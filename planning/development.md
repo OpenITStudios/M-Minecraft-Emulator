@@ -1,5 +1,15 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Quick #3 false green diagnosed: restore fail-fast CI and current UI contract — 18 October 2026
+
+**Actual evidence:** [manual Windows Quick run #3](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39128459740) at `9bb52ac5d344e89f2269db0e4af2175e625bbdd5` showed overall SUCCESS and 62 source tests PASS (6 localtest + 15 feasibility + 18 native feasibility + 15 Sandboxie feasibility + 8 PresentMon). However, its first command `npm run verify:repository` threw `Active native/isolated pilot may not call legacy VM lifecycle commands` at `tooling/repository/verify.mjs:194`. Windows PowerShell executed every subsequent command, whose final exit status masked the failure. The run is **PARTIAL / FAILED CONTRACT VERIFICATION**, not a complete Quick PASS.
+
+**Root cause and bounded correction:** the first wrong owner is a stale static verifier requirement `<h1>Instances</h1>`; mounted `CompactManagerApp.svelte` now uses `<h1>Virtual Manager</h1>` and separately `<h2>Minecraft sessions</h2>`. Update the exact verifier predicates, preserving all legacy VM prohibitions and Tauri command guards. Convert each Quick `npm run` to its own GitHub Actions step, and separate Windows Build icon/frontend commands, so no prior failure can be masked. Preserve manual-only `workflow_dispatch`, `Local` ref guards, Windows runners and no installer or driver action.
+
+**Proof boundary:** actual run #3 job logs retrieved; current source checked for every predicate in the previously failing active UI block (13 unaffected checks and corrected headings). New workflow source reviewed for single-command fail-fast steps. New Quick execution on committed SHA remains **NOT_EXECUTED** until manually dispatched; Full Source, Tauri compile, Minecraft gameplay and driver acceptance remain unexecuted.
+
+**Next:** run manual Quick on `Local` at the new commit, verify all six steps PASS, then run Full Source.
+
 ## Windows Quick manual CI first-run fix — 18 October 2026
 
 **Observed:** [GitHub Actions #2](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39123683409) on `c8bcbc4126aa5f38461aa156ca219bdd3d3b45ba` passed checkout and installed Node 24.21.0/npm 11.19.0, then failed in `actions/setup-node@v7`: its implicit npm cache search expected root `package-lock.json` although the only lockfile is `apps/desktop/package-lock.json`. All Quick test commands were skipped.

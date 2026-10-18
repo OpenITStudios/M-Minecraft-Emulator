@@ -198,7 +198,8 @@ requireFact(activeSurface.includes("nativeFeasibility.openOfficialMinecraft()") 
   !activeSurface.includes("setInterval(") &&
   !activeSurface.includes("onMount(") &&
   !activeSurface.includes("<aside") &&
-  activeSurface.includes("<h1>Instances</h1>") &&
+  activeSurface.includes("<h1>Virtual Manager</h1>") &&
+  activeSurface.includes("<h2>Minecraft sessions</h2>") &&
   activeSurface.includes("Settings") &&
   !activeSurface.includes("Start All") &&
   !activeSurface.includes("Stop All") &&

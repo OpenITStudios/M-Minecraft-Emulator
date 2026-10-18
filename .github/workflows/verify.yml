@@ -33,15 +33,20 @@ jobs:
         with:
           node-version: 24.21.0
           package-manager-cache: false
-      - name: Verify lightweight repository contracts
-        run: |
-          node --version
-          npm run verify:repository
-          npm run test:localtest
-          npm run test:feasibility
-          npm run test:native-feasibility
-          npm run test:sandboxie-feasibility
-          npm run test:presentmon
+      # Separate steps: PowerShell may continue to the next native command
+      # after a non-zero exit code in a multi-command run block.
+      - name: Verify repository contracts
+        run: npm run verify:repository
+      - name: Test localtest recorder
+        run: npm run test:localtest
+      - name: Test feasibility reports
+        run: npm run test:feasibility
+      - name: Test native feasibility
+        run: npm run test:native-feasibility
+      - name: Test Sandboxie feasibility
+        run: npm run test:sandboxie-feasibility
+      - name: Test PresentMon analysis
+        run: npm run test:presentmon
       - name: Report exact commit and proof boundary
         if: always()
         shell: pwsh
@@ -98,10 +103,10 @@ jobs:
           rustup default 1.98.1
       - name: Install pinned desktop dependencies
         run: npm run setup
-      - name: Prepare icons and compile frontend
-        run: |
-          npm --prefix apps/desktop run prepare:icons
-          npm --prefix apps/desktop run build:frontend
+      - name: Prepare desktop icons
+        run: npm --prefix apps/desktop run prepare:icons
+      - name: Compile desktop frontend
+        run: npm --prefix apps/desktop run build:frontend
       - name: Compile Tauri desktop (no packaging or installation)
         run: cargo build --locked --target x86_64-pc-windows-msvc --manifest-path apps/desktop/src-tauri/Cargo.toml
       - name: Report exact commit and proof boundary
