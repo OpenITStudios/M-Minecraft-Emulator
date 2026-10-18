@@ -1,5 +1,17 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Quick #4: repair obsolete blanket MIVUBI name prohibition — 18 October 2026
+
+**Actual CI evidence:** [manual Windows Quick run #4](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39134013426) on `84d481434ffaf9ddc1462f8fbc52da8f2f14c22b` failed properly at the first fail-fast `Verify repository contracts` step (exit 1). The remaining five Quick source suites were SKIPPED, not FAIL or PASS in this run. The exact verifier error at `tooling/repository/verify.mjs:420` was `Active generic naming must remain consistent without renaming installed VMware identity`.
+
+**Confirmed first wrong owner:** the verifier required `!isolatedScreen.includes("MIVUBI")` even though the active UI must explain the status of the MIVUBI-owned engine, explicitly stating it is not active and that no owned virtuals have been created. All ten other individual checks in the naming block matched the exact `Local` source, including the unchanged historical installed product name and identifier.
+
+**Bounded fix:** separate installed Windows identity checks from active runtime/user-facing naming checks; preserve the fixed package identity and existing app/collector/data-path contracts. Replace the blanket MIVUBI ban with two affirmative, scoped UI requirements: existing Sandboxie is the active pilot, while MIVUBI-owned engine/virtuals remain unavailable and unverified. This is a verifier correction, not product renaming. No changes to driver, installer identity, runtime, account data, workflow triggers or providers.
+
+**Proof:** original failing run logs and exact source predicates inspected; source-based positive and negative cases verified for legacy identity and engine non-activation wording. Full repository verification on the new SHA still awaits a manually requested Quick CI run; Full Source/Windows Build/Minecraft acceptance are NOT_EXECUTED.
+
+**Next:** manually start Quick on the new `Local` commit and examine the first remaining failing check, if any.
+
 ## Quick #3 false green diagnosed: restore fail-fast CI and current UI contract — 18 October 2026
 
 **Actual evidence:** [manual Windows Quick run #3](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39128459740) at `9bb52ac5d344e89f2269db0e4af2175e625bbdd5` showed overall SUCCESS and 62 source tests PASS (6 localtest + 15 feasibility + 18 native feasibility + 15 Sandboxie feasibility + 8 PresentMon). However, its first command `npm run verify:repository` threw `Active native/isolated pilot may not call legacy VM lifecycle commands` at `tooling/repository/verify.mjs:194`. Windows PowerShell executed every subsequent command, whose final exit status masked the failure. The run is **PARTIAL / FAILED CONTRACT VERIFICATION**, not a complete Quick PASS.

@@ -417,19 +417,23 @@ requireFact(nativeDesktop.includes("pub fn request_sandbox_client_02(") &&
   "One non-destructive MinecraftClient02 launch must be registered end to end");
 const sandboxBoxCollector = read("tooling/acceptance/windows/collect-sandboxie-feasibility.ps1");
 const desktopPilotLease = read("apps/desktop/src-tauri/src/engine/app_instance.rs");
+// The installed legacy Windows product identity is stable even while the
+// active manager UI names MIVUBI's not-yet-installed isolation engine.
 requireFact(tauri.app.windows[0].title === "Minecraft Instance Manager" &&
   tauri.productName === "M-Bedrock Virtual Clients" &&
-  tauri.identifier === "com.mivubi.mbedrock.virtualclients" &&
-  activeEntry.includes("Minecraft Instance Manager") &&
+  tauri.identifier === "com.mivubi.mbedrock.virtualclients",
+  "Installed Windows product identity changed without a migration review");
+requireFact(activeEntry.includes("Minecraft Instance Manager") &&
   isolatedScreen.includes("MinecraftClient02") &&
-  !isolatedScreen.includes("MIVUBI") &&
+  isolatedScreen.includes("Runtime: existing Sandboxie Plus pilot. MIVUBI-owned engine is not active.") &&
+  isolatedScreen.includes("MIVUBI has not created or verified these virtuals.") &&
   sandboxBoxCollector.includes("BoxName = 'MinecraftClient02'") &&
   sandboxBoxCollector.includes("MinecraftInstanceManager\\SandboxieFeasibility") &&
   read("tooling/acceptance/windows/collect-native-feasibility.ps1").includes(
     "MinecraftInstanceManager\\NativeFeasibility") &&
   desktopPilotLease.includes('.join("MinecraftInstanceManager")') &&
   desktopPilotLease.includes('.join("NativePilot")'),
-  "Active generic naming must remain consistent without renaming installed VMware identity");
+  "Active pilot naming, data paths or unavailable owned-engine labels drifted");
 const desktopFacade = read("apps/desktop/src/app/bridge/virtualClientsApi.ts");
 const desktopBootstrap = read("apps/desktop/src-tauri/src/app_bootstrap.rs");
 requireFact(read("apps/desktop/src-tauri/src/commands/native_clients.rs").includes("fn desktop_open_native_minecraft(") &&
