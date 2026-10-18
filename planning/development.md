@@ -1,5 +1,15 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Full CI enabled for Local pushes — 19 October 2026
+
+**Explicit user override:** earlier manual-only preference has been superseded by user authorization for FULL CI, to eliminate repeated manual GitHub workflow launches during source-hardening. Keep `Local` as the sole development and verification authority; `main` and its manual registration-only workflow remain unchanged.
+
+**Implementation:** a `push` event restricted to `Local` automatically launches the existing twelve-stage Windows Full Source diagnostics, with the final fail-on-any-stage gate unchanged. If **all** source stages pass, the same Windows runner then compiles the Tauri desktop executable (no installer). A newer push cancels an obsolete *automatic* run to conserve Windows minutes, but manual Quick / Full Source / Windows Build selections remain available and independently grouped. Update `toolchain.json` `ciPolicy`, repository verifier, active ops and root governance to reflect the user-authorized exception. Historical VMware packaging is never auto-run; no signing/loading drivers, login, Minecraft gameplay, release or `main` promotion.
+
+**Evidence:** workflow/source contract must be checked on the pinned `Local` SHA. The first auto-push run on this exact commit must be inspected for actual stage conclusions; an uploaded workflow, green manual Quick on another commit or partial test results are not proof.
+
+**Next:** inspect the automatic Windows Full Source run for this commit and fix its concrete failures in a single batch.
+
 ## Full Source #9–10: three root causes patched together (18 October 2026)
 
 **Observed:** manual Windows GitHub [#9](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39142688943) and [#10](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39144237781) at `51029b4b57a268424cf45ce43cbf5661521a3c10` both reported 3 failing stages of 12: repository, isolation (164/168 PASS, 4 FAIL), and desktop (148/151 PASS, 3 FAIL). All canonical Rust check/test/format stages passed.

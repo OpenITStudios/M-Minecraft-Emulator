@@ -1,7 +1,12 @@
 name: Emulator Source Verification (manual)
 
-# Only an operator may request work. No push, pull_request or schedule triggers.
+# Explicit user approval: run full source CI on every Local push.
+# Manual Quick / Full Source / Windows Build remain available. No PR, schedule,
+# installer, driver load, login or deployment triggers.
 on:
+  push:
+    branches:
+      - Local
   workflow_dispatch:
     inputs:
       scope:
@@ -17,14 +22,15 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded automatic commits; never cancel an operator's manual run.
 concurrency:
-  group: emulator-manual-${{ github.ref }}-${{ inputs.scope }}
-  cancel-in-progress: false
+  group: emulator-${{ github.ref }}-${{ github.event_name == 'push' && 'automatic' || format('manual-{0}', inputs.scope) }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   quick:
     name: Quick source contracts (Windows)
-    if: inputs.scope == 'quick' && github.ref == 'refs/heads/Local'
+    if: github.event_name == 'workflow_dispatch' && inputs.scope == 'quick' && github.ref == 'refs/heads/Local'
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -57,7 +63,7 @@ jobs:
 
   full:
     name: Full source (Windows)
-    if: inputs.scope == 'full-source' && github.ref == 'refs/heads/Local'
+    if: github.ref == 'refs/heads/Local' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.scope == 'full-source'))
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -167,17 +173,22 @@ jobs:
           if ($failed -gt 0) {
             throw "$failed source verification stage(s) failed or were skipped; review each stage log."
           }
+      # The automatic Local-push pipeline compiles Tauri after all source
+      # checks pass, in the SAME Windows job. No extra runner or installer.
+      - name: Auto compile Windows desktop (no installer)
+        if: github.event_name == 'push'
+        run: cargo build --locked --target x86_64-pc-windows-msvc --manifest-path apps/desktop/src-tauri/Cargo.toml
       - name: Report exact commit and proof boundary
         if: always()
         shell: pwsh
         run: |
           "### Full source verification" >> $env:GITHUB_STEP_SUMMARY
           "Commit: $env:GITHUB_SHA" >> $env:GITHUB_STEP_SUMMARY
-          "Source checks only; no driver installation, Minecraft sign-in or gameplay." >> $env:GITHUB_STEP_SUMMARY
+          "Event: $env:GITHUB_EVENT_NAME. Automatic push runs also compile Tauri after source PASS; manual Full Source is source-only. No driver installation, Minecraft sign-in or gameplay." >> $env:GITHUB_STEP_SUMMARY
 
   windows-build:
     name: Windows desktop compile only (no installer)
-    if: inputs.scope == 'windows-build' && github.ref == 'refs/heads/Local'
+    if: github.event_name == 'workflow_dispatch' && inputs.scope == 'windows-build' && github.ref == 'refs/heads/Local'
     runs-on: windows-latest
     timeout-minutes: 60
     steps:

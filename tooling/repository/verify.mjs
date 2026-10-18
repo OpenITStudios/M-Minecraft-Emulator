@@ -135,7 +135,7 @@ requireFact(version === rootPackage.version && version === appPackage.version &&
   version === cargoVersion("engine/runtime-core/Cargo.toml"), "Product version mismatch");
 requireFact(toolchain.node.version === read(".node-version").trim(), "Node pin mismatch");
 requireFact(toolchain.npm.lockfile === "apps/desktop/package-lock.json", "App lockfile path drift");
-requireFact(toolchain.policy.ciPolicy === "manual-only", "Manual-only CI policy drift");
+requireFact(toolchain.policy.ciPolicy === "full-ci-local", "Local-only full CI policy drift");
 requireFact(lock.packages[""]?.version === appPackage.version, "Desktop lockfile version mismatch");
 for (const [name, range] of Object.entries({ ...appPackage.dependencies, ...appPackage.devDependencies })) {
   requireFact(lock.packages[""]?.dependencies?.[name] === range ||
@@ -515,8 +515,8 @@ for (const origin of resourceRoots) {
 }
 requireFact(tauri.bundle?.windows?.nsis?.installMode === "currentUser", "Windows install scope changed");
 requireFact(tauri.bundle?.windows?.allowDowngrades === false, "Downgrade restriction changed");
-// CI diagnostics must faithfully cover every canonical verify:source stage
-// while leaving workflow_dispatch manual and the Windows failure gate intact.
+// CI diagnostics must cover the canonical source stages on both Local push
+// and manual Full Source, retaining a strict final failure gate.
 const fullSourceWorkflow = read(".github/workflows/verify.yml").replace(/\r\n/g, "\n");
 const fullSourceBlock = fullSourceWorkflow.split("\n  full:\n")[1]?.split("\n  windows-build:\n")[0] ?? "";
 const canonicalStages = rootPackage.scripts["verify:source"].split(" && ");
@@ -528,12 +528,21 @@ requireFact(canonicalStages.length === 12 &&
   fullSourceBlock.includes("if ($failed -gt 0)") &&
   fullSourceBlock.includes("github.ref == 'refs/heads/Local'"),
   "Full Source CI must cover every canonical stage and fail the final aggregate gate");
-for (const path of [".github/workflows/verify.yml", ".github/workflows/package-smoke.yml"]) {
-  const workflow = read(path);
-  requireFact(/^on:\s*\n\s+workflow_dispatch:/m.test(workflow), "Workflow is not manual: " + path);
-  requireFact(!/^\s{2}(?:push|pull_request|schedule):/m.test(workflow),
-    "Automatic workflow trigger detected: " + path);
-}
+const ciWorkflow = read(".github/workflows/verify.yml").replace(/\r\n/g, "\n");
+const isLocalPush = /^on:\s*\n  push:\s*\n    branches:\s*\n      - Local\s*\n  workflow_dispatch:/m.test(ciWorkflow);
+requireFact(isLocalPush &&
+  !/^  (?:pull_request|schedule|workflow_run|release):/m.test(ciWorkflow) &&
+  ciWorkflow.includes("cancel-in-progress: ${{ github.event_name == 'push' }}") &&
+  ciWorkflow.includes("github.ref == 'refs/heads/Local'") &&
+  ciWorkflow.includes("github.event_name == 'push' ||") &&
+  ciWorkflow.includes("if: github.event_name == 'push'") &&
+  ciWorkflow.includes("Auto compile Windows desktop (no installer)") &&
+  !ciWorkflow.includes("tauri build"),
+  "Automatic full CI must be Local-push-only, cancel obsolete runs, and never package/install");
+const legacyWorkflow = read(".github/workflows/package-smoke.yml");
+requireFact(/^on:\s*\n\s+workflow_dispatch:/m.test(legacyWorkflow) &&
+  !/^\s{2}(?:push|pull_request|schedule):/m.test(legacyWorkflow),
+  "Legacy package-smoke must remain manual-only");
 
 function markdownFiles(dir) {
   return readdirSync(resolve(root, dir), { withFileTypes: true }).flatMap((entry) => {
