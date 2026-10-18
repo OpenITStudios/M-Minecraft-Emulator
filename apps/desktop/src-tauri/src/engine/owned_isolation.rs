@@ -266,6 +266,8 @@ fn verify_payload_inventory(root: &Path, declared: &HashSet<String>) -> io::Resu
             return Err(rejected("owned-engine payload directory depth exceeded"));
         }
         for entry in fs::read_dir(directory)? {
+            // A failed directory enumeration is not an absent entry: fail closed.
+            let entry = entry?;
             entries_seen += 1;
             if entries_seen > 96 {
                 return Err(rejected("owned-engine payload entry cap exceeded"));
@@ -410,9 +412,9 @@ pub fn inspect_candidate(root: &Path) -> io::Result<OwnedCandidateInspection> {
         return Err(rejected("owned-engine manifest makes unproven runtime claims"));
     }
 
-    let mut seen = HashSet::new();
+    let mut seen: HashSet<String> = HashSet::new();
     for artifact in &manifest.artifacts {
-        if !seen.insert(artifact.path.as_str()) {
+        if !seen.insert(artifact.path.clone()) {
             return Err(rejected("duplicate owned-engine artifact path"));
         }
         if expected_source_for_payload(&artifact.path).as_deref()

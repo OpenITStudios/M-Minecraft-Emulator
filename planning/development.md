@@ -1,5 +1,15 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Automatic Full CI #12: fix remaining source-check and Tauri Rust compiler faults — 19 October 2026
+
+**Executed proof:** automatic [Windows FULL CI #12](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39149382359) on exact `Local` `9e5c6fc2ca57b094ac224edb2a99ad22babaa680`: all 168 isolation-source tests PASS, desktop Vitest and frontend checks proceed to Rust, and runtime Rust check/test/format PASS. The final gate failed due two source stages: repository verifier and desktop. Desktop Rust failed with E0599 three times when `Result<DirEntry, io::Error>` was treated as `DirEntry` during payload traversal, and E0308 when `HashSet<&str>` was passed into `verify_payload_inventory(&HashSet<String>)`. Repository verifier checked Cargo.lock with LF-only exact text even though Git for Windows uses CRLF.
+
+**Bounded fix:** normalize Cargo.lock to LF **only in the verifier's in-memory text**; keep direct sha2 pin and `--locked` compilation. Extract each `read_dir` entry using `?` before reading its path/name, failing closed on enumeration errors. Store owned artifact paths as `HashSet<String>` by cloning declared manifest paths; retain duplicate detection, exact inventory comparison, symlink/reparse-point guards and bounded traversal. Add regression source contract assertions in existing desktop test owner. No installation, kernel driver activation, Sandboxie profile changes or default-branch updates.
+
+**Evidence ceiling:** source error locations were confirmed in Windows runner log and exact GitHub sources; patched source contract checks and commit readback are source-only until the next automatic Local-push run returns. No Windows executable or real Minecraft gameplay PASS is claimed until source gate and conditional compile actually succeed.
+
+**Next:** inspect the automatic FULL CI result on this new commit, then diagnose any actual remaining Rust/Tauri compile errors.
+
 ## First automatic Full CI: patch remaining Windows header EOL and Tauri lock — 19 October 2026
 
 **Actual execution:** [automatic Local push Full CI #11](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39148661018) on `85040838dff3a9be66bdcee8c02565c6bb39ba49` ran the new 12-stage Windows source pipeline. Ten source stages passed. Isolation source passed 165/168 tests (3 failed), and desktop failed due `apps/desktop/src-tauri/Cargo.lock` refusing `--locked`. All canonical Rust runtime check/test/format tests passed. The final aggregate gate correctly rejected PASS and skipped automatic Tauri compilation.

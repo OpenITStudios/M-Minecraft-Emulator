@@ -138,7 +138,7 @@ requireFact(toolchain.npm.lockfile === "apps/desktop/package-lock.json", "App lo
 requireFact(toolchain.policy.ciPolicy === "full-ci-local", "Local-only full CI policy drift");
 // The desktop depends on the already-locked sha2 0.10.8. Its local package
 // edge must be recorded or cargo --locked rejects this clean checkout.
-const desktopLock = read("apps/desktop/src-tauri/Cargo.lock");
+const desktopLock = read("apps/desktop/src-tauri/Cargo.lock").replace(/\r\n/g, "\n");
 const desktopPackageEntry = desktopLock.split('name = "m-bedrock-virtual-clients"\n')[1]
   ?.split("\n[[package]]")[0] ?? "";
 requireFact(read("apps/desktop/src-tauri/Cargo.toml").includes('sha2 = "=0.10.8"') &&
