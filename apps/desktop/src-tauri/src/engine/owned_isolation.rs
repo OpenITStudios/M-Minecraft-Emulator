@@ -432,7 +432,7 @@ pub fn inspect_candidate(root: &Path) -> io::Result<OwnedCandidateInspection> {
             return Err(rejected("owned-engine artifact checksum does not match bytes"));
         }
     }
-    if !REQUIRED_FILES.iter().all(|name| seen.contains(name))
+    if !REQUIRED_FILES.iter().all(|name| seen.contains(*name))
         || (owned_v1186 && !seen.contains("LICENSES/LICENSE.Classic"))
     {
         return Err(rejected("incomplete owned-engine driver/service/DLL, helpers or license closure"));

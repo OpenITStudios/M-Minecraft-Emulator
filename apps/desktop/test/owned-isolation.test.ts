@@ -52,6 +52,7 @@ describe("Owned isolation candidate — strictly read-only", () => {
     expect(owned).toContain("let entry = entry?;");
     expect(owned).toContain("let mut seen: HashSet<String> = HashSet::new();");
     expect(owned).toContain("seen.insert(artifact.path.clone())");
+    expect(owned).toContain("REQUIRED_FILES.iter().all(|name| seen.contains(*name))");
     expect(owned).toContain("FILE_ATTRIBUTE_REPARSE_POINT");
     expect(owned).toContain("owned-engine payload entry cap exceeded");
     expect(owned).toContain("owned-engine metadata changed while it was read");

@@ -1,5 +1,15 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Full Source #13: correct owned inventory filename borrow — 19 October 2026
+
+**Executed proof:** automatic [Windows FULL CI #13](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39151556535) at `2b2f70c4e8ca1aab5bd05e5fcdaf45ecfc0f85e6`. All twelve stage commands actually executed; eleven succeeded and desktop failed. The desktop step was displayed green because `continue-on-error` masks its conclusion, but the aggregate gate correctly saw `STAGE_DESKTOP: failure` and skipped automatic compile-only. The only Rust compiler diagnostic in that desktop stage was E0277 at `apps/desktop/src-tauri/src/engine/owned_isolation.rs:435`: `HashSet<String>` cannot `Borrow<&str>` from an iterator item of type `&&str`. All 168 isolation-source tests passed.
+
+**Correction:** pass the referenced filename as `*name` to `HashSet<String>::contains`, preserving the exact required-file list, owned path set, fail-closed directory enumeration and declared-vs-observed comparison. The existing desktop test suite asserts this source contract. No runtime, account, driver, packaging, GitHub policy or `main` changes.
+
+**Proof ceiling:** compiler E0277 directly observed in #13 log and source readback checked; the new automatic run is required to prove complete Full Source and conditional Tauri compile. The previous job's green *step conclusion* does not count as desktop PASS.
+
+**Next:** inspect automatic Full CI at the new `Local` SHA through to the compile-only verdict.
+
 ## Automatic Full CI #12: fix remaining source-check and Tauri Rust compiler faults — 19 October 2026
 
 **Executed proof:** automatic [Windows FULL CI #12](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39149382359) on exact `Local` `9e5c6fc2ca57b094ac224edb2a99ad22babaa680`: all 168 isolation-source tests PASS, desktop Vitest and frontend checks proceed to Rust, and runtime Rust check/test/format PASS. The final gate failed due two source stages: repository verifier and desktop. Desktop Rust failed with E0599 three times when `Result<DirEntry, io::Error>` was treated as `DirEntry` during payload traversal, and E0308 when `HashSet<&str>` was passed into `verify_payload_inventory(&HashSet<String>)`. Repository verifier checked Cargo.lock with LF-only exact text even though Git for Windows uses CRLF.
