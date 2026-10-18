@@ -1,5 +1,17 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Full Source #7 — update private Git patch command contract (18 October 2026)
+
+**Observed:** [manual Full Source #7](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39138030002), exact `Local` `e9df2de39146fe2ee4c59157949526f03b54a1c5`, failed after successful Windows checkout, Node 24/npm 11, Rust 1.98.1 and locked npm setup. `npm run verify:repository -- --g0` failed at `tooling/repository/verify.mjs:258`, with `Private fork source/build must be explicit, reviewed and non-installing`. No isolation-source, desktop Svelte/Vitest, Tauri or canonical Rust build/test suite executed for #7.
+
+**Confirmed owner:** the static verifier still demanded the historical prefix `git(root, ["apply", "--check", "--index"` despite the previous Windows CRLF patch adding `git -c core.whitespace=cr-at-eol apply ...`. The production patch routine still uses two strict commands: one indexed `--check` then indexed `apply`, both with `--whitespace=error`. This is a stale verifier predicate, not evidence to weaken patch validation.
+
+**Bounded change:** require exact source statements for both CRLF-aware strict commands (including `-c core.whitespace=cr-at-eol`, `--index`, `--whitespace=error`, and the preparatory `--check`). Keep all other private provenance, noninstallable driver and provider checks untouched. No workflow, `main`, desktop app, accounts or kernel runtime changes.
+
+**Proof ceiling:** the exact predicate/producer mismatch and replacement checked against pinned source. Full Source on the corrected commit is NOT_EXECUTED. The 28 isolation failures observed on #6 remain unverified after the Windows fixture changes in `e9df2de`; do not claim they were resolved.
+
+**Next:** manually dispatch Full Source for the new `Local` SHA and inspect the first real failing check or test category.
+
 ## Full Source #6 — isolation fixture and Windows path repairs (18 October 2026)
 
 GitHub Actions Full Source #6 at `4039c5b` completed environment setup but failed in `test:isolation-source`: 121 of 149 isolation tests passed; 28 failed. Svelte/Vitest/Rust builds were not reached. This patch addresses identified Windows Git-directory short-name aliases without accepting different physical directories, Git patch CRLF trailing-carriage-return false positives without disabling whitespace/index enforcement, obsolete subset baseline hash fixtures using the immutable canonical manifest, and 10-versus-11 owned source file provenance drift. Four Git source consumers use the same constrained directory identity helper; installation, runtime data, signed driver, Sandboxie, manual CI and default branch remain unchanged. Other failures are unresolved; no new Windows run executed yet.

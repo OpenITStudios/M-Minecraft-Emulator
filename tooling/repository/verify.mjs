@@ -256,7 +256,8 @@ requireFact(
 const privateForkPatch = read("engine/isolation-native/fork-overlay/apply-private-source.mjs");
 const privateForkBuild = read("engine/isolation-native/fork-overlay/build-private.ps1");
 requireFact(
-  privateForkPatch.includes("git(root, [\"apply\", \"--check\", \"--index\"") &&
+  privateForkPatch.includes('git(root, ["-c", "core.whitespace=cr-at-eol", "apply", "--check", "--index", "--whitespace=error", "-"], patch);') &&
+  privateForkPatch.includes('git(root, ["-c", "core.whitespace=cr-at-eol", "apply", "--index", "--whitespace=error", "-"], patch);') &&
   privateForkPatch.includes("canCoexistWithOfficialSandboxie: false") &&
   privateForkPatch.includes("MIVUBI_PRIVATE_ISOLATION_ABI") &&
   privateForkBuild.includes("PRIVATE_CORE_BINARIES_BUILT_NOT_SIGNED_OR_RUN") &&
