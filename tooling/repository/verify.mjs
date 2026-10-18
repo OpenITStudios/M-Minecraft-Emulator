@@ -136,6 +136,15 @@ requireFact(version === rootPackage.version && version === appPackage.version &&
 requireFact(toolchain.node.version === read(".node-version").trim(), "Node pin mismatch");
 requireFact(toolchain.npm.lockfile === "apps/desktop/package-lock.json", "App lockfile path drift");
 requireFact(toolchain.policy.ciPolicy === "full-ci-local", "Local-only full CI policy drift");
+// The desktop depends on the already-locked sha2 0.10.8. Its local package
+// edge must be recorded or cargo --locked rejects this clean checkout.
+const desktopLock = read("apps/desktop/src-tauri/Cargo.lock");
+const desktopPackageEntry = desktopLock.split('name = "m-bedrock-virtual-clients"\n')[1]
+  ?.split("\n[[package]]")[0] ?? "";
+requireFact(read("apps/desktop/src-tauri/Cargo.toml").includes('sha2 = "=0.10.8"') &&
+  desktopPackageEntry.includes(' "sha2",') &&
+  desktopLock.includes('name = "sha2"\nversion = "0.10.8"'),
+  "Desktop Cargo.lock must reflect the pinned direct sha2 dependency");
 requireFact(lock.packages[""]?.version === appPackage.version, "Desktop lockfile version mismatch");
 for (const [name, range] of Object.entries({ ...appPackage.dependencies, ...appPackage.devDependencies })) {
   requireFact(lock.packages[""]?.dependencies?.[name] === range ||

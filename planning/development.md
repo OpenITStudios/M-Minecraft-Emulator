@@ -1,5 +1,15 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## First automatic Full CI: patch remaining Windows header EOL and Tauri lock — 19 October 2026
+
+**Actual execution:** [automatic Local push Full CI #11](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39148661018) on `85040838dff3a9be66bdcee8c02565c6bb39ba49` ran the new 12-stage Windows source pipeline. Ten source stages passed. Isolation source passed 165/168 tests (3 failed), and desktop failed due `apps/desktop/src-tauri/Cargo.lock` refusing `--locked`. All canonical Rust runtime check/test/format tests passed. The final aggregate gate correctly rejected PASS and skipped automatic Tauri compilation.
+
+**Root causes:** the previous EOL fix normalized only `mivubi_core_identity.h`; `mivubi_kernel_box_policy.h` and `mivubi_owned_start_policy.h` still entered the reviewed source-patch arrays with checkout-dependent CRLF. Normalize **only in-memory source lines** for both at the existing read owner, without changing the kernel rules or relaxing `git apply --index --whitespace=error`. The desktop Cargo.toml already declares direct `sha2 = "=0.10.8"`, and Cargo.lock already resolves `sha2` 0.10.8 via runtime core, but the desktop package record omitted the direct dependency edge. Reconcile that one deterministic lockfile record; add repository verification of this pinned manifest/lock entry and preserve `cargo --locked`.
+
+**Evidence:** exact source/lock graphs and first automatic Windows run logs reviewed. Source static readback is available; no next-SHA auto CI outcome may be claimed before the GitHub runner finishes. The owned engine, driver, sandbox, installer, `main` and Microsoft credentials are untouched.
+
+**Next:** inspect the new automatic Local push run and, if successful, confirm Windows desktop compile or diagnose any newly surfaced build error.
+
 ## Full CI enabled for Local pushes — 19 October 2026
 
 **Explicit user override:** earlier manual-only preference has been superseded by user authorization for FULL CI, to eliminate repeated manual GitHub workflow launches during source-hardening. Keep `Local` as the sole development and verification authority; `main` and its manual registration-only workflow remain unchanged.

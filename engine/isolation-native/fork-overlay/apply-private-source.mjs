@@ -73,7 +73,7 @@ const BOX_INCLUDE_ANCHOR = '#include "box.h"';
 const BOX_ALLOC_ANCHOR = "    BOX *box = Mem_Alloc(pool, sizeof(BOX));";
 const BOX_POLICY = readFileSync(
   new URL("../owned-runtime/mivubi_kernel_box_policy.h", import.meta.url),
-  "utf8").trimEnd().split("\n");
+  "utf8").replace(/\r\n/g, "\n").trimEnd().split("\n");
 const BOX_ADMISSION = [
   "#if defined(MIVUBI_PRIVATE_ISOLATION_BUILD)",
   "    // Kernel admission applies to both new boxes and cloned descendants.",
@@ -240,7 +240,7 @@ const START_PARSE_ANCHOR =
 // external MIVUBI header include path during MSVC compilation.
 const START_POLICY = readFileSync(
   new URL("../owned-runtime/mivubi_owned_start_policy.h", import.meta.url),
-  "utf8").trimEnd().split("\n");
+  "utf8").replace(/\r\n/g, "\n").trimEnd().split("\n");
 const START_DISPATCH = [
   "#if defined(MIVUBI_PRIVATE_ISOLATION_BUILD)",
   "    // MIVUBI-only opt-in: explicit, bounded client selection BEFORE restart.",
