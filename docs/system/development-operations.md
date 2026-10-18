@@ -73,6 +73,9 @@ The Local source-verification workflow has three explicitly selected manual scop
 
 ### Operator proof and branch safety
 
+**Full Source diagnostics (18 October 2026):** all twelve commands from the canonical root `verify:source` script now run as independent stages in the **same manually selected Windows Full Source job**. Individual stages use `continue-on-error` only to collect later diagnostics; an always-run final gate explicitly fails the overall job if *any* stage is failed or skipped and records each stage outcome in the summary. This prevents early isolation-source failures from hiding Svelte/Vitest/Rust errors, without granting false source PASS. Each job remains manual-only on `Local`; installer/driver/account operations stay absent. This diagnostic mode can consume more Windows-runner time per manually requested Full Source run, but avoids repeated entire runs to uncover the next failure. Use the final aggregate gate, not individual continued-stage checkmarks, as the actual acceptance outcome.
+
+
 **Quick run #3 false-positive (18 October 2026):** the GitHub Actions job was marked SUCCESS but `npm run verify:repository` actually failed with `Active native/isolated pilot may not call legacy VM lifecycle commands`. The verifier expected the removed `<h1>Instances</h1>` label, while the mounted UI correctly has `<h1>Virtual Manager</h1>` plus `<h2>Minecraft sessions</h2>`. The five subsequent test commands passed a total of 62 tests, but a multi-command Windows PowerShell step continued after the first native command failed. Quick now uses **one GitHub Actions step for each command** to make failures fail the job. Windows Build icon and frontend commands are also separate steps. This is a CI/verifier correction, not proof of full-source readiness. Rerun Quick manually at the new `Local` SHA; do not rerun the old revision.
 
 

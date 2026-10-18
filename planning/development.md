@@ -1,5 +1,17 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Full Source diagnostic coverage: expose all stage failures per manual run — 18 October 2026
+
+**Reason:** Windows Full Source #8 stopped at the isolation suite (140/149 PASS, 9 FAIL), leaving Svelte/Vitest desktop, canonical Rust and formatting untouched. The previously sequential `npm run verify:source` runner therefore requires repeated manual GitHub runs to discover independent errors. A new `Local` commit `9b195475f2e430dec6c17dd25b031dd58cfd95b3` has already corrected all nine observed fixture/import categories from #8 but has no executed CI verdict.
+
+**Implementation:** retain root `verify:source` as the canonical list of 12 verification commands. The manual Windows `full-source` GitHub job runs each exact canonical command in its own diagnostic step with `continue-on-error: true`, then an always-run aggregate gate fails the job if **any** command failed or was skipped. This does NOT relax any validator, suppress evidence or treat a partial run as PASS. The repository verifier now asserts full coverage of all canonical commands, twelve diagnostic steps and the final failure gate so workflow drift cannot silently omit checks. Rust toolchain setup also honors each command exit code.
+
+**Boundaries:** strictly `workflow_dispatch` and `refs/heads/Local`; `main` unchanged. No installer/package, owned driver activation, Sandboxie mutation, credentials or gameplay. More tests will run in one manually requested Full Source job; this trades a longer single run for a complete failure inventory and fewer manual CI iterations.
+
+**Proof:** workflow/static contracts reviewed at exact commit source; no automated runner was triggered by this change. The new Full Source diagnostic execution and patched nine isolation cases remain NOT_EXECUTED until a user explicitly dispatches `full-source`.
+
+**Next:** manually run Full Source once against this new Local SHA, then fix the complete reported failing-stage inventory in one batch.
+
 ## Full Source #8 — remaining 9 isolation failures, bundled corrections (18 October 2026)
 
 **Observed:** [Windows Full Source #8](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39139293068) at `16a1e15e8e84e386d2ea39f3dacb7205c09735db` reached isolation suite: 140/149 PASS, nine FAIL. Setup and repository, recorder, feasibility tests passed, but Svelte/Vitest/Tauri/Rust compilation had NOT_EXECUTED due to the isolation suite gate.

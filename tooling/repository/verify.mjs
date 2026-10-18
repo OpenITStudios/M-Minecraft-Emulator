@@ -515,6 +515,19 @@ for (const origin of resourceRoots) {
 }
 requireFact(tauri.bundle?.windows?.nsis?.installMode === "currentUser", "Windows install scope changed");
 requireFact(tauri.bundle?.windows?.allowDowngrades === false, "Downgrade restriction changed");
+// CI diagnostics must faithfully cover every canonical verify:source stage
+// while leaving workflow_dispatch manual and the Windows failure gate intact.
+const fullSourceWorkflow = read(".github/workflows/verify.yml");
+const fullSourceBlock = fullSourceWorkflow.split("\n  full:\n")[1]?.split("\n  windows-build:\n")[0] ?? "";
+const canonicalStages = rootPackage.scripts["verify:source"].split(" && ");
+requireFact(canonicalStages.length === 12 &&
+  canonicalStages.every(command => fullSourceBlock.includes("run: " + command + "\n")) &&
+  (fullSourceBlock.match(/continue-on-error: true/g) || []).length === canonicalStages.length &&
+  fullSourceBlock.includes("Enforce all full-source results") &&
+  fullSourceBlock.includes("steps.runtime_format.outcome") &&
+  fullSourceBlock.includes("if ($failed -gt 0)") &&
+  fullSourceBlock.includes("github.ref == 'refs/heads/Local'"),
+  "Full Source CI must cover every canonical stage and fail the final aggregate gate");
 for (const path of [".github/workflows/verify.yml", ".github/workflows/package-smoke.yml"]) {
   const workflow = read(path);
   requireFact(/^on:\s*\n\s+workflow_dispatch:/m.test(workflow), "Workflow is not manual: " + path);

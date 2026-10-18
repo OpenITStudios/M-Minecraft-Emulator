@@ -67,22 +67,113 @@ jobs:
           node-version: 24.21.0
           cache: npm
           cache-dependency-path: apps/desktop/package-lock.json
-      - name: Rust 1.98.1
+      - name: Install Rust 1.98.1
         shell: pwsh
         run: |
           rustup toolchain install 1.98.1 --profile minimal --component rustfmt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           rustup default 1.98.1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Install pinned desktop dependencies
         run: npm run setup
-      - name: Run complete source verification
-        run: npm run verify:source
+      # Keep ALL verification stages identical to package.json verify:source.
+      # Each stage is independent so one manual run exposes all failures;
+      # the final gate fails if ANY stage had a non-success outcome.
+      - name: Verify repository stage
+        id: repository
+        continue-on-error: true
+        run: npm run verify:repository -- --g0
+      - name: Verify localtest stage
+        id: localtest
+        continue-on-error: true
+        run: npm run test:localtest
+      - name: Verify feasibility stage
+        id: feasibility
+        continue-on-error: true
+        run: npm run test:feasibility
+      - name: Verify isolation stage
+        id: isolation
+        continue-on-error: true
+        run: npm run test:isolation-source
+      - name: Verify native feasibility stage
+        id: native_feasibility
+        continue-on-error: true
+        run: npm run test:native-feasibility
+      - name: Verify sandboxie stage
+        id: sandboxie
+        continue-on-error: true
+        run: npm run test:sandboxie-feasibility
+      - name: Verify native performance stage
+        id: native_performance
+        continue-on-error: true
+        run: npm run test:native-performance
+      - name: Verify presentmon stage
+        id: presentmon
+        continue-on-error: true
+        run: npm run test:presentmon
+      - name: Verify desktop stage
+        id: desktop
+        continue-on-error: true
+        run: npm run check:desktop
+      - name: Verify runtime check stage
+        id: runtime_check
+        continue-on-error: true
+        run: npm run check:runtime
+      - name: Verify runtime test stage
+        id: runtime_test
+        continue-on-error: true
+        run: npm run test:runtime
+      - name: Verify runtime format stage
+        id: runtime_format
+        continue-on-error: true
+        run: npm run format:runtime
+      - name: Enforce all full-source results
+        if: always()
+        shell: pwsh
+        env:
+          STAGE_REPOSITORY: ${{ steps.repository.outcome }}
+          STAGE_LOCALTEST: ${{ steps.localtest.outcome }}
+          STAGE_FEASIBILITY: ${{ steps.feasibility.outcome }}
+          STAGE_ISOLATION: ${{ steps.isolation.outcome }}
+          STAGE_NATIVE_FEASIBILITY: ${{ steps.native_feasibility.outcome }}
+          STAGE_SANDBOXIE: ${{ steps.sandboxie.outcome }}
+          STAGE_NATIVE_PERFORMANCE: ${{ steps.native_performance.outcome }}
+          STAGE_PRESENTMON: ${{ steps.presentmon.outcome }}
+          STAGE_DESKTOP: ${{ steps.desktop.outcome }}
+          STAGE_RUNTIME_CHECK: ${{ steps.runtime_check.outcome }}
+          STAGE_RUNTIME_TEST: ${{ steps.runtime_test.outcome }}
+          STAGE_RUNTIME_FORMAT: ${{ steps.runtime_format.outcome }}
+        run: |
+          $results = [ordered]@{
+            'repository' = $env:STAGE_REPOSITORY
+            'localtest' = $env:STAGE_LOCALTEST
+            'feasibility' = $env:STAGE_FEASIBILITY
+            'isolation' = $env:STAGE_ISOLATION
+            'native_feasibility' = $env:STAGE_NATIVE_FEASIBILITY
+            'sandboxie' = $env:STAGE_SANDBOXIE
+            'native_performance' = $env:STAGE_NATIVE_PERFORMANCE
+            'presentmon' = $env:STAGE_PRESENTMON
+            'desktop' = $env:STAGE_DESKTOP
+            'runtime_check' = $env:STAGE_RUNTIME_CHECK
+            'runtime_test' = $env:STAGE_RUNTIME_TEST
+            'runtime_format' = $env:STAGE_RUNTIME_FORMAT
+          }
+          "### Individual source-stage verdicts" >> $env:GITHUB_STEP_SUMMARY
+          $failed = 0
+          foreach ($item in $results.GetEnumerator()) {
+            "$($item.Key): $($item.Value)" >> $env:GITHUB_STEP_SUMMARY
+            if ($item.Value -ne 'success') { $failed++ }
+          }
+          if ($failed -gt 0) {
+            throw "$failed source verification stage(s) failed or were skipped; review each stage log."
+          }
       - name: Report exact commit and proof boundary
         if: always()
         shell: pwsh
         run: |
           "### Full source verification" >> $env:GITHUB_STEP_SUMMARY
           "Commit: $env:GITHUB_SHA" >> $env:GITHUB_STEP_SUMMARY
-          "No driver installation, Minecraft sign-in or gameplay occurred." >> $env:GITHUB_STEP_SUMMARY
+          "Source checks only; no driver installation, Minecraft sign-in or gameplay." >> $env:GITHUB_STEP_SUMMARY
 
   windows-build:
     name: Windows desktop compile only (no installer)
