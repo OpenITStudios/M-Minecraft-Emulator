@@ -1,5 +1,15 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Windows Quick manual CI first-run fix — 18 October 2026
+
+**Observed:** [GitHub Actions #2](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39123683409) on `c8bcbc4126aa5f38461aa156ca219bdd3d3b45ba` passed checkout and installed Node 24.21.0/npm 11.19.0, then failed in `actions/setup-node@v7`: its implicit npm cache search expected root `package-lock.json` although the only lockfile is `apps/desktop/package-lock.json`. All Quick test commands were skipped.
+
+**Change:** move Quick from Ubuntu to `windows-latest`, disable implicit npm caching (`package-manager-cache: false`) only for Quick's no-install tier, and use Windows PowerShell for job summaries. Full Source and Windows Build keep their explicit lockfile-specific cache. Existing Local-only guards, manual workflow trigger, main registration, and no driver/install restrictions remain.
+
+**Evidence:** first failed run's job logs and exact source configuration reviewed. Corrected Quick workflow remains NOT_EXECUTED until the operator manually runs it. Windows runner source tests cannot prove Minecraft gameplay or the target PC environment.
+
+**Next:** manually run only Quick against the new Local SHA and review the resulting tests.
+
 ## Local-only manual Actions registered on main — 18 October 2026
 
 **Decision:** the user approved a single discovery-only workflow file on `main` so manual Actions can target the source on `Local`. CI remains fully opt-in. No `push`, PR, schedule, release, merge, package installer or driver install triggers are introduced.

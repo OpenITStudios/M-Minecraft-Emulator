@@ -23,15 +23,16 @@ concurrency:
 
 jobs:
   quick:
-    name: Quick source contracts (Linux)
+    name: Quick source contracts (Windows)
     if: inputs.scope == 'quick' && github.ref == 'refs/heads/Local'
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 24.21.0
+          package-manager-cache: false
       - name: Verify lightweight repository contracts
         run: |
           node --version
@@ -43,10 +44,11 @@ jobs:
           npm run test:presentmon
       - name: Report exact commit and proof boundary
         if: always()
+        shell: pwsh
         run: |
-          echo "### Quick source verification" >> "$GITHUB_STEP_SUMMARY"
-          echo "Commit: \`$GITHUB_SHA\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "These source tests do not validate Windows, Minecraft, logins or driver installation." >> "$GITHUB_STEP_SUMMARY"
+          "### Quick source verification (Windows)" >> $env:GITHUB_STEP_SUMMARY
+          "Commit: $env:GITHUB_SHA" >> $env:GITHUB_STEP_SUMMARY
+          "Node source checks only; does not test Minecraft, accounts, kernel driver or a local Windows PC." >> $env:GITHUB_STEP_SUMMARY
 
   full:
     name: Full source (Windows)
