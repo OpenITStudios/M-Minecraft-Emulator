@@ -14,6 +14,7 @@ import { createHash } from 'node:crypto';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifyPinnedSeed } from './bootstrap-fork.mjs';
+import { sameGitDirectory } from './git-directory-identity.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const UPSTREAM = 'https://github.com/sandboxie-plus/Sandboxie.git';
@@ -51,7 +52,7 @@ export function importFullSandboxie({
     'an exact parent Local SHA is mandatory');
   const root = resolve(repoRoot), seed = resolve(root, seedRoot);
   refuse(ordinaryDirectory(root), 'application Git root must be an ordinary directory');
-  refuse(git(root, ['rev-parse', '--show-toplevel']) === root,
+  refuse(sameGitDirectory(root,git(root, ['rev-parse', '--show-toplevel'])),
     'must target the application repository root');
   refuse(git(root, ['branch', '--show-current']) === 'Local',
     'only the Local branch may receive the owned source');

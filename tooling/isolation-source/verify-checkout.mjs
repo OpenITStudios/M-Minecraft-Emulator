@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { lstatSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { sameGitDirectory } from './git-directory-identity.mjs';
 
 const UPSTREAM = 'https://github.com/sandboxie-plus/Sandboxie.git';
 const PIN = 'abd4c240031cfb46666daa74ca47ed4e48b561e4';
@@ -36,7 +37,7 @@ export function verifyCheckout(path, { upstream = UPSTREAM, pin = PIN,
   try { entry = lstatSync(root); } catch { throw new Error('Isolation source checkout rejected: directory missing'); }
   requireFact(entry.isDirectory() && !entry.isSymbolicLink(), 'checkout must be a real directory');
   requireFact(samePath(realpathSync(root), root), 'checkout contains redirected parent path');
-  requireFact(samePath(git(root, 'rev-parse', '--show-toplevel'), root),
+  requireFact(sameGitDirectory(root,git(root, 'rev-parse', '--show-toplevel')),
     'nested worktree or non-root path');
   requireFact(git(root, 'rev-parse', '--is-shallow-repository') === 'false',
     'shallow history');

@@ -10,6 +10,7 @@
 import {spawnSync} from 'node:child_process';
 import {existsSync, readFileSync, lstatSync, realpathSync} from 'node:fs';
 import {resolve,join,dirname} from 'node:path';
+import {sameGitDirectory} from './git-directory-identity.mjs';
 import {fileURLToPath} from 'node:url';
 import {verifyPinnedSeed} from './bootstrap-fork.mjs';
 import {
@@ -34,7 +35,7 @@ export function applyOwnedSandboxie({repoRoot,seedRoot,expectedHead,upstreamComm
  tag='v1.18.5'}) {
  guard(typeof expectedHead==='string'&&/^[0-9a-f]{40}$/.test(expectedHead),'exact Local HEAD required');
  const root=resolve(repoRoot),seed=resolve(root,seedRoot),owned=join(root,...OWNED_PATH.split('/'));
- guard(ordinaryDir(root)&&git(root,['rev-parse','--show-toplevel'])===root,'repo root invalid');
+ guard(ordinaryDir(root)&&sameGitDirectory(root,git(root,['rev-parse','--show-toplevel'])),'repo root invalid');
  guard(git(root,['branch','--show-current'])==='Local','only Local branch may be modified');
  guard(git(root,['rev-parse','HEAD'])===expectedHead,'Local HEAD has changed');
  guard(git(root,['status','--porcelain=v1','--untracked-files=all'])==='','working tree is dirty');

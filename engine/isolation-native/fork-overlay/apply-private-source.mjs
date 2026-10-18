@@ -687,8 +687,8 @@ export function preparePrivateForkSource(rootDirectory) {
   const patch = buildPrivateSourcePatch(source);
   // --index checks current index and worktree together; no partial
   // multi-file overwrite should be accepted from an anchored patch.
-  git(root, ["apply", "--check", "--index", "--whitespace=error", "-"], patch);
-  git(root, ["apply", "--index", "--whitespace=error", "-"], patch);
+  git(root, ["-c", "core.whitespace=cr-at-eol", "apply", "--check", "--index", "--whitespace=error", "-"], patch);
+  git(root, ["-c", "core.whitespace=cr-at-eol", "apply", "--index", "--whitespace=error", "-"], patch);
   const touched = git(root, ["diff", "--cached", "--name-only"])
     .split("\n").filter(Boolean);
   assert(touched.length === SOURCE_FILES.length &&

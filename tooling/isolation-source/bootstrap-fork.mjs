@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, renameSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { sameGitDirectory } from './git-directory-identity.mjs';
 
 const UPSTREAM = 'https://github.com/sandboxie-plus/Sandboxie.git';
 const PIN = 'abd4c240031cfb46666daa74ca47ed4e48b561e4';
@@ -31,7 +32,7 @@ export function verifyPinnedSeed(seed, { expectedCommit = PIN, upstreamUrl = UPS
     throw new Error('Pinned upstream seed must be a real directory');
   }
   const run = (...args) => git(['-C', root, ...args]);
-  if (resolve(run('rev-parse', '--show-toplevel')) !== root ||
+  if (!sameGitDirectory(root,run('rev-parse', '--show-toplevel')) ||
       run('rev-parse', '--is-shallow-repository') !== 'false' ||
       run('rev-parse', 'HEAD') !== expectedCommit ||
       run('rev-parse', '--verify', `refs/tags/${tag}^{commit}`) !== expectedCommit) {

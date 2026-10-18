@@ -1,5 +1,11 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Full Source #6 — isolation fixture and Windows path repairs (18 October 2026)
+
+GitHub Actions Full Source #6 at `4039c5b` completed environment setup but failed in `test:isolation-source`: 121 of 149 isolation tests passed; 28 failed. Svelte/Vitest/Rust builds were not reached. This patch addresses identified Windows Git-directory short-name aliases without accepting different physical directories, Git patch CRLF trailing-carriage-return false positives without disabling whitespace/index enforcement, obsolete subset baseline hash fixtures using the immutable canonical manifest, and 10-versus-11 owned source file provenance drift. Four Git source consumers use the same constrained directory identity helper; installation, runtime data, signed driver, Sandboxie, manual CI and default branch remain unchanged. Other failures are unresolved; no new Windows run executed yet.
+
+Next: one manually requested Full Source run at the new Local SHA and diagnosis of remaining failed cases.
+
 ## Quick #4: repair obsolete blanket MIVUBI name prohibition — 18 October 2026
 
 **Actual CI evidence:** [manual Windows Quick run #4](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39134013426) on `84d481434ffaf9ddc1462f8fbc52da8f2f14c22b` failed properly at the first fail-fast `Verify repository contracts` step (exit 1). The remaining five Quick source suites were SKIPPED, not FAIL or PASS in this run. The exact verifier error at `tooling/repository/verify.mjs:420` was `Active generic naming must remain consistent without renaming installed VMware identity`.

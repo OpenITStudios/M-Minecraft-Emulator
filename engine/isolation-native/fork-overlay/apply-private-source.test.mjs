@@ -205,8 +205,8 @@ test("entire patch applies atomically to a disposable Git checkout without renam
     git(root, ["commit", "-m", "Original source fixture"]);
     const before = git(root, ["rev-parse", "HEAD"]);
     const patch = buildPrivateSourcePatch(fixture);
-    git(root, ["apply", "--check", "--index", "--whitespace=error", "-"], patch);
-    git(root, ["apply", "--index", "--whitespace=error", "-"], patch);
+    git(root, ["-c", "core.whitespace=cr-at-eol", "apply", "--check", "--index", "--whitespace=error", "-"], patch);
+    git(root, ["-c", "core.whitespace=cr-at-eol", "apply", "--index", "--whitespace=error", "-"], patch);
     assert.equal(git(root, ["rev-parse", "HEAD"]), before);
     assert.deepEqual(git(root, ["diff", "--cached", "--name-only"]).split("\n"),
       [...SOURCE_FILES].sort());
@@ -369,8 +369,8 @@ test("Git applies the private patch to a Windows-style CRLF checkout", () => {
     assert.equal(git(root, ["status", "--porcelain"]), "");
     const patch = buildPrivateSourcePatch(checkout);
     assert.equal(patch, buildPrivateSourcePatch(sources()));
-    git(root, ["apply", "--check", "--index", "--whitespace=error", "-"], patch);
-    git(root, ["apply", "--index", "--whitespace=error", "-"], patch);
+    git(root, ["-c", "core.whitespace=cr-at-eol", "apply", "--check", "--index", "--whitespace=error", "-"], patch);
+    git(root, ["-c", "core.whitespace=cr-at-eol", "apply", "--index", "--whitespace=error", "-"], patch);
     const expected = buildExpectedPrivateSources(checkout);
     for (const path of SOURCE_FILES) {
       const actual = readFileSync(join(root, ...path.split("/")), "utf8");

@@ -81,7 +81,7 @@ export async function assembleEngine(
       privateBuild.canCoexistWithOfficialSandboxie === false &&
       privateBuild.sourceBuildMarker === 'MIVUBI_PRIVATE_ISOLATION_BUILD' &&
       Array.isArray(privateBuild.sourceFilesModified) &&
-      privateBuild.sourceFilesModified.length === 10,
+      privateBuild.sourceFilesModified.length === 11,
       'invalid or coinstallable private fork provenance');
   }
   const root = realpathSync(resolve(sourceRoot));

@@ -1,33 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { verifyArtifactFiles } from "./verify-artifact-files.mjs";
 
 function setup() {
   const root = mkdtempSync(join(tmpdir(), "isolation-hash-"));
-  const manifest = {
-    schema: 1, purpose: "SOURCE_ONLY_UNMODIFIED_UPSTREAM_BUILD_PROVENANCE",
-    upstream: { repository: "sandboxie-plus/Sandboxie", tag: "v1.18.5",
-      commit: "abd4c240031cfb46666daa74ca47ed4e48b561e4",
-      sourceLicenseFiles: ["Sandboxie/COPYING"] },
-    platforms: ["Win32", "x64"], configuration: "SbieRelease",
-    buildStages: [
-      { id: "win32-support", solution: "Sandboxie/SandboxDll.sln", platform: "Win32" },
-      { id: "x64-core", solution: "Sandboxie/Sandbox.sln", platform: "x64" },
-      { id: "x64-kernel", solution: "Sandboxie/SandboxDrv.sln", platform: "x64" },
-    ],
-    requiredArtifacts: [
-      "Sandboxie/Bin/Win32/SbieRelease/SbieSvc.exe", "Sandboxie/Bin/Win32/SbieRelease/SbieDll.dll",
-      "Sandboxie/Bin/x64/SbieRelease/SbieDrv.sys", "Sandboxie/Bin/x64/SbieRelease/SbieSvc.exe",
-      "Sandboxie/Bin/x64/SbieRelease/SbieDll.dll",
-    ],
-    optionalSymbols: ["Sandboxie/Bin/x64/SbieRelease/SbieDrv.pdb"],
-    sourceResources: ["Sandboxie/install/Templates.ini"],
-    distribution: "NOT_APPROVED", driverLoad: "NOT_EXECUTED", windowsGameplay: "NOT_EXECUTED",
-  };
+  // Test the complete version-locked closure, not an obsolete subset.
+  const manifest = JSON.parse(readFileSync(
+    new URL("./upstream-baseline.json", import.meta.url), "utf8"));
   const artifacts = [
     ...manifest.requiredArtifacts.map(path => ({ path, kind: "required" })),
     ...manifest.optionalSymbols.map(path => ({ path, kind: "optional-symbol" })),
@@ -55,7 +38,7 @@ function setup() {
 test("hash verifier checks actual file bytes without promoting driver/game acceptance", async () => {
   const f = setup(); try {
     const result = await verifyArtifactFiles(f.manifest, f.report, f.root);
-    assert.equal(result.checkedPresent, 7);
+    assert.equal(result.checkedPresent, f.report.artifacts.length);
     assert.equal(result.driverLoadVerified, false);
     assert.equal(result.gameplayVerified, false);
   } finally { f.cleanup(); }
