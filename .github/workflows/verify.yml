@@ -1,0 +1,28 @@
+name: Emulator Source Verification (manual)
+
+# GitHub requires discovery on the default branch for workflow_dispatch.
+# This version NEVER runs tests or a runner; select branch Local when dispatching.
+# The Local branch owns the actual quick, full-source and windows-build jobs.
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: Select one verification tier (use branch Local)
+        required: true
+        default: quick
+        type: choice
+        options:
+          - quick
+          - full-source
+          - windows-build
+
+permissions:
+  contents: read
+
+jobs:
+  registration-only:
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Never run on default branch
+        run: echo "Registration only. Choose Local in Run workflow."
