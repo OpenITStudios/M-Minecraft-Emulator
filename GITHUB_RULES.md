@@ -1,6 +1,6 @@
 # GitHub Rules — M-Minecraft-Emulator
 
-Canonical GitHub delivery and proof policy. **Development and source-verification authority: `Local` only.** `main` is reserved for a future approved stable release and must remain untouched (currently initialized with only `README.md`). No workflow bootstrap, default-branch switch, or source promotion to `main` is authorized.
+Canonical GitHub delivery and proof policy. **Development and source-verification authority: `Local` only.** `main` is reserved for a future reviewed release, with one **explicitly user-approved** exception (18 October 2026): a registration-only `.github/workflows/verify.yml` to expose manual Actions for testing `Local`. No other `main` changes, automated triggers, default-branch switch or source promotion are authorized.
 
 ## Operating sequence
 
@@ -83,7 +83,7 @@ Next: <one action only when incomplete>
 
 Use the cheapest decisive evidence: exact-ref static path/contract review → targeted source test → full source check only when needed → actual package inspection → Windows/VMware acceptance → real Minecraft Education acceptance. **Only G0–G4 in `docs/validation/acceptance.md` are product-test progress gates.** Unit/regression tests, static checks and stage-recorder JSON are supporting evidence, not milestones, percentages or extra gate states. Finish a coherent engineering batch before evaluating affected gates; do not run repeated micro-tests to manufacture progress.
 
-GitHub Actions workflow source must remain `workflow_dispatch` only, with read-only default permissions; no push, pull_request, cron or auto-release. GitHub's default-branch requirement currently prevents dispatch because `main` intentionally has no workflows. **Do not solve this by editing `main`, installing workflows there, changing the default branch, or merging `Local`.** Continue source/static verification entirely against `Local`. Only actual executable capability already present in ChatGPT + GitHub may produce `SOURCE_EXECUTION` or `PACKAGE_EXECUTION` evidence at an exact pinned SHA. If it is unavailable, record `NOT_EXECUTED` and continue source-verifiable work; do not suggest another machine, service, runner, or alternate deployment path. Inability to run GitHub Actions is not permission to modify `main`, add automated CI, or manufacture build evidence.
+GitHub Actions must remain strictly **manual-only** (`workflow_dispatch`, `permissions: contents: read`). No `push`, `pull_request`, cron, auto-merge, auto-release or deployment. The user approved exactly one **registration-only** `.github/workflows/verify.yml` on default branch `main`, with a permanently skipped job and no checkout. The `Local` workflow owns `quick`, `full-source`, and `windows-build` jobs; **each job must require `github.ref == 'refs/heads/Local'`** in addition to its scope. Users must select `Local` in Run workflow. Selecting `main` must never run builds/tests. Preserve `package-smoke.yml` as historical VMware packaging and do not run it for the native pilot. No additional edits to `main` are permitted. Only executed checks at the exact selected SHA provide test evidence; skipped jobs are not PASS.
 
 ## 8. Security
 

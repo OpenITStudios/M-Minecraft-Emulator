@@ -65,15 +65,15 @@ DEV.cmd package
 
 GitHub workflow files in `.github/workflows/` are `workflow_dispatch` only and may be invoked solely when appropriate. They are evidence tools, not a parallel source of readiness state. No push-based CI, unattended release or automatic promotion to `main`.
 
+**Approved manual registration (18 October 2026):** default branch `main` contains only the registration version of `.github/workflows/verify.yml`, with one permanently skipped job and no checkout. The real Quick / Full Source / Windows Build jobs are only in `Local`, each guarded by `github.ref == 'refs/heads/Local'`. The default branch cannot be used to run tests. To test: Actions → Emulator Source Verification (manual) → Run workflow → select **Local** → choose `quick` (default), `full-source` or `windows-build` → Run workflow. No job is started by commits.
+
 The Local source-verification workflow has three explicitly selected manual scopes: `quick` (Linux, small Node/source tests; default), `full-source` (complete Node/Svelte/Vitest/Rust checks on Windows), and `windows-build` (Windows frontend and Tauri Rust compilation only, without installer or kernel-driver activation). Only one scope is scheduled for a manual run. The separate historical `package-smoke.yml` remains **legacy VMware packaging** and is not an approved native pilot command; do not use it as a substitute for `windows-build`. These source definitions are not proof of executed tests.
 
-**Dispatch limitation:** the source-verification workflow remains non-dispatchable through the GitHub Actions UI/API while the default branch `main` contains no matching workflow file. Keep `main` unchanged under the current branch policy. If a future authorized decision enables dispatch, review the minimum default-branch workflow registration separately; do not silently add triggers, switch the default branch, merge product code or run packaging just to activate CI.
+**Workflow activation:** GitHub requires a manual workflow definition on the default branch. The user authorized exactly one registry file on `main`; its always-skipped job does not check out or build the app. Source and real jobs are loaded from the selected `Local` ref. Only explicit `workflow_dispatch` selections run CI, never commit hooks. This exception does not authorize a release, a merge to `main`, a driver install, or the legacy NSIS `package-smoke.yml` workflow.
 
-### Manual workflow activation on this repository
+### Operator proof and branch safety
 
-GitHub requires a `workflow_dispatch` workflow file to exist on the repository's **default branch** before it can be manually triggered. Currently `main` is the default and contains no workflow files; only `Local` has `verify.yml` and `package-smoke.yml`. Their YAML being syntactically present in `Local` therefore **does not mean the Actions UI or API can run them yet**. See [GitHub's manual-run requirement](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
-
-**Current decision (2026-10-11): source development is ChatGPT + GitHub only, on `Local`; leave `main` unchanged.** Do not bootstrap workflows on `main`, switch the default branch, promote source to activate Actions, create a new CI trigger, or require another execution environment. Existing `Local` workflow YAML is a source definition, **not runnable CI evidence** under the current branch policy. Carry out source-verifiable edits and exact-head static review with the available GitHub tooling. Mark all unexecuted compilation, packaging, VMware, and Minecraft acceptance as `NOT_EXECUTED`; do not transfer incremental validation work to a user's computer.
+Choose branch `Local` **every time**. GitHub's dropdown may initially display `main`, whose registration-only job is skipped; such an outcome is not PASS. Verify the workflow run head SHA, selected scope and log exit status. Manual CI results prove source/compilation only, not installed Windows behavior, Microsoft authentication, Minecraft gameplay or four-client stability.
 
 ## Single guest renderer compatibility pilot
 

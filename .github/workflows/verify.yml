@@ -24,7 +24,7 @@ concurrency:
 jobs:
   quick:
     name: Quick source contracts (Linux)
-    if: inputs.scope == 'quick'
+    if: inputs.scope == 'quick' && github.ref == 'refs/heads/Local'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -50,7 +50,7 @@ jobs:
 
   full:
     name: Full source (Windows)
-    if: inputs.scope == 'full-source'
+    if: inputs.scope == 'full-source' && github.ref == 'refs/heads/Local'
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -79,7 +79,7 @@ jobs:
 
   windows-build:
     name: Windows desktop compile only (no installer)
-    if: inputs.scope == 'windows-build'
+    if: inputs.scope == 'windows-build' && github.ref == 'refs/heads/Local'
     runs-on: windows-latest
     timeout-minutes: 60
     steps:

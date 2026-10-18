@@ -1,5 +1,15 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Local-only manual Actions registered on main — 18 October 2026
+
+**Decision:** the user approved a single discovery-only workflow file on `main` so manual Actions can target the source on `Local`. CI remains fully opt-in. No `push`, PR, schedule, release, merge, package installer or driver install triggers are introduced.
+
+**Implementation:** the `Local` verification workflow now checks `github.ref == 'refs/heads/Local'` for Quick, Full Source and Windows Build jobs. The default-branch workflow holds only the same dispatch inputs and an always-skipped placeholder job. An accidental `main` selection consumes no build/test job and cannot count as PASS.
+
+**Proof ceiling:** GitHub exact-head source/branch registration will be checked. Workflow execution, Svelte/Rust compilation, native Windows and Minecraft acceptance remain NOT_EXECUTED until actually run.
+
+**Next:** run manual Quick verification for the selected `Local` SHA, then examine its logs before requesting expensive tiers.
+
 ## Manual-only CI tiers prepared without default-branch changes — 18 October 2026
 
 **User decision:** keep CI strictly manually triggered. Automated `push`, pull-request, schedule and auto-release triggers are disallowed to avoid unwanted expensive runs. Preserve `Local` as the development authority and do not change `main`.
