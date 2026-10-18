@@ -2,7 +2,7 @@
 // This module returns data, NOT an executable authorization. No OS calls.
 import { win32 } from "node:path";
 import { UPSTREAM_SHA } from "../provision-disposable.mjs";
-import { PRODUCTION_LAB_TRUST_KEY_PEM } from "../attestation-gate.mjs";
+import { PRODUCTION_LAB_TRUST_KEY_PEM } from "./attestation-gate.mjs";
 
 const DRIVER = "SbieDrv";
 const SERVICE = "SbieSvc";

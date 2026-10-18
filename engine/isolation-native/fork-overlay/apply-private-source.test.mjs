@@ -212,7 +212,7 @@ test("entire patch applies atomically to a disposable Git checkout without renam
       [...SOURCE_FILES].sort());
     const expected = buildExpectedPrivateSources(fixture);
     for (const path of SOURCE_FILES) {
-      assert.equal(readFileSync(join(root, path), "utf8"), expected[path]);
+      assert.equal(readFileSync(join(root, path), "utf8").replace(/\r\n/g, "\n"), expected[path]);
     }
     const feature = readFileSync(join(root, "Sandboxie/apps/start/start.cpp"), "utf8");
     assert.match(feature, /mivubi_client:/);
@@ -371,10 +371,13 @@ test("Git applies the private patch to a Windows-style CRLF checkout", () => {
     assert.equal(patch, buildPrivateSourcePatch(sources()));
     git(root, ["-c", "core.whitespace=cr-at-eol", "apply", "--check", "--index", "--whitespace=error", "-"], patch);
     git(root, ["-c", "core.whitespace=cr-at-eol", "apply", "--index", "--whitespace=error", "-"], patch);
-    const expected = buildExpectedPrivateSources(checkout);
+    // Compare canonical Git source bytes, not double-convert CRLF fixtures.
+    // The checkout must retain Windows CRLF while its LF-normalized content
+    // must match the same reviewed private patch as on other platforms.
+    const expected = buildExpectedPrivateSources(sources());
     for (const path of SOURCE_FILES) {
       const actual = readFileSync(join(root, ...path.split("/")), "utf8");
-      assert.equal(actual, expected[path]);
+      assert.equal(actual.replace(/\r\n/g, "\n"), expected[path]);
       assert.ok(actual.includes("\r\n"), "Git must preserve Windows worktree EOL");
     }
     assert.deepEqual(git(root, ["diff", "--cached", "--name-only"]).split("\n"),

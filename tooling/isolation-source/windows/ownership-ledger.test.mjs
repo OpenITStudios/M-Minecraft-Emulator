@@ -143,7 +143,8 @@ test("tampering with stored hash chain is detected on read",()=>{
     recordIntent(f);append(f,"SbieDrv");
     const path=f.journal.location;
     const changed=JSON.parse(readFileSync(path,"utf8"));
-    changed.serviceEvidence[0].imageSignatureStatus="NotSigned";
+    // Alter a valid existing field: verification must reach the hash-chain gate.
+    changed.serviceEvidence[0].signatureStatus="NotSigned";
     writeFileSync(path,JSON.stringify(changed));
     assert.throws(()=>inspectOwnershipReview(f),/hash chain altered/);
   }finally{f.cleanup()}

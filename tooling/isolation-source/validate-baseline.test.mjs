@@ -120,8 +120,10 @@ test("baseline Windows build preserves reports, logs and existing staging paths"
   assert.match(script, /@\(\$spec\.requiredArtifacts\) \+ @\(\$spec\.optionalSymbols\)/);
   assert.match(script, /Out-File -LiteralPath \$logPath -Encoding UTF8 -NoClobber/);
   assert.match(script, /Out-File -LiteralPath \$reportFull -Encoding UTF8 -NoClobber/);
-  assert.ok(script.indexOf("Baseline build log already exists") <
-    script.indexOf("foreach ($stage in @($spec.buildStages)) {\n    $stageResult"),
+  // Source checkout can be CRLF on Windows; preserve ordering/guard assertion.
+  const scriptLines = script.replace(/\r\n/g, "\n");
+  assert.ok(scriptLines.indexOf("Baseline build log already exists") <
+    scriptLines.indexOf("foreach ($stage in @($spec.buildStages)) {\n    $stageResult"),
     "prior logs must be rejected before any MSBuild invocation");
   assert.doesNotMatch(script, /\b(?:Start-Service|Stop-Service|sc\.exe)\b/i);
 });

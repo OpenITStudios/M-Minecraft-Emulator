@@ -19,7 +19,7 @@ function makeFixture(){
  git(source,'add','.');git(source,'commit','-m','Fixture upstream tag');git(source,'tag','v1.18.5');
  const pin=git(source,'rev-parse','HEAD');
  git(app,'init','-b','Local');git(app,'config','user.name','Fixture');git(app,'config','user.email','fixture@example.invalid');
- for(const s of ['bootstrap-fork.mjs','import-full-sandboxie.mjs','apply-owned-sandboxie.mjs']){
+ for(const s of ['bootstrap-fork.mjs','import-full-sandboxie.mjs','apply-owned-sandboxie.mjs','git-directory-identity.mjs']){
  const dst=join(app,'tooling/isolation-source',s);mkdirSync(dirname(dst),{recursive:true});copyFileSync(new URL('./'+s,import.meta.url),dst);
  }
  put(app,'engine/isolation-native/fork-overlay/apply-private-source.mjs',`

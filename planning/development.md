@@ -1,5 +1,17 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Full Source #8 — remaining 9 isolation failures, bundled corrections (18 October 2026)
+
+**Observed:** [Windows Full Source #8](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39139293068) at `16a1e15e8e84e386d2ea39f3dacb7205c09735db` reached isolation suite: 140/149 PASS, nine FAIL. Setup and repository, recorder, feasibility tests passed, but Svelte/Vitest/Tauri/Rust compilation had NOT_EXECUTED due to the isolation suite gate.
+
+**First-owning faults fixed together:** (1) Two private Git patch fixture tests assumed LF files, though Windows worktrees legitimately have CRLF. Compare LF-normalized output against the exact reviewed private patch and retain the explicit CRLF assertion; Git indexed/hunk/identity checks remain. (2) Disposable cloned application fixtures omitted the newly imported `git-directory-identity.mjs`; copy its real production bytes together with dependent source. (3) Exact Git subtree identity was already checked, while one test compared a Windows worktree file directly to LF; normalize EOL for only that assertion. (4) Baseline build preflight checks were correct but the source-order assertion searched a literal LF sequence on Windows CRLF; normalize only the test's read string. (5) Tampering with ledger used an unrecognized `imageSignatureStatus` field and was rejected as malformed before reaching hash verification; mutate valid `signatureStatus` to prove the chain is actually checked. (6) `windows/transport-commands.mjs` incorrectly imported `../attestation-gate.mjs`; the existing trusted empty production key owner is `./attestation-gate.mjs` alongside it. Keep rollback gated, with no new trusted key.
+
+**Safety:** no weakening of upstream pins, package manifest closure, Git `--index --whitespace=error`, cryptographic source checks, service ownership rules, provider selection, driver load or installed account data. This batch changes only test fixtures and one module-relative import, not the engine activation policy. No workflow triggers or `main` edits.
+
+**Proof ceiling:** actual #8 errors mapped to corresponding source, static cross-file invariants and GitHub exact-SHA readback. Patched tests are NOT_EXECUTED until the operator runs manual Full Source. Subsequent Svelte/Rust failures may remain; do not assert Localtest Ready.
+
+**Next:** manually run Full Source once on new Local SHA, then fix any newly exposed Svelte/Rust errors in a complete batch.
+
 ## Full Source #7 — update private Git patch command contract (18 October 2026)
 
 **Observed:** [manual Full Source #7](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39138030002), exact `Local` `e9df2de39146fe2ee4c59157949526f03b54a1c5`, failed after successful Windows checkout, Node 24/npm 11, Rust 1.98.1 and locked npm setup. `npm run verify:repository -- --g0` failed at `tooling/repository/verify.mjs:258`, with `Private fork source/build must be explicit, reviewed and non-installing`. No isolation-source, desktop Svelte/Vitest, Tauri or canonical Rust build/test suite executed for #7.

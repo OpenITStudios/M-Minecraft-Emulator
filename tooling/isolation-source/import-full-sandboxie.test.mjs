@@ -31,7 +31,8 @@ test('imports every original upstream tracked source byte as owned editable tree
   assert.equal(r.sourceTree,r.importedTree);
   assert.equal(r.importedFileCount,10);
   assert.equal(git(f.repo,'rev-parse',`HEAD:${OWNED_PATH}`),git(f.seed,'rev-parse','HEAD^{tree}'));
-  assert.equal(readFileSync(join(f.repo,OWNED_PATH,'SandboxiePlus/SandMan/Main.cpp'),'utf8'),'original SandboxiePlus/SandMan/Main.cpp\n');
+  // Git verifies imported tree/blob identity; compare text with Windows worktree EOL normalized.
+  assert.equal(readFileSync(join(f.repo,OWNED_PATH,'SandboxiePlus/SandMan/Main.cpp'),'utf8').replace(/\r\n/g,'\n'),'original SandboxiePlus/SandMan/Main.cpp\n');
   assert.equal(git(f.repo,'branch','--show-current'),'Local');
   assert.equal(git(f.repo,'show',`${f.head}:README.md`),'MIVUBI application');
   assert.equal(git(f.repo,'status','--porcelain'),'');
