@@ -226,7 +226,7 @@ const DRIVER_VERSION_ANCHOR =
 // Existing kernel ABI/IOCTL/function codes remain exactly the pinned upstream.
 const CORE_IDENTITY = readFileSync(
   new URL("../owned-runtime/mivubi_core_identity.h", import.meta.url),
-  "utf8").trimEnd().split("\n");
+  "utf8").replace(/\r\n/g, "\n").trimEnd().split("\n");
 const DRIVER_IDENTITY_OVERRIDE = [
   "#if defined(MIVUBI_PRIVATE_ISOLATION_BUILD)",
   "    // Change only the private fork's GET_VERSION response, not its ABI.",

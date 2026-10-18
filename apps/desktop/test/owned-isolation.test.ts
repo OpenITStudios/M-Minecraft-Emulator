@@ -57,7 +57,8 @@ describe("Owned isolation candidate — strictly read-only", () => {
     expect(commands).toContain("fn desktop_inspect_owned_engine_candidate(");
     expect(screen).toContain("Inspect engine candidate");
     expect(screen).toContain("No engine was activated.");
-    expect(screen).toContain("Folder snapshot:");
+    expect(screen).toContain("Engine package ");
+    expect(screen).toContain("checksums match");
     expect(screen).toContain("Files could change after inspection.");
   });
 });

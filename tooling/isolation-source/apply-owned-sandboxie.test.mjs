@@ -10,7 +10,7 @@ function put(root,p,content){const name=join(root,p);mkdirSync(dirname(name),{re
 function makeFixture(){
  const folder=mkdtempSync(join(tmpdir(),'mivubi-owned-git-'));
  const app=join(folder,'app'),source=join(folder,'source');mkdirSync(app);mkdirSync(source);
- git(source,'init','-b','master');git(source,'config','user.name','Fixture');git(source,'config','user.email','fixture@example.invalid');
+ git(source,'init','-b','master');git(source,'config','core.autocrlf','false');git(source,'config','user.name','Fixture');git(source,'config','user.email','fixture@example.invalid');
  git(source,'remote','add','origin','https://github.com/sandboxie-plus/Sandboxie.git');
  for (const p of ['LICENSE.Plus','LICENSE.Classic','Sandboxie/COPYING',
  'SandboxiePlus/QSbieAPI/LICENSE','Sandboxie/core/drv/box.c',
@@ -18,7 +18,7 @@ function makeFixture(){
  'Sandboxie/apps/start/start.cpp','SandboxiePlus/SandMan/main.cpp']) put(source,p,'original '+p+'\n');
  git(source,'add','.');git(source,'commit','-m','Fixture upstream tag');git(source,'tag','v1.18.5');
  const pin=git(source,'rev-parse','HEAD');
- git(app,'init','-b','Local');git(app,'config','user.name','Fixture');git(app,'config','user.email','fixture@example.invalid');
+ git(app,'init','-b','Local');git(app,'config','core.autocrlf','false');git(app,'config','user.name','Fixture');git(app,'config','user.email','fixture@example.invalid');
  for(const s of ['bootstrap-fork.mjs','import-full-sandboxie.mjs','apply-owned-sandboxie.mjs','git-directory-identity.mjs']){
  const dst=join(app,'tooling/isolation-source',s);mkdirSync(dirname(dst),{recursive:true});copyFileSync(new URL('./'+s,import.meta.url),dst);
  }

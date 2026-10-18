@@ -128,6 +128,9 @@ function git(root, args, input) {
 }
 
 test("generated patch includes DLL and service startup in exact core closure and preserves kernel names", () => {
+  const generated = buildExpectedPrivateSources(sources());
+  // The shared identity header must generate exactly the same LF patch bytes on Windows.
+  for (const path of SOURCE_FILES) assert.ok(!generated[path].includes("\r"), "noncanonical C/C++ private patch lines");
   const patch = buildPrivateSourcePatch(sources());
   assert.equal((patch.match(/^diff --git/gm) ?? []).length, 11);
   assert.equal((patch.match(/^@@ /gm) ?? []).length, 24);

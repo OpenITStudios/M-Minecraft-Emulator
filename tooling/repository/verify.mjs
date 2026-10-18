@@ -517,7 +517,7 @@ requireFact(tauri.bundle?.windows?.nsis?.installMode === "currentUser", "Windows
 requireFact(tauri.bundle?.windows?.allowDowngrades === false, "Downgrade restriction changed");
 // CI diagnostics must faithfully cover every canonical verify:source stage
 // while leaving workflow_dispatch manual and the Windows failure gate intact.
-const fullSourceWorkflow = read(".github/workflows/verify.yml");
+const fullSourceWorkflow = read(".github/workflows/verify.yml").replace(/\r\n/g, "\n");
 const fullSourceBlock = fullSourceWorkflow.split("\n  full:\n")[1]?.split("\n  windows-build:\n")[0] ?? "";
 const canonicalStages = rootPackage.scripts["verify:source"].split(" && ");
 requireFact(canonicalStages.length === 12 &&

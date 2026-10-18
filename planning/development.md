@@ -1,5 +1,19 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Full Source #9–10: three root causes patched together (18 October 2026)
+
+**Observed:** manual Windows GitHub [#9](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39142688943) and [#10](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39144237781) at `51029b4b57a268424cf45ce43cbf5661521a3c10` both reported 3 failing stages of 12: repository, isolation (164/168 PASS, 4 FAIL), and desktop (148/151 PASS, 3 FAIL). All canonical Rust check/test/format stages passed.
+
+**First-owner fixes:**
+- Repository policy reader normalized Windows CRLF to LF **in memory** before comparing `verify.yml` stage contracts. Strict canonical 12-stage coverage and fail-final-gate checks remain.
+- Reviewed `mivubi_core_identity.h` is normalized to LF **in memory** when loaded for private C/C++ patch construction. Tests now assert generated private C/C++ source has no noncanonical CR; kernel ABI, source hash and Git `--index --whitespace=error` remain untouched.
+- The disposable *LF* Git test fixture sets `core.autocrlf=false` in its isolated seed/app repositories so Windows/global Git policy cannot convert the nested inline test-source script unexpectedly. Separate explicit Windows CRLF fixture tests are retained.
+- Desktop test fixes: define app source in the Create Virtual test's lexical scope (previously ReferenceError), verify the actual engine-package checksum notice rather than obsolete Folder snapshot text, and include `test:isolation-source` plus `test:presentmon` in the canonical verification routing expectation.
+
+**Proof ceiling:** exact source and two Windows logs analyzed, SHA consistency and changed file readback available. Patched Vitest/Node and full CI are NOT_EXECUTED until a new manual dispatch. No UI runtime, installer, signed driver, sandbox account, deployed game or `main` changes.
+
+**Next:** run the manual Full Source scope once on the new Local HEAD and examine all 12 outcomes.
+
 ## Full Source diagnostic coverage: expose all stage failures per manual run — 18 October 2026
 
 **Reason:** Windows Full Source #8 stopped at the isolation suite (140/149 PASS, 9 FAIL), leaving Svelte/Vitest desktop, canonical Rust and formatting untouched. The previously sequential `npm run verify:source` runner therefore requires repeated manual GitHub runs to discover independent errors. A new `Local` commit `9b195475f2e430dec6c17dd25b031dd58cfd95b3` has already corrected all nine observed fixture/import categories from #8 but has no executed CI verdict.

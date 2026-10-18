@@ -28,6 +28,7 @@ function inspected(): IsolatedClientObservation {
 }
 
 describe("MIVUBI Create Virtual readiness", () => {
+  const app = readFileSync(new URL("../src/CompactManagerApp.svelte", import.meta.url), "utf8");
   const probe = (state: OwnedHostInspection["state"]): OwnedHostInspection => ({
     schema: 1, state, interactiveSession: true,
     serviceRegistration: state === "BLOCKED_SERVICE_NAMESPACE_IN_USE" ? "PRESENT" : "ABSENT",
