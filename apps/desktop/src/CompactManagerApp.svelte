@@ -64,6 +64,9 @@
   let instanceFocusError = "";
   let focusEvents: ForegroundEventObserverStatus | null = null;
   let focusEventsError = "";
+  // A failed Start/Stop does not establish the actual Windows hook state.
+  // A deliberate successful Read must confirm state before another Start.
+  let focusEventsNeedsRecheck = false;
   // Temporary UI feedback, isolated by supported instance identity.
   let issues: Partial<Record<InstanceId, UiIssue>> = {};
   let notices: Partial<Record<InstanceId, UiNotice>> = {};
@@ -389,16 +392,19 @@
   // Opt-in, process-local Windows event counter. No automatic polling;
   // the user explicitly starts, refreshes and stops the one observer.
   async function changeFocusObserver(enable: boolean) {
-    if (isResourceOperationBusy(busy, ownedHostBusy, ownedInspectionBusy)) return;
+    if (isResourceOperationBusy(busy, ownedHostBusy, ownedInspectionBusy) ||
+        (focusEventsNeedsRecheck && enable)) return;
     busy = enable ? "focus-events-start" : "focus-events-stop";
     focusEventsError = "";
     try {
       focusEvents = enable
         ? await nativeFeasibility.startFocusObserver()
         : await nativeFeasibility.stopFocusObserver();
+      focusEventsNeedsRecheck = false;
     } catch {
       focusEvents = null;
-      focusEventsError = "Focus observer action failed. Inspect its status before changing anything.";
+      focusEventsNeedsRecheck = true;
+      focusEventsError = "Observer state unverified. Read event count or retry Stop/cleanup; do not start another hook.";
     } finally {
       busy = "";
     }
@@ -410,9 +416,11 @@
     focusEventsError = "";
     try {
       focusEvents = await nativeFeasibility.readFocusObserver();
+      focusEventsNeedsRecheck = false;
     } catch {
       focusEvents = null;
-      focusEventsError = "Unable to read foreground event counts.";
+      focusEventsNeedsRecheck = true;
+      focusEventsError = "Unable to verify foreground observer state. Do not start another hook.";
     } finally {
       busy = "";
     }
@@ -798,14 +806,19 @@
               <h3>Optional Windows focus event observer</h3>
               <p>Observe the number of foreground changes across Windows. This is opt-in and uses one low-overhead event hook, not constant polling. Events are counted only; no window title, account, or PID is retained. It does not identify Minecraft clients or modify FPS.</p>
               <div class="cm-field-row">
-                {#if focusEvents?.enabled}
+                {#if focusEventsNeedsRecheck}
+                  <button type="button" class="cm-button cm-secondary"
+                    disabled={resourceOperationBusy} on:click={() => changeFocusObserver(false)}>
+                    {busy === "focus-events-stop" ? "Cleaning up…" : "Retry Stop/cleanup"}
+                  </button>
+                {:else if focusEvents?.enabled}
                   <button type="button" class="cm-button cm-secondary"
                     disabled={resourceOperationBusy} on:click={() => changeFocusObserver(false)}>
                     {busy === "focus-events-stop" ? "Stopping…" : "Stop observer"}
                   </button>
                 {:else}
                   <button type="button" class="cm-button cm-secondary"
-                    disabled={resourceOperationBusy} on:click={() => changeFocusObserver(true)}>
+                    disabled={resourceOperationBusy || focusEventsNeedsRecheck} on:click={() => changeFocusObserver(true)}>
                     {busy === "focus-events-start" ? "Starting…" : "Start observer"}
                   </button>
                 {/if}
@@ -816,6 +829,9 @@
               </div>
               {#if focusEvents}
                 <p aria-live="polite">Observer {focusEvents.enabled ? "running" : "stopped"} · {focusEvents.eventCount} foreground-change event(s). An event count is not evidence of game FPS or process ownership.</p>
+              {/if}
+              {#if focusEventsNeedsRecheck}
+                <p class="cm-warning" aria-live="polite">Observer state unknown. Start stays disabled until Read confirms a safe state or Stop/cleanup completes.</p>
               {/if}
               {#if focusEventsError}<p class="cm-warning" role="alert">{focusEventsError}</p>{/if}
               <h3>Sandboxie configuration</h3>

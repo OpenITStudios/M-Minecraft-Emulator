@@ -49,8 +49,8 @@ pub async fn desktop_inspect_instance_overview() -> Result<InstanceOverview, Str
 // One opt-in WinEvent observer counts foreground transitions with no
 // per-event PID/HWND/title retention, Minecraft interaction, or FPS mutation.
 #[tauri::command]
-pub fn desktop_read_focus_observer() -> ForegroundEventObserverStatus {
-    instance_focus_events::read_observer()
+pub fn desktop_read_focus_observer() -> Result<ForegroundEventObserverStatus, String> {
+    instance_focus_events::read_observer().map_err(|error| error.to_string())
 }
 
 #[tauri::command]

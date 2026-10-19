@@ -10,5 +10,5 @@
   an old Windows build command as the current plan.
 
 One current work owner, one actual implementation owner, one outcome with
-exact-SHA evidence. The latest GitHub `Local` source and CI verdict
+exact-SHA evidence. The latest GitHub `Local` source and any actually executed manual evidence
 take precedence over all historical notes.

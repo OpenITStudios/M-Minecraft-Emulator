@@ -1,6 +1,13 @@
 # GitHub Rules — M-Minecraft-Emulator
 
-Canonical GitHub delivery and proof policy. **Development and source-verification authority: `Local` only.** `main` is reserved for a future reviewed release, with the previously approved registration-only `.github/workflows/verify.yml`. The user has now explicitly authorized **full automatic CI on `Local`**, superseding the earlier manual-only rule. This does not authorize any changes to `main`, default branch, packaging, releases, installed drivers, credentials or deployed gameplay.
+Canonical GitHub delivery and proof policy. **Development authority:
+`Local` only.** Following the operator's 20 October 2026 explicit decision,
+**GitHub Actions CI is fully disabled** (not merely changed from automatic
+to manual). Workflow definitions are removed from `Local` and the previously
+registration-only `main` workflow is retired. No push, manual, PR, schedule,
+package-smoke, release or deployment workflow should be reintroduced without
+new explicit user approval. This does not authorize product writes on
+`main`, releases, driver operations or account/gameplay access.
 
 ## Operating sequence
 
@@ -79,11 +86,24 @@ Next: <one action only when incomplete>
 
 `Work`, `State` and `Proof` are required going forward. `DONE` closes the specific commit outcome, not the entire runtime/product. Git history records past decisions; `planning/development.md` owns current development intent and handoff, not a second implementation-status database. No checkpoint commits, automatic chat naming or duplicated TODO files.
 
-## 7. Verification and CI
+## 7. Verification without CI
 
-Use the cheapest decisive evidence: exact-ref static path/contract review → targeted source test → full source check only when needed → actual package inspection → Windows/VMware acceptance → real Minecraft Education acceptance. **Only G0–G4 in `docs/validation/acceptance.md` are product-test progress gates.** Unit/regression tests, static checks and stage-recorder JSON are supporting evidence, not milestones, percentages or extra gate states. Finish a coherent engineering batch before evaluating affected gates; do not run repeated micro-tests to manufacture progress.
+Use the lowest sufficient available evidence: exact-HEAD static source /
+contracts → optional tests in a genuinely available execution environment →
+real Windows/gameplay acceptance only when observed. **No GitHub Actions
+workflows or CI jobs are enabled**, including manual or package-smoke.
+Do not create a new workflow, hidden schedule or alternative hosted runner
+to replace CI. The repository's pinned Node/Rust/Powershell scripts may be
+run manually when the user explicitly asks and a compatible execution
+environment is available. Do not block GitHub source commits waiting for
+a runner, or claim authored tests as executed. The user's choice to turn off
+CI does not permit deleting safety checks, weakening code review, or
+pretending four Minecraft instances or FPS limiting have been validated.
 
-**User-approved full CI:** `.github/workflows/verify.yml` on `Local` accepts `push` events **only** for `Local`, as well as explicit `workflow_dispatch` for Quick, Full Source or Windows Build. On `Local` push run the complete twelve-stage Windows Full Source check; the aggregate gate must fail on *any* stage failure or skip. **Only after all stages pass**, compile the Windows Tauri desktop in the same runner without packaging or installing. Cancel obsolete automatic runs for subsequent commits, but do not cancel manual operator runs. No `pull_request`, `schedule`, auto-merge, auto-release or deployment. `permissions: contents: read` only. The previously approved registration-only workflow on `main` remains always skipped and unchanged; all real jobs must require `github.ref == 'refs/heads/Local'`. Quick and Windows Build remain available as manually selected scopes; the legacy `package-smoke.yml` remains manual-only and blocked for this pilot. Never auto-install/sign/load kernel drivers, launch Minecraft, alter Sandboxie boxes or access real accounts. Executed checks at the *same SHA* are evidence; skipped, partial or failed checks are not PASS.
+**Only G0–G4 in `docs/validation/acceptance.md` are product-test progress
+gates.** Static checks and offline unit tests are supporting evidence, not
+new milestone flags. Previously completed CI logs remain historical evidence
+for their **specific old SHAs**, never proof for the new HEAD.
 
 ## 8. Security
 

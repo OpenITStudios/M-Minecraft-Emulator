@@ -98,6 +98,13 @@ or periodic UI timer is introduced. It exists to validate event delivery
 and lifecycle before building a provider-attributed, reversible external
 resource policy.
 
+A failed Start/Stop call does not establish whether the hook is still
+active. The UI enters an explicitly unknown state and blocks new Start.
+A read-only status that finds an installing/exiting worker returns an
+error rather than manufacturing `enabled=false`. The operator may retry
+Stop/cleanup, or read status again after cleanup. The single Rust worker
+remains the only source of hook ownership and admission.
+
 Windows contract: the thread that installs `SetWinEventHook` needs its own
 message loop and must perform `UnhookWinEvent` itself. The worker now
 returns a checked `io::Result` to the coordinator: `GetMessageW == -1` is

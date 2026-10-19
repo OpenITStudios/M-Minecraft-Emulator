@@ -136,7 +136,7 @@ The root **does not** need a `tsconfig.json` or `package-lock.json`: the only No
 
 ```text
 .agents/                 bounded developer-agent procedure
-.github/                 automatic Local Full Source CI; manual legacy package smoke
+.github/                 CI disabled; no Actions workflow files
 apps/desktop/            Svelte UI, Tauri command adapters, native window layout
 engine/runtime-core/     authoritative Rust VM lifecycle, identity, provider and guest protocol
 engine/guest/windows/    Windows Base and Guest Agent install/uninstall/finalize scripts

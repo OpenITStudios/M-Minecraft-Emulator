@@ -17,7 +17,7 @@
     "npmVersionPinned": true,
     "rustVersionPinned": true,
     "appLockfileRequired": true,
-    "ciPolicy": "full-ci-local",
+    "ciPolicy": "disabled",
     "endUserToolchainRequired": false,
     "guestOSAndMinecraftExternal": true,
     "localDeveloperStorage": true

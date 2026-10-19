@@ -4,7 +4,16 @@ This file defines repository-wide routing and non-negotiable boundaries only. Th
 
 ## Priority and branch
 
-Current user intent guides bounded work, subject to source authority, safety and available proof. **`Local` is the only active working branch for development and repository verification.** Keep `main` reserved for future reviewed releases, except for **one user-approved default-branch manual workflow registration** (`.github/workflows/verify.yml`, approved 18 October 2026). That file has no runnable jobs on `main`. All implementation and real CI jobs remain on `Local`. The user has explicitly approved automatic **Full Source plus conditional Windows compile-only** on pushes to `Local`; the earlier manual-only restriction no longer applies to that branch. Manual scopes remain available. Do not add any other workflows, product source, generated artifacts, releases or automatic CI triggers to `main`, and do not change default branch or promote `Local` without new approval. Never silently fall back to `main`.
+Current user intent guides bounded work, subject to source authority,
+safety and available proof. **`Local` is the only active working branch for
+product development.** `main` remains release-reserved. The operator has
+explicitly superseded previous CI approval: **GitHub Actions CI is disabled
+entirely**; there must be no workflow definitions on `Local` or `main`,
+and no push, manual, schedule, or package job. The workflow registration-only
+exception on `main` is retired. This CI shutdown is not permission to
+publish product changes, installers, releases or gameplay to `main`.
+Source checks remain available only when explicitly requested outside
+GitHub Actions. Never silently fall back to `main`.
 
 For material writes read `GITHUB_RULES.md`, pin exact `Local` HEAD, and consult `docs/system/implementation-map.md` before broad searching. `CONTEXT.md` holds stable facts; `planning/development.md` holds current continuation. Current source wins if either document is stale.
 

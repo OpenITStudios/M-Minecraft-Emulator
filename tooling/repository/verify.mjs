@@ -64,7 +64,6 @@ const required = [
   "tooling/acceptance/evaluate-native-performance.mjs",
   "tooling/acceptance/evaluate-native-performance.test.mjs",
   "engine/guest/windows/prepare-base.ps1",
-  ".github/workflows/verify.yml", ".github/workflows/package-smoke.yml",
   "docs/validation/client-feasibility.md",
   "docs/validation/pre-local-test-readiness.md",
   "docs/product/four-concurrent-accounts.md",
@@ -135,7 +134,7 @@ requireFact(version === rootPackage.version && version === appPackage.version &&
   version === cargoVersion("engine/runtime-core/Cargo.toml"), "Product version mismatch");
 requireFact(toolchain.node.version === read(".node-version").trim(), "Node pin mismatch");
 requireFact(toolchain.npm.lockfile === "apps/desktop/package-lock.json", "App lockfile path drift");
-requireFact(toolchain.policy.ciPolicy === "full-ci-local", "Local-only full CI policy drift");
+requireFact(toolchain.policy.ciPolicy === "disabled", "CI must remain disabled per operator request");
 // The desktop depends on the already-locked sha2 0.10.8. Its local package
 // edge must be recorded or cargo --locked rejects this clean checkout.
 const desktopLock = read("apps/desktop/src-tauri/Cargo.lock").replace(/\r\n/g, "\n");
@@ -530,50 +529,18 @@ requireFact(debugCandidateGuide.includes("raw, unsigned development executable")
   debugCandidateGuide.includes("DEV.cmd preflight") &&
   debugCandidateGuide.includes("does not install a driver"),
   "CI debug candidate must retain explicit non-installer and checksum instructions");
-// CI diagnostics must cover the canonical source stages on both Local push
-// and manual Full Source, retaining a strict final failure gate.
-const fullSourceWorkflow = read(".github/workflows/verify.yml").replace(/\r\n/g, "\n");
-const fullSourceBlock = fullSourceWorkflow.split("\n  full:\n")[1]?.split("\n  windows-build:\n")[0] ?? "";
+// CI is deliberately disabled. Retain the existing `npm run verify:source`
+// and its twelve constituent scripts for opt-in, non-Actions testing only.
+// Do not add GitHub workflows, silent runners, deployment, or scheduled jobs.
 const canonicalStages = rootPackage.scripts["verify:source"].split(" && ");
-requireFact(canonicalStages.length === 12 &&
-  canonicalStages.every(command => fullSourceBlock.includes("run: " + command + "\n")) &&
-  (fullSourceBlock.match(/continue-on-error: true/g) || []).length === canonicalStages.length &&
-  fullSourceBlock.includes("Enforce all full-source results") &&
-  fullSourceBlock.includes("steps.runtime_format.outcome") &&
-  fullSourceBlock.includes("if ($failed -gt 0)") &&
-  fullSourceBlock.includes("github.ref == 'refs/heads/Local'"),
-  "Full Source CI must cover every canonical stage and fail the final aggregate gate");
-const ciWorkflow = read(".github/workflows/verify.yml").replace(/\r\n/g, "\n");
-const isLocalPush = /^on:\s*\n  push:\s*\n    branches:\s*\n      - Local\s*\n  workflow_dispatch:/m.test(ciWorkflow);
-requireFact(isLocalPush &&
-  !/^  (?:pull_request|schedule|workflow_run|release):/m.test(ciWorkflow) &&
-  ciWorkflow.includes("cancel-in-progress: ${{ github.event_name == 'push' }}") &&
-  ciWorkflow.includes("github.ref == 'refs/heads/Local'") &&
-  ciWorkflow.includes("github.event_name == 'push' ||") &&
-  ciWorkflow.includes("if: github.event_name == 'push'") &&
-  ciWorkflow.includes("Auto compile Windows desktop (no installer)") &&
-  ciWorkflow.indexOf("Stage developer executable") > ciWorkflow.indexOf("Auto compile Windows desktop (no installer)") &&
-  ciWorkflow.indexOf("Upload developer binary evidence") > ciWorkflow.indexOf("Stage developer executable") &&
-  ciWorkflow.includes("uses: actions/upload-artifact@v4") &&
-  ciWorkflow.includes("if-no-files-found: error") &&
-  ciWorkflow.includes("retention-days: 30") &&
-  ciWorkflow.includes("Debug candidate must be a PE executable for AMD64.") &&
-  ciWorkflow.includes("Debug candidate must be PE32+ for Windows x64.") &&
-  ciWorkflow.includes("Debug candidate must use the Windows GUI subsystem.") &&
-  ciWorkflow.includes("pe_machine=AMD64") &&
-  ciWorkflow.includes("pe_optional_header=PE32_PLUS") &&
-  ciWorkflow.includes("pe_subsystem=WINDOWS_GUI") &&
-  ciWorkflow.includes("name: localtest-debug-${{ github.sha }}") &&
-  ciWorkflow.includes("github.event_name == 'push'") &&
-  ciWorkflow.includes("m-bedrock-virtual-clients.exe") &&
-  ciWorkflow.includes("BUILD-MANIFEST.txt") &&
-  ciWorkflow.includes("LOCALTEST-INSTRUCTIONS.md") &&
-  !ciWorkflow.includes("tauri build"),
-  "Automatic full CI must be Local-push-only, cancel obsolete runs, and never package/install");
-const legacyWorkflow = read(".github/workflows/package-smoke.yml");
-requireFact(/^on:\s*\n\s+workflow_dispatch:/m.test(legacyWorkflow) &&
-  !/^\s{2}(?:push|pull_request|schedule):/m.test(legacyWorkflow),
-  "Legacy package-smoke must remain manual-only");
+requireFact(canonicalStages.length === 12,
+  "Keep existing source-verification scripts independently available");
+requireFact(!existsSync(resolve(root, ".github/workflows/verify.yml")) &&
+  !existsSync(resolve(root, ".github/workflows/package-smoke.yml")) &&
+  (!existsSync(resolve(root, ".github/workflows")) ||
+    readdirSync(resolve(root, ".github/workflows")).every(name =>
+      name.startsWith(".") && name !== "." && name !== "..")),
+  "GitHub Actions workflows must stay removed from Local");
 
 function markdownFiles(dir) {
   return readdirSync(resolve(root, dir), { withFileTypes: true }).flatMap((entry) => {
@@ -623,9 +590,9 @@ requireFact(
   toolRouter.includes("v1.18.5 scripts are historical"),
   "Tooling router must reference only the current v1.18.6 native build owner");
 requireFact(
-  validationRouter.includes("12-stage Full Source Windows CI") &&
-  !validationRouter.includes("workflow files are manual-only"),
-  "Validation router must reflect current automatic Local-only full CI");
+  validationRouter.includes("GitHub Actions CI disabled") &&
+  !validationRouter.includes("Current `Local` pushes run automatic"),
+  "Validation router must reflect CI disabled policy");
 for (const historicalPath of [
   "planning/history/isolation-v1185-source-notes.md",
   "planning/history/isolation-native-development-notes.md",

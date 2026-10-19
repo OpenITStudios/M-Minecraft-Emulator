@@ -1,104 +1,71 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
-## Current correction — verified WinEvent unhook outcome
+**Repository:** `OpenITStudios/M-Minecraft-Emulator`; all product changes on
+branch `Local`. Current operator decision: **GitHub Actions CI OFF**.
 
-Audit of the current opt-in focus observer found that `UnhookWinEvent`
-and abnormal `GetMessageW` errors were ignored, allowing Stop to report
-success without having verified hook removal. The sole worker now owns a
-`JoinHandle<io::Result<()>>`, returns failure from unhook or message-loop
-errors, and both normal Stop and prior-worker reaping propagate the result.
-The already-established zero-capacity startup handshake, single-owner
-guard and same-thread cleanup remain unchanged. Shutdown logs any unverified
-cleanup after the Tauri event loop exits. The public `OBSERVE_ONLY`
-IPC/schema, Start/Read/Stop controls, and four-slot registry are unchanged.
+## Current work: retire CI and preserve safe foreground observation
 
-The previous `Local` commit
-`6b2bd798e9a9ba1236d9cde7417b0ed8405822d8` had passed
-all 12 source stages and started Windows debug compilation on
-[GitHub run 39290629066](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39290629066)
-at last inspection. This correction needs its own exact-SHA Full Source
-and Windows debug-build outcome.
+The operator explicitly revoked approval for GitHub Actions on
+20 October 2026. Remove **both** workflow definitions from `Local`:
+`.github/workflows/verify.yml` (automatic Full Source / manual Quick /
+Full Source / Windows Build) and `.github/workflows/package-smoke.yml`
+(manual installer/package testing). The separate registration-only
+`main` workflow was removed in
+[main commit cb106f9](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/cb106f9013206a73f6172c12fb62ee590a1c6b15).
+The canonical `toolchain.json`, root rules, repository verifier and
+validation router now reflect the CI-disabled policy. Never restore an
+Actions workflow, third-party hosted runner, or scheduled CI without
+fresh explicit user approval. Existing `npm run verify:source`, Rust, Svelte
+and Windows scripts remain *available* for optional manual execution
+when supported and requested. They do not run automatically.
 
-**Next:** verify the new exact-SHA Full CI and resolve concrete errors,
-if any. The observer has not been exercised in an interactive user
-Windows session; Client 01 attribution, owned engine v1.18.6 installation,
-Client 03/04 playability, four licensed sessions and safe external
-FPS limiting remain `NOT_EXECUTED` / `UNSUPPORTED`.
+This repository write is not the same as changing the repository-wide
+GitHub **Settings → Actions** administrative switch: the connector exposes
+source editing but not that settings mutation. To disable GitHub Actions
+even against future workflow re-additions or other branches, an
+administrator must turn Actions off in the repository settings. No new
+Actions workflow definitions remain on current Local/main after this
+batch if both deletion commits succeed. Previously started workflow
+runs may finish; historical logs remain historical evidence only.
 
----
+## Continued engineering: fail-closed observer recovery
 
+The existing opt-in Windows foreground event hook is still ONE Rust worker
+in `apps/desktop/src-tauri/src/engine/instance_focus_events.rs`, with
+unbuffered startup handshake, same-thread unhook and explicit Stop. The
+operator-facing Start/Read/Stop state previously had a blind spot: a
+failed IPC could cause the UI to offer Start even when hook cleanup was
+unverified, and a worker holding the lock could be misreported as stopped.
 
-**Repository:** `OpenITStudios/M-Minecraft-Emulator`; development branch `Local`.
+Changes in this batch:
+- A Rust status read returns an error for uncertain worker ownership
+  (installing, exiting, unreaped or busy), not a fabricated `enabled=false`.
+- The Svelte UI blocks Start after any failed transition or status read,
+  offers **Retry Stop/cleanup** and a separate explicit **Read event count**.
+- A successful Stop or valid status read restores the appropriate controls.
+- Transport checks and negative frontend/source contracts updated.
+- No extra service, timers, process mutation, Sandboxie driver action,
+  or Minecraft graphics/simulation/account setting change.
 
-## Current bounded correction — no orphaned foreground hooks
+## Evidence / remaining blockers
 
-The first hook batch remains source-only and opt-in. This change hardens
-lifecycle admission: the startup handshake is unbuffered, so a late
-worker can never acknowledge startup after the waiting caller times out.
-A timed-out worker retains its JoinHandle under the single owner until
-it has fully stopped; a second Start cannot install another hook during
-cleanup. Stop reports WouldBlock while this cleanup is pending instead
-of posting WM_QUIT to an unknown thread ID. A live worker still receives
-WM_QUIT and unhooks on its own message-loop thread. The public
-OBSERVE_ONLY counter/IPC remains unchanged; no PID, HWND or FPS is stored.
+The preceding `Local` commit `b5db7f6c4a026ab17a29edc012427b0d04cb05d9`
+[failed desktop Vitest on GitHub](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39292712346):
+one assertion sought a cleanup log string without its `MIVUBI` prefix.
+The actual backend log was correct. Repository, native/isolation stages
+and Rust checks passed on that prior SHA. The assertion has been fixed.
 
-Previous exact `Local` commit
-`5a465e8a86206c621cfb2fc636b7184d2400aa24`
-[CI 39288641331](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39288641331)
-had passed all 12 source stages and entered Windows debug compilation at
-last review; its terminal CI status must be checked independently.
-The current bounded correction requires its own exact-SHA Full Source CI.
+**No CI will run for this new commit**. Static review supports source
+coherence only; the new Rust/UI behavior is **NOT_EXECUTED** in Windows.
+Source compilation, hook lifecycle on a real desktop, active Client 03/04,
+four independent licensed Minecraft Education sessions and 15–20 FPS
+external limiting are still unverified or not implemented. Editable owned
+v1.18.6 source exists but is not an installed, supported runtime.
 
----
+**Next source task:** establish positive, provider-owned Client 01 and
+03/04 process attribution; do not infer it from process names or generic
+Sandboxie query failures. Keep the entire performance system external
+to Minecraft and leave FPS mutation disabled until a supported vendor/API
+route has been measured on Windows.
 
-## Current bounded batch — opt-in event-driven focus observation
-
-The desktop now contains one **operator-controlled** foreground-event
-counter in `apps/desktop/src-tauri/src/engine/instance_focus_events.rs`.
-It registers exactly one `EVENT_SYSTEM_FOREGROUND` hook from a dedicated
-Windows message-loop thread using `WINEVENT_OUTOFCONTEXT` and
-`WINEVENT_SKIPOWNPROCESS`. The thread waits inside `GetMessageW`,
-does not poll and unhooks on its installing thread. Start/Stop/Read
-controls are under Settings → Diagnostics; `app_bootstrap.rs` requests
-shutdown after the Tauri runtime exits. Nothing starts automatically.
-
-The callback counts foreground events and discards all HWND/PID/window
-titles, accounts and process data; the existing four-slot catalog and
-separate Client 02 signed box/window validation remain the only source
-owners for instance identity. The event counter is **not** a client-specific
-foreground classification, Minecraft FPS measurement, proof of gameplay
-or signal authorizing CPU/GPU changes. Neither a driver nor a frame limiter
-has been added. No Minecraft render/simulation/world/login or Windows
-priority/sandbox configuration is modified.
-
-## Evidence and proof ceiling
-
-The source hook commit `510945632b827c88eebef13b89b67e4cce449689`
-[failed Full Source CI 39286306975](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39286306975)
-at its Windows desktop compile stage: three `windows-sys` 0.61
-WinEvent constants were incorrectly imported from `Win32::UI::Accessibility`.
-They belong to `Win32::UI::WindowsAndMessaging`, while
-`SetWinEventHook` and `UnhookWinEvent` remain under Accessibility.
-Other eleven source stages passed; no debug desktop artifact was produced.
-
-This bounded fix changes only the Rust imports and adds a source contract
-test for the actual `windows-sys` module owners. It does not weaken hooks,
-admission, cleanup or Minecraft isolation.
-The preceding `b71384e98bcf3414b72b18a2863667e8a6f59d8e`
-[passed Full Source CI 39283268843](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39283268843).
-
-**The new exact-SHA Full Source / Windows compile result is pending.**
-The Windows hook has not been observed operating on the user's PC.
-Client 01 native attribution, owned v1.18.6 driver/service activation,
-Client 03/04 provisioning, four independent licensed Minecraft Education
-sessions and safe external-only background FPS limiter remain
-`NOT_EXECUTED` or `UNSUPPORTED`. No 15–20 FPS or RAM savings claim.
-
-## Next action
-
-Check the new exact-SHA Windows Full Source CI and repair proven failures,
-if any. Then review provider-specific attribution for Client 01 and
-v1.18.6 sandbox slots before connecting focus events to *any*
-reversible performance action.
-
-History: [planning/history](./history/development-through-2026-10-19.md).
+Historical work: [planning/history](./history/development-through-2026-10-19.md).

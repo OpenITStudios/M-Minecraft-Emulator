@@ -142,15 +142,19 @@ mod windows {
         ))
     }
 
-    pub fn read() -> ForegroundEventObserverStatus {
-        match WORKER.lock() {
-            Ok(guard) => status(
-                guard.as_ref().is_some_and(|worker|
-                    worker.thread_id != 0 && worker.alive.load(Ordering::Acquire)),
-                EVENTS.load(Ordering::Relaxed),
-            ),
-            Err(_) => status(false, EVENTS.load(Ordering::Relaxed)),
-        }
+    pub fn read() -> io::Result<ForegroundEventObserverStatus> {
+        // A poisoned/busy lock or a worker awaiting reap is UNKNOWN, not
+        // evidence that the hook has stopped. Caller can retry Stop.
+        let guard = lock()?;
+        let active = match guard.as_ref() {
+            None => false,
+            Some(worker) if worker.thread_id != 0
+                && worker.alive.load(Ordering::Acquire)
+                && !worker.join.is_finished() => true,
+            Some(_) => return Err(io::Error::new(io::ErrorKind::WouldBlock,
+                "Foreground hook state unverified; Stop/cleanup required")),
+        };
+        Ok(status(active, EVENTS.load(Ordering::Relaxed)))
     }
 
     pub fn start() -> io::Result<ForegroundEventObserverStatus> {
@@ -222,11 +226,11 @@ mod windows {
     }
 }
 
-pub fn read_observer() -> ForegroundEventObserverStatus {
+pub fn read_observer() -> io::Result<ForegroundEventObserverStatus> {
     #[cfg(windows)]
     { windows::read() }
     #[cfg(not(windows))]
-    { status(false, 0) }
+    { Err(io::Error::new(io::ErrorKind::Unsupported, "Windows only")) }
 }
 
 pub fn start_observer() -> io::Result<ForegroundEventObserverStatus> {

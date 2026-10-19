@@ -63,7 +63,7 @@ describe("Opt-in Windows event-driven focus counter", () => {
     expect(rust).toContain("unhook_result?;");
     expect(rust).toContain("old.join.join().map_err(");
     expect(rust).toContain("worker.join.join().map_err(");
-    expect(rust).toContain('Foreground observer cleanup unverified: {error}');
+    expect(rust).toContain('MIVUBI foreground observer cleanup unverified: {error}');
     expect(rust).not.toContain("{ let _ = windows::stop(); }");
     expect(rust).toContain("PostThreadMessageW(worker.thread_id, WM_QUIT, 0, 0)");
     expect(rust).toContain("static WORKER: Mutex<Option<Worker>>");
@@ -92,6 +92,17 @@ describe("Opt-in Windows event-driven focus counter", () => {
     expect(rust).not.toContain("Sleep(");
     expect(ui).toContain("on:click={() => changeFocusObserver(true)}");
     expect(ui).toContain("on:click={() => changeFocusObserver(false)}");
+    expect(ui).toContain("focusEventsNeedsRecheck = true;");
+    expect(ui).toContain("focusEventsNeedsRecheck = false;");
+    expect(ui).toContain("disabled={resourceOperationBusy || focusEventsNeedsRecheck}");
+    expect(ui).toContain("Retry Stop/cleanup");
+    expect(ui).toContain("Observer state unknown. Start stays disabled");
+    expect(ui).not.toContain('disabled={resourceOperationBusy} on:click={() => changeFocusObserver(true)}');
+    expect(rust).toContain('pub fn read() -> io::Result<ForegroundEventObserverStatus>');
+    expect(rust).toContain('worker.join.is_finished() => true,');
+    expect(rust).toContain('"Foreground hook state unverified; Stop/cleanup required"');
+    expect(rust).not.toContain("Err(_) => status(false, EVENTS.load(Ordering::Relaxed))");
+    expect(commands).toContain("instance_focus_events::read_observer().map_err(");
     expect(ui).toContain("on:click={readFocusObserver}");
     expect(ui).not.toContain("setInterval(");
     expect(bootstrap).toContain("instance_focus_events::shutdown()");
