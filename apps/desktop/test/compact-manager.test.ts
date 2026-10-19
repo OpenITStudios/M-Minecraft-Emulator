@@ -46,9 +46,15 @@ describe("Explicit read-only four-slot discovery", () => {
     const commands = readFileSync(new URL("../src-tauri/src/commands/native_clients.rs", import.meta.url), "utf8");
     const source = readFileSync(new URL("../src-tauri/src/engine/instance_discovery.rs", import.meta.url), "utf8");
     expect(commands).toContain("run_manager_operation(instance_discovery::inspect_instance_overview)");
-    expect(source).toContain("native_clients::inspect_native_candidates()?");
-    expect(source).toContain("native_clients::inspect_sandbox_client_02()?");
+    expect(source).toContain("native_clients::inspect_native_candidates().ok()");
+    expect(source).toContain("native_clients::inspect_sandbox_client_02().ok()");
+    expect(source).toContain("project_overview(native.as_ref(), isolated.as_ref())");
+    expect(source).not.toContain("native_clients::inspect_native_candidates()?");
+    expect(source).not.toContain("native_clients::inspect_sandbox_client_02()?");
     expect(source).toContain('evidence: "PROVIDER_NOT_AVAILABLE"');
+    expect(source).toContain("fn independent_collector_failure_preserves_only_its_peers_evidence()");
+    expect(source).toContain('assert_eq!(slot.evidence, "UNKNOWN")');
+    expect(source).toContain("assert_eq!(slot.candidate_count, None)");
     const ui = readFileSync(new URL("../src/CompactManagerApp.svelte", import.meta.url), "utf8");
     expect(ui).toContain('on:click={inspectAllSlots}');
     expect(ui).toContain("nativeFeasibility.inspectInstanceOverview()");

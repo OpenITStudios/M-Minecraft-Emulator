@@ -4,9 +4,9 @@
 
 ## Current batch — explicit read-only discovery for all four slots
 
-The active desktop adds one operator-requested `Inspect all four slots` action in Settings → Diagnostics. `instance_discovery.rs` projects the existing Windows process name-match observation and official Sandboxie Client 02 observation to four IDs from `instance_catalog.rs`. Both collector calls are serialized under the existing Rust manager lock; there is no new helper process kept resident, watcher, cache, periodic polling or provider mutation. The frontend validates a strict four-slot schema.
+The active desktop adds one operator-requested `Inspect all four slots` action in Settings → Diagnostics. `instance_discovery.rs` projects the existing Windows process name-match observation and official Sandboxie Client 02 observation to four IDs from `instance_catalog.rs`. Both collector calls are serialized under the existing Rust manager lock; there is no new helper process kept resident, watcher, cache, periodic polling or provider mutation. If one collector fails, that slot becomes `UNKNOWN` with no candidate count, while the other successful observation remains available. The frontend validates a strict four-slot schema.
 
-**Evidence ceiling:** 01 name matches are **not** attributed to Host 01: other editions and sandboxes may match. 02 returns only observed box process candidates, never sign-in or playable-world proof. 03/04 remain `PROVIDER_NOT_AVAILABLE`; zero candidates never proves that a game has completely stopped. Errors fail the whole request rather than yielding misleading empty instances. No action uses this overview to authorize Minecraft launch, account access, provisioning, process throttling or driver activation.
+**Evidence ceiling:** 01 name matches are **not** attributed to Host 01: other editions and sandboxes may match. 02 returns only observed box process candidates, never sign-in or playable-world proof. 03/04 remain `PROVIDER_NOT_AVAILABLE`; zero candidates never proves that a game has completely stopped. Collector errors remain `UNKNOWN`, rather than yielding misleading empty instances. Neither collector may authorize launch. No action uses this overview to authorize Minecraft launch, account access, provisioning, process throttling or driver activation.
 
 ## Established source architecture
 
@@ -17,6 +17,14 @@ The active desktop adds one operator-requested `Inspect all four slots` action i
 - One local Windows checkout: `DEV.cmd bootstrap` → `doctor` → `preflight` → `dev`. Project-controlled download/cache/evidence belongs under `workspace/`; OS services, C++ Build Tools, Minecraft and Microsoft user profiles remain external.
 
 ## Exact-SHA evidence
+
+**New bounded resilience change:** read-only overview keeps independent
+native/official Sandboxie candidate evidence when the other collector
+fails. No collector failure is translated into zero candidates; no new
+controller or watcher is introduced. Unit and TypeScript source contracts
+cover both one-source and two-source failures. The last exact-SHA
+`9f249656075c1fbcf3c2b8b6e9f088b719fa0368` CI is not assumed to
+verify this new change; check its own Full Source result first.
 
 The new discovery source on `92f164f78e2dc7be07ecf201e4f7412b12ad58ba`
 [failed Full Source CI](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39265234252)

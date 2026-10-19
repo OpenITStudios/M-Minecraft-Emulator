@@ -56,8 +56,10 @@ projects those two validated observations onto the four IDs from
 `instance_catalog.rs`; it performs no scanning of new boxes or providers.
 Client 01 remains **unattributed Windows name-match evidence**, Client 02
 remains **Sandboxie box candidate evidence**, and 03/04 remain
-`PROVIDER_NOT_AVAILABLE`. A collector failure fails the entire overview;
-no zero or running state is fabricated. This feature never authorizes
+`PROVIDER_NOT_AVAILABLE`. Each collector is independent: when one fails,
+its respective slot reports `UNKNOWN` with no count, while verified
+evidence from the other collector is preserved. Even if both fail, no
+zero or running state is fabricated. This feature never authorizes
 launch, login, account isolation, provisioning, focus changes or FPS caps.
 The UI validates the exact response before rendering, and invokes it only
 after an explicit operator click—no background polling, daemon or cache.

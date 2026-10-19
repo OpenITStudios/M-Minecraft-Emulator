@@ -27,39 +27,41 @@ pub struct InstanceOverview {
 /// Source-only projection; successful collector calls provide candidates,
 /// not proof of a signed-in, playable game or eligibility to launch.
 fn project_overview(
-    native: &NativeProcessObservation,
-    isolated: &SandboxieClientObservation,
+    native: Option<&NativeProcessObservation>,
+    isolated: Option<&SandboxieClientObservation>,
 ) -> InstanceOverview {
     let slots = instance_slots();
+    // An unavailable/failed collector is UNKNOWN, never a verified empty slot.
+    // Preserve successful evidence from the other independent collector.
+    let native_observed = native.is_some_and(|view| view.interactive_session);
+    let box_observed = isolated.is_some_and(|view| {
+        view.interactive_session
+            && view.membership_status == "OBSERVED"
+            && view.box_configured == "YES"
+            && view.box_settings_source == "BOX_SECTION_ENUMERATED"
+    });
     InstanceOverview {
         schema: 1,
         slots: [
             SlotDiscovery {
                 id: slots[0].id,
-                evidence: if native.interactive_session {
+                evidence: if native_observed {
                     "NAME_MATCH_UNATTRIBUTED"
                 } else {
                     "UNKNOWN"
                 },
-                candidate_count: native.interactive_session
-                    .then_some(native.candidates.len() as u32),
+                candidate_count: native.filter(|_| native_observed)
+                    .map(|view| view.candidates.len() as u32),
             },
             SlotDiscovery {
                 id: slots[1].id,
-                evidence: if isolated.interactive_session
-                    && isolated.membership_status == "OBSERVED"
-                    && isolated.box_configured == "YES"
-                    && isolated.box_settings_source == "BOX_SECTION_ENUMERATED"
-                {
+                evidence: if box_observed {
                     "BOX_PROCESS_CANDIDATES_ONLY"
                 } else {
                     "UNKNOWN"
                 },
-                candidate_count: (isolated.interactive_session
-                    && isolated.membership_status == "OBSERVED"
-                    && isolated.box_configured == "YES"
-                    && isolated.box_settings_source == "BOX_SECTION_ENUMERATED")
-                    .then_some(isolated.isolated_candidate_processes),
+                candidate_count: isolated.filter(|_| box_observed)
+                    .map(|view| view.isolated_candidate_processes),
             },
             SlotDiscovery {
                 id: slots[2].id,
@@ -76,13 +78,14 @@ fn project_overview(
 }
 
 pub fn inspect_instance_overview() -> io::Result<InstanceOverview> {
-    // Explicit caller action only. Both collectors run in sequence and fail
-    // closed: an incomplete result must never appear as an empty game slot.
+    // Explicit caller action only. Attempt each existing collector once,
+    // sequentially. A failure never becomes zero or a launch authorization;
+    // one failed source cannot discard a separate source's valid evidence.
     admit_slot_operation("01", SlotOperation::Inspect)?;
     admit_slot_operation("02", SlotOperation::Inspect)?;
-    let native = native_clients::inspect_native_candidates()?;
-    let isolated = native_clients::inspect_sandbox_client_02()?;
-    Ok(project_overview(&native, &isolated))
+    let native = native_clients::inspect_native_candidates().ok();
+    let isolated = native_clients::inspect_sandbox_client_02().ok();
+    Ok(project_overview(native.as_ref(), isolated.as_ref()))
 }
 
 #[cfg(test)]
@@ -129,7 +132,7 @@ mod tests {
 
     #[test]
     fn projects_four_slots_without_claiming_host_01_or_gameplay() {
-        let result = project_overview(&native(2, true), &isolated("OBSERVED", 1));
+        let result = project_overview(Some(&native(2, true)), Some(&isolated("OBSERVED", 1)));
         assert_eq!(result.schema, 1);
         assert_eq!(result.slots.iter().map(|slot| slot.id).collect::<Vec<_>>(), ["01", "02", "03", "04"]);
         assert_eq!(result.slots[0].evidence, "NAME_MATCH_UNATTRIBUTED");
@@ -147,8 +150,33 @@ mod tests {
     }
 
     #[test]
+    fn independent_collector_failure_preserves_only_its_peers_evidence() {
+        let safe_native = native(2, true);
+        let safe_isolated = isolated("OBSERVED", 1);
+        let only_native = project_overview(Some(&safe_native), None);
+        assert_eq!(only_native.slots[0].evidence, "NAME_MATCH_UNATTRIBUTED");
+        assert_eq!(only_native.slots[0].candidate_count, Some(2));
+        assert_eq!(only_native.slots[1].evidence, "UNKNOWN");
+        assert_eq!(only_native.slots[1].candidate_count, None);
+        let only_isolated = project_overview(None, Some(&safe_isolated));
+        assert_eq!(only_isolated.slots[0].evidence, "UNKNOWN");
+        assert_eq!(only_isolated.slots[0].candidate_count, None);
+        assert_eq!(only_isolated.slots[1].evidence, "BOX_PROCESS_CANDIDATES_ONLY");
+        assert_eq!(only_isolated.slots[1].candidate_count, Some(1));
+        let neither = project_overview(None, None);
+        for slot in &neither.slots[..2] {
+            assert_eq!(slot.evidence, "UNKNOWN");
+            assert_eq!(slot.candidate_count, None);
+        }
+        for slot in &neither.slots[2..] {
+            assert_eq!(slot.evidence, "PROVIDER_NOT_AVAILABLE");
+            assert_eq!(slot.candidate_count, None);
+        }
+    }
+
+    #[test]
     fn zero_candidates_is_observed_not_verified_stopped() {
-        let result = project_overview(&native(0, true), &isolated("OBSERVED", 0));
+        let result = project_overview(Some(&native(0, true)), Some(&isolated("OBSERVED", 0)));
         assert_eq!(result.slots[0].candidate_count, Some(0));
         assert_eq!(result.slots[1].candidate_count, Some(0));
         assert_eq!(result.slots[1].evidence, "BOX_PROCESS_CANDIDATES_ONLY");
@@ -156,14 +184,14 @@ mod tests {
 
     #[test]
     fn ambiguous_or_noninteractive_observations_never_mean_empty() {
-        let result = project_overview(&native(0, false), &isolated("UNKNOWN", 0));
+        let result = project_overview(Some(&native(0, false)), Some(&isolated("UNKNOWN", 0)));
         assert_eq!(result.slots[0].evidence, "UNKNOWN");
         assert_eq!(result.slots[0].candidate_count, None);
         assert_eq!(result.slots[1].evidence, "UNKNOWN");
         assert_eq!(result.slots[1].candidate_count, None);
         let mut unsafe_box = isolated("OBSERVED", 1);
         unsafe_box.box_settings_source = "UNKNOWN".into();
-        let result = project_overview(&native(1, true), &unsafe_box);
+        let result = project_overview(Some(&native(1, true)), Some(&unsafe_box));
         assert_eq!(result.slots[1].evidence, "UNKNOWN");
         assert_eq!(result.slots[1].candidate_count, None);
     }
