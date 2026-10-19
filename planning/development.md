@@ -1,125 +1,29 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
-**CI correction:** [run 39261357069](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39261357069) for `bae3364` failed only desktop Vitest (153/154 passed): a newly authored string assertion expected the qualified enum variant instead of Rust's declaration. Repository, isolation and Rust stages passed. The corrected test now checks the variant declaration and proves the allowed-operation match arms exclude FPS and slots 03/04. Reverify on the new exact SHA.
+**Repository:** `OpenITStudios/M-Minecraft-Emulator`; source authority is the GitHub `Local` branch. Do not rely on historical Next/PASS claims.
 
+## Current batch — explicit read-only discovery for all four slots
 
-## Shared four-slot identity/admission — 19 October 2026
+The active desktop adds one operator-requested `Inspect all four slots` action in Settings → Diagnostics. `instance_discovery.rs` projects the existing Windows process name-match observation and official Sandboxie Client 02 observation to four IDs from `instance_catalog.rs`. Both collector calls are serialized under the existing Rust manager lock; there is no new helper process kept resident, watcher, cache, periodic polling or provider mutation. The frontend validates a strict four-slot schema.
 
-**Scope:** one fail-closed slot operation matrix in the existing Rust
-`instance_catalog.rs`, enforced by the current Tauri commands before
-spawning expensive helpers; a small reusable PID/FILETIME/HWND parser
-in `instance_identity.rs` replaces duplicate parsing inside the existing
-Client 02 fresh-window verification. The signed image, box membership and
-live HWND ownership checks are unchanged.
+**Evidence ceiling:** 01 name matches are **not** attributed to Host 01: other editions and sandboxes may match. 02 returns only observed box process candidates, never sign-in or playable-world proof. 03/04 remain `PROVIDER_NOT_AVAILABLE`; zero candidates never proves that a game has completely stopped. Errors fail the whole request rather than yielding misleading empty instances. No action uses this overview to authorize Minecraft launch, account access, provisioning, process throttling or driver activation.
 
-**Supported operations:** Client 01 candidate inspection/official launch;
-Client 02 official Sandboxie inspection/selection/launch/focus/place.
-Client 03/04 launch, provisioning, process mutation, and external FPS
-control all remain explicitly blocked. No Minecraft setting, account or
-driver/service change; no new monitoring loop, IPC alias or provider.
+## Established source architecture
 
-**Evidence:** prior `87fc898ced54f1be8a0a8d75a8d30a2f26b2bf42`
-passed all 12 Full Source Windows stages and debug compilation/upload,
-[run 39258261515](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39258261515).
-This source revision requires its own exact-SHA CI. Next task after
-verification: build read-only, provider-specific discovery across slots
-without inventing or enabling a v1.18.6 driver.
+- Four immutable slot identities: `apps/desktop/src-tauri/src/engine/instance_catalog.rs`.
+- One existing Rust IPC admission rule table, shared process identity parser and official 01/02 provider with fresh Sandboxie membership/identity verification.
+- MIVUBI-owned Sandboxie v1.18.6 editable source: `engine/isolation-owned/`, immutable byte-exact reference: `engine/isolation-candidates/sandboxie-v1.18.6/`.
+- Sole build-only engine procedure: [isolation-source README](../tooling/isolation-source/README.md). Older v1.18.5/VMware routes are historical, not an active fallback.
+- One local Windows checkout: `DEV.cmd bootstrap` → `doctor` → `preflight` → `dev`. Project-controlled download/cache/evidence belongs under `workspace/`; OS services, C++ Build Tools, Minecraft and Microsoft user profiles remain external.
 
----
+## Exact-SHA evidence
 
+The previous `Local` commit `106d925f92ecd2044f128635c58fa68e25fbf867` **passed** twelve Windows Full Source CI stages, compile-only debug desktop build and artifact upload: [run 39262164288](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39262164288). This new discovery batch needs its own matching SHA CI. Success in CI is not Windows UI startup, real Minecraft login, running v1.18.6 driver or stable four-client acceptance.
 
-## Four-client foundation — 19 October 2026
+## Unresolved and next action
 
-**Scope:** one read-only catalog of four slot identities in the existing
-desktop Rust engine, exposed via a single lightweight Tauri IPC and strictly
-validated in the mounted Svelte UI. Client 01/02 retain their existing
-official Windows/Sandboxie pilot launch implementations. Client 03/04
-are rendered from the same backend catalog as `NOT_AVAILABLE`, not started
-or provisioned, and cannot be misinterpreted as ready.
+Actual owned v1.18.6 driver build/sign/install in an authorized clean lab, Client 03/04 provisioning and gameplay, four separate licensed sign-ins, Client 02 idle crash, and independently verified external FPS limiter remain **NOT EXECUTED / UNKNOWN** as appropriate. Do not alter Minecraft render/simulation distance, injection paths, game settings, official Sandboxie service, credentials or accounts.
 
-**Constraint:** this is the first bounded source change toward a four-slot
-architecture, **not** completed four-client lifecycle or four-account
-acceptance. No private v1.18.6 driver, FPS limiter or outside-game
-resource governor is enabled; no Minecraft settings or account data change.
-Future external focus/FPS work needs a real supported vendor/API capability
-and Windows measurement before applying policy.
+**Next:** inspect this exact SHA's automatic Windows Full Source and desktop compile result, fix demonstrated regressions only, then extend authenticated provider-owned discovery when its native v1.18.6 capability is validated.
 
-**Proof:** prior Local `260ef64a3175a043b43503c18666395c817c4a95`
-passed automatic Full CI run
-[39250836579](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39250836579).
-Current change requires its own Full CI verification and subsequent
-Windows/UI observation. Next source unit: generalize the existing process
-identity and lifecycle admission owner from Client 02 to slots 02–04
-without enabling an unproven provider.
-
----
-
-
-## Correct documented authority regression — 19 October 2026
-
-**CI evidence:** Full Source [run 39247152326](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39247152326) on `480891c27419a4715c45d8f1e9117b32b7673a72` FAILED two source-verification stages (repository and isolation), although desktop, runtime and other source stages passed. The repository contract expected the new `engine/README.md` but that file had not been updated in the prior commit. The v1.18.5 baseline test still sought its historical command examples in the now-active v1.18.6 README instead of the archive.
-
-**Bounded correction:** route `engine/README.md` to the sole editable v1.18.6 owner and preserve its immutable reference/legacy distinctions. Give each router a specific static invariant and rebind the v1.18.5 historical example regression to `planning/history/isolation-v1185-source-notes.md`; additionally refuse old baseline commands in the active README. No service, installer, provider, code of the active UI or native engine was touched. CI must pass on the newer SHA before this cleanup is considered verified.
-
-**Next:** inspect automatic Full Source CI on the corrected exact SHA, then attempt only a checksum-verified UI smoke on the user's Windows PC.
-
----
-
-
-**Repository:** `OpenITStudios/M-Minecraft-Emulator`; only GitHub branch
-`Local` is authorized for active development. The exact branch HEAD
-and current source always outrank historical notes.
-
-## Current product route
-
-- **Active runtime pilot:** official Minecraft Education Client 01 on
-  Windows, plus Client 02 through officially installed Sandboxie Plus
-  box `MinecraftClient02`. Create Virtual 03/04 and owned-engine
-  driver/service activation are blocked.
-- **Owned future isolation engine:** one editable Sandboxie-derived
-  v1.18.6 tree in `engine/isolation-owned/`, compared against immutable
-  `engine/isolation-candidates/sandboxie-v1.18.6/`. Its build owner
-  and outputs are documented only in
-  [Isolation Source Tooling](../tooling/isolation-source/README.md).
-  Older v1.18.5 scripts are reference/test fixtures, **not active fallback**.
-- **Single Windows local checkout:** `DEV.cmd bootstrap` → `doctor`
-  → `preflight` → `dev`; developer toolchains/downloads, native reports,
-  staging and test evidence stay under `workspace/`. Windows system
-  services, Minecraft profiles and MSVC/WDK remain OS-managed and are not
-  silently relocated.
-
-## Latest independently observed CI evidence
-
-Automatic [Full Source CI run 39239232750](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39239232750)
-for exact `Local` commit
-`48222b8f3fae0fd19790bbdc003c3ab8351e715b` **PASSED**
-all 12 source stages, Windows desktop debug compilation and artifact upload.
-Artifact `localtest-debug-48222b8f3fae0fd19790bbdc003c3ab8351e715b`
-was present and unexpired at review (scheduled expiry 18 November 2026).
-This is **not** proof of Windows UI startup, portable bootstrap execution,
-a signed installer, installed driver, Microsoft login or game stability.
-Any newer source commit needs its own exact-SHA CI verdict.
-
-## Next single action
-
-**Operator-controlled UI-only smoke on Windows 10/11 x64.** Use the
-[CI Debug Candidate](../docs/validation/ci-debug-candidate.md) with a
-verified exact-SHA manifest, save and extract under `workspace/`, and
-observe window open/render/close. Only afterward, when full source execution
-is necessary, use the
-[native pilot localtest procedure](../docs/validation/native-pilot-localtest.md)
-for the optional bootstrap/doctor/preflight/dev route and two-client
-gameplay checks. **Do not install a private driver or migrate accounts.**
-
-## Unresolved (actual target-machine evidence)
-
-Portable developer setup on the user PC, WebView2 UI smoke, Client 02
-idle-crash root cause, durable separate-account persistence, multiplayer,
-four concurrently playable accounts, and unsigned owned-driver
-MSVC/WDK build remain **NOT EXECUTED / UNKNOWN** as appropriate.
-Prior operator-confirmed two-account gameplay on 14 October 2026
-was followed by an unproven idle crash, not stable acceptance.
-
-Historical CI failures, alternate routes, and former progress notes
-are preserved separately under [planning/history](./history/development-through-2026-10-19.md).
-Do not carry an old `Next` or `PASS` into the current head.
+Historical design/CI/procedures: [planning/history](./history/development-through-2026-10-19.md).

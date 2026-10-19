@@ -3,6 +3,7 @@
 pub mod app_instance;
 pub mod dpi;
 pub mod instance_catalog;
+pub mod instance_discovery;
 pub mod instance_identity;
 pub mod native_clients;
 pub mod owned_isolation;

@@ -46,6 +46,22 @@ graphics/simulation settings, alter threads or inject rendering hooks.
 Until Windows/GPU-specific acceptance proves capability, no FPS cap is
 applied and no RAM/GPU savings are claimed.
 
+## One explicit four-slot discovery path
+
+One read-only overview is requested from Settings → Diagnostics. It
+sequentially reuses the **existing** native Windows name-match collector
+and Sandboxie Client 02 membership collector under the existing manager
+resource admission lock. The Rust `instance_discovery.rs` module only
+projects those two validated observations onto the four IDs from
+`instance_catalog.rs`; it performs no scanning of new boxes or providers.
+Client 01 remains **unattributed Windows name-match evidence**, Client 02
+remains **Sandboxie box candidate evidence**, and 03/04 remain
+`PROVIDER_NOT_AVAILABLE`. A collector failure fails the entire overview;
+no zero or running state is fabricated. This feature never authorizes
+launch, login, account isolation, provisioning, focus changes or FPS caps.
+The UI validates the exact response before rendering, and invokes it only
+after an explicit operator click—no background polling, daemon or cache.
+
 ## Four-slot admission and shared process identity foundation
 
 The `instance_catalog.rs` owner now also contains the fixed, fail-closed

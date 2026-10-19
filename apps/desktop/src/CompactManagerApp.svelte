@@ -5,6 +5,7 @@
     isSandboxieBoxPrepared,
     canRequestClient02,
     type InstanceSlotDescriptor,
+    type InstanceOverview,
     type IsolatedClientObservation,
     type OwnedCandidateInspection,
     type OwnedHostInspection,
@@ -55,6 +56,8 @@
   let ownedHostError = "";
   let existingVirtuals: VirtualBoxInventory | null = null;
   let existingVirtualsError = "";
+  let instanceOverview: InstanceOverview | null = null;
+  let instanceOverviewError = "";
   // Temporary UI feedback, isolated by supported instance identity.
   let issues: Partial<Record<InstanceId, UiIssue>> = {};
   let notices: Partial<Record<InstanceId, UiNotice>> = {};
@@ -374,6 +377,21 @@
     if (action === "setup") toggleDetails(id, "setup", origin);
   }
 
+  async function inspectAllSlots() {
+    if (isResourceOperationBusy(busy, ownedHostBusy, ownedInspectionBusy)) return;
+    busy = "inspect-all";
+    instanceOverview = null;
+    instanceOverviewError = "";
+    try {
+      instanceOverview = await nativeFeasibility.inspectInstanceOverview();
+    } catch {
+      // An incomplete collector response is UNKNOWN, never an empty game.
+      instanceOverviewError = "Four-slot inspection was inconclusive. No client was started or changed.";
+    } finally {
+      busy = "";
+    }
+  }
+
   async function discoverExistingVirtuals() {
     if (isResourceOperationBusy(busy, ownedHostBusy, ownedInspectionBusy)) return;
     busy = "discover-virtuals";
@@ -666,6 +684,32 @@
             <summary>Diagnostics</summary>
             <div class="cm-diagnostics-body">
               <p class="cm-assist">Advanced, read-only checks for the current Sandboxie Plus pilot and the not-yet-installed MIVUBI engine. These checks do not create, install, migrate or sign in to any virtual.</p>
+              <h3>Four-slot process discovery</h3>
+              <p>Inspect only on request. Host 01 results are name matches from the Windows session, not verified native ownership; Client 02 results reflect only process candidates in its official Sandboxie box. An observed zero is not proof that Minecraft stopped.</p>
+              <button type="button" class="cm-button cm-secondary"
+                disabled={resourceOperationBusy} on:click={inspectAllSlots}>
+                {busy === "inspect-all" ? "Inspecting slots…" : "Inspect all four slots"}
+              </button>
+              {#if instanceOverview}
+                <section aria-label="Four-slot candidate evidence" class="cm-existing-virtuals">
+                  <h3>Read-only instance overview</h3>
+                  <ul>
+                    {#each instanceOverview.slots as slot (slot.id)}
+                      <li>Client {slot.id} ·
+                        {slot.evidence === "NAME_MATCH_UNATTRIBUTED" ? "Windows name matches, not attributed to Client 01"
+                          : slot.evidence === "BOX_PROCESS_CANDIDATES_ONLY" ? "Sandboxie box process candidates only"
+                          : slot.evidence === "PROVIDER_NOT_AVAILABLE" ? "MIVUBI engine not available"
+                          : "Observation unknown"}
+                        {#if slot.candidateCount !== null} · {slot.candidateCount} candidate(s){/if}
+                      </li>
+                    {/each}
+                  </ul>
+                  <p>These observations never confirm Minecraft sign-in, gameplay, or permission to launch another instance.</p>
+                </section>
+              {/if}
+              {#if instanceOverviewError}
+                <p class="cm-warning" role="alert">{instanceOverviewError}</p>
+              {/if}
               <h3>Sandboxie configuration</h3>
               <p>Inspect configuration section names from the installed pilot. Results are candidates, not verified running Minecraft sessions.</p>
               <button type="button" class="cm-button cm-secondary"

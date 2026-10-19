@@ -1,5 +1,6 @@
 use crate::engine::{
     instance_catalog::{admit_slot_operation, instance_slots, InstanceSlotDescriptor, SlotOperation},
+    instance_discovery::{self, InstanceOverview},
     native_clients,
 };
 
@@ -30,6 +31,17 @@ fn admit_resource_operation<T>(
 
 fn run_manager_operation<T>(operation: impl FnOnce() -> io::Result<T>) -> io::Result<T> {
     admit_resource_operation(&MANAGER_RESOURCE_LOCK, operation)
+}
+
+// Explicit inspection of all four stable IDs. The two existing Windows
+// collectors run sequentially beneath ONE manager resource lock. No new
+// inspector service, process monitor, or shared runtime state is created.
+#[tauri::command]
+pub async fn desktop_inspect_instance_overview() -> Result<InstanceOverview, String> {
+    tauri::async_runtime::spawn_blocking(|| run_manager_operation(instance_discovery::inspect_instance_overview))
+        .await
+        .map_err(|error| format!("Four-slot inspection task failed: {error}"))?
+        .map_err(|error| error.to_string())
 }
 
 // Validate the exact slot/operation *before* touching a Windows helper.

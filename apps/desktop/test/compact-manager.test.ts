@@ -8,7 +8,7 @@ import {
   ownedVirtualCreationReason,
   isResourceOperationBusy,
 } from "../src/app/presentation/compactManager.js";
-import { parseInstanceSlots } from "../src/app/bridge/nativeFeasibilityApi.js";
+import { parseInstanceSlots, parseInstanceOverview } from "../src/app/bridge/nativeFeasibilityApi.js";
 import type { IsolatedClientObservation, OwnedHostInspection } from "../src/app/bridge/nativeFeasibilityApi.js";
 
 function inspected(): IsolatedClientObservation {
@@ -27,6 +27,50 @@ function inspected(): IsolatedClientObservation {
     interpretation: "CONFIG_AND_PROCESS_CANDIDATES_ONLY_NO_AUTHENTICATION_PROOF",
   };
 }
+
+describe("Explicit read-only four-slot discovery", () => {
+  const overview = {
+    schema: 1, slots: [
+      { id: "01", evidence: "NAME_MATCH_UNATTRIBUTED", candidateCount: 2 },
+      { id: "02", evidence: "BOX_PROCESS_CANDIDATES_ONLY", candidateCount: 1 },
+      { id: "03", evidence: "PROVIDER_NOT_AVAILABLE", candidateCount: null },
+      { id: "04", evidence: "PROVIDER_NOT_AVAILABLE", candidateCount: null },
+    ],
+  };
+  it("accepts candidate evidence without inferring per-game identity or availability", () => {
+    expect(parseInstanceOverview(overview)).toEqual(overview);
+    expect(parseInstanceOverview({
+      ...overview, slots: overview.slots.map((slot, i) =>
+        i === 1 ? { ...slot, evidence: "BOX_PROCESS_CANDIDATES_ONLY", candidateCount: 0 } : slot),
+    }).slots[1].candidateCount).toBe(0);
+    const commands = readFileSync(new URL("../src-tauri/src/commands/native_clients.rs", import.meta.url), "utf8");
+    const source = readFileSync(new URL("../src-tauri/src/engine/instance_discovery.rs", import.meta.url), "utf8");
+    expect(commands).toContain("run_manager_operation(instance_discovery::inspect_instance_overview)");
+    expect(source).toContain("native_clients::inspect_native_candidates()?");
+    expect(source).toContain("native_clients::inspect_sandbox_client_02()?");
+    expect(source).toContain('evidence: "PROVIDER_NOT_AVAILABLE"');
+    const ui = readFileSync(new URL("../src/CompactManagerApp.svelte", import.meta.url), "utf8");
+    expect(ui).toContain('on:click={inspectAllSlots}');
+    expect(ui).toContain("nativeFeasibility.inspectInstanceOverview()");
+    expect(ui).not.toContain("setInterval(");
+  });
+  it("refuses missing, switched or invented process statuses, counts and extra fields", () => {
+    expect(() => parseInstanceOverview({ ...overview, slots: overview.slots.slice(0, 3) })).toThrow();
+    expect(() => parseInstanceOverview({ ...overview, slots: [overview.slots[0], overview.slots[2], overview.slots[1], overview.slots[3]] })).toThrow();
+    expect(() => parseInstanceOverview({ ...overview, slots: overview.slots.map((v, i) =>
+      i === 2 ? { ...v, evidence: "BOX_PROCESS_CANDIDATES_ONLY", candidateCount: 1 } : v) })).toThrow();
+    expect(() => parseInstanceOverview({ ...overview, slots: overview.slots.map((v, i) =>
+      i === 0 ? { ...v, evidence: "NATIVE_VERIFIED" } : v) })).toThrow();
+    expect(() => parseInstanceOverview({ ...overview, slots: overview.slots.map((v, i) =>
+      i === 1 ? { ...v, candidateCount: -1 } : v) })).toThrow();
+    expect(() => parseInstanceOverview({ ...overview, slots: overview.slots.map((v, i) =>
+      i === 3 ? { ...v, candidateCount: 0 } : v) })).toThrow();
+    expect(() => parseInstanceOverview({ ...overview, slots: overview.slots.map((v, i) =>
+      i === 1 ? { ...v, running: true } : v) })).toThrow();
+    expect(() => parseInstanceOverview({ ...overview, slots: overview.slots.map((v, i) =>
+      i === 0 ? { ...v, evidence: "UNKNOWN", candidateCount: 0 } : v) })).toThrow();
+  });
+});
 
 describe("Shared four-slot operation admission", () => {
   it("puts supported actions behind the existing Rust command boundary", () => {

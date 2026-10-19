@@ -383,7 +383,49 @@ export function parseInstanceSlots(value: unknown): InstanceSlotDescriptor[] {
   return value as InstanceSlotDescriptor[];
 }
 
+/** Operator-requested candidate-only discovery. No per-slot login, process
+ * ownership for Host 01, or lifecycle readiness is claimed.
+ */
+export interface SlotDiscovery {
+  id: InstanceSlotId;
+  evidence: "NAME_MATCH_UNATTRIBUTED" | "BOX_PROCESS_CANDIDATES_ONLY" |
+    "UNKNOWN" | "PROVIDER_NOT_AVAILABLE";
+  candidateCount: number | null;
+}
+export interface InstanceOverview {
+  schema: 1;
+  slots: SlotDiscovery[];
+}
+export function parseInstanceOverview(value: unknown): InstanceOverview {
+  if (!isRecord(value) || !hasOnly(value, ["schema", "slots"]) ||
+      value.schema !== 1 || !Array.isArray(value.slots) || value.slots.length !== 4) {
+    throw new TypeError("Incomplete four-slot process observation.");
+  }
+  const ids: InstanceSlotId[] = ["01", "02", "03", "04"];
+  for (const [index, item] of value.slots.entries()) {
+    if (!isRecord(item) || !hasOnly(item, ["id", "evidence", "candidateCount"]) ||
+        item.id !== ids[index]) {
+      throw new TypeError("Unexpected process discovery identity.");
+    }
+    const evidence = item.evidence;
+    const supported = index === 0
+      ? ["NAME_MATCH_UNATTRIBUTED", "UNKNOWN"]
+      : index === 1 ? ["BOX_PROCESS_CANDIDATES_ONLY", "UNKNOWN"]
+      : ["PROVIDER_NOT_AVAILABLE"];
+    if (!supported.includes(evidence as string) ||
+        (evidence === "UNKNOWN" || evidence === "PROVIDER_NOT_AVAILABLE"
+          ? item.candidateCount !== null
+          : !Number.isInteger(item.candidateCount) ||
+            (item.candidateCount as number) < 0 || (item.candidateCount as number) > 16)) {
+      throw new TypeError("Invalid or escalated process discovery evidence.");
+    }
+  }
+  return value as unknown as InstanceOverview;
+}
+
 export const nativeFeasibility = {
+  inspectInstanceOverview: async (): Promise<InstanceOverview> =>
+    parseInstanceOverview(await invokeRuntime<unknown>("desktop_inspect_instance_overview")),
   listInstanceSlots: async (): Promise<InstanceSlotDescriptor[]> =>
     parseInstanceSlots(await invokeRuntime<unknown>("desktop_list_instance_slots")),
   // Only the official registered Start app is requested, never a copied EXE.
