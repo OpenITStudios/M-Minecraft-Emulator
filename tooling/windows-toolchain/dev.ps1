@@ -139,6 +139,11 @@ function Test-DeveloperToolchain {
         throw "Developer toolchain doctor found $($errors.Count) issue(s)."
     }
     Write-Host "Toolchain inputs present. No G0 or VM/game acceptance implied."
+    Write-Host "Project root: $Root"
+    Write-Host "Developer tools: $(Join-Path $Root 'workspace/toolchains')"
+    Write-Host "Project downloads: $(Join-Path $Root 'workspace/downloads')"
+    Write-Host "Project cache: $(Join-Path $Root 'workspace/cache')"
+    Write-Host "Project temporary files: $(Join-Path $Root 'workspace/tmp')"
 }
 
 # Create ONLY the missing desktop lockfile. Never synthesize dependency versions,
@@ -294,6 +299,11 @@ function Invoke-G0SourcePackage {
 
 Push-Location $Root
 try {
+    # Any command that may install dependencies, build or launch the desktop
+    # must prove pinned local binaries first; "doctor" is not an optional guard.
+    if ($Command -in @("setup", "check", "test", "dev")) {
+        Test-DeveloperToolchain
+    }
     switch ($Command) {
         "setup"   { Invoke-RepositoryNpm -NpmArguments @("run", "setup") }
         "doctor"  { Test-DeveloperToolchain }

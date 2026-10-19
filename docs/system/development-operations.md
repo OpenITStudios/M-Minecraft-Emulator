@@ -87,3 +87,15 @@ Source-only changes may be completed on GitHub `Local`, but guest graphics and g
 Read [Acceptance](../validation/acceptance.md) and [Failure Matrix](../validation/four-client-failure-matrix.md). The privacy-bounded Windows evidence collector lives in `../../tooling/acceptance/windows/collect-acceptance.ps1`. Running the collector does not prove Microsoft sign-in, 3D graphics or multiplayer unless separately observed.
 
 No source edit should be left unfinished merely because real-machine verification is unavailable; mark the exact corresponding claim `NOT_EXECUTED`.
+
+## Before localtest: one-root command protection
+
+Use `DEV.cmd bootstrap` once, then `DEV.cmd doctor`, then
+`DEV.cmd preflight`, then `DEV.cmd dev`. The `setup`, `check`,
+`test`, and `dev` routes each revalidate pinned local tool versions and
+lockfile presence before proceeding; they do not assume that the operator
+remembered to run `doctor`. `bootstrap` uses a process-only local
+TEMP/TMP before network downloads, and the Rustup sidecar has bounded plain-file
+admission. This is a source/CI contract, not a completed Windows installed-PC
+smoke test. Debug artifact output is a separate compile-only candidate and does
+not install the system dependencies.

@@ -31,6 +31,9 @@ function Assert-RealDirectory {
 foreach ($dir in @($workspace,$downloads,$tools,$temp,$cache,(Join-Path $tools 'cargo'),(Join-Path $tools 'rustup'))) {
   Assert-RealDirectory $dir
 }
+# Windows PowerShell web requests and extraction use local scratch, not system TEMP.
+$env:TEMP = $temp
+$env:TMP = $temp
 function Get-VerifiedDownload {
   param([string]$Url,[string]$FileName,[string]$Sha256)
   $parsed = $null
@@ -118,6 +121,12 @@ if (-not (Test-Path -LiteralPath $checksumFile)) {
   if (Test-Path -LiteralPath $partial) { throw 'Stale rustup checksum download; inspect it first.' }
   Invoke-WebRequest -Uri $portable.rustup.sha256Url -OutFile $partial -UseBasicParsing
   Move-Item -LiteralPath $partial -Destination $checksumFile
+}
+$checksumItem = Get-Item -LiteralPath $checksumFile -Force -ErrorAction Stop
+if ($checksumItem.PSIsContainer -or
+    ($checksumItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+    $checksumItem.Length -gt 4096 -or $checksumItem.Length -lt 64) {
+  throw 'Rustup checksum sidecar must be a bounded ordinary file.'
 }
 $checksumText = (Get-Content -LiteralPath $checksumFile -Raw).Trim()
 if ($checksumText -match '^([a-fA-F0-9]{64})(?:\s+.*)?$') {

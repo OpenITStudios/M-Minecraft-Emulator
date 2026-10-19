@@ -15,6 +15,8 @@ const config = JSON.parse(read('toolchain.json'));
 
 test('DEV.cmd dispatches only workspace-local PowerShell after opt-in bootstrap', () => {
   assert.match(launcher, /if \/I "%~1"=="bootstrap"/);
+  assert.match(launcher, /if "%~1"=="" goto help/);
+  assert.match(launcher, /if \/I "%~1"=="help" goto help/);
   assert.match(launcher, /powershell\.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass/);
   assert.match(launcher, /workspace\\toolchains\\powershell\\pwsh\.exe/);
   assert.match(launcher, /Portable developer environment is missing/);
@@ -44,6 +46,9 @@ test('download route is pinned, checksum-verified, local and non-global', () => 
   assert.match(bootstrap,/Downloading .*workspace\/downloads/);
   assert.match(bootstrap,/SHA-256 mismatch/);
   assert.match(bootstrap,/Refuse non-directory or reparse-point/);
+  assert.ok(bootstrap.indexOf('$env:TEMP = $temp') < bootstrap.indexOf('function Get-VerifiedDownload'),
+    'bootstrap download temporary directory must be local before network IO');
+  assert.match(bootstrap,/Rustup checksum sidecar must be a bounded ordinary file/);
   assert.match(bootstrap,/Portable Node\/npm\/PowerShell runtime identity mismatch/);
   assert.doesNotMatch(bootstrap,/\b(?:Start-Service|New-Service|sc\.exe|Start-Process -Verb RunAs)\b/);
 });
@@ -52,6 +57,8 @@ test('developer commands isolate HOME/cache/temp, require local runtime and pres
   assert.match(developer,/workspace\/toolchains\/node\/npm\.cmd/);
   assert.match(developer, /resolves outside workspace\/toolchains/);
   assert.match(developer,/& \$LocalNpm @NpmArguments/);
+  assert.match(developer,/if \(\$Command -in @\("setup", "check", "test", "dev"\)\)/);
+  assert.match(developer,/if \(\$Command -in @[\s\S]*?Test-DeveloperToolchain[\s\S]*?switch \(\$Command\)/);
   for(const snippet of [
     '$env:CARGO_HOME', '$env:RUSTUP_HOME', '$env:NPM_CONFIG_CACHE',
     '$env:NPM_CONFIG_PREFIX', '$env:NUGET_PACKAGES', '$env:TEMP', '$env:TMP'

@@ -53,3 +53,15 @@ local Node/npm/Cargo/Rust and use process-scoped npm/NuGet cache, temporary
 and home paths under `workspace/`. Direct `npm`, `cargo` or PowerShell
 commands outside `DEV.cmd` are **not** guaranteed to share these settings.
 Git, Visual Studio/MSVC/WDK and Windows services remain OS prerequisites.
+
+The `setup`, `check`, `test`, and `dev` launcher commands validate the
+pinned local toolchain before doing work, even when `doctor` was skipped.
+`DEV.cmd doctor` prints the active project, toolchain, download, cache and
+temporary directories for explicit inspection. PowerShell bootstrap sets
+process-local TEMP/TMP before downloading. Installed Microsoft/Windows system
+components remain external prerequisites and are never relocated by `DEV.cmd`.
+
+For CI debug artifacts, set the browser download destination to
+`workspace/downloads/`, then extract the allowlisted unsigned debug files
+into a unique `workspace/packages/debug-<SHA>/` directory. The browser's
+own download location cannot be controlled by the command launcher.

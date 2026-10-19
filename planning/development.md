@@ -1,3 +1,15 @@
+## Single-root pre-localtest audit — 19 October 2026
+
+**Observed exact source baseline:** commit 58fe67af134e893bea78df86f35749b72b8f4c08 passed the 12 Full Source Windows CI stages, Windows x64 desktop debug compilation and signed-off artifact hash/PE structural checks. Workflow run 39230175060 published checksum-listed unsigned developer binary artifact; this is not a verified launcher, game, signing or native provider execution.
+
+**Source hardening:** developer setup/check/test/dev now fail closed unless the pinned local Node/npm/Rust and lockfiles actually validate, without requiring a separate doctor invocation; doctor shows resolved on-root paths. Bootstrap sets process-local TEMP/TMP before network operations and rejects symlink/oversized Rustup SHA sidecars. Portable regression contracts cover these invariants.
+
+**Still NOT_EXECUTED:** a real Windows bootstrap on an operator PC, external Microsoft VS/MSVC/WDK prerequisite setup, live unsigned debug UI smoke, Sandboxie Client 02 gameplay/crash retest or four-client acceptance. Git/Windows native drivers are deliberately outside project-managed portable storage. Preserve all account-bearing data and driver installation gates.
+
+**Next:** verify latest CI SHA; before gaming, run the opt-in portable bootstrap and inspect doctor output on Windows.
+
+---
+
 ## Workspace-only portable development launcher — 19 October 2026
 
 **Bounded implementation:** DEV.cmd bootstrap provides a Windows x64 portable local prerequisite route: checksum-pinned Node v24.21.0/npm v11.19.0 and PowerShell v7.5.4 ZIPs, Rust v1.98.1 via checksum-verified official rustup-init, all saved/extracted beneath workspace/. The DEV.cmd developer route uses the local PowerShell executable and process-scoped Cargo/Rustup homes, npm/NuGet caches and temp, with an explicit no-global-node/npm/rust fallback. One localtest suite includes the PowerShell parser/route contract. Git/MSVC/WDK remain external OS prerequisites; no Windows installed app identity, Minecraft data, Sandboxie services or drivers modified.
