@@ -55,7 +55,7 @@ mod windows {
     struct Worker {
         thread_id: u32,
         alive: Arc<AtomicBool>,
-        join: JoinHandle<()>,
+        join: JoinHandle<io::Result<()>>,
     }
 
     static WORKER: Mutex<Option<Worker>> = Mutex::new(None);
@@ -83,7 +83,7 @@ mod windows {
     fn worker_main(
         ready: mpsc::SyncSender<io::Result<u32>>,
         alive: Arc<AtomicBool>,
-    ) {
+    ) -> io::Result<()> {
         // Install, dispatch and UNINSTALL the hook on this same OS thread.
         // PeekMessage creates the thread message queue before start handshake.
         let mut msg: MSG = unsafe { std::mem::zeroed() };
@@ -101,24 +101,39 @@ mod windows {
         };
         if hook.is_null() {
             let _ = ready.send(Err(io::Error::last_os_error()));
-            return;
+            // Nothing was installed; the error has been sent to the caller.
+            return Ok(());
         }
         // Publish liveness BEFORE the handshake so a fast second caller
         // cannot mistake a newly installed hook for a stopped worker.
         alive.store(true, Ordering::Release);
         // If caller timed out/dropped the handshake, never orphan a hook.
+        let mut dispatch_error = None;
         if ready.send(Ok(unsafe { GetCurrentThreadId() })).is_ok() {
             loop {
                 let result = unsafe { GetMessageW(&mut msg, ptr::null_mut(), 0, 0) };
-                if result <= 0 { break; }
+                if result == 0 { break; } // WM_QUIT is an orderly Stop.
+                if result == -1 {
+                    dispatch_error = Some(io::Error::last_os_error());
+                    break;
+                }
                 unsafe {
                     TranslateMessage(&msg);
                     DispatchMessageW(&msg);
                 }
             }
         }
-        unsafe { UnhookWinEvent(hook) };
+        // The installing message-loop thread is the sole unhook owner.
+        // Do not report a successful Stop if Windows refused UnhookWinEvent.
+        let unhook_result = if unsafe { UnhookWinEvent(hook) } == 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(())
+        };
         alive.store(false, Ordering::Release);
+        unhook_result?;
+        if let Some(error) = dispatch_error { return Err(error); }
+        Ok(())
     }
 
     fn lock() -> io::Result<std::sync::MutexGuard<'static, Option<Worker>>> {
@@ -154,7 +169,7 @@ mod windows {
         }
         if let Some(old) = guard.take() {
             old.join.join().map_err(|_| io::Error::other(
-                "Previous foreground hook thread terminated unexpectedly"))?;
+                "Previous foreground hook thread terminated unexpectedly"))??;
         }
         EVENTS.store(0, Ordering::Relaxed);
         // Zero-capacity handshake: the hook thread's send succeeds only
@@ -201,7 +216,7 @@ mod windows {
         }
         if let Some(worker) = guard.take() {
             worker.join.join().map_err(|_| io::Error::other(
-                "Foreground hook worker exited unexpectedly"))?;
+                "Foreground hook worker exited unexpectedly"))??;
         }
         Ok(status(false, EVENTS.load(Ordering::Relaxed)))
     }
@@ -232,7 +247,11 @@ pub fn stop_observer() -> io::Result<ForegroundEventObserverStatus> {
 /// process exit, but our normal path explicitly unhooks on its owner thread.
 pub fn shutdown() {
     #[cfg(windows)]
-    { let _ = windows::stop(); }
+    if let Err(error) = windows::stop() {
+        // Tauri has already exited, so preserve a diagnostic instead of
+        // silently claiming an orderly cleanup was verified.
+        eprintln!("MIVUBI foreground observer cleanup unverified: {error}");
+    }
 }
 
 #[cfg(test)]

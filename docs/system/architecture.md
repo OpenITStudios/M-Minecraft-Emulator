@@ -99,7 +99,13 @@ and lifecycle before building a provider-attributed, reversible external
 resource policy.
 
 Windows contract: the thread that installs `SetWinEventHook` needs its own
-message loop and must perform `UnhookWinEvent` itself. Treat Windows
+message loop and must perform `UnhookWinEvent` itself. The worker now
+returns a checked `io::Result` to the coordinator: `GetMessageW == -1` is
+an error, and `UnhookWinEvent == FALSE` must not be treated as a successful
+Stop. Repeated Stop without a worker is idempotent, while restarting a
+previous worker must reap its JoinHandle before a new hook is installed.
+Any cleanup error after the Tauri event loop exits is recorded as an
+unverified shutdown rather than silently swallowed. Treat Windows
 hook installation failures, event delivery and actual memory overhead
 as `NOT_EXECUTED` until operator Windows evidence exists.
 

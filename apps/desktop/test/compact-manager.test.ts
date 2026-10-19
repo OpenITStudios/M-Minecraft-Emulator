@@ -55,6 +55,16 @@ describe("Opt-in Windows event-driven focus counter", () => {
     expect(rust).toContain("WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS");
     expect(rust).toContain("GetMessageW(");
     expect(rust).toContain("UnhookWinEvent(hook)");
+    // A failed unhook or a broken Win32 message queue must never
+    // masquerade as a successful Stop, including after repeated cycles.
+    expect(rust).toContain("join: JoinHandle<io::Result<()>>");
+    expect(rust).toContain("if result == -1 {");
+    expect(rust).toContain("let unhook_result = if unsafe { UnhookWinEvent(hook) } == 0 {");
+    expect(rust).toContain("unhook_result?;");
+    expect(rust).toContain("old.join.join().map_err(");
+    expect(rust).toContain("worker.join.join().map_err(");
+    expect(rust).toContain('Foreground observer cleanup unverified: {error}');
+    expect(rust).not.toContain("{ let _ = windows::stop(); }");
     expect(rust).toContain("PostThreadMessageW(worker.thread_id, WM_QUIT, 0, 0)");
     expect(rust).toContain("static WORKER: Mutex<Option<Worker>>");
     // A buffered handshake could acknowledge a hook after the caller's

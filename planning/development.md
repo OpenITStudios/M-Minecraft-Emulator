@@ -1,5 +1,33 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Current correction — verified WinEvent unhook outcome
+
+Audit of the current opt-in focus observer found that `UnhookWinEvent`
+and abnormal `GetMessageW` errors were ignored, allowing Stop to report
+success without having verified hook removal. The sole worker now owns a
+`JoinHandle<io::Result<()>>`, returns failure from unhook or message-loop
+errors, and both normal Stop and prior-worker reaping propagate the result.
+The already-established zero-capacity startup handshake, single-owner
+guard and same-thread cleanup remain unchanged. Shutdown logs any unverified
+cleanup after the Tauri event loop exits. The public `OBSERVE_ONLY`
+IPC/schema, Start/Read/Stop controls, and four-slot registry are unchanged.
+
+The previous `Local` commit
+`6b2bd798e9a9ba1236d9cde7417b0ed8405822d8` had passed
+all 12 source stages and started Windows debug compilation on
+[GitHub run 39290629066](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39290629066)
+at last inspection. This correction needs its own exact-SHA Full Source
+and Windows debug-build outcome.
+
+**Next:** verify the new exact-SHA Full CI and resolve concrete errors,
+if any. The observer has not been exercised in an interactive user
+Windows session; Client 01 attribution, owned engine v1.18.6 installation,
+Client 03/04 playability, four licensed sessions and safe external
+FPS limiting remain `NOT_EXECUTED` / `UNSUPPORTED`.
+
+---
+
+
 **Repository:** `OpenITStudios/M-Minecraft-Emulator`; development branch `Local`.
 
 ## Current bounded correction — no orphaned foreground hooks
