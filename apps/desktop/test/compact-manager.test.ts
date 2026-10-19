@@ -36,7 +36,11 @@ describe("Shared four-slot operation admission", () => {
     const native = readFileSync(new URL("../src-tauri/src/engine/native_clients.rs", import.meta.url), "utf8");
     expect(catalog).toContain("pub fn admit_slot_operation(id: &str, operation: SlotOperation)");
     expect(catalog).toContain('slot.availability != "PILOT_ROUTE_ONLY"');
-    expect(catalog).toContain("SlotOperation::ApplyFrameCap");
+    expect(catalog).toContain("    ApplyFrameCap,");
+    const allowed = catalog.split("let allowed = matches!(")[1]?.split("if !allowed")[0] ?? "";
+    expect(allowed).not.toContain("ApplyFrameCap");
+    expect(allowed).not.toContain('"03"');
+    expect(allowed).not.toContain('"04"');
     expect(commands).toContain("admit_slot_operation(id, action)?");
     expect(commands).toContain('run_slot_operation("02", SlotOperation::Launch');
     expect(commands).toContain('run_slot_operation("01", SlotOperation::Launch');

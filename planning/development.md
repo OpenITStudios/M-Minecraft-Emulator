@@ -1,5 +1,8 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+**CI correction:** [run 39261357069](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39261357069) for `bae3364` failed only desktop Vitest (153/154 passed): a newly authored string assertion expected the qualified enum variant instead of Rust's declaration. Repository, isolation and Rust stages passed. The corrected test now checks the variant declaration and proves the allowed-operation match arms exclude FPS and slots 03/04. Reverify on the new exact SHA.
+
+
 ## Shared four-slot identity/admission — 19 October 2026
 
 **Scope:** one fail-closed slot operation matrix in the existing Rust
