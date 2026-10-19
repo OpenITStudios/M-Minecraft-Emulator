@@ -29,8 +29,8 @@ in this change. Do not describe source inspection as REA runtime proof.
 | Product code and runtime contracts | `apps/`, `engine/`, `tooling/` | Yes | Keep source and deterministic tests under their actual owners |
 | Toolchain declarations and lockfiles | `toolchain.json`, `apps/desktop/package-lock.json` and Rust `Cargo.lock` | Yes | These are immutable inputs, not generated binary caches |
 | Node, Vite, Rust, Tauri output | `apps/desktop/node_modules/`, `apps/desktop/dist/`, Rust/Tauri `target/`, Tauri staging | No | Already contained by the one checkout; preserve tool-native paths |
-| Portable developer tool installations | `workspace/toolchains/` | No | Future scoped installer/launcher must verify exact provenance and use local paths |
-| Developer caches and temporary files | `workspace/cache/`, `workspace/tmp/` | No | Future scoped commands must not default to global cache locations |
+| Portable developer tool installations | `workspace/toolchains/` | No | Opt-in `DEV.cmd bootstrap`: pinned and checksum-verified Node/PowerShell ZIPs, Rustup checksum sidecar and local Rustup home |
+| Developer caches and temporary files | `workspace/cache/`, `workspace/tmp/` | No | `DEV.cmd` applies process-scoped npm/NuGet caches and temporary directories; direct shells are not managed |
 | External installer and prerequisite downloads | `workspace/downloads/` | No | Record original URL, vendor, version and SHA-256 |
 | Native-engine build reports | `workspace/builds/<fresh-run>/` | No | Only new, non-reparse destinations; reports remain inside this checkout |
 | Engine staged payloads and future approved packages | `workspace/packages/<fresh-run>/` | No | Fresh path only; staged native engine is NOT-INSTALLABLE, never released or signed by copying |
@@ -50,12 +50,13 @@ project-generated report. The current owned v1.18.6 builder must accept
 the assembler enforces those same boundaries. Both require preexisting,
 non-junction parent directories and refuse reuse. Tool-owned compiler
 outputs inside `engine/isolation-owned/` are ignored and independently
-checked for preexisting binaries. The current `DEV.cmd` still uses
-toolchain executables from PATH and does **not** yet guarantee that its
-downloads/caches stay in the checkout; a separate, verified portable
-bootstrap and environment-scoped launcher are still required before
-the **entire developer installation** can be called self-contained.
-Never describe merely changing this policy as proof of that bootstrap.
+checked for preexisting binaries. The opt-in `DEV.cmd bootstrap` installs pinned portable developer tools
+under `workspace/toolchains/` from checksum-verified downloads saved in
+`workspace/downloads/`. `DEV.cmd` refuses global runtime fallback and
+scopes developer caches/temp to this root without altering OS/user PATH.
+Git and VS2022/MSVC/WDK remain system prerequisites; neither game runtime
+nor installed Windows services is relocatable by this developer workflow.
+These source contracts do not prove that bootstrap executed on target Windows.
 Do not create root `artifacts/`, `downloads/`, `installers/`,
 or `test-results/` directories. The root is an entry/config boundary,
 not a second build or evidence owner.

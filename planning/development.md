@@ -1,3 +1,13 @@
+## Workspace-only portable development launcher — 19 October 2026
+
+**Bounded implementation:** DEV.cmd bootstrap provides a Windows x64 portable local prerequisite route: checksum-pinned Node v24.21.0/npm v11.19.0 and PowerShell v7.5.4 ZIPs, Rust v1.98.1 via checksum-verified official rustup-init, all saved/extracted beneath workspace/. The DEV.cmd developer route uses the local PowerShell executable and process-scoped Cargo/Rustup homes, npm/NuGet caches and temp, with an explicit no-global-node/npm/rust fallback. One localtest suite includes the PowerShell parser/route contract. Git/MSVC/WDK remain external OS prerequisites; no Windows installed app identity, Minecraft data, Sandboxie services or drivers modified.
+
+**Proof ceiling:** source/static contract authored on Local; requires exact-SHA CI source execution and a real Windows portable bootstrap before this runtime claim may be PASS. No native driver or licensed gameplay proof.
+
+**Next:** inspect Full CI and perform a later operator-controlled Windows bootstrap/localtest; record actual locations and keep any outside-the-root exceptions explicit.
+
+---
+
 ## Single-checkout machine-output refactor — 19 October 2026
 
 **User requirement:** keep all repository-managed project downloads, source, toolchains, caches, native build evidence and staged payloads under one Windows checkout root without separate D:/Source or system-C project folders. Modular owners remain apps/, engine/, tooling/, docs/, planning/ and workspace/.

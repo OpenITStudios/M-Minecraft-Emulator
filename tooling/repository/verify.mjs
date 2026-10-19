@@ -593,7 +593,7 @@ for (const path of markdownFiles("docs")) {
 }
 
 const scripts = json("package.json").scripts;
-requireFact(scripts["test:localtest"] === "node --test tooling/local-test/session.test.mjs" &&
+requireFact(scripts["test:localtest"] === "node --test tooling/local-test/session.test.mjs tooling/windows-toolchain/portable.test.mjs" &&
   scripts["verify:source"].includes("npm run test:localtest"),
   "Source verification must execute local-test storage regressions");
 const nativePreflight = read("tooling/windows-toolchain/dev.ps1");

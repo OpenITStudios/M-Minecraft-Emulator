@@ -119,6 +119,9 @@ test('owned v1.18.6 build produces a closed read-only 25-file engine payload',as
 });
 test('payload and report cannot escape dedicated ignored workspace folders',async()=>{
   const f=fixture();try{
+    // Make the invalid source-side parent real so the workspace allowlist,
+    // not an unrelated missing-parent preflight, is the guard being tested.
+    mkdirSync(join(f.repository,'apps','desktop'),{recursive:true});
     await assert.rejects(f.run(join(f.base,'outside')), /workspace\/packages/);
     await assert.rejects(f.run(join(f.repository,'apps','desktop','payload')), /workspace\/packages/);
     await assert.rejects(f.run(undefined,join(f.base,'native-build.json')), /workspace\/builds/);

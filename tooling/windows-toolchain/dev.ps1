@@ -6,12 +6,15 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+. (Join-Path $PSScriptRoot 'local-env.ps1')
+Set-LocalDeveloperEnvironment -Root $Root
+$LocalNpm = Join-Path $Root 'workspace/toolchains/node/npm.cmd'
 $DesktopLock = "apps/desktop/src-tauri/Cargo.lock"
 $DesktopManifest = "apps/desktop/src-tauri/Cargo.toml"
 
 function Invoke-RepositoryNpm {
     param([string[]]$NpmArguments)
-    & npm @NpmArguments
+    & $LocalNpm @NpmArguments
     if ($LASTEXITCODE -ne 0) {
         throw "npm $($NpmArguments -join ' ') failed with exit code $LASTEXITCODE."
     }
@@ -70,11 +73,22 @@ function Test-DeveloperToolchain {
     }
     $requiredTools = @("rustc", "cargo")
     if (-not $RustOnly) {
-        $requiredTools += @("node", "npm", "rustfmt")
+        $requiredTools += @("node", "npm.cmd", "rustfmt")
+    }
+    $localBins = @{
+        "node" = (Join-Path $Root 'workspace/toolchains/node/node.exe')
+        "npm.cmd" = $LocalNpm
+        "rustc" = (Join-Path $Root 'workspace/toolchains/cargo/bin/rustc.exe')
+        "cargo" = (Join-Path $Root 'workspace/toolchains/cargo/bin/cargo.exe')
+        "rustfmt" = (Join-Path $Root 'workspace/toolchains/cargo/bin/rustfmt.exe')
     }
     foreach ($tool in $requiredTools) {
-        if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
-            $errors.Add("$tool is unavailable.")
+        $found = Get-Command $tool -ErrorAction SilentlyContinue
+        if (-not $found) {
+            $errors.Add("$tool is unavailable in the workspace-local toolchain.")
+        } elseif ([IO.Path]::GetFullPath($found.Source) -ine
+                  [IO.Path]::GetFullPath($localBins[$tool])) {
+            $errors.Add("$tool resolves outside workspace/toolchains: $($found.Source).")
         }
     }
     if (-not $RustOnly -and (Get-Command node -ErrorAction SilentlyContinue)) {
@@ -83,8 +97,8 @@ function Test-DeveloperToolchain {
             $errors.Add("Node v$actual does not match pinned v$($toolchain.node.version).")
         }
     }
-    if (-not $RustOnly -and (Get-Command npm -ErrorAction SilentlyContinue)) {
-        $actual = (& npm --version).Trim()
+    if (-not $RustOnly -and (Get-Command npm.cmd -ErrorAction SilentlyContinue)) {
+        $actual = (& $LocalNpm --version).Trim()
         if ($actual -ne [string]$toolchain.npm.version) {
             $errors.Add("npm $actual does not match pinned $($toolchain.npm.version).")
         }
@@ -294,7 +308,8 @@ try {
         "dev"     { Invoke-RepositoryNpm -NpmArguments @("run", "dev") }
         "package" { Invoke-RepositoryNpm -NpmArguments @("run", "package:windows") }
         default {
-            Write-Host "M-Minecraft-Emulator (optional Windows developer commands)"
+            Write-Host "M-Minecraft-Emulator (workspace-local Windows developer commands)"
+            Write-Host "  DEV.cmd bootstrap # verified, portable Node / PowerShell / Rust under workspace"
             Write-Host "  DEV.cmd lock     # resolve missing Tauri Cargo.lock (no automatic commit)"
             Write-Host "  DEV.cmd doctor   # pinned toolchain checks"
             Write-Host "  DEV.cmd preflight # native pilot exact-SHA setup + full source verification (NO package/game)"

@@ -27,7 +27,7 @@ A user-PC checkout, npm installation, `DEV.cmd`, VMware or Minecraft execution i
 
 ## Toolchain authority
 
-Read `../../toolchain.json`. Developer/build versions are Node `24.21.0`, npm `11.19.0`, Rust `1.98.1` and PowerShell 7 for the optional Windows command wrapper. Desktop uses its only npm lockfile, `apps/desktop/package-lock.json`; Rust backend uses `engine/runtime-core/Cargo.lock`. The repository root intentionally has **no separate Node dependency graph**.
+Read `../../toolchain.json`. Developer/build versions are Node `24.21.0`, npm `11.19.0`, Rust `1.98.1` and portable PowerShell `7.5.4` for the Windows command wrapper. Desktop uses its only npm lockfile, `apps/desktop/package-lock.json`; Rust backend uses `engine/runtime-core/Cargo.lock`. The repository root intentionally has **no separate Node dependency graph**.
 
 ## Optional source execution
 
@@ -45,9 +45,10 @@ npm run dev
 
 `verify:repository` is a structural policy/consumer check. Desktop `verify:source` runs Svelte typecheck, Vitest source tests, frontend build, Tauri Rust check and Rust desktop tests; `verify:source` at **root** also checks canonical runtime Rust and formatting. Neither automatically starts VMware or Minecraft.
 
-`DEV.cmd` delegates to `tooling/windows-toolchain/dev.ps1` for optional Windows developer tasks. The selected native pilot uses one fail-fast preflight before manual gameplay; the old `g0` packaging route remains separate:
+`DEV.cmd bootstrap` is the single opt-in Windows x64 setup entrypoint: it downloads verified portable Node/PowerShell and checksum-verified official Rustup only to `workspace/`. Other `DEV.cmd` commands run the local PowerShell runtime, source `tooling/windows-toolchain/local-env.ps1`, refuse global Node/npm/Rust fallbacks, and use process-scoped caches, Cargo/Rustup homes and temp within `workspace/`. Git, Visual Studio C++/MSVC and WDK still require a system installation; game/driver/service locations are not rewritten. `DEV.cmd` delegates to `tooling/windows-toolchain/dev.ps1` for optional Windows developer tasks. The selected native pilot uses one fail-fast preflight before manual gameplay; the old `g0` packaging route remains separate:
 
 ```text
+DEV.cmd bootstrap
 DEV.cmd setup
 DEV.cmd doctor
 DEV.cmd preflight
