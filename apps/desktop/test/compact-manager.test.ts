@@ -8,6 +8,7 @@ import {
   ownedVirtualCreationReason,
   isResourceOperationBusy,
 } from "../src/app/presentation/compactManager.js";
+import { parseInstanceSlots } from "../src/app/bridge/nativeFeasibilityApi.js";
 import type { IsolatedClientObservation, OwnedHostInspection } from "../src/app/bridge/nativeFeasibilityApi.js";
 
 function inspected(): IsolatedClientObservation {
@@ -26,6 +27,39 @@ function inspected(): IsolatedClientObservation {
     interpretation: "CONFIG_AND_PROCESS_CANDIDATES_ONLY_NO_AUTHENTICATION_PROOF",
   };
 }
+
+describe("Four-slot catalog read-only contract", () => {
+  const expected = [
+    { id: "01", kind: "NATIVE", route: "OFFICIAL_WINDOWS", availability: "PILOT_ROUTE_ONLY" },
+    { id: "02", kind: "ISOLATED", route: "OFFICIAL_SANDBOXIE", availability: "PILOT_ROUTE_ONLY" },
+    { id: "03", kind: "ISOLATED", route: "OWNED_V1186", availability: "NOT_AVAILABLE" },
+    { id: "04", kind: "ISOLATED", route: "OWNED_V1186", availability: "NOT_AVAILABLE" },
+  ];
+  it("accepts precisely four ordered backend-owned identities without pretending four launches", () => {
+    expect(parseInstanceSlots(expected)).toEqual(expected);
+    const ui = readFileSync(new URL("../src/CompactManagerApp.svelte", import.meta.url), "utf8");
+    expect(ui).toContain('instanceSlots.filter(slot => slot.id === "03" || slot.id === "04")');
+    expect(ui).toContain('slot.availability === "NOT_AVAILABLE"');
+    expect(ui).not.toContain('{#each ["03", "04"]');
+    const rust = readFileSync(new URL("../src-tauri/src/engine/instance_catalog.rs", import.meta.url), "utf8");
+    expect(rust).toContain('route: "OWNED_V1186"');
+    expect(rust).toContain('availability: "NOT_AVAILABLE"');
+    expect(rust).not.toContain("Start-Process");
+    expect(rust).not.toContain("StartServiceW");
+    const commands = readFileSync(new URL("../src-tauri/src/app_bootstrap.rs", import.meta.url), "utf8");
+    expect(commands).toContain("desktop_list_instance_slots");
+    expect(commands).not.toContain("desktop_create_virtual");
+  });
+  it("rejects missing/duplicate/reordered slots, escalated launch claims and unrelated fields", () => {
+    expect(() => parseInstanceSlots(expected.slice(0, 3))).toThrow();
+    expect(() => parseInstanceSlots([expected[0], expected[1], expected[3], expected[2]])).toThrow();
+    expect(() => parseInstanceSlots([expected[0], expected[1], expected[2], expected[2]])).toThrow();
+    expect(() => parseInstanceSlots(expected.map((x, i) => i === 2
+      ? { ...x, availability: "PILOT_ROUTE_ONLY" } : x))).toThrow();
+    expect(() => parseInstanceSlots(expected.map((x, i) => i === 3
+      ? { ...x, running: true } : x))).toThrow();
+  });
+});
 
 describe("MIVUBI Create Virtual readiness", () => {
   const app = readFileSync(new URL("../src/CompactManagerApp.svelte", import.meta.url), "utf8");
@@ -109,7 +143,10 @@ describe("Balanced resource admission", () => {
     expect(application).not.toContain("if (busy ||");
     expect(application).not.toContain("setInterval(");
     expect(application).not.toContain("setTimeout(");
+    // The one-time read-only catalog request is not a background poll.
+    expect(application).toContain("nativeFeasibility.listInstanceSlots()");
     expect(application).not.toContain("onMount(");
+    expect(application).not.toContain("setInterval(");
     for (const action of [
       "checkStatus", "openMinecraft01", "selectMinecraft", "openMinecraft02",
       "switchMinecraft02", "moveMinecraft02", "discoverExistingVirtuals",
@@ -540,8 +577,8 @@ describe("Compact Manager app source and command boundary", () => {
     expect(app).toContain('<h2>Planned virtuals</h2>');
     expect(app).toContain("Supported today: Host 01 can request a Windows launch.");
     expect(app).toContain("Minecraft sessions");
-    expect(app).toContain('{#each ["03", "04"] as client (client)}');
-    expect(app).toContain('<h3>Virtual {client} · Minecraft Education</h3>');
+    expect(app).toContain('instanceSlots.filter(slot => slot.id === "03" || slot.id === "04")');
+    expect(app).toContain('<h3>Virtual {slot.id} · Minecraft Education</h3>');
     expect(app).toContain('Unavailable in MIVUBI · No managed session');
     expect(app).toContain('Clients 03 and 04 cannot be created or launched yet.');
     expect(app).not.toContain("openMinecraft03");

@@ -352,7 +352,40 @@ export function parseVirtualBoxInventory(value: unknown): VirtualBoxInventory {
   return value as unknown as VirtualBoxInventory;
 }
 
+/** The Rust catalog is the only authority for all four identities/routes.
+ * This transport validator must not infer that a mounted route means a
+ * verified Minecraft window or an installed MIVUBI driver.
+ */
+export type InstanceSlotId = "01" | "02" | "03" | "04";
+export interface InstanceSlotDescriptor {
+  id: InstanceSlotId;
+  kind: "NATIVE" | "ISOLATED";
+  route: "OFFICIAL_WINDOWS" | "OFFICIAL_SANDBOXIE" | "OWNED_V1186";
+  availability: "PILOT_ROUTE_ONLY" | "NOT_AVAILABLE";
+}
+export function parseInstanceSlots(value: unknown): InstanceSlotDescriptor[] {
+  if (!Array.isArray(value) || value.length !== 4) {
+    throw new TypeError("Incomplete four-slot instance catalog.");
+  }
+  const ids: InstanceSlotId[] = ["01", "02", "03", "04"];
+  const routes: InstanceSlotDescriptor["route"][] = [
+    "OFFICIAL_WINDOWS", "OFFICIAL_SANDBOXIE", "OWNED_V1186", "OWNED_V1186",
+  ];
+  for (const [index, item] of value.entries()) {
+    const expected = ids[index];
+    if (!isRecord(item) || !hasOnly(item, ["id", "kind", "route", "availability"]) ||
+        item.id !== expected || item.route !== routes[index] ||
+        item.kind !== (index === 0 ? "NATIVE" : "ISOLATED") ||
+        item.availability !== (index < 2 ? "PILOT_ROUTE_ONLY" : "NOT_AVAILABLE")) {
+      throw new TypeError("Untrusted or unsupported four-slot catalog.");
+    }
+  }
+  return value as InstanceSlotDescriptor[];
+}
+
 export const nativeFeasibility = {
+  listInstanceSlots: async (): Promise<InstanceSlotDescriptor[]> =>
+    parseInstanceSlots(await invokeRuntime<unknown>("desktop_list_instance_slots")),
   // Only the official registered Start app is requested, never a copied EXE.
   openOfficialMinecraft: () => invokeRuntime<void>("desktop_open_native_minecraft"),
   selectEducationExe: () => invokeRuntime<string | null>("desktop_select_education_exe"),

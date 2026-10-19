@@ -1,5 +1,32 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Four-client foundation — 19 October 2026
+
+**Scope:** one read-only catalog of four slot identities in the existing
+desktop Rust engine, exposed via a single lightweight Tauri IPC and strictly
+validated in the mounted Svelte UI. Client 01/02 retain their existing
+official Windows/Sandboxie pilot launch implementations. Client 03/04
+are rendered from the same backend catalog as `NOT_AVAILABLE`, not started
+or provisioned, and cannot be misinterpreted as ready.
+
+**Constraint:** this is the first bounded source change toward a four-slot
+architecture, **not** completed four-client lifecycle or four-account
+acceptance. No private v1.18.6 driver, FPS limiter or outside-game
+resource governor is enabled; no Minecraft settings or account data change.
+Future external focus/FPS work needs a real supported vendor/API capability
+and Windows measurement before applying policy.
+
+**Proof:** prior Local `260ef64a3175a043b43503c18666395c817c4a95`
+passed automatic Full CI run
+[39250836579](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39250836579).
+Current change requires its own Full CI verification and subsequent
+Windows/UI observation. Next source unit: generalize the existing process
+identity and lifecycle admission owner from Client 02 to slots 02–04
+without enabling an unproven provider.
+
+---
+
+
 ## Correct documented authority regression — 19 October 2026
 
 **CI evidence:** Full Source [run 39247152326](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39247152326) on `480891c27419a4715c45d8f1e9117b32b7673a72` FAILED two source-verification stages (repository and isolation), although desktop, runtime and other source stages passed. The repository contract expected the new `engine/README.md` but that file had not been updated in the prior commit. The v1.18.5 baseline test still sought its historical command examples in the now-active v1.18.6 README instead of the archive.

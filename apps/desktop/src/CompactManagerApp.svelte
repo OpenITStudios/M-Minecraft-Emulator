@@ -4,6 +4,7 @@
     nativeFeasibility,
     isSandboxieBoxPrepared,
     canRequestClient02,
+    type InstanceSlotDescriptor,
     type IsolatedClientObservation,
     type OwnedCandidateInspection,
     type OwnedHostInspection,
@@ -35,6 +36,14 @@
   let observation: IsolatedClientObservation | undefined;
   let lastCheck: Date | null = null;
   let lastCheckIsCurrent = false;
+  // Single cheap read-only Rust metadata request when this UI is created.
+  // No timer, process inspection, game launch or background helper is started.
+  let instanceSlots: InstanceSlotDescriptor[] = [];
+  let instanceCatalogError = "";
+  void nativeFeasibility.listInstanceSlots().then(
+    slots => { instanceSlots = slots; },
+    () => { instanceCatalogError = "Four-slot catalog unavailable; no additional client was enabled."; },
+  );
   let selectedExecutable = "";
   let licenseConfirmed = false;
   // Development-only candidate inspection is independent of active Client 02.
@@ -592,13 +601,18 @@
       <section class="cm-future-virtuals" aria-label="Planned virtual clients">
         <h2>Planned virtuals</h2>
         <p>Clients 03 and 04 cannot be created or launched yet. A built, signed and verified MIVUBI isolation engine is required.</p>
-        {#each ["03", "04"] as client (client)}
+        {#if instanceCatalogError}
+          <p role="status">{instanceCatalogError}</p>
+        {:else if instanceSlots.length === 0}
+          <p role="status">Reading the four-slot catalog…</p>
+        {/if}
+        {#each instanceSlots.filter(slot => slot.id === "03" || slot.id === "04") as slot (slot.id)}
           <div class="cm-instance cm-planned-instance">
             <div class="cm-row">
               <span class="cm-monitor" aria-hidden="true"></span>
               <div class="cm-row-copy">
-                <h3>Virtual {client} · Minecraft Education</h3>
-                <p>Unavailable in MIVUBI · No managed session</p>
+                <h3>Virtual {slot.id} · Minecraft Education</h3>
+                <p>{slot.availability === "NOT_AVAILABLE" ? "Unavailable in MIVUBI · No managed session" : "State unknown · Do not launch"}</p>
               </div>
             </div>
           </div>

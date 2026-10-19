@@ -21,6 +21,7 @@ pub fn run() {
         // native-first pilot. Source and account-bearing guest data remain.
         // Re-enabling a route requires an explicit product decision.
         .invoke_handler(tauri::generate_handler![
+            commands::native_clients::desktop_list_instance_slots,
             commands::native_clients::desktop_open_native_minecraft,
             commands::native_clients::desktop_inspect_native_candidates,
             commands::native_clients::desktop_select_education_exe,

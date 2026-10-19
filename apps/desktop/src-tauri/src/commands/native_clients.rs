@@ -1,4 +1,7 @@
-use crate::engine::native_clients;
+use crate::engine::{
+    instance_catalog::{instance_slots, InstanceSlotDescriptor},
+    native_clients,
+};
 
 use std::{io, sync::Mutex};
 
@@ -7,6 +10,12 @@ use std::{io, sync::Mutex};
 // probe, file hash, dialog, launch or window operation is in flight.
 // This limits manager-created CPU/RAM peaks, not Minecraft CPU or GPU usage.
 static MANAGER_RESOURCE_LOCK: Mutex<()> = Mutex::new(());
+
+// One tiny, synchronous read-only catalog, no resource lock or Windows helper.
+#[tauri::command]
+pub fn desktop_list_instance_slots() -> [InstanceSlotDescriptor; 4] {
+    instance_slots()
+}
 
 fn admit_resource_operation<T>(
     lock: &Mutex<()>,

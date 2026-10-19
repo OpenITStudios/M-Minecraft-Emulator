@@ -26,6 +26,26 @@ configuration. Four clients remain the future product target, **not** current
 implemented behavior. No Windows VM, Android runtime, fake touchscreen
 controller, copied EXE or cloned login profile is part of the selected path.
 
+## One four-slot identity catalog, two currently mounted launch routes
+
+The read-only Rust owner `apps/desktop/src-tauri/src/engine/instance_catalog.rs`
+defines exactly `01` (native), `02` (official Sandboxie), and `03`/`04`
+(future owned v1.18.6). A single typed Tauri command returns this catalog
+once when the UI mounts; it performs no process inspection, creation,
+Windows helper call, persistence or periodic monitoring. The TypeScript
+bridge validates exact identities/routes and **refuses to upgrade** future
+slots into available launch routes. An IPC failure remains unknown. This
+catalog is not a second lifecycle authority and never asserts login, PID,
+window or gameplay status. The existing Client 01/02 launch guards remain
+unchanged. A future four-client lifecycle must reuse these exact IDs
+without making unverified MIVUBI drivers installable.
+
+**External efficiency boundary:** the eventual FPS adapter may operate
+only through a verified, reversible external API; it cannot change Minecraft
+graphics/simulation settings, alter threads or inject rendering hooks.
+Until Windows/GPU-specific acceptance proves capability, no FPS cap is
+applied and no RAM/GPU savings are claimed.
+
 ## One lightweight control plane, two independent Windows game processes
 
 ```text
