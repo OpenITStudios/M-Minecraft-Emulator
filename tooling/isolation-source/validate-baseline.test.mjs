@@ -128,8 +128,13 @@ test("baseline Windows build preserves reports, logs and existing staging paths"
   assert.doesNotMatch(script, /\b(?:Start-Service|Stop-Service|sc\.exe)\b/i);
 });
 
-test("Windows baseline handoff uses different report paths for inspection and build", () => {
-  const guide = readFileSync(new URL("./README.md", import.meta.url), "utf8");
+test("archived v1.18.5 baseline handoff retains distinct report examples without becoming current", () => {
+  const guide = readFileSync(new URL("../../planning/history/isolation-v1185-source-notes.md", import.meta.url), "utf8");
+  const current = readFileSync(new URL("./README.md", import.meta.url), "utf8");
+  assert.match(guide, /^# Archived Sandboxie v1\.18\.5 source investigations/);
+  assert.match(guide, /HISTORICAL \/ NON-EXECUTABLE GUIDE/);
+  assert.doesNotMatch(current, /build-baseline\.ps1\s+-SourceRoot/);
+  assert.match(current, /build-owned-v1186\.ps1/);
   const lines = guide.split("\n").filter(line => line.includes("build-baseline.ps1") &&
     line.includes("-ReportPath") && !line.trim().startsWith("#"));
   assert.equal(lines.length, 3, "baseline handoff must show the collection and two alternative build commands");

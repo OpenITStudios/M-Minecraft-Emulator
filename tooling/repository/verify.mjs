@@ -612,12 +612,20 @@ requireFact(currentIsolationGuide.includes("build-owned-v1186.ps1") &&
   !currentIsolationGuide.includes("D:\\Source\\M-Isolation-Engine") &&
   currentIsolationGuide.includes("historical"),
   "Active native README must select one v1.18.6 owner and workspace outputs");
-requireFact(engineRouter.includes("isolation-owned/") &&
+requireFact(
+  engineRouter.includes("isolation-owned/") &&
   engineRouter.includes("isolation-candidates/sandboxie-v1.18.6/") &&
+  engineRouter.includes("Isolation Source Tooling README") &&
+  engineRouter.includes("official Sandboxie Plus"),
+  "Engine router must distinguish editable owned v1.18.6, immutable reference and official runtime");
+requireFact(
   toolRouter.includes("Sole current v1.18.6") &&
+  toolRouter.includes("v1.18.5 scripts are historical"),
+  "Tooling router must reference only the current v1.18.6 native build owner");
+requireFact(
   validationRouter.includes("12-stage Full Source Windows CI") &&
   !validationRouter.includes("workflow files are manual-only"),
-  "Engine/tooling/validation routers contain stale authority or CI routing");
+  "Validation router must reflect current automatic Local-only full CI");
 for (const historicalPath of [
   "planning/history/isolation-v1185-source-notes.md",
   "planning/history/isolation-native-development-notes.md",

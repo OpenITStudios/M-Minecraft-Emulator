@@ -1,5 +1,16 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Correct documented authority regression — 19 October 2026
+
+**CI evidence:** Full Source [run 39247152326](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39247152326) on `480891c27419a4715c45d8f1e9117b32b7673a72` FAILED two source-verification stages (repository and isolation), although desktop, runtime and other source stages passed. The repository contract expected the new `engine/README.md` but that file had not been updated in the prior commit. The v1.18.5 baseline test still sought its historical command examples in the now-active v1.18.6 README instead of the archive.
+
+**Bounded correction:** route `engine/README.md` to the sole editable v1.18.6 owner and preserve its immutable reference/legacy distinctions. Give each router a specific static invariant and rebind the v1.18.5 historical example regression to `planning/history/isolation-v1185-source-notes.md`; additionally refuse old baseline commands in the active README. No service, installer, provider, code of the active UI or native engine was touched. CI must pass on the newer SHA before this cleanup is considered verified.
+
+**Next:** inspect automatic Full Source CI on the corrected exact SHA, then attempt only a checksum-verified UI smoke on the user's Windows PC.
+
+---
+
+
 **Repository:** `OpenITStudios/M-Minecraft-Emulator`; only GitHub branch
 `Local` is authorized for active development. The exact branch HEAD
 and current source always outrank historical notes.
