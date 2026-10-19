@@ -8,7 +8,7 @@ import {
   ownedVirtualCreationReason,
   isResourceOperationBusy,
 } from "../src/app/presentation/compactManager.js";
-import { parseInstanceSlots, parseInstanceOverview } from "../src/app/bridge/nativeFeasibilityApi.js";
+import { parseInstanceSlots, parseInstanceOverview, parseClient02Foreground } from "../src/app/bridge/nativeFeasibilityApi.js";
 import type { IsolatedClientObservation, OwnedHostInspection } from "../src/app/bridge/nativeFeasibilityApi.js";
 
 function inspected(): IsolatedClientObservation {
@@ -27,6 +27,38 @@ function inspected(): IsolatedClientObservation {
     interpretation: "CONFIG_AND_PROCESS_CANDIDATES_ONLY_NO_AUTHENTICATION_PROOF",
   };
 }
+
+describe("Read-only external foreground diagnostic", () => {
+  it("accepts only exact Client 02 snapshot statuses without FPS or account claims", () => {
+    for (const state of ["FOREGROUND", "NOT_FOREGROUND", "UNKNOWN"]) {
+      expect(parseClient02Foreground({ schema: 1, slotId: "02", state })).toEqual({
+        schema: 1, slotId: "02", state,
+      });
+    }
+    for (const value of [
+      { schema: 1, slotId: "01", state: "FOREGROUND" },
+      { schema: 1, slotId: "03", state: "FOREGROUND" },
+      { schema: 1, slotId: "02", state: "FOREGROUND", fps: 15 },
+      { schema: 1, slotId: "02", state: "RUNNING" },
+      { schema: 2, slotId: "02", state: "UNKNOWN" },
+    ]) expect(() => parseClient02Foreground(value)).toThrow();
+  });
+  it("reuses verified Client 02 window and remains explicitly user-requested", () => {
+    const rust = readFileSync(new URL("../src-tauri/src/engine/instance_focus.rs", import.meta.url), "utf8");
+    const owner = readFileSync(new URL("../src-tauri/src/engine/native_clients.rs", import.meta.url), "utf8");
+    const ui = readFileSync(new URL("../src/CompactManagerApp.svelte", import.meta.url), "utf8");
+    const cmd = readFileSync(new URL("../src-tauri/src/commands/native_clients.rs", import.meta.url), "utf8");
+    expect(rust).toContain("with_verified_client_02_window(target");
+    expect(rust).toContain("GetForegroundWindow()");
+    expect(rust).toContain('None | Some(0) => "UNKNOWN"');
+    expect(owner).toContain("pub(super) fn with_verified_client_02_window(");
+    expect(cmd).toContain('SlotOperation::Inspect, || instance_focus::inspect_client_02_foreground(target)');
+    expect(ui).toContain('on:click={inspectClient02Foreground}');
+    expect(ui).toContain("nativeFeasibility.inspectClient02Foreground(target)");
+    expect(ui).not.toContain("setInterval(");
+    expect(ui).not.toContain("setTimeout(");
+  });
+});
 
 describe("Explicit read-only four-slot discovery", () => {
   const overview = {

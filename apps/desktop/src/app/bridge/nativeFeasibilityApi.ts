@@ -423,7 +423,27 @@ export function parseInstanceOverview(value: unknown): InstanceOverview {
   return value as unknown as InstanceOverview;
 }
 
+/** Snapshot from a freshly revalidated signed boxed Client 02 window.
+ * It reports only whether that exact HWND was foreground during this call;
+ * it never implies sustained focus, gameplay, FPS limitation, or Host 01.
+ */
+export interface Client02ForegroundObservation {
+  schema: 1;
+  slotId: "02";
+  state: "FOREGROUND" | "NOT_FOREGROUND" | "UNKNOWN";
+}
+export function parseClient02Foreground(value: unknown): Client02ForegroundObservation {
+  if (!isRecord(value) || !hasOnly(value, ["schema", "slotId", "state"]) ||
+      value.schema !== 1 || value.slotId !== "02" ||
+      !["FOREGROUND", "NOT_FOREGROUND", "UNKNOWN"].includes(value.state as string)) {
+    throw new TypeError("Untrusted or malformed Client 02 foreground observation.");
+  }
+  return value as unknown as Client02ForegroundObservation;
+}
+
 export const nativeFeasibility = {
+  inspectClient02Foreground: async (target: ProcessIdentityCandidate): Promise<Client02ForegroundObservation> =>
+    parseClient02Foreground(await invokeRuntime<unknown>("desktop_inspect_client_02_foreground", { target })),
   inspectInstanceOverview: async (): Promise<InstanceOverview> =>
     parseInstanceOverview(await invokeRuntime<unknown>("desktop_inspect_instance_overview")),
   listInstanceSlots: async (): Promise<InstanceSlotDescriptor[]> =>

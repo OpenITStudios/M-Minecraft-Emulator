@@ -637,7 +637,7 @@ fn verify_live_client_02_window(
 // alive across the entire Win32 action to prevent PID reuse. Recheck the
 // observed box membership and HWND owner immediately before calling the OS.
 #[cfg(windows)]
-fn with_verified_client_02_window(
+pub(super) fn with_verified_client_02_window(
     target: ProcessIdentityCandidate,
     action: impl FnOnce(windows_sys::Win32::Foundation::HWND) -> io::Result<()>,
 ) -> io::Result<()> {

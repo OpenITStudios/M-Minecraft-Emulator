@@ -32,6 +32,7 @@ pub fn run() {
             commands::native_clients::desktop_inspect_owned_engine_host,
             commands::native_clients::desktop_discover_existing_virtuals,
             commands::native_clients::desktop_select_owned_engine_candidate_directory,
+            commands::native_clients::desktop_inspect_client_02_foreground,
             commands::native_clients::desktop_focus_observed_client_02,
             commands::native_clients::desktop_place_observed_client_02,
         ])

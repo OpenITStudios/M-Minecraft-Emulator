@@ -46,6 +46,22 @@ graphics/simulation settings, alter threads or inject rendering hooks.
 Until Windows/GPU-specific acceptance proves capability, no FPS cap is
 applied and no RAM/GPU savings are claimed.
 
+## External-only focus diagnostic — Client 02
+
+The new `instance_focus.rs` performs a one-shot, **read-only**
+`GetForegroundWindow()` query only after the existing Rust
+`with_verified_client_02_window` admission: fresh official Sandboxie box
+membership, Microsoft-signed Education image, exact PID/FILETIME/HWND
+and live top-level window ownership. `NULL` foreground yields `UNKNOWN`,
+not a background FPS policy. A different foreground HWND yields a
+one-time `NOT_FOREGROUND` snapshot, not a continuous background verdict.
+The only UI control is a manually requested Diagnostics button with a
+strict typed result; the current Client 01 identity remains unattributed.
+There is **no focus event hook or polling**, CPU affinity, FPS control,
+Minecraft setting change, injected DLL, process suspension or driver change.
+This is a prerequisite for later external performance evaluation, not an
+enabled governor or proof of graphics savings.
+
 ## One explicit four-slot discovery path
 
 One read-only overview is requested from Settings → Diagnostics. It

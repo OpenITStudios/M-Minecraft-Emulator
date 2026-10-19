@@ -6,6 +6,7 @@
     canRequestClient02,
     type InstanceSlotDescriptor,
     type InstanceOverview,
+    type Client02ForegroundObservation,
     type IsolatedClientObservation,
     type OwnedCandidateInspection,
     type OwnedHostInspection,
@@ -58,6 +59,8 @@
   let existingVirtualsError = "";
   let instanceOverview: InstanceOverview | null = null;
   let instanceOverviewError = "";
+  let client02Foreground: Client02ForegroundObservation | null = null;
+  let client02ForegroundError = "";
   // Temporary UI feedback, isolated by supported instance identity.
   let issues: Partial<Record<InstanceId, UiIssue>> = {};
   let notices: Partial<Record<InstanceId, UiNotice>> = {};
@@ -155,6 +158,8 @@
   }
 
   function invalidateCurrentInspection() {
+    client02Foreground = null;
+    client02ForegroundError = "";
     observation = undefined;
     lastCheckIsCurrent = false;
   }
@@ -375,6 +380,26 @@
     // "View issue" must never close the issue when it is already visible.
     if (action === "issue") { expandDetails(id, "issue", origin); return; }
     if (action === "setup") toggleDetails(id, "setup", origin);
+  }
+
+  async function inspectClient02Foreground() {
+    if (isResourceOperationBusy(busy, ownedHostBusy, ownedInspectionBusy)) return;
+    const target = focusCandidate(observation);
+    client02Foreground = null;
+    client02ForegroundError = "";
+    if (!target) {
+      client02ForegroundError = "Client 02 has no unique verified window candidate. Use Check status · 02 first.";
+      return;
+    }
+    busy = "inspect-focus";
+    try {
+      // Backend independently revalidates box/PID/FILETIME/HWND/signature.
+      client02Foreground = await nativeFeasibility.inspectClient02Foreground(target);
+    } catch {
+      client02ForegroundError = "Foreground inspection was inconclusive. No focus or FPS policy was changed.";
+    } finally {
+      busy = "";
+    }
   }
 
   async function inspectAllSlots() {
@@ -709,6 +734,23 @@
               {/if}
               {#if instanceOverviewError}
                 <p class="cm-warning" role="alert">{instanceOverviewError}</p>
+              {/if}
+              <h3>Foreground diagnostic · Client 02</h3>
+              <p>One-time read of the Windows foreground window after a fresh signed Sandboxie Client 02 identity check. Use Check status · 02 first. No background monitoring, process throttling, or FPS limit is applied.</p>
+              <button type="button" class="cm-button cm-secondary"
+                disabled={resourceOperationBusy || !focusCandidate(observation)} on:click={inspectClient02Foreground}>
+                {busy === "inspect-focus" ? "Reading focus…" : "Check focused Client 02"}
+              </button>
+              {#if client02Foreground}
+                <p aria-live="polite">At the instant of this check, Client 02 was
+                  {client02Foreground.state === "FOREGROUND" ? " the foreground window."
+                    : client02Foreground.state === "NOT_FOREGROUND" ? " not the foreground window."
+                    : " UNKNOWN (Windows did not return a foreground window)."}
+                  This does not measure FPS or identify Client 01.
+                </p>
+              {/if}
+              {#if client02ForegroundError}
+                <p class="cm-warning" role="alert">{client02ForegroundError}</p>
               {/if}
               <h3>Sandboxie configuration</h3>
               <p>Inspect configuration section names from the installed pilot. Results are candidates, not verified running Minecraft sessions.</p>
