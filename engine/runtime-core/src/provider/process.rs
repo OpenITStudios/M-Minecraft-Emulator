@@ -448,10 +448,19 @@ mod tests {
         #[cfg(not(windows))]
         let (program, args): (&Path, &[&str]) = (Path::new("cat"), &[]);
 
+        // Cold-starting PowerShell on a shared Windows CI runner can exceed
+        // five seconds under parallel Rust tests even for a tiny stdin value.
+        // Only the test budget is extended; production and the separate
+        // timed-out-child reaping regression retain their existing limits.
+        let timeout = if cfg!(windows) {
+            Duration::from_secs(20)
+        } else {
+            Duration::from_secs(5)
+        };
         let output = super::command_output_with_stdin(
             program,
             args.iter().copied(),
-            Duration::from_secs(5),
+            timeout,
             b"short-input",
         )
         .expect("bounded stdin should close with EOF and produce output");

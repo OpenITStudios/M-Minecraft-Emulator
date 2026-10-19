@@ -1,5 +1,15 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Full CI #16: Windows PowerShell stdin cold-start test timeout — 19 October 2026
+
+**Executed:** [automatic Full CI #16](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39208340304), exact SHA `3e88233db7eceb1ddeac74cfb71213135fbb0688`: eleven source stages succeeded, but `STAGE_RUNTIME_TEST` failed 158/159 on `provider::process::tests::bounded_stdin_command_delivers_data_without_command_line_embedding`. The Windows PowerShell child exceeded the test's five-second deadline while other tests passed. Final aggregate gate correctly failed, so Windows compile, PE validation and new 30-day artifact upload were skipped.
+
+**Bounded correction:** use twenty seconds for this single Windows PowerShell stdin/EOF regression, with original five-second limit elsewhere. This is a **test-only** timing allowance for shared-host process startup; unchanged production helper timeouts, bounded I/O resource caps, 100ms kill-and-reap timeout regression and driver/application behavior. No test is disabled or skipped.
+
+**Proof ceiling:** exact GitHub log and original Rust source were inspected. Updated source still needs a new executed Full Source result and Windows PE artifact verdict; no local PC, installer, driver or Minecraft runtime proof is available.
+
+**Next:** inspect the automatic Full CI for the new `Local` SHA through artifact upload.
+
 ## No-PC localtest readiness: preserve artifact and validate Windows PE header — 19 October 2026
 
 **User constraint:** local Windows PC is currently unavailable. Do not request an immediate installed-machine test or promote any simulated outcome into Minecraft gameplay evidence. Preserve Windows source and compilation proof at exact SHA `88eb9cfaf50fb5eb5834d28602d93d1e03bfd8aa`; [automatic CI #15](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39206026547) PASS included all 12 Full Source stages, Windows x64 debug compilation, artifact staging and upload. Artifact `localtest-debug-88eb9cf...` exists but expires 26 October 2026; cannot extend old artifact retroactively.
