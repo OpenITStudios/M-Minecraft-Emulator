@@ -46,6 +46,25 @@ graphics/simulation settings, alter threads or inject rendering hooks.
 Until Windows/GPU-specific acceptance proves capability, no FPS cap is
 applied and no RAM/GPU savings are claimed.
 
+## Four-slot admission and shared process identity foundation
+
+The `instance_catalog.rs` owner now also contains the fixed, fail-closed
+operation admission table. At the existing Tauri command boundary,
+`run_slot_operation` validates each already-mounted action before acquiring
+the manager's resource lock or running a Windows helper. Native Client 01
+can only inspect candidate metadata or request its official launch;
+official Sandboxie Client 02 retains explicit inspect/select/launch/focus/place.
+Client 03/04, private provisioning and FPS mutation are all unavailable
+at this source stage. Direct IPC cannot turn the catalog into launch authority.
+
+The small `instance_identity.rs` parses process ID, full Windows
+creation FILETIME and HWND as nonzero machine integers. Existing Client 02
+focus/move verification consumes the shared parser but still requires a
+fresh Sandboxie observation, Microsoft-signed image proof and HWND owner
+revalidation. Future isolated slots can reuse parsing; they do not inherit
+permission to launch. No timers, extra daemons, account-state duplication,
+Minecraft settings or game-resource mutation are introduced.
+
 ## One lightweight control plane, two independent Windows game processes
 
 ```text

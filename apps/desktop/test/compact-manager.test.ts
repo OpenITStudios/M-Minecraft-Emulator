@@ -28,6 +28,25 @@ function inspected(): IsolatedClientObservation {
   };
 }
 
+describe("Shared four-slot operation admission", () => {
+  it("puts supported actions behind the existing Rust command boundary", () => {
+    const catalog = readFileSync(new URL("../src-tauri/src/engine/instance_catalog.rs", import.meta.url), "utf8");
+    const commands = readFileSync(new URL("../src-tauri/src/commands/native_clients.rs", import.meta.url), "utf8");
+    const identity = readFileSync(new URL("../src-tauri/src/engine/instance_identity.rs", import.meta.url), "utf8");
+    const native = readFileSync(new URL("../src-tauri/src/engine/native_clients.rs", import.meta.url), "utf8");
+    expect(catalog).toContain("pub fn admit_slot_operation(id: &str, operation: SlotOperation)");
+    expect(catalog).toContain('slot.availability != "PILOT_ROUTE_ONLY"');
+    expect(catalog).toContain("SlotOperation::ApplyFrameCap");
+    expect(commands).toContain("admit_slot_operation(id, action)?");
+    expect(commands).toContain('run_slot_operation("02", SlotOperation::Launch');
+    expect(commands).toContain('run_slot_operation("01", SlotOperation::Launch');
+    expect(commands).not.toContain('run_slot_operation("03",');
+    expect(commands).not.toContain('run_slot_operation("04",');
+    expect(identity).toContain("pub fn parse_window_identity(");
+    expect(native).toContain("super::instance_identity::parse_window_identity(");
+  });
+});
+
 describe("Four-slot catalog read-only contract", () => {
   const expected = [
     { id: "01", kind: "NATIVE", route: "OFFICIAL_WINDOWS", availability: "PILOT_ROUTE_ONLY" },

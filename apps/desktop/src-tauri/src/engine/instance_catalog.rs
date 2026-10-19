@@ -43,6 +43,45 @@ pub fn instance_slots() -> [InstanceSlotDescriptor; 4] {
     ]
 }
 
+// One admission table for the four stable slots. It does not assert whether
+// the game is running; the existing provider performs fresh Windows checks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SlotOperation {
+    Inspect,
+    SelectExecutable,
+    Launch,
+    Focus,
+    Place,
+    Provision,
+    ApplyFrameCap,
+}
+
+pub fn admit_slot_operation(id: &str, operation: SlotOperation) -> std::io::Result<()> {
+    use std::io::{Error, ErrorKind};
+    let slot = instance_slots()
+        .into_iter()
+        .find(|slot| slot.id == id)
+        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "Unknown Minecraft instance slot"))?;
+
+    // An uninstalled future provider cannot be promoted by UI data or direct
+    // Tauri invocation. Provisioning and FPS control have no active adapter.
+    if slot.availability != "PILOT_ROUTE_ONLY" {
+        return Err(Error::new(ErrorKind::Unsupported,
+            "Owned v1.18.6 runtime is not installed and verified; slot unavailable"));
+    }
+    let allowed = matches!(
+        (slot.id, operation),
+        ("01", SlotOperation::Inspect | SlotOperation::Launch)
+        | ("02", SlotOperation::Inspect | SlotOperation::SelectExecutable
+            | SlotOperation::Launch | SlotOperation::Focus | SlotOperation::Place)
+    );
+    if !allowed {
+        return Err(Error::new(ErrorKind::Unsupported,
+            "This slot operation has no verified active provider route"));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -58,6 +97,26 @@ mod tests {
         assert!(slots[2..].iter().all(|slot| {
             slot.route == "OWNED_V1186" && slot.availability == "NOT_AVAILABLE"
         }));
+    }
+
+
+    #[test]
+    fn all_slot_operations_have_a_single_fail_closed_admission_table() {
+        use SlotOperation::*;
+        for op in [Inspect, SelectExecutable, Launch, Focus, Place, Provision, ApplyFrameCap] {
+            assert_eq!(admit_slot_operation("01", op).is_ok(),
+                matches!(op, Inspect | Launch));
+            assert_eq!(admit_slot_operation("02", op).is_ok(),
+                matches!(op, Inspect | SelectExecutable | Launch | Focus | Place));
+            for future in ["03", "04"] {
+                assert_eq!(admit_slot_operation(future, op).unwrap_err().kind(),
+                    std::io::ErrorKind::Unsupported);
+            }
+        }
+        for unknown in ["", "1", "05", "00", "Client02", "02 ", "02\\0"] {
+            assert_eq!(admit_slot_operation(unknown, Inspect).unwrap_err().kind(),
+                std::io::ErrorKind::InvalidInput);
+        }
     }
 
     #[test]

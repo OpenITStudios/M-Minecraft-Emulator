@@ -548,14 +548,10 @@ fn verify_fresh_focus_target(
     {
         return Err(invalid());
     }
-    let created = target.created_file_time.as_deref()
-        .ok_or_else(invalid)?.parse::<u64>().map_err(|_| invalid())?;
-    let window_text = target.window_handle.as_deref().ok_or_else(invalid)?;
-    let hwnd = u64::from_str_radix(
-        window_text.strip_prefix("0x").ok_or_else(invalid)?, 16
-    ).map_err(|_| invalid())?;
-    if created == 0 || hwnd == 0 ||
-        !fresh.process_candidates.iter().any(|candidate| {
+    let key = super::instance_identity::parse_window_identity(
+        target.pid, target.created_file_time.as_deref(), target.window_handle.as_deref()
+    ).ok_or_else(invalid)?;
+    if !fresh.process_candidates.iter().any(|candidate| {
             candidate.pid == target.pid
                 && candidate.created_file_time == target.created_file_time
                 && candidate.window_handle == target.window_handle
@@ -568,7 +564,7 @@ fn verify_fresh_focus_target(
         return Err(io::Error::new(io::ErrorKind::NotFound,
             "Client 02 identity, window or Microsoft-signed Education image could not be verified; Refresh first"));
     }
-    Ok((created, hwnd))
+    Ok((key.created_file_time, key.hwnd))
 }
 
 // Compute a single client slot inside a monitor's usable work area. This

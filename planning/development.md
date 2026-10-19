@@ -1,5 +1,30 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Shared four-slot identity/admission — 19 October 2026
+
+**Scope:** one fail-closed slot operation matrix in the existing Rust
+`instance_catalog.rs`, enforced by the current Tauri commands before
+spawning expensive helpers; a small reusable PID/FILETIME/HWND parser
+in `instance_identity.rs` replaces duplicate parsing inside the existing
+Client 02 fresh-window verification. The signed image, box membership and
+live HWND ownership checks are unchanged.
+
+**Supported operations:** Client 01 candidate inspection/official launch;
+Client 02 official Sandboxie inspection/selection/launch/focus/place.
+Client 03/04 launch, provisioning, process mutation, and external FPS
+control all remain explicitly blocked. No Minecraft setting, account or
+driver/service change; no new monitoring loop, IPC alias or provider.
+
+**Evidence:** prior `87fc898ced54f1be8a0a8d75a8d30a2f26b2bf42`
+passed all 12 Full Source Windows stages and debug compilation/upload,
+[run 39258261515](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39258261515).
+This source revision requires its own exact-SHA CI. Next task after
+verification: build read-only, provider-specific discovery across slots
+without inventing or enabling a v1.18.6 driver.
+
+---
+
+
 ## Four-client foundation — 19 October 2026
 
 **Scope:** one read-only catalog of four slot identities in the existing

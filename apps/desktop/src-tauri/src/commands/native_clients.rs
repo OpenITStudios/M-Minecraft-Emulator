@@ -1,5 +1,5 @@
 use crate::engine::{
-    instance_catalog::{instance_slots, InstanceSlotDescriptor},
+    instance_catalog::{admit_slot_operation, instance_slots, InstanceSlotDescriptor, SlotOperation},
     native_clients,
 };
 
@@ -32,9 +32,20 @@ fn run_manager_operation<T>(operation: impl FnOnce() -> io::Result<T>) -> io::Re
     admit_resource_operation(&MANAGER_RESOURCE_LOCK, operation)
 }
 
+// Validate the exact slot/operation *before* touching a Windows helper.
+// This reuses the single slot catalog; no second lifecycle state store.
+fn run_slot_operation<T>(
+    id: &str,
+    action: SlotOperation,
+    operation: impl FnOnce() -> io::Result<T>,
+) -> io::Result<T> {
+    admit_slot_operation(id, action)?;
+    run_manager_operation(operation)
+}
+
 #[tauri::command]
 pub async fn desktop_open_native_minecraft() -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(|| run_manager_operation(native_clients::open_native_minecraft))
+    tauri::async_runtime::spawn_blocking(|| run_slot_operation("01", SlotOperation::Launch, native_clients::open_native_minecraft))
         .await
         .map_err(|error| format!("Desktop launch task failed: {error}"))?
         .map_err(|error| error.to_string())
@@ -42,7 +53,7 @@ pub async fn desktop_open_native_minecraft() -> Result<(), String> {
 
 #[tauri::command]
 pub async fn desktop_inspect_native_candidates() -> Result<native_clients::NativeProcessObservation, String> {
-    tauri::async_runtime::spawn_blocking(|| run_manager_operation(native_clients::inspect_native_candidates))
+    tauri::async_runtime::spawn_blocking(|| run_slot_operation("01", SlotOperation::Inspect, native_clients::inspect_native_candidates))
         .await
         .map_err(|error| format!("Native inspection task failed: {error}"))?
         .map_err(|error| error.to_string())
@@ -50,20 +61,20 @@ pub async fn desktop_inspect_native_candidates() -> Result<native_clients::Nativ
 
 #[tauri::command]
 pub async fn desktop_select_education_exe() -> Result<Option<String>, String> {
-    tauri::async_runtime::spawn_blocking(|| run_manager_operation(native_clients::select_education_exe))
+    tauri::async_runtime::spawn_blocking(|| run_slot_operation("02", SlotOperation::SelectExecutable, native_clients::select_education_exe))
         .await.map_err(|e| format!("File dialog failed: {e}"))?
         .map_err(|e| e.to_string())
 }
 #[tauri::command]
 pub async fn desktop_request_sandbox_client_02(executable: String, licensed: bool) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || run_manager_operation(|| native_clients::request_sandbox_client_02(executable, licensed)))
+    tauri::async_runtime::spawn_blocking(move || run_slot_operation("02", SlotOperation::Launch, || native_clients::request_sandbox_client_02(executable, licensed)))
         .await.map_err(|e| format!("Isolated launch failed: {e}"))?
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn desktop_focus_observed_client_02(target: native_clients::ProcessIdentityCandidate) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || run_manager_operation(|| native_clients::focus_observed_client_02(target)))
+    tauri::async_runtime::spawn_blocking(move || run_slot_operation("02", SlotOperation::Focus, || native_clients::focus_observed_client_02(target)))
         .await
         .map_err(|error| format!("Client 02 focus task failed: {error}"))?
         .map_err(|error| error.to_string())
@@ -74,7 +85,7 @@ pub async fn desktop_place_observed_client_02(
     target: native_clients::ProcessIdentityCandidate,
     side: native_clients::Client02PlacementSide,
 ) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || run_manager_operation(|| native_clients::place_observed_client_02(target, side)))
+    tauri::async_runtime::spawn_blocking(move || run_slot_operation("02", SlotOperation::Place, || native_clients::place_observed_client_02(target, side)))
         .await
         .map_err(|error| format!("Client 02 placement task failed: {error}"))?
         .map_err(|error| error.to_string())
@@ -82,7 +93,7 @@ pub async fn desktop_place_observed_client_02(
 
 #[tauri::command]
 pub async fn desktop_inspect_sandbox_client_02() -> Result<native_clients::SandboxieClientObservation, String> {
-    tauri::async_runtime::spawn_blocking(|| run_manager_operation(native_clients::inspect_sandbox_client_02))
+    tauri::async_runtime::spawn_blocking(|| run_slot_operation("02", SlotOperation::Inspect, native_clients::inspect_sandbox_client_02))
         .await
         .map_err(|error| format!("Sandboxie inspection task failed: {error}"))?
         .map_err(|error| error.to_string())
@@ -128,7 +139,8 @@ pub async fn desktop_discover_existing_virtuals(
 
 #[cfg(test)]
 mod resource_admission_tests {
-    use super::admit_resource_operation;
+    use super::{admit_resource_operation, run_slot_operation};
+    use crate::engine::instance_catalog::SlotOperation;
     use std::{cell::Cell, io, sync::Mutex};
 
     #[test]
@@ -144,6 +156,22 @@ mod resource_admission_tests {
         assert!(!invoked.get(), "must not spawn an overlapping Windows helper");
         drop(existing);
         assert_eq!(admit_resource_operation(&gate, || Ok(7)).unwrap(), 7);
+    }
+
+    #[test]
+    fn future_or_invalid_slot_fails_before_any_resource_action() {
+        let invoked = Cell::new(false);
+        for id in ["03", "04", "", "02 ", "05"] {
+            let error = run_slot_operation(id, SlotOperation::Launch, || {
+                invoked.set(true);
+                Ok(())
+            }).unwrap_err();
+            assert!(matches!(error.kind(),
+                io::ErrorKind::Unsupported | io::ErrorKind::InvalidInput));
+        }
+        assert!(!invoked.get(), "no unavailable slot may run a helper");
+        assert_eq!(run_slot_operation("02", SlotOperation::Inspect, || Ok("read-only"))
+            .unwrap(), "read-only");
     }
 
     #[test]
