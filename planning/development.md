@@ -1,5 +1,15 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Windows compile-only artifact for first localtest smoke — 19 October 2026
+
+**Observed baseline:** [Full CI #14](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39152478135), exact SHA `4260729f07efde5272d8ee7c16dbd5d961a7abd2`, completed SUCCESS: all twelve Full Source stages and final Windows x64 Tauri `cargo build --locked` succeeded. This does not establish Windows startup, Sandboxie/Minecraft functionality, or signed installer viability. The source collector for Client 02 is already embedded with `include_str!`, so no external Sandboxie script or downloaded Minecraft binary belongs in this candidate.
+
+**Preparation:** upload a single short-retention GitHub Actions **developer-debug** artifact from the same successful automatic Local-push job, after compiled binary validation and SHA-256 calculation. Allowlist is exactly the unsigned `m-bedrock-virtual-clients.exe`, `BUILD-MANIFEST.txt` (complete 40-char Git SHA, target, profile, digest and unverified claims), and `LOCALTEST-INSTRUCTIONS.md` copied from the new canonical [CI Debug Candidate](../docs/validation/ci-debug-candidate.md). No installer, release, driver, Sandboxie, Minecraft software, worlds or account data. This is an optional smoke candidate; existing `DEV.cmd preflight` / `DEV.cmd dev` remains the actual developer localtest route.
+
+**Proof ceiling:** exact workflow source contracts and readback on new HEAD are verifiable immediately. The newly added artifact staging/upload must **execute successfully on a new Local CI SHA** before anyone claims a downloadable candidate exists. A debug EXE is not a confirmed standalone distribution; running UI, login, gameplay, multiplayer, persistence and release packaging are NOT_EXECUTED.
+
+**Next:** inspect new automatic Full CI including Stage/Upload and record whether the artifact is actually present, then stop for the later controlled Windows smoke.
+
 ## Full Source #13: correct owned inventory filename borrow — 19 October 2026
 
 **Executed proof:** automatic [Windows FULL CI #13](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39151556535) at `2b2f70c4e8ca1aab5bd05e5fcdaf45ecfc0f85e6`. All twelve stage commands actually executed; eleven succeeded and desktop failed. The desktop step was displayed green because `continue-on-error` masks its conclusion, but the aggregate gate correctly saw `STAGE_DESKTOP: failure` and skipped automatic compile-only. The only Rust compiler diagnostic in that desktop stage was E0277 at `apps/desktop/src-tauri/src/engine/owned_isolation.rs:435`: `HashSet<String>` cannot `Borrow<&str>` from an iterator item of type `&&str`. All 168 isolation-source tests passed.

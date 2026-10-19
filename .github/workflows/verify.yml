@@ -178,6 +178,52 @@ jobs:
       - name: Auto compile Windows desktop (no installer)
         if: github.event_name == 'push'
         run: cargo build --locked --target x86_64-pc-windows-msvc --manifest-path apps/desktop/src-tauri/Cargo.toml
+      - name: Stage developer executable
+        if: github.event_name == 'push'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $binary = Join-Path $env:GITHUB_WORKSPACE 'apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/debug/m-bedrock-virtual-clients.exe'
+          if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) {
+            throw 'The expected Windows x64 debug executable is missing; refuse artifact upload.'
+          }
+          $candidate = Join-Path $env:RUNNER_TEMP 'mivubi-localtest-debug'
+          if (Test-Path -LiteralPath $candidate) {
+            throw 'Candidate staging folder already exists; refuse overwrite.'
+          }
+          New-Item -ItemType Directory -Path $candidate -ErrorAction Stop | Out-Null
+          $copied = Join-Path $candidate 'm-bedrock-virtual-clients.exe'
+          Copy-Item -LiteralPath $binary -Destination $copied -ErrorAction Stop
+          $digest = (Get-FileHash -LiteralPath $copied -Algorithm SHA256).Hash.ToLowerInvariant()
+          $length = (Get-Item -LiteralPath $copied).Length
+          if ($digest -notmatch '^[a-f0-9]{64}$' -or $length -le 0 -or $env:GITHUB_SHA -notmatch '^[a-f0-9]{40}$') {
+            throw 'Invalid binary digest, size or exact commit identifier.'
+          }
+          $record = @(
+            'schema=1'
+            "source_commit=$env:GITHUB_SHA"
+            'source_branch=Local'
+            'target=x86_64-pc-windows-msvc'
+            'build_profile=dev'
+            'unsigned=true'
+            'installed_or_run=false'
+            'gameplay_verified=false'
+            'file=m-bedrock-virtual-clients.exe'
+            "sha256=$digest"
+            "size_bytes=$length"
+          )
+          [System.IO.File]::WriteAllLines((Join-Path $candidate 'BUILD-MANIFEST.txt'), $record, [System.Text.UTF8Encoding]::new($false))
+          Copy-Item -LiteralPath 'docs/validation/ci-debug-candidate.md' -Destination (Join-Path $candidate 'LOCALTEST-INSTRUCTIONS.md') -ErrorAction Stop
+          $staged = @(Get-ChildItem -LiteralPath $candidate -File)
+          if ($staged.Count -ne 3) { throw 'Developer artifact allowlist violated.' }
+      - name: Upload developer binary evidence
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: localtest-debug-${{ github.sha }}
+          path: ${{ runner.temp }}/mivubi-localtest-debug/
+          if-no-files-found: error
+          retention-days: 7
       - name: Report exact commit and proof boundary
         if: always()
         shell: pwsh

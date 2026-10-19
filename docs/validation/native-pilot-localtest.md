@@ -11,6 +11,10 @@ lifecycle: ACTIVE
 
 **Scope:** developer-mode local feasibility check for **one native Minecraft Education Client 01 + one Sandboxie Plus Client 02**, on a **single Windows 10/11 x64 PC**. Does not install/replace the legacy VMware manager. Does not start/delete/reset VMware guests and does not automate Microsoft sign-in. The goal of four independently playable licensed sessions is **NOT PROVEN**.
 
+## Optional CI debug binary — UI-only smoke
+
+A successful automatic Windows Full CI run for `Local` can also upload a short-lived `localtest-debug-<SHA>` **unsigned debug executable** after all twelve source stages and compile-only pass. See [CI Debug Candidate](./ci-debug-candidate.md) for its SHA-256/commit checks, seven-day retention and strict UI-only startup smoke. It is **not** an installer, release, or proof of Minecraft functionality. The normal full localtest route remains `DEV.cmd preflight` followed by `DEV.cmd dev`.
+
 ## Quick start — first Windows session
 
 For a new checkout, open PowerShell 7 in a normal developer folder and run:

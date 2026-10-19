@@ -524,6 +524,12 @@ for (const origin of resourceRoots) {
 }
 requireFact(tauri.bundle?.windows?.nsis?.installMode === "currentUser", "Windows install scope changed");
 requireFact(tauri.bundle?.windows?.allowDowngrades === false, "Downgrade restriction changed");
+const debugCandidateGuide = read("docs/validation/ci-debug-candidate.md");
+requireFact(debugCandidateGuide.includes("raw, unsigned development executable") &&
+  debugCandidateGuide.includes("sha256=*") &&
+  debugCandidateGuide.includes("DEV.cmd preflight") &&
+  debugCandidateGuide.includes("does not install a driver"),
+  "CI debug candidate must retain explicit non-installer and checksum instructions");
 // CI diagnostics must cover the canonical source stages on both Local push
 // and manual Full Source, retaining a strict final failure gate.
 const fullSourceWorkflow = read(".github/workflows/verify.yml").replace(/\r\n/g, "\n");
@@ -546,6 +552,16 @@ requireFact(isLocalPush &&
   ciWorkflow.includes("github.event_name == 'push' ||") &&
   ciWorkflow.includes("if: github.event_name == 'push'") &&
   ciWorkflow.includes("Auto compile Windows desktop (no installer)") &&
+  ciWorkflow.indexOf("Stage developer executable") > ciWorkflow.indexOf("Auto compile Windows desktop (no installer)") &&
+  ciWorkflow.indexOf("Upload developer binary evidence") > ciWorkflow.indexOf("Stage developer executable") &&
+  ciWorkflow.includes("uses: actions/upload-artifact@v4") &&
+  ciWorkflow.includes("if-no-files-found: error") &&
+  ciWorkflow.includes("retention-days: 7") &&
+  ciWorkflow.includes("name: localtest-debug-${{ github.sha }}") &&
+  ciWorkflow.includes("github.event_name == 'push'") &&
+  ciWorkflow.includes("m-bedrock-virtual-clients.exe") &&
+  ciWorkflow.includes("BUILD-MANIFEST.txt") &&
+  ciWorkflow.includes("LOCALTEST-INSTRUCTIONS.md") &&
   !ciWorkflow.includes("tauri build"),
   "Automatic full CI must be Local-push-only, cancel obsolete runs, and never package/install");
 const legacyWorkflow = read(".github/workflows/package-smoke.yml");
