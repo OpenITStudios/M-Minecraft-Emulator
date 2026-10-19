@@ -4,10 +4,16 @@ class: DOCUMENT
 domain: validation
 role: REPORT
 authority: WORKING
-lifecycle: ACTIVE
+lifecycle: HISTORICAL
 ---
 
 # Owned Isolation — pinned upstream component, license and build inventory
+
+> **HISTORICAL v1.18.5 design/inventory snapshot.** The only current
+> owned v1.18.6 source/build route is [Isolation Source Tooling](../../tooling/isolation-source/README.md).
+> External checkout paths, old fork procedures and pending tests below are
+> not current `Local` commands.
+
 
 **Review date:** 2026-10-14. **Product source:** `MIVUBI-STD/M-Minecraft-Emulator` `Local` at `8f58f26b800fcd89188224efb862930b6f2e0ec9`.
 **Upstream:** [sandboxie-plus/Sandboxie v1.18.5](https://github.com/sandboxie-plus/Sandboxie/tree/abd4c240031cfb46666daa74ca47ed4e48b561e4), exact tag commit `abd4c240031cfb46666daa74ca47ed4e48b561e4`. This is SOURCE evidence; installed Sandboxie 1.18.5 has not been proven byte-for-byte identical to an independently compiled artifact. No upstream binary or modified driver was compiled or executed in this batch.

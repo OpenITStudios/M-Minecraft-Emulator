@@ -592,6 +592,46 @@ for (const path of markdownFiles("docs")) {
   }
 }
 
+// One active engine/one current handoff: historical recipes must not be
+// mistaken for the current v1.18.6 source/build flow.
+const currentHandoff = read("planning/development.md");
+const currentIsolationGuide = read("tooling/isolation-source/README.md");
+const engineRouter = read("engine/README.md");
+const toolRouter = read("tooling/README.md");
+const validationRouter = read("docs/validation/README.md");
+requireFact(currentHandoff.startsWith("# Current Development Handoff") &&
+  currentHandoff.length < 8000 &&
+  currentHandoff.includes("planning/history") &&
+  read("planning/history/development-through-2026-10-19.md").includes("ARCHIVE ONLY"),
+  "Current handoff must be concise and separate from historical progress");
+requireFact(currentIsolationGuide.includes("build-owned-v1186.ps1") &&
+  currentIsolationGuide.includes("assemble-owned-v1186.mjs") &&
+  currentIsolationGuide.includes("workspace/builds/") &&
+  currentIsolationGuide.includes("workspace/packages/") &&
+  !currentIsolationGuide.includes("D:\\MIVUBIReports") &&
+  !currentIsolationGuide.includes("D:\\Source\\M-Isolation-Engine") &&
+  currentIsolationGuide.includes("historical"),
+  "Active native README must select one v1.18.6 owner and workspace outputs");
+requireFact(engineRouter.includes("isolation-owned/") &&
+  engineRouter.includes("isolation-candidates/sandboxie-v1.18.6/") &&
+  toolRouter.includes("Sole current v1.18.6") &&
+  validationRouter.includes("12-stage Full Source Windows CI") &&
+  !validationRouter.includes("workflow files are manual-only"),
+  "Engine/tooling/validation routers contain stale authority or CI routing");
+for (const historicalPath of [
+  "planning/history/isolation-v1185-source-notes.md",
+  "planning/history/isolation-native-development-notes.md",
+  "planning/history/owned-source-import-notes.md"
+]) {
+  const note = read(historicalPath);
+  requireFact(note.includes("HISTORICAL") || note.includes("ARCHIVED"),
+    "Missing explicitly historical source archive: " + historicalPath);
+}
+requireFact(read("docs/system/owned-source-import.md").length < 5500 &&
+  read("docs/system/owned-isolation-design.md").includes("lifecycle: HISTORICAL") &&
+  read("docs/validation/owned-isolation-upstream-inventory.md").includes("lifecycle: HISTORICAL"),
+  "Active source-import procedure still mixes historical v1.18.5 authority");
+
 const scripts = json("package.json").scripts;
 requireFact(scripts["test:localtest"] === "node --test tooling/local-test/session.test.mjs tooling/windows-toolchain/portable.test.mjs" &&
   scripts["verify:source"].includes("npm run test:localtest"),

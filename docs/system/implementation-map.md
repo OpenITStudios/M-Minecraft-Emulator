@@ -9,7 +9,7 @@ lifecycle: ACTIVE
 
 # Implementation Ownership Map
 
-This is a **navigation guide**, not a second registry or copy of implementation truth. For an issue, select its responsibility, then inspect the exact owning source and affected consumers.
+This is a **navigation guide**, not a second implementation registry. The sole current v1.18.6 source/compile/assembly commands live in [Isolation Source Tooling](../../tooling/isolation-source/README.md); current work intent lives only in [planning/development.md](../../planning/development.md). Historical v1.18.5 entries below are for provenance and regression traceability, **not alternate active commands**. For an issue, inspect its current source owner and actual consumers.
 
 ## Locate work by problem
 

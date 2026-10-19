@@ -13,6 +13,7 @@ Choose one document based on the requested concern:
 
 | Concern | Canonical document |
 | --- | --- |
+| Native engine current v1.18.6 build/verification | [Isolation Source Tooling](../../tooling/isolation-source/README.md) — no v1.18.5 fallback |
 | Layering, source authority and architecture | [Architecture](./architecture.md) |
 | Future app-owned isolation backend, compatibility and cutover gates | [Owned Isolation Design](./owned-isolation-design.md) — design only, not active runtime |
 | Paused VM pathways and safe future deletion | [Legacy Retirement](./legacy-retirement.md) |

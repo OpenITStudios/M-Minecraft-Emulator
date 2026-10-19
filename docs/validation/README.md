@@ -32,11 +32,12 @@ returns **no-write SummaryOnly** evidence to the desktop; a separately invoked f
 
 | Question | Authoritative reference |
 | --- | --- |
-| What Sandboxie source/components/licenses are needed for an app-owned engine? | [Pinned upstream isolation inventory](./owned-isolation-upstream-inventory.md) — source review, no fork binaries/build run |
+| What is the **current** v1.18.6 owned source/build path? | [One native source/build owner](../../tooling/isolation-source/README.md) — unsigned, noninstallable and not the current runtime provider |
+| What was the old v1.18.5 build inventory? | [Historical pinned upstream inventory](./owned-isolation-upstream-inventory.md) — research snapshot only |
 | What passed in the first two-client run, and what remains unstable? | [First success and subsequent crash, 14 Oct 2026](./two-client-first-success-2026-10-14.md) — operator-confirmed gameplay, observed compatibility probes and unresolved idle crash |
 | How do I prepare and execute the current Windows local test safely? | [Native + Sandboxie local test](./native-pilot-localtest.md) — exact-HEAD build, manual two-client steps, failure handling and evidence limits |
 | Can one native Minecraft and one sandboxed Windows Minecraft run independently? | [Sandboxie Client 02 feasibility](./sandboxie-two-client-feasibility.md) — single active experiment, not game-proof |
-| What is the current REA-aligned repository audit and prioritized closure plan? | [REA-aligned source audit, 13 Oct 2026](./rea-source-audit-2026-10-13.md) — read-only source evidence, conditional risks and pending real artifact/runtime proof |
+| What did the 13 October source audit observe? | [Historical REA-aligned audit](./rea-source-audit-2026-10-13.md) — former source snapshot, not a current release verdict |
 | What was the earlier native-only experiment? | [Native two-client feasibility](./native-multi-instance-feasibility.md) — historical evidence route; not active architecture |
 | What were the historical VMware-only product gates? | [Legacy VMware G0–G4](./acceptance.md) — preserved five-gate VMware campaign, **not** the active native acceptance procedure |
 | What did historical VMware G0 require? | [Legacy VMware G0 Source & Package Readiness](./pre-local-test-readiness.md) — old package route remains blocked for native pilot |
@@ -66,4 +67,4 @@ Exact GitHub source / package verification
 
 A lower level cannot authorize the next. Machine collector source lives in `../../tooling/acceptance/windows/`; a completed collection proves only the fields directly observed. Player/gameplay acceptance still requires real Minecraft evidence.
 
-The available development mode is ChatGPT + GitHub `Local`. Existing GitHub workflow files are manual-only but cannot currently be dispatched under the protected `main` branch policy. Do not substitute a synthetic execution PASS; `planning/development.md` records the currently unexecuted gate evidence, not a second database.
+Current `Local` pushes run automatic 12-stage Full Source Windows CI. When all stages PASS, the same job compiles an **unsigned debug desktop** and uploads the candidate; manual scopes are separate. The `main` workflow registration does not run source checks. [Current handoff](../../planning/development.md) records exact-SHA evidence, not a second implementation database. CI does **not** prove GUI startup, account login or owned-driver readiness.
