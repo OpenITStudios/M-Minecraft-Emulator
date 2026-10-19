@@ -2,6 +2,27 @@
 
 **Repository:** `OpenITStudios/M-Minecraft-Emulator`; development branch `Local`.
 
+## Current bounded correction — no orphaned foreground hooks
+
+The first hook batch remains source-only and opt-in. This change hardens
+lifecycle admission: the startup handshake is unbuffered, so a late
+worker can never acknowledge startup after the waiting caller times out.
+A timed-out worker retains its JoinHandle under the single owner until
+it has fully stopped; a second Start cannot install another hook during
+cleanup. Stop reports WouldBlock while this cleanup is pending instead
+of posting WM_QUIT to an unknown thread ID. A live worker still receives
+WM_QUIT and unhooks on its own message-loop thread. The public
+OBSERVE_ONLY counter/IPC remains unchanged; no PID, HWND or FPS is stored.
+
+Previous exact `Local` commit
+`5a465e8a86206c621cfb2fc636b7184d2400aa24`
+[CI 39288641331](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39288641331)
+had passed all 12 source stages and entered Windows debug compilation at
+last review; its terminal CI status must be checked independently.
+The current bounded correction requires its own exact-SHA Full Source CI.
+
+---
+
 ## Current bounded batch — opt-in event-driven focus observation
 
 The desktop now contains one **operator-controlled** foreground-event

@@ -130,7 +130,8 @@ mod windows {
     pub fn read() -> ForegroundEventObserverStatus {
         match WORKER.lock() {
             Ok(guard) => status(
-                guard.as_ref().is_some_and(|worker| worker.alive.load(Ordering::Acquire)),
+                guard.as_ref().is_some_and(|worker|
+                    worker.thread_id != 0 && worker.alive.load(Ordering::Acquire)),
                 EVENTS.load(Ordering::Relaxed),
             ),
             Err(_) => status(false, EVENTS.load(Ordering::Relaxed)),
@@ -139,17 +140,27 @@ mod windows {
 
     pub fn start() -> io::Result<ForegroundEventObserverStatus> {
         let mut guard = lock()?;
-        if guard.as_ref().is_some_and(|worker| worker.alive.load(Ordering::Acquire)) {
-            return Err(io::Error::new(io::ErrorKind::AlreadyExists,
-                "Foreground observer is already active"));
+        if let Some(worker) = guard.as_ref() {
+            if worker.thread_id != 0 && worker.alive.load(Ordering::Acquire) {
+                return Err(io::Error::new(io::ErrorKind::AlreadyExists,
+                    "Foreground observer is already active"));
+            }
+            // This covers both a timed-out startup and an exited hook that
+            // has not yet unregistered. Never create a replacement meanwhile.
+            if !worker.join.is_finished() {
+                return Err(io::Error::new(io::ErrorKind::WouldBlock,
+                    "Previous foreground hook is still closing; retry after it exits"));
+            }
         }
-        // Reap a thread that exited unexpectedly; avoid a second live worker.
         if let Some(old) = guard.take() {
             old.join.join().map_err(|_| io::Error::other(
                 "Previous foreground hook thread terminated unexpectedly"))?;
         }
         EVENTS.store(0, Ordering::Relaxed);
-        let (tx, rx) = mpsc::sync_channel(1);
+        // Zero-capacity handshake: the hook thread's send succeeds only
+        // when this caller actually receives the thread ID. After a timeout
+        // a late send must fail and the hook is uninstalled on its own thread.
+        let (tx, rx) = mpsc::sync_channel(0);
         let alive = Arc::new(AtomicBool::new(false));
         let worker_alive = Arc::clone(&alive);
         let join = thread::Builder::new()
@@ -158,11 +169,12 @@ mod windows {
         let thread_id = match rx.recv_timeout(Duration::from_secs(5)) {
             Ok(Ok(id)) if id != 0 => id,
             Ok(Ok(_)) | Ok(Err(_)) | Err(_) => {
-                // A late worker sees a dropped receiver and unhooks itself.
-                // A failed hook-install worker exits before this join.
-                drop(join);
+                // Do not detach: a late worker may still be installing its
+                // hook. Preserve the only worker ownership until joined.
+                // sync_channel(0) guarantees a late send cannot succeed.
+                *guard = Some(Worker { thread_id: 0, alive, join });
                 return Err(io::Error::new(io::ErrorKind::Other,
-                    "Windows focus event hook could not start"));
+                    "Windows focus event hook did not confirm startup"));
             }
         };
         *guard = Some(Worker { thread_id, alive, join });
@@ -171,14 +183,23 @@ mod windows {
 
     pub fn stop() -> io::Result<ForegroundEventObserverStatus> {
         let mut guard = lock()?;
-        if let Some(worker) = guard.take() {
-            if worker.alive.load(Ordering::Acquire) {
-                if unsafe { PostThreadMessageW(worker.thread_id, WM_QUIT, 0, 0) } == 0 {
-                    // Preserve the only hook owner if Windows refused shutdown.
-                    *guard = Some(worker);
-                    return Err(io::Error::last_os_error());
+        if let Some(worker) = guard.as_ref() {
+            if worker.thread_id == 0 {
+                // Startup timed out. A zero-capacity handshake ensures the
+                // late worker unhooks itself. Do not join a thread still
+                // potentially blocked in the Windows install call.
+                if !worker.join.is_finished() {
+                    return Err(io::Error::new(io::ErrorKind::WouldBlock,
+                        "Timed-out hook is still cleaning up"));
                 }
+            } else if worker.alive.load(Ordering::Acquire)
+                && unsafe { PostThreadMessageW(worker.thread_id, WM_QUIT, 0, 0) } == 0
+            {
+                // Never discard the worker handle on a refused shutdown.
+                return Err(io::Error::last_os_error());
             }
+        }
+        if let Some(worker) = guard.take() {
             worker.join.join().map_err(|_| io::Error::other(
                 "Foreground hook worker exited unexpectedly"))?;
         }

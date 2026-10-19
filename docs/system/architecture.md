@@ -81,7 +81,11 @@ settings changes are introduced.
 blocks in the native `GetMessageW` message loop (no polling) and invokes
 `UnhookWinEvent` on that **same** thread when the operator presses Stop or
 Tauri exits. The manager refuses a second running hook and uses a bounded
-startup handshake; a timed-out startup must not leave an orphaned hook.
+startup handshake. Startup uses a zero-capacity channel so a late
+confirmation cannot succeed after timeout. If startup times out, the
+manager retains ownership of the installing worker until it exits, and
+a second Start or Stop cannot treat a still-cleaning hook as absent.
+The worker unhooks on its original thread even when the receiver has gone.
 
 The callback counts matching foreground events only. It records **no**
 window title, HWND, PID, process image, user account or credential. The

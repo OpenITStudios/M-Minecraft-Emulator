@@ -57,6 +57,15 @@ describe("Opt-in Windows event-driven focus counter", () => {
     expect(rust).toContain("UnhookWinEvent(hook)");
     expect(rust).toContain("PostThreadMessageW(worker.thread_id, WM_QUIT, 0, 0)");
     expect(rust).toContain("static WORKER: Mutex<Option<Worker>>");
+    // A buffered handshake could acknowledge a hook after the caller's
+    // timeout. Preserve ownership and forbid a replacement until cleanup.
+    expect(rust).toContain("mpsc::sync_channel(0)");
+    expect(rust).not.toContain("mpsc::sync_channel(1)");
+    expect(rust).toContain("*guard = Some(Worker { thread_id: 0, alive, join });");
+    expect(rust).toContain("worker.join.is_finished()");
+    expect(rust).toContain("worker.thread_id != 0 && worker.alive.load(Ordering::Acquire)");
+    expect(rust).toContain('"Timed-out hook is still cleaning up"');
+    expect(rust).not.toContain("drop(join);");
     expect(rust).toContain("EVENT_SYSTEM_FOREGROUND");
     const winImports = rust.split("WindowsAndMessaging::{")[1]?.split("},")[0] ?? "";
     const accessibilityImports = rust.split("Accessibility::{")[1]?.split("},")[0] ?? "";
