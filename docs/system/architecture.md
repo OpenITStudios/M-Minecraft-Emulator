@@ -52,8 +52,14 @@ applied and no RAM/GPU savings are claimed.
 foreground. Only Client 02 is currently attributable: its window must pass
 the existing fresh official Sandboxie membership, Microsoft-signed Education
 image, PID/FILETIME/HWND and live root-window ownership checks.
-One `GetForegroundWindow()` call classifies this verified window as
-`FOREGROUND`, `NOT_FOREGROUND`, or `UNKNOWN` (including NULL foreground).
+A bounded read of `GetForegroundWindow()` and `GetWindowThreadProcessId`
+classifies this verified window as `FOREGROUND`, `NOT_FOREGROUND`, or
+`UNKNOWN`. The foreground HWND is read again to detect focus changes
+mid-check. A NULL window, missing process-owner PID, reused HWND, focus
+transition, or the MIVUBI manager itself as foreground is `UNKNOWN`,
+never eligible for FPS throttling. Since the operator must click inside
+MIVUBI to request this diagnostic, manager-owned foreground is expected
+and the diagnostic is not a continuous focus tracker.
 
 Client 01 remains `UNATTRIBUTED` because process name-matches and absence
 from the selected Sandboxie box cannot establish native ownership.

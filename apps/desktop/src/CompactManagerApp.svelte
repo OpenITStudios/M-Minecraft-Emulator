@@ -736,14 +736,14 @@
                 <p class="cm-warning" role="alert">{instanceOverviewError}</p>
               {/if}
               <h3>Four-slot focus evidence</h3>
-              <p>Read-only snapshot after fresh verification of Client 02. Client 01 cannot yet be attributed; Client 03/04 have no verified MIVUBI provider. No FPS limiter is enabled.</p>
+              <p>Read-only snapshot after fresh verification of Client 02. Because clicking this control usually focuses MIVUBI itself, the result may be UNKNOWN. Client 01 cannot yet be attributed; Client 03/04 have no verified provider. No FPS limiter is enabled.</p>
               <button type="button" class="cm-button cm-secondary"
                 disabled={resourceOperationBusy || !focusCandidate(observation)} on:click={inspectInstanceFocus}>
                 {busy === "inspect-focus" ? "Reading focus…" : "Inspect four-slot focus"}
               </button>
               {#if instanceFocus}
                 <section class="cm-existing-virtuals" aria-label="Four-slot focus evidence" aria-live="polite">
-                  <p>Mode: observation only. Status is one instant, not continuous monitoring.</p>
+                  <p>Mode: observation only. Focus on the MIVUBI manager or an Alt+Tab transition reports UNKNOWN, not background-game eligibility.</p>
                   <ul>
                     {#each instanceFocus.slots as slot (slot.id)}
                       <li>Client {slot.id} · {slot.evidence === "FOREGROUND" ? "Verified foreground at check"

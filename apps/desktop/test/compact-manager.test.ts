@@ -28,6 +28,19 @@ function inspected(): IsolatedClientObservation {
   };
 }
 
+describe("Native Client 01 attribution remains explicitly unproven", () => {
+  it("does not treat a nonzero Sandboxie QueryProcess result as native ownership", () => {
+    const collector = readFileSync(new URL(
+      "../../../tooling/acceptance/windows/collect-sandboxie-feasibility.ps1",
+      import.meta.url,
+    ), "utf8");
+    expect(collector).toContain('results[i] = "UNKNOWN";');
+    expect(collector).toContain("if (!SameProcess(process, expected) || status != 0) continue;");
+    expect(collector).toContain('results[i] = "OTHER_BOX";');
+    expect(collector).not.toContain('results[i] = "NATIVE";');
+  });
+});
+
 describe("Shared read-only four-slot focus projection", () => {
   const focus = {
     schema: 2, mode: "OBSERVE_ONLY", slots: [
@@ -61,7 +74,13 @@ describe("Shared read-only four-slot focus projection", () => {
     const bootstrap = readFileSync(new URL("../src-tauri/src/app_bootstrap.rs", import.meta.url), "utf8");
     expect(rust).toContain("native_clients::with_verified_client_02_window(target");
     expect(rust).toContain("GetForegroundWindow()");
-    expect(rust).toContain('None | Some(0) => "UNKNOWN"');
+    expect(rust).toContain("GetWindowThreadProcessId(foreground, &mut owner_pid)");
+    expect(rust).toContain("std::process::id(),");
+    expect(rust).toContain("let stable = unsafe { GetForegroundWindow() } == foreground;");
+    expect(rust).toContain('Some(303), true), "NOT_FOREGROUND"');
+    expect(rust).toContain('Some(900), true), "UNKNOWN"');
+    expect(rust).toContain('Some(202), false), "UNKNOWN"');
+    expect(rust).toContain('Some(303), false), "UNKNOWN"');
     expect(rust).toContain('mode: "OBSERVE_ONLY"');
     expect(commands).toContain('SlotOperation::Inspect, || instance_focus::inspect_instance_focus(target)');
     expect(bootstrap).toContain("desktop_inspect_instance_focus,");
