@@ -131,7 +131,7 @@ mod tests {
     fn projects_four_slots_without_claiming_host_01_or_gameplay() {
         let result = project_overview(&native(2, true), &isolated("OBSERVED", 1));
         assert_eq!(result.schema, 1);
-        assert_eq!(result.slots.map(|s| s.id), ["01", "02", "03", "04"]);
+        assert_eq!(result.slots.iter().map(|slot| slot.id).collect::<Vec<_>>(), ["01", "02", "03", "04"]);
         assert_eq!(result.slots[0].evidence, "NAME_MATCH_UNATTRIBUTED");
         assert_eq!(result.slots[0].candidate_count, Some(2));
         assert_eq!(result.slots[1].evidence, "BOX_PROCESS_CANDIDATES_ONLY");

@@ -18,6 +18,14 @@ The active desktop adds one operator-requested `Inspect all four slots` action i
 
 ## Exact-SHA evidence
 
+The new discovery source on `92f164f78e2dc7be07ecf201e4f7412b12ad58ba`
+[failed Full Source CI](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39265234252)
+in the desktop Rust **test** compilation only: `result.slots.map(...)` moved
+the non-Copy array before later assertions. The affected test now iterates
+by reference. All other source stages, frontend tests, runtime Rust tests and
+format checks on that SHA passed; this correction needs its own exact-SHA CI
+before debug desktop compilation can be claimed.
+
 The previous `Local` commit `106d925f92ecd2044f128635c58fa68e25fbf867` **passed** twelve Windows Full Source CI stages, compile-only debug desktop build and artifact upload: [run 39262164288](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39262164288). This new discovery batch needs its own matching SHA CI. Success in CI is not Windows UI startup, real Minecraft login, running v1.18.6 driver or stable four-client acceptance.
 
 ## Unresolved and next action
