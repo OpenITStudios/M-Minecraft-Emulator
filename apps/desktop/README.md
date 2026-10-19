@@ -105,9 +105,16 @@ Base creation and Windows Sysprep remain guided user steps because the backend h
 
 From repository root, use `npm run verify:source` as the optional complete developer checkpoint. The root route includes the app's Svelte/Vitest/build/Tauri checks and the canonical backend crate's check, tests and rustfmt. App-local `verify:source` covers the desktop but does not replace the backend's own checks.
 
-Prepare desktop dependencies from `apps/desktop/package-lock.json` with `npm --prefix apps/desktop ci`. The new repository root has no Bedrock analysis engine dependencies. Use the pinned Node/npm versions in toolchain.json, the
-Rust toolchain used by the Virtual Clients backend workflow (including rustfmt),
-and Windows desktop build prerequisites. See
+For an operator's Windows checkout, the supported one-root route is
+`DEV.cmd bootstrap` → `DEV.cmd doctor` → `DEV.cmd preflight` →
+`DEV.cmd dev` from the repository root. The launcher provisions pinned
+Node/npm, Rust/rustfmt and PowerShell under `workspace/toolchains/`
+and directs downloads, caches and temporary files to `workspace/`;
+Git and Microsoft C++/Windows prerequisites remain external. Direct
+`npm --prefix apps/desktop ci` (using the locked
+`apps/desktop/package-lock.json`) remains a low-level source/CI command,
+not the promised portable Windows entrypoint. The repository root
+intentionally has no second Node dependency graph. See
 [Development Operations](../../docs/system/development-operations.md).
 
 This command does not build/install the distributable or start VMware/Minecraft.

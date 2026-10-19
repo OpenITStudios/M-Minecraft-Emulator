@@ -102,7 +102,7 @@ native launcher is active; there is no approved native release installer yet. Le
 | --- | --- | --- |
 | Develop, refactor, repair, or improve repository | [AGENTS.md](AGENTS.md) → [.agents development procedure](.agents/skills/emulator-development/SKILL.md) | Existing source owner in `apps/` or `engine/` |
 | Examine VM behavior or diagnose setup | [Implementation Map](docs/system/implementation-map.md) → [Runtime Core](docs/system/runtime-core.md) | `engine/runtime-core/`, observed provider/guest evidence |
-| Follow the selected Windows two-account experiment | [Native pilot local test](docs/validation/native-pilot-localtest.md) | `DEV.cmd preflight` → `DEV.cmd dev`; no installer, login/gameplay still unproven |
+| Follow the selected Windows two-account experiment | [Native pilot local test](docs/validation/native-pilot-localtest.md) | `DEV.cmd bootstrap` → `doctor` → `preflight` → `dev`; no installer, login/gameplay still unproven |
 | Review the legacy VMware NSIS release integrity gate | [Historical G0](docs/validation/pre-local-test-readiness.md) | Old NSIS packaging intentionally blocked for native pilot |
 | Consult historical one-guest VMware feasibility (inactive) | [Legacy Client Feasibility](docs/validation/client-feasibility.md) | Scratch guest procedure is retained as reference; not an active pilot instruction |
 | Verify Windows/VMware/Minecraft usability | [Validation](docs/validation/README.md) | Real machine and game observations; `tooling/acceptance/` collects bounded evidence |
@@ -127,7 +127,7 @@ The root is a thin entry/configuration boundary, not a second home for VM lifecy
 | `toolchain.json` | Canonical developer tool and proof policy | `tooling/windows-toolchain/` |
 | `.node-version` | Node version selector | `toolchain.json` |
 | `VERSION` | Product release version text | Desktop/Tauri/Rust versions must agree |
-| `DEV.cmd` | Optional Windows-local command launcher | `tooling/windows-toolchain/dev.ps1` |
+| `DEV.cmd` | One Windows developer entrypoint with portable bootstrap | `tooling/windows-toolchain/bootstrap.ps1`, `dev.ps1` |
 | `.editorconfig`, `.gitattributes`, `.gitignore` | Editing, Git and generated-data boundaries | No executable VM semantics |
 
 The root **does not** need a `tsconfig.json` or `package-lock.json`: the only Node dependency installation belongs to `apps/desktop/`. Rust dependencies are locked separately in `engine/runtime-core/Cargo.lock` and `apps/desktop/src-tauri/Cargo.lock`. Avoid duplicate manifests just for visual symmetry with another repository.
@@ -136,7 +136,7 @@ The root **does not** need a `tsconfig.json` or `package-lock.json`: the only No
 
 ```text
 .agents/                 bounded developer-agent procedure
-.github/                 manual-only verification and Windows package smoke
+.github/                 automatic Local Full Source CI; manual legacy package smoke
 apps/desktop/            Svelte UI, Tauri command adapters, native window layout
 engine/runtime-core/     authoritative Rust VM lifecycle, identity, provider and guest protocol
 engine/guest/windows/    Windows Base and Guest Agent install/uninstall/finalize scripts
@@ -146,9 +146,9 @@ docs/system/             architecture, runtime semantics, ownership and develope
 docs/validation/         proof policy, failure matrix and platform constraints
 planning/                current development intent and continuation
 tooling/repository/      static repository/source contract verification
-tooling/windows-toolchain/ optional Windows developer launcher
+tooling/windows-toolchain/ portable Windows developer setup and launcher
 tooling/acceptance/      bounded Windows host/guest evidence collection
-workspace/               untracked private execution material / project handoffs
+workspace/               one local root for toolchains, downloads, caches, builds, packages and test runs
 experiments/             bounded non-authoritative research
 ```
 
@@ -170,7 +170,7 @@ npm run dev                      # Tauri desktop development
 npm run package:windows          # BLOCKED for native pilot: old VMware bundle still attached
 ```
 
-For the native Windows pilot, use `DEV.cmd preflight` to run the exact-SHA toolchain, locked setup and complete source checks in one non-destructive sequence; only after it succeeds use `DEV.cmd dev` for the manual two-client experiment. `DEV.cmd g0` and packaging remain blocked legacy routes. Windows developers can also use `DEV.cmd help`; it delegates to the existing PowerShell development script. GitHub workflows are **manual-only**. A committed test or valid static check is not proof of a passing Windows package or working four-client Minecraft session.
+For the native Windows pilot, use `DEV.cmd bootstrap` to provision pinned developer tools beneath `workspace/`, then `DEV.cmd doctor` to confirm local executable paths, `DEV.cmd preflight` to run exact-SHA locked source checks, and finally `DEV.cmd dev` for the developer UI. For UI-only startup, use the exact-SHA [CI debug candidate](docs/validation/ci-debug-candidate.md) without installing a developer toolchain. `DEV.cmd g0` and legacy packaging stay blocked. GitHub `Local` pushes run automatic Full Source CI and conditional Windows debug compilation; manual scopes remain available. CI compilation is **not** proof of GUI startup, portable bootstrap execution, independent Minecraft sign-in or four-client gameplay.
 
 ## Product and compatibility invariants
 

@@ -13,21 +13,41 @@ lifecycle: ACTIVE
 
 ## Optional CI debug binary — UI-only smoke
 
-A successful automatic Windows Full CI run for `Local` can also upload a short-lived `localtest-debug-<SHA>` **unsigned debug executable** after all twelve source stages and compile-only pass. See [CI Debug Candidate](./ci-debug-candidate.md) for its SHA-256/commit checks, 30-day retention on newly uploaded artifacts, PE x64 structural validation and strict UI-only startup smoke. It is **not** an installer, release, or proof of Minecraft functionality. The normal full localtest route remains `DEV.cmd preflight` followed by `DEV.cmd dev`.
+A successful automatic Windows Full CI run for `Local` can upload a `localtest-debug-<SHA>` **unsigned debug executable** after all twelve source stages and compile-only pass. This is the **shortest first localtest**: no portable developer toolchain or MSVC/WDK build is needed to *attempt* UI startup. Use [CI Debug Candidate](./ci-debug-candidate.md) to download the exact-SHA artifact into `workspace/downloads/`, extract only the expected three files into a new `workspace/packages/debug-<SHA>/`, verify the manifest SHA-256, and try opening/closing the manager on Windows 10/11 x64 with WebView2. It is not an installer, signed release, Sandboxie distribution or Minecraft gameplay proof. Do **not** bypass OS security warnings. The normal full developer localtest route remains `DEV.cmd bootstrap` → `DEV.cmd doctor` → `DEV.cmd preflight` → `DEV.cmd dev`.
 
 ## Quick start — first Windows session
 
-For a new checkout, open PowerShell 7 in a normal developer folder and run:
+Choose one **short NTFS checkout root on a drive you control**, such as
+`D:\M-Minecraft-Emulator`. Install Git for Windows as an OS prerequisite.
+Open a normal Windows PowerShell or Command Prompt at that drive's parent
+directory, then run:
 
 ```powershell
 git clone --branch Local --single-branch https://github.com/OpenITStudios/M-Minecraft-Emulator.git
 cd M-Minecraft-Emulator
+.\DEV.cmd bootstrap
+.\DEV.cmd doctor
 .\DEV.cmd preflight
 ```
 
-For an existing checkout, inspect `git status --short` first, preserve any local edits, then use `git switch Local` and `git pull --ff-only origin Local`. Never run `git reset --hard` as a troubleshooting shortcut.
+The `bootstrap` command runs through the built-in Windows PowerShell,
+downloads the pinned Node/npm, PowerShell, and Rust prerequisites into
+`workspace/downloads/`, and extracts/configures them only beneath
+`workspace/toolchains/`. Dependency caches and temporary files belong
+to `workspace/cache/` and `workspace/tmp/`. No separate `C:\Source`,
+`D:\Source`, global Node installation, or global Rust installation is
+required by this developer launcher. **Git and Microsoft C++ Build Tools
+remain OS-level prerequisites.** Before opening the UI, inspect the paths
+printed by `doctor`. Do not change Windows service/driver or installed
+Minecraft/Sandboxie locations to make them appear portable.
 
-**Stop at the first failed stage.** If preflight passes, run the developer UI in a terminal at the same repository root:
+For an existing checkout, inspect `git status --short` first, preserve
+local edits, then use `git switch Local` and `git pull --ff-only origin
+Local`. Never run `git reset --hard` as a shortcut. Execute the same
+`bootstrap`, `doctor` and `preflight` sequence.
+
+**Stop at the first failed stage.** If preflight passes, run the developer
+UI in a terminal at the same repository root:
 
 ```powershell
 .\DEV.cmd dev
@@ -38,13 +58,15 @@ This developer mode does not install/replace the old VMware manager.
 ## A. Before starting (stop on failures)
 
 1. Use **branch `Local`** at a known commit (prefer latest reviewed `Local`). Confirm the checkout is clean with `git status --short` and record `git rev-parse HEAD`. Source changes or untracked edits can invalidate exact-head verification.
-2. Install [Node **24.21.0** with bundled npm **11.19.0**](https://nodejs.org/en/download/archive/v24.21.0), Rust **1.98.1** with rustfmt and **x86_64-pc-windows-msvc** host, [PowerShell **7+**](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows) and Git. For Tauri, ensure [MSVC Desktop development with C++ and WebView2](https://v2.tauri.app/start/prerequisites/) are available. The toolchain doctor checks exact language versions; only a real build establishes linker/SDK compatibility.
+2. Run `DEV.cmd bootstrap` and `DEV.cmd doctor` from the checkout root. The portable setup pins Node **24.21.0** / npm **11.19.0**, Rust **1.98.1** with rustfmt and `x86_64-pc-windows-msvc`, and PowerShell **7.5.4** under the checkout's `workspace/toolchains/`. Do **not** install these globally just for this project. Git, [MSVC Desktop development with C++ and WebView2](https://v2.tauri.app/start/prerequisites/) remain external Windows prerequisites for the developer-mode build. The `doctor` check proves tool versions/paths, not linker compatibility or that a Windows desktop opened successfully.
 3. Use an [official Minecraft Education Windows Desktop installation](https://edusupport.minecraft.net/hc/en-us/articles/13106858087956-Windows-Installation-Guide), not copied binaries or mixed Microsoft Store + Desktop editions. Have **two distinct properly entitled Education accounts** ready for manual sign-in. Do not place usernames, tokens, passwords, world files or screenshots exposing identities in Git.
 4. Use a legitimately licensed [Sandboxie Plus installation](https://sandboxie-plus.com/downloads/) in the applicable environment. Check the vendor's business/educational certificate requirements where applicable. Create **one clean, persistent, enabled** box named exactly `MinecraftClient02` in Sandboxie Plus. Keep **AutoDelete**, **AutoRemove** and credential-bypass/protected-storage settings disabled; do not clone existing account data. The manager does **not** provision the box or its license. Check effective settings in Sandboxie Plus, including templates.
 
 ### Source verification (repository root)
 
 ```powershell
+.\DEV.cmd bootstrap
+.\DEV.cmd doctor
 .\DEV.cmd preflight
 ```
 

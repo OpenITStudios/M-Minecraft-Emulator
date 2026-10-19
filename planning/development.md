@@ -1,3 +1,13 @@
+## Final source-to-localtest handoff — 19 October 2026
+
+**Exact baseline:** `Local` SHA `adf9f6c17ed52852d7510ddeaeaee096b6f85591` achieved full success in [automatic CI run 39233121684](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39233121684): all twelve Windows Full Source stages, x64 debug desktop compile, binary staging and artifact upload PASSED. Artifact `localtest-debug-adf9f6c17ed52852d7510ddeaeaee096b6f85591` (GitHub ID 12177963900) remains available through 18 November 2026. The CI artifact proves build/PE shape/hash, **not** launch or game readiness.
+
+**Documentation alignment (source-only):** current selected native pilot instructions now require local `DEV.cmd bootstrap` → `doctor` → `preflight` → `dev`, avoiding obsolete global Node/Rust/PowerShell install advice. The shorter UI-only debug-candidate smoke is explicitly separated from full developer-mode and two-client gameplay. Root/desktop README no longer misstate Full Source CI as manual-only.
+
+**Next required evidence:** a normal-user Windows 10/11 x64 smoke of the downloaded exact-SHA debug executable within `workspace/packages/`, with checksum and SHA validation, followed by an opt-in portable toolchain bootstrap/doctor/preflight/dev session only if full developer/gameplay debugging is needed. Git/MSVC/WDK and installed Sandboxie/Minecraft remain OS-level dependencies, not portable project files. Minecraft Client 02 idle-crash stability and all four-client acceptance remain NOT_EXECUTED at this SHA. No driver/service installation or account-data migration is approved.
+
+---
+
 ## Single-root pre-localtest audit — 19 October 2026
 
 **Observed exact source baseline:** commit 58fe67af134e893bea78df86f35749b72b8f4c08 passed the 12 Full Source Windows CI stages, Windows x64 desktop debug compilation and signed-off artifact hash/PE structural checks. Workflow run 39230175060 published checksum-listed unsigned developer binary artifact; this is not a verified launcher, game, signing or native provider execution.
