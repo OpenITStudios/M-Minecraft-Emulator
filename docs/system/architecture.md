@@ -73,6 +73,32 @@ No hook, polling loop, new service, driver activation, FPS throttle,
 priority manipulation, injected DLL, user account access or Minecraft
 settings changes are introduced.
 
+## Optional Windows foreground event observer
+
+`instance_focus_events.rs` provides an **explicitly opt-in**, one-at-a-time
+`EVENT_SYSTEM_FOREGROUND` observer via `SetWinEventHook` with
+`WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS`. Its dedicated thread
+blocks in the native `GetMessageW` message loop (no polling) and invokes
+`UnhookWinEvent` on that **same** thread when the operator presses Stop or
+Tauri exits. The manager refuses a second running hook and uses a bounded
+startup handshake; a timed-out startup must not leave an orphaned hook.
+
+The callback counts matching foreground events only. It records **no**
+window title, HWND, PID, process image, user account or credential. The
+operator reads the aggregate count manually; it is not evidence of a
+Minecraft window, account, active game, or GPU savings. The hook does not
+ever call a Minecraft launcher, change CPU process priority, set FPS, alter
+graphics/simulation settings or touch Sandboxie services. No automatic
+hook is installed on app startup, and no additional background service
+or periodic UI timer is introduced. It exists to validate event delivery
+and lifecycle before building a provider-attributed, reversible external
+resource policy.
+
+Windows contract: the thread that installs `SetWinEventHook` needs its own
+message loop and must perform `UnhookWinEvent` itself. Treat Windows
+hook installation failures, event delivery and actual memory overhead
+as `NOT_EXECUTED` until operator Windows evidence exists.
+
 ## One explicit four-slot discovery path
 
 One read-only overview is requested from Settings → Diagnostics. It

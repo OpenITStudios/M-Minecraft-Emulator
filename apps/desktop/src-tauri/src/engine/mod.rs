@@ -5,6 +5,7 @@ pub mod dpi;
 pub mod instance_catalog;
 pub mod instance_discovery;
 pub mod instance_focus;
+pub mod instance_focus_events;
 pub mod instance_identity;
 pub mod native_clients;
 pub mod owned_isolation;

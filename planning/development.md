@@ -1,53 +1,49 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
-**Repository:** `OpenITStudios/M-Minecraft-Emulator`. Active GitHub branch: `Local`.
+**Repository:** `OpenITStudios/M-Minecraft-Emulator`; development branch `Local`.
 
-## Current change: avoid manager-focus contamination
+## Current bounded batch — opt-in event-driven focus observation
 
-The existing four-slot focus diagnostic stays one-shot and read-only.
-Client 02 still requires a fresh signed Education executable check and
-official Sandboxie PID/creation FILETIME/HWND/root-owner verification.
-The Windows foreground HWND and its owning PID are read, then foreground
-is read again. The result is `UNKNOWN` when the foreground belongs to
-MIVUBI's own process, Windows returns NULL, the PID lookup fails, or the
-foreground changes across the observations. An unexpected PID owning a
-reused matching HWND also becomes `UNKNOWN`.
+The desktop now contains one **operator-controlled** foreground-event
+counter in `apps/desktop/src-tauri/src/engine/instance_focus_events.rs`.
+It registers exactly one `EVENT_SYSTEM_FOREGROUND` hook from a dedicated
+Windows message-loop thread using `WINEVENT_OUTOFCONTEXT` and
+`WINEVENT_SKIPOWNPROCESS`. The thread waits inside `GetMessageW`,
+does not poll and unhooks on its installing thread. Start/Stop/Read
+controls are under Settings → Diagnostics; `app_bootstrap.rs` requests
+shutdown after the Tauri runtime exits. Nothing starts automatically.
 
-This corrects a real usability/safety ambiguity: clicking the Diagnostics
-button usually foregrounds the *manager*, so an earlier `NOT_FOREGROUND`
-snapshot could be mistaken for a safe background-FPS signal. Current
-`NOT_FOREGROUND` now requires another **non-MIVUBI** window with a stable
-identifiable owner; it remains an instant-only observation and cannot
-authorize any FPS cap. The canonical slot 01 remains `UNATTRIBUTED`;
-03/04 remain `PROVIDER_NOT_AVAILABLE`. Schema-2 OBSERVE_ONLY IPC is
-unchanged, and no extra watcher, service, provider or thread is added.
+The callback counts foreground events and discards all HWND/PID/window
+titles, accounts and process data; the existing four-slot catalog and
+separate Client 02 signed box/window validation remain the only source
+owners for instance identity. The event counter is **not** a client-specific
+foreground classification, Minecraft FPS measurement, proof of gameplay
+or signal authorizing CPU/GPU changes. Neither a driver nor a frame limiter
+has been added. No Minecraft render/simulation/world/login or Windows
+priority/sandbox configuration is modified.
 
-## Verification
+## Evidence and proof ceiling
 
-Preceding `Local` commit
-`6b09f52e18300742b09946eea2a276441ee2a484` has already passed
-all twelve source stages, Windows debug compilation and artifact upload
-on [GitHub run 39278677898](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39278677898).
-The workflow had not yet reported its terminal state when inspected.
-This source change must have its own exact-SHA CI result; it has not
-been executed on the user's Windows PC.
+Prior commit `b71384e98bcf3414b72b18a2863667e8a6f59d8e` entered
+[Full Source CI 39283268843](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39283268843),
+which was **queued** at the last inspection. Do not promote that run
+or the new batch into PASS before observing the exact outcome.
+The preceding `6b09f52e18300742b09946eea2a276441ee2a484`
+passed all 12 source stages and Windows debug build/upload
+([CI 39278677898](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39278677898)).
 
-## Unresolved and next action
+**New commit requires fresh exact-SHA full Windows source/test/compile.**
+The Windows hook has not been observed operating on the user's PC.
+Client 01 native attribution, owned v1.18.6 driver/service activation,
+Client 03/04 provisioning, four independent licensed Minecraft Education
+sessions and safe external-only background FPS limiter remain
+`NOT_EXECUTED` or `UNSUPPORTED`. No 15–20 FPS or RAM savings claim.
 
-Client 01 origin attribution cannot be derived from name matches or a
-nonzero result of the official Sandboxie DLL query. That API's error
-values also cover exit/permission/unsandboxed cases, so they are not
-proof of native ownership. The owned v1.18.6 Windows service/driver,
-Client 03/04 provisioning, four independent licensed active sessions,
-gameplay, actual Windows focus performance and 15–20 FPS external-only
-limitation remain `NOT_EXECUTED` / `UNSUPPORTED`.
+## Next action
 
-**Next:** verify Full Source and debug Windows compilation at this exact
-SHA, then design an opt-in event-driven Windows foreground observer
-(`SetWinEventHook` requires a message loop) only after reliable
-per-slot process attribution; continue to block any actual FPS mutation.
-
-No Minecraft settings, render/simulation distance, game executable,
-accounts, official Sandboxie driver or external system services changed.
+Check the new exact-SHA Windows Full Source CI and repair proven failures,
+if any. Then review provider-specific attribution for Client 01 and
+v1.18.6 sandbox slots before connecting focus events to *any*
+reversible performance action.
 
 History: [planning/history](./history/development-through-2026-10-19.md).

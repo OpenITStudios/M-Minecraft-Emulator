@@ -16,7 +16,7 @@ pub fn run() {
         }
     };
 
-    tauri::Builder::default()
+    let result = tauri::Builder::default()
         // Legacy VM/Tauri routes are deliberately not registered in the
         // native-first pilot. Source and account-bearing guest data remain.
         // Re-enabling a route requires an explicit product decision.
@@ -33,11 +33,16 @@ pub fn run() {
             commands::native_clients::desktop_discover_existing_virtuals,
             commands::native_clients::desktop_select_owned_engine_candidate_directory,
             commands::native_clients::desktop_inspect_instance_focus,
+            commands::native_clients::desktop_read_focus_observer,
+            commands::native_clients::desktop_start_focus_observer,
+            commands::native_clients::desktop_stop_focus_observer,
             commands::native_clients::desktop_focus_observed_client_02,
             commands::native_clients::desktop_place_observed_client_02,
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to run Minecraft Instance Manager desktop runtime");
+        .run(tauri::generate_context!());
+    // Unhook from the worker's installation thread before exit.
+    crate::engine::instance_focus_events::shutdown();
+    result.expect("failed to run Minecraft Instance Manager desktop runtime");
 }
 
 fn show_startup_error(message: &str) {

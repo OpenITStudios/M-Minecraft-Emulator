@@ -455,7 +455,30 @@ export function parseInstanceFocus(value: unknown): InstanceFocusObservation {
   return value as unknown as InstanceFocusObservation;
 }
 
+/** Aggregated Windows focus-event counter, never a per-game FPS signal. */
+export interface ForegroundEventObserverStatus {
+  schema: 1;
+  mode: "OBSERVE_ONLY";
+  enabled: boolean;
+  eventCount: number;
+}
+export function parseForegroundEventObserverStatus(value: unknown): ForegroundEventObserverStatus {
+  if (!isRecord(value) || !hasOnly(value, ["schema", "mode", "enabled", "eventCount"]) ||
+      value.schema !== 1 || value.mode !== "OBSERVE_ONLY" ||
+      typeof value.enabled !== "boolean" ||
+      !Number.isSafeInteger(value.eventCount) || (value.eventCount as number) < 0) {
+    throw new TypeError("Untrusted focus-event observer status.");
+  }
+  return value as unknown as ForegroundEventObserverStatus;
+}
+
 export const nativeFeasibility = {
+  readFocusObserver: async (): Promise<ForegroundEventObserverStatus> =>
+    parseForegroundEventObserverStatus(await invokeRuntime<unknown>("desktop_read_focus_observer")),
+  startFocusObserver: async (): Promise<ForegroundEventObserverStatus> =>
+    parseForegroundEventObserverStatus(await invokeRuntime<unknown>("desktop_start_focus_observer")),
+  stopFocusObserver: async (): Promise<ForegroundEventObserverStatus> =>
+    parseForegroundEventObserverStatus(await invokeRuntime<unknown>("desktop_stop_focus_observer")),
   inspectInstanceFocus: async (target: ProcessIdentityCandidate): Promise<InstanceFocusObservation> =>
     parseInstanceFocus(await invokeRuntime<unknown>("desktop_inspect_instance_focus", { target })),
   inspectInstanceOverview: async (): Promise<InstanceOverview> =>

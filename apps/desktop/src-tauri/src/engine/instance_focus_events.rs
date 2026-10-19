@@ -1,0 +1,238 @@
+//! Opt-in observer of Windows foreground-change EVENT COUNTS, not Minecraft.
+//! There is exactly one hook thread per desktop manager, no polling/daemon,
+//! and no process, window title, PID, credentials or FPS are retained.
+//! The hook cannot authorize a game launch, window attribution or frame cap.
+use serde::Serialize;
+use std::io;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForegroundEventObserverStatus {
+    pub schema: u32,
+    pub mode: &'static str,
+    pub enabled: bool,
+    pub event_count: u64,
+}
+
+fn status(enabled: bool, events: u64) -> ForegroundEventObserverStatus {
+    ForegroundEventObserverStatus {
+        schema: 1,
+        mode: "OBSERVE_ONLY",
+        enabled,
+        // Keep JSON numeric transport exactly representable in JS.
+        event_count: events.min(9_007_199_254_740_991),
+    }
+}
+
+#[cfg(windows)]
+mod windows {
+    use super::{status, ForegroundEventObserverStatus};
+    use std::{
+        io,
+        ptr,
+        sync::{
+            atomic::{AtomicBool, AtomicU64, Ordering},
+            mpsc, Arc, Mutex,
+        },
+        thread::{self, JoinHandle},
+        time::Duration,
+    };
+    use windows_sys::Win32::{
+        Foundation::HWND,
+        System::Threading::GetCurrentThreadId,
+        UI::{
+            Accessibility::{
+                SetWinEventHook, UnhookWinEvent, EVENT_SYSTEM_FOREGROUND,
+                WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, HWINEVENTHOOK,
+            },
+            WindowsAndMessaging::{
+                DispatchMessageW, GetMessageW, PeekMessageW, PostThreadMessageW,
+                TranslateMessage, MSG, PM_NOREMOVE, WM_QUIT,
+            },
+        },
+    };
+
+    struct Worker {
+        thread_id: u32,
+        alive: Arc<AtomicBool>,
+        join: JoinHandle<()>,
+    }
+
+    static WORKER: Mutex<Option<Worker>> = Mutex::new(None);
+    static EVENTS: AtomicU64 = AtomicU64::new(0);
+
+    // Out-of-context callback runs on the installing worker's message thread.
+    // Never inspect or retain HWND/PID/title here; no per-event helper calls.
+    unsafe extern "system" fn foreground_event(
+        _hook: HWINEVENTHOOK,
+        event: u32,
+        _hwnd: HWND,
+        object_id: i32,
+        child_id: i32,
+        _event_thread: u32,
+        _event_time: u32,
+    ) {
+        // OBJID_WINDOW and CHILDID_SELF are both zero. Ignore sub-objects.
+        if event == EVENT_SYSTEM_FOREGROUND && object_id == 0 && child_id == 0 {
+            let _ = EVENTS.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
+                Some(n.saturating_add(1))
+            });
+        }
+    }
+
+    fn worker_main(
+        ready: mpsc::SyncSender<io::Result<u32>>,
+        alive: Arc<AtomicBool>,
+    ) {
+        // Install, dispatch and UNINSTALL the hook on this same OS thread.
+        // PeekMessage creates the thread message queue before start handshake.
+        let mut msg: MSG = unsafe { std::mem::zeroed() };
+        unsafe { PeekMessageW(&mut msg, ptr::null_mut(), 0, 0, PM_NOREMOVE) };
+        let hook = unsafe {
+            SetWinEventHook(
+                EVENT_SYSTEM_FOREGROUND,
+                EVENT_SYSTEM_FOREGROUND,
+                ptr::null_mut(),
+                Some(foreground_event),
+                0,
+                0,
+                WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
+            )
+        };
+        if hook.is_null() {
+            let _ = ready.send(Err(io::Error::last_os_error()));
+            return;
+        }
+        // Publish liveness BEFORE the handshake so a fast second caller
+        // cannot mistake a newly installed hook for a stopped worker.
+        alive.store(true, Ordering::Release);
+        // If caller timed out/dropped the handshake, never orphan a hook.
+        if ready.send(Ok(unsafe { GetCurrentThreadId() })).is_ok() {
+            loop {
+                let result = unsafe { GetMessageW(&mut msg, ptr::null_mut(), 0, 0) };
+                if result <= 0 { break; }
+                unsafe {
+                    TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+            }
+        }
+        unsafe { UnhookWinEvent(hook) };
+        alive.store(false, Ordering::Release);
+    }
+
+    fn lock() -> io::Result<std::sync::MutexGuard<'static, Option<Worker>>> {
+        WORKER.try_lock().map_err(|_| io::Error::new(
+            io::ErrorKind::WouldBlock, "Foreground observer transition is in progress",
+        ))
+    }
+
+    pub fn read() -> ForegroundEventObserverStatus {
+        match WORKER.lock() {
+            Ok(guard) => status(
+                guard.as_ref().is_some_and(|worker| worker.alive.load(Ordering::Acquire)),
+                EVENTS.load(Ordering::Relaxed),
+            ),
+            Err(_) => status(false, EVENTS.load(Ordering::Relaxed)),
+        }
+    }
+
+    pub fn start() -> io::Result<ForegroundEventObserverStatus> {
+        let mut guard = lock()?;
+        if guard.as_ref().is_some_and(|worker| worker.alive.load(Ordering::Acquire)) {
+            return Err(io::Error::new(io::ErrorKind::AlreadyExists,
+                "Foreground observer is already active"));
+        }
+        // Reap a thread that exited unexpectedly; avoid a second live worker.
+        if let Some(old) = guard.take() {
+            old.join.join().map_err(|_| io::Error::other(
+                "Previous foreground hook thread terminated unexpectedly"))?;
+        }
+        EVENTS.store(0, Ordering::Relaxed);
+        let (tx, rx) = mpsc::sync_channel(1);
+        let alive = Arc::new(AtomicBool::new(false));
+        let worker_alive = Arc::clone(&alive);
+        let join = thread::Builder::new()
+            .name("mivubi-focus-events".into())
+            .spawn(move || worker_main(tx, worker_alive))?;
+        let thread_id = match rx.recv_timeout(Duration::from_secs(5)) {
+            Ok(Ok(id)) if id != 0 => id,
+            Ok(Ok(_)) | Ok(Err(_)) | Err(_) => {
+                // A late worker sees a dropped receiver and unhooks itself.
+                // A failed hook-install worker exits before this join.
+                drop(join);
+                return Err(io::Error::new(io::ErrorKind::Other,
+                    "Windows focus event hook could not start"));
+            }
+        };
+        *guard = Some(Worker { thread_id, alive, join });
+        Ok(status(true, EVENTS.load(Ordering::Relaxed)))
+    }
+
+    pub fn stop() -> io::Result<ForegroundEventObserverStatus> {
+        let mut guard = lock()?;
+        if let Some(worker) = guard.take() {
+            if worker.alive.load(Ordering::Acquire) {
+                if unsafe { PostThreadMessageW(worker.thread_id, WM_QUIT, 0, 0) } == 0 {
+                    // Preserve the only hook owner if Windows refused shutdown.
+                    *guard = Some(worker);
+                    return Err(io::Error::last_os_error());
+                }
+            }
+            worker.join.join().map_err(|_| io::Error::other(
+                "Foreground hook worker exited unexpectedly"))?;
+        }
+        Ok(status(false, EVENTS.load(Ordering::Relaxed)))
+    }
+}
+
+pub fn read_observer() -> ForegroundEventObserverStatus {
+    #[cfg(windows)]
+    { windows::read() }
+    #[cfg(not(windows))]
+    { status(false, 0) }
+}
+
+pub fn start_observer() -> io::Result<ForegroundEventObserverStatus> {
+    #[cfg(windows)]
+    { windows::start() }
+    #[cfg(not(windows))]
+    { Err(io::Error::new(io::ErrorKind::Unsupported, "Windows only")) }
+}
+
+pub fn stop_observer() -> io::Result<ForegroundEventObserverStatus> {
+    #[cfg(windows)]
+    { windows::stop() }
+    #[cfg(not(windows))]
+    { Err(io::Error::new(io::ErrorKind::Unsupported, "Windows only")) }
+}
+
+/// Called after the Tauri run loop exits. Windows also removes hooks on
+/// process exit, but our normal path explicitly unhooks on its owner thread.
+pub fn shutdown() {
+    #[cfg(windows)]
+    { let _ = windows::stop(); }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn observer_contract_is_count_only_without_window_identity_or_fps() {
+        let report = serde_json::to_value(status(false, 7)).unwrap();
+        assert_eq!(report["schema"], 1);
+        assert_eq!(report["mode"], "OBSERVE_ONLY");
+        assert_eq!(report["enabled"], false);
+        assert_eq!(report["eventCount"], 7);
+        assert_eq!(report.as_object().unwrap().len(), 4);
+        for field in ["pid", "windowHandle", "windowTitle", "account", "fps", "gameplay"] {
+            assert!(report.get(field).is_none());
+        }
+    }
+    #[test]
+    fn observer_is_off_by_default_outside_explicit_user_start() {
+        // Pure status projection, no OS hook or timer is installed by tests.
+        assert_eq!(status(false, 0).event_count, 0);
+        assert!(!status(false, 0).enabled);
+    }
+}

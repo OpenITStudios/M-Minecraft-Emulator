@@ -7,6 +7,7 @@
     type InstanceSlotDescriptor,
     type InstanceOverview,
     type InstanceFocusObservation,
+    type ForegroundEventObserverStatus,
     type IsolatedClientObservation,
     type OwnedCandidateInspection,
     type OwnedHostInspection,
@@ -61,6 +62,8 @@
   let instanceOverviewError = "";
   let instanceFocus: InstanceFocusObservation | null = null;
   let instanceFocusError = "";
+  let focusEvents: ForegroundEventObserverStatus | null = null;
+  let focusEventsError = "";
   // Temporary UI feedback, isolated by supported instance identity.
   let issues: Partial<Record<InstanceId, UiIssue>> = {};
   let notices: Partial<Record<InstanceId, UiNotice>> = {};
@@ -380,6 +383,39 @@
     // "View issue" must never close the issue when it is already visible.
     if (action === "issue") { expandDetails(id, "issue", origin); return; }
     if (action === "setup") toggleDetails(id, "setup", origin);
+  }
+
+
+  // Opt-in, process-local Windows event counter. No automatic polling;
+  // the user explicitly starts, refreshes and stops the one observer.
+  async function changeFocusObserver(enable: boolean) {
+    if (isResourceOperationBusy(busy, ownedHostBusy, ownedInspectionBusy)) return;
+    busy = enable ? "focus-events-start" : "focus-events-stop";
+    focusEventsError = "";
+    try {
+      focusEvents = enable
+        ? await nativeFeasibility.startFocusObserver()
+        : await nativeFeasibility.stopFocusObserver();
+    } catch {
+      focusEvents = null;
+      focusEventsError = "Focus observer action failed. Inspect its status before changing anything.";
+    } finally {
+      busy = "";
+    }
+  }
+
+  async function readFocusObserver() {
+    if (isResourceOperationBusy(busy, ownedHostBusy, ownedInspectionBusy)) return;
+    busy = "focus-events-read";
+    focusEventsError = "";
+    try {
+      focusEvents = await nativeFeasibility.readFocusObserver();
+    } catch {
+      focusEvents = null;
+      focusEventsError = "Unable to read foreground event counts.";
+    } finally {
+      busy = "";
+    }
   }
 
   async function inspectInstanceFocus() {
@@ -759,6 +795,29 @@
               {#if instanceFocusError}
                 <p class="cm-warning" role="alert">{instanceFocusError}</p>
               {/if}
+              <h3>Optional Windows focus event observer</h3>
+              <p>Observe the number of foreground changes across Windows. This is opt-in and uses one low-overhead event hook, not constant polling. Events are counted only; no window title, account, or PID is retained. It does not identify Minecraft clients or modify FPS.</p>
+              <div class="cm-field-row">
+                {#if focusEvents?.enabled}
+                  <button type="button" class="cm-button cm-secondary"
+                    disabled={resourceOperationBusy} on:click={() => changeFocusObserver(false)}>
+                    {busy === "focus-events-stop" ? "Stopping…" : "Stop observer"}
+                  </button>
+                {:else}
+                  <button type="button" class="cm-button cm-secondary"
+                    disabled={resourceOperationBusy} on:click={() => changeFocusObserver(true)}>
+                    {busy === "focus-events-start" ? "Starting…" : "Start observer"}
+                  </button>
+                {/if}
+                <button type="button" class="cm-button cm-secondary"
+                  disabled={resourceOperationBusy} on:click={readFocusObserver}>
+                  {busy === "focus-events-read" ? "Reading…" : "Read event count"}
+                </button>
+              </div>
+              {#if focusEvents}
+                <p aria-live="polite">Observer {focusEvents.enabled ? "running" : "stopped"} · {focusEvents.eventCount} foreground-change event(s). An event count is not evidence of game FPS or process ownership.</p>
+              {/if}
+              {#if focusEventsError}<p class="cm-warning" role="alert">{focusEventsError}</p>{/if}
               <h3>Sandboxie configuration</h3>
               <p>Inspect configuration section names from the installed pilot. Results are candidates, not verified running Minecraft sessions.</p>
               <button type="button" class="cm-button cm-secondary"

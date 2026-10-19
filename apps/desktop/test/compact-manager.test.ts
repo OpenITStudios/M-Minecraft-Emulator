@@ -8,7 +8,7 @@ import {
   ownedVirtualCreationReason,
   isResourceOperationBusy,
 } from "../src/app/presentation/compactManager.js";
-import { parseInstanceSlots, parseInstanceOverview, parseInstanceFocus } from "../src/app/bridge/nativeFeasibilityApi.js";
+import { parseInstanceSlots, parseInstanceOverview, parseInstanceFocus, parseForegroundEventObserverStatus } from "../src/app/bridge/nativeFeasibilityApi.js";
 import type { IsolatedClientObservation, OwnedHostInspection } from "../src/app/bridge/nativeFeasibilityApi.js";
 
 function inspected(): IsolatedClientObservation {
@@ -27,6 +27,51 @@ function inspected(): IsolatedClientObservation {
     interpretation: "CONFIG_AND_PROCESS_CANDIDATES_ONLY_NO_AUTHENTICATION_PROOF",
   };
 }
+
+describe("Opt-in Windows event-driven focus counter", () => {
+  it("only parses a four-field OBSERVE_ONLY counter with safe integers", () => {
+    const valid = { schema: 1, mode: "OBSERVE_ONLY", enabled: true, eventCount: 17 };
+    expect(parseForegroundEventObserverStatus(valid)).toEqual(valid);
+    for (const bad of [
+      { ...valid, schema: 2 },
+      { ...valid, mode: "FPS_LIMITED" },
+      { ...valid, eventCount: -1 },
+      { ...valid, eventCount: 0.25 },
+      { ...valid, eventCount: Number.MAX_SAFE_INTEGER + 1 },
+      { ...valid, enabled: 1 },
+      { ...valid, pid: 122 },
+      { ...valid, windowTitle: "Minecraft" },
+      { ...valid, fps: 15 },
+      { ...valid, authenticated: true },
+    ]) expect(() => parseForegroundEventObserverStatus(bad)).toThrow();
+  });
+  it("uses one out-of-context hook with same-thread cleanup and no automatic startup", () => {
+    const rust = readFileSync(new URL("../src-tauri/src/engine/instance_focus_events.rs", import.meta.url), "utf8");
+    const ui = readFileSync(new URL("../src/CompactManagerApp.svelte", import.meta.url), "utf8");
+    const bootstrap = readFileSync(new URL("../src-tauri/src/app_bootstrap.rs", import.meta.url), "utf8");
+    const commands = readFileSync(new URL("../src-tauri/src/commands/native_clients.rs", import.meta.url), "utf8");
+    const cargo = readFileSync(new URL("../src-tauri/Cargo.toml", import.meta.url), "utf8");
+    expect(rust).toContain("SetWinEventHook(");
+    expect(rust).toContain("WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS");
+    expect(rust).toContain("GetMessageW(");
+    expect(rust).toContain("UnhookWinEvent(hook)");
+    expect(rust).toContain("PostThreadMessageW(worker.thread_id, WM_QUIT, 0, 0)");
+    expect(rust).toContain("static WORKER: Mutex<Option<Worker>>");
+    expect(rust).toContain("EVENT_SYSTEM_FOREGROUND");
+    expect(rust).not.toContain("SetPriorityClass");
+    expect(rust).not.toContain("SetWindowPos");
+    expect(rust).not.toContain("Sleep(");
+    expect(ui).toContain("on:click={() => changeFocusObserver(true)}");
+    expect(ui).toContain("on:click={() => changeFocusObserver(false)}");
+    expect(ui).toContain("on:click={readFocusObserver}");
+    expect(ui).not.toContain("setInterval(");
+    expect(bootstrap).toContain("instance_focus_events::shutdown()");
+    expect(bootstrap).not.toContain("instance_focus_events::start_observer()");
+    expect(commands).toContain("desktop_start_focus_observer");
+    expect(commands).toContain("desktop_stop_focus_observer");
+    expect(cargo).toContain("Win32_UI_Accessibility");
+  });
+});
 
 describe("Native Client 01 attribution remains explicitly unproven", () => {
   it("does not treat a nonzero Sandboxie QueryProcess result as native ownership", () => {

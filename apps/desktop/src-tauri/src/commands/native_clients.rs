@@ -2,6 +2,7 @@ use crate::engine::{
     instance_catalog::{admit_slot_operation, instance_slots, InstanceSlotDescriptor, SlotOperation},
     instance_discovery::{self, InstanceOverview},
     instance_focus::{self, InstanceFocusObservation},
+    instance_focus_events::{self, ForegroundEventObserverStatus},
     native_clients,
 };
 
@@ -42,6 +43,33 @@ pub async fn desktop_inspect_instance_overview() -> Result<InstanceOverview, Str
     tauri::async_runtime::spawn_blocking(|| run_manager_operation(instance_discovery::inspect_instance_overview))
         .await
         .map_err(|error| format!("Four-slot inspection task failed: {error}"))?
+        .map_err(|error| error.to_string())
+}
+
+// One opt-in WinEvent observer counts foreground transitions with no
+// per-event PID/HWND/title retention, Minecraft interaction, or FPS mutation.
+#[tauri::command]
+pub fn desktop_read_focus_observer() -> ForegroundEventObserverStatus {
+    instance_focus_events::read_observer()
+}
+
+#[tauri::command]
+pub async fn desktop_start_focus_observer() -> Result<ForegroundEventObserverStatus, String> {
+    tauri::async_runtime::spawn_blocking(|| run_manager_operation(
+        instance_focus_events::start_observer
+    ))
+        .await
+        .map_err(|error| format!("Focus observer startup task failed: {error}"))?
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn desktop_stop_focus_observer() -> Result<ForegroundEventObserverStatus, String> {
+    tauri::async_runtime::spawn_blocking(|| run_manager_operation(
+        instance_focus_events::stop_observer
+    ))
+        .await
+        .map_err(|error| format!("Focus observer shutdown task failed: {error}"))?
         .map_err(|error| error.to_string())
 }
 
