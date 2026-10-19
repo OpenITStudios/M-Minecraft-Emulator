@@ -13,14 +13,14 @@ lifecycle: ACTIVE
 
 ## Optional CI debug binary — UI-only smoke
 
-A successful automatic Windows Full CI run for `Local` can also upload a short-lived `localtest-debug-<SHA>` **unsigned debug executable** after all twelve source stages and compile-only pass. See [CI Debug Candidate](./ci-debug-candidate.md) for its SHA-256/commit checks, seven-day retention and strict UI-only startup smoke. It is **not** an installer, release, or proof of Minecraft functionality. The normal full localtest route remains `DEV.cmd preflight` followed by `DEV.cmd dev`.
+A successful automatic Windows Full CI run for `Local` can also upload a short-lived `localtest-debug-<SHA>` **unsigned debug executable** after all twelve source stages and compile-only pass. See [CI Debug Candidate](./ci-debug-candidate.md) for its SHA-256/commit checks, 30-day retention on newly uploaded artifacts, PE x64 structural validation and strict UI-only startup smoke. It is **not** an installer, release, or proof of Minecraft functionality. The normal full localtest route remains `DEV.cmd preflight` followed by `DEV.cmd dev`.
 
 ## Quick start — first Windows session
 
 For a new checkout, open PowerShell 7 in a normal developer folder and run:
 
 ```powershell
-git clone --branch Local --single-branch https://github.com/MIVUBI-STD/M-Minecraft-Emulator.git
+git clone --branch Local --single-branch https://github.com/OpenITStudios/M-Minecraft-Emulator.git
 cd M-Minecraft-Emulator
 .\DEV.cmd preflight
 ```

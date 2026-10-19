@@ -194,6 +194,39 @@ jobs:
           New-Item -ItemType Directory -Path $candidate -ErrorAction Stop | Out-Null
           $copied = Join-Path $candidate 'm-bedrock-virtual-clients.exe'
           Copy-Item -LiteralPath $binary -Destination $copied -ErrorAction Stop
+          # Validate the actual binary container; an arbitrary renamed file
+          # must not become a runnable Windows candidate artifact.
+          $stream = [System.IO.File]::OpenRead($copied)
+          $reader = $null
+          try {
+            $reader = [System.IO.BinaryReader]::new($stream)
+            if ($stream.Length -lt 4096 -or $reader.ReadUInt16() -ne 0x5A4D) {
+              throw 'Debug candidate is not a valid DOS/PE executable.'
+            }
+            $stream.Position = 0x3C
+            $peOffset = [long]$reader.ReadUInt32()
+            if ($peOffset -lt 64 -or $peOffset -gt ($stream.Length - 96)) {
+              throw 'Invalid PE header offset or truncated binary.'
+            }
+            $stream.Position = $peOffset
+            if ($reader.ReadUInt32() -ne 0x00004550 -or $reader.ReadUInt16() -ne 0x8664) {
+              throw 'Debug candidate must be a PE executable for AMD64.'
+            }
+            $stream.Position = $peOffset + 20
+            if ($reader.ReadUInt16() -lt 70) {
+              throw 'Debug candidate optional PE header is too short.'
+            }
+            $stream.Position = $peOffset + 24
+            if ($reader.ReadUInt16() -ne 0x20B) {
+              throw 'Debug candidate must be PE32+ for Windows x64.'
+            }
+            $stream.Position = $peOffset + 24 + 68
+            if ($reader.ReadUInt16() -ne 2) {
+              throw 'Debug candidate must use the Windows GUI subsystem.'
+            }
+          } finally {
+            if ($null -ne $reader) { $reader.Dispose() } else { $stream.Dispose() }
+          }
           $digest = (Get-FileHash -LiteralPath $copied -Algorithm SHA256).Hash.ToLowerInvariant()
           $length = (Get-Item -LiteralPath $copied).Length
           if ($digest -notmatch '^[a-f0-9]{64}$' -or $length -le 0 -or $env:GITHUB_SHA -notmatch '^[a-f0-9]{40}$') {
@@ -205,6 +238,9 @@ jobs:
             'source_branch=Local'
             'target=x86_64-pc-windows-msvc'
             'build_profile=dev'
+            'pe_machine=AMD64'
+            'pe_optional_header=PE32_PLUS'
+            'pe_subsystem=WINDOWS_GUI'
             'unsigned=true'
             'installed_or_run=false'
             'gameplay_verified=false'
@@ -223,7 +259,7 @@ jobs:
           name: localtest-debug-${{ github.sha }}
           path: ${{ runner.temp }}/mivubi-localtest-debug/
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
       - name: Report exact commit and proof boundary
         if: always()
         shell: pwsh

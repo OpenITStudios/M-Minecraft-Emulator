@@ -15,10 +15,10 @@ This is a **raw, unsigned development executable**, not a signed installer, Wind
 
 ## Obtain and verify
 
-1. In [GitHub Actions](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/workflows/verify.yml), open a successful automatic run with event `push`, branch `Local`, and inspect its **exact full commit SHA**.
+1. In [GitHub Actions](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/workflows/verify.yml), open a successful automatic run with event `push`, branch `Local`, and inspect its **exact full commit SHA**.
 2. Confirm that **Enforce all full-source results**, **Auto compile Windows desktop (no installer)**, **Stage developer executable**, and **Upload developer binary evidence** all succeeded. A manually dispatched `quick`, `full-source` or `windows-build` run does **not** create this artifact.
-3. Download its `localtest-debug-<SHA>` GitHub Actions artifact while it is retained (seven days). Extract into a new ordinary folder, not an existing VMware application, Minecraft installation or Sandboxie box. It contains only `m-bedrock-virtual-clients.exe`, `BUILD-MANIFEST.txt`, and `LOCALTEST-INSTRUCTIONS.md`.
-4. Compare the complete `source_commit` in the manifest with the run's `head_sha`. Run this in PowerShell from the extracted folder:
+3. Download its `localtest-debug-<SHA>` GitHub Actions artifact while it is retained (30 days for new runs; earlier artifacts retain their own original expiry). Extract into a new ordinary folder, not an existing VMware application, Minecraft installation or Sandboxie box. It contains only `m-bedrock-virtual-clients.exe`, `BUILD-MANIFEST.txt`, and `LOCALTEST-INSTRUCTIONS.md`.
+4. Confirm the manifest declares `pe_machine=AMD64`, `pe_optional_header=PE32_PLUS` and `pe_subsystem=WINDOWS_GUI`. These are structural checks performed by GitHub CI, **not** proof of a trusted signer, successful GUI startup or software safety. Compare the complete `source_commit` in the manifest with the run's `head_sha`. Run this in PowerShell from the extracted folder:
 
 ```powershell
 $expected = ((Get-Content .\BUILD-MANIFEST.txt | Where-Object { $_ -like 'sha256=*' }) -split '=', 2)[1]
@@ -27,6 +27,8 @@ if ($actual.ToLowerInvariant() -ne $expected.ToLowerInvariant()) { throw 'Debug 
 ```
 
 Never use a build with a missing/mismatched manifest, wrong commit, or a failed CI verdict.
+
+**Artifact availability:** the original #15 candidate expires 26 October 2026. The longer 30-day retention applies only to artifacts uploaded by the newer workflow; GitHub retention limits may further restrict availability. Do not mistake a metadata-only artifact listing for a verified local launch.
 
 ## First smoke only
 

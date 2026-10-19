@@ -1,5 +1,17 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## No-PC localtest readiness: preserve artifact and validate Windows PE header — 19 October 2026
+
+**User constraint:** local Windows PC is currently unavailable. Do not request an immediate installed-machine test or promote any simulated outcome into Minecraft gameplay evidence. Preserve Windows source and compilation proof at exact SHA `88eb9cfaf50fb5eb5834d28602d93d1e03bfd8aa`; [automatic CI #15](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39206026547) PASS included all 12 Full Source stages, Windows x64 debug compilation, artifact staging and upload. Artifact `localtest-debug-88eb9cf...` exists but expires 26 October 2026; cannot extend old artifact retroactively.
+
+**Repository identity:** GitHub returned moved-permanently for `MIVUBI-STD/M-Minecraft-Emulator`. Verified new canonical owner `OpenITStudios/M-Minecraft-Emulator` with **same immutable repository id `1412902903`**, same `Local` SHA and unchanged `main`; change future clone and CI documentation links only. Legacy update/release identity remains pinned to the historical owner and is **not** migrated here because release trust/compatibility require separate review.
+
+**Bounded pre-PC enhancement:** raise new developer-debug artifact retention from seven to 30 days, preserving read-only source, no installer or driver activation. Validate copied output using Windows PE header DOS signature, bounded PE signature location, AMD64 machine (`0x8664`), PE32+ optional header (`0x20B`) and Windows GUI subsystem (`2`) before hashing/uploading. Record these structural descriptors in the checksum manifest and document that this is NOT an executed UI, signing or malware-safety test. Exact-size/sha256 checks and strict three-file allowlist remain.
+
+**Proof boundary:** repository source and CI workflow changes can be reviewed statically on the new SHA. Only after the automatic Windows run finishes SUCCESS and an actual new artifact appears may an updated downloadable candidate be claimed. No source modification can replace actual Minecraft login, Sandboxie box persistence or multi-client gameplay validation.
+
+**Next:** inspect the automatic CI run and new artifact metadata, then defer all target-PC-only steps until user access returns.
+
 ## Windows compile-only artifact for first localtest smoke — 19 October 2026
 
 **Observed baseline:** [Full CI #14](https://github.com/MIVUBI-STD/M-Minecraft-Emulator/actions/runs/39152478135), exact SHA `4260729f07efde5272d8ee7c16dbd5d961a7abd2`, completed SUCCESS: all twelve Full Source stages and final Windows x64 Tauri `cargo build --locked` succeeded. This does not establish Windows startup, Sandboxie/Minecraft functionality, or signed installer viability. The source collector for Client 02 is already embedded with `include_str!`, so no external Sandboxie script or downloaded Minecraft binary belongs in this candidate.

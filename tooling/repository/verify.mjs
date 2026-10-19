@@ -556,7 +556,13 @@ requireFact(isLocalPush &&
   ciWorkflow.indexOf("Upload developer binary evidence") > ciWorkflow.indexOf("Stage developer executable") &&
   ciWorkflow.includes("uses: actions/upload-artifact@v4") &&
   ciWorkflow.includes("if-no-files-found: error") &&
-  ciWorkflow.includes("retention-days: 7") &&
+  ciWorkflow.includes("retention-days: 30") &&
+  ciWorkflow.includes("Debug candidate must be a PE executable for AMD64.") &&
+  ciWorkflow.includes("Debug candidate must be PE32+ for Windows x64.") &&
+  ciWorkflow.includes("Debug candidate must use the Windows GUI subsystem.") &&
+  ciWorkflow.includes("pe_machine=AMD64") &&
+  ciWorkflow.includes("pe_optional_header=PE32_PLUS") &&
+  ciWorkflow.includes("pe_subsystem=WINDOWS_GUI") &&
   ciWorkflow.includes("name: localtest-debug-${{ github.sha }}") &&
   ciWorkflow.includes("github.event_name == 'push'") &&
   ciWorkflow.includes("m-bedrock-virtual-clients.exe") &&
