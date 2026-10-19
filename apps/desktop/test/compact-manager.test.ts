@@ -8,7 +8,7 @@ import {
   ownedVirtualCreationReason,
   isResourceOperationBusy,
 } from "../src/app/presentation/compactManager.js";
-import { parseInstanceSlots, parseInstanceOverview, parseClient02Foreground } from "../src/app/bridge/nativeFeasibilityApi.js";
+import { parseInstanceSlots, parseInstanceOverview, parseInstanceFocus } from "../src/app/bridge/nativeFeasibilityApi.js";
 import type { IsolatedClientObservation, OwnedHostInspection } from "../src/app/bridge/nativeFeasibilityApi.js";
 
 function inspected(): IsolatedClientObservation {
@@ -28,35 +28,50 @@ function inspected(): IsolatedClientObservation {
   };
 }
 
-describe("Read-only external foreground diagnostic", () => {
-  it("accepts only exact Client 02 snapshot statuses without FPS or account claims", () => {
+describe("Shared read-only four-slot focus projection", () => {
+  const focus = {
+    schema: 2, mode: "OBSERVE_ONLY", slots: [
+      { id: "01", evidence: "UNATTRIBUTED" },
+      { id: "02", evidence: "FOREGROUND" },
+      { id: "03", evidence: "PROVIDER_NOT_AVAILABLE" },
+      { id: "04", evidence: "PROVIDER_NOT_AVAILABLE" },
+    ],
+  };
+  it("accepts only attributable Client 02 focus and preserves unavailable slots", () => {
     for (const state of ["FOREGROUND", "NOT_FOREGROUND", "UNKNOWN"]) {
-      expect(parseClient02Foreground({ schema: 1, slotId: "02", state })).toEqual({
-        schema: 1, slotId: "02", state,
-      });
+      const payload = { ...focus, slots: focus.slots.map((slot,i) =>
+        i === 1 ? { ...slot, evidence: state } : slot) };
+      expect(parseInstanceFocus(payload)).toEqual(payload);
     }
-    for (const value of [
-      { schema: 1, slotId: "01", state: "FOREGROUND" },
-      { schema: 1, slotId: "03", state: "FOREGROUND" },
-      { schema: 1, slotId: "02", state: "FOREGROUND", fps: 15 },
-      { schema: 1, slotId: "02", state: "RUNNING" },
-      { schema: 2, slotId: "02", state: "UNKNOWN" },
-    ]) expect(() => parseClient02Foreground(value)).toThrow();
+    for (const data of [
+      { ...focus, schema: 1 },
+      { ...focus, mode: "FPS_LIMITED" },
+      { ...focus, fps: 15 },
+      { ...focus, slots: focus.slots.slice(0, 3) },
+      { ...focus, slots: [focus.slots[0],focus.slots[2],focus.slots[1],focus.slots[3]] },
+      { ...focus, slots: focus.slots.map((slot,i) => i===0 ? { ...slot,evidence:"FOREGROUND" } : slot) },
+      { ...focus, slots: focus.slots.map((slot,i) => i===3 ? { ...slot,evidence:"FOREGROUND" } : slot) },
+      { ...focus, slots: focus.slots.map((slot,i) => i===1 ? { ...slot,fps:20 } : slot) },
+    ]) expect(() => parseInstanceFocus(data)).toThrow();
   });
-  it("reuses verified Client 02 window and remains explicitly user-requested", () => {
+  it("requests one verified, on-demand Windows reading without a new service or throttle", () => {
     const rust = readFileSync(new URL("../src-tauri/src/engine/instance_focus.rs", import.meta.url), "utf8");
-    const owner = readFileSync(new URL("../src-tauri/src/engine/native_clients.rs", import.meta.url), "utf8");
     const ui = readFileSync(new URL("../src/CompactManagerApp.svelte", import.meta.url), "utf8");
-    const cmd = readFileSync(new URL("../src-tauri/src/commands/native_clients.rs", import.meta.url), "utf8");
-    expect(rust).toContain("with_verified_client_02_window(target");
+    const commands = readFileSync(new URL("../src-tauri/src/commands/native_clients.rs", import.meta.url), "utf8");
+    const bootstrap = readFileSync(new URL("../src-tauri/src/app_bootstrap.rs", import.meta.url), "utf8");
+    expect(rust).toContain("native_clients::with_verified_client_02_window(target");
     expect(rust).toContain("GetForegroundWindow()");
     expect(rust).toContain('None | Some(0) => "UNKNOWN"');
-    expect(owner).toContain("pub(super) fn with_verified_client_02_window(");
-    expect(cmd).toContain('SlotOperation::Inspect, || instance_focus::inspect_client_02_foreground(target)');
-    expect(ui).toContain('on:click={inspectClient02Foreground}');
-    expect(ui).toContain("nativeFeasibility.inspectClient02Foreground(target)");
+    expect(rust).toContain('mode: "OBSERVE_ONLY"');
+    expect(commands).toContain('SlotOperation::Inspect, || instance_focus::inspect_instance_focus(target)');
+    expect(bootstrap).toContain("desktop_inspect_instance_focus,");
+    expect(ui).toContain("on:click={inspectInstanceFocus}");
+    expect(ui).toContain("nativeFeasibility.inspectInstanceFocus(target)");
+    expect(ui).toContain("instanceFocus.slots as slot");
     expect(ui).not.toContain("setInterval(");
     expect(ui).not.toContain("setTimeout(");
+    expect(rust).not.toContain("SetWinEventHook");
+    expect(rust).not.toContain("SetPriorityClass");
   });
 });
 

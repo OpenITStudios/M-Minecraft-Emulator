@@ -46,21 +46,26 @@ graphics/simulation settings, alter threads or inject rendering hooks.
 Until Windows/GPU-specific acceptance proves capability, no FPS cap is
 applied and no RAM/GPU savings are claimed.
 
-## External-only focus diagnostic — Client 02
+## External-only four-slot focus projection
 
-The new `instance_focus.rs` performs a one-shot, **read-only**
-`GetForegroundWindow()` query only after the existing Rust
-`with_verified_client_02_window` admission: fresh official Sandboxie box
-membership, Microsoft-signed Education image, exact PID/FILETIME/HWND
-and live top-level window ownership. `NULL` foreground yields `UNKNOWN`,
-not a background FPS policy. A different foreground HWND yields a
-one-time `NOT_FOREGROUND` snapshot, not a continuous background verdict.
-The only UI control is a manually requested Diagnostics button with a
-strict typed result; the current Client 01 identity remains unattributed.
-There is **no focus event hook or polling**, CPU affinity, FPS control,
-Minecraft setting change, injected DLL, process suspension or driver change.
-This is a prerequisite for later external performance evaluation, not an
-enabled governor or proof of graphics savings.
+`instance_focus.rs` now owns **one** four-slot snapshot of the Windows
+foreground. Only Client 02 is currently attributable: its window must pass
+the existing fresh official Sandboxie membership, Microsoft-signed Education
+image, PID/FILETIME/HWND and live root-window ownership checks.
+One `GetForegroundWindow()` call classifies this verified window as
+`FOREGROUND`, `NOT_FOREGROUND`, or `UNKNOWN` (including NULL foreground).
+
+Client 01 remains `UNATTRIBUTED` because process name-matches and absence
+from the selected Sandboxie box cannot establish native ownership.
+Client 03/04 remain `PROVIDER_NOT_AVAILABLE` until owned v1.18.6 is
+proven. The former Client-02-specific focus command is **replaced** by one
+strict schema-2 `OBSERVE_ONLY` four-slot response. The existing manual
+Diagnostics control now shows the full focus projection, never a claim of
+continuously measured FPS or client login.
+
+No hook, polling loop, new service, driver activation, FPS throttle,
+priority manipulation, injected DLL, user account access or Minecraft
+settings changes are introduced.
 
 ## One explicit four-slot discovery path
 

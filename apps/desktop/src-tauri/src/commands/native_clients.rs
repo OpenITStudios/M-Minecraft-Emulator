@@ -1,7 +1,7 @@
 use crate::engine::{
     instance_catalog::{admit_slot_operation, instance_slots, InstanceSlotDescriptor, SlotOperation},
     instance_discovery::{self, InstanceOverview},
-    instance_focus::{self, Client02ForegroundObservation},
+    instance_focus::{self, InstanceFocusObservation},
     native_clients,
 };
 
@@ -88,11 +88,11 @@ pub async fn desktop_request_sandbox_client_02(executable: String, licensed: boo
 // One-shot read-only GetForegroundWindow snapshot, using the same full
 // fresh Client 02 identity verification as the existing Focus/Place commands.
 #[tauri::command]
-pub async fn desktop_inspect_client_02_foreground(
+pub async fn desktop_inspect_instance_focus(
     target: native_clients::ProcessIdentityCandidate,
-) -> Result<Client02ForegroundObservation, String> {
+) -> Result<InstanceFocusObservation, String> {
     tauri::async_runtime::spawn_blocking(move || run_slot_operation(
-        "02", SlotOperation::Inspect, || instance_focus::inspect_client_02_foreground(target)
+        "02", SlotOperation::Inspect, || instance_focus::inspect_instance_focus(target)
     ))
         .await
         .map_err(|error| format!("Foreground inspection task failed: {error}"))?

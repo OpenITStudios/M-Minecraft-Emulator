@@ -423,27 +423,41 @@ export function parseInstanceOverview(value: unknown): InstanceOverview {
   return value as unknown as InstanceOverview;
 }
 
-/** Snapshot from a freshly revalidated signed boxed Client 02 window.
- * It reports only whether that exact HWND was foreground during this call;
- * it never implies sustained focus, gameplay, FPS limitation, or Host 01.
+/** One on-demand focus snapshot, not a gameplay/FPS claim.
+ * Only verified Client 02 windows are attributable at this stage.
  */
-export interface Client02ForegroundObservation {
-  schema: 1;
-  slotId: "02";
-  state: "FOREGROUND" | "NOT_FOREGROUND" | "UNKNOWN";
+export interface InstanceFocusEvidence {
+  id: InstanceSlotId;
+  evidence: "UNATTRIBUTED" | "FOREGROUND" | "NOT_FOREGROUND" |
+    "UNKNOWN" | "PROVIDER_NOT_AVAILABLE";
 }
-export function parseClient02Foreground(value: unknown): Client02ForegroundObservation {
-  if (!isRecord(value) || !hasOnly(value, ["schema", "slotId", "state"]) ||
-      value.schema !== 1 || value.slotId !== "02" ||
-      !["FOREGROUND", "NOT_FOREGROUND", "UNKNOWN"].includes(value.state as string)) {
-    throw new TypeError("Untrusted or malformed Client 02 foreground observation.");
+export interface InstanceFocusObservation {
+  schema: 2;
+  mode: "OBSERVE_ONLY";
+  slots: InstanceFocusEvidence[];
+}
+export function parseInstanceFocus(value: unknown): InstanceFocusObservation {
+  if (!isRecord(value) || !hasOnly(value, ["schema", "mode", "slots"]) ||
+      value.schema !== 2 || value.mode !== "OBSERVE_ONLY" ||
+      !Array.isArray(value.slots) || value.slots.length !== 4) {
+    throw new TypeError("Malformed four-slot focus observation.");
   }
-  return value as unknown as Client02ForegroundObservation;
+  const ids: InstanceSlotId[] = ["01", "02", "03", "04"];
+  for (const [index, slot] of value.slots.entries()) {
+    const allowed = index === 0 ? ["UNATTRIBUTED"]
+      : index === 1 ? ["FOREGROUND", "NOT_FOREGROUND", "UNKNOWN"]
+      : ["PROVIDER_NOT_AVAILABLE"];
+    if (!isRecord(slot) || !hasOnly(slot, ["id", "evidence"]) ||
+        slot.id !== ids[index] || !allowed.includes(slot.evidence as string)) {
+      throw new TypeError("Unsupported focus attribution or elevated slot evidence.");
+    }
+  }
+  return value as unknown as InstanceFocusObservation;
 }
 
 export const nativeFeasibility = {
-  inspectClient02Foreground: async (target: ProcessIdentityCandidate): Promise<Client02ForegroundObservation> =>
-    parseClient02Foreground(await invokeRuntime<unknown>("desktop_inspect_client_02_foreground", { target })),
+  inspectInstanceFocus: async (target: ProcessIdentityCandidate): Promise<InstanceFocusObservation> =>
+    parseInstanceFocus(await invokeRuntime<unknown>("desktop_inspect_instance_focus", { target })),
   inspectInstanceOverview: async (): Promise<InstanceOverview> =>
     parseInstanceOverview(await invokeRuntime<unknown>("desktop_inspect_instance_overview")),
   listInstanceSlots: async (): Promise<InstanceSlotDescriptor[]> =>
