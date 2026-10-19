@@ -1,3 +1,15 @@
+## Single-checkout machine-output refactor — 19 October 2026
+
+**User requirement:** keep all repository-managed project downloads, source, toolchains, caches, native build evidence and staged payloads under one Windows checkout root without separate D:/Source or system-C project folders. Modular owners remain apps/, engine/, tooling/, docs/, planning/ and workspace/.
+
+**Bounded implemented source change:** the active v1.18.6 native builder now admits only fresh workspace/builds children for its report and workspace/packages children for optional payloads. The matching native assembler admits only a fresh workspace/packages payload and validates its build report under workspace/builds, preserving preexisting-output, provenance, exact-HEAD, reparse-parent, license/hash and no-install guards. Updated source tests and storage documentation.
+
+**Open implementation:** DEV.cmd presently resolves external Node, npm, Rust, Cargo and PowerShell; it does not provision portable runtimes, guarantee local caches or relocate Visual Studio/WDK/installed Sandboxie and Minecraft. Implement a checksum-verified local bootstrap and scoped developer environment separately, without bypassing CI or Windows service safety. CI execution on the resulting SHA is required to claim PASS; native MSVC/WDK and Minecraft acceptance remain NOT_EXECUTED.
+
+**Next:** implement local-only toolchain/download/cache routing with tested fallback refusal, then verify the exact CI SHA. Do not install or activate native driver/services.
+
+---
+
 # Current Development Handoff — M-Minecraft-Emulator
 
 ## Full CI #16: Windows PowerShell stdin cold-start test timeout — 19 October 2026

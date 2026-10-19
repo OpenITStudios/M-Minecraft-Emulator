@@ -28,9 +28,12 @@ in this change. Do not describe source inspection as REA runtime proof.
 | --- | --- | --- | --- |
 | Product code and runtime contracts | `apps/`, `engine/`, `tooling/` | Yes | Keep source and deterministic tests under their actual owners |
 | Toolchain declarations and lockfiles | `toolchain.json`, `apps/desktop/package-lock.json` and Rust `Cargo.lock` | Yes | These are immutable inputs, not generated binary caches |
-| Node, Vite, Rust, Tauri output | `node_modules/`, `dist/`, `target/`, Tauri staging | No | Regenerate and leave in tool-native paths |
+| Node, Vite, Rust, Tauri output | `apps/desktop/node_modules/`, `apps/desktop/dist/`, Rust/Tauri `target/`, Tauri staging | No | Already contained by the one checkout; preserve tool-native paths |
+| Portable developer tool installations | `workspace/toolchains/` | No | Future scoped installer/launcher must verify exact provenance and use local paths |
+| Developer caches and temporary files | `workspace/cache/`, `workspace/tmp/` | No | Future scoped commands must not default to global cache locations |
 | External installer and prerequisite downloads | `workspace/downloads/` | No | Record original URL, vendor, version and SHA-256 |
-| Future approved package copies | `workspace/packages/` | No | Never interpret a copied executable as released or signed |
+| Native-engine build reports | `workspace/builds/<fresh-run>/` | No | Only new, non-reparse destinations; reports remain inside this checkout |
+| Engine staged payloads and future approved packages | `workspace/packages/<fresh-run>/` | No | Fresh path only; staged native engine is NOT-INSTALLABLE, never released or signed by copying |
 | Per-attempt local tests | `workspace/runs/` | No | Separate logs, raw records, redacted extracts and provenance |
 | Temporary investigation | `workspace/scratch/` | No | Never promote hypotheses into observed results |
 | Restricted machine data | Protected user/application paths; `workspace/private/` only when authorized | Never | Git ignore is not a secrecy control |
@@ -38,6 +41,21 @@ in this change. Do not describe source inspection as REA runtime proof.
 | Published release | Separately approved distribution channel | No | Requires release gate, signatures and hashes first |
 
 Only `workspace/README.md` may be Git-tracked under `workspace/`.
+
+**Repository-controlled storage contract:** one checkout root is the parent
+of every project download, source tree, locally staged payload and
+project-generated report. The current owned v1.18.6 builder must accept
+`workspace/builds/<new-name>/` as its report directory and
+`workspace/packages/<new-name>/` as the optional payload directory;
+the assembler enforces those same boundaries. Both require preexisting,
+non-junction parent directories and refuse reuse. Tool-owned compiler
+outputs inside `engine/isolation-owned/` are ignored and independently
+checked for preexisting binaries. The current `DEV.cmd` still uses
+toolchain executables from PATH and does **not** yet guarantee that its
+downloads/caches stay in the checkout; a separate, verified portable
+bootstrap and environment-scoped launcher are still required before
+the **entire developer installation** can be called self-contained.
+Never describe merely changing this policy as proof of that bootstrap.
 Do not create root `artifacts/`, `downloads/`, `installers/`,
 or `test-results/` directories. The root is an entry/config boundary,
 not a second build or evidence owner.

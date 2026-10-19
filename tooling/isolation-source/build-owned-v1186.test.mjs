@@ -137,9 +137,9 @@ test('build-only stages reject incomplete outputs before starting the next expen
     'x64 stage unexpectedly builds driver; reconsider stage ownership');
 });
 
-test('native build report destination is outside the checkout and has no junction ancestors', () => {
+test('native build report is restricted to ignored workspace/builds without junction ancestors', () => {
   const guard = source.indexOf("$reportAbsolute = [IO.Path]::GetFullPath($ReportDirectory)");
-  const preflight = source.indexOf("Build report must be outside the repository checkout.");
+  const preflight = source.indexOf("Build report must be a new child of workspace/builds within the repository.");
   const gitCheck = source.indexOf("$dirty = (& $git -C $repo status");
   const reportCreation = source.indexOf("New-Item -ItemType Directory -Path $reportFolder");
   const compile = source.indexOf("foreach ($stage in $stages)");
@@ -148,17 +148,17 @@ test('native build report destination is outside the checkout and has no junctio
     'a dirtying report directory must be rejected before either Git proof or MSBuild');
   assert.match(source, /\$reportRoot = \[IO\.Path\]::GetPathRoot\(\$reportAbsolute\)/);
   assert.match(source, /Build report destination must not be a drive root/);
-  assert.match(source, /\$reportFolder\.Equals\(\$repoFolder/);
-  assert.match(source, /\$reportFolder\.StartsWith\(\$repoFolder \+ /);
-  assert.match(source, /\$repoFolder\.StartsWith\(\$reportFolder \+ /);
+  assert.match(source, /\$workspaceRoot = Join-Path \$repoFolder 'workspace'/);
+  assert.match(source, /\$reportAllowed = Join-Path \$workspaceRoot 'builds'/);
+  assert.match(source, /\$reportFolder\.StartsWith\(\$reportAllowed \+ /);
   assert.match(source, /\$ancestor = \$reportParent/);
   assert.match(source, /while \(\$ancestor\) \{/);
   assert.match(source, /\$parentItem = Get-Item -LiteralPath \$ancestor -Force/);
   assert.match(source, /\$next = Split-Path -Parent \$ancestor/);
   assert.match(source, /Build report parent must not be a Windows reparse point/);
-  assert.equal((source.match(/Build report must be outside the repository checkout/g) || []).length, 1);
+  assert.equal((source.match(/Build report must be a new child of workspace\/builds within the repository/g) || []).length, 1);
   // The optional package output must remain separately preflighted.
-  assert.match(source, /Engine package output must be outside the repository checkout/);
+  assert.match(source, /Engine package output must be a new child of workspace\/packages within the repository/);
   assert.doesNotMatch(source, /Build report may not overlap native source/);
 });
 
@@ -170,15 +170,15 @@ test('optional engine package target is refused early before expensive MSBuild w
     'bad output must not create a report folder');
   for (const reason of [
     'Engine package output must not be a drive root.',
-    'Engine package output must be outside the repository checkout.',
+    'Engine package output must be a new child of workspace/packages within the repository.',
     'Engine package destination already exists; refuse replacement.',
     'Engine package destination parent must exist before native compilation.',
     'Engine package parent must not be a Windows reparse point.',
   ]) {
     assert.ok(source.includes(reason), 'missing non-destructive path refusal: '+reason);
   }
-  assert.match(source, /\$packageFolder\.StartsWith\(\$repoFolder \+ /);
-  assert.match(source, /\$repoFolder\.StartsWith\(\$packageFolder \+ /);
+  assert.match(source, /\$packageAllowed = Join-Path \$workspaceRoot 'packages'/);
+  assert.match(source, /\$packageFolder\.StartsWith\(\$packageAllowed \+ /);
   assert.match(source, /\$parentItem\.Attributes -band \[IO\.FileAttributes\]::ReparsePoint/);
   assert.match(source, /\$ancestor = \$packageParent/);
   assert.match(source, /while \(\$ancestor\)/);

@@ -178,9 +178,10 @@ export async function stageOwnedV1186({
   demand(exists(parent) && lstatSync(parent).isDirectory() &&
     !lstatSync(parent).isSymbolicLink() && realpathSync(parent) === parent,
     'payload destination parent must be a real directory');
-  demand(!inside(root, target) && !inside(target, root) &&
+  const packagesRoot = join(root, 'workspace', 'packages');
+  demand(inside(packagesRoot, target) && target !== packagesRoot &&
     !inside(sourceRoot, target) && !inside(target, sourceRoot),
-    'payload must be outside the source checkout');
+    'payload must be a new child of workspace/packages');
   demand(!exists(target), 'destination already exists');
   demand(readGit(root, 'branch', '--show-current') === 'Local',
     'only reviewed Local branch is supported');
@@ -211,6 +212,10 @@ export async function stageOwnedV1186({
   }
   // Read the actual report bytes and bind their SHA to package provenance.
   const reportPath = resolve(buildReport);
+  const buildsRoot = join(root, 'workspace', 'builds');
+  demand(inside(buildsRoot, reportPath) && reportPath !== buildsRoot &&
+    realpathSync(dirname(reportPath)) === dirname(reportPath),
+    'build report must remain within real workspace/builds');
   demand(exists(reportPath) && !lstatSync(reportPath).isSymbolicLink() &&
     lstatSync(reportPath).isFile() && statSync(reportPath).size <= 256*1024,
     'report must be an ordinary bounded file');

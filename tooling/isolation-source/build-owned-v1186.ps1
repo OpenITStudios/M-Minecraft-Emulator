@@ -25,21 +25,19 @@ if (-not (Test-Path -LiteralPath $source -PathType Container)) {
 if (Test-Path -LiteralPath $reportFolder) {
   throw 'Report destination exists; use a new directory to preserve build evidence.'
 }
-# A report beneath the checkout becomes untracked input after the Git clean
-# preflight and can invalidate reproducibility or a subsequent assembler run.
-# Refuse the entire repository, not just engine/isolation-owned.
-if ($reportFolder.Equals($repoFolder, [StringComparison]::OrdinalIgnoreCase) -or
-    $reportFolder.StartsWith($repoFolder + '\', [StringComparison]::OrdinalIgnoreCase) -or
-    $repoFolder.StartsWith($reportFolder + '\', [StringComparison]::OrdinalIgnoreCase)) {
-  throw 'Build report must be outside the repository checkout.'
+# Keep machine-local evidence inside this checkout, but ONLY in its Git-ignored
+# workspace/builds owner. Never mix reports with tracked source or native output.
+$workspaceRoot = Join-Path $repoFolder 'workspace'
+$reportAllowed = Join-Path $workspaceRoot 'builds'
+if (-not $reportFolder.StartsWith($reportAllowed + '\', [StringComparison]::OrdinalIgnoreCase)) {
+  throw 'Build report must be a new child of workspace/builds within the repository.'
 }
 $reportParent = Split-Path -Parent $reportFolder
 if (-not (Test-Path -LiteralPath $reportParent -PathType Container)) {
   throw 'Report destination parent does not exist.'
 }
-# An apparently external report parent may redirect through an NTFS junction
-# into this repository or another protected tree. Check the full ancestor
-# chain before source verification, MSBuild and directory creation.
+# Any reparse-point ancestor could redirect local evidence elsewhere.
+# Check the full ancestor chain before source verification and MSBuild.
 $ancestor = $reportParent
 while ($ancestor) {
   $parentItem = Get-Item -LiteralPath $ancestor -Force -ErrorAction Stop
@@ -50,9 +48,8 @@ while ($ancestor) {
   if (-not $next -or $next -eq $ancestor) { break }
   $ancestor = $next
 }
-# The optional assembler refuses existing targets and destinations within
-# the repository. Reject those predictable failures BEFORE spending time on
-# three native MSBuild stages. The assembler remains the final path verifier.
+# The optional assembler accepts only a fresh workspace/packages child.
+# Check that target before spending time on three native MSBuild stages.
 if ($PackageDirectory) {
   $packageAbsolute = [IO.Path]::GetFullPath($PackageDirectory)
   $rootPath = [IO.Path]::GetPathRoot($packageAbsolute)
@@ -61,11 +58,9 @@ if ($PackageDirectory) {
     throw 'Engine package output must not be a drive root.'
   }
   $packageFolder = $packageAbsolute.TrimEnd('\')
-  $repoFolder = [IO.Path]::GetFullPath($repo).TrimEnd('\')
-  if ($packageFolder.Equals($repoFolder, [StringComparison]::OrdinalIgnoreCase) -or
-      $packageFolder.StartsWith($repoFolder + '\', [StringComparison]::OrdinalIgnoreCase) -or
-      $repoFolder.StartsWith($packageFolder + '\', [StringComparison]::OrdinalIgnoreCase)) {
-    throw 'Engine package output must be outside the repository checkout.'
+  $packageAllowed = Join-Path $workspaceRoot 'packages'
+  if (-not $packageFolder.StartsWith($packageAllowed + '\', [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Engine package output must be a new child of workspace/packages within the repository.'
   }
   if (Test-Path -LiteralPath $packageFolder) {
     throw 'Engine package destination already exists; refuse replacement.'
@@ -74,9 +69,8 @@ if ($PackageDirectory) {
   if (-not (Test-Path -LiteralPath $packageParent -PathType Container)) {
     throw 'Engine package destination parent must exist before native compilation.'
   }
-  # A junction anywhere in the parent chain could redirect an apparently
-  # outside-checkout package path into the repository after MSBuild completes.
-  # Check every ancestor now; the assembler still performs final realpath proof.
+  # Junctions may redirect workspace/packages outside the project.
+  # Check every ancestor now; the assembler also performs final realpath proof.
   $ancestor = $packageParent
   while ($ancestor) {
     $parentItem = Get-Item -LiteralPath $ancestor -Force -ErrorAction Stop

@@ -22,9 +22,10 @@ const profile = JSON.parse(readFileSync(
 function fixture() {
   const base = mkdtempSync(join(tmpdir(),'mivubi-owned-v1186-'));
   const repository = join(base,'repo');
-  const outputDirectory = join(base,'payload');
-  const buildReport = join(base,'native-build.json');
-  mkdirSync(repository);
+  const outputDirectory = join(repository,'workspace','packages','payload');
+  const buildReport = join(repository,'workspace','builds','native-build.json');
+  mkdirSync(join(repository,'workspace','packages'),{recursive:true});
+  mkdirSync(join(repository,'workspace','builds'),{recursive:true});
   function file(relative, bytes=Buffer.from('owned test: '+relative)) {
     const full = join(repository,...relative.split('/'));
     mkdirSync(dirname(full),{recursive:true});
@@ -86,7 +87,8 @@ function fixture() {
     base,repository,outputDirectory,buildReport,report,save,
     setTrackedStatus:(status)=>{ trackedStatus=status; },
     afterTrackedStatus:(action)=>{ afterTrackedStatus=action; },
-    run:()=>stageOwnedV1186({repository,buildReport,outputDirectory},adapters),
+    run:(destination=outputDirectory, reportPath=buildReport)=>
+      stageOwnedV1186({repository,buildReport:reportPath,outputDirectory:destination},adapters),
     clean:()=>rmSync(base,{force:true,recursive:true}),
   };
 }
@@ -113,6 +115,14 @@ test('owned v1.18.6 build produces a closed read-only 25-file engine payload',as
     assert.ok(existsSync(join(f.outputDirectory,'LICENSES','LICENSE.Classic')));
     assert.ok(existsSync(join(f.outputDirectory,'LICENSES','Sandboxie','COPYING')));
     assert.match(readFileSync(join(f.outputDirectory,'NOT-INSTALLABLE.txt'),'utf8'),/NOT installable or co-installable/);
+  }finally{f.clean();}
+});
+test('payload and report cannot escape dedicated ignored workspace folders',async()=>{
+  const f=fixture();try{
+    await assert.rejects(f.run(join(f.base,'outside')), /workspace\/packages/);
+    await assert.rejects(f.run(join(f.repository,'apps','desktop','payload')), /workspace\/packages/);
+    await assert.rejects(f.run(undefined,join(f.base,'native-build.json')), /workspace\/builds/);
+    assert.equal(existsSync(f.outputDirectory),false);
   }finally{f.clean();}
 });
 test('build report claiming loaded driver or signing cannot create package',async()=>{
