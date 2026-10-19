@@ -58,6 +58,16 @@ describe("Opt-in Windows event-driven focus counter", () => {
     expect(rust).toContain("PostThreadMessageW(worker.thread_id, WM_QUIT, 0, 0)");
     expect(rust).toContain("static WORKER: Mutex<Option<Worker>>");
     expect(rust).toContain("EVENT_SYSTEM_FOREGROUND");
+    const winImports = rust.split("WindowsAndMessaging::{")[1]?.split("},")[0] ?? "";
+    const accessibilityImports = rust.split("Accessibility::{")[1]?.split("},")[0] ?? "";
+    for (const constant of [
+      "EVENT_SYSTEM_FOREGROUND", "WINEVENT_OUTOFCONTEXT", "WINEVENT_SKIPOWNPROCESS",
+    ]) {
+      expect(winImports).toContain(constant);
+      expect(accessibilityImports).not.toContain(constant);
+    }
+    expect(accessibilityImports).toContain("SetWinEventHook");
+    expect(accessibilityImports).toContain("UnhookWinEvent");
     expect(rust).not.toContain("SetPriorityClass");
     expect(rust).not.toContain("SetWindowPos");
     expect(rust).not.toContain("Sleep(");

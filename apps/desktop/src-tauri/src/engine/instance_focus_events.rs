@@ -42,12 +42,12 @@ mod windows {
         System::Threading::GetCurrentThreadId,
         UI::{
             Accessibility::{
-                SetWinEventHook, UnhookWinEvent, EVENT_SYSTEM_FOREGROUND,
-                WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, HWINEVENTHOOK,
+                SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK,
             },
             WindowsAndMessaging::{
                 DispatchMessageW, GetMessageW, PeekMessageW, PostThreadMessageW,
-                TranslateMessage, MSG, PM_NOREMOVE, WM_QUIT,
+                TranslateMessage, EVENT_SYSTEM_FOREGROUND, WINEVENT_OUTOFCONTEXT,
+                WINEVENT_SKIPOWNPROCESS, MSG, PM_NOREMOVE, WM_QUIT,
             },
         },
     };

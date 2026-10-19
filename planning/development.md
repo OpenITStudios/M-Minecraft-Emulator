@@ -24,15 +24,21 @@ priority/sandbox configuration is modified.
 
 ## Evidence and proof ceiling
 
-Prior commit `b71384e98bcf3414b72b18a2863667e8a6f59d8e` entered
-[Full Source CI 39283268843](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39283268843),
-which was **queued** at the last inspection. Do not promote that run
-or the new batch into PASS before observing the exact outcome.
-The preceding `6b09f52e18300742b09946eea2a276441ee2a484`
-passed all 12 source stages and Windows debug build/upload
-([CI 39278677898](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39278677898)).
+The source hook commit `510945632b827c88eebef13b89b67e4cce449689`
+[failed Full Source CI 39286306975](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39286306975)
+at its Windows desktop compile stage: three `windows-sys` 0.61
+WinEvent constants were incorrectly imported from `Win32::UI::Accessibility`.
+They belong to `Win32::UI::WindowsAndMessaging`, while
+`SetWinEventHook` and `UnhookWinEvent` remain under Accessibility.
+Other eleven source stages passed; no debug desktop artifact was produced.
 
-**New commit requires fresh exact-SHA full Windows source/test/compile.**
+This bounded fix changes only the Rust imports and adds a source contract
+test for the actual `windows-sys` module owners. It does not weaken hooks,
+admission, cleanup or Minecraft isolation.
+The preceding `b71384e98bcf3414b72b18a2863667e8a6f59d8e`
+[passed Full Source CI 39283268843](https://github.com/OpenITStudios/M-Minecraft-Emulator/actions/runs/39283268843).
+
+**The new exact-SHA Full Source / Windows compile result is pending.**
 The Windows hook has not been observed operating on the user's PC.
 Client 01 native attribution, owned v1.18.6 driver/service activation,
 Client 03/04 provisioning, four independent licensed Minecraft Education
