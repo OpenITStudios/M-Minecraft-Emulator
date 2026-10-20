@@ -207,8 +207,52 @@ all-session idle and every final profile setting; it accepts only the observed
 Microsoft-signed official desktop executable and uses the private `/mivubi_client:02`
 entrypoint. An accepted request is not proof of a running or playable game.
 Sign in manually; no credentials, existing account state or tokens are copied.
-The manager UI's owned slots remain blocked until its own provider integration
-is explicitly implemented and verified; these commands are a local test route.
+The default official pilot and production provider are not promoted by these
+commands. The debug manager now has an explicit local-test selection described
+below; these CLI commands remain a separate operator entry into the same engine.
+
+## Four-slot manager integration — developer mode
+
+Run the actual Tauri development app, then choose Settings → **Select local
+engine test** and select the activated session directory (containing session.json
+and payload). Return to Virtuals. The selection lasts only for this app session;
+there is no automatic fallback or new persistent readiness flag. Local test
+selection is rejected in production builds. The existing catalog admits IDs
+01–04; the developer backend independently authenticates the actual service
+paths, all 25 hashes/signatures, source manifest/resources, private driver/ABI,
+kernel Test Mode and current Windows session on every call.
+
+Client 01 retains the registered official Windows launch route. The owned mode
+attributes its native process through stable image/start-time identity and two
+explicit not-boxed API results, without classifying unknown failures as native.
+Clients 02–04 use canonical MivubiEdu profiles. The prepared Client 02 is adopted
+only through its existing creation receipt plus fresh settings/provider evidence.
+New profiles refuse existing sections, partial attempts and orphan default
+data/hive roots; custom global storage roots require review. The compatibility
+checkbox explicitly acknowledges reduced containment, not account isolation.
+
+Profile creation is the only operation that requests UAC. It invokes this same
+application's fixed Create-only helper with a bounded local request, never an
+elevated mutable checkout script or a new background service. Current Windows
+PowerShell modules are imported from the system PSHOME rather than inherited
+module search paths. The same global runtime and per-session locks serialize
+CLI, manager and elevated child operations. No driver/service/boot operations are
+exposed through this adapter. Sign-in remains manual.
+
+Open records a request and observes actual processes with a deadline. No automatic
+launch retry is issued. A live previous launcher, nonempty profile, mismatched
+PID/start time/session/HWND or provider blocks operations. An inconclusive launch
+requires Refresh and an explicit guarded retry; the cooldown remains enforced
+across app restarts through the existing session receipt. Focus/Place validate
+the target immediately before Windows calls. Close sends WM_CLOSE only and does
+not claim STOPPED until a subsequent inventory proves it; save/confirm inside
+Minecraft when necessary. UI inspections are on demand, with no new polling loop.
+
+The opt-in Rust test `engine::owned_provider::tests::actual_owned_session_inspects_three_slots`
+accepts `MIVUBI_TEST_OWNED_SESSION` and verifies the actual selected backend read-only.
+Default source tests never require an installed driver or game. Four-client UI,
+manual account separation, multiplayer and soak results belong only to the
+canonical [acceptance report](../../docs/validation/native-pilot-localtest.md).
 
 For a selected actual Education PID, `probe-v1186-runtime.ps1 -DllPath <verified
 owned SbieDll.dll> -Sha256 <its recorded SHA-256> -GameProcessId <PID>` adds a

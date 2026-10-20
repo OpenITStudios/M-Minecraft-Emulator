@@ -1,4 +1,5 @@
 //! Explicit developer adapter. Selection is not authority: every call checks Windows.
+//! The embedded helper is developer-only and never installs a driver/service.
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, io, path::PathBuf};
 

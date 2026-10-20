@@ -141,6 +141,8 @@ try {
         }
     }
     foreach($row in $manifest.artifacts){Demand ($seen.Contains($row.path)) 'Missing declared artifact.';if($row.path -notmatch '\.(exe|dll|sys)$'){Demand ((Hash (Join-Path $payload $row.path)) -ceq $row.sha256) 'Original configuration/license resource changed.'}}
+    Ordinary (Join-Path $payload 'TEST-ONLY-NOT-FOR-DISTRIBUTION.txt')
+    Demand (@(Get-ChildItem -LiteralPath $payload -Recurse -File -Force).Count -eq 26) 'Unexpected files in the test payload.'
     foreach ($name in @('SbieDrv','SbieSvc')) {
         $filename=if ($name -eq 'SbieDrv') {'SbieDrv.sys'} else {'SbieSvc.exe'}
         $live=([string](Get-ItemProperty -LiteralPath "HKLM:\SYSTEM\CurrentControlSet\Services\$name").ImagePath -replace '^\\\?\?\\','').Trim('"')
