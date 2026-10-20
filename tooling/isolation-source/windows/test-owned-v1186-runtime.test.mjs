@@ -94,7 +94,7 @@ test('game attribution rejects PID reuse before touching a vendor DLL',{skip:pro
     catch {if($_.Exception.ToString() -notmatch 'PID reused before attribution'){throw}}
     exit 0`);
   assert.equal(result.status,0,result.stdout+result.stderr);
-  assert.match(probe,/one!=two \|\| one!=session/);
+  assert.match(probe,/one==two && one==session/);
   assert.match(probe,/PID reused after attribution/);
   assert.match(probe,/Private driver required for owned game attribution/);
 });

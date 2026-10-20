@@ -54,6 +54,38 @@ pub enum SlotOperation {
     Place,
     Provision,
     ApplyFrameCap,
+    Close,
+}
+
+// Explicit developer selection changes routing, never Windows authorization.
+// Every owned adapter operation must independently verify the live provider.
+pub fn admit_owned_test_operation(id: &str, operation: SlotOperation) -> std::io::Result<()> {
+    if id == "01"
+        && matches!(
+            operation,
+            SlotOperation::Inspect
+                | SlotOperation::Focus
+                | SlotOperation::Place
+                | SlotOperation::Close
+        )
+    {
+        return Ok(());
+    }
+    let valid = instance_slots()
+        .iter()
+        .any(|slot| slot.id == id && slot.kind == "ISOLATED");
+    if !valid
+        || matches!(
+            operation,
+            SlotOperation::ApplyFrameCap | SlotOperation::SelectExecutable
+        )
+    {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "No owned test route for this slot/operation",
+        ));
+    }
+    Ok(())
 }
 
 pub fn admit_slot_operation(id: &str, operation: SlotOperation) -> std::io::Result<()> {

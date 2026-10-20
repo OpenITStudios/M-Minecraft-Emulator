@@ -16,6 +16,41 @@ use std::{io, sync::Mutex};
 // This limits manager-created CPU/RAM peaks, not Minecraft CPU or GPU usage.
 static MANAGER_RESOURCE_LOCK: Mutex<()> = Mutex::new(());
 
+#[tauri::command]
+pub async fn desktop_owned_test_operation(
+    request: crate::engine::owned_provider::OwnedRequest,
+) -> Result<crate::engine::owned_provider::OwnedSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        run_manager_operation(|| {
+            crate::engine::owned_provider::OwnedTestBackend { request: &request }.execute()
+        })
+    })
+    .await
+    .map_err(|error| format!("Owned test operation failed: {error}"))?
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn desktop_select_owned_test_session() -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        run_manager_operation(|| {
+            if !cfg!(debug_assertions) {
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "Developer session selection is unavailable in production",
+                ));
+            }
+            Ok(rfd::FileDialog::new()
+                .set_title("Select the activated local engine test session")
+                .pick_folder()
+                .map(|p| p.to_string_lossy().into_owned()))
+        })
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(|error| error.to_string())
+}
+
 // One tiny, synchronous read-only catalog, no resource lock or Windows helper.
 #[tauri::command]
 pub fn desktop_list_instance_slots() -> [InstanceSlotDescriptor; 4] {

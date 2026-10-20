@@ -1,7 +1,7 @@
 //! Read-only candidate for an app-owned Sandboxie-derived engine.
 //! This module NEVER installs/loads a driver, chooses a runtime backend,
 //! migrates an occupied box, or treats checksums as Authenticode trust.
-//! The officially installed Sandboxie provider remains the only active route.
+//! Explicit developer runtime selection is verified separately by owned_provider.
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
