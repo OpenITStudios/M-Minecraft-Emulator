@@ -9,6 +9,62 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Unified manager and automatic setup — 20 October 2026
+
+**ACTIVE; actual manager gameplay remains NOT_EXECUTED after this change.**
+Implementation: `1591b6165eb605a2ab064c8f0babd56e328723f1` on Local,
+following baseline `89af69acf97f4fa215983206c5b6fba70835f5be`.
+The operator requested one coherent English application and then explicitly
+requested automatic setup instead of folder selection and repeated checkboxes.
+
+The sole mounted `UnifiedManagerApp.svelte` shows 01 native and owned 02–04.
+Legacy Compact Manager/pilot source and all existing profile/account/world data
+remain preserved and unmounted. The active UI never falls back to official Sandboxie.
+Canonical slot/provider/profile definitions live in
+[`minecraft-targets.json`](../../engine/isolation-native/owned-runtime/minecraft-targets.json).
+The existing legacy diagnostic catalog projects those identities onto its historical
+pilot metadata; that projection is not the unified dashboard's provider selection.
+
+Startup derives one candidate from the currently registered SbieSvc image, bounded
+to developer test storage, then runs the existing full owned-provider verification.
+An official installation, unknown package or foreign service cannot be auto-adopted.
+Only successful automatic verification saves locations in the existing
+`%LOCALAPPDATA%\MinecraftInstanceManager\NativePilot\manager-settings.json`.
+Saved preferences do not replace live verification. The game resolver checks registry
+installation, Microsoft signature and the native launcher's resolved Known Folder path.
+There is no directory hunt, service replacement, driver installation or login at startup.
+
+**Current operator path:** open the manager → **Open** on Minecraft 02 → manual
+sign-in/world test. No engine picker or licensing checkbox is required on this host.
+For a missing owned profile, Open asks compatibility consent once, creates through
+the same bounded Create-only helper/readback, then launches only after success.
+UAC remains Windows-controlled. Focus/placement/normal close revalidate identity;
+no forced game termination, account copying or automatic launch retry is added.
+
+| Verification | Result | Evidence / limit |
+| --- | --- | --- |
+| Default full source pipeline | PASS | 692 tests: 276 Node, 170 Vitest, 246 Rust; zero failed, four existing Node symlink skips and four opt-in Rust tests ignored by default |
+| Real registered game / native launcher identity | PASS | Opt-in Rust test validates actual signed installation and resolved registered Start app target without launch |
+| Actual automatic engine preparation and remembered preferences | PASS | Opt-in Rust calls the same prepare owner twice; full owned verification succeeds and saved locations match on reread; no profile/game mutation |
+| Actual three-owned-slot inspection | PASS | Opt-in existing Rust test verifies the running private engine and profile 02 settings |
+| PowerShell module failure in actual native subprocess | FAIL reproduced → PASS after fix | Security module auto-load failed under inherited environment; resolver explicitly imports trusted system modules; actual Rust target inspection then passes |
+| Concurrent external inspection | BLOCKED as designed | First automatic-setup test overlapped the dev app's startup inspection; exclusive operation admission rejected overlap. Idle rerun passes; no automatic launch retry added |
+| Frontend checking / production assets / Windows developer executable | PASS | Svelte 0 errors/warnings, Vite production build and actual Tauri debug compilation/startup |
+| Layout, keyboard and error presentation | PASS, browser fixture only | 1180×760 and 920×620; four cards, no horizontal overflow; keyboard outline visible; technical error remains collapsed in Diagnostics |
+| First-open consent and launch UI | PASS, browser fixture only | Cancel creates nothing; Open issues exactly one request; backend-denied retry stays disabled after check and Settings navigation |
+| Actual manager Open 02, focus, place, close and reopen | NOT_EXECUTED | Operator asked to click Open in the automatically prepared app; no new playable-session result received yet |
+| Four accounts / multiplayer / 60-minute soak / displayed FPS | NOT_EXECUTED | Earlier one-client CLI world proof does not establish new manager acceptance |
+| Independent installer / clean Windows | NOT_EXECUTED | Engine still uses authorized borrowed SbieDrv/SbieSvc registrations; namespace and installer separation remain subsequent work |
+
+The launcher now journals exit code, whether the launcher remains alive, boxed
+process count and attributed game count in the existing local receipt. The recent
+UTC cooldown bug is fixed; any remaining cold-launch failure must be diagnosed
+from a new actual attempt, not hidden by retry. The UI asks Check again and exposes
+technical details separately. All identifiers in repository evidence are sanitized;
+raw local receipts and screenshots remain ignored workspace artifacts.
+
+Historical observations below keep their original revision/proof scope.
+
 ## Four-slot manager integration — 20 October 2026, active continuation
 
 **ACTIVE; four-client acceptance is NOT_EXECUTED.** Implementation source

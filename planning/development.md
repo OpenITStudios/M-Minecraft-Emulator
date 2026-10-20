@@ -2,9 +2,7 @@
 
 ## Owned manager / independence — 20 October 2026
 
-**ACTIVE:** `fd064eb` integrates debug manager 01–04; 683 source tests and actual Rust provider inspection pass.
-UI selection confirmed. Fixed UTC/local launch cooldown; 4 regressions/live inspection pass. Next: UI Open 02 retry.
-Four-client/multiplayer/soak and independent installer NOT_EXECUTED. See [campaign results](../docs/validation/native-pilot-localtest.md).
+**ACTIVE:** `1591b61` unifies 01–04 and automatically verifies/remembers the active engine/game. 692 source tests pass; live setup/reread passes. Next: operator clicks Open 02, then tests focus/close/reopen. Four-client gameplay and independent installer NOT_EXECUTED. See [results](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
 

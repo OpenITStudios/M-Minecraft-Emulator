@@ -213,14 +213,19 @@ below; these CLI commands remain a separate operator entry into the same engine.
 
 ## Four-slot manager integration — developer mode
 
-Run the actual Tauri development app, then choose Settings → **Select local
-engine test** and select the activated session directory (containing session.json
-and payload). Return to Virtuals. The selection lasts only for this app session;
-there is no automatic fallback or new persistent readiness flag. Local test
-selection is rejected in production builds. The existing catalog admits IDs
-01–04; the developer backend independently authenticates the actual service
-paths, all 25 hashes/signatures, source manifest/resources, private driver/ABI,
-kernel Test Mode and current Windows session on every call.
+Run the actual Tauri development app. Startup detects the current owned service
+payload and registered Education installation, authenticates them through the
+existing provider, and remembers verified locations in the existing manager data
+directory. On this activated test host, use **Clients → Open**; no folder picker
+or repeated licensing checkbox is needed. Choosing Open confirms use of a separate
+licensed account. Settings → Choose engine / Choose executable are repair controls.
+
+The canonical catalog is `engine/isolation-native/owned-runtime/minecraft-targets.json`.
+Automatic discovery never adopts official Sandboxie or an offline package. Local
+test operations remain rejected in production builds. The backend independently
+authenticates actual service paths, all 25 hashes/signatures, source manifest/resources,
+private driver/ABI, kernel Test Mode and current Windows session on every operation.
+Saved locations are preferences, not a new readiness flag or lifecycle authority.
 
 Client 01 retains the registered official Windows launch route. The owned mode
 attributes its native process through stable image/start-time identity and two
@@ -228,8 +233,9 @@ explicit not-boxed API results, without classifying unknown failures as native.
 Clients 02–04 use canonical MivubiEdu profiles. The prepared Client 02 is adopted
 only through its existing creation receipt plus fresh settings/provider evidence.
 New profiles refuse existing sections, partial attempts and orphan default
-data/hive roots; custom global storage roots require review. The compatibility
-checkbox explicitly acknowledges reduced containment, not account isolation.
+data/hive roots; custom global storage roots require review. First Open on an absent profile asks compatibility consent, then prepares and opens
+through the same existing operations. Cancellation creates nothing. Compatibility
+consent acknowledges reduced containment, not account isolation.
 
 Profile creation is the only operation that requests UAC. It invokes this same
 application's fixed Create-only helper with a bounded local request, never an

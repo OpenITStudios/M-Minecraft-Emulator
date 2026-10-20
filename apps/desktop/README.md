@@ -14,11 +14,16 @@ inside the existing manager data directory. They are preferences, never readines
 Every owned operation rechecks the live engine; the shared Education resolver matches
 the selected signed executable to its registered installation and native Windows launcher.
 
-Choose an engine once in **Settings → Choose engine**. The game is detected from
-Windows registration; **Choose executable** permits an explicit matching location.
-Return to **Clients**, confirm separate licensed accounts, then use **Set up**,
-**Open**, or **Focus**. Reduced-containment compatibility consent is required when
-creating a profile. Window actions include placement and normal close only.
+Startup automatically resolves the game from Windows registration and the active
+owned engine from SCM, verifies it through the existing provider, and remembers
+the verified locations. No folder selection is needed on this configured host.
+Settings location pickers remain repair controls, never alternate runtime modes.
+
+On **Clients**, choose **Open** or **Focus**. Choosing Open explicitly confirms
+that a separate licensed account will be used; login stays manual inside Minecraft.
+An absent owned profile is prepared and opened after one compatibility confirmation.
+Cancelling that confirmation creates nothing. Reduced-containment compatibility
+is never accepted silently. Window actions include placement and normal close only.
 **Check all clients** refreshes observations; raw errors are under **Diagnostics**.
 There is no automatic launch retry, credential automation, force-close, or background poll.
 
@@ -45,15 +50,15 @@ This follows the same desktop architecture as `M-LazyBuilder-Plugin/apps/launche
 ACTIVE: UnifiedManagerApp.svelte + OwnedManagerPanel.svelte (presentation)
         app/presentation/unifiedManager.ts (pure status projection)
             ↓
-        app/bridge/nativeFeasibilityApi.ts (typed, fail-closed IPC)
+        app/bridge/managerConfiguration.ts + ownedProviderApi.ts (typed IPC)
             ↓
         src-tauri/src/commands/native_clients.rs (thin Tauri adapters)
             ↓
-        src-tauri/src/engine/native_clients.rs (Windows/Sandboxie owner)
+        src-tauri/src/engine/owned_provider.rs + native_clients.rs (Windows owners)
             ↓
-        read-only collector / official vendor launchers
+        verified owned provider / registered native Windows launcher
 
-INACTIVE: NativeFeasibilityApp.svelte, App.svelte, virtualClientsApi.ts, VMware Rust routes
+INACTIVE: CompactManagerApp.svelte, NativeFeasibilityApp.svelte, App.svelte, virtualClientsApi.ts, VMware Rust routes
           are retained for compatibility, but not registered.
 ```
 
