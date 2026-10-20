@@ -20,6 +20,7 @@ This is the **single documentation entrypoint**. Load only the domain needed for
 | Architecture, ownership, naming, developer commands | [System](./system/README.md) | `apps/desktop/`, `engine/runtime-core/`, `tooling/` |
 | Source proof, Windows/VMware/ Minecraft acceptance | [Validation](./validation/README.md) | `tooling/acceptance/windows/` and live evidence |
 | Installer packaging, update and trust policy | [Distribution](../engine/distribution/README.md) | `engine/distribution/`, Tauri packaging |
+| Dependency maintenance and modernization evidence | [Dependency tooling](../tooling/dependencies/README.md) / [Report](./validation/dependency-modernization-2026-10-20.md) | npm/Cargo manifests and package-manager-generated locks |
 | Current tasks, blockers and continuation | [Planning](../planning/README.md) | Current branch HEAD and `planning/development.md` |
 | Working artifacts and local-test storage | [Storage Policy](./system/artifact-storage.md) → [Workspace](../workspace/README.md) | Private evidence, caches and generated packages are not committed |
 

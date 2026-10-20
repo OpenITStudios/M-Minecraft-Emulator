@@ -27,7 +27,7 @@ A user-PC checkout, npm installation, `DEV.cmd`, VMware or Minecraft execution i
 
 ## Toolchain authority
 
-Read `../../toolchain.json`. Developer/build versions are Node `24.21.0`, npm `11.19.0`, Rust `1.98.1` and portable PowerShell `7.5.4` for the Windows command wrapper. Desktop uses its only npm lockfile, `apps/desktop/package-lock.json`; Rust backend uses `engine/runtime-core/Cargo.lock`. The repository root intentionally has **no separate Node dependency graph**.
+Read `../../toolchain.json`. Developer/build versions are Node `24.22.0`, npm `12.2.0`, Rust `1.99.1` and portable PowerShell `7.6.7` for the Windows command wrapper. Desktop uses its only npm lockfile, `apps/desktop/package-lock.json`; Rust backend uses `engine/runtime-core/Cargo.lock`. The repository root intentionally has **no separate Node dependency graph**.
 
 ## Optional source execution
 

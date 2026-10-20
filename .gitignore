@@ -69,3 +69,6 @@ engine/runtime-core/images/
 /*.zip
 /*.7z
 /*.dmp
+
+# Native Svelte/TypeScript checker intermediates
+/apps/desktop/.svelte-check/

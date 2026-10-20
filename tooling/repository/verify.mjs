@@ -526,12 +526,14 @@ requireFact(debugCandidateGuide.includes("raw, unsigned development executable")
   debugCandidateGuide.includes("DEV.cmd preflight") &&
   debugCandidateGuide.includes("does not install a driver"),
   "CI debug candidate must retain explicit non-installer and checksum instructions");
-// CI is deliberately disabled. Retain the existing `npm run verify:source`
-// and its twelve constituent scripts for opt-in, non-Actions testing only.
-// Do not add GitHub workflows, silent runners, deployment, or scheduled jobs.
+// CI stays disabled; keep every opt-in source stage available as checks grow.
 const canonicalStages = rootPackage.scripts["verify:source"].split(" && ");
-requireFact(canonicalStages.length === 12,
-  "Keep existing source-verification scripts independently available");
+for (const stage of ["verify:repository -- --g0", "check:structure", "check:dependencies",
+  "test:repository", "test:localtest", "test:feasibility", "test:isolation-source",
+  "test:native-feasibility", "test:sandboxie-feasibility", "test:native-performance",
+  "test:presentmon", "check:desktop", "check:runtime", "test:runtime", "format:runtime"]) {
+  requireFact(canonicalStages.includes("npm run " + stage), "Missing manual source stage: " + stage);
+}
 requireFact(!existsSync(resolve(root, ".github/workflows/verify.yml")) &&
   !existsSync(resolve(root, ".github/workflows/package-smoke.yml")) &&
   (!existsSync(resolve(root, ".github/workflows")) ||

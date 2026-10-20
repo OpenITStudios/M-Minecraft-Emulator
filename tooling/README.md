@@ -6,6 +6,7 @@ not implement a second Minecraft runtime or background service.**
 | Owner | Current use |
 | --- | --- |
 | [`isolation-source/README.md`](./isolation-source/README.md) | **Sole current v1.18.6** source verifier, optional compile-only build and NOT-INSTALLABLE assembler; v1.18.5 scripts are historical |
+| [`dependencies/README.md`](./dependencies/README.md) | Dependency audit, coupled upgrades and lock consistency commands |
 | [`repository/verify.mjs`](./repository/verify.mjs) | Static repository/source ownership invariants |
 | [`local-test/session.mjs`](./local-test/session.mjs) | Metadata-only exact-SHA source-preflight records; never captures raw logs or Minecraft profiles |
 | [`windows-toolchain/dev.ps1`](./windows-toolchain/dev.ps1) | Portable `DEV.cmd bootstrap` / `doctor` / `preflight` / `dev` using one checkout |

@@ -8,7 +8,7 @@ import { checkTracked, checkLinks } from './check-structure.mjs';
 test('reject outputs and competing root owners while preserving native provenance', () => {
   assert.deepEqual(checkTracked(['README.md', 'workspace/README.md',
     'engine/isolation-owned/tools/dist/tool.exe', 'engine/isolation-candidates/target/reference.log']), []);
-  for (const path of ['scratch.mjs', 'workspace/report.json', 'apps/desktop/dist/index.html',
+  for (const path of ['apps/desktop/.svelte-check/tsconfig.json', 'scratch.mjs', 'workspace/report.json', 'apps/desktop/dist/index.html',
     'engine/runtime-core/target/debug/core.exe', '.github/workflows/verify.yml']) {
     assert.ok(checkTracked([path]).length > 0, path);
   }

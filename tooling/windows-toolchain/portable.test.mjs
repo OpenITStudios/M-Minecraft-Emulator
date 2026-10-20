@@ -24,10 +24,10 @@ test('DEV.cmd dispatches only workspace-local PowerShell after opt-in bootstrap'
   assert.doesNotMatch(launcher, /(?:^|\n)\s*pwsh -NoLogo/m);
 });
 test('download route is pinned, checksum-verified, local and non-global', () => {
-  assert.equal(config.node.version,'24.21.0');
-  assert.equal(config.npm.version,'11.19.0');
-  assert.equal(config.rust.version,'1.98.1');
-  assert.equal(config.powershell.version,'7.5.4');
+  assert.equal(config.node.version,'24.22.0');
+  assert.equal(config.npm.version,'12.2.0');
+  assert.equal(config.rust.version,'1.99.1');
+  assert.equal(config.powershell.version,'7.6.7');
   assert.equal(config.policy.localDeveloperStorage,true);
   for(const asset of [config.portableWindowsX64.node,config.portableWindowsX64.powershell]) {
     assert.match(asset.url,/^https:\/\//);

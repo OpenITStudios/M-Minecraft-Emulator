@@ -1,31 +1,38 @@
-# Native dependency upgrade gate
+# Dependency maintenance tooling
 
-The Windows client uses two independently locked Cargo manifests:
-`apps/desktop/src-tauri/Cargo.toml` and `engine/runtime-core/Cargo.toml`.
+Root `package.json` is the command entrypoint. Application dependencies remain
+in `apps/desktop`; desktop Tauri and runtime-core retain independent Cargo
+manifests/locks. `toolchain.json` owns developer tool versions.
 
-## Preconditions
+| Command | Purpose |
+| --- | --- |
+| `npm run check:dependencies` | Install-free npm manifest/lock ownership, exact versions, aliases and platform integrity |
+| `npm run check:structure` | Tracked output, root ownership, simple internal Markdown links and command paths |
+| `npm run audit:dependencies` | npm tree/outdated/security plus both Cargo duplicate/advisory audits; requires installed dependencies and cargo-audit |
+| `npm run upgrade:frontend` | Read official stable Vite/plugin/Vitest metadata without editing |
+| `npm run upgrade:frontend -- --apply` | On a clean `Local` checkout with pinned tools, resolve the coupled group through npm and validate it |
 
-- Rust toolchain satisfying the workspace MSRV (the desktop declares Rust 1.98).
-- A Windows build host and installed Visual Studio C++/Windows SDK prerequisites.
-- Online crates.io access for Cargo resolution.
-- A clean worktree; disabled CI remains unchanged.
+`npm outdated` exit 1 means update candidates, including deliberately retained
+compatibility versions. Audit failures and missing tools propagate after all
+independent graphs have been checked. RustSec informational warnings still need
+review even when cargo-audit exits successfully. No command enables CI.
 
-## Scoped upgrade workflow
+For a new migration, inspect registry releases, peer requirements, crate MSRV and
+actual source consumers first. Resolve npm and Cargo locks with their package
+managers; never transplant locks or invent integrity metadata. Update coupled
+frontend packages together. Tauri API, CLI and Rust crates release independently:
+use supported versions, rather than requiring identical patch numbers.
 
-1. Inspect available releases with `cargo outdated` (if installed) and `cargo audit` (if installed).
-2. Update the desktop `tauri` and `tauri-build` **together** to a mutually compatible release, not by transplanting another application's Cargo.lock.
-3. Run `cargo update --manifest-path apps/desktop/src-tauri/Cargo.toml` to regenerate the desktop lockfile.
-4. Evaluate `ureq` 2 -> 3 separately; its native TLS and JSON APIs require source adaptation. Do not bump it in isolation.
-5. Update `engine/runtime-core/Cargo.lock` via `cargo update --manifest-path engine/runtime-core/Cargo.toml` after reviewing HTTP and TLS migrations.
-6. Validate:
+TypeScript 7 is installed through the official stable alias
+`@typescript/native = npm:typescript@7.0.2`. `typecheck` uses the native checker;
+`typecheck:compat` retains TypeScript 6 for the Svelte JS API and compatibility
+investigation. Aggregate verification runs the primary checker once.
 
-```sh
-npm --prefix apps/desktop run check:rust
-npm --prefix apps/desktop run test:rust
-cargo check --locked --all-targets --manifest-path engine/runtime-core/Cargo.toml
-cargo test --locked --all-targets --manifest-path engine/runtime-core/Cargo.toml
-```
+For Rust migrations, run each manifest's `cargo check --locked --all-targets` and
+`cargo test --locked --all-targets`, then affected desktop tests and builds.
+Keep native-tls platform trust, response limits, timeout bounds, process start
+identity and cross-process locking intact. Native driver/upstream snapshot
+upgrades require their own migration; they are not routine Cargo updates.
 
-7. On Windows, validate foreground observation, process lifecycle, per-client inventory, and packaging using the focused acceptance scripts. No Windows/driver changes should be accepted based only on Linux checks.
-
-No Cargo command was run in the GitHub connector environment. Native dependency versions remain unchanged until compatible Cargo resolution and Windows validation are possible.
+The canonical outcomes, exceptions, versions and evidence are in the
+[modernization report](../../docs/validation/dependency-modernization-2026-10-20.md).

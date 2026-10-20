@@ -1,54 +1,54 @@
 #!/usr/bin/env node
-// Reproducible, opt-in upgrade on Node 24/npm 11 with an accessible npm registry.
-// No CI or Rust manifests are modified by this command.
-import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
-import { readFileSync } from "node:fs";
+// Resolve the coupled frontend group from official stable registry metadata.
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const desktop = resolve(root, "apps/desktop");
-const requested = ["vite@8.3.4", "@sveltejs/vite-plugin-svelte@7.3.1", "vitest@5.0.5"];
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const desktop = resolve(root, 'apps/desktop');
+const npmCli = process.env.npm_execpath || resolve(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js');
+const toolchain = JSON.parse(readFileSync(resolve(root, 'toolchain.json'), 'utf8'));
 const args = process.argv.slice(2);
-if (!args.includes("--apply")) {
-  console.log("Dry-run: upgrade " + requested.join(", "));
-  console.log("Requires Node 24, npm 11, registry access, and a clean Git worktree.");
-  console.log("Run with --apply to migrate, regenerate the lockfile, and run focused checks.");
-  process.exit(0);
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url) && (args.some(arg => arg !== '--apply') || args.length > 1)) throw Error('Only --apply is supported');
+const apply = args.includes('--apply');
+const run = (command, argv, cwd = root, capture = false) => {
+  const result = spawnSync(command === 'npm' ? process.execPath : command, command === 'npm' ? [npmCli, ...argv] : argv, {
+    cwd, encoding: 'utf8', stdio: capture ? 'pipe' : 'inherit',
+    windowsHide: true,
+  });
+  if (result.error || result.status !== 0) throw Error(result.error?.message || `${command} failed (${result.status}): ${result.stderr ?? ''}`);
+  return result.stdout?.trim();
+};
+if (apply) {
+  if (process.versions.node !== toolchain.node.version ||
+      run('npm', ['--version'], root, true) !== toolchain.npm.version) {
+    throw Error('Use the exact Node/npm versions in toolchain.json');
+  }
+  if (run('git', ['branch', '--show-current'], root, true) !== 'Local' ||
+      run('git', ['status', '--porcelain', '--untracked-files=normal'], root, true)) {
+    throw Error('Apply requires a clean Local checkout');
+  }
 }
-if (args.some((arg) => arg !== "--apply")) {
-  console.error("Only --apply is supported.");
-  process.exit(2);
+export async function stableRelease(name, fetchMetadata = fetch) {
+  const response = await fetchMetadata('https://registry.npmjs.org/' + encodeURIComponent(name) + '/latest');
+  if (!response.ok) throw Error('Registry metadata failed: ' + name + ' (' + response.status + ')');
+  const metadata = await response.json();
+  if (!/^\d+\.\d+\.\d+$/.test(metadata.version)) throw Error('Stable release required: ' + name);
+  console.log(name, metadata.version, JSON.stringify({engines: metadata.engines, peers: metadata.peerDependencies}));
+  return name + '@' + metadata.version;
 }
-function run(command, argv, cwd = root) {
-  const result = spawnSync(command, argv, { cwd, stdio: "inherit", shell: process.platform === "win32" });
-  if (result.error) throw result.error;
-  if (result.status !== 0) process.exit(result.status ?? 1);
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+const requested = await Promise.all(['vite', '@sveltejs/vite-plugin-svelte', 'vitest'].map(name => stableRelease(name)));
+if (!apply) {
+  console.log('Dry-run only. --apply resolves this group with npm and checks the resulting application.');
+} else {
+  run('npm', ['install', '--save-dev', '--save-exact', '--no-audit', '--no-fund', ...requested], desktop);
+  run('npm', ['ci', '--no-audit', '--no-fund'], desktop);
+  run(process.execPath, ['tooling/repository/check-dependency-lock.mjs']);
+  run('npm', ['ls', '--all'], desktop);
+  for (const command of ['typecheck', 'test', 'build:frontend']) run('npm', ['run', command], desktop);
+  console.log('Focused checks complete. Review the diff and security audit before committing.');
 }
-if (Number(process.versions.node.split(".")[0]) !== 24) {
-  console.error("Upgrade requires Node 24.x to match package.json engines.");
-  process.exit(2);
+
 }
-const npmVersion = spawnSync("npm", ["--version"], { encoding: "utf8", shell: process.platform === "win32" });
-if (npmVersion.status !== 0 || Number(npmVersion.stdout.trim().split(".")[0]) !== 11) {
-  console.error("Upgrade requires npm 11.x.");
-  process.exit(2);
-}
-const status = spawnSync("git", ["status", "--porcelain", "--untracked-files=normal"], {
-  cwd: root, encoding: "utf8", shell: process.platform === "win32"
-});
-if (status.status !== 0 || status.stdout.trim()) {
-  console.error("Stop: Git worktree must be clean before modifying the lockfile.");
-  process.exit(2);
-}
-const manifest = JSON.parse(readFileSync(resolve(desktop, "package.json"), "utf8"));
-for (const name of ["vite", "@sveltejs/vite-plugin-svelte", "vitest"]) {
-  if (!manifest.devDependencies?.[name]) throw Error("Missing expected direct dependency " + name);
-}
-run("npm", ["install", "--save-dev", "--save-exact", "--no-audit", "--no-fund", ...requested], desktop);
-run("npm", ["ci", "--no-audit", "--no-fund"], desktop);
-run("node", ["tooling/repository/check-dependency-lock.mjs"]);
-run("npm", ["run", "typecheck"], desktop);
-run("npm", ["run", "test"], desktop);
-run("npm", ["run", "build:frontend"], desktop);
-console.log("Frontend major upgrade and focused checks complete; inspect git diff and commit.");

@@ -17,7 +17,7 @@ export function checkTracked(paths) {
       if (!rootFiles.has(path)) errors.push('Unreviewed root owner: ' + path);
     } else if (!roots.has(path.split('/')[0])) errors.push('Unreviewed directory owner: ' + path);
     if (path.startsWith('workspace/') && path !== 'workspace/README.md') errors.push('Tracked workspace output: ' + path);
-    if (!upstream.test(path) && /(?:^|\/)(?:node_modules|target|dist|coverage|test-results)\/|\.(?:log|tmp)$/.test(path)) {
+    if (!upstream.test(path) && /(?:^|\/)(?:node_modules|target|dist|coverage|test-results|\.svelte-check)\/|\.(?:log|tmp)$/.test(path)) {
       errors.push('Tracked generated output: ' + path);
     }
     if (/^\.github\/workflows\//.test(path)) errors.push('GitHub Actions must stay disabled: ' + path);

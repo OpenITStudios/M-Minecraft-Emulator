@@ -7,7 +7,7 @@
   "engines": {
     "node": "24.x"
   },
-  "packageManager": "npm@11.19.0",
+  "packageManager": "npm@12.2.0",
   "scripts": {
     "setup": "npm --prefix apps/desktop ci --no-audit --no-fund",
     "dev": "npm --prefix apps/desktop run dev:app",
@@ -17,7 +17,7 @@
     "check:runtime": "cargo check --locked --all-targets --manifest-path engine/runtime-core/Cargo.toml",
     "test:runtime": "cargo test --locked --all-targets --manifest-path engine/runtime-core/Cargo.toml",
     "format:runtime": "cargo fmt --manifest-path engine/runtime-core/Cargo.toml --all --check",
-    "verify:source": "npm run verify:repository -- --g0 && npm run test:localtest && npm run test:feasibility && npm run test:isolation-source && npm run test:native-feasibility && npm run test:sandboxie-feasibility && npm run test:native-performance && npm run test:presentmon && npm run check:desktop && npm run check:runtime && npm run test:runtime && npm run format:runtime",
+    "verify:source": "npm run verify:repository -- --g0 && npm run check:structure && npm run check:dependencies && npm run test:repository && npm run test:localtest && npm run test:feasibility && npm run test:isolation-source && npm run test:native-feasibility && npm run test:sandboxie-feasibility && npm run test:native-performance && npm run test:presentmon && npm run check:desktop && npm run check:runtime && npm run test:runtime && npm run format:runtime",
     "package:windows": "npm --prefix apps/desktop run build:app",
     "test:feasibility": "node --test tooling/acceptance/evaluate-client-feasibility.test.mjs",
     "feasibility:review": "node tooling/acceptance/evaluate-client-feasibility.mjs",
@@ -48,6 +48,8 @@
     "frametime:review": "node tooling/acceptance/analyze-presentmon.mjs",
     "upgrade:frontend": "node tooling/dependencies/upgrade-frontend.mjs",
     "check:structure": "node tooling/repository/check-structure.mjs",
-    "test:repository": "node --test tooling/repository/*.test.mjs"
+    "test:repository": "node --test tooling/repository/*.test.mjs tooling/dependencies/*.test.mjs",
+    "check:dependencies": "node tooling/repository/check-dependency-lock.mjs",
+    "audit:dependencies": "node tooling/dependencies/audit.mjs"
   }
 }

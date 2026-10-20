@@ -6,9 +6,9 @@ $manifest = Get-Content -LiteralPath (Join-Path $Root 'toolchain.json') -Raw | C
 if ($env:OS -cne 'Windows_NT' -or -not [Environment]::Is64BitOperatingSystem) {
   throw 'Portable bootstrap supports Windows x64 only.'
 }
-if ([string]$manifest.node.version -cne '24.21.0' -or
-    [string]$manifest.npm.version -cne '11.19.0' -or
-    [string]$manifest.rust.version -cne '1.98.1') {
+if ([string]$manifest.node.version -cne '24.22.0' -or
+    [string]$manifest.npm.version -cne '12.2.0' -or
+    [string]$manifest.rust.version -cne '1.99.1') {
   throw 'Unreviewed toolchain version: update authenticated artifact pins before bootstrap.'
 }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -92,9 +92,9 @@ function Expand-PinnedZip {
   }
 }
 $portable = $manifest.portableWindowsX64
-if ([string]$manifest.powershell.version -cne '7.5.4' -or
-    [string]$portable.node.name -cne 'node-v24.21.0-win-x64.zip' -or
-    [string]$portable.powershell.name -cne 'PowerShell-7.5.4-win-x64.zip' -or
+if ([string]$manifest.powershell.version -cne '7.6.7' -or
+    [string]$portable.node.name -cne 'node-v24.22.0-win-x64.zip' -or
+    [string]$portable.powershell.name -cne 'PowerShell-7.6.7-win-x64.zip' -or
     [string]$portable.rustup.url -cne 'https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe') {
   throw 'Unreviewed portable archive identities in toolchain.json.'
 }
@@ -105,12 +105,23 @@ Expand-PinnedZip -Archive $psZip -Destination (Join-Path $tools 'powershell') -N
 $node = Join-Path $tools 'node/node.exe'
 $npm = Join-Path $tools 'node/npm.cmd'
 $pwsh = Join-Path $tools 'powershell/pwsh.exe'
+# The authenticated Node LTS archive bundles npm 11; provision the reviewed npm
+# release into the same portable directory, never the system installation.
+if ((& $node --version).Trim() -cne 'v24.22.0') {
+  throw 'Portable Node version mismatch before npm provisioning.'
+}
+$env:PATH = "$(Join-Path $tools 'node');$env:PATH"
+$env:NPM_CONFIG_CACHE = Join-Path $cache 'npm'
+if ((& $npm --version).Trim() -cne '12.2.0') {
+  & $npm install --global --prefix (Join-Path $tools 'node') 'npm@12.2.0' --ignore-scripts --no-audit --no-fund
+  if ($LASTEXITCODE -ne 0) { throw 'Portable pinned npm provisioning failed.' }
+}
 if (-not (Test-Path -LiteralPath $node -PathType Leaf) -or
     -not (Test-Path -LiteralPath $npm -PathType Leaf) -or
     -not (Test-Path -LiteralPath $pwsh -PathType Leaf) -or
-    ((& $node --version).Trim() -cne 'v24.21.0') -or
-    ((& $npm --version).Trim() -cne '11.19.0') -or
-    ((& $pwsh --version).Trim() -cne 'PowerShell 7.5.4')) {
+    ((& $node --version).Trim() -cne 'v24.22.0') -or
+    ((& $npm --version).Trim() -cne '12.2.0') -or
+    ((& $pwsh --version).Trim() -cne 'PowerShell 7.6.7')) {
   throw 'Portable Node/npm/PowerShell runtime identity mismatch.'
 }
 $rustupUrl = [string]$portable.rustup.url
@@ -153,10 +164,14 @@ if (-not (Test-Path -LiteralPath $cargo) -or
     -not (Test-Path -LiteralPath $rustup)) {
   throw 'Rustup did not provision the required local tools.'
 }
+& $rustup toolchain install $manifest.rust.version --profile minimal
+if ($LASTEXITCODE -ne 0) { throw 'Pinned local Rust installation failed.' }
+& $rustup default $manifest.rust.version
+if ($LASTEXITCODE -ne 0) { throw 'Pinned local Rust selection failed.' }
 & $rustup component add rustfmt --toolchain $manifest.rust.version
 if ($LASTEXITCODE -ne 0) { throw 'Pinned local rustfmt installation failed.' }
 $rustVersion = (& $rustc --version | Out-String).Trim()
-if ($LASTEXITCODE -ne 0 -or $rustVersion -notmatch '^rustc 1\.98\.1\b') {
+if ($LASTEXITCODE -ne 0 -or $rustVersion -notmatch '^rustc 1\.99\.1\b') {
   throw "Incorrect workspace-local Rust version: $rustVersion"
 }
 Write-Host 'Local toolchains ready. Use DEV.cmd doctor, then DEV.cmd preflight.'

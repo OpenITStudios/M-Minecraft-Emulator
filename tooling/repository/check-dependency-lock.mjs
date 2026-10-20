@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 const desktop = resolve(dirname(fileURLToPath(import.meta.url)), "../../apps/desktop");
 export function checkDependencyLock(manifest, lock) {
 const root = lock.packages?.[""];
+assert.equal(manifest.version, root?.version, "npm lock root version mismatch");
 assert.equal(lock.lockfileVersion, 3, "npm lockfile v3 required");
 assert.equal(manifest.name, root?.name, "npm lock root name mismatch");
 for (const area of ["dependencies", "devDependencies"]) {
@@ -18,8 +19,9 @@ for (const area of ["dependencies", "devDependencies"]) {
     assert.ok(installed?.version, `missing installed package: ${name}`);
     assert.ok(installed.resolved && installed.integrity, `missing provenance for ${name}`);
     // Exact pins can be asserted without an external semver dependency.
-    if (/^\d+\.\d+\.\d+$/.test(declared)) {
-      assert.equal(installed.version, declared, `installed version mismatch for ${name}`);
+    const exact = declared.startsWith("npm:") ? declared.slice(declared.lastIndexOf("@") + 1) : declared;
+    if (/^\d+\.\d+\.\d+$/.test(exact)) {
+      assert.equal(installed.version, exact, `installed version mismatch for ${name}`);
     }
   }
 }
