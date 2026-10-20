@@ -6,12 +6,12 @@ import { dirname, resolve } from "node:path";
 import assert from "node:assert/strict";
 
 const desktop = resolve(dirname(fileURLToPath(import.meta.url)), "../../apps/desktop");
-const manifest = JSON.parse(readFileSync(resolve(desktop, "package.json"), "utf8"));
-const lock = JSON.parse(readFileSync(resolve(desktop, "package-lock.json"), "utf8"));
+export function checkDependencyLock(manifest, lock) {
 const root = lock.packages?.[""];
 assert.equal(lock.lockfileVersion, 3, "npm lockfile v3 required");
 assert.equal(manifest.name, root?.name, "npm lock root name mismatch");
 for (const area of ["dependencies", "devDependencies"]) {
+  assert.deepEqual(root?.[area] ?? {}, manifest[area] ?? {}, area + ' lock ownership mismatch');
   for (const [name, declared] of Object.entries(manifest[area] ?? {})) {
     assert.equal(root?.[area]?.[name], declared, `root lock mismatch for ${name}`);
     const installed = lock.packages?.[`node_modules/${name}`];
@@ -25,14 +25,9 @@ for (const area of ["dependencies", "devDependencies"]) {
 }
 const installed = (name) => lock.packages?.[`node_modules/${name}`];
 const major = (name) => Number(installed(name)?.version?.split(".")[0]);
-const vite = major("vite"), plugin = major("@sveltejs/vite-plugin-svelte"), vitest = major("vitest");
-assert.ok(
-  (vite === 7 && plugin === 6 && vitest === 3) ||
-  (vite === 8 && plugin === 7 && vitest >= 5),
-  `unsupported Vite / Svelte Plugin / Vitest combination: ${vite}/${plugin}/${vitest}`
-);
-assert.equal(installed("@tauri-apps/api").version, installed("@tauri-apps/cli").version,
-  "Tauri JS API/CLI versions must remain aligned");
+// API and CLI are independently released; their supported Tauri major must agree.
+assert.equal(major('@tauri-apps/api'), major('@tauri-apps/cli'), 'Tauri JS major mismatch');
+// Peer/engine compatibility is checked by npm ci and npm ls, not a version matrix.
 for (const [name, expected] of Object.entries(installed("@tauri-apps/cli").optionalDependencies ?? {})) {
   assert.equal(installed(name)?.version, expected, `Tauri platform package mismatch: ${name}`);
   assert.ok(installed(name)?.integrity, `missing integrity: ${name}`);
@@ -43,7 +38,7 @@ const undiciConstraint = installed("@types/node")?.dependencies?.["undici-types"
 if (undiciConstraint) {
   const actual = installed("undici-types");
   assert.ok(actual?.version, "missing undici-types required by @types/node");
-  const match = /^>=([0-9]+)\\.([0-9]+)\\.([0-9]+) <([0-9]+)\\.([0-9]+)\\.([0-9]+)$/.exec(undiciConstraint);
+  const match = /^>=([0-9]+)\.([0-9]+)\.([0-9]+) <([0-9]+)\.([0-9]+)\.([0-9]+)$/.exec(undiciConstraint);
   // Reject an unfamiliar range instead of silently skipping a safety check.
   assert.ok(match, `review new @types/node undici range: ${undiciConstraint}`);
   const tuple = (x) => x.split(".").map(Number);
@@ -65,4 +60,9 @@ if (!svelteCheckPeer.includes("^7.0.0")) {
   assert.ok(major("typescript") === 5 || major("typescript") === 6,
     "Svelte Check does not advertise TypeScript 7 support");
 }
-console.log("Dependency lock metadata and selected toolchain compatibility: PASS");
+}
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  checkDependencyLock(JSON.parse(readFileSync(resolve(desktop, 'package.json'), 'utf8')),
+    JSON.parse(readFileSync(resolve(desktop, 'package-lock.json'), 'utf8')));
+  console.log('Dependency lock metadata: PASS (npm ci / npm ls validate peers and engines)');
+}

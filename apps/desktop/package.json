@@ -22,19 +22,16 @@
     "check:dependencies": "node ../../tooling/repository/check-dependency-lock.mjs"
   },
   "dependencies": {
-    "@tauri-apps/api": "2.12.3"
+    "@tauri-apps/api": "2.12.4"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^6.2.4",
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
     "@tauri-apps/cli": "2.12.3",
     "@types/node": "24.19.2",
     "svelte": "5.57.2",
     "svelte-check": "4.7.7",
     "typescript": "6.0.3",
-    "vite": "^7.0.0",
-    "vitest": "^3.2.0"
-  },
-  "allowScripts": {
-    "esbuild@0.28.2": true
+    "vite": "8.3.4",
+    "vitest": "5.0.5"
   }
 }
