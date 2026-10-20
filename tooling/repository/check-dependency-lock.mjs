@@ -18,7 +18,7 @@ for (const area of ["dependencies", "devDependencies"]) {
     assert.ok(installed?.version, `missing installed package: ${name}`);
     assert.ok(installed.resolved && installed.integrity, `missing provenance for ${name}`);
     // Exact pins can be asserted without an external semver dependency.
-    if (/^\\d+\\.\\d+\\.\\d+$/.test(declared)) {
+    if (/^\d+\.\d+\.\d+$/.test(declared)) {
       assert.equal(installed.version, declared, `installed version mismatch for ${name}`);
     }
   }
