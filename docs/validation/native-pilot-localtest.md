@@ -36,7 +36,8 @@ from the existing canonical owner, not a second preset.
 | System PowerShell module loading | PASS | Actual Rust subprocess initially lacked Get-FileHash; fixed by importing Utility/Security/Management from system PSHOME, disabling inherited module auto-loading; live inspection then passes |
 | Profile mutation boundaries | PASS, source/regression | Existing/foreign/partial/orphan profiles refused; disabled first, query after each write, enabled last; Create-only helper in same executable with normal UAC |
 | Launch / window boundaries | PASS, source/regression | Nonempty profile/live prior launcher/cooldown prevents duplicate requests; bounded observation with no automatic retry; fresh PID/start/session/HWND required; WM_CLOSE only |
-| Actual UI session selection / buttons | NOT_EXECUTED | App opened; operator asked to select the activated test session and confirm four-slot UI |
+| Actual UI session selection | PASS, operator/screenshot | Selected test engine; four slots shown, 02 STOPPED and 03–04 ABSENT |
+| UI launch cooldown | FAIL observed, source fixed | UTC DateTime was parsed to local time before subtraction, incorrectly extending the 30-second guard on UTC+7. DateTimeOffset now compares instants; four focused Windows regressions and live Rust inspection pass. Actual UI relaunch/gameplay remains NOT_EXECUTED after fix |
 | Actual creation of profiles 03–04 through UI | NOT_EXECUTED | No new accounts/profiles created by source verification |
 | Four distinct playable sessions / multiplayer / reopen | NOT_EXECUTED | Four accounts available, not yet logged in/tested through the new manager |
 | Four-client 60-minute soak / displayed FPS | NOT_EXECUTED | No soak or adequate displayed-frame measurement |

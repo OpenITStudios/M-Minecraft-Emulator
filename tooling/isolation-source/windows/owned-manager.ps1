@@ -186,7 +186,7 @@ try {
         Demand ($slot.boxedProcessCount -eq 0) 'Profile is not empty; another launch is refused.'
         $launchKey='managerLaunch'+$request.clientId
         if ($receipt.runtime.PSObject.Properties.Name -contains $launchKey) {
-            Demand (([DateTime]::UtcNow-[DateTime]::Parse($receipt.runtime.$launchKey)).TotalSeconds -ge 30) 'Recent launch request; inspect before retrying.'
+            Demand (([DateTimeOffset]::UtcNow-[DateTimeOffset]::Parse($receipt.runtime.$launchKey)).TotalSeconds -ge 30) 'Recent launch request; inspect before retrying.'
         }
         $launcherKey='managerLauncher'+$request.clientId
         if($receipt.runtime.PSObject.Properties.Name -contains $launcherKey){

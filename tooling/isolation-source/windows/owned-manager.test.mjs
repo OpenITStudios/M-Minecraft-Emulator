@@ -6,6 +6,12 @@ import {fileURLToPath} from 'node:url';
 const source=readFileSync(new URL('./owned-manager.ps1',import.meta.url),'utf8');
 const probe=readFileSync(new URL('./probe-v1186-runtime.ps1',import.meta.url),'utf8');
 const ps=code=>spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',code],{encoding:'utf8',timeout:15000,windowsHide:true});
+test('launch cooldown compares UTC instants on non-UTC Windows',{skip:process.platform!=='win32'},()=>{
+  const expression=source.match(/Demand \((\(\[DateTimeOffset\]::UtcNow-\[DateTimeOffset\]::Parse\(\$receipt.runtime.\$launchKey\)\).TotalSeconds -ge 30)\)/)?.[1];
+  assert.ok(expression,'production cooldown expression');
+  const r=ps(`$launchKey='managerLaunch02';$receipt=[pscustomobject]@{runtime=[pscustomobject]@{managerLaunch02=[DateTimeOffset]::UtcNow.AddSeconds(-31).ToOffset([TimeSpan]::FromHours(7)).ToString('o')}};if(-not (${expression})){throw 'elapsed cooldown rejected'};$receipt.runtime.managerLaunch02=[DateTimeOffset]::UtcNow.AddSeconds(-5).ToOffset([TimeSpan]::FromHours(7)).ToString('o');if(${expression}){throw 'recent launch admitted'}`);
+  assert.equal(r.status,0,r.stdout+r.stderr);
+});
 test('owned manager confines mutations to profiles and attributed windows',()=>{
   assert.doesNotMatch(source,/ChangeServiceConfig|New-Service|Stop-Service|TerminateProcess|Remove-Item|bcdedit|Export-PfxCertificate/);
   for(const required of ['Private driver/ABI/Test Mode verification failed','Active service belongs to another provider','Recent launch request','Previous private launcher is still running','Profile exists; refusing','partial profile attempt','account-bearing profile data','Game belongs to another Windows session','processes.Count -eq 1','createdFileTime -ceq $target.createdFileTime'])assert.ok(source.includes(required),required);
