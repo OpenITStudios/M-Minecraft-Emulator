@@ -58,12 +58,7 @@ test('rejects mismatched source pin/tag', () => {
 test('rejects source path symlink', t => {
   const f = fixture(); const wrapper = join(tmpdir(), 'isolation-checkout-link-' + process.pid);
   try {
-    try { symlinkSync(f.dir, wrapper); } catch (error) {
-      if (process.platform === 'win32' && ['EPERM', 'EACCES'].includes(error.code)) {
-        t.skip('Windows symlinks unavailable'); return;
-      }
-      throw error;
-    }
+    symlinkSync(f.dir, wrapper, process.platform === 'win32' ? 'junction' : 'dir');
     assert.throws(() => verifyCheckout(wrapper, { pin: f.pin }), /real directory/);
   } finally { rmSync(wrapper, { force: true }); f.cleanup(); }
 });

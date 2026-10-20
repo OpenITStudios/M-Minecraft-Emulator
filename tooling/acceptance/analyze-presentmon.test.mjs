@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, symlinkSync, lstatSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -80,7 +80,7 @@ test('one missing interval retains coverage, but extensive missing data fails', 
     /too many missing/);
 });
 
-test('CLI analyzes existing CSV, never outputs raw PID, refuses symlink and invalid input', () => {
+test('CLI analyzes existing CSV without raw PID output and rejects invalid input', () => {
   const dir=mkdtempSync(join(tmpdir(),'mivubi-frame-'));
   try {
     const csv=join(dir,'capture.csv');
@@ -91,15 +91,36 @@ test('CLI analyzes existing CSV, never outputs raw PID, refuses symlink and inva
     assert.equal(good.status,0,good.stderr);
     assert.equal(JSON.parse(good.stdout).observedIntervals,100);
     assert.ok(!good.stdout.includes('1234'));
-    const alias=join(dir,'alias.csv');
-    symlinkSync(csv,alias);
-    const link=spawnSync(process.execPath,[path,'--csv',alias,'--process-id','1234'],
-      {encoding:'utf8'});
-    assert.equal(link.status,1);
     const bad=spawnSync(process.execPath,[path,'--csv',csv,'--process-id','wrong'],
       {encoding:'utf8'});
     assert.equal(bad.status,1);
     assert.ok(!bad.stderr.includes(csv));
+  } finally {
+    rmSync(dir,{recursive:true,force:true});
+  }
+});
+
+
+test('CLI refuses a real symbolic link input, including an unprivileged Windows junction', t => {
+  const dir=mkdtempSync(join(tmpdir(),'mivubi-frame-link-'));
+  try {
+    const csv=join(dir,'capture.csv');
+    writeFileSync(csv, valid());
+    const alias=join(dir,'alias.csv');
+    try {
+      symlinkSync(csv,alias,'file');
+    } catch (error) {
+      if (process.platform !== 'win32' || !['EPERM','EACCES'].includes(error.code)) throw error;
+      // A junction exercises the same real link-input rejection without changing host policy.
+      symlinkSync(dir,alias,'junction');
+      t.diagnostic('File-symlink privilege unavailable; actual Windows directory junction tested.');
+    }
+    assert.equal(lstatSync(alias).isSymbolicLink(),true);
+    const path=fileURLToPath(new URL('./analyze-presentmon.mjs',import.meta.url));
+    const link=spawnSync(process.execPath,[path,'--csv',alias,'--process-id','1234'],{encoding:'utf8'});
+    assert.equal(link.status,1);
+    assert.match(link.stderr,/CSV must be an ordinary file/);
+    assert.ok(!link.stderr.includes(alias));
   } finally {
     rmSync(dir,{recursive:true,force:true});
   }

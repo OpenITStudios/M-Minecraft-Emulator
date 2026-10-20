@@ -56,10 +56,7 @@ test('refuses missing tag and cleans temporary checkout',()=>{
 
 test('refuses dangling symlink as a destination', t => {
   const f = createRepo(); try {
-    try { symlinkSync(join(f.parent,'nonexistent'),f.destination); } catch(e) {
-      if(process.platform === 'win32' && ['EPERM','EACCES'].includes(e.code)) { t.skip('Symlink privileges missing'); return; }
-      throw e;
-    }
+    symlinkSync(join(f.parent,'nonexistent'),f.destination, process.platform === 'win32' ? 'junction' : 'dir');
     assert.throws(() => bootstrapFork({source:f.upstream,destination:f.destination,expectedCommit:f.expectedCommit}), /Destination exists/);
   } finally { f.cleanup(); }
 });
