@@ -2,7 +2,7 @@
 
 ## Owned manager / independence — 20 October 2026
 
-**ACTIVE:** `337e137` fixes GUI helper flashes and owned launch (exit 0; attributed responsive 02). 694 source tests pass. Next: manual world/UI close-reopen proof. Four-client/standalone acceptance NOT_EXECUTED. [Results](../docs/validation/native-pilot-localtest.md).
+**ACTIVE:** User confirms Minecraft normal (`a1a147b`). `52c38a3`: no Settings pickers. `e80ef10`: synthetic attach/restore PASS; 696 source tests pass. Next: synthetic host-crash recovery. Product host/previews and four-client acceptance NOT_EXECUTED. [Design/evidence](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
 

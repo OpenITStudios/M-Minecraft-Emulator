@@ -9,6 +9,48 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Unified workspace foundation — 20 October 2026
+
+**ACTIVE; workspace hosting is not implemented.** The operator resumed work and
+confirmed that the previously launched Minecraft was running normally. This is
+human-reported runtime evidence for the earlier launch/presentation work at
+`a1a147bbc5fd4fc68531a18cf5ee58410281a511`, not four-client or embedded-game proof.
+The [approved workspace contract](../product/unified-workspace.md) records one
+interactive main view plus three previews, automatic setup and recovery gates.
+
+Source `52c38a3c09c87b9a65d6b2b2d49621cd0d439b9c` removes executable/engine
+pickers from the mounted UI. Settings has automatic detection/status and Check
+again, routed through the existing authenticated startup preparation. Paths and
+canonical routing are read-only under collapsed Diagnostics. Existing backend
+validation, account/profile data and service registrations are unchanged.
+
+Source `e80ef10f4046aa60767104d89790b7a02e465bc8` adds only the approved design
+and a synthetic cross-process window-hosting probe. It is not a product game
+host. Its two independent processes use the same PMv2 DPI context and verify
+ownership, parent, style, geometry restoration and normal close. The second
+case deliberately fails after attachment and verifies restoration.
+
+| Check | Result | Evidence / limit |
+| --- | --- | --- |
+| Previous Minecraft visible/normal | PASS, operator report | User: Minecraft could run normally; no new game launched or moved during this foundation work |
+| Automatic Settings and retry | PASS, source/browser fixture | No chooser calls in mounted UI; technical paths collapsed; startup uses existing provider; saved paths alone do not establish readiness |
+| Browser layout/interaction | PASS, mocked bridge | 1180×760 and 920×620; four cards, no horizontal overflow, visible keyboard focus; compatibility consent and pending-launch navigation guard remain intact; not actual Tauri/game acceptance |
+| Synthetic probe first attempt | FAIL → PASS | Initial detach readback occurred before restoring WS_CHILD/style and produced an incorrect failure; readback moved after style restoration, then both modes pass |
+| Synthetic cross-process attach/detach | PASS, actual Windows | Parent, original style and screen rectangle restored; child remains alive through restoration and accepts normal close |
+| Injected partial attach failure | PASS, actual Windows | Original presentation restored and fixture normally closed after injected exception |
+| Source pipeline | PASS | 696 tests: 278 Node + 171 Vitest + 247 Rust; four existing Node symlink skips and six opt-in Rust tests ignored; Svelte 0 errors/0 warnings, production frontend build, Windows Cargo checks and formatting pass |
+| New documents and tracked fixture structure | PASS | Repository contract and internal documentation links pass with all new files staged |
+| Actual Minecraft hosted inside manager | NOT_EXECUTED | No product hosting module is exposed; synthetic result does not establish graphics or relative mouse support |
+| Host crash / mixed DPI / prompts / capture previews | NOT_EXECUTED | Required before native-host promotion; current probe deliberately cannot target external windows |
+| Four clients / multiplayer / soak / displayed FPS / independent installer | NOT_EXECUTED | Previous acceptance limits remain |
+
+Only synthetic fixture processes created by this probe were cleaned up after
+the failed probe; no Minecraft, unrelated shell, service or account process was
+terminated. Evidence stays in ignored local workspace logs/JSON/screenshots;
+no raw HWND, PID, account, credentials or private world data is committed.
+The main Clients page still uses the existing cards and external game windows.
+Next gate: synthetic host-failure recovery before connecting a live game surface.
+
 ## Launch failure and flashing PowerShell repair — 20 October 2026
 
 **ACTIVE.** Source `337e137b4c0501139224fef53d95d24472f6d306`, following
