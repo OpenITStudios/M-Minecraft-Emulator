@@ -1,22 +1,31 @@
 # Minecraft Instance Manager — Experimental Desktop
 
-The active Windows developer pilot is **Minecraft Instance Manager**. The single mounted
-`CompactManagerApp.svelte` (English-only Compact Manager) provides the same typed on-demand controls through the existing native bridge; the historical unmounted `NativeFeasibilityApp.svelte` provided Client 01 launch, one Client 02
-Sandboxie (`MinecraftClient02`) launch request with checked launcher exit,
-and **one explicit Refresh** that observes native/boxed process candidates
-and WinCred-hook configuration through `src/app/bridge/nativeFeasibilityApi.ts`.
-An outside-box PID is not verified host-native, and OpenCredentials OFF
-still permits native WinCred read-through. Login identity needs an actual
-Minecraft Education observation.
-The canonical Windows Sandboxie collector owns the box/membership facts.
-Its `-SummaryOnly` mode returns a non-persistent response to the desktop,
-while the manual CLI still writes a bounded evidence report. No duplicate
-PowerShell probe, periodic polling or persistent manager daemon is added.
-The game executable is not copied and logins are manual. Two independent
-Minecraft Education account sessions are not yet verified. The former
-`M-Bedrock Virtual Clients` installed product identifier and VMware runtime
-are legacy compatibility boundaries: VM/Guest Agent controls remain disabled,
-and the old NSIS bundle is blocked. See [Legacy Retirement](../../docs/system/legacy-retirement.md).
+The sole mounted application is `UnifiedManagerApp.svelte`: an English dashboard
+with four cards, 01 native and 02–04 owned. Settings contains the shared Minecraft
+executable and owned developer engine location; there is no official-pilot mode
+switch or automatic Sandboxie fallback. `CompactManagerApp.svelte` and the older
+surfaces remain unmounted historical source; their account-bearing data is preserved.
+
+The canonical target catalog is
+[`minecraft-targets.json`](../../engine/isolation-native/owned-runtime/minecraft-targets.json).
+Rust admission/observation, the profile planner and UI derive slot identities from it.
+Local selections live at `%LOCALAPPDATA%\MinecraftInstanceManager\NativePilot\manager-settings.json`
+inside the existing manager data directory. They are preferences, never readiness proof.
+Every owned operation rechecks the live engine; the shared Education resolver matches
+the selected signed executable to its registered installation and native Windows launcher.
+
+Choose an engine once in **Settings → Choose engine**. The game is detected from
+Windows registration; **Choose executable** permits an explicit matching location.
+Return to **Clients**, confirm separate licensed accounts, then use **Set up**,
+**Open**, or **Focus**. Reduced-containment compatibility consent is required when
+creating a profile. Window actions include placement and normal close only.
+**Check all clients** refreshes observations; raw errors are under **Diagnostics**.
+There is no automatic launch retry, credential automation, force-close, or background poll.
+
+Developer test signing and borrowed service registrations remain distinct from a
+standalone production installation. The installed app identity and data paths stay
+unchanged; the old VMware bundle remains blocked. See the
+[canonical acceptance report](../../docs/validation/native-pilot-localtest.md).
 
 ## Stack
 
@@ -33,8 +42,8 @@ This follows the same desktop architecture as `M-LazyBuilder-Plugin/apps/launche
 ## Layer boundary
 
 ```text
-ACTIVE: CompactManagerApp.svelte (presentation + transient UI state)
-        app/presentation/compactManager.ts (pure status/action projection)
+ACTIVE: UnifiedManagerApp.svelte + OwnedManagerPanel.svelte (presentation)
+        app/presentation/unifiedManager.ts (pure status projection)
             ↓
         app/bridge/nativeFeasibilityApi.ts (typed, fail-closed IPC)
             ↓

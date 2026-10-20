@@ -2,16 +2,16 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
 describe("Active native-first startup boundary", () => {
-  it("mounts the Compact Manager without querying VMware, Guest Agent or update APIs", () => {
+  it("mounts the Unified Manager without querying VMware, Guest Agent or update APIs", () => {
     const entry = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
-    const active = readFileSync(new URL("../src/CompactManagerApp.svelte", import.meta.url), "utf8");
+    const active = readFileSync(new URL("../src/UnifiedManagerApp.svelte", import.meta.url), "utf8");
     const bootstrap = readFileSync(new URL("../src-tauri/src/app_bootstrap.rs", import.meta.url), "utf8");
-    expect(entry).toContain('import CompactManagerApp from "./CompactManagerApp.svelte"');
-    expect(entry).toContain("mount(CompactManagerApp, { target });");
-    expect(active).toContain("nativeFeasibility.openOfficialMinecraft()");
-    expect(active).toContain("nativeFeasibility.inspectIsolatedClient02()");
+    expect(entry).toContain('import UnifiedManagerApp from "./UnifiedManagerApp.svelte"');
+    expect(entry).toContain("mount(UnifiedManagerApp, { target });");
+    expect(active).toContain("managerConfiguration.load()");
+    expect(active).toContain("ownedProvider.execute(");
     expect(active).not.toContain("backend.");
-    expect(active).not.toContain("onMount(");
+    expect(active).not.toContain("setInterval(");
     expect(active).not.toContain("checkUpdateOnce");
     expect(bootstrap).not.toContain("commands::virtual_clients::virtual_clients_");
     expect(bootstrap).not.toContain("commands::setup_tools::setup_");

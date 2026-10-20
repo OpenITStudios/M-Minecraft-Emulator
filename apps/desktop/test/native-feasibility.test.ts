@@ -138,7 +138,7 @@ describe("Native candidate IPC evidence", () => {
     // a uniquely registered current-user Minecraft Education Start app.
     expect(engine.match(/Get-AppxPackage -Name 'Microsoft.MinecraftEducationEdition' -ErrorAction Stop/g)).toHaveLength(1);
     expect(engine.match(/Get-StartApps -ErrorAction Stop/g)).toHaveLength(1);
-    expect(engine).toContain("[EDUCATION_DESKTOP_PREFLIGHT, SCRIPT].concat()");
+    expect(engine).toContain("Assert-ManagerRegisteredAppId $appId $selectedTarget");
     expect(engine).toContain("let desktop_preflight = EDUCATION_DESKTOP_PREFLIGHT;");
     expect(engine).toContain("{desktop_preflight}");
     expect(engine).toContain("Minecraft Education must have exactly one registered Start menu app.");

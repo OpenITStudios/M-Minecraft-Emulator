@@ -46,7 +46,7 @@ describe("Emulator source verification routing", () => {
     const entry = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
     const packageBuilder = readFileSync(new URL("../scripts/prepare-package-binaries.mjs", import.meta.url), "utf8");
     const policy = readFileSync(new URL("../../../engine/distribution/package-contract.json", import.meta.url), "utf8");
-    expect(entry).toContain("CompactManagerApp");
+    expect(entry).toContain("UnifiedManagerApp");
     expect(packageBuilder).toContain("PACKAGE_BLOCKED_NATIVE_FEASIBILITY");
     expect(packageBuilder).toContain("const LEGACY_PACKAGE_RELEASE_APPROVED = false;");
     expect(packageBuilder).toContain("if (!LEGACY_PACKAGE_RELEASE_APPROVED)");

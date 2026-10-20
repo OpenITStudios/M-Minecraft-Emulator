@@ -184,7 +184,7 @@ requireFact(read("docs/product/four-concurrent-accounts.md").includes(
   "four separate Minecraft Education Windows desktop clients concurrently"),
   "Four-client end-user outcome was removed from canonical product contract");
 const activeEntry = read("apps/desktop/src/main.ts");
-const activeSurface = read("apps/desktop/src/CompactManagerApp.svelte");
+const activeSurface = read("apps/desktop/src/UnifiedManagerApp.svelte");
 const rustCommandBoundary = read("engine/runtime-core/src/command.rs");
 const activeTauri = read("apps/desktop/src-tauri/src/app_bootstrap.rs");
 const activeCommandModules = read("apps/desktop/src-tauri/src/commands/mod.rs");
@@ -195,27 +195,20 @@ requireFact(activeCommandModules.includes("pub mod native_clients;") &&
   !/^\s*pub mod (setup_tools|window_arrangement|screen_overlay);/m.test(activeEngineModules) &&
   !activeTauri.includes("screen_overlay::shutdown()"),
   "Legacy desktop Rust modules must remain outside the active native compile graph");
-requireFact(activeEntry.includes('import CompactManagerApp from "./CompactManagerApp.svelte";') &&
-  activeEntry.includes("mount(CompactManagerApp, { target });") &&
+requireFact(activeEntry.includes('import UnifiedManagerApp from "./UnifiedManagerApp.svelte";') &&
+  activeEntry.includes("mount(UnifiedManagerApp, { target });") &&
   !activeEntry.includes("NativeFeasibilityApp") &&
   !activeEntry.includes('import App from "./App.svelte";'),
-  "The sole active desktop entry must mount the Compact Manager");
-requireFact(activeSurface.includes("nativeFeasibility.openOfficialMinecraft()") &&
-  activeSurface.includes("nativeFeasibility.inspectIsolatedClient02()") &&
-  !activeSurface.includes("nativeFeasibility.inspectCandidates()") &&
-  !activeSurface.includes("Promise.allSettled") &&
-  !activeSurface.includes("setInterval(") &&
-  !activeSurface.includes("onMount(") &&
-  !activeSurface.includes("<aside") &&
-  activeSurface.includes("<h1>Virtual Manager</h1>") &&
-  activeSurface.includes("<h2>Minecraft sessions</h2>") &&
-  activeSurface.includes("Settings") &&
-  !activeSurface.includes("Start All") &&
-  !activeSurface.includes("Stop All") &&
-  !activeSurface.includes("backend.snapshot()") &&
-  !activeSurface.includes("backend.startClient(") &&
-  !activeSurface.includes("backend.provision("),
-  "Active native/isolated pilot may not call legacy VM lifecycle commands");
+  "The sole active desktop entry must mount the Unified Manager");
+requireFact(activeSurface.includes('managerConfiguration.load()') &&
+  activeSurface.includes('ownedProvider.execute(') &&
+  activeSurface.includes('OwnedManagerPanel') &&
+  !activeSurface.includes('CompactManagerApp') &&
+  !activeSurface.includes('inspectIsolatedClient02') &&
+  !activeSurface.includes('setInterval(') &&
+  !activeSurface.includes('backend.startClient(') &&
+  !activeSurface.includes('backend.provision('),
+  "Unified manager must use one owned dashboard without legacy VM/pilot fallback");
 requireFact(activeTauri.includes("commands::native_clients::desktop_open_native_minecraft,") &&
   activeTauri.includes("commands::native_clients::desktop_inspect_native_candidates,") &&
   !/commands::virtual_clients::virtual_clients_|commands::setup_tools::setup_|commands::window_arrangement::window_/.test(activeTauri),

@@ -280,8 +280,8 @@ describe("Four-slot catalog read-only contract", () => {
     expect(ui).toContain('slot.availability === "NOT_AVAILABLE"');
     expect(ui).not.toContain('{#each ["03", "04"]');
     const rust = readFileSync(new URL("../src-tauri/src/engine/instance_catalog.rs", import.meta.url), "utf8");
-    expect(rust).toContain('route: "OWNED_V1186"');
-    expect(rust).toContain('availability: "NOT_AVAILABLE"');
+    expect(rust).toContain('super::manager_settings::TARGETS');
+    expect(rust).toContain('"NOT_AVAILABLE"');
     expect(rust).not.toContain("Start-Process");
     expect(rust).not.toContain("StartServiceW");
     const commands = readFileSync(new URL("../src-tauri/src/app_bootstrap.rs", import.meta.url), "utf8");
@@ -755,7 +755,7 @@ describe("Compact Manager app source and command boundary", () => {
     const map = readFileSync(new URL("../../../docs/system/implementation-map.md", import.meta.url), "utf8");
     const acceptanceSteps = localGuide.split("## B. Two-client manual acceptance sequence")[1]
       ?.split("## C. Read-only collector")[0] ?? "";
-    expect(entry).toContain('mount(CompactManagerApp, { target });');
+    expect(entry).toContain('mount(UnifiedManagerApp, { target });');
     expect(app).toContain('{busy === "check" ? "Checking…" : "Check status · 02"}');
     expect(app).toContain('on:click={showClient02MoveDetails}>Move window</button>');
     expect(localGuide).toContain(".\\DEV.cmd preflight");
@@ -770,7 +770,7 @@ describe("Compact Manager app source and command boundary", () => {
     expect(localGuide).toContain("CHECK STATUS (CLIENT 02):");
     expect(localGuide).not.toContain("REFRESH STATUS:");
     expect(localGuide).toContain("**NOT_EXECUTED** for that revision");
-    expect(map).toContain("Active desktop navigation / transient visual state | `apps/desktop/src/CompactManagerApp.svelte`");
+    expect(map).toContain("Active desktop navigation / transient visual state | `apps/desktop/src/UnifiedManagerApp.svelte`");
     expect(map).toContain("Legacy VMware client-owned setup wizard (inactive)");
     expect(map).toContain("legacy VMware layout/overlay (inactive)");
     expect(map).toContain("Explicit **Check status** (`-ImageProof`)");
@@ -789,7 +789,7 @@ describe("Compact Manager app source and command boundary", () => {
     expect(app).toContain('on:click={(event) => choosePrimary("02", event.currentTarget)} aria-label=');
   });
   it("mounts exactly one compact UI with no new native providers", () => {
-    expect(entry).toContain('mount(CompactManagerApp, { target });');
+    expect(entry).toContain('mount(UnifiedManagerApp, { target });');
     expect(entry).not.toContain("NativeFeasibilityApp");
     expect(app).not.toContain("<aside");
     expect(app).toContain("Virtual Manager");
@@ -977,7 +977,7 @@ describe("Compact Manager app source and command boundary", () => {
   });
   it("rejects unrelated picked EXEs before UI claims Minecraft and clears stale consent on errors", () => {
     const rust = readFileSync(new URL("../src-tauri/src/engine/native_clients.rs", import.meta.url), "utf8");
-    const picker = rust.split("#[cfg(windows)]\npub fn select_education_exe()")[1]
+    const picker = rust.replace(/\r\n/g,"\n").split("#[cfg(windows)]\npub fn select_education_exe()")[1]
       ?.split("#[cfg(not(windows))]")[0] ?? "";
     expect(picker).toContain("validate_education_path(executable)?;");
     expect(picker).toContain("if !path.is_file()");
