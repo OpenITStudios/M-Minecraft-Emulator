@@ -12,7 +12,7 @@ lifecycle: ACTIVE
 Branch: **Local**. Repository: OpenITStudios/M-Minecraft-Emulator.
 Baseline: `5226e30a9bb37a3b007af0020a787e81ed10a3d0`.
 Continuation baseline: `b8d7f7d1efe7c62c3be8d76eb4fa29995fcdd871`.
-Executed source revision: `972b0e40440452d16ff5ee35678559afa66d84e8`.
+Executed source revision: `bb588902f472ba6413325c12ab522e0a9908a339`.
 This report supersedes the earlier partial-verification batches in this same file;
 their original text remains in Git history. It is the one outcome report;
 [dependency tooling](../../tooling/dependencies/README.md) owns command usage.
@@ -21,7 +21,7 @@ their original text remains in Git history. It is the one outcome report;
 
 **Supported Windows dependency/source maintenance is complete with documented
 upstream and execution exceptions.** The full `npm run verify:source` pipeline
-PASSES at the exact source revision above: **655 passed, 0 failed, 4 skipped**.
+PASSES at the exact source revision above: **657 passed, 0 failed, 4 skipped**.
 The four existing skipped cases require file-symlink creation, which this Windows
 token cannot perform. They remain NOT_EXECUTED, not security PASS. Real Windows
 directory junctions now execute without skips for storage, source checkout,
@@ -41,6 +41,39 @@ cutover changes were made. Evidence ceiling is **SOURCE_EXECUTION**, not package
 or gameplay acceptance.
 
 ## Continuation repairs
+
+### Windows-first process inspection efficiency
+
+At `bb588902f472ba6413325c12ab522e0a9908a339`, the desktop instance authority
+uses one targeted PID refresh with `ProcessRefreshKind::nothing().without_tasks()`
+instead of `System::new_all()` followed by another refresh. Both current-process
+identity and stale-owner inspection retain PID/start-time matching. Windows still
+uses its exclusive file handle for instance authority. No extra dependency,
+manifest/lockfile, IPC, data path, installer or legacy-route change is needed.
+The existing bootstrap is the consumer; no second process manager was added.
+
+[Upstream sysinfo documentation](https://docs.rs/sysinfo/0.39.6/sysinfo/struct.ProcessRefreshKind.html)
+confirms start time remains available with optional refresh fields disabled.
+Two real-process regressions verify stable current identity and reject a matching
+PID with a different start time; the existing exclusive-owner Windows test passes.
+This reduces requested collection work; startup milliseconds, RAM savings and game
+FPS were **NOT RUN / NOT_EXECUTED** and no measured speedup is claimed.
+
+| Windows-first verification at the executed source revision | Result | Evidence |
+| --- | --- | --- |
+| Full source pipeline | PASS | 657 passed, 0 failed, 4 existing file-link skips; desktop now 64 tests |
+| TS6 compatibility route | PASS | 0 errors, 0 warnings; TS7 also passes in full source pipeline |
+| Dependency audit | PASS with existing warnings | npm clean; Cargo zero vulnerability-class findings, two GTK informational warnings retained |
+| Windows dependency selection | PASS | `cargo tree --locked --target x86_64-pc-windows-msvc`; glib, gtk and proc-macro-error absent from selected graph |
+| Installer/gameplay/four-client acceptance | NOT RUN | Existing package hold and acceptance boundaries retained |
+
+Logs are reproducible local outputs under ignored
+`workspace/dependency-maintenance/windows-efficiency-*`; they are not committed.
+File moves, deletions, consolidation, new ignores and dependency version changes:
+none in this bounded efficiency continuation. Cross-platform lockfile warnings
+remain visible; Windows focus does not authorize unsafe upstream overrides.
+
+### Earlier maintenance repairs
 
 - Split ordinary PresentMon CLI assertions from link fixtures. If Windows refuses
   a file symlink, the latter test exercises a real junction and reports that
@@ -224,12 +257,14 @@ check external URLs; package-manager/build tests validate the actual import grap
 
 ## Verification results
 
-All source pipeline results refer to `972b0e40440452d16ff5ee35678559afa66d84e8`.
+All source pipeline results refer to `bb588902f472ba6413325c12ab522e0a9908a339`.
+Bootstrap, strict install, unsupported-Node probe and upgrade-tooling evidence
+remain the earlier maintenance runs; those toolchain/manifests are unchanged.
 The final report/handoff delivery is a separate documentation-only commit.
 
 | Check | Result | Evidence / limitation |
 | --- | --- | --- |
-| Full npm run verify:source | PASS | 655 passed, 0 failed, 4 existing file-link cases skipped |
+| Full npm run verify:source | PASS | 657 passed, 0 failed, 4 existing file-link cases skipped |
 | Portable bootstrap | PASS | Previously executed verified bootstrap; pins unchanged during continuation |
 | Strict npm ci and npm ls --all | PASS | npm 12.2.0; both compiler routes installed |
 | Unsupported Node install probe | PASS | Node 24.14.1 dry run rejected with EBADENGINE |
@@ -241,7 +276,7 @@ The final report/handoff delivery is a separate documentation-only commit.
 | Frontend production build | PASS | Vite 8 / Rolldown production assets |
 | Core Cargo check --locked --all-targets | PASS | Windows MSVC toolchain |
 | Core Rust tests | PASS | 176 tests: 163 library, 4 guest-agent, 9 integration |
-| Desktop Cargo check and tests --locked --all-targets | PASS | 62 desktop unit tests |
+| Desktop Cargo check and tests --locked --all-targets | PASS | 64 desktop unit tests |
 | Desktop executable compilation | PASS | cargo build --locked; no GUI/game launched |
 | Core rustfmt | PASS | Full core package --all --check |
 | Whole-desktop rustfmt | PASS | Included in the existing desktop source route |

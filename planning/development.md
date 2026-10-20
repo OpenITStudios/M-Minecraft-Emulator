@@ -1,5 +1,21 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Windows-first efficiency — 20 October 2026
+
+**State: DONE for bounded desktop process inspection.** Source:
+`bb588902f472ba6413325c12ab522e0a9908a339`. The existing desktop instance owner
+now requests only its target PID and basic identity fields, replacing a full
+system/process refresh plus redundant refresh. PID/start-time identity and Windows
+exclusive handle semantics are preserved; no dependency or release format changes.
+Two real-process regressions were added. Full `npm run verify:source`: **657 passed,
+0 failed, 4 existing file-symlink skips**; desktop 64 tests. TS6 compatibility,
+formatting, Windows compilation and dependency audit also pass with the existing
+two cross-platform GTK informational warnings. Those crates are absent from the
+explicit Windows Cargo graph. The canonical [report](../docs/validation/dependency-modernization-2026-10-20.md)
+records exact evidence and unchanged exceptions. Actual startup/RAM/FPS gains,
+installer, gameplay and four-client acceptance remain NOT_EXECUTED. No CI, main,
+driver or account operations were performed.
+
 ## Dependency modernization and structure cleanup — 20 October 2026
 
 **State: DONE for supported Windows dependency/source maintenance**, with explicit
