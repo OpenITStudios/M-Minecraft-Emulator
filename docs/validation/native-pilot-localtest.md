@@ -9,9 +9,107 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Owned Windows engine campaign — 20 October 2026
+
+**Overall state: BLOCKED on native build prerequisites; four Minecraft NOT_EXECUTED.**
+The operator selected owned v1.18.6 first: one native Client 01 and three owned
+persistent profiles 02–04. The official two-client desktop pilot below remains
+the mounted implementation, not an automatic fallback for this campaign.
+No owned provider has been activated.
+
+Executed source revision: `8928602466f864e4acabb43e7982c2d29e2aa21a`.
+Baseline: `8c1c6b459b8d6a69bb5683200d1d1ef120247460`.
+This section owns campaign results; the dependency report retains dependency scope.
+
+| Check | Result | Actual evidence / reason |
+| --- | --- | --- |
+| Remote and checkout identity | PASS | Clean Local matched remote baseline before edits |
+| Exact source provenance | PASS | 1,627 files; pristine upstream unchanged; 11 C/C++ changes plus four exact project quoting fixes |
+| Full source pipeline | PASS | 662 passed: 261 Node, 161 Vitest, 240 Rust; 0 failed, 4 existing file-symlink skips |
+| Native C/C++ policy executables | PASS | MSVC Release build and three CTest tests: launcher parser, core identity/ABI matching, kernel box policy |
+| Native Win32 engine build | FAIL | MSBuild exit 1: resource.rc(10), RC1015, missing afxres.h (MFC); previous MASM/lib/mc path quoting failures corrected |
+| Native x64 user-mode and kernel builds | NOT_EXECUTED | Stopped after Win32 failure; inspected VS installation also lacks kernel WDK toolset |
+| Sixteen binaries / five resources / four licenses staged | NOT_EXECUTED | No complete successful native build report; no payload promoted |
+| Dependency audit | PASS with warnings | Zero vulnerability-class findings; existing two GTK informational warnings retained |
+| Four-process telemetry | PASS | Actual 30-second disposable Node captures under PowerShell 7 and Windows PowerShell 5.1; six samples per target; exited Client 03 remains UNKNOWN in five subsequent readings |
+| Signing / activation / owned operations | BLOCKED | No complete signed, Windows-accepted candidate; no driver, service or account changes |
+| Owned gameplay: one, two, then four | NOT_EXECUTED | Runtime unavailable; no login, world, independent input, recovery or multiplayer observation |
+| Four-client 60-minute soak, active 60 FPS | NOT_EXECUTED | No four-client game session or displayed-frame capture |
+| Background cap near 10 FPS | NOT_EXECUTED | No supported, measured vendor/API route selected; no FPS mutation added |
+
+The full engine attempt used VS2022 Build Tools 17.14, MSVC 14.44.35207,
+MSBuild 17.14.40.60911 and Windows SDK 10.0.26100.0. MFC headers and the
+WindowsKernelModeDriver10.0 platform toolset were unavailable in the inspected
+installation. No system components were installed. Signing credentials and Windows
+driver acceptance were not assessed; the incomplete build already blocks activation.
+
+The concrete prerequisite proposal is MFC v143 x86/x64
+(`Microsoft.VisualStudio.Component.VC.ATLMFC`) in the existing VS2022 Build Tools,
+plus WDK 26100.6584 and its VS integration, checking the SDK/WDK build-number pair
+before setup. Microsoft lists that kit for VS2022; do not install the default
+VS2026 kit into this build route. Sources:
+[Microsoft WDK downloads](https://learn.microsoft.com/en-us/windows-hardware/drivers/other-wdk-downloads)
+and [Build Tools component IDs](https://learn.microsoft.com/en-us/visualstudio/install/workload-component-id-vs-build-tools?view=vs-2022).
+This is a proposed system-component change, not driver installation or permission
+to reboot, replace Sandboxie, change signing policy or access game accounts.
+
+Builder repairs capture VS discovery status in a fresh strict PowerShell session,
+wait for the compiler rather than inherited descendants, and retain the process
+handle so Windows PowerShell 5.1 preserves its real exit code. Actual exit-7 and
+VS discovery regressions pass. The verifier reconstructs all four project fixes
+from pristine source; the eleven C/C++ transformation checks remain active.
+The standalone identity test uses a bounded copy without suppressing warnings.
+No upstream snapshot or driver runtime policy was modified.
+
+The existing sampler accepts four distinct explicit targets, pins creation times,
+keeps lost identities UNKNOWN, and publishes sanitized schema-3 CPU/RAM reports.
+Schemas 1/2 remain compatible. It neither authenticates owned Minecraft targets
+nor measures FPS. Usage belongs to the
+[Windows tooling guide](../../tooling/acceptance/windows/README.md).
+
+Machine-local logs remain ignored under `workspace/builds/owned-20261020-134617/`
+and `workspace/dependency-maintenance/owned-four-*`. Earlier failed compiler outputs
+were preserved beneath their build-report directories before clean retries.
+No binary, account identity, private world, token, certificate or raw host report
+is committed.
+
+### Remaining implementation and acceptance sequence
+
+1. Supply MFC and matching WDK through separately authorized system setup; rerun
+   the canonical builder from clean native outputs at one exact Local revision.
+   Do not bypass compiler errors or stage partial files.
+2. Verify the complete candidate's hashes, ABI, Windows-accepted signatures,
+   service provenance and recovery instructions. Review a concrete activation
+   proposal before driver/service changes. Never silently replace official
+   SbieDrv/SbieSvc. Reduced-containment settings require explicit review and do
+   not prove WAM/account isolation.
+3. Implement owned create/launch/inspect/stop, fresh provider/profile/PID/start-time/
+   session attribution, cross-process admission and partial-failure handling in
+   existing runtime/desktop owners. **Those operations and owned typed bridge
+   integration are not implemented by this build/telemetry batch.** Slot admission
+   stays blocked; caller flags, checksums or process names cannot authorize it.
+4. Prove one owned client, then two, then four with manually signed-in distinct
+   licensed accounts, responsive worlds and independent input. Test native↔owned
+   and owned↔owned multiplayer, rejoin and sequential client restart without
+   session loss or cross-account contamination. Stop escalation on failure.
+5. Run four clients for 60 minutes with matching version, graphics and world
+   conditions. Rotate focus through each client and capture displayed FPS during
+   focused 60-second post-loading windows to evaluate the active 60-FPS target.
+   Inter-present data alone cannot award displayed-FPS PASS. Record CPU/RAM,
+   available GPU/VRAM diagnostics, crash/freeze and memory growth; no arbitrary
+   RAM/GPU threshold is added. Background clients must remain responsive; a supported
+   cap near 10 FPS is optional and reported separately.
+
+**Delivery is partial, not full plan completion.** Build/signing/runtime/gameplay
+prerequisites remain. GitHub Actions stays OFF, main untouched and VMware paused.
+
 **Scope:** developer-mode local feasibility check for **one native Minecraft Education Client 01 + one Sandboxie Plus Client 02**, on a **single Windows 10/11 x64 PC**. Does not install/replace the legacy VMware manager. Does not start/delete/reset VMware guests and does not automate Microsoft sign-in. The goal of four independently playable licensed sessions is **NOT PROVEN**.
 
-## Optional CI debug binary — UI-only smoke
+## Historical CI debug binary — UI-only smoke
+
+**CI is disabled.** The following describes historical artifacts only and is not
+a current download/build route. Use the existing manual toolchain for source work;
+never restore an Actions workflow to obtain a binary.
 
 A successful automatic Windows Full CI run for `Local` can upload a `localtest-debug-<SHA>` **unsigned debug executable** after all twelve source stages and compile-only pass. This is the **shortest first localtest**: no portable developer toolchain or MSVC/WDK build is needed to *attempt* UI startup. Use [CI Debug Candidate](./ci-debug-candidate.md) to download the exact-SHA artifact into `workspace/downloads/`, extract only the expected three files into a new `workspace/packages/debug-<SHA>/`, verify the manifest SHA-256, and try opening/closing the manager on Windows 10/11 x64 with WebView2. It is not an installer, signed release, Sandboxie distribution or Minecraft gameplay proof. Do **not** bypass OS security warnings. The normal full developer localtest route remains `DEV.cmd bootstrap` → `DEV.cmd doctor` → `DEV.cmd preflight` → `DEV.cmd dev`.
 

@@ -15,12 +15,16 @@ This is a **navigation guide**, not a second implementation registry. The sole c
 
 **Current native source (15 October 2026):** the editable Sandboxie-derived
 v1.18.6 implementation is **complete as source** in `engine/isolation-owned/`
-(1,627 files, 11 directly modified C/C++ files). The unmodified reference is
+(1,627 files, 11 directly modified C/C++ files plus four reviewed project-path
+quoting fixes). The unmodified reference is
 `engine/isolation-candidates/sandboxie-v1.18.6/`. The active exact-source
 verifier is `tooling/isolation-source/verify-owned-v1186.mjs` and the
 **build-only** Windows entrypoint is `tooling/isolation-source/build-owned-v1186.ps1`.
-Neither native compilation, driver installation nor owned-engine gameplay
-has been demonstrated. See [current implementation sequence](../../planning/development.md).
+The full native build was attempted on 20 October 2026 and remains incomplete:
+Win32 stops at missing MFC `afxres.h`; the kernel WDK toolset is also unavailable.
+Three standalone C/C++ policy tests compile and pass with MSVC; they are not the
+real driver build. Driver installation and owned-engine gameplay remain unexecuted.
+See [current implementation sequence](../../planning/development.md).
 The pinned v1.18.5 Gitlink, independent fork scripts, overlays, assemblers
 and Windows transaction prototypes listed elsewhere in this guide are
 **historical/reference-only** until they are explicitly migrated to v1.18.6;

@@ -1,5 +1,10 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Owned engine / four clients — 20 October 2026
+
+**BLOCKED:** MFC/WDK unavailable; owned runtime integration and gameplay remain incomplete.
+Build fixes and four-PID telemetry landed. See [campaign results](../docs/validation/native-pilot-localtest.md).
+
 ## Windows-first efficiency — 20 October 2026
 
 **State: DONE for bounded desktop process inspection.** Source:

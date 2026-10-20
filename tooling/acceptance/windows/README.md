@@ -68,6 +68,33 @@ powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-native-perf
   -DurationSeconds 3600 -SampleIntervalSeconds 5
 ```
 
+### Four-client CPU/RAM capture
+
+After independently verifying four existing game identities in an authorized
+Windows session, extend the same collector with both additional PID parameters:
+
+```powershell
+powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-native-performance.ps1 `
+  -NativePid <CLIENT01_PID> -IsolatedPid <CLIENT02_PID> `
+  -Client03Pid <CLIENT03_PID> -Client04Pid <CLIENT04_PID> `
+  -DurationSeconds 3600 -SampleIntervalSeconds 5
+npm run native-performance:review -- <CAPTURE_JSON>
+```
+
+Both extra parameters are required together and all four PIDs must be distinct.
+The capture uses schema 3 and retains separate CPU/RAM metrics for slots 01–04;
+each identity is pinned to its initial creation time. A missing/inaccessible target
+stays UNKNOWN for the rest of the capture. Output includes no PID/account data.
+The old two-client commands keep schemas 1/2 unchanged. Schema 3 supports individual
+review only; comparison with another capture and the two-client `-GpuSnapshot`
+option are rejected rather than producing incomplete four-client evidence.
+
+This measures four manually selected processes, without provider attribution,
+process-tree totals, FPS, account isolation or multiplayer certification.
+Actual 30-second collector checks with disposable Node processes passed in
+PowerShell 7 and Windows PowerShell 5.1, including permanent identity loss after
+one process exited. Those checks are **not Minecraft or a 60-minute acceptance run**.
+
 ### Optional GPU counter snapshot (diagnostic only)
 
 The default command above remains lightweight, uses **schema 1**, and does

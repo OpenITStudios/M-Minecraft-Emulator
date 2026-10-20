@@ -10,7 +10,7 @@ load, sign, install or switch to the owned engine**.
 | Role | Canonical owner | Allowed use |
 | --- | --- | --- |
 | Unchanged comparison source | `engine/isolation-candidates/sandboxie-v1.18.6/` | Read-only byte/tree reference (1,627 files) |
-| Editable native source | `engine/isolation-owned/` | One owned v1.18.6 C/C++ source tree (1,627 files, 11 reviewed modifications) |
+| Editable native source | `engine/isolation-owned/` | One owned v1.18.6 tree (1,627 files; 11 C/C++ changes plus four exact build-project path fixes) |
 | Build component contract | `engine/isolation-native/owned-runtime/build-profile-v1186.json` | Exactly 3 stages, 16 native binaries, 5 resources and 4 original licenses |
 | Source verification | `tooling/isolation-source/verify-owned-v1186.mjs` | Read-only exact-source and upstream provenance check |
 | Windows build (optional, build-only) | `tooling/isolation-source/build-owned-v1186.ps1` | Compile only; 3 MSBuild stages, WDK required |
@@ -41,6 +41,31 @@ assembler refuse paths outside `workspace/builds/` and
 bounded artifact provenance and reparse-point checks. Neither command
 installs or starts a driver, replaces official Sandboxie, creates boxes,
 changes accounts or proves multiplayer.
+
+## Current Windows build evidence — 20 October 2026
+
+The owned-engine campaign prioritizes build/signing before switching the desktop.
+At `8928602466f864e4acabb43e7982c2d29e2aa21a`, actual Win32 MSBuild exits 1:
+`resource.rc(10): fatal error RC1015: cannot open include file 'afxres.h'`.
+VS2022 v143 and Windows SDK 10.0.26100.0 are present; MFC headers and the
+WindowsKernelModeDriver10.0 VS toolset are unavailable in the inspected installation.
+No system components were installed. x64 and kernel stages, complete 16-binary
+assembly, signing and activation remain unexecuted. The builder keeps failure
+reports, compiler exit status and logs; do not reuse partial build products.
+
+Four reviewed project changes quote MASM, import-library and message-compiler
+paths, including checkout paths containing spaces. The source verifier reconstructs
+these exact transformations from pristine upstream separately from the eleven
+C/C++ security/identity modifications. Unexpected edits still fail verification.
+Standalone C/C++ policies pass actual MSVC compilation and all three CTest tests:
+
+```powershell
+npm run isolation-native:test-owned-start
+```
+
+That command does not compile or load the real kernel driver. Full campaign
+results and remaining work live in the existing
+[Windows validation procedure](../../docs/validation/native-pilot-localtest.md).
 
 ## Not active — historical implementations
 
