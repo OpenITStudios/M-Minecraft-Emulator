@@ -115,6 +115,68 @@ were preserved beneath their build-report directories before clean retries.
 No binary, account identity, private world, token, certificate or raw host report
 is committed.
 
+### Signing and real desktop-inspector review — 20 October 2026
+
+Review source: `f6c0b2308dcf06ae19df777cbec12b7874fc8b4d`.
+The reviewed unsigned artifact remains the successful build at
+`f529d59fda778be50cd3e874374a5546c32dce29`; this review did not rebuild or replace it.
+Observed host OS: Windows 11 Pro, build 26100. No host/account identifiers are stored.
+
+| Review | Result | Evidence / boundary |
+| --- | --- | --- |
+| Existing desktop Rust inspector on actual staged payload | PASS | Explicit isolation-source:inspect-candidate test verifies all 25 files and asserts provider/load/gameplay/install claims remain false |
+| Existing native SCM host probe | OBSERVED / activation BLOCKED | SbieSvc and SbieDrv registrations PRESENT; state BLOCKED_SERVICE_NAMESPACE_IN_USE; names alone do not authenticate an owner |
+| SDK kernel signing verification | FAIL, expected for unsigned candidate | SignTool verify /kp /v exits 1: No signature found; no signing operation executed |
+| Upstream reference INF qualification | FAIL | InfVerif 10.0.26100.6584 /w exits 1627; source reference is not a usable current submission package |
+| Full source pipeline at review source | PASS | 663 passed, 0 failed; four existing Node file-symlink skips and one default-ignored real-payload Rust test |
+| Explicit real-payload Rust test at review source | PASS | The default-ignored test is separately executed successfully against the real build; no artifact dependency added to routine source verification |
+
+The root command uses the existing production candidate inspector and SCM probe;
+it adds no app IPC, installer switch, lifecycle manager or readiness database.
+It reads the path explicitly selected with MIVUBI_TEST_OWNED_PAYLOAD, checks the
+actual payload and current service namespace, and never loads its DLL/driver,
+starts/stops services or changes account state. The selected path is cleared from
+the test process environment afterward. Command usage belongs to the
+[native source guide](../../tooling/isolation-source/README.md).
+
+**Signing requirements checked against current Microsoft documentation:** new
+kernel drivers use the Hardware Developer Program signing path; an EV certificate
+alone is not a Windows kernel signature. Microsoft recommends HLK-tested dashboard
+signing for certified distribution. Its attestation route is described for testing,
+requires dashboard enrollment/EV credentials, and does not establish compatibility
+or Windows certification. It must not be treated as general production acceptance.
+References: [kernel signing policy](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/kernel-mode-code-signing-policy--windows-vista-and-later-),
+[signing offerings](https://learn.microsoft.com/en-us/windows-hardware/drivers/dashboard/driver-signing-offerings),
+[attestation submission requirements](https://learn.microsoft.com/en-us/windows-hardware/drivers/dashboard/code-signing-attestation),
+and [SignTool verification policy](https://learn.microsoft.com/en-us/windows/win32/seccrypto/signtool).
+
+The 25-file runtime staging manifest is **not a signing submission CAB**. It does
+not ship an INF, CAT or debug PDB. The upstream source reference
+`engine/isolation-owned/Sandboxie/core/drv/SbieDrv.inf` is not referenced by the
+current driver project/install helper. Its stale DriverVer=5.23.5, absent decorated
+primitive-install sections/PnpLockdown, DIRID requirements and placeholder
+ServiceBinary=examplefilesystem.sys prevent using it as a current submission INF.
+The six observed verifier errors are 1423, 1420, 1324, 1217, 1322 and 1421.
+No source INF was stamped or rewritten, and no alternate INF-based installer was
+introduced alongside the existing KmdUtil design. Submission packaging needs its
+own review against the actual service/driver installation contract and legal
+publisher identity; upstream copyright notices remain intact.
+
+No partner account was accessed, no certificate store/private key was scanned,
+and no upload, enrollment, purchase or signing was performed. Availability of the
+operator's Hardware Developer Program access and EV certificate is **NOT AVAILABLE**,
+explicitly confirmed by the operator in this continuation. Official signing and
+owned-driver activation are therefore externally blocked under the selected
+no-bypass route. Unsigned binaries and occupied service names independently block
+activation. Source-only work can continue; four owned clients cannot be accepted
+from this unsigned build. A future signing result must
+be separately verified and bound to new artifact hashes; it must not overwrite
+this unsigned candidate or turn its installation flags on.
+
+Review logs are local ignored outputs under
+`workspace/dependency-maintenance/owned-signing-*`. These are observations, not an
+authorization to install a driver, replace a service or claim playable clients.
+
 ### Remaining implementation and acceptance sequence
 
 1. Preserve this unsigned candidate and its exact source/build hashes for signing

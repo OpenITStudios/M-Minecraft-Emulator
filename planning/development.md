@@ -2,7 +2,7 @@
 
 ## Owned engine / four clients — 20 October 2026
 
-**ACTIVE:** owned build/staging pass (16 binaries); unsigned, runtime/gameplay pending.
+**BLOCKED:** EV/Hardware Dev access unavailable; inspector passes, signing/SCM block gameplay.
 Build fixes and four-PID telemetry landed. See [campaign results](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
