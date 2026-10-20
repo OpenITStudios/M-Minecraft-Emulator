@@ -2,7 +2,7 @@
 
 ## Owned manager / independence — 20 October 2026
 
-**ACTIVE** (`aada461`): four retained tab leases, shell flags and foreground recovery built. Source 707 PASS; synthetic recovery PASS; four-window identity/switch checks PASS. Blank/rendering/input, Alt-Tab and visual one-taskbar acceptance remain unproven; gameplay FAIL stands. Next: verify real presentation. [Evidence](../docs/validation/native-pilot-localtest.md).
+**ACTIVE** (`451e138`): four tab leases/shell flags built; source 707 PASS at `aada461`, 12-switch checks PASS, subsequent restart FAIL (game exits UNKNOWN). Partial startup/alert overflow regression fixed; 175 UI tests/build PASS. Rendering/input, Alt-Tab and single taskbar unaccepted. Next: diagnose restart/presentation. [Evidence](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
 

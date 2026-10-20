@@ -11,6 +11,30 @@ lifecycle: ACTIVE
 
 ## Four retained tabs and shell eligibility — 20 October 2026, 21:08–21:16 WIB
 
+### Subsequent restart failure and partial-startup correction, 21:17–21:20 WIB
+
+**FAIL: restart acceptance.** After the successful campaigns and normal restoration/
+manager restart, only two game processes remained with ordinary separate-window
+shell flags; the next provider observation found only the native game. No matching
+Application 1000/1001/1002 record was found in the inspected 15-minute interval.
+Exit cause and whether any closure was external remain **UNKNOWN**. The earlier
+four-window PASS is a point/campaign observation, not stable restart acceptance.
+No visual one-taskbar or crash-resolution claim is made.
+
+Source correction `451e1387a05975940158b00bbe3661941c403a49` fixes a separately
+reproduced startup blindspot: one failed admission aborted all later sessions.
+The mounted mock injected a first-session exit and timed out waiting for the next
+tab (**FAIL**); per-session failure handling then admitted the next tab (**PASS**).
+That error banner also exposed viewport overflow; flex allocation now preserves
+the play area at all three tested sizes, including error state. Typecheck has
+0 errors/0 warnings, 175 frontend tests and the rebuilt Windows debug executable
+PASS. Rust product code is unchanged from `aada461`; the full 707-test result
+above belongs to that prior implementation, not a new full-suite run at `451e138`.
+The latest build was started normally with no CDP listener on port 9223. Only a
+responsive native process was subsequently observed; automatic real-game adoption,
+four clients, rendered input and restart stability remain unaccepted at this revision.
+This partial-startup fix does not explain or fix the observed game exits.
+
 Implementation revision: `aada461865317ec8059b3becf4c46b9fcb9357b5`, based on
 `1d21cb7b89238e3ac7405d2194ff4a54215e6e89`. This section supersedes the historical
 single-lease descriptions below. The collector's delivery follow-up waits for
