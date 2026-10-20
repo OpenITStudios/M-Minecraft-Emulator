@@ -11,6 +11,7 @@
   export let selectedClient:ClientId|null=null;
   export let onPresent:((client:ClientId,target:OwnedProcess)=>Promise<void>)|null=null;
   export let onRelease:(()=>Promise<void>)|null=null;
+  export let onResume:(()=>Promise<void>)|null=null;
   let snapshot=initialSnapshot;
   let error="",notice="",details="",activeClient="",activeOperation="";
   let licensed=false,compatibility=false;
@@ -32,6 +33,7 @@
     const client=setupClient;if(!client)return;setupDialog.close();compatibility=true;
     await act(client,"Create");
     if(current&&snapshot.clients.find(s=>s.clientId===client)?.settingsVerified)await act(client,"Launch");
+    if(!current)await onResume?.();
   }
   let current=true;
   let pending:Partial<Record<ClientId,boolean>>={};
@@ -39,6 +41,10 @@
   $: snapshot=initialSnapshot;
   $: if(initialSnapshot)current=true;
   export async function closeClient(client:ClientId,target:OwnedProcess){await act(client,'Close',target);}
+  export async function activateClient(client:ClientId){
+    const target=client==='01'?snapshot.nativeProcesses[0]:snapshot.clients.find(slot=>slot.clientId===client)?.processes[0];
+    if(target)await play(client,target);else await openClient(client);
+  }
   async function play(client:ClientId,target:OwnedProcess){
     if(!onPresent){await act(client,'Focus',target);return;}
     if(operationBusy||externalBusy)return;
@@ -121,5 +127,5 @@
   <h2 id="um-profile-title">Prepare Minecraft {setupClient}</h2>
   <p>We will create its persistent game profile, then open Minecraft. Existing profiles and worlds will be preserved.</p>
   <p>The Minecraft compatibility profile reduces process and COM containment so the game can work with Windows services. It does not prove account isolation.</p>
-  <div><button class="cm-button cm-secondary" on:click={()=>setupDialog.close()}>Cancel</button><button class="cm-button" on:click={createAndOpen}>Prepare and open</button></div>
+  <div><button class="cm-button cm-secondary" on:click={async()=>{setupDialog.close();try{await onResume?.();}catch(e){const issue=operationIssue(e);error=issue.message;details=issue.details;}}}>Cancel</button><button class="cm-button" on:click={createAndOpen}>Prepare and open</button></div>
 </dialog>

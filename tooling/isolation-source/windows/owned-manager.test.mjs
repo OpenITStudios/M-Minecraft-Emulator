@@ -41,6 +41,12 @@ test('native attribution crosses PowerShell without null-to-empty profile coerci
   assert.equal(r.status,0,r.stdout+r.stderr);
 });
 
+test('window discovery retains hidden tabs and rejects ambiguous main windows',{skip:process.platform!=='win32'},()=>{
+  const code=probe.split("Add-Type -TypeDefinition @'")[1].split("'@")[0];
+  const r=ps(`$ErrorActionPreference='Stop';Add-Type -TypeDefinition @'\n${code}\n'@;Add-Type -AssemblyName System.Windows.Forms;$one=[Windows.Forms.Form]::new();$two=[Windows.Forms.Form]::new();try{$one.Width=480;$one.Height=320;$one.Show();[Windows.Forms.Application]::DoEvents();$handle=$one.Handle;if([MivubiManagerWindows]::GameWindow($PID) -ne $handle){throw 'Visible window lost'};$one.Hide();if([MivubiManagerWindows]::GameWindow($PID) -ne $handle){throw 'Hidden tab lost'};$two.Width=480;$two.Height=320;$two.Show();try{[MivubiManagerWindows]::GameWindow($PID);throw 'Ambiguous windows accepted'}catch{if($_.Exception.ToString() -notmatch 'Ambiguous Education'){throw}}}finally{$one.Dispose();$two.Dispose()};exit 0`);
+  assert.equal(r.status,0,r.stdout+r.stderr);
+});
+
 test('shared Education resolver rejects another launcher target without launching',{skip:process.platform!=='win32'},()=>{
   const file=fileURLToPath(new URL('./education-target.ps1',import.meta.url)).replaceAll("'","''");
   const r=ps(`$ErrorActionPreference='Stop';. '${file}';try{Assert-ManagerRegisteredAppId '{6D809377-6AF0-444B-8957-A3773F02200E}\\Minecraft.Windows.exe' 'C:\\wrong\\Minecraft.Windows.exe';throw 'foreign launcher accepted'}catch{if($_.Exception.ToString() -notmatch 'different Minecraft installation'){throw}};exit 0`);

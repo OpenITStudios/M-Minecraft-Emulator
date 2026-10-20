@@ -17,6 +17,14 @@ pub fn run() {
     };
 
     let result = tauri::Builder::default()
+        .setup(|app|{
+            #[cfg(windows)] {
+                use tauri::Manager;
+                let window=app.get_webview_window("main").ok_or_else(||std::io::Error::other("Main workspace window missing"))?;
+                workspace_foreground::start(window.as_ref().window())?;
+            }
+            Ok(())
+        })
         // Legacy VM/Tauri routes are deliberately not registered in the
         // native-first pilot. Source and account-bearing guest data remain.
         // Re-enabling a route requires an explicit product decision.
@@ -24,6 +32,7 @@ pub fn run() {
             commands::native_clients::desktop_present_workspace,
             commands::native_clients::desktop_update_workspace,
             commands::native_clients::desktop_release_workspace,
+            commands::native_clients::desktop_suspend_workspace,
             commands::native_clients::desktop_manager_settings,
             commands::native_clients::desktop_owned_test_operation,
             commands::native_clients::desktop_select_owned_test_session,
@@ -74,10 +83,136 @@ pub fn run() {
             }
         })
         .run(tauri::generate_context!());
+    #[cfg(windows)]
+    workspace_foreground::shutdown();
     let _ = crate::engine::workspace_surface::release();
     // Unhook from the worker's installation thread before exit.
     crate::engine::instance_focus_events::shutdown();
     result.expect("failed to run Minecraft Instance Manager desktop runtime");
+}
+
+#[cfg(windows)]
+mod workspace_foreground {
+    use std::{
+        io, ptr,
+        sync::{
+            atomic::{AtomicU64, Ordering},
+            mpsc, Mutex, OnceLock,
+        },
+        thread::{self, JoinHandle},
+        time::Duration,
+    };
+    use windows_sys::Win32::{
+        Foundation::HWND,
+        System::Threading::GetCurrentThreadId,
+        UI::{
+            Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK},
+            WindowsAndMessaging::*,
+        },
+    };
+    static WINDOW: OnceLock<tauri::Window> = OnceLock::new();
+    static HANDLE: AtomicU64 = AtomicU64::new(0);
+    static WORKER: Mutex<Option<(u32, JoinHandle<()>)>> = Mutex::new(None);
+    fn accepts(event: u32, window: u64, object: i32, child: i32, manager: u64) -> bool {
+        manager != 0
+            && window == manager
+            && event == EVENT_SYSTEM_FOREGROUND
+            && object == 0
+            && child == 0
+    }
+    unsafe extern "system" fn changed(
+        _: HWINEVENTHOOK,
+        event: u32,
+        window: HWND,
+        object: i32,
+        child: i32,
+        _: u32,
+        _: u32,
+    ) {
+        // Observe only the manager's own foreground window; never inspect external titles/PIDs.
+        if accepts(
+            event,
+            window as usize as u64,
+            object,
+            child,
+            HANDLE.load(Ordering::Acquire),
+        ) {
+            if let Some(window) = WINDOW.get() {
+                super::queue_workspace_update(window.clone());
+            }
+        }
+    }
+    pub fn start(window: tauri::Window) -> io::Result<()> {
+        let handle = window.hwnd().map_err(io::Error::other)?.0 as usize as u64;
+        WINDOW
+            .set(window)
+            .map_err(|_| io::Error::other("Workspace foreground watcher already initialized"))?;
+        HANDLE.store(handle, Ordering::Release);
+        let (ready, receiver) = mpsc::sync_channel(1);
+        let worker = thread::spawn(move || unsafe {
+            let mut message: MSG = std::mem::zeroed();
+            PeekMessageW(&mut message, ptr::null_mut(), 0, 0, PM_NOREMOVE);
+            let hook = SetWinEventHook(
+                EVENT_SYSTEM_FOREGROUND,
+                EVENT_SYSTEM_FOREGROUND,
+                ptr::null_mut(),
+                Some(changed),
+                std::process::id(),
+                0,
+                WINEVENT_OUTOFCONTEXT,
+            );
+            if hook.is_null() {
+                let _ = ready.send(Err(io::Error::last_os_error()));
+                return;
+            }
+            if ready.send(Ok(GetCurrentThreadId())).is_ok() {
+                while GetMessageW(&mut message, ptr::null_mut(), 0, 0) > 0 {
+                    TranslateMessage(&message);
+                    DispatchMessageW(&message);
+                }
+            }
+            UnhookWinEvent(hook);
+        });
+        match receiver.recv_timeout(Duration::from_secs(3)) {
+            Ok(Ok(id)) => {
+                *WORKER
+                    .lock()
+                    .map_err(|_| io::Error::other("Workspace watcher state unavailable"))? =
+                    Some((id, worker));
+                Ok(())
+            }
+            Ok(Err(error)) => {
+                let _ = worker.join();
+                Err(error)
+            }
+            Err(_) => Err(io::Error::other(
+                "Workspace foreground watcher startup timed out",
+            )),
+        }
+    }
+    pub fn shutdown() {
+        HANDLE.store(0, Ordering::Release);
+        if let Ok(mut worker) = WORKER.lock() {
+            if let Some((id, join)) = worker.take() {
+                if unsafe { PostThreadMessageW(id, WM_QUIT, 0, 0) } != 0 {
+                    let _ = join.join();
+                }
+            }
+        }
+    }
+    #[test]
+    fn only_manager_foreground_events_can_restore_the_surface() {
+        assert!(accepts(EVENT_SYSTEM_FOREGROUND, 17, 0, 0, 17));
+        for (event, window, object, child, manager) in [
+            (EVENT_SYSTEM_FOREGROUND, 18, 0, 0, 17),
+            (EVENT_SYSTEM_FOREGROUND, 17, 1, 0, 17),
+            (EVENT_SYSTEM_FOREGROUND, 17, 0, 1, 17),
+            (EVENT_OBJECT_SHOW, 17, 0, 0, 17),
+            (EVENT_SYSTEM_FOREGROUND, 0, 0, 0, 0),
+        ] {
+            assert!(!accepts(event, window, object, child, manager));
+        }
+    }
 }
 
 #[cfg(windows)]

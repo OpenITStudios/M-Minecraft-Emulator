@@ -10,5 +10,6 @@ export function workspaceViewport(rect:WorkspaceRectangle,pixelRatio=1):Workspac
 export const workspaceSurface={
   present:(sessionDirectory:string,clientId:ClientId,target:OwnedProcess,rect:WorkspaceRectangle)=>invokeRuntime<void>('desktop_present_workspace',{sessionDirectory,clientId,target,viewport:workspaceViewport(rect,window.devicePixelRatio)}),
   update:(rect:WorkspaceRectangle)=>invokeRuntime<void>('desktop_update_workspace',{viewport:workspaceViewport(rect,window.devicePixelRatio)}),
-  release:()=>invokeRuntime<void>('desktop_release_workspace'),
+  release:(target:OwnedProcess|null=null)=>invokeRuntime<void>('desktop_release_workspace',{target}),
+  suspend:()=>invokeRuntime<boolean>('desktop_suspend_workspace'),
 };

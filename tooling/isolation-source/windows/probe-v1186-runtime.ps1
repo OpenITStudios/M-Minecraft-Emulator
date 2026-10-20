@@ -107,6 +107,25 @@ public static class MivubiRuntimeProbe {
   }
 }
 public static class MivubiManagerWindows {
+  delegate bool EnumWindow(IntPtr window,IntPtr state);
+  [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindow callback,IntPtr state);
+  [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr window,uint relation);
+  [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr window,out Rect rect);
+  [DllImport("user32.dll",SetLastError=true)] static extern IntPtr SendMessageTimeoutW(IntPtr window,uint message,UIntPtr w,IntPtr l,uint flags,uint timeout,out UIntPtr result);
+  public static bool WindowResponding(IntPtr window) {
+    UIntPtr result;
+    return window!=IntPtr.Zero && IsWindow(window) && SendMessageTimeoutW(window,0,UIntPtr.Zero,IntPtr.Zero,2,500,out result)!=IntPtr.Zero;
+  }
+  public static IntPtr GameWindow(int pid) {
+    IntPtr found=IntPtr.Zero;int count=0;
+    EnumWindows(delegate(IntPtr window,IntPtr state){uint actual;Rect rect;
+      GetWindowThreadProcessId(window,out actual);
+      if(actual==pid && GetWindow(window,4)==IntPtr.Zero && GetWindowRect(window,out rect) && rect.Right-rect.Left>=160 && rect.Bottom-rect.Top>=120){found=window;count++;}
+      return true;
+    },IntPtr.Zero);
+    if(count>1)throw new Exception("Ambiguous Education top-level windows");
+    return found;
+  }
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window,out uint pid);
   [DllImport("user32.dll")] static extern bool IsWindow(IntPtr window);
   [DllImport("user32.dll")] static extern bool IsIconic(IntPtr window);

@@ -42,6 +42,7 @@ struct Rectangle {
 struct Saved {
     target: OwnedProcess,
     style: i64,
+    extended_style: i64,
     rect: Rectangle,
     manager_pid: u32,
 }
@@ -317,6 +318,7 @@ mod native {
             Ok(Saved {
                 target,
                 style: GetWindowLongPtrW(window, GWL_STYLE) as i64,
+                extended_style: GetWindowLongPtrW(window, GWL_EXSTYLE) as i64,
                 rect: Rectangle {
                     x: rect.left,
                     y: rect.top,
@@ -348,6 +350,19 @@ mod native {
             let presentation_style =
                 current_style & !((WS_CAPTION | WS_THICKFRAME | WS_MAXIMIZE) as i64);
             let frame_changed = current_style != presentation_style;
+            let shell_style = GetWindowLongPtrW(window, GWL_EXSTYLE) as i64;
+            let managed_shell = (shell_style & !(WS_EX_APPWINDOW as i64)) | WS_EX_TOOLWINDOW as i64;
+            if shell_style != managed_shell {
+                ShowWindow(window, SW_HIDE);
+                SetLastError(0);
+                let previous = SetWindowLongPtrW(window, GWL_EXSTYLE, managed_shell as isize);
+                if previous == 0 && GetLastError() != 0 {
+                    return Err(io::Error::other(format!(
+                        "Workspace shell adoption: {}",
+                        io::Error::last_os_error()
+                    )));
+                }
+            }
             if frame_changed {
                 style(window, presentation_style)?;
             }
@@ -407,6 +422,19 @@ mod native {
             if focus && raise && GetForegroundWindow() != window {
                 SetForegroundWindow(window);
             }
+            // A matching rectangle does not prove that the manager is not covering the game.
+            // Check only while our workspace is foreground; unrelated applications may cover it.
+            if raise {
+                let hit = WindowFromPoint(POINT {
+                    x: rect.x + rect.width / 2,
+                    y: rect.y + rect.height / 2,
+                });
+                if GetAncestor(hit, GA_ROOT) != window {
+                    return Err(io::Error::other(
+                        "Workspace game is covered; presentation was not confirmed",
+                    ));
+                }
+            }
         }
         Ok(())
     }
@@ -444,6 +472,20 @@ mod native {
         };
         unsafe {
             let frame_mask = (WS_CAPTION | WS_THICKFRAME | WS_MAXIMIZE) as i64;
+            let shell_mask = (WS_EX_APPWINDOW | WS_EX_TOOLWINDOW) as i64;
+            let shell = GetWindowLongPtrW(window, GWL_EXSTYLE) as i64;
+            let restored_shell = (shell & !shell_mask) | (saved.extended_style & shell_mask);
+            if shell != restored_shell {
+                ShowWindow(window, SW_HIDE);
+                SetLastError(0);
+                let previous = SetWindowLongPtrW(window, GWL_EXSTYLE, restored_shell as isize);
+                if previous == 0 && GetLastError() != 0 {
+                    return Err(io::Error::other(format!(
+                        "Workspace shell recovery: {}",
+                        io::Error::last_os_error()
+                    )));
+                }
+            }
             let current_style = GetWindowLongPtrW(window, GWL_STYLE) as i64;
             style(
                 window,
@@ -476,7 +518,7 @@ mod native {
         }
         Ok(())
     }
-    fn retired(target: &OwnedProcess) -> bool {
+    pub(super) fn retired(target: &OwnedProcess) -> bool {
         unsafe {
             let Some(key) = super::super::instance_identity::parse_window_identity(
                 target.pid,
@@ -576,6 +618,9 @@ mod native {
     pub(super) fn minimized(_: u64) -> io::Result<bool> {
         unavailable()
     }
+    pub(super) fn retired(_: &OwnedProcess) -> bool {
+        false
+    }
 }
 
 mod controller {
@@ -656,22 +701,98 @@ mod controller {
             }
         }
     }
-    static SURFACE: Mutex<Option<Lease>> = Mutex::new(None);
+    struct Surfaces {
+        active: Option<Lease>,
+        parked: Vec<Lease>,
+        suspended: bool,
+    }
+    static SURFACE: Mutex<Surfaces> = Mutex::new(Surfaces {
+        active: None,
+        parked: Vec::new(),
+        suspended: false,
+    });
+    fn same(lease: &Lease, target: &OwnedProcess) -> bool {
+        lease.saved.as_ref().is_some_and(|s| {
+            s.target.pid == target.pid
+                && s.target.created_file_time == target.created_file_time
+                && s.target.session_id == target.session_id
+                && s.target.window_handle == target.window_handle
+        })
+    }
     pub fn is_active() -> bool {
         SURFACE
             .try_lock()
-            .map(|state| state.is_some())
+            .map(|s| s.active.is_some() || !s.parked.is_empty())
             .unwrap_or(true)
     }
     pub fn release() -> io::Result<()> {
         let mut state = SURFACE
             .lock()
             .map_err(|_| io::Error::other("Workspace state unavailable"))?;
-        if let Some(lease) = state.as_mut() {
-            lease.stop()?;
+        let mut error = None;
+        if let Some(active) = state.active.as_mut() {
+            match active.stop() {
+                Ok(()) => state.active = None,
+                Err(e) => error = Some(e),
+            }
         }
-        *state = None;
+        state.parked.retain_mut(|lease| match lease.stop() {
+            Ok(()) => false,
+            Err(e) => {
+                if error.is_none() {
+                    error = Some(e);
+                }
+                true
+            }
+        });
+        if let Some(error) = error {
+            return Err(error);
+        }
+        state.suspended = false;
         Ok(())
+    }
+    pub fn suspend() -> io::Result<bool> {
+        let mut state = SURFACE
+            .lock()
+            .map_err(|_| io::Error::other("Workspace state unavailable"))?;
+        if let Some(lease) = state.active.as_mut() {
+            if lease.child.try_wait()?.is_some()
+                || lease
+                    .saved
+                    .as_ref()
+                    .is_some_and(|saved| native::retired(&saved.target))
+            {
+                lease.stop()?;
+                state.active = None;
+            }
+        }
+        if let Some(lease) = state.active.as_mut() {
+            if !matches!(lease.send(Command::Hide)?, Reply::Hidden) {
+                return Err(io::Error::other("Surface suspend failed"));
+            }
+        }
+        state.suspended = true;
+        Ok(state.active.is_some())
+    }
+    pub fn release_target(target: &OwnedProcess) -> io::Result<()> {
+        let mut state = SURFACE
+            .lock()
+            .map_err(|_| io::Error::other("Workspace state unavailable"))?;
+        if state
+            .active
+            .as_ref()
+            .is_some_and(|lease| same(lease, target))
+        {
+            state.active.as_mut().unwrap().stop()?;
+            state.active = None;
+            return Ok(());
+        }
+        if let Some(index) = state.parked.iter().position(|lease| same(lease, target)) {
+            state.parked[index].stop()?;
+            state.parked.remove(index);
+            return Ok(());
+        }
+        Err(io::Error::other("Workspace target no longer managed"))
     }
     fn prepare(manager: u64, viewport: Viewport, target: OwnedProcess) -> io::Result<Lease> {
         if !cfg!(debug_assertions) {
@@ -757,84 +878,102 @@ mod controller {
         let mut state = SURFACE
             .lock()
             .map_err(|_| io::Error::other("Workspace state unavailable"))?;
-        if let Some(old) = state.as_mut() {
-            if old.saved.as_ref().is_some_and(|s| {
-                s.target.pid == target.pid
-                    && s.target.created_file_time == target.created_file_time
-                    && s.target.window_handle == target.window_handle
-            }) {
-                old.viewport = viewport;
-                return match old.send(Command::Place {
-                    rect,
-                    focus: native::foreground(manager),
-                    manager_pid: std::process::id(),
-                    manager_window: manager,
-                })? {
-                    Reply::Placed => Ok(()),
-                    _ => Err(io::Error::other("Unexpected surface acknowledgement")),
-                };
-            }
-        }
-        // Prepare and validate the replacement before touching the playable client.
-        let mut replacement = prepare(manager, viewport, target)?;
-        let previous = state.as_ref().and_then(|old| {
-            old.saved
-                .as_ref()
-                .map(|saved| (old.manager, old.viewport, saved.target.clone()))
-        });
-        if let Some(old) = state.as_mut() {
-            if let Err(error) = old.stop() {
-                let _ = replacement.stop();
-                return Err(error);
-            }
-        }
-        let placement = replacement.send(Command::Place {
+        let command = || Command::Place {
             rect,
             focus: native::foreground(manager),
             manager_pid: std::process::id(),
             manager_window: manager,
-        });
-        let placed = matches!(placement, Ok(Reply::Placed));
-        let detail = match placement {
-            Err(error) => error.to_string(),
-            _ => "Unexpected surface acknowledgement".into(),
         };
-        if placed {
-            *state = Some(replacement);
-            return Ok(());
+        // A finished recovery helper must confirm restoration before its slot is reused.
+        if let Some(active) = state.active.as_mut() {
+            if active.child.try_wait()?.is_some()
+                || active
+                    .saved
+                    .as_ref()
+                    .is_some_and(|s| native::retired(&s.target))
+            {
+                active.stop()?;
+                state.active = None;
+            }
         }
-        if let Err(error) = replacement.stop() {
-            *state = Some(replacement);
-            return Err(error);
+        for index in (0..state.parked.len()).rev() {
+            if state.parked[index].child.try_wait()?.is_some()
+                || state.parked[index]
+                    .saved
+                    .as_ref()
+                    .is_some_and(|s| native::retired(&s.target))
+            {
+                state.parked[index].stop()?;
+                state.parked.remove(index);
+            }
         }
-        *state = None;
-        if let Some((manager, viewport, target)) = previous {
-            let mut old = prepare(manager, viewport, target)?;
-            let restored = matches!(
-                old.send(Command::Place {
-                    rect: native::rectangle(manager, viewport)?,
-                    focus: false,
-                    manager_pid: std::process::id(),
-                    manager_window: manager,
-                }),
-                Ok(Reply::Placed)
-            );
-            *state = Some(old);
-            if !restored {
+        if let Some(old) = state.active.as_mut() {
+            if same(old, &target) {
+                if old.manager != manager {
+                    return Err(io::Error::other("Wrong workspace window"));
+                }
+                old.viewport = viewport;
+                if !matches!(old.send(command())?, Reply::Placed) {
+                    return Err(io::Error::other("Surface presentation failed"));
+                }
+                state.suspended = false;
+                return Ok(());
+            }
+        }
+        let parked = state.parked.iter().position(|lease| same(lease, &target));
+        if parked.is_none() && state.parked.len() + usize::from(state.active.is_some()) >= 4 {
+            return Err(io::Error::other("Workspace already manages four clients"));
+        }
+        // A retained lease owns the original checkpoint, never recapture a hidden tab.
+        let mut replacement = if let Some(index) = parked {
+            state.parked.remove(index)
+        } else {
+            prepare(manager, viewport, target)?
+        };
+        if replacement.manager != manager {
+            state.parked.push(replacement);
+            return Err(io::Error::other("Wrong workspace window"));
+        }
+        replacement.viewport = viewport;
+        let outcome = replacement.send(command());
+        if !matches!(outcome, Ok(Reply::Placed)) {
+            let detail = outcome
+                .err()
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "Invalid surface acknowledgement".into());
+            if parked.is_some() {
+                let _ = replacement.send(Command::Hide);
+                state.parked.push(replacement);
+            } else if let Err(error) = replacement.stop() {
+                state.parked.push(replacement);
+                return Err(error);
+            }
+            return Err(io::Error::other(format!(
+                "Workspace placement failed: {detail}. Previous session preserved."
+            )));
+        }
+        if let Some(old) = state.active.as_mut() {
+            if !matches!(old.send(Command::Hide), Ok(Reply::Hidden)) {
+                let _ = replacement.send(Command::Hide);
+                state.parked.push(replacement);
                 return Err(io::Error::other(
-                    "Previous surface could not resume. Restore windows before continuing.",
+                    "Previous surface could not suspend; restore windows before continuing",
                 ));
             }
         }
-        Err(io::Error::other(format!(
-            "Workspace placement failed: {detail}. Previous session preserved."
-        )))
+        if let Some(old) = state.active.take() {
+            state.parked.push(old);
+        }
+        state.active = Some(replacement);
+        state.suspended = false;
+        Ok(())
     }
     pub fn update(manager: u64, viewport: Option<Viewport>) -> io::Result<()> {
         let mut state = SURFACE
             .lock()
             .map_err(|_| io::Error::other("Workspace state unavailable"))?;
-        let Some(lease) = state.as_mut() else {
+        let suspended = state.suspended;
+        let Some(lease) = state.active.as_mut() else {
             return Ok(());
         };
         if manager != lease.manager {
@@ -843,7 +982,7 @@ mod controller {
         if let Some(viewport) = viewport {
             lease.viewport = viewport.validate()?;
         }
-        if native::minimized(manager)? {
+        if suspended || native::minimized(manager)? {
             return match lease.send(Command::Hide)? {
                 Reply::Hidden => Ok(()),
                 _ => Err(io::Error::other("Surface hide failed")),
@@ -1017,7 +1156,7 @@ mod controller {
                 )
             };
             assert!(!manager.is_null());
-            let (_fixture, target) = fixture();
+            let (fixture_a, target) = fixture();
             let viewport = Viewport {
                 x: 20.0,
                 y: 60.0,
@@ -1044,6 +1183,8 @@ mod controller {
                     std::thread::sleep(Duration::from_millis(100));
                     let composed = native::capture(target.clone()).unwrap();
                     assert_ne!(composed.style, original.style);
+                    assert_ne!(composed.extended_style & WS_EX_TOOLWINDOW as i64, 0);
+                    assert_eq!(composed.extended_style & WS_EX_APPWINDOW as i64, 0);
                     assert_eq!(
                         composed.rect,
                         native::rectangle(manager as usize as u64, viewport).unwrap()
@@ -1065,7 +1206,7 @@ mod controller {
                     } else {
                         {
                             let mut state = SURFACE.lock().unwrap();
-                            let lease = state.as_mut().unwrap();
+                            let lease = state.active.as_mut().unwrap();
                             if mode == "pipe-loss" {
                                 drop(lease.input.take());
                             } else {
@@ -1090,6 +1231,10 @@ mod controller {
                     let current = native::capture(target.clone()).unwrap();
                     assert_eq!(current.style, original.style, "{mode}");
                     assert_eq!(current.rect, original.rect, "{mode}");
+                    assert_eq!(
+                        current.extended_style, original.extended_style,
+                        "{mode}: shell recovery"
+                    );
                 }
             }
             let mut reused = target.clone();
@@ -1106,7 +1251,7 @@ mod controller {
             let before = native::capture(target.clone()).unwrap();
             assert!(present(manager as usize as u64, viewport, invalid).is_err());
             assert!(
-                SURFACE.lock().unwrap().is_some(),
+                SURFACE.lock().unwrap().active.is_some(),
                 "Rejected swap lost the previous surface"
             );
             let after = native::capture(target.clone()).unwrap();
@@ -1160,13 +1305,61 @@ mod controller {
                     GetWindowLongPtrW(game_window, GWL_STYLE) & !(WS_DISABLED as isize),
                 );
             }
+            let (_second_fixture, second) = fixture();
+            let second_original = native::capture(second.clone()).unwrap();
+            let second_window =
+                u64::from_str_radix(second.window_handle.trim_start_matches("0x"), 16).unwrap()
+                    as usize as HWND;
+            present(manager as usize as u64, viewport, target.clone()).unwrap();
+            present(manager as usize as u64, viewport, second.clone()).unwrap();
+            assert_eq!(
+                unsafe { IsWindowVisible(game_window) },
+                0,
+                "Background tab stayed visible"
+            );
+            assert_ne!(unsafe { IsWindowVisible(second_window) }, 0);
+            assert_eq!(SURFACE.lock().unwrap().parked.len(), 1);
+            suspend().unwrap();
+            update(manager as usize as u64, Some(viewport)).unwrap();
+            assert_eq!(
+                unsafe { IsWindowVisible(second_window) },
+                0,
+                "Settings resurfaced its suspended tab"
+            );
+            present(manager as usize as u64, viewport, target.clone()).unwrap();
+            assert_ne!(unsafe { IsWindowVisible(game_window) }, 0);
+            assert_eq!(unsafe { IsWindowVisible(second_window) }, 0);
+            release_target(&target).unwrap();
+            assert_eq!(
+                SURFACE.lock().unwrap().parked.len(),
+                1,
+                "Releasing one tab detached another"
+            );
+            release().unwrap();
+            let second_restored = native::capture(second.clone()).unwrap();
+            assert_eq!(second_restored.style, second_original.style);
+            assert_eq!(
+                second_restored.extended_style,
+                second_original.extended_style
+            );
+            assert_eq!(second_restored.rect, second_original.rect);
+            present(manager as usize as u64, viewport, target.clone()).unwrap();
+            unsafe {
+                assert_ne!(PostMessageW(game_window, WM_CLOSE, 0, 0), 0);
+                assert_eq!(
+                    WaitForSingleObject(fixture_a.process.as_raw_handle(), 3000),
+                    WAIT_OBJECT_0
+                );
+            }
+            present(manager as usize as u64, viewport, second).unwrap();
+            release().unwrap();
             unsafe {
                 DestroyWindow(manager);
             }
         }
     }
 }
-pub use controller::{is_active, present, release, update};
+pub use controller::{is_active, present, release, release_target, suspend, update};
 
 #[cfg(test)]
 mod tests {

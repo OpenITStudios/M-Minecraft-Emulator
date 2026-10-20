@@ -8,6 +8,14 @@
   export let activeClient:ClientId|null=null;
   export let busy=false;
   export let onClose:(client:ClientId,target:OwnedProcess)=>Promise<void>=async()=>{};
+  export let onSelect:(client:ClientId)=>Promise<void>=async()=>{};
+  const clientIds:ClientId[]=['01','02','03','04'];
+  function tabKey(event:KeyboardEvent){
+    const tabs=Array.from((event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('[role=tab]'));
+    const index=tabs.indexOf(document.activeElement as HTMLButtonElement);
+    const next=event.key==='ArrowRight'?(index+1)%4:event.key==='ArrowLeft'?(index+3)%4:event.key==='Home'?0:event.key==='End'?3:-1;
+    if(next>=0){event.preventDefault();tabs[next]?.focus();}
+  }
   let viewport:HTMLDivElement,target:OwnedProcess|null=null;
   let issue:ReturnType<typeof operationIssue>|null=null;
   let updating=false,updatePending=false;
@@ -18,6 +26,8 @@
   export async function restore(){
     await workspaceSurface.release();activeClient=null;target=null;updateFailed=false;issue=null;
   }
+  export async function suspend(){const retained=await workspaceSurface.suspend();if(!retained){activeClient=null;target=null;updateFailed=false;}}
+  export async function resume(){if(activeClient&&target)await present(activeClient,target);}
   export async function present(client:ClientId,process:OwnedProcess){
     issue=null;
     try{
@@ -41,7 +51,7 @@
   async function closeClient(){
     if(disabled||!activeClient||!target)return;
     const client=activeClient,process=target;working=true;issue=null;
-    try{await restore();working=false;await tick();await onClose(client,process);}catch(error){issue=operationIssue(error);}finally{working=false;}
+    try{await workspaceSurface.release(process);activeClient=null;target=null;updateFailed=false;working=false;await tick();await onClose(client,process);}catch(error){issue=operationIssue(error);}finally{working=false;}
   }
   onMount(()=>{
     let disposed=false,unlisten:(()=>void)|undefined;
@@ -50,10 +60,13 @@
     return ()=>{disposed=true;unlisten?.();observer.disconnect();void workspaceSurface.release().catch(()=>{});};
   });
 </script>
-<section class="nw-stage" aria-label="Active Minecraft session">
+<section class="nw-stage" id="minecraft-play-area" aria-label="Active Minecraft session">
   <header><div><p class="um-eyebrow">PLAY AREA</p><h2>{activeClient?`Minecraft ${activeClient}`:'Your Minecraft workspace'}</h2></div>
     {#if activeClient||issue}<div class="nw-actions"><button class="cm-button cm-secondary" {disabled} on:click={returnToWindows}>Restore window</button>{#if activeClient}<button class="cm-button cm-secondary" {disabled} on:click={closeClient}>Close normally</button>{/if}</div>{/if}
   </header>
+  <div class="nw-tabs" role="tablist" tabindex="-1" aria-label="Minecraft sessions" on:keydown={tabKey}>
+    {#each clientIds as client}<button role="tab" aria-selected={activeClient===client} aria-controls="minecraft-play-area" {disabled} on:click={()=>onSelect(client)}>Minecraft {client}</button>{/each}
+  </div>
   {#if issue}<div class="um-alert" role="alert"><strong>{issue.message}</strong><p>{issue.action}</p><details><summary>Diagnostics</summary><pre>{issue.details}</pre></details></div>{/if}
   <div class="nw-viewport"><div class="nw-native-slot" bind:this={viewport}>
     {#if !activeClient}<div><span class="nw-mark">M</span><h3>Choose a client to play</h3><p>Open a session or select Play. Sign in inside Minecraft.</p></div>{/if}

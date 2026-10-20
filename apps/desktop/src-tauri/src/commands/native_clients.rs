@@ -108,9 +108,24 @@ pub async fn desktop_update_workspace(
 }
 
 #[tauri::command]
-pub async fn desktop_release_workspace() -> Result<(), SurfaceFailure> {
+pub async fn desktop_release_workspace(
+    target: Option<crate::engine::owned_provider::OwnedProcess>,
+) -> Result<(), SurfaceFailure> {
+    tauri::async_runtime::spawn_blocking(move || {
+        run_manager_operation(|| match target {
+            Some(target) => crate::engine::workspace_surface::release_target(&target),
+            None => crate::engine::workspace_surface::release(),
+        })
+    })
+    .await
+    .map_err(surface_failure)?
+    .map_err(surface_failure)
+}
+
+#[tauri::command]
+pub async fn desktop_suspend_workspace() -> Result<bool, SurfaceFailure> {
     tauri::async_runtime::spawn_blocking(|| {
-        run_manager_operation(crate::engine::workspace_surface::release)
+        run_manager_operation(crate::engine::workspace_surface::suspend)
     })
     .await
     .map_err(surface_failure)?

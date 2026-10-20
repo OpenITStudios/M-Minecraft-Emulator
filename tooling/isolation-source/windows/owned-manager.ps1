@@ -78,8 +78,9 @@ function Snapshot([string]$operation,$exitCode) {
             Demand ($identity.WindowsSession -eq $currentSession) 'Game belongs to another Windows session.'
             $process.Refresh()
             Demand (-not $process.HasExited -and $process.StartTime.ToUniversalTime() -eq $started) 'Game identity changed.'
+            $window=[MivubiManagerWindows]::GameWindow($process.Id)
             $games+=@{pid=$process.Id;createdFileTime=$started.ToFileTimeUtc().ToString();sessionId=$identity.WindowsSession;
-                windowHandle=('0x'+$process.MainWindowHandle.ToInt64().ToString('x'));responding=$identity.Responding}
+                windowHandle=('0x'+$window.ToInt64().ToString('x'));responding=[MivubiManagerWindows]::WindowResponding($window)}
         }
         Demand ($games.Count -le 1) 'Multiple Education processes in one profile; ownership is ambiguous.'
         $status=if (-not $exists) {'ABSENT'} elseif (-not $ready) {'BLOCKED'} elseif ($games.Count -eq 1 -and $games[0].windowHandle -ne '0x0') {'RUNNING'} elseif ($pids.Count -gt 0) {'STARTING_OR_CLOSING'} else {'STOPPED'}
@@ -96,7 +97,8 @@ function Snapshot([string]$operation,$exitCode) {
         $started=$process.StartTime.ToUniversalTime()
         $identity=[MivubiRuntimeProbe]::NativeGame($dll,$process.Id,$started.Ticks)
         Demand ($identity.WindowsSession -eq $currentSession) 'Native game belongs to another Windows session.'
-        $native+=@{pid=$process.Id;createdFileTime=$started.ToFileTimeUtc().ToString();sessionId=$identity.WindowsSession;windowHandle=('0x'+$process.MainWindowHandle.ToInt64().ToString('x'));responding=$identity.Responding}
+        $window=[MivubiManagerWindows]::GameWindow($process.Id)
+        $native+=@{pid=$process.Id;createdFileTime=$started.ToFileTimeUtc().ToString();sessionId=$identity.WindowsSession;windowHandle=('0x'+$window.ToInt64().ToString('x'));responding=[MivubiManagerWindows]::WindowResponding($window)}
     }
     Demand ($native.Count -le 1) 'Multiple native Education processes; ownership is ambiguous.'
     return @{schema=1;provider='OWNED_V1186_LOCAL_TEST';operation=$operation;launcherExitCode=$exitCode;focusError=$null;clients=@($clients);nativeProcesses=@($native)}
