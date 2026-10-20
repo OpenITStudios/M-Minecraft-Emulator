@@ -29,6 +29,11 @@ is never accepted silently. The play area provides **Restore window** and
 Four stable tabs retain original recovery checkpoints for hidden background games;
 normal close releases only the selected tab. Startup adopts verified running sessions.
 **Check all clients** refreshes observations; raw errors are under **Diagnostics**.
+**Retry display** revalidates and presents a failed initial or active surface;
+successful recovery clears the related error and resumes viewport updates. The
+first native error is retained until recovery, with the helper's last operation
+stage in Diagnostics. Tabs and cards share action guards; keyboard navigation
+skips unavailable sessions. Connected describes the engine connection only.
 `Window detected` describes an observed responsive HWND, not accepted rendering,
 input or gameplay. A nonresponsive observation shows `Needs attention`. During
 Settings, frontend resize observations are suspended with the native surface;
@@ -41,8 +46,11 @@ frame is temporarily removed and its rectangle aligned to a 16:9 play area.
 Managed games use tool-window shell eligibility instead of separate taskbar buttons;
 detaching restores their original shell flags. Actual single-button taskbar behavior,
 Alt-Tab and playable rendering/input still require acceptance; blank-game reports
-remain failures. Manager foreground events request a coalesced placement update,
-and foreground presentation checks the window at the viewport center for occlusion.
+remain failures. Manager foreground events request a coalesced placement update.
+The helper preserves z-order while positioning; the foreground manager hands its
+own focus to the selected game and checks viewport-center coverage. An unrelated
+foreground application is left alone. The native-menu observations at `9a6999c`
+are bounded evidence, not acceptance of direct input, four-client play or hosting.
 The existing provider revalidates profile/PID/start/session/HWND before selection;
 the presentation owner rechecks native identity for each window operation.
 One hidden recovery helper in the same executable restores the frame/position

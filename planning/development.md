@@ -2,7 +2,12 @@
 
 ## Owned manager / independence — 20 October 2026
 
-**ACTIVE / acceptance FAIL** (cd382b4): full check fixed four reproduced resize/setup/refresh/foreground-race bugs; source 709 PASS. Unresolved: Alt-Tab timeout, Settings coverage, blank frames/exits, four tabs/taskbar, independent installer. UI stopped by physical Escape; experimental binary may still run: rebuild retained source. Cross-chat issue inventory: [Evidence](../docs/validation/native-pilot-localtest.md).
+**ACTIVE**, source `9a6999c24b3e7505c4fb3acd5ee9cc3ed45a066a`.
+**711 source + 2 Windows synthetic PASS**; UI regression PASS. Manager-owned
+focus/recovery fixed: native menu visible at startup, app switch, Settings and
+minimize/restore; rebuilt manager open. [Evidence](../docs/validation/native-pilot-localtest.md).
+**Next:** native input/capture before 02–04. Full gameplay, exits, arbitrary
+timeout recovery and installer remain unresolved.
 
 ## Windows-first efficiency — 20 October 2026
 

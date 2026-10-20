@@ -9,6 +9,81 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Foreground-owner correction and recovery UI — 20 October 2026, 22:14–22:51 WIB
+
+Baseline: `6593776cd2ace947f1501c857cb340e1a03e6d21`. Retained implementation:
+`9a6999c24b3e7505c4fb3acd5ee9cc3ed45a066a`.
+**Native menu presentation: bounded PASS for the final-build observations below.
+Overall four-client/gameplay acceptance remains FAIL/unaccepted.** This section
+supersedes the earlier binary warning and native-menu observations only; it does
+not erase historical hangs, unexplained exits or untested requirements.
+
+The operator explicitly resumed implementation without their participation at
+the PC. The running manager was the old experimental executable: Diagnostics
+reported `Workspace foreground handoff refused by Windows`, absent from retained
+source. Games were restored and the manager closed normally before rebuilding.
+No game was force-closed, no world opened and no authentication automated.
+
+### Reproduced defects and correction
+
+- Startup errors persisted globally after successful presentation. A mounted
+  regression failed, then passed with presentation errors owned by the workspace
+  and related parent errors cleared after confirmed recovery.
+- Later native events overwrote the first failure with helper completion. A
+  mounted two-error replay failed, then passed after preserving the first error
+  until explicit recovery. Stage-only helper progress shares the original
+  three-second deadline; it contains no PID, account or window-title data.
+- Actual manager → existing Task Manager → manager reproduced a blank stage.
+  The preserved first error was `Surface helper failed at place/position:
+  Workspace position update: Access is denied. (os error 5)`. Background z-order
+  preservation alone removed that error in the observed retry but still failed
+  coverage. Asynchronous promotion from the manager also failed and was discarded.
+- The retained helper owns geometry/recovery with `SWP_NOZORDER`. The manager
+  calls `SetForegroundWindow` only when its own workspace is foreground; an
+  unrelated foreground application is left alone. Native identity and modal
+  guards remain, with a bounded 500 ms coverage observation. No parenting,
+  topmost flag, input-queue attachment or foreground-lock override. Obsolete
+  focus parameters were removed from the private same-executable protocol;
+  public Tauri schemas are unchanged.
+- **Retry display** works after initial admission or active update failure and
+  revalidates through the existing provider. Failed replacement does not commit
+  selection. Tab/card guards agree on stale, pending, ambiguous and unresponsive
+  observations; keyboard navigation skips disabled tabs. The engine badge says
+  Connected. Consolidated viewport sizing, readable labels and bounded recovery
+  banners replace conflicting layout overrides. The rail is controls, not previews.
+
+### Executed evidence
+
+| Check | Result | Boundary |
+| --- | --- | --- |
+| Final `npm run verify:source` | PASS | 711: Node 281, frontend 177, desktop Rust 76, runtime Rust 177; four existing file-symlink skips; eight opt-in desktop tests ignored by default. Typecheck zero errors/warnings, frontend build, Rust checks and formatting pass. |
+| Windows debug executable | PASS | Rebuilt from retained implementation after final frontend build. Abandoned experiments are absent; no installer constructed. |
+| Actual-helper synthetic suite | PASS | Two opt-in Windows tests run separately: normal/maximized release, pipe loss, helper crash, retained tabs/minimize/modal/stale identity cases; a four-second synthetic position stall reports `place/position`, restores original state and leaves the synthetic client alive. Diagnostic regression failed on the original generic timeout, then passed. |
+| Mounted UI | PASS | Startup/initial/active retry, first-error preservation, failed suspend/release, retired target reconciliation, tab/card parity and disabled-tab keyboard navigation; 1366×900, 1180×760, 920×620 without page overflow. Mocked bridge, no game rendering proof. |
+| Final-build real native menu | PASS, bounded | Startup visibly renders the menu; manager → existing Task Manager → manager returns to a rendered menu; one Settings round-trip and one minimize/restore round-trip return to the menu without an alert. Earlier candidate repetitions are supporting observations, not extra final-SHA cycles. |
+| First retained full source attempt | FAIL, rerun PASS | Existing private-engine assembler fixture hit EPERM on temporary payload rename. Isolated and complete reruns pass without assembler changes. File-lock cause UNKNOWN. |
+| Wider runtime | NOT_EXECUTED | Direct world/input, mouse capture, authentication, four-client campaign, multiplayer, endurance, FPS, mixed-DPI/Explorer restart and standalone installer acceptance. A sent Alt-Tab chord is not a separately isolated Alt-Tab campaign. |
+
+The Vite development server also logged ResizeObserver undelivered-notification
+warnings during repeated mocked viewport/error transitions. The final mounted
+harness completed without a page-error verdict; this does not establish that
+the warning is absent in every runtime. No speculative observer change retained.
+
+The final retained debug manager remains open with the native menu displayed;
+no loopback CDP listener was enabled. Historical timeout causes outside this
+reproduced placement/foreground failure remain UNKNOWN. Synchronous fallback
+restoration and simultaneous manager/helper failure still lack complete bounded
+or durable recovery proof. The game remains an independent top-level window,
+not true child embedding. Prove native direct input/recovery before four-slot
+escalation. `main`, Actions, drivers, services and profiles are unchanged.
+
+Local supporting logs are ignored: `workspace/workspace-*-red.log`,
+`workspace/workspace-recovery-ui-final.log`,
+`workspace/workspace-recovery-retained-source-rerun.log`,
+`workspace/workspace-recovery-retained-build.log`,
+`workspace/workspace-recovery-retained-synthetic.log`. Sanitized observations above
+are portable; no account-bearing screenshots or raw machine identity enter Git.
+
 ## Full check and cross-chat handoff — 20 October 2026
 
 Baseline: `cf3089c1e0ff8893b9939bdb5062e3facab7b2fd`. Retained source/test
