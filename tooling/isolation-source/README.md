@@ -180,6 +180,36 @@ It leaves profiles/worlds/configuration, payload and test signing untouched.
 Only after restoration may the earlier `RestoreTestMode` cancellation remove the
 certificate and restore the boot setting, followed by another manual reboot.
 
+Exit the official Sandboxie Plus/Control manager **through its tray Exit menu**
+before activation. An open manager can prevent driver unloading despite an empty
+sandbox-process inventory. Activation now refuses a running SandMan/SbieCtrl
+before stopping any service. A failure before ImagePath redirection restores
+the original user service without retrying the failed original-driver unload.
+Completed restoration permits an explicit activation retry; previous attempts
+remain in `runtimeHistory` inside the same local receipt.
+
+For the first owned client only, after private driver activation passes:
+
+```powershell
+# Elevated: refuses existing MivubiEdu02 or any previous partial creation.
+./tooling/isolation-source/windows/test-owned-v1186-runtime.ps1 -Stage ConfigureClient02 -SessionDirectory $session
+# In a NORMAL, UNELEVATED PowerShell session:
+./tooling/isolation-source/windows/test-owned-v1186-runtime.ps1 -Stage LaunchClient02 -SessionDirectory $session `
+  -GameExecutable 'C:\Program Files\Microsoft Studios\Minecraft Education\Minecraft.Windows.exe'
+```
+
+The adapter consumes the existing `minecraft-profiles.mjs` owner, disables the
+new section first, and requires a matching query after every write, enabling it
+last. Existing/partial profiles are preserved and never overwritten or deleted.
+The explicitly approved App Compartment/OpenCOM compatibility mode is not an
+account-isolation guarantee. Launch rechecks actual owned driver/service identity,
+all-session idle and every final profile setting; it accepts only the observed
+Microsoft-signed official desktop executable and uses the private `/mivubi_client:02`
+entrypoint. An accepted request is not proof of a running or playable game.
+Sign in manually; no credentials, existing account state or tokens are copied.
+The manager UI's owned slots remain blocked until its own provider integration
+is explicitly implemented and verified; these commands are a local test route.
+
 ## Not active — historical implementations
 
 The pinned v1.18.5 Git submodule

@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync,mkdtempSync,writeFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 const source=readFileSync(new URL('./test-owned-v1186-runtime.ps1',import.meta.url),'utf8').replaceAll('\r\n','\n');
 const probe=readFileSync(new URL('./probe-v1186-runtime.ps1',import.meta.url),'utf8');
@@ -61,4 +64,26 @@ test('failure before SCM redirection restores without unloading the original dri
   assert.match(source,/runtimeHistory \+= \$receipt.runtime/);
   assert.match(source,/Exit the official Sandboxie manager normally/);
   assert.ok(source.indexOf('Exit the official Sandboxie manager normally')<source.indexOf("Helper $officialRoot 'stop' 'SbieSvc'"));
+});
+test('first-client adapter refuses occupied profiles and uses canonical guarded readbacks',()=>{
+  const dir=mkdtempSync(join(tmpdir(),'owned-profile-'));
+  try {
+    const input=join(dir,'inventory.json');
+    const cli=fileURLToPath(new URL('./client02-profile-plan.mjs',import.meta.url));
+    writeFileSync(input,JSON.stringify({schema:1,boxes:[]}));
+    const result=spawnSync(process.execPath,[cli,input],{encoding:'utf8',timeout:10000,windowsHide:true});
+    assert.equal(result.status,0,result.stderr);
+    const plan=JSON.parse(result.stdout);
+    assert.equal(plan.profiles[0].box,'MivubiEdu02');
+    assert.equal(plan.guardedSteps[0].arguments.join(' '),'set MivubiEdu02 Enabled n');
+    assert.equal(plan.guardedSteps.at(-1).operation,'REQUIRE_READBACK');
+    writeFileSync(input,JSON.stringify({schema:1,boxes:['mivubiedu02']}));
+    const occupied=spawnSync(process.execPath,[cli,input],{encoding:'utf8',timeout:10000,windowsHide:true});
+    assert.notEqual(occupied.status,0);
+    assert.match(occupied.stderr,/already exists/);
+  } finally {rmSync(dir,{recursive:true,force:true});}
+  assert.match(source,/A profile attempt already exists/);
+  assert.match(source,/PARTIAL_REQUIRES_REVIEW/);
+  assert.match(source,/Launch the game from a normal unelevated/);
+  assert.match(source,/Profile changed since configuration/);
 });

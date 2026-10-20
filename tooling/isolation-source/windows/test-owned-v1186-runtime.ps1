@@ -1,7 +1,8 @@
 # Explicit local developer test. Reuses SCM registrations; never deletes services/data.
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][ValidateSet('Inspect','Activate','Restore')][string]$Stage,
-      [Parameter(Mandatory=$true)][string]$SessionDirectory)
+param([Parameter(Mandatory=$true)][ValidateSet('Inspect','Activate','Restore','ConfigureClient02','LaunchClient02')][string]$Stage,
+      [Parameter(Mandatory=$true)][string]$SessionDirectory,
+      [string]$GameExecutable)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
@@ -103,7 +104,8 @@ public static class MivubiTestScm {
 '@
 Ordinary $session
 $principal=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Normal elevated Windows PowerShell required.' }
+if ($Stage -ne 'LaunchClient02' -and -not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Normal elevated Windows PowerShell required.' }
+if ($Stage -eq 'LaunchClient02' -and $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Launch the game from a normal unelevated PowerShell session.' }
 $mutex=[Threading.Mutex]::new($false,'Global\MIVUBI.OwnedV1186.TestRuntime')
 $acquired=$false; $fileLock=$null
 try {
@@ -132,7 +134,56 @@ try {
         [ordered]@{schema=1; state=$receipt.state; rebootObserved=$true; driver=$probe; servicesChanged=$receipt.servicesChanged; gameplayVerified=$false} | ConvertTo-Json -Depth 5 -Compress
         return
     }
-    if ($Stage -eq 'Activate') {
+    if ($Stage -in @('ConfigureClient02','LaunchClient02')) {
+        if ($receipt.servicesChanged -ne $true -or $receipt.driverLoaded -ne $true -or
+            $receipt.state -notin @('OWNED_TEST_DRIVER_ACTIVE_NO_GAME','OWNED_TEST_CLIENT02_CONFIGURED_NO_GAME')) { throw 'Owned test driver is not ready for a first client.' }
+        foreach ($service in $receipt.runtime.services) {
+            if ((Image $service.name) -cne $service.ownedImage -or [string](Get-Service $service.name).Status -ne 'Running') { throw 'Owned service identity/state mismatch.' }
+            VerifyImage $service.ownedImage $service.ownedHash $receipt.certificateThumbprint
+        }
+        $owned=Idle (Join-Path $payload 'SbieDll.dll')
+        if ($owned.version -cne '5.73.6-MIVU' -or $owned.abi -ne 0x57230) { throw 'Private driver identity/ABI mismatch.' }
+        $ini=Join-Path $payload 'SbieIni.exe'
+        if ($Stage -eq 'ConfigureClient02') {
+            if ($receipt.runtime.PSObject.Properties.Name -contains 'client02') { throw 'A profile attempt already exists; inspect partial evidence rather than overwrite.' }
+            $sections=@((Native $ini @('query','*')).Trim() -split '\r?\n')
+            if ($sections.Count -lt 1 -or $sections.Count -gt 512 -or $sections[0] -cne 'GlobalSettings') { throw 'Unreliable section inventory.' }
+            $boxes=@($sections | Select-Object -Skip 1 | Where-Object { $_ -notmatch '^(Template_|UserSettings_)' -and $_ -ne 'TemplateSettings' })
+            $inventoryPath=Join-Path $session 'client02-box-inventory.json'
+            [IO.File]::WriteAllText($inventoryPath,(@{schema=1;boxes=$boxes}|ConvertTo-Json -Depth 3),[Text.UTF8Encoding]::new($false))
+            $node=Join-Path $repo 'workspace/toolchains/node/node.exe'
+            $plan=(Native $node @((Join-Path $PSScriptRoot 'client02-profile-plan.mjs'),$inventoryPath)) | ConvertFrom-Json
+            if ($plan.profiles.Count -ne 1 -or $plan.profiles[0].box -cne 'MivubiEdu02' -or $plan.guardedSteps.Count -ne 18) { throw 'Unexpected canonical profile plan.' }
+            $receipt.runtime | Add-Member -NotePropertyName client02 -NotePropertyValue ([pscustomobject]@{
+                box='MivubiEdu02'; configurationState='PARTIAL_REQUIRES_REVIEW'; settingsReadbackVerified=$false;
+                compatibilityProfile=$plan.compatibilityProfile; accountAuthenticated=$false; gameplayVerified=$false})
+            Journal 'client02:configuration-started'
+            foreach ($step in $plan.guardedSteps) {
+                if ($step.client -cne '02' -or $step.executable -cne 'SbieIni.exe' -or $step.arguments[1] -cne 'MivubiEdu02') { throw 'Foreign profile operation.' }
+                Journal ('client02:'+ $step.operation+':'+$step.arguments[2])
+                $text=Native $ini @($step.arguments)
+                if ($step.operation -ceq 'REQUIRE_READBACK' -and $text.Trim() -cne $step.expectedValue) { throw 'Profile setting readback failed; preserve partial profile.' }
+            }
+            $receipt.runtime.client02.configurationState='CONFIGURED'; $receipt.runtime.client02.settingsReadbackVerified=$true
+            $receipt.state='OWNED_TEST_CLIENT02_CONFIGURED_NO_GAME'; Journal 'client02:configuration-readback-verified'
+        } else {
+            if ($receipt.state -cne 'OWNED_TEST_CLIENT02_CONFIGURED_NO_GAME' -or $receipt.runtime.client02.settingsReadbackVerified -ne $true) { throw 'Client 02 settings are not verified.' }
+            $game=(Resolve-Path -LiteralPath $GameExecutable).Path
+            Ordinary $game
+            if ($game -cne 'C:\Program Files\Microsoft Studios\Minecraft Education\Minecraft.Windows.exe') { throw 'This first test supports only the observed official Education desktop installation.' }
+            $sig=Get-AuthenticodeSignature -LiteralPath $game
+            if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch '^CN=Microsoft Corporation,') { throw 'Official Microsoft Education signature required.' }
+            # Re-read every canonical setting immediately before launch.
+            $inventoryPath=Join-Path $session 'client02-launch-plan-input.json'
+            [IO.File]::WriteAllText($inventoryPath,'{"schema":1,"boxes":[]}',[Text.UTF8Encoding]::new($false))
+            $plan=(Native (Join-Path $repo 'workspace/toolchains/node/node.exe') @((Join-Path $PSScriptRoot 'client02-profile-plan.mjs'),$inventoryPath)) | ConvertFrom-Json
+            foreach ($step in @($plan.guardedSteps | Where-Object operation -ceq 'REQUIRE_READBACK' | Select-Object -Skip 1)) {
+                if ((Native $ini @($step.arguments)).Trim() -cne $step.expectedValue) { throw 'Profile changed since configuration.' }
+            }
+            $receipt.state='OWNED_TEST_CLIENT02_LAUNCH_REQUESTED'; Journal 'client02:launch-requested'
+            Start-Process -FilePath (Join-Path $payload 'Start.exe') -ArgumentList ('/mivubi_client:02 "'+$game+'"') -WorkingDirectory $payload | Out-Null
+        }
+    } elseif ($Stage -eq 'Activate') {
         $retry=$receipt.state -ceq 'OFFICIAL_SERVICES_RESTORED_TEST_BOOT_REMAINS' -and $receipt.servicesChanged -eq $false
         if (-not $retry -and ($receipt.state -cne 'REBOOT_REQUIRED_NO_SERVICE_CHANGES' -or $receipt.servicesChanged -ne $false -or $receipt.PSObject.Properties.Name -contains 'runtime')) { throw 'Activation is not fresh; inspect or restore the existing transaction.' }
         if (@(Get-Process -Name SandMan,SbieCtrl -ErrorAction SilentlyContinue).Count -ne 0) { throw 'Exit the official Sandboxie manager normally before activation; no process was terminated.' }
