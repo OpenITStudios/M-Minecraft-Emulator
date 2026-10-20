@@ -2,7 +2,7 @@
 
 ## Owned manager / independence — 20 October 2026
 
-**ACTIVE:** operator approved native composition. `d3a2a3c` / `f5d81be`: automatic play workspace, verified HWND placement and helper recovery implemented; source checks and six synthetic recovery cases PASS. Live Minecraft layout, previews, four clients and standalone installation remain NOT_EXECUTED. Next: accept one client in the actual workspace. [Evidence](../docs/validation/native-pilot-localtest.md).
+**ACTIVE:** user workspace acceptance FAIL (empty after Open 01). Fixed missing launch→observe→present path; 175 frontend tests, mounted mock UI and Windows build PASS. Corrected gameplay, previews, four clients and standalone installation remain NOT_EXECUTED. Next: accept one real client. [Evidence](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
 

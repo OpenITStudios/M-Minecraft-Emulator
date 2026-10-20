@@ -11,6 +11,25 @@ lifecycle: ACTIVE
 
 ## Approved native workspace integration — 20 October 2026
 
+**Subsequent user acceptance: FAIL.** The operator screenshot showed an empty
+play area after Open 01, with the game opening separately and a refresh-required
+notice. Source confirmed that the native launch handler stopped after starting
+the registered launcher; it never observed the new process or called presentation.
+The correction observes up to eight fresh provider snapshots, admits only one
+responsive HWND for the requested slot, then presents automatically. Owned launches
+also use this bounded observation when their first result precedes a game window.
+No automatic relaunch or background polling was introduced. Existing native processes
+are inspected and presented rather than launched again. Timeout retains a recovery
+message and requires a fresh check before retrying.
+
+Correction checks: Svelte/TypeScript **PASS** (zero errors/warnings), frontend
+**175 tests PASS**, frontend build **PASS**, Windows debug build **PASS**. A mounted
+browser regression with mocked Tauri commands **PASS**: clicking Open 01 observes
+a delayed native window and calls presentation exactly once without refresh.
+Two unit regressions cover delayed-window admission and bounded rejection of a
+native process for an owned slot. These are source/UI evidence only; corrected
+real-game visibility/input remains **NOT_EXECUTED** pending operator acceptance.
+
 **ACTIVE.** The operator approved independent native composition instead of
 direct child-window embedding. Implementation revisions: `d3a2a3c` (backend)
 and `f5d81be` (mounted UI). The game remains an unowned top-level Windows

@@ -3,6 +3,7 @@
   import {ownedClientStatus} from "./app/presentation/unifiedManager.js";
   import {operationIssue} from "./app/bridge/managerConfiguration.js";
   import {nativeFeasibility} from "./app/bridge/nativeFeasibilityApi.js";
+  import {observeWorkspaceLaunch} from './app/presentation/launchWorkspace.js';
   export let sessionDirectory:string;
   export let initialSnapshot:OwnedSnapshot;
   export let operationBusy=false;
@@ -58,7 +59,12 @@
         if(snapshot.focusError)details=snapshot.focusError;
         notice=slot?.status==="RUNNING"&&snapshot.focusError?`Minecraft ${client} opened in the background. Click Focus to show it.`:slot?.status==="RUNNING"?`Minecraft ${client} window brought forward. Sign-in and gameplay need manual testing.`:
           `Launch requested for ${client}. Exit ${snapshot.launcherExitCode??"pending"}; no playable session is established. Refresh before any retry.`;
-        if(slot?.status==='RUNNING'&&slot.processes.length===1&&onPresent){await onPresent(client,slot.processes[0]);notice=`Minecraft ${client} opened in the play area. Sign-in stays inside Minecraft.`;}
+        if(onPresent){
+          notice=`Starting Minecraft ${client}. Waiting for its game window…`;
+          const presented=await observeWorkspaceLaunch(client,()=>ownedProvider.execute(sessionDirectory,client,'Inspect'),onPresent,observation=>{snapshot=observation;initialSnapshot=observation;current=true;});
+          pending[client]=!presented;
+          notice=presented?`Minecraft ${client} opened in the play area. Sign-in stays inside Minecraft.`:`Minecraft ${client} has not provided a responsive window yet. Check all clients before retrying.`;
+        }
       }else if(operation==="Close"){closing[client]=true;notice="Normal close requested. Save/confirm inside Minecraft if needed; refresh to observe completion.";}
       else if(operation==="Create")notice=`Persistent profile ${client} created and settings verified.`;
       else if(operation==="Inspect")notice="Client status updated.";
@@ -70,7 +76,14 @@
   async function nativeLaunch(){
     if(operationBusy||externalBusy)return;
     operationBusy=true;activeClient="01";activeOperation="Launch";error="";notice="";details="";pending["01"]=true;
-    try{const before=await ownedProvider.execute(sessionDirectory,"02","Inspect");if(before.nativeProcesses.length)throw new Error("A native Minecraft process already exists. Check again.");await nativeFeasibility.openOfficialMinecraft();notice="Native Education launch requested. Refresh to observe its process; login remains manual.";current=false;}
+    try{
+      const before=await ownedProvider.execute(sessionDirectory,"02","Inspect");
+      if(!before.nativeProcesses.length)await nativeFeasibility.openOfficialMinecraft();
+      notice='Starting Minecraft 01. Waiting for its game window…';
+      const presented=await observeWorkspaceLaunch('01',()=>ownedProvider.execute(sessionDirectory,'02','Inspect'),onPresent,observation=>{snapshot=observation;initialSnapshot=observation;current=true;});
+      pending['01']=!presented;
+      notice=presented?'Minecraft 01 opened in the play area. Sign-in stays inside Minecraft.':'Minecraft 01 has not provided a responsive window yet. Check all clients before retrying.';
+    }
     catch(e){const issue=operationIssue(e);error=issue.message+" "+issue.action;details=issue.details;current=false;}
     finally{operationBusy=false;activeClient="";activeOperation="";}
   }
