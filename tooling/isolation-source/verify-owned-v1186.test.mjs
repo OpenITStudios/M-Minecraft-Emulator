@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {assessOwnedV1186, V1186_FILE_COUNT} from './verify-owned-v1186.mjs';
+import {assessOwnedV1186, V1186_FILE_COUNT, BUILD_FILES, applyOwnedBuildPathFix} from './verify-owned-v1186.mjs';
+import {readFileSync} from 'node:fs';
 
 const approved = ['Sandboxie/common/my_version.h',
   'Sandboxie/core/drv/api.c', 'Sandboxie/apps/start/start.cpp'];
@@ -41,4 +42,17 @@ test('file-mode changes and accidentally unmodified overlay paths are refused', 
   const g = fixture();
   g.owned.set(approved[0],{...g.candidate.get(approved[0])});
   assert.throws(()=>assessOwnedV1186(g.candidate,g.owned,approved),/exact approved/);
+});
+
+test('owned build projects differ only by exact path quoting from pristine upstream', () => {
+  for (const path of BUILD_FILES) {
+    const pristine = readFileSync(new URL('../../engine/isolation-candidates/sandboxie-v1.18.6/' + path,
+      import.meta.url), 'utf8');
+    const owned = readFileSync(new URL('../../engine/isolation-owned/' + path,
+      import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+    assert.equal(applyOwnedBuildPathFix(path, pristine), owned);
+    assert.throws(() => applyOwnedBuildPathFix(path, owned), /anchor drift/);
+    assert.throws(() => applyOwnedBuildPathFix(path, ''), /anchor drift/);
+  }
+  assert.throws(() => applyOwnedBuildPathFix('unreviewed.vcxproj', ''), /unknown/);
 });

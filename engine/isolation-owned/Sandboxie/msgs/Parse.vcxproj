@@ -54,7 +54,7 @@ if not errorlevel 1 goto end
 echo *** PARSE FAILURE! ***
 exit 1
 :end
-mc /h $(MSBuildProjectDirectory)\$(Configuration) /r $(MSBuildProjectDirectory)\$(Configuration) -u $(MSBuildProjectDirectory)\msgs.mc
+mc /h "$(MSBuildProjectDirectory)\$(Configuration)" /r "$(MSBuildProjectDirectory)\$(Configuration)" -u "$(MSBuildProjectDirectory)\msgs.mc"
 </Command>
     </CustomBuildStep>
     <CustomBuildStep>

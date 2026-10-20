@@ -211,8 +211,10 @@ try {
     $results += $stageResult
     try {
       $process = Start-Process -FilePath $msbuild -WorkingDirectory $source -ArgumentList $arguments `
-        -NoNewWindow -PassThru -Wait -RedirectStandardOutput $stdout `
+        -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdout `
         -RedirectStandardError $stderr -ErrorAction Stop
+      # Wait for this compiler, not unrelated descendants inheriting its job.
+      $process.WaitForExit()
       $stageResult.exitCode = [int]$process.ExitCode
     }
     catch {

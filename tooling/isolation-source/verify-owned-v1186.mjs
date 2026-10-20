@@ -1,6 +1,6 @@
 /**
  * Read-only proof that Local owns the exact full Sandboxie v1.18.6 source
- * plus ONLY the eleven reviewed native MIVUBI changes. Never installs a driver.
+ * plus eleven native MIVUBI changes and two exact build-path fixes.
  */
 import {spawnSync} from 'node:child_process';
 import {resolve, dirname} from 'node:path';
@@ -14,6 +14,30 @@ export const V1186_FILE_COUNT = 1627;
 export const V1186_CANDIDATE = 'engine/isolation-candidates/sandboxie-v1.18.6';
 export const V1186_OWNED = 'engine/isolation-owned';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+export const BUILD_FILES = Object.freeze([
+  'Sandboxie/core/low/LowLevel.vcxproj',
+  'Sandboxie/msgs/Parse.vcxproj',
+]);
+
+/** Only quote compiler paths; no compiler flags, source or driver policy changes. */
+export function applyOwnedBuildPathFix(path, original) {
+  let text = original.replace(/\r\n/g, '\n');
+  const changes = path === BUILD_FILES[0] ? [
+    [String.raw`-Fo$(Configuration)\%(Filename).obj %(FullPath)`,
+      String.raw`-Fo"$(Configuration)\%(Filename).obj" "%(FullPath)"`, 1],
+    [String.raw`-Fo$(Platform)\$(Configuration)\%(Filename).obj %(FullPath)`,
+      String.raw`-Fo"$(Platform)\$(Configuration)\%(Filename).obj" "%(FullPath)"`, 3],
+  ] : path === BUILD_FILES[1] ? [[
+    String.raw`mc /h $(MSBuildProjectDirectory)\$(Configuration) /r $(MSBuildProjectDirectory)\$(Configuration) -u $(MSBuildProjectDirectory)\msgs.mc`,
+    String.raw`mc /h "$(MSBuildProjectDirectory)\$(Configuration)" /r "$(MSBuildProjectDirectory)\$(Configuration)" -u "$(MSBuildProjectDirectory)\msgs.mc"`, 1,
+  ]] : [];
+  requireFact(changes.length > 0, 'unknown build patch path');
+  for (const [before, after, count] of changes) {
+    requireFact(text.split(before).length - 1 === count, 'build patch anchor drift: ' + path);
+    text = text.replaceAll(before, () => after);
+  }
+  return text;
+}
 
 function requireFact(ok, reason) {
   if (!ok) throw Error('MIVUBI v1.18.6 source refused: ' + reason);
@@ -49,7 +73,7 @@ function lsOwnedTree(root, path) {
 }
 
 /** Pure tree-diff gate; unit tests cover missing, alien and modified paths. */
-export function assessOwnedV1186(candidate, owned, allowed = SOURCE_FILES,
+export function assessOwnedV1186(candidate, owned, allowed = [...SOURCE_FILES, ...BUILD_FILES],
   expectedCount = V1186_FILE_COUNT) {
   requireFact(candidate instanceof Map && owned instanceof Map,
     'Git tree maps required');
@@ -68,7 +92,7 @@ export function assessOwnedV1186(candidate, owned, allowed = SOURCE_FILES,
   requireFact(owned.size === candidate.size, 'unapproved owned source entry');
   const expected = [...allowed].sort();
   requireFact(JSON.stringify(changed.sort()) === JSON.stringify(expected),
-    'native source delta is not the exact approved eleven-file closure');
+    'native source delta is not the exact approved source/build closure');
   return {sourceFiles: candidate.size, nativeModifiedFiles: changed.length,
     nativePaths: changed, sourceTreeComplete: true, nativeBuildVerified: false,
     signedDriverLoaded: false, minecraftGameplayVerified: false};
@@ -99,9 +123,17 @@ export function verifyOwnedV1186(repoRoot = ROOT) {
   requireFact((patch.match(/^@@ /gm) || []).length === 24,
     'native source patch closure changed');
   verifyExactPrivateSourceBytes(original, modified);
+  for (const path of BUILD_FILES) {
+    const pristine = git(root, ['cat-file', 'blob', candidate.get(path).sha]).toString('utf8');
+    const current = git(root, ['cat-file', 'blob', owned.get(path).sha]).toString('utf8');
+    requireFact(current.replace(/\r\n/g, '\n') === applyOwnedBuildPathFix(path, pristine),
+      'build project differs from reviewed path quoting: ' + path);
+  }
   return {state: 'MIVUBI_V1186_NATIVE_SOURCE_PATCHED_NOT_BUILT', head,
     upstreamTree, ownedTree: gitText(root, ['rev-parse', 'HEAD:' + V1186_OWNED]),
-    ...summary, activeProviderChanged: false, installationPermitted: false};
+    ...summary, totalModifiedFiles: summary.nativeModifiedFiles,
+    nativeModifiedFiles: SOURCE_FILES.length, nativeBuildModifiedFiles: BUILD_FILES.length,
+    activeProviderChanged: false, installationPermitted: false};
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try { process.stdout.write(JSON.stringify(verifyOwnedV1186(), null, 2) + '\n'); }
