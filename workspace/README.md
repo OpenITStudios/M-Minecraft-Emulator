@@ -38,8 +38,9 @@ worlds, signing keys, or unredacted logs. Git ignore is not encryption.
 ## Setup on Windows x64 (workspace-only)
 
 Run `DEV.cmd bootstrap` **once** from this checkout root. The existing
-Windows PowerShell bootstrap downloads pinned Node 24.21.0 and PowerShell
-7.5.4 ZIPs, verifies release SHA-256, and runs Rustup with a separate
+Windows PowerShell bootstrap downloads the Node and PowerShell ZIPs pinned in
+[toolchain.json](../toolchain.json), verifies release SHA-256, provisions the
+pinned npm into the portable Node directory, and runs Rustup with a separate
 `CARGO_HOME` / `RUSTUP_HOME` under `workspace/toolchains/`. All downloaded
 archives and the Rustup checksum/installer remain in `workspace/downloads/`.
 The Rustup executable checksum is fetched from its official HTTPS sidecar.
