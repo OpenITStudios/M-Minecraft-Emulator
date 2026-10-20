@@ -2,7 +2,7 @@
 
 ## Owned manager / independence — 20 October 2026
 
-**ACTIVE:** User confirms Minecraft normal (`a1a147b`). `52c38a3`: no Settings pickers. `e80ef10`: synthetic attach/restore PASS; 696 source tests pass. Next: synthetic host-crash recovery. Product host/previews and four-client acceptance NOT_EXECUTED. [Design/evidence](../docs/validation/native-pilot-localtest.md).
+**ACTIVE:** `ef250c5` proves direct-parent crash recovery FAIL (HWND lost); separate-owner synthetic UI-crash recovery PASS. No product host yet. Next: resolve presentation-owner failure before live hosting. Minecraft normal per user; Settings automatic. Four-client acceptance NOT_EXECUTED. [Evidence](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
 

@@ -9,6 +9,39 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Workspace crash boundary — 20 October 2026
+
+**ACTIVE, synthetic evidence only.** Source:
+`ef250c57dc7db52ada5fd334a14c0f97d359bc68`, following `f91f742`.
+No product UI, engine, game, service, profile or account code is changed.
+
+| Check | Result | Actual evidence / limit |
+| --- | --- | --- |
+| Synthetic normal attach/detach | PASS | Original parent/style/geometry restored; normal close request accepted and child exits 0 |
+| Synthetic partial attachment failure | PASS | Same restoration after injected failure; child normally closes with exit 0 |
+| Direct manager-parent crash recovery | FAIL, reproduced | Terminating the synthetic manager destroys the client's HWND. Its process may remain alive without a usable window; independent coordinator cannot restore the lost HWND. Optional diagnostic still returns FAIL/nonzero |
+| Separate presentation owner; synthetic UI killed | PASS | Fake UI and fake game are sibling children of a surviving owner. Game PID/start/HWND remains valid after UI exit; parent/style/geometry restored and normal close exits 0 |
+| Residual synthetic processes | PASS, observed | Zero fixture processes after the completed comparison. Cleanup is restricted to exact synthetic executable/start identity, never real games |
+| C# compilation and Windows execution | PASS | Existing Framework64 compiler; normal/partial/protected cases execute; explicit direct-parent comparison executes and keeps its failure verdict |
+| Structure / repository contract / whitespace | PASS | Relevant manual checks; no workflow definitions introduced |
+| Full frontend/Rust pipeline | NOT_EXECUTED for this revision | No frontend/Rust/package/dependency changes; prior 696-test run remains evidence for its earlier revision only |
+| Separate presentation-owner failure | NOT_EXECUTED | The protected case keeps that owner alive; it cannot establish survival if that process also crashes |
+| Actual hosted Minecraft / prompts / input / previews / four-client acceptance | NOT_EXECUTED | No game is attached to this experimental arrangement |
+
+The first crash-harness revision also exposed a local fixture error: disposing
+the pipe wait handle before EndWaitForConnection caused ObjectDisposedException.
+That harness error was corrected before recording the final direct-parent FAIL.
+Earlier stranded synthetic fixtures were cleaned up by their exact executable
+paths; a thread-based 20-second safety exit now covers a stranded Forms timer.
+The optional negative diagnostic remains `-IncludeUnsafeDirectCrash`, explicitly
+separate from the three passing synthetic scenarios. It is not a production
+fallback or a waived recovery requirement.
+
+**Decision:** reject direct parenting into the manager/UI process. A separate
+presentation owner is a narrower promising seam, not an accepted product host.
+Resolve its own failure behavior before attaching Minecraft. Keeping a game
+process alive without a usable HWND does not satisfy recovery or user comfort.
+
 ## Unified workspace foundation — 20 October 2026
 
 **ACTIVE; workspace hosting is not implemented.** The operator resumed work and
