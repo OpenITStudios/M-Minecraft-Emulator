@@ -11,7 +11,11 @@ param(
   [ValidateRange(1, 60)]
   [int]$SampleIntervalSeconds = 5,
   [switch]$GpuSnapshot,
-  [string]$OutputDirectory = ''
+  [string]$OutputDirectory = '',
+  [ValidateRange(0, 2147483647)]
+  [int]$Client03Pid = 0,
+  [ValidateRange(0, 2147483647)]
+  [int]$Client04Pid = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -19,6 +23,18 @@ $ErrorActionPreference = 'Stop'
 # reads sign-in/profile/world content or infers gameplay from PID existence.
 if ($NativePid -eq $IsolatedPid) {
   throw 'Native and isolated process IDs must be distinct.'
+}
+$fourClients = $Client03Pid -ne 0 -or $Client04Pid -ne 0
+if ($fourClients) {
+  if ($Client03Pid -eq 0 -or $Client04Pid -eq 0) {
+    throw 'Four-client sampling requires both Client03Pid and Client04Pid.'
+  }
+  if (@(@($NativePid, $IsolatedPid, $Client03Pid, $Client04Pid) | Select-Object -Unique).Count -ne 4) {
+    throw 'All four manually selected process IDs must be distinct.'
+  }
+  if ($GpuSnapshot) {
+    throw 'Four-client CPU/RAM sampling does not support the two-client GPU snapshot. Collect GPU evidence separately.'
+  }
 }
 if ($SampleIntervalSeconds -gt $DurationSeconds) {
   throw 'The sample interval cannot exceed the duration.'
@@ -147,6 +163,16 @@ $baselineIsolated = Read-Target -ProcessId $IsolatedPid
 if ($null -eq $baselineNative -or $null -eq $baselineIsolated) {
   throw 'Both manually selected processes must be accessible before measurement. No report produced.'
 }
+$extraTargets = @()
+if ($fourClients) {
+  foreach ($entry in @(@{ key='client03'; processId=$Client03Pid },
+                       @{ key='client04'; processId=$Client04Pid })) {
+    $baseline = Read-Target -ProcessId $entry.processId
+    if ($null -eq $baseline) { throw 'All four manually selected processes must be accessible before measurement. No report produced.' }
+    $extraTargets += @{ key=$entry.key; processId=$entry.processId;
+      baseline=$baseline; previous=$baseline; lost=$false }
+  }
+}
 $logicalCpus = [Environment]::ProcessorCount
 if ($logicalCpus -lt 1) { throw 'Host logical CPU count is invalid.' }
 if (-not $OutputDirectory) {
@@ -181,11 +207,20 @@ while ($timer.Elapsed.TotalSeconds -lt $DurationSeconds) {
   if ($null -eq $nativeCurrent) { $nativeLost = $true }
   if ($null -eq $isolatedCurrent) { $isolatedLost = $true }
 
-  $samples.Add([ordered]@{
+  $sample = [ordered]@{
     elapsedSeconds = [math]::Round($elapsed, 2)
     native = (Process-Sample -Previous $previousNative -Current $nativeCurrent -ElapsedSeconds $delta -LogicalCpus $logicalCpus)
     isolated = (Process-Sample -Previous $previousIsolated -Current $isolatedCurrent -ElapsedSeconds $delta -LogicalCpus $logicalCpus)
-  })
+  }
+  foreach ($entry in $extraTargets) {
+    $current = if ($entry.lost) { $null } else {
+      Read-Target -ProcessId $entry.processId -ExpectedStartTicks $entry.baseline.startTicks
+    }
+    if ($null -eq $current) { $entry.lost = $true }
+    $sample[$entry.key] = Process-Sample -Previous $entry.previous -Current $current -ElapsedSeconds $delta -LogicalCpus $logicalCpus
+    $entry.previous = $current
+  }
+  $samples.Add($sample)
   $previousNative = $nativeCurrent
   $previousIsolated = $isolatedCurrent
   $previousSecond = $elapsed
@@ -228,6 +263,12 @@ $report = [ordered]@{
 if ($GpuSnapshot) {
   $report['schema'] = 2
   $report['gpuDiagnostic'] = $gpuDiagnostic
+}
+if ($fourClients) {
+  $report['schema'] = 3
+  $report['scope'] = 'FOUR_CLIENT_PROCESS_PERFORMANCE'
+  $report['client03ProcessIdentityLost'] = [bool]$extraTargets[0].lost
+  $report['client04ProcessIdentityLost'] = [bool]$extraTargets[1].lost
 }
 $stamp = $beginUtc.ToString('yyyyMMddTHHmmssfffffffZ')
 $file = Join-Path $OutputDirectory ('native-process-performance-' + $stamp + '.json')

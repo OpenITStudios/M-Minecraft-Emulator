@@ -79,6 +79,7 @@ function metrics(samples, key) {
 }
 
 export function evaluateNativePerformance(report) {
+  if (report?.schema === 3) return evaluateFourClientPerformance(report);
   const fields = ["schema", "scope", "evidenceOrigin", "attribution",
     "automaticVerdict", "capturedAtUtc", "durationRequestedSeconds",
     "durationObservedSeconds", "sampleIntervalSeconds", "hostLogicalCpus",
@@ -165,6 +166,45 @@ export function evaluateNativePerformance(report) {
   };
 }
 
+// Reuse the same strict two-process validator for both pairs, without merging
+// unrelated captures or interpreting manually selected PIDs as owned clients.
+function evaluateFourClientPerformance(report) {
+  const { client03ProcessIdentityLost, client04ProcessIdentityLost,
+    ...base } = report;
+  if (report.scope !== 'FOUR_CLIENT_PROCESS_PERFORMANCE' ||
+      typeof client03ProcessIdentityLost !== 'boolean' ||
+      typeof client04ProcessIdentityLost !== 'boolean' ||
+      !Array.isArray(report.samples) || report.samples.length > 7200) {
+    throw new TypeError('Invalid four-client process capture.');
+  }
+  for (const row of report.samples) {
+    if (!exactly(row, ['elapsedSeconds', 'native', 'isolated', 'client03', 'client04'])) {
+      throw new TypeError('Four-client sample must contain exactly four process readings.');
+    }
+  }
+  const pair = (first, second, firstLost, secondLost) => evaluateNativePerformance({
+    ...base, schema: 1, scope: 'NATIVE_SANDBOXIE_PROCESS_PERFORMANCE',
+    nativeProcessIdentityLost: firstLost, isolatedProcessIdentityLost: secondLost,
+    samples: report.samples.map(row => ({elapsedSeconds: row.elapsedSeconds,
+      native: row[first], isolated: row[second]})),
+  });
+  const first = pair('native', 'isolated', report.nativeProcessIdentityLost,
+    report.isolatedProcessIdentityLost);
+  const second = pair('client03', 'client04', client03ProcessIdentityLost,
+    client04ProcessIdentityLost);
+  return {
+    interpretation: 'PROCESS_TELEMETRY_ONLY', automaticGameplayProof: false,
+    automaticPerformanceVerdict: 'NOT_PROVIDED', fourClientReady: false,
+    durationRequestedSeconds: first.durationRequestedSeconds,
+    durationObservedSeconds: first.durationObservedSeconds, sampleCount: first.sampleCount,
+    clients: { '01': first.native, '02': first.isolated,
+      '03': second.native, '04': second.isolated },
+    identityDiscontinuityObserved: first.identityDiscontinuityObserved || second.identityDiscontinuityObserved,
+    identityDiscontinuityInterpretation: first.identityDiscontinuityInterpretation,
+    metricScope: first.metricScope, missingEvidence: [...missing],
+  };
+}
+
 
 /**
  * Compare two process-only captures without claiming same host/workload,
@@ -172,6 +212,9 @@ export function evaluateNativePerformance(report) {
  * Results are withheld for mismatched captures or any lost process identity.
  */
 export function compareNativePerformance(baseline, candidate) {
+  if (baseline?.schema === 3 || candidate?.schema === 3) {
+    throw new TypeError('Four-client captures support individual review only; paired comparison requires the same two-client schema.');
+  }
   const before = evaluateNativePerformance(baseline);
   const after = evaluateNativePerformance(candidate);
   const conditions = {

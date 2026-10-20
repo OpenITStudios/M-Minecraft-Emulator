@@ -32,6 +32,55 @@ const sample = () => ({
     "GPU_VRAM", "MULTIPLAYER", "INPUT_RESPONSIVENESS"],
 });
 
+const fourSample = () => {
+  const report = sample();
+  report.schema = 3;
+  report.scope = 'FOUR_CLIENT_PROCESS_PERFORMANCE';
+  report.client03ProcessIdentityLost = false;
+  report.client04ProcessIdentityLost = false;
+  for (const row of report.samples) {
+    row.client03 = {...row.native};
+    row.client04 = {...row.isolated};
+  }
+  return report;
+};
+
+test('four-client review preserves separate metrics without account or FPS verdicts', () => {
+  const result = evaluateNativePerformance(fourSample());
+  assert.deepEqual(Object.keys(result.clients), ['01', '02', '03', '04']);
+  assert.equal(result.clients['03'].meanHostCpuPercent, 6);
+  assert.equal(result.clients['04'].meanWorkingSetMb, 230);
+  assert.equal(result.fourClientReady, false);
+  assert.equal(result.automaticGameplayProof, false);
+  assert.equal(result.automaticPerformanceVerdict, 'NOT_PROVIDED');
+});
+
+test('four-client review refuses partial, resumed, injected and contradictory evidence', () => {
+  const invalid = [
+    r => delete r.samples[0].client03,
+    r => r.samples[0].pid = 42,
+    r => r.client04ProcessIdentityLost = true,
+    r => r.samples[0].client03 = {status:'UNKNOWN', cpuPercentOfHost:null, workingSetMb:null},
+    r => r.samples[0].client04.cpuPercentOfHost = Infinity,
+    r => r.scope = 'NATIVE_SANDBOXIE_PROCESS_PERFORMANCE',
+    r => r.gpuDiagnostic = {},
+    r => r.providerVerified = true,
+  ];
+  for (const mutate of invalid) {
+    const report = fourSample();
+    mutate(report);
+    assert.throws(() => evaluateNativePerformance(report), TypeError);
+  }
+  const lost = fourSample();
+  lost.client03ProcessIdentityLost = true;
+  lost.samples[1].client03 = {status:'UNKNOWN', cpuPercentOfHost:null, workingSetMb:null};
+  const result = evaluateNativePerformance(lost);
+  assert.equal(result.clients['03'].missingSamples, 1);
+  assert.equal(result.identityDiscontinuityObserved, true);
+  assert.equal(result.clients['04'].missingSamples, 0);
+  assert.throws(() => compareNativePerformance(lost, lost), /individual review only/);
+});
+
 test("complete CPU/RAM values still never create gameplay or performance PASS", () => {
   const result = evaluateNativePerformance(sample());
   assert.equal(result.interpretation, "PROCESS_TELEMETRY_ONLY");
