@@ -35,10 +35,17 @@ mod tests {
     fn accepts_full_width_windows_filetime_without_lossy_float_conversion() {
         assert_eq!(
             parse_window_identity(42, Some("133400000000000000"), Some("0x100")),
-            Some(WindowIdentity { pid: 42, created_file_time: 133400000000000000, hwnd: 256 })
+            Some(WindowIdentity {
+                pid: 42,
+                created_file_time: 133400000000000000,
+                hwnd: 256
+            })
         );
-        assert_eq!(parse_window_identity(42, Some("18446744073709551615"), Some("0xffffffffffffffff"))
-            .map(|key| key.created_file_time), Some(u64::MAX));
+        assert_eq!(
+            parse_window_identity(42, Some("18446744073709551615"), Some("0xffffffffffffffff"))
+                .map(|key| key.created_file_time),
+            Some(u64::MAX)
+        );
     }
     #[test]
     fn refuses_missing_zero_reused_or_malformed_identity_pieces() {

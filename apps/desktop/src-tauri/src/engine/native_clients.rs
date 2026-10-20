@@ -16,21 +16,26 @@ static CLIENT_02_LAUNCH: Mutex<Option<Instant>> = Mutex::new(None);
 // bounded PowerShell/Start.exe helper is still running. This only protects
 // this app's explicit launches; external Sandboxie activity is not atomic.
 fn client_02_launch_in_retry_gap(last: Option<Instant>, now: Instant) -> bool {
-    last.is_some_and(|finished| now.saturating_duration_since(finished) < CLIENT_02_LAUNCH_RETRY_GAP)
+    last.is_some_and(|finished| {
+        now.saturating_duration_since(finished) < CLIENT_02_LAUNCH_RETRY_GAP
+    })
 }
 
 fn acquire_client_02_launch() -> io::Result<MutexGuard<'static, Option<Instant>>> {
     let guard = CLIENT_02_LAUNCH.try_lock().map_err(|_| {
-        io::Error::new(io::ErrorKind::WouldBlock,
-            "A Client 02 launch is already in progress")
+        io::Error::new(
+            io::ErrorKind::WouldBlock,
+            "A Client 02 launch is already in progress",
+        )
     })?;
     if client_02_launch_in_retry_gap(*guard, Instant::now()) {
-        return Err(io::Error::new(io::ErrorKind::AlreadyExists,
-            "Client 02 was recently requested; inspect before retrying after 30 seconds"));
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "Client 02 was recently requested; inspect before retrying after 30 seconds",
+        ));
     }
     Ok(guard)
 }
-
 
 #[cfg(windows)]
 pub(super) fn system_powershell() -> io::Result<std::path::PathBuf> {
@@ -42,16 +47,20 @@ pub(super) fn system_powershell() -> io::Result<std::path::PathBuf> {
     let mut system_dir = [0_u16; 32768];
     let length = unsafe { GetSystemDirectoryW(system_dir.as_mut_ptr(), system_dir.len() as u32) };
     if length == 0 || length as usize >= system_dir.len() {
-        return Err(io::Error::new(io::ErrorKind::NotFound,
-            "Windows system directory could not be resolved"));
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "Windows system directory could not be resolved",
+        ));
     }
     let executable = PathBuf::from(OsString::from_wide(&system_dir[..length as usize]))
         .join("WindowsPowerShell")
         .join("v1.0")
         .join("powershell.exe");
     if !executable.is_file() {
-        return Err(io::Error::new(io::ErrorKind::NotFound,
-            "Windows system PowerShell is unavailable; refusing an untrusted executable search"));
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "Windows system PowerShell is unavailable; refusing an untrusted executable search",
+        ));
     }
     Ok(executable)
 }
@@ -91,7 +100,9 @@ fn parse_native_observation(raw: &str) -> io::Result<NativeProcessObservation> {
     let mut handles = HashSet::new();
     for process in &report.candidates {
         if process.pid == 0 || !pids.insert(process.pid) {
-            return Err(invalid_evidence("native process candidates have invalid or duplicate PIDs"));
+            return Err(invalid_evidence(
+                "native process candidates have invalid or duplicate PIDs",
+            ));
         }
         if let Some(handle) = &process.window_handle {
             let bytes = handle.as_bytes();
@@ -99,12 +110,16 @@ fn parse_native_observation(raw: &str) -> io::Result<NativeProcessObservation> {
                 || !handle.starts_with("0x")
                 || !bytes[2..].iter().all(u8::is_ascii_hexdigit)
             {
-                return Err(invalid_evidence("native candidate window handle is malformed"));
+                return Err(invalid_evidence(
+                    "native candidate window handle is malformed",
+                ));
             }
             let numeric_handle = u64::from_str_radix(&handle[2..], 16)
                 .map_err(|_| invalid_evidence("native candidate window handle is invalid"))?;
             if numeric_handle == 0 || !handles.insert(numeric_handle) {
-                return Err(invalid_evidence("native candidate window handle is zero or duplicate"));
+                return Err(invalid_evidence(
+                    "native candidate window handle is zero or duplicate",
+                ));
             }
         }
     }
@@ -149,7 +164,13 @@ if ($items.Count -gt 16) { throw 'Candidate process cap exceeded' }
 
     let output = virtual_clients_core::bounded_command_output(
         &system_powershell()?,
-        ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", SCRIPT],
+        [
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            SCRIPT,
+        ],
         Duration::from_secs(8),
     )?;
     parse_native_observation(&output)
@@ -222,7 +243,13 @@ Start-Process -FilePath $explorer -ArgumentList ('"shell:AppsFolder\' + $appId +
     let script = [EDUCATION_DESKTOP_PREFLIGHT, SCRIPT].concat();
     virtual_clients_core::bounded_command_output(
         &system_powershell()?,
-        ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", &script],
+        [
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            &script,
+        ],
         Duration::from_secs(12),
     )
     .map(|_| ())
@@ -241,8 +268,6 @@ pub fn open_native_minecraft() -> io::Result<()> {
         "The four-account MVP currently targets a Windows PC.",
     ))
 }
-
-
 
 // The canonical Windows evidence collector is embedded into this development
 // pilot. One implementation owns Sandboxie box/membership/config observations;
@@ -296,39 +321,51 @@ fn parse_sandboxie_observation(raw: &str) -> io::Result<SandboxieClientObservati
         || report.process_evidence_class != "NAME_MATCH_CANDIDATE_ONLY"
         || report.interpretation != "CONFIG_AND_PROCESS_CANDIDATES_ONLY_NO_AUTHENTICATION_PROOF"
         || !one_of(&report.box_configured, &["YES", "NO", "UNKNOWN"])
-        || !one_of(&report.box_settings_source, &["BOX_SECTION_ENUMERATED", "UNKNOWN"])
+        || !one_of(
+            &report.box_settings_source,
+            &["BOX_SECTION_ENUMERATED", "UNKNOWN"],
+        )
         || !one_of(&report.auto_delete, &["ON", "OFF", "UNKNOWN"])
         || !one_of(&report.auto_remove, &["ON", "OFF", "UNKNOWN"])
         || !one_of(&report.credential_host_access, &["ON", "OFF", "UNKNOWN"])
         || !one_of(&report.membership_status, &["OBSERVED", "UNKNOWN"])
         || (report.membership_status == "OBSERVED" && report.box_configured != "YES")
-        || (report.box_settings_source == "BOX_SECTION_ENUMERATED" && report.box_configured != "YES")
-        || (report.credential_host_access != "UNKNOWN" && report.box_settings_source != "BOX_SECTION_ENUMERATED")
+        || (report.box_settings_source == "BOX_SECTION_ENUMERATED"
+            && report.box_configured != "YES")
+        || (report.credential_host_access != "UNKNOWN"
+            && report.box_settings_source != "BOX_SECTION_ENUMERATED")
         || report.candidate_process_count > 16
         || report.process_candidates.len() != report.candidate_process_count as usize
         || report.official_image_outside_selected_box_count > report.candidate_process_count
-        || !one_of(&report.direct_pid_query, &["NOT_REQUESTED", "UNAVAILABLE", "QUERIED"])
+        || !one_of(
+            &report.direct_pid_query,
+            &["NOT_REQUESTED", "UNAVAILABLE", "QUERIED"],
+        )
         || report.signed_image_other_box_count > report.official_image_outside_selected_box_count
         || report.signed_image_unknown_box_count > report.official_image_outside_selected_box_count
-        || report.signed_image_other_box_count
+        || report
+            .signed_image_other_box_count
             .saturating_add(report.signed_image_unknown_box_count)
             != report.official_image_outside_selected_box_count
         || (report.direct_pid_query == "NOT_REQUESTED"
             && report.official_image_outside_selected_box_count != 0)
         || (report.direct_pid_query != "NOT_REQUESTED"
             && report.official_image_outside_selected_box_count == 0)
-        || (report.direct_pid_query != "QUERIED"
-            && report.signed_image_other_box_count != 0)
+        || (report.direct_pid_query != "QUERIED" && report.signed_image_other_box_count != 0)
         || report.isolated_candidate_processes > report.candidate_process_count
         || report.isolated_visible_candidates > report.isolated_candidate_processes
-        || report.native_visible_candidates.saturating_add(report.isolated_visible_candidates)
+        || report
+            .native_visible_candidates
+            .saturating_add(report.isolated_visible_candidates)
             > report.candidate_process_count
         || (report.membership_status == "UNKNOWN"
             && (report.native_visible_candidates != 0
                 || report.isolated_visible_candidates != 0
                 || report.isolated_candidate_processes != 0))
     {
-        return Err(invalid_evidence("untrusted or contradictory Sandboxie process observation"));
+        return Err(invalid_evidence(
+            "untrusted or contradictory Sandboxie process observation",
+        ));
     }
     // Reconcile the identity list with the published candidate counts.
     // No PID/HWND snapshot is proof of Education sign-in or active gameplay.
@@ -343,16 +380,21 @@ fn parse_sandboxie_observation(raw: &str) -> io::Result<SandboxieClientObservati
             return Err(invalid_evidence("duplicate or zero process identity PID"));
         }
         if let Some(time) = &candidate.created_file_time {
-            let n = time.parse::<u64>()
+            let n = time
+                .parse::<u64>()
                 .map_err(|_| invalid_evidence("invalid process FILETIME"))?;
             if n == 0 || n.to_string() != *time {
                 return Err(invalid_evidence("noncanonical process FILETIME"));
             }
         }
         if report.membership_status == "UNKNOWN" && candidate.in_selected_box.is_some() {
-            return Err(invalid_evidence("unknown Sandboxie membership cannot attribute a PID"));
+            return Err(invalid_evidence(
+                "unknown Sandboxie membership cannot attribute a PID",
+            ));
         }
-        if candidate.in_selected_box == Some(true) { boxed += 1; }
+        if candidate.in_selected_box == Some(true) {
+            boxed += 1;
+        }
         match candidate.image_evidence.as_str() {
             "UNKNOWN" => (),
             "SIGNED_EDUCATION_IMAGE_CANDIDATE" => {
@@ -365,7 +407,9 @@ fn parse_sandboxie_observation(raw: &str) -> io::Result<SandboxieClientObservati
                         "signed Education image requires a visible attributed process and boxed creation time"));
                 }
                 // This original counter remains OUTSIDE-only.
-                if candidate.in_selected_box == Some(false) { official_outside += 1; }
+                if candidate.in_selected_box == Some(false) {
+                    official_outside += 1;
+                }
             }
             _ => return Err(invalid_evidence("unrecognized executable image evidence")),
         }
@@ -382,8 +426,12 @@ fn parse_sandboxie_observation(raw: &str) -> io::Result<SandboxieClientObservati
             if handle == 0 || !windows.insert(handle) {
                 return Err(invalid_evidence("duplicate or zero process HWND"));
             }
-            if candidate.in_selected_box == Some(true) { boxed_visible += 1; }
-            if candidate.in_selected_box == Some(false) { outside_visible += 1; }
+            if candidate.in_selected_box == Some(true) {
+                boxed_visible += 1;
+            }
+            if candidate.in_selected_box == Some(false) {
+                outside_visible += 1;
+            }
         }
     }
     if boxed != report.isolated_candidate_processes
@@ -391,7 +439,9 @@ fn parse_sandboxie_observation(raw: &str) -> io::Result<SandboxieClientObservati
         || boxed_visible != report.isolated_visible_candidates
         || outside_visible != report.native_visible_candidates
     {
-        return Err(invalid_evidence("process candidate identities contradict counters"));
+        return Err(invalid_evidence(
+            "process candidate identities contradict counters",
+        ));
     }
     Ok(report)
 }
@@ -442,24 +492,32 @@ const ACTIVE_ISOLATION_BACKEND: OfficialSandboxieBackend = OfficialSandboxieBack
 impl IsolationBackend for OfficialSandboxieBackend {
     fn inspect(&self, mode: IsolationInspection) -> io::Result<SandboxieClientObservation> {
         if matches!(mode, IsolationInspection::TargetedImageProof(0)) {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                "Targeted inspection requires a nonzero process PID"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Targeted inspection requires a nonzero process PID",
+            ));
         }
         #[cfg(windows)]
         {
             match mode {
-                IsolationInspection::StatusWithImageProof =>
-                    inspect_sandbox_client_02_mode(true, None),
-                IsolationInspection::FastLaunchPreflight =>
-                    inspect_sandbox_client_02_mode(false, None),
-                IsolationInspection::TargetedImageProof(pid) =>
-                    inspect_sandbox_client_02_mode(false, Some(pid)),
+                IsolationInspection::StatusWithImageProof => {
+                    inspect_sandbox_client_02_mode(true, None)
+                }
+                IsolationInspection::FastLaunchPreflight => {
+                    inspect_sandbox_client_02_mode(false, None)
+                }
+                IsolationInspection::TargetedImageProof(pid) => {
+                    inspect_sandbox_client_02_mode(false, Some(pid))
+                }
             }
         }
         #[cfg(not(windows))]
         {
             let _ = mode;
-            Err(io::Error::new(io::ErrorKind::Unsupported, "Windows is required"))
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "Windows is required",
+            ))
         }
     }
 
@@ -502,7 +560,13 @@ fn inspect_sandbox_client_02_mode(
         ["& {\n", INSPECT, "\n} -SummaryOnly -ImageProof"].concat()
     } else if let Some(pid) = boxed_image_pid.filter(|pid| *pid != 0) {
         // A decimal u32 is the only interpolated value, not executable path.
-        ["& {\n", INSPECT, "\n} -SummaryOnly -BoxedImageProofPid ", &pid.to_string()].concat()
+        [
+            "& {\n",
+            INSPECT,
+            "\n} -SummaryOnly -BoxedImageProofPid ",
+            &pid.to_string(),
+        ]
+        .concat()
     } else {
         ["& {\n", INSPECT, "\n} -SummaryOnly"].concat()
     };
@@ -513,7 +577,13 @@ fn inspect_sandbox_client_02_mode(
     const BOOTSTRAP: &str = "$r=[System.IO.StreamReader]::new([Console]::OpenStandardInput(),[System.Text.Encoding]::UTF8);& ([ScriptBlock]::Create($r.ReadToEnd()))";
     let output = virtual_clients_core::bounded_command_output_with_stdin(
         &system_powershell()?,
-        ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", BOOTSTRAP],
+        [
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            BOOTSTRAP,
+        ],
         Duration::from_secs(30),
         script.as_bytes(),
     )?;
@@ -521,12 +591,18 @@ fn inspect_sandbox_client_02_mode(
 }
 
 pub fn inspect_sandbox_client_02() -> io::Result<SandboxieClientObservation> {
-    inspect_with_backend(&ACTIVE_ISOLATION_BACKEND, IsolationInspection::StatusWithImageProof)
+    inspect_with_backend(
+        &ACTIVE_ISOLATION_BACKEND,
+        IsolationInspection::StatusWithImageProof,
+    )
 }
 
 #[cfg(windows)]
 fn inspect_sandbox_client_02_fast() -> io::Result<SandboxieClientObservation> {
-    inspect_with_backend(&ACTIVE_ISOLATION_BACKEND, IsolationInspection::FastLaunchPreflight)
+    inspect_with_backend(
+        &ACTIVE_ISOLATION_BACKEND,
+        IsolationInspection::FastLaunchPreflight,
+    )
 }
 
 // Focus is a user-requested, non-destructive window operation. Never use a
@@ -536,29 +612,36 @@ fn verify_fresh_focus_target(
     target: &ProcessIdentityCandidate,
     fresh: &SandboxieClientObservation,
 ) -> io::Result<(u64, u64)> {
-    let invalid = || io::Error::new(io::ErrorKind::InvalidInput,
-        "Client 02 focus requires a visible boxed process with known identity; Refresh first");
+    let invalid =
+        || {
+            io::Error::new(io::ErrorKind::InvalidInput,
+        "Client 02 focus requires a visible boxed process with known identity; Refresh first")
+        };
     // UI eligibility requires exactly one boxed Minecraft candidate.
     // Repeat that requirement against the NEW snapshot: another game process
     // may have appeared since Check status, even if the old PID/HWND survives.
-    if target.pid == 0 || target.in_selected_box != Some(true)
-        || !fresh.interactive_session || fresh.membership_status != "OBSERVED"
+    if target.pid == 0
+        || target.in_selected_box != Some(true)
+        || !fresh.interactive_session
+        || fresh.membership_status != "OBSERVED"
         || fresh.isolated_candidate_processes != 1
         || fresh.isolated_visible_candidates != 1
     {
         return Err(invalid());
     }
     let key = super::instance_identity::parse_window_identity(
-        target.pid, target.created_file_time.as_deref(), target.window_handle.as_deref()
-    ).ok_or_else(invalid)?;
+        target.pid,
+        target.created_file_time.as_deref(),
+        target.window_handle.as_deref(),
+    )
+    .ok_or_else(invalid)?;
     if !fresh.process_candidates.iter().any(|candidate| {
-            candidate.pid == target.pid
-                && candidate.created_file_time == target.created_file_time
-                && candidate.window_handle == target.window_handle
-                && candidate.in_selected_box == Some(true)
-                && candidate.image_evidence == "SIGNED_EDUCATION_IMAGE_CANDIDATE"
-        })
-    {
+        candidate.pid == target.pid
+            && candidate.created_file_time == target.created_file_time
+            && candidate.window_handle == target.window_handle
+            && candidate.in_selected_box == Some(true)
+            && candidate.image_evidence == "SIGNED_EDUCATION_IMAGE_CANDIDATE"
+    }) {
         // The caller's imageEvidence is untrusted. The backend must obtain
         // a new signed-file check for this exact PID/time/window.
         return Err(io::Error::new(io::ErrorKind::NotFound,
@@ -585,14 +668,22 @@ struct Client02PlacementRect {
 }
 
 fn client_02_half_slot(
-    left: i32, top: i32, right: i32, bottom: i32, side: Client02PlacementSide,
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+    side: Client02PlacementSide,
 ) -> io::Result<Client02PlacementRect> {
-    let width = right.checked_sub(left)
+    let width = right
+        .checked_sub(left)
         .ok_or_else(|| invalid_evidence("invalid monitor work-area width"))?;
-    let height = bottom.checked_sub(top)
+    let height = bottom
+        .checked_sub(top)
         .ok_or_else(|| invalid_evidence("invalid monitor work-area height"))?;
     if width < 2 || height < 1 {
-        return Err(invalid_evidence("monitor work area is too small for window placement"));
+        return Err(invalid_evidence(
+            "monitor work area is too small for window placement",
+        ));
     }
     let left_width = width / 2;
     let (x, slot_width) = match side {
@@ -603,7 +694,12 @@ fn client_02_half_slot(
             width - left_width,
         ),
     };
-    Ok(Client02PlacementRect { x, y: top, width: slot_width, height })
+    Ok(Client02PlacementRect {
+        x,
+        y: top,
+        width: slot_width,
+        height,
+    })
 }
 
 // GA_ROOT checks parents, not an owned top-level popup. Require an unowned,
@@ -616,8 +712,8 @@ fn verify_live_client_02_window(
     expected_pid: u32,
 ) -> io::Result<()> {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GetAncestor, GetWindow, GetWindowThreadProcessId, IsWindow,
-        IsWindowVisible, GA_ROOT, GW_OWNER,
+        GetAncestor, GetWindow, GetWindowThreadProcessId, IsWindow, IsWindowVisible, GA_ROOT,
+        GW_OWNER,
     };
     let mut actual_pid = 0_u32;
     if unsafe { IsWindow(hwnd) } == 0
@@ -627,8 +723,10 @@ fn verify_live_client_02_window(
         || unsafe { GetAncestor(hwnd, GA_ROOT) } != hwnd
         || !unsafe { GetWindow(hwnd, GW_OWNER) }.is_null()
     {
-        return Err(io::Error::new(io::ErrorKind::NotFound,
-            "Client 02 game window changed, closed or became an owned popup; Refresh first"));
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "Client 02 game window changed, closed or became an owned popup; Refresh first",
+        ));
     }
     Ok(())
 }
@@ -648,37 +746,50 @@ pub(super) fn with_verified_client_02_window(
     // An explicit operation never bypasses an in-progress launch or another
     // window mutation in the same manager.
     let _guard = CLIENT_02_LAUNCH.try_lock().map_err(|_| {
-        io::Error::new(io::ErrorKind::WouldBlock,
-            "Another Client 02 operation is in progress")
+        io::Error::new(
+            io::ErrorKind::WouldBlock,
+            "Another Client 02 operation is in progress",
+        )
     })?;
     // A targeted, read-only signed-file probe is run only for this boxed
     // PID. The manual outside-box ImageProof remains a different mode.
     let fresh = inspect_with_backend(
-        &ACTIVE_ISOLATION_BACKEND, IsolationInspection::TargetedImageProof(target.pid))?;
+        &ACTIVE_ISOLATION_BACKEND,
+        IsolationInspection::TargetedImageProof(target.pid),
+    )?;
     let (expected_time, hwnd_number) = verify_fresh_focus_target(&target, &fresh)?;
     let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, target.pid) };
     if process.is_null() {
-        return Err(io::Error::new(io::ErrorKind::PermissionDenied,
-            "Cannot inspect Client 02 process identity; action refused"));
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "Cannot inspect Client 02 process identity; action refused",
+        ));
     }
 
     let outcome = (|| -> io::Result<()> {
-        let empty = || FILETIME { dwLowDateTime: 0, dwHighDateTime: 0 };
+        let empty = || FILETIME {
+            dwLowDateTime: 0,
+            dwHighDateTime: 0,
+        };
         let mut created = empty();
         let mut exited = empty();
         let mut kernel = empty();
         let mut user = empty();
-        if unsafe { GetProcessTimes(process, &mut created, &mut exited,
-            &mut kernel, &mut user) } == 0
+        if unsafe { GetProcessTimes(process, &mut created, &mut exited, &mut kernel, &mut user) }
+            == 0
         {
-            return Err(io::Error::new(io::ErrorKind::PermissionDenied,
-                "Cannot recheck Client 02 creation time"));
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Cannot recheck Client 02 creation time",
+            ));
         }
-        let actual_time = (u64::from(created.dwHighDateTime) << 32)
-            | u64::from(created.dwLowDateTime);
+        let actual_time =
+            (u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime);
         if actual_time != expected_time {
-            return Err(io::Error::new(io::ErrorKind::NotFound,
-                "Client 02 PID was reused or process identity changed; Refresh first"));
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "Client 02 PID was reused or process identity changed; Refresh first",
+            ));
         }
 
         // Avoid silent truncation of an HWND recorded as a 64-bit integer.
@@ -688,7 +799,9 @@ pub(super) fn with_verified_client_02_window(
         verify_live_client_02_window(hwnd, target.pid)?;
         action(hwnd)
     })();
-    unsafe { CloseHandle(process); }
+    unsafe {
+        CloseHandle(process);
+    }
     outcome
 }
 
@@ -700,17 +813,23 @@ pub fn focus_observed_client_02(target: ProcessIdentityCandidate) -> io::Result<
     let process_id = target.pid;
     with_verified_client_02_window(target, |hwnd| {
         if unsafe { IsIconic(hwnd) } != 0 {
-            unsafe { ShowWindow(hwnd, SW_RESTORE); }
+            unsafe {
+                ShowWindow(hwnd, SW_RESTORE);
+            }
             if unsafe { IsIconic(hwnd) } != 0 {
-                return Err(io::Error::new(io::ErrorKind::WouldBlock,
-                    "Windows did not restore Client 02; restore the game window manually"));
+                return Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "Windows did not restore Client 02; restore the game window manually",
+                ));
             }
         }
         // Restore may replace the window; never focus a stale HWND.
         verify_live_client_02_window(hwnd, process_id)?;
         if unsafe { SetForegroundWindow(hwnd) } == 0 {
-            return Err(io::Error::new(io::ErrorKind::PermissionDenied,
-                "Windows refused to focus Client 02; select its window or use Alt+Tab"));
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Windows refused to focus Client 02; select its window or use Alt+Tab",
+            ));
         }
         Ok(())
     })
@@ -718,8 +837,10 @@ pub fn focus_observed_client_02(target: ProcessIdentityCandidate) -> io::Result<
 
 #[cfg(not(windows))]
 pub fn focus_observed_client_02(_target: ProcessIdentityCandidate) -> io::Result<()> {
-    Err(io::Error::new(io::ErrorKind::Unsupported,
-        "Focusing Client 02 requires Windows"))
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "Focusing Client 02 requires Windows",
+    ))
 }
 
 #[cfg(windows)]
@@ -732,8 +853,8 @@ pub fn place_observed_client_02(
             GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
         },
         UI::WindowsAndMessaging::{
-            IsIconic, IsZoomed, SetWindowPos, SWP_ASYNCWINDOWPOS,
-            SWP_NOACTIVATE, SWP_NOOWNERZORDER, SWP_NOZORDER,
+            IsIconic, IsZoomed, SetWindowPos, SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE,
+            SWP_NOOWNERZORDER, SWP_NOZORDER,
         },
     };
     let process_id = target.pid;
@@ -741,13 +862,17 @@ pub fn place_observed_client_02(
         // Never silently change Minecraft's maximized/fullscreen or minimized
         // state. The operator can restore the window explicitly first.
         if unsafe { IsIconic(hwnd) } != 0 || unsafe { IsZoomed(hwnd) } != 0 {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                "Restore Client 02 to a normal window before arranging"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Restore Client 02 to a normal window before arranging",
+            ));
         }
         let monitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) };
         if monitor.is_null() {
-            return Err(io::Error::new(io::ErrorKind::NotFound,
-                "Cannot locate the monitor containing Client 02"));
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "Cannot locate the monitor containing Client 02",
+            ));
         }
         let mut info = MONITORINFO::default();
         info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
@@ -755,29 +880,38 @@ pub fn place_observed_client_02(
             return Err(io::Error::last_os_error());
         }
         let work = info.rcWork;
-        let slot = client_02_half_slot(
-            work.left, work.top, work.right, work.bottom, side,
-        )?;
+        let slot = client_02_half_slot(work.left, work.top, work.right, work.bottom, side)?;
         // Monitor/window state can change while querying the work area.
         // Revalidate the entire window and layout target before the move.
         verify_live_client_02_window(hwnd, process_id)?;
         if unsafe { IsIconic(hwnd) } != 0 || unsafe { IsZoomed(hwnd) } != 0 {
-            return Err(io::Error::new(io::ErrorKind::WouldBlock,
-                "Client 02 window state changed before placement; restore and Refresh"));
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "Client 02 window state changed before placement; restore and Refresh",
+            ));
         }
         if unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) } != monitor {
-            return Err(io::Error::new(io::ErrorKind::WouldBlock,
-                "Client 02 moved to another monitor; Refresh before placing"));
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "Client 02 moved to another monitor; Refresh before placing",
+            ));
         }
         // Async placement avoids waiting indefinitely on a game window's
         // input queue. Success means the request was accepted, not that the
         // game rendered or the final geometry is already confirmed.
-        let flags = SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE
-            | SWP_NOZORDER | SWP_NOOWNERZORDER;
-        if unsafe { SetWindowPos(
-            hwnd, std::ptr::null_mut(), slot.x, slot.y,
-            slot.width, slot.height, flags,
-        ) } == 0 {
+        let flags = SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER;
+        if unsafe {
+            SetWindowPos(
+                hwnd,
+                std::ptr::null_mut(),
+                slot.x,
+                slot.y,
+                slot.width,
+                slot.height,
+                flags,
+            )
+        } == 0
+        {
             return Err(io::Error::last_os_error());
         }
         Ok(())
@@ -789,8 +923,10 @@ pub fn place_observed_client_02(
     _target: ProcessIdentityCandidate,
     _side: Client02PlacementSide,
 ) -> io::Result<()> {
-    Err(io::Error::new(io::ErrorKind::Unsupported,
-        "Arranging Client 02 requires Windows"))
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "Arranging Client 02 requires Windows",
+    ))
 }
 
 // Client 02 only. The sandbox is provisioned and licensed outside the manager.
@@ -799,14 +935,21 @@ const CLIENT_02_BOX_NAME: &str = "MinecraftClient02";
 fn validate_education_path(path: &str) -> io::Result<()> {
     let p = std::path::Path::new(path);
     let valid = p.file_name().and_then(|s| s.to_str()).is_some_and(|name| {
-        matches!(name.to_ascii_lowercase().as_str(),
-            "minecraft.windows.exe" | "minecrafteducation.exe" |
-            "minecrafteducationedition.exe")
+        matches!(
+            name.to_ascii_lowercase().as_str(),
+            "minecraft.windows.exe" | "minecrafteducation.exe" | "minecrafteducationedition.exe"
+        )
     });
-    if path.is_empty() || path.len() > 1024 || path.chars().any(char::is_control)
-        || !p.is_absolute() || !valid {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput,
-            "Select the installed Minecraft Education Windows EXE, not a shortcut or installer"));
+    if path.is_empty()
+        || path.len() > 1024
+        || path.chars().any(char::is_control)
+        || !p.is_absolute()
+        || !valid
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Select the installed Minecraft Education Windows EXE, not a shortcut or installer",
+        ));
     }
     Ok(())
 }
@@ -822,14 +965,18 @@ pub fn select_education_exe() -> io::Result<Option<String>> {
         .add_filter("Windows executable", &["exe"])
         .pick_file()
         .map(|path| {
-            let executable = path.to_str().ok_or_else(|| io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Selected executable path cannot be represented safely",
-            ))?;
+            let executable = path.to_str().ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Selected executable path cannot be represented safely",
+                )
+            })?;
             validate_education_path(executable)?;
             if !path.is_file() {
-                return Err(io::Error::new(io::ErrorKind::NotFound,
-                    "Selected Minecraft Education executable is unavailable"));
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "Selected Minecraft Education executable is unavailable",
+                ));
             }
             Ok(executable.to_owned())
         })
@@ -854,8 +1001,8 @@ pub fn inspect_owned_engine_candidate(
 }
 
 // Read-only SCM namespace probe: does not select or install an owned backend.
-pub fn inspect_owned_engine_host(
-) -> io::Result<crate::engine::owned_isolation::OwnedHostInspection> {
+pub fn inspect_owned_engine_host() -> io::Result<crate::engine::owned_isolation::OwnedHostInspection>
+{
     crate::engine::owned_isolation::inspect_host_service_namespace()
 }
 
@@ -863,7 +1010,8 @@ pub fn inspect_owned_engine_host(
 pub fn select_owned_candidate_directory() -> io::Result<Option<String>> {
     Ok(rfd::FileDialog::new()
         .set_title("Select staged owned isolation engine (read-only)")
-        .pick_folder().map(|p| p.to_string_lossy().into_owned()))
+        .pick_folder()
+        .map(|p| p.to_string_lossy().into_owned()))
 }
 
 #[cfg(not(windows))]
@@ -878,12 +1026,16 @@ fn launch_with_official_sandboxie(executable: String, licensed: bool) -> io::Res
     use std::{path::Path, time::Duration};
     validate_education_path(&executable)?;
     if !licensed {
-        return Err(io::Error::new(io::ErrorKind::PermissionDenied,
-            "Confirm licensing for Sandboxie Plus in this environment"));
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "Confirm licensing for Sandboxie Plus in this environment",
+        ));
     }
     if !Path::new(&executable).is_file() {
-        return Err(io::Error::new(io::ErrorKind::NotFound,
-            "Selected Minecraft Education EXE was not found"));
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "Selected Minecraft Education EXE was not found",
+        ));
     }
     // UI buttons are not an IPC concurrency guarantee. Hold the backend
     // guard across preflight and launch to prevent overlapping requests.
@@ -894,7 +1046,8 @@ fn launch_with_official_sandboxie(executable: String, licensed: bool) -> io::Res
     let escaped = executable.replace('\'', "''");
     let box_name = CLIENT_02_BOX_NAME;
     let desktop_preflight = EDUCATION_DESKTOP_PREFLIGHT;
-    let script = format!(r#"
+    let script = format!(
+        r#"
 {desktop_preflight}
 $game = '{escaped}'
 $box = '{box_name}'
@@ -968,13 +1121,20 @@ try {{
 }} finally {{
     $launcher.Dispose()
 }}
-"#);
+"#
+    );
     // Even a failed/timed-out Start.exe request may already have spawned the
     // game. Keep the in-process lock throughout the attempt and reserve the
     // entire retry gap AFTER helper completion, including ambiguous failures.
     let launch_result = virtual_clients_core::bounded_command_output(
         &system_powershell()?,
-        ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script.as_str()],
+        [
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            script.as_str(),
+        ],
         Duration::from_secs(20),
     );
     *launch_guard = Some(Instant::now());
@@ -989,7 +1149,10 @@ fn launch_with_official_sandboxie(_executable: String, _licensed: bool) -> io::R
 
 #[cfg(test)]
 mod tests {
-    use super::{acquire_client_02_launch, parse_native_observation, parse_sandboxie_observation, validate_education_path};
+    use super::{
+        acquire_client_02_launch, parse_native_observation, parse_sandboxie_observation,
+        validate_education_path,
+    };
     use serde_json::json;
 
     fn fixture() -> serde_json::Value {
@@ -1011,9 +1174,10 @@ mod tests {
             .expect("system PowerShell must be available for the Windows pilot");
         assert!(tool.is_absolute());
         assert!(tool.is_file());
-        assert!(tool.ends_with(std::path::Path::new("WindowsPowerShell/v1.0/powershell.exe")));
+        assert!(tool.ends_with(std::path::Path::new(
+            "WindowsPowerShell/v1.0/powershell.exe"
+        )));
     }
-
 
     struct FakeInspection {
         value: Option<super::SandboxieClientObservation>,
@@ -1021,51 +1185,71 @@ mod tests {
         probes: std::cell::Cell<u32>,
     }
     impl super::IsolationBackend for FakeInspection {
-        fn inspect(&self, mode: super::IsolationInspection)
-            -> std::io::Result<super::SandboxieClientObservation> {
+        fn inspect(
+            &self,
+            mode: super::IsolationInspection,
+        ) -> std::io::Result<super::SandboxieClientObservation> {
             assert_eq!(mode, super::IsolationInspection::FastLaunchPreflight);
             self.probes.set(self.probes.get() + 1);
             if let Some(error) = self.failure {
                 return Err(std::io::Error::new(error, "unknown inspection outcome"));
             }
-            self.value.clone().ok_or_else(|| std::io::Error::new(
-                std::io::ErrorKind::InvalidData, "no complete sandbox observation"))
+            self.value.clone().ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "no complete sandbox observation",
+                )
+            })
         }
 
         fn request_launch(&self, _executable: String, _licensed: bool) -> std::io::Result<()> {
-            Err(std::io::Error::new(std::io::ErrorKind::Unsupported,
-                "inspection fake never launches"))
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "inspection fake never launches",
+            ))
         }
     }
 
     #[test]
     fn adapter_propagates_timeout_and_incomplete_evidence_without_fallback() {
         let fake = FakeInspection {
-            value: None, failure: Some(std::io::ErrorKind::TimedOut),
+            value: None,
+            failure: Some(std::io::ErrorKind::TimedOut),
             probes: std::cell::Cell::new(0),
         };
-        assert_eq!(super::inspect_with_backend(
-            &fake, super::IsolationInspection::FastLaunchPreflight)
-            .unwrap_err().kind(), std::io::ErrorKind::TimedOut);
+        assert_eq!(
+            super::inspect_with_backend(&fake, super::IsolationInspection::FastLaunchPreflight)
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::TimedOut
+        );
         assert_eq!(fake.probes.get(), 1);
 
         let invalid = FakeInspection {
-            value: None, failure: None, probes: std::cell::Cell::new(0),
+            value: None,
+            failure: None,
+            probes: std::cell::Cell::new(0),
         };
-        assert_eq!(super::inspect_with_backend(
-            &invalid, super::IsolationInspection::FastLaunchPreflight)
-            .unwrap_err().kind(), std::io::ErrorKind::InvalidData);
+        assert_eq!(
+            super::inspect_with_backend(&invalid, super::IsolationInspection::FastLaunchPreflight)
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::InvalidData
+        );
         assert_eq!(invalid.probes.get(), 1);
     }
 
     #[test]
     fn official_adapter_rejects_zero_pid_before_os_image_proof() {
         use super::IsolationBackend;
-        assert_eq!(super::ACTIVE_ISOLATION_BACKEND.inspect(
-            super::IsolationInspection::TargetedImageProof(0))
-            .unwrap_err().kind(), std::io::ErrorKind::InvalidInput);
+        assert_eq!(
+            super::ACTIVE_ISOLATION_BACKEND
+                .inspect(super::IsolationInspection::TargetedImageProof(0))
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::InvalidInput
+        );
     }
-
 
     struct FakeLaunch {
         attempts: std::cell::Cell<u32>,
@@ -1073,16 +1257,23 @@ mod tests {
     }
 
     impl super::IsolationBackend for FakeLaunch {
-        fn inspect(&self, _mode: super::IsolationInspection)
-            -> std::io::Result<super::SandboxieClientObservation> {
-            Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "launch fake cannot inspect"))
+        fn inspect(
+            &self,
+            _mode: super::IsolationInspection,
+        ) -> std::io::Result<super::SandboxieClientObservation> {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "launch fake cannot inspect",
+            ))
         }
 
         fn request_launch(&self, executable: String, licensed: bool) -> std::io::Result<()> {
             self.attempts.set(self.attempts.get() + 1);
             *self.received.borrow_mut() = Some((executable, licensed));
-            Err(std::io::Error::new(std::io::ErrorKind::TimedOut,
-                "ambiguous launch outcome"))
+            Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "ambiguous launch outcome",
+            ))
         }
     }
 
@@ -1103,7 +1294,8 @@ mod tests {
     fn placement_slot_keeps_all_pieces_inside_monitor_work_area() {
         use super::{client_02_half_slot, Client02PlacementSide};
         let left = client_02_half_slot(-1280, 40, 641, 1120, Client02PlacementSide::Left).unwrap();
-        let right = client_02_half_slot(-1280, 40, 641, 1120, Client02PlacementSide::Right).unwrap();
+        let right =
+            client_02_half_slot(-1280, 40, 641, 1120, Client02PlacementSide::Right).unwrap();
         assert_eq!(left.x, -1280);
         assert_eq!(left.y, 40);
         assert_eq!(left.width, 960);
@@ -1113,8 +1305,9 @@ mod tests {
         assert_eq!(right.x + right.width, 641);
         assert!(client_02_half_slot(30, 0, 31, 800, Client02PlacementSide::Left).is_err());
         assert!(client_02_half_slot(10, 40, 10, 400, Client02PlacementSide::Right).is_err());
-        assert!(client_02_half_slot(i32::MIN, 0, i32::MAX, 800,
-            Client02PlacementSide::Right).is_err());
+        assert!(
+            client_02_half_slot(i32::MIN, 0, i32::MAX, 800, Client02PlacementSide::Right).is_err()
+        );
     }
 
     #[test]
@@ -1142,12 +1335,13 @@ mod tests {
         // The UI sends a name-matched UNKNOWN candidate. It cannot grant
         // itself image authority; an unsigned fresh snapshot is rejected.
         assert!(super::verify_fresh_focus_target(&target, &fresh).is_err());
-        fresh.process_candidates[0].image_evidence =
-            "SIGNED_EDUCATION_IMAGE_CANDIDATE".into();
+        fresh.process_candidates[0].image_evidence = "SIGNED_EDUCATION_IMAGE_CANDIDATE".into();
         // The fresh backend proof is for the exact same PID/time/HWND;
         // caller-supplied imageEvidence remains ignored.
-        assert_eq!(super::verify_fresh_focus_target(&target, &fresh).unwrap().0,
-            133400000000000001);
+        assert_eq!(
+            super::verify_fresh_focus_target(&target, &fresh).unwrap().0,
+            133400000000000001
+        );
 
         // The selected PID/time/HWND still matches, but a SECOND boxed
         // candidate appeared after the UI snapshot. Focus and Place must
@@ -1161,16 +1355,16 @@ mod tests {
         extra_boxed.process_candidates.push(newcomer.clone());
         extra_boxed.candidate_process_count = 2;
         extra_boxed.isolated_candidate_processes = 2;
-        assert!(parse_sandboxie_observation(
-            &serde_json::to_string(&extra_boxed).unwrap()).is_ok());
+        assert!(parse_sandboxie_observation(&serde_json::to_string(&extra_boxed).unwrap()).is_ok());
         assert!(super::verify_fresh_focus_target(&target, &extra_boxed).is_err());
 
         // Both windows might be visible by the time the action reaches Rust.
         let mut extra_window = extra_boxed.clone();
         extra_window.process_candidates[1].window_handle = Some("0x300".into());
         extra_window.isolated_visible_candidates = 2;
-        assert!(parse_sandboxie_observation(
-            &serde_json::to_string(&extra_window).unwrap()).is_ok());
+        assert!(
+            parse_sandboxie_observation(&serde_json::to_string(&extra_window).unwrap()).is_ok()
+        );
         assert!(super::verify_fresh_focus_target(&target, &extra_window).is_err());
 
         // A distinct outside-box native candidate is NOT a second boxed
@@ -1181,8 +1375,9 @@ mod tests {
         native_outside.process_candidates.push(newcomer);
         native_outside.candidate_process_count = 2;
         native_outside.native_visible_candidates = 1;
-        assert!(parse_sandboxie_observation(
-            &serde_json::to_string(&native_outside).unwrap()).is_ok());
+        assert!(
+            parse_sandboxie_observation(&serde_json::to_string(&native_outside).unwrap()).is_ok()
+        );
         assert!(super::verify_fresh_focus_target(&target, &native_outside).is_ok());
 
         let mut changed = target.clone();
@@ -1209,7 +1404,8 @@ mod tests {
         assert!(!super::client_02_launch_in_retry_gap(None, now));
         assert!(super::client_02_launch_in_retry_gap(Some(now), now));
         assert!(super::client_02_launch_in_retry_gap(
-            Some(now - (gap - std::time::Duration::from_secs(1))), now
+            Some(now - (gap - std::time::Duration::from_secs(1))),
+            now
         ));
         assert!(!super::client_02_launch_in_retry_gap(Some(now - gap), now));
     }
@@ -1217,7 +1413,9 @@ mod tests {
     #[test]
     fn backend_rejects_overlapping_client_02_launches() {
         let first = acquire_client_02_launch().expect("first request admitted");
-        let second = acquire_client_02_launch().err().expect("concurrent request refused");
+        let second = acquire_client_02_launch()
+            .err()
+            .expect("concurrent request refused");
         assert_eq!(second.kind(), std::io::ErrorKind::WouldBlock);
         drop(first);
         assert!(acquire_client_02_launch().is_ok());
@@ -1243,16 +1441,28 @@ mod tests {
         let mut unknown = empty.clone();
         unknown["membershipStatus"] = serde_json::json!("UNKNOWN");
         let unknown = parse_sandboxie_observation(&unknown.to_string()).unwrap();
-        assert_eq!(super::admit_client_02_launch_snapshot(&unknown)
-            .unwrap_err().kind(), std::io::ErrorKind::WouldBlock);
+        assert_eq!(
+            super::admit_client_02_launch_snapshot(&unknown)
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::WouldBlock
+        );
         let mut occupied = observed.clone();
         occupied.isolated_candidate_processes = 1;
-        assert_eq!(super::admit_client_02_launch_snapshot(&occupied)
-            .unwrap_err().kind(), std::io::ErrorKind::AlreadyExists);
+        assert_eq!(
+            super::admit_client_02_launch_snapshot(&occupied)
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::AlreadyExists
+        );
         let mut unsafe_box = observed.clone();
         unsafe_box.credential_host_access = "UNKNOWN".into();
-        assert_eq!(super::admit_client_02_launch_snapshot(&unsafe_box)
-            .unwrap_err().kind(), std::io::ErrorKind::PermissionDenied);
+        assert_eq!(
+            super::admit_client_02_launch_snapshot(&unsafe_box)
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::PermissionDenied
+        );
     }
 
     #[test]
@@ -1363,9 +1573,11 @@ mod tests {
     #[test]
     fn rejects_unbounded_and_extra_private_data() {
         let mut report = fixture();
-        report["candidates"] = json!((1..=17).map(|pid| json!({
-            "pid": pid, "windowHandle": null
-        })).collect::<Vec<_>>());
+        report["candidates"] = json!((1..=17)
+            .map(|pid| json!({
+                "pid": pid, "windowHandle": null
+            }))
+            .collect::<Vec<_>>());
         assert!(parse_native_observation(&report.to_string()).is_err());
 
         let mut report = fixture();
@@ -1375,9 +1587,14 @@ mod tests {
 
     #[test]
     fn rejects_non_education_exe_and_unsafe_paths() {
-        for bad in ["", "notepad.exe", "C:/Tools/notepad.exe",
-                    "C:/Tools/Minecraft.Windows.cmd",
-                    "../Minecraft.Windows.exe", "C:/Minecraft.Windows.exe\nother"] {
+        for bad in [
+            "",
+            "notepad.exe",
+            "C:/Tools/notepad.exe",
+            "C:/Tools/Minecraft.Windows.cmd",
+            "../Minecraft.Windows.exe",
+            "C:/Minecraft.Windows.exe\nother",
+        ] {
             assert!(validate_education_path(bad).is_err());
         }
     }

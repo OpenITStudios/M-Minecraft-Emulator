@@ -5,11 +5,12 @@
   "type": "module",
   "description": "Minecraft Education native and Sandboxie feasibility controller; legacy VMware source retained",
   "engines": {
-    "node": "24.x"
+    "node": "^24.22.0",
+    "npm": "12.2.0"
   },
   "packageManager": "npm@12.2.0",
   "scripts": {
-    "setup": "npm --prefix apps/desktop ci --no-audit --no-fund",
+    "setup": "npm --prefix apps/desktop ci --engine-strict --no-audit --no-fund",
     "dev": "npm --prefix apps/desktop run dev:app",
     "verify:repository": "node tooling/repository/verify.mjs",
     "test": "npm --prefix apps/desktop run test",

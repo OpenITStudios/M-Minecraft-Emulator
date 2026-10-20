@@ -33,15 +33,29 @@ const PRIVATE_SOURCE_FILES: &[&str] = &[
     "Sandboxie/install/kmdutil/kmdutil.c",
 ];
 const REQUIRED_FILES: &[&str] = &[
-    "SbieDrv.sys", "SbieSvc.exe", "SbieDll.dll",
-    "Start.exe", "SbieIni.exe", "kmdutil.exe", "SbieMsg.dll",
-    "SandboxieRpcSs.exe", "SandboxieDcomLaunch.exe",
-    "SandboxieCrypto.exe", "SandboxieBITS.exe", "SandboxieWUAU.exe",
-    "SbieCtrl.exe", "SboxHostDll.dll",
-    "32/SbieSvc.exe", "32/SbieDll.dll",
-    "Templates.ini", "SbieSettings.ini",
-    "Manifest0.txt", "Manifest1.txt", "Manifest2.txt",
-    "LICENSES/LICENSE.Plus", "LICENSES/Sandboxie/COPYING",
+    "SbieDrv.sys",
+    "SbieSvc.exe",
+    "SbieDll.dll",
+    "Start.exe",
+    "SbieIni.exe",
+    "kmdutil.exe",
+    "SbieMsg.dll",
+    "SandboxieRpcSs.exe",
+    "SandboxieDcomLaunch.exe",
+    "SandboxieCrypto.exe",
+    "SandboxieBITS.exe",
+    "SandboxieWUAU.exe",
+    "SbieCtrl.exe",
+    "SboxHostDll.dll",
+    "32/SbieSvc.exe",
+    "32/SbieDll.dll",
+    "Templates.ini",
+    "SbieSettings.ini",
+    "Manifest0.txt",
+    "Manifest1.txt",
+    "Manifest2.txt",
+    "LICENSES/LICENSE.Plus",
+    "LICENSES/Sandboxie/COPYING",
     "LICENSES/SandboxiePlus/QSbieAPI/LICENSE",
 ];
 
@@ -116,27 +130,26 @@ fn expected_source_for_payload(path: &str) -> Option<String> {
     match path {
         "32/SbieSvc.exe" => Some("Sandboxie/Bin/Win32/SbieRelease/SbieSvc.exe".into()),
         "32/SbieDll.dll" => Some("Sandboxie/Bin/Win32/SbieRelease/SbieDll.dll".into()),
-        "Templates.ini" | "SbieSettings.ini" | "Manifest0.txt"
-            | "Manifest1.txt" | "Manifest2.txt" => {
-            Some(format!("Sandboxie/install/{path}"))
-        }
+        "Templates.ini" | "SbieSettings.ini" | "Manifest0.txt" | "Manifest1.txt"
+        | "Manifest2.txt" => Some(format!("Sandboxie/install/{path}")),
         "LICENSES/LICENSE.Plus" => Some("LICENSE.Plus".into()),
         "LICENSES/LICENSE.Classic" => Some("LICENSE.Classic".into()),
         "LICENSES/Sandboxie/COPYING" => Some("Sandboxie/COPYING".into()),
-        "LICENSES/SandboxiePlus/QSbieAPI/LICENSE" => {
-            Some("SandboxiePlus/QSbieAPI/LICENSE".into())
-        }
-        "_debug/Win32/SbieSvc.pdb" | "_debug/Win32/SbieDll.pdb" => {
-            Some(format!("Sandboxie/Bin/Win32/SbieRelease/{}",
-                path.rsplit('/').next()?))
-        }
-        "_debug/x64/SbieDrv.pdb" | "_debug/x64/SbieSvc.pdb"
-            | "_debug/x64/SbieDll.pdb" | "_debug/x64/Start.pdb"
-            | "_debug/x64/SbieIni.pdb" | "_debug/x64/kmdutil.pdb"
-            | "_debug/x64/SboxHostDll.pdb" => {
-            Some(format!("Sandboxie/Bin/x64/SbieRelease/{}",
-                path.rsplit('/').next()?))
-        }
+        "LICENSES/SandboxiePlus/QSbieAPI/LICENSE" => Some("SandboxiePlus/QSbieAPI/LICENSE".into()),
+        "_debug/Win32/SbieSvc.pdb" | "_debug/Win32/SbieDll.pdb" => Some(format!(
+            "Sandboxie/Bin/Win32/SbieRelease/{}",
+            path.rsplit('/').next()?
+        )),
+        "_debug/x64/SbieDrv.pdb"
+        | "_debug/x64/SbieSvc.pdb"
+        | "_debug/x64/SbieDll.pdb"
+        | "_debug/x64/Start.pdb"
+        | "_debug/x64/SbieIni.pdb"
+        | "_debug/x64/kmdutil.pdb"
+        | "_debug/x64/SboxHostDll.pdb" => Some(format!(
+            "Sandboxie/Bin/x64/SbieRelease/{}",
+            path.rsplit('/').next()?
+        )),
         _ if REQUIRED_FILES.contains(&path) => {
             Some(format!("Sandboxie/Bin/x64/SbieRelease/{path}"))
         }
@@ -181,7 +194,9 @@ fn read_bounded_file(path: &Path, limit: usize) -> io::Result<Vec<u8>> {
     let mut file = File::open(path)?;
     let before = file.metadata()?;
     if !before.is_file() || before.len() > limit as u64 {
-        return Err(rejected("owned-engine metadata is not a bounded regular file"));
+        return Err(rejected(
+            "owned-engine metadata is not a bounded regular file",
+        ));
     }
     let mut bytes = Vec::with_capacity(before.len() as usize);
     (&mut file).take(limit as u64 + 1).read_to_end(&mut bytes)?;
@@ -214,8 +229,10 @@ fn safe_relative_file(root: &Path, relative: &str) -> io::Result<PathBuf> {
             return Err(rejected("owned-engine artifact path depth exceeded"));
         }
         let part = part.to_string_lossy();
-        if part.is_empty() || !part.bytes().all(|b|
-            b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+        if part.is_empty()
+            || !part
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
         {
             return Err(rejected("owned-engine artifact path has unsafe characters"));
         }
@@ -243,14 +260,22 @@ fn sha256_file(path: &Path, expected_size: u64) -> io::Result<String> {
     let mut buffer = [0_u8; 64 * 1024];
     loop {
         let count = file.read(&mut buffer)?;
-        if count == 0 { break; }
+        if count == 0 {
+            break;
+        }
         hasher.update(&buffer[..count]);
     }
     let current = file.metadata()?;
     if current.len() != original.len() || current.modified()? != original.modified()? {
-        return Err(rejected("owned-engine artifact changed during hash verification"));
+        return Err(rejected(
+            "owned-engine artifact changed during hash verification",
+        ));
     }
-    Ok(hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect::<String>())
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>())
 }
 
 // A read-only candidate must match the assembler's closed payload inventory.
@@ -273,10 +298,13 @@ fn verify_payload_inventory(root: &Path, declared: &HashSet<String>) -> io::Resu
                 return Err(rejected("owned-engine payload entry cap exceeded"));
             }
             let name_os = entry.file_name();
-            let name = name_os.to_str()
+            let name = name_os
+                .to_str()
                 .ok_or_else(|| rejected("owned-engine payload contains non-Unicode name"))?;
-            if name.is_empty() || !name.bytes().all(|b|
-                b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+            if name.is_empty()
+                || !name
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
             {
                 return Err(rejected("owned-engine payload name is not canonical"));
             }
@@ -291,7 +319,10 @@ fn verify_payload_inventory(root: &Path, declared: &HashSet<String>) -> io::Resu
             }
             if meta.is_dir() {
                 let directory_prefix = format!("{relative}/");
-                if !declared.iter().any(|path| path.starts_with(&directory_prefix)) {
+                if !declared
+                    .iter()
+                    .any(|path| path.starts_with(&directory_prefix))
+                {
                     return Err(rejected("undeclared owned-engine directory"));
                 }
                 directories.push((entry.path(), relative, depth + 1));
@@ -305,33 +336,47 @@ fn verify_payload_inventory(root: &Path, declared: &HashSet<String>) -> io::Resu
         }
     }
     if &observed != declared {
-        return Err(rejected("owned-engine payload inventory changed during inspection"));
+        return Err(rejected(
+            "owned-engine payload inventory changed during inspection",
+        ));
     }
     Ok(())
 }
 
 fn required_stages(stages: &[BuildStage], owned_v1186: bool) -> bool {
     let expected = if owned_v1186 {
-        [("win32-support", "Win32"), ("x64-user-core", "x64"), ("x64-wdk-kernel", "x64")]
+        [
+            ("win32-support", "Win32"),
+            ("x64-user-core", "x64"),
+            ("x64-wdk-kernel", "x64"),
+        ]
     } else {
-        [("win32-support", "Win32"), ("x64-core", "x64"), ("x64-kernel", "x64")]
+        [
+            ("win32-support", "Win32"),
+            ("x64-core", "x64"),
+            ("x64-kernel", "x64"),
+        ]
     };
-    stages.len() == expected.len() && stages.iter().zip(expected).all(
-        |(actual, (id, platform))|
+    stages.len() == expected.len()
+        && stages.iter().zip(expected).all(|(actual, (id, platform))| {
             actual.id == id && actual.platform == platform && actual.state == "COMPILED"
-    )
+        })
 }
 
 /// Read-only checksum and layout inspection. A result is NEVER approval to
 /// install the upstream kernel driver or launch a separate Minecraft account.
 pub fn inspect_candidate(root: &Path) -> io::Result<OwnedCandidateInspection> {
     if root.as_os_str().is_empty() || !root.is_absolute() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput,
-            "Owned engine candidate requires an absolute directory"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Owned engine candidate requires an absolute directory",
+        ));
     }
     let metadata = fs::symlink_metadata(root)?;
     if is_redirected_entry(&metadata) || !metadata.is_dir() {
-        return Err(rejected("owned-engine candidate root must be an ordinary directory"));
+        return Err(rejected(
+            "owned-engine candidate root must be an ordinary directory",
+        ));
     }
     let manifest_path = safe_relative_file(root, "engine-provenance.json")?;
     let raw = read_bounded_file(&manifest_path, 256 * 1024)?;
@@ -339,9 +384,13 @@ pub fn inspect_candidate(root: &Path) -> io::Result<OwnedCandidateInspection> {
         .map_err(|_| rejected("invalid owned-engine provenance schema"))?;
     let private = manifest.state == PRIVATE_STATE;
     let owned_v1186 = manifest.state == OWNED_V1186_STATE;
-    let hex = |value: &Option<String>, bytes: usize| value.as_ref().is_some_and(|x| {
-        x.len() == bytes && x.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
-    });
+    let hex = |value: &Option<String>, bytes: usize| {
+        value.as_ref().is_some_and(|x| {
+            x.len() == bytes
+                && x.bytes()
+                    .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+        })
+    };
     let legacy_fields_absent = manifest.source_version.is_none()
         && manifest.upstream_tree.is_none()
         && manifest.owned_repo_head.is_none()
@@ -367,25 +416,36 @@ pub fn inspect_candidate(root: &Path) -> io::Result<OwnedCandidateInspection> {
     } else if private && legacy_fields_absent {
         manifest.private_core_build == Some(true)
             && manifest.private_fork_head.as_ref().is_some_and(|sha| {
-                sha.len() == 40 && sha != PINNED_UPSTREAM
-                    && sha.bytes().all(|b| b.is_ascii_hexdigit()
-                        && !b.is_ascii_uppercase())
+                sha.len() == 40
+                    && sha != PINNED_UPSTREAM
+                    && sha
+                        .bytes()
+                        .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
             })
             && manifest.private_fork_tree.as_ref().is_some_and(|sha| {
-                sha.len() == 40 && sha.bytes().all(|b| b.is_ascii_hexdigit()
-                    && !b.is_ascii_uppercase())
+                sha.len() == 40
+                    && sha
+                        .bytes()
+                        .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
             })
             && manifest.private_patch_sha256.as_ref().is_some_and(|sha| {
-                sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_hexdigit()
-                    && !b.is_ascii_uppercase())
+                sha.len() == 64
+                    && sha
+                        .bytes()
+                        .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
             })
             && manifest.source_build_marker.as_deref() == Some("MIVUBI_PRIVATE_ISOLATION_BUILD")
             && manifest.can_coexist_with_official_sandboxie == Some(false)
-            && manifest.source_files_modified.as_ref().is_some_and(|files| {
-                files.len() == PRIVATE_SOURCE_FILES.len() &&
-                files.iter().zip(PRIVATE_SOURCE_FILES.iter())
-                    .all(|(actual, expected)| actual.as_str() == *expected)
-            })
+            && manifest
+                .source_files_modified
+                .as_ref()
+                .is_some_and(|files| {
+                    files.len() == PRIVATE_SOURCE_FILES.len()
+                        && files
+                            .iter()
+                            .zip(PRIVATE_SOURCE_FILES.iter())
+                            .all(|(actual, expected)| actual.as_str() == *expected)
+                })
     } else {
         legacy_fields_absent
             && manifest.private_core_build.is_none()
@@ -401,7 +461,12 @@ pub fn inspect_candidate(root: &Path) -> io::Result<OwnedCandidateInspection> {
         || !private_provenance_correct
         || manifest.upstream_repository != "sandboxie-plus/Sandboxie"
         || manifest.upstream_tag != (if owned_v1186 { "v1.18.6" } else { "v1.18.5" })
-        || manifest.upstream_commit != (if owned_v1186 { OWNED_V1186_UPSTREAM } else { PINNED_UPSTREAM })
+        || manifest.upstream_commit
+            != (if owned_v1186 {
+                OWNED_V1186_UPSTREAM
+            } else {
+                PINNED_UPSTREAM
+            })
         || manifest.windows_kernel_driver_loaded
         || manifest.minecraft_gameplay_verified
         || manifest.sandboxie_external_dependency_removed
@@ -409,7 +474,9 @@ pub fn inspect_candidate(root: &Path) -> io::Result<OwnedCandidateInspection> {
         || !required_stages(&manifest.build_stages, owned_v1186)
         || !(REQUIRED_FILES.len()..=48).contains(&manifest.artifacts.len())
     {
-        return Err(rejected("owned-engine manifest makes unproven runtime claims"));
+        return Err(rejected(
+            "owned-engine manifest makes unproven runtime claims",
+        ));
     }
 
     let mut seen: HashSet<String> = HashSet::new();
@@ -417,25 +484,33 @@ pub fn inspect_candidate(root: &Path) -> io::Result<OwnedCandidateInspection> {
         if !seen.insert(artifact.path.clone()) {
             return Err(rejected("duplicate owned-engine artifact path"));
         }
-        if expected_source_for_payload(&artifact.path).as_deref()
-            != Some(artifact.source.as_str())
+        if expected_source_for_payload(&artifact.path).as_deref() != Some(artifact.source.as_str())
         {
-            return Err(rejected("owned-engine artifact path/source provenance mismatch"));
+            return Err(rejected(
+                "owned-engine artifact path/source provenance mismatch",
+            ));
         }
-        if artifact.sha256.len() != 64 || !artifact.sha256.bytes().all(|b|
-            b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+        if artifact.sha256.len() != 64
+            || !artifact
+                .sha256
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
         {
             return Err(rejected("invalid owned-engine artifact checksum"));
         }
         let path = safe_relative_file(root, &artifact.path)?;
         if sha256_file(&path, artifact.size_bytes)? != artifact.sha256 {
-            return Err(rejected("owned-engine artifact checksum does not match bytes"));
+            return Err(rejected(
+                "owned-engine artifact checksum does not match bytes",
+            ));
         }
     }
     if !REQUIRED_FILES.iter().all(|name| seen.contains(*name))
         || (owned_v1186 && !seen.contains("LICENSES/LICENSE.Classic"))
     {
-        return Err(rejected("incomplete owned-engine driver/service/DLL, helpers or license closure"));
+        return Err(rejected(
+            "incomplete owned-engine driver/service/DLL, helpers or license closure",
+        ));
     }
     // Explicit staging marker must accompany the purported uninstalled bundle.
     let marker = safe_relative_file(root, "NOT-INSTALLABLE.txt")?;
@@ -446,7 +521,9 @@ pub fn inspect_candidate(root: &Path) -> io::Result<OwnedCandidateInspection> {
         expected_not_installable_marker(private)
     };
     if marker_bytes != expected_marker.as_bytes() {
-        return Err(rejected("owned-engine safety marker is missing or modified"));
+        return Err(rejected(
+            "owned-engine safety marker is missing or modified",
+        ));
     }
     let mut declared = seen;
     declared.insert("engine-provenance.json".into());
@@ -468,7 +545,6 @@ pub fn inspect_candidate(root: &Path) -> io::Result<OwnedCandidateInspection> {
 pub fn inspect_candidate_path(path: String) -> io::Result<OwnedCandidateInspection> {
     inspect_candidate(Path::new(&path))
 }
-
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -515,22 +591,28 @@ fn parse_host_probe(raw: &str) -> io::Result<OwnedHostInspection> {
 
 fn interpret_host_probe(probe: OwnedHostProbe) -> io::Result<OwnedHostInspection> {
     let allowed = |s: &str| matches!(s, "PRESENT" | "ABSENT" | "UNKNOWN");
-    let unknown = probe.service_registration == "UNKNOWN"
-        || probe.driver_registration == "UNKNOWN";
+    let unknown = probe.service_registration == "UNKNOWN" || probe.driver_registration == "UNKNOWN";
     if probe.schema != 1
         || probe.evidence_class != "WINDOWS_SERVICE_NAME_ONLY_NO_OWNER_PROOF"
         || !allowed(&probe.service_registration)
         || !allowed(&probe.driver_registration)
         || (probe.inspection_status == "PARTIAL_UNKNOWN") != unknown
-        || !matches!(probe.inspection_status.as_str(), "OBSERVED" | "PARTIAL_UNKNOWN")
-        || probe.provider_selected || probe.trusted_driver_loaded || probe.gameplay_verified
+        || !matches!(
+            probe.inspection_status.as_str(),
+            "OBSERVED" | "PARTIAL_UNKNOWN"
+        )
+        || probe.provider_selected
+        || probe.trusted_driver_loaded
+        || probe.gameplay_verified
     {
-        return Err(rejected("owned host service probe is contradictory or overclaims trust"));
+        return Err(rejected(
+            "owned host service probe is contradictory or overclaims trust",
+        ));
     }
     // Even an empty SCM namespace has no signed driver, configured isolation
     // profile, trusted IPC protocol or proved disposable-host provenance.
-    let empty_namespace = !unknown && probe.service_registration == "ABSENT"
-        && probe.driver_registration == "ABSENT";
+    let empty_namespace =
+        !unknown && probe.service_registration == "ABSENT" && probe.driver_registration == "ABSENT";
     let state = if !probe.interactive_session {
         "BLOCKED_NON_INTERACTIVE_SESSION"
     } else if probe.service_registration == "PRESENT" || probe.driver_registration == "PRESENT" {
@@ -560,7 +642,11 @@ fn interpret_host_probe(probe: OwnedHostProbe) -> io::Result<OwnedHostInspection
 const SERVICE_DOES_NOT_EXIST: u32 = 1060;
 
 fn classify_service_open_error(error: u32) -> &'static str {
-    if error == SERVICE_DOES_NOT_EXIST { "ABSENT" } else { "UNKNOWN" }
+    if error == SERVICE_DOES_NOT_EXIST {
+        "ABSENT"
+    } else {
+        "UNKNOWN"
+    }
 }
 
 #[cfg(windows)]
@@ -575,7 +661,9 @@ fn read_native_service_registration(
     let wide_name: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
     let service = unsafe { OpenServiceW(manager, wide_name.as_ptr(), SERVICE_QUERY_STATUS) };
     if !service.is_null() {
-        unsafe { CloseServiceHandle(service); }
+        unsafe {
+            CloseServiceHandle(service);
+        }
         "PRESENT"
     } else {
         // Must read GetLastError immediately after the failed OpenServiceW.
@@ -595,18 +683,17 @@ pub fn inspect_host_service_namespace() -> io::Result<OwnedHostInspection> {
         Threading::GetCurrentProcessId,
     };
     let mut session_id = 0_u32;
-    let session_known = unsafe {
-        ProcessIdToSessionId(GetCurrentProcessId(), &mut session_id)
-    } != 0;
-    let manager = unsafe {
-        OpenSCManagerW(std::ptr::null(), std::ptr::null(), SC_MANAGER_CONNECT)
-    };
+    let session_known =
+        unsafe { ProcessIdToSessionId(GetCurrentProcessId(), &mut session_id) } != 0;
+    let manager = unsafe { OpenSCManagerW(std::ptr::null(), std::ptr::null(), SC_MANAGER_CONNECT) };
     let (service, driver) = if manager.is_null() {
         ("UNKNOWN", "UNKNOWN")
     } else {
         let service = read_native_service_registration(manager, "SbieSvc");
         let driver = read_native_service_registration(manager, "SbieDrv");
-        unsafe { CloseServiceHandle(manager); }
+        unsafe {
+            CloseServiceHandle(manager);
+        }
         (service, driver)
     };
     let unknown = service == "UNKNOWN" || driver == "UNKNOWN";
@@ -614,7 +701,12 @@ pub fn inspect_host_service_namespace() -> io::Result<OwnedHostInspection> {
         schema: 1,
         evidence_class: "WINDOWS_SERVICE_NAME_ONLY_NO_OWNER_PROOF".into(),
         interactive_session: session_known && session_id != 0,
-        inspection_status: if unknown { "PARTIAL_UNKNOWN" } else { "OBSERVED" }.into(),
+        inspection_status: if unknown {
+            "PARTIAL_UNKNOWN"
+        } else {
+            "OBSERVED"
+        }
+        .into(),
         service_registration: service.into(),
         driver_registration: driver.into(),
         provider_selected: false,
@@ -625,10 +717,11 @@ pub fn inspect_host_service_namespace() -> io::Result<OwnedHostInspection> {
 
 #[cfg(not(windows))]
 pub fn inspect_host_service_namespace() -> io::Result<OwnedHostInspection> {
-    Err(io::Error::new(io::ErrorKind::Unsupported,
-        "Owned host service inspection requires interactive Windows"))
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "Owned host service inspection requires interactive Windows",
+    ))
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -638,8 +731,14 @@ mod tests {
     struct TempCandidate(PathBuf);
     impl TempCandidate {
         fn new() -> Self {
-            let unique = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-            let path = std::env::temp_dir().join(format!("mivubi-owned-candidate-{}-{unique}", std::process::id()));
+            let unique = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!(
+                "mivubi-owned-candidate-{}-{unique}",
+                std::process::id()
+            ));
             fs::create_dir(&path).unwrap();
             Self(path)
         }
@@ -661,8 +760,11 @@ mod tests {
             for path in REQUIRED_FILES {
                 files.push(self.add_file(path, format!("fixture:{path}").as_bytes()));
             }
-            fs::write(self.0.join("NOT-INSTALLABLE.txt"),
-                expected_not_installable_marker(false)).unwrap();
+            fs::write(
+                self.0.join("NOT-INSTALLABLE.txt"),
+                expected_not_installable_marker(false),
+            )
+            .unwrap();
             let provenance = serde_json::json!({
                 "schema": 1, "state": EXPECTED_STATE, "upstreamRepository": "sandboxie-plus/Sandboxie",
                 "upstreamTag": "v1.18.5", "upstreamCommit": PINNED_UPSTREAM,
@@ -677,14 +779,18 @@ mod tests {
                 "sandboxieExternalDependencyRemoved": false,
                 "publicDistributionApproved": false
             });
-            fs::write(self.0.join("engine-provenance.json"),
-                serde_json::to_vec(&provenance).unwrap()).unwrap();
+            fs::write(
+                self.0.join("engine-provenance.json"),
+                serde_json::to_vec(&provenance).unwrap(),
+            )
+            .unwrap();
         }
     }
     impl Drop for TempCandidate {
-        fn drop(&mut self) { let _ = fs::remove_dir_all(&self.0); }
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
     }
-
 
     fn host_probe(service: &str, driver: &str, interactive: bool) -> String {
         let unknown = service == "UNKNOWN" || driver == "UNKNOWN";
@@ -698,7 +804,8 @@ mod tests {
             "providerSelected": false,
             "trustedDriverLoaded": false,
             "gameplayVerified": false
-        }).to_string()
+        })
+        .to_string()
     }
 
     #[test]
@@ -715,8 +822,18 @@ mod tests {
     fn direct_scm_results_keep_the_legacy_public_host_contract_blocked() {
         for (service, driver, interactive, expected) in [
             ("ABSENT", "ABSENT", true, "BLOCKED_UNVERIFIED_OWNED_DRIVER"),
-            ("PRESENT", "ABSENT", true, "BLOCKED_SERVICE_NAMESPACE_IN_USE"),
-            ("ABSENT", "PRESENT", true, "BLOCKED_SERVICE_NAMESPACE_IN_USE"),
+            (
+                "PRESENT",
+                "ABSENT",
+                true,
+                "BLOCKED_SERVICE_NAMESPACE_IN_USE",
+            ),
+            (
+                "ABSENT",
+                "PRESENT",
+                true,
+                "BLOCKED_SERVICE_NAMESPACE_IN_USE",
+            ),
             ("UNKNOWN", "ABSENT", true, "BLOCKED_SERVICE_PROBE_UNKNOWN"),
             ("ABSENT", "ABSENT", false, "BLOCKED_NON_INTERACTIVE_SESSION"),
         ] {
@@ -728,7 +845,8 @@ mod tests {
                     "PARTIAL_UNKNOWN"
                 } else {
                     "OBSERVED"
-                }.into(),
+                }
+                .into(),
                 service_registration: service.into(),
                 driver_registration: driver.into(),
                 provider_selected: false,
@@ -737,8 +855,12 @@ mod tests {
             };
             let result = interpret_host_probe(probe).unwrap();
             assert_eq!(result.state, expected);
-            assert!(!result.activation_allowed && !result.trusted_driver_loaded
-                && !result.provider_selected && !result.gameplay_verified);
+            assert!(
+                !result.activation_allowed
+                    && !result.trusted_driver_loaded
+                    && !result.provider_selected
+                    && !result.gameplay_verified
+            );
         }
     }
 
@@ -747,15 +869,21 @@ mod tests {
         let result = parse_host_probe(&host_probe("ABSENT", "ABSENT", true)).unwrap();
         assert_eq!(result.state, "BLOCKED_UNVERIFIED_OWNED_DRIVER");
         assert!(result.service_namespace_available);
-        assert!(!result.activation_allowed && !result.provider_selected
-            && !result.trusted_driver_loaded && !result.gameplay_verified);
+        assert!(
+            !result.activation_allowed
+                && !result.provider_selected
+                && !result.trusted_driver_loaded
+                && !result.gameplay_verified
+        );
     }
 
     #[test]
     fn service_and_driver_names_block_an_ambiguous_owned_runtime() {
-        for (service, driver) in [("PRESENT", "ABSENT"), ("ABSENT", "PRESENT"),
-            ("PRESENT", "PRESENT")]
-        {
+        for (service, driver) in [
+            ("PRESENT", "ABSENT"),
+            ("ABSENT", "PRESENT"),
+            ("PRESENT", "PRESENT"),
+        ] {
             let result = parse_host_probe(&host_probe(service, driver, true)).unwrap();
             assert_eq!(result.state, "BLOCKED_SERVICE_NAMESPACE_IN_USE");
             assert!(!result.activation_allowed);
@@ -776,7 +904,8 @@ mod tests {
     fn rejects_fabricated_service_provenance_and_true_ready_fields() {
         let raw = host_probe("ABSENT", "ABSENT", true);
         for (field, value) in [
-            ("providerSelected", true), ("trustedDriverLoaded", true),
+            ("providerSelected", true),
+            ("trustedDriverLoaded", true),
             ("gameplayVerified", true),
         ] {
             let mut data: serde_json::Value = serde_json::from_str(&raw).unwrap();
@@ -790,7 +919,6 @@ mod tests {
         data["serviceRegistration"] = serde_json::json!("RUNNING");
         assert!(parse_host_probe(&data.to_string()).is_err());
     }
-
 
     #[test]
     fn owned_v1186_package_uses_real_stage_identity_and_remains_uninstallable() {
@@ -821,8 +949,12 @@ mod tests {
         assert_eq!(inspected.upstream_commit, OWNED_V1186_UPSTREAM);
         assert_eq!(inspected.verified_artifact_count, 25);
         assert_eq!(inspected.required_artifact_count, 25);
-        assert!(!inspected.provider_selected && !inspected.install_permitted
-            && !inspected.driver_load_verified && !inspected.gameplay_verified);
+        assert!(
+            !inspected.provider_selected
+                && !inspected.install_permitted
+                && !inspected.driver_load_verified
+                && !inspected.gameplay_verified
+        );
         for (key, wrong) in [
             ("nativeModifiedFiles", serde_json::json!(10)),
             ("sourceVersion", serde_json::json!("v1.18.5")),
@@ -849,21 +981,24 @@ mod tests {
         let mut data: serde_json::Value =
             serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         data["state"] = serde_json::json!(PRIVATE_STATE);
-        fs::write(c.0.join("NOT-INSTALLABLE.txt"),
-            expected_not_installable_marker(true)).unwrap();
+        fs::write(
+            c.0.join("NOT-INSTALLABLE.txt"),
+            expected_not_installable_marker(true),
+        )
+        .unwrap();
         data["privateCoreBuild"] = serde_json::json!(true);
         data["privateForkHead"] = serde_json::json!("a".repeat(40));
         data["privateForkTree"] = serde_json::json!("b".repeat(40));
         data["privatePatchSha256"] = serde_json::json!("c".repeat(64));
-        data["sourceBuildMarker"] =
-            serde_json::json!("MIVUBI_PRIVATE_ISOLATION_BUILD");
+        data["sourceBuildMarker"] = serde_json::json!("MIVUBI_PRIVATE_ISOLATION_BUILD");
         data["sourceFilesModified"] = serde_json::json!(PRIVATE_SOURCE_FILES);
         data["canCoexistWithOfficialSandboxie"] = serde_json::json!(false);
         fs::write(&path, serde_json::to_vec(&data).unwrap()).unwrap();
         let valid = inspect_candidate(&c.0).unwrap();
         assert_eq!(valid.state, "CANDIDATE_INTEGRITY_VERIFIED_NOT_INSTALLABLE");
-        assert!(!valid.provider_selected && !valid.install_permitted
-            && !valid.driver_load_verified);
+        assert!(
+            !valid.provider_selected && !valid.install_permitted && !valid.driver_load_verified
+        );
         data["privatePatchSha256"] = serde_json::json!("not-a-digest");
         fs::write(&path, serde_json::to_vec(&data).unwrap()).unwrap();
         assert!(inspect_candidate(&c.0).is_err());
@@ -899,8 +1034,12 @@ mod tests {
         c.populate();
         let result = inspect_candidate(&c.0).unwrap();
         assert_eq!(result.verified_artifact_count, REQUIRED_FILES.len() as u32);
-        assert!(!result.provider_selected && !result.driver_load_verified
-            && !result.gameplay_verified && !result.install_permitted);
+        assert!(
+            !result.provider_selected
+                && !result.driver_load_verified
+                && !result.gameplay_verified
+                && !result.install_permitted
+        );
     }
 
     #[test]
@@ -908,9 +1047,13 @@ mod tests {
         let c = TempCandidate::new();
         c.populate();
         let path = c.0.join("engine-provenance.json");
-        let mut data: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        let mut data: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         let artifacts = data["artifacts"].as_array_mut().unwrap();
-        let row = artifacts.iter_mut().find(|row| row["path"] == "SbieDrv.sys").unwrap();
+        let row = artifacts
+            .iter_mut()
+            .find(|row| row["path"] == "SbieDrv.sys")
+            .unwrap();
         row["source"] = serde_json::json!("Sandboxie/Bin/x64/SbieRelease/Start.exe");
         fs::write(&path, serde_json::to_vec(&data).unwrap()).unwrap();
         assert!(inspect_candidate(&c.0).is_err());
@@ -931,7 +1074,8 @@ mod tests {
             "sha256": hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect::<String>(),
         });
         let path = c.0.join("engine-provenance.json");
-        let mut data: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        let mut data: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         data["artifacts"].as_array_mut().unwrap().push(unexpected);
         fs::write(&path, serde_json::to_vec(&data).unwrap()).unwrap();
         assert!(inspect_candidate(&c.0).is_err());
@@ -941,7 +1085,11 @@ mod tests {
     fn candidate_safety_marker_content_must_match_exact_payload_state() {
         let c = TempCandidate::new();
         c.populate();
-        fs::write(c.0.join("NOT-INSTALLABLE.txt"), b"not an installation marker").unwrap();
+        fs::write(
+            c.0.join("NOT-INSTALLABLE.txt"),
+            b"not an installation marker",
+        )
+        .unwrap();
         assert!(inspect_candidate(&c.0).is_err());
     }
 
@@ -959,11 +1107,15 @@ mod tests {
         c.populate();
         let extra = c.add_file("_debug/x64/SbieDrv.pdb", b"synthetic symbol file");
         let path = c.0.join("engine-provenance.json");
-        let mut data: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        let mut data: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         data["artifacts"].as_array_mut().unwrap().push(extra);
         fs::write(&path, serde_json::to_vec(&data).unwrap()).unwrap();
         let valid = inspect_candidate(&c.0).unwrap();
-        assert_eq!(valid.verified_artifact_count, (REQUIRED_FILES.len() + 1) as u32);
+        assert_eq!(
+            valid.verified_artifact_count,
+            (REQUIRED_FILES.len() + 1) as u32
+        );
         assert!(!valid.install_permitted);
     }
 
@@ -971,7 +1123,11 @@ mod tests {
     fn oversized_manifest_is_refused_before_deserializing() {
         let c = TempCandidate::new();
         c.populate();
-        fs::write(c.0.join("engine-provenance.json"), vec![b'X'; 256 * 1024 + 1]).unwrap();
+        fs::write(
+            c.0.join("engine-provenance.json"),
+            vec![b'X'; 256 * 1024 + 1],
+        )
+        .unwrap();
         assert!(inspect_candidate(&c.0).is_err());
     }
 
@@ -1052,7 +1208,8 @@ mod tests {
         let c = TempCandidate::new();
         c.populate();
         let path = c.0.join("engine-provenance.json");
-        let mut manifest: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         manifest["windowsKernelDriverLoaded"] = true.into();
         fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
         assert!(inspect_candidate(&c.0).is_err());

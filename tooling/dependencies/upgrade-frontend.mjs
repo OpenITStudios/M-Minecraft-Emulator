@@ -43,8 +43,8 @@ const requested = await Promise.all(['vite', '@sveltejs/vite-plugin-svelte', 'vi
 if (!apply) {
   console.log('Dry-run only. --apply resolves this group with npm and checks the resulting application.');
 } else {
-  run('npm', ['install', '--save-dev', '--save-exact', '--no-audit', '--no-fund', ...requested], desktop);
-  run('npm', ['ci', '--no-audit', '--no-fund'], desktop);
+  run('npm', ['install', '--engine-strict', '--save-dev', '--save-exact', '--no-audit', '--no-fund', ...requested], desktop);
+  run('npm', ['ci', '--engine-strict', '--no-audit', '--no-fund'], desktop);
   run(process.execPath, ['tooling/repository/check-dependency-lock.mjs']);
   run('npm', ['ls', '--all'], desktop);
   for (const command of ['typecheck', 'test', 'build:frontend']) run('npm', ['run', command], desktop);

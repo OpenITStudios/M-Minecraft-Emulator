@@ -24,7 +24,7 @@
 </script>
 
 <div class="dialog-backdrop" role="presentation">
-  <section class="layout-dialog" role="dialog" aria-modal="true" aria-labelledby="window-layout-title">
+  <div class="layout-dialog" role="dialog" tabindex="-1" aria-modal="true" aria-labelledby="window-layout-title">
     <header>
       <div><span class="eyebrow">WINDOW LAYOUT</span><h2 id="window-layout-title">Arrange Minecraft windows</h2></div>
       <button class="icon-close" aria-label="Close" on:click={onCancel}>×</button>
@@ -80,5 +80,5 @@
     {/if}
 
     <footer><button on:click={() => (draft = onReset())}>Reset to defaults</button>{#if draft.overlay.enabled}<button class="identify-button" on:click={() => onIdentify(draft)}>Identify screens</button>{/if}<span class="dialog-spacer"></span><button on:click={onCancel}>Cancel</button><button class="primary" on:click={() => onApply(draft)}>Apply</button></footer>
-  </section>
+  </div>
 </div>

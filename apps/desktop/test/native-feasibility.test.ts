@@ -186,7 +186,7 @@ describe("Native candidate IPC evidence", () => {
     expect(engine).toContain("request_with_backend(&ACTIVE_ISOLATION_BACKEND, executable, licensed)");
     expect(engine).toContain("launch_with_official_sandboxie(executable, licensed)");
     expect(engine).toContain("fn adapter_launch_dispatches_once_without_retry_on_timeout()");
-    expect(engine).toContain("inspect_with_backend(&ACTIVE_ISOLATION_BACKEND, IsolationInspection::FastLaunchPreflight)");
+    expect(engine).toMatch(/inspect_with_backend\(\s*&ACTIVE_ISOLATION_BACKEND,\s*IsolationInspection::FastLaunchPreflight,?\s*\)/);
     expect(engine).toContain('candidate.image_evidence == "SIGNED_EDUCATION_IMAGE_CANDIDATE"');
     expect(engine).toContain('candidate.created_file_time == target.created_file_time');
     expect(active).toContain("UNKNOWN or unsigned files are refused");

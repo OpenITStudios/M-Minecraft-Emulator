@@ -134,6 +134,10 @@ requireFact(version === rootPackage.version && version === appPackage.version &&
   version === cargoVersion("engine/runtime-core/Cargo.toml"), "Product version mismatch");
 requireFact(toolchain.node.version === read(".node-version").trim(), "Node pin mismatch");
 requireFact(toolchain.npm.lockfile === "apps/desktop/package-lock.json", "App lockfile path drift");
+requireFact(rootPackage.engines.node === "^" + toolchain.node.version &&
+  appPackage.engines.node === rootPackage.engines.node &&
+  rootPackage.engines.npm === toolchain.npm.version && appPackage.engines.npm === toolchain.npm.version,
+  "Package engines must match the supported Node LTS floor and pinned npm");
 requireFact(toolchain.policy.ciPolicy === "disabled", "CI must remain disabled per operator request");
 // Verify the direct edge without pinning this repository check to an old digest API.
 const desktopLock = read("apps/desktop/src-tauri/Cargo.lock").replace(/\r\n/g, "\n");
@@ -377,8 +381,8 @@ requireFact(
   sandboxCollector.includes("$signedOutside = @($gameCandidates | Where-Object {") &&
   sandboxCollector.includes("$_.imageEvidence -eq 'SIGNED_EDUCATION_IMAGE_CANDIDATE' -and") &&
   sandboxCollector.includes("$_.inSelectedBox -eq $false") &&
-  read("apps/desktop/src-tauri/src/engine/native_clients.rs").includes(
-    "if candidate.in_selected_box == Some(false) { official_outside += 1; }"),
+  /if candidate\.in_selected_box == Some\(false\) \{\s*official_outside \+= 1;\s*\}/.test(
+    read("apps/desktop/src-tauri/src/engine/native_clients.rs")),
   "Boxed signed Education images must never inflate outside-only counters");
 
 // The current UI cannot be shipped as the old VMware installer while

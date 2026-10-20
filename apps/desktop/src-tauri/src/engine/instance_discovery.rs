@@ -50,7 +50,8 @@ fn project_overview(
                 } else {
                     "UNKNOWN"
                 },
-                candidate_count: native.filter(|_| native_observed)
+                candidate_count: native
+                    .filter(|_| native_observed)
                     .map(|view| view.candidates.len() as u32),
             },
             SlotDiscovery {
@@ -60,7 +61,8 @@ fn project_overview(
                 } else {
                     "UNKNOWN"
                 },
-                candidate_count: isolated.filter(|_| box_observed)
+                candidate_count: isolated
+                    .filter(|_| box_observed)
                     .map(|view| view.isolated_candidate_processes),
             },
             SlotDiscovery {
@@ -98,10 +100,12 @@ mod tests {
             schema: 1,
             evidence_class: "NAME_MATCH_CANDIDATE_ONLY".into(),
             interactive_session: interactive,
-            candidates: (1..=candidates as u32).map(|pid| NativeProcessCandidate {
-                pid,
-                window_handle: None,
-            }).collect(),
+            candidates: (1..=candidates as u32)
+                .map(|pid| NativeProcessCandidate {
+                    pid,
+                    window_handle: None,
+                })
+                .collect(),
         }
     }
     fn isolated(membership: &str, candidates: u32) -> SandboxieClientObservation {
@@ -134,7 +138,10 @@ mod tests {
     fn projects_four_slots_without_claiming_host_01_or_gameplay() {
         let result = project_overview(Some(&native(2, true)), Some(&isolated("OBSERVED", 1)));
         assert_eq!(result.schema, 1);
-        assert_eq!(result.slots.iter().map(|slot| slot.id).collect::<Vec<_>>(), ["01", "02", "03", "04"]);
+        assert_eq!(
+            result.slots.iter().map(|slot| slot.id).collect::<Vec<_>>(),
+            ["01", "02", "03", "04"]
+        );
         assert_eq!(result.slots[0].evidence, "NAME_MATCH_UNATTRIBUTED");
         assert_eq!(result.slots[0].candidate_count, Some(2));
         assert_eq!(result.slots[1].evidence, "BOX_PROCESS_CANDIDATES_ONLY");
@@ -161,7 +168,10 @@ mod tests {
         let only_isolated = project_overview(None, Some(&safe_isolated));
         assert_eq!(only_isolated.slots[0].evidence, "UNKNOWN");
         assert_eq!(only_isolated.slots[0].candidate_count, None);
-        assert_eq!(only_isolated.slots[1].evidence, "BOX_PROCESS_CANDIDATES_ONLY");
+        assert_eq!(
+            only_isolated.slots[1].evidence,
+            "BOX_PROCESS_CANDIDATES_ONLY"
+        );
         assert_eq!(only_isolated.slots[1].candidate_count, Some(1));
         let neither = project_overview(None, None);
         for slot in &neither.slots[..2] {

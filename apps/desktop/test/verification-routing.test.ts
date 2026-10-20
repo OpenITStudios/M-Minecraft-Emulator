@@ -31,10 +31,11 @@ describe("Emulator source verification routing", () => {
 
   it("runs desktop tests and source compilation checks without packaging", () => {
     expect(app.scripts["verify:source"]).toBe(
-      "npm run typecheck && npm run test && npm run build:frontend && npm run check:rust && npm run test:rust",
+      "npm run typecheck && npm run test && npm run build:frontend && npm run check:rust && npm run test:rust && npm run format:rust",
     );
     expect(app.scripts["check:rust"]).toContain("npm run prepare:icons && cargo check");
     expect(app.scripts["test:rust"]).toContain("cargo test --all-targets");
+    expect(app.scripts["format:rust"]).toBe("cargo fmt --all --check --manifest-path src-tauri/Cargo.toml");
     expect(root.scripts["verify:source"]).not.toMatch(/build:app|dev:app|vmrun/);
     expect(app.scripts["check:rust"]).toContain(" --locked ");
     expect(app.scripts["test:rust"]).toContain(" --locked ");

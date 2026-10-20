@@ -62,7 +62,7 @@ describe("Opt-in Windows event-driven focus counter", () => {
     expect(rust).toContain("let unhook_result = if unsafe { UnhookWinEvent(hook) } == 0 {");
     expect(rust).toContain("unhook_result?;");
     expect(rust).toContain("old.join.join().map_err(");
-    expect(rust).toContain("worker.join.join().map_err(");
+    expect(rust).toMatch(/worker\s*\.join\s*\.join\(\)\s*\.map_err\(/);
     expect(rust).toContain('MIVUBI foreground observer cleanup unverified: {error}');
     expect(rust).not.toContain("{ let _ = windows::stop(); }");
     expect(rust).toContain("PostThreadMessageW(worker.thread_id, WM_QUIT, 0, 0)");
@@ -71,8 +71,8 @@ describe("Opt-in Windows event-driven focus counter", () => {
     // timeout. Preserve ownership and forbid a replacement until cleanup.
     expect(rust).toContain("mpsc::sync_channel(0)");
     expect(rust).not.toContain("mpsc::sync_channel(1)");
-    expect(rust).toContain("*guard = Some(Worker { thread_id: 0, alive, stop_requested: false, join });");
-    expect(rust).toContain("*guard = Some(Worker { thread_id, alive, stop_requested: false, join });");
+    expect(rust).toMatch(/\*guard = Some\(Worker \{\s*thread_id: 0,\s*alive,\s*stop_requested: false,\s*join,?\s*\}\);/);
+    expect(rust).toMatch(/\*guard = Some\(Worker \{\s*thread_id,\s*alive,\s*stop_requested: false,\s*join,?\s*\}\);/);
     expect(rust).toContain("worker.join.is_finished()");
     // Stop is a two-step confirmation when WM_QUIT is merely queued.
     // Never block the shared manager lock inside join() on a live worker.
@@ -113,7 +113,7 @@ describe("Opt-in Windows event-driven focus counter", () => {
     expect(ui).toContain("Observer state unknown. Start stays disabled");
     expect(ui).not.toContain('disabled={resourceOperationBusy} on:click={() => changeFocusObserver(true)}');
     expect(rust).toContain('pub fn read() -> io::Result<ForegroundEventObserverStatus>');
-    expect(rust).toContain('worker.join.is_finished() => true,');
+    expect(rust).toMatch(/worker\.join\.is_finished\(\)\s*=>\s*(?:true,|\{\s*true\s*\})/);
     expect(rust).toContain('"Foreground hook state unverified; Stop/cleanup required"');
     expect(rust).not.toContain("Err(_) => status(false, EVENTS.load(Ordering::Relaxed))");
     expect(commands).toContain("instance_focus_events::read_observer().map_err(");
@@ -181,7 +181,7 @@ describe("Shared read-only four-slot focus projection", () => {
     expect(rust).toContain('Some(202), false), "UNKNOWN"');
     expect(rust).toContain('Some(303), false), "UNKNOWN"');
     expect(rust).toContain('mode: "OBSERVE_ONLY"');
-    expect(commands).toContain('SlotOperation::Inspect, || instance_focus::inspect_instance_focus(target)');
+    expect(commands).toMatch(/SlotOperation::Inspect,\s*\|\|\s*\{?\s*instance_focus::inspect_instance_focus\(target\)/);
     expect(bootstrap).toContain("desktop_inspect_instance_focus,");
     expect(ui).toContain("on:click={inspectInstanceFocus}");
     expect(ui).toContain("nativeFeasibility.inspectInstanceFocus(target)");
@@ -258,7 +258,7 @@ describe("Shared four-slot operation admission", () => {
     expect(allowed).not.toContain('"04"');
     expect(commands).toContain("admit_slot_operation(id, action)?");
     expect(commands).toContain('run_slot_operation("02", SlotOperation::Launch');
-    expect(commands).toContain('run_slot_operation("01", SlotOperation::Launch');
+    expect(commands).toMatch(/run_slot_operation\(\s*"01",\s*SlotOperation::Launch/);
     expect(commands).not.toContain('run_slot_operation("03",');
     expect(commands).not.toContain('run_slot_operation("04",');
     expect(identity).toContain("pub fn parse_window_identity(");
@@ -347,7 +347,7 @@ describe("Native Windows readiness probe optimization", () => {
     expect(win).not.toContain("probe-host-service-names.ps1");
     expect(win).not.toContain("CreateServiceW");
     expect(win).not.toContain("StartServiceW");
-    expect(source).toContain('if error == SERVICE_DOES_NOT_EXIST { "ABSENT" } else { "UNKNOWN" }');
+    expect(source).toMatch(/if error == SERVICE_DOES_NOT_EXIST \{\s*"ABSENT"\s*\} else \{\s*"UNKNOWN"\s*\}/);
     expect(source).toContain("activation_allowed: false");
   });
 });

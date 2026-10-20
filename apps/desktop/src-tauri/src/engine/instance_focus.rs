@@ -42,7 +42,11 @@ fn classify_foreground(
     match (foreground_hwnd, foreground_pid) {
         (Some(hwnd), Some(pid)) if hwnd != 0 && pid != 0 && pid != manager_pid => {
             if hwnd == verified_hwnd {
-                if pid == verified_pid { "FOREGROUND" } else { "UNKNOWN" }
+                if pid == verified_pid {
+                    "FOREGROUND"
+                } else {
+                    "UNKNOWN"
+                }
             } else {
                 "NOT_FOREGROUND"
             }
@@ -57,10 +61,22 @@ fn project_focus(client_02_evidence: &'static str) -> InstanceFocusObservation {
         schema: 2,
         mode: "OBSERVE_ONLY",
         slots: [
-            SlotFocusEvidence { id: ids[0].id, evidence: "UNATTRIBUTED" },
-            SlotFocusEvidence { id: ids[1].id, evidence: client_02_evidence },
-            SlotFocusEvidence { id: ids[2].id, evidence: "PROVIDER_NOT_AVAILABLE" },
-            SlotFocusEvidence { id: ids[3].id, evidence: "PROVIDER_NOT_AVAILABLE" },
+            SlotFocusEvidence {
+                id: ids[0].id,
+                evidence: "UNATTRIBUTED",
+            },
+            SlotFocusEvidence {
+                id: ids[1].id,
+                evidence: client_02_evidence,
+            },
+            SlotFocusEvidence {
+                id: ids[2].id,
+                evidence: "PROVIDER_NOT_AVAILABLE",
+            },
+            SlotFocusEvidence {
+                id: ids[3].id,
+                evidence: "PROVIDER_NOT_AVAILABLE",
+            },
         ],
     }
 }
@@ -96,7 +112,11 @@ pub fn inspect_instance_focus(
         evidence = classify_foreground(
             verified_hwnd as usize as u64,
             verified_pid,
-            if foreground.is_null() { None } else { Some(foreground as usize as u64) },
+            if foreground.is_null() {
+                None
+            } else {
+                Some(foreground as usize as u64)
+            },
             foreground_owner,
             std::process::id(),
             stable,
@@ -110,8 +130,10 @@ pub fn inspect_instance_focus(
 pub fn inspect_instance_focus(
     _target: ProcessIdentityCandidate,
 ) -> io::Result<InstanceFocusObservation> {
-    Err(io::Error::new(io::ErrorKind::Unsupported,
-        "Four-slot focus inspection requires interactive Windows"))
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "Four-slot focus inspection requires interactive Windows",
+    ))
 }
 
 #[cfg(test)]
@@ -121,9 +143,7 @@ mod tests {
     #[test]
     fn matches_only_stable_foreground_owned_by_the_verified_client() {
         // Distinct fixed PIDs: Client 02 = 202, manager = 900.
-        let check = |hwnd, pid, stable| {
-            classify_foreground(0x200, 202, hwnd, pid, 900, stable)
-        };
+        let check = |hwnd, pid, stable| classify_foreground(0x200, 202, hwnd, pid, 900, stable);
         assert_eq!(check(Some(0x200), Some(202), true), "FOREGROUND");
         assert_eq!(check(Some(0x300), Some(303), true), "NOT_FOREGROUND");
         assert_eq!(check(None, None, true), "UNKNOWN");
@@ -134,8 +154,14 @@ mod tests {
         assert_eq!(check(Some(0x200), Some(303), true), "UNKNOWN");
         assert_eq!(check(Some(0x200), Some(202), false), "UNKNOWN");
         assert_eq!(check(Some(0x300), Some(303), false), "UNKNOWN");
-        assert_eq!(classify_foreground(0, 202, Some(0x200), Some(202), 900, true), "UNKNOWN");
-        assert_eq!(classify_foreground(0x200, 0, Some(0x200), Some(202), 900, true), "UNKNOWN");
+        assert_eq!(
+            classify_foreground(0, 202, Some(0x200), Some(202), 900, true),
+            "UNKNOWN"
+        );
+        assert_eq!(
+            classify_foreground(0x200, 0, Some(0x200), Some(202), 900, true),
+            "UNKNOWN"
+        );
     }
 
     #[test]
@@ -144,8 +170,10 @@ mod tests {
             let focus = project_focus(client_02);
             assert_eq!(focus.schema, 2);
             assert_eq!(focus.mode, "OBSERVE_ONLY");
-            assert_eq!(focus.slots.iter().map(|slot| slot.id).collect::<Vec<_>>(),
-                ["01", "02", "03", "04"]);
+            assert_eq!(
+                focus.slots.iter().map(|slot| slot.id).collect::<Vec<_>>(),
+                ["01", "02", "03", "04"]
+            );
             assert_eq!(focus.slots[0].evidence, "UNATTRIBUTED");
             assert_eq!(focus.slots[1].evidence, client_02);
             for later in &focus.slots[2..] {

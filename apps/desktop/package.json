@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "engines": {
-    "node": "24.x"
+    "node": "^24.22.0",
+    "npm": "12.2.0"
   },
   "scripts": {
     "dev:frontend": "vite --host 127.0.0.1 --port 1421 --strictPort",
@@ -16,11 +17,12 @@
     "typecheck": "svelte-check --tsgo --tsconfig ./tsconfig.json",
     "check:rust": "npm run prepare:icons && cargo check --all-targets --locked --manifest-path src-tauri/Cargo.toml",
     "test:rust": "cargo test --all-targets --locked --manifest-path src-tauri/Cargo.toml",
-    "verify:source": "npm run typecheck && npm run test && npm run build:frontend && npm run check:rust && npm run test:rust",
+    "verify:source": "npm run typecheck && npm run test && npm run build:frontend && npm run check:rust && npm run test:rust && npm run format:rust",
     "prepare:package-binaries": "node scripts/prepare-package-binaries.mjs",
     "test": "vitest run test",
     "check:dependencies": "node ../../tooling/repository/check-dependency-lock.mjs",
-    "typecheck:compat": "svelte-check --tsconfig ./tsconfig.json"
+    "typecheck:compat": "svelte-check --tsconfig ./tsconfig.json",
+    "format:rust": "cargo fmt --all --check --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.4"

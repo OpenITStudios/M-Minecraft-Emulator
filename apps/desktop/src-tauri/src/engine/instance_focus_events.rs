@@ -28,8 +28,7 @@ fn status(enabled: bool, events: u64) -> ForegroundEventObserverStatus {
 mod windows {
     use super::{status, ForegroundEventObserverStatus};
     use std::{
-        io,
-        ptr,
+        io, ptr,
         sync::{
             atomic::{AtomicBool, AtomicU64, Ordering},
             mpsc, Arc, Mutex,
@@ -41,13 +40,11 @@ mod windows {
         Foundation::HWND,
         System::Threading::GetCurrentThreadId,
         UI::{
-            Accessibility::{
-                SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK,
-            },
+            Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK},
             WindowsAndMessaging::{
-                DispatchMessageW, GetMessageW, PeekMessageW, PostThreadMessageW,
-                TranslateMessage, EVENT_SYSTEM_FOREGROUND, WINEVENT_OUTOFCONTEXT,
-                WINEVENT_SKIPOWNPROCESS, MSG, PM_NOREMOVE, WM_QUIT,
+                DispatchMessageW, GetMessageW, PeekMessageW, PostThreadMessageW, TranslateMessage,
+                EVENT_SYSTEM_FOREGROUND, MSG, PM_NOREMOVE, WINEVENT_OUTOFCONTEXT,
+                WINEVENT_SKIPOWNPROCESS, WM_QUIT,
             },
         },
     };
@@ -115,7 +112,9 @@ mod windows {
         if ready.send(Ok(unsafe { GetCurrentThreadId() })).is_ok() {
             loop {
                 let result = unsafe { GetMessageW(&mut msg, ptr::null_mut(), 0, 0) };
-                if result == 0 { break; } // WM_QUIT is an orderly Stop.
+                if result == 0 {
+                    break;
+                } // WM_QUIT is an orderly Stop.
                 if result == -1 {
                     dispatch_error = Some(io::Error::last_os_error());
                     break;
@@ -135,14 +134,19 @@ mod windows {
         };
         alive.store(false, Ordering::Release);
         unhook_result?;
-        if let Some(error) = dispatch_error { return Err(error); }
+        if let Some(error) = dispatch_error {
+            return Err(error);
+        }
         Ok(())
     }
 
     fn lock() -> io::Result<std::sync::MutexGuard<'static, Option<Worker>>> {
-        WORKER.try_lock().map_err(|_| io::Error::new(
-            io::ErrorKind::WouldBlock, "Foreground observer transition is in progress",
-        ))
+        WORKER.try_lock().map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "Foreground observer transition is in progress",
+            )
+        })
     }
 
     pub fn read() -> io::Result<ForegroundEventObserverStatus> {
@@ -151,11 +155,19 @@ mod windows {
         let guard = lock()?;
         let active = match guard.as_ref() {
             None => false,
-            Some(worker) if worker.thread_id != 0
-                && worker.alive.load(Ordering::Acquire)
-                && !worker.join.is_finished() => true,
-            Some(_) => return Err(io::Error::new(io::ErrorKind::WouldBlock,
-                "Foreground hook state unverified; Stop/cleanup required")),
+            Some(worker)
+                if worker.thread_id != 0
+                    && worker.alive.load(Ordering::Acquire)
+                    && !worker.join.is_finished() =>
+            {
+                true
+            }
+            Some(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "Foreground hook state unverified; Stop/cleanup required",
+                ))
+            }
         };
         Ok(status(active, EVENTS.load(Ordering::Relaxed)))
     }
@@ -164,19 +176,24 @@ mod windows {
         let mut guard = lock()?;
         if let Some(worker) = guard.as_ref() {
             if worker.thread_id != 0 && worker.alive.load(Ordering::Acquire) {
-                return Err(io::Error::new(io::ErrorKind::AlreadyExists,
-                    "Foreground observer is already active"));
+                return Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    "Foreground observer is already active",
+                ));
             }
             // This covers both a timed-out startup and an exited hook that
             // has not yet unregistered. Never create a replacement meanwhile.
             if !worker.join.is_finished() {
-                return Err(io::Error::new(io::ErrorKind::WouldBlock,
-                    "Previous foreground hook is still closing; retry after it exits"));
+                return Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "Previous foreground hook is still closing; retry after it exits",
+                ));
             }
         }
         if let Some(old) = guard.take() {
-            old.join.join().map_err(|_| io::Error::other(
-                "Previous foreground hook thread terminated unexpectedly"))??;
+            old.join.join().map_err(|_| {
+                io::Error::other("Previous foreground hook thread terminated unexpectedly")
+            })??;
         }
         EVENTS.store(0, Ordering::Relaxed);
         // Zero-capacity handshake: the hook thread's send succeeds only
@@ -194,12 +211,24 @@ mod windows {
                 // Do not detach: a late worker may still be installing its
                 // hook. Preserve the only worker ownership until joined.
                 // sync_channel(0) guarantees a late send cannot succeed.
-                *guard = Some(Worker { thread_id: 0, alive, stop_requested: false, join });
-                return Err(io::Error::new(io::ErrorKind::Other,
-                    "Windows focus event hook did not confirm startup"));
+                *guard = Some(Worker {
+                    thread_id: 0,
+                    alive,
+                    stop_requested: false,
+                    join,
+                });
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "Windows focus event hook did not confirm startup",
+                ));
             }
         };
-        *guard = Some(Worker { thread_id, alive, stop_requested: false, join });
+        *guard = Some(Worker {
+            thread_id,
+            alive,
+            stop_requested: false,
+            join,
+        });
         Ok(status(true, EVENTS.load(Ordering::Relaxed)))
     }
 
@@ -214,8 +243,10 @@ mod windows {
                 if worker.thread_id == 0 {
                     // The timed-out zero-capacity handshake forces its
                     // worker to unhook itself before exiting.
-                    return Err(io::Error::new(io::ErrorKind::WouldBlock,
-                        "Timed-out hook is still cleaning up"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::WouldBlock,
+                        "Timed-out hook is still cleaning up",
+                    ));
                 }
                 if worker.alive.load(Ordering::Acquire) && !worker.stop_requested {
                     if unsafe { PostThreadMessageW(worker.thread_id, WM_QUIT, 0, 0) } == 0 {
@@ -224,15 +255,19 @@ mod windows {
                     }
                     worker.stop_requested = true;
                 }
-                return Err(io::Error::new(io::ErrorKind::WouldBlock,
-                    "Foreground observer shutdown requested; retry Stop to confirm cleanup"));
+                return Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "Foreground observer shutdown requested; retry Stop to confirm cleanup",
+                ));
             }
         }
         // A finished worker cannot block on join. Propagate message-loop
         // and UnhookWinEvent failures rather than inventing a clean Stop.
         if let Some(worker) = guard.take() {
-            worker.join.join().map_err(|_| io::Error::other(
-                "Foreground hook worker exited unexpectedly"))??;
+            worker
+                .join
+                .join()
+                .map_err(|_| io::Error::other("Foreground hook worker exited unexpectedly"))??;
         }
         Ok(status(false, EVENTS.load(Ordering::Relaxed)))
     }
@@ -240,23 +275,35 @@ mod windows {
 
 pub fn read_observer() -> io::Result<ForegroundEventObserverStatus> {
     #[cfg(windows)]
-    { windows::read() }
+    {
+        windows::read()
+    }
     #[cfg(not(windows))]
-    { Err(io::Error::new(io::ErrorKind::Unsupported, "Windows only")) }
+    {
+        Err(io::Error::new(io::ErrorKind::Unsupported, "Windows only"))
+    }
 }
 
 pub fn start_observer() -> io::Result<ForegroundEventObserverStatus> {
     #[cfg(windows)]
-    { windows::start() }
+    {
+        windows::start()
+    }
     #[cfg(not(windows))]
-    { Err(io::Error::new(io::ErrorKind::Unsupported, "Windows only")) }
+    {
+        Err(io::Error::new(io::ErrorKind::Unsupported, "Windows only"))
+    }
 }
 
 pub fn stop_observer() -> io::Result<ForegroundEventObserverStatus> {
     #[cfg(windows)]
-    { windows::stop() }
+    {
+        windows::stop()
+    }
     #[cfg(not(windows))]
-    { Err(io::Error::new(io::ErrorKind::Unsupported, "Windows only")) }
+    {
+        Err(io::Error::new(io::ErrorKind::Unsupported, "Windows only"))
+    }
 }
 
 /// Called after the Tauri run loop exits. Windows also removes hooks on
@@ -281,7 +328,14 @@ mod tests {
         assert_eq!(report["enabled"], false);
         assert_eq!(report["eventCount"], 7);
         assert_eq!(report.as_object().unwrap().len(), 4);
-        for field in ["pid", "windowHandle", "windowTitle", "account", "fps", "gameplay"] {
+        for field in [
+            "pid",
+            "windowHandle",
+            "windowTitle",
+            "account",
+            "fps",
+            "gameplay",
+        ] {
             assert!(report.get(field).is_none());
         }
     }

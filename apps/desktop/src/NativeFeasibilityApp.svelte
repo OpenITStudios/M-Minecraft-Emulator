@@ -338,10 +338,6 @@
   .pilot-primary:focus-visible,.pilot-secondary:focus-visible { outline:2px solid white; outline-offset:2px; }
   .pilot-info { color:#a4dabc !important; }
   .pilot-error { color:#f3aaa5 !important; }
-  .pilot-counts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:16px; }
-  .pilot-counts > div { display:flex; flex-direction:column; gap:4px; padding:16px; border-radius:12px; background:#191e28; }
-  .pilot-counts strong { font-size:26px; }
-  .pilot-counts span { color:#a0acbb; font-size:12px; }
   .pilot-caution { color:#b7a37e; font-size:12px; line-height:1.7; margin-top:16px; }
   .pilot-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:15px; }
   .pilot-slot { padding:18px; border-radius:12px; background:#191e28; border:1px solid rgba(255,255,255,.06); }
@@ -360,5 +356,5 @@
   .pilot-diagnostics summary { cursor:pointer; color:#d9e1ed; font-weight:650; }
   .pilot-diagnostics summary:focus-visible { outline:2px solid white; outline-offset:3px; }
   .pilot-diagnostics p { line-height:1.6; margin:10px 0 0; }
-  @media(max-width:740px) { .pilot-grid,.pilot-counts { grid-template-columns:1fr; } .pilot-main { padding:16px; } .pilot-readiness-list li { flex-direction:column; gap:4px; } .pilot-readiness-list span { text-align:left; } }
+  @media(max-width:740px) { .pilot-grid { grid-template-columns:1fr; } .pilot-main { padding:16px; } .pilot-readiness-list li { flex-direction:column; gap:4px; } .pilot-readiness-list span { text-align:left; } }
 </style>

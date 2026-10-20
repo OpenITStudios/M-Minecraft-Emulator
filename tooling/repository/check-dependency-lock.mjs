@@ -11,6 +11,7 @@ const root = lock.packages?.[""];
 assert.equal(manifest.version, root?.version, "npm lock root version mismatch");
 assert.equal(lock.lockfileVersion, 3, "npm lockfile v3 required");
 assert.equal(manifest.name, root?.name, "npm lock root name mismatch");
+assert.deepEqual(root?.engines, manifest.engines, "npm lock engine requirements mismatch");
 for (const area of ["dependencies", "devDependencies"]) {
   assert.deepEqual(root?.[area] ?? {}, manifest[area] ?? {}, area + ' lock ownership mismatch');
   for (const [name, declared] of Object.entries(manifest[area] ?? {})) {

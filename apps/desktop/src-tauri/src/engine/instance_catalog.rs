@@ -66,18 +66,28 @@ pub fn admit_slot_operation(id: &str, operation: SlotOperation) -> std::io::Resu
     // An uninstalled future provider cannot be promoted by UI data or direct
     // Tauri invocation. Provisioning and FPS control have no active adapter.
     if slot.availability != "PILOT_ROUTE_ONLY" {
-        return Err(Error::new(ErrorKind::Unsupported,
-            "Owned v1.18.6 runtime is not installed and verified; slot unavailable"));
+        return Err(Error::new(
+            ErrorKind::Unsupported,
+            "Owned v1.18.6 runtime is not installed and verified; slot unavailable",
+        ));
     }
     let allowed = matches!(
         (slot.id, operation),
         ("01", SlotOperation::Inspect | SlotOperation::Launch)
-        | ("02", SlotOperation::Inspect | SlotOperation::SelectExecutable
-            | SlotOperation::Launch | SlotOperation::Focus | SlotOperation::Place)
+            | (
+                "02",
+                SlotOperation::Inspect
+                    | SlotOperation::SelectExecutable
+                    | SlotOperation::Launch
+                    | SlotOperation::Focus
+                    | SlotOperation::Place
+            )
     );
     if !allowed {
-        return Err(Error::new(ErrorKind::Unsupported,
-            "This slot operation has no verified active provider route"));
+        return Err(Error::new(
+            ErrorKind::Unsupported,
+            "This slot operation has no verified active provider route",
+        ));
     }
     Ok(())
 }
@@ -93,29 +103,46 @@ mod tests {
         assert_eq!(slots[0].kind, "NATIVE");
         assert!(slots[1..].iter().all(|slot| slot.kind == "ISOLATED"));
         assert_eq!(slots[1].route, "OFFICIAL_SANDBOXIE");
-        assert!(slots[..2].iter().all(|slot| slot.availability == "PILOT_ROUTE_ONLY"));
-        assert!(slots[2..].iter().all(|slot| {
-            slot.route == "OWNED_V1186" && slot.availability == "NOT_AVAILABLE"
-        }));
+        assert!(slots[..2]
+            .iter()
+            .all(|slot| slot.availability == "PILOT_ROUTE_ONLY"));
+        assert!(slots[2..]
+            .iter()
+            .all(|slot| { slot.route == "OWNED_V1186" && slot.availability == "NOT_AVAILABLE" }));
     }
-
 
     #[test]
     fn all_slot_operations_have_a_single_fail_closed_admission_table() {
         use SlotOperation::*;
-        for op in [Inspect, SelectExecutable, Launch, Focus, Place, Provision, ApplyFrameCap] {
-            assert_eq!(admit_slot_operation("01", op).is_ok(),
-                matches!(op, Inspect | Launch));
-            assert_eq!(admit_slot_operation("02", op).is_ok(),
-                matches!(op, Inspect | SelectExecutable | Launch | Focus | Place));
+        for op in [
+            Inspect,
+            SelectExecutable,
+            Launch,
+            Focus,
+            Place,
+            Provision,
+            ApplyFrameCap,
+        ] {
+            assert_eq!(
+                admit_slot_operation("01", op).is_ok(),
+                matches!(op, Inspect | Launch)
+            );
+            assert_eq!(
+                admit_slot_operation("02", op).is_ok(),
+                matches!(op, Inspect | SelectExecutable | Launch | Focus | Place)
+            );
             for future in ["03", "04"] {
-                assert_eq!(admit_slot_operation(future, op).unwrap_err().kind(),
-                    std::io::ErrorKind::Unsupported);
+                assert_eq!(
+                    admit_slot_operation(future, op).unwrap_err().kind(),
+                    std::io::ErrorKind::Unsupported
+                );
             }
         }
         for unknown in ["", "1", "05", "00", "Client02", "02 ", "02\\0"] {
-            assert_eq!(admit_slot_operation(unknown, Inspect).unwrap_err().kind(),
-                std::io::ErrorKind::InvalidInput);
+            assert_eq!(
+                admit_slot_operation(unknown, Inspect).unwrap_err().kind(),
+                std::io::ErrorKind::InvalidInput
+            );
         }
     }
 
