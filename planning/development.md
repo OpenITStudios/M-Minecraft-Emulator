@@ -3,6 +3,25 @@
 **Repository:** `OpenITStudios/M-Minecraft-Emulator`; all product changes on
 branch `Local`. Current operator decision: **GitHub Actions CI OFF**.
 
+## Continued development: non-blocking observer Stop
+
+The last observer source owner still used a potentially indefinite
+`JoinHandle::join()` immediately after requesting `WM_QUIT`, holding
+the global Rust manager operation lock. A message queue blocked in a
+Windows callback could freeze other manager operations indefinitely.
+In this bounded change, Stop posts at most one `WM_QUIT` per worker,
+returns a truthful `WouldBlock` while cleanup is pending, preserves the
+only worker handle, and joins **only when `is_finished()` is true**.
+A later explicit Stop confirms cleanup, including propagation of a
+`GetMessageW` or `UnhookWinEvent` failure. Startup and account/focus
+attribution are unchanged.
+
+This is a source-only correction on the CI-disabled `Local` branch.
+It is not a Windows runtime test, game FPS measurement or proof of
+four Minecraft instances. No Actions workflow is restored.
+
+---
+
 ## Current work: retire CI and preserve safe foreground observation
 
 The operator explicitly revoked approval for GitHub Actions on

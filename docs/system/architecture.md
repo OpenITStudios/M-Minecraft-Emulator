@@ -109,8 +109,14 @@ Windows contract: the thread that installs `SetWinEventHook` needs its own
 message loop and must perform `UnhookWinEvent` itself. The worker now
 returns a checked `io::Result` to the coordinator: `GetMessageW == -1` is
 an error, and `UnhookWinEvent == FALSE` must not be treated as a successful
-Stop. Repeated Stop without a worker is idempotent, while restarting a
-previous worker must reap its JoinHandle before a new hook is installed.
+Stop. A successful `PostThreadMessageW(WM_QUIT)` is only a shutdown
+request, not proof that the worker finished. The Stop operation now
+returns `WouldBlock` while the worker is alive instead of blocking on
+`join()` behind the manager-wide resource lock; the user can retry Stop
+to verify completion. Duplicate `WM_QUIT` posts are prevented by the
+same worker's `stop_requested` flag. Repeated Stop without a worker
+is idempotent, while restarting a previous worker must reap its
+JoinHandle before a new hook is installed.
 Any cleanup error after the Tauri event loop exits is recorded as an
 unverified shutdown rather than silently swallowed. Treat Windows
 hook installation failures, event delivery and actual memory overhead

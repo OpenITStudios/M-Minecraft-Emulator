@@ -55,6 +55,9 @@ mod windows {
     struct Worker {
         thread_id: u32,
         alive: Arc<AtomicBool>,
+        // Set only after WM_QUIT has actually entered the worker queue.
+        // Never post duplicate shutdown messages on repeated Stop actions.
+        stop_requested: bool,
         join: JoinHandle<io::Result<()>>,
     }
 
@@ -191,33 +194,42 @@ mod windows {
                 // Do not detach: a late worker may still be installing its
                 // hook. Preserve the only worker ownership until joined.
                 // sync_channel(0) guarantees a late send cannot succeed.
-                *guard = Some(Worker { thread_id: 0, alive, join });
+                *guard = Some(Worker { thread_id: 0, alive, stop_requested: false, join });
                 return Err(io::Error::new(io::ErrorKind::Other,
                     "Windows focus event hook did not confirm startup"));
             }
         };
-        *guard = Some(Worker { thread_id, alive, join });
+        *guard = Some(Worker { thread_id, alive, stop_requested: false, join });
         Ok(status(true, EVENTS.load(Ordering::Relaxed)))
     }
 
     pub fn stop() -> io::Result<ForegroundEventObserverStatus> {
         let mut guard = lock()?;
-        if let Some(worker) = guard.as_ref() {
-            if worker.thread_id == 0 {
-                // Startup timed out. A zero-capacity handshake ensures the
-                // late worker unhooks itself. Do not join a thread still
-                // potentially blocked in the Windows install call.
-                if !worker.join.is_finished() {
+        if let Some(worker) = guard.as_mut() {
+            // A successful PostThreadMessageW only queues WM_QUIT; it does
+            // NOT prove GetMessageW has processed it. Never join a worker
+            // that may still be running: doing so could block every manager
+            // operation behind the shared resource lock indefinitely.
+            if !worker.join.is_finished() {
+                if worker.thread_id == 0 {
+                    // The timed-out zero-capacity handshake forces its
+                    // worker to unhook itself before exiting.
                     return Err(io::Error::new(io::ErrorKind::WouldBlock,
                         "Timed-out hook is still cleaning up"));
                 }
-            } else if worker.alive.load(Ordering::Acquire)
-                && unsafe { PostThreadMessageW(worker.thread_id, WM_QUIT, 0, 0) } == 0
-            {
-                // Never discard the worker handle on a refused shutdown.
-                return Err(io::Error::last_os_error());
+                if worker.alive.load(Ordering::Acquire) && !worker.stop_requested {
+                    if unsafe { PostThreadMessageW(worker.thread_id, WM_QUIT, 0, 0) } == 0 {
+                        // Preserve ownership; a later explicit Stop can retry.
+                        return Err(io::Error::last_os_error());
+                    }
+                    worker.stop_requested = true;
+                }
+                return Err(io::Error::new(io::ErrorKind::WouldBlock,
+                    "Foreground observer shutdown requested; retry Stop to confirm cleanup"));
             }
         }
+        // A finished worker cannot block on join. Propagate message-loop
+        // and UnhookWinEvent failures rather than inventing a clean Stop.
         if let Some(worker) = guard.take() {
             worker.join.join().map_err(|_| io::Error::other(
                 "Foreground hook worker exited unexpectedly"))??;

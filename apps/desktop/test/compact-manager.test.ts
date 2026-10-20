@@ -71,8 +71,22 @@ describe("Opt-in Windows event-driven focus counter", () => {
     // timeout. Preserve ownership and forbid a replacement until cleanup.
     expect(rust).toContain("mpsc::sync_channel(0)");
     expect(rust).not.toContain("mpsc::sync_channel(1)");
-    expect(rust).toContain("*guard = Some(Worker { thread_id: 0, alive, join });");
+    expect(rust).toContain("*guard = Some(Worker { thread_id: 0, alive, stop_requested: false, join });");
+    expect(rust).toContain("*guard = Some(Worker { thread_id, alive, stop_requested: false, join });");
     expect(rust).toContain("worker.join.is_finished()");
+    // Stop is a two-step confirmation when WM_QUIT is merely queued.
+    // Never block the shared manager lock inside join() on a live worker.
+    expect(rust).toContain("stop_requested: bool");
+    expect(rust).toContain("if !worker.join.is_finished() {");
+    expect(rust).toContain("worker.stop_requested = true;");
+    expect(rust).toContain("worker.alive.load(Ordering::Acquire) && !worker.stop_requested");
+    expect(rust).toContain('"Foreground observer shutdown requested; retry Stop to confirm cleanup"');
+    const stopBlock = rust.split("pub fn stop() -> io::Result<ForegroundEventObserverStatus> {")[1]
+      ?.split("pub fn read_observer()")[0] ?? "";
+    expect(stopBlock.indexOf("if !worker.join.is_finished()")).toBeLessThan(
+      stopBlock.indexOf("if let Some(worker) = guard.take()"));
+    expect(stopBlock).toContain("PostThreadMessageW(worker.thread_id, WM_QUIT, 0, 0)");
+    expect(stopBlock).not.toContain("thread::sleep(");
     expect(rust).toContain("worker.thread_id != 0 && worker.alive.load(Ordering::Acquire)");
     expect(rust).toContain('"Timed-out hook is still cleaning up"');
     expect(rust).not.toContain("drop(join);");
