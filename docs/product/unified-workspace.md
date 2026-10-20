@@ -14,6 +14,14 @@ of independent native composition after the crash experiments. A developer
 integration now provides the play area and session rail; real game acceptance
 and live previews remain incomplete.
 
+**20 October acceptance correction:** the operator reports unstable app switching
+and now requests genuine in-app control/containment. Independent composition has
+failed user acceptance and remains a developer experiment, not a completed substitute
+for hosting. No single taskbar entry or safe child-window hosting is proven. The
+existing destructive SetParent failure must not be bypassed to hide an icon.
+Current corrections preserve recovery controls and handle minimized updates;
+they do not resolve this architectural requirement. See the canonical test report.
+
 ## User experience
 
 One maximized English-language application contains one large playable game

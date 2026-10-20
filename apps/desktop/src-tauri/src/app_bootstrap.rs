@@ -70,13 +70,7 @@ pub fn run() {
                     | tauri::WindowEvent::Resized(_)
                     | tauri::WindowEvent::Focused(true)
             ) {
-                if let Ok(handle) = window.hwnd() {
-                    let manager = handle.0 as usize as u64;
-                    let hidden = window.is_minimized().unwrap_or(true);
-                    tauri::async_runtime::spawn_blocking(move || {
-                        let _ = crate::engine::workspace_surface::update(manager, None, hidden);
-                    });
-                }
+                queue_workspace_update(window.clone());
             }
         })
         .run(tauri::generate_context!());
@@ -84,6 +78,44 @@ pub fn run() {
     // Unhook from the worker's installation thread before exit.
     crate::engine::instance_focus_events::shutdown();
     result.expect("failed to run Minecraft Instance Manager desktop runtime");
+}
+
+#[cfg(windows)]
+fn queue_workspace_update(window: tauri::Window) {
+    use std::sync::Mutex;
+    use tauri::Emitter;
+    // One worker drains the latest event; no stale visibility snapshots or thread per move.
+    static PENDING: Mutex<(bool, Option<tauri::Window>)> = Mutex::new((false, None));
+    let Ok(mut pending) = PENDING.lock() else {
+        return;
+    };
+    pending.1 = Some(window);
+    if pending.0 {
+        return;
+    }
+    pending.0 = true;
+    drop(pending);
+    tauri::async_runtime::spawn_blocking(|| loop {
+        let window = {
+            let Ok(mut pending) = PENDING.lock() else {
+                return;
+            };
+            match pending.1.take() {
+                Some(window) => window,
+                None => {
+                    pending.0 = false;
+                    return;
+                }
+            }
+        };
+        let result = window.hwnd().map_err(|e| e.to_string()).and_then(|handle| {
+            crate::engine::workspace_surface::update(handle.0 as usize as u64, None)
+                .map_err(|e| e.to_string())
+        });
+        if let Err(error) = result {
+            let _ = window.emit("workspace-surface-error", error);
+        }
+    });
 }
 
 fn show_startup_error(message: &str) {

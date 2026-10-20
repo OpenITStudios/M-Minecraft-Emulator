@@ -2,6 +2,14 @@
 
 ## Unified workspace feasibility (synthetic windows only)
 
+Optional UI regression, from repository root with the frontend server on
+127.0.0.1:1421: `node tooling/acceptance/workspace-ui-regression.mjs`.
+It requires an available Playwright installation and Edge; optionally set
+`MIVUBI_PLAYWRIGHT_MODULE` to that installation's absolute module directory.
+It mocks Tauri, creates no game or engine processes, and writes only synthetic
+UI screenshots below ignored `workspace/`. It covers resize errors retaining
+recovery controls, native error events and three viewport sizes. Not gameplay proof.
+
 The approved composition now has a developer product implementation in
 `apps/desktop/src-tauri/src/engine/workspace_surface.rs`. Its opt-in regression
 uses the actual debug executable and real synthetic windows. Build the frontend

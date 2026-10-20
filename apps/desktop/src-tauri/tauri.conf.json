@@ -24,6 +24,13 @@
       }
     ],
     "security": {
+      "capabilities": [
+        {
+          "identifier": "workspace-events",
+          "windows": ["main"],
+          "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+        }
+      ],
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
     }
   },

@@ -2,7 +2,7 @@
 
 ## Owned manager / independence — 20 October 2026
 
-**ACTIVE:** workspace acceptance FAIL. Real backend reproduced native null→empty profile coercion; corrected explicit C# native entrypoint. Active-engine inspection, eight provider tests and Windows build PASS. Gameplay, previews, four clients and standalone installation unproven. Next: accept one real client. [Evidence](../docs/validation/native-pilot-localtest.md).
+**ACTIVE:** switching acceptance FAIL; genuine in-app hosting requested. Resize loses UI lease and minimized webview placement reproduced/fixed; coalesced events and visible errors added. Synthetic/browser regressions PASS, actual crash cause UNKNOWN. Hosting, gameplay stability and independence unproven. Next: resolve safe hosting boundary. [Evidence](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
 

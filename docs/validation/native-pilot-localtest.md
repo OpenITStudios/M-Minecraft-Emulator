@@ -9,6 +9,43 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Workspace switching investigation — 20 October 2026
+
+Baseline: `0819b3d17a5bb104fb19d39033e6d6ea33cffbb4`. Operator reports
+unstable app switching, disappearing presentation and a crash. Acceptance remains
+**FAIL**. Task Manager showing a separate Minecraft process is expected; it is
+not evidence of a Windows Sandbox dependency or of a crash. Application/WER
+inspection did not provide a usable matching crash record. The precise reported
+crash cause remains **UNKNOWN**, not attributed to the following bugs without proof.
+
+| Investigation | Result / action |
+| --- | --- |
+| Resize error discards UI selection but retains backend lease | Reproduced FAIL in mounted mocked UI; corrected to retain target and Restore/Close controls, suspend automatic resize updates after failure; regression PASS |
+| Webview update while manager minimized | Reproduced FAIL in real controller regression (`Workspace layout changed`); update now checks current native minimized state under the surface lock; hide/restore regression PASS |
+| Stale move/minimize/focus snapshots and worker growth | Native events coalesce through one worker with one latest pending window; visibility is read when executed, not captured when queued |
+| Silent native event errors | Errors now reach UI via `workspace-surface-error`; main window gets only listen/unlisten permissions; subscription errors are visible; mocked event regression PASS |
+| Helper/manager loss, invalid replacement, PID reuse, foreign session | Existing six normal/maximized synthetic recovery scenarios and attribution checks retained; these do not establish real-game acceptance |
+| True containment, one taskbar group, Alt-Tab, dialogs, relative mouse, fullscreen, mixed DPI and real Minecraft crash recovery | NOT_EXECUTED / not proven; current independent composition cannot promise true containment or one taskbar entry |
+| Direct reparenting / owner reassignment | Not enabled; prior destructive HWND recovery failure remains a rejection. Removing the taskbar icon would not establish safe containment |
+
+The optional persisted browser harness is
+`tooling/acceptance/workspace-ui-regression.mjs` (mock bridge, no game control).
+It covers selection, settings release, failed replacement, three viewport sizes,
+resize failure with retained recovery controls, and native error delivery.
+The native regression additionally checks minimize→webview update→restore.
+No game, account, driver, service or official Sandboxie registration is changed.
+
+The operator now asks for genuine in-app hosting after composition instability.
+This is an unmet architectural requirement. Stabilization corrections here are
+not a declaration that the overlay is equivalent to hosting or production-ready.
+A replacement must first prove rendering, direct input, dialogs, app switching
+and host-failure recovery; capturing video alone is not interactive hosting.
+Microsoft documents cross-process DPI risks for
+[SetParent](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setparent)
+and owner/child destruction behavior in
+[window features](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features).
+No unsafe parent/owner workaround, input injection or engine fallback was added.
+
 ## Approved native workspace integration — 20 October 2026
 
 **Second user acceptance: FAIL; live backend cause reproduced and corrected.**

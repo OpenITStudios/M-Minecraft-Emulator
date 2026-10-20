@@ -100,7 +100,7 @@ pub async fn desktop_update_workspace(
         0
     };
     tauri::async_runtime::spawn_blocking(move || {
-        crate::engine::workspace_surface::update(manager, Some(viewport), false)
+        crate::engine::workspace_surface::update(manager, Some(viewport))
     })
     .await
     .map_err(surface_failure)?

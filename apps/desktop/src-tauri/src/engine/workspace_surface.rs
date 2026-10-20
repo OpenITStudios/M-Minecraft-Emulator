@@ -412,6 +412,17 @@ mod native {
     pub(super) fn foreground(manager: u64) -> bool {
         unsafe { GetForegroundWindow() == manager as usize as HWND }
     }
+    pub(super) fn minimized(manager: u64) -> io::Result<bool> {
+        unsafe {
+            let window = manager as usize as HWND;
+            let mut pid = 0;
+            GetWindowThreadProcessId(window, &mut pid);
+            if IsWindow(window) == 0 || pid != std::process::id() {
+                return Err(io::Error::other("Invalid workspace window"));
+            }
+            Ok(IsIconic(window) != 0)
+        }
+    }
     pub(super) fn restore(saved: &Saved) -> io::Result<()> {
         let (_process, window) = match hwnd(&saved.target) {
             Ok(window) => window,
@@ -549,6 +560,9 @@ mod native {
     pub(super) fn foreground(_: u64) -> bool {
         false
     }
+    pub(super) fn minimized(_: u64) -> io::Result<bool> {
+        unavailable()
+    }
 }
 
 mod controller {
@@ -638,8 +652,8 @@ mod controller {
     }
     pub fn release() -> io::Result<()> {
         let mut state = SURFACE
-            .try_lock()
-            .map_err(|_| io::Error::other("Workspace operation in progress"))?;
+            .lock()
+            .map_err(|_| io::Error::other("Workspace state unavailable"))?;
         if let Some(lease) = state.as_mut() {
             lease.stop()?;
         }
@@ -728,8 +742,8 @@ mod controller {
         let viewport = viewport.validate()?;
         let rect = native::rectangle(manager, viewport)?;
         let mut state = SURFACE
-            .try_lock()
-            .map_err(|_| io::Error::other("Workspace operation in progress"))?;
+            .lock()
+            .map_err(|_| io::Error::other("Workspace state unavailable"))?;
         if let Some(old) = state.as_mut() {
             if old.saved.as_ref().is_some_and(|s| {
                 s.target.pid == target.pid
@@ -803,7 +817,7 @@ mod controller {
             "Workspace placement failed: {detail}. Previous session preserved."
         )))
     }
-    pub fn update(manager: u64, viewport: Option<Viewport>, hidden: bool) -> io::Result<()> {
+    pub fn update(manager: u64, viewport: Option<Viewport>) -> io::Result<()> {
         let mut state = SURFACE
             .lock()
             .map_err(|_| io::Error::other("Workspace state unavailable"))?;
@@ -816,7 +830,7 @@ mod controller {
         if let Some(viewport) = viewport {
             lease.viewport = viewport.validate()?;
         }
-        if hidden {
+        if native::minimized(manager)? {
             return match lease.send(Command::Hide)? {
                 Reply::Hidden => Ok(()),
                 _ => Err(io::Error::other("Surface hide failed")),
@@ -1085,6 +1099,27 @@ mod controller {
             let after = native::capture(target.clone()).unwrap();
             assert_eq!(before.rect, after.rect);
             assert_eq!(before.style, after.style);
+            // Stale webview/native events must not override the current native state.
+            unsafe {
+                ShowWindow(manager, SW_SHOWMINNOACTIVE);
+            }
+            update(manager as usize as u64, Some(viewport)).unwrap();
+            let game_window = u64::from_str_radix(target.window_handle.trim_start_matches("0x"), 16)
+                .unwrap() as usize as HWND;
+            assert_eq!(
+                unsafe { IsWindowVisible(game_window) },
+                0,
+                "Webview update resurfaced a game over a minimized manager"
+            );
+            unsafe {
+                ShowWindow(manager, SW_SHOWNOACTIVATE);
+            }
+            update(manager as usize as u64, None).unwrap();
+            assert_ne!(
+                unsafe { IsWindowVisible(game_window) },
+                0,
+                "Stale minimize event hid a restored session"
+            );
             release().unwrap();
             unsafe {
                 DestroyWindow(manager);

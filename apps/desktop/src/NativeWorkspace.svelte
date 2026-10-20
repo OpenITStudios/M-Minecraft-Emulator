@@ -3,6 +3,7 @@
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import type {ClientId,OwnedProcess} from './app/bridge/ownedProviderApi.js';
   import {operationIssue} from './app/bridge/managerConfiguration.js';
+  import {listen} from '@tauri-apps/api/event';
   export let sessionDirectory='';
   export let activeClient:ClientId|null=null;
   export let busy=false;
@@ -10,25 +11,27 @@
   let viewport:HTMLDivElement,target:OwnedProcess|null=null;
   let issue:ReturnType<typeof operationIssue>|null=null;
   let updating=false,updatePending=false;
+  let updateFailed=false;
   export let working=false;
   $: disabled=busy||working;
-  $: if(!busy&&updatePending&&activeClient&&!updating)void update();
+  $: if(!busy&&!working&&updatePending&&activeClient&&!updating)void update();
   export async function restore(){
-    await workspaceSurface.release();activeClient=null;target=null;
+    await workspaceSurface.release();activeClient=null;target=null;updateFailed=false;issue=null;
   }
   export async function present(client:ClientId,process:OwnedProcess){
     issue=null;
     try{
       await tick();
       await workspaceSurface.present(sessionDirectory,client,process,viewport.getBoundingClientRect());
-      activeClient=client;target=process;
-    }catch(error){issue=operationIssue(error);if(/recovery not confirmed|Previous surface could not resume|Surface helper ended/.test(issue.details)){activeClient=null;target=null;}throw error;}
+      activeClient=client;target=process;updateFailed=false;
+    }catch(error){issue=operationIssue(error);throw error;}
   }
   async function update(){
-    updatePending=true;if(updating||busy||!activeClient)return;
+    if(updateFailed)return;
+    updatePending=true;if(updating||busy||working||!activeClient)return;
     updating=true;
     try{while(updatePending&&activeClient){updatePending=false;await workspaceSurface.update(viewport.getBoundingClientRect());}}
-    catch(error){issue=operationIssue(error);activeClient=null;target=null;}
+    catch(error){issue=operationIssue(error);updateFailed=true;updatePending=false;}
     finally{updating=false;}
   }
   async function returnToWindows(){
@@ -41,8 +44,10 @@
     try{await restore();working=false;await tick();await onClose(client,process);}catch(error){issue=operationIssue(error);}finally{working=false;}
   }
   onMount(()=>{
+    let disposed=false,unlisten:(()=>void)|undefined;
+    void listen<string>('workspace-surface-error',event=>{issue=operationIssue(event.payload);updateFailed=true;updatePending=false;}).then(stop=>{if(disposed)stop();else unlisten=stop;}).catch(error=>{if(!disposed)issue=operationIssue(`Workspace recovery notifications unavailable: ${String(error)}`);});
     const observer=new ResizeObserver(()=>{void update();});observer.observe(viewport,{box:'device-pixel-content-box'});
-    return ()=>{observer.disconnect();void workspaceSurface.release().catch(()=>{});};
+    return ()=>{disposed=true;unlisten?.();observer.disconnect();void workspaceSurface.release().catch(()=>{});};
   });
 </script>
 <section class="nw-stage" aria-label="Active Minecraft session">
