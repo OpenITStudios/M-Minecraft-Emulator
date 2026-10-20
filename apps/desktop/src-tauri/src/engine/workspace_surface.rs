@@ -687,6 +687,29 @@ mod controller {
         saved: Option<Saved>,
     }
     impl Lease {
+        fn hold_after_failure(&mut self, error: io::Error) -> io::Error {
+            // Keep the first failure and its checkpoint. A delayed successful
+            // activation must not cover recovery controls at the old geometry.
+            // An ended helper already restores the standalone window via its reader.
+            if matches!(self.child.try_wait(), Ok(None)) {
+                match self.send(Command::Hide) {
+                    Ok(Reply::Hidden) => {}
+                    result => {
+                        return io::Error::new(
+                            error.kind(),
+                            format!(
+                                "{error}; hiding failed presentation: {}",
+                                result
+                                    .err()
+                                    .map(|e| e.to_string())
+                                    .unwrap_or_else(|| "unexpected acknowledgement".into())
+                            ),
+                        )
+                    }
+                }
+            }
+            error
+        }
         fn place(&mut self, rect: Rectangle) -> io::Result<()> {
             if !matches!(
                 self.send(Command::Place {
@@ -997,7 +1020,11 @@ mod controller {
                     return Err(io::Error::other("Wrong workspace window"));
                 }
                 old.viewport = viewport;
-                old.place(rect)?;
+                if let Err(error) = old.place(rect) {
+                    let error = old.hold_after_failure(error);
+                    state.suspended = true;
+                    return Err(error);
+                }
                 state.suspended = false;
                 return Ok(());
             }
@@ -1054,7 +1081,11 @@ mod controller {
         let mut state = SURFACE
             .lock()
             .map_err(|_| io::Error::other("Workspace state unavailable"))?;
-        let suspended = state.suspended;
+        // Settings and failed presentation have already hidden the active lease.
+        // Native focus/resize notifications cannot retry it behind the UI's back.
+        if state.suspended {
+            return Ok(());
+        }
         let Some(lease) = state.active.as_mut() else {
             return Ok(());
         };
@@ -1065,7 +1096,7 @@ mod controller {
             Some(value) => value.validate()?,
             None => lease.viewport,
         };
-        if suspended || native::minimized(manager)? {
+        if native::minimized(manager)? {
             return match lease.send(Command::Hide)? {
                 Reply::Hidden => Ok(()),
                 _ => Err(io::Error::other("Surface hide failed")),
@@ -1080,7 +1111,14 @@ mod controller {
             Err(error) => return Err(error),
         };
         lease.viewport = next_viewport;
-        lease.place(rect)
+        match lease.place(rect) {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                let error = lease.hold_after_failure(error);
+                state.suspended = true;
+                Err(error)
+            }
+        }
     }
 
     #[cfg(all(test, windows))]
@@ -1264,18 +1302,17 @@ mod controller {
                 assert_ne!(PostMessageW(window, 0x8001, 0, 0), 0);
             }
             std::thread::sleep(Duration::from_millis(100));
+            SURFACE.lock().unwrap().active = Some(lease);
             let started = Instant::now();
-            let error = lease
-                .send(Command::Place {
-                    rect: native::rectangle(manager as usize as u64, viewport).unwrap(),
-                    manager_pid: std::process::id(),
-                })
+            let error = update(manager as usize as u64, Some(viewport))
                 .err()
                 .expect("Synthetic placement did not stall");
             assert_eq!(error.kind(), io::ErrorKind::TimedOut);
             let diagnostic = error.to_string();
             // Recover even when the diagnostic assertion fails on the old implementation.
-            lease.stop().unwrap();
+            let held = SURFACE.lock().unwrap().suspended;
+            let followup = update(manager as usize as u64, Some(viewport));
+            release().unwrap();
             assert!(fixture.process.try_wait().unwrap().is_none());
             let restored = native::capture(target).unwrap();
             assert_eq!(restored.rect, original.rect);
@@ -1285,6 +1322,8 @@ mod controller {
                 DestroyWindow(manager);
             }
             assert!(started.elapsed() < Duration::from_secs(8));
+            assert!(held, "Failed update was not held for explicit recovery");
+            assert!(followup.is_ok(), "A native event retried the failed lease");
             assert!(
                 diagnostic.contains("place/position"),
                 "Missing blocking native stage: {diagnostic}"
