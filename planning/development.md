@@ -2,9 +2,9 @@
 
 ## Owned engine / four clients — 20 October 2026
 
-**ACTIVE:** local developer test route approved. `d99f2a4`: separate signed-copy/boot preparation;
-666 source tests pass. UAC retry/signing/TESTSIGNING pass at e411fd7; no service changes. Next: manual reboot.
-Service takeover/rollback and gameplay remain NOT_EXECUTED; see [campaign results](../docs/validation/native-pilot-localtest.md).
+**ACTIVE:** `38b19e6` adds reversible test activation; 669 source tests pass.
+Reboot/Test Mode/hash/global-idle probes pass. Activation UAC pending; official services unchanged.
+Next: observe activation; owned driver/gameplay NOT_EXECUTED. See [campaign results](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
 

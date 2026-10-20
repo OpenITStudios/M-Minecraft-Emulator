@@ -9,6 +9,39 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Post-reboot runtime preparation — 20 October 2026
+
+Source revision `38b19e603134f2846bca9259fc08036afa7d8cd6` adds the explicit
+v1.18.6 test activation/restoration path. It changes only the existing services'
+ImagePath through SCM, preserving their registrations, startup types, accounts,
+dependencies, security descriptors and minifilter configuration. Authenticated
+upstream helpers perform bounded stop/start; original image paths/hashes/signers
+are journaled before redirection. This replaces the earlier proposed
+delete/reinstall approach with a smaller reversible operation. No legacy Apply
+gate or desktop provider is enabled. Commands are in
+[Isolation Source Tooling](../../tooling/isolation-source/README.md).
+
+| Check | Result | Actual evidence |
+| --- | --- | --- |
+| Reboot | PASS | OS boot time is newer than preparation's recorded boot |
+| Actual Test Mode | PASS | NtQuerySystemInformation SystemCodeIntegrityInformation reports TESTSIGN active |
+| Signed copy integrity | PASS | All 25 recorded SHA-256 values match; driver signature Valid |
+| All-session idle inspection | PASS | Verified official SbieDll API queried twice, null box filter/allSessions=true; both counts zero |
+| Current driver identity | PASS observation | Official driver 5.73.2, ABI 0x57230; not our private driver |
+| Minecraft Education install | PASS observation | Desktop EXE 1.26.32.0, signature Valid, Microsoft Corporation; no game launched |
+| Source verification | PASS | verify:source: 669 passed, zero failed; four existing Node symlink skips and one default-ignored actual-payload Rust test |
+| New runtime regressions | PASS | Three tests cover parser validity, service-preserving SCM contract, ownership/hash/signer rejection, active/unknown process rejection and all-session probe contract |
+| Elevated activation | NOT_EXECUTED | Normal RunAs UAC pending; receipt has no runtime snapshot and servicesChanged=false |
+| Own driver load, service restoration, profile and gameplay | NOT_EXECUTED | Existing official SbieDrv/SbieSvc remain running; no takeover has begun |
+
+First next action is resolving the normal UAC request, then observing the actual
+private driver load/ABI result. Do not interpret the preparation receipt's old
+REBOOT_REQUIRED label as current boot evidence; the fresh read-only probe above
+independently confirms the reboot and actual kernel Test Mode. If activation
+fails, retain its first error and use only verified transaction ownership for
+restoration. Do not proceed to profile/game creation until private identity and
+ABI pass. Manual login and playable-world acceptance remain outstanding.
+
 ## Local developer activation preparation — 20 October 2026
 
 **ACTIVE, not gameplay-ready.** Source revision
