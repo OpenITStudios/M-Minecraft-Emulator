@@ -1,16 +1,16 @@
 # Isolation Source Tooling — Active Route (v1.18.6)
 
 This README is the **single operator entrypoint for native isolation source
-verification/build**. The active desktop pilot continues to use the
-*official installed* Sandboxie Plus for `MinecraftClient02`; **it does not
-load, sign, install or switch to the owned engine**.
+verification/build**. The desktop has an explicit developer owned-runtime adapter;
+these build commands do not sign, install, load or select an engine. A source
+build is separate from the provider currently active on Windows.
 
 ## Exactly one current source/build path
 
 | Role | Canonical owner | Allowed use |
 | --- | --- | --- |
 | Unchanged comparison source | `engine/isolation-candidates/sandboxie-v1.18.6/` | Read-only byte/tree reference (1,627 files) |
-| Editable native source | `engine/isolation-owned/` | One owned v1.18.6 tree (1,627 files; 11 C/C++ changes plus four exact build-project path fixes) |
+| Editable native source | `engine/isolation-owned/` | One owned v1.18.6 tree (1,627 files; 13 C/C++ changes plus four exact build-project path fixes) |
 | Build component contract | `engine/isolation-native/owned-runtime/build-profile-v1186.json` | Exactly 3 stages, 16 native binaries, 5 resources and 4 original licenses |
 | Source verification | `tooling/isolation-source/verify-owned-v1186.mjs` | Read-only exact-source and upstream provenance check |
 | Windows build (optional, build-only) | `tooling/isolation-source/build-owned-v1186.ps1` | Compile only; 3 MSBuild stages, WDK required |
@@ -62,7 +62,7 @@ or licenses remain rejected. Preserve the successful candidate; do not install i
 
 Four reviewed project changes quote MASM, import-library and message-compiler
 paths, including checkout paths containing spaces. The source verifier reconstructs
-these exact transformations from pristine upstream separately from the eleven
+these exact transformations from pristine upstream separately from the original eleven
 C/C++ security/identity modifications. Unexpected edits still fail verification.
 Standalone C/C++ policies pass actual MSVC compilation and all three CTest tests:
 

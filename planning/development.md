@@ -2,12 +2,12 @@
 
 ## Owned manager / independence — 20 October 2026
 
-**ACTIVE**, audited `35688ff` / source `dd1e404`.
-**Product FAIL**: operator rejects four-client launch and shared accounts;
-foreground refusal observed. Prior tab recovery is not account acceptance.
-[Audit](../docs/validation/native-pilot-localtest.md).
-**Next:** distinguish game cache, credential fallback and host broker reuse before
-an isolation fix. Four accounts, input/gameplay and reliable hosting are unproven.
+**ACTIVE**, source `68ded21636ff486e973d757ce149f12ce05e1069`.
+Classic credential fallback and compartment storage bypass closed. **715 source
+checks + three native build stages PASS**; NOT_INSTALLABLE, active engine unchanged.
+[Evidence](../docs/validation/native-pilot-localtest.md). **Product FAIL** remains.
+**Next:** distinguish broker/cache reuse; live account isolation, input and four
+playable clients remain unproven.
 
 ## Windows-first efficiency — 20 October 2026
 

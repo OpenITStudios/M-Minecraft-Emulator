@@ -9,6 +9,65 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Implemented classic credential/storage boundary — 20 October 2026
+
+Implementation `68ded21636ff486e973d757ce149f12ce05e1069`, following audit
+`a8adc19`. **Source and native build PASS; active engine unchanged. Product
+acceptance remains FAIL.** This is a bounded implementation of confirmed source
+gaps, not a proven cure for the game's reported account reuse.
+
+The existing owned `cred.c` now refuses host fallback for missing/deleted classic
+credentials and domain credentials; enumeration returns virtual-store entries
+without merging the host list. Output pointers/counts are cleared on failures.
+The upstream ANSI domain-read/enumeration implementations delegated directly to
+the host without virtual conversion; they now return `ERROR_NOT_SUPPORTED`.
+That deliberate compatibility restriction requires real game acceptance.
+Credential hook initialization cannot be disabled by an open-credential/storage
+setting in this private build.
+
+Consumer tracing found an additional bypass: `pst.cpp::Pst_Init` skipped the
+virtual Protected Storage hook in App Compartment mode and for open storage.
+Those bypasses are removed in the owned tree so the credential consumer reaches
+the existing virtual storage implementation. No second credential store, new
+account database, public ABI change or profile/data migration was introduced.
+The pristine and historical source trees are unchanged. The current exact source
+verifier reconstructs the two new deltas separately from the original eleven
+native changes; build/assembly contracts require **13 native + 4 build changes**.
+
+### Executed proof and limits
+
+- A native C fixture extracts the actual owned credential routines and both
+  hook-initialization bodies, then compiles them with MSVC against synthetic
+  stores. It failed on host fallback before correction, then independently on
+  the App Compartment storage-hook bypass. Both pass after correction. Covered:
+  empty/missing store, deleted marker, malformed boxed data, successful boxed
+  reads/domain reads/enumeration, zero host calls, unsupported ANSI reads and
+  hooks retained despite synthetic open/compartment settings. It reads no real
+  Windows credential or account value and does not prove live box isolation.
+- `npm run verify:source`: **715 passed** (Node 285, frontend 177, desktop Rust
+  76, runtime Rust 177); four existing file-symlink skips, eight opt-in desktop
+  tests ignored. After final newline normalization, the eight focused native/
+  reconstruction tests pass. Exact committed `isolation-source:verify` passes.
+- The normal checkout's build-only preflight refused existing ignored compiler
+  artifacts, as designed. A clean source-only clone on `Local` at the exact
+  implementation SHA was used; no old build outputs or account data were copied.
+- `build-owned-v1186.ps1` completed **all three real stages**, exit 0: Win32
+  support, x64 user core (including modified credential C and storage C++), and
+  x64 WDK kernel. Sixteen native binaries, five resources and four licenses were
+  staged into one 25-file **NOT_INSTALLABLE** candidate. Driver signed/loaded,
+  active-provider-changed and gameplay-verification flags remain false.
+  Machine-local evidence is preserved at
+  `workspace/credential-clean-68ded21-20261020-234500/workspace/builds/credential-policy-68ded21/`
+  and the corresponding `workspace/packages/credential-policy-68ded21/` in that
+  clean clone. These ignored reports/payloads are not committed or installed.
+
+The running engine/profile configuration was not replaced. No game was launched,
+closed or signed out in this implementation batch. WAM/SSO broker behavior,
+game-local inherited cache, actual virtual-store read/write noninterference,
+login compatibility and four distinct licensed playable clients remain unproven.
+Closing classic credential paths does not establish which mechanism caused
+Minecraft's account reuse; product acceptance cannot advance from this build.
+
 ## Acceptance retracted: four independent accounts are not supported by proof
 
 20 October 2026, reviewed `Local` HEAD

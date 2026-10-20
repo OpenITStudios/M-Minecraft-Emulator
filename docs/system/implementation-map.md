@@ -15,7 +15,7 @@ This is a **navigation guide**, not a second implementation registry. The sole c
 
 **Current native source (15 October 2026):** the editable Sandboxie-derived
 v1.18.6 implementation is **complete as source** in `engine/isolation-owned/`
-(1,627 files, 11 directly modified C/C++ files plus four reviewed project-path
+(1,627 files, 13 directly modified C/C++ files plus four reviewed project-path
 quoting fixes). The unmodified reference is
 `engine/isolation-candidates/sandboxie-v1.18.6/`. The active exact-source
 verifier is `tooling/isolation-source/verify-owned-v1186.mjs` and the
@@ -34,6 +34,7 @@ they must never be chosen automatically as current build or activation code.
 
 | Question / fault | Primary implementation owner | Consumer / companion |
 | --- | --- | --- |
+| Classic host credential fallback and App Compartment protected-storage bypass | `engine/isolation-owned/Sandboxie/core/dll/cred.c` and `pst.cpp` | Exact current delta in `tooling/isolation-source/owned-credential-policy.mjs`, reconstructed by the v1.18.6 verifier; compiled synthetic routine regression and build-only evidence in [native pilot report](../validation/native-pilot-localtest.md). WAM/SSO, game cache and account acceptance remain unproven. |
 | Four-tab native composition, shell eligibility and window recovery | `apps/desktop/src/NativeWorkspace.svelte` → `app/bridge/workspaceSurface.ts` → `src-tauri/src/engine/workspace_surface.rs`, gated by existing owned provider | [Workspace contract](../product/unified-workspace.md); retained checkpoints, same-executable recovery helpers, coalesced manager foreground updates in `app_bootstrap.rs`; playable rendering/input and single-taskbar acceptance pending |
 | Unified dashboard, saved locations and canonical Minecraft targets | `apps/desktop/src/UnifiedManagerApp.svelte` → `manager_settings.rs` | Existing NativePilot data directory; `engine/isolation-native/owned-runtime/minecraft-targets.json`, shared `education-target.ps1`, existing owned provider; old Compact Manager is unmounted |
 | Explicit debug-manager owned engine selection and four-slot operations | `apps/desktop/src-tauri/src/engine/owned_provider.rs` → embedded `tooling/isolation-source/windows/owned-manager.ps1` | Existing catalog/resource lock, typed `ownedProviderApi.ts`, mounted `OwnedManagerPanel.svelte`; one-shot Create-only helper in the same executable; no production activation or service installation |
