@@ -10,7 +10,7 @@ build is separate from the provider currently active on Windows.
 | Role | Canonical owner | Allowed use |
 | --- | --- | --- |
 | Unchanged comparison source | `engine/isolation-candidates/sandboxie-v1.18.6/` | Read-only byte/tree reference (1,627 files) |
-| Editable native source | `engine/isolation-owned/` | One owned v1.18.6 tree (1,627 files; 13 C/C++ changes plus four exact build-project path fixes) |
+| Editable native source | `engine/isolation-owned/` | One owned v1.18.6 tree (1,627 files; 15 C/C++ changes plus four exact build-project path fixes) |
 | Build component contract | `engine/isolation-native/owned-runtime/build-profile-v1186.json` | Exactly 3 stages, 16 native binaries, 5 resources and 4 original licenses |
 | Source verification | `tooling/isolation-source/verify-owned-v1186.mjs` | Read-only exact-source and upstream provenance check |
 | Windows build (optional, build-only) | `tooling/isolation-source/build-owned-v1186.ps1` | Compile only; 3 MSBuild stages, WDK required |

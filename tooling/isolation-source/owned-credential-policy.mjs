@@ -1,6 +1,69 @@
 // Exact current-owned delta; never applied to the pristine or legacy fork.
 export const CREDENTIAL_FILE='Sandboxie/core/dll/cred.c';
 export const STORAGE_FILE='Sandboxie/core/dll/pst.cpp';
+export const STREAM_FILE='Sandboxie/core/dll/ipstore_impl.cpp';
+export const SERVICE_FILE='Sandboxie/core/svc/pstoreserver.cpp';
+export function applyOwnedStorageServiceIsolation(input){
+  let source=input.replaceAll('\r\n','\n');
+  const include='#include "stdafx.h"';
+  const queue='    QueueUserWorkItem(connectToPStore, this, WT_EXECUTELONGFUNCTION);';
+  const start=source.indexOf('MSG_HEADER *PStoreServer::Handler(');
+  const end=source.indexOf('\n//---',start);
+  if(source.split(include).length!==2||source.split(queue).length!==2||start<0||end<0)
+    throw Error('Owned storage service anchor drift');
+  source=source.slice(0,start)+`MSG_HEADER *PStoreServer::Handler(void *_this, MSG_HEADER *msg)
+{
+    // Boxed storage stays local; never proxy misses or enumeration to the host.
+    return SHORT_REPLY(E_ACCESSDENIED);
+}
+
+`+source.slice(end);
+  return source.replace(include,()=>include+'\n#include "common/my_version.h"\n#if !defined(MIVUBI_PRIVATE_ISOLATION_BUILD) || MIVUBI_PRIVATE_ISOLATION_BUILD != 0x4D495655\n#error Owned_storage_service_requires_private_build\n#endif')
+    .replace(queue,()=> '    // Owned profiles do not connect to host Protected Storage.');
+}
+export function applyOwnedStorageStreamIsolation(input){
+  let source=input.replaceAll('\r\n','\n');
+  function replace(before,after){
+    if(source.split(before).length!==2)throw Error('Owned storage stream anchor drift');
+    source=source.replace(before,()=>after);
+  }
+  replace('#include "common/my_version.h"','#include "common/my_version.h"\n#if !defined(MIVUBI_PRIVATE_ISOLATION_BUILD) || MIVUBI_PRIVATE_ISOLATION_BUILD != 0x4D495655\n#error Owned_storage_stream_requires_private_build\n#endif');
+  replace('    if (forWrite) {\n\n        desired_access',`    // Never inherit the host storage file through read-through or open rules.
+    if (! Dll_BoxName)
+        return NULL;
+    WCHAR *ntpath = File_TranslateDosToNtPath(filename);
+    if (! ntpath)
+        return NULL;
+    ULONG rules = SbieDll_MatchPath(L'f', ntpath);
+    Dll_Free(ntpath);
+    if (PATH_IS_OPEN(rules) || PATH_IS_CLOSED(rules) || PATH_IS_READ(rules))
+        return NULL;
+
+    if (forWrite) {
+
+        desired_access`);
+  replace('        create_disp = CREATE_ALWAYS;','        create_disp = OPEN_ALWAYS;');
+  replace('        create_disp = TRUNCATE_EXISTING;','        create_disp = OPEN_EXISTING;');
+  replace('    if (handle != INVALID_HANDLE_VALUE) {\n\n        if (Stream_Open(&stream, handle) == STATUS_SUCCESS)\n            return stream;\n    }',`    if (handle != INVALID_HANDLE_VALUE) {
+
+        BOOLEAN boxed = FALSE;
+        NTSTATUS status = (NTSTATUS)SbieDll_GetHandlePath(handle, NULL, &boxed);
+        if (! boxed || (! NT_SUCCESS(status) && status != STATUS_BAD_INITIAL_PC)) {
+            CloseHandle(handle);
+            return NULL;
+        }
+        // Opening is non-destructive. Truncate only after checking the handle.
+        if (forWrite && (SetFilePointer(handle, 0, NULL, FILE_BEGIN) != 0 ||
+                         ! SetEndOfFile(handle))) {
+            CloseHandle(handle);
+            return NULL;
+        }
+        if (Stream_Open(&stream, handle) == STATUS_SUCCESS)
+            return stream;
+        CloseHandle(handle);
+    }`);
+  return source;
+}
 export function applyOwnedProtectedStorageIsolation(input){
   let source=input.replaceAll('\r\n','\n');
   const anchor='#include "dll.h"';

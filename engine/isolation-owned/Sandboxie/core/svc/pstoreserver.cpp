@@ -20,6 +20,10 @@
 //---------------------------------------------------------------------------
 
 #include "stdafx.h"
+#include "common/my_version.h"
+#if !defined(MIVUBI_PRIVATE_ISOLATION_BUILD) || MIVUBI_PRIVATE_ISOLATION_BUILD != 0x4D495655
+#error Owned_storage_service_requires_private_build
+#endif
 
 #include "pstoreserver.h"
 #include "pstorewire.h"
@@ -48,7 +52,7 @@ PStoreServer::PStoreServer(PipeServer *pipeServer)
 
     pipeServer->Register(MSGID_PSTORE, this, Handler);
 
-    QueueUserWorkItem(connectToPStore, this, WT_EXECUTELONGFUNCTION);
+    // Owned profiles do not connect to host Protected Storage.
 }
 
 
@@ -94,27 +98,8 @@ DWORD PStoreServer::connectToPStore(void *__this)
 
 MSG_HEADER *PStoreServer::Handler(void *_this, MSG_HEADER *msg)
 {
-    PStoreServer *pThis = (PStoreServer *)_this;
-
-    if (PipeServer::ImpersonateCaller(&msg) != 0)
-        return msg;
-
-    if (msg->msgid == MSGID_PSTORE_GET_TYPE_INFO)
-        return pThis->GetTypeInfo(msg);
-
-    if (msg->msgid == MSGID_PSTORE_GET_SUBTYPE_INFO)
-        return pThis->GetSubtypeInfo(msg);
-
-    if (msg->msgid == MSGID_PSTORE_READ_ITEM)
-        return pThis->ReadItem(msg);
-
-    if (msg->msgid == MSGID_PSTORE_ENUM_TYPES)
-        return pThis->EnumTypes(msg);
-
-    if (msg->msgid == MSGID_PSTORE_ENUM_ITEMS)
-        return pThis->EnumItems(msg);
-
-    return NULL;
+    // Boxed storage stays local; never proxy misses or enumeration to the host.
+    return SHORT_REPLY(E_ACCESSDENIED);
 }
 
 

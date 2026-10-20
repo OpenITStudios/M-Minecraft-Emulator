@@ -27,6 +27,9 @@ extern "C" {
 #include "common/win32_ntddk.h"
 #include "core/svc/PStoreWire.h"
 #include "common/my_version.h"
+#if !defined(MIVUBI_PRIVATE_ISOLATION_BUILD) || MIVUBI_PRIVATE_ISOLATION_BUILD != 0x4D495655
+#error Owned_storage_stream_requires_private_build
+#endif
 #include "msgs/msgs.h"
 
 
@@ -125,11 +128,22 @@ void *IPStoreImpl::open_stream(bool forWrite)
     wcscat(filename, L"\\SbiePst.dat");
 #endif SBIE_PST_DAT
 
+    // Never inherit the host storage file through read-through or open rules.
+    if (! Dll_BoxName)
+        return NULL;
+    WCHAR *ntpath = File_TranslateDosToNtPath(filename);
+    if (! ntpath)
+        return NULL;
+    ULONG rules = SbieDll_MatchPath(L'f', ntpath);
+    Dll_Free(ntpath);
+    if (PATH_IS_OPEN(rules) || PATH_IS_CLOSED(rules) || PATH_IS_READ(rules))
+        return NULL;
+
     if (forWrite) {
 
         desired_access = GENERIC_WRITE;
         share_mode = 0;
-        create_disp = CREATE_ALWAYS;
+        create_disp = OPEN_ALWAYS;
         file_attrs = FILE_ATTRIBUTE_HIDDEN;
 
     } else {
@@ -147,7 +161,7 @@ void *IPStoreImpl::open_stream(bool forWrite)
     if ((handle == INVALID_HANDLE_VALUE) && (GetLastError() == 5) &&
             forWrite) {
 
-        create_disp = TRUNCATE_EXISTING;
+        create_disp = OPEN_EXISTING;
         handle = CreateFile(
             filename, desired_access, share_mode,
             NULL, create_disp, file_attrs, NULL);
@@ -155,8 +169,21 @@ void *IPStoreImpl::open_stream(bool forWrite)
 
     if (handle != INVALID_HANDLE_VALUE) {
 
+        BOOLEAN boxed = FALSE;
+        NTSTATUS status = (NTSTATUS)SbieDll_GetHandlePath(handle, NULL, &boxed);
+        if (! boxed || (! NT_SUCCESS(status) && status != STATUS_BAD_INITIAL_PC)) {
+            CloseHandle(handle);
+            return NULL;
+        }
+        // Opening is non-destructive. Truncate only after checking the handle.
+        if (forWrite && (SetFilePointer(handle, 0, NULL, FILE_BEGIN) != 0 ||
+                         ! SetEndOfFile(handle))) {
+            CloseHandle(handle);
+            return NULL;
+        }
         if (Stream_Open(&stream, handle) == STATUS_SUCCESS)
             return stream;
+        CloseHandle(handle);
     }
 
     return NULL;

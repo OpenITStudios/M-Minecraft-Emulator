@@ -2,7 +2,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {assessOwnedV1186, V1186_FILE_COUNT, BUILD_FILES, applyOwnedBuildPathFix} from './verify-owned-v1186.mjs';
 import {readFileSync} from 'node:fs';
-import {applyOwnedCredentialIsolation,CREDENTIAL_FILE,STORAGE_FILE,applyOwnedProtectedStorageIsolation} from './owned-credential-policy.mjs';
+import {applyOwnedCredentialIsolation,CREDENTIAL_FILE,STORAGE_FILE,STREAM_FILE,SERVICE_FILE,applyOwnedProtectedStorageIsolation,applyOwnedStorageStreamIsolation,applyOwnedStorageServiceIsolation} from './owned-credential-policy.mjs';
+
+test('private Protected Storage service never connects or dispatches to host',()=>{
+  const pristine=readFileSync(new URL('../../engine/isolation-candidates/sandboxie-v1.18.6/'+SERVICE_FILE,import.meta.url),'utf8');
+  const owned=readFileSync(new URL('../../engine/isolation-owned/'+SERVICE_FILE,import.meta.url),'utf8').replaceAll('\r\n','\n');
+  assert.equal(applyOwnedStorageServiceIsolation(pristine),owned);
+  assert.throws(()=>applyOwnedStorageServiceIsolation(owned),/drift/);
+});
+
+test('protected storage stream transformation is exact and rejects drift',()=>{
+  const pristine=readFileSync(new URL('../../engine/isolation-candidates/sandboxie-v1.18.6/'+STREAM_FILE,import.meta.url),'utf8');
+  const owned=readFileSync(new URL('../../engine/isolation-owned/'+STREAM_FILE,import.meta.url),'utf8').replaceAll('\r\n','\n');
+  assert.equal(applyOwnedStorageStreamIsolation(pristine),owned);
+  assert.throws(()=>applyOwnedStorageStreamIsolation(owned),/drift/);
+  assert.throws(()=>applyOwnedStorageStreamIsolation(pristine.replace('create_disp = CREATE_ALWAYS','create_disp = OPEN_ALWAYS')),/drift/);
+});
 
 test('owned credential policy is reconstructed exactly and rejects anchor drift',()=>{
   const pristine=readFileSync(new URL('../../engine/isolation-candidates/sandboxie-v1.18.6/'+CREDENTIAL_FILE,import.meta.url),'utf8');

@@ -46,7 +46,7 @@ function fixture() {
   const report={
     schema:1,state:'NATIVE_BUILD_ARTIFACTS_CAPTURED_NOT_INSTALLABLE',
     sourceVersion:'v1.18.6',repoHead:HEAD,upstreamTree:profile.pristineSourceTree,
-    ownedTree:TREE,nativeModifiedFiles:13,
+    ownedTree:TREE,nativeModifiedFiles:15,
     compiler:{path:'C:\\VS\\MSBuild.exe',fileVersion:'17.0',sha256:'c'.repeat(64)},
     buildStages:profile.buildStages.map(row=>({
       stage:row.id,platform:row.platform,exitCode:0,
@@ -61,7 +61,7 @@ function fixture() {
   let trackedStatus = '';
   let afterTrackedStatus = () => {};
   const adapters={
-    verifySource:()=>({head:HEAD,ownedTree:TREE,nativeModifiedFiles:13}),
+    verifySource:()=>({head:HEAD,ownedTree:TREE,nativeModifiedFiles:15}),
     readGit:(_root,...args)=>{
       const key=args.join(' ');
       if(key==='branch --show-current')return 'Local';
@@ -106,7 +106,7 @@ test('owned v1.18.6 build produces a closed read-only 25-file engine payload',as
     assert.equal(manifest.upstreamCommit,profile.sourceCommit);
     assert.equal(manifest.ownedRepoHead,HEAD);
     assert.equal(manifest.ownedTree,TREE);
-    assert.equal(manifest.nativeModifiedFiles,13);
+    assert.equal(manifest.nativeModifiedFiles,15);
     assert.equal(manifest.canCoexistWithOfficialSandboxie,false);
     assert.equal(manifest.windowsKernelDriverLoaded,false);
     assert.equal(manifest.artifacts.length,25);

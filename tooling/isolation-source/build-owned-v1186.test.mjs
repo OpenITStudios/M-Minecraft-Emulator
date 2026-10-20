@@ -14,7 +14,7 @@ const profile = JSON.parse(readFileSync(
 test('v1.18.6 builder checks exact owned C/C++ source before any MSBuild call', () => {
   assert.match(source, /verify-owned-v1186\.mjs/);
   assert.match(source, /MIVUBI_V1186_NATIVE_SOURCE_PATCHED_NOT_BUILT/);
-  assert.match(source, /nativeModifiedFiles -ne 13/);
+  assert.match(source, /nativeModifiedFiles -ne 15/);
   assert.match(source, /sourceFiles -ne 1627/);
   assert.match(source, /privateDriverIdentity -cne '5\.73\.6-MIVU'/);
   assert.match(source, /Working tree must be clean/);

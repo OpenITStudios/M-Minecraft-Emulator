@@ -127,8 +127,8 @@ if ($spec.sourceVersion -cne 'v1.18.6' -or $spec.privateDriverIdentity -cne '5.7
 $rawProof = (& $node $verifier | Out-String).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Exact modified-source proof failed; refusing MSBuild.' }
 $proof = $rawProof | ConvertFrom-Json -ErrorAction Stop
-if ($proof.head -cne $head -or $proof.nativeModifiedFiles -ne 13 -or
-    $proof.nativeBuildModifiedFiles -ne 4 -or $proof.totalModifiedFiles -ne 17 -or
+if ($proof.head -cne $head -or $proof.nativeModifiedFiles -ne 15 -or
+    $proof.nativeBuildModifiedFiles -ne 4 -or $proof.totalModifiedFiles -ne 19 -or
     $proof.sourceFiles -ne 1627 -or
     $proof.state -cne 'MIVUBI_V1186_NATIVE_SOURCE_PATCHED_NOT_BUILT' -or
     $proof.installationPermitted -ne $false) {
@@ -173,7 +173,7 @@ $report = [ordered]@{
   }
   upstreamTree = [string]$proof.upstreamTree
   ownedTree = [string]$proof.ownedTree
-  nativeModifiedFiles = 13
+  nativeModifiedFiles = 15
   nativeBuildModifiedFiles = 4
   buildStages = @()
   artifacts = @()

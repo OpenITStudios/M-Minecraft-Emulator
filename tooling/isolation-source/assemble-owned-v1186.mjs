@@ -102,7 +102,7 @@ function requireProfile(profile) {
     profile.canonicalEditableSource === 'engine/isolation-owned' &&
     profile.privateDriverIdentity === '5.73.6-MIVU' &&
     profile.driverAbi === '0x57230' &&
-    profile.approvedNativeModifiedFiles === 13 &&
+    profile.approvedNativeModifiedFiles === 15 &&
     profile.enginePayloadState === PAYLOAD_STATE &&
     profile.flags?.canCoexistWithOfficialSandboxie === false &&
     profile.flags?.driverBuilt === false &&
@@ -140,7 +140,7 @@ function requireReport(report, profile, head, ownedTree) {
     report.repoHead === head && sha40.test(head) &&
     report.ownedTree === ownedTree && sha40.test(ownedTree) &&
     report.upstreamTree === profile.pristineSourceTree &&
-    report.nativeModifiedFiles === 13 &&
+    report.nativeModifiedFiles === 15 &&
     report.compiler && sha64.test(report.compiler.sha256) &&
     typeof report.compiler.fileVersion === 'string' &&
     !report.failureReason &&
@@ -199,7 +199,7 @@ export async function stageOwnedV1186({
   if (verifySource) {
     const result = verifySource(root);
     demand(result?.head === head && result?.ownedTree === ownedTree &&
-      result?.nativeModifiedFiles === 13, 'modified source proof differs');
+      result?.nativeModifiedFiles === 15, 'modified source proof differs');
   } else {
     const output = spawnSync(process.execPath,
       [join(root,'tooling/isolation-source/verify-owned-v1186.mjs')],
@@ -208,7 +208,7 @@ export async function stageOwnedV1186({
       'exact owned native source verification failed');
     const proof = JSON.parse(output.stdout);
     demand(proof.head === head && proof.ownedTree === ownedTree &&
-      proof.nativeModifiedFiles === 13, 'source verifier mismatch');
+      proof.nativeModifiedFiles === 15, 'source verifier mismatch');
   }
   // Read the actual report bytes and bind their SHA to package provenance.
   const reportPath = resolve(buildReport);
@@ -283,7 +283,7 @@ export async function stageOwnedV1186({
       upstreamRepository:'sandboxie-plus/Sandboxie',
       upstreamTag:'v1.18.6', upstreamCommit:profile.sourceCommit,
       upstreamTree:profile.pristineSourceTree, ownedRepoHead:head,
-      ownedTree, nativeModifiedFiles:13,
+      ownedTree, nativeModifiedFiles:15,
       buildReportSha256:reportHash, compilerSha256:report.compiler.sha256,
       canCoexistWithOfficialSandboxie:false,
       buildStages:profile.buildStages.map(s=>({id:s.id,platform:s.platform,state:'COMPILED'})),
