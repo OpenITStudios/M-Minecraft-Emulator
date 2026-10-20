@@ -106,6 +106,8 @@ public static class MivubiManagerWindows {
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window,out uint pid);
   [DllImport("user32.dll")] static extern bool IsWindow(IntPtr window);
   [DllImport("user32.dll")] static extern bool IsIconic(IntPtr window);
+  [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr window);
+  [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr window,int command);
   [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr window);
   [DllImport("user32.dll",SetLastError=true)] static extern bool PostMessage(IntPtr window,uint message,IntPtr w,IntPtr l);
@@ -120,9 +122,9 @@ public static class MivubiManagerWindows {
       if(process.HasExited || process.StartTime.ToUniversalTime().ToFileTimeUtc()!=fileTime || !IsWindow(window) ||
          GetWindowThreadProcessId(window,out actual)==0 || actual!=pid) throw new Exception("Stale process/window identity");
       if(operation=="Close") {if(!PostMessage(window,0x10,IntPtr.Zero,IntPtr.Zero))throw new Exception("Windows refused normal close");return;}
-      if(IsIconic(window)) ShowWindow(window,9);
+      if(IsIconic(window) || !IsWindowVisible(window)) ShowWindow(window,9);
       if(!IsWindow(window) || GetWindowThreadProcessId(window,out actual)==0 || actual!=pid || process.HasExited) throw new Exception("Window identity changed after restore");
-      if(operation=="Focus") {if(!SetForegroundWindow(window))throw new Exception("Windows refused focus; use Alt+Tab");return;}
+      if(operation=="Focus") {if(!IsWindowVisible(window) || !SetForegroundWindow(window) || GetForegroundWindow()!=window)throw new Exception("Windows refused focus; the game remains open in the background. Click Focus in the manager.");return;}
       if(operation!="PlaceLeft" && operation!="PlaceRight")throw new Exception("Unknown window operation");
       Monitor info=new Monitor();info.Size=(uint)Marshal.SizeOf(typeof(Monitor));
       if(!GetMonitorInfo(MonitorFromWindow(window,2),ref info))throw new Exception("Monitor work area unavailable");

@@ -53,6 +53,14 @@ function SettingsMatch([string]$client) {
     }
     return $true
 }
+function Show-LaunchedWindow($slot) {
+    if($slot.status -cne 'RUNNING' -or -not $slot.settingsVerified -or $slot.processes.Count -ne 1){return $null}
+    $game=$slot.processes[0]
+    try {
+        [MivubiManagerWindows]::Act([int]$game.pid,[long]$game.createdFileTime,[long][Convert]::ToInt64($game.windowHandle.Substring(2),16),'Focus')
+        return $null
+    } catch { return $_.Exception.GetBaseException().Message }
+}
 function Snapshot([string]$operation,$exitCode) {
     $sections=@(Sections);$clients=@();$ownedPids=[Collections.Generic.HashSet[int]]::new()
     foreach ($target in $minecraftTargets) {
@@ -91,7 +99,7 @@ function Snapshot([string]$operation,$exitCode) {
         $native+=@{pid=$process.Id;createdFileTime=$started.ToFileTimeUtc().ToString();sessionId=$identity.WindowsSession;windowHandle=('0x'+$process.MainWindowHandle.ToInt64().ToString('x'));responding=$identity.Responding}
     }
     Demand ($native.Count -le 1) 'Multiple native Education processes; ownership is ambiguous.'
-    return @{schema=1;provider='OWNED_V1186_LOCAL_TEST';operation=$operation;launcherExitCode=$exitCode;clients=@($clients);nativeProcesses=@($native)}
+    return @{schema=1;provider='OWNED_V1186_LOCAL_TEST';operation=$operation;launcherExitCode=$exitCode;focusError=$null;clients=@($clients);nativeProcesses=@($native)}
 }
 $mutex=$null;$held=$false;$fileLock=$null
 try {
@@ -216,7 +224,8 @@ try {
         $deadline=[DateTime]::UtcNow.AddSeconds(12)
         do {$after=Snapshot 'Launch' $exitCode;$found=@($after.clients|Where-Object clientId -ceq $request.clientId)[0];if($found.status -ceq 'RUNNING'){break};Start-Sleep -Milliseconds 350} while([DateTime]::UtcNow -lt $deadline)
         if($child.HasExited){$exitCode=$child.ExitCode;$after.launcherExitCode=$exitCode}
-        $receipt.runtime|Add-Member -Force -NotePropertyName ('managerLaunchEvidence'+$request.clientId) -NotePropertyValue (@{at=[DateTimeOffset]::UtcNow.ToString('o');launcherExitCode=$exitCode;launcherAlive=(-not $child.HasExited);boxedProcessCount=$found.boxedProcessCount;attributedGameCount=$found.processes.Count;status=$found.status});SaveReceipt
+        $after.focusError=Show-LaunchedWindow $found
+        $receipt.runtime|Add-Member -Force -NotePropertyName ('managerLaunchEvidence'+$request.clientId) -NotePropertyValue (@{at=[DateTimeOffset]::UtcNow.ToString('o');launcherExitCode=$exitCode;launcherAlive=(-not $child.HasExited);boxedProcessCount=$found.boxedProcessCount;attributedGameCount=$found.processes.Count;status=$found.status;focusError=$after.focusError});SaveReceipt
         $result=$after
     } elseif ($request.operation -notin @('Inspect','Create')) {
         Demand ($slot.settingsVerified -and $slot.processes.Count -eq 1 -and $null -ne $request.target) 'One freshly attributed game/window is required.'

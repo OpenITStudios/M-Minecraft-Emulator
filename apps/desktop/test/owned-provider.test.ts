@@ -1,7 +1,7 @@
 import {expect,it} from "vitest";
 import {readFileSync} from "node:fs";
 import {parseOwnedSnapshot} from "../src/app/bridge/ownedProviderApi.js";
-const stopped=()=>({schema:1,provider:"OWNED_V1186_LOCAL_TEST",operation:"Inspect",launcherExitCode:null,nativeProcesses:[],clients:["02","03","04"].map(clientId=>({clientId,box:`MivubiEdu${clientId}`,profileExists:true,settingsVerified:true,boxedProcessCount:0,launchAllowed:true,status:"STOPPED",processes:[]}))});
+const stopped=()=>({schema:1,provider:"OWNED_V1186_LOCAL_TEST",operation:"Inspect",launcherExitCode:null,focusError:null,nativeProcesses:[],clients:["02","03","04"].map(clientId=>({clientId,box:`MivubiEdu${clientId}`,profileExists:true,settingsVerified:true,boxedProcessCount:0,launchAllowed:true,status:"STOPPED",processes:[]}))});
 const process=()=>({pid:77,createdFileTime:"134000000000000001",sessionId:1,windowHandle:"0x123",responding:true});
 it("accepts exactly three known owned profiles without inferring gameplay",()=>{
   const result=parseOwnedSnapshot(stopped());expect(result.clients.map(s=>s.clientId)).toEqual(["02","03","04"]);
@@ -35,4 +35,13 @@ it("mounted owned UI never auto-launches, force-kills, polls, or treats launcher
   expect(panel).toContain('Close normally');
   expect(panel).toContain('Retry after empty check');
   expect(panel).not.toMatch(/setInterval|setTimeout|onMount|TerminateProcess/);
+});
+it("represents focus refusal separately from a successful launch and rejects malformed focus feedback",()=>{
+  const value={...stopped(),operation:'Launch',launcherExitCode:0,focusError:'Windows refused focus'};
+  expect(parseOwnedSnapshot(value).launcherExitCode).toBe(0);
+  expect(parseOwnedSnapshot(value).focusError).toContain('refused');
+  expect(()=>parseOwnedSnapshot({...value,focusError:123})).toThrow();
+  expect(()=>parseOwnedSnapshot({...value,focusError:'x'.repeat(2049)})).toThrow();
+  const panel=readFileSync(new URL('../src/OwnedManagerPanel.svelte',import.meta.url),'utf8');
+  expect(panel).toContain('opened in the background. Click Focus to show it.');
 });

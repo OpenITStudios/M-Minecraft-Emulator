@@ -56,6 +56,8 @@ pub struct OwnedSnapshot {
     pub provider: String,
     pub operation: OwnedOperation,
     pub launcher_exit_code: Option<i32>,
+    #[serde(default)]
+    pub focus_error: Option<String>,
     pub clients: Vec<OwnedSlot>,
     pub native_processes: Vec<OwnedProcess>,
 }
@@ -125,6 +127,10 @@ fn parse_snapshot(text: &str, operation: OwnedOperation) -> io::Result<OwnedSnap
         || snapshot.provider != "OWNED_V1186_LOCAL_TEST"
         || snapshot.operation != operation
         || snapshot.clients.len() != 3
+        || snapshot
+            .focus_error
+            .as_ref()
+            .is_some_and(|s| s.len() > 2048)
     {
         return Err(invalid("Unexpected owned provider observation"));
     }
@@ -460,6 +466,36 @@ mod automatic_setup_tests {
 #[cfg(test)]
 mod launch_regression_tests {
     use super::*;
+    #[test]
+    #[ignore = "requires the operator-authorized owned game already running; brings its window forward"]
+    fn actual_owned_game_can_be_focused() {
+        let session = std::env::var("MIVUBI_TEST_OWNED_SESSION").unwrap();
+        let mut request = OwnedRequest {
+            session_directory: session,
+            client_id: "02".into(),
+            operation: OwnedOperation::Inspect,
+            licensed: false,
+            compatibility_confirmed: false,
+            target: None,
+        };
+        let snapshot = (OwnedTestBackend { request: &request }).execute().unwrap();
+        request.target = Some(snapshot.clients[0].processes[0].clone());
+        request.operation = OwnedOperation::Focus;
+        (OwnedTestBackend { request: &request }).execute().unwrap();
+        #[cfg(windows)]
+        unsafe {
+            use windows_sys::Win32::UI::WindowsAndMessaging::{
+                GetForegroundWindow, GetWindowThreadProcessId,
+            };
+            let mut pid = 0;
+            GetWindowThreadProcessId(GetForegroundWindow(), &mut pid);
+            assert_eq!(
+                pid,
+                request.target.as_ref().unwrap().pid,
+                "game must actually become foreground"
+            );
+        }
+    }
     #[test]
     #[ignore = "explicit operator-authorized live launch; may leave the attributed game running"]
     fn actual_manager_launch_observes_owned_minecraft() {

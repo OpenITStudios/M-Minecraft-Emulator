@@ -36,7 +36,8 @@
       if(operation==="Launch"){
         pending[client]=true;
         const slot=snapshot.clients.find(s=>s.clientId===client);
-        notice=slot?.status==="RUNNING"?`Minecraft ${client} window observed. Sign-in and gameplay need manual testing.`:
+        if(snapshot.focusError)details=snapshot.focusError;
+        notice=slot?.status==="RUNNING"&&snapshot.focusError?`Minecraft ${client} opened in the background. Click Focus to show it.`:slot?.status==="RUNNING"?`Minecraft ${client} window brought forward. Sign-in and gameplay need manual testing.`:
           `Launch requested for ${client}. Exit ${snapshot.launcherExitCode??"pending"}; no playable session is established. Refresh before any retry.`;
       }else if(operation==="Close"){closing[client]=true;notice="Normal close requested. Save/confirm inside Minecraft if needed; refresh to observe completion.";}
       else if(operation==="Create")notice=`Persistent profile ${client} created and settings verified.`;
