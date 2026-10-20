@@ -48,3 +48,17 @@ test('runtime and read-only probe scripts parse without privileged execution',{s
     assert.equal(r.status,0,r.stdout+r.stderr);
   }
 });
+test('failure before SCM redirection restores without unloading the original driver',{skip:process.platform!=='win32'},()=>{
+  const start=source.indexOf('        if ($ownedLive) {');
+  const end=source.indexOf("        Helper $officialRoot 'start' 'SbieDrv'",start);
+  assert.ok(start>0 && end>start);
+  const result=ps(`$ErrorActionPreference='Stop';$ownedLive=$false
+    function Helper { throw 'must not stop original driver' }
+    function Image { throw 'must not redirect original images' }
+    ${source.slice(start,end)}
+    exit 0`);
+  assert.equal(result.status,0,result.stdout+result.stderr);
+  assert.match(source,/runtimeHistory \+= \$receipt.runtime/);
+  assert.match(source,/Exit the official Sandboxie manager normally/);
+  assert.ok(source.indexOf('Exit the official Sandboxie manager normally')<source.indexOf("Helper $officialRoot 'stop' 'SbieSvc'"));
+});

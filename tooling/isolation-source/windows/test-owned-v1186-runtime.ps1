@@ -133,7 +133,9 @@ try {
         return
     }
     if ($Stage -eq 'Activate') {
-        if ($receipt.state -cne 'REBOOT_REQUIRED_NO_SERVICE_CHANGES' -or $receipt.servicesChanged -ne $false -or $receipt.PSObject.Properties.Name -contains 'runtime') { throw 'Activation is not fresh; inspect or restore the existing transaction.' }
+        $retry=$receipt.state -ceq 'OFFICIAL_SERVICES_RESTORED_TEST_BOOT_REMAINS' -and $receipt.servicesChanged -eq $false
+        if (-not $retry -and ($receipt.state -cne 'REBOOT_REQUIRED_NO_SERVICE_CHANGES' -or $receipt.servicesChanged -ne $false -or $receipt.PSObject.Properties.Name -contains 'runtime')) { throw 'Activation is not fresh; inspect or restore the existing transaction.' }
+        if (@(Get-Process -Name SandMan,SbieCtrl -ErrorAction SilentlyContinue).Count -ne 0) { throw 'Exit the official Sandboxie manager normally before activation; no process was terminated.' }
         $officialSigner=(Get-Content -LiteralPath (Join-Path $session 'SbieSvc-image.json') -Raw | ConvertFrom-Json).signer
         foreach ($file in @('kmdutil.exe','SbieDll.dll')) {
             $sig=Get-AuthenticodeSignature -LiteralPath (Join-Path $officialRoot $file)
@@ -159,7 +161,12 @@ try {
                 originalState=[string](Get-Service $name).Status; ownedImage=$ownImage; ownedHash=(Digest $ownPath)}
         }
         if (@($snapshots | Where-Object originalState -ne 'Running').Count -ne 0) { throw 'Expected original services running; do not guess restore semantics.' }
-        $receipt | Add-Member -NotePropertyName runtime -NotePropertyValue ([pscustomobject]@{
+        if ($retry) {
+            if ($receipt.PSObject.Properties.Name -notcontains 'runtimeHistory') { $receipt | Add-Member -NotePropertyName runtimeHistory -NotePropertyValue @() }
+            if (@($receipt.runtimeHistory).Count -ge 8) { throw 'Repeated activation attempts require manual diagnosis.' }
+            $receipt.runtimeHistory += $receipt.runtime
+        }
+        $receipt | Add-Member -Force -NotePropertyName runtime -NotePropertyValue ([pscustomobject]@{
             sourceRevision=(Native 'git.exe' @('-C',$repo,'rev-parse','HEAD')).Trim(); services=$snapshots;
             officialHelperHash=(Digest (Join-Path $officialRoot 'kmdutil.exe')); events=@(); error=$null})
         $receipt.state='ACTIVATING_TEST_ENGINE'; Save
@@ -203,18 +210,22 @@ try {
             $dll=if ((Image 'SbieDrv') -ceq $driver.ownedImage) { Join-Path $payload 'SbieDll.dll' } else { Join-Path $officialRoot 'SbieDll.dll' }
             Idle $dll | Out-Null
         }
-        foreach ($name in @('SbieSvc','SbieDrv')) {
-            if ([string](Get-Service $name).Status -ne 'Stopped') {
-                Helper $(if ($ownedLive) { $payload } else { $officialRoot }) 'stop' $name
+        # A failure before redirection needs only the original service restarted.
+        # Do not retry the same driver unload that just failed during activation.
+        if ($ownedLive) {
+            foreach ($name in @('SbieSvc','SbieDrv')) {
+                if ([string](Get-Service $name).Status -ne 'Stopped') {
+                    Helper $payload 'stop' $name
+                }
             }
-        }
-        foreach ($service in $receipt.runtime.services) {
-            $live=Image $service.name
-            if ($live -cne $service.originalImage -and $live -cne $service.ownedImage) { throw 'SCM identity changed during restoration.' }
-            VerifyImage $service.originalImage $service.originalHash $service.originalSigner
-            Journal ('restore-image:'+ $service.name)
-            [MivubiTestScm]::Image($service.name,$service.originalImage)
-            if ((Image $service.name) -cne $service.originalImage) { throw 'Original SCM path readback mismatch.' }
+            foreach ($service in $receipt.runtime.services) {
+                $live=Image $service.name
+                if ($live -cne $service.originalImage -and $live -cne $service.ownedImage) { throw 'SCM identity changed during restoration.' }
+                VerifyImage $service.originalImage $service.originalHash $service.originalSigner
+                Journal ('restore-image:'+ $service.name)
+                [MivubiTestScm]::Image($service.name,$service.originalImage)
+                if ((Image $service.name) -cne $service.originalImage) { throw 'Original SCM path readback mismatch.' }
+            }
         }
         Helper $officialRoot 'start' 'SbieDrv'
         Helper $officialRoot 'start' 'SbieSvc'
