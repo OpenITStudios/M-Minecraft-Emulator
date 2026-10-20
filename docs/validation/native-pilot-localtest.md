@@ -9,6 +9,38 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Independent native-surface proposal — 20 October 2026
+
+**ACTIVE; design deviation awaits operator decision.** Source:
+`5369417bc015a9e722d7189bd72ca93dd270cc20`. This resolves the feasibility question
+for an alternative, not the original embedded-host acceptance requirement.
+No live game or mounted product behavior was changed.
+
+| Check | Result | Evidence / limit |
+| --- | --- | --- |
+| Normal / partial failure / protected UI crash | PASS | Three existing synthetic cases still pass after shared-fixture changes |
+| Independent surface survives host crash | PASS, synthetic | Game stand-in remains an unowned top-level HWND; frame/caption temporarily removed and rectangle aligned; after host termination the same process/start/HWND survives, original style/geometry restores and normal close exits 0 |
+| Direct-parent recovery comparison | FAIL, retained | Same final compiled fixture still reproduces lost HWND; combined diagnostic command exits nonzero rather than waiving this failure |
+| Residual synthetic processes | PASS, observed | Zero after completed comparison; no game, account or service was targeted |
+| Compilation / repository contracts / links / whitespace | PASS | Existing Windows x64 compiler and relevant manual source checks |
+| Full Svelte/Rust pipeline | NOT_EXECUTED | No product, frontend, Rust or dependency changes; historical pipeline results are not promoted to this revision |
+| Minecraft / native input / live previews / dialogs / z-order / DPI / taskbar grouping | NOT_EXECUTED | Separate integration acceptance still required |
+| Simultaneous recovery-coordinator failure | NOT_EXECUTED | Test coordinator retains the original window state; do not infer recovery if it is also lost |
+
+The alternative never assigns a manager parent/owner or synthesizes input.
+It is window composition rather than embedding. The approved design explicitly
+rejects silently substituting placement for embedding, so the proposal remains
+opt-in tooling and is not wired into the product. The operator was asked whether
+to accept that explicit change. The desired main view/three previews is still a
+target, not a claim of implemented UI or a single taskbar entry.
+
+The first alternative harness run could not read ExitCode from a process object
+discovered by IPC after it exited. Retaining its OS process handle before exit
+corrected the fixture; the final positive and negative results above are from
+the corrected comparison. No production process-lifecycle behavior changed.
+Run the proposal with `-IndependentSurfaceProposal`; add
+`-IncludeUnsafeDirectCrash` to retain the failing direct-parent comparison.
+
 ## Workspace crash boundary — 20 October 2026
 
 **ACTIVE, synthetic evidence only.** Source:

@@ -2,7 +2,7 @@
 
 ## Owned manager / independence — 20 October 2026
 
-**ACTIVE:** `ef250c5` proves direct-parent crash recovery FAIL (HWND lost); separate-owner synthetic UI-crash recovery PASS. No product host yet. Next: resolve presentation-owner failure before live hosting. Minecraft normal per user; Settings automatic. Four-client acceptance NOT_EXECUTED. [Evidence](../docs/validation/native-pilot-localtest.md).
+**ACTIVE:** `5369417`: independent native-surface crash recovery PASS, direct-parent recovery still FAIL (synthetic). Composition is not embedding; operator decision requested before product changes. No hosted game/previews/four-client proof. [Evidence and limits](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
 
