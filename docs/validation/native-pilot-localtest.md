@@ -9,6 +9,56 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Four-slot manager integration — 20 October 2026, active continuation
+
+**ACTIVE; four-client acceptance is NOT_EXECUTED.** Implementation source
+`fd064eb9ba9a30dec11f54c2134d7b30acae8121` follows the operator's approved
+sequence: integrate the actual manager first, validate 01 native plus owned
+02–04, then separate the engine namespace/installation and repeat acceptance.
+Four different licensed accounts are operator-confirmed available; login stays
+manual. This is an explicit **developer mode**, not production activation or
+proof of an installation independent of official Sandboxie.
+
+The backend verifies the selected activated session, 25 artifact hashes and
+signatures, original source manifest/resources, closed signed-copy inventory,
+actual SCM images, private driver/ABI, kernel Test Mode and current Windows
+session. The old official pilot remains a separate explicit route; errors do
+not fall back to it. The existing catalog/resource lock owns admission; no
+second lifecycle service/readiness database is added. Profile settings come
+from the existing canonical owner, not a second preset.
+
+| Check / behavior | Result | Revision-scoped evidence |
+| --- | --- | --- |
+| Full source pipeline | PASS | 683 passed: 274 Node, 166 Vitest, 243 Rust; zero failed; four existing Node symlink skips, two explicit actual-payload/session Rust tests ignored by default |
+| Live Rust selected-provider inspection | PASS | Opt-in actual Windows test validates all three owned slots, including adopted Client 02; no create, launch or window mutation executed |
+| Svelte/TypeScript / frontend production build | PASS | Zero check errors/warnings; Vite build completed |
+| Actual Tauri developer app | PASS, startup only | Real debug build finished and a responsive HWND in the interactive session observed; startup is not button/IPC acceptance |
+| System PowerShell module loading | PASS | Actual Rust subprocess initially lacked Get-FileHash; fixed by importing Utility/Security/Management from system PSHOME, disabling inherited module auto-loading; live inspection then passes |
+| Profile mutation boundaries | PASS, source/regression | Existing/foreign/partial/orphan profiles refused; disabled first, query after each write, enabled last; Create-only helper in same executable with normal UAC |
+| Launch / window boundaries | PASS, source/regression | Nonempty profile/live prior launcher/cooldown prevents duplicate requests; bounded observation with no automatic retry; fresh PID/start/session/HWND required; WM_CLOSE only |
+| Actual UI session selection / buttons | NOT_EXECUTED | App opened; operator asked to select the activated test session and confirm four-slot UI |
+| Actual creation of profiles 03–04 through UI | NOT_EXECUTED | No new accounts/profiles created by source verification |
+| Four distinct playable sessions / multiplayer / reopen | NOT_EXECUTED | Four accounts available, not yet logged in/tested through the new manager |
+| Four-client 60-minute soak / displayed FPS | NOT_EXECUTED | No soak or adequate displayed-frame measurement |
+| Independent namespaces / installer / clean Windows | NOT_EXECUTED | Intentionally follows manager acceptance; current test still borrows SbieDrv/SbieSvc registrations |
+
+Operator UI sequence: Settings → Select local engine test → select the active
+session directory containing session.json and payload → Back to Virtuals.
+Confirm the licensing checkbox and explicitly approve the reduced-containment
+compatibility profile before creating new virtuals. First open 02 through its
+button and verify manual world/input; then add native 01, then owned 03–04,
+stopping on the first failure. Verify focus, placement, normal close and reopen
+through actual buttons, with world progress saved normally. A native/owned
+process observation is not an account/gameplay claim. An inconclusive Open
+requires Refresh and an explicit guarded retry; never repeatedly click Open.
+
+Next evidence is the operator's mounted UI result. Preserve the current game
+profiles and original service recovery receipts. Do not uninstall official
+Sandboxie or switch namespaces while the four-client manager test is pending.
+After successful manager acceptance, follow the approved standalone namespace,
+rebuild, packaging and fresh-profile/manual-login stage; do not promote this
+developer adapter to production simply by changing a readiness flag.
+
 ## First playable owned client — 20 October 2026, latest result
 
 **PASS for the first bounded goal: one playable Minecraft Education on the built

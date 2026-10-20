@@ -1,10 +1,10 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
-## Owned engine / four clients — 20 October 2026
+## Owned manager / independence — 20 October 2026
 
-**DONE, first owned client:** `3cff607` verifies private driver/ABI, owned hook and MivubiEdu02 PID/session;
-operator confirms playable world. 672 source tests pass. Test engine/game remain active.
-Two/four clients, multiplayer and FPS NOT_EXECUTED; cold-launch retry UNKNOWN. See [campaign results](../docs/validation/native-pilot-localtest.md).
+**ACTIVE:** `fd064eb` integrates debug manager 01–04; 683 source tests and actual Rust provider inspection pass.
+App opened; next: operator selects engine session and tests UI. One owned world previously playable.
+Four-client/multiplayer/soak and independent installer NOT_EXECUTED. See [campaign results](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
 
