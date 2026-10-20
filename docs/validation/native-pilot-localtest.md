@@ -9,6 +9,62 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Audit correction: focus failure and recovery hold — 20 October 2026
+
+Baseline `5f8460dacdcfeb849d8611bdcfbbf76c3904d67d`; retained source
+`106bd5917f800558cf832b40cc56f03c62ea34d2`. **Primary workspace acceptance
+remains FAIL. Recovery hold is a bounded PASS.** This supersedes any reading of
+the previous menu observations as general focus/input acceptance.
+
+### Why previous fixes did not close the reported issue
+
+| Finding | Evidence and implication |
+| --- | --- |
+| Presentation is still two independent top-level windows | `workspace_surface.rs` deliberately avoids parenting/injection. Aligning a game rectangle and suppressing its taskbar entry does not create interactive child hosting. The product's single-shell requirement remains unproven. |
+| Foreground handoff remains unreliable | Actual composed native menu → activate manager and Tab reproduced a blank stage. Diagnostics: game foreground false, manager foreground true, center covered by manager true, game visible/enabled true. Game appeared later at its old rectangle. This is a presentation/focus failure, not proof of process exit or a missing installation. |
+| Error handling had two different retry policies | `NativeWorkspace.svelte` latched `updateFailed`, while `app_bootstrap.rs` continued forwarding native foreground/resize events to `controller::update`. The backend could show/place the game after the banner changed viewport geometry. Thus the delayed game covered recovery controls. |
+| The previous proof was too narrow | Menu pixels, helper readbacks, mocked UI and offline test success did not exercise composed gameplay input/capture. This turn a standalone Tab visibly changed menu focus, but the composed toolwindow could not be targeted by the available UI tool. No composed input or four-client PASS follows. |
+
+The exact cause of the foreground handoff failure remains **UNKNOWN**. Ranked
+probes considered pending cross-queue activation, manager focus reclaim, and a
+slow game message thread. Microsoft documents asynchronous activation across
+input queues and a bounded `WM_NULL` acknowledgement
+([primary explanation](https://devblogs.microsoft.com/oldnewthing/20161118-00/?p=94745)).
+A two-second acknowledgement experiment passed its synthetic timeout/recovery
+test but **still reproduced the real failure**. Both experiment and synthetic
+extension were discarded. Increasing a wait is not retained as a solution.
+
+### Retained correction and executed proof
+
+The existing controller now holds failed active presentation using its existing
+`suspended` state, asks a live helper to hide it, and preserves the first error.
+Later native updates do nothing while held; an explicit, freshly validated
+presentation or Restore remains available. Ended helpers retain their existing
+standalone checkpoint recovery. A hide failure is appended to the original
+error, not reported as success. General hung-window restoration is still unproven.
+
+- `cargo test ... stalled_window_reports -- --ignored --test-threads=1
+  --nocapture` failed before the fix: **Failed update was not held for explicit
+  recovery**. After the fix it verifies the held state, a harmless follow-up
+  update, original style/geometry recovery, first native-stage error and a live
+  synthetic client. The complete two-test actual-helper suite passes.
+- Final `npm run verify:source`: **711 passed**, four existing file-symlink
+  skips, eight opt-in desktop tests ignored by default. Windows debug build and
+  formatting pass. No frontend code changed in this continuation.
+- Final-build actual native menu → manager Tab reproduced the original coverage
+  error, but the game stayed hidden and the complete recovery banner remained
+  visible. Clicking **Retry display** returned the native menu to the correct
+  viewport without an alert. This proves that recovery sequence only.
+- The earlier system-menu/resize probe also left a blank stage without a clearly
+  observed error transition; Restore successfully returned the standalone game.
+  It is not counted as stable resize or keyboard-capture acceptance.
+
+**Remaining:** true hosting/single-shell behavior, reliable manager/game focus,
+composed keyboard/mouse capture and escape, world gameplay, unexplained exits,
+general timeout recovery, then two/four licensed playable sessions. No world,
+authentication, VM, driver, installer, CI or `main` operation was performed.
+The rebuilt developer manager remains open after the successful native-menu retry.
+
 ## Foreground-owner correction and recovery UI — 20 October 2026, 22:14–22:51 WIB
 
 Baseline: `6593776cd2ace947f1501c857cb340e1a03e6d21`. Retained implementation:
