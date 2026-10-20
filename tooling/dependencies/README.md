@@ -2,7 +2,9 @@
 
 Root `package.json` is the command entrypoint. Application dependencies remain
 in `apps/desktop`; desktop Tauri and runtime-core retain independent Cargo
-manifests/locks. `toolchain.json` owns developer tool versions.
+manifests/locks. `toolchain.json` owns developer tool versions. Both package engine
+declarations match the supported Node LTS floor and pinned npm. Setup and upgrade
+installs use --engine-strict to reject unsupported runtimes.
 
 | Command | Purpose |
 | --- | --- |
@@ -30,8 +32,10 @@ investigation. Aggregate verification runs the primary checker once.
 
 For Rust migrations, run each manifest's `cargo check --locked --all-targets` and
 `cargo test --locked --all-targets`, then affected desktop tests and builds.
-Keep native-tls platform trust, response limits, timeout bounds, process start
-identity and cross-process locking intact. Native driver/upstream snapshot
+The existing desktop source route also checks Rust formatting. Keep platform TLS
+trust, response limits, timeout bounds and process start identity intact. File
+locks use stable std::fs::File APIs with typed WouldBlock handling and bounded
+journal retries; a separate locking dependency is unnecessary. Native snapshot
 upgrades require their own migration; they are not routine Cargo updates.
 
 The canonical outcomes, exceptions, versions and evidence are in the

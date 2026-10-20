@@ -11,23 +11,57 @@ lifecycle: ACTIVE
 
 Branch: **Local**. Repository: OpenITStudios/M-Minecraft-Emulator.
 Baseline: `5226e30a9bb37a3b007af0020a787e81ed10a3d0`.
-Executed source revision: `e6eb1358bf94ab524d70666ccbfb8674dfa8f35e` (unless a prior exact revision is stated).
-A later tooling-only audit correction at `5ecbf268c7cac9d9d8d71911090a15018543bc27` rejects registry-error JSON instead of treating it as outdated findings. Its deterministic tests and live audit passed; desktop/core sources are unchanged. No exact-delivery-SHA aggregate PASS is claimed.
-This report supersedes the earlier metadata-only batches in this same file;
+Continuation baseline: `b8d7f7d1efe7c62c3be8d76eb4fa29995fcdd871`.
+Executed source revision: `972b0e40440452d16ff5ee35678559afa66d84e8`.
+This report supersedes the earlier partial-verification batches in this same file;
 their original text remains in Git history. It is the one outcome report;
 [dependency tooling](../../tooling/dependencies/README.md) owns command usage.
 
 ## Outcome and evidence ceiling
 
-Compatible direct dependency migrations are implemented, package-manager locks
-are regenerated, and Windows source compilation/tests succeed. **Fully validated
-modernization is NOT achieved**: aggregate source verification has a pre-existing
-symlink-privilege failure; seven other symlink scenarios were already skipped by
-their existing tests; GTK-only RustSec warnings remain; whole-desktop formatting
-debt and the native installer release hold are unchanged. Interactive Windows,
-gameplay and four-client acceptance are NOT RUN. No GitHub Actions, main edits,
-driver installation, account access or runtime-provider cutover was performed.
-Evidence ceiling is **SOURCE_EXECUTION**, not PACKAGE_EXECUTION or gameplay.
+**Supported Windows dependency/source maintenance is complete with documented
+upstream and execution exceptions.** The full `npm run verify:source` pipeline
+PASSES at the exact source revision above: **655 passed, 0 failed, 4 skipped**.
+The four existing skipped cases require file-symlink creation, which this Windows
+token cannot perform. They remain NOT_EXECUTED, not security PASS. Real Windows
+directory junctions now execute without skips for storage, source checkout,
+dangling destination and PresentMon input rejection.
+
+Both compiler routes report **0 errors and 0 warnings**. Core and desktop Rust
+formatting, tests and Windows compilation pass. Deprecated atomic calls were
+migrated without changing memory orderings or raising MSRV. Npm and Cargo audits
+report zero vulnerability-class findings; two upstream GTK informational warnings
+remain explicit below. This is not an all-platform security clearance. Preserved
+paused/legacy Rust code still produces unused/dead-code warnings; no blanket
+warning suppressions or legacy deletion were used.
+
+The native installer release hold, interactive Windows/gameplay and four-client
+acceptance are unchanged and NOT RUN. No CI, main, driver, account or provider
+cutover changes were made. Evidence ceiling is **SOURCE_EXECUTION**, not package
+or gameplay acceptance.
+
+## Continuation repairs
+
+- Split ordinary PresentMon CLI assertions from link fixtures. If Windows refuses
+  a file symlink, the latter test exercises a real junction and reports that
+  substitution explicitly. Three prior directory-link skips now execute.
+- Format all desktop Rust and include its check in the existing source route.
+  Contract tests retain their safety conditions while accepting rustfmt layout.
+- Align both package engines with the supported Node floor and exact npm;
+  regenerate the npm lock with npm. Setup/upgrades enforce --engine-strict.
+  Supported installation passes; a Node 24.14.1 dry-run probe fails EBADENGINE.
+- Remove unused legacy CSS and use a valid focusable dialog container. No legacy
+  route was enabled. Native TS7 and TS6 compatibility checks are warning-free.
+- Remove fs2 after actual Windows regressions exposed its contention error as
+  Uncategorized instead of WouldBlock, bypassing existing journal retries.
+  Standard-library locks restore typed contention handling, shared/exclusive
+  ownership, Drop release and the retry budget. Both Cargo locks were regenerated.
+
+[File locking](https://doc.rust-lang.org/std/fs/struct.File.html#method.try_lock)
+is stable since Rust 1.89, below the existing core minimum, and uses Windows
+LockFileEx. Atomic [try_update](https://doc.rust-lang.org/std/sync/atomic/struct.Atomic.html#method.try_update)
+is stable since Rust 1.95. Its three renamed calls retain the original closures
+and orderings; deprecated-API warnings are absent without suppressions.
 
 ## Versions and compatibility
 
@@ -100,14 +134,14 @@ exact graph authority. Tauri's internal crates are deliberately not patch-aligne
 | ureq | 2.9.7 | 3.4.2 | v3 config/header/status/body APIs; bounded responses and TLS tests |
 | url | 2.5.0 | 2.5.8 | Cargo-resolved supported graph |
 | windows-sys | 0.61.2 | 0.61.2 | Cargo-resolved supported graph |
-| fs2 | 0.4.3 | 0.4.3 | Latest stable retained; preserve cross-process locks |
+| fs2 | 0.4.3 | removed | std::fs::File locks; Windows contention regression fixed |
 
 The desktop additionally carries sha2 0.10.9 through upstream dependencies alongside
 our direct sha2 0.11.1. Independent lockfiles are retained. Both were resolved by
 Cargo update and checked with --locked; no lockfile was transplanted or hand-built.
 System/process consumers were migrated to current CPU refresh, process-list and
-OsStr APIs. Existing PID/start-time attribution, resource thresholds and locking
-behavior remain intact. Sysinfo disables unused default subsystems in both packages.
+OsStr APIs. Existing PID/start-time attribution and resource thresholds remain intact.
+Shared/exclusive lock ownership is retained; Windows contention mapping is corrected. Sysinfo disables unused default subsystems in both packages.
 Ureq's platform TLS provider replaces our redundant direct native-tls connector;
 status mapping, no proxy/no redirects for the localhost provider, timeout bounds,
 HTTPS admission and bounded body reads have regression coverage.
@@ -117,8 +151,9 @@ HTTPS admission and bounded body reads have regression coverage.
 - TypeScript 6.0.3 remains required by svelte-check's JS API peer range; stable
   TypeScript 7.0.2 is also installed and used as the primary native checker.
 - Node types stay 24.19.2 rather than latest 26.6.5 to match Node 24 LTS.
-- fs2 0.4.3 is the latest published stable; audit found no advisory for it.
-  Replacing working Windows cross-process locking is not needed for modernization.
+- fs2 was initially retained, then removed after continuation tests exposed the
+  Windows contention mismatch. Stable standard-library locks need no replacement
+  dependency and retain the shared/exclusive ownership contract.
 - cargo-outdated reports core fully current. Desktop reports upstream feature
   branches serde_with -> indexmap 1.9.3 / schemars 0.9.0 and indexmap ->
   hashbrown 0.12.3 / autocfg. New major branches exist, but these are upstream
@@ -189,37 +224,48 @@ check external URLs; package-manager/build tests validate the actual import grap
 
 ## Verification results
 
+All source pipeline results refer to `972b0e40440452d16ff5ee35678559afa66d84e8`.
+The final report/handoff delivery is a separate documentation-only commit.
+
 | Check | Result | Evidence / limitation |
 | --- | --- | --- |
-| Portable bootstrap | PASS | Executed checksum-verified Node/PowerShell, npm provisioning, Rust/rustfmt |
-| npm ci and npm ls --all | PASS | npm 12.2.0; both compiler routes installed |
-| Manifest/lock and structure checks | PASS | Exact pins, alias versions, CLI platform integrity, paths/docs/output ownership |
+| Full npm run verify:source | PASS | 655 passed, 0 failed, 4 existing file-link cases skipped |
+| Portable bootstrap | PASS | Previously executed verified bootstrap; pins unchanged during continuation |
+| Strict npm ci and npm ls --all | PASS | npm 12.2.0; both compiler routes installed |
+| Unsupported Node install probe | PASS | Node 24.14.1 dry run rejected with EBADENGINE |
+| Manifest/lock and structure checks | PASS | Engine ownership, exact pins/aliases, CLI integrity, paths/docs/output ownership |
 | Tooling regressions | PASS | 10 tests including Windows PowerShell AST parsing; no downloads in parser test |
-| Svelte + TypeScript 7 native | PASS | 0 errors, 6 existing warnings |
-| TypeScript 6 compatibility | PASS | 0 errors, same 6 existing warnings |
+| Svelte + TypeScript 7 native | PASS | 0 errors, 0 warnings |
+| TypeScript 6 compatibility | PASS | 0 errors, 0 warnings |
 | Desktop Vitest | PASS | 17 files / 161 tests |
 | Frontend production build | PASS | Vite 8 / Rolldown production assets |
 | Core Cargo check --locked --all-targets | PASS | Windows MSVC toolchain |
-| Core Rust tests | PASS | 174 tests: 161 unit + 13 integration |
+| Core Rust tests | PASS | 176 tests: 163 library, 4 guest-agent, 9 integration |
 | Desktop Cargo check and tests --locked --all-targets | PASS | 62 desktop unit tests |
 | Desktop executable compilation | PASS | cargo build --locked; no GUI/game launched |
 | Core rustfmt | PASS | Full core package --all --check |
-| Whole-desktop rustfmt | FAIL | Existing formatting in build.rs/desktop owners; broad unrelated reformat intentionally avoided |
+| Whole-desktop rustfmt | PASS | Included in the existing desktop source route |
+| Deprecated Rust API warnings | PASS | None; preserved unused/legacy warnings remain |
+| PresentMon CLI/source tests | PASS | 9 tests; ordinary input/errors and real junction rejection |
+| Isolation-source tests | PASS | 165 passed, 4 pre-existing file-symlink cases skipped |
 | npm security audit | PASS | 0 vulnerabilities |
 | Cargo security audit | PASS | 0 vulnerability-class findings; 2 informational GTK warnings below |
 | Dependency tree/outdated audit | PASS | Both graphs inspected; retained constraints listed above |
-| Aggregate npm run verify:source | FAIL | On 70197697837afa78de96c3eb8df48eae3fd0e9b0: PresentMon symlink fixture EPERM |
 | Native installer construction/inspection | NOT RUN | Existing PACKAGE_BLOCKED_NATIVE_FEASIBILITY release gate; no bypass |
 | Interactive Windows lifecycle, sign-in, gameplay, four clients | NOT RUN | Source tests do not establish runtime acceptance |
 
-The aggregate's earlier stages passed: repository tests, local-test, feasibility,
-isolation-source, native feasibility, Sandboxie feasibility and performance tests.
-Existing suites skipped seven symlink cases because this Windows token cannot
-create symlinks. PresentMon's unchanged test instead fails on fs.symlinkSync with
-EPERM (7 passed / 1 failed). No assertions were weakened and no new skip was added.
-Later desktop/core stages were executed independently on the source revision
-identified above. Six Svelte warnings belong to the preserved unmounted legacy
-dialog and native-feasibility CSS; Rust also retains existing unused/dead-code warnings.
+At the continuation baseline, PresentMon failed during fixture creation and
+whole-desktop rustfmt failed. Both are resolved. Three prior directory-link skips
+now execute with actual Windows junctions. PresentMon reports its file-symlink to
+junction substitution as a diagnostic; it does not claim that privileged file
+symlink creation ran here. Four existing file-link cases remain skipped: required
+native executable, external private binary, artifact hash source and dangling
+optional artifact. No new skip was introduced and no safety assertion was removed.
+
+The two new Windows locking regressions failed on fs2 with Uncategorized rather
+than WouldBlock, then passed after standard-library migration. They exercise real
+cross-process readers/writers, Drop release and journal retry timing. The complete
+pipeline also executes all existing feasibility and performance source suites.
 
 RustSec database commit: 999ec89d5d3f10f20be14750ec8c2d8b44e0ac9b.
 Remaining informational warnings are
@@ -232,7 +278,10 @@ Cargo override. Audit exit zero does not erase these warnings.
 
 ## Git delivery
 
-Source push: **PASS**, fast-forward from baseline to `5ecbf268c7cac9d9d8d71911090a15018543bc27`, verified against remote Local on 20 October 2026. Remote main remains `cb106f9013206a73f6172c12fb62ee590a1c6b15` and was not modified. The report/handoff are a separate documentation-only delivery commit on Local; its exact SHA is available from this file's Git history.
+Source push: **PASS**, fast-forward to `972b0e40440452d16ff5ee35678559afa66d84e8`, verified against remote Local
+on 20 October 2026. Remote main remains `cb106f9013206a73f6172c12fb62ee590a1c6b15`
+and was not modified. The report, dependency guide and handoff are a separate
+documentation-only delivery commit; find its exact SHA in this file's Git history.
 
 Logical commits:
 
@@ -244,10 +293,14 @@ add047e build(desktop): enable stable native TypeScript checking with Svelte com
 7019769 build(tooling): centralize dependency audits and refresh portable toolchains
 e6eb135 build(repo): preserve desktop MSRV and remove stale toolchain copies
 5ecbf26 fix(tooling): distinguish outdated findings from registry failures
+b8d7f7d docs(dependencies): report modernization results and remaining verification limits
+9ae8fec test(tooling): exercise real Windows junctions without symlink privilege
+3ae04c8 fix(runtime): replace fs2 with typed standard-library file locking
+8bd44bd build(desktop): enforce clean source formatting and supported toolchain installs
+972b0e4 refactor(runtime): use stable atomic update API without deprecation
 ```
 
 No force push, workflow, driver installation or release publication was used.
-
 Changed paths through the executed source revision:
 
 ```text
@@ -257,9 +310,22 @@ M	apps/desktop/package-lock.json
 M	apps/desktop/package.json
 M	apps/desktop/src-tauri/Cargo.lock
 M	apps/desktop/src-tauri/Cargo.toml
+M	apps/desktop/src-tauri/build.rs
+M	apps/desktop/src-tauri/src/commands/native_clients.rs
 M	apps/desktop/src-tauri/src/engine/app_instance.rs
+M	apps/desktop/src-tauri/src/engine/instance_catalog.rs
+M	apps/desktop/src-tauri/src/engine/instance_discovery.rs
+M	apps/desktop/src-tauri/src/engine/instance_focus.rs
+M	apps/desktop/src-tauri/src/engine/instance_focus_events.rs
+M	apps/desktop/src-tauri/src/engine/instance_identity.rs
+M	apps/desktop/src-tauri/src/engine/native_clients.rs
 M	apps/desktop/src-tauri/src/engine/owned_isolation.rs
+M	apps/desktop/src-tauri/src/engine/virtual_inventory.rs
+M	apps/desktop/src/NativeFeasibilityApp.svelte
+M	apps/desktop/src/app/components/WindowLayoutDialog.svelte
 D	apps/desktop/src/svelte.d.ts
+M	apps/desktop/test/compact-manager.test.ts
+M	apps/desktop/test/native-feasibility.test.ts
 M	apps/desktop/test/verification-routing.test.ts
 M	apps/desktop/tsconfig.json
 M	docs/README.md
@@ -272,21 +338,29 @@ M	engine/runtime-core/src/bin/virtual-guest-agent.rs
 M	engine/runtime-core/src/capacity.rs
 M	engine/runtime-core/src/doctor.rs
 M	engine/runtime-core/src/guest.rs
+M	engine/runtime-core/src/journal.rs
+M	engine/runtime-core/src/operation_lock.rs
 M	engine/runtime-core/src/profile.rs
 M	engine/runtime-core/src/provider/app_sandbox.rs
 M	engine/runtime-core/src/provider/app_sandbox_pilot.rs
 M	engine/runtime-core/src/provider/mod.rs
+M	engine/runtime-core/src/provider/process.rs
 M	engine/runtime-core/src/provider/vmx.rs
 M	engine/runtime-core/src/resources.rs
 M	engine/runtime-core/src/update.rs
 M	package.json
+M	planning/development.md
 M	toolchain.json
 M	tooling/README.md
+M	tooling/acceptance/analyze-presentmon.test.mjs
 A	tooling/dependencies/README.md
 D	tooling/dependencies/RUST-UPGRADE.md
 A	tooling/dependencies/audit.mjs
 A	tooling/dependencies/maintenance.test.mjs
 M	tooling/dependencies/upgrade-frontend.mjs
+M	tooling/isolation-source/bootstrap-fork.test.mjs
+M	tooling/isolation-source/verify-checkout.test.mjs
+M	tooling/local-test/session.test.mjs
 M	tooling/repository/check-dependency-lock.mjs
 A	tooling/repository/check-dependency-lock.test.mjs
 A	tooling/repository/check-structure.mjs
@@ -297,6 +371,7 @@ M	tooling/windows-toolchain/portable.test.mjs
 M	workspace/README.md
 ```
 
-This report and planning/development.md are the additional final delivery files.
-Remaining work is confined to the explicit verification/security/release exceptions
-above; it is not authorization to resume drivers, accounts or unrelated features.
+The documentation-only delivery also updates this report, the dependency guide
+and planning/development.md. Remaining limits are upstream-constrained versions
+and GTK warnings, four file-symlink execution cases, and separately held installer
+and gameplay acceptance. They do not authorize unsafe overrides or scope expansion.

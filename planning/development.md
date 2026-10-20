@@ -2,19 +2,26 @@
 
 ## Dependency modernization and structure cleanup — 20 October 2026
 
-**State:** implementation delivered; full validation remains incomplete.
-Source revision: `e6eb1358bf94ab524d70666ccbfb8674dfa8f35e`.
-Canonical [report](../docs/validation/dependency-modernization-2026-10-20.md)
-records all dependency versions, structural changes, commits and exceptions.
-Source batches through `5ecbf268c7cac9d9d8d71911090a15018543bc27` were pushed and remotely verified; a later tooling-only registry-error correction has its own test evidence in the report.
-Vite/plugin/Vitest, native TS7 + Svelte TS6, Tauri/Rust networking/system crates,
-and portable toolchains were modernized with npm/Cargo-generated locks.
-Windows source checks, 174 core tests, 62 desktop Rust tests and 161 Vitest tests
-pass. The aggregate has an unchanged PresentMon symlink EPERM failure; existing
-symlink skips, desktop formatting debt, GTK RustSec warnings and native package
-release hold remain explicit. No CI, main, driver, accounts or gameplay changed.
-**Next for this topic:** resolve the recorded acceptance exceptions before claiming
-fully verified modernization; do not bypass checks or resume legacy operations.
+**State: DONE for supported Windows dependency/source maintenance**, with explicit
+upstream/runtime exceptions. Source: `972b0e40440452d16ff5ee35678559afa66d84e8`.
+The complete `npm run verify:source` passes: **655 passed, 0 failed, 4 existing
+file-symlink tests skipped**. Native TS7 and TS6 checks have 0 errors/0 warnings;
+both Rust packages pass formatting, checks and tests. The canonical
+[report](../docs/validation/dependency-modernization-2026-10-20.md) owns versions,
+change inventory, source commits and exact evidence.
+
+Continuation fixed Windows lock-contention error mapping and journal retries
+while removing fs2; actual cross-process regressions pass. Real Windows junctions
+replace directory fixtures that previously skipped. Installs enforce supported
+Node/npm engines. Deprecated atomic calls were migrated without an MSRV increase.
+Source batches were pushed and remotely verified.
+
+Npm/Cargo audit: zero vulnerability-class findings; two upstream GTK Linux
+informational warnings remain. Four file-symlink execution cases, native installer
+release approval and gameplay/four-client proof remain unexecuted/held. No CI,
+main, driver, account or gameplay mutation occurred. Maintain dependencies through
+existing audit/check commands; do not reopen features or legacy operations merely
+to erase these separately scoped exceptions.
 
 
 **Repository:** `OpenITStudios/M-Minecraft-Emulator`; all product changes on
