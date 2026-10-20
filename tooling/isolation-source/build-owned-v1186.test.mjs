@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -64,6 +64,29 @@ test('builder resolves VS2022 deterministically and captures native MSBuild fail
   assert.match(source, /\$report\.buildStages = \$results/);
   assert.match(source, /build-result\.json/);
   assert.match(source, /\$report\.failureReason = \$_\.Exception\.Message/);
+});
+
+test('VS discovery captures exit status in a fresh strict PowerShell session', t => {
+  const vswhere = join(process.env['ProgramFiles(x86)'] || 'C:/Program Files (x86)',
+    'Microsoft Visual Studio/Installer/vswhere.exe');
+  if (process.platform !== 'win32' || !existsSync(vswhere)) {
+    t.skip('Windows VS discovery executable unavailable');
+    return;
+  }
+  const discovery = source.slice(source.indexOf('$installations ='),
+    source.indexOf('$installationRoot ='));
+  const script = `Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+Remove-Variable LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
+$vswhere = '${vswhere.replaceAll("'", "''")}'
+${discovery}
+if (-not $installation) { throw 'Missing installation' }
+Write-Output 'DISCOVERY_OK'`;
+  const result = spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive',
+    '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+  { encoding: 'utf8', timeout: 30000 });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /DISCOVERY_OK/);
 });
 
 test('build stages match the actual v1.18.6 solution projects and output directories', () => {

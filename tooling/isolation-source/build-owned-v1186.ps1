@@ -91,10 +91,11 @@ $vswhere = Join-Path $programFilesX86 'Microsoft Visual Studio/Installer/vswhere
 if (-not (Test-Path -LiteralPath $vswhere -PathType Leaf)) {
   throw 'Visual Studio 2022 vswhere.exe is missing; install VS2022 C++/MSBuild.'
 }
-$installation = (& $vswhere -latest -products '*' -version '[17.0,18.0)' -requires Microsoft.Component.MSBuild -property installationPath | Select-Object -First 1)
-if ($LASTEXITCODE -ne 0 -or -not $installation) {
+$installations = @(& $vswhere -latest -products '*' -version '[17.0,18.0)' -requires Microsoft.Component.MSBuild -property installationPath)
+if ($LASTEXITCODE -ne 0 -or $installations.Count -eq 0) {
   throw 'No Visual Studio 2022 installation with MSBuild was found.'
 }
+$installation = $installations[0]
 $installationRoot = ([string]$installation).Trim()
 $msbuild = Join-Path $installationRoot 'MSBuild/Current/Bin/MSBuild.exe'
 if (-not (Test-Path -LiteralPath $msbuild -PathType Leaf)) {
