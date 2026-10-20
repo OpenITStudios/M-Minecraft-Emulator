@@ -74,6 +74,31 @@ That command does not compile or load the real kernel driver. Full campaign
 results and remaining work live in the existing
 [Windows validation procedure](../../docs/validation/native-pilot-localtest.md).
 
+## Explicit real-payload desktop inspection
+
+The desktop's existing Rust inspector can be exercised against a selected real
+v1.18.6 payload, without opening the app, loading a DLL/driver or changing services:
+
+```powershell
+$env:MIVUBI_TEST_OWNED_PAYLOAD = (Resolve-Path 'workspace/packages/owned-20261020-150022').Path
+try { npm run isolation-source:inspect-candidate }
+finally { Remove-Item Env:MIVUBI_TEST_OWNED_PAYLOAD -ErrorAction SilentlyContinue }
+```
+
+Select an existing absolute payload directory from the matching build report;
+the example is the completed unsigned candidate, not an automatic latest selector.
+The command runs one opt-in Rust test, checks all 25 declared artifacts with the
+production inspector, and observes the current SCM namespace using its existing
+read-only probe. It asserts provider selection, driver-load/gameplay proof and
+installation/activation remain false. Printed service-name registration is not
+service-owner authentication. A successful checksum inspection never grants
+permission to replace an occupied namespace or load an unsigned driver.
+
+The real-payload test is ignored by default because source verification must not
+depend on machine-local build artifacts; explicit invocation fails if the variable
+is missing or the payload is invalid. This is developer verification, not a new
+installed-app CLI, IPC schema, runtime provider or readiness database.
+
 ## Not active — historical implementations
 
 The pinned v1.18.5 Git submodule

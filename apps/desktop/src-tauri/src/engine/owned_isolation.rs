@@ -728,6 +728,35 @@ mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    #[test]
+    #[ignore = "requires an explicitly selected real owned v1.18.6 staged payload"]
+    fn actual_staged_owned_payload_remains_not_installable() {
+        let directory = std::env::var("MIVUBI_TEST_OWNED_PAYLOAD")
+            .expect("set MIVUBI_TEST_OWNED_PAYLOAD to the absolute staged payload directory");
+        let inspection = inspect_candidate_path(directory).expect("inspect actual staged payload");
+        assert_eq!(inspection.upstream_commit, OWNED_V1186_UPSTREAM);
+        assert_eq!(inspection.verified_artifact_count, 25);
+        assert_eq!(inspection.required_artifact_count, 25);
+        assert_eq!(
+            inspection.state,
+            "CANDIDATE_INTEGRITY_VERIFIED_NOT_INSTALLABLE"
+        );
+        assert!(!inspection.provider_selected);
+        assert!(!inspection.driver_load_verified);
+        assert!(!inspection.gameplay_verified);
+        assert!(!inspection.install_permitted);
+        let host =
+            inspect_host_service_namespace().expect("read-only Windows service namespace probe");
+        assert!(!host.activation_allowed);
+        assert!(!host.provider_selected);
+        assert!(!host.trusted_driver_loaded);
+        assert!(!host.gameplay_verified);
+        println!(
+            "Candidate integrity verified: 25 files. Host service={}, driver={}, state={}; activation refused.",
+            host.service_registration, host.driver_registration, host.state
+        );
+    }
+
     struct TempCandidate(PathBuf);
     impl TempCandidate {
         fn new() -> Self {
