@@ -45,13 +45,15 @@ changes accounts or proves multiplayer.
 ## Current Windows build evidence — 20 October 2026
 
 The owned-engine campaign prioritizes build/signing before switching the desktop.
-At `8928602466f864e4acabb43e7982c2d29e2aa21a`, actual Win32 MSBuild exits 1:
-`resource.rc(10): fatal error RC1015: cannot open include file 'afxres.h'`.
-VS2022 v143 and Windows SDK 10.0.26100.0 are present; MFC headers and the
-WindowsKernelModeDriver10.0 VS toolset are unavailable in the inspected installation.
-No system components were installed. x64 and kernel stages, complete 16-binary
-assembly, signing and activation remain unexecuted. The builder keeps failure
-reports, compiler exit status and logs; do not reuse partial build products.
+At `ffe65a15c843b2dacbf3a024cfd9d02e8f936b40`, authorized MFC v143 and WDK
+26100.6584 setup completed with exit 0 and no reboot. The actual Win32 and x64
+user-mode stages pass, producing 15/16 required binaries. Kernel build fails with
+MSB8020 because WindowsKernelModeDriver10.0 is not registered in VS2022: the
+`Component.Microsoft.Windows.DriverKit.BuildTools` integration elevation attempt
+was canceled at Windows consent. Resolve that OS step before retrying the same
+canonical builder. No driver was installed, no security policy changed and no
+system-file-copy workaround was used. Complete staging, signing, activation and
+gameplay remain unexecuted. Keep failure logs and never reuse partial products.
 
 Four reviewed project changes quote MASM, import-library and message-compiler
 paths, including checkout paths containing spaces. The source verifier reconstructs

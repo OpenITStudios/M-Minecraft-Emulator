@@ -21,7 +21,8 @@ quoting fixes). The unmodified reference is
 verifier is `tooling/isolation-source/verify-owned-v1186.mjs` and the
 **build-only** Windows entrypoint is `tooling/isolation-source/build-owned-v1186.ps1`.
 The full native build was attempted on 20 October 2026 and remains incomplete:
-Win32 stops at missing MFC `afxres.h`; the kernel WDK toolset is also unavailable.
+after authorized MFC/WDK installation, Win32 and x64 user-mode stages pass (15/16
+binaries); kernel fails MSB8020 because VS2022 WDK integration was canceled at UAC.
 Three standalone C/C++ policy tests compile and pass with MSVC; they are not the
 real driver build. Driver installation and owned-engine gameplay remain unexecuted.
 See [current implementation sequence](../../planning/development.md).

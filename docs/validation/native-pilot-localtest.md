@@ -11,13 +11,13 @@ lifecycle: ACTIVE
 
 ## Owned Windows engine campaign — 20 October 2026
 
-**Overall state: BLOCKED on native build prerequisites; four Minecraft NOT_EXECUTED.**
+**Overall state: BLOCKED on WDK/VS integration; four Minecraft NOT_EXECUTED.**
 The operator selected owned v1.18.6 first: one native Client 01 and three owned
 persistent profiles 02–04. The official two-client desktop pilot below remains
 the mounted implementation, not an automatic fallback for this campaign.
 No owned provider has been activated.
 
-Executed source revision: `8928602466f864e4acabb43e7982c2d29e2aa21a`.
+Executed source revision: `ffe65a15c843b2dacbf3a024cfd9d02e8f936b40`.
 Baseline: `8c1c6b459b8d6a69bb5683200d1d1ef120247460`.
 This section owns campaign results; the dependency report retains dependency scope.
 
@@ -27,31 +27,44 @@ This section owns campaign results; the dependency report retains dependency sco
 | Exact source provenance | PASS | 1,627 files; pristine upstream unchanged; 11 C/C++ changes plus four exact project quoting fixes |
 | Full source pipeline | PASS | 662 passed: 261 Node, 161 Vitest, 240 Rust; 0 failed, 4 existing file-symlink skips |
 | Native C/C++ policy executables | PASS | MSVC Release build and three CTest tests: launcher parser, core identity/ABI matching, kernel box policy |
-| Native Win32 engine build | FAIL | MSBuild exit 1: resource.rc(10), RC1015, missing afxres.h (MFC); previous MASM/lib/mc path quoting failures corrected |
-| Native x64 user-mode and kernel builds | NOT_EXECUTED | Stopped after Win32 failure; inspected VS installation also lacks kernel WDK toolset |
+| MFC v143 x86/x64 setup | PASS | User authorized system setup; installer exit 0 and afxres.h present |
+| WDK 26100.6584 setup | PASS | Microsoft signature Valid; installer exit 0, kernel headers present, no reboot |
+| WDK integration into VS2022 | BLOCKED | Elevation attempt returned “The operation was canceled by the user”; VS platform-toolset registration still absent |
+| Native Win32 engine build | PASS | Real canonical builder stage exit 0; both required Win32 binaries present |
+| Native x64 user-mode build | PASS | Real canonical builder stage exit 0; thirteen required x64 user-mode binaries present |
+| Native x64 kernel build | FAIL | Post-WDK-install retry exits 1: MSB8020, WindowsKernelModeDriver10.0 toolset not found by VS2022 |
 | Sixteen binaries / five resources / four licenses staged | NOT_EXECUTED | No complete successful native build report; no payload promoted |
-| Dependency audit | PASS with warnings | Zero vulnerability-class findings; existing two GTK informational warnings retained |
-| Four-process telemetry | PASS | Actual 30-second disposable Node captures under PowerShell 7 and Windows PowerShell 5.1; six samples per target; exited Client 03 remains UNKNOWN in five subsequent readings |
+| Dependency audit | PASS with warnings | Prior source batch: zero vulnerability-class findings; manifests unchanged; two GTK informational warnings retained |
+| Four-process telemetry | PASS | Prior batch at 8928602: actual 30-second disposable Node captures on PowerShell 7/5.1; six samples each; exited Client 03 stays UNKNOWN |
 | Signing / activation / owned operations | BLOCKED | No complete signed, Windows-accepted candidate; no driver, service or account changes |
 | Owned gameplay: one, two, then four | NOT_EXECUTED | Runtime unavailable; no login, world, independent input, recovery or multiplayer observation |
 | Four-client 60-minute soak, active 60 FPS | NOT_EXECUTED | No four-client game session or displayed-frame capture |
 | Background cap near 10 FPS | NOT_EXECUTED | No supported, measured vendor/API route selected; no FPS mutation added |
 
 The full engine attempt used VS2022 Build Tools 17.14, MSVC 14.44.35207,
-MSBuild 17.14.40.60911 and Windows SDK 10.0.26100.0. MFC headers and the
-WindowsKernelModeDriver10.0 platform toolset were unavailable in the inspected
-installation. No system components were installed. Signing credentials and Windows
-driver acceptance were not assessed; the incomplete build already blocks activation.
+MSBuild 17.14.40.60911 and Windows SDK 10.0.26100.0. The earlier RC1015 missing-MFC
+failure is resolved. MFC and WDK setup were explicitly authorized by the user and
+completed. VS2022's WindowsKernelModeDriver10.0 integration remains unavailable.
+Signing credentials and Windows driver acceptance were not assessed; the
+incomplete build already blocks activation.
 
-The concrete prerequisite proposal is MFC v143 x86/x64
-(`Microsoft.VisualStudio.Component.VC.ATLMFC`) in the existing VS2022 Build Tools,
-plus WDK 26100.6584 and its VS integration, checking the SDK/WDK build-number pair
-before setup. Microsoft lists that kit for VS2022; do not install the default
-VS2026 kit into this build route. Sources:
+Installed components: MFC v143 x86/x64
+(`Microsoft.VisualStudio.Component.VC.ATLMFC`) in the existing VS2022 Build Tools
+and WDK 26100.6584 (bundle version 10.1.26100.6584; SDK/WDK path build 26100).
+The WDK bootstrapper SHA-256 is
+`ed82c46bd98e0f1d07fd6e5075900e42aedc3fa5e68c06a8764b3dc5303cff1b`;
+Authenticode was Valid with Microsoft Corporation as signer before execution.
+The VS catalog identifies `Component.Microsoft.Windows.DriverKit.BuildTools` for
+the remaining build integration. Its RunAs attempt was canceled at the Windows
+consent boundary; no bypass, forced retry, manual system-file copying or change
+to security policy was performed. A chat clarification about the OS prompt was
+requested. No driver was installed and no reboot was performed.
+Microsoft lists this kit for VS2022; no VS2026 toolchain migration was attempted.
+Sources:
 [Microsoft WDK downloads](https://learn.microsoft.com/en-us/windows-hardware/drivers/other-wdk-downloads)
 and [Build Tools component IDs](https://learn.microsoft.com/en-us/visualstudio/install/workload-component-id-vs-build-tools?view=vs-2022).
-This is a proposed system-component change, not driver installation or permission
-to reboot, replace Sandboxie, change signing policy or access game accounts.
+System-component authorization does not include reboot, driver installation,
+replacing Sandboxie, changing signing policy or accessing game accounts.
 
 Builder repairs capture VS discovery status in a fresh strict PowerShell session,
 wait for the compiler rather than inherited descendants, and retain the process
@@ -67,17 +80,21 @@ Schemas 1/2 remain compatible. It neither authenticates owned Minecraft targets
 nor measures FPS. Usage belongs to the
 [Windows tooling guide](../../tooling/acceptance/windows/README.md).
 
-Machine-local logs remain ignored under `workspace/builds/owned-20261020-134617/`
-and `workspace/dependency-maintenance/owned-four-*`. Earlier failed compiler outputs
+Latest build logs are ignored under `workspace/builds/owned-20261020-144615/`;
+the earlier two-stage pass is in `workspace/builds/owned-20261020-144214/`.
+WDK setup and new source/policy logs are under
+`workspace/dependency-maintenance/wdk-26100-install*` and `owned-toolchain-*`;
+earlier telemetry remains under `owned-four-*`. Earlier failed compiler outputs
 were preserved beneath their build-report directories before clean retries.
 No binary, account identity, private world, token, certificate or raw host report
 is committed.
 
 ### Remaining implementation and acceptance sequence
 
-1. Supply MFC and matching WDK through separately authorized system setup; rerun
-   the canonical builder from clean native outputs at one exact Local revision.
-   Do not bypass compiler errors or stage partial files.
+1. Resolve the canceled Windows consent step for the already-authorized VS2022
+   WDK Build Tools integration; confirm the kernel toolset is registered. Then
+   rerun the canonical builder from clean native outputs at one exact Local
+   revision. Do not bypass errors or stage the existing 15/16 partial artifacts.
 2. Verify the complete candidate's hashes, ABI, Windows-accepted signatures,
    service provenance and recovery instructions. Review a concrete activation
    proposal before driver/service changes. Never silently replace official
