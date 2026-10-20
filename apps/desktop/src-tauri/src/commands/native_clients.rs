@@ -16,6 +16,107 @@ use std::{io, sync::Mutex};
 // This limits manager-created CPU/RAM peaks, not Minecraft CPU or GPU usage.
 static MANAGER_RESOURCE_LOCK: Mutex<()> = Mutex::new(());
 
+type SurfaceFailure = crate::engine::manager_settings::OperationFailure;
+fn surface_failure(error: impl std::fmt::Display) -> SurfaceFailure {
+    SurfaceFailure::from(io::Error::other(error.to_string()))
+}
+
+#[tauri::command]
+pub async fn desktop_present_workspace(
+    window: tauri::WebviewWindow,
+    session_directory: String,
+    client_id: String,
+    target: crate::engine::owned_provider::OwnedProcess,
+    viewport: crate::engine::workspace_surface::Viewport,
+) -> Result<(), SurfaceFailure> {
+    #[cfg(windows)]
+    let manager = window.hwnd().map_err(surface_failure)?.0 as usize as u64;
+    #[cfg(not(windows))]
+    let manager = {
+        let _ = window;
+        0
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        run_manager_operation(|| {
+            use crate::engine::owned_provider::{OwnedOperation, OwnedRequest, OwnedTestBackend};
+            crate::engine::instance_catalog::admit_owned_test_operation(
+                &client_id,
+                SlotOperation::Place,
+            )?;
+            let request = OwnedRequest {
+                session_directory,
+                client_id: "02".into(),
+                operation: OwnedOperation::Inspect,
+                licensed: false,
+                compatibility_confirmed: false,
+                target: None,
+            };
+            let observation = OwnedTestBackend { request: &request }.execute()?;
+            let processes = if client_id == "01" {
+                &observation.native_processes
+            } else {
+                let slot = observation
+                    .clients
+                    .iter()
+                    .find(|slot| {
+                        slot.client_id == client_id
+                            && slot.status == "RUNNING"
+                            && slot.settings_verified
+                    })
+                    .ok_or_else(|| io::Error::other("Client is not ready for the workspace"))?;
+                &slot.processes
+            };
+            let matches = processes.len() == 1
+                && processes.iter().any(|p| {
+                    p.pid == target.pid
+                        && p.created_file_time == target.created_file_time
+                        && p.session_id == target.session_id
+                        && p.window_handle == target.window_handle
+                        && p.responding
+                });
+            if !matches {
+                return Err(io::Error::other(
+                    "Workspace process attribution changed; check clients again",
+                ));
+            }
+            crate::engine::workspace_surface::present(manager, viewport, target)
+        })
+    })
+    .await
+    .map_err(surface_failure)?
+    .map_err(surface_failure)
+}
+
+#[tauri::command]
+pub async fn desktop_update_workspace(
+    window: tauri::WebviewWindow,
+    viewport: crate::engine::workspace_surface::Viewport,
+) -> Result<(), SurfaceFailure> {
+    #[cfg(windows)]
+    let manager = window.hwnd().map_err(surface_failure)?.0 as usize as u64;
+    #[cfg(not(windows))]
+    let manager = {
+        let _ = window;
+        0
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::engine::workspace_surface::update(manager, Some(viewport), false)
+    })
+    .await
+    .map_err(surface_failure)?
+    .map_err(surface_failure)
+}
+
+#[tauri::command]
+pub async fn desktop_release_workspace() -> Result<(), SurfaceFailure> {
+    tauri::async_runtime::spawn_blocking(|| {
+        run_manager_operation(crate::engine::workspace_surface::release)
+    })
+    .await
+    .map_err(surface_failure)?
+    .map_err(surface_failure)
+}
+
 #[tauri::command]
 pub async fn desktop_manager_settings(
     settings: Option<crate::engine::manager_settings::ManagerSettings>,

@@ -75,6 +75,19 @@ fn write(path: &std::path::Path, value: &ManagerSettings) -> io::Result<()> {
 mod tests {
     use super::*;
     #[test]
+    fn workspace_errors_remain_structured_without_masking_engine_failures() {
+        let geometry = OperationFailure::from(io::Error::other(
+            "Workspace geometry mismatch: requested vs observed",
+        ));
+        assert_eq!(geometry.code, "WORKSPACE_UNAVAILABLE");
+        assert!(!geometry.message.contains("requested"));
+        assert!(geometry.details.contains("requested"));
+        let engine = OperationFailure::from(io::Error::other(
+            "payload hash mismatch in workspace/owned-tests/example",
+        ));
+        assert_eq!(engine.code, "ENGINE_UNAVAILABLE");
+    }
+    #[test]
     fn catalog_has_four_unique_owned_routes() {
         let v: serde_json::Value = serde_json::from_str(TARGETS).unwrap();
         let targets = v["targets"].as_array().unwrap();
@@ -132,38 +145,44 @@ pub struct OperationFailure {
 impl From<std::io::Error> for OperationFailure {
     fn from(error: std::io::Error) -> Self {
         let details = error.to_string();
-        let (code, message, action) =
-            if details.contains("Recent launch") || details.contains("Previous private launcher") {
-                (
-                    "LAUNCH_PENDING",
-                    "A previous launch is still pending.",
-                    "Check again before retrying; at least 30 seconds must pass.",
-                )
-            } else if details.contains("Minecraft")
-                || details.contains("executable")
-                || details.contains("installation")
-            {
-                (
-                    "GAME_TARGET_INVALID",
-                    "Minecraft could not be opened or verified.",
-                    "Check the installed executable in Settings, then check the clients again.",
-                )
-            } else if ["payload", "driver", "service", "ABI", "signature", "hash"]
-                .iter()
-                .any(|word| details.contains(word))
-            {
-                (
-                    "ENGINE_UNAVAILABLE",
-                    "The selected engine could not be verified.",
-                    "Check engine configuration in Settings. No fallback engine was used.",
-                )
-            } else {
-                (
-                    "OPERATION_REJECTED",
-                    "The operation could not be completed.",
-                    "Check again for a fresh status. See Diagnostics for details.",
-                )
-            };
+        let (code, message, action) = if details.contains("Recent launch")
+            || details.contains("Previous private launcher")
+        {
+            (
+                "LAUNCH_PENDING",
+                "A previous launch is still pending.",
+                "Check again before retrying; at least 30 seconds must pass.",
+            )
+        } else if details.contains("Minecraft")
+            || details.contains("executable")
+            || details.contains("installation")
+        {
+            (
+                "GAME_TARGET_INVALID",
+                "Minecraft could not be opened or verified.",
+                "Make sure Minecraft Education Desktop is installed, then check again.",
+            )
+        } else if ["payload", "driver", "service", "ABI", "signature", "hash"]
+            .iter()
+            .any(|word| details.contains(word))
+        {
+            (
+                "ENGINE_UNAVAILABLE",
+                "The engine could not be verified.",
+                "Check again. If this continues, open Settings Diagnostics for the reason.",
+            )
+        } else if ["workspace", "surface", "game area", "window recovery"]
+            .iter()
+            .any(|word| details.to_ascii_lowercase().contains(word))
+        {
+            ("WORKSPACE_UNAVAILABLE","The workspace needs attention.","Restore the game window or enlarge the manager, then try again. See Diagnostics for details.")
+        } else {
+            (
+                "OPERATION_REJECTED",
+                "The operation could not be completed.",
+                "Check again for a fresh status. See Diagnostics for details.",
+            )
+        };
         Self {
             code,
             message,

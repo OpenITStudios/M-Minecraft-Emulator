@@ -21,6 +21,9 @@ pub fn run() {
         // native-first pilot. Source and account-bearing guest data remain.
         // Re-enabling a route requires an explicit product decision.
         .invoke_handler(tauri::generate_handler![
+            commands::native_clients::desktop_present_workspace,
+            commands::native_clients::desktop_update_workspace,
+            commands::native_clients::desktop_release_workspace,
             commands::native_clients::desktop_manager_settings,
             commands::native_clients::desktop_owned_test_operation,
             commands::native_clients::desktop_select_owned_test_session,
@@ -42,7 +45,42 @@ pub fn run() {
             commands::native_clients::desktop_focus_observed_client_02,
             commands::native_clients::desktop_place_observed_client_02,
         ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested{api,..}=event {
+                if crate::engine::workspace_surface::is_active() {
+                    use std::sync::atomic::{AtomicBool,Ordering};
+                    static CONFIRMING:AtomicBool=AtomicBool::new(false);
+                    api.prevent_close();
+                    if !CONFIRMING.swap(true,Ordering::SeqCst) {
+                        let window=window.clone();
+                        tauri::async_runtime::spawn_blocking(move || {
+                            let choice=MessageDialog::new().set_title("Close manager?").set_description("Minecraft will stay open in its normal window. Your game will not be closed.").set_buttons(MessageButtons::YesNo).show();
+                            if choice==rfd::MessageDialogResult::Yes {
+                                match crate::engine::workspace_surface::release(){Ok(())=>{let _=window.destroy();},Err(error)=>show_startup_error(&format!("Window recovery needs attention: {error}"))}
+                            }
+                            CONFIRMING.store(false,Ordering::SeqCst);
+                        });
+                    }
+                }
+            }
+            #[cfg(windows)]
+            if matches!(
+                event,
+                tauri::WindowEvent::Moved(_)
+                    | tauri::WindowEvent::Resized(_)
+                    | tauri::WindowEvent::Focused(true)
+            ) {
+                if let Ok(handle) = window.hwnd() {
+                    let manager = handle.0 as usize as u64;
+                    let hidden = window.is_minimized().unwrap_or(true);
+                    tauri::async_runtime::spawn_blocking(move || {
+                        let _ = crate::engine::workspace_surface::update(manager, None, hidden);
+                    });
+                }
+            }
+        })
         .run(tauri::generate_context!());
+    let _ = crate::engine::workspace_surface::release();
     // Unhook from the worker's installation thread before exit.
     crate::engine::instance_focus_events::shutdown();
     result.expect("failed to run Minecraft Instance Manager desktop runtime");

@@ -18,7 +18,7 @@ serde_json = "1"
 sha2 = "0.11.1"
 tauri = { version = "2.12.4", features = [] }
 virtual-clients-core = { package = "m-bedrock-virtual-clients-core", path = "../../../engine/runtime-core" }
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_System_RemoteDesktop", "Win32_System_Services", "Win32_System_Threading", "Win32_System_SystemInformation", "Win32_UI_HiDpi", "Win32_UI_Accessibility", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_Diagnostics_ToolHelp", "Win32_System_LibraryLoader", "Win32_System_RemoteDesktop", "Win32_System_Services", "Win32_System_Threading", "Win32_System_SystemInformation", "Win32_UI_HiDpi", "Win32_UI_Accessibility", "Win32_UI_WindowsAndMessaging"] }
 
 [features]
 default = ["custom-protocol"]

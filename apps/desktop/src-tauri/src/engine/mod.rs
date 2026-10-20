@@ -12,3 +12,4 @@ pub mod native_clients;
 pub mod owned_isolation;
 pub mod owned_provider;
 pub mod virtual_inventory;
+pub mod workspace_surface;
