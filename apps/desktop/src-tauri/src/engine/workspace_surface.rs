@@ -38,6 +38,10 @@ struct Rectangle {
     width: i32,
     height: i32,
 }
+#[cfg(any(windows, test))]
+fn foreground_surface_covered(foreground: u64, game: u64, manager: u64, point_root: u64) -> bool {
+    (foreground == game || foreground == manager) && point_root != game
+}
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct Saved {
     target: OwnedProcess,
@@ -429,12 +433,19 @@ mod native {
                     x: rect.x + rect.width / 2,
                     y: rect.y + rect.height / 2,
                 });
-                if GetAncestor(hit, GA_ROOT) != window {
+                let point_root = GetAncestor(hit, GA_ROOT);
+                let current_foreground = GetForegroundWindow();
+                if foreground_surface_covered(
+                    current_foreground as usize as u64,
+                    window as usize as u64,
+                    manager_window,
+                    point_root as usize as u64,
+                ) {
                     return Err(io::Error::other(format!(
                         "Workspace game is covered; presentation was not confirmed (focus requested: {focus}, game foreground: {}, manager foreground: {}, center covered by manager: {}, visible: {}, enabled: {})",
-                        GetForegroundWindow() == window,
-                        GetForegroundWindow() == manager_window as usize as HWND,
-                        GetAncestor(hit, GA_ROOT) == manager_window as usize as HWND,
+                        current_foreground == window,
+                        current_foreground == manager_window as usize as HWND,
+                        point_root == manager_window as usize as HWND,
                         IsWindowVisible(window) != 0,
                         GetWindowLongPtrW(window, GWL_STYLE) & WS_DISABLED as isize == 0,
                     )));
@@ -568,7 +579,8 @@ mod native {
                 return Err(io::Error::other("Workspace DPI unavailable"));
             }
             if (scale - viewport.pixel_ratio).abs() > 0.05 {
-                return Err(io::Error::other(
+                return Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
                     "Workspace DPI changed. Wait for the layout, then try again.",
                 ));
             }
@@ -582,7 +594,10 @@ mod native {
             let width = (viewport.width * scale).round() as i32;
             let height = (viewport.height * scale).round() as i32;
             if x < 0 || y < 0 || x + width > client.right + 1 || y + height > client.bottom + 1 {
-                return Err(io::Error::other("Workspace layout changed; try again"));
+                return Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "Workspace layout changed; try again",
+                ));
             }
             Ok(Rectangle {
                 x: origin.x + x,
@@ -984,16 +999,25 @@ mod controller {
         if manager != lease.manager {
             return Err(io::Error::other("Wrong workspace window"));
         }
-        if let Some(viewport) = viewport {
-            lease.viewport = viewport.validate()?;
-        }
+        let next_viewport = match viewport {
+            Some(value) => value.validate()?,
+            None => lease.viewport,
+        };
         if suspended || native::minimized(manager)? {
             return match lease.send(Command::Hide)? {
                 Reply::Hidden => Ok(()),
                 _ => Err(io::Error::other("Surface hide failed")),
             };
         }
-        let rect = native::rectangle(manager, lease.viewport)?;
+        let rect = match native::rectangle(manager, next_viewport) {
+            Ok(rect) => rect,
+            // Native resize/DPI events precede the authoritative webview geometry.
+            Err(error) if viewport.is_none() && error.kind() == io::ErrorKind::WouldBlock => {
+                return Ok(())
+            }
+            Err(error) => return Err(error),
+        };
+        lease.viewport = next_viewport;
         match lease.send(Command::Place {
             rect,
             focus: false,
@@ -1251,6 +1275,54 @@ mod controller {
             assert!(native::capture(foreign).is_err());
             present(manager as usize as u64, viewport, target.clone()).unwrap();
             let mut invalid = target.clone();
+            // Native resize can arrive before the webview sends its replacement rectangle.
+            unsafe {
+                assert_ne!(
+                    SetWindowPos(
+                        manager,
+                        std::ptr::null_mut(),
+                        0,
+                        0,
+                        500,
+                        350,
+                        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE
+                    ),
+                    0
+                );
+            }
+            assert!(
+                update(manager as usize as u64, None).is_ok(),
+                "A stale native resize must wait for fresh webview geometry, not poison recovery"
+            );
+            assert!(
+                update(manager as usize as u64, Some(viewport)).is_err(),
+                "Explicit out-of-bounds webview geometry must still be rejected"
+            );
+            let smaller = Viewport {
+                width: 300.0,
+                height: 180.0,
+                ..viewport
+            };
+            update(manager as usize as u64, Some(smaller)).unwrap();
+            assert_eq!(
+                native::capture(target.clone()).unwrap().rect,
+                native::rectangle(manager as usize as u64, smaller).unwrap()
+            );
+            unsafe {
+                assert_ne!(
+                    SetWindowPos(
+                        manager,
+                        std::ptr::null_mut(),
+                        0,
+                        0,
+                        1200,
+                        900,
+                        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE
+                    ),
+                    0
+                );
+            }
+            update(manager as usize as u64, Some(viewport)).unwrap();
             invalid.created_file_time =
                 (invalid.created_file_time.parse::<u64>().unwrap() + 1).to_string();
             let before = native::capture(target.clone()).unwrap();
@@ -1369,6 +1441,19 @@ pub use controller::{is_active, present, release, release_target, suspend, updat
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn app_switch_during_placement_is_not_a_failed_foreground_surface() {
+        let game = 11;
+        let manager = 22;
+        let other_app = 33;
+        // Replay the observed failure: placement began focused, then another app took focus.
+        assert!(!foreground_surface_covered(
+            other_app, game, manager, manager
+        ));
+        assert!(foreground_surface_covered(manager, game, manager, manager));
+        assert!(foreground_surface_covered(game, game, manager, other_app));
+        assert!(!foreground_surface_covered(manager, game, manager, game));
+    }
     #[test]
     fn viewport_rejects_invalid_or_unbounded_layouts() {
         for viewport in [

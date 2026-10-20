@@ -1,7 +1,7 @@
 <script lang="ts">
   import {onMount,tick} from 'svelte';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
-  import type {ClientId,OwnedProcess} from './app/bridge/ownedProviderApi.js';
+  import type {ClientId,OwnedProcess,OwnedSnapshot} from './app/bridge/ownedProviderApi.js';
   import {operationIssue} from './app/bridge/managerConfiguration.js';
   import {listen} from '@tauri-apps/api/event';
   export let sessionDirectory='';
@@ -32,6 +32,14 @@
     catch(error){suspended=previous;throw error;}
   }
   export async function resume(){if(activeClient&&target)await present(activeClient,target);}
+  export async function reconcile(observation:OwnedSnapshot){
+    if(!activeClient||!target)return;
+    const processes=activeClient==='01'?observation.nativeProcesses:observation.clients.find(slot=>slot.clientId===activeClient)?.processes??[];
+    const previous=target;
+    if(processes.some(process=>process.pid===previous.pid&&process.createdFileTime===previous.createdFileTime&&process.sessionId===previous.sessionId&&process.windowHandle===previous.windowHandle))return;
+    await workspaceSurface.release(previous);
+    activeClient=null;target=null;issue=null;updateFailed=false;suspended=false;updatePending=false;
+  }
   export async function present(client:ClientId,process:OwnedProcess){
     issue=null;
     try{

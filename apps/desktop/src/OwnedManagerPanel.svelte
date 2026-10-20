@@ -12,6 +12,7 @@
   export let onPresent:((client:ClientId,target:OwnedProcess)=>Promise<void>)|null=null;
   export let onRelease:(()=>Promise<void>)|null=null;
   export let onResume:(()=>Promise<void>)|null=null;
+  export let onObserved:((snapshot:OwnedSnapshot)=>Promise<void>)|null=null;
   let snapshot=initialSnapshot;
   let error="",notice="",details="",activeClient="",activeOperation="";
   let licensed=false,compatibility=false;
@@ -34,6 +35,11 @@
     await act(client,"Create");
     if(current&&snapshot.clients.find(s=>s.clientId===client)?.settingsVerified)await act(client,"Launch");
     if(!current)await onResume?.();
+  }
+  async function cancelSetup(){
+    setupDialog.close();setupClient=null;
+    try{await onResume?.();}
+    catch(e){const issue=operationIssue(e);error=issue.message;details=issue.details;}
   }
   let current=true;
   let pending:Partial<Record<ClientId,boolean>>={};
@@ -59,6 +65,7 @@
       snapshot=await ownedProvider.execute(sessionDirectory,client,operation,licensed,compatibility,target);
       initialSnapshot=snapshot;
       current=true;
+      if(operation==='Inspect')await onObserved?.(snapshot);
       if(operation==="Launch"){
         pending[client]=true;
         const slot=snapshot.clients.find(s=>s.clientId===client);
@@ -123,9 +130,9 @@
     </article>
   {/each}
 </section>
-<dialog class="um-profile-dialog" bind:this={setupDialog} aria-labelledby="um-profile-title">
+<dialog class="um-profile-dialog" bind:this={setupDialog} aria-labelledby="um-profile-title" on:cancel|preventDefault={cancelSetup}>
   <h2 id="um-profile-title">Prepare Minecraft {setupClient}</h2>
   <p>We will create its persistent game profile, then open Minecraft. Existing profiles and worlds will be preserved.</p>
   <p>The Minecraft compatibility profile reduces process and COM containment so the game can work with Windows services. It does not prove account isolation.</p>
-  <div><button class="cm-button cm-secondary" on:click={async()=>{setupDialog.close();try{await onResume?.();}catch(e){const issue=operationIssue(e);error=issue.message;details=issue.details;}}}>Cancel</button><button class="cm-button" on:click={createAndOpen}>Prepare and open</button></div>
+  <div><button class="cm-button cm-secondary" on:click={cancelSetup}>Cancel</button><button class="cm-button" on:click={createAndOpen}>Prepare and open</button></div>
 </dialog>
