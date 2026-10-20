@@ -2,6 +2,26 @@
 
 ## Unified workspace feasibility (synthetic windows only)
 
+The approved composition now has a developer product implementation in
+`apps/desktop/src-tauri/src/engine/workspace_surface.rs`. Its opt-in regression
+uses the actual debug executable and real synthetic windows. Build the frontend
+and debug desktop first, then run:
+
+```powershell
+cargo build --locked --manifest-path apps/desktop/src-tauri/Cargo.toml
+cargo test --locked --manifest-path apps/desktop/src-tauri/Cargo.toml actual_surface_helper_restores_on_release_pipe_loss_and_helper_crash -- --ignored --nocapture
+```
+
+The regression compiles the existing C# fixture and exercises the production
+controller/helper for normal release, manager-pipe loss and helper termination,
+both normal and maximized. It checks exact original style/rectangle, native
+unowned HWND, stable composed bounds, rejected stale creation time/foreign
+session and preservation of the current surface when replacement preparation
+fails. It never launches Minecraft or uses a real profile; only its self-created
+synthetic process is force-cleaned. It is ignored in the portable default suite.
+Actual gameplay/input, simultaneous coordinator/helper failure, mixed-monitor
+DPI and live previews require separate acceptance.
+
 Run `powershell.exe -NoProfile -NonInteractive -File tooling/acceptance/windows/test-workspace-host.ps1`
 from the repository. The opt-in probe compiles an x64 GUI fixture with the existing
 Windows .NET Framework compiler, starts only its own synthetic client, checks

@@ -9,8 +9,10 @@ lifecycle: ACTIVE
 
 # One Minecraft workspace
 
-Operator-approved design, 20 October 2026. This is the target experience;
-the current card dashboard does not implement native game hosting yet.
+Operator-approved design, 20 October 2026, amended by explicit operator approval
+of independent native composition after the crash experiments. A developer
+integration now provides the play area and session rail; real game acceptance
+and live previews remain incomplete.
 
 ## User experience
 
@@ -19,7 +21,7 @@ on the left and three live session previews on the right. Minecraft 01–04
 remain stable identities from the existing canonical target catalog. Selecting
 a preview promotes that session without restarting either game. The previous
 active session takes its place in the preview rail. Never present a screenshot
-as an interactive game or external window arrangement as completed hosting.
+as an interactive game or describe native composition as true embedded hosting.
 
 The normal flow is open the manager, open a client, sign in inside Minecraft,
 and play. Startup discovers and verifies the registered Education installation
@@ -85,7 +87,7 @@ boundary, not an implemented product helper or a second lifecycle authority.
 Failure of that presentation owner still has no proven recovery. Do not attach
 Minecraft merely because the narrower UI-crash scenario passes.
 
-### Proposed deviation: independent native surface (decision pending)
+### Approved presentation mode: independent native composition
 
 An opt-in synthetic comparison leaves the client as an unowned top-level native
 window, temporarily removes its caption/frame, and aligns it to the workspace's
@@ -93,12 +95,23 @@ main rectangle. It does not call SetParent on that client or synthesize input.
 Terminating the host leaves the same client HWND alive; an independent test
 coordinator restores its saved style and screen bounds and requests normal close.
 
-This is native window composition, **not embedded hosting**. It is not an
-approved fallback, and the mounted product remains unchanged. Operator approval
-of this explicit deviation is required before product implementation because
-the existing contract rejects substituting window placement for embedding.
+This is native window composition, **not embedded hosting**. The operator
+explicitly selected this approach after the synthetic comparison. This replaces
+the earlier strict embedding requirement, without weakening provider attribution,
+normal-close, no-injection or account/data-preservation boundaries.
 
-The proposed user flow remains one workspace, an active native game region and
+`NativeWorkspace.svelte` and `workspace_surface.rs` implement the first developer
+increment. The existing provider authenticates the selected process before the
+same-executable recovery helper prepares its original style/rectangle checkpoint.
+The independent game is positioned over a 16:9 native play area, with direct
+Windows input. Manager connection loss restores through the helper; helper loss
+restores through the manager's reader worker. No new lifecycle owner, credentials
+store, engine selector or persistent readiness flag is added. Settings restores
+the game before displaying its page; manager close offers to restore and leave
+the game running. The side rail currently contains session controls, not live
+previews. Combined manager/helper failure has no persistent recovery checkpoint.
+
+The accepted user flow remains one workspace, an active native game region and
 three previews, automatic setup and manual login. Before acceptance it must
 prove game input/capture release, app switching without focus theft, host resize,
 mixed DPI, minimize/restore, z-order, unobscured login/save dialogs, usable
@@ -107,10 +120,10 @@ also fails. The current synthetic test does not prove any of those behaviors or
 promise a single taskbar entry. No installation, accounts or production gate is
 changed by this proposal.
 
-Before exposing a hosted game in the normal UI, prove:
+Before accepting the developer integration as complete, prove:
 
-1. Synthetic cross-process attach, normal detach and partial-failure restoration.
-2. Synthetic host failure and restoration without destroying the client window;
+1. Synthetic independent composition, normal release and rejected replacement.
+2. Manager/helper failure and restoration without destroying the client window;
    mismatched DPI, minimized/maximized windows and identity changes fail safely.
 3. One actual game: rendering, relative mouse/capture/release, keyboard, login and
    save dialogs, resize, minimize/restore, close and reopen inside the manager.
@@ -118,8 +131,8 @@ Before exposing a hosted game in the normal UI, prove:
 5. Four games: live previews, sequential restart, multiplayer and 60-minute soak.
    Measure displayed FPS separately; unavailable measurement is NOT_EXECUTED.
 
-Do not bypass a failed native-host gate by presenting window placement or an
-image with synthesized input as the requested workspace.
+The failed SetParent route remains rejected. Do not call a capture image an
+interactive session or substitute synthesized input for the native game.
 
 Evidence belongs in the [canonical Windows test report](../validation/native-pilot-localtest.md).
 The [synthetic probe](../../tooling/acceptance/windows/test-workspace-host.ps1)

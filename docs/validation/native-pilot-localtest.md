@@ -9,6 +9,40 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Approved native workspace integration — 20 October 2026
+
+**ACTIVE.** The operator approved independent native composition instead of
+direct child-window embedding. Implementation revisions: `d3a2a3c` (backend)
+and `f5d81be` (mounted UI). The game remains an unowned top-level Windows
+window, aligned with the manager play area. This uses ordinary Windows APIs;
+Windows Sandbox is not a dependency. The existing owned provider still borrows
+the Sandboxie service namespace; standalone installation is not complete.
+
+| Check | Result | Evidence / limit |
+| --- | --- | --- |
+| Full `npm run verify:source` on the integrated source | PASS | 702 passed: Node 278, frontend 173, desktop Rust 74, runtime Rust 177; four existing Node symlink skips and seven opt-in Rust tests ignored |
+| Windows debug executable | PASS | `cargo build --locked`; not a production installer or signing acceptance |
+| Actual helper with synthetic normal/maximized windows | PASS | Six scenarios: normal release, manager pipe loss and helper crash for each initial window state; original geometry/style restored, identity preserved; invalid replacement rejected |
+| Maximized-window regression during implementation | FAIL then PASS | Strict geometry checking exposed retained old dimensions; restoring from maximized state before applying presentation style fixed the six-case regression |
+| Mock browser UI | PASS | 1366x900, 1180x760 and 920x620: layout, selection, restore, Settings release and failure handling; no Minecraft rendering/input claim |
+| Helper caller restriction | PASS | Foreign PowerShell caller rejected; helper accepts the same manager executable, plus the debug test harness for regression only |
+| Flicker prevention in placement source | PASS, source | Repeated updates do not reapply an unchanged window frame; updates serialize rather than incorrectly reporting concurrent resize as session failure. Helpers use hidden/no-console creation |
+| Minecraft visibility, mouse, keyboard, dialogs, minimize and reopen on this layout | NOT_EXECUTED | Earlier user-reported normal gameplay predates this composition and does not establish its acceptance |
+| Three live previews, four-client gameplay, multiplayer, 60 minutes, displayed FPS | NOT_EXECUTED | Current rail contains session controls, not live previews |
+| Standalone engine services, installer and clean Windows without official Sandboxie | NOT_EXECUTED | Separate namespace/package work remains; no system, driver or account changes made in this integration |
+
+The synthetic fixture may briefly appear while explicit engineering tests run.
+It is not part of normal product startup. It is neither Minecraft nor Windows
+Sandbox. Reduced redraw is not proof that the reported real-game flicker is fixed.
+
+The existing resource lock and provider remain the lifecycle authority. Presentation
+checks PID, birth time, session and HWND before native changes. Recovery saves
+style/geometry in memory; simultaneous failure of manager and recovery helper,
+mixed-DPI displays and full-screen transitions are not proven. No forced game
+termination, token migration or account handling was added. The only dependency
+configuration change enables a Windows ToolHelp API feature; versions/locks are
+unchanged. `main` and GitHub Actions remain untouched.
+
 ## Independent native-surface proposal — 20 October 2026
 
 **ACTIVE; design deviation awaits operator decision.** Source:

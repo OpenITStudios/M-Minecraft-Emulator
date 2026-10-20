@@ -2,7 +2,7 @@
 
 ## Owned manager / independence — 20 October 2026
 
-**ACTIVE:** `5369417`: independent native-surface crash recovery PASS, direct-parent recovery still FAIL (synthetic). Composition is not embedding; operator decision requested before product changes. No hosted game/previews/four-client proof. [Evidence and limits](../docs/validation/native-pilot-localtest.md).
+**ACTIVE:** operator approved native composition. `d3a2a3c` / `f5d81be`: automatic play workspace, verified HWND placement and helper recovery implemented; source checks and six synthetic recovery cases PASS. Live Minecraft layout, previews, four clients and standalone installation remain NOT_EXECUTED. Next: accept one client in the actual workspace. [Evidence](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
 
