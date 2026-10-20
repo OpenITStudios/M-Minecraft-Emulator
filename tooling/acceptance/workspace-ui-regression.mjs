@@ -14,6 +14,7 @@ let browser;
  const errors=[];page.on('pageerror',error=>errors.push(error.message));
  await page.addInitScript(({catalog,snapshot})=>{
   window.__calls=[];window.__listeners={};
+  window.__startupFailure=true;
   window.__TAURI_EVENT_PLUGIN_INTERNALS__={unregisterListener:()=>{}};
   window.__TAURI_INTERNALS__={transformCallback:callback=>{window.__listeners[1]=callback;return 1;},invoke:async(command,args)=>{
    window.__calls.push({command,args});
@@ -21,6 +22,7 @@ let browser;
    if(command==='plugin:event|unlisten')return null;
    if(command==='desktop_suspend_workspace')return true;
    if(command==='desktop_manager_settings')return {observation:snapshot,engineError:null,detectedMinecraft:'C:\\Game\\Minecraft.Windows.exe',targetError:null,settings:{sessionDirectory:'D:\\Developer engine',minecraftExecutable:'C:\\Game\\Minecraft.Windows.exe'},catalog};
+   if(command==='desktop_present_workspace'&&window.__startupFailure&&args.clientId==='02'){window.__startupFailure=false;throw 'Client exited during startup admission';}
    if(command==='desktop_present_workspace'&&window.__failPresentation)throw 'Workspace could not prepare the replacement';
    if(command==='desktop_update_workspace'&&window.__failUpdate)throw 'Workspace geometry changed during resize';
    if(['desktop_present_workspace','desktop_update_workspace','desktop_release_workspace','desktop_suspend_workspace'].includes(command))return null;
@@ -29,6 +31,8 @@ let browser;
   }};
  },{catalog,snapshot});
  await page.goto('http://127.0.0.1:1421');
+ await page.waitForFunction(()=>document.querySelector('[role=tab][aria-selected=true]')?.textContent==='Minecraft 03',{},{timeout:5000});
+ if(!await page.evaluate(()=>window.__calls.some(c=>c.command==='desktop_present_workspace'&&c.args.clientId==='02')))throw Error('Failed startup slot was not exercised');
  const card=page.locator('.um-card').filter({has:page.getByRole('heading',{name:'Minecraft 02',exact:true})});
  await card.getByRole('button',{name:'Play',exact:true}).click();
  await page.getByRole('heading',{name:'Minecraft 02',exact:true}).first().waitFor();

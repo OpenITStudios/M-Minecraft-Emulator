@@ -27,7 +27,11 @@
     try{
       const running=snapshot.clients.filter(slot=>slot.status==='RUNNING'&&slot.processes[0]?.responding).map(slot=>({client:slot.clientId as ClientId,target:slot.processes[0]}));
       const native=snapshot.nativeProcesses[0];if(native&&native.responding&&native.windowHandle!=='0x0')running.push({client:'01',target:native});
-      for(const session of running)await workspace.present(session.client,session.target);
+      // A client exiting during admission must not prevent adopting the other sessions.
+      for(const session of running){
+        try{await workspace.present(session.client,session.target);}
+        catch(error){issue=operationIssue(error);}
+      }
     }catch(error){issue=operationIssue(error);}finally{busy=false;}
   })();});
 </script>
@@ -41,7 +45,7 @@
   <main class="um-main">
     <header class="um-header"><div><p class="um-eyebrow">YOUR WORKSPACE</p><h1>{page==='clients'?'Minecraft clients':'Settings'}</h1><p>{page==='clients'?'Four sessions. One place to launch and manage.':'Minecraft and the engine are detected automatically.'}</p></div><span class="um-engine" class:ready={checked}>Engine · {busy?'Checking':checked?'Verified':'Needs attention'}</span></header>
     {#if issue}<div class="um-alert" role="alert"><strong>{issue.message}</strong><p>{issue.action}</p><details><summary>Diagnostics</summary><pre>{issue.details}</pre></details></div>{/if}
-    <div hidden={page!=='clients'}>
+    <div class="um-client-view" hidden={page!=='clients'}>
       {#if config && snapshot}<div class="nw-layout"><NativeWorkspace bind:this={workspace} bind:working={workspaceBusy} sessionDirectory={config.settings.sessionDirectory} bind:activeClient={selectedClient} {busy} onClose={(client,target)=>panel.closeClient(client,target)} onSelect={client=>panel.activateClient(client)}/><aside class="nw-sessions" aria-label="Other Minecraft sessions"><OwnedManagerPanel bind:this={panel} sessionDirectory={config.settings.sessionDirectory} bind:initialSnapshot={snapshot} bind:operationBusy={busy} {selectedClient} externalBusy={workspaceBusy} onPresent={(client,target)=>workspace.present(client,target)} onRelease={()=>workspace.suspend()} onResume={()=>workspace.resume()}/></aside></div>
       {:else}
         <section class="um-setup"><h2>{busy?'Checking your engine…':'Engine needs attention'}</h2><p>Automatic verification could not connect to the engine. Your profiles and game data are preserved.</p><button class="cm-button" disabled={busy} on:click={prepare}>Check again</button><button class="cm-button cm-secondary" disabled={busy} on:click={()=>page='settings'}>View status</button></section>
