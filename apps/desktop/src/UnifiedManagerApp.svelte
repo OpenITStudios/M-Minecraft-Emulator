@@ -30,7 +30,7 @@
       // A client exiting during admission must not prevent adopting the other sessions.
       for(const session of running){
         try{await workspace.present(session.client,session.target);}
-        catch(error){issue=operationIssue(error);}
+        catch{/* The workspace owns presentation errors and recovery controls. */}
       }
     }catch(error){issue=operationIssue(error);}finally{busy=false;}
   })();});
@@ -43,10 +43,10 @@
     <p class="um-sidebar-foot">Windows developer test<br/>One native · Three owned</p>
   </aside>
   <main class="um-main">
-    <header class="um-header"><div><p class="um-eyebrow">YOUR WORKSPACE</p><h1>{page==='clients'?'Minecraft clients':'Settings'}</h1><p>{page==='clients'?'Four sessions. One place to launch and manage.':'Minecraft and the engine are detected automatically.'}</p></div><span class="um-engine" class:ready={checked}>Engine · {busy?'Checking':checked?'Verified':'Needs attention'}</span></header>
+    <header class="um-header"><div><p class="um-eyebrow">YOUR WORKSPACE</p><h1>{page==='clients'?'Minecraft clients':'Settings'}</h1><p>{page==='clients'?'Four sessions. One place to launch and manage.':'Minecraft and the engine are detected automatically.'}</p></div><span class="um-engine" class:ready={checked}>Engine · {busy?'Checking':checked?'Connected':'Needs attention'}</span></header>
     {#if issue}<div class="um-alert" role="alert"><strong>{issue.message}</strong><p>{issue.action}</p><details><summary>Diagnostics</summary><pre>{issue.details}</pre></details></div>{/if}
     <div class="um-client-view" hidden={page!=='clients'}>
-      {#if config && snapshot}<div class="nw-layout"><NativeWorkspace bind:this={workspace} bind:working={workspaceBusy} sessionDirectory={config.settings.sessionDirectory} bind:activeClient={selectedClient} {busy} onClose={(client,target)=>panel.closeClient(client,target)} onSelect={client=>panel.activateClient(client)}/><aside class="nw-sessions" aria-label="Other Minecraft sessions"><OwnedManagerPanel bind:this={panel} sessionDirectory={config.settings.sessionDirectory} bind:initialSnapshot={snapshot} bind:operationBusy={busy} {selectedClient} externalBusy={workspaceBusy} onPresent={(client,target)=>workspace.present(client,target)} onRelease={()=>workspace.suspend()} onResume={()=>workspace.resume()} onObserved={observation=>workspace.reconcile(observation)}/></aside></div>
+      {#if config && snapshot}<div class="nw-layout"><NativeWorkspace bind:this={workspace} bind:working={workspaceBusy} sessionDirectory={config.settings.sessionDirectory} bind:activeClient={selectedClient} {busy} onRecovered={()=>issue=null} selectionBlocked={client=>panel?.actionBlockedReason(client)??null} onClose={(client,target)=>panel.closeClient(client,target)} onSelect={client=>panel.activateClient(client)}/><aside class="nw-sessions" aria-label="Other Minecraft sessions"><OwnedManagerPanel bind:this={panel} sessionDirectory={config.settings.sessionDirectory} bind:initialSnapshot={snapshot} bind:operationBusy={busy} {selectedClient} externalBusy={workspaceBusy} onPresent={(client,target)=>workspace.present(client,target)} onRelease={()=>workspace.suspend()} onResume={()=>workspace.resume()} onObserved={observation=>workspace.reconcile(observation)}/></aside></div>
       {:else}
         <section class="um-setup"><h2>{busy?'Checking your engine…':'Engine needs attention'}</h2><p>Automatic verification could not connect to the engine. Your profiles and game data are preserved.</p><button class="cm-button" disabled={busy} on:click={prepare}>Check again</button><button class="cm-button cm-secondary" disabled={busy} on:click={()=>page='settings'}>View status</button></section>
         <section class="um-grid" aria-label="Minecraft clients">{#each config?.catalog.targets??[] as target}<article class="um-card"><p class="um-eyebrow">{target.kind==='NATIVE'?'NATIVE':'OWNED'}</p><h2>Minecraft {target.id}</h2><span class="um-status">Waiting for engine</span><p>{target.kind==='NATIVE'?'Native session':'Private persistent session'}</p></article>{/each}</section>

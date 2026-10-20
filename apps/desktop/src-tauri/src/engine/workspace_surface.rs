@@ -53,17 +53,13 @@ struct Saved {
 #[derive(Deserialize, Serialize)]
 enum Command {
     Start(OwnedProcess),
-    Place {
-        rect: Rectangle,
-        focus: bool,
-        manager_pid: u32,
-        manager_window: u64,
-    },
+    Place { rect: Rectangle, manager_pid: u32 },
     Hide,
     Restore,
 }
 #[derive(Deserialize, Serialize)]
 enum Reply {
+    Progress(String),
     Ready(Saved),
     Placed,
     Hidden,
@@ -111,24 +107,23 @@ pub fn maybe_run_helper() -> bool {
             let command: Command = serde_json::from_str(&text)?;
             let reply = match command {
                 Command::Start(target) if saved.is_none() => {
+                    line(&Reply::Progress("start/capture".into()), &mut output)?;
                     let state = native::capture(target)?;
                     saved = Some(state.clone());
                     Reply::Ready(state)
                 }
-                Command::Place {
-                    rect,
-                    focus,
-                    manager_pid,
-                    manager_window,
-                } => {
+                Command::Place { rect, manager_pid } => {
                     let state = saved
                         .as_mut()
                         .ok_or_else(|| io::Error::other("Surface not prepared"))?;
                     state.manager_pid = manager_pid;
-                    native::place(state, rect, focus, manager_pid, manager_window)?;
+                    native::place(state, rect, &mut |stage| {
+                        line(&Reply::Progress(stage.into()), &mut output)
+                    })?;
                     Reply::Placed
                 }
                 Command::Hide => {
+                    line(&Reply::Progress("hide/window".into()), &mut output)?;
                     native::hide(
                         saved
                             .as_ref()
@@ -138,7 +133,9 @@ pub fn maybe_run_helper() -> bool {
                 }
                 Command::Restore => {
                     if let Some(state) = &saved {
-                        native::restore(state)?;
+                        native::restore_traced(state, &mut |stage| {
+                            line(&Reply::Progress(stage.into()), &mut output)
+                        })?;
                     }
                     saved = None;
                     line(&Reply::Restored, &mut output)?;
@@ -336,17 +333,17 @@ mod native {
     pub(super) fn place(
         saved: &Saved,
         rect: Rectangle,
-        focus: bool,
-        manager_pid: u32,
-        manager_window: u64,
+        progress: &mut dyn FnMut(&str) -> io::Result<()>,
     ) -> io::Result<()> {
         if rect.width < 160 || rect.height < 120 || rect.width > 20000 || rect.height > 20000 {
             return Err(io::Error::other("Invalid native viewport"));
         }
+        progress("place/identity")?;
         let (_process, window) = hwnd(&saved.target)?;
         unsafe {
             // No owner/parent and no topmost flag: other applications can cover it normally.
             if IsZoomed(window) != 0 {
+                progress("place/unmaximize")?;
                 ShowWindow(window, SW_SHOWNOACTIVATE);
             }
             let current_style = GetWindowLongPtrW(window, GWL_STYLE) as i64;
@@ -357,7 +354,9 @@ mod native {
             let shell_style = GetWindowLongPtrW(window, GWL_EXSTYLE) as i64;
             let managed_shell = (shell_style & !(WS_EX_APPWINDOW as i64)) | WS_EX_TOOLWINDOW as i64;
             if shell_style != managed_shell {
+                progress("place/hide-for-shell")?;
                 ShowWindow(window, SW_HIDE);
+                progress("place/shell-style")?;
                 SetLastError(0);
                 let previous = SetWindowLongPtrW(window, GWL_EXSTYLE, managed_shell as isize);
                 if previous == 0 && GetLastError() != 0 {
@@ -368,22 +367,13 @@ mod native {
                 }
             }
             if frame_changed {
+                progress("place/frame-style")?;
                 style(window, presentation_style)?;
             }
-            let foreground = GetForegroundWindow();
-            let mut foreground_pid = 0;
-            GetWindowThreadProcessId(foreground, &mut foreground_pid);
-            let raise = (foreground == window
-                || (foreground_pid == manager_pid
-                    && foreground == manager_window as usize as HWND))
-                && GetWindowLongPtrW(window, GWL_STYLE) & WS_DISABLED as isize == 0;
+            progress("place/position")?;
             if SetWindowPos(
                 window,
-                if raise || foreground.is_null() {
-                    std::ptr::null_mut()
-                } else {
-                    foreground
-                },
+                std::ptr::null_mut(),
                 rect.x,
                 rect.y,
                 rect.width,
@@ -391,11 +381,8 @@ mod native {
                 (if frame_changed { SWP_FRAMECHANGED } else { 0 })
                     | SWP_NOACTIVATE
                     | SWP_SHOWWINDOW
-                    | if !raise && foreground.is_null() {
-                        SWP_NOZORDER
-                    } else {
-                        0
-                    },
+                    // Background placement must not reorder against an unrelated application.
+                    | SWP_NOZORDER,
             ) == 0
             {
                 return Err(io::Error::other(format!(
@@ -403,6 +390,7 @@ mod native {
                     io::Error::last_os_error()
                 )));
             }
+            progress("place/verify-geometry")?;
             hwnd(&saved.target)?;
             let mut actual: RECT = std::mem::zeroed();
             if GetWindowRect(window, &mut actual) == 0
@@ -423,36 +411,53 @@ mod native {
                     actual.bottom - actual.top
                 )));
             }
-            if focus && raise && GetForegroundWindow() != window {
-                SetForegroundWindow(window);
+        }
+        Ok(())
+    }
+    pub(super) fn confirm_foreground(
+        saved: &Saved,
+        rect: Rectangle,
+        manager: u64,
+    ) -> io::Result<()> {
+        let (_process, window) = hwnd(&saved.target)?;
+        let manager = manager as usize as HWND;
+        unsafe {
+            let foreground = GetForegroundWindow();
+            if (foreground != manager && foreground != window)
+                || GetWindowLongPtrW(window, GWL_STYLE) & WS_DISABLED as isize != 0
+            {
+                return Ok(());
             }
-            // A matching rectangle does not prove that the manager is not covering the game.
-            // Check only while our workspace is foreground; unrelated applications may cover it.
-            if raise {
+            // Only the foreground manager can hand its own focus to the selected game.
+            // No input-queue attachment or foreground-lock override is permitted.
+            if foreground == manager && SetForegroundWindow(window) == 0 {
+                return Err(io::Error::other(
+                    "Workspace foreground activation refused by Windows",
+                ));
+            }
+            let deadline = std::time::Instant::now() + std::time::Duration::from_millis(500);
+            loop {
+                let current_foreground = GetForegroundWindow();
                 let hit = WindowFromPoint(POINT {
                     x: rect.x + rect.width / 2,
                     y: rect.y + rect.height / 2,
                 });
                 let point_root = GetAncestor(hit, GA_ROOT);
-                let current_foreground = GetForegroundWindow();
-                if foreground_surface_covered(
+                if !foreground_surface_covered(
                     current_foreground as usize as u64,
                     window as usize as u64,
-                    manager_window,
+                    manager as usize as u64,
                     point_root as usize as u64,
                 ) {
-                    return Err(io::Error::other(format!(
-                        "Workspace game is covered; presentation was not confirmed (focus requested: {focus}, game foreground: {}, manager foreground: {}, center covered by manager: {}, visible: {}, enabled: {})",
-                        current_foreground == window,
-                        current_foreground == manager_window as usize as HWND,
-                        point_root == manager_window as usize as HWND,
-                        IsWindowVisible(window) != 0,
-                        GetWindowLongPtrW(window, GWL_STYLE) & WS_DISABLED as isize == 0,
-                    )));
+                    hwnd(&saved.target)?;
+                    return Ok(());
                 }
+                if std::time::Instant::now() >= deadline {
+                    return Err(io::Error::other(format!("Workspace game is covered; presentation was not confirmed (game foreground: {}, manager foreground: {}, center covered by manager: {}, visible: {}, enabled: {})",current_foreground==window,current_foreground==manager,point_root==manager,IsWindowVisible(window)!=0,GetWindowLongPtrW(window,GWL_STYLE)&WS_DISABLED as isize==0)));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
             }
         }
-        Ok(())
     }
     pub(super) fn hide(saved: &Saved) -> io::Result<()> {
         let (_process, window) = hwnd(&saved.target)?;
@@ -460,9 +465,6 @@ mod native {
             ShowWindow(window, SW_HIDE);
         }
         Ok(())
-    }
-    pub(super) fn foreground(manager: u64) -> bool {
-        unsafe { GetForegroundWindow() == manager as usize as HWND }
     }
     pub(super) fn minimized(manager: u64) -> io::Result<bool> {
         unsafe {
@@ -476,6 +478,13 @@ mod native {
         }
     }
     pub(super) fn restore(saved: &Saved) -> io::Result<()> {
+        restore_traced(saved, &mut |_| Ok(()))
+    }
+    pub(super) fn restore_traced(
+        saved: &Saved,
+        progress: &mut dyn FnMut(&str) -> io::Result<()>,
+    ) -> io::Result<()> {
+        progress("restore/identity")?;
         let (_process, window) = match hwnd(&saved.target) {
             Ok(window) => window,
             Err(error) => {
@@ -492,7 +501,9 @@ mod native {
             let shell = GetWindowLongPtrW(window, GWL_EXSTYLE) as i64;
             let restored_shell = (shell & !shell_mask) | (saved.extended_style & shell_mask);
             if shell != restored_shell {
+                progress("restore/hide-for-shell")?;
                 ShowWindow(window, SW_HIDE);
+                progress("restore/shell-style")?;
                 SetLastError(0);
                 let previous = SetWindowLongPtrW(window, GWL_EXSTYLE, restored_shell as isize);
                 if previous == 0 && GetLastError() != 0 {
@@ -503,6 +514,7 @@ mod native {
                 }
             }
             let current_style = GetWindowLongPtrW(window, GWL_STYLE) as i64;
+            progress("restore/frame-style")?;
             style(
                 window,
                 (current_style & !frame_mask) | (saved.style & frame_mask),
@@ -512,6 +524,7 @@ mod native {
             let mut pid = 0;
             GetWindowThreadProcessId(foreground, &mut pid);
             let lower = foreground != window && pid == saved.manager_pid;
+            progress("restore/position")?;
             if SetWindowPos(
                 window,
                 if lower {
@@ -620,20 +633,30 @@ mod native {
     pub(super) fn capture(_: OwnedProcess) -> io::Result<Saved> {
         unavailable()
     }
-    pub(super) fn place(_: &Saved, _: Rectangle, _: bool, _: u32, _: u64) -> io::Result<()> {
+    pub(super) fn place(
+        _: &Saved,
+        _: Rectangle,
+        _: &mut dyn FnMut(&str) -> io::Result<()>,
+    ) -> io::Result<()> {
         unavailable()
     }
     pub(super) fn hide(_: &Saved) -> io::Result<()> {
         unavailable()
     }
+    pub(super) fn confirm_foreground(_: &Saved, _: Rectangle, _: u64) -> io::Result<()> {
+        unavailable()
+    }
     pub(super) fn restore(_: &Saved) -> io::Result<()> {
+        unavailable()
+    }
+    pub(super) fn restore_traced(
+        _: &Saved,
+        _: &mut dyn FnMut(&str) -> io::Result<()>,
+    ) -> io::Result<()> {
         unavailable()
     }
     pub(super) fn rectangle(_: u64, _: Viewport) -> io::Result<Rectangle> {
         unavailable()
-    }
-    pub(super) fn foreground(_: u64) -> bool {
-        false
     }
     pub(super) fn minimized(_: u64) -> io::Result<bool> {
         unavailable()
@@ -648,7 +671,7 @@ mod controller {
     use std::{
         process::{Child, ChildStdin, Command as ProcessCommand, Stdio},
         sync::{mpsc, Mutex},
-        time::Duration,
+        time::{Duration, Instant},
     };
     enum Event {
         Reply(Reply),
@@ -664,20 +687,63 @@ mod controller {
         saved: Option<Saved>,
     }
     impl Lease {
+        fn place(&mut self, rect: Rectangle) -> io::Result<()> {
+            if !matches!(
+                self.send(Command::Place {
+                    rect,
+                    manager_pid: std::process::id(),
+                })?,
+                Reply::Placed
+            ) {
+                return Err(io::Error::other("Surface presentation failed"));
+            }
+            native::confirm_foreground(
+                self.saved
+                    .as_ref()
+                    .ok_or_else(|| io::Error::other("Surface checkpoint missing"))?,
+                rect,
+                self.manager,
+            )
+        }
         fn receive(&mut self) -> io::Result<Reply> {
-            match self.events.recv_timeout(Duration::from_secs(3)) {
-                Ok(Event::Reply(Reply::Error(error))) => Err(io::Error::other(error)),
-                Ok(Event::Reply(reply)) => Ok(reply),
-                Ok(Event::End(result)) => {
-                    self.ended = Some(result.clone());
-                    Err(io::Error::other(format!(
-                        "Surface helper ended: {result:?}"
-                    )))
+            // Progress must never extend the command's original deadline.
+            let deadline = Instant::now() + Duration::from_secs(3);
+            let mut stage = String::from("awaiting helper");
+            loop {
+                match self
+                    .events
+                    .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+                {
+                    Ok(Event::Reply(Reply::Progress(next))) => {
+                        stage = next;
+                        if Instant::now() < deadline {
+                            continue;
+                        }
+                    }
+                    Ok(Event::Reply(Reply::Error(error))) => {
+                        return Err(io::Error::other(format!(
+                            "Surface helper failed at {stage}: {error}"
+                        )))
+                    }
+                    Ok(Event::Reply(reply)) => return Ok(reply),
+                    Ok(Event::End(result)) => {
+                        self.ended = Some(result.clone());
+                        return Err(io::Error::other(format!(
+                            "Surface helper ended at {stage}: {result:?}"
+                        )));
+                    }
+                    Err(mpsc::RecvTimeoutError::Disconnected) => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::BrokenPipe,
+                            format!("Surface helper disconnected at {stage}"),
+                        ))
+                    }
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
                 }
-                Err(_) => Err(io::Error::new(
+                return Err(io::Error::new(
                     io::ErrorKind::TimedOut,
-                    "Surface helper timed out",
-                )),
+                    format!("Surface helper timed out after 3000 ms at {stage}"),
+                ));
             }
         }
         fn send(&mut self, command: Command) -> io::Result<Reply> {
@@ -823,8 +889,12 @@ mod controller {
         #[cfg(not(test))]
         let executable = std::env::current_exe()?;
         #[cfg(test)]
-        let executable = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("target/debug/m-bedrock-virtual-clients.exe");
+        let executable = std::env::var_os("MIVUBI_TEST_SURFACE_EXECUTABLE")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| {
+                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("target/debug/m-bedrock-virtual-clients.exe")
+            });
         let mut command = ProcessCommand::new(executable);
         command
             .arg("--workspace-surface")
@@ -898,12 +968,6 @@ mod controller {
         let mut state = SURFACE
             .lock()
             .map_err(|_| io::Error::other("Workspace state unavailable"))?;
-        let command = || Command::Place {
-            rect,
-            focus: native::foreground(manager),
-            manager_pid: std::process::id(),
-            manager_window: manager,
-        };
         // A finished recovery helper must confirm restoration before its slot is reused.
         if let Some(active) = state.active.as_mut() {
             if active.child.try_wait()?.is_some()
@@ -933,9 +997,7 @@ mod controller {
                     return Err(io::Error::other("Wrong workspace window"));
                 }
                 old.viewport = viewport;
-                if !matches!(old.send(command())?, Reply::Placed) {
-                    return Err(io::Error::other("Surface presentation failed"));
-                }
+                old.place(rect)?;
                 state.suspended = false;
                 return Ok(());
             }
@@ -955,8 +1017,8 @@ mod controller {
             return Err(io::Error::other("Wrong workspace window"));
         }
         replacement.viewport = viewport;
-        let outcome = replacement.send(command());
-        if !matches!(outcome, Ok(Reply::Placed)) {
+        let outcome = replacement.place(rect);
+        if outcome.is_err() {
             let detail = outcome
                 .err()
                 .map(|e| e.to_string())
@@ -1018,15 +1080,7 @@ mod controller {
             Err(error) => return Err(error),
         };
         lease.viewport = next_viewport;
-        match lease.send(Command::Place {
-            rect,
-            focus: false,
-            manager_pid: std::process::id(),
-            manager_window: manager,
-        })? {
-            Reply::Placed => Ok(()),
-            _ => Err(io::Error::other("Surface update failed")),
-        }
+        lease.place(rect)
     }
 
     #[cfg(all(test, windows))]
@@ -1162,6 +1216,79 @@ mod controller {
                 }
             };
             (fixture, target)
+        }
+        #[test]
+        #[ignore = "Requires the built debug manager and Windows .NET compiler; synthetic windows only"]
+        fn stalled_window_reports_the_native_stage_and_recovers_without_game_termination() {
+            crate::engine::dpi::configure().unwrap();
+            let class: [u16; 7] = [83, 84, 65, 84, 73, 67, 0];
+            let manager = unsafe {
+                CreateWindowExW(
+                    0,
+                    class.as_ptr(),
+                    class.as_ptr(),
+                    WS_OVERLAPPEDWINDOW,
+                    50,
+                    50,
+                    1200,
+                    900,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null(),
+                )
+            };
+            assert!(!manager.is_null());
+            let (mut fixture, target) = fixture();
+            let original = native::capture(target.clone()).unwrap();
+            let viewport = Viewport {
+                x: 20.0,
+                y: 60.0,
+                width: 700.0,
+                height: 450.0,
+                pixel_ratio: unsafe { windows_sys::Win32::UI::HiDpi::GetDpiForWindow(manager) }
+                    as f64
+                    / 96.0,
+            };
+            let mut lease = prepare(manager as usize as u64, viewport, target.clone()).unwrap();
+            let window = u64::from_str_radix(target.window_handle.trim_start_matches("0x"), 16)
+                .unwrap() as usize as HWND;
+            // Arm after shell/style setup so the next placement blocks at SetWindowPos.
+            lease
+                .send(Command::Place {
+                    rect: native::rectangle(manager as usize as u64, viewport).unwrap(),
+                    manager_pid: std::process::id(),
+                })
+                .unwrap();
+            unsafe {
+                assert_ne!(PostMessageW(window, 0x8001, 0, 0), 0);
+            }
+            std::thread::sleep(Duration::from_millis(100));
+            let started = Instant::now();
+            let error = lease
+                .send(Command::Place {
+                    rect: native::rectangle(manager as usize as u64, viewport).unwrap(),
+                    manager_pid: std::process::id(),
+                })
+                .err()
+                .expect("Synthetic placement did not stall");
+            assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+            let diagnostic = error.to_string();
+            // Recover even when the diagnostic assertion fails on the old implementation.
+            lease.stop().unwrap();
+            assert!(fixture.process.try_wait().unwrap().is_none());
+            let restored = native::capture(target).unwrap();
+            assert_eq!(restored.rect, original.rect);
+            assert_eq!(restored.style, original.style);
+            assert_eq!(restored.extended_style, original.extended_style);
+            unsafe {
+                DestroyWindow(manager);
+            }
+            assert!(started.elapsed() < Duration::from_secs(8));
+            assert!(
+                diagnostic.contains("place/position"),
+                "Missing blocking native stage: {diagnostic}"
+            );
         }
         #[test]
         #[ignore = "Requires the built debug manager and Windows .NET compiler; synthetic windows only"]

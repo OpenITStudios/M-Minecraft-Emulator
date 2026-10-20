@@ -1,6 +1,6 @@
 <script lang="ts">
   import {ownedProvider,type OwnedSnapshot,type OwnedOperation,type ClientId,type OwnedProcess} from "./app/bridge/ownedProviderApi.js";
-  import {ownedClientStatus} from "./app/presentation/unifiedManager.js";
+  import {ownedClientStatus,clientActionBlockedReason} from "./app/presentation/unifiedManager.js";
   import {operationIssue} from "./app/bridge/managerConfiguration.js";
   import {nativeFeasibility} from "./app/bridge/nativeFeasibilityApi.js";
   import {observeWorkspaceLaunch} from './app/presentation/launchWorkspace.js';
@@ -19,6 +19,7 @@
   let setupDialog:HTMLDialogElement;
   let setupClient:ClientId|null=null;
   async function openClient(client:ClientId){
+    if(operationBusy||externalBusy||actionBlockedReason(client))return;
     licensed=true;
     const slot=snapshot.clients.find(s=>s.clientId===client);
     if(slot && !slot.profileExists){
@@ -47,15 +48,23 @@
   $: snapshot=initialSnapshot;
   $: if(initialSnapshot)current=true;
   export async function closeClient(client:ClientId,target:OwnedProcess){await act(client,'Close',target);}
+  export function actionBlockedReason(client:ClientId){return clientActionBlockedReason(snapshot,client,current,!!pending[client],!!closing[client]);}
+  async function retryLaunch(client:ClientId){
+    if(operationBusy||externalBusy||clientActionBlockedReason(snapshot,client,current,false,!!closing[client]))return;
+    pending[client]=false;
+    await openClient(client);
+  }
   export async function activateClient(client:ClientId){
+    if(operationBusy||externalBusy||actionBlockedReason(client))return;
     const target=client==='01'?snapshot.nativeProcesses[0]:snapshot.clients.find(slot=>slot.clientId===client)?.processes[0];
     if(target)await play(client,target);else await openClient(client);
   }
   async function play(client:ClientId,target:OwnedProcess){
     if(!onPresent){await act(client,'Focus',target);return;}
     if(operationBusy||externalBusy)return;
+    if(actionBlockedReason(client))return;
     operationBusy=true;error='';details='';
-    try{await onPresent(client,target);}catch(e){const issue=operationIssue(e);error=issue.message+' '+issue.action;details=issue.details;}
+    try{await onPresent(client,target);}catch{/* The workspace owns display errors and recovery. */}
     finally{operationBusy=false;}
   }
   async function act(client:ClientId,operation:OwnedOperation,target:OwnedProcess|null=null){
@@ -83,6 +92,7 @@
       else if(operation==="Inspect")notice="Client status updated.";
       for(const slot of snapshot.clients){if(slot.processes.length>0)pending[slot.clientId]=false;else closing[slot.clientId]=false;}
       if(snapshot.nativeProcesses.length>0)pending["01"]=false;
+      else closing['01']=false;
     }catch(e){current=false;const issue=operationIssue(e);error=issue.message+" "+issue.action;details=issue.details;if(operation==="Launch")pending[client]=true;}
     finally{operationBusy=false;activeClient="";activeOperation="";}
   }
@@ -104,28 +114,28 @@
   $: native=snapshot.nativeProcesses[0]??null;
 </script>
 
-<div class="um-toolbar"><div><strong>Owned engine connected</strong><p>Statuses show process identity. Sign-in and gameplay are tested manually.</p></div><button class="cm-button cm-secondary" disabled={disabled} on:click={()=>act("02","Inspect")}>{operationBusy?"Working…":"Check all clients"}</button></div>
-<p class="um-license">Choosing Open confirms you will sign in with a separate licensed Education account for that client. Sign-in stays inside Minecraft.</p>
+<div class="um-toolbar"><div><strong>Client status</strong><p>A detected window still needs successful display and input.</p></div><button class="cm-button cm-secondary" disabled={disabled} on:click={()=>act("02","Inspect")}>{operationBusy?"Working…":"Check all clients"}</button></div>
+<p class="um-license">Use a separate licensed Education account for each client. Sign in inside Minecraft.</p>
 {#if error}<div class="um-alert" role="alert">{error}<details><summary>Diagnostics</summary><pre>{details}</pre></details></div>{/if}
 {#if notice}<p class="um-notice" role="status">{notice}</p>{/if}
 {#if !current}<p class="um-notice" role="status">Status needs a fresh check before another operation.</p>{/if}
 <section class="um-grid" aria-label="Minecraft clients">
   <article class="um-card" hidden={selectedClient==='01'}><div class="um-card-top"><span class="um-number">01</span><span class="um-eyebrow">NATIVE</span></div><h2>Minecraft 01</h2><span class="um-status" class:running={!!native?.responding}>{activeClient==='01'?'Starting':!current?'Needs attention':closing['01']&&native?'Closing':native?(native.responding?'Window detected':'Needs attention'):pending['01']?'Needs attention':'Ready'}</span><p>Windows Desktop installation</p>
-    <button class="cm-button um-primary" disabled={disabled||!current||(!native&&!!pending['01'])||(!!native&&(!native.responding||native.windowHandle==='0x0'))} on:click={()=>native?play('01',native):openClient('01')}>{native?(onPresent?'Play':'Focus'):'Open'}</button>
-    {#if pending['01'] && current && !native}<button class="cm-button cm-secondary" disabled={disabled} on:click={()=>openClient("01")}>Retry after empty native check</button>{/if}
+    <button class="cm-button um-primary" title={actionBlockedReason('01')??''} disabled={disabled||!!actionBlockedReason('01')} on:click={()=>native?play('01',native):openClient('01')}>{native?(onPresent?'Play':'Focus'):'Open'}</button>
+    {#if pending['01'] && current && !native}<button class="cm-button cm-secondary" disabled={disabled} on:click={()=>retryLaunch("01")}>Retry after empty native check</button>{/if}
     <details class="um-actions"><summary>Window actions</summary><div><button disabled={disabled||!current||!native||native.windowHandle==='0x0'} on:click={()=>act('01','PlaceLeft',native)}>Place left</button><button disabled={disabled||!current||!native||native.windowHandle==='0x0'} on:click={()=>act('01','PlaceRight',native)}>Place right</button><button disabled={disabled||!current||!native||native.windowHandle==='0x0'} on:click={()=>act('01','Close',native)}>Close normally</button></div></details>
   </article>
   {#each snapshot.clients as slot (slot.clientId)}
     {@const target=slot.processes[0]??null}
     <article class="um-card" hidden={selectedClient===slot.clientId}><div class="um-card-top"><span class="um-number">{slot.clientId}</span><span class="um-eyebrow">OWNED</span></div><h2>Minecraft {slot.clientId}</h2><span class="um-status" class:running={slot.status==='RUNNING'&&!!target?.responding}>{ownedClientStatus(slot,current,!!pending[slot.clientId],activeClient===slot.clientId?activeOperation as OwnedOperation:null,!!closing[slot.clientId])}</span><p>{slot.box} · Persistent profile</p>
       {#if !slot.profileExists}
-        <button class="cm-button um-primary" disabled={disabled||!current} on:click={()=>openClient(slot.clientId)}>Open</button>
+        <button class="cm-button um-primary" title={actionBlockedReason(slot.clientId)??''} disabled={disabled||!!actionBlockedReason(slot.clientId)} on:click={()=>openClient(slot.clientId)}>Open</button>
       {:else if target}
-        <button class="cm-button um-primary" disabled={disabled||!current||!target.responding||target.windowHandle==='0x0'} on:click={()=>play(slot.clientId,target)}>{onPresent?'Play':'Focus'}</button>
+        <button class="cm-button um-primary" title={actionBlockedReason(slot.clientId)??''} disabled={disabled||!!actionBlockedReason(slot.clientId)} on:click={()=>play(slot.clientId,target)}>{onPresent?'Play':'Focus'}</button>
       {:else}
-        <button class="cm-button um-primary" disabled={disabled||!current||!slot.settingsVerified||!slot.launchAllowed||slot.boxedProcessCount!==0||!!pending[slot.clientId]} on:click={()=>openClient(slot.clientId)}>Open</button>
+        <button class="cm-button um-primary" title={actionBlockedReason(slot.clientId)??''} disabled={disabled||!!actionBlockedReason(slot.clientId)} on:click={()=>openClient(slot.clientId)}>Open</button>
       {/if}
-      {#if pending[slot.clientId] && current && slot.boxedProcessCount===0}<button class="cm-button cm-secondary" disabled={disabled||!slot.launchAllowed} on:click={()=>openClient(slot.clientId)}>Retry after empty check · wait 30 seconds</button>{/if}
+      {#if pending[slot.clientId] && current && slot.boxedProcessCount===0}<button class="cm-button cm-secondary" disabled={disabled||!slot.launchAllowed} on:click={()=>retryLaunch(slot.clientId)}>Retry after empty check · wait 30 seconds</button>{/if}
       <details class="um-actions"><summary>Window actions</summary><div><button disabled={disabled||!current||!target||target.windowHandle==='0x0'} on:click={()=>act(slot.clientId,'PlaceLeft',target)}>Place left</button><button disabled={disabled||!current||!target||target.windowHandle==='0x0'} on:click={()=>act(slot.clientId,'PlaceRight',target)}>Place right</button><button disabled={disabled||!current||!target||target.windowHandle==='0x0'} on:click={()=>act(slot.clientId,'Close',target)}>Close normally</button></div></details>
     </article>
   {/each}

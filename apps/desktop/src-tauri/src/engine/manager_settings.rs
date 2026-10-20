@@ -86,6 +86,15 @@ mod tests {
             "payload hash mismatch in workspace/owned-tests/example",
         ));
         assert_eq!(engine.code, "ENGINE_UNAVAILABLE");
+        let timeout = OperationFailure::from(io::Error::other(
+            "Surface helper timed out after 3000 ms at place/position",
+        ));
+        assert_eq!(timeout.message, "Minecraft display stopped responding.");
+        assert!(timeout.action.contains("Retry display"));
+        let covered = OperationFailure::from(io::Error::other(
+            "Workspace game is covered; presentation was not confirmed",
+        ));
+        assert_eq!(covered.message, "Minecraft is hidden behind the manager.");
     }
     #[test]
     fn catalog_has_four_unique_owned_routes() {
@@ -170,6 +179,16 @@ impl From<std::io::Error> for OperationFailure {
                 "ENGINE_UNAVAILABLE",
                 "The engine could not be verified.",
                 "Check again. If this continues, open Settings Diagnostics for the reason.",
+            )
+        } else if details.to_ascii_lowercase().contains("surface helper")
+            && details.contains("timed out")
+        {
+            ("WORKSPACE_UNAVAILABLE", "Minecraft display stopped responding.", "Choose Retry display. If it still fails, use Restore window. Diagnostics includes the last helper stage.")
+        } else if details.contains("Workspace game is covered") {
+            (
+                "WORKSPACE_UNAVAILABLE",
+                "Minecraft is hidden behind the manager.",
+                "Choose Retry display to show it again, or Restore window to return it to Windows.",
             )
         } else if ["workspace", "surface", "game area", "window recovery"]
             .iter()

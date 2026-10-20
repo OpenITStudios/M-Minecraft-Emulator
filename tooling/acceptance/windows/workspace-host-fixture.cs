@@ -10,6 +10,21 @@ using System.Windows.Forms;
 
 internal static class WorkspaceHostFixture
 {
+    // Only this synthetic process accepts the private stall trigger.
+    sealed class SlowWindow : Form
+    {
+        bool stall;
+        protected override void WndProc(ref Message message)
+        {
+            if (message.Msg == 0x8001) stall = true;
+            if (message.Msg == 0x46 && stall)
+            {
+                stall = false;
+                System.Threading.Thread.Sleep(4000);
+            }
+            base.WndProc(ref message);
+        }
+    }
     const int Style = -16;
     const long Child = 0x40000000L, Popup = 0x80000000L;
     const uint FrameChanged = 0x20, NoActivate = 0x10, NoZOrder = 4;
@@ -75,7 +90,7 @@ internal static class WorkspaceHostFixture
         if (args.Length == 2 && args[0] == "protected-manager-crash") return ProtectedManagerCrash(args[1]);
         if (args.Length == 1 && args[0] == "--fixture-child")
         {
-            using (var child = new Form { Text = "Synthetic workspace client", Bounds = new Rectangle(80, 80, 480, 320) })
+            using (var child = new SlowWindow { Text = "Synthetic workspace client", Bounds = new Rectangle(80, 80, 480, 320) })
             using (var lifetime = new Timer { Interval = 20000 })
             // A destroyed native HWND can strand the Forms message loop and its timer.
             // This process-only safety exit is restricted to synthetic clients.

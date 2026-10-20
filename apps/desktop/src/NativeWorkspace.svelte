@@ -9,14 +9,18 @@
   export let busy=false;
   export let onClose:(client:ClientId,target:OwnedProcess)=>Promise<void>=async()=>{};
   export let onSelect:(client:ClientId)=>Promise<void>=async()=>{};
+  export let onRecovered:()=>void=()=>{};
+  export let selectionBlocked:(client:ClientId)=>string|null=()=>null;
   const clientIds:ClientId[]=['01','02','03','04'];
   function tabKey(event:KeyboardEvent){
-    const tabs=Array.from((event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('[role=tab]'));
+    const tabs=Array.from((event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('[role=tab]')).filter(tab=>!tab.disabled);
+    if(!tabs.length)return;
     const index=tabs.indexOf(document.activeElement as HTMLButtonElement);
-    const next=event.key==='ArrowRight'?(index+1)%4:event.key==='ArrowLeft'?(index+3)%4:event.key==='Home'?0:event.key==='End'?3:-1;
+    const next=event.key==='ArrowRight'?(index+1)%tabs.length:event.key==='ArrowLeft'?(index+tabs.length-1)%tabs.length:event.key==='Home'?0:event.key==='End'?tabs.length-1:-1;
     if(next>=0){event.preventDefault();tabs[next]?.focus();}
   }
   let viewport:HTMLDivElement,target:OwnedProcess|null=null;
+  let failedPresentation:{client:ClientId;target:OwnedProcess}|null=null;
   let issue:ReturnType<typeof operationIssue>|null=null;
   let updating=false,updatePending=false;
   let updateFailed=false,suspended=false;
@@ -24,7 +28,7 @@
   $: disabled=busy||working;
   $: if(!busy&&!working&&!suspended&&updatePending&&activeClient&&!updating)void update();
   export async function restore(){
-    await workspaceSurface.release();activeClient=null;target=null;updateFailed=false;issue=null;suspended=false;
+    await workspaceSurface.release();activeClient=null;target=null;failedPresentation=null;updateFailed=false;issue=null;suspended=false;
   }
   export async function suspend(){
     const previous=suspended;suspended=true;updatePending=false;
@@ -45,20 +49,27 @@
     try{
       await tick();
       await workspaceSurface.present(sessionDirectory,client,process,viewport.getBoundingClientRect());
-      activeClient=client;target=process;updateFailed=false;suspended=false;
-    }catch(error){issue=operationIssue(error);throw error;}
+      activeClient=client;target=process;failedPresentation=null;updateFailed=false;suspended=false;
+      issue=null;onRecovered();
+    }catch(error){failedPresentation={client,target:process};issue=operationIssue(error);throw error;}
   }
   async function update(){
     if(updateFailed||suspended)return;
     updatePending=true;if(updating||busy||working||!activeClient)return;
     updating=true;
     try{while(updatePending&&activeClient){updatePending=false;await workspaceSurface.update(viewport.getBoundingClientRect());}}
-    catch(error){issue=operationIssue(error);updateFailed=true;updatePending=false;}
+    catch(error){issue??=operationIssue(error);updateFailed=true;updatePending=false;}
     finally{updating=false;}
   }
   async function returnToWindows(){
     if(disabled)return;working=true;issue=null;
     try{await restore();}catch(error){issue=operationIssue(error);}finally{working=false;}
+  }
+  async function retryDisplay(){
+    const retry=failedPresentation??(activeClient&&target?{client:activeClient,target}:null);
+    if(disabled||!retry)return;
+    working=true;
+    try{await present(retry.client,retry.target);}catch{/* present retains the recovery error. */}finally{working=false;}
   }
   async function closeClient(){
     if(disabled||!activeClient||!target)return;
@@ -67,7 +78,7 @@
   }
   onMount(()=>{
     let disposed=false,unlisten:(()=>void)|undefined;
-    void listen<string>('workspace-surface-error',event=>{issue=operationIssue(event.payload);updateFailed=true;updatePending=false;}).then(stop=>{if(disposed)stop();else unlisten=stop;}).catch(error=>{if(!disposed)issue=operationIssue(`Workspace recovery notifications unavailable: ${String(error)}`);});
+    void listen<string>('workspace-surface-error',event=>{issue??=operationIssue(event.payload);updateFailed=true;updatePending=false;}).then(stop=>{if(disposed)stop();else unlisten=stop;}).catch(error=>{if(!disposed)issue=operationIssue(`Workspace recovery notifications unavailable: ${String(error)}`);});
     const observer=new ResizeObserver(()=>{void update();});observer.observe(viewport,{box:'device-pixel-content-box'});
     return ()=>{disposed=true;unlisten?.();observer.disconnect();void workspaceSurface.release().catch(()=>{});};
   });
@@ -77,9 +88,9 @@
     {#if activeClient||issue}<div class="nw-actions"><button class="cm-button cm-secondary" {disabled} on:click={returnToWindows}>Restore window</button>{#if activeClient}<button class="cm-button cm-secondary" {disabled} on:click={closeClient}>Close normally</button>{/if}</div>{/if}
   </header>
   <div class="nw-tabs" role="tablist" tabindex="-1" aria-label="Minecraft sessions" on:keydown={tabKey}>
-    {#each clientIds as client}<button role="tab" aria-selected={activeClient===client} aria-controls="minecraft-play-area" {disabled} on:click={()=>onSelect(client)}>Minecraft {client}</button>{/each}
+    {#each clientIds as client}<button role="tab" aria-selected={activeClient===client} aria-controls="minecraft-play-area" title={selectionBlocked(client)??''} disabled={disabled||!!selectionBlocked(client)} on:click={()=>onSelect(client)}>Minecraft {client}</button>{/each}
   </div>
-  {#if issue}<div class="um-alert" role="alert"><strong>{issue.message}</strong><p>{issue.action}</p><details><summary>Diagnostics</summary><pre>{issue.details}</pre></details></div>{/if}
+  {#if issue}<div class="um-alert" role="alert"><strong>{issue.message}</strong><p>{issue.action}</p>{#if failedPresentation||(activeClient&&target)}<button class="cm-button" {disabled} on:click={retryDisplay}>Retry display</button>{/if}<details><summary>Diagnostics</summary><pre>{issue.details}</pre></details></div>{/if}
   <div class="nw-viewport"><div class="nw-native-slot" bind:this={viewport}>
     {#if !activeClient}<div><span class="nw-mark">M</span><h3>Choose a client to play</h3><p>Open a session or select Play. Sign in inside Minecraft.</p></div>{/if}
   </div></div>

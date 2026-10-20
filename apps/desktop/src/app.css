@@ -115,16 +115,59 @@ button:disabled { opacity: .52; cursor: not-allowed; }
 .um-profile-dialog{max-width:520px;background:#1b222d;color:#dce6f5;border:1px solid #465366;border-radius:14px;padding:28px;box-shadow:0 24px 80px #0008}.um-profile-dialog::backdrop{background:#090d13c9}.um-profile-dialog h2{font-size:21px;margin:0 0 16px}.um-profile-dialog p{font-size:13px;color:#b6c4d8;line-height:1.7}.um-profile-dialog>div{display:flex;justify-content:flex-end;gap:12px;margin-top:24px}
 .um-settings pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:200px;overflow:auto;font-size:11px;color:#b6c4d8}.um-settings summary{cursor:pointer;padding:6px 0;font-weight:600}
 .um-app .cm-button:hover:not(:disabled){background:#b9efc4;color:#102218}.um-app .cm-button.cm-secondary:hover:not(:disabled){background:#303c4d;color:#eef5ff}
-.um-main:has(.nw-layout){height:100dvh;display:flex;flex-direction:column;overflow:auto}.um-main:has(.nw-layout)>.um-header,.um-main:has(.nw-layout)>.um-alert{flex-shrink:0}.um-main:has(.nw-layout)>.um-alert{max-height:30dvh;overflow:auto}.um-main:has(.nw-layout)>.um-client-view{flex:1;min-height:0}.um-main:has(.nw-layout) .nw-layout{height:100%;min-height:0}.nw-stage>.nw-viewport{min-height:0}@media(max-width:1250px){.um-main:has(.nw-layout) .nw-layout{grid-template-rows:minmax(0,1fr) 92px}}
-.nw-tabs{display:flex;gap:4px;padding:0 12px 8px;flex-wrap:wrap}.nw-tabs button{border:1px solid #303947;background:#202833;color:#c0ccdc;border-radius:7px;padding:8px 12px;font-size:12px;cursor:pointer}.nw-tabs button[aria-selected=true]{background:#a4deb1;color:#101a14;border-color:#a4deb1}.nw-tabs button:focus-visible{outline:2px solid #e1f8e7;outline-offset:2px}.nw-tabs button:disabled{opacity:.55;cursor:wait}
-.um-main:has(.nw-layout)>.um-header{height:40px;margin-bottom:16px;align-items:center}
-.um-main:has(.nw-layout)>.um-header h1{font-size:22px;margin:0}
-.um-main:has(.nw-layout)>.um-header p{display:none}
-.nw-viewport{container-type:size}
-.nw-viewport>.nw-native-slot{padding:0;width:min(100cqw,177.7778cqh);height:min(56.25cqw,100cqh);display:grid;place-items:center}
-.nw-native-slot>div{padding:24px}
-.um-main .nw-layout{height:calc(100dvh - 140px)}
-@media(max-width:1250px){.um-main .nw-layout{grid-template-rows:minmax(240px,1fr) 92px}.nw-sessions .um-card{min-width:128px;padding:8px;gap:4px}.nw-sessions .um-card h2{font-size:12px;line-height:18px}.nw-sessions .um-status{font-size:9px;line-height:14px;padding:2px 4px}.nw-sessions .cm-button{min-height:28px;font-size:11px;padding:4px 8px}.nw-sessions>.um-toolbar{min-width:110px;max-width:110px;padding:8px;gap:4px}}
-@media(max-width:1000px){.um-main .nw-layout{height:calc(100dvh - 112px)}}
-.um-main:has(.nw-layout){max-width:none;margin:0}.nw-layout{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:18px;height:calc(100dvh - 210px);min-height:380px}.nw-stage{display:flex;flex-direction:column;min-width:0;min-height:0;background:#151b22;border:1px solid #303947;border-radius:14px;overflow:hidden}.nw-stage>header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 18px}.nw-stage h2{font-size:17px;margin:0}.nw-stage .um-eyebrow{margin-bottom:3px}.nw-actions{display:flex;gap:8px}.nw-actions .cm-button{padding:7px 10px;font-size:11px}.nw-viewport{min-height:140px;flex:1;display:grid;place-items:center;text-align:center;background:#0c1015;border-top:1px solid #27303c;border-bottom:1px solid #27303c;overflow:hidden}.nw-viewport>div{padding:24px;color:#9eabc0}.nw-viewport h3{color:#e1e9f4;font-size:19px}.nw-viewport p{font-size:12px}.nw-mark{display:inline-grid;place-items:center;background:#283c30;color:#b4e8bf;border-radius:14px;width:60px;height:60px;font-size:28px;font-weight:700}.nw-footnote{font-size:11px;color:#93a3b6;padding:8px 18px;margin:0}.nw-sessions{min-width:0;min-height:0;overflow:auto}.nw-sessions .um-toolbar{padding:10px;display:grid;gap:8px;font-size:12px}.nw-sessions .um-toolbar p{display:none}.nw-sessions .um-license{font-size:10px;margin:10px 0}.nw-sessions .um-grid{grid-template-columns:1fr;gap:10px}.nw-sessions .um-card{padding:12px;gap:6px;border-radius:10px}.nw-sessions .um-card h2{font-size:14px}.nw-sessions .um-card>p{display:none}.nw-sessions .um-number{font-size:12px;padding:3px 7px}.nw-sessions .um-actions{display:none}.nw-sessions .um-notice{font-size:10px}.um-card[hidden]{display:none}.nw-stage>.um-alert{margin:0 12px 10px;padding:10px;font-size:12px}
-@media(max-width:1250px){.nw-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(240px,1fr) 122px;height:calc(100dvh - 230px);gap:12px}.nw-sessions{display:flex;gap:10px;overflow:auto}.nw-sessions>.um-toolbar{min-width:120px;max-width:120px}.nw-sessions>.um-grid{display:flex;gap:10px;flex:1}.nw-sessions .um-card{min-width:155px;flex:1}.nw-sessions>.um-license,.nw-sessions>.um-notice{display:none}.nw-sessions .um-card-top{display:none}.nw-footnote{display:none}.nw-stage>header{padding:10px 14px}.nw-stage h2{font-size:14px}}
+/* One viewport layout; recovery controls keep their space at every supported size. */
+.um-app:has(.nw-layout) { grid-template-columns: 184px minmax(0, 1fr); }
+.um-main:has(.nw-layout) { height: 100dvh; max-width: none; margin: 0; padding: 24px; display: flex; flex-direction: column; overflow: auto; }
+.um-main:has(.nw-layout) > .um-header { flex-shrink: 0; min-height: 40px; margin-bottom: 16px; align-items: center; }
+.um-main:has(.nw-layout) > .um-header h1 { font-size: 24px; margin: 0; }
+.um-main:has(.nw-layout) > .um-header p { display: none; }
+.um-main:has(.nw-layout) > .um-alert { flex-shrink: 0; max-height: 25dvh; overflow: auto; }
+.um-main:has(.nw-layout) > .um-client-view { flex: 1; min-height: 0; }
+.nw-layout { height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 264px; gap: 16px; }
+.nw-stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: #151b22; border: 1px solid #303947; border-radius: 12px; overflow: hidden; }
+.nw-stage > header { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; }
+.nw-stage h2 { font-size: 18px; margin: 0; }
+.nw-stage .um-eyebrow { margin-bottom: 2px; }
+.nw-actions { display: flex; gap: 8px; }
+.nw-actions .cm-button { padding: 8px 10px; font-size: 12px; }
+.nw-tabs { display: flex; flex-shrink: 0; gap: 6px; padding: 0 16px 12px; flex-wrap: wrap; }
+.nw-tabs button { border: 1px solid #394554; background: #202833; color: #d1dbe8; border-radius: 7px; padding: 8px 12px; font-size: 13px; cursor: pointer; }
+.nw-tabs button[aria-selected=true] { background: #a4deb1; color: #101a14; border-color: #a4deb1; }
+.nw-tabs button:focus-visible { outline: 2px solid #e1f8e7; outline-offset: 2px; }
+.nw-tabs button:disabled { opacity: .55; cursor: not-allowed; }
+.nw-stage > .um-alert { flex-shrink: 0; max-height: 35%; overflow: auto; margin: 0 16px 12px; padding: 12px; font-size: 13px; }
+.nw-viewport { container-type: size; min-height: 0; flex: 1; display: grid; place-items: center; text-align: center; background: #0c1015; border-block: 1px solid #27303c; overflow: hidden; }
+.nw-viewport > .nw-native-slot { padding: 0; width: min(100cqw, 177.7778cqh); height: min(56.25cqw, 100cqh); display: grid; place-items: center; color: #aebbd0; }
+.nw-native-slot > div { padding: 20px; }
+.nw-viewport h3 { color: #e1e9f4; font-size: 20px; }
+.nw-viewport p { font-size: 14px; }
+.nw-mark { display: inline-grid; place-items: center; background: #283c30; color: #b4e8bf; border-radius: 14px; width: 60px; height: 60px; font-size: 28px; font-weight: 700; }
+.nw-footnote { flex-shrink: 0; font-size: 12px; color: #a4b2c5; padding: 8px 16px; margin: 0; }
+.nw-sessions { min-width: 0; min-height: 0; overflow: auto; }
+.nw-sessions .um-toolbar { padding: 14px; display: grid; gap: 10px; font-size: 14px; }
+.nw-sessions .um-toolbar p { display: none; }
+.nw-sessions .um-license { font-size: 12px; margin: 12px 0; }
+.nw-sessions .um-grid { grid-template-columns: 1fr; gap: 12px; }
+.nw-sessions .um-card { padding: 14px; gap: 8px; border-radius: 10px; }
+.nw-sessions .um-card h2 { font-size: 16px; }
+.nw-sessions .um-card > p { display: none; }
+.nw-sessions .um-number { font-size: 13px; padding: 3px 7px; }
+.nw-sessions .um-status { font-size: 12px; }
+.nw-sessions .um-actions { display: none; }
+.nw-sessions .um-notice { font-size: 12px; }
+.um-card[hidden] { display: none; }
+@media (max-width: 1250px) {
+  .um-app:has(.nw-layout) { grid-template-columns: 160px minmax(0, 1fr); }
+  .um-main:has(.nw-layout) { padding: 16px; }
+  .nw-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 112px; gap: 12px; }
+  .nw-sessions { display: flex; gap: 10px; overflow: auto; }
+  .nw-sessions > .um-toolbar { min-width: 152px; max-width: 152px; padding: 10px; align-content: center; }
+  .nw-sessions > .um-grid { display: flex; gap: 10px; flex: 1; }
+  .nw-sessions .um-card { min-width: 155px; flex: 1; padding: 10px; gap: 5px; }
+  .nw-sessions .um-card h2 { font-size: 14px; }
+  .nw-sessions .um-card-top, .nw-sessions > .um-license, .nw-sessions > .um-notice { display: none; }
+  .nw-sessions > .um-alert { min-width: 240px; overflow: auto; margin: 0; }
+  .nw-footnote { display: none; }
+  .nw-stage > header { padding: 10px 14px; }
+  .nw-stage h2 { font-size: 16px; }
+}

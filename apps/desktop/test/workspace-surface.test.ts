@@ -1,5 +1,17 @@
 import {expect,it} from 'vitest';
 import {workspaceViewport} from '../src/app/bridge/workspaceSurface.js';
+import {readFileSync} from 'node:fs';
+it('keeps focus authority in the foreground manager and geometry in the recovery helper',()=>{
+  const source=readFileSync(new URL('../src-tauri/src/engine/workspace_surface.rs',import.meta.url),'utf8');
+  const helperPlacement=source.slice(source.indexOf('pub(super) fn place('),source.indexOf('pub(super) fn confirm_foreground('));
+  expect(helperPlacement).toContain('SWP_NOZORDER');
+  expect(helperPlacement).not.toContain('SetForegroundWindow');
+  const foreground=source.slice(source.indexOf('pub(super) fn confirm_foreground('),source.indexOf('pub(super) fn hide('));
+  expect(foreground).toContain('foreground != manager && foreground != window');
+  expect(foreground).toContain('foreground == manager && SetForegroundWindow(window)');
+  expect(source).toContain('native::confirm_foreground(');
+  expect(source).not.toMatch(/AttachThreadInput|AllowSetForegroundWindow|SPI_SETFOREGROUNDLOCKTIMEOUT/);
+});
 it('keeps fractional CSS coordinates and explicit display scale for native conversion',()=>{
   expect(workspaceViewport({x:40.25,y:80.5,width:960.5,height:540.25},1.5)).toEqual({x:40.25,y:80.5,width:960.5,height:540.25,pixelRatio:1.5});
 });
