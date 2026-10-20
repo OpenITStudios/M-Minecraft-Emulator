@@ -457,3 +457,28 @@ mod automatic_setup_tests {
         assert!(second["engineError"].is_null());
     }
 }
+#[cfg(test)]
+mod launch_regression_tests {
+    use super::*;
+    #[test]
+    #[ignore = "explicit operator-authorized live launch; may leave the attributed game running"]
+    fn actual_manager_launch_observes_owned_minecraft() {
+        let session = std::env::var("MIVUBI_TEST_OWNED_SESSION").unwrap();
+        let request = OwnedRequest {
+            session_directory: session,
+            client_id: "02".into(),
+            operation: OwnedOperation::Launch,
+            licensed: true,
+            compatibility_confirmed: false,
+            target: None,
+        };
+        let result = (OwnedTestBackend { request: &request }).execute().unwrap();
+        assert_eq!(
+            result.clients[0].processes.len(),
+            1,
+            "launcher exit {:?}, status {}",
+            result.launcher_exit_code,
+            result.clients[0].status
+        );
+    }
+}

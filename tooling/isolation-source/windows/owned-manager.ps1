@@ -203,7 +203,10 @@ try {
             Demand (-not ($running -and $running.StartTime.ToUniversalTime().ToFileTimeUtc().ToString() -ceq $prior.createdFileTime)) 'Previous private launcher is still running; inspect it before retrying.'
         }
         $receipt.runtime|Add-Member -Force -NotePropertyName $launchKey -NotePropertyValue ([DateTime]::UtcNow.ToString('o'));SaveReceipt
-        $child=Start-Process -FilePath (Join-Path $payload 'Start.exe') -ArgumentList ('/mivubi_client:'+$request.clientId+' "'+$gamePath+'"') -WorkingDirectory $payload -PassThru
+        $start=[Diagnostics.ProcessStartInfo]::new()
+        $start.FileName=Join-Path $payload 'Start.exe';$start.Arguments='/mivubi_client:'+$request.clientId+' "'+$gamePath+'"'
+        $start.WorkingDirectory=$payload;$start.UseShellExecute=$false
+        $child=[Diagnostics.Process]::Start($start)
         $handle=$child.Handle
         try {
             $receipt.runtime|Add-Member -Force -NotePropertyName $launcherKey -NotePropertyValue (@{pid=$child.Id;createdFileTime=$child.StartTime.ToUniversalTime().ToFileTimeUtc().ToString()});SaveReceipt
@@ -211,7 +214,7 @@ try {
         if ($child.WaitForExit(1200)) {$exitCode=$child.ExitCode}
         # Observe only: never issue a second launch to compensate for missing evidence.
         $deadline=[DateTime]::UtcNow.AddSeconds(12)
-        do {$after=Snapshot 'Launch' $exitCode;$found=@($after.clients|Where-Object clientId -ceq $request.clientId)[0];if($found.processes.Count -gt 0){break};Start-Sleep -Milliseconds 350} while([DateTime]::UtcNow -lt $deadline)
+        do {$after=Snapshot 'Launch' $exitCode;$found=@($after.clients|Where-Object clientId -ceq $request.clientId)[0];if($found.status -ceq 'RUNNING'){break};Start-Sleep -Milliseconds 350} while([DateTime]::UtcNow -lt $deadline)
         if($child.HasExited){$exitCode=$child.ExitCode;$after.launcherExitCode=$exitCode}
         $receipt.runtime|Add-Member -Force -NotePropertyName ('managerLaunchEvidence'+$request.clientId) -NotePropertyValue (@{at=[DateTimeOffset]::UtcNow.ToString('o');launcherExitCode=$exitCode;launcherAlive=(-not $child.HasExited);boxedProcessCount=$found.boxedProcessCount;attributedGameCount=$found.processes.Count;status=$found.status});SaveReceipt
         $result=$after

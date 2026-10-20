@@ -38,3 +38,9 @@ test('shared Education resolver rejects another launcher target without launchin
   const r=ps(`$ErrorActionPreference='Stop';. '${file}';try{Assert-ManagerRegisteredAppId '{6D809377-6AF0-444B-8957-A3773F02200E}\\Minecraft.Windows.exe' 'C:\\wrong\\Minecraft.Windows.exe';throw 'foreign launcher accepted'}catch{if($_.Exception.ToString() -notmatch 'different Minecraft installation'){throw}};exit 0`);
   assert.equal(r.status,0,r.stdout+r.stderr);
 });
+test('launch observation waits for an attributed window instead of a PID alone',{skip:process.platform!=='win32'},()=>{
+  const loop=source.match(/do \{\$after=Snapshot 'Launch'[^\n]+while\(\[DateTime\]::UtcNow -lt \$deadline\)/)?.[0];
+  assert.ok(loop,'production launch observation loop');
+  const r=ps(`$ErrorActionPreference='Stop';$script:count=0;$request=@{clientId='02'};$exitCode=0;$deadline=[DateTime]::UtcNow.AddSeconds(3);function Snapshot($operation,$exitCode){$script:count++;return @{clients=@(@{clientId='02';status=$(if($script:count -eq 1){'STARTING_OR_CLOSING'}else{'RUNNING'});processes=@(@{pid=1})})}};${loop};if($count -ne 2 -or $found.status -ne 'RUNNING'){throw 'Stopped observation before window readiness'};exit 0`);
+  assert.equal(r.status,0,r.stdout+r.stderr);
+});
