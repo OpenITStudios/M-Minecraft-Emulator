@@ -1,6 +1,6 @@
 /**
  * Read-only proof that Local owns the exact full Sandboxie v1.18.6 source
- * plus eleven native MIVUBI changes and two exact build-path fixes.
+ * plus eleven native MIVUBI changes and four exact build-path fixes.
  */
 import {spawnSync} from 'node:child_process';
 import {resolve, dirname} from 'node:path';
@@ -17,20 +17,28 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 export const BUILD_FILES = Object.freeze([
   'Sandboxie/core/low/LowLevel.vcxproj',
   'Sandboxie/msgs/Parse.vcxproj',
+  'Sandboxie/core/dll/SboxDll.vcxproj',
+  'Sandboxie/core/drv/SboxDrv.vcxproj',
 ]);
 
 /** Only quote compiler paths; no compiler flags, source or driver policy changes. */
 export function applyOwnedBuildPathFix(path, original) {
   let text = original.replace(/\r\n/g, '\n');
-  const changes = path === BUILD_FILES[0] ? [
+  const counts = new Map([[BUILD_FILES[0], [1, 3]],
+    [BUILD_FILES[2], [2, 12]], [BUILD_FILES[3], [4, 8]]]);
+  const changes = counts.has(path) ? [
     [String.raw`-Fo$(Configuration)\%(Filename).obj %(FullPath)`,
-      String.raw`-Fo"$(Configuration)\%(Filename).obj" "%(FullPath)"`, 1],
+      String.raw`-Fo"$(Configuration)\%(Filename).obj" "%(FullPath)"`, counts.get(path)[0]],
     [String.raw`-Fo$(Platform)\$(Configuration)\%(Filename).obj %(FullPath)`,
-      String.raw`-Fo"$(Platform)\$(Configuration)\%(Filename).obj" "%(FullPath)"`, 3],
+      String.raw`-Fo"$(Platform)\$(Configuration)\%(Filename).obj" "%(FullPath)"`, counts.get(path)[1]],
   ] : path === BUILD_FILES[1] ? [[
     String.raw`mc /h $(MSBuildProjectDirectory)\$(Configuration) /r $(MSBuildProjectDirectory)\$(Configuration) -u $(MSBuildProjectDirectory)\msgs.mc`,
     String.raw`mc /h "$(MSBuildProjectDirectory)\$(Configuration)" /r "$(MSBuildProjectDirectory)\$(Configuration)" -u "$(MSBuildProjectDirectory)\msgs.mc"`, 1,
   ]] : [];
+  if (path === BUILD_FILES[2]) changes.push([
+    String.raw`lib /def:%(FullPath) /out:$(SolutionDir)Bin\$(PlatformName)\$(Configuration)\NtCRT.lib`,
+    String.raw`lib /def:"%(FullPath)" /out:"$(SolutionDir)Bin\$(PlatformName)\$(Configuration)\NtCRT.lib"`, 8,
+  ]);
   requireFact(changes.length > 0, 'unknown build patch path');
   for (const [before, after, count] of changes) {
     requireFact(text.split(before).length - 1 === count, 'build patch anchor drift: ' + path);
