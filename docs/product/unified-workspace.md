@@ -31,10 +31,12 @@ in Task Manager are expected and must not be hidden. Multiple application button
 and independent game-window navigation are not the intended accepted UX.
 
 The existing provider/catalog remains the launch, profile and ownership authority.
-The desktop presentation module must eventually retain verified presentation
-leases for all managed tabs, with one active viewport. Its current single lease
-restores the previous window on switching and therefore does **not** implement
-this requirement. Do not rename the current session rail to imply working tabs.
+The desktop presentation module now retains up to four verified presentation
+leases, with one active viewport. Background sessions are hidden and retain their
+original recovery checkpoints; Settings suspends rather than detaches them.
+Startup adopts uniquely attributed responsive sessions without launching duplicates.
+These are developer mechanics; the operator's blank/unresponsive-game report
+still prevents product acceptance. Tabs alone do not prove usable gameplay.
 
 Required implementation checks before enabling a single-shell mode:
 
@@ -53,7 +55,11 @@ Required implementation checks before enabling a single-shell mode:
 
 Windows offers [taskbar item removal](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-itaskbarlist-deletetab)
 and [shell eligibility styles](https://learn.microsoft.com/en-us/windows/win32/winmsg/extended-window-styles).
-These are candidate primitives, not implemented/accepted product behavior.
+The developer implementation hides a window before clearing `WS_EX_APPWINDOW`
+and adding `WS_EX_TOOLWINDOW`, then shows the selected session. Original shell
+eligibility is restored on detach/recovery. This follows the documented
+[dynamic taskbar style procedure](https://learn.microsoft.com/en-us/windows/win32/shell/taskbar).
+Visual taskbar count, Explorer restart and game-dialog behavior are not accepted yet.
 No Task Manager process concealment, game injection or new isolation provider is
 authorized or required by this UX. Windows Sandbox remains outside the design.
 
@@ -149,7 +155,7 @@ same-executable recovery helper prepares its original style/rectangle checkpoint
 The independent game is positioned over a 16:9 native play area, with direct
 Windows input. Manager connection loss restores through the helper; helper loss
 restores through the manager's reader worker. No new lifecycle owner, credentials
-store, engine selector or persistent readiness flag is added. Settings restores
+store, engine selector or persistent readiness flag is added. Settings suspends
 the game before displaying its page; manager close offers to restore and leave
 the game running. The side rail currently contains session controls, not live
 previews. Combined manager/helper failure has no persistent recovery checkpoint.

@@ -347,6 +347,18 @@ Use `collect-acceptance.ps1` before and after meaningful runtime transitions. Th
 
 ## Performance evidence
 
+Developer workspace probes live in `../probe-live-workspace.mjs`. Supply
+`MIVUBI_PLAYWRIGHT_MODULE` if Playwright is not resolvable, and use a separately
+started debug manager with a loopback-only CDP endpoint on port 9223. Never enable
+that endpoint in saved settings or release configuration. `--live` may launch
+one native game and exercises Settings suspend/resume. `--live --four` requires
+four already running, uniquely attributed responsive game windows and performs
+12 tab selections without launching, signing in, sending game input or opening
+worlds. It verifies identity/responsiveness, not rendered gameplay or taskbar
+appearance. Close the debug manager normally after restoring windows, then run
+normally to remove the endpoint. Canonical results belong in
+`docs/validation/native-pilot-localtest.md`.
+
 Use `performance-contract.json` during target-machine performance acceptance. Record measurements as observations, not conclusions.
 
 The purpose is to calibrate the single automatic performance policy with real Native + Virtual-01/02/03 evidence. Do not change configured RAM, vCPU, GPU policy or startup thresholds from an incomplete run. Missing measurements remain unknown; they are never treated as zero or PASS.

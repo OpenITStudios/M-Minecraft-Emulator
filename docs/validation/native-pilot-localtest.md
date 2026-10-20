@@ -9,6 +9,58 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Four retained tabs and shell eligibility — 20 October 2026, 21:08–21:16 WIB
+
+Implementation revision: `aada461865317ec8059b3becf4c46b9fcb9357b5`, based on
+`1d21cb7b89238e3ac7405d2194ff4a54215e6e89`. This section supersedes the historical
+single-lease descriptions below. The collector's delivery follow-up waits for
+startup adoption to finish; no product behavior changes after this implementation.
+The operator's blank/unresponsive screenshots remain **FAIL** for usable gameplay;
+the narrower machine observations below do not overturn them.
+
+The existing desktop presentation owner retains four original checkpoints,
+hides background tabs, suspends Settings, restores only the chosen tab for normal
+close, and restores all windows on detach/manager exit. Hidden window enumeration
+does not interpret `.MainWindowHandle == 0` as game exit. PID, creation FILETIME,
+Windows session, HWND and provider/profile checks remain. Shell adoption hides
+before changing APPWINDOW/TOOLWINDOW bits; recovery restores the original bits
+without overwriting live modal flags. A manager-only foreground event hook queues
+coalesced updates, without polling external applications. Foreground placement
+also rejects a covered viewport center instead of accepting geometry alone.
+
+| Check | Result | Actual boundary |
+| --- | --- | --- |
+| Full `npm run verify:source` | PASS | 707 passed: Node 280, frontend 175, desktop Rust 75, runtime Rust 177; 4 existing symlink skips, 7 opt-in desktop tests ignored. Typecheck, frontend build, checks and formatting pass. |
+| Intervening full source attempt | FAIL | Windows EPERM renaming a temporary payload in the existing owned assembler fixture; complete rerun PASS without changing that owner. Transient cause UNKNOWN. |
+| Windows debug executable build | PASS | Actual MSVC build, including final foreground occlusion check; existing dead-code warnings retained. No installer/signing change. |
+| Actual recovery helper with synthetic windows | PASS | Six normal/maximized release/pipe-loss/helper-crash cases, two retained tabs, shell restoration, minimize, Settings, modal flags, stale identity and closed-client replacement. Synthetic windows are not Minecraft. |
+| Mocked mounted UI | PASS | Selection, Settings suspend/resume, error recovery and 1366×900 / 1180×760 / 920×620 geometry. |
+| Actual native Education baseline and Settings | PASS | 20-second idle identity/response baseline, manager adoption, three suspend/resume cycles and 10-second response check. No sign-in/world/input automation. |
+| Actual four-slot manager selection | PASS | Two 12-switch campaigns retained four PID/birth/session/HWND identities and bounded WM_NULL responsiveness. Final campaign includes final occlusion-check build. First measured campaign median 3982 ms, maximum 4091 ms per switch; this remains a UX limitation. |
+| Actual shell-style readback | PASS | Four game root windows: TOOLWINDOW=4, APPWINDOW=0, visible=1 after final four-tab campaign. These flags are not visual taskbar acceptance. |
+| First final collector startup | FAIL | Inspector collided with startup adoption's existing operation lock. Collector now waits for enabled tabs; repeated final campaign PASS. No retry/lock bypass added to product. |
+| Automated foreground transition | NOT_EXECUTED | Windows denied SetForegroundWindow; no focus-lock bypass or simulated Alt-Tab. The foreground watcher is not proof actual Alt-Tab is fixed. |
+| Visual one-taskbar button, Explorer restart, game dialogs | NOT_EXECUTED | Shell readback alone cannot prove these behaviors. A brief pre-adoption launch icon is not eliminated/proven absent. |
+| Rendered game, mouse/keyboard, four licensed worlds, multiplayer, 60-minute soak, displayed FPS | NOT_EXECUTED | No credentials, game input, private worlds or account state were automated. Previous acceptance FAIL remains unresolved. |
+
+At resumption all four game processes were absent while the old manager retained
+a selected tab and helper-ended error. Cause of those exits is **UNKNOWN**.
+No event evidence links them to a particular owner; do not claim the recorded
+Education hang fixed. Tests above subsequently launched through the real manager
+without forced game termination, token copying or profile/data deletion.
+
+Before rebuilding, all four game windows were restored and the manager closed
+normally. Developer CDP was loopback-only and process-scoped, never saved in
+settings or release config; the manager is restarted normally after collection.
+The existing test-signed fork still borrows SbieDrv/SbieSvc registrations;
+standalone namespaces/installer and simultaneous manager/helper recovery remain
+unproven. Main, CI, driver registrations and security settings were not changed.
+
+Next: reproduce and verify visible interactive presentation and real focus
+transitions against this build before declaring one-shell acceptance or advancing
+to multiplayer/soak. Avoid incremental manual tests after each code edit; reserve
+manual licensed login/gameplay for a consolidated acceptance campaign.
+
 ## Browser-like shell target and live window flags — 20 October 2026
 
 Baseline `5ce53a254bd598a76995510f979ecae7c58049a2`. The operator clarifies

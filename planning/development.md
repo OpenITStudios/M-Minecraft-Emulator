@@ -2,7 +2,7 @@
 
 ## Owned manager / independence — 20 October 2026
 
-**ACTIVE:** browser-like one-taskbar/four-tab shell required; current single presentation lease does not meet it. Modal live-style overwrite reproduced/fixed; synthetic PASS. Education hang (Event 1002) cause UNKNOWN; gameplay FAIL, no multi-client escalation. Next: native baseline vs controlled composition diagnosis. [Evidence](../docs/validation/native-pilot-localtest.md).
+**ACTIVE** (`aada461`): four retained tab leases, shell flags and foreground recovery built. Source 707 PASS; synthetic recovery PASS; four-window identity/switch checks PASS. Blank/rendering/input, Alt-Tab and visual one-taskbar acceptance remain unproven; gameplay FAIL stands. Next: verify real presentation. [Evidence](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
 

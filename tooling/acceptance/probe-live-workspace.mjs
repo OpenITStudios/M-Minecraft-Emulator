@@ -12,7 +12,7 @@ const four=process.argv.includes('--four');
  if(!page)throw Error('Developer manager page not found');
  page.setDefaultTimeout(15000);
  await page.getByRole('tab',{name:'Minecraft 01',exact:true}).waitFor();
- for(let i=0;i<20;i++){if(await page.getByRole('tab',{name:'Minecraft 01',exact:true}).isEnabled())break;await pause(500);}
+ await page.waitForFunction(()=>[...document.querySelectorAll('[role=tab]')].length===4&&[...document.querySelectorAll('[role=tab]')].every(tab=>!tab.disabled),{},{timeout:60000});
  const inspectAll=()=>page.evaluate(async()=>{
    const invoke=window.__TAURI_INTERNALS__.invoke;
    const config=await invoke('desktop_manager_settings',{settings:null});

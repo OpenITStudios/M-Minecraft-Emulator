@@ -25,13 +25,20 @@ that a separate licensed account will be used; login stays manual inside Minecra
 An absent owned profile is prepared and opened after one compatibility confirmation.
 Cancelling that confirmation creates nothing. Reduced-containment compatibility
 is never accepted silently. The play area provides **Restore window** and
-**Close normally**. Settings restores the independent game window before opening.
+**Close normally**. Settings suspends the selected game and resumes it on return.
+Four stable tabs retain original recovery checkpoints for hidden background games;
+normal close releases only the selected tab. Startup adopts verified running sessions.
 **Check all clients** refreshes observations; raw errors are under **Diagnostics**.
 There is no automatic launch retry, credential automation, force-close, or background poll.
 
 Native composition is the operator-approved alternative to cross-process child
 embedding. The game stays top-level and unowned, with real Windows input. Its
 frame is temporarily removed and its rectangle aligned to a 16:9 play area.
+Managed games use tool-window shell eligibility instead of separate taskbar buttons;
+detaching restores their original shell flags. Actual single-button taskbar behavior,
+Alt-Tab and playable rendering/input still require acceptance; blank-game reports
+remain failures. Manager foreground events request a coalesced placement update,
+and foreground presentation checks the window at the viewport center for occlusion.
 The existing provider revalidates profile/PID/start/session/HWND before selection;
 the presentation owner rechecks native identity for each window operation.
 One hidden recovery helper in the same executable restores the frame/position
