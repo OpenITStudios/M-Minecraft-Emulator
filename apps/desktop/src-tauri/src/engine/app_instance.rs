@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
-use sysinfo::{Pid, System};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
 #[cfg(windows)]
 use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
@@ -162,8 +162,12 @@ fn try_create(path: &Path, marker: &InstanceMarker) -> Result<(), std::io::Error
 fn current_process_marker() -> Result<InstanceMarker, String> {
     let process_id = std::process::id();
     let pid = Pid::from_u32(process_id);
-    let mut system = System::new_all();
-    system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[pid]),
+        true,
+        ProcessRefreshKind::nothing().without_tasks(),
+    );
     let process_start_time = system
         .process(pid)
         .map(|process| process.start_time())
@@ -182,8 +186,12 @@ fn instance_owner_is_alive(path: &Path) -> Result<bool, String> {
         return Ok(false);
     };
     let pid = Pid::from_u32(marker.process_id);
-    let mut system = System::new_all();
-    system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[pid]),
+        true,
+        ProcessRefreshKind::nothing().without_tasks(),
+    );
     Ok(system
         .process(pid)
         .map(|process| process.start_time() == marker.process_start_time)
@@ -251,6 +259,32 @@ fn stale_instance_path(path: &Path, process_id: u32, attempt: u8) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn minimal_refresh_preserves_current_process_identity() {
+        let first = current_process_marker().expect("inspect current process");
+        let second = current_process_marker().expect("inspect current process again");
+        assert_eq!(first.process_id, std::process::id());
+        assert!(first.process_start_time > 0);
+        assert_eq!(first.process_start_time, second.process_start_time);
+    }
+
+    #[test]
+    fn owner_check_rejects_same_pid_with_different_start_time() {
+        let directory = std::env::temp_dir().join(format!(
+            "virtual-clients-instance-identity-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("desktop-instance.json");
+        let mut marker = current_process_marker().unwrap();
+        fs::write(&path, serde_json::to_vec(&marker).unwrap()).unwrap();
+        assert!(instance_owner_is_alive(&path).unwrap());
+        marker.process_start_time += 1;
+        fs::write(&path, serde_json::to_vec(&marker).unwrap()).unwrap();
+        assert!(!instance_owner_is_alive(&path).unwrap());
+        fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn marker_round_trips() {
