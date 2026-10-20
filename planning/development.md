@@ -2,9 +2,9 @@
 
 ## Owned engine / four clients — 20 October 2026
 
-**ACTIVE:** `38b19e6` adds reversible test activation; 669 source tests pass.
-Reboot/Test Mode/hash/global-idle probes pass. Activation UAC pending; official services unchanged.
-Next: observe activation; owned driver/gameplay NOT_EXECUTED. See [campaign results](../docs/validation/native-pilot-localtest.md).
+**DONE, first owned client:** `3cff607` verifies private driver/ABI, owned hook and MivubiEdu02 PID/session;
+operator confirms playable world. 672 source tests pass. Test engine/game remain active.
+Two/four clients, multiplayer and FPS NOT_EXECUTED; cold-launch retry UNKNOWN. See [campaign results](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
 

@@ -9,6 +9,50 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## First playable owned client — 20 October 2026, latest result
+
+**PASS for the first bounded goal: one playable Minecraft Education on the built
+owned fork, including its driver.** Source/tooling revision
+`3cff60738ecd0cbc19eca95b2c23b13fe5361464`; native binaries remain the real
+`f529d59fda778be50cd3e874374a5546c32dce29` build, explicitly test-signed in a
+separate local copy. Earlier checkpoint sections below retain historical results,
+not the current activation/gameplay status. This is not production signing or
+four-client acceptance.
+
+| Evidence | Result | Attribution / limits |
+| --- | --- | --- |
+| Private driver loaded | PASS | Machine observed 5.73.6-MIVU, ABI 0x57230, actual kernel Test Mode active |
+| Owned service namespace | PASS | Guarded ImagePath takeover, verified binary hashes/signatures, stopped/start/readback; no service registrations deleted |
+| First unload attempt | FAIL | Official KmdUtil exceeded 60 seconds while SandMan remained open; no ImagePath changed |
+| Recovery from pre-redirect failure | PASS | Original driver remained loaded; original user service restarted and original identity verified without repeating the failed unload |
+| Explicit activation retry | PASS | Operator exited SandMan normally; second activation unloaded the old driver, started owned services and passed private ABI checks; previous receipt retained in runtimeHistory |
+| New MivubiEdu02 profile | PASS | No preexisting name; canonical 18 guarded write/readback steps, disabled first/enabled last; persistent App Compartment/OpenCOM mode explicitly approved |
+| Education process attribution | PASS | Microsoft-signed desktop 1.26.32.0; own API twice confirms MivubiEdu02 and matching Windows session; PID/start time stable before/after; local identifiers not published |
+| Actual injected hook | PASS | Live Education module list points to the test copy's SbieDll.dll; recorded signed hash matches |
+| Window/input/world | PASS, operator reported | Window presence and responsiveness machine observed; operator explicitly reports successfully entering a world and being able to play after manual login |
+| Original unsigned payload | PASS | Independent final recheck: zero hash mismatches across all 25 original artifacts |
+| Full source verification | PASS | 672 passed: 271 Node, 161 Vitest, 240 Rust; zero failed; four existing Node symlink skips and one default-ignored actual-payload Rust test |
+| Runtime regressions | PASS | Six runtime tests cover ownership, busy/unknown inventory, failed-unload recovery, canonical occupied-profile handling, parser validity and PID-reuse rejection before DLL loading |
+| Full restoration after an active owned driver | NOT_EXECUTED | Pre-redirect recovery was executed; stopping/reverting the currently active owned driver has not been exercised |
+| Two/four clients, account separation, multiplayer, reopen | NOT_EXECUTED | One operator-confirmed playable owned session; no inference about other accounts or peers |
+| 60-minute soak / displayed 60 FPS / background cap | NOT_EXECUTED | No duration or FPS acceptance measurement |
+
+The first launch request returned without an immediately observed game process.
+A controlled retry, after independently confirming zero boxed/game processes,
+returned private launcher exit 0 and produced the attributed responsive window.
+The cold-launch discrepancy remains UNKNOWN; repeated first-click reliability
+is not accepted or claimed fixed. No game executable, account, token, license
+check or driver signing enforcement was patched to obtain this result.
+
+Current Windows state: the owned test driver/service and game remain active,
+Test Mode and the local test certificate remain configured. Saved original service
+paths/configuration and all local receipts remain available. Do not remove the
+test certificate or restore boot settings while its driver is still in use.
+For restoration, first save/close the owned game normally; the documented Restore
+stage refuses active sandbox processes or ambiguous images. Profiles/worlds are
+preserved. The manager UI's owned-provider integration remains unimplemented;
+this successful session uses the explicit developer test route.
+
 ## Post-reboot runtime preparation — 20 October 2026
 
 Source revision `38b19e603134f2846bca9259fc08036afa7d8cd6` adds the explicit
