@@ -60,7 +60,7 @@ internal static class WorkspaceHostFixture
         try { return Run(args); }
         catch (Exception ex)
         {
-            if (args.Length == 2 && args[0] != "crash-host") File.WriteAllText(args[1] + ".error", ex.ToString());
+            if (args.Length == 2 && args[0] != "crash-host" && args[0] != "crash-surface") File.WriteAllText(args[1] + ".error", ex.ToString());
             return 1;
         }
     }
@@ -70,7 +70,8 @@ internal static class WorkspaceHostFixture
         if (!SetProcessDpiAwarenessContext(new IntPtr(-4))) throw new InvalidOperationException("Cannot establish PMv2");
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
         Application.EnableVisualStyles();
-        if (args.Length == 2 && args[0] == "crash-recovery") return CrashRecovery(args[1]);
+        if (args.Length == 2 && args[0] == "crash-recovery") return CrashRecovery(args[1], false);
+        if (args.Length == 2 && args[0] == "independent-surface-crash") return CrashRecovery(args[1], true);
         if (args.Length == 2 && args[0] == "protected-manager-crash") return ProtectedManagerCrash(args[1]);
         if (args.Length == 1 && args[0] == "--fixture-child")
         {
@@ -87,8 +88,9 @@ internal static class WorkspaceHostFixture
             }
             return 0;
         }
-        if (args.Length != 2 || (args[0] != "normal" && args[0] != "partial-failure" && args[0] != "crash-host")) return 2;
-        bool crashHost = args[0] == "crash-host";
+        if (args.Length != 2 || (args[0] != "normal" && args[0] != "partial-failure" && args[0] != "crash-host" && args[0] != "crash-surface")) return 2;
+        bool independent = args[0] == "crash-surface";
+        bool crashHost = args[0] == "crash-host" || independent;
         bool injectFailure = args[0] == "partial-failure", attached = false, restored = false, partialObserved = false;
         string errorText = null;
         Process process = null;
@@ -112,7 +114,7 @@ internal static class WorkspaceHostFixture
             {
                 if (!attached) return;
                 CheckOwned(process, started, window);
-                Reparent(window, originalParent);
+                if (!independent) Reparent(window, originalParent);
                 SetStyle(window, originalStyle);
                 Require(GetParent(window) == originalParent, "Parent restoration failed");
                 Place(window, originalRect.Left, originalRect.Top, originalRect.Right - originalRect.Left, originalRect.Bottom - originalRect.Top);
@@ -141,12 +143,24 @@ internal static class WorkspaceHostFixture
                         Require(GetWindowRect(window, out originalRect), "Cannot save geometry");
                         // Mark before mutation so any partially completed operation restores.
                         attached = true;
-                        SetStyle(window, (originalStyle & ~Popup) | Child);
-                        Reparent(window, host.Handle);
-                        Require(GetParent(window) == host.Handle, "Parent readback failed");
+                        if (independent)
+                        {
+                            // Proposal only: a native top-level surface aligned with the host.
+                            // Never give it a manager parent/owner, and never synthesize input.
+                            SetStyle(window, originalStyle & ~0x00C40000L); // Caption and thick frame.
+                            Point origin = host.PointToScreen(Point.Empty);
+                            Place(window, origin.X, origin.Y, host.ClientSize.Width, host.ClientSize.Height);
+                            Require(GetParent(window) == IntPtr.Zero, "Independent surface acquired a parent");
+                        }
+                        else
+                        {
+                            SetStyle(window, (originalStyle & ~Popup) | Child);
+                            Reparent(window, host.Handle);
+                            Require(GetParent(window) == host.Handle, "Parent readback failed");
+                            Place(window, 0, 0, host.ClientSize.Width, host.ClientSize.Height);
+                            Require((GetWindowLongPtrW(window, Style).ToInt64() & Child) != 0, "Child style missing");
+                        }
                         if (!crashHost) File.AppendAllText(args[1] + ".trace", "attached\n");
-                        Place(window, 0, 0, host.ClientSize.Width, host.ClientSize.Height);
-                        Require((GetWindowLongPtrW(window, Style).ToInt64() & Child) != 0, "Child style missing");
                         if (crashHost)
                         {
                             // Only the coordinator's freshly spawned fixture uses this pipe.
@@ -202,7 +216,7 @@ internal static class WorkspaceHostFixture
         return passed ? 0 : 1;
     }
 
-    static int CrashRecovery(string output)
+    static int CrashRecovery(string output, bool independent)
     {
         bool survived = false, restored = false, closed = false;
         Process client = null;
@@ -210,7 +224,7 @@ internal static class WorkspaceHostFixture
         DateTime started = DateTime.MinValue;
         string pipeName = "MivubiSyntheticHost-" + Guid.NewGuid().ToString("N");
         using (var pipe = new NamedPipeServerStream(pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous))
-        using (var host = Process.Start(new ProcessStartInfo(Application.ExecutablePath, "crash-host " + pipeName) { UseShellExecute = false }))
+        using (var host = Process.Start(new ProcessStartInfo(Application.ExecutablePath, (independent ? "crash-surface " : "crash-host ") + pipeName) { UseShellExecute = false }))
         {
             try
             {
@@ -227,11 +241,13 @@ internal static class WorkspaceHostFixture
                     string[] fields = pending.Result.Split('|');
                     Require(fields.Length == 8, "Invalid synthetic identity");
                     client = Process.GetProcessById(int.Parse(fields[0]));
+                    // Retain an OS handle before exit so ExitCode is readable for this IPC-discovered fixture.
+                    Require(client.Handle != IntPtr.Zero, "Cannot retain synthetic client handle");
                     started = new DateTime(long.Parse(fields[1]), DateTimeKind.Utc);
                     window = new IntPtr(long.Parse(fields[2]));
                     CheckOwned(client, started, window);
                     Require(string.Equals(client.MainModule.FileName, Application.ExecutablePath, StringComparison.OrdinalIgnoreCase), "Not the synthetic executable");
-                    Require(GetParent(window) != IntPtr.Zero, "Synthetic client was never attached");
+                    Require(independent ? GetParent(window) == IntPtr.Zero : GetParent(window) != IntPtr.Zero, "Unexpected surface parent before crash");
                     // Kill only this Process.Start result. The synthetic client is separate.
                     host.Kill();
                     Require(host.WaitForExit(3000), "Synthetic host did not exit");
@@ -239,7 +255,7 @@ internal static class WorkspaceHostFixture
                     if (survived)
                     {
                         CheckOwned(client, started, window);
-                        Reparent(window, IntPtr.Zero);
+                        if (!independent) Reparent(window, IntPtr.Zero);
                         SetStyle(window, long.Parse(fields[3]));
                         int left = int.Parse(fields[4]), top = int.Parse(fields[5]);
                         int right = int.Parse(fields[6]), bottom = int.Parse(fields[7]);

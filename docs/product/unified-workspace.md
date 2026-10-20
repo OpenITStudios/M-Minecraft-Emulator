@@ -85,6 +85,28 @@ boundary, not an implemented product helper or a second lifecycle authority.
 Failure of that presentation owner still has no proven recovery. Do not attach
 Minecraft merely because the narrower UI-crash scenario passes.
 
+### Proposed deviation: independent native surface (decision pending)
+
+An opt-in synthetic comparison leaves the client as an unowned top-level native
+window, temporarily removes its caption/frame, and aligns it to the workspace's
+main rectangle. It does not call SetParent on that client or synthesize input.
+Terminating the host leaves the same client HWND alive; an independent test
+coordinator restores its saved style and screen bounds and requests normal close.
+
+This is native window composition, **not embedded hosting**. It is not an
+approved fallback, and the mounted product remains unchanged. Operator approval
+of this explicit deviation is required before product implementation because
+the existing contract rejects substituting window placement for embedding.
+
+The proposed user flow remains one workspace, an active native game region and
+three previews, automatic setup and manual login. Before acceptance it must
+prove game input/capture release, app switching without focus theft, host resize,
+mixed DPI, minimize/restore, z-order, unobscured login/save dialogs, usable
+taskbar/navigation, actual preview capture, and recovery when the coordinator
+also fails. The current synthetic test does not prove any of those behaviors or
+promise a single taskbar entry. No installation, accounts or production gate is
+changed by this proposal.
+
 Before exposing a hosted game in the normal UI, prove:
 
 1. Synthetic cross-process attach, normal detach and partial-failure restoration.

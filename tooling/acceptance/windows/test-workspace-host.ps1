@@ -1,5 +1,5 @@
 # Synthetic cross-process probe only; never targets Minecraft or existing windows.
-param([switch]$IncludeUnsafeDirectCrash)
+param([switch]$IncludeUnsafeDirectCrash, [switch]$IndependentSurfaceProposal)
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 $workspace = Join-Path $root 'workspace'
@@ -12,6 +12,7 @@ $binary = Join-Path $output 'WorkspaceHostFixture.exe'
 & $compiler /nologo /target:winexe /platform:x64 /reference:System.Windows.Forms.dll /reference:System.Drawing.dll "/out:$binary" (Join-Path $PSScriptRoot 'workspace-host-fixture.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Workspace fixture compilation failed' }
 $modes = @('normal', 'partial-failure', 'protected-manager-crash')
+if ($IndependentSurfaceProposal) { $modes += 'independent-surface-crash' }
 if ($IncludeUnsafeDirectCrash) { $modes += 'crash-recovery' }
 foreach ($mode in $modes) {
     $result = Join-Path $output ($mode + '.json')
@@ -27,7 +28,7 @@ foreach ($mode in $modes) {
         Write-Output ("{0}: {1}" -f $mode, ($proof | ConvertTo-Json -Compress))
         if ($process.ExitCode -ne 0) { throw "Workspace recovery FAILED: $mode; evidence retained in $output" }
         if ($proof.result -ne 'PASS' -or -not $proof.restored -or -not $proof.normalClose) { throw 'Workspace proof incomplete' }
-        if ($mode -eq 'crash-recovery') {
+        if ($mode -eq 'crash-recovery' -or $mode -eq 'independent-surface-crash') {
             if (-not $proof.survivedHostCrash) { throw 'Synthetic client did not survive host crash' }
         } elseif ($mode -eq 'protected-manager-crash') {
             if (-not $proof.survivedManagerCrash) { throw 'Synthetic client did not survive UI crash' }
@@ -42,4 +43,4 @@ foreach ($mode in $modes) {
         $process.Dispose()
     }
 }
-Write-Output 'Synthetic windows only: game rendering/input, mixed DPI and presentation-owner failure remain NOT_EXECUTED by this protected case. Direct manager parenting is unsafe; -IncludeUnsafeDirectCrash retains its failing recovery verdict.'
+Write-Output 'Synthetic windows only. Independent surfaces are a proposal, not embedded hosting or product code. Actual game rendering/input, mixed DPI and four-client acceptance remain NOT_EXECUTED. Direct manager parenting remains unsafe.'

@@ -21,6 +21,15 @@ failure; it is evidence against the candidate design, not a passing acceptance
 case. It never targets an existing game. Native window loss can leave the fake
 client's message loop alive, so this case separately rechecks its exact compiled
 fixture path and start time before cleaning up that synthetic process only.
+
+`-IndependentSurfaceProposal` adds a different, explicitly proposed presentation
+strategy: the synthetic client keeps no parent/owner, retains native input, and
+is styled/positioned inside the host's screen rectangle. After terminating that
+host, the independent coordinator verifies the same client HWND survives,
+restores style/geometry, and requests normal close (exit 0). This is **not
+embedding** and does not alter the product. It does not prove actual Minecraft
+input, z-order, dialogs, taskbar behavior, DPI, preview capture or simultaneous
+coordinator failure. Approval of the design deviation is still pending.
 The wrapper never accepts an external process/window. It retains evidence under
 a unique ignored `workspace/workspace-host-*` directory; a stuck synthetic host
 alone may be terminated by its creator. A separate 20-second thread timer exits
