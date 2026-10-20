@@ -22,6 +22,10 @@
 
 extern "C" {
 #include "dll.h"
+#include "common/my_version.h"
+#if !defined(MIVUBI_PRIVATE_ISOLATION_BUILD) || MIVUBI_PRIVATE_ISOLATION_BUILD != 0x4D495655
+#error Owned_storage_policy_requires_private_build
+#endif
 }
 
 #include <windows.h>
@@ -81,24 +85,7 @@ extern "C" _FX BOOLEAN Pst_Init(HMODULE module)
 {
     P_PStoreCreateInstance PStoreCreateInstance;
 
-    //
-    // if OpenProtectedStorage is specified, don't hook anything
-    //
-
-    ULONG mp_flags = SbieDll_MatchPath(L'i', L"\\RPC Control\\protected_storage");
-    if (PATH_IS_OPEN(mp_flags))
-        return TRUE;
-
-    //
-    // in app mode we don't need these hooks as we have a full token
-    //
-
-    if (Dll_CompartmentMode)
-        return TRUE;
-
-    //
-    // hook Protected Storage entry point
-    //
+    // Owned profiles retain virtual storage even in App Compartment mode.
 
     PStoreCreateInstance = (P_PStoreCreateInstance)
         GetProcAddress(module, Pst_PStoreCreateInstanceProcName);

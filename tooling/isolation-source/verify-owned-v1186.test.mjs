@@ -2,6 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {assessOwnedV1186, V1186_FILE_COUNT, BUILD_FILES, applyOwnedBuildPathFix} from './verify-owned-v1186.mjs';
 import {readFileSync} from 'node:fs';
+import {applyOwnedCredentialIsolation,CREDENTIAL_FILE,STORAGE_FILE,applyOwnedProtectedStorageIsolation} from './owned-credential-policy.mjs';
+
+test('owned credential policy is reconstructed exactly and rejects anchor drift',()=>{
+  const pristine=readFileSync(new URL('../../engine/isolation-candidates/sandboxie-v1.18.6/'+CREDENTIAL_FILE,import.meta.url),'utf8');
+  const owned=readFileSync(new URL('../../engine/isolation-owned/'+CREDENTIAL_FILE,import.meta.url),'utf8').replaceAll('\r\n','\n');
+  assert.equal(applyOwnedCredentialIsolation(pristine),owned);
+  assert.throws(()=>applyOwnedCredentialIsolation(owned),/anchor drift/);
+  assert.throws(()=>applyOwnedCredentialIsolation(pristine.replace('_FX BOOL Cred_CredReadW(', '_FX BOOL DriftedRead(')),/routine|anchor/);
+});
+test('App Compartment cannot bypass the reviewed private storage hook',()=>{
+  const pristine=readFileSync(new URL('../../engine/isolation-candidates/sandboxie-v1.18.6/'+STORAGE_FILE,import.meta.url),'utf8');
+  const owned=readFileSync(new URL('../../engine/isolation-owned/'+STORAGE_FILE,import.meta.url),'utf8').replaceAll('\r\n','\n');
+  assert.equal(applyOwnedProtectedStorageIsolation(pristine),owned);
+  assert.throws(()=>applyOwnedProtectedStorageIsolation(owned),/drift/);
+});
 
 const approved = ['Sandboxie/common/my_version.h',
   'Sandboxie/core/drv/api.c', 'Sandboxie/apps/start/start.cpp'];

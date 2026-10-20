@@ -42,7 +42,7 @@
     "Sandboxie/apps/control",
     "SandboxiePlus/QtSingleApp"
   ],
-  "approvedNativeModifiedFiles": 11,
+  "approvedNativeModifiedFiles": 13,
   "driverServiceNamesStillExclusive": [
     "SbieDrv",
     "SbieSvc"

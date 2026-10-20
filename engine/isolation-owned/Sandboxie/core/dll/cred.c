@@ -22,6 +22,10 @@
 
 
 #include "dll.h"
+#include "common/my_version.h"
+#if !defined(MIVUBI_PRIVATE_ISOLATION_BUILD) || MIVUBI_PRIVATE_ISOLATION_BUILD != 0x4D495655
+#error Owned_credential_policy_requires_private_build
+#endif
 #include <stdio.h>
 #include <wincred.h>
 #define COBJMACROS
@@ -163,17 +167,7 @@ static const WCHAR *Cred_DomainCred = L"DomainCred-";
 
 _FX BOOLEAN Cred_Init(HMODULE module)
 {
-    //
-    // if OpenProtectedStorage or OpenCredentials is specified,
-    // don't hook anything
-    //
-
-    ULONG mp_flags = SbieDll_MatchPath(L'i', L"\\RPC Control\\protected_storage");
-    if (PATH_IS_OPEN(mp_flags))
-        return TRUE;
-
-    if (SbieApi_QueryConfBool(NULL, L"OpenCredentials", FALSE))
-        return TRUE;
+    // Owned game profiles never bypass credential virtualization.
 
     //Cred_Trace = SbieApi_QueryConfBool(NULL, L"CredTrace", FALSE);
 
@@ -762,6 +756,8 @@ _FX BOOL Cred_CredReadW(
     ULONG err;
     BOOL ok;
 
+    *ppCredential = NULL;
+
     if (! Cred_PreparePStore())
         return FALSE;
 
@@ -779,7 +775,8 @@ _FX BOOL Cred_CredReadW(
         if (SUCCEEDED(hr))
             Cred_CoTaskMemFree(mrshcred);
 
-        ok = __sys_CredReadW(TargetName, Type, Flags, ppCredential);
+        SetLastError(ERROR_NOT_FOUND);
+        ok = FALSE;
     }
     else {
 
@@ -886,6 +883,9 @@ _FX BOOL Cred_CredReadDomainCredentialsW(
     ULONG err;
     BOOL ok;
 
+    *pCount = 0;
+    *ppCredentials = NULL;
+
     if (! Cred_PreparePStore())
         return FALSE;
 
@@ -940,8 +940,8 @@ _FX BOOL Cred_CredReadDomainCredentialsW(
     }
 
     if (! ok) {
-        return __sys_CredReadDomainCredentialsW(
-                                pTargetInfo, Flags, pCount, ppCredentials);
+        SetLastError(ERROR_NOT_FOUND);
+        return FALSE;
     }
 
     SetLastError(ERROR_SUCCESS);
@@ -1013,6 +1013,9 @@ _FX BOOL Cred_CredEnumerateW(
     BOOL ok;
     BOOLEAN exact;
 
+    *pCount = 0;
+    *ppCredentials = NULL;
+
     if (! Cred_PreparePStore())
         return FALSE;
 
@@ -1081,24 +1084,10 @@ _FX BOOL Cred_CredEnumerateW(
             Cred_CoTaskMemFree(name);
     }
 
-    ok = __sys_CredEnumerateW(pFilter, Flags, pCount, ppCredentials);
-    err = GetLastError();
+    ok = FALSE;
+    err = ERROR_NOT_FOUND;
 
     if (num_mrshcreds) {
-
-        if (ok) {
-
-            void **in_creds = *ppCredentials;
-            for (i = 0; i < *pCount; ++i) {
-                if (num_mrshcreds < 510) {
-                    mrshcreds[num_mrshcreds] =
-                                    Cred_Serialize(in_creds[i], &len, FALSE);
-                    ++num_mrshcreds;
-                }
-            }
-
-            LocalFree(in_creds);
-        }
 
         mrshcreds[num_mrshcreds] = NULL;
         *ppCredentials = Cred_UnserializeN(mrshcreds, pCount);
@@ -1420,6 +1409,7 @@ _FX BOOL Cred_CredReadA(
 {
     const WCHAR* TargetNameW = Cred_STRA2W(TargetName);
     
+    *ppCredential = NULL;
     void* pCredentialW = NULL;
     BOOL ret = Cred_CredReadW(TargetNameW, Type, Flags, &pCredentialW);
 
@@ -1441,10 +1431,11 @@ _FX BOOL Cred_CredReadA(
 _FX BOOL Cred_CredReadDomainCredentialsA(
     void *pTargetInfo, ULONG Flags, ULONG *pCount, void ***ppCredentials)
 {
-    // todo
-    SbieApi_Log(2205, L"CredReadDomainCredentialsA");
-    return __sys_CredReadDomainCredentialsA(
-                                pTargetInfo, Flags, pCount, ppCredentials);
+    // Upstream ANSI implementation delegates to the host; fail closed instead.
+    *pCount = 0;
+    *ppCredentials = NULL;
+    SetLastError(ERROR_NOT_SUPPORTED);
+    return FALSE;
 }
 
 
@@ -1456,7 +1447,9 @@ _FX BOOL Cred_CredReadDomainCredentialsA(
 _FX BOOL Cred_CredEnumerateA(
     void *pFilter, ULONG Flags, ULONG *pCount, void ***ppCredentials)
 {
-    // todo
-    //SbieApi_Log(2205, L"CredEnumerateA");
-    return __sys_CredEnumerateA(pFilter, Flags, pCount, ppCredentials);
+    // Upstream ANSI implementation delegates to the host; fail closed instead.
+    *pCount = 0;
+    *ppCredentials = NULL;
+    SetLastError(ERROR_NOT_SUPPORTED);
+    return FALSE;
 }

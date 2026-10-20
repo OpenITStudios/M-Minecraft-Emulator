@@ -1,6 +1,6 @@
 /**
  * Read-only proof that Local owns the exact full Sandboxie v1.18.6 source
- * plus eleven native MIVUBI changes and four exact build-path fixes.
+ * plus thirteen native MIVUBI changes and four exact build-path fixes.
  */
 import {spawnSync} from 'node:child_process';
 import {resolve, dirname} from 'node:path';
@@ -8,6 +8,8 @@ import {fileURLToPath} from 'node:url';
 import {
   SOURCE_FILES, buildPrivateSourcePatch, verifyExactPrivateSourceBytes,
 } from '../../engine/isolation-native/fork-overlay/apply-private-source.mjs';
+import {CREDENTIAL_FILE,STORAGE_FILE,applyOwnedCredentialIsolation,applyOwnedProtectedStorageIsolation} from './owned-credential-policy.mjs';
+export const NATIVE_FILES=Object.freeze([...SOURCE_FILES,CREDENTIAL_FILE,STORAGE_FILE]);
 
 export const V1186_SOURCE_TREE = 'f690477c07a40810f479f53973334ceae7e0ab13';
 export const V1186_FILE_COUNT = 1627;
@@ -81,7 +83,7 @@ function lsOwnedTree(root, path) {
 }
 
 /** Pure tree-diff gate; unit tests cover missing, alien and modified paths. */
-export function assessOwnedV1186(candidate, owned, allowed = [...SOURCE_FILES, ...BUILD_FILES],
+export function assessOwnedV1186(candidate, owned, allowed = [...NATIVE_FILES, ...BUILD_FILES],
   expectedCount = V1186_FILE_COUNT) {
   requireFact(candidate instanceof Map && owned instanceof Map,
     'Git tree maps required');
@@ -131,6 +133,14 @@ export function verifyOwnedV1186(repoRoot = ROOT) {
   requireFact((patch.match(/^@@ /gm) || []).length === 24,
     'native source patch closure changed');
   verifyExactPrivateSourceBytes(original, modified);
+  const credentials=git(root,['cat-file','blob',candidate.get(CREDENTIAL_FILE).sha]).toString('utf8');
+  const isolated=git(root,['cat-file','blob',owned.get(CREDENTIAL_FILE).sha]).toString('utf8');
+  requireFact(isolated.replace(/\r\n/g,'\n')===applyOwnedCredentialIsolation(credentials),
+    'credential source differs from reviewed boxed-only policy');
+  const storage=git(root,['cat-file','blob',candidate.get(STORAGE_FILE).sha]).toString('utf8');
+  const boxedStorage=git(root,['cat-file','blob',owned.get(STORAGE_FILE).sha]).toString('utf8');
+  requireFact(boxedStorage.replace(/\r\n/g,'\n')===applyOwnedProtectedStorageIsolation(storage),
+    'protected storage source differs from reviewed private policy');
   for (const path of BUILD_FILES) {
     const pristine = git(root, ['cat-file', 'blob', candidate.get(path).sha]).toString('utf8');
     const current = git(root, ['cat-file', 'blob', owned.get(path).sha]).toString('utf8');
@@ -140,8 +150,8 @@ export function verifyOwnedV1186(repoRoot = ROOT) {
   return {state: 'MIVUBI_V1186_NATIVE_SOURCE_PATCHED_NOT_BUILT', head,
     upstreamTree, ownedTree: gitText(root, ['rev-parse', 'HEAD:' + V1186_OWNED]),
     ...summary, totalModifiedFiles: summary.nativeModifiedFiles,
-    nativeModifiedFiles: SOURCE_FILES.length, nativeBuildModifiedFiles: BUILD_FILES.length,
-    nativePaths: summary.nativePaths.filter(path => SOURCE_FILES.includes(path)),
+    nativeModifiedFiles: NATIVE_FILES.length, nativeBuildModifiedFiles: BUILD_FILES.length,
+    nativePaths: summary.nativePaths.filter(path => NATIVE_FILES.includes(path)),
     nativeBuildPaths: summary.nativePaths.filter(path => BUILD_FILES.includes(path)),
     activeProviderChanged: false, installationPermitted: false};
 }
