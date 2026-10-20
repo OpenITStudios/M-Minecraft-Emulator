@@ -430,9 +430,14 @@ mod native {
                     y: rect.y + rect.height / 2,
                 });
                 if GetAncestor(hit, GA_ROOT) != window {
-                    return Err(io::Error::other(
-                        "Workspace game is covered; presentation was not confirmed",
-                    ));
+                    return Err(io::Error::other(format!(
+                        "Workspace game is covered; presentation was not confirmed (focus requested: {focus}, game foreground: {}, manager foreground: {}, center covered by manager: {}, visible: {}, enabled: {})",
+                        GetForegroundWindow() == window,
+                        GetForegroundWindow() == manager_window as usize as HWND,
+                        GetAncestor(hit, GA_ROOT) == manager_window as usize as HWND,
+                        IsWindowVisible(window) != 0,
+                        GetWindowLongPtrW(window, GWL_STYLE) & WS_DISABLED as isize == 0,
+                    )));
                 }
             }
         }

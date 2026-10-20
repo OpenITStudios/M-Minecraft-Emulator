@@ -49,6 +49,8 @@ const four=process.argv.includes('--four');
  for(let i=0;i<3;i++){
    await page.getByRole('button',{name:'Settings',exact:true}).click();
    await page.getByText('Automatic setup',{exact:true}).waitFor();
+   await pause(200);
+   if(await page.locator('.nw-stage .um-alert').count())throw Error('Hidden Settings viewport produced a workspace error');
    native=await inspect();if(native.length!==1||native[0].pid!==original.pid||!native[0].responding)throw Error('Suspended window lost attribution/responsiveness');
    await page.getByRole('button',{name:'Clients 04',exact:true}).click();
    await page.locator('.nw-stage').getByRole('heading',{name:'Minecraft 01',exact:true}).waitFor();

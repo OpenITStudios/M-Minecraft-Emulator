@@ -20,7 +20,7 @@ let browser;
    window.__calls.push({command,args});
    if(command==='plugin:event|listen')return 1;
    if(command==='plugin:event|unlisten')return null;
-   if(command==='desktop_suspend_workspace')return true;
+   if(command==='desktop_suspend_workspace'){if(window.__failSuspend)throw 'Suspend failed; previous session retained';return true;}
    if(command==='desktop_manager_settings')return {observation:snapshot,engineError:null,detectedMinecraft:'C:\\Game\\Minecraft.Windows.exe',targetError:null,settings:{sessionDirectory:'D:\\Developer engine',minecraftExecutable:'C:\\Game\\Minecraft.Windows.exe'},catalog};
    if(command==='desktop_present_workspace'&&window.__startupFailure&&args.clientId==='02'){window.__startupFailure=false;throw 'Client exited during startup admission';}
    if(command==='desktop_present_workspace'&&window.__failPresentation)throw 'Workspace could not prepare the replacement';
@@ -49,10 +49,19 @@ let browser;
  }
  await page.getByRole('button',{name:'Settings',exact:true}).click();
  await page.getByText('Automatic setup',{exact:true}).waitFor();
+ await page.waitForTimeout(200);
+ if(await page.locator('.nw-stage .um-alert').count())throw Error('Hidden Settings viewport generated a workspace error');
  if(!await page.evaluate(()=>window.__calls.some(c=>c.command==='desktop_suspend_workspace')))throw Error('Settings did not suspend native surface');
  if(await page.getByRole('button',{name:/Choose/}).count())throw Error('Manual chooser returned');
  await page.getByRole('button',{name:'Clients 04',exact:true}).click();
  await page.getByRole('tab',{name:'Minecraft 02',exact:true}).click();
+ await page.evaluate(()=>window.__failSuspend=true);
+ await page.getByRole('button',{name:'Settings',exact:true}).click();
+ if(!await page.locator('.um-client-view').isVisible())throw Error('Failed suspend hid the active session');
+ const beforeResize=await page.evaluate(()=>window.__calls.filter(c=>c.command==='desktop_update_workspace').length);
+ await page.setViewportSize({width:940,height:640});await page.waitForTimeout(200);
+ if(await page.evaluate(()=>window.__calls.filter(c=>c.command==='desktop_update_workspace').length)<=beforeResize)throw Error('Failed suspend permanently stopped viewport updates');
+ await page.evaluate(()=>window.__failSuspend=false);
  await page.getByRole('button',{name:'Restore window',exact:true}).click();
  await page.getByRole('heading',{name:'Your Minecraft workspace',exact:true}).waitFor();
  await page.evaluate(()=>window.__failPresentation=true);await card.getByRole('button',{name:'Play',exact:true}).click();

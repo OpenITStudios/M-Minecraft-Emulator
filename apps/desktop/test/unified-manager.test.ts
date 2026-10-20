@@ -24,7 +24,10 @@ it('states distinguish ready, blocked retry, active operation, missing profile a
   expect(ownedClientStatus(slot,true,false,'Close')).toBe('Closing');
   expect(ownedClientStatus(slot,false,false,null)).toBe('Needs attention');
   expect(ownedClientStatus({...slot,status:'ABSENT'},true,false,null)).toBe('Not configured');
-  expect(ownedClientStatus({...slot,status:'RUNNING'},true,false,null)).toBe('Running');
+  expect(ownedClientStatus({...slot,status:'RUNNING'},true,false,null)).toBe('Needs attention');
+  const process={pid:77,createdFileTime:'134000000000000001',sessionId:1,windowHandle:'0x123',responding:true};
+  expect(ownedClientStatus({...slot,status:'RUNNING',processes:[process]},true,false,null)).toBe('Window detected');
+  expect(ownedClientStatus({...slot,status:'RUNNING',processes:[{...process,responding:false}]},true,false,null)).toBe('Needs attention');
 });
 it('mounted dashboard has no alternate pilot panel or automatic game launch',()=>{
   const source=readFileSync(new URL('../src/UnifiedManagerApp.svelte',import.meta.url),'utf8');

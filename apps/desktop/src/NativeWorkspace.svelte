@@ -19,25 +19,29 @@
   let viewport:HTMLDivElement,target:OwnedProcess|null=null;
   let issue:ReturnType<typeof operationIssue>|null=null;
   let updating=false,updatePending=false;
-  let updateFailed=false;
+  let updateFailed=false,suspended=false;
   export let working=false;
   $: disabled=busy||working;
-  $: if(!busy&&!working&&updatePending&&activeClient&&!updating)void update();
+  $: if(!busy&&!working&&!suspended&&updatePending&&activeClient&&!updating)void update();
   export async function restore(){
-    await workspaceSurface.release();activeClient=null;target=null;updateFailed=false;issue=null;
+    await workspaceSurface.release();activeClient=null;target=null;updateFailed=false;issue=null;suspended=false;
   }
-  export async function suspend(){const retained=await workspaceSurface.suspend();if(!retained){activeClient=null;target=null;updateFailed=false;}}
+  export async function suspend(){
+    const previous=suspended;suspended=true;updatePending=false;
+    try{const retained=await workspaceSurface.suspend();if(!retained){activeClient=null;target=null;updateFailed=false;}}
+    catch(error){suspended=previous;throw error;}
+  }
   export async function resume(){if(activeClient&&target)await present(activeClient,target);}
   export async function present(client:ClientId,process:OwnedProcess){
     issue=null;
     try{
       await tick();
       await workspaceSurface.present(sessionDirectory,client,process,viewport.getBoundingClientRect());
-      activeClient=client;target=process;updateFailed=false;
+      activeClient=client;target=process;updateFailed=false;suspended=false;
     }catch(error){issue=operationIssue(error);throw error;}
   }
   async function update(){
-    if(updateFailed)return;
+    if(updateFailed||suspended)return;
     updatePending=true;if(updating||busy||working||!activeClient)return;
     updating=true;
     try{while(updatePending&&activeClient){updatePending=false;await workspaceSurface.update(viewport.getBoundingClientRect());}}
