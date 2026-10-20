@@ -18,6 +18,15 @@ not evidence of a Windows Sandbox dependency or of a crash. Application/WER
 inspection did not provide a usable matching crash record. The precise reported
 crash cause remains **UNKNOWN**, not attributed to the following bugs without proof.
 
+Correction revision: `f406e7718685ce7582664993414927841a597073`.
+Final executed checks: full `npm run verify:source` **PASS**, 705 tests
+(Node 279, frontend 175, desktop Rust 74, runtime Rust 177; four existing symlink
+skips, seven opt-in Rust tests ignored), Windows debug build **PASS**, opt-in
+synthetic helper/minimize/restore regression **PASS**, and persisted mock browser
+regression **PASS**. One preliminary overlapping test run encountered Windows
+linker LNK1104 on its in-use test executable; the final sequential run exited 0.
+These results are not actual Minecraft app-switching or crash-recovery acceptance.
+
 | Investigation | Result / action |
 | --- | --- |
 | Resize error discards UI selection but retains backend lease | Reproduced FAIL in mounted mocked UI; corrected to retain target and Restore/Close controls, suspend automatic resize updates after failure; regression PASS |
