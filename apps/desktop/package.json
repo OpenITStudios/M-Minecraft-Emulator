@@ -13,13 +13,14 @@
     "build:frontend": "vite build",
     "preview:frontend": "vite preview",
     "build:app": "npm run prepare:icons && npm run prepare:package-binaries && tauri build --target x86_64-pc-windows-msvc --bundles nsis --config src-tauri/tauri.package.conf.json -- --locked",
-    "typecheck": "svelte-check --tsconfig ./tsconfig.json",
+    "typecheck": "svelte-check --tsgo --tsconfig ./tsconfig.json",
     "check:rust": "npm run prepare:icons && cargo check --all-targets --locked --manifest-path src-tauri/Cargo.toml",
     "test:rust": "cargo test --all-targets --locked --manifest-path src-tauri/Cargo.toml",
     "verify:source": "npm run typecheck && npm run test && npm run build:frontend && npm run check:rust && npm run test:rust",
     "prepare:package-binaries": "node scripts/prepare-package-binaries.mjs",
     "test": "vitest run test",
-    "check:dependencies": "node ../../tooling/repository/check-dependency-lock.mjs"
+    "check:dependencies": "node ../../tooling/repository/check-dependency-lock.mjs",
+    "typecheck:compat": "svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.4"
@@ -28,6 +29,7 @@
     "@sveltejs/vite-plugin-svelte": "7.3.1",
     "@tauri-apps/cli": "2.12.3",
     "@types/node": "24.19.2",
+    "@typescript/native": "npm:typescript@7.0.2",
     "svelte": "5.57.2",
     "svelte-check": "4.7.7",
     "typescript": "6.0.3",
