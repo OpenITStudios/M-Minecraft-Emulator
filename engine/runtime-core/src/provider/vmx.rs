@@ -120,7 +120,7 @@ pub(crate) fn vm_identity_key(vmx: &Path) -> io::Result<Option<String>> {
 
 fn generate_guest_token() -> io::Result<String> {
     let mut bytes = [0_u8; 32];
-    getrandom::getrandom(&mut bytes).map_err(|error| {
+    getrandom::fill(&mut bytes).map_err(|error| {
         io::Error::new(
             io::ErrorKind::Other,
             format!("guest token entropy failed: {error}"),

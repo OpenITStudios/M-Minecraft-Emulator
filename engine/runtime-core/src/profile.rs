@@ -91,12 +91,15 @@ pub struct ClientProfile {
 }
 
 pub(crate) fn identity_fingerprint(value: &str) -> String {
-    format!("{:x}", Sha256::digest(value.as_bytes()))
+    Sha256::digest(value.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>()
 }
 
 fn new_base_generation_id() -> io::Result<String> {
     let mut bytes = [0_u8; 32];
-    getrandom::getrandom(&mut bytes)
+    getrandom::fill(&mut bytes)
         .map_err(|error| io::Error::new(io::ErrorKind::Other, error.to_string()))?;
     Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }

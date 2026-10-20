@@ -286,7 +286,7 @@ pub(crate) fn host_working_sets_mb() -> Vec<(ClientId, u64)> {
                 process
                     .cmd()
                     .iter()
-                    .any(|arg| arg.to_ascii_lowercase().contains(&target))
+                    .any(|arg| arg.to_string_lossy().to_ascii_lowercase().contains(&target))
             })
             .map(|process| process.memory())
             .sum::<u64>();

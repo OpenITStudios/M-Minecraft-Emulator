@@ -148,7 +148,7 @@ fn current_process_marker() -> Result<InstanceMarker, String> {
     let process_id = std::process::id();
     let pid = Pid::from_u32(process_id);
     let mut system = System::new_all();
-    system.refresh_process(pid);
+    system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
     let process_start_time = system
         .process(pid)
         .map(|process| process.start_time())
@@ -165,7 +165,7 @@ fn instance_owner_is_alive(path: &Path) -> Result<bool, String> {
     };
     let pid = Pid::from_u32(marker.process_id);
     let mut system = System::new_all();
-    system.refresh_process(pid);
+    system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
     Ok(system
         .process(pid)
         .map(|process| process.start_time() == marker.process_start_time)

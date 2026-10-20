@@ -297,7 +297,7 @@ pub fn doctor() -> DoctorReport {
 
     let mut system = System::new();
     system.refresh_memory();
-    system.refresh_cpu();
+    system.refresh_cpu_all();
     let logical_cpus = system.cpus().len();
     let total_memory_gb = system.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
     let available_memory_gb = system.available_memory() as f64 / 1024.0 / 1024.0 / 1024.0;

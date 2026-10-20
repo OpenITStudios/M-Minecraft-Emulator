@@ -69,14 +69,10 @@ pub fn current_host_pressure() -> HostPressure {
     // Snapshot pressure needs RAM and sampled CPU, not the host process table.
     let mut system = System::new();
     system.refresh_memory();
-    system.refresh_cpu();
+    system.refresh_cpu_all();
     std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
-    system.refresh_cpu();
-    let cpu = system
-        .global_cpu_info()
-        .cpu_usage()
-        .round()
-        .clamp(0.0, 100.0) as u8;
+    system.refresh_cpu_all();
+    let cpu = system.global_cpu_usage().round().clamp(0.0, 100.0) as u8;
     evaluate_pressure(
         system.total_memory() / 1024 / 1024,
         system.available_memory() / 1024 / 1024,

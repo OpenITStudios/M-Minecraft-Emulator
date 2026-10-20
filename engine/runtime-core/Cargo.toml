@@ -4,16 +4,15 @@ version = "0.1.0"
 description = "M-Bedrock Virtual Clients runtime core"
 authors = ["MIVUBI-STD"]
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.95"
 publish = false
 
 [dependencies]
 fs2 = "0.4"
-getrandom = "=0.2.17"
+getrandom = "0.4.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha2 = "=0.10.8"
-native-tls = "=0.2.12"
-ureq = { version = "=2.9.7", default-features = false, features = ["json", "native-tls"] }
-url = "=2.5.0"
-sysinfo = { version = "0.30", default-features = false }
+sha2 = "0.11.1"
+ureq = { version = "3.4.2", default-features = false, features = ["json", "native-tls"] }
+url = "2.5.8"
+sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }

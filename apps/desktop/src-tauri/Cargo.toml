@@ -4,19 +4,19 @@ version = "0.1.0"
 description = "M-Bedrock Virtual Clients desktop manager"
 authors = ["MIVUBI-STD"]
 edition = "2021"
-rust-version = "1.98"
+rust-version = "1.95"
 publish = false
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.7.3", features = [] }
 
 [dependencies]
-rfd = "0.15"
-sysinfo = "0.30"
+rfd = "0.17.2"
+sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha2 = "=0.10.8"
-tauri = { version = "2", features = [] }
+sha2 = "0.11.1"
+tauri = { version = "2.12.4", features = [] }
 virtual-clients-core = { package = "m-bedrock-virtual-clients-core", path = "../../../engine/runtime-core" }
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_System_RemoteDesktop", "Win32_System_Services", "Win32_System_Threading", "Win32_System_SystemInformation", "Win32_UI_HiDpi", "Win32_UI_Accessibility", "Win32_UI_WindowsAndMessaging"] }
 

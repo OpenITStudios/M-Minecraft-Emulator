@@ -53,7 +53,7 @@ pub struct MinecraftLaunchResult {
 
 fn request_id() -> io::Result<String> {
     let mut bytes = [0u8; 16];
-    getrandom::getrandom(&mut bytes)
+    getrandom::fill(&mut bytes)
         .map_err(|error| io::Error::new(io::ErrorKind::Other, error.to_string()))?;
     Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }

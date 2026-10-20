@@ -250,7 +250,7 @@ fn sha256_file(path: &Path, expected_size: u64) -> io::Result<String> {
     if current.len() != original.len() || current.modified()? != original.modified()? {
         return Err(rejected("owned-engine artifact changed during hash verification"));
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect::<String>())
 }
 
 // A read-only candidate must match the assembler's closed payload inventory.
@@ -653,7 +653,7 @@ mod tests {
                 "path": path,
                 "source": expected_source_for_payload(path).expect("canonical fixture path"),
                 "sizeBytes": content.len(),
-                "sha256": format!("{:x}", hash.finalize()),
+                "sha256": hash.finalize().iter().map(|byte| format!("{byte:02x}")).collect::<String>(),
             })
         }
         fn populate(&self) {
@@ -928,7 +928,7 @@ mod tests {
             "path": "unexpected.exe",
             "source": "Sandboxie/Bin/x64/SbieRelease/unexpected.exe",
             "sizeBytes": bytes.len(),
-            "sha256": format!("{:x}", hasher.finalize()),
+            "sha256": hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect::<String>(),
         });
         let path = c.0.join("engine-provenance.json");
         let mut data: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();

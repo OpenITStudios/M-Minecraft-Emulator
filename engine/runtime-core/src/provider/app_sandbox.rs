@@ -438,20 +438,21 @@ fn get_json(
     let mut request = agent.get(&url);
     if let Some(token) = token {
         let authorization = format!("Bearer {token}");
-        request = request.set("Authorization", &authorization);
+        request = request.header("Authorization", &authorization);
     }
     let response = match request.call() {
         Ok(response) => response,
-        Err(ureq::Error::Status(401, _)) => return Err("PROVIDER_AUTH_FAILED"),
-        Err(ureq::Error::Status(404, _)) => return Err("VM_NOT_FOUND"),
-        Err(ureq::Error::Status(_, _)) => return Err("PROVIDER_HTTP_ERROR"),
-        Err(ureq::Error::Transport(_)) => return Err("PROVIDER_UNREACHABLE"),
+        Err(ureq::Error::StatusCode(401)) => return Err("PROVIDER_AUTH_FAILED"),
+        Err(ureq::Error::StatusCode(404)) => return Err("VM_NOT_FOUND"),
+        Err(ureq::Error::StatusCode(_)) => return Err("PROVIDER_HTTP_ERROR"),
+        Err(_) => return Err("PROVIDER_UNREACHABLE"),
     };
     if response.status() != 200 {
         return Err("PROVIDER_HTTP_ERROR");
     }
     let mut bytes = Vec::new();
     response
+        .into_body()
         .into_reader()
         .take(MAX_API_BYTES + 1)
         .read_to_end(&mut bytes)
@@ -473,15 +474,23 @@ pub(super) struct AsbSession {
     pub(super) host: HostCapacity,
 }
 
+fn provider_agent() -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .proxy(None)
+        .max_redirects(0)
+        .max_redirects_will_error(false)
+        .timeout_connect(Some(Duration::from_secs(2)))
+        .timeout_recv_response(Some(Duration::from_secs(3)))
+        .timeout_recv_body(Some(Duration::from_secs(3)))
+        .timeout_send_request(Some(Duration::from_secs(3)))
+        .timeout_send_body(Some(Duration::from_secs(3)))
+        .build()
+        .into()
+}
+
 pub(super) fn authenticated_session() -> Result<AsbSession, &'static str> {
     let discovery = discover()?;
-    let agent = ureq::AgentBuilder::new()
-        .try_proxy_from_env(false)
-        .redirects(0)
-        .timeout_connect(Duration::from_secs(2))
-        .timeout_read(Duration::from_secs(3))
-        .timeout_write(Duration::from_secs(3))
-        .build();
+    let agent = provider_agent();
     let version_bytes = get_json(&agent, &discovery.endpoint, "version", None)?;
     let version = parse_version(&version_bytes)?;
     // Version is deliberately unauthenticated upstream. Prove the bearer
@@ -852,5 +861,63 @@ mod tests {
         assert_eq!(output["state"], "UNVERIFIED");
         assert_eq!(output["gameAndGpuVerified"], false);
         assert!(output.get("token").is_none());
+    }
+
+    #[test]
+    fn http_migration_preserves_status_mapping_no_redirects_and_bounded_body() {
+        use std::{
+            io::{Read, Write},
+            net::TcpListener,
+            thread,
+        };
+        let agent = super::provider_agent();
+        assert!(agent.config().proxy().is_none());
+        assert_eq!(agent.config().max_redirects(), 0);
+        assert_eq!(
+            agent.config().timeouts().connect,
+            Some(std::time::Duration::from_secs(2))
+        );
+        for (status, body, expected) in [
+            (200, b"{}".to_vec(), Ok(b"{}".to_vec())),
+            (401, vec![], Err("PROVIDER_AUTH_FAILED")),
+            (404, vec![], Err("VM_NOT_FOUND")),
+            (500, vec![], Err("PROVIDER_HTTP_ERROR")),
+            (302, vec![], Err("PROVIDER_HTTP_ERROR")),
+            (
+                200,
+                vec![b'x'; super::MAX_API_BYTES as usize + 1],
+                Err("INVALID_PROVIDER_RESPONSE"),
+            ),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let endpoint = format!("http://{}", listener.local_addr().unwrap());
+            let server = thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(std::time::Duration::from_secs(3)))
+                    .unwrap();
+                let mut request = Vec::new();
+                loop {
+                    let mut byte = [0];
+                    stream.read_exact(&mut byte).unwrap();
+                    request.push(byte[0]);
+                    if request.ends_with(b"\r\n\r\n") {
+                        break;
+                    }
+                    assert!(request.len() < 4096);
+                }
+                assert!(String::from_utf8(request)
+                    .unwrap()
+                    .to_ascii_lowercase()
+                    .contains("authorization: bearer fixture-token"));
+                write!(stream, "HTTP/1.1 {status} Fixture\r\nContent-Length: {}\r\nLocation: /redirect-forbidden\r\nConnection: close\r\n\r\n", body.len()).unwrap();
+                let _ = stream.write_all(&body);
+            });
+            assert_eq!(
+                super::get_json(&agent, &endpoint, "host", Some("fixture-token")),
+                expected
+            );
+            server.join().unwrap();
+        }
     }
 }

@@ -12,7 +12,7 @@ pub(crate) fn current_host_capacity() -> HostCapacity {
     // Capacity needs only CPU topology and installed memory, not all processes.
     let mut system = System::new();
     system.refresh_memory();
-    system.refresh_cpu();
+    system.refresh_cpu_all();
     let logical_cpus = system.cpus().len();
     let total_memory_gb = system.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
     HostCapacity {

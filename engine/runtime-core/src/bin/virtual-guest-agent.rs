@@ -184,7 +184,7 @@ fn request_interactive_minecraft_launch(
     stream.set_write_timeout(Some(Duration::from_secs(2)))?;
 
     let mut request_bytes = [0u8; 8];
-    getrandom::getrandom(&mut request_bytes)
+    getrandom::fill(&mut request_bytes)
         .map_err(|error| io::Error::new(io::ErrorKind::Other, error.to_string()))?;
     let request_id: String = request_bytes
         .iter()
@@ -526,9 +526,9 @@ fn interactive_session_available() -> bool {
 fn minecraft_process_running() -> bool {
     // Avoid starting PowerShell merely to check for an existing game process.
     let mut system = sysinfo::System::new();
-    system.refresh_processes();
+    system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
     system.processes().values().any(|process| {
-        let name = process.name().to_ascii_lowercase();
+        let name = process.name().to_string_lossy().to_ascii_lowercase();
         name.contains("minecraft") || name.contains("education")
     })
 }
@@ -623,7 +623,12 @@ fn guest_machine_identity() -> Option<String> {
     if machine_guid.is_empty() || machine_guid.len() > 128 {
         return None;
     }
-    Some(format!("{:x}", Sha256::digest(machine_guid.as_bytes())))
+    Some(
+        Sha256::digest(machine_guid.as_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>(),
+    )
 }
 
 #[cfg(not(target_os = "windows"))]

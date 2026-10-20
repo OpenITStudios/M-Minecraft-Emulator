@@ -5,7 +5,6 @@ use std::{
     fs,
     io::{self, Read},
     path::{Path, PathBuf},
-    sync::Arc,
     time::Duration,
 };
 
@@ -325,6 +324,19 @@ fn fetch_manifest(policy: &ReleaseChannel) -> io::Result<UpdateManifest> {
     })
 }
 
+fn update_agent() -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(12)))
+        .tls_config(
+            ureq::tls::TlsConfig::builder()
+                .provider(ureq::tls::TlsProvider::NativeTls)
+                .root_certs(ureq::tls::RootCerts::PlatformVerifier)
+                .build(),
+        )
+        .build()
+        .into()
+}
+
 fn fetch_bytes(url: &str, max_bytes: u64) -> io::Result<Vec<u8>> {
     if !url.starts_with("https://") {
         return Err(io::Error::new(
@@ -333,16 +345,7 @@ fn fetch_bytes(url: &str, max_bytes: u64) -> io::Result<Vec<u8>> {
         ));
     }
 
-    let tls = native_tls::TlsConnector::new().map_err(|error| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            format!("native TLS initialization failed: {error}"),
-        )
-    })?;
-    let agent = ureq::AgentBuilder::new()
-        .timeout(Duration::from_secs(12))
-        .tls_connector(Arc::new(tls))
-        .build();
+    let agent = update_agent();
     let response = agent.get(url).call().map_err(|error| {
         io::Error::new(
             io::ErrorKind::Other,
@@ -352,6 +355,7 @@ fn fetch_bytes(url: &str, max_bytes: u64) -> io::Result<Vec<u8>> {
 
     let mut bytes = Vec::new();
     response
+        .into_body()
         .into_reader()
         .take(max_bytes + 1)
         .read_to_end(&mut bytes)?;
@@ -437,7 +441,11 @@ fn sha256_file(path: &Path) -> io::Result<String> {
         }
         hasher.update(&buffer[..read]);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>())
 }
 
 fn staged_metadata_path() -> io::Result<PathBuf> {
@@ -827,5 +835,28 @@ mod tests {
             &changed_signer,
             true
         ));
+    }
+
+    #[test]
+    fn update_transport_keeps_platform_trust_and_https_requirement() {
+        let agent = super::update_agent();
+        assert_eq!(
+            agent.config().tls_config().provider(),
+            ureq::tls::TlsProvider::NativeTls
+        );
+        assert!(matches!(
+            agent.config().tls_config().root_certs(),
+            ureq::tls::RootCerts::PlatformVerifier
+        ));
+        assert_eq!(
+            agent.config().timeouts().global,
+            Some(std::time::Duration::from_secs(12))
+        );
+        assert_eq!(
+            super::fetch_bytes("http://127.0.0.1/never-requested", 8)
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::InvalidInput
+        );
     }
 }

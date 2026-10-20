@@ -247,7 +247,10 @@ fn start_resource_guard(session: &AsbSession) -> io::Result<()> {
 
 fn fingerprint(active_vhdx: &str, mac: &str) -> String {
     let binding = format!("{PILOT_NAME}|{active_vhdx}|{mac}");
-    format!("{:x}", Sha256::digest(binding.as_bytes()))
+    Sha256::digest(binding.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>()
 }
 
 fn read_consent(path: &Path, fingerprint: &str) -> bool {
@@ -470,8 +473,8 @@ fn post_fixed(session: &AsbSession, action: PilotAction) -> io::Result<()> {
     let result = session
         .agent
         .post(&url)
-        .set("Authorization", &header)
-        .send_json(serde_json::json!({}));
+        .header("Authorization", &header)
+        .send_json(&serde_json::json!({}));
     let response = match result {
         Ok(response) => response,
         Err(_) => {
@@ -483,6 +486,7 @@ fn post_fixed(session: &AsbSession, action: PilotAction) -> io::Result<()> {
     let code = response.status();
     let mut bytes = Vec::new();
     response
+        .into_body()
         .into_reader()
         .take(MAX_REPLY_BYTES + 1)
         .read_to_end(&mut bytes)
