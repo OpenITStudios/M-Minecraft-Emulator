@@ -237,6 +237,13 @@ data/hive roots; custom global storage roots require review. First Open on an ab
 through the same existing operations. Cancellation creates nothing. Compatibility
 consent acknowledges reduced containment, not account isolation.
 
+Background PowerShell calls use the canonical bounded runner with CREATE_NO_WINDOW.
+The game launcher uses direct ProcessStartInfo without ShellExecute, and observes
+an attributed window before RUNNING. The opt-in test
+`engine::owned_provider::launch_regression_tests::actual_manager_launch_observes_owned_minecraft`
+is an actual launch, requires MIVUBI_TEST_OWNED_SESSION, and must not be run while
+a client is active. It never closes the game or signs in automatically.
+
 Profile creation is the only operation that requests UAC. It invokes this same
 application's fixed Create-only helper with a bounded local request, never an
 elevated mutable checkout script or a new background service. Current Windows

@@ -2,7 +2,7 @@
 
 ## Owned manager / independence — 20 October 2026
 
-**ACTIVE:** `1591b61` unifies 01–04 and automatically verifies/remembers the active engine/game. 692 source tests pass; live setup/reread passes. Next: UI Open 02 acceptance. Four-client gameplay and independent installer NOT_EXECUTED. See [results](../docs/validation/native-pilot-localtest.md).
+**ACTIVE:** `337e137` fixes GUI helper flashes and owned launch (exit 0; attributed responsive 02). 694 source tests pass. Next: manual world/UI close-reopen proof. Four-client/standalone acceptance NOT_EXECUTED. [Results](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
 

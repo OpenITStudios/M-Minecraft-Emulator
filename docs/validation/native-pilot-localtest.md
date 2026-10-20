@@ -9,6 +9,45 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Launch failure and flashing PowerShell repair — 20 October 2026
+
+**ACTIVE.** Source `337e137b4c0501139224fef53d95d24472f6d306`, following
+`a01a056ca7a8c2785bf2f67eb6b4fb2866bfab78`. The operator reported that Open 02
+showed PowerShell briefly but no game. The existing receipt recorded exit 1,
+zero attributed games and an empty profile. No stale powershell.exe processes
+were present in the initial inventory, so no unrelated process was terminated.
+
+The existing bounded runner now uses CREATE_NO_WINDOW on Windows. Its timeout,
+output limits and direct-child-only cleanup remain intact; no job kills game
+descendants. The privileged Create helper still uses normal Windows UAC.
+Private Start.exe is now started with ProcessStartInfo/UseShellExecute=false,
+keeping the verified executable, exact arguments and working directory.
+The bounded observation waits for an attributed window (RUNNING), not a PID alone.
+
+| Check | Result | Actual evidence / limit |
+| --- | --- | --- |
+| Original manager-backend launch repro | FAIL reproduced | Opt-in real launch returns exit 1 and zero games, matching the operator symptom; no automatic retry |
+| Console regression from a GUI host | FAIL before → PASS after | Test compiles a Windows GUI host using the actual bounded runner; helper GetConsoleWindow changes from nonzero to zero after CREATE_NO_WINDOW |
+| Bounded process tests | PASS | 15 tests cover console suppression, pipes, size bounds, timeout and direct-child reaping |
+| Broker communication diagnosis | PASS, read-only | Private DLL GET_USER returns status 0; no account/user-section contents retained |
+| Controlled direct-launch experiment | PASS, backend execution | Same opted-in manager backend creates one owned Minecraft with launcher exit 0 after direct process startup; this experiment precedes the subsequent wait-for-window refinement |
+| Actual post-launch identity/window | PASS | Signed game, private driver 5.73.6-MIVU/ABI 0x57230, twice-queried MivubiEdu02, stable PID/start time, interactive Windows session, window present and responsive; raw identifiers stay local |
+| Residual helpers after game launch | PASS, observed inventory | No powershell.exe or Start.exe remains; Minecraft remains running. No blind global process cleanup performed |
+| Window observation regression | PASS | Actual production loop with controlled snapshots does not stop at a game PID before a window appears |
+| Complete source pipeline at source SHA above | PASS | 694 tests: 277 Node, 170 Vitest, 247 Rust; four existing Node symlink skips, five opt-in Rust tests ignored by default; Svelte check/build and Windows checks pass |
+| First full verification attempt | FAIL → PASS after fixture correction | Existing parallel candidate tests collided on timestamp-only directory names. Test-local atomic suffix fixes the fixture; production integrity verification is unchanged |
+| New manager UI Open/normal close/reopen | NOT_EXECUTED after fix | Current game was launched through the real backend regression, not a new operator UI click. Reopen was deliberately not retried while the game is active |
+| Manual login/world/input after fix | NOT_EXECUTED | Operator asked to check the already-open game; no result received yet |
+| Four clients / multiplayer / soak / FPS / independent installation | NOT_EXECUTED | No change to previous acceptance limits |
+
+The controlled experiment changed direct process startup after console suppression
+had also been fixed. The exact contribution of ShellExecute versus inherited
+console state is not independently isolated; the observed launch outcome is the
+claim, not a guessed upstream failure mechanism. No payload, driver, service,
+account or world was replaced. The previous unsigned package and signing status
+remain intact. On the running manager, a fresh check should show the existing
+Minecraft 02 and offer Focus; do not launch another copy while it remains active.
+
 ## Unified manager and automatic setup — 20 October 2026
 
 **ACTIVE; actual manager gameplay remains NOT_EXECUTED after this change.**
