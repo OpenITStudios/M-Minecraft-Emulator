@@ -273,6 +273,11 @@ try {
     $artifacts += [ordered]@{ path=$rel; bytes=$f.Length; sha256=$digest }
   }
   $report.artifacts = $artifacts
+  $driverPath = Join-Path $source 'Sandboxie/Bin/x64/SbieRelease/SbieDrv.sys'
+  $driverSignature = Get-AuthenticodeSignature -LiteralPath $driverPath
+  if ($driverSignature.Status -ne 'NotSigned') {
+    throw 'Build-only driver must be unsigned; signing requires a separate reviewed step.'
+  }
   $report.driverBuilt = $true
   $report.state = 'NATIVE_BUILD_ARTIFACTS_CAPTURED_NOT_INSTALLABLE'
 }

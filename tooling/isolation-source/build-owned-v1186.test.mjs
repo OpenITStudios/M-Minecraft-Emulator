@@ -41,6 +41,8 @@ test('builder only compiles and captures unsigned artifacts, never installs a dr
   assert.match(source, /driverSigned = \$false/);
   assert.match(source, /'\/p:SignMode=Off'/);
   assert.match(source, /'\/p:EnableTestSign=false'/);
+  assert.match(source, /Get-AuthenticodeSignature -LiteralPath \$driverPath/);
+  assert.match(source, /\$driverSignature\.Status -ne 'NotSigned'/);
   assert.match(source, /driverLoaded = \$false/);
   assert.match(source, /installPermitted = \$false/);
   assert.match(source, /activeProviderChanged = \$false/);
