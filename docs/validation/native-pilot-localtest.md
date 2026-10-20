@@ -33,14 +33,14 @@ WAM/SSO or account separation. Login remains manual with a licensed account.
 | Tracked structure | PASS | 3,558 tracked files after implementation commit; no workflow or generated payload added |
 | Existing services | PASS observation only | SCM reports official-location SbieSvc and SbieDrv running; this does not prove all sandbox processes idle |
 | Security observations | PASS observation only | Current unelevated CIM reports no running HVCI service; registry Secure Boot/HVCI values are zero; firmware, BitLocker and boot preflight still require elevation |
-| Elevated preparation | BLOCKED | Normal RunAs request is waiting at Windows UAC; no elevated result receipt exists at reporting time |
-| Test-copy signing / certificate trust | NOT_EXECUTED | Preparation process has not passed UAC; original unsigned 25-artifact candidate remains unchanged |
+| Elevated preparation | BLOCKED | Normal RunAs request ended with Windows error: operation was canceled; no elevated process/result receipt exists |
+| Test-copy signing / certificate trust | NOT_EXECUTED | Preparation never started after the unsuccessful UAC request; original unsigned 25-artifact candidate remains unchanged |
 | TESTSIGNING / reboot | NOT_EXECUTED | No boot modification or reboot performed |
 | Service takeover / rollback | NOT_EXECUTED | Needs all-session idle proof, full restoration review and the subsequent v1.18.6 activation implementation; preparation exports alone are not an executable service rollback |
 | Driver load / ABI / owned profile / Minecraft | NOT_EXECUTED | No owned driver, service replacement, profile creation or game launch |
 
 Actual commands/logs remain in ignored workspace storage. A normal elevated
-`Prepare` launch was requested; the observed consent process is pending. No UAC
+`Prepare` launch was requested; Windows returned "The operation was canceled by the user" after the consent wait; whether the dialog was visible is unconfirmed. No UAC
 bypass or second hidden installer route was attempted. If preparation fails,
 retain its local receipt/error and diagnose that first failure before proceeding.
 The new script supports only `Prepare`, `Inspect`, `EnableTestMode` and
