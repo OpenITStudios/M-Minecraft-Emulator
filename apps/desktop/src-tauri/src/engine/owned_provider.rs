@@ -44,6 +44,7 @@ pub struct OwnedSlot {
     pub profile_exists: bool,
     pub settings_verified: bool,
     pub boxed_process_count: u32,
+    pub launch_allowed: bool,
     pub status: String,
     pub processes: Vec<OwnedProcess>,
 }
@@ -141,6 +142,7 @@ fn parse_snapshot(text: &str, operation: OwnedOperation) -> io::Result<OwnedSnap
             || slot.box_name != format!("MivubiEdu{id}")
             || slot.processes.len() > 1
             || slot.boxed_process_count > 256
+            || (slot.launch_allowed && (!slot.settings_verified || slot.boxed_process_count != 0))
             || !matches!(
                 slot.status.as_str(),
                 "ABSENT" | "BLOCKED" | "STOPPED" | "STARTING_OR_CLOSING" | "RUNNING"
@@ -217,7 +219,9 @@ impl OwnedTestBackend<'_> {
         let quote = |s: &str| format!("'{}'", s.replace('\'', "''"));
         let json = serde_json::to_string(self.request).map_err(io::Error::other)?;
         let modules = "$PSModuleAutoLoadingPreference='None';foreach($n in @('Utility','Security','Management')){Import-Module (Join-Path $PSHOME ('Modules/Microsoft.PowerShell.'+$n+'/Microsoft.PowerShell.'+$n+'.psd1')) -ErrorAction Stop};";
-        let script = format!("{modules}\nAdd-Type -TypeDefinition @'\n{code}\n'@\n& {{\n{SCRIPT}\n}} -RequestJson {} -RepositoryRoot {} -ApplicationExecutable {} {}", quote(&json), quote(&repository_root().to_string_lossy()), quote(&std::env::current_exe()?.to_string_lossy()), if helper_only {"-HelperOnly"} else {""});
+        let resolver =
+            include_str!("../../../../../tooling/isolation-source/windows/education-target.ps1");
+        let script = format!("{modules}\n{resolver}\nAdd-Type -TypeDefinition @'\n{code}\n'@\n& {{\n{SCRIPT}\n}} -RequestJson {} -RepositoryRoot {} -ApplicationExecutable {} {}", quote(&json), quote(&repository_root().to_string_lossy()), quote(&std::env::current_exe()?.to_string_lossy()), if helper_only {"-HelperOnly"} else {""});
         const BOOTSTRAP: &str = "$ErrorActionPreference='Stop';$r=[IO.StreamReader]::new([Console]::OpenStandardInput(),[Text.Encoding]::UTF8);& ([ScriptBlock]::Create($r.ReadToEnd()))";
         let output = virtual_clients_core::bounded_command_output_with_stdin(
             &super::native_clients::system_powershell()?,

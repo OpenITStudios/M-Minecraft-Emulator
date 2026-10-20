@@ -138,7 +138,8 @@ if ($GameProcessId -ne 0) {
     if ($result.version -cne '5.73.6-MIVU' -or $result.abi -ne 0x57230) { throw 'Private driver required for owned game attribution.' }
     $game=Get-Process -Id $GameProcessId
     $started=$game.StartTime.ToUniversalTime().Ticks
-    if ($game.Path -cne 'C:\Program Files\Microsoft Studios\Minecraft Education\Minecraft.Windows.exe') { throw 'Unexpected game image path.' }
+    . (Join-Path $PSScriptRoot 'education-target.ps1')
+    if ($game.Path -ine (Resolve-ManagerEducationTarget)) { throw 'Unexpected game image path.' }
     $signature=Get-AuthenticodeSignature -LiteralPath $game.Path
     if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '^CN=Microsoft Corporation,') { throw 'Official Education image required.' }
     $identity=[MivubiRuntimeProbe]::Game($resolved,$GameProcessId,$started)

@@ -2,7 +2,7 @@ import {invokeRuntime} from "./invokeRuntime.js";
 export type OwnedOperation = "Inspect" | "Create" | "Launch" | "Focus" | "PlaceLeft" | "PlaceRight" | "Close";
 export type ClientId = "01" | "02" | "03" | "04";
 export interface OwnedProcess {pid:number;createdFileTime:string;sessionId:number;windowHandle:string;responding:boolean}
-export interface OwnedSlot {clientId:Exclude<ClientId,"01">;box:string;profileExists:boolean;settingsVerified:boolean;boxedProcessCount:number;status:"ABSENT"|"BLOCKED"|"STOPPED"|"STARTING_OR_CLOSING"|"RUNNING";processes:OwnedProcess[]}
+export interface OwnedSlot {clientId:Exclude<ClientId,"01">;box:string;profileExists:boolean;settingsVerified:boolean;boxedProcessCount:number;launchAllowed:boolean;status:"ABSENT"|"BLOCKED"|"STOPPED"|"STARTING_OR_CLOSING"|"RUNNING";processes:OwnedProcess[]}
 export interface OwnedSnapshot {schema:1;provider:"OWNED_V1186_LOCAL_TEST";operation:OwnedOperation;launcherExitCode:number|null;clients:OwnedSlot[];nativeProcesses:OwnedProcess[]}
 const record=(v:unknown):v is Record<string,unknown>=>typeof v==="object" && v!==null && !Array.isArray(v);
 const keys=(v:Record<string,unknown>, names:string[])=>Object.keys(v).length===names.length && names.every(n=>Object.hasOwn(v,n));
@@ -21,8 +21,8 @@ export function parseOwnedSnapshot(value:unknown):OwnedSnapshot {
   value.nativeProcesses.forEach(p=>process(p));
   value.clients.forEach((s:unknown,index:number)=>{
     const id=String(index+2).padStart(2,"0");
-    if(!record(s)||!keys(s,["clientId","box","profileExists","settingsVerified","boxedProcessCount","status","processes"])||s.clientId!==id||s.box!==`MivubiEdu${id}`||
-      typeof s.profileExists!=="boolean"||typeof s.settingsVerified!=="boolean"||!Number.isInteger(s.boxedProcessCount)||Number(s.boxedProcessCount)<0||Number(s.boxedProcessCount)>256||
+    if(!record(s)||!keys(s,["clientId","box","profileExists","settingsVerified","boxedProcessCount","launchAllowed","status","processes"])||s.clientId!==id||s.box!==`MivubiEdu${id}`||
+      typeof s.launchAllowed!=="boolean"||(s.launchAllowed&&(!s.settingsVerified||s.boxedProcessCount!==0))||typeof s.profileExists!=="boolean"||typeof s.settingsVerified!=="boolean"||!Number.isInteger(s.boxedProcessCount)||Number(s.boxedProcessCount)<0||Number(s.boxedProcessCount)>256||
       !["ABSENT","BLOCKED","STOPPED","STARTING_OR_CLOSING","RUNNING"].includes(String(s.status))||!Array.isArray(s.processes)||s.processes.length>1||s.processes.length>Number(s.boxedProcessCount)||
       (s.settingsVerified&&!s.profileExists)||(s.status==="ABSENT"&&(s.profileExists||s.boxedProcessCount!==0))||(s.status==="STOPPED"&&(!s.settingsVerified||s.boxedProcessCount!==0))||
       (s.status==="RUNNING"&&(!s.settingsVerified||s.processes.length!==1))) throw new TypeError("Inconsistent owned slot observation.");

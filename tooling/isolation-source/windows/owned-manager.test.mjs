@@ -33,3 +33,8 @@ test('window action and box query refuse stale/foreign identities before native 
     exit 0`);
   assert.equal(r.status,0,r.stdout+r.stderr);
 });
+test('shared Education resolver rejects another launcher target without launching',{skip:process.platform!=='win32'},()=>{
+  const file=fileURLToPath(new URL('./education-target.ps1',import.meta.url)).replaceAll("'","''");
+  const r=ps(`$ErrorActionPreference='Stop';. '${file}';try{Assert-ManagerRegisteredAppId '{6D809377-6AF0-444B-8957-A3773F02200E}\\Minecraft.Windows.exe' 'C:\\wrong\\Minecraft.Windows.exe';throw 'foreign launcher accepted'}catch{if($_.Exception.ToString() -notmatch 'different Minecraft installation'){throw}};exit 0`);
+  assert.equal(r.status,0,r.stdout+r.stderr);
+});

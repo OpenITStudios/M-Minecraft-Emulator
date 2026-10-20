@@ -170,7 +170,8 @@ try {
             if ($receipt.state -cne 'OWNED_TEST_CLIENT02_CONFIGURED_NO_GAME' -or $receipt.runtime.client02.settingsReadbackVerified -ne $true) { throw 'Client 02 settings are not verified.' }
             $game=(Resolve-Path -LiteralPath $GameExecutable).Path
             Ordinary $game
-            if ($game -cne 'C:\Program Files\Microsoft Studios\Minecraft Education\Minecraft.Windows.exe') { throw 'This first test supports only the observed official Education desktop installation.' }
+            . (Join-Path $PSScriptRoot 'education-target.ps1')
+            if ($game -ine (Resolve-ManagerEducationTarget)) { throw 'The selected game must match the registered Education Desktop installation.' }
             $sig=Get-AuthenticodeSignature -LiteralPath $game
             if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch '^CN=Microsoft Corporation,') { throw 'Official Microsoft Education signature required.' }
             # Re-read every canonical setting immediately before launch.

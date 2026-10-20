@@ -55,8 +55,8 @@ function SettingsMatch([string]$client) {
 }
 function Snapshot([string]$operation,$exitCode) {
     $sections=@(Sections);$clients=@();$ownedPids=[Collections.Generic.HashSet[int]]::new()
-    foreach ($client in @('02','03','04')) {
-        $box='MivubiEdu'+$client;$exists=$sections -icontains $box
+    foreach ($target in $minecraftTargets) {
+        $client=$target.id;$box=$target.profile;$exists=$sections -icontains $box
         $owned=$exists -and (OwnedProfile $client)
         $ready=$owned -and (SettingsMatch $client)
         $pids=if($exists){@([MivubiRuntimeProbe]::BoxPids($dll,$box))}else{@()};$pids=@($pids);$games=@()
@@ -75,7 +75,11 @@ function Snapshot([string]$operation,$exitCode) {
         }
         Demand ($games.Count -le 1) 'Multiple Education processes in one profile; ownership is ambiguous.'
         $status=if (-not $exists) {'ABSENT'} elseif (-not $ready) {'BLOCKED'} elseif ($games.Count -eq 1 -and $games[0].windowHandle -ne '0x0') {'RUNNING'} elseif ($pids.Count -gt 0) {'STARTING_OR_CLOSING'} else {'STOPPED'}
-        $clients+=@{clientId=$client;box=$box;profileExists=$exists;settingsVerified=$ready;boxedProcessCount=$pids.Count;status=$status;processes=@($games)}
+        $launchAllowed=$ready -and $pids.Count -eq 0
+        $launchKey='managerLaunch'+$client;$launcherKey='managerLauncher'+$client
+        if($receipt.runtime.PSObject.Properties.Name -contains $launchKey){$launchAllowed=$launchAllowed -and (([DateTimeOffset]::UtcNow-[DateTimeOffset]::Parse($receipt.runtime.$launchKey)).TotalSeconds -ge 30)}
+        if($receipt.runtime.PSObject.Properties.Name -contains $launcherKey){$prior=$receipt.runtime.$launcherKey;$running=Get-Process -Id $prior.pid -ErrorAction SilentlyContinue;if($running -and $running.StartTime.ToUniversalTime().ToFileTimeUtc().ToString() -ceq $prior.createdFileTime){$launchAllowed=$false}}
+        $clients+=@{clientId=$client;box=$box;profileExists=$exists;settingsVerified=$ready;boxedProcessCount=$pids.Count;status=$status;processes=@($games);launchAllowed=[bool]$launchAllowed}
     }
     $native=@()
     foreach($process in @(Get-Process -Name Minecraft.Windows -ErrorAction SilentlyContinue)) {
@@ -156,7 +160,11 @@ try {
     }
     $driver=[MivubiRuntimeProbe]::Read($dll)|ConvertFrom-Json
     Demand ($driver.version -ceq '5.73.6-MIVU' -and $driver.abi -eq 0x57230 -and $driver.testSigningActive -eq $true) 'Private driver/ABI/Test Mode verification failed.'
-    $gamePath='C:\Program Files\Microsoft Studios\Minecraft Education\Minecraft.Windows.exe'
+    if (-not (Get-Command Resolve-ManagerEducationTarget -ErrorAction SilentlyContinue)) {
+        . (Join-Path $repo 'tooling/isolation-source/windows/education-target.ps1')
+    }
+    $gamePath=Resolve-ManagerEducationTarget
+    $minecraftTargets=@((Get-Content -LiteralPath (Join-Path $repo 'engine/isolation-native/owned-runtime/minecraft-targets.json') -Raw|ConvertFrom-Json).targets|Where-Object kind -ceq 'ISOLATED')
     $signature=Get-AuthenticodeSignature -LiteralPath $gamePath
     Demand ($signature.Status -eq 'Valid' -and $signature.SignerCertificate.Subject -match '^CN=Microsoft Corporation,') 'Official Education installation is untrusted.'
     $before=Snapshot $request.operation $null
@@ -204,6 +212,8 @@ try {
         # Observe only: never issue a second launch to compensate for missing evidence.
         $deadline=[DateTime]::UtcNow.AddSeconds(12)
         do {$after=Snapshot 'Launch' $exitCode;$found=@($after.clients|Where-Object clientId -ceq $request.clientId)[0];if($found.processes.Count -gt 0){break};Start-Sleep -Milliseconds 350} while([DateTime]::UtcNow -lt $deadline)
+        if($child.HasExited){$exitCode=$child.ExitCode;$after.launcherExitCode=$exitCode}
+        $receipt.runtime|Add-Member -Force -NotePropertyName ('managerLaunchEvidence'+$request.clientId) -NotePropertyValue (@{at=[DateTimeOffset]::UtcNow.ToString('o');launcherExitCode=$exitCode;launcherAlive=(-not $child.HasExited);boxedProcessCount=$found.boxedProcessCount;attributedGameCount=$found.processes.Count;status=$found.status});SaveReceipt
         $result=$after
     } elseif ($request.operation -notin @('Inspect','Create')) {
         Demand ($slot.settingsVerified -and $slot.processes.Count -eq 1 -and $null -ne $request.target) 'One freshly attributed game/window is required.'
