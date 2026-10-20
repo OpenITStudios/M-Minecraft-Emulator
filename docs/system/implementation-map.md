@@ -13,18 +13,18 @@ This is a **navigation guide**, not a second implementation registry. The sole c
 
 ## Locate work by problem
 
-**Current native source (15 October 2026):** the editable Sandboxie-derived
+**Current native source (21 October 2026):** the editable Sandboxie-derived
 v1.18.6 implementation is **complete as source** in `engine/isolation-owned/`
 (1,627 files, 15 directly modified C/C++ files plus four reviewed project-path
 quoting fixes). The unmodified reference is
 `engine/isolation-candidates/sandboxie-v1.18.6/`. The active exact-source
 verifier is `tooling/isolation-source/verify-owned-v1186.mjs` and the
 **build-only** Windows entrypoint is `tooling/isolation-source/build-owned-v1186.ps1`.
-The full native build and staging pass on 20 October 2026 at `f529d59`:
+The full native build and staging pass on 21 October 2026 at `e2c80ad`:
 three Windows stages, 16 unsigned-build binaries, five resources and four licenses.
 The resulting 25-file owned package remains NOT_INSTALLABLE; production signing,
 provider activation and gameplay remain unexecuted.
-Three standalone C/C++ policy tests compile and pass with MSVC; they are not the
+Standalone C/C++ policy tests compile and pass with MSVC; they are not the
 real driver build. Driver installation and owned-engine gameplay remain unexecuted.
 See [current implementation sequence](../../planning/development.md).
 The pinned v1.18.5 Gitlink, independent fork scripts, overlays, assemblers
@@ -45,11 +45,11 @@ they must never be chosen automatically as current build or activation code.
 | Select a single owned Minecraft virtual slot (plan-only, 02/03/04) | `engine/isolation-native/owned-runtime/minecraft-profiles.mjs` (`planOwnedMinecraftVirtual`) | Same persistent Sandboxie setting sequence, with no driver activation; UI readiness explanation belongs to `app/presentation/compactManager.ts` and existing Rust host probe |
 | Inspect candidate Sandboxie section names, including disabled boxes (read-only; no ownership proof) | `tooling/acceptance/windows/collect-virtual-boxes.ps1` → `apps/desktop/src-tauri/src/engine/virtual_inventory.rs` → existing Tauri `desktop_discover_existing_virtuals` | `nativeFeasibilityApi.ts` and mounted `CompactManagerApp.svelte`; inspection UI lives in Settings → Diagnostics, official-pilot section candidates only, no Create/Configure/driver activation or account proof |
 | User-facing Virtual Manager and internal isolation readiness | `apps/desktop/src/CompactManagerApp.svelte` + `apps/desktop/src/app/bridge/nativeFeasibilityApi.ts` | One mounted UI: Minecraft 01–04 overview first, technical Sandboxie/owned-engine checks collapsed under Settings → Diagnostics; existing Rust inspector (`apps/desktop/src-tauri/src/engine/owned_isolation.rs`); v1.18.6/25 and v1.18.5/24 metadata agree, Create Virtual remains blocked until a signed owned provider exists |
-| Compile actual **v1.18.6 MIVUBI-owned** native core without installation | `engine/isolation-owned/` + `tooling/isolation-source/build-owned-v1186.ps1` | `engine/isolation-native/owned-runtime/build-profile-v1186.json`, `verify-owned-v1186.mjs` and `build-owned-v1186.test.mjs`; three-stage real Windows build remains NOT_EXECUTED |
+| Compile actual **v1.18.6 MIVUBI-owned** native core without installation | `engine/isolation-owned/` + `tooling/isolation-source/build-owned-v1186.ps1` | `engine/isolation-native/owned-runtime/build-profile-v1186.json`, `verify-owned-v1186.mjs` and `build-owned-v1186.test.mjs`; three-stage real Windows build passes at `e2c80ad`; not installed |
 | Native PID/HWND candidates without accounts, tokens or VM | `apps/desktop/src-tauri/src/engine/native_clients.rs`, `apps/desktop/src/app/bridge/nativeFeasibilityApi.ts` | [Native feasibility](../validation/native-multi-instance-feasibility.md); candidate-only |
 | Active desktop and blocked legacy VM routing | `apps/desktop/src/main.ts`, `apps/desktop/src/CompactManagerApp.svelte`, `engine/runtime-core/src/command.rs` | [Legacy Retirement](./legacy-retirement.md); old Tauri handlers not registered |
 | Prove two Minecraft Education Desktop sessions can run natively without VMs | `tooling/acceptance/windows/collect-native-feasibility.ps1`, `tooling/acceptance/evaluate-native-feasibility.mjs` | [Native feasibility](../validation/native-multi-instance-feasibility.md); historical alternative, not selected launch architecture |
-| Build/package the current owned v1.18.6 engine (unsigned, not installable) | `engine/isolation-native/owned-runtime/build-profile-v1186.json` → `tooling/isolation-source/build-owned-v1186.ps1` → `tooling/isolation-source/assemble-owned-v1186.mjs` | One exact profile, actual compiler exit/16 binary hashes/5 resources/4 licenses; package remains NOT_INSTALLABLE; Windows build NOT_EXECUTED |
+| Build/package the current owned v1.18.6 engine (unsigned, not installable) | `engine/isolation-native/owned-runtime/build-profile-v1186.json` → `tooling/isolation-source/build-owned-v1186.ps1` → `tooling/isolation-source/assemble-owned-v1186.mjs` | One exact profile, actual compiler exit/16 binary hashes/5 resources/4 licenses; package remains NOT_INSTALLABLE; Windows build passes at `e2c80ad` |
 | Inspect the owned v1.18.6 payload in the desktop (read-only) | `apps/desktop/src-tauri/src/engine/owned_isolation.rs` | Existing Settings → Diagnostics candidate inspection accepts owned schema-2 package but never selects or installs the engine |
 | Historical private v1.18.5 assembler (superseded) | `tooling/isolation-source/assemble-private-engine.mjs` → `assemble-engine.mjs` | Retained only for regression/reference; not an active source build or package route |
 | Apply a coherent private-source build marker and ABI compiler guards across seven pinned upstream owners in a separate Git fork checkout | `engine/isolation-native/fork-overlay/apply-private-source.mjs`, `build-private.ps1` | Private exclusive fork build route, keeps upstream namespace/ABI intact, private build report distinct from unmodified baseline; no install |

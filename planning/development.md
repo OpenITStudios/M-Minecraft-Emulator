@@ -1,12 +1,12 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
-## Owned manager / independence — 20 October 2026
+## Owned manager / independence — 21 October 2026
 
-**ACTIVE**, source `68ded21636ff486e973d757ce149f12ce05e1069`.
-Classic credential fallback and compartment storage bypass closed. **715 source
-checks + three native build stages PASS**; NOT_INSTALLABLE, active engine unchanged.
+**ACTIVE**, source `e2c80ada420b259ede58c2100d735a7bd73ff763`.
+Credential/storage host fallback closed. **718 source checks + three native
+build stages PASS**; NOT_INSTALLABLE, active engine unchanged.
 [Evidence](../docs/validation/native-pilot-localtest.md). **Product FAIL** remains.
-**Next:** distinguish broker/cache reuse; live account isolation, input and four
+**Next:** distinguish WAM/cache reuse; live account isolation, input and four
 playable clients remain unproven.
 
 ## Windows-first efficiency — 20 October 2026

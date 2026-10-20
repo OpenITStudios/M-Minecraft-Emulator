@@ -9,6 +9,58 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Protected Storage consumer closure — 21 October 2026
+
+Implementation `e2c80ada420b259ede58c2100d735a7bd73ff763` continues the
+credential work below. **718 source checks and three full native build stages
+PASS. Active engine unchanged; four-client product acceptance remains FAIL.**
+
+Tracing the actual credential-store consumer exposed two further host paths:
+
+- `ipstore_impl.cpp::open_stream` opened the logical Windows storage path using
+  normal read-through, so a missing boxed file could resolve to a host handle.
+  Writes used destructive create/truncate dispositions before checking origin.
+  The owned implementation now rejects open/closed/read-only path rules and
+  unsandboxed use, validates the resulting boxed handle before reading, opens
+  writes without truncation, and truncates only after handle validation. Failed
+  identity, seek, truncation and stream-open paths close the handle. The same
+  logical storage path and existing box data are retained.
+- `IPStoreImpl::find_type/find_subtype/find_item` and `ipstore_enum.cpp` still
+  requested missing entries and host enumeration through the existing PStore
+  service. Its host connection and dispatch were a second fallback below the
+  earlier credential-layer correction. The private service no longer schedules
+  that host connection; its registered handler returns `E_ACCESSDENIED` for all
+  PStore requests. Local boxed storage continues through the existing DLL path.
+  No second store, new public message schema or account migration was added.
+
+The actual stream and service-handler function bodies compile with MSVC against
+synthetic handles, storage and dispatch counters. The regression first failed
+on the old host read-through, and then separately on host service dispatch.
+After correction it covers boxed success, host rejection, special boxed-path
+status, identity errors, non-destructive retry, seek/truncation/stream failures,
+blocked path rules and all five host service operations plus an unknown request.
+It never reads real account values. This is not a live filesystem-isolation test.
+
+`npm run verify:source` passes **718** checks: Node 288, frontend 177,
+desktop Rust 76 and runtime Rust 177; four existing file-symlink skips and
+eight opt-in Rust tests remain. Exact committed-source reconstruction passes:
+1,627 files, **15 native + 4 build-path changes**, pristine tree unchanged.
+
+A clean source-only `Local` clone at the implementation SHA completed all
+three real MSBuild stages with exit 0 (Win32 support, x64 user core including
+the modified DLL and service, x64 WDK kernel). The resulting 16 binaries,
+five resources and four licenses form a 25-file **NOT_INSTALLABLE** candidate.
+Local evidence: `workspace/storage-clean-e2c80ad-20261021-000506/workspace/builds/storage-boundary/`
+and its corresponding `workspace/packages/storage-boundary/`. The source-check
+log is `workspace/storage-boundary-source-check.log` in the working checkout.
+
+No running engine, profile, game, account or driver was changed in this batch.
+Host PStore compatibility is deliberately removed from the private build; real
+game login compatibility remains unexecuted. WAM/SSO broker use, any existing
+account-bearing game cache, focus/input recovery and four independently licensed
+playable accounts concurrently remain unresolved. These source/build results do
+not establish that the reported shared-account symptom is fixed.
+
 ## Implemented classic credential/storage boundary — 20 October 2026
 
 Implementation `68ded21636ff486e973d757ce149f12ce05e1069`, following audit
