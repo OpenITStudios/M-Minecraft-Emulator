@@ -10,8 +10,9 @@ test('stable registry selection rejects previews and unavailable metadata', asyn
 });
 test('audit continues all graphs, treats outdated findings as informational, and propagates failures',()=>{
   let calls=0;
-  assert.equal(auditDependencies((command,args)=>{calls++;return {status:args.includes('outdated')?1:0};}),0);
+  assert.equal(auditDependencies((command,args)=>{calls++;return {status:args.includes('outdated')?1:0,stdout:'{"vite":{"current":"1.0.0","latest":"2.0.0"}}'};}),0);
   assert.equal(calls,7);
+  assert.equal(auditDependencies((command,args)=>({status:args.includes('outdated')?1:0,stdout:'{"error":{"code":"EAI_AGAIN"}}'})),1);
   calls=0;
   assert.equal(auditDependencies((command,args)=>{calls++;return {status:args.includes('audit')?1:0};}),1);
   assert.equal(calls,7);
