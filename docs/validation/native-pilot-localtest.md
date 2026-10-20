@@ -18,6 +18,23 @@ not evidence of a Windows Sandbox dependency or of a crash. Application/WER
 inspection did not provide a usable matching crash record. The precise reported
 crash cause remains **UNKNOWN**, not attributed to the following bugs without proof.
 
+**Later operator clarification and matching Windows evidence:** the game closed
+itself, rather than remaining alive behind the manager. Read-only Application
+event inspection found Event ID **1002** at **20 October 2026, 20:22:23 local**:
+`Minecraft.Windows.exe` **1.26.32.0** stopped interacting with Windows and was
+closed; `HangType` is `Top level window is idle`. This supersedes the earlier
+absence of a matching record. It establishes a game hang/closure, not its cause
+or an exception fault module. No contemporaneous dump was found; existing dumps
+dated September/10 October are historical and were not used as proof for this run.
+Source review finds no game force-termination in the presentation owner (its
+kill calls target its own helper or synthetic fixture), but does not exclude
+window/style/focus changes triggering a game hang. Real-game acceptance remains
+**FAIL**; escalating to two/four clients is deferred. Next runtime investigation
+must compare a normal native window baseline with controlled composition,
+including foreground loss, minimize/restore and original-style restoration;
+preserve any new crash evidence and stop on the first hang. No test may be
+declared successful solely because the process/HWND exists.
+
 Correction revision: `f406e7718685ce7582664993414927841a597073`.
 Final executed checks: full `npm run verify:source` **PASS**, 705 tests
 (Node 279, frontend 175, desktop Rust 74, runtime Rust 177; four existing symlink

@@ -2,7 +2,7 @@
 
 ## Owned manager / independence — 20 October 2026
 
-**ACTIVE:** switching acceptance FAIL; genuine in-app hosting requested. Resize loses UI lease and minimized webview placement reproduced/fixed; coalesced events and visible errors added. Synthetic/browser regressions PASS, actual crash cause UNKNOWN. Hosting, gameplay stability and independence unproven. Next: resolve safe hosting boundary. [Evidence](../docs/validation/native-pilot-localtest.md).
+**ACTIVE:** switching FAIL; user confirms game closed. Windows Event 1002 at 20:22 confirms Education 1.26.32.0 hung/closed; cause UNKNOWN, no current dump. `f406e77` fixes UI recovery/minimize races; tests PASS, gameplay FAIL. No two/four-client escalation. Next: native baseline vs controlled composition diagnosis. [Evidence](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
 
