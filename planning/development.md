@@ -2,11 +2,11 @@
 
 ## Owned manager / independence — 20 October 2026
 
-**ACTIVE**, source `106bd5917f800558cf832b40cc56f03c62ea34d2`.
-**Focus/hosting FAIL** on manager Tab; recovery holds the surface and Retry works.
-**711 source + 2 synthetic PASS**. [Audit](../docs/validation/native-pilot-localtest.md).
-**Next:** resolve native focus before 02–04. Hosting, input/gameplay, exits,
-timeout recovery and installer remain unresolved.
+**ACTIVE**, source `dd1e4047034a2c73e7456b06f6f57746ea285bb8`.
+01→launch 02→01 recovery observed: game-class ambiguity and inherited launch
+pipes fixed. **712 source PASS**. [Evidence](../docs/validation/native-pilot-localtest.md).
+**Next:** resolve intermittent focus loss. Hosting, composed input/gameplay,
+four clients, general timeout recovery and installer remain unresolved.
 
 ## Windows-first efficiency — 20 October 2026
 

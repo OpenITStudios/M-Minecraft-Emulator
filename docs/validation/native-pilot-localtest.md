@@ -9,6 +9,53 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Client 01 recovery after opening 02 — 20 October 2026
+
+Source `dd1e4047034a2c73e7456b06f6f57746ea285bb8`, baseline `ac68612`.
+**Reported irreversible 01 loss: bounded recovery PASS in the final sequence.
+General foreground stability and full gameplay acceptance remain unaccepted.**
+
+Two independent defects were reproduced and corrected in the existing owned
+provider's canonical PowerShell window/launch owner:
+
+1. The still-running native game had both an `OGLES` surface and a large hidden
+   `Chrome_WidgetWin_0`. Size/owner filtering counted both and threw the screenshot's
+   `Ambiguous Education top-level windows`. All-client Inspect, launch preflight
+   and display revalidation consequently failed; 01 was hidden, not exited.
+   Discovery now selects the exact game class within the freshly attributed PID:
+   native `OGLES`, or `Sandbox:<verified canonical profile>:OGLES` for owned games.
+   Hidden retained tabs remain eligible. Unknown classes return no window; two
+   matching game surfaces still fail closed. Class names do not replace existing
+   PID/start/session/image/profile ownership validation.
+2. The initial real 02 launch reached its menu while the manager remained Working
+   after PowerShell exited. With `UseShellExecute=false`, a synthetic long-lived
+   GUI inherited the observation pipes: the production policy made collection
+   wait 4,138 ms for its four-second lifetime. The same regression passes with
+   shell execution, which separates the launched application from those pipes.
+   This matches the documented [ProcessStartInfo standard-stream inheritance](https://learn.microsoft.com/en-us/dotnet/api/System.Diagnostics.ProcessStartInfo).
+
+Both regressions failed before correction. Final `npm run verify:source` passes
+**712 checks** (Node 282, frontend 177, desktop Rust 76, runtime Rust 177), with
+four existing file-symlink skips and eight opt-in desktop tests ignored. The
+focused ten-test Windows provider suite and rebuilt Windows debug executable pass.
+No frontend or general process-runner changes were needed for this correction.
+
+Final-build actual sequence: adopt existing 01 and 02, display 02, then select 01
+and visibly recover its existing world. Next select 02 at its menu, request
+**Close normally**, approve its ordinary exit dialog, refresh to observe it empty,
+and recover 01. Open 02 once using the final launcher; at the approximately
+23-second observation the manager was Connected, 02's menu occupied the viewport,
+and controls were enabled. Select tab 01: its same world returned without a
+restart, while 02 remained detected. Two game processes remained alive. No input
+was sent into the world, no login was automated and no credentials were copied.
+
+The old coverage/foreground error still appeared during manager interaction and
+loading; explicit selection/retry recovered it. This change does not claim
+continuous 01 visibility throughout launch, reliable mouse/keyboard capture,
+distinct licensed accounts, two concurrent playable worlds, four clients or safe
+true child hosting. Those remain separate acceptance gaps. The developer manager
+is left on the recovered 01 world with 02 available as a retained tab.
+
 ## Audit correction: focus failure and recovery hold — 20 October 2026
 
 Baseline `5f8460dacdcfeb849d8611bdcfbbf76c3904d67d`; retained source
