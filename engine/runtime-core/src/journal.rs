@@ -3,7 +3,6 @@ use crate::{
     paths::runtime_root,
     persistence::{read_text_recovering, reject_unsafe_existing_file, write_text_transactional},
 };
-use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File, OpenOptions},
@@ -69,7 +68,7 @@ fn history_path() -> io::Result<std::path::PathBuf> {
 
 fn lock_history_with_deadline(file: &File) -> io::Result<()> {
     for attempt in 0..HISTORY_LOCK_ATTEMPTS {
-        match FileExt::try_lock_exclusive(file) {
+        match file.try_lock().map_err(io::Error::from) {
             Ok(()) => return Ok(()),
             Err(error)
                 if error.kind() == io::ErrorKind::WouldBlock
@@ -99,7 +98,7 @@ fn with_history_lock<T>(operation: impl FnOnce() -> io::Result<T>) -> io::Result
         .open(&lock_path)?;
     lock_history_with_deadline(&file)?;
     let outcome = operation();
-    let release = FileExt::unlock(&file);
+    let release = file.unlock();
     match (outcome, release) {
         (Err(error), _) => Err(error),
         (Ok(_), Err(error)) => Err(error),
@@ -245,5 +244,42 @@ mod tests {
         assert!(!json.contains("password"));
         assert!(!json.contains("token"));
         assert!(!json.contains("email"));
+    }
+
+    #[test]
+    fn history_contention_returns_would_block_and_releases_for_retry() {
+        use std::{fs::OpenOptions, io, time::Instant};
+        let root = std::env::temp_dir().join(format!(
+            "history-contention-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("history.lock");
+        let owner = OpenOptions::new()
+            .create_new(true)
+            .read(true)
+            .write(true)
+            .open(&path)
+            .unwrap();
+        let contender = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&path)
+            .unwrap();
+        owner.try_lock().unwrap();
+        let started = Instant::now();
+        let error = super::lock_history_with_deadline(&contender).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
+        assert!(started.elapsed() >= HISTORY_LOCK_INTERVAL * (HISTORY_LOCK_ATTEMPTS as u32 - 1));
+        owner.unlock().unwrap();
+        super::lock_history_with_deadline(&contender).unwrap();
+        contender.unlock().unwrap();
+        drop(contender);
+        drop(owner);
+        fs::remove_dir_all(root).unwrap();
     }
 }
