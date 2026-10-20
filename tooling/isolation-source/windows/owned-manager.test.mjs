@@ -1,11 +1,34 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync,mkdtempSync,rmSync} from 'node:fs';
+import {resolve,join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 const source=readFileSync(new URL('./owned-manager.ps1',import.meta.url),'utf8');
 const probe=readFileSync(new URL('./probe-v1186-runtime.ps1',import.meta.url),'utf8');
 const ps=code=>spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',code],{encoding:'utf8',timeout:15000,windowsHide:true});
+
+test('long-lived launcher does not retain the manager observation pipes',{skip:process.platform!=='win32'},async()=>{
+  const directory=mkdtempSync(resolve('workspace/launcher-pipes-'));
+  const binary=join(directory,'Synthetic.exe');
+  const quoted=binary.replaceAll("'","''");
+  const setting=source.match(/\$start\.UseShellExecute=\$(?:true|false)/)?.[0];
+  assert.ok(setting,'production launcher shell policy');
+  try{
+    const compiled=ps(`Add-Type -TypeDefinition 'public static class Fixture {public static void Main(){System.Threading.Thread.Sleep(4000);}}' -OutputAssembly '${quoted}' -OutputType WindowsApplication`);
+    assert.equal(compiled.status,0,compiled.stdout+compiled.stderr);
+    const began=Date.now();
+    const result=ps(`$ErrorActionPreference='Stop';$start=[Diagnostics.ProcessStartInfo]::new();$start.FileName='${quoted}';${setting};$child=[Diagnostics.Process]::Start($start);$child.Dispose();Write-Output 'observation-complete'`);
+    const elapsed=Date.now()-began;
+    assert.equal(result.status,0,result.stdout+result.stderr);
+    assert.match(result.stdout,/observation-complete/);
+    assert.ok(elapsed<2500,`Observation waited ${elapsed} ms for synthetic game exit`);
+  }finally{
+    // The synthetic GUI exits itself; never terminate a real process for this test.
+    await new Promise(resolve=>setTimeout(resolve,4200));
+    rmSync(directory,{recursive:true});
+  }
+});
 test('launch cooldown compares UTC instants on non-UTC Windows',{skip:process.platform!=='win32'},()=>{
   const expression=source.match(/Demand \((\(\[DateTimeOffset\]::UtcNow-\[DateTimeOffset\]::Parse\(\$receipt.runtime.\$launchKey\)\).TotalSeconds -ge 30)\)/)?.[1];
   assert.ok(expression,'production cooldown expression');
@@ -41,9 +64,41 @@ test('native attribution crosses PowerShell without null-to-empty profile coerci
   assert.equal(r.status,0,r.stdout+r.stderr);
 });
 
-test('window discovery retains hidden tabs and rejects ambiguous main windows',{skip:process.platform!=='win32'},()=>{
+test('window discovery retains hidden game tabs, ignores browser windows and rejects two game windows',{skip:process.platform!=='win32'},()=>{
   const code=probe.split("Add-Type -TypeDefinition @'")[1].split("'@")[0];
-  const r=ps(`$ErrorActionPreference='Stop';Add-Type -TypeDefinition @'\n${code}\n'@;Add-Type -AssemblyName System.Windows.Forms;$one=[Windows.Forms.Form]::new();$two=[Windows.Forms.Form]::new();try{$one.Width=480;$one.Height=320;$one.Show();[Windows.Forms.Application]::DoEvents();$handle=$one.Handle;if([MivubiManagerWindows]::GameWindow($PID) -ne $handle){throw 'Visible window lost'};$one.Hide();if([MivubiManagerWindows]::GameWindow($PID) -ne $handle){throw 'Hidden tab lost'};$two.Width=480;$two.Height=320;$two.Show();try{[MivubiManagerWindows]::GameWindow($PID);throw 'Ambiguous windows accepted'}catch{if($_.Exception.ToString() -notmatch 'Ambiguous Education'){throw}}}finally{$one.Dispose();$two.Dispose()};exit 0`);
+  const fixture=String.raw`
+using System;
+using System.Runtime.InteropServices;
+public static class SyntheticGameWindows {
+  delegate IntPtr Proc(IntPtr h,uint m,IntPtr w,IntPtr l);
+  static Proc procedure=DefWindowProcW;
+  [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)] struct Class {
+    public uint style; public Proc proc; public int a,b; public IntPtr module,icon,cursor,background;
+    public string menu,name;
+  }
+  [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern ushort RegisterClassW(ref Class c);
+  [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern IntPtr CreateWindowExW(uint ex,string cls,string title,uint style,int x,int y,int w,int h,IntPtr parent,IntPtr menu,IntPtr module,IntPtr data);
+  [DllImport("user32.dll")] static extern IntPtr DefWindowProcW(IntPtr h,uint m,IntPtr w,IntPtr l);
+  [DllImport("user32.dll")] public static extern bool DestroyWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h,int command);
+  public static IntPtr Create(string name){
+    var c=new Class {proc=procedure,name=name}; RegisterClassW(ref c);
+    var h=CreateWindowExW(0,name,"Synthetic only",0x00cf0000,20,20,480,320,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero);
+    if(h==IntPtr.Zero)throw new Exception("Fixture creation failed");return h;
+  }
+}`;
+  const r=ps(`$ErrorActionPreference='Stop';Add-Type -TypeDefinition @'\n${code}\n'@;Add-Type -TypeDefinition @'\n${fixture}\n'@
+    $one=[SyntheticGameWindows]::Create('OGLES');$browser=[SyntheticGameWindows]::Create('Chrome_WidgetWin_0');$boxed=[SyntheticGameWindows]::Create('Sandbox:MivubiEdu02:OGLES');$two=[IntPtr]::Zero;
+    try{
+      if([MivubiManagerWindows]::GameWindow($PID,'MivubiEdu02') -ne $boxed){throw 'Canonical boxed game lost'};
+      if([MivubiManagerWindows]::GameWindow($PID,'MivubiEdu03') -ne [IntPtr]::Zero){throw 'Foreign box class accepted'};
+      [void][SyntheticGameWindows]::ShowWindow($one,4);
+      if([MivubiManagerWindows]::GameWindow($PID) -ne $one){throw 'Visible game confused with hidden browser'};
+      [void][SyntheticGameWindows]::ShowWindow($one,0);
+      if([MivubiManagerWindows]::GameWindow($PID) -ne $one){throw 'Hidden tab lost'};
+      $two=[SyntheticGameWindows]::Create('OGLES');
+      try{[MivubiManagerWindows]::GameWindow($PID);throw 'Ambiguous windows accepted'}catch{if($_.Exception.ToString() -notmatch 'Ambiguous Education'){throw}}
+    }finally{if($two -ne [IntPtr]::Zero){[void][SyntheticGameWindows]::DestroyWindow($two)};[void][SyntheticGameWindows]::DestroyWindow($one);[void][SyntheticGameWindows]::DestroyWindow($browser);[void][SyntheticGameWindows]::DestroyWindow($boxed)};exit 0`);
   assert.equal(r.status,0,r.stdout+r.stderr);
 });
 

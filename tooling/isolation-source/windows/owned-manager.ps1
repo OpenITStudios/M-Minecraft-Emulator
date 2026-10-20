@@ -78,7 +78,7 @@ function Snapshot([string]$operation,$exitCode) {
             Demand ($identity.WindowsSession -eq $currentSession) 'Game belongs to another Windows session.'
             $process.Refresh()
             Demand (-not $process.HasExited -and $process.StartTime.ToUniversalTime() -eq $started) 'Game identity changed.'
-            $window=[MivubiManagerWindows]::GameWindow($process.Id)
+            $window=[MivubiManagerWindows]::GameWindow($process.Id,$box)
             $games+=@{pid=$process.Id;createdFileTime=$started.ToFileTimeUtc().ToString();sessionId=$identity.WindowsSession;
                 windowHandle=('0x'+$window.ToInt64().ToString('x'));responding=[MivubiManagerWindows]::WindowResponding($window)}
         }
@@ -215,7 +215,8 @@ try {
         $receipt.runtime|Add-Member -Force -NotePropertyName $launchKey -NotePropertyValue ([DateTime]::UtcNow.ToString('o'));SaveReceipt
         $start=[Diagnostics.ProcessStartInfo]::new()
         $start.FileName=Join-Path $payload 'Start.exe';$start.Arguments='/mivubi_client:'+$request.clientId+' "'+$gamePath+'"'
-        $start.WorkingDirectory=$payload;$start.UseShellExecute=$false
+        # The long-lived game must not inherit this observation's stdout/stderr pipes.
+        $start.WorkingDirectory=$payload;$start.UseShellExecute=$true
         $child=[Diagnostics.Process]::Start($start)
         $handle=$child.Handle
         try {
