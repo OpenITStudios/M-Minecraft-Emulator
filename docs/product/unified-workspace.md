@@ -22,6 +22,41 @@ existing destructive SetParent failure must not be bypassed to hide an icon.
 Current corrections preserve recovery controls and handle minimized updates;
 they do not resolve this architectural requirement. See the canonical test report.
 
+### Latest operator clarification: browser-like shell
+
+One manager taskbar entry and one navigation surface are required. Minecraft
+01–04 behave like stable tabs: select one to play, keep other sessions alive,
+close only the chosen session after normal save prompts. Separate game processes
+in Task Manager are expected and must not be hidden. Multiple application buttons
+and independent game-window navigation are not the intended accepted UX.
+
+The existing provider/catalog remains the launch, profile and ownership authority.
+The desktop presentation module must eventually retain verified presentation
+leases for all managed tabs, with one active viewport. Its current single lease
+restores the previous window on switching and therefore does **not** implement
+this requirement. Do not rename the current session rail to imply working tabs.
+
+Required implementation checks before enabling a single-shell mode:
+
+- Retain per-tab recovery checkpoints and commit selection only after a successful
+  switch; reject PID reuse, foreign profiles, stale HWNDs and partial adoption.
+- Obtain fresh native/provider identity even for hidden background windows;
+  `MainWindowHandle` being zero is not proof that a hidden game exited.
+- Keep background games alive without stealing focus; handle minimize/restore,
+  dialogs, resize, fullscreen, DPI changes and normal close in one sequence.
+- Change shell/taskbar eligibility only after recovery is established, restore
+  it on detach and host/helper loss, and test Explorer restart. Never use owner
+  or parent reassignment merely to suppress an icon. Taskbar suppression alone
+  is not interactive hosting or proof of one-shell behavior.
+- Prove the native baseline versus composed game behavior, then one/two/four tab
+  switching; no multi-client escalation while the observed game hang is unresolved.
+
+Windows offers [taskbar item removal](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-itaskbarlist-deletetab)
+and [shell eligibility styles](https://learn.microsoft.com/en-us/windows/win32/winmsg/extended-window-styles).
+These are candidate primitives, not implemented/accepted product behavior.
+No Task Manager process concealment, game injection or new isolation provider is
+authorized or required by this UX. Windows Sandbox remains outside the design.
+
 ## User experience
 
 One maximized English-language application contains one large playable game

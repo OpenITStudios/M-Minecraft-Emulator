@@ -2,7 +2,7 @@
 
 ## Owned manager / independence — 20 October 2026
 
-**ACTIVE:** switching FAIL; user confirms game closed. Windows Event 1002 at 20:22 confirms Education 1.26.32.0 hung/closed; cause UNKNOWN, no current dump. `f406e77` fixes UI recovery/minimize races; tests PASS, gameplay FAIL. No two/four-client escalation. Next: native baseline vs controlled composition diagnosis. [Evidence](../docs/validation/native-pilot-localtest.md).
+**ACTIVE:** browser-like one-taskbar/four-tab shell required; current single presentation lease does not meet it. Modal live-style overwrite reproduced/fixed; synthetic PASS. Education hang (Event 1002) cause UNKNOWN; gameplay FAIL, no multi-client escalation. Next: native baseline vs controlled composition diagnosis. [Evidence](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
 

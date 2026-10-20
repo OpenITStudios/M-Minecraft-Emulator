@@ -9,6 +9,32 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Browser-like shell target and live window flags — 20 October 2026
+
+Baseline `5ce53a254bd598a76995510f979ecae7c58049a2`. The operator clarifies
+the target as one taskbar entry with four game tabs, not hiding game processes
+in Task Manager. The product contract now records the current single-lease
+limitation and adoption/recovery requirements. One-taskbar/multitab operation
+remains **NOT_EXECUTED / not implemented**; no shell-style or ownership hack was
+enabled on the game.
+
+The continuing source diagnosis found that placement/restoration replayed the
+saved whole window style, overwriting live game-controlled bits such as
+`WS_DISABLED`. A synthetic modal-state regression reproduced **FAIL**: placement
+re-enabled the main window. The fix changes only the frame mask and preserves
+other current bits during placement and restoration. The extended controller/
+helper test now **PASS** on two consecutive final runs, including modal-state
+preservation, minimize/restore and six normal/maximized recovery cases. Frame and
+position errors now include the failed operation in diagnostics. Two intervening
+runs failed with generic Access Denied before operation-context diagnostics were
+added; that transient cause is **UNKNOWN**, not explained by the diagnostic change.
+The prior modal assertion failure was deterministic and is not waived.
+
+This is not evidence that the recorded Minecraft hang is fixed. A real native
+baseline, controlled composition, rendering/input, shell eligibility and game
+dialog acceptance are still required. No game launch, world access, driver/service
+operation, forced game termination or taskbar manipulation occurred in these tests.
+
 ## Workspace switching investigation — 20 October 2026
 
 Baseline: `0819b3d17a5bb104fb19d39033e6d6ea33cffbb4`. Operator reports

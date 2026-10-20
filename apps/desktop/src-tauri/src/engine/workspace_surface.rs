@@ -294,7 +294,10 @@ mod native {
             SetLastError(0);
             let previous = SetWindowLongPtrW(window, GWL_STYLE, value as isize);
             if previous == 0 && GetLastError() != 0 {
-                return Err(io::Error::last_os_error());
+                return Err(io::Error::other(format!(
+                    "Workspace frame update: {}",
+                    io::Error::last_os_error()
+                )));
             }
             Ok(())
         }
@@ -340,9 +343,11 @@ mod native {
             if IsZoomed(window) != 0 {
                 ShowWindow(window, SW_SHOWNOACTIVATE);
             }
+            let current_style = GetWindowLongPtrW(window, GWL_STYLE) as i64;
+            // Minecraft owns live flags (especially modal WS_DISABLED), not our checkpoint.
             let presentation_style =
-                saved.style & !((WS_CAPTION | WS_THICKFRAME | WS_MAXIMIZE) as i64);
-            let frame_changed = GetWindowLongPtrW(window, GWL_STYLE) as i64 != presentation_style;
+                current_style & !((WS_CAPTION | WS_THICKFRAME | WS_MAXIMIZE) as i64);
+            let frame_changed = current_style != presentation_style;
             if frame_changed {
                 style(window, presentation_style)?;
             }
@@ -374,7 +379,10 @@ mod native {
                     },
             ) == 0
             {
-                return Err(io::Error::last_os_error());
+                return Err(io::Error::other(format!(
+                    "Workspace position update: {}",
+                    io::Error::last_os_error()
+                )));
             }
             hwnd(&saved.target)?;
             let mut actual: RECT = std::mem::zeroed();
@@ -435,7 +443,12 @@ mod native {
             }
         };
         unsafe {
-            style(window, saved.style)?;
+            let frame_mask = (WS_CAPTION | WS_THICKFRAME | WS_MAXIMIZE) as i64;
+            let current_style = GetWindowLongPtrW(window, GWL_STYLE) as i64;
+            style(
+                window,
+                (current_style & !frame_mask) | (saved.style & frame_mask),
+            )?;
             let r = saved.rect;
             let foreground = GetForegroundWindow();
             let mut pid = 0;
@@ -1120,7 +1133,33 @@ mod controller {
                 0,
                 "Stale minimize event hid a restored session"
             );
+            // Simulate a modal dialog disabling its main window between updates.
+            unsafe {
+                SetWindowLongPtrW(
+                    game_window,
+                    GWL_STYLE,
+                    GetWindowLongPtrW(game_window, GWL_STYLE) | WS_DISABLED as isize,
+                );
+            }
+            update(manager as usize as u64, Some(viewport)).unwrap();
+            assert_ne!(
+                unsafe { GetWindowLongPtrW(game_window, GWL_STYLE) & WS_DISABLED as isize },
+                0,
+                "Placement overrode the game's modal disabled state"
+            );
             release().unwrap();
+            assert_ne!(
+                unsafe { GetWindowLongPtrW(game_window, GWL_STYLE) & WS_DISABLED as isize },
+                0,
+                "Recovery overrode the game's modal disabled state"
+            );
+            unsafe {
+                SetWindowLongPtrW(
+                    game_window,
+                    GWL_STYLE,
+                    GetWindowLongPtrW(game_window, GWL_STYLE) & !(WS_DISABLED as isize),
+                );
+            }
             unsafe {
                 DestroyWindow(manager);
             }
