@@ -9,6 +9,67 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Acceptance retracted: four independent accounts are not supported by proof
+
+20 October 2026, reviewed `Local` HEAD
+`35688ff9cf68debb22f2ed40a075e767deec3497` (implementation `dd1e404`).
+The operator rejects the previous completion claim: 02–04 cannot be used as four
+simultaneous clients and reuse the same account. **Product acceptance: FAIL.**
+The earlier menu/tab observations remain historical bounded observations only;
+they establish neither independent accounts nor four concurrent playable clients.
+
+### Capability audit
+
+| Required capability | Actual evidence | Verdict |
+| --- | --- | --- |
+| Distinct profile names | `minecraft-profiles.mjs` plans MivubiEdu02/03/04; read-only local receipt records profiles 03 and 04 configured. | Source/configuration only; not independent identities. |
+| Four simultaneous usable games | Operator reports failure. Individual historical launch receipts for 02, 03 and 04 say RUNNING at separate times; the current process inventory did not contain four games. | FAIL by operator report; receipts cannot be combined into concurrency proof. |
+| Stable presentation and control | Actual current workspace Diagnostics says `Workspace placement failed: Workspace foreground activation refused by Windows. Previous session preserved.` | FAIL for the observed presentation; process detection is insufficient. |
+| Separate accounts | Operator reports the same account. Each canonical profile plan explicitly returns `accountIsolationVerified:false`. | FAIL by operator report; no independent account acceptance. |
+| Persistence and cross-account noninterference | No final-source four-account close/reopen campaign, independent sign-out test, or independently controlled concurrent worlds. | NOT_EXECUTED. |
+
+The account problem belongs first to the isolation/authentication boundary, not
+the Svelte tab layout. Current settings intentionally use `NoSecurityIsolation=y`
+and `Template=OpenCOM` for login compatibility. The profile source already warns
+that `OpenCredentials=n` does not guarantee WAM/SSO isolation. Pinned owned source
+`Sandboxie/core/dll/cred.c`, `Cred_CredReadW`, falls back to the host CredReadW
+when a boxed item is absent; `Cred_CredEnumerateW` merges host credentials.
+`Sandboxie/install/Templates.ini`, Template_OpenCOM, opens host RPC/COM paths.
+These are confirmed source paths, **not a trace proving which path Minecraft used
+for the reported shared account**. No credential values or tokens were read.
+
+Microsoft documents that [WAM integrates accounts known to Windows and can sign
+in silently](https://learn.microsoft.com/en-us/entra/identity-platform/scenario-desktop-acquire-token-wam).
+This makes host broker reuse a hypothesis to distinguish from inherited
+game-local cache. Separate process/box names and credential-write virtualization
+do not prove either path isolated. The historical official-provider two-account
+operator observation at a different revision does not establish current owned
+engine capability.
+
+### Required engineering boundary before another success claim
+
+1. Identify whether the real game obtains the reused identity from game-local
+   file/registry state, classic credential fallback, or the host broker/COM path.
+   Use bounded credential-free metadata/probes; no token/account-store dumps.
+2. Correct the identified owner, then prove per-profile read/write independence
+   with synthetic nonsecret markers under the actual owned engine. A speculative
+   OpenCOM toggle, manual sign-out, or deleting caches is not an isolation fix;
+   restricting COM previously broke login and must preserve its supported path.
+3. Prove launch/presentation independently of authentication: each slot starts
+   once, controls recover from failure, and another client's operation cannot
+   hide or strand a usable session. Existing global operation serialization
+   explains disabled controls while Working; it proves no four-client capability.
+4. Only then accept four distinct licensed game accounts concurrently, with
+   responsive input and close/reopen/noninterference evidence at one exact SHA.
+   Synthetic tests and a configured/readable profile cannot substitute for this.
+
+This audit makes **no authentication fix or capability guarantee**. No login,
+logout, cache deletion, profile rewrite, driver/service change or VM operation
+was performed. The existing 15 profile-contract tests were executed and pass;
+their assertions deliberately keep account isolation false. They are source
+evidence, not account/gameplay acceptance. There is no justified one-setting fix
+until the actual authentication path is distinguished.
+
 ## Client 01 recovery after opening 02 — 20 October 2026
 
 Source `dd1e4047034a2c73e7456b06f6f57746ea285bb8`, baseline `ac68612`.

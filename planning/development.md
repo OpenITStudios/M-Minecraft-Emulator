@@ -2,11 +2,12 @@
 
 ## Owned manager / independence — 20 October 2026
 
-**ACTIVE**, source `dd1e4047034a2c73e7456b06f6f57746ea285bb8`.
-01→launch 02→01 recovery observed: game-class ambiguity and inherited launch
-pipes fixed. **712 source PASS**. [Evidence](../docs/validation/native-pilot-localtest.md).
-**Next:** resolve intermittent focus loss. Hosting, composed input/gameplay,
-four clients, general timeout recovery and installer remain unresolved.
+**ACTIVE**, audited `35688ff` / source `dd1e404`.
+**Product FAIL**: operator rejects four-client launch and shared accounts;
+foreground refusal observed. Prior tab recovery is not account acceptance.
+[Audit](../docs/validation/native-pilot-localtest.md).
+**Next:** distinguish game cache, credential fallback and host broker reuse before
+an isolation fix. Four accounts, input/gameplay and reliable hosting are unproven.
 
 ## Windows-first efficiency — 20 October 2026
 
