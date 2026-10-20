@@ -67,3 +67,5 @@ npm run build:frontend
 ```
 
 Inspect migration warnings and update affected Vitest tests or Vite options before committing the npm-generated lockfile. Maintain the existing CI shutdown. Upgrade Cargo and its lockfiles only from a machine with installed Rust/Cargo; verify Windows-specific builds separately.
+
+- Follow-up lock correction: updated transitive `undici-types` 7.18.2 -> 7.24.6, required by refreshed `@types/node` 24.19.2 (`>=7.24.0 <7.24.7`).
