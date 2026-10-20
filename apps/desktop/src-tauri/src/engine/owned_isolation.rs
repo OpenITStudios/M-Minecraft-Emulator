@@ -760,12 +760,14 @@ mod tests {
     struct TempCandidate(PathBuf);
     impl TempCandidate {
         fn new() -> Self {
+            static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            let serial = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let unique = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_nanos();
             let path = std::env::temp_dir().join(format!(
-                "mivubi-owned-candidate-{}-{unique}",
+                "mivubi-owned-candidate-{}-{unique}-{serial}",
                 std::process::id()
             ));
             fs::create_dir(&path).unwrap();
