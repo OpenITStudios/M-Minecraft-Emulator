@@ -2,7 +2,7 @@
 
 ## Owned manager / independence — 20 October 2026
 
-**ACTIVE:** user workspace acceptance FAIL (empty after Open 01). Fixed missing launch→observe→present path; 175 frontend tests, mounted mock UI and Windows build PASS. Corrected gameplay, previews, four clients and standalone installation remain NOT_EXECUTED. Next: accept one real client. [Evidence](../docs/validation/native-pilot-localtest.md).
+**ACTIVE:** workspace acceptance FAIL. Real backend reproduced native null→empty profile coercion; corrected explicit C# native entrypoint. Active-engine inspection, eight provider tests and Windows build PASS. Gameplay, previews, four clients and standalone installation unproven. Next: accept one real client. [Evidence](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
 

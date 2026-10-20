@@ -32,6 +32,10 @@ public static class MivubiRuntimeProbe {
   public static GameIdentity Game(string path,int pid,long expectedStart) {
     return Game(path,pid,expectedStart,"MivubiEdu02");
   }
+  public static GameIdentity NativeGame(string path,int pid,long expectedStart) {
+    // PowerShell coerces $null to an empty string for a string parameter.
+    return Game(path,pid,expectedStart,null);
+  }
   public static GameIdentity Game(string path,int pid,long expectedStart,string expectedBox) {
     if(expectedBox!=null && expectedBox!="MivubiEdu02" && expectedBox!="MivubiEdu03" && expectedBox!="MivubiEdu04") throw new Exception("Unknown owned profile");
     using(var process=System.Diagnostics.Process.GetProcessById(pid)) {

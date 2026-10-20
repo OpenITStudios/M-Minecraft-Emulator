@@ -94,7 +94,7 @@ function Snapshot([string]$operation,$exitCode) {
         if($ownedPids.Contains($process.Id)){continue}
         Demand ($process.Path -ceq $gamePath) 'Unknown Education image outside owned profiles.'
         $started=$process.StartTime.ToUniversalTime()
-        $identity=[MivubiRuntimeProbe]::Game($dll,$process.Id,$started.Ticks,$null)
+        $identity=[MivubiRuntimeProbe]::NativeGame($dll,$process.Id,$started.Ticks)
         Demand ($identity.WindowsSession -eq $currentSession) 'Native game belongs to another Windows session.'
         $native+=@{pid=$process.Id;createdFileTime=$started.ToFileTimeUtc().ToString();sessionId=$identity.WindowsSession;windowHandle=('0x'+$process.MainWindowHandle.ToInt64().ToString('x'));responding=$identity.Responding}
     }

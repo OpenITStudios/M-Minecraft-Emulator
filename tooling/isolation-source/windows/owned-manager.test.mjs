@@ -33,6 +33,14 @@ test('window action and box query refuse stale/foreign identities before native 
     exit 0`);
   assert.equal(r.status,0,r.stdout+r.stderr);
 });
+test('native attribution crosses PowerShell without null-to-empty profile coercion',{skip:process.platform!=='win32'},()=>{
+  const code=probe.split("Add-Type -TypeDefinition @'")[1].split("'@")[0];
+  const call=source.match(/\$identity=\[MivubiRuntimeProbe\]::(?:NativeGame|Game)\(\$dll,\$process.Id,\$started.Ticks(?:,\$null)?\)/)?.[0];
+  assert.ok(call,'production native attribution call');
+  const r=ps(`$ErrorActionPreference='Stop';Add-Type -TypeDefinition @'\n${code}\n'@; $process=Get-Process -Id $PID;$started=$process.StartTime.ToUniversalTime();$dll='must-not-exist-native-regression.dll';try{${call};throw 'Unexpected DLL acceptance'}catch{if($_.Exception.ToString() -notmatch 'Query DLL load failed'){throw}};exit 0`);
+  assert.equal(r.status,0,r.stdout+r.stderr);
+});
+
 test('shared Education resolver rejects another launcher target without launching',{skip:process.platform!=='win32'},()=>{
   const file=fileURLToPath(new URL('./education-target.ps1',import.meta.url)).replaceAll("'","''");
   const r=ps(`$ErrorActionPreference='Stop';. '${file}';try{Assert-ManagerRegisteredAppId '{6D809377-6AF0-444B-8957-A3773F02200E}\\Minecraft.Windows.exe' 'C:\\wrong\\Minecraft.Windows.exe';throw 'foreign launcher accepted'}catch{if($_.Exception.ToString() -notmatch 'different Minecraft installation'){throw}};exit 0`);

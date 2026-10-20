@@ -11,6 +11,20 @@ lifecycle: ACTIVE
 
 ## Approved native workspace integration — 20 October 2026
 
+**Second user acceptance: FAIL; live backend cause reproduced and corrected.**
+The operator reported `Game` / `Unknown owned profile`, reproduced by the real
+read-only `actual_owned_session_inspects_three_slots` regression. PowerShell
+converted the native `$null` argument to an empty C# string, triggering the
+owned-profile allowlist. `NativeGame` now supplies null inside C# and shares the
+same PID/start/session and two-query attribution checks. Empty/foreign owned
+profile names remain rejected; no security predicate was weakened.
+After correction, real active-engine inspection **PASS** (three slots; no launch,
+create or window operation), eight PowerShell/provider tests **PASS**, and Windows
+debug build **PASS**. A regression executes the production native call against
+the compiled query type, requiring it to reach DLL loading rather than fail the
+profile allowlist. Real-game workspace visibility/input still awaits acceptance;
+this backend PASS does not supersede the user's failed UI acceptance.
+
 **Subsequent user acceptance: FAIL.** The operator screenshot showed an empty
 play area after Open 01, with the game opening separately and a refresh-required
 notice. Source confirmed that the native launch handler stopped after starting
