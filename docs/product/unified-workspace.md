@@ -76,6 +76,15 @@ Capture can supply previews but cannot replace interactive rendering/input.
 Native surfaces can also cover webview dialogs. A successful synthetic parent
 change therefore does not establish game input, graphics, popups or recovery.
 
+The synthetic crash experiment rejects putting a game directly below the
+manager/UI process: terminating that parent destroys the synthetic client's
+HWND, even though its process can remain alive. A separate native presentation
+owner with the UI and game as sibling children survives a synthetic UI-process
+failure and can restore the game window. This is only a candidate presentation
+boundary, not an implemented product helper or a second lifecycle authority.
+Failure of that presentation owner still has no proven recovery. Do not attach
+Minecraft merely because the narrower UI-crash scenario passes.
+
 Before exposing a hosted game in the normal UI, prove:
 
 1. Synthetic cross-process attach, normal detach and partial-failure restoration.

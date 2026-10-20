@@ -1,4 +1,5 @@
 # Synthetic cross-process probe only; never targets Minecraft or existing windows.
+param([switch]$IncludeUnsafeDirectCrash)
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 $workspace = Join-Path $root 'workspace'
@@ -10,7 +11,9 @@ if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) { throw 'Windows x64
 $binary = Join-Path $output 'WorkspaceHostFixture.exe'
 & $compiler /nologo /target:winexe /platform:x64 /reference:System.Windows.Forms.dll /reference:System.Drawing.dll "/out:$binary" (Join-Path $PSScriptRoot 'workspace-host-fixture.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Workspace fixture compilation failed' }
-foreach ($mode in @('normal', 'partial-failure')) {
+$modes = @('normal', 'partial-failure', 'protected-manager-crash')
+if ($IncludeUnsafeDirectCrash) { $modes += 'crash-recovery' }
+foreach ($mode in $modes) {
     $result = Join-Path $output ($mode + '.json')
     $start = New-Object Diagnostics.ProcessStartInfo
     $start.FileName = $binary
@@ -19,10 +22,16 @@ foreach ($mode in @('normal', 'partial-failure')) {
     $process = [Diagnostics.Process]::Start($start)
     try {
         if (-not $process.WaitForExit(15000)) { throw 'Synthetic workspace probe timed out; evidence retained' }
-        if ($process.ExitCode -ne 0) { throw "Workspace probe failed: $mode; evidence retained in $output" }
+        if (-not (Test-Path -LiteralPath $result -PathType Leaf)) { throw "Workspace probe produced no verdict: $mode; evidence retained in $output" }
         $proof = Get-Content -LiteralPath $result -Raw | ConvertFrom-Json
-        if ($proof.result -ne 'PASS' -or -not $proof.restored -or -not $proof.normalClose -or $proof.partialFailureObserved -ne ($mode -eq 'partial-failure')) { throw 'Workspace proof incomplete' }
         Write-Output ("{0}: {1}" -f $mode, ($proof | ConvertTo-Json -Compress))
+        if ($process.ExitCode -ne 0) { throw "Workspace recovery FAILED: $mode; evidence retained in $output" }
+        if ($proof.result -ne 'PASS' -or -not $proof.restored -or -not $proof.normalClose) { throw 'Workspace proof incomplete' }
+        if ($mode -eq 'crash-recovery') {
+            if (-not $proof.survivedHostCrash) { throw 'Synthetic client did not survive host crash' }
+        } elseif ($mode -eq 'protected-manager-crash') {
+            if (-not $proof.survivedManagerCrash) { throw 'Synthetic client did not survive UI crash' }
+        } elseif ($proof.partialFailureObserved -ne ($mode -eq 'partial-failure')) { throw 'Partial-failure evidence mismatch' }
     } finally {
         # Only the exact synthetic host started above. Never targets external windows.
         # Its self-created synthetic child has its own 20-second lifetime.
@@ -33,4 +42,4 @@ foreach ($mode in @('normal', 'partial-failure')) {
         $process.Dispose()
     }
 }
-Write-Output 'Synthetic windows only: game rendering/input, mixed DPI and host-crash recovery remain NOT_EXECUTED.'
+Write-Output 'Synthetic windows only: game rendering/input, mixed DPI and presentation-owner failure remain NOT_EXECUTED by this protected case. Direct manager parenting is unsafe; -IncludeUnsafeDirectCrash retains its failing recovery verdict.'

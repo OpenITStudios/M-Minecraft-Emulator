@@ -8,13 +8,27 @@ Windows .NET Framework compiler, starts only its own synthetic client, checks
 PID/start time/window ownership and equal PMv2 contexts, reparents the client,
 then verifies original parent/style/geometry restoration and normal close.
 It also injects a failure immediately after attachment and verifies restoration.
+The third default case creates separate synthetic UI and game processes below
+a surviving presentation-owner window. It forcibly terminates only the fake UI,
+verifies the game HWND/process survives, then restores parent/style/geometry and
+requests normal close. This does not test failure of the presentation owner.
+
+To reproduce the rejected direct-parent design, append `-IncludeUnsafeDirectCrash`.
+This additional case kills its own synthetic parent and attempts recovery from
+the independent coordinator. On the tested Windows host the client HWND is
+destroyed: JSON reports **FAIL** and the script exits nonzero. Preserve this
+failure; it is evidence against the candidate design, not a passing acceptance
+case. It never targets an existing game. Native window loss can leave the fake
+client's message loop alive, so this case separately rechecks its exact compiled
+fixture path and start time before cleaning up that synthetic process only.
 The wrapper never accepts an external process/window. It retains evidence under
 a unique ignored `workspace/workspace-host-*` directory; a stuck synthetic host
-alone may be terminated by its creator, while its synthetic child self-expires.
+alone may be terminated by its creator. A separate 20-second thread timer exits
+the synthetic child even if destruction of its HWND strands the Forms timer.
 It does not modify or launch Minecraft, services, profiles or accounts.
 
 This is bounded feasibility evidence, not the product hosting implementation.
-Relative mouse, rendering, mixed DPI, accessibility, host crash, game dialogs,
+Relative mouse, rendering, mixed DPI, accessibility, presentation-owner crash, game dialogs,
 capture previews and actual Tauri surface composition need separate proof.
 See the [workspace contract](../../../docs/product/unified-workspace.md).
 
