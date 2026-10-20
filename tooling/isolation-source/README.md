@@ -147,6 +147,39 @@ this cancellation as rollback after installing a driver. Test signing is for
 local development, never a production release or account-isolation guarantee.
 See [Microsoft test-signing boot configuration](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/the-testsigning-boot-configuration-option).
 
+## Explicit v1.18.6 runtime test and service restoration
+
+After the manual reboot, use elevated Windows PowerShell and the **same session**:
+
+```powershell
+./tooling/isolation-source/windows/test-owned-v1186-runtime.ps1 -Stage Inspect -SessionDirectory $session
+./tooling/isolation-source/windows/test-owned-v1186-runtime.ps1 -Stage Activate -SessionDirectory $session
+# Close any test clients normally before restoring:
+./tooling/isolation-source/windows/test-owned-v1186-runtime.ps1 -Stage Restore -SessionDirectory $session
+```
+
+This opt-in test route preserves the existing SCM registrations, startup type,
+account, ACL, dependencies and minifilter configuration. It authenticates the
+original paths/hashes/signers against preparation, verifies altitude 86900, then
+uses the upstream KmdUtil stop/start operations with bounded waits. SCM
+`ChangeServiceConfig` changes **only ImagePath**, with original images recorded
+in the existing session receipt before changes. No service is deleted/recreated;
+the old v1.18.5 installer is not activated. Inspect and activation use a separate,
+short-lived signed-DLL probe, release its handles on exit, and query all sessions
+with a null box filter. Actual code-integrity Test Mode and a reboot after
+preparation are required. Any active/unknown sandbox inventory blocks takeover.
+
+Activation verifies `5.73.6-MIVU` and ABI `0x57230` through the actual loaded
+driver before reporting `OWNED_TEST_DRIVER_ACTIVE_NO_GAME`. It does not create a
+profile, launch Minecraft, or enable the desktop owned provider. A named mutex
+and receipt file lock serialize operations. Partial failure preserves the first
+error and journal; inspect before retry, and run Restore if ownership is proven.
+Restore refuses foreign images or active sandbox processes, restores original
+ImagePath values, starts the original services and verifies their driver identity.
+It leaves profiles/worlds/configuration, payload and test signing untouched.
+Only after restoration may the earlier `RestoreTestMode` cancellation remove the
+certificate and restore the boot setting, followed by another manual reboot.
+
 ## Not active — historical implementations
 
 The pinned v1.18.5 Git submodule
