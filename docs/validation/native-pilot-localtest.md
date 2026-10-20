@@ -33,26 +33,33 @@ WAM/SSO or account separation. Login remains manual with a licensed account.
 | Tracked structure | PASS | 3,558 tracked files after implementation commit; no workflow or generated payload added |
 | Existing services | PASS observation only | SCM reports official-location SbieSvc and SbieDrv running; this does not prove all sandbox processes idle |
 | Security observations | PASS observation only | Current unelevated CIM reports no running HVCI service; registry Secure Boot/HVCI values are zero; firmware, BitLocker and boot preflight still require elevation |
-| Elevated preparation | BLOCKED | Normal RunAs request ended with Windows error: operation was canceled; no elevated process/result receipt exists |
-| Test-copy signing / certificate trust | NOT_EXECUTED | Preparation never started after the unsuccessful UAC request; original unsigned 25-artifact candidate remains unchanged |
-| TESTSIGNING / reboot | NOT_EXECUTED | No boot modification or reboot performed |
+| Elevated preparation | PASS | Normal RunAs retry succeeded at source revision e411fd7380668220e2f220b675528a03c0b065b1; session test-20261020-a |
+| Test-copy signing / certificate trust | PASS | 16 copied binaries have Valid signatures; all 25 copied artifact hashes recorded; independent original-artifact recheck has zero mismatches |
+| TESTSIGNING / reboot | PASS / NOT_EXECUTED | Explicit EnableTestMode completed with boot readback Yes; receipt REBOOT_REQUIRED_NO_SERVICE_CHANGES; manual reboot outstanding |
 | Service takeover / rollback | NOT_EXECUTED | Needs all-session idle proof, full restoration review and the subsequent v1.18.6 activation implementation; preparation exports alone are not an executable service rollback |
 | Driver load / ABI / owned profile / Minecraft | NOT_EXECUTED | No owned driver, service replacement, profile creation or game launch |
 
-Actual commands/logs remain in ignored workspace storage. A normal elevated
-`Prepare` launch was requested; Windows returned "The operation was canceled by the user" after the consent wait; whether the dialog was visible is unconfirmed. No UAC
-bypass or second hidden installer route was attempted. If preparation fails,
-retain its local receipt/error and diagnose that first failure before proceeding.
-The new script supports only `Prepare`, `Inspect`, `EnableTestMode` and
-`RestoreTestMode`; it is deliberately **not** a driver installer or an active
-desktop provider. The historical v1.18.5 Apply path remains sealed. Production
-EV/Partner Center signing is still unavailable, but is no longer a prerequisite
-for this expressly selected local developer test route.
+Actual commands/logs remain in ignored workspace storage. The first normal UAC
+request ended canceled without a visible dialog, as reported by the operator.
+A second normal RunAs request succeeded; no UAC bypass was used. At source
+revision `e411fd7380668220e2f220b675528a03c0b065b1`, elevated preparation and
+EnableTestMode both returned PASS. The local receipt is
+`workspace/owned-tests/test-20261020-a/session.json`, state
+`REBOOT_REQUIRED_NO_SERVICE_CHANGES`. All 16 copied binary signatures are Valid;
+independent verification found zero original artifact hash mismatches. Firmware,
+HVCI and BitLocker preflight passed without changing their settings. The recorded
+boot entry now has TESTSIGNING Yes; no reboot has occurred.
 
-Next: complete normal UAC preparation, inspect its receipt, then request the
-recorded boot change and stop for the operator's manual reboot. After reboot,
-finish and verify controlled v1.18.6 service takeover/restoration before loading
-the driver; never infer ownership or idle state from service names/window counts.
+No official service was stopped/replaced, no owned driver was loaded, and no
+profile/game was launched. The script supports preparation and pre-takeover
+cancellation only; historical v1.18.5 Apply stays sealed. Production signing
+remains separate. To cancel before takeover, use the documented elevated
+RestoreTestMode stage with this exact session directory, then reboot manually.
+
+Next: operator saves work and manually reboots Windows. Resume by checking the
+same local receipt, actual boot state and signature hashes. Complete the reviewed
+v1.18.6 service takeover/restoration path, including all-session idle proof and
+private ABI checks, before loading the driver or launching owned Minecraft.
 
 ## Owned Windows engine campaign — 20 October 2026
 
