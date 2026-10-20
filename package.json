@@ -46,6 +46,8 @@
     "isolation-source:verify-legacy-v1185": "node tooling/isolation-source/validate-baseline.mjs tooling/isolation-source/upstream-baseline.json",
     "test:presentmon": "node --test tooling/acceptance/analyze-presentmon.test.mjs",
     "frametime:review": "node tooling/acceptance/analyze-presentmon.mjs",
-    "upgrade:frontend": "node tooling/dependencies/upgrade-frontend.mjs"
+    "upgrade:frontend": "node tooling/dependencies/upgrade-frontend.mjs",
+    "check:structure": "node tooling/repository/check-structure.mjs",
+    "test:repository": "node --test tooling/repository/*.test.mjs"
   }
 }

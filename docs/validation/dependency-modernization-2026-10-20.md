@@ -1,3 +1,12 @@
+---
+id: document.validation.dependency-modernization-2026-10-20
+class: DOCUMENT
+domain: validation
+role: REPORT
+authority: CANONICAL
+lifecycle: ACTIVE
+---
+
 # Emulator dependency modernization (2026-10-20)
 
 Target branch: `Local`. Source of comparison: `OpenITStudios/M-LazyDesigner` at `e9e40749e08f4fea71b7a64438e3b3d1741b0d9e`.
