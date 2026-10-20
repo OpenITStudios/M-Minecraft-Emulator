@@ -9,6 +9,51 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Hidden viewport failure isolated — 20 October 2026, 21:22–21:35 WIB
+
+Baseline `a916e3e587e4d12f6fdcd45d2ecfe552f3a22926`; product correction
+`e26500c`, lifetime diagnostic/test integration `dcf779e`.
+The operator approved the focused stability design. **Overall gameplay acceptance
+remains FAIL/unaccepted**; this batch fixes a reproduced Settings bug, not every
+reported blank-frame, focus or process-exit failure.
+
+The new mounted regression reproduced **FAIL**: opening Settings hid the native
+viewport, but ResizeObserver queued zero-sized geometry. When busy cleared, that
+update generated a false error and latched off later resize updates. The desktop
+now suspends observation before requesting native suspension, discards pending
+hidden geometry, and resumes after successful presentation. Failed suspension
+restores the previous observation state. No duplicate readiness/provider store,
+automatic game retry, foreground-lock bypass or force-close was added.
+
+| Verification | Result | Scope |
+| --- | --- | --- |
+| Hidden Settings geometry | PASS after reproduced FAIL | Mounted mocked UI; explicitly checks hidden-stage errors rather than visible alerts only. Failed suspend also retains the client page and permits subsequent resize updates. |
+| Actual manager Settings | PASS | New Windows build: three native Settings suspend/resume cycles with hidden-stage error checks, same process identity and bounded window response retained. No rendered input/world proof. |
+| Status contract | PASS after reproduced FAIL | An observed HWND is labelled `Window detected`; absent/nonresponsive observations cannot be labelled playable/running. Native and owned Play buttons refuse a nonresponsive observation. No `Ready to play` state is inferred. |
+| Full source | PASS | 708 passed: Node 281, frontend 175, desktop Rust 75, runtime Rust 177; four existing symlink skips, seven opt-in Rust tests not run by default. Typecheck 0 errors/0 warnings, production frontend build, Rust checks and formatting pass. |
+| Windows debug build | PASS | MSVC executable rebuilt with Settings fix and contextual occlusion diagnostics. No installer/driver/signing operations. |
+| Mounted error layouts | PASS | 1366×900, 1180×760 and 920×620; preserves recovery controls. |
+| Process lifetime collector | PASS | Exact creation time plus retained process handle; Windows fixture rejects stale identity, distinguishes timeout from exit, and preserves known exit code 17. JSON omits PID/path/title/account data. |
+| Native lifetime observation | PASS, bounded | 60 seconds, original process did not exit. This is not a responsiveness/rendering claim. |
+| Owned 02 lifetime observation | PASS, bounded | Two distinct 60-second intervals covering normal restoration/close/reopening (first includes rebuild/debug reopen; second normal reopen without CDP). Original owned process did not exit in either interval. These are not a continuous soak; earlier four-client exits remain UNKNOWN. |
+| Two-client selection campaign | PASS, bounded | Twelve selections retain both PID/birth/session/HWND identities and response; median acknowledgement 3123 ms, max 3316 ms. Switching delay remains a UX limitation. |
+| Normal restart shell readback | PASS, bounded | Two original game processes/root windows, two TOOLWINDOW, zero APPWINDOW, exactly one visible after normal manager restart. Loopback debug listener removed. Visual taskbar/Alt-Tab proof is not inferred. |
+| Rendered input, actual Alt-Tab, Explorer restart, four playable clients, multiplayer/soak/FPS | NOT_EXECUTED | These unresolved acceptance requirements are not replaced by source/WM_NULL/style checks. |
+
+One earlier startup on this baseline was rejected by the foreground-center
+occlusion check, leaving a retained process but no selected viewport. A later
+startup succeeded; the transient cause remains **UNKNOWN**. Contextual diagnostics
+now distinguish focus requested, current game/manager foreground, manager coverage,
+visibility and disabled state, without recording external window titles or IDs.
+No speculative permission or z-order workaround was enabled. Likewise, no exit
+was observed in the two bounded process-handle observations; that does not explain
+the earlier closures, identify who closed a game, or prove a long soak.
+
+The existing read-only `watch-workspace-process.ps1` collector is documented in
+the Windows tooling guide. It is optional acceptance instrumentation, not a
+product lifecycle monitor or readiness authority. Four-client escalation remains
+deferred until visible interactive presentation and focus transitions are proven.
+
 ## Four retained tabs and shell eligibility — 20 October 2026, 21:08–21:16 WIB
 
 ### Subsequent restart failure and partial-startup correction, 21:17–21:20 WIB

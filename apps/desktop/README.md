@@ -29,6 +29,10 @@ is never accepted silently. The play area provides **Restore window** and
 Four stable tabs retain original recovery checkpoints for hidden background games;
 normal close releases only the selected tab. Startup adopts verified running sessions.
 **Check all clients** refreshes observations; raw errors are under **Diagnostics**.
+`Window detected` describes an observed responsive HWND, not accepted rendering,
+input or gameplay. A nonresponsive observation shows `Needs attention`. During
+Settings, frontend resize observations are suspended with the native surface;
+zero-sized hidden geometry must not become a persistent presentation failure.
 There is no automatic launch retry, credential automation, force-close, or background poll.
 
 Native composition is the operator-approved alternative to cross-process child

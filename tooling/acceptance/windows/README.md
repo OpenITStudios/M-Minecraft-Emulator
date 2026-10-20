@@ -1,5 +1,22 @@
 # Windows Acceptance Tooling
 
+## Bounded process lifetime diagnosis
+
+`watch-workspace-process.ps1 -ProcessId <observed PID> -CreatedFileTime '<observed FILETIME>' -DurationMilliseconds 60000`
+pins the original process handle and refuses a different creation time. Obtain
+the identity from the existing provider observation, not a window title. The
+collector waits at most 60 seconds and reports UTC start/end, elapsed time,
+whether that process exited and its exit code if available. It never closes a
+process, sends game input, reads credentials/worlds, or enumerates accounts.
+The JSON omits PID, image path and window title. Keep local collection output
+under ignored `workspace/`; record only sanitized results in the canonical report.
+
+A timeout means no exit was observed during that interval. It does not mean the
+window rendered, accepted input, or passed gameplay; exit code alone does not
+identify the caller/cause of a closure. This collector grants no provider or
+mutation authority. `npm run test:native-feasibility` includes its Windows fixture
+test for stale identity rejection, bounded timeout and known exit code.
+
 ## Unified workspace feasibility (synthetic windows only)
 
 Optional UI regression, from repository root with the frontend server on
