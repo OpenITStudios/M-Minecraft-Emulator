@@ -2,11 +2,9 @@
 // This is functional configuration/launch planning for the PRIVATE fork,
 // not an installer, signed driver, official Sandboxie adapter, or game proof.
 // Real execution may be enabled only by a separately verified Windows lab.
-const PROFILES = Object.freeze({
-  "02": "MivubiEdu02",
-  "03": "MivubiEdu03",
-  "04": "MivubiEdu04",
-});
+import {readFileSync} from 'node:fs';
+const targets = JSON.parse(readFileSync(new URL('./minecraft-targets.json', import.meta.url), 'utf8')).targets;
+const PROFILES = Object.freeze(Object.fromEntries(targets.filter(t => t.kind === 'ISOLATED').map(t => [t.id, t.profile])));
 // Exact Minecraft Education compatibility profile observed as usable in
 // the authorized official Sandboxie 1.18.5 two-account Windows local test.
 // App Compartment / OpenCOM reduces containment; this is NOT a hardened box.

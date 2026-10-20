@@ -227,6 +227,24 @@ if (-not $appId -or $appId.Length -gt 256 -or -not ($simpleAppId -or $desktopApp
 "#;
 
 #[cfg(target_os = "windows")]
+pub fn registered_education_target() -> io::Result<String> {
+    let resolver =
+        include_str!("../../../../../tooling/isolation-source/windows/education-target.ps1");
+    let script = [resolver, EDUCATION_DESKTOP_PREFLIGHT, "\n$selectedTarget=Resolve-ManagerEducationTarget\nAssert-ManagerRegisteredAppId $appId $selectedTarget\n$selectedTarget"].concat();
+    virtual_clients_core::bounded_command_output(
+        &system_powershell()?,
+        ["-NoProfile", "-NonInteractive", "-Command", &script],
+        std::time::Duration::from_secs(15),
+    )
+    .map(|s| s.trim().to_owned())
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn registered_education_target() -> io::Result<String> {
+    Err(io::Error::other("Windows required"))
+}
+
+#[cfg(target_os = "windows")]
 pub fn open_native_minecraft() -> io::Result<()> {
     use std::time::Duration;
 
@@ -240,7 +258,15 @@ if (-not (Test-Path -LiteralPath $explorer -PathType Leaf)) {
 }
 Start-Process -FilePath $explorer -ArgumentList ('"shell:AppsFolder\' + $appId + '"') -ErrorAction Stop | Out-Null
 "#;
-    let script = [EDUCATION_DESKTOP_PREFLIGHT, SCRIPT].concat();
+    let resolver =
+        include_str!("../../../../../tooling/isolation-source/windows/education-target.ps1");
+    let script = [
+        resolver,
+        EDUCATION_DESKTOP_PREFLIGHT,
+        "\n$selectedTarget=Resolve-ManagerEducationTarget\nAssert-ManagerRegisteredAppId $appId $selectedTarget\n",
+        SCRIPT,
+    ]
+    .concat();
     virtual_clients_core::bounded_command_output(
         &system_powershell()?,
         [

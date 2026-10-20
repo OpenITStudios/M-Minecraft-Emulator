@@ -17,17 +17,36 @@ use std::{io, sync::Mutex};
 static MANAGER_RESOURCE_LOCK: Mutex<()> = Mutex::new(());
 
 #[tauri::command]
+pub async fn desktop_manager_settings(
+    settings: Option<crate::engine::manager_settings::ManagerSettings>,
+) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || run_manager_operation(|| {
+        use crate::engine::manager_settings;
+        if let Some(value) = settings { manager_settings::save(&value)?; }
+        let detected = native_clients::registered_education_target();
+        let loaded = manager_settings::load();
+        let target_error = loaded.as_ref().err().map(|e| format!("Saved settings could not be read; choose the locations again. {e}")).or_else(|| detected.as_ref().err().map(|e|e.to_string()));
+        Ok(serde_json::json!({"detectedMinecraft":detected.as_ref().ok(),"targetError":target_error,"settings":loaded.unwrap_or_default(),"catalog":serde_json::from_str::<serde_json::Value>(manager_settings::TARGETS).map_err(io::Error::other)?}))
+    })).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn desktop_owned_test_operation(
     request: crate::engine::owned_provider::OwnedRequest,
-) -> Result<crate::engine::owned_provider::OwnedSnapshot, String> {
+) -> Result<
+    crate::engine::owned_provider::OwnedSnapshot,
+    crate::engine::manager_settings::OperationFailure,
+> {
     tauri::async_runtime::spawn_blocking(move || {
         run_manager_operation(|| {
             crate::engine::owned_provider::OwnedTestBackend { request: &request }.execute()
         })
     })
     .await
-    .map_err(|error| format!("Owned test operation failed: {error}"))?
-    .map_err(|error| error.to_string())
+    .map_err(|error| {
+        crate::engine::manager_settings::OperationFailure::from(io::Error::other(error.to_string()))
+    })?
+    .map_err(crate::engine::manager_settings::OperationFailure::from)
 }
 
 #[tauri::command]

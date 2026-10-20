@@ -7,6 +7,7 @@ pub mod instance_discovery;
 pub mod instance_focus;
 pub mod instance_focus_events;
 pub mod instance_identity;
+pub mod manager_settings;
 pub mod native_clients;
 pub mod owned_isolation;
 pub mod owned_provider;

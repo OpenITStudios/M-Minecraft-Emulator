@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "targets": [
+    {
+      "kind": "NATIVE",
+      "profile": null,
+      "provider": "OFFICIAL_WINDOWS",
+      "id": "01"
+    },
+    {
+      "kind": "ISOLATED",
+      "profile": "MivubiEdu02",
+      "provider": "OWNED_V1186",
+      "id": "02"
+    },
+    {
+      "kind": "ISOLATED",
+      "profile": "MivubiEdu03",
+      "provider": "OWNED_V1186",
+      "id": "03"
+    },
+    {
+      "kind": "ISOLATED",
+      "profile": "MivubiEdu04",
+      "provider": "OWNED_V1186",
+      "id": "04"
+    }
+  ]
+}

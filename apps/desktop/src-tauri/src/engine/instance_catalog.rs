@@ -15,34 +15,28 @@ pub struct InstanceSlotDescriptor {
 }
 
 pub fn instance_slots() -> [InstanceSlotDescriptor; 4] {
-    [
-        InstanceSlotDescriptor {
-            id: "01",
-            kind: "NATIVE",
-            route: "OFFICIAL_WINDOWS",
-            availability: "PILOT_ROUTE_ONLY",
+    // Legacy diagnostics project canonical identities onto their retired pilot routes.
+    static CATALOG: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
+    let catalog = CATALOG.get_or_init(|| {
+        serde_json::from_str(super::manager_settings::TARGETS).expect("embedded target catalog")
+    });
+    std::array::from_fn(|i| InstanceSlotDescriptor {
+        id: catalog["targets"][i]["id"].as_str().expect("target id"),
+        kind: catalog["targets"][i]["kind"].as_str().expect("target kind"),
+        route: if i == 0 {
+            "OFFICIAL_WINDOWS"
+        } else if i == 1 {
+            "OFFICIAL_SANDBOXIE"
+        } else {
+            "OWNED_V1186"
         },
-        InstanceSlotDescriptor {
-            id: "02",
-            kind: "ISOLATED",
-            route: "OFFICIAL_SANDBOXIE",
-            availability: "PILOT_ROUTE_ONLY",
+        availability: if i < 2 {
+            "PILOT_ROUTE_ONLY"
+        } else {
+            "NOT_AVAILABLE"
         },
-        InstanceSlotDescriptor {
-            id: "03",
-            kind: "ISOLATED",
-            route: "OWNED_V1186",
-            availability: "NOT_AVAILABLE",
-        },
-        InstanceSlotDescriptor {
-            id: "04",
-            kind: "ISOLATED",
-            route: "OWNED_V1186",
-            availability: "NOT_AVAILABLE",
-        },
-    ]
+    })
 }
-
 // One admission table for the four stable slots. It does not assert whether
 // the game is running; the existing provider performs fresh Windows checks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
