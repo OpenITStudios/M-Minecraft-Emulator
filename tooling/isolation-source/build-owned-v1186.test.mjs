@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const source = readFileSync(new URL('./build-owned-v1186.ps1', import.meta.url), 'utf8');
+const source = readFileSync(new URL('./build-owned-v1186.ps1', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const profile = JSON.parse(readFileSync(
   new URL('../../engine/isolation-native/owned-runtime/build-profile-v1186.json', import.meta.url),
   'utf8',
@@ -87,6 +87,30 @@ Write-Output 'DISCOVERY_OK'`;
   { encoding: 'utf8', timeout: 30000 });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /DISCOVERY_OK/);
+});
+
+test('compiler wait captures a real nonzero exit without waiting for a process tree', t => {
+  if (process.platform !== 'win32') { t.skip('Windows process launch unavailable'); return; }
+  const fixture = mkdtempSync(join(tmpdir(), 'mivubi-compiler-exit-'));
+  try {
+    const launch = source.slice(source.indexOf('      $process = Start-Process'),
+      source.indexOf('\n    }\n    catch', source.indexOf('      $process = Start-Process')));
+    const script = `Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+$msbuild = $env:ComSpec
+$source = '${fixture.replaceAll("'", "''")}'
+$stdout = Join-Path $source 'stdout.log'
+$stderr = Join-Path $source 'stderr.log'
+$arguments = @('/d', '/c', 'exit 7')
+$stageResult = @{exitCode=$null}
+${launch}
+if ($stageResult.exitCode -ne 7) { throw 'Compiler exit was lost' }
+Write-Output 'EXIT_CAPTURE_OK'`;
+    const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand',
+      Buffer.from(script, 'utf16le').toString('base64')], {encoding:'utf8', timeout:30000});
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /EXIT_CAPTURE_OK/);
+  } finally { rmSync(fixture, {recursive:true, force:true}); }
 });
 
 test('build stages match the actual v1.18.6 solution projects and output directories', () => {

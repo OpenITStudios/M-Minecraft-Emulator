@@ -128,6 +128,7 @@ $rawProof = (& $node $verifier | Out-String).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Exact modified-source proof failed; refusing MSBuild.' }
 $proof = $rawProof | ConvertFrom-Json -ErrorAction Stop
 if ($proof.head -cne $head -or $proof.nativeModifiedFiles -ne 11 -or
+    $proof.nativeBuildModifiedFiles -ne 4 -or $proof.totalModifiedFiles -ne 15 -or
     $proof.sourceFiles -ne 1627 -or
     $proof.state -cne 'MIVUBI_V1186_NATIVE_SOURCE_PATCHED_NOT_BUILT' -or
     $proof.installationPermitted -ne $false) {
@@ -173,6 +174,7 @@ $report = [ordered]@{
   upstreamTree = [string]$proof.upstreamTree
   ownedTree = [string]$proof.ownedTree
   nativeModifiedFiles = 11
+  nativeBuildModifiedFiles = 4
   buildStages = @()
   artifacts = @()
   driverBuilt = $false
@@ -213,6 +215,8 @@ try {
       $process = Start-Process -FilePath $msbuild -WorkingDirectory $source -ArgumentList $arguments `
         -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdout `
         -RedirectStandardError $stderr -ErrorAction Stop
+      # Cache the handle before exit; Windows PowerShell otherwise loses ExitCode.
+      $null = $process.Handle
       # Wait for this compiler, not unrelated descendants inheriting its job.
       $process.WaitForExit()
       $stageResult.exitCode = [int]$process.ExitCode

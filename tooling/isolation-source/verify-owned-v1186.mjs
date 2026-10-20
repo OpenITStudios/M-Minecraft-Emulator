@@ -141,6 +141,8 @@ export function verifyOwnedV1186(repoRoot = ROOT) {
     upstreamTree, ownedTree: gitText(root, ['rev-parse', 'HEAD:' + V1186_OWNED]),
     ...summary, totalModifiedFiles: summary.nativeModifiedFiles,
     nativeModifiedFiles: SOURCE_FILES.length, nativeBuildModifiedFiles: BUILD_FILES.length,
+    nativePaths: summary.nativePaths.filter(path => SOURCE_FILES.includes(path)),
+    nativeBuildPaths: summary.nativePaths.filter(path => BUILD_FILES.includes(path)),
     activeProviderChanged: false, installationPermitted: false};
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

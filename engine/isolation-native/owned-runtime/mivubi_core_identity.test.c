@@ -15,7 +15,8 @@ int main(void) {
     if (wcscmp(private_driver, official) == 0) return 1;
     if (wcscmp(private_driver, L"5.73.6-MIVU") != 0) return 2;
     if (wcslen(private_driver) >= sizeof(observed) / sizeof(observed[0])) return 3;
-    wcscpy(observed, private_driver);
+    for (size_t i = 0; i < sizeof(MIVUBI_PRIVATE_DRIVER_ID) / sizeof(wchar_t); ++i)
+        observed[i] = private_driver[i];
     if (wcscmp(observed, MIVUBI_PRIVATE_DRIVER_ID) != 0) return 4;
     if (!MivubiOwnedDriverMatches(observed, 16, MIVUBI_PRIVATE_DRIVER_ABI)) return 5;
     if (MivubiOwnedDriverMatches(official, 16, MIVUBI_PRIVATE_DRIVER_ABI)) return 6;
