@@ -31,7 +31,7 @@ impl Drop for IoWorkerSlot {
 
 fn reserve_io_workers(count: usize) -> io::Result<Vec<IoWorkerSlot>> {
     BOUNDED_IO_WORKERS
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+        .try_update(Ordering::AcqRel, Ordering::Acquire, |current| {
             current
                 .checked_add(count)
                 .filter(|next| *next <= MAX_BOUNDED_IO_WORKERS)

@@ -86,7 +86,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(mut stream) => {
                 // Bound worker count: a slow connection must not block all status calls.
                 if active
-                    .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+                    .try_update(Ordering::AcqRel, Ordering::Acquire, |count| {
                         (count < MAX_ACTIVE_REQUESTS).then_some(count + 1)
                     })
                     .is_err()

@@ -74,7 +74,7 @@ mod windows {
     ) {
         // OBJID_WINDOW and CHILDID_SELF are both zero. Ignore sub-objects.
         if event == EVENT_SYSTEM_FOREGROUND && object_id == 0 && child_id == 0 {
-            let _ = EVENTS.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
+            let _ = EVENTS.try_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
                 Some(n.saturating_add(1))
             });
         }
