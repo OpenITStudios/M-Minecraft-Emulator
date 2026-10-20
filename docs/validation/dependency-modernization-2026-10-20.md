@@ -44,3 +44,26 @@ npm --prefix apps/desktop run test:rust
 6. Keep repository GitHub Actions disabled per existing commit/policy; use affected/local checks, not a blanket full-suite run.
 
 Update this document as each batch is verified; keep untested work explicitly labeled.
+
+## Batch 2: safe npm patch alignment (2026-10-20)
+
+- Svelte 5.57.0 -> 5.57.2 (version and verified-integrity lock entry from LazyDesigner).
+- @types/node 24.13.4 -> 24.19.2 (version and verified-integrity lock entry from LazyDesigner).
+- Added `node tooling/repository/check-dependency-lock.mjs` and `npm run check:dependencies` for install-free manifest consistency, synchronized Tauri platform packages and the selected Vite/Vitest/plugin major-version contract. This check deliberately rejects an isolated Vite 8 bump until Vitest is updated.
+- Note: this metadata-only gate is not a substitute for `npm ci`, TypeScript checking, Vitest, Windows Rust compilation, or packaging. Those executions are still outstanding.
+
+### Release gate for the major modernization
+
+**Do not edit npm lockfiles by hand for Vite 8/Vitest 5.** On Node 24 with npm 11.19.0 use a clean checkout and perform a coordinated install:
+
+```sh
+cd apps/desktop
+npm install --save-dev --save-exact vite@8.3.4 @sveltejs/vite-plugin-svelte@7.3.1 vitest@5.0.5
+npm ci --no-audit --no-fund
+node ../../tooling/repository/check-dependency-lock.mjs
+npm run typecheck
+npm run test
+npm run build:frontend
+```
+
+Inspect migration warnings and update affected Vitest tests or Vite options before committing the npm-generated lockfile. Maintain the existing CI shutdown. Upgrade Cargo and its lockfiles only from a machine with installed Rust/Cargo; verify Windows-specific builds separately.
