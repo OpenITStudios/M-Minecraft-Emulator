@@ -99,6 +99,54 @@ depend on machine-local build artifacts; explicit invocation fails if the variab
 is missing or the payload is invalid. This is developer verification, not a new
 installed-app CLI, IPC schema, runtime provider or readiness database.
 
+## Local developer test preparation — v1.18.6 only
+
+`windows/prepare-owned-v1186-test.ps1` prepares a **separate test-signed copy**
+of an existing successful build. It never installs, starts, stops or deletes a
+service, launches Minecraft, reboots Windows, or selects a production provider.
+Use Windows PowerShell elevated through normal UAC, on branch `Local`:
+
+```powershell
+$session = Join-Path (Get-Location) 'workspace/owned-tests/my-new-session'
+./tooling/isolation-source/windows/prepare-owned-v1186-test.ps1 -Stage Prepare `
+  -SessionDirectory $session `
+  -CandidateDirectory 'workspace/packages/owned-20261020-150022' `
+  -BuildReport 'workspace/builds/owned-20261020-150022/build-result.json'
+./tooling/isolation-source/windows/prepare-owned-v1186-test.ps1 -Stage EnableTestMode -SessionDirectory $session
+```
+
+Choose a **fresh** session directory. The preparation checks 25 artifact hashes,
+the matching build report and committed source tree, snapshots the existing
+official service registrations, and signs only the copied 16 binaries using a
+new, nonexportable, 90-day local developer key. Public certificate trust is
+installed in LocalMachine Root and TrustedPublisher, with exact thumbprint and
+store tracking in ignored `session.json`. The unsigned original is untouched.
+Receipts and registry exports remain local; never commit signing material,
+machine configuration or private profiles. Preparation failures preserve partial
+evidence rather than guessing that cleanup succeeded.
+
+Boot preparation refuses Secure Boot, running HVCI, enabled BitLocker protection,
+unknown boot entry/value, or changed signed artifacts; it never disables these
+protections. `EnableTestMode` records `REBOOT_REQUIRED_NO_SERVICE_CHANGES` after
+readback. **Save work and reboot manually.** This checkpoint is not driver-load
+or gameplay evidence. `Inspect` prints the preparation receipt, not live driver
+attestation. Service takeover, all-session process-idle proof, ABI checks and
+owned Minecraft launch still require the subsequent reviewed activation step;
+the historical v1.18.5 Apply transport stays sealed.
+
+To cancel preparation **before any service takeover**, run elevated:
+
+```powershell
+./tooling/isolation-source/windows/prepare-owned-v1186-test.ps1 -Stage RestoreTestMode -SessionDirectory $session
+```
+
+This restores the recorded boot setting and removes only the recorded MIVUBI
+test certificate/trust/key; manually reboot to apply boot changes. It does not
+restore services or delete profiles, worlds, payloads or evidence. Do not use
+this cancellation as rollback after installing a driver. Test signing is for
+local development, never a production release or account-isolation guarantee.
+See [Microsoft test-signing boot configuration](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/the-testsigning-boot-configuration-option).
+
 ## Not active — historical implementations
 
 The pinned v1.18.5 Git submodule
