@@ -22,7 +22,7 @@
     "package:windows": "npm --prefix apps/desktop run build:app",
     "test:feasibility": "node --test tooling/acceptance/evaluate-client-feasibility.test.mjs",
     "feasibility:review": "node tooling/acceptance/evaluate-client-feasibility.mjs",
-    "test:native-feasibility": "node --test tooling/acceptance/evaluate-native-feasibility.test.mjs",
+    "test:native-feasibility": "node --test tooling/acceptance/evaluate-native-feasibility.test.mjs tooling/acceptance/watch-workspace-process.test.mjs",
     "native-feasibility:review": "node tooling/acceptance/evaluate-native-feasibility.mjs",
     "test:sandboxie-feasibility": "node --test tooling/acceptance/evaluate-sandboxie-feasibility.test.mjs",
     "test:native-performance": "node --test tooling/acceptance/evaluate-native-performance.test.mjs",
