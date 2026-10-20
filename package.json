@@ -45,6 +45,7 @@
     "isolation-native:test-owned-start": "cmake -S engine/isolation-native/owned-runtime -B workspace/owned-start-policy -DCMAKE_BUILD_TYPE=Release && cmake --build workspace/owned-start-policy --config Release && ctest --test-dir workspace/owned-start-policy -C Release --output-on-failure",
     "isolation-source:verify-legacy-v1185": "node tooling/isolation-source/validate-baseline.mjs tooling/isolation-source/upstream-baseline.json",
     "test:presentmon": "node --test tooling/acceptance/analyze-presentmon.test.mjs",
-    "frametime:review": "node tooling/acceptance/analyze-presentmon.mjs"
+    "frametime:review": "node tooling/acceptance/analyze-presentmon.mjs",
+    "upgrade:frontend": "node tooling/dependencies/upgrade-frontend.mjs"
   }
 }

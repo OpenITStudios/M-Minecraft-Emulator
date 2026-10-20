@@ -69,3 +69,9 @@ npm run build:frontend
 Inspect migration warnings and update affected Vitest tests or Vite options before committing the npm-generated lockfile. Maintain the existing CI shutdown. Upgrade Cargo and its lockfiles only from a machine with installed Rust/Cargo; verify Windows-specific builds separately.
 
 - Follow-up lock correction: updated transitive `undici-types` 7.18.2 -> 7.24.6, required by refreshed `@types/node` 24.19.2 (`>=7.24.0 <7.24.7`).
+
+## Batch 3: reproducible major-upgrade execution helper
+
+Added `npm run upgrade:frontend` (dry-run) and `npm run upgrade:frontend -- --apply` (opt-in, guarded execution). On a clean Node 24/npm 11 checkout, apply regenerates npm locks through the registry and runs install, dependency gate, Svelte typecheck, focused desktop Vitest tests, and the frontend build. It fails fast rather than bypassing peer dependencies or declaring an incomplete migration successful.
+
+The registry is unavailable in the current execution environment (EAI_AGAIN); the current host also lacks Cargo. Therefore Vite/Vitest and Rust manifests/locks deliberately remain at their previous resolved versions. See `tooling/dependencies/RUST-UPGRADE.md` for the separately scoped native upgrade and acceptance.
