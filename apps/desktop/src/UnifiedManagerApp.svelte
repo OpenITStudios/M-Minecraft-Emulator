@@ -5,7 +5,7 @@
   import {nativeFeasibility} from './app/bridge/nativeFeasibilityApi.js';
   import {managerConfiguration,operationIssue,type ManagerConfiguration} from './app/bridge/managerConfiguration.js';
   let config:ManagerConfiguration|null=null,snapshot:OwnedSnapshot|null=null;
-  let page:'clients'|'settings'='clients',busy=false,checked=false;
+  let page:'clients'|'settings'='clients',busy=true,checked=false;
   let issue:ReturnType<typeof operationIssue>|null=null;
   let feedback='';
   async function inspect(){
@@ -14,7 +14,7 @@
     try{snapshot=await ownedProvider.execute(config.settings.sessionDirectory,'02','Inspect');checked=true;}
     catch(e){snapshot=null;issue=operationIssue(e);}finally{busy=false;}
   }
-  onMount(()=>{void (async()=>{try{config=await managerConfiguration.load();await inspect();}catch(e){issue=operationIssue(e);}})();});
+  onMount(()=>{void (async()=>{try{config=await managerConfiguration.load();snapshot=config.observation;checked=!!snapshot;if(config.engineError)issue=operationIssue(config.engineError);}catch(e){issue=operationIssue(e);}finally{busy=false;}})();});
   async function select(kind:'engine'|'minecraft'){
     if(busy||!config)return;
     busy=true;issue=null;feedback='';
@@ -22,10 +22,9 @@
       const path=kind==='engine'?await ownedProvider.selectSession():await nativeFeasibility.selectEducationExe();
       if(path){
         const settings={...config.settings,[kind==='engine'?'sessionDirectory':'minecraftExecutable']:path};
-        config=await managerConfiguration.save(settings);snapshot=null;checked=false;feedback='Location saved. Checking the current installation…';
+        config=await managerConfiguration.save(settings);snapshot=config.observation;checked=!!snapshot;if(config.engineError)issue=operationIssue(config.engineError);feedback='Location saved.';
       }
     }catch(e){issue=operationIssue(e);}finally{busy=false;}
-    await inspect();
     if(checked)feedback='Locations saved and engine verified for this session.';
   }
 </script>
@@ -42,7 +41,7 @@
     <div hidden={page!=='clients'}>
       {#if config && snapshot}<OwnedManagerPanel sessionDirectory={config.settings.sessionDirectory} bind:initialSnapshot={snapshot} bind:operationBusy={busy}/>
       {:else}
-        <section class="um-setup"><h2>{busy?'Checking your engine…':'Connect your engine'}</h2><p>Choose the owned test engine in Settings. Existing profiles and game data are preserved.</p><button class="cm-button" disabled={busy} on:click={()=>page='settings'}>Open Settings</button>{#if config?.settings.sessionDirectory}<button class="cm-button cm-secondary" disabled={busy} on:click={inspect}>Check again</button>{/if}</section>
+        <section class="um-setup"><h2>{busy?'Checking your engine…':'Connect your engine'}</h2><p>We could not connect to a verified owned engine automatically. Existing profiles and game data are preserved.</p><button class="cm-button" disabled={busy} on:click={()=>page='settings'}>Open Settings</button>{#if config?.settings.sessionDirectory}<button class="cm-button cm-secondary" disabled={busy} on:click={inspect}>Check again</button>{/if}</section>
         <section class="um-grid" aria-label="Minecraft clients">{#each config?.catalog.targets??[] as target}<article class="um-card"><p class="um-eyebrow">{target.kind==='NATIVE'?'NATIVE':'OWNED'}</p><h2>Minecraft {target.id}</h2><span class="um-status">Not configured</span><p>{target.profile??'Windows Desktop installation'}</p><button class="cm-button" disabled={busy} on:click={()=>page='settings'}>Set up</button></article>{/each}</section>
       {/if}
     </div>

@@ -1,7 +1,8 @@
+import {parseOwnedSnapshot,type OwnedSnapshot} from './ownedProviderApi.js';
 import {invokeRuntime} from './invokeRuntime.js';
 export interface ManagerSettings {sessionDirectory:string;minecraftExecutable:string}
 export interface MinecraftTarget {id:'01'|'02'|'03'|'04';kind:'NATIVE'|'ISOLATED';provider:string;profile:string|null}
-export interface ManagerConfiguration {detectedMinecraft:string|null;targetError:string|null;settings:ManagerSettings;catalog:{schema:1;targets:MinecraftTarget[]}}
+export interface ManagerConfiguration {observation:OwnedSnapshot|null;engineError:unknown;detectedMinecraft:string|null;targetError:string|null;settings:ManagerSettings;catalog:{schema:1;targets:MinecraftTarget[]}}
 export function parseManagerConfiguration(value:unknown):ManagerConfiguration {
   const v=value as ManagerConfiguration;
   if(!v||!(v.detectedMinecraft===null||typeof v.detectedMinecraft==='string')||!(v.targetError===null||typeof v.targetError==='string')||!v.settings||typeof v.settings.sessionDirectory!=='string'||typeof v.settings.minecraftExecutable!=='string'||v.catalog?.schema!==1||!Array.isArray(v.catalog.targets)||v.catalog.targets.length!==4)throw new TypeError('Invalid manager configuration');
@@ -10,6 +11,7 @@ export function parseManagerConfiguration(value:unknown):ManagerConfiguration {
     if(t.id!==String(i+1).padStart(2,'0')||t.kind!==(i===0?'NATIVE':'ISOLATED')||t.provider!==(i===0?'OFFICIAL_WINDOWS':'OWNED_V1186')||(i===0?t.profile!==null:typeof t.profile!=='string'||t.profile!==`MivubiEdu${t.id}`||profiles.has(t.profile)))throw new TypeError('Invalid target catalog');
     if(t.profile)profiles.add(t.profile);
   });
+  if(v.observation!==null)v.observation=parseOwnedSnapshot(v.observation);
   return v;
 }
 export const managerConfiguration={load:async()=>parseManagerConfiguration(await invokeRuntime('desktop_manager_settings',{settings:null})),save:async(settings:ManagerSettings)=>parseManagerConfiguration(await invokeRuntime('desktop_manager_settings',{settings}))};

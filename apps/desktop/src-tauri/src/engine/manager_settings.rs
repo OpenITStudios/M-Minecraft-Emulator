@@ -172,3 +172,53 @@ impl From<std::io::Error> for OperationFailure {
         }
     }
 }
+/// Preferences are saved only after the existing provider proves a detected engine.
+pub fn prepare(requested: Option<ManagerSettings>) -> io::Result<serde_json::Value> {
+    if let Some(value) = requested {
+        save(&value)?;
+    }
+    let loaded = load();
+    let mut settings = loaded
+        .as_ref()
+        .map(|s| ManagerSettings {
+            session_directory: s.session_directory.clone(),
+            minecraft_executable: s.minecraft_executable.clone(),
+        })
+        .unwrap_or_default();
+    let detected = super::native_clients::registered_education_target();
+    let target_error = loaded
+        .err()
+        .map(|e| format!("Saved preferences could not be read. {e}"))
+        .or_else(|| detected.as_ref().err().map(|e| e.to_string()));
+    let mut engine_error = None;
+    if settings.session_directory.is_empty() {
+        match super::owned_provider::discover_active_session() {
+            Ok(path) => settings.session_directory = path.to_string_lossy().into_owned(),
+            Err(error) => engine_error = Some(OperationFailure::from(error)),
+        }
+    }
+    let mut observation = None;
+    if !settings.session_directory.is_empty() && detected.is_ok() {
+        let request = super::owned_provider::OwnedRequest {
+            session_directory: settings.session_directory.clone(),
+            client_id: "02".into(),
+            operation: super::owned_provider::OwnedOperation::Inspect,
+            licensed: false,
+            compatibility_confirmed: false,
+            target: None,
+        };
+        match (super::owned_provider::OwnedTestBackend { request: &request }).execute() {
+            Ok(value) => {
+                observation = Some(value);
+                if settings.minecraft_executable.is_empty() {
+                    settings.minecraft_executable = detected.as_ref().unwrap().clone();
+                }
+                save(&settings)?;
+            }
+            Err(error) => engine_error = Some(OperationFailure::from(error)),
+        }
+    }
+    Ok(
+        serde_json::json!({"settings":settings,"catalog":serde_json::from_str::<serde_json::Value>(TARGETS).map_err(io::Error::other)?,"detectedMinecraft":detected.ok(),"targetError":target_error,"engineError":engine_error,"observation":observation}),
+    )
+}

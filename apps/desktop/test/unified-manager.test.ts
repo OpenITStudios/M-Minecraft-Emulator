@@ -4,7 +4,7 @@ import {parseManagerConfiguration,operationIssue} from '../src/app/bridge/manage
 import {ownedClientStatus} from '../src/app/presentation/unifiedManager.js';
 import type {OwnedSlot} from '../src/app/bridge/ownedProviderApi.js';
 const catalog=JSON.parse(readFileSync(new URL('../../../engine/isolation-native/owned-runtime/minecraft-targets.json',import.meta.url),'utf8'));
-const config=()=>({settings:{sessionDirectory:'D:\\engine',minecraftExecutable:'C:\\game.exe'},detectedMinecraft:'C:\\game.exe',targetError:null,catalog:structuredClone(catalog)});
+const config=()=>({observation:null,engineError:null,settings:{sessionDirectory:'D:\\engine',minecraftExecutable:'C:\\game.exe'},detectedMinecraft:'C:\\game.exe',targetError:null,catalog:structuredClone(catalog)});
 it('configuration has exactly four canonical targets and no runtime readiness authority',()=>{
   expect(parseManagerConfiguration(config()).catalog.targets.map(t=>t.id)).toEqual(['01','02','03','04']);
   const wrong=config();wrong.catalog.targets[2].profile='MivubiEdu02';expect(()=>parseManagerConfiguration(wrong)).toThrow();

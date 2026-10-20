@@ -353,3 +353,107 @@ mod tests {
         println!("ACTUAL_OWNED_MANAGER_INSPECTION: three slots verified; no launch/create/window operation executed");
     }
 }
+/// Discover a candidate only from the service currently registered with Windows.
+/// The returned path grants no authority; execute() must verify the entire engine.
+#[cfg(windows)]
+pub fn discover_active_session() -> io::Result<PathBuf> {
+    use windows_sys::Win32::System::Services::*;
+    unsafe {
+        let manager = OpenSCManagerW(std::ptr::null(), std::ptr::null(), SC_MANAGER_CONNECT);
+        if manager.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        let name: Vec<u16> = "SbieSvc\0".encode_utf16().collect();
+        let service = OpenServiceW(manager, name.as_ptr(), SERVICE_QUERY_CONFIG);
+        let open_error = io::Error::last_os_error();
+        CloseServiceHandle(manager);
+        if service.is_null() {
+            return Err(open_error);
+        }
+        let mut needed = 0;
+        QueryServiceConfigW(service, std::ptr::null_mut(), 0, &mut needed);
+        if needed == 0 || needed > 65536 {
+            CloseServiceHandle(service);
+            return Err(invalid("Service configuration size is invalid"));
+        }
+        let mut buffer = vec![0_u64; (needed as usize).div_ceil(8)];
+        let config = buffer.as_mut_ptr().cast::<QUERY_SERVICE_CONFIGW>();
+        let success = QueryServiceConfigW(service, config, needed, &mut needed);
+        let error = io::Error::last_os_error();
+        CloseServiceHandle(service);
+        if success == 0 {
+            return Err(error);
+        }
+        let pointer = (*config).lpBinaryPathName;
+        let start = buffer.as_ptr() as usize;
+        let end = start + buffer.len() * 8;
+        let address = pointer as usize;
+        if address < start || address >= end || !address.is_multiple_of(2) {
+            return Err(invalid("Invalid service image pointer"));
+        }
+        let units = std::slice::from_raw_parts(pointer, (end - address) / 2);
+        let len = units
+            .iter()
+            .position(|n| *n == 0)
+            .ok_or_else(|| invalid("Unterminated service image"))?;
+        let image = String::from_utf16(&units[..len])
+            .map_err(|_| invalid("Invalid service image encoding"))?;
+        session_from_service_image(&image)
+    }
+}
+#[cfg(not(windows))]
+pub fn discover_active_session() -> io::Result<PathBuf> {
+    Err(invalid("Windows required"))
+}
+fn session_from_service_image(image: &str) -> io::Result<PathBuf> {
+    let executable = PathBuf::from(image.trim_matches('"'));
+    if executable.file_name().is_none_or(|n| n != "SbieSvc.exe")
+        || executable
+            .parent()
+            .and_then(|p| p.file_name())
+            .is_none_or(|n| n != "payload")
+    {
+        return Err(invalid("No active owned developer engine was detected"));
+    }
+    let session = executable
+        .parent()
+        .and_then(|p| p.parent())
+        .ok_or_else(|| invalid("Missing engine session"))?;
+    let request = OwnedRequest {
+        session_directory: session.to_string_lossy().into_owned(),
+        client_id: "02".into(),
+        operation: OwnedOperation::Inspect,
+        licensed: false,
+        compatibility_confirmed: false,
+        target: None,
+    };
+    checked_session(&request)?;
+    Ok(session.to_path_buf())
+}
+#[cfg(test)]
+mod automatic_setup_tests {
+    use super::*;
+    #[test]
+    fn foreign_service_images_are_not_adopted() {
+        for image in [
+            r#""C:\Program Files\Sandboxie-Plus\SbieSvc.exe""#,
+            r#""C:\foreign\payload\other.exe""#,
+            r#""C:\foreign\payload\SbieSvc.exe" --argument"#,
+        ] {
+            assert!(session_from_service_image(image).is_err());
+        }
+    }
+    #[test]
+    #[ignore = "requires the authorized active owned Windows engine; saves verified location preferences only"]
+    fn actual_automatic_setup_verifies_and_remembers_active_engine() {
+        let first = super::super::manager_settings::prepare(None).unwrap();
+        assert!(first["engineError"].is_null(), "{}", first["engineError"]);
+        assert!(first["observation"]["clients"].is_array());
+        assert!(first["observation"]["clients"][0]["settingsVerified"]
+            .as_bool()
+            .unwrap());
+        let second = super::super::manager_settings::prepare(None).unwrap();
+        assert_eq!(first["settings"], second["settings"]);
+        assert!(second["engineError"].is_null());
+    }
+}
