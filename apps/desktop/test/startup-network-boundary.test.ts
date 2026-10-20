@@ -9,7 +9,8 @@ describe("Active native-first startup boundary", () => {
     expect(entry).toContain('import UnifiedManagerApp from "./UnifiedManagerApp.svelte"');
     expect(entry).toContain("mount(UnifiedManagerApp, { target });");
     expect(active).toContain("managerConfiguration.load()");
-    expect(active).toContain("ownedProvider.execute(");
+    expect(active).toContain("OwnedManagerPanel");
+    expect(readFileSync(new URL('../src/OwnedManagerPanel.svelte', import.meta.url), 'utf8')).toContain("ownedProvider.execute(");
     expect(active).not.toContain("backend.");
     expect(active).not.toContain("setInterval(");
     expect(active).not.toContain("checkUpdateOnce");

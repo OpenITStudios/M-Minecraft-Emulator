@@ -19,7 +19,7 @@ export function operationIssue(error:unknown){
   if(error && typeof error==='object' && 'code' in error && 'message' in error && 'action' in error && 'details' in error && typeof error.message==='string' && typeof error.action==='string' && typeof error.details==='string')return {message:error.message,action:error.action,details:error.details};
   const details=(error instanceof Error?error.message:typeof error==='string'?error:JSON.stringify(error))??'Unknown error';
   if(/Recent launch|Previous private launcher/.test(details))return {message:'A previous launch is still pending.',action:'Check again before retrying. The launch guard also requires 30 seconds.',details};
-  if(/signature|hash|payload|service|driver|ABI|Test Mode/i.test(details))return {message:'The selected engine could not be verified.',action:'Check engine configuration in Settings. No fallback engine was used.',details};
-  if(/Minecraft|executable|installation/i.test(details))return {message:'Minecraft could not be opened or verified.',action:'Check its installed location in Settings, then check the clients again.',details};
+  if(/signature|hash|payload|service|driver|ABI|Test Mode/i.test(details))return {message:'The engine could not be verified.',action:'Check again. If this continues, open Settings → Diagnostics for the reason.',details};
+  if(/Minecraft|executable|installation/i.test(details))return {message:'Minecraft could not be opened or verified.',action:'Make sure Minecraft Education Desktop is installed, then check again. Technical details are in Diagnostics.',details};
   return {message:'The operation could not be completed.',action:'Check again to obtain a fresh status. Open Diagnostics for the technical details.',details};
 }

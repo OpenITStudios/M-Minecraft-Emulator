@@ -1,32 +1,17 @@
 <script lang="ts">
   import {onMount} from 'svelte';
   import OwnedManagerPanel from './OwnedManagerPanel.svelte';
-  import {ownedProvider,type OwnedSnapshot} from './app/bridge/ownedProviderApi.js';
-  import {nativeFeasibility} from './app/bridge/nativeFeasibilityApi.js';
+  import type {OwnedSnapshot} from './app/bridge/ownedProviderApi.js';
   import {managerConfiguration,operationIssue,type ManagerConfiguration} from './app/bridge/managerConfiguration.js';
   let config:ManagerConfiguration|null=null,snapshot:OwnedSnapshot|null=null;
   let page:'clients'|'settings'='clients',busy=true,checked=false;
   let issue:ReturnType<typeof operationIssue>|null=null;
-  let feedback='';
-  async function inspect(){
-    if(busy||!config?.settings.sessionDirectory)return;
+  async function prepare(){
     busy=true;checked=false;issue=null;
-    try{snapshot=await ownedProvider.execute(config.settings.sessionDirectory,'02','Inspect');checked=true;}
+    try{config=await managerConfiguration.load();snapshot=config.observation;checked=!!snapshot;if(config.engineError)issue=operationIssue(config.engineError);}
     catch(e){snapshot=null;issue=operationIssue(e);}finally{busy=false;}
   }
-  onMount(()=>{void (async()=>{try{config=await managerConfiguration.load();snapshot=config.observation;checked=!!snapshot;if(config.engineError)issue=operationIssue(config.engineError);}catch(e){issue=operationIssue(e);}finally{busy=false;}})();});
-  async function select(kind:'engine'|'minecraft'){
-    if(busy||!config)return;
-    busy=true;issue=null;feedback='';
-    try{
-      const path=kind==='engine'?await ownedProvider.selectSession():await nativeFeasibility.selectEducationExe();
-      if(path){
-        const settings={...config.settings,[kind==='engine'?'sessionDirectory':'minecraftExecutable']:path};
-        config=await managerConfiguration.save(settings);snapshot=config.observation;checked=!!snapshot;if(config.engineError)issue=operationIssue(config.engineError);feedback='Location saved.';
-      }
-    }catch(e){issue=operationIssue(e);}finally{busy=false;}
-    if(checked)feedback='Locations saved and engine verified for this session.';
-  }
+  onMount(()=>{void prepare();});
 </script>
 
 <svelte:head><title>Minecraft Instance Manager</title></svelte:head>
@@ -36,20 +21,22 @@
     <p class="um-sidebar-foot">Windows developer test<br/>One native · Three owned</p>
   </aside>
   <main class="um-main">
-    <header class="um-header"><div><p class="um-eyebrow">YOUR WORKSPACE</p><h1>{page==='clients'?'Minecraft clients':'Settings'}</h1><p>{page==='clients'?'Four sessions. One place to set up, launch and manage.':'Choose the game and engine once. Their identity is checked before use.'}</p></div><span class="um-engine" class:ready={checked}>Engine · {busy?'Checking':checked?'Verified':'Needs setup'}</span></header>
+    <header class="um-header"><div><p class="um-eyebrow">YOUR WORKSPACE</p><h1>{page==='clients'?'Minecraft clients':'Settings'}</h1><p>{page==='clients'?'Four sessions. One place to launch and manage.':'Minecraft and the engine are detected automatically.'}</p></div><span class="um-engine" class:ready={checked}>Engine · {busy?'Checking':checked?'Verified':'Needs attention'}</span></header>
     {#if issue}<div class="um-alert" role="alert"><strong>{issue.message}</strong><p>{issue.action}</p><details><summary>Diagnostics</summary><pre>{issue.details}</pre></details></div>{/if}
     <div hidden={page!=='clients'}>
       {#if config && snapshot}<OwnedManagerPanel sessionDirectory={config.settings.sessionDirectory} bind:initialSnapshot={snapshot} bind:operationBusy={busy}/>
       {:else}
-        <section class="um-setup"><h2>{busy?'Checking your engine…':'Connect your engine'}</h2><p>We could not connect to a verified owned engine automatically. Existing profiles and game data are preserved.</p><button class="cm-button" disabled={busy} on:click={()=>page='settings'}>Open Settings</button>{#if config?.settings.sessionDirectory}<button class="cm-button cm-secondary" disabled={busy} on:click={inspect}>Check again</button>{/if}</section>
-        <section class="um-grid" aria-label="Minecraft clients">{#each config?.catalog.targets??[] as target}<article class="um-card"><p class="um-eyebrow">{target.kind==='NATIVE'?'NATIVE':'OWNED'}</p><h2>Minecraft {target.id}</h2><span class="um-status">Not configured</span><p>{target.profile??'Windows Desktop installation'}</p><button class="cm-button" disabled={busy} on:click={()=>page='settings'}>Set up</button></article>{/each}</section>
+        <section class="um-setup"><h2>{busy?'Checking your engine…':'Engine needs attention'}</h2><p>Automatic verification could not connect to the engine. Your profiles and game data are preserved.</p><button class="cm-button" disabled={busy} on:click={prepare}>Check again</button><button class="cm-button cm-secondary" disabled={busy} on:click={()=>page='settings'}>View status</button></section>
+        <section class="um-grid" aria-label="Minecraft clients">{#each config?.catalog.targets??[] as target}<article class="um-card"><p class="um-eyebrow">{target.kind==='NATIVE'?'NATIVE':'OWNED'}</p><h2>Minecraft {target.id}</h2><span class="um-status">Waiting for engine</span><p>{target.kind==='NATIVE'?'Native session':'Private persistent session'}</p></article>{/each}</section>
       {/if}
     </div>
     {#if page==='settings'}
-      <section class="um-settings"><h2>Game & engine</h2>{#if config?.targetError}<div class="um-alert" role="alert"><strong>Minecraft needs attention</strong><details><summary>Diagnostics</summary><pre>{config.targetError}</pre></details></div>{/if}<div class="um-setting"><div><h3>Minecraft Education</h3><p>One registered Desktop installation is used by all four clients.</p><code>{config?.settings.minecraftExecutable||config?.detectedMinecraft||'No registered Desktop installation detected'}</code></div><button class="cm-button cm-secondary" disabled={busy||!config} on:click={()=>select('minecraft')}>Choose executable</button></div>
-      <div class="um-setting"><div><h3>Owned engine</h3><p>Developer test package. Production installation is a separate acceptance step.</p><code>{config?.settings.sessionDirectory||'No engine selected'}</code></div><button class="cm-button cm-secondary" disabled={busy||!config} on:click={()=>select('engine')}>Choose engine</button></div>
-      {#if feedback}<p role="status">{feedback}</p>{/if}<button class="cm-button" disabled={busy||!config?.settings.sessionDirectory} on:click={inspect}>Check configuration</button></section>
-      <section class="um-settings"><h2>Minecraft targets</h2><p>Canonical catalog · engine/isolation-native/owned-runtime/minecraft-targets.json</p>{#each config?.catalog.targets??[] as target}<div class="um-target"><strong>Minecraft {target.id}</strong><span>{target.kind==='NATIVE'?'Native Windows':target.profile}</span></div>{/each}</section>
+      <section class="um-settings"><h2>Automatic setup</h2><p>No folders or executable files to choose. We check the installed game and engine before use.</p>
+        <div class="um-setting"><div><h3>Minecraft Education</h3><p>{busy?'Checking installation…':config?.targetError?'Installation needs attention. Repair Minecraft Education, then check again.':config?.detectedMinecraft?'Installed · detected automatically':'Not detected. Install Minecraft Education Desktop, then check again.'}</p></div></div>
+        <div class="um-setting"><div><h3>Engine</h3><p>{busy?'Checking engine…':checked?'Connected · verified for this session':'Unavailable. Check Diagnostics for the reason.'}</p></div></div>
+        <button class="cm-button" disabled={busy} on:click={prepare}>{busy?'Checking…':'Check again'}</button>
+      </section>
+      <section class="um-settings"><details><summary>Diagnostics</summary><p>Windows developer test. Independent installation and production signing have separate acceptance requirements.</p><h3>Minecraft location</h3><pre>{config?.settings.minecraftExecutable||config?.detectedMinecraft||'Not detected'}</pre><h3>Engine location</h3><pre>{config?.settings.sessionDirectory||'Not detected'}</pre>{#if config?.targetError}<h3>Installation details</h3><pre>{config.targetError}</pre>{/if}<h3>Client routing</h3>{#each config?.catalog.targets??[] as target}<div class="um-target"><strong>Minecraft {target.id}</strong><span>{target.kind==='NATIVE'?'Native Windows':target.profile}</span></div>{/each}</details></section>
     {/if}
   </main>
 </div>

@@ -29,6 +29,7 @@ it('states distinguish ready, blocked retry, active operation, missing profile a
 it('mounted dashboard has no alternate pilot panel or automatic game launch',()=>{
   const source=readFileSync(new URL('../src/UnifiedManagerApp.svelte',import.meta.url),'utf8');
   expect(source).not.toMatch(/CompactManagerApp|inspectIsolatedClient02|setInterval|openOfficialMinecraft/);
-  expect(source).toContain('managerConfiguration.load()');expect(source).toContain('managerConfiguration.save(settings)');
-  expect(source).toContain('Minecraft targets');expect(source).toContain('OwnedManagerPanel');
+  expect(source).toContain('managerConfiguration.load()');
+  expect(source).not.toMatch(/managerConfiguration\.save|selectSession|selectEducationExe|Choose executable|Choose engine/);
+  expect(source).toContain('Automatic setup');expect(source).toContain('OwnedManagerPanel');
 });

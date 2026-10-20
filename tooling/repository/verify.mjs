@@ -201,7 +201,7 @@ requireFact(activeEntry.includes('import UnifiedManagerApp from "./UnifiedManage
   !activeEntry.includes('import App from "./App.svelte";'),
   "The sole active desktop entry must mount the Unified Manager");
 requireFact(activeSurface.includes('managerConfiguration.load()') &&
-  activeSurface.includes('ownedProvider.execute(') &&
+  read('apps/desktop/src/OwnedManagerPanel.svelte').includes('ownedProvider.execute(') &&
   activeSurface.includes('OwnedManagerPanel') &&
   !activeSurface.includes('CompactManagerApp') &&
   !activeSurface.includes('inspectIsolatedClient02') &&

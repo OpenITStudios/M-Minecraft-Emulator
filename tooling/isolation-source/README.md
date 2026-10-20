@@ -218,7 +218,8 @@ payload and registered Education installation, authenticates them through the
 existing provider, and remembers verified locations in the existing manager data
 directory. On this activated test host, use **Clients → Open**; no folder picker
 or repeated licensing checkbox is needed. Choosing Open confirms use of a separate
-licensed account. Settings → Choose engine / Choose executable are repair controls.
+licensed account. Settings reports automatic detection; technical locations are
+read-only under Diagnostics. The ordinary UI has no file/folder chooser.
 
 The canonical catalog is `engine/isolation-native/owned-runtime/minecraft-targets.json`.
 Automatic discovery never adopts official Sandboxie or an offline package. Local
