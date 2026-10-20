@@ -20,9 +20,10 @@ quoting fixes). The unmodified reference is
 `engine/isolation-candidates/sandboxie-v1.18.6/`. The active exact-source
 verifier is `tooling/isolation-source/verify-owned-v1186.mjs` and the
 **build-only** Windows entrypoint is `tooling/isolation-source/build-owned-v1186.ps1`.
-The full native build was attempted on 20 October 2026 and remains incomplete:
-after authorized MFC/WDK installation, Win32 and x64 user-mode stages pass (15/16
-binaries); kernel fails MSB8020 because VS2022 WDK integration was canceled at UAC.
+The full native build and staging pass on 20 October 2026 at `f529d59`:
+three Windows stages, 16 unsigned-build binaries, five resources and four licenses.
+The resulting 25-file owned package remains NOT_INSTALLABLE; production signing,
+provider activation and gameplay remain unexecuted.
 Three standalone C/C++ policy tests compile and pass with MSVC; they are not the
 real driver build. Driver installation and owned-engine gameplay remain unexecuted.
 See [current implementation sequence](../../planning/development.md).

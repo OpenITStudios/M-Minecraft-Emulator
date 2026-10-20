@@ -45,15 +45,20 @@ changes accounts or proves multiplayer.
 ## Current Windows build evidence — 20 October 2026
 
 The owned-engine campaign prioritizes build/signing before switching the desktop.
-At `ffe65a15c843b2dacbf3a024cfd9d02e8f936b40`, authorized MFC v143 and WDK
-26100.6584 setup completed with exit 0 and no reboot. The actual Win32 and x64
-user-mode stages pass, producing 15/16 required binaries. Kernel build fails with
-MSB8020 because WindowsKernelModeDriver10.0 is not registered in VS2022: the
-`Component.Microsoft.Windows.DriverKit.BuildTools` integration elevation attempt
-was canceled at Windows consent. Resolve that OS step before retrying the same
-canonical builder. No driver was installed, no security policy changed and no
-system-file-copy workaround was used. Complete staging, signing, activation and
-gameplay remain unexecuted. Keep failure logs and never reuse partial products.
+At `f529d59fda778be50cd3e874374a5546c32dce29`, all three actual Windows compiler
+stages pass and all 16 binaries plus five resources/four licenses stage successfully.
+MFC v143, WDK 26100.6584 and its VS2022 integration are installed after operator
+authorization. The package is **MIVUBI_V1186_CORE_STAGED_NOT_INSTALLABLE**.
+Production signing, activation, owned runtime operations and gameplay remain
+unexecuted; no driver was installed and no security policy changed.
+
+The builder explicitly disables WDK's default test signing and checks the driver
+is actually `NotSigned`. An earlier implicit test-signed attempt was rejected and
+its generated temporary certificate/private key removed. The final clean unsigned
+candidate is `workspace/packages/owned-20261020-150022/`, with its source/hash-bound
+report in `workspace/builds/owned-20261020-150022/`. Resources normalize checkout
+CRLF only if the result matches exact committed Git blob bytes; edited configs
+or licenses remain rejected. Preserve the successful candidate; do not install it.
 
 Four reviewed project changes quote MASM, import-library and message-compiler
 paths, including checkout paths containing spaces. The source verifier reconstructs

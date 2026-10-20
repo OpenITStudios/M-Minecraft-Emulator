@@ -11,13 +11,13 @@ lifecycle: ACTIVE
 
 ## Owned Windows engine campaign — 20 October 2026
 
-**Overall state: BLOCKED on WDK/VS integration; four Minecraft NOT_EXECUTED.**
+**Build/staging COMPLETE; activation, owned operations and four Minecraft NOT_EXECUTED.**
 The operator selected owned v1.18.6 first: one native Client 01 and three owned
 persistent profiles 02–04. The official two-client desktop pilot below remains
 the mounted implementation, not an automatic fallback for this campaign.
 No owned provider has been activated.
 
-Executed source revision: `ffe65a15c843b2dacbf3a024cfd9d02e8f936b40`.
+Executed source revision: `f529d59fda778be50cd3e874374a5546c32dce29`.
 Baseline: `8c1c6b459b8d6a69bb5683200d1d1ef120247460`.
 This section owns campaign results; the dependency report retains dependency scope.
 
@@ -25,18 +25,18 @@ This section owns campaign results; the dependency report retains dependency sco
 | --- | --- | --- |
 | Remote and checkout identity | PASS | Clean Local matched remote baseline before edits |
 | Exact source provenance | PASS | 1,627 files; pristine upstream unchanged; 11 C/C++ changes plus four exact project quoting fixes |
-| Full source pipeline | PASS | 662 passed: 261 Node, 161 Vitest, 240 Rust; 0 failed, 4 existing file-symlink skips |
+| Full source pipeline | PASS | 663 passed: 262 Node, 161 Vitest, 240 Rust; 0 failed, 4 existing file-symlink skips |
 | Native C/C++ policy executables | PASS | MSVC Release build and three CTest tests: launcher parser, core identity/ABI matching, kernel box policy |
 | MFC v143 x86/x64 setup | PASS | User authorized system setup; installer exit 0 and afxres.h present |
 | WDK 26100.6584 setup | PASS | Microsoft signature Valid; installer exit 0, kernel headers present, no reboot |
-| WDK integration into VS2022 | BLOCKED | Elevation attempt returned “The operation was canceled by the user”; VS platform-toolset registration still absent |
+| WDK integration into VS2022 | PASS | Official RunAs retry after operator clarification exits 0; kernel toolset registered; no UAC/security-policy bypass |
 | Native Win32 engine build | PASS | Real canonical builder stage exit 0; both required Win32 binaries present |
 | Native x64 user-mode build | PASS | Real canonical builder stage exit 0; thirteen required x64 user-mode binaries present |
-| Native x64 kernel build | FAIL | Post-WDK-install retry exits 1: MSB8020, WindowsKernelModeDriver10.0 toolset not found by VS2022 |
-| Sixteen binaries / five resources / four licenses staged | NOT_EXECUTED | No complete successful native build report; no payload promoted |
+| Native x64 kernel build | PASS | Real canonical stage exit 0; driver Authenticode status NotSigned |
+| Sixteen binaries / five resources / four licenses staged | PASS | 25 artifact records bound to source revision, actual build report and SHA-256; state MIVUBI_V1186_CORE_STAGED_NOT_INSTALLABLE |
 | Dependency audit | PASS with warnings | Prior source batch: zero vulnerability-class findings; manifests unchanged; two GTK informational warnings retained |
 | Four-process telemetry | PASS | Prior batch at 8928602: actual 30-second disposable Node captures on PowerShell 7/5.1; six samples each; exited Client 03 stays UNKNOWN |
-| Signing / activation / owned operations | BLOCKED | No complete signed, Windows-accepted candidate; no driver, service or account changes |
+| Production signing / activation / owned operations | BLOCKED | Candidate deliberately unsigned; no Windows-accepted production signature or active owned adapter; no driver/service/account changes |
 | Owned gameplay: one, two, then four | NOT_EXECUTED | Runtime unavailable; no login, world, independent input, recovery or multiplayer observation |
 | Four-client 60-minute soak, active 60 FPS | NOT_EXECUTED | No four-client game session or displayed-frame capture |
 | Background cap near 10 FPS | NOT_EXECUTED | No supported, measured vendor/API route selected; no FPS mutation added |
@@ -44,9 +44,9 @@ This section owns campaign results; the dependency report retains dependency sco
 The full engine attempt used VS2022 Build Tools 17.14, MSVC 14.44.35207,
 MSBuild 17.14.40.60911 and Windows SDK 10.0.26100.0. The earlier RC1015 missing-MFC
 failure is resolved. MFC and WDK setup were explicitly authorized by the user and
-completed. VS2022's WindowsKernelModeDriver10.0 integration remains unavailable.
-Signing credentials and Windows driver acceptance were not assessed; the
-incomplete build already blocks activation.
+completed. VS2022's WindowsKernelModeDriver10.0 integration is now installed;
+all three native build stages pass. Production signing credentials and Windows
+driver acceptance were not assessed; the unsigned candidate cannot be activated.
 
 Installed components: MFC v143 x86/x64
 (`Microsoft.VisualStudio.Component.VC.ATLMFC`) in the existing VS2022 Build Tools
@@ -54,11 +54,11 @@ and WDK 26100.6584 (bundle version 10.1.26100.6584; SDK/WDK path build 26100).
 The WDK bootstrapper SHA-256 is
 `ed82c46bd98e0f1d07fd6e5075900e42aedc3fa5e68c06a8764b3dc5303cff1b`;
 Authenticode was Valid with Microsoft Corporation as signer before execution.
-The VS catalog identifies `Component.Microsoft.Windows.DriverKit.BuildTools` for
-the remaining build integration. Its RunAs attempt was canceled at the Windows
-consent boundary; no bypass, forced retry, manual system-file copying or change
-to security policy was performed. A chat clarification about the OS prompt was
-requested. No driver was installed and no reboot was performed.
+The VS component `Component.Microsoft.Windows.DriverKit.BuildTools` is installed.
+After the earlier canceled consent attempt, the operator reported no visible
+dialog; a normal official RunAs retry completed with exit 0. No UAC bypass,
+manual system-file copying, driver installation, reboot or security-policy change
+was performed.
 Microsoft lists this kit for VS2022; no VS2026 toolchain migration was attempted.
 Sources:
 [Microsoft WDK downloads](https://learn.microsoft.com/en-us/windows-hardware/drivers/other-wdk-downloads)
@@ -74,16 +74,42 @@ from pristine source; the eleven C/C++ transformation checks remain active.
 The standalone identity test uses a bounded copy without suppressing warnings.
 No upstream snapshot or driver runtime policy was modified.
 
+### Native-build findings resolved in the final candidate
+
+The first fully compiling attempt exposed WDK's implicit test-sign default:
+it generated a temporary test certificate and test-signed the local driver.
+That output was rejected for final use, was never installed or loaded, and its
+generated certificate plus private key were removed. Targeted checks found no
+remaining matching certificate in the user/machine My, Root or TrustedPeople
+stores. No real signing credential was accessed or removed.
+
+The builder now passes `SignMode=Off` and `EnableTestSign=false` to every stage
+and checks the resulting driver's actual Authenticode status is `NotSigned`
+before issuing a successful compile-only receipt. The final clean build meets
+that check. A test-signed local binary is not production signing evidence.
+
+Staging also exposed Git autocrlf expansion in configuration/license files.
+The assembler now accepts original bytes or CRLF→LF normalization only when
+the resulting Git blob ID exactly matches committed HEAD; it writes those exact
+bytes and retains the final copied-blob check. Modified configuration or licenses
+still fail even after an earlier clean-status observation. Regression tests cover
+both accepted CRLF checkout resources and tampering. No tracked resource or
+license content was rewritten to accommodate staging.
+
 The existing sampler accepts four distinct explicit targets, pins creation times,
 keeps lost identities UNKNOWN, and publishes sanitized schema-3 CPU/RAM reports.
 Schemas 1/2 remain compatible. It neither authenticates owned Minecraft targets
 nor measures FPS. Usage belongs to the
 [Windows tooling guide](../../tooling/acceptance/windows/README.md).
 
-Latest build logs are ignored under `workspace/builds/owned-20261020-144615/`;
-the earlier two-stage pass is in `workspace/builds/owned-20261020-144214/`.
+Successful build logs and sixteen hashes are ignored under
+`workspace/builds/owned-20261020-150022/`; the matching 25-file artifact manifest is
+`workspace/packages/owned-20261020-150022/engine-provenance.json`.
+The package is local and NOT_INSTALLABLE; it is not a desktop installer or release.
+Earlier rejected output is preserved in `workspace/builds/owned-20261020-145802/`.
 WDK setup and new source/policy logs are under
-`workspace/dependency-maintenance/wdk-26100-install*` and `owned-toolchain-*`;
+`workspace/dependency-maintenance/wdk-26100-install*`, `owned-toolchain-*`
+and `owned-unsigned-*`;
 earlier telemetry remains under `owned-four-*`. Earlier failed compiler outputs
 were preserved beneath their build-report directories before clean retries.
 No binary, account identity, private world, token, certificate or raw host report
@@ -91,10 +117,9 @@ is committed.
 
 ### Remaining implementation and acceptance sequence
 
-1. Resolve the canceled Windows consent step for the already-authorized VS2022
-   WDK Build Tools integration; confirm the kernel toolset is registered. Then
-   rerun the canonical builder from clean native outputs at one exact Local
-   revision. Do not bypass errors or stage the existing 15/16 partial artifacts.
+1. Preserve this unsigned candidate and its exact source/build hashes for signing
+   review. Native build/staging are complete; do not reinstall or rebuild merely
+   to repeat a passing check. Any new source change requires fresh bound evidence.
 2. Verify the complete candidate's hashes, ABI, Windows-accepted signatures,
    service provenance and recovery instructions. Review a concrete activation
    proposal before driver/service changes. Never silently replace official

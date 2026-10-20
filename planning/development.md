@@ -2,7 +2,7 @@
 
 ## Owned engine / four clients — 20 October 2026
 
-**BLOCKED:** MFC/WDK installed; VS integration UAC canceled; kernel/gameplay incomplete.
+**ACTIVE:** owned build/staging pass (16 binaries); unsigned, runtime/gameplay pending.
 Build fixes and four-PID telemetry landed. See [campaign results](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
