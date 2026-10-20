@@ -1,5 +1,23 @@
 # Windows Acceptance Tooling
 
+## Unified workspace feasibility (synthetic windows only)
+
+Run `powershell.exe -NoProfile -NonInteractive -File tooling/acceptance/windows/test-workspace-host.ps1`
+from the repository. The opt-in probe compiles an x64 GUI fixture with the existing
+Windows .NET Framework compiler, starts only its own synthetic client, checks
+PID/start time/window ownership and equal PMv2 contexts, reparents the client,
+then verifies original parent/style/geometry restoration and normal close.
+It also injects a failure immediately after attachment and verifies restoration.
+The wrapper never accepts an external process/window. It retains evidence under
+a unique ignored `workspace/workspace-host-*` directory; a stuck synthetic host
+alone may be terminated by its creator, while its synthetic child self-expires.
+It does not modify or launch Minecraft, services, profiles or accounts.
+
+This is bounded feasibility evidence, not the product hosting implementation.
+Relative mouse, rendering, mixed DPI, accessibility, host crash, game dialogs,
+capture previews and actual Tauri surface composition need separate proof.
+See the [workspace contract](../../../docs/product/unified-workspace.md).
+
 **Selected active experiment:** [Client 01 native + Client 02 Sandboxie Plus](../../../docs/validation/sandboxie-two-client-feasibility.md).
 Use `collect-sandboxie-feasibility.ps1 -Stage INSPECT -BoxName MinecraftClient02`
 for an explicitly requested observation; the desktop uses its read-only
