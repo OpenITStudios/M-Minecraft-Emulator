@@ -9,6 +9,51 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Local developer activation preparation — 20 October 2026
+
+**ACTIVE, not gameplay-ready.** Source revision
+`d99f2a47392bc976de717349a5289a6b30f6e7e7` adds the explicit v1.18.6 developer
+preparation procedure described in [Isolation Source Tooling](../../tooling/isolation-source/README.md).
+The operator now authorizes local developer test signing on this Windows host,
+manual reboot checkpoints and a later controlled, reversible replacement of the
+official service namespace. This supersedes the **local testing** production-only
+signing restriction below; it does not approve production distribution. The first
+goal is one playable owned client, followed by native plus owned; four clients
+and the 60-minute performance campaign follow only after these succeed.
+
+The selected new profile may use `NoSecurityIsolation=y` and `Template=OpenCOM`.
+This explicit compatibility choice weakens containment and does not establish
+WAM/SSO or account separation. Login remains manual with a licensed account.
+
+| Check / operation | Result | Evidence / remaining work |
+| --- | --- | --- |
+| Branch and starting remote | PASS | Local and origin/Local both `01e21e110defb940dc7c755dad15289b0f043821` before changes |
+| Source verification | PASS | `npm run verify:source`: 666 passed (265 Node, 161 Vitest, 240 Rust), zero failed; four existing Node symlink skips and one default-ignored actual-payload test |
+| Preparation regressions | PASS | Three tests: complete PowerShell parsing, preparation/activation boundaries, real bounded native execution including spaced arguments, exit 7 and quote refusal |
+| Tracked structure | PASS | 3,558 tracked files after implementation commit; no workflow or generated payload added |
+| Existing services | PASS observation only | SCM reports official-location SbieSvc and SbieDrv running; this does not prove all sandbox processes idle |
+| Security observations | PASS observation only | Current unelevated CIM reports no running HVCI service; registry Secure Boot/HVCI values are zero; firmware, BitLocker and boot preflight still require elevation |
+| Elevated preparation | BLOCKED | Normal RunAs request is waiting at Windows UAC; no elevated result receipt exists at reporting time |
+| Test-copy signing / certificate trust | NOT_EXECUTED | Preparation process has not passed UAC; original unsigned 25-artifact candidate remains unchanged |
+| TESTSIGNING / reboot | NOT_EXECUTED | No boot modification or reboot performed |
+| Service takeover / rollback | NOT_EXECUTED | Needs all-session idle proof, full restoration review and the subsequent v1.18.6 activation implementation; preparation exports alone are not an executable service rollback |
+| Driver load / ABI / owned profile / Minecraft | NOT_EXECUTED | No owned driver, service replacement, profile creation or game launch |
+
+Actual commands/logs remain in ignored workspace storage. A normal elevated
+`Prepare` launch was requested; the observed consent process is pending. No UAC
+bypass or second hidden installer route was attempted. If preparation fails,
+retain its local receipt/error and diagnose that first failure before proceeding.
+The new script supports only `Prepare`, `Inspect`, `EnableTestMode` and
+`RestoreTestMode`; it is deliberately **not** a driver installer or an active
+desktop provider. The historical v1.18.5 Apply path remains sealed. Production
+EV/Partner Center signing is still unavailable, but is no longer a prerequisite
+for this expressly selected local developer test route.
+
+Next: complete normal UAC preparation, inspect its receipt, then request the
+recorded boot change and stop for the operator's manual reboot. After reboot,
+finish and verify controlled v1.18.6 service takeover/restoration before loading
+the driver; never infer ownership or idle state from service names/window counts.
+
 ## Owned Windows engine campaign — 20 October 2026
 
 **Build/staging COMPLETE; activation, owned operations and four Minecraft NOT_EXECUTED.**

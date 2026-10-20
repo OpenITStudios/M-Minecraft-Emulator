@@ -2,8 +2,9 @@
 
 ## Owned engine / four clients — 20 October 2026
 
-**BLOCKED:** EV/Hardware Dev access unavailable; inspector passes, signing/SCM block gameplay.
-Build fixes and four-PID telemetry landed. See [campaign results](../docs/validation/native-pilot-localtest.md).
+**ACTIVE:** local developer test route approved. `d99f2a4`: separate signed-copy/boot preparation;
+666 source tests pass. Normal UAC pending; no boot/service changes. Next: finish preparation.
+Service takeover/rollback and gameplay remain NOT_EXECUTED; see [campaign results](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
 
