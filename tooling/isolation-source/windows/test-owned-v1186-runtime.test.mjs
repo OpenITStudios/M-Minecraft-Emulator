@@ -87,3 +87,14 @@ test('first-client adapter refuses occupied profiles and uses canonical guarded 
   assert.match(source,/Launch the game from a normal unelevated/);
   assert.match(source,/Profile changed since configuration/);
 });
+test('game attribution rejects PID reuse before touching a vendor DLL',{skip:process.platform!=='win32'},()=>{
+  const code=probe.split("Add-Type -TypeDefinition @'")[1].split("'@")[0];
+  const result=ps(`$ErrorActionPreference='Stop';Add-Type -TypeDefinition @'\n${code}\n'@
+    try {[MivubiRuntimeProbe]::Game('must-not-load.dll',$PID,0);throw 'accepted wrong start time'}
+    catch {if($_.Exception.ToString() -notmatch 'PID reused before attribution'){throw}}
+    exit 0`);
+  assert.equal(result.status,0,result.stdout+result.stderr);
+  assert.match(probe,/one!=two \|\| one!=session/);
+  assert.match(probe,/PID reused after attribution/);
+  assert.match(probe,/Private driver required for owned game attribution/);
+});

@@ -210,6 +210,16 @@ Sign in manually; no credentials, existing account state or tokens are copied.
 The manager UI's owned slots remain blocked until its own provider integration
 is explicitly implemented and verified; these commands are a local test route.
 
+For a selected actual Education PID, `probe-v1186-runtime.ps1 -DllPath <verified
+owned SbieDll.dll> -Sha256 <its recorded SHA-256> -GameProcessId <PID>` adds a
+read-only attribution observation. It verifies the official Microsoft-signed
+game path, current private driver/ABI, twice-read MivubiEdu02 membership and
+Windows session, and process start time before/after the query. PID reuse or
+identity loss fails closed. Window presence/responsiveness is diagnostic;
+manual sign-in, playable world, independent input and multiplayer require
+separately attributed operator observations. Output excludes account/SID/title
+data and remains local unless sanitized for the canonical acceptance report.
+
 ## Not active — historical implementations
 
 The pinned v1.18.5 Git submodule

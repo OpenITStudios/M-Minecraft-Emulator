@@ -1,7 +1,8 @@
 # Short-lived, read-only process: release all vendor DLL/device handles on exit.
 [CmdletBinding()]
 param([Parameter(Mandatory=$true)][string]$DllPath,
-      [Parameter(Mandatory=$true)][ValidatePattern('^[a-f0-9]{64}$')][string]$Sha256)
+      [Parameter(Mandatory=$true)][ValidatePattern('^[a-f0-9]{64}$')][string]$Sha256,
+      [ValidateRange(0,2147483647)][int]$GameProcessId=0)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 if ((Get-FileHash -LiteralPath $DllPath).Hash.ToLowerInvariant() -cne $Sha256 -or
@@ -22,6 +23,37 @@ public static class MivubiRuntimeProbe {
   [UnmanagedFunctionPointer(CallingConvention.StdCall)]
   delegate int EnumAll(IntPtr box, [MarshalAs(UnmanagedType.U1)] bool allSessions, uint session,
     [Out,MarshalAs(UnmanagedType.LPArray)] uint[] pids, ref uint count);
+  [UnmanagedFunctionPointer(CallingConvention.StdCall,CharSet=CharSet.Unicode)]
+  delegate int QueryProcess(IntPtr pid,[Out,MarshalAs(UnmanagedType.LPArray,SizeConst=34)] char[] box,IntPtr image,IntPtr sid,out uint session);
+  public sealed class GameIdentity {
+    public int Pid; public string ProcessStartUtc; public string Box;
+    public int WindowsSession; public bool IdentityStable; public bool WindowPresent; public bool Responding;
+  }
+  public static GameIdentity Game(string path,int pid,long expectedStart) {
+    using(var process=System.Diagnostics.Process.GetProcessById(pid)) {
+      DateTime started=process.StartTime.ToUniversalTime(); int session=process.SessionId;
+      if(started.Ticks!=expectedStart) throw new Exception("PID reused before attribution");
+      IntPtr module=LoadLibraryExW(path,IntPtr.Zero,0x1100);
+      if(module==IntPtr.Zero) throw new Exception("Query DLL load failed");
+      try {
+        IntPtr address=GetProcAddress(module,"SbieApi_QueryProcess");
+        if(address==IntPtr.Zero) throw new Exception("Process attribution API unavailable");
+        QueryProcess query=(QueryProcess)Marshal.GetDelegateForFunctionPointer(address,typeof(QueryProcess));
+        char[] first=new char[34],second=new char[34]; uint one,two;
+        if(query(new IntPtr(pid),first,IntPtr.Zero,IntPtr.Zero,out one)!=0 ||
+           query(new IntPtr(pid),second,IntPtr.Zero,IntPtr.Zero,out two)!=0 || one!=two || one!=session ||
+           new string(first).TrimEnd('\0')!="MivubiEdu02" || new string(second)!=new string(first))
+          throw new Exception("Owned Client 02 profile/session attribution failed");
+        process.Refresh();
+        if(process.HasExited || process.StartTime.ToUniversalTime()!=started) throw new Exception("Process identity lost during attribution");
+        using(var current=System.Diagnostics.Process.GetProcessById(pid)) {
+          if(current.StartTime.ToUniversalTime()!=started) throw new Exception("PID reused after attribution");
+        }
+        return new GameIdentity {Pid=pid,ProcessStartUtc=started.ToString("o"),Box="MivubiEdu02",WindowsSession=session,
+          IdentityStable=true,WindowPresent=process.MainWindowHandle!=IntPtr.Zero,Responding=process.Responding};
+      } finally {FreeLibrary(module);}
+    }
+  }
   public static string Read(string path) {
     CI ci = new CI(); ci.Length=8; int returned;
     if(NtQuerySystemInformation(103,ref ci,8,out returned)!=0 || returned!=8) throw new Exception("Code integrity state unavailable");
@@ -45,4 +77,16 @@ public static class MivubiRuntimeProbe {
   }
 }
 '@
-[MivubiRuntimeProbe]::Read((Resolve-Path -LiteralPath $DllPath).Path)
+$resolved=(Resolve-Path -LiteralPath $DllPath).Path
+$result=[MivubiRuntimeProbe]::Read($resolved) | ConvertFrom-Json
+if ($GameProcessId -ne 0) {
+    if ($result.version -cne '5.73.6-MIVU' -or $result.abi -ne 0x57230) { throw 'Private driver required for owned game attribution.' }
+    $game=Get-Process -Id $GameProcessId
+    $started=$game.StartTime.ToUniversalTime().Ticks
+    if ($game.Path -cne 'C:\Program Files\Microsoft Studios\Minecraft Education\Minecraft.Windows.exe') { throw 'Unexpected game image path.' }
+    $signature=Get-AuthenticodeSignature -LiteralPath $game.Path
+    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '^CN=Microsoft Corporation,') { throw 'Official Education image required.' }
+    $identity=[MivubiRuntimeProbe]::Game($resolved,$GameProcessId,$started)
+    $result | Add-Member -NotePropertyName game -NotePropertyValue $identity
+}
+$result | ConvertTo-Json -Depth 4 -Compress
