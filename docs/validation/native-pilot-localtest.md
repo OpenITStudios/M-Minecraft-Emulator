@@ -9,6 +9,88 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Full check and cross-chat handoff — 20 October 2026
+
+Baseline: `cf3089c1e0ff8893b9939bdb5062e3facab7b2fd`. Retained source/test
+corrections: `cd382b4353b2c53761927551d91c71d8e09e62a1`.
+**Overall acceptance: FAIL. The manager is not yet reliably usable.** This section
+supersedes earlier optimistic UI observations for current acceptance. The user
+requested recording unresolved work before moving to a new chat; do not resume
+interactive tests merely from this historical handoff.
+
+### Required experience and architecture boundary
+
+One automatically configured English manager, four sessions (01 native, 02–04
+owned), browser-like switching, one manager taskbar entry, responsive rendering
+and input, safe Alt-Tab/minimize/restore/Settings navigation. No executable or
+engine folder chooser in the normal flow. Accounts remain manually signed in,
+separate and licensed. The operator accepts normal Windows APIs and windows but
+does not want Windows Sandbox or an external sandbox application dependency.
+Current presentation is native top-level window composition, not true child
+embedding. Previous SetParent experimentation was rejected because parent failure
+could destroy the game HWND. Do not conceal this architectural limitation or
+claim that window flags prove a working embedded renderer.
+
+### Unresolved issues, evidence and continuation
+
+| Priority | Issue | Actual evidence / next investigation |
+| --- | --- | --- |
+| P1 | Alt-Tab recovery fails | Actual manager → existing Task Manager → manager sequence produced `Surface helper timed out`; blank play area. UI automation activation also changed window geometry, so pure Alt-Tab versus restore/resize is not isolated. Trace helper command/reply and native call duration before changing policy. Never kill Minecraft to recover. |
+| P1 | Returning from Settings can leave game behind manager | Actual error: `Workspace game is covered; presentation was not confirmed`; sampled game foreground false, manager foreground true, center covered by manager true, visible/enabled true. The asynchronous foreground-race fix below does not resolve this stable-foreground failure. |
+| P1 | Process detected is incorrectly easy to interpret as usable | Native process remained responsive, but blank workspace persisted. Running/process identity, WM_NULL, rectangle and visibility readbacks do not prove displayed frames or keyboard/mouse input. Keep rendering/input acceptance failed/unexecuted until directly established. |
+| P1 | Reported Minecraft self-exits / four-client unresponsiveness | User previously reported game exit and all four nonresponsive. At full-check start only native process was alive; previously displayed owned 02 was absent. No matching Application 1000/1001/1002 record was found in the queried hour. Exit cause UNKNOWN, not a clean-exit conclusion. Collect sanitized termination/helper timing evidence. |
+| P1 | Four tabs and one taskbar entry not accepted | Earlier shell flag readbacks are supporting evidence only. Stable switching for 02–04, actual visual taskbar/Alt-Tab behavior, Explorer restart, minimize/restore, DPI and monitor changes remain unaccepted. Do not hide windows merely to make taskbar screenshots pass. |
+| P2 | Recovery may block on synchronous native calls | Helper reply has a three-second deadline and helper-only termination, but manager-side checkpoint restoration still makes synchronous Win32 calls. A hung game UI may block recovery; this is a source risk, not the demonstrated timeout root cause. Investigate bounded restoration in the existing owner. |
+| P2 | Checkpoint durability gap | Saved window state is in memory. Simultaneous manager/helper failure has no proven durable recovery. Preserve original styles/placement and process identity; do not introduce another lifecycle manager. |
+| P2 | Error/status UX can remain stale | A root startup alert was observed persisting after manual window restoration. Global startup errors and local presentation errors need consistent clearing after confirmed recovery. No background game-exit notification is established; explicit fresh Check now reconciles retired targets. |
+| P2 | Tab/card operation guards differ | Static review: tab activation does not share every card pending/current-observation guard. Backend ownership/locking checks remain, but avoidable denied operations are possible. Reproduce before changing shared command semantics. |
+| Separate scope | Engine independence incomplete | Developer test fork still borrows SbieDrv/SbieSvc identities. Namespace separation, independent installer/uninstall and clean Windows without official Sandboxie remain unproved. Unsigned production payload stays NOT_INSTALLABLE. No driver/service/security changes were performed in this full check. |
+| Separate acceptance | Gameplay/performance | Four distinct licensed playable sessions, account separation, multiplayer native↔owned and owned↔owned, staggered restarts, 60-minute endurance and displayed 60 FPS remain NOT_EXECUTED for this revision. No official background FPS cap established. |
+
+### Retained fixes and verification
+
+Four reproduced issues were corrected in the existing desktop owner, with
+regressions: stale native-resize geometry now waits for authoritative webview
+geometry (explicit invalid geometry still fails); Escape from profile setup
+resumes the suspended game; fresh Inspect clears an exited selected target only
+after safe release (failed release retains recovery controls); a foreground switch
+during placement no longer falsely applies foreground-only coverage rejection.
+Each targeted regression failed before its correction and passed afterwards.
+
+| Check | Result | Scope / limitation |
+| --- | --- | --- |
+| Final `npm run verify:source` after removing experiment | PASS | 709 tests: Node 281, frontend 175, desktop Rust 76, runtime Rust 177; four existing symlink skips, seven opt-in desktop tests ignored by default. Log `workspace/full-check-confirmed-source.log`; source committed as cd382b4. |
+| Svelte/TypeScript and Windows debug build | PASS | Zero checking errors/warnings; debug build before foreground experiment passed. Current on-disk executable may still be the experimental build; rebuild before next UI test. No installer constructed. |
+| Mounted workspace UI regression | PASS | Three viewport sizes, setup Escape, fresh exited-target reconciliation and failed-release recovery. Mocked UI is not Minecraft rendering proof. |
+| Real-helper Windows synthetic regression | PASS | Stale geometry red/green plus normal/maximized release, pipe-loss and helper-crash recovery. Synthetic fixture is not game compatibility proof. |
+| Four other opt-in Windows checks | PASS | Owned three-slot read-only inspection; automatic setup validation/preferences; registered native launcher matches chosen installation; staged 25-file package remains not installable. Owned-game launch/focus opt-ins NOT_EXECUTED in this batch. |
+| Staged package first invocation | FAIL, corrected invocation PASS | First check incorrectly pointed to payload subfolder; corrected package root passed. Invocation error, not evidence of a defective payload. |
+| Dependency audit / provenance | PASS with warnings | npm audit zero vulnerabilities; Cargo audit retains known cross-platform glib 0.18.5 RUSTSEC-2024-0429 and proc-macro-error 1.0.4 RUSTSEC-2024-0370 warnings; both absent from explicit Windows target graph. No dependency changes. npm outdated remains informational; latest-everything is not claimed. Isolation source verifier passed. |
+| Clean npm installation | NOT_EXECUTED | Existing locked installation used; no npm ci in this batch. |
+| Actual app switching / Settings return | FAIL | Residual P1 failures above; source test success does not override them. |
+| Current revision world/input/taskbar acceptance | NOT_EXECUTED | Native menu was incidentally visible; no account details retained. No gameplay input or login automated. |
+
+An exact-child `AllowSetForegroundWindow` experiment compiled and passed synthetic
+checks but did not demonstrate a live improvement. It was removed from committed
+source; no focus-lock/security bypass retained. The running/on-disk experimental
+binary must not be mistaken for cd382b4. The last attempted UI observation was
+stopped by the operator's physical Escape key. No further Computer Use was
+performed, and no final window/service cleanup is claimed. Reinspect live state
+read-only at the next explicitly resumed session; use normal restoration/close,
+never force-close games or delete profiles/worlds.
+
+Local raw logs are under ignored `workspace/full-check-*.log` and may not travel
+with a new checkout. This sanitized report and Git source/tests are the portable
+handoff. First continuation: reproduce the native helper timeout and identify the
+first blocking native call using bounded diagnostics in
+`apps/desktop/src-tauri/src/engine/workspace_surface.rs`; its UI consumers are
+`NativeWorkspace.svelte`, `OwnedManagerPanel.svelte`, and `UnifiedManagerApp.svelte`.
+Do not ask the user to validate tiny speculative patches. Rebuild the retained
+source and run meaningful manager navigation/recovery checks before requesting
+manual licensed gameplay acceptance. `main`, Actions, accounts and game data stay
+unchanged.
+
+
 ## Hidden viewport failure isolated — 20 October 2026, 21:22–21:35 WIB
 
 Baseline `a916e3e587e4d12f6fdcd45d2ecfe552f3a22926`; product correction

@@ -2,7 +2,7 @@
 
 ## Owned manager / independence — 20 October 2026
 
-**ACTIVE** (`e26500c`/`dcf779e`): hidden Settings resize bug red/green; source 708/build PASS. Native Settings and 12 two-client selections PASS; pinned native/owned each survive 60s, owned across restart. Two-window shell readback PASS. Prior exits/coverage UNKNOWN; rendering/input, Alt-Tab/four-client acceptance unresolved. Next: reproduce real focus/visibility. [Evidence](../docs/validation/native-pilot-localtest.md).
+**ACTIVE / acceptance FAIL** (cd382b4): full check fixed four reproduced resize/setup/refresh/foreground-race bugs; source 709 PASS. Unresolved: Alt-Tab timeout, Settings coverage, blank frames/exits, four tabs/taskbar, independent installer. UI stopped by physical Escape; experimental binary may still run: rebuild retained source. Cross-chat issue inventory: [Evidence](../docs/validation/native-pilot-localtest.md).
 
 ## Windows-first efficiency — 20 October 2026
 
