@@ -201,6 +201,8 @@ try {
       ('"' + $solution + '"'),
       '/t:Build',
       '/p:Configuration=SbieRelease',
+      '/p:SignMode=Off',
+      '/p:EnableTestSign=false',
       ("/p:Platform=" + $stage.platform),
       '/maxcpucount:8',
       '/nodeReuse:false',

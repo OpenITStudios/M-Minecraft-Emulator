@@ -251,7 +251,21 @@ export async function stageOwnedV1186({
       const original = ordinary(sourceRoot,rel);
       const dest = join(payload,...destinationFor(rel).split('/'));
       mkdirSync(dirname(dest),{recursive:true});
-      copyFileSync(original,dest);
+      if (resourceBlobs.has(rel)) {
+        demand(statSync(original).size <= 8 * 1024 * 1024, 'resource exceeds bounded size');
+        let bytes = readFileSync(original);
+        demand(bytes.length <= 8 * 1024 * 1024, 'resource exceeds bounded size');
+        const blob = data => createHash('sha1').update('blob ' + data.length + '\0').update(data).digest('hex');
+        // Git autocrlf may expand checkout text. Only accept normalization
+        // when its resulting bytes match the exact committed resource blob.
+        if (blob(bytes) !== resourceBlobs.get(rel)) {
+          bytes = Buffer.from(bytes.toString('latin1').replace(/\r\n/g, '\n'), 'latin1');
+        }
+        demand(blob(bytes) === resourceBlobs.get(rel), 'copied resource differs from committed Git HEAD: ' + rel);
+        writeFileSync(dest, bytes);
+      } else {
+        copyFileSync(original,dest);
+      }
       const meta = {path:destinationFor(rel),source:rel,
         sizeBytes:statSync(dest).size, sha256:await checksum(dest)};
       const expected = report.artifacts.find(x => x.path === rel);

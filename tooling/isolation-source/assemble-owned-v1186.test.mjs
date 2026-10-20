@@ -40,7 +40,8 @@ function fixture() {
   });
   const resourceBlobs = new Map();
   for (const path of [...profile.sourceResources,...profile.originalLicensesMustBeRetained]) {
-    resourceBlobs.set(path, gitBlobId(file('engine/isolation-owned/'+path)));
+    resourceBlobs.set(path, gitBlobId(file('engine/isolation-owned/'+path,
+      Buffer.from('owned test: '+path+'\n'))));
   }
   const report={
     schema:1,state:'NATIVE_BUILD_ARTIFACTS_CAPTURED_NOT_INSTALLABLE',
@@ -116,6 +117,24 @@ test('owned v1.18.6 build produces a closed read-only 25-file engine payload',as
     assert.ok(existsSync(join(f.outputDirectory,'LICENSES','Sandboxie','COPYING')));
     assert.match(readFileSync(join(f.outputDirectory,'NOT-INSTALLABLE.txt'),'utf8'),/NOT installable or co-installable/);
   }finally{f.clean();}
+});
+
+test('CRLF checkout config and licenses stage as exact committed blob bytes', async () => {
+  const f = fixture();
+  try {
+    const expected = new Map();
+    for (const path of ['Sandboxie/install/Templates.ini', 'LICENSE.Plus']) {
+      const source = join(f.repository, 'engine/isolation-owned', path);
+      const bytes = readFileSync(source);
+      expected.set(path, bytes);
+      writeFileSync(source, Buffer.from(bytes.toString('latin1').replace(/\n/g, '\r\n'), 'latin1'));
+    }
+    await f.run();
+    assert.deepEqual(readFileSync(join(f.outputDirectory, 'Templates.ini')),
+      expected.get('Sandboxie/install/Templates.ini'));
+    assert.deepEqual(readFileSync(join(f.outputDirectory, 'LICENSES/LICENSE.Plus')),
+      expected.get('LICENSE.Plus'));
+  } finally { f.clean(); }
 });
 test('payload and report cannot escape dedicated ignored workspace folders',async()=>{
   const f=fixture();try{

@@ -39,6 +39,8 @@ test('builder only compiles and captures unsigned artifacts, never installs a dr
   assert.match(source, /Ignored native build outputs exist; use a fresh clean source checkout/);
   assert.match(source, /NATIVE_BUILD_ARTIFACTS_CAPTURED_NOT_INSTALLABLE/);
   assert.match(source, /driverSigned = \$false/);
+  assert.match(source, /'\/p:SignMode=Off'/);
+  assert.match(source, /'\/p:EnableTestSign=false'/);
   assert.match(source, /driverLoaded = \$false/);
   assert.match(source, /installPermitted = \$false/);
   assert.match(source, /activeProviderChanged = \$false/);
