@@ -101,7 +101,14 @@ where
     // without starting another helper or increasing resource pressure.
     let slots = reserve_io_workers(if input.is_some() { 3 } else { 2 })?;
     let mut slots = slots.into_iter();
-    let mut child = Command::new(program)
+    let mut command = Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // Background helpers launched by the GUI must not allocate a console.
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let mut child = command
         .args(args)
         .stdin(if input.is_some() {
             Stdio::piped()
@@ -623,6 +630,41 @@ mod tests {
         assert!(error
             .to_string()
             .contains("refusing truncated provider evidence"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn bounded_helper_has_no_console_window() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let directory =
+            std::env::temp_dir().join(format!("mivubi-console-test-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let host = directory.join("gui-host.exe");
+        let compiled = Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()))
+            .arg("--edition=2021")
+            .arg(root.join("src/provider/fixtures/gui_helper_host.rs"))
+            .arg("-o")
+            .arg(&host)
+            .output()
+            .unwrap();
+        assert!(
+            compiled.status.success(),
+            "{}",
+            String::from_utf8_lossy(&compiled.stderr)
+        );
+        let result = directory.join("console.txt");
+        let status = Command::new(&host).arg(&result).status().unwrap();
+        assert!(status.success());
+        let observed = std::fs::read_to_string(&result).unwrap();
+        let _ = std::fs::remove_file(&host);
+        let _ = std::fs::remove_file(&result);
+        let _ = std::fs::remove_file(directory.join("gui-host.pdb"));
+        let _ = std::fs::remove_dir(&directory);
+        assert_eq!(
+            observed.trim(),
+            "0",
+            "a GUI manager's background helper must not allocate a console window"
+        );
     }
 
     #[test]
