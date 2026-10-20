@@ -375,7 +375,7 @@ describe("Balanced resource admission", () => {
   it("guards every runtime action and disables action buttons during costly inspection", () => {
     const application = readFileSync(new URL("../src/CompactManagerApp.svelte", import.meta.url), "utf8");
     expect(application).toContain(
-      '$: resourceOperationBusy = isResourceOperationBusy(busy, ownedHostBusy, ownedInspectionBusy);');
+      '$: resourceOperationBusy = isResourceOperationBusy(busy, ownedHostBusy, ownedInspectionBusy) || ownedManagerBusy;');
     expect(application).not.toContain("disabled={Boolean(busy)}");
     expect(application).not.toContain("if (busy) return;");
     expect(application).not.toContain("if (busy ||");

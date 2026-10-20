@@ -1,4 +1,6 @@
 <script lang="ts">
+  import OwnedManagerPanel from "./OwnedManagerPanel.svelte";
+  import {ownedProvider,type OwnedSnapshot} from "./app/bridge/ownedProviderApi.js";
   import { tick } from "svelte";
   import {
     nativeFeasibility,
@@ -33,6 +35,19 @@
   type MoveSide = "LEFT" | "RIGHT";
 
   let page: Page = "instances";
+  let ownedSession="";
+  let ownedSnapshot:OwnedSnapshot|null=null;
+  let ownedManagerBusy=false;
+  let ownedSelectionError="";
+  async function selectOwnedTestSession(){
+    if(resourceOperationBusy)return;
+    busy="owned-select";ownedSelectionError="";
+    try{
+      const session=await ownedProvider.selectSession();
+      if(session){const snapshot=await ownedProvider.execute(session,"02","Inspect");ownedSession=session;ownedSnapshot=snapshot;}
+    }catch(e){ownedSelectionError=String(e);}
+    finally{busy="";}
+  }
   let expanded: InstanceId | null = null;
   let detailMode: DetailMode = "info";
   let busy = "";
@@ -82,7 +97,7 @@
 
   // Balanced policy is the current actual behavior, not a game FPS/RAM limit.
   // All expensive helpers are explicitly requested and serialized by the UI.
-  $: resourceOperationBusy = isResourceOperationBusy(busy, ownedHostBusy, ownedInspectionBusy);
+  $: resourceOperationBusy = isResourceOperationBusy(busy, ownedHostBusy, ownedInspectionBusy) || ownedManagerBusy;
   $: base02 = client02Presentation(observation, selectedExecutable, licenseConfirmed);
   $: issue01 = issues["01"] ?? null;
   $: issue02 = issues["02"] ?? null;
@@ -524,14 +539,19 @@
       <header class="cm-toolbar">
         <h1>Virtual Manager</h1>
         <div class="cm-toolbar-actions">
+          {#if !ownedSession}
           <button class="cm-button cm-secondary" type="button" title="Inspects Virtual 02 only; Host 01 is not checked" bind:this={checkStatusButton} disabled={resourceOperationBusy} on:click={checkStatus}>
             <span class="cm-refresh-icon" aria-hidden="true">↻</span>
             {busy === "check" ? "Checking…" : "Check status · 02"}
           </button>
+          {/if}
           <button class="cm-button cm-quiet" type="button" on:click={showSettings}>Settings</button>
         </div>
       </header>
 
+      {#if ownedSession && ownedSnapshot}
+        <OwnedManagerPanel sessionDirectory={ownedSession} bind:initialSnapshot={ownedSnapshot} bind:operationBusy={ownedManagerBusy} externalBusy={!!busy || ownedHostBusy || ownedInspectionBusy}/>
+      {:else}
       <section class="cm-virtual-overview" aria-label="Create virtual availability">
         <div>
           <h2>Minecraft sessions</h2>
@@ -714,12 +734,20 @@
           Status not checked this session
         {/if}
       </footer>
+      {/if}
     {:else}
       <header class="cm-toolbar">
         <h1>Settings</h1>
         <button class="cm-button cm-secondary" type="button" bind:this={settingsBackButton} on:click={showInstances}>Back to Virtuals</button>
       </header>
       <section class="cm-settings" aria-label="Application settings">
+        <div class="cm-setting-group">
+          <h2>Engine</h2>
+          <p>{ownedSession?"Local engine test selected · Four-client manager operations use the verified owned provider.":"Existing official pilot selected · Owned test engine has not been selected in this app session."}</p>
+          <button type="button" class="cm-button cm-secondary" disabled={resourceOperationBusy} on:click={selectOwnedTestSession}>Select local engine test</button>
+          <p>Select the activated session directory containing session.json and payload. This does not install or activate a driver.</p>
+          {#if ownedSelectionError}<p role="alert" class="cm-warning">{ownedSelectionError}</p>{/if}
+        </div>
         <div class="cm-setting-group">
           <h2>Minecraft setup</h2>
           <p>Choose the official Minecraft Education Desktop installation for Minecraft 02.</p>
