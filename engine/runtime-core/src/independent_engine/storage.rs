@@ -255,6 +255,9 @@ pub fn preflight_storage_route(request: StorageRouteRequest) -> StorageRoutePref
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PendingPrivateFilePlan {
     pub slot: SessionSlot,
+    // The exact process key remains attached. Future adapters must re-pin
+    // this PID/FILETIME at operation time; a stale plan has no authority.
+    pub process: ProcessIdentity,
     pub domain: StorageRouteDomain,
     pub action: StorageRouteAction,
     pub components: Vec<String>,
@@ -327,8 +330,8 @@ pub fn plan_private_file_access(
         }
     }
     Ok(PendingPrivateFilePlan {
-        slot: request.slot, domain: request.domain, action: request.action,
-        components,
+        slot: request.slot, process: request.expected_process,
+        domain: request.domain, action: request.action, components,
     })
 }
 
@@ -363,9 +366,13 @@ mod route_tests {
                         domain, action, ..request(slot)
                     }, "state/checkpoint-01.json").unwrap();
                     assert_eq!(plan.slot, slot);
+                    assert_eq!(plan.process, process());
                     assert_eq!(plan.domain, domain);
                     assert_eq!(plan.action, action);
-                    assert_eq!(plan.components, ["state", "checkpoint-01.json"]);
+                    assert_eq!(
+                        plan.components,
+                        vec!["state".to_owned(), "checkpoint-01.json".to_owned()]
+                    );
                 }
             }
         }

@@ -1,5 +1,21 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — bind pending file plan to exact process key, 22 October 2026
+
+Follow-up hardening on the new private metadata path planner: the pending
+result now retains the full PID/creation FILETIME from the already validated
+request. Future native adapters must re-pin this identity before acting and
+must never treat old plans from a restarted or reused PID as reusable.
+Valid-plan regressions assert the carried full identity and explicit owned
+String components. This is a source-only correction, NOT a launch grant or
+filesystem virtualization.
+
+**Proof:** exact GitHub source review; Rust tests NOT_EXECUTED.
+No game data, account files or OS paths were read or changed.
+**Next:** implement only a verified owner-bound native storage capability
+after supported Windows/private-profile enforcement is established.
+
+
 ## Independent engine — read-only pinned private root handle inspection, 22 October 2026
 
 Added a Windows-only, unmounted `inspect_private_root_handle_source` to the
