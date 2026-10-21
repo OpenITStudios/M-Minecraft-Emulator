@@ -101,6 +101,24 @@ observer must replace it with verified OS-specific evidence. The
 integration is not registered with Tauri; admission continues to
 deny isolated launches.
 
+## Exact-process storage binding and token metadata
+
+The port contract now requires `StorageObserverPort::inspect_boundaries`
+to receive the exact `ProcessIdentity` (PID and full-width creation
+FILETIME). An eventual native storage implementation must re-pin or retain the
+same handle before inspecting a process-specific storage view. Domain tests
+verify the requested identity reaches the observer, and that mismatched or
+denied process observations prevent storage inspection entirely.
+
+The desktop's existing process identity owner checks the live token's
+AppContainer flag and SID through its already pinned process handle. Only
+`ProcessContainment::NoAppContainerToken` or
+`ProcessContainment::AppContainerTokenObserved` leaves the native observer.
+Raw SIDs, tokens, filesystem paths and credentials remain private; the
+all-`Unknown` storage adapter is unchanged. Observing an AppContainer SID
+is not proof of separate named-object namespaces, RoamingAppData,
+registry, WAM/MSAL accounts or game compatibility. No launch route is enabled.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

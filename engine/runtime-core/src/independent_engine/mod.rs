@@ -15,6 +15,7 @@ pub use inspection::{inspect_existing, SessionInspection};
 pub use operations::{OperationClass, SessionOperation};
 pub use ports::{
     DisabledIndependentProvider, IndependentProviderPort, NativePortError,
-    ProcessObservation, ProcessObserverPort, StorageObserverPort, WorkspacePresentationPort,
+    ProcessContainment, ProcessObservation, ProcessObserverPort, StorageObserverPort,
+    WorkspacePresentationPort,
 };
 pub use storage::{StorageFinding, StorageObservations, StorageSurface};

@@ -72,7 +72,7 @@ pub fn compare_appcontainer_identities(
 // check; it does NOT claim a signed Education image, visible game window,
 // persistent storage, or isolated Microsoft credentials.
 use virtual_clients_core::independent_engine::{
-    inspect_existing, NativePortError, ProcessIdentity,
+    inspect_existing, NativePortError, ProcessContainment, ProcessIdentity,
     ProcessObservation, ProcessObserverPort, SessionInspection, SessionSlot,
     StorageObservations, StorageObserverPort,
 };
@@ -91,7 +91,7 @@ impl ProcessObserverPort for WindowsProcessObserver {
         };
         #[cfg(windows)]
         {
-            windows::inspect_exact(&key).map_err(|e| match e.kind() {
+            let containment = windows::inspect_exact(&key).map_err(|e| match e.kind() {
                 std::io::ErrorKind::NotFound => NativePortError::StaleProcess,
                 std::io::ErrorKind::InvalidInput | std::io::ErrorKind::InvalidData => {
                     NativePortError::InvalidIdentity
@@ -101,6 +101,7 @@ impl ProcessObserverPort for WindowsProcessObserver {
             })?;
             Ok(ProcessObservation {
                 identity: expected,
+                containment,
                 official_image_signature_observed: false,
                 visible_window_observed: false,
             })
@@ -117,6 +118,7 @@ impl StorageObserverPort for UnknownStorageObserver {
     fn inspect_boundaries(
         &self,
         _slot: SessionSlot,
+        _expected: ProcessIdentity,
     ) -> Result<StorageObservations, NativePortError> {
         // Never invent isolation from an AppContainer SID or private-looking path.
         // A real OS storage observer requires its own exact scope and evidence.
@@ -135,7 +137,7 @@ pub fn inspect_independent_source(
 
 #[cfg(windows)]
 mod windows {
-    use super::{AppContainerComparison, ContextComparison, ProcessKey};
+    use super::{AppContainerComparison, ContextComparison, ProcessContainment, ProcessKey};
     use std::{io, mem::size_of, ptr};
     use windows_sys::Win32::{
         Foundation::{
@@ -364,9 +366,15 @@ mod windows {
 
     /// Reuse the same pinned handle/FILETIME check as the existing desktop
     /// observer. The handle is retained until the final liveness check.
-    pub(super) fn inspect_exact(expected: &ProcessKey) -> io::Result<()> {
+    pub(super) fn inspect_exact(expected: &ProcessKey) -> io::Result<ProcessContainment> {
         let process = pin(expected)?;
-        live(&process)
+        let containment = if appcontainer_sid(&process)?.is_some() {
+            ProcessContainment::AppContainerTokenObserved
+        } else {
+            ProcessContainment::NoAppContainerToken
+        };
+        live(&process)?;
+        Ok(containment)
     }
 
     pub(super) fn compare_appcontainers(
@@ -498,10 +506,16 @@ mod windows {
                 expected,
             ).unwrap();
             assert_eq!(result.process.identity, expected);
+            assert!(matches!(
+                result.process.containment,
+                ProcessContainment::NoAppContainerToken
+                    | ProcessContainment::AppContainerTokenObserved
+            ));
             assert!(!result.process.official_image_signature_observed);
             assert!(!result.process.visible_window_observed);
             assert!(result.storage.unresolved().contains(&StorageSurface::RoamingKnownFolder));
             assert!(result.storage.unresolved().contains(&StorageSurface::AuthenticationBroker));
+            assert!(result.storage.unresolved().contains(&StorageSurface::NamedObjects));
 
             let stale = ProcessIdentity::checked(expected.pid, expected.created_file_time + 1)
                 .unwrap();
@@ -612,7 +626,10 @@ mod tests {
         use virtual_clients_core::independent_engine::{
             StorageFinding, StorageSurface,
         };
-        let report = UnknownStorageObserver.inspect_boundaries(SessionSlot::Mc02).unwrap();
+        let expected = ProcessIdentity::checked(42, 133400000000000000).unwrap();
+        let report = UnknownStorageObserver
+            .inspect_boundaries(SessionSlot::Mc02, expected)
+            .unwrap();
         for surface in StorageSurface::ALL {
             assert_eq!(report.finding(surface), StorageFinding::Unknown);
         }

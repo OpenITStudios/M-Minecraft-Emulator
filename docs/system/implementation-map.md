@@ -25,6 +25,12 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+The independent `StorageObserverPort` now accepts exact
+`ProcessIdentity` along with the slot, rather than slot alone. The
+existing pinned Windows process observer also categorizes its actual
+AppContainer token without emitting raw SID. Storage remains all-Unknown
+and the verified token category grants no launch or game readiness.
+
 The existing desktop identity owner
 `apps/desktop/src-tauri/src/engine/instance_identity.rs` now supplies
 a read-only `WindowsProcessObserver` and `inspect_independent_source`.

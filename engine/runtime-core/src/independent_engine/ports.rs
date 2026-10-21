@@ -14,9 +14,20 @@ pub enum NativePortError {
     OperationFailed,
 }
 
+/// Windows process-token category only. An AppContainer token alone cannot
+/// establish filesystem, registry, broker, singleton or account isolation.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ProcessContainment {
+    #[default]
+    Unknown,
+    NoAppContainerToken,
+    AppContainerTokenObserved,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ProcessObservation {
     pub identity: ProcessIdentity,
+    pub containment: ProcessContainment,
     // Candidate observations alone do not prove official signature, account,
     // rendering, multiplayer, or the scope of the game's singleton.
     pub official_image_signature_observed: bool,
@@ -28,9 +39,13 @@ pub trait ProcessObserverPort {
 }
 
 pub trait StorageObserverPort {
+    /// Bind storage evidence to the exact process already inspected. Any
+    /// native implementation must revalidate or pin the OS process handle
+    /// during its own inspection; slot labels alone are never sufficient.
     fn inspect_boundaries(
         &self,
         slot: SessionSlot,
+        expected: ProcessIdentity,
     ) -> Result<StorageObservations, NativePortError>;
 }
 

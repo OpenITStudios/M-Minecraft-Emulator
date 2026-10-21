@@ -27,7 +27,7 @@ pub fn inspect_existing<P: ProcessObserverPort, S: StorageObserverPort>(
     if observed.identity != expected {
         return Err(NativePortError::StaleProcess);
     }
-    let surfaces = storage.inspect_boundaries(slot)?;
+    let surfaces = storage.inspect_boundaries(slot, expected)?;
     Ok(SessionInspection {
         process: observed,
         storage: surfaces,
@@ -37,7 +37,9 @@ pub fn inspect_existing<P: ProcessObserverPort, S: StorageObserverPort>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::independent_engine::{StorageFinding, StorageSurface};
+    use crate::independent_engine::{
+        ProcessContainment, StorageFinding, StorageSurface,
+    };
     use std::cell::Cell;
 
     struct FakeProcess {
@@ -54,21 +56,26 @@ mod tests {
             }
             Ok(ProcessObservation {
                 identity: self.reported,
+                containment: ProcessContainment::Unknown,
                 official_image_signature_observed: false,
                 visible_window_observed: false,
             })
         }
     }
 
+    #[derive(Default)]
     struct FakeStorage {
         calls: Cell<usize>,
+        last_identity: Cell<Option<ProcessIdentity>>,
     }
     impl StorageObserverPort for FakeStorage {
         fn inspect_boundaries(
             &self,
             _slot: SessionSlot,
+            expected: ProcessIdentity,
         ) -> Result<StorageObservations, NativePortError> {
             self.calls.set(self.calls.get() + 1);
+            self.last_identity.set(Some(expected));
             let mut value = StorageObservations::default();
             value.observe(StorageSurface::LocalAppData, StorageFinding::PathOnly);
             Ok(value)
@@ -83,12 +90,13 @@ mod tests {
             reported: wrong,
             fail: false,
         };
-        let storage = FakeStorage { calls: Cell::new(0) };
+        let storage = FakeStorage::default();
         assert!(matches!(
             inspect_existing(&process, &storage, SessionSlot::Mc02, expected),
             Err(NativePortError::StaleProcess)
         ));
         assert_eq!(storage.calls.get(), 0);
+        assert_eq!(storage.last_identity.get(), None);
     }
 
     #[test]
@@ -98,12 +106,13 @@ mod tests {
             reported: expected,
             fail: true,
         };
-        let storage = FakeStorage { calls: Cell::new(0) };
+        let storage = FakeStorage::default();
         assert!(matches!(
             inspect_existing(&process, &storage, SessionSlot::Mc02, expected),
             Err(NativePortError::AccessDenied)
         ));
         assert_eq!(storage.calls.get(), 0);
+        assert_eq!(storage.last_identity.get(), None);
     }
 
     #[test]
@@ -113,11 +122,13 @@ mod tests {
             reported: expected,
             fail: false,
         };
-        let storage = FakeStorage { calls: Cell::new(0) };
+        let storage = FakeStorage::default();
         let result =
             inspect_existing(&process, &storage, SessionSlot::Mc02, expected).unwrap();
         assert_eq!(result.process.identity, expected);
+        assert_eq!(result.process.containment, ProcessContainment::Unknown);
         assert_eq!(storage.calls.get(), 1);
+        assert_eq!(storage.last_identity.get(), Some(expected));
         assert_eq!(
             result.storage.finding(StorageSurface::LocalAppData),
             StorageFinding::PathOnly

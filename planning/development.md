@@ -29,11 +29,18 @@ claimed on this path. Windows and non-Windows negative/source tests
 are authored; compilation/execution remains NOT_EXECUTED here.
 No Tauri command or new provider was registered.
 
-**Next source-only milestone:** add a read-only, OS-grounded
-AppContainer/storage evidence interface and map only actually observed
-Windows facts; retain the full set of unknowns for Known Folder roaming
-and authentication. No launch, profile, credential, service, or driver
-operations until local acceptance is explicitly resumed.
+**Current source contract:** Storage inspection now requires the same
+full-width process identity as the process observer, preventing a future
+adapter from silently relying on slot/PID alone. The existing Windows
+pinned-handle observer returns only a sanitized AppContainer token
+category, with all filesystem, registry, known-folder and authentication
+surfaces still Unknown. Negative tests assert that a stale/missing
+process cannot trigger storage inspection. Windows/Rust execution remains
+NOT_EXECUTED; no Tauri launch/provider mutation or new service.
+
+**Next source-only milestone:** specify a native storage evidence adapter
+with exact-handle/lifetime binding and explicit known-folder/registry/broker
+unknowns; keep account-bearing paths untouched pending local acceptance.
 
 ## Independent sandbox engine — ACTIVE source foundation, 21 October 2026
 
