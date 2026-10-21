@@ -1,23 +1,21 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
-## Independent native AppContainer proof - 21 October 2026
+## Independent engine - PAUSED for operator discussion, 21 October 2026
 
-**ACTIVE**, base `cea5c365753efddafbba8ef8ccabf2b8f40b70fa`.
-User selected independent implementation; both Sandboxie product launch routes
-remain retired. [Architecture](../docs/system/architecture.md) and
-[actual findings](../docs/system/independent-isolation.md) own the design/evidence.
-Native unpackaged AppContainer is a justified synthetic candidate, not a proven
-game provider. MSVC /W4 /WX fixture: two actual distinct container tokens,
-concurrent lifetimes, same-name mutex separation, own canary reads, denied peer/
-host canary reads and independent normal exit PASS. Temporary profiles removed.
-Negative reused-token control failed at its expected check with cleanup confirmed.
-Local AppData redirected; roaming environment and known-folder paths did NOT.
-Historical official Education changelog proves MSAL migration, not current WAM.
-Installed signed image metadata/imports cannot establish actual broker/singleton.
-No Minecraft launch, credentials, game/installed ACL changes or driver operations.
-**Next:** prove private persistent roaming storage for unmodified Education under
-AppContainer without granting host data access; preserve any future game profile.
-Independent game provider, auth, input/network and four-client acceptance unproven.
+**PAUSED at operator request.** Last implementation/proof commit:
+`d823f68456e64298aedea38d879daabe3be4aa55` (`Local`). No further experiments,
+game launches, service changes or implementation until explicitly resumed.
+Start the ChatGPT discussion from the
+[discussion brief](../docs/system/independent-isolation.md#bahan-diskusi-chatgpt---21-oktober-2026).
+Architecture and retirement decisions remain in the existing linked owners there.
+Sandboxie and its fork remain retired for new product sessions; installed
+services, old profiles/accounts/worlds and legacy VM data remain preserved.
+Two synthetic native AppContainers passed token/namespace/canary/lifetime checks;
+negative reused-token control failed as expected; fixture profiles removed.
+Local AppData redirected, roaming environment/known-folder paths did NOT.
+No independent Minecraft launch, auth or four-client acceptance exists.
+**Candidate after discussion, not authorization:** prove private persistent
+roaming storage without host access or game modification before game smoke tests.
 
 ## Windows-first efficiency — 20 October 2026
 

@@ -21,6 +21,106 @@ bar. Selecting a tab changes presentation; another session keeps running.
 **Independent production provider: NOT_IMPLEMENTED.** No Windows-user experiment,
 Education sign-in, four-world play or multiplayer acceptance is claimed here.
 
+## Bahan diskusi ChatGPT - 21 Oktober 2026
+
+Operator ingin mendiskusikan keputusan berikutnya sebelum pekerjaan dilanjutkan.
+Status jeda dan otoritas melanjutkan hanya dimiliki
+[planning/development.md](../../planning/development.md). Bagian ini merangkum
+konteks untuk diskusi, bukan persetujuan menjalankan eksperimen berikutnya.
+Mulai dengan membaca `AGENTS.md`, `GITHUB_RULES.md`, implementation map dan HEAD
+`Local` terbaru; jangan mengambil `Next` historis sebagai izin baru.
+
+### Tujuan dan keputusan yang sudah disetujui
+
+- Empat Minecraft Education berjalan bersamaan pada satu PC, dengan empat akun
+  berlisensi berbeda dan data persisten masing-masing. Operator menyatakan empat
+  akun tersedia untuk login manual; login ditunda sampai fondasi/UX layak diuji.
+- Perilaku tab seperti browser: memilih tab hanya mengganti tampilan/kontrol;
+  semua proses lain tetap hidup. Menutup game merupakan tindakan terpisah.
+- Pensiunkan Sandboxie **dan fork turunannya**, bukan sekadar mengganti nama.
+  Kemiripan ide arsitektur diperbolehkan; implementasi pengganti harus mandiri.
+  Tidak kembali ke pembelian/aktivasi sertifikat fitur Sandboxie sebagai solusi.
+- Gunakan satu pemilik lifecycle/admission; jangan menambah penyimpanan kredensial,
+  implementasi login Microsoft, flag ready atau manager paralel. Login tetap di
+  game. Tidak menyalin token, menginjeksi DLL atau memodifikasi binary Minecraft.
+- Branch produk hanya `Local`; `main` dan rilis tidak disentuh. GitHub Actions
+  tetap sepenuhnya dimatikan. VMware/guest legacy tidak dihidupkan kembali.
+
+### Masalah semula dan koreksi klaim
+
+Operator melaporkan area game kosong, kontrol duplikat/tidak jelas, tab lambat,
+MC01 hilang ketika MC02 dibuka, kegagalan kembali dari maximize/fullscreen,
+MC02–04 tidak operasional, serta akun yang belum benar-benar terpisah. Klaim
+empat sesi stabil/terisolasi **tidak pernah memperoleh acceptance** dan ditolak
+operator. Banyak proses atau status Running bukan bukti empat akun playable.
+
+Pada engine lama, sumber fork menunjukkan App Compartment menjadwalkan terminasi
+sekitar lima menit ketika fitur terkait tidak aktif. Query fitur aktual tidak
+aktif dan satu exit code cocok dengan jalur terminasi; waktu/caller terminasi
+setiap kegagalan lama tidak tertangkap. Ini bukan diagnosis tunggal untuk semua
+blank window, fullscreen atau crash. Detail dan batas bukti ada di
+[native pilot report](../validation/native-pilot-localtest.md).
+Perbaikan swap/recovery lama dipertahankan, tetapi bukan bukti engine pengganti
+atau jaminan fullscreen, DPI lintas monitor, input dan gameplay sudah stabil.
+
+### Titik sumber dan bukti yang bisa dirujuk
+
+| Commit `Local` | Hasil terbatas yang benar-benar dicatat |
+| --- | --- |
+| `79b93ae76c03ff5d9ca128264511d2c145a0cde9` | Admission menolak Launch/Provision melalui Sandboxie resmi dan fork; recovery/close sesi lama dipertahankan. Desktop verification 185 frontend + 78 Rust; 8 opt-in ignored; receipt unchanged regression lulus. Full root suite berhenti pada assembler `EPERM`; bukan PASS keseluruhan. |
+| `cea5c365753efddafbba8ef8ccabf2b8f40b70fa` | Inspector konteks proses Windows tanpa Sandboxie; handle dan creation identity diverifikasi, hanya tiga boolean keluar melalui typed IPC/diagnostics. Desktop verification 188 frontend + 80 Rust, 8 ignored; dua regresi Windows nyata memakai proses tes/child sendiri. Bukan isolator atau launcher game. |
+| `d823f68456e64298aedea38d879daabe3be4aa55` | Prototipe native AppContainer hanya untuk fixture sintetis; MSVC `/W4 /WX`, kontrol positif dan negatif nyata, serta pemeriksaan struktur/kontrak repo lulus. Desktop/root full suite tidak dijalankan ulang pada batch tooling ini. Bukan penerimaan Minecraft. |
+
+Temuan kandidat terakhir: dua token AppContainer berbeda, proses bersamaan,
+mutex bernama sama dalam namespace terpisah, canary sendiri terbaca, canary peer
+serta host ditolak, dan penghentian normal satu fixture tidak menghentikan yang
+lain. Dua profil sintetis dibersihkan. Kontrol negatif sengaja menyamakan token
+kedua dan ditolak pada `actual-distinct-container-tokens`; FAIL tersebut adalah
+hasil kontrol yang diharapkan, bukan acceptance produk yang gagal/disembunyikan.
+
+`LOCALAPPDATA` environment dan known-folder beralih ke container pada host yang
+diuji. `%APPDATA%` roaming dan known-folder roaming **tidak** berada di container.
+Hasil token SID berbeda atau nama folder berbeda tidak membuktikan data game,
+cache MSAL, broker WAM atau akun Microsoft terisolasi.
+
+### Hal yang belum boleh diasumsikan
+
+- AppContainer saat ini **kandidat sintetis**, bukan provider Minecraft produksi.
+  Tidak ada peluncuran game, login, empat dunia, multiplayer, uji sesi panjang,
+  rendering/input/fullscreen atau package acceptance untuk penggantinya.
+- Changelog resmi membuktikan migrasi historis ADAL ke MSAL; belum membuktikan
+  broker yang dipakai build terpasang. WAM mempunyai batas RunAs yang terdokumentasi;
+  belum ada alasan menyatakan Minecraft selalu memakai WAM atau selalu bebas WAM.
+- Pembatas proses kedua Minecraft belum teridentifikasi. Namespace mutex sintetis
+  terpisah tidak membuktikan singleton game memakai mekanisme yang sama.
+- Driver/service Sandboxie lama masih terpasang; pengujian pada Windows bersih
+  tanpa driver itu belum dilakukan. Source fixture tidak memanggil API Sandboxie.
+- Executable desktop yang sebelumnya terbuka tidak diganti oleh batch-batch ini;
+  binary/UI terpasang tidak boleh dianggap sama dengan HEAD sumber terbaru.
+- Profil akun/dunia lama tidak dimigrasikan atau dihapus. Profil yang kelak pernah
+  menjalankan game harus dianggap berpotensi membawa akun/data dan **tidak boleh**
+  mengikuti kebijakan auto-delete milik fixture sintetis.
+
+### Pertanyaan untuk dibahas sebelum memilih langkah berikutnya
+
+1. Apakah AppContainer layak diteruskan mengingat jalur roaming belum terarah?
+   Bukti minimum apa yang membedakan data privat nyata dari perubahan environment
+   yang tidak diikuti game/known-folder API?
+2. Bagaimana memeriksa kompatibilitas MSAL/broker dan singleton game tanpa membaca
+   cache akun, memodifikasi binary, menginjeksi kode atau membuka akses data host?
+3. Apa kriteria NO-GO kandidat ini, sehingga kita tidak menumpuk launcher, custom
+   driver atau shim sebelum ada mekanisme yang cocok dan terbukti?
+4. Bila kandidat lolos, bagaimana urutan dua game hidup bersamaan, recovery/tab,
+   dua login manual, lalu empat akun dan packaging/migrasi yang reversibel?
+
+Pemilik sumber: lifecycle/policy `engine/runtime-core/`; Windows identity dan
+presentation `apps/desktop/`; fixture pembuktian `tooling/acceptance/windows/`;
+[arsitektur](architecture.md) untuk tanggung jawab sistem dan
+[retirement register](legacy-retirement.md) untuk batas pensiun/data.
+Log, hasil kompilasi, JSON runtime dan receipt mentah tetap di ignored `workspace/`;
+repo menyimpan sumber, ringkasan bukti tersanitasi dan hash commit, bukan token,
+akun, dunia, raw machine identity, signing material atau dump privat.
+
 ## Implementation direction
 
 Build the smallest independent, Minecraft-specific Windows session engine. Do not
