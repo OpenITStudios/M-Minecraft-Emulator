@@ -379,6 +379,37 @@ game/registry/broker isolation, does not issue
 The current in-product standalone Rust reader still returns
 `UnboundFixturePaths`; no admission or workspace behavior is changed.
 
+## Independent filesystem / registry route preflight — source contract
+
+`independent_engine/storage.rs` now owns a pure Rust
+`preflight_storage_route` for MC02–MC04. This is **not filesystem or
+registry virtualization**, but a fail-closed assessment that describes
+what a future Windows adapter must verify before **considering**
+access. Every request supplies the slot, exact expected and observed
+PID/creation FILETIME, storage domain, logical target owner and action.
+
+Host account/profile data, unknown targets, another session's data,
+missing or stale process identity and attempts to adopt MC01's native
+profile are denied at the policy level. The official signed game
+installation may be considered **read-only**, only through the local
+file domain, and still requires native signature/handle verification;
+creation, update and deletion of the official install are rejected.
+Private local files, roaming files, current-user registry and named
+objects each carry **separate required Windows observations**.
+Roaming requires both `APPDATA` and Known Folder proofs, cross-slot
+denial, host denial and restart persistence. A registry canary is not
+file proof, and named-object isolation is not a registry view.
+
+The only non-denied outcome is `NeedsNativeVerification`: it is NOT an
+OS access grant, a profile mapping, provider readiness, authentication
+proof or launch permission. An arbitrary caller may claim a private
+owner; the native adapter must independently establish actual
+Windows token/root/registry ownership and reject reparse, junction,
+namespace alias and unsupported API routing. Only the existing
+admission owner can authorize future lifecycle operations, and it
+continues to reject isolated launch/provision. No new state store,
+driver, filesystem I/O, HKCU writing or account/world access is added.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

@@ -25,6 +25,16 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+Independent filesystem and registry route **preflight** now lives
+in the existing `independent_engine/storage.rs` owner. Pure Rust
+`preflight_storage_route` explicitly rejects host/account data,
+cross-slot owners, unknown targets, stale process keys, and writes to
+the common official installation. MC01 remains under its existing
+native owner. Remaining private local/roaming/registry/namespace
+requests return **NeedsNativeVerification** with distinct required
+OS proof surfaces; no runtime filesystem or registry mapping is
+implemented and desktop Launch/Provision remains blocked.
+
 An opt-in, **test-only Windows HANDLE handoff** is implemented by
 the existing C++ AppContainer fixture plus
 `engine/runtime-core/src/bin/synthetic_fixture_handoff.rs`. The

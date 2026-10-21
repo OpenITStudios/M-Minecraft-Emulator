@@ -35,4 +35,8 @@ pub use ports::{
     ProcessObservation, ProcessObserverPort, StorageObserverPort,
     WorkspacePresentationPort,
 };
-pub use storage::{StorageFinding, StorageObservations, StorageSurface};
+pub use storage::{
+    preflight_storage_route, StorageFinding, StorageObservations,
+    StorageRouteAction, StorageRouteBlocker, StorageRouteDomain, StorageRoutePreflight,
+    StorageRouteRequest, StorageRouteTarget, StorageSurface,
+};

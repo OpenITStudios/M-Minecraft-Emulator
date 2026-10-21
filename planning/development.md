@@ -1,5 +1,31 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — filesystem/registry routing policy, 21 October 2026
+
+**Source-first implementation:** extended canonical
+`engine/runtime-core/src/independent_engine/storage.rs` with typed
+`preflight_storage_route`. MC02–MC04 deny cross-slot data, host
+account/world/cache targets, unknown owner, unpinned PID/FILETIME,
+and mutations of the single official Minecraft installation.
+MC01 stays with the existing native route. Valid-looking private
+local, roaming, HKCU registry and named-object requests produce
+only `NeedsNativeVerification`, each carrying independently required
+boundary observations. Roaming environment and Known Folder remain
+separate checks. Seven Rust tests cover denial and necessary proofs;
+**NOT_EXECUTED** (no Rust toolchain/Windows here). Existing JavaScript,
+Windows and Minecraft acceptance not run on this HEAD.
+
+**This is not an isolation provider:** no Windows calls, paths,
+registry writes, service/driver/daemon, credential handling, or
+authorization to launch. The retired Sandboxie source and account
+data remain untouched; no CI, main, release or installer change.
+
+**Next source-only milestone:** implement a Windows-owned, read-only
+registry and filesystem boundary inspector returning sanitized
+process-bound diagnostics, without assuming host manager path or
+registry view equals the game's process view. Preserve all Unknown
+until actual native observations exist.
+
 ## Independent engine — opt-in inherited fixture handle handoff, 21 October 2026
 
 **Source-first native-to-Rust bridge:** the original C++ fixture parent
