@@ -2,6 +2,19 @@
 
 ## Independent native AppContainer proof (synthetic only)
 
+### Self-observed A/B paths — schema 2
+
+The native fixture now records Local AppData Known Folder, APPDATA environment,
+and Roaming Known Folder from within **each** synthetic AppContainer child.
+The parent verifies token identity and emits separate sanitized
+`processPaths` for fixtures A and B. No raw SID, PID, creation time, account
+or path appears in JSON. The Node reviewer rejects mismatches between those
+child observations and the older aggregate fields. The child labels are not
+a verified production `ProcessIdentity` (`processIdentityBound=false`).
+A path under the synthetic profile is NOT proof of real Minecraft data or
+MSAL broker isolation. Positive fixture reports now use schema 2; the
+historical negative-control failure keeps its existing schema-1 shape.
+
 ### Persistent private roaming-like storage proof (synthetic, opt-in)
 
 The same AppContainer fixture now writes a canary under a freshly created

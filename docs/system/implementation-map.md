@@ -25,6 +25,11 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+The synthetic native AppContainer fixture emits separate path-query outcomes
+for each cooperative A/B process (JSON schema 2), with strict offline review.
+No raw process identifier or profile path is serialized; A/B labels are
+not authoritative PID/FILETIME evidence. Existing game launch remains blocked.
+
 The new `independent_engine/paths.rs` performs source-only, exact
 slot/PID/FILETIME review of three process-local path outcomes. It
 distinguishes `PathOnly`, `PathOutsideProfile` and `Unknown`

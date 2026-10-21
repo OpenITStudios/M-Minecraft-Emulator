@@ -158,6 +158,17 @@ No game, token, registry or profile file is opened. Tests cover
 stale PID/FILETIME, wrong slot, all-private-looking path reports,
 missing Known Folder data and invalid provenance.
 
+## Per-process synthetic path evidence (source-only)
+
+The existing native fixture collects paths from both cooperating synthetic
+AppContainer children and emits bounded schema-2 A/B observations. The parent
+checks token identity; individual paths are never exposed. The offline
+evaluator verifies child/aggregate consistency but explicitly reports
+`processIdentityBound=false`, since fixture labels are not PID/FILETIME.
+Production binding must continue to use the canonical pinned Windows
+process observer and `independent_engine/paths.rs`. This is not a game
+launch, isolated Windows roaming solution, or local runtime acceptance.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

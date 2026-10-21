@@ -165,7 +165,23 @@ enum : DWORD { OWN_FILE = 1, PEER_DENIED = 2, HOST_DENIED = 4, MUTEX_PRIVATE = 8
     LOCAL_ENV = 16, LOCAL_KNOWN_FOLDER = 32, ROAMING_ENV_PRIVATE = 64,
     ROAMING_KNOWN_AVAILABLE = 128, ROAMING_KNOWN_PRIVATE = 256,
     CUSTOM_ROAMING_OWN = 512, CUSTOM_ROAMING_PEER_DENIED = 1024,
-    CUSTOM_ROAMING_CREATED = 2048, CUSTOM_ROAMING_REOPENED = 4096 };
+    CUSTOM_ROAMING_CREATED = 2048, CUSTOM_ROAMING_REOPENED = 4096,
+    ROAMING_ENV_AVAILABLE = 8192 };
+const char* status(bool queried, bool inside) {
+    if (!queried) return "UNAVAILABLE";
+    return inside ? "UNDER_EXPECTED_PROFILE" : "OUTSIDE_EXPECTED_PROFILE";
+}
+const char* local_status(const Observation& o) {
+    return status(true, (o.flags & LOCAL_KNOWN_FOLDER) != 0);
+}
+const char* env_status(const Observation& o) {
+    return status((o.flags & ROAMING_ENV_AVAILABLE) != 0,
+        (o.flags & ROAMING_ENV_PRIVATE) != 0);
+}
+const char* roaming_status(const Observation& o) {
+    return status((o.flags & ROAMING_KNOWN_AVAILABLE) != 0,
+        (o.flags & ROAMING_KNOWN_PRIVATE) != 0);
+}
 int contained(const fs::path& root, const fs::path& own, const fs::path& peer, bool reopen) {
     HANDLE raw = nullptr;
     require(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &raw) != 0, "child-token");
@@ -187,7 +203,9 @@ int contained(const fs::path& root, const fs::path& own, const fs::path& peer, b
     if (same_path(local, own.wstring())) observation.flags |= LOCAL_KNOWN_FOLDER;
     CoTaskMemFree(local);
     // Compare paths only. Never open the host roaming profile or account files.
-    if (under_profile(environment(L"APPDATA"), own)) observation.flags |= ROAMING_ENV_PRIVATE;
+    const auto roaming_env = environment(L"APPDATA");
+    if (!roaming_env.empty()) observation.flags |= ROAMING_ENV_AVAILABLE;
+    if (under_profile(roaming_env, own)) observation.flags |= ROAMING_ENV_PRIVATE;
     PWSTR roaming = nullptr;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &roaming))) {
         observation.flags |= ROAMING_KNOWN_AVAILABLE;
@@ -327,12 +345,16 @@ int parent(const fs::path& output, bool negative_control) {
     CloseHandle(b.process.hProcess); CloseHandle(b.process.hThread); b.process = {};
     const bool cleaned_a = first.cleanup(), cleaned_b = second.cleanup();
     require(cleaned_a && cleaned_b, "fixture-profile-cleanup");
-    std::printf("{\"schema\":1,\"result\":\"PASS\",\"syntheticOnly\":true,\"distinctAppContainerTokens\":true,\"concurrentProcesses\":true,\"privateMutexNamespaces\":true,\"ownStorageReadable\":true,\"peerStorageDenied\":true,\"hostCanaryDenied\":true,\"independentNormalStop\":true,\"profilesRemoved\":true,\"localAppDataEnvironmentRedirected\":%s,\"localAppDataKnownFolderRedirected\":%s,\"roamingEnvironmentUnderContainer\":%s,\"roamingKnownFolderQuerySucceeded\":%s,\"roamingKnownFolderUnderContainer\":%s,\"syntheticPrivateRoamingWritten\":true,\"syntheticPrivateRoamingPeerDenied\":true,\"syntheticPrivateRoamingPersistsAfterRestart\":true,\"minecraftRoamingCompatibility\":\"NOT_EXECUTED\",\"minecraftAcceptance\":\"NOT_EXECUTED\"}\n",
+    // Both observations originate inside their own synthetic child tokens.
+    // Fixture labels are NOT production PID/FILETIME or account identities.
+    std::printf("{\"schema\":2,\"result\":\"PASS\",\"syntheticOnly\":true,\"distinctAppContainerTokens\":true,\"concurrentProcesses\":true,\"privateMutexNamespaces\":true,\"ownStorageReadable\":true,\"peerStorageDenied\":true,\"hostCanaryDenied\":true,\"independentNormalStop\":true,\"profilesRemoved\":true,\"localAppDataEnvironmentRedirected\":%s,\"localAppDataKnownFolderRedirected\":%s,\"roamingEnvironmentUnderContainer\":%s,\"roamingKnownFolderQuerySucceeded\":%s,\"roamingKnownFolderUnderContainer\":%s,\"syntheticPrivateRoamingWritten\":true,\"syntheticPrivateRoamingPeerDenied\":true,\"syntheticPrivateRoamingPersistsAfterRestart\":true,\"processPaths\":[{\"fixture\":\"A\",\"localKnownFolder\":\"%s\",\"roamingEnvironment\":\"%s\",\"roamingKnownFolder\":\"%s\"},{\"fixture\":\"B\",\"localKnownFolder\":\"%s\",\"roamingEnvironment\":\"%s\",\"roamingKnownFolder\":\"%s\"}],\"minecraftRoamingCompatibility\":\"NOT_EXECUTED\",\"minecraftAcceptance\":\"NOT_EXECUTED\"}\n",
         (left.flags & LOCAL_ENV) && (right.flags & LOCAL_ENV) ? "true" : "false",
         (left.flags & LOCAL_KNOWN_FOLDER) && (right.flags & LOCAL_KNOWN_FOLDER) ? "true" : "false",
         (left.flags & ROAMING_ENV_PRIVATE) && (right.flags & ROAMING_ENV_PRIVATE) ? "true" : "false",
         (left.flags & ROAMING_KNOWN_AVAILABLE) && (right.flags & ROAMING_KNOWN_AVAILABLE) ? "true" : "false",
-        (left.flags & ROAMING_KNOWN_PRIVATE) && (right.flags & ROAMING_KNOWN_PRIVATE) ? "true" : "false");
+        (left.flags & ROAMING_KNOWN_PRIVATE) && (right.flags & ROAMING_KNOWN_PRIVATE) ? "true" : "false",
+        local_status(left), env_status(left), roaming_status(left),
+        local_status(right), env_status(right), roaming_status(right));
     return 0;
 }
 int wmain(int argc, wchar_t** argv) {

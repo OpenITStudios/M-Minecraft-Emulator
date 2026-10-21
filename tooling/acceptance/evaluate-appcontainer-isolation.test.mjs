@@ -13,8 +13,12 @@ function fixture() {
     "syntheticPrivateRoamingPeerDenied", "syntheticPrivateRoamingPersistsAfterRestart"
   ];
   const report = {
-    schema: 1,
+    schema: 2,
     result: "PASS",
+    processPaths: [
+      {fixture:"A",localKnownFolder:"UNDER_EXPECTED_PROFILE",roamingEnvironment:"OUTSIDE_EXPECTED_PROFILE",roamingKnownFolder:"OUTSIDE_EXPECTED_PROFILE"},
+      {fixture:"B",localKnownFolder:"UNDER_EXPECTED_PROFILE",roamingEnvironment:"OUTSIDE_EXPECTED_PROFILE",roamingKnownFolder:"OUTSIDE_EXPECTED_PROFILE"}
+    ],
     minecraftRoamingCompatibility: "NOT_EXECUTED",
     minecraftAcceptance: "NOT_EXECUTED"
   };
@@ -40,6 +44,10 @@ test("all paths reported under profile are still not proof of auth or real file 
   const report = fixture();
   report.roamingEnvironmentUnderContainer = true;
   report.roamingKnownFolderUnderContainer = true;
+  for (const p of report.processPaths) {
+    p.roamingEnvironment = "UNDER_EXPECTED_PROFILE";
+    p.roamingKnownFolder = "UNDER_EXPECTED_PROFILE";
+  }
   const result = evaluateAppContainerIsolation(report);
   assert.equal(result.roamingPathObservation, "PRIVATE_PATHS_REPORTED_ONLY");
   assert.equal(result.knownFolderDataAccessProven, false);
@@ -49,6 +57,7 @@ test("all paths reported under profile are still not proof of auth or real file 
 test("unknown known-folder query never becomes private", () => {
   const report = fixture();
   report.roamingKnownFolderQuerySucceeded = false;
+  report.processPaths[0].roamingKnownFolder = "UNAVAILABLE";
   const result = evaluateAppContainerIsolation(report);
   assert.equal(result.roamingPathObservation, "INCOMPLETE");
   assert.ok(result.risks.includes("ROAMING_KNOWN_FOLDER_NOT_OBSERVED"));
@@ -64,7 +73,7 @@ test("positive synthetic flags and evidence tiers must all be consistent", () =>
     r => r.minecraftAcceptance = "PASS",
     r => r.minecraftRoamingCompatibility = "PASS",
     r => { r.roamingKnownFolderQuerySucceeded = false; r.roamingKnownFolderUnderContainer = true; },
-    r => r.schema = 2,
+    r => r.schema = 1,
     r => r.ownStorageReadable = "true",
     r => delete r.hostCanaryDenied,
     r => r.profilePath = "C:\\Users\\private\\world"
@@ -83,4 +92,29 @@ test("reject malformed inputs without leaking private fields", () => {
   const report = evaluateAppContainerIsolation(fixture());
   assert.equal(JSON.stringify(report).includes("Users"), false);
   assert.equal(JSON.stringify(report).includes("SID"), false);
+});
+
+test("per-process paths remain separate and never prove launch", () => {
+  const report = fixture();
+  report.processPaths[1].roamingEnvironment = "UNDER_EXPECTED_PROFILE";
+  const outcome = evaluateAppContainerIsolation(report);
+  assert.equal(outcome.processPaths[0].roamingEnvironment, "OUTSIDE_EXPECTED_PROFILE");
+  assert.equal(outcome.processPaths[1].roamingEnvironment, "UNDER_EXPECTED_PROFILE");
+  assert.equal(outcome.processIdentityBound, false);
+  assert.equal(outcome.isolatedLaunchAllowed, false);
+});
+
+test("contradictory child values and leaked paths fail closed", () => {
+  for (const mutate of [
+    r => {r.processPaths[0].fixture = "B";},
+    r => {r.processPaths[1].localKnownFolder = "UNAVAILABLE";},
+    r => {r.processPaths[0].rawPath = "private";},
+    r => {r.processPaths.pop();},
+    r => {r.processPaths[0].roamingKnownFolder = "UNAVAILABLE";},
+    r => {r.processPaths[1].roamingEnvironment = "UNDER_EXPECTED_PROFILE";r.roamingEnvironmentUnderContainer = true;}
+  ]) {
+    const report = fixture();
+    mutate(report);
+    assert.throws(() => evaluateAppContainerIsolation(report), TypeError);
+  }
 });

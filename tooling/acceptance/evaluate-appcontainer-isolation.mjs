@@ -18,14 +18,34 @@ export function evaluateAppContainerIsolation(report) {
     "roamingKnownFolderUnderContainer", "syntheticPrivateRoamingWritten",
     "syntheticPrivateRoamingPeerDenied", "syntheticPrivateRoamingPersistsAfterRestart"
   ];
-  const allowed = new Set(["schema", "result", "minecraftRoamingCompatibility", "minecraftAcceptance", ...booleanFields]);
+  const allowed = new Set(["schema", "result", "minecraftRoamingCompatibility", "minecraftAcceptance", "processPaths", ...booleanFields]);
   if (Object.keys(report).length !== allowed.size ||
       Object.keys(report).some(key => !allowed.has(key)) ||
-      report.schema !== 1 || report.result !== "PASS" ||
+      report.schema !== 2 || report.result !== "PASS" ||
       report.minecraftRoamingCompatibility !== "NOT_EXECUTED" ||
       report.minecraftAcceptance !== "NOT_EXECUTED" ||
       booleanFields.some(key => typeof report[key] !== "boolean") ||
       (report.roamingKnownFolderUnderContainer && !report.roamingKnownFolderQuerySucceeded)) invalid();
+  // Validate each child's own path observations separately. Do not infer
+  // PID/FILETIME from A/B fixture labels or promote path strings to access proof.
+  const pathKeys = ["fixture", "localKnownFolder", "roamingEnvironment", "roamingKnownFolder"];
+  const states = new Set(["UNDER_EXPECTED_PROFILE", "OUTSIDE_EXPECTED_PROFILE", "UNAVAILABLE"]);
+  if (!Array.isArray(report.processPaths) || report.processPaths.length !== 2 ||
+      report.processPaths.some((p, i) => !p || typeof p !== "object" ||
+        Array.isArray(p) || Object.keys(p).length !== pathKeys.length ||
+        Object.keys(p).some(key => !pathKeys.includes(key)) ||
+        p.fixture !== ["A", "B"][i] ||
+        p.localKnownFolder === "UNAVAILABLE" ||
+        !states.has(p.localKnownFolder) ||
+        !states.has(p.roamingEnvironment) ||
+        !states.has(p.roamingKnownFolder))) invalid();
+  const bothUnder = key => report.processPaths.every(p => p[key] === "UNDER_EXPECTED_PROFILE");
+  if (report.localAppDataKnownFolderRedirected !== bothUnder("localKnownFolder") ||
+      report.roamingEnvironmentUnderContainer !== bothUnder("roamingEnvironment") ||
+      report.roamingKnownFolderQuerySucceeded !==
+        report.processPaths.every(p => p.roamingKnownFolder !== "UNAVAILABLE") ||
+      report.roamingKnownFolderUnderContainer !== bothUnder("roamingKnownFolder")) invalid();
+
   const syntheticRequired = [
     "syntheticOnly", "distinctAppContainerTokens", "concurrentProcesses",
     "privateMutexNamespaces", "ownStorageReadable", "peerStorageDenied",
@@ -55,6 +75,13 @@ export function evaluateAppContainerIsolation(report) {
     syntheticIsolation: "REPORTED_PASS",
     syntheticPrivateStorageAcrossProcessRestart: "REPORTED_PASS",
     roamingPathObservation: pathObservation,
+    processPaths: report.processPaths.map(p => ({
+      fixture: p.fixture,
+      localKnownFolder: p.localKnownFolder,
+      roamingEnvironment: p.roamingEnvironment,
+      roamingKnownFolder: p.roamingKnownFolder
+    })),
+    processIdentityBound: false,
     knownFolderDataAccessProven: false,
     educationAuthenticationVerified: false,
     productionProviderSelected: false,

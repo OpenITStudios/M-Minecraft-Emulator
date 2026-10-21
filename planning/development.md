@@ -1,5 +1,17 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — source-first A/B path collector, 21 October 2026
+
+The existing native AppContainer synthetic fixture reports separate
+per-child `processPaths` for Local AppData Known Folder, APPDATA environment,
+and Roaming Known Folder. The offline evaluator checks schema-2 child
+observations against aggregate flags and does not infer real process identity
+or successful data isolation. Negative/source tests authored, NOT_EXECUTED.
+No Minecraft, Windows driver, installation, old profile, `main`, or CI
+changes. The historical negative-control failure remains schema 1.
+**Next:** bind future native path collection to independently pinned
+PID/FILETIME without treating synthetic A/B labels as game process identity.
+
 ## Independent engine — source-first architecture, 21 October 2026
 
 **Operator decision:** finish modular architecture and source integration on
