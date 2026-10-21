@@ -9,6 +9,57 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Game data boundary and retained workspace recovery — 21 October 2026
+
+Source `0a8bdea49eb629f503236865fb0062488df9e68f` includes the data-profile
+change `075c3ac`. **722 source checks PASS; product acceptance still FAIL.**
+
+The canonical new-profile settings now include
+`WriteFilePath=%AppData%\Minecraft Education Edition` before `Enabled=y`.
+The [official Desktop data location](https://edusupport.minecraft.net/hc/en-us/articles/360047118832-Clean-Reinstall-Minecraft-Education-on-PC)
+and [box-only semantics](https://sandboxie-plus.github.io/sandboxie-docs/Content/WriteFilePath/)
+support this bounded correction: ordinary opens under the effective rule use
+boxed data instead of inheriting host data when the box has no copy. Existing
+boxed data remains readable. No world, cache or account value was read, copied,
+removed or migrated. The previous profile lacked this rule; ordinary Sandboxie
+read-through was insufficient to establish independent game-local state.
+
+All three new client plans use the same owner. Each now has nine settings and
+20 guarded disable/write/readback steps. The developer runtime consumer's exact
+plan-length gate was updated. The manager already consumes the canonical
+readback list; executed synthetic PowerShell testing confirms that it checks the
+data rule and rejects a missing rule or a widened `%AppData%` value. Existing
+profiles are intentionally not rewritten or erased: without the required
+readback they remain blocked pending explicit profile review. This change does
+not remove account state previously copied into a box and does not isolate WAM.
+
+A separate confirmed UI defect explained one way Minecraft 01 could disappear:
+the new-profile dialog suspends the old workspace, but a completed launch
+observation with no responsive new window left `current=true`; the old flow only
+resumed on `current=false`. The actual setup-function regression reproduced zero
+resume calls. Setup now finishes by resuming a retained suspended workspace even
+after a timeout, and `NativeWorkspace.resume` does nothing when the new client
+is already presented. Resume errors remain visible. This is source-level proof
+of the recovery branch, not observed live input/playability acceptance.
+
+`npm run verify:source`: **722 passed** (Node 290, frontend 179, desktop Rust 76,
+runtime Rust 177), four existing file-symlink skips and eight opt-in Rust tests
+ignored. Typecheck, frontend bundle, Windows Rust checks and formatting pass.
+Exact committed native-source reconstruction passes at this SHA; native C/C++
+bytes are unchanged from `e2c80ad`, whose three-stage build is recorded below.
+No new native compiler build, engine activation or Minecraft runtime test is
+claimed for this revision. Local source log:
+`workspace/game-data-workspace-source-check.log`.
+
+The game still owns login. [Microsoft's WAM documentation](https://learn.microsoft.com/en-us/entra/identity-platform/scenario-desktop-acquire-token-wam)
+explains broker integration with Windows-known accounts; the owned WinRT factory
+currently forwards allowed activations to Windows. That establishes a remaining
+possible host-account route, not evidence that this Minecraft build actually
+used it. Do not disable the broker or clear identity caches speculatively.
+Four distinct licensed accounts, manual sign-in, concurrent gameplay and live
+workspace/input recovery remain unexecuted for these changes. The running engine
+and account-bearing profiles were left intact.
+
 ## Protected Storage consumer closure — 21 October 2026
 
 Implementation `e2c80ada420b259ede58c2100d735a7bd73ff763` continues the

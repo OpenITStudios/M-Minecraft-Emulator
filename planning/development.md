@@ -2,12 +2,12 @@
 
 ## Owned manager / independence — 21 October 2026
 
-**ACTIVE**, source `e2c80ada420b259ede58c2100d735a7bd73ff763`.
-Credential/storage host fallback closed. **718 source checks + three native
-build stages PASS**; NOT_INSTALLABLE, active engine unchanged.
+**ACTIVE**, source `0a8bdea49eb629f503236865fb0062488df9e68f`.
+Box-only game data/setup recovery fixed. **722 source checks PASS**;
+native bytes from built `e2c80ad`, active engine unchanged.
 [Evidence](../docs/validation/native-pilot-localtest.md). **Product FAIL** remains.
-**Next:** distinguish WAM/cache reuse; live account isolation, input and four
-playable clients remain unproven.
+**Next:** review existing profiles and WAM/cache reuse. Four-account gameplay and
+live input unproven; no silent profile rewrite.
 
 ## Windows-first efficiency — 20 October 2026
 
