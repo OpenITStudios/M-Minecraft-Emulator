@@ -47,6 +47,14 @@ adapters must use the reviewed conversion function rather than
 arbitrarily assign verified fields. Negative Rust tests are authored but
 NOT_EXECUTED; no Windows or Minecraft acceptance is claimed.
 
+**Process-local path contract:** `independent_engine/paths.rs` now
+maps three sanitized process-local LocalAppData/roaming observations
+to explicit `PathOnly`, `PathOutsideProfile` or `Unknown`.
+It binds slot and full-width process identity and never upgrades a
+path string to private file access. New negative unit tests are
+authored, but not executed. The existing native desktop storage
+adapter still reports all Unknown and launch remains blocked.
+
 **Next source-only milestone:** specify a native storage evidence adapter
 with exact-handle/lifetime binding and explicit known-folder/registry/broker
 unknowns; keep account-bearing paths untouched pending local acceptance.

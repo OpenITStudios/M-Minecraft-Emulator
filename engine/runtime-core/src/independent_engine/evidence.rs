@@ -102,7 +102,7 @@ pub fn review_bound_storage_facts(
 
         let valid = match fact.finding {
             StorageFinding::Unknown => fact.method == StorageProbeMethod::Unavailable,
-            StorageFinding::PathOnly => matches!(
+            StorageFinding::PathOnly | StorageFinding::PathOutsideProfile => matches!(
                 fact.surface,
                 StorageSurface::LocalAppData
                     | StorageSurface::RoamingEnvironment
@@ -129,7 +129,9 @@ pub fn review_bound_storage_facts(
         // A positive conclusion never comes from a purely synthetic
         // experiment. Broker sign-in observations require actual game evidence,
         // not a Win32 token, storage path or MSAL library metadata.
-        if !matches!(fact.finding, StorageFinding::Unknown | StorageFinding::PathOnly) {
+        if !matches!(fact.finding, StorageFinding::Unknown
+            | StorageFinding::PathOnly
+            | StorageFinding::PathOutsideProfile) {
             let required = if fact.surface == StorageSurface::AuthenticationBroker {
                 StorageEvidenceSource::MinecraftRuntime
             } else {
@@ -239,6 +241,35 @@ mod tests {
             identity(), &[actual_game_report]).unwrap();
         assert!(!result.unresolved().contains(&StorageSurface::AuthenticationBroker));
         assert!(result.unresolved().contains(&StorageSurface::RoamingKnownFolder));
+    }
+
+
+    #[test]
+    fn path_outside_private_profile_is_not_a_proven_data_leak() {
+        let outside = fact(
+            StorageSurface::RoamingKnownFolder,
+            StorageFinding::PathOutsideProfile,
+            StorageProbeMethod::PathQuery,
+            StorageEvidenceSource::SyntheticFixture,
+        );
+        let report = review_bound_storage_facts(SessionSlot::Mc02, identity(), &[outside]).unwrap();
+        assert_eq!(
+            report.finding(StorageSurface::RoamingKnownFolder),
+            StorageFinding::PathOutsideProfile
+        );
+        assert!(report.unresolved().contains(&StorageSurface::RoamingKnownFolder));
+        assert!(report.unresolved().contains(&StorageSurface::AuthenticationBroker));
+
+        let invalid = fact(
+            StorageSurface::AuthenticationBroker,
+            StorageFinding::PathOutsideProfile,
+            StorageProbeMethod::PathQuery,
+            StorageEvidenceSource::WindowsProcess,
+        );
+        assert_eq!(
+            review_bound_storage_facts(SessionSlot::Mc02, identity(), &[invalid]).unwrap_err(),
+            EvidenceReviewError::InvalidObservation
+        );
     }
 
     #[test]

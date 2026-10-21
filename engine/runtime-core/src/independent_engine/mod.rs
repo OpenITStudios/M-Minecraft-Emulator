@@ -7,6 +7,7 @@
 mod evidence;
 mod identity;
 mod inspection;
+mod paths;
 mod operations;
 mod ports;
 mod storage;
@@ -17,6 +18,7 @@ pub use evidence::{
 };
 pub use identity::{ProcessIdentity, SessionSlot};
 pub use inspection::{inspect_existing, SessionInspection};
+pub use paths::{review_process_path_snapshot, PathLocation, ProcessPathSnapshot};
 pub use operations::{OperationClass, SessionOperation};
 pub use ports::{
     DisabledIndependentProvider, IndependentProviderPort, NativePortError,

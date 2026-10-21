@@ -139,6 +139,25 @@ all-`Unknown` storage adapter is unchanged. Observing an AppContainer SID
 is not proof of separate named-object namespaces, RoamingAppData,
 registry, WAM/MSAL accounts or game compatibility. No launch route is enabled.
 
+## Process-local path evidence — source-only contract
+
+`independent_engine/paths.rs` accepts a sanitized, exact-process
+`ProcessPathSnapshot` with three independent observations:
+LocalAppData, `APPDATA` roaming environment, and
+`FOLDERID_RoamingAppData` Known Folder. Each is `Unavailable`,
+`UnderExpectedProfile`, or `OutsideExpectedProfile`. The collector
+must establish that it ran within the intended process context; an
+external host query for another user's Known Folder is not equivalent
+to the unmodified game's actual view. No raw path is stored.
+
+The mapping distinguishes `PathOnly` from
+`PathOutsideProfile`. Both remain unresolved because neither proves
+actual file/registry access or account isolation. A reported outside
+path is a compatibility warning, **not a demonstrated host-data leak**.
+No game, token, registry or profile file is opened. Tests cover
+stale PID/FILETIME, wrong slot, all-private-looking path reports,
+missing Known Folder data and invalid provenance.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

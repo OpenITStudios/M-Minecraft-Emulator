@@ -25,6 +25,12 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+The new `independent_engine/paths.rs` performs source-only, exact
+slot/PID/FILETIME review of three process-local path outcomes. It
+distinguishes `PathOnly`, `PathOutsideProfile` and `Unknown`
+without calling host filesystem APIs or treating path strings as
+successful isolation. No production Windows collector is wired to it yet.
+
 Bound native storage evidence mapping is owned by
 `engine/runtime-core/src/independent_engine/evidence.rs`. It binds
 each fact to exact slot/PID/FILETIME, probe method, and evidence source

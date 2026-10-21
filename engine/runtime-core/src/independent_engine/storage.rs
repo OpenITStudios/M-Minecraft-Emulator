@@ -48,6 +48,9 @@ pub enum StorageFinding {
     #[default]
     Unknown,
     PathOnly,
+    /// A queried path points outside the expected private profile. This is
+    /// a compatibility warning, NOT evidence that the process read host data.
+    PathOutsideProfile,
     PrivateAccessObserved,
     AccessDenied,
     SharedOrLeaking,
