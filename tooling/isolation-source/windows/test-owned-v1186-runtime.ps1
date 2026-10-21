@@ -153,7 +153,7 @@ try {
             [IO.File]::WriteAllText($inventoryPath,(@{schema=1;boxes=$boxes}|ConvertTo-Json -Depth 3),[Text.UTF8Encoding]::new($false))
             $node=Join-Path $repo 'workspace/toolchains/node/node.exe'
             $plan=(Native $node @((Join-Path $PSScriptRoot 'client02-profile-plan.mjs'),$inventoryPath)) | ConvertFrom-Json
-            if ($plan.profiles.Count -ne 1 -or $plan.profiles[0].box -cne 'MivubiEdu02' -or $plan.guardedSteps.Count -ne 18) { throw 'Unexpected canonical profile plan.' }
+            if ($plan.profiles.Count -ne 1 -or $plan.profiles[0].box -cne 'MivubiEdu02' -or $plan.guardedSteps.Count -ne 20) { throw 'Unexpected canonical profile plan.' }
             $receipt.runtime | Add-Member -NotePropertyName client02 -NotePropertyValue ([pscustomobject]@{
                 box='MivubiEdu02'; configurationState='PARTIAL_REQUIRES_REVIEW'; settingsReadbackVerified=$false;
                 compatibilityProfile=$plan.compatibilityProfile; accountAuthenticated=$false; gameplayVerified=$false})

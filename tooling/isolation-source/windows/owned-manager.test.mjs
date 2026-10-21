@@ -4,9 +4,27 @@ import {readFileSync,mkdtempSync,rmSync} from 'node:fs';
 import {resolve,join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {planOwnedMinecraftVirtual} from '../../../engine/isolation-native/owned-runtime/minecraft-profiles.mjs';
 const source=readFileSync(new URL('./owned-manager.ps1',import.meta.url),'utf8');
 const probe=readFileSync(new URL('./probe-v1186-runtime.ps1',import.meta.url),'utf8');
 const ps=code=>spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',code],{encoding:'utf8',timeout:15000,windowsHide:true});
+
+test('manager blocks launch readiness for missing or widened game-data isolation',{skip:process.platform!=='win32'},()=>{
+  const start=source.indexOf('function SettingsMatch('),end=source.indexOf('\nfunction ',start+1);
+  assert.ok(start>=0&&end>start);
+  const plan=JSON.stringify(planOwnedMinecraftVirtual('02',[])).replaceAll("'","''");
+  const r=ps(`$ErrorActionPreference='Stop';$plan='${plan}'|ConvertFrom-Json;$ini='synthetic';$script:mode='match';$script:checks=0
+    function CanonicalPlan {return $plan}
+    function Native([string]$exe,[string[]]$arguments){
+      $step=@($plan.guardedSteps|Where-Object {$_.operation -eq 'REQUIRE_READBACK' -and $_.arguments[2] -ceq $arguments[2]})[-1]
+      if($arguments[2] -ceq 'WriteFilePath'){$script:checks++;if($script:mode -ceq 'wide'){return '%AppData%'};if($script:mode -ceq 'missing'){return ''}}
+      return $step.expectedValue
+    }
+    ${source.slice(start,end)}
+    if(-not (SettingsMatch '02') -or $checks -ne 1){throw 'Complete profile refused or data rule not checked'}
+    foreach($mode in @('wide','missing')){$script:mode=$mode;if(SettingsMatch '02'){throw 'Host read-through profile accepted'}};exit 0`);
+  assert.equal(r.status,0,r.stdout+r.stderr);
+});
 
 test('long-lived launcher does not retain the manager observation pipes',{skip:process.platform!=='win32'},async()=>{
   const directory=mkdtempSync(resolve('workspace/launcher-pipes-'));

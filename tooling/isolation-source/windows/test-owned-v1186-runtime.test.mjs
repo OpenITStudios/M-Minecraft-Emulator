@@ -77,6 +77,8 @@ test('first-client adapter refuses occupied profiles and uses canonical guarded 
     assert.equal(plan.profiles[0].box,'MivubiEdu02');
     assert.equal(plan.guardedSteps[0].arguments.join(' '),'set MivubiEdu02 Enabled n');
     assert.equal(plan.guardedSteps.at(-1).operation,'REQUIRE_READBACK');
+    assert.ok(source.includes('$plan.guardedSteps.Count -ne '+plan.guardedSteps.length),
+      'runtime admission must accept the complete current profile plan');
     writeFileSync(input,JSON.stringify({schema:1,boxes:['mivubiedu02']}));
     const occupied=spawnSync(process.execPath,[cli,input],{encoding:'utf8',timeout:10000,windowsHide:true});
     assert.notEqual(occupied.status,0);

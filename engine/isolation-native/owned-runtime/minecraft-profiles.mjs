@@ -16,6 +16,8 @@ const SETTINGS = Object.freeze([
   Object.freeze(["Template", "OpenCOM"]),
   Object.freeze(["OpenCredentials", "n"]),
   Object.freeze(["OpenProtectedStorage", "n"]),
+  // A fresh box must not read through to the native client's game data.
+  Object.freeze(["WriteFilePath", "%AppData%\\Minecraft Education Edition"]),
   // Enable LAST: never present a partially configured box as ready.
   Object.freeze(["Enabled", "y"]),
 ]);
@@ -63,7 +65,9 @@ export function ownedMinecraftProfiles() {
 /** Command arguments for creating three distinct persistent config sections.
  * An executor MUST first prove a disposable host with the owned SbieSvc/SbieDrv
  * namespace; an existing box must never be overwritten or mutated by this plan.
- * These settings reproduce the successful Education App Compartment pilot;
+ * The compatibility settings retain the Education App Compartment pilot;
+ * Box-only game data additionally prevents host filesystem inheritance.
+ * Existing boxed account data is retained; WAM/SSO remains a separate boundary.
  * NoSecurityIsolation=y and Template=OpenCOM reduce process/COM containment.
  * OpenCredentials=n is NOT a guarantee that WAM/SSO state stays isolated.
  * An executor needs explicit operator approval for this compatibility mode
