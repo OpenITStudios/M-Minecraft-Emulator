@@ -11,6 +11,17 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Read-only private-root owner and DACL negative check (22 October 2026)
+
+The existing Windows directory-handle inspector checks `GetSecurityInfo`
+OWNER/DACL on the same opened file object and rejects missing owner, NULL
+DACL, failure, or changing volume/file identity. It frees the security
+descriptor with `LocalFree`. A non-NULL DACL is **not** proof of isolation:
+a separate effective ACE/access check, trusted expected owner/token, secure
+ancestor traversal, and actual per-process game file view must be established.
+The result stays unmounted and non-authorizing.
+
+
 ### Bounded Windows private-root handle inspector (22 October 2026)
 
 A new **unmounted** read-only inspector accepts an already-open directory

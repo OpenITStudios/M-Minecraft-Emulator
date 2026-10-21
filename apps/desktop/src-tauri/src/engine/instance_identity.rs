@@ -604,32 +604,111 @@ mod windows {
     #[link(name = "kernel32")]
     unsafe extern "system" {
         fn FreeLibrary(h_lib_module: *mut std::ffi::c_void) -> i32;
+        fn LocalFree(h_mem: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
     }
 
-    /// One already opened directory HANDLE. This does not dereference a path
-    /// or claim that an arbitrary caller owns a Minecraft/private profile.
+    // GetSecurityInfo returns a DWORD status (not GetLastError), with
+    // owner/DACL pointers borrowed from the LocalFree-owned descriptor.
+    // SE_FILE_OBJECT=1, OWNER_SECURITY_INFORMATION=1, DACL_SECURITY_INFORMATION=4.
+    // The handle must already carry READ_CONTROL; never enable privileges.
+    #[link(name = "advapi32")]
+    unsafe extern "system" {
+        fn GetSecurityInfo(
+            handle: HANDLE,
+            object_type: i32,
+            security_information: u32,
+            owner_sid: *mut *mut std::ffi::c_void,
+            group_sid: *mut *mut std::ffi::c_void,
+            dacl: *mut *mut std::ffi::c_void,
+            sacl: *mut *mut std::ffi::c_void,
+            security_descriptor: *mut *mut std::ffi::c_void,
+        ) -> u32;
+    }
+
+    /// Only a minimal negative check. A non-null DACL is not a private ACL:
+    /// broad Everyone/Users ACEs, inherited rights, ancestor junctions and
+    /// the target game's actual file view remain unresolved.
+    fn reject_invalid_directory_acl(owner_valid: bool, dacl_present: bool) -> io::Result<()> {
+        if !owner_valid || !dacl_present {
+            return Err(invalid("Private root owner/DACL is absent or invalid"));
+        }
+        Ok(())
+    }
+
+    fn inspect_directory_security(opened: &std::fs::File) -> io::Result<()> {
+        struct Descriptor(*mut std::ffi::c_void);
+        impl Drop for Descriptor {
+            fn drop(&mut self) {
+                if !self.0.is_null() {
+                    // GetSecurityInfo memory is always freed with LocalFree,
+                    // never CloseHandle/FreeLibrary or Rust's allocator.
+                    let _ = unsafe { LocalFree(self.0) };
+                }
+            }
+        }
+        let mut owner: *mut std::ffi::c_void = ptr::null_mut();
+        let mut dacl: *mut std::ffi::c_void = ptr::null_mut();
+        let mut raw_descriptor: *mut std::ffi::c_void = ptr::null_mut();
+        let status = unsafe {
+            GetSecurityInfo(
+                opened.as_raw_handle(),
+                1, // SE_FILE_OBJECT
+                1 | 4, // OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION
+                &mut owner,
+                ptr::null_mut(),
+                &mut dacl,
+                ptr::null_mut(),
+                &mut raw_descriptor,
+            )
+        };
+        let _descriptor = Descriptor(raw_descriptor);
+        if status != 0 {
+            return Err(io::Error::from_raw_os_error(status as i32));
+        }
+        if raw_descriptor.is_null() {
+            return Err(invalid("Windows returned no private root security descriptor"));
+        }
+        let owner_valid = !owner.is_null() && unsafe { IsValidSid(owner) } != 0;
+        reject_invalid_directory_acl(owner_valid, !dacl.is_null())
+    }
+
+    /// Inspect one already-open directory object and its minimal ACL metadata.
+    /// Requiring a non-null DACL/valid owner SID rules out obvious open-access
+    /// configurations, NOT any specific isolation policy or account ownership.
     pub(super) fn inspect_directory_handle(
         opened: &std::fs::File,
     ) -> io::Result<super::PrivateRootObjectIdentity> {
-        let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
-        if unsafe { GetFileInformationByHandle(opened.as_raw_handle(), &mut info) } == 0 {
-            return Err(io::Error::last_os_error());
+        fn snapshot(file: &std::fs::File) -> io::Result<super::PrivateRootObjectIdentity> {
+            let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+            if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            // Must have been opened with FILE_FLAG_OPEN_REPARSE_POINT.
+            // Checking a followed target alone cannot prove a safe ancestor.
+            if info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY == 0
+                || info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
+            {
+                return Err(invalid("Private root handle is not an ordinary directory"));
+            }
+            let index = (u64::from(info.nFileIndexHigh) << 32)
+                | u64::from(info.nFileIndexLow);
+            if index == 0 {
+                return Err(invalid("Private root directory identity is unavailable"));
+            }
+            Ok(super::PrivateRootObjectIdentity {
+                volume: info.dwVolumeSerialNumber,
+                file_index: index,
+            })
         }
-        // Reject a regular file or final-component reparse point. The caller
-        // must have opened reparse points themselves (not their targets).
-        if info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY == 0
-            || info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
-        {
-            return Err(invalid("Private root handle is not an ordinary directory"));
+
+        let before = snapshot(opened)?;
+        // READ_CONTROL on the already-opened object, no path traversal and
+        // no read of user account files, world data, or registry keys.
+        inspect_directory_security(opened)?;
+        if snapshot(opened)? != before {
+            return Err(invalid("Directory changed during ACL observation"));
         }
-        let index = (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow);
-        if index == 0 {
-            return Err(invalid("Private root directory identity is unavailable"));
-        }
-        Ok(super::PrivateRootObjectIdentity {
-            volume: info.dwVolumeSerialNumber,
-            file_index: index,
-        })
+        Ok(before)
     }
 
     /// Exact identity and attributes of a fixture file HANDLE, not its path.
@@ -1330,6 +1409,19 @@ mod windows {
             let executable = std::fs::File::open(std::env::current_exe().unwrap()).unwrap();
             let result = inspect_directory_handle(&executable);
             assert_eq!(result.unwrap_err().kind(), io::ErrorKind::InvalidData);
+        }
+
+        #[test]
+        fn incomplete_directory_acl_never_counts_as_a_checked_root() {
+            for (owner, dacl) in [(false, false), (false, true), (true, false)] {
+                assert_eq!(
+                    reject_invalid_directory_acl(owner, dacl).unwrap_err().kind(),
+                    io::ErrorKind::InvalidData,
+                );
+            }
+            assert!(reject_invalid_directory_acl(true, true).is_ok());
+            // Even two true inputs are NOT an ACL effectiveness or
+            // account-isolation attestation, just a structural check.
         }
 
         #[test]

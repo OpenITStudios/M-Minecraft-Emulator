@@ -1,5 +1,30 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — fail closed on invalid directory DACL/owner, 22 October 2026
+
+The unmounted Windows private-root inspection now reads OWNER and DACL
+information from the **same already-open directory handle** using the
+documented `GetSecurityInfo` `SE_FILE_OBJECT` ABI. The returned descriptor
+is released via `LocalFree`, including failure paths. A missing or invalid
+owner SID, NULL DACL, failed READ_CONTROL query, or changed directory object
+identity causes rejection. The routine does not read files or profiles and
+does not modify ACLs. The check is deliberately limited: a non-NULL DACL
+may still contain broadly permissive ACEs, and ancestor reparse points,
+actual root ownership, live Windows token/slot binding, and Minecraft
+filesystem visibility remain unverified. It never produces a launch grant.
+The existing disposable directory and regular-file tests are unchanged;
+one new pure policy regression was authored, NOT_EXECUTED.
+
+**Proof:** GitHub source review and Microsoft GetSecurityInfo / LocalFree
+API contract; Windows ABI compilation, Windows tests and Minecraft runtime
+NOT_EXECUTED. No service, driver, installer, Tauri route, account or world
+mutation, and no GitHub Actions reactivation.
+
+**Next:** Define an independently verified effective-permission and
+ancestor traversal assessment for a trusted private-root owner, without
+letting an arbitrary directory handle authorize session file access.
+
+
 ## Independent engine — bind pending file plan to exact process key, 22 October 2026
 
 Follow-up hardening on the new private metadata path planner: the pending
