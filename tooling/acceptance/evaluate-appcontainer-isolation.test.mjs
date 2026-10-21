@@ -63,7 +63,7 @@ test("positive synthetic flags and evidence tiers must all be consistent", () =>
     r => r.profilesRemoved = false,
     r => r.minecraftAcceptance = "PASS",
     r => r.minecraftRoamingCompatibility = "PASS",
-    r => r.roamingKnownFolderQuerySucceeded = false,
+    r => { r.roamingKnownFolderQuerySucceeded = false; r.roamingKnownFolderUnderContainer = true; },
     r => r.schema = 2,
     r => r.ownStorageReadable = "true",
     r => delete r.hostCanaryDenied,
