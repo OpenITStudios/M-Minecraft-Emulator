@@ -2,6 +2,17 @@
 
 ## Independent native AppContainer proof (synthetic only)
 
+### Original fixture parent ownership checks
+
+The native fixture parent records each child process's creation FILETIME
+from its original CreateProcessW handle, then checks liveness and SID
+before and after reading only its fresh profile's observation file.
+It refuses record reparse points, non-regular files and records of
+unexpected length and rechecks the file identity/size. Rust also rejects
+binary records missing the fixture's mandatory isolation control flags.
+These are synthetic fixture checks only, not authenticated cross-language
+IPC or Minecraft compatibility/launch permission.
+
 ### Bounded native Rust reader (not process-bound yet)
 
 `apps/desktop/src-tauri/src/engine/instance_identity.rs` now supplies

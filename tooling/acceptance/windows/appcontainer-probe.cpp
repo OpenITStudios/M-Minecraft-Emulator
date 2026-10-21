@@ -109,6 +109,7 @@ struct Profile {
 };
 struct Child {
     PROCESS_INFORMATION process{};
+    ULONGLONG created_file_time = 0;
     Child() = default;
     Child(const Child&) = delete;
     ~Child() {
@@ -124,6 +125,14 @@ struct Child {
     }
 };
 std::wstring quote(const fs::path& value) { return L"\"" + value.wstring() + L"\""; }
+// Query only the exact self-created process handle, not discovered PIDs.
+ULONGLONG creation_filetime(HANDLE process) {
+    FILETIME created{}, exited{}, kernel{}, user{};
+    require(GetProcessTimes(process, &created, &exited, &kernel, &user) != 0,
+        "fixture-creation-time");
+    return (static_cast<ULONGLONG>(created.dwHighDateTime) << 32)
+        | static_cast<ULONGLONG>(created.dwLowDateTime);
+}
 void launch(Child& child, const fs::path& binary, const fs::path& root,
     const Profile& own, const Profile& peer, bool reopen = false) {
     SIZE_T bytes = 0;
@@ -145,6 +154,7 @@ void launch(Child& child, const fs::path& binary, const fs::path& root,
     require(CreateProcessW(binary.c_str(), command.data(), nullptr, nullptr, FALSE,
         EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW, nullptr, root.c_str(), &startup.StartupInfo,
         &child.process) != 0, "create-contained-fixture");
+    child.created_file_time = creation_filetime(child.process.hProcess);
 }
 bool token_matches(HANDLE process, PSID expected) {
     HANDLE raw = nullptr;
@@ -159,6 +169,17 @@ bool token_matches(HANDLE process, PSID expected) {
     require(GetTokenInformation(raw, TokenAppContainerSid, storage.data(), size, &size) != 0, "query-container-sid");
     const auto info = reinterpret_cast<TOKEN_APPCONTAINER_INFORMATION*>(storage.data());
     return EqualSid(info->TokenAppContainer, expected) != 0;
+}
+// Never read a record on behalf of a different/reused or already dead PID.
+// These checks apply only to the exact child spawned by this fixture parent.
+void verify_created_child(const Child& child, const Profile& expected) {
+    require(child.process.hProcess != nullptr && child.created_file_time != 0,
+        "fixture-missing-owned-handle");
+    require(WaitForSingleObject(child.process.hProcess, 0) == WAIT_TIMEOUT,
+        "fixture-not-live");
+    require(creation_filetime(child.process.hProcess) == child.created_file_time,
+        "fixture-creation-changed");
+    require(token_matches(child.process.hProcess, expected.sid), "fixture-token-mismatch");
 }
 struct Observation { DWORD version = 1, flags = 0; };
 static_assert(sizeof(DWORD) == 4 && sizeof(Observation) == 8,
@@ -242,13 +263,37 @@ int contained(const fs::path& root, const fs::path& own, const fs::path& peer, b
     return 98;
 }
 Observation observe(const Profile& profile, Child& child, bool reopen = false) {
+    // "profile" exists only because this parent just created it. Recheck
+    // the exact self-launched child handle before touching fixture-owned data.
+    verify_created_child(child, profile);
     const auto path = profile.folder / (reopen ? L"observation-reopen" : L"observation");
     const ULONGLONG deadline = GetTickCount64() + 5000;
     while (GetTickCount64() < deadline) {
-        Handle file(CreateFileW(path.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+        Handle file(CreateFileW(path.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
         if (file.value != INVALID_HANDLE_VALUE) {
-            Observation value; DWORD read = 0;
-            require(ReadFile(file.value, &value, sizeof(value), &read, nullptr) && read == sizeof(value) && value.version == 1, "read-observation");
+            BY_HANDLE_FILE_INFORMATION before{}, after{};
+            require(GetFileInformationByHandle(file.value, &before) != 0,
+                "fixture-file-identity");
+            const DWORD not_regular = FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT;
+            require((before.dwFileAttributes & not_regular) == 0
+                    && before.nFileSizeHigh == 0
+                    && before.nFileSizeLow == sizeof(Observation),
+                "fixture-not-regular-eight-byte-file");
+            Observation value{}; DWORD read = 0;
+            require(ReadFile(file.value, &value, sizeof(value), &read, nullptr)
+                    && read == sizeof(value) && value.version == 1,
+                "read-observation");
+            require(GetFileInformationByHandle(file.value, &after) != 0,
+                "fixture-file-identity-recheck");
+            require(before.dwVolumeSerialNumber == after.dwVolumeSerialNumber
+                    && before.nFileIndexHigh == after.nFileIndexHigh
+                    && before.nFileIndexLow == after.nFileIndexLow
+                    && before.nFileSizeHigh == after.nFileSizeHigh
+                    && before.nFileSizeLow == after.nFileSizeLow
+                    && (after.dwFileAttributes & not_regular) == 0,
+                "fixture-file-changed");
+            verify_created_child(child, profile);
             return value;
         }
         DWORD status = GetLastError();

@@ -18,6 +18,14 @@ const LOCAL_KNOWN_FOLDER: u32 = 1 << 5;
 const ROAMING_ENV_PRIVATE: u32 = 1 << 6;
 const ROAMING_KNOWN_AVAILABLE: u32 = 1 << 7;
 const ROAMING_KNOWN_PRIVATE: u32 = 1 << 8;
+const OWN_FILE: u32 = 1 << 0;
+const PEER_DENIED: u32 = 1 << 1;
+const HOST_DENIED: u32 = 1 << 2;
+const MUTEX_PRIVATE: u32 = 1 << 3;
+const CUSTOM_ROAMING_OWN: u32 = 1 << 9;
+const CUSTOM_ROAMING_PEER_DENIED: u32 = 1 << 10;
+const REQUIRED_CONTROLS: u32 = OWN_FILE | PEER_DENIED | HOST_DENIED
+    | MUTEX_PRIVATE | CUSTOM_ROAMING_OWN | CUSTOM_ROAMING_PEER_DENIED;
 const CUSTOM_ROAMING_CREATED: u32 = 1 << 11;
 const CUSTOM_ROAMING_REOPENED: u32 = 1 << 12;
 const ROAMING_ENV_AVAILABLE: u32 = 1 << 13;
@@ -30,6 +38,7 @@ pub enum SyntheticFrameError {
     UnsupportedFlags,
     ContradictoryFlags,
     InconsistentPhase,
+    MissingFixtureControls,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -77,6 +86,9 @@ pub fn decode_synthetic_fixture_paths(
     if flags & !KNOWN_FLAGS != 0 {
         return Err(SyntheticFrameError::UnsupportedFlags);
     }
+    if flags & REQUIRED_CONTROLS != REQUIRED_CONTROLS {
+        return Err(SyntheticFrameError::MissingFixtureControls);
+    }
     let has = |flag| flags & flag != 0;
     if has(ROAMING_ENV_PRIVATE) && !has(ROAMING_ENV_AVAILABLE)
         || has(ROAMING_KNOWN_PRIVATE) && !has(ROAMING_KNOWN_AVAILABLE)
@@ -123,13 +135,7 @@ pub fn decode_synthetic_fixture_pair(
 mod tests {
     use super::*;
 
-    const OWN_FILE: u32 = 1;
-    const PEER_DENIED: u32 = 2;
-    const HOST_DENIED: u32 = 4;
-    const MUTEX_PRIVATE: u32 = 8;
     const LOCAL_ENV: u32 = 16;
-    const SYNTHETIC_OWN: u32 = 512;
-    const SYNTHETIC_PEER_DENIED: u32 = 1024;
     const FIRST: u32 = CUSTOM_ROAMING_CREATED;
     const SECOND: u32 = CUSTOM_ROAMING_REOPENED;
 
@@ -141,8 +147,7 @@ mod tests {
     }
 
     fn required(phase: u32) -> u32 {
-        OWN_FILE | PEER_DENIED | HOST_DENIED | MUTEX_PRIVATE
-            | SYNTHETIC_OWN | SYNTHETIC_PEER_DENIED | phase
+        REQUIRED_CONTROLS | phase
     }
 
     #[test]
@@ -223,6 +228,24 @@ mod tests {
                 Err(SyntheticFrameError::ContradictoryFlags)
             );
         }
+    }
+
+    #[test]
+    fn missing_any_mandatory_fixture_control_must_fail_closed() {
+        let valid = required(FIRST) | LOCAL_KNOWN_FOLDER | ROAMING_ENV_AVAILABLE;
+        for bit in [
+            OWN_FILE, PEER_DENIED, HOST_DENIED, MUTEX_PRIVATE,
+            CUSTOM_ROAMING_OWN, CUSTOM_ROAMING_PEER_DENIED,
+        ] {
+            assert_eq!(
+                decode_synthetic_fixture_paths(&frame(valid & !bit)),
+                Err(SyntheticFrameError::MissingFixtureControls)
+            );
+        }
+        assert_eq!(
+            decode_synthetic_fixture_paths(&frame(FIRST)),
+            Err(SyntheticFrameError::MissingFixtureControls)
+        );
     }
 
     #[test]

@@ -277,6 +277,27 @@ or an authorization to launch an installed Minecraft executable.
 No Tauri command, service, filesystem/registry virtualization, background
 task or profile cleanup is implemented here.
 
+## Synthetic fixture record ownership safeguards
+
+The original C++ fixture parent now retains the creation FILETIME of each
+**self-created child process handle**, and rechecks live state, creation
+identity and actual AppContainer SID against its freshly created profile
+both before and after each record read. The file is opened from that
+profile's fixed observation name with reparse-point following disabled;
+a reparse/link, directory or non-eight-byte file is refused. The same
+open handle's file ID, volume and size are checked again before accepting
+its data. The Rust decoder also rejects an eight-byte record if required
+own/peer/host/mutex/synthetic-roaming control bits are missing.
+
+These checks strengthen **synthetic parent-local provenance** and prevent
+accepting arbitrary short records as meaningful fixture evidence. They do
+not establish cryptographic authorship, proof that unmodified Minecraft
+uses the same paths, or a Rust transport from the original parent. The
+separate Rust helper still returns only `UnboundFixturePaths`, because
+it does not own the parent-created profile and process handles. A trusted,
+bounded capability handoff must be designed before creating a bound
+`ProcessPathSnapshot`.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

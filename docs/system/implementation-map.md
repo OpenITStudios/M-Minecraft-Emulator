@@ -25,6 +25,13 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+The original native C++ fixture parent now pins self-created process
+creation FILETIME and rechecks exact AppContainer SID/liveness around
+fixture record reads. Its open record handle must refer to a regular,
+non-reparse, exactly eight-byte file; identity and size are rechecked.
+The Rust decoder rejects missing core synthetic control flags. This is
+fixture-side hardening, not a trusted Rust file-to-child transport.
+
 A bounded *unbound* fixture record reader is now implemented under the
 existing desktop process-identity owner:
 `apps/desktop/src-tauri/src/engine/instance_identity.rs`.

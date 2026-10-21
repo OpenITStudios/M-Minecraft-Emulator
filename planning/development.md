@@ -1,5 +1,25 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — synthetic fixture provenance hardening, 21 October 2026
+
+The existing C++ AppContainer fixture parent now pins each created
+process handle's FILETIME, and verifies live process, expected AppContainer
+SID and creation time before/after a fixed observation read. The file
+must be a regular, non-reparse eight-byte record with unchanged volume,
+file ID and size. The Rust fixture decoder rejects missing required
+own/peer/host/mutex/private canary flags. All source-only tests are
+authored, but C++/Rust compilation and Windows/Minecraft execution are
+NOT_EXECUTED on this HEAD.
+
+This does NOT make the separate Rust reader an authenticated collector,
+nor permit Minecraft launch, sign-in, driver/service activation, profile
+migration or account/world access. Existing desktop admission stays
+blocked and the independent provider remains disabled.
+
+**Next source milestone:** design a narrow, explicitly synthetic
+capability handoff from the original process/profile owner to the Rust
+observer; never adopt pre-existing user profiles or trust an unbound file.
+
 ## Independent engine — bounded Windows fixture record reader, 21 October 2026
 
 **Source-only Rust-first implementation:** the existing desktop process
