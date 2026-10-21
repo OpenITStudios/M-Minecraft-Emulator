@@ -1,5 +1,25 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — bounded Windows fixture record reader, 21 October 2026
+
+**Source-only Rust-first implementation:** the existing desktop process
+identity owner implements an opt-in internal
+`inspect_unbound_synthetic_fixture_record` helper. It accepts one already
+opened regular file handle (never a profile path), requires exactly eight
+bytes, decodes the existing C++ synthetic observation, and pins/rechecks
+PID/FILETIME + AppContainer token before and after the read. An authored
+Windows negative test rejects non-AppContainer/self process and stale
+FILETIME. **No file-to-child provenance has been established**:
+even a valid record alongside a live process is `UnboundFixturePaths`,
+not a trusted production `ProcessPathSnapshot`. No new Tauri command,
+engine provider, service, driver or account/world access. Native Rust and
+Windows tests remain NOT_EXECUTED in GitHub.
+
+**Next:** implement verifiable record-handle provenance tied exclusively to
+a self-created synthetic fixture child/profile before any bound Rust
+path observer is permitted. The existing isolated Launch/Provision
+block remains authoritative; local Minecraft acceptance is deferred.
+
 ## Independent engine — bounded synthetic fixture wire decoder, 21 October 2026
 
 **Source-only Rust/C++ integration:** `independent_engine/fixture_wire.rs`

@@ -135,6 +135,83 @@ pub fn inspect_independent_source(
     inspect_existing(&WindowsProcessObserver, &UnknownStorageObserver, slot, expected)
 }
 
+
+// Synthetic-only bounded native FILE-handle reader. The caller MUST have
+// created/owned the fixture child and independently established which fresh
+// AppContainer profile contains this ALREADY OPENED file handle. This routine
+// cannot certify that source provenance: it returns UnboundFixturePaths only.
+// Never accept a path from the UI, read account caches, or use this for a game.
+#[cfg(windows)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FixtureRecordInspectionError {
+    Process(NativePortError),
+    NotSyntheticContainer,
+    InvalidFileTypeOrLength,
+    FileIo(std::io::ErrorKind),
+    Record(virtual_clients_core::independent_engine::SyntheticFrameError),
+}
+
+#[cfg(windows)]
+pub(crate) fn inspect_unbound_synthetic_fixture_record(
+    expected: ProcessIdentity,
+    opened_record: &mut std::fs::File,
+) -> Result<
+    virtual_clients_core::independent_engine::UnboundFixturePaths,
+    FixtureRecordInspectionError,
+> {
+    use std::io::{Read, Seek};
+    use virtual_clients_core::independent_engine::{
+        decode_synthetic_fixture_paths, ProcessContainment, SYNTHETIC_FRAME_BYTES,
+    };
+
+    let before = WindowsProcessObserver
+        .observe_exact(expected)
+        .map_err(FixtureRecordInspectionError::Process)?;
+    if before.identity != expected {
+        return Err(FixtureRecordInspectionError::Process(NativePortError::StaleProcess));
+    }
+    if before.containment != ProcessContainment::AppContainerTokenObserved {
+        return Err(FixtureRecordInspectionError::NotSyntheticContainer);
+    }
+
+    // A fixed 8-byte regular file handle is the only accepted input. No path
+    // traversal, opening, profile discovery, file writes, or unbounded reads.
+    // The caller remains responsible for exclusive/open-handle provenance;
+    // length checks cannot defeat a malicious concurrent writer.
+    let metadata = opened_record
+        .metadata()
+        .map_err(|error| FixtureRecordInspectionError::FileIo(error.kind()))?;
+    if !metadata.is_file() || metadata.len() != SYNTHETIC_FRAME_BYTES as u64 {
+        return Err(FixtureRecordInspectionError::InvalidFileTypeOrLength);
+    }
+    opened_record
+        .rewind()
+        .map_err(|error| FixtureRecordInspectionError::FileIo(error.kind()))?;
+    let mut bytes = [0u8; SYNTHETIC_FRAME_BYTES];
+    opened_record
+        .read_exact(&mut bytes)
+        .map_err(|error| FixtureRecordInspectionError::FileIo(error.kind()))?;
+    let after_metadata = opened_record
+        .metadata()
+        .map_err(|error| FixtureRecordInspectionError::FileIo(error.kind()))?;
+    if !after_metadata.is_file() || after_metadata.len() != SYNTHETIC_FRAME_BYTES as u64 {
+        return Err(FixtureRecordInspectionError::InvalidFileTypeOrLength);
+    }
+    let paths = decode_synthetic_fixture_paths(&bytes)
+        .map_err(FixtureRecordInspectionError::Record)?;
+
+    let after = WindowsProcessObserver
+        .observe_exact(expected)
+        .map_err(FixtureRecordInspectionError::Process)?;
+    if after.identity != expected {
+        return Err(FixtureRecordInspectionError::Process(NativePortError::StaleProcess));
+    }
+    if after.containment != ProcessContainment::AppContainerTokenObserved {
+        return Err(FixtureRecordInspectionError::NotSyntheticContainer);
+    }
+    Ok(paths)
+}
+
 #[cfg(windows)]
 mod windows {
     use super::{AppContainerComparison, ContextComparison, ProcessContainment, ProcessKey};
@@ -524,6 +601,46 @@ mod windows {
                     .unwrap_err(),
                 NativePortError::InvalidIdentity
             );
+        }
+
+        #[test]
+        fn unbound_fixture_reader_checks_process_before_open_file_bytes() {
+            use virtual_clients_core::independent_engine::ProcessIdentity;
+            let key = own_key();
+            let process = Handle(unsafe {
+                OpenProcess(
+                    PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+                    0,
+                    key.pid,
+                )
+            });
+            assert!(!process.0.is_null());
+            // A normal desktop test process is not a synthetic AppContainer;
+            // do not attempt to interpret arbitrary files as fixture evidence.
+            if appcontainer_sid(&process).unwrap().is_none() {
+                let mut executable = std::fs::File::open(std::env::current_exe().unwrap()).unwrap();
+                let expected = ProcessIdentity::checked(
+                    key.pid, key.created_file_time.parse::<u64>().unwrap()
+                ).unwrap();
+                assert_eq!(
+                    super::super::inspect_unbound_synthetic_fixture_record(
+                        expected, &mut executable
+                    ).unwrap_err(),
+                    super::super::FixtureRecordInspectionError::NotSyntheticContainer
+                );
+
+                let stale = ProcessIdentity::checked(
+                    expected.pid, expected.created_file_time + 1
+                ).unwrap();
+                assert_eq!(
+                    super::super::inspect_unbound_synthetic_fixture_record(
+                        stale, &mut executable
+                    ).unwrap_err(),
+                    super::super::FixtureRecordInspectionError::Process(
+                        super::super::NativePortError::InvalidIdentity
+                    )
+                );
+            }
         }
 
         #[test]

@@ -253,6 +253,30 @@ bounded I/O and reject stale identities before using the full domain path
 inspection flow. No account-bearing paths, broker tokens, installed game,
 driver, service or production launch code are added.
 
+## Bounded, unbound fixture record reader — source-only
+
+The existing desktop-native identity owner now contains
+`inspect_unbound_synthetic_fixture_record`, compiled only on Windows.
+It accepts an **already-opened** `std::fs::File` handle and exact
+`ProcessIdentity`, not an arbitrary path or an application account ID.
+It verifies the process's PID/creation FILETIME and AppContainer token
+both before and after reading, checks the file is regular and precisely
+eight bytes, performs a single bounded `read_exact`, then calls the
+canonical `fixture_wire.rs` decoder. Source tests reject an ordinary
+non-AppContainer process and a stale creation identity.
+
+This checks the process **and** the record, but it does **not** establish
+a relationship between them. The next adapter must validate that the
+specific open record handle belongs to the newly created profile of the
+original self-created fixture child, and guard against concurrent
+replacement/writes. Neither two valid independent checks nor a matching
+AppContainer flag proves that the process wrote the supplied bytes.
+Accordingly the reader returns **UnboundFixturePaths**, never a bound
+`ProcessPathSnapshot`, a trusted `CooperativePathObserverPort` result,
+or an authorization to launch an installed Minecraft executable.
+No Tauri command, service, filesystem/registry virtualization, background
+task or profile cleanup is implemented here.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

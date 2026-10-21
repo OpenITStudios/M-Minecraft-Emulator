@@ -25,6 +25,15 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+A bounded *unbound* fixture record reader is now implemented under the
+existing desktop process-identity owner:
+`apps/desktop/src-tauri/src/engine/instance_identity.rs`.
+It takes an already-opened file handle, checks PID/FILETIME and a
+Windows AppContainer token before/after one eight-byte read, and returns
+`UnboundFixturePaths`. The reader does **not** prove that the file was
+written by this process; it is not a production collector, session provider,
+profile manager, new Tauri route or game authentication evidence.
+
 The existing C++ test fixture's **eight-byte Observation record** now has
 a strict pure-Rust decoder at
 `engine/runtime-core/src/independent_engine/fixture_wire.rs`.

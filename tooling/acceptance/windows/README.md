@@ -2,6 +2,19 @@
 
 ## Independent native AppContainer proof (synthetic only)
 
+### Bounded native Rust reader (not process-bound yet)
+
+`apps/desktop/src-tauri/src/engine/instance_identity.rs` now supplies
+an internal, Windows-only read helper for an **already opened** fixture
+record handle. It verifies exact process creation FILETIME and an
+AppContainer token before and after one eight-byte read. Wrong record
+length or non-regular file is refused. The output is intentionally
+`UnboundFixturePaths`, since no link from the supplied file handle to
+that process's original fresh profile is yet established. The native
+fixture itself still owns/validates its child handles. This helper
+does not open arbitrary paths, touch Microsoft accounts, spawn games,
+enable a provider, or provide production evidence.
+
 ### Rust decoder for the existing synthetic child record
 
 The native fixture writes `Observation` records containing exactly two
