@@ -142,7 +142,7 @@ try {
     $manifestPath=Join-Path $session 'unsigned-engine-provenance.json';Ordinary $manifestPath
     Demand ((Hash $manifestPath) -ceq $receipt.manifestSha256) 'Original build manifest changed.'
     $manifest=Get-Content -LiteralPath $manifestPath -Raw|ConvertFrom-Json
-    Demand ($manifest.state -ceq 'MIVUBI_V1186_CORE_STAGED_NOT_INSTALLABLE' -and $manifest.ownedTree -ceq '21dff59ba02a1a257beacd62a793399acb47da23' -and $manifest.artifacts.Count -eq 25) 'Unexpected native source provenance.'
+    Demand ($manifest.state -ceq 'MIVUBI_V1186_CORE_STAGED_NOT_INSTALLABLE' -and $manifest.ownedTree -ceq 'ca1ab69f673bcbbdbf06d778f3a1a236d00f4864' -and $manifest.artifacts.Count -eq 25) 'Unexpected native source provenance.'
     $seen=[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     Demand (@($receipt.signedArtifacts).Count -eq 25) 'Incomplete test payload.'
     foreach ($row in $receipt.signedArtifacts) {

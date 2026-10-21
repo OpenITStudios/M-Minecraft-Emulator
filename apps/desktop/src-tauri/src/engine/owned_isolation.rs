@@ -410,7 +410,7 @@ pub fn inspect_candidate(root: &Path) -> io::Result<OwnedCandidateInspection> {
             && manifest.upstream_tree.as_deref() == Some(OWNED_V1186_TREE)
             && hex(&manifest.owned_repo_head, 40)
             && hex(&manifest.owned_tree, 40)
-            && manifest.native_modified_files == Some(11)
+            && manifest.native_modified_files == Some(15)
             && hex(&manifest.build_report_sha256, 64)
             && hex(&manifest.compiler_sha256, 64)
     } else if private && legacy_fields_absent {
@@ -968,7 +968,7 @@ mod tests {
         data["upstreamTree"] = serde_json::json!(OWNED_V1186_TREE);
         data["ownedRepoHead"] = serde_json::json!("a".repeat(40));
         data["ownedTree"] = serde_json::json!("b".repeat(40));
-        data["nativeModifiedFiles"] = serde_json::json!(11);
+        data["nativeModifiedFiles"] = serde_json::json!(15);
         data["buildReportSha256"] = serde_json::json!("c".repeat(64));
         data["compilerSha256"] = serde_json::json!("d".repeat(64));
         data["canCoexistWithOfficialSandboxie"] = serde_json::json!(false);
@@ -988,6 +988,8 @@ mod tests {
         );
         for (key, wrong) in [
             ("nativeModifiedFiles", serde_json::json!(10)),
+            ("nativeModifiedFiles", serde_json::json!(11)),
+            ("nativeModifiedFiles", serde_json::json!(14)),
             ("sourceVersion", serde_json::json!("v1.18.5")),
             ("compilerSha256", serde_json::json!("invalid")),
             ("upstreamTree", serde_json::json!("not-pinned")),

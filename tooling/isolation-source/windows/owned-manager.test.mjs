@@ -9,6 +9,13 @@ const source=readFileSync(new URL('./owned-manager.ps1',import.meta.url),'utf8')
 const probe=readFileSync(new URL('./probe-v1186-runtime.ps1',import.meta.url),'utf8');
 const ps=code=>spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',code],{encoding:'utf8',timeout:15000,windowsHide:true});
 
+test('manager provenance pin follows the exact committed owned native source',()=>{
+  const tree=spawnSync('git',['rev-parse','HEAD:engine/isolation-owned'],{encoding:'utf8',windowsHide:true});
+  assert.equal(tree.status,0,tree.stderr);
+  assert.match(tree.stdout.trim(),/^[a-f0-9]{40}$/);
+  assert.ok(source.includes("$manifest.ownedTree -ceq '"+tree.stdout.trim()+"'"),'manager rejects the currently approved native build');
+});
+
 test('manager blocks launch readiness for missing or widened game-data isolation',{skip:process.platform!=='win32'},()=>{
   const start=source.indexOf('function SettingsMatch('),end=source.indexOf('\nfunction ',start+1);
   assert.ok(start>=0&&end>start);
