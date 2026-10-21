@@ -1,5 +1,19 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — root navigation corrected for source-first development, 22 October 2026
+
+The root README no longer routes new development through the retired
+Sandboxie-owned fork or suggests automatic GitHub Actions compilation.
+The active architecture is Rust-first independent Windows process and
+isolation work. Isolated Launch/Provision stays disabled and localtest is
+explicitly deferred by operator instruction. This is navigation-only;
+no engine capability was promoted and no CI, installer or account data changed.
+
+**Proof:** Exact GitHub source/authority comparison; source tests NOT_EXECUTED.
+**Next:** Continue implementation of independent Windows source boundaries
+and compiler-ready tests without re-enabling retired providers.
+
+
 ## Independent engine — token-bound cooperative path inspection, 22 October 2026
 
 The Rust `independent_engine/paths.rs::inspect_cooperative_paths` now

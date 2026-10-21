@@ -1,25 +1,22 @@
 # M-Minecraft-Emulator
 
-**Product goal:** four concurrent, independently playable Minecraft Education **Windows desktop** sessions with four separately licensed accounts on one Windows PC. The **single active engineering route** is **Minecraft Instance Manager**: native Client 01 and isolated Client 02 in the persistent Sandboxie Plus box `MinecraftClient02`. Four accounts remain the long-term goal. Two-account playability was operator-confirmed on 14 October 2026, followed by a boxed-client idle crash; stable two-client and four-client acceptance remain unproven. The previous VMware implementation remains as **inactive legacy source**: VM mutation commands are paused and its UI is unmounted. All existing account-bearing guest data is preserved. The official Sandboxie two-client pilot has limited success evidence, not stable completion or independent owned-engine proof.
+**Product goal:** four concurrent, independently playable Minecraft Education **Windows desktop** sessions with four separately licensed accounts on one Windows PC. **Current active development:** an independently authored, Rust-first Windows session engine with bounded Win32 adapters. **Current product limit:** no independent production provider exists; isolated Launch/Provision for MC02–MC04 is deliberately blocked. Native MC01 and inspection/recovery of already-existing historical sessions remain separate operations. The Sandboxie two-client test of 14 October 2026 was limited and later encountered an idle crash; it is NOT acceptance for the replacement. Historical Sandboxie and VMware code remains preserved only for reference and data-safe legacy handling.
 
 ## Product definition — integrated Virtual Manager
 
-**MIVUBI is the application that manages virtual sandboxes**. The original
-Sandboxie-derived C/C++ driver, service and DLL belong to its internal
-isolation engine; Rust/Tauri is the single virtual lifecycle authority and
-Svelte provides one simplified user interface. Users should eventually
-create, configure, launch and manage virtuals entirely in MIVUBI rather than
-opening SandMan/Sandboxie Plus. Minecraft Education is the first supported
-profile, not the definition of a virtual.
+**MIVUBI is the future manager for independently isolated Minecraft
+Education sessions.** Rust runtime-core owns lifecycle and admission;
+Windows-native code is a narrow platform adapter, Tauri connects it to
+Svelte, and presentation never becomes another lifecycle manager.
+Sandboxie-derived driver, service and DLL source is historical and explicitly
+not a dependency of the independent engine.
 
-**Current implementation limit:** the Virtual Manager UI and current
-version-aware owned package inspection are integrated, but the app still
-uses the official Sandboxie Client 02 compatibility pilot. The internal
-owned driver/service have not been built, signed, installed or validated.
-The **Create virtual** action correctly remains unavailable: no visible
-virtual may be called created or ready until its actual sandbox configuration
-is written to and confirmed by a trusted running engine. Existing account
-data is never migrated/deleted as part of UI cleanup.
+**Current implementation limit:** source-only independent process observers,
+storage/registry compatibility diagnostics and image signer inspection exist.
+They are not an implementation of separate Minecraft launches, per-client
+Microsoft sign-in, or four-session isolation. Create virtual and isolated
+Launch/Provision remain unavailable. Existing account/world data and older
+sessions are never reset merely to simplify development.
 
 ## Branch authority
 
@@ -28,43 +25,37 @@ Local → active development / source authority
 main  → reviewed stable/release authority
 ```
 
-## Native source ownership — Sandboxie v1.18.6
+## Historical native source reference — Sandboxie v1.18.6
 
 **Source migration and private native source patch are complete (source-only).**
 All 1,627 authentic v1.18.6 files remain untouched at
 `engine/isolation-candidates/sandboxie-v1.18.6/`, with pinned Git tree
 `f690477c07a40810f479f53973334ceae7e0ab13`.
-The sole editable MIVUBI native owner is now `engine/isolation-owned/`:
-1,627 files, with **exactly 11 MIVUBI-modified native source files** and
-all original licenses and other upstream files preserved. The old partial
-v1.18.5 owned tree was superseded; its history is retained in Git, not used
-as the current source. Read-only inspection:
-`npm run isolation-source:verify`.
+The retired historical fork is `engine/isolation-owned/`: 1,627 files
+with 11 previously modified native files and the upstream license terms
+preserved. It is NOT the independent runtime owner and must not be promoted,
+rebranded as an independent engine, linked or packaged into the replacement.
+The older v1.18.5 tree remains only in Git history. Source-only historical
+inspection: `npm run isolation-source:verify`.
 
-**Not complete:** no v1.18.6 MSVC/WDK build, driver signing/load,
-service lifecycle, Microsoft Education login, four-client stability or
-performance results are claimed. The existing official Sandboxie Client 02
-pilot is still the active runtime and is never switched merely because
-source code exists. The v1.18.5-specific builder/patch commands remain
-historical source and must not be used for the current engine. Follow
-`engine/isolation-native/owned-runtime/build-profile-v1186.json`
-for required build components and excluded app UIs; this does not approve
-runtime pruning without a native build closure.
+**Historical boundary:** no source import, MSVC/WDK build or driver signing
+would validate or activate the independent engine. The old installed
+Sandboxie environment can be inspected or normally closed for existing
+sessions but cannot create a new production sandbox via MIVUBI. Fork
+build/profiling commands are retained for provenance only.
 
-**New build-only entrypoint:** `tooling/isolation-source/build-owned-v1186.ps1` is a version-pinned Windows MSBuild/WDK compiler path for the actual MIVUBI-owned v1.18.6 source. It verifies exact source before the build, rejects stale native outputs, and saves Win32/x64/WDK logs and hashes in a new report directory. It **never signs, loads, installs, launches or selects** the private driver. The script is authored but **has not run on Windows**.
+**Retired build-only entrypoint:** `tooling/isolation-source/build-owned-v1186.ps1`
+is historical source tooling. It was authored without Windows execution and
+must not be mistaken for the build or launch path of the independent engine.
 
-**Owned v1.18.6 implementation path:** the source, build and read-only
-desktop inspection are now joined through one chain:
-`engine/isolation-owned/` → `tooling/isolation-source/build-owned-v1186.ps1`
-→ `tooling/isolation-source/assemble-owned-v1186.mjs`
-→ `apps/desktop/src-tauri/src/engine/owned_isolation.rs`.
-The exact build/payload inventory belongs to
-`engine/isolation-native/owned-runtime/build-profile-v1186.json`.
-`npm run isolation-source:assemble` selects this v1.18.6 pipeline, not the
-older v1.18.5 assembler. See [native build-to-desktop instructions](tooling/isolation-source/README.md).
-No successfully built, signed, installed or playable private Windows engine is
-claimed by this source integration. The installed official Client 02 remains
-the only active provider.
+**Historical pipeline:** `engine/isolation-owned/` →
+`tooling/isolation-source/build-owned-v1186.ps1` →
+`tooling/isolation-source/assemble-owned-v1186.mjs` →
+`apps/desktop/src-tauri/src/engine/owned_isolation.rs`. These
+assets remain inspectable for provenance, but are NOT the replacement.
+The new source authority is `engine/runtime-core/src/independent_engine/`
+and the existing desktop Windows adapter
+`apps/desktop/src-tauri/src/engine/instance_identity.rs`.
 
 ## Start here
 
@@ -77,24 +68,26 @@ AGENTS.md → GITHUB_RULES.md → docs/system/implementation-map.md
 
 An operator does **not** need a local checkout to complete repository/source-verifiable tasks. Windows or Minecraft acceptance is a separate, higher proof context. `DEV.cmd` is an optional local developer convenience, never the remote GitHub completion requirement.
 
-**Primary development priority (14 October 2026): build MIVUBI's own
-Sandboxie-derived Windows isolation core to completion**, not an independent
-wrapper or endless source validator. The first native C++ behavioral component
-is the MIVUBI-owned `Start.exe` profile admission policy in
-[engine/isolation-native/owned-runtime](engine/isolation-native/owned-runtime/),
-compiled and tested with GCC/Clang in ChatGPT. It is also inlined by the
-exact pinned Sandboxie fork overlay, but **the complete private Windows
-driver/service/DLL/Start binaries have not been built or activated**.
-The already installed official Sandboxie Client 02 remains the safe active
-pilot until signed disposable-Windows core evidence exists.
+**Primary development priority (22 October 2026): implement and validate
+the independent Windows engine** in Rust-first modules without copying or
+loading the retired Sandboxie fork. Complete source verifiability and
+fail-closed admission in GitHub first. Windows and Minecraft acceptance
+must remain NOT_EXECUTED until deliberately performed; no localtest is
+currently requested. See
+[Independent Engine Architecture](docs/system/independent-engine-architecture.md)
+and [current handoff](planning/development.md).
 
-**Definition of DONE:** [Four simultaneous Minecraft Education accounts](docs/product/four-concurrent-accounts.md). **Technical status:** candidate PID/window observations and manually reported two-account playability are separate intermediate evidence; neither proves four-client acceptance. **Current experiment:** [One native + one Sandboxie Plus Windows Client 02](docs/validation/sandboxie-two-client-feasibility.md); explicit isolated launch and separate read-only verification. Two-account simultaneous playability has been operator-reported in the later 14 October test, but sustained stability failed. Documentation: [docs/README.md](docs/README.md). **Current handoff:** [planning/development.md](planning/development.md) (top section). **Removal map:** [Legacy Retirement](docs/system/legacy-retirement.md).
+**Definition of DONE:** [Four simultaneous Minecraft Education accounts](docs/product/four-concurrent-accounts.md). **Technical status:** no four-client gameplay, independent provider or production security acceptance exists. Previous [two-client Sandboxie evidence](docs/validation/two-client-first-success-2026-10-14.md) is explicitly historical. **Current handoff:** [planning/development.md](planning/development.md). **Retirement map:** [Legacy Retirement](docs/system/legacy-retirement.md).
 
 ## Current operating mode
 
-The desktop now mounts one focused **two-client Windows feasibility pilot**: official native Client 01 plus one explicitly requested Sandboxie `MinecraftClient02` Client 02, with read-only candidate process/window counts. Later operator evidence reports two authenticated playable sessions followed by a Client 02 idle crash; it does not prove stable two-client or four-client acceptance. No VM refresh, guest setup or old updater runs on startup. The existing
-VMware-based installer build is explicitly blocked while this experimental
-native launcher is active; there is no approved native release installer yet. Legacy VMware/App Sandbox mutation commands return UNSUPPORTED; the VM-oriented routes below remain documentation and read-only reference, not active workflows.
+The desktop can inspect or recover previously observed legacy sessions,
+but **new isolated session Launch/Provision is blocked** on official
+Sandboxie and the derivative fork. MC01 native launch is a separate existing
+operation. The independent provider is NOT_IMPLEMENTED. No VM refresh,
+guest preparation, signed driver install, untrusted profile mutation or
+automatic updater runs on startup. Legacy VMware mutations and existing
+VMware-oriented packaging remain blocked.
 
 ## Choose one work route
 
@@ -102,7 +95,7 @@ native launcher is active; there is no approved native release installer yet. Le
 | --- | --- | --- |
 | Develop, refactor, repair, or improve repository | [AGENTS.md](AGENTS.md) → [.agents development procedure](.agents/skills/emulator-development/SKILL.md) | Existing source owner in `apps/` or `engine/` |
 | Examine VM behavior or diagnose setup | [Implementation Map](docs/system/implementation-map.md) → [Runtime Core](docs/system/runtime-core.md) | `engine/runtime-core/`, observed provider/guest evidence |
-| Follow the selected Windows two-account experiment | [Native pilot local test](docs/validation/native-pilot-localtest.md) | `DEV.cmd bootstrap` → `doctor` → `preflight` → `dev`; no installer, login/gameplay still unproven |
+| Develop independent isolation and source-only checks | [Independent Engine Architecture](docs/system/independent-engine-architecture.md) → [Development Planning](planning/development.md) | Rust independent engine policy + existing Windows desktop process adapter; no live game test |
 | Review the legacy VMware NSIS release integrity gate | [Historical G0](docs/validation/pre-local-test-readiness.md) | Old NSIS packaging intentionally blocked for native pilot |
 | Consult historical one-guest VMware feasibility (inactive) | [Legacy Client Feasibility](docs/validation/client-feasibility.md) | Scratch guest procedure is retained as reference; not an active pilot instruction |
 | Verify Windows/VMware/Minecraft usability | [Validation](docs/validation/README.md) | Real machine and game observations; `tooling/acceptance/` collects bounded evidence |
@@ -170,12 +163,18 @@ npm run dev                      # Tauri desktop development
 npm run package:windows          # BLOCKED for native pilot: old VMware bundle still attached
 ```
 
-For the native Windows pilot, use `DEV.cmd bootstrap` to provision pinned developer tools beneath `workspace/`, then `DEV.cmd doctor` to confirm local executable paths, `DEV.cmd preflight` to run exact-SHA locked source checks, and finally `DEV.cmd dev` for the developer UI. For UI-only startup, use the exact-SHA [CI debug candidate](docs/validation/ci-debug-candidate.md) without installing a developer toolchain. `DEV.cmd g0` and legacy packaging stay blocked. GitHub `Local` pushes run automatic Full Source CI and conditional Windows debug compilation; manual scopes remain available. CI compilation is **not** proof of GUI startup, portable bootstrap execution, independent Minecraft sign-in or four-client gameplay.
+Optional manual source checks are available via `npm run verify:source` and
+the pinned Rust/desktop commands above when an authorized execution
+environment is available. **GitHub Actions workflows are disabled** by
+operator decision; pushing to `Local` does NOT execute CI. Do not create
+workflows, run localtest, package installers or activate a driver merely
+to claim source completion. Manual source verification is not proof of
+Minecraft sign-in, process isolation or four-client gameplay.
 
 ## Product and compatibility invariants
 
 - Svelte is presentation; thin Tauri commands route to the Rust runtime authority.
-- **Active pilot:** one official host-native Windows client plus one Sandboxie Plus Client 02; neither account independence nor render/playability is proven. VMware Workstation/Fusion implementations remain **inactive legacy backend source**, not the active native pilot provider.
+- **Active development:** independent, unmounted Windows engine foundation; isolated MC02–04 Launch/Provision remains blocked pending a verified provider. Historical Sandboxie/VMware remain inactive for new sessions.
 - Native/Base/Virtual Minecraft version parity and finalized Base lineage gate VM start/provisioning.
 - Each Virtual retains its own guest disk and account state; destructive reprovision requires explicit confirmation.
 - VM running, Guest Agent reachable, game process running, sign-in usable and multiplayer-ready are different observations.
