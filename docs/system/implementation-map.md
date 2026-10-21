@@ -25,6 +25,14 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+The unbound Windows Rust fixture record reader now checks the
+underlying **file HANDLE** using `GetFileInformationByHandle` before
+and after its eight-byte read, rejecting invalid file type,
+reparse attributes, length and changed file identity. It remains
+non-authoritative: only the original C++ fixture owner can establish
+the fresh profile + handle provenance, and no cross-language
+capability has been issued.
+
 The synthetic C++ fixture now uses one `Child` owner binding:
 a freshly created `Profile` is paired with its original process
 handle/FILETIME during `launch`. `observe(child)` and `stop(child)`

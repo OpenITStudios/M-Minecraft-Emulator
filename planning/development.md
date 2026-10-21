@@ -1,5 +1,30 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — strict Windows fixture file handle identity, 21 October 2026
+
+The existing Windows-only Rust reader
+`instance_identity.rs::inspect_unbound_synthetic_fixture_record`
+now validates the exact open HANDLE via
+`GetFileInformationByHandle` before and after the fixed eight-byte read.
+It refuses unexpected file length, directory or reparse-point
+attributes, unsupported handles, and file-ID/volume/size/last-write
+changes. No path is opened; the original C++ owner still controls
+exclusive/non-following file open and fresh synthetic profile creation.
+One Windows negative test authored, **NOT_EXECUTED**. Cargo adds only
+the existing `windows-sys` crate's FileSystem API feature; no
+dependency version change.
+
+**Trust boundary unchanged:** Rust does not receive original
+`CreateProcessW`/profile capability and cannot bind a record to
+that specific child. Result remains `UnboundFixturePaths`.
+No game/account/world operations, Tauri route, driver, service,
+CI, `main`, or release changes.
+
+**Next:** implement an explicit test-only handle handoff from the
+original C++ fixture parent to a Rust collector, with OS handle
+rights/lifetime and fresh-profile provenance; do not treat anonymous
+fixture files or paths as game isolation evidence.
+
 ## Independent engine — owned synthetic child/profile pairing, 21 October 2026
 
 **Source-only fixture hardening:** the original C++ parent now binds

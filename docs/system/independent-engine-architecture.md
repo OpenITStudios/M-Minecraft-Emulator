@@ -321,6 +321,30 @@ prove filesystem/registry/broker isolation. Before any Rust-bound
 handoff, the original owner must supply an OS-verified child and record
 handle using a bounded transport with explicit lifetime/rights checks.
 
+## Rust fixture record handle identity hardening
+
+The existing **Windows-only** `inspect_unbound_synthetic_fixture_record`
+now uses the already-opened file HANDLE with Win32
+`GetFileInformationByHandle` both before and after its one fixed
+eight-byte read. It rejects directory/reparse-point file attributes,
+incorrect lengths, unsupported handle types and changed volume/file
+index, size, attributes or last-write timestamp. The Windows API call
+and unsafe conversion stay in the existing desktop process identity
+owner, using one additional `windows-sys` feature, not a new service
+or lifecycle layer. An authored Windows unit test checks rejection of
+a non-eight-byte executable.
+
+**Security ceiling:** Win32 reports the object reached by an existing
+handle; opening a symlink that follows to a regular target can conceal
+the original reparse point. The original trusted fixture owner MUST
+therefore use `FILE_FLAG_OPEN_REPARSE_POINT` plus exclusive sharing and
+prove that the file belongs to its self-created AppContainer profile.
+Metadata stability is not a cryptographic signature and cannot prevent
+same-length concurrent malicious writes. Neither a PID check nor a
+file identity check alone proves a specific process wrote that file.
+The reader deliberately continues to return `UnboundFixturePaths`,
+never process-bound launch evidence.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

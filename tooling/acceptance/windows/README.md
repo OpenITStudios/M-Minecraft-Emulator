@@ -2,6 +2,19 @@
 
 ## Independent native AppContainer proof (synthetic only)
 
+### Rust record HANDLE identity validation
+
+The Windows-only Rust reader now applies
+`GetFileInformationByHandle` to the caller's **already-opened**
+fixture record handle before and after one eight-byte read. A
+directory, linked object, wrong size, changing file identity or
+last-write timestamp fails closed. The caller must still open only
+its newly created fixture profile file using
+`FILE_FLAG_OPEN_REPARSE_POINT` and exclusive sharing: a followed
+link can otherwise hide the original reparse attributes. Even with
+these checks, the Rust reader is **not authenticated** to the
+C++ parent; it returns `UnboundFixturePaths` only.
+
 ### Owner-bound synthetic process observation
 
 The C++ fixture now pairs its `Child` directly with the

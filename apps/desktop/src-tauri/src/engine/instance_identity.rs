@@ -174,16 +174,17 @@ pub(crate) fn inspect_unbound_synthetic_fixture_record(
         return Err(FixtureRecordInspectionError::NotSyntheticContainer);
     }
 
-    // A fixed 8-byte regular file handle is the only accepted input. No path
-    // traversal, opening, profile discovery, file writes, or unbounded reads.
-    // The caller remains responsible for exclusive/open-handle provenance;
-    // length checks cannot defeat a malicious concurrent writer.
-    let metadata = opened_record
-        .metadata()
-        .map_err(|error| FixtureRecordInspectionError::FileIo(error.kind()))?;
-    if !metadata.is_file() || metadata.len() != SYNTHETIC_FRAME_BYTES as u64 {
-        return Err(FixtureRecordInspectionError::InvalidFileTypeOrLength);
-    }
+    // Require a stable fixed-length disk-file identity, not a named pipe,
+    // directory or an opened reparse point. The caller MUST have opened this
+    // file with FILE_FLAG_OPEN_REPARSE_POINT and exclusive sharing, and must
+    // independently prove that its owned fixture child/profile produced it.
+    // Metadata cannot establish source authenticity or prevent a compromised
+    // writer changing eight bytes without a visible file metadata change.
+    let before_file = windows::fixture_record_identity(opened_record)
+        .map_err(|error| match error.kind() {
+            std::io::ErrorKind::InvalidData => FixtureRecordInspectionError::InvalidFileTypeOrLength,
+            _ => FixtureRecordInspectionError::FileIo(error.kind()),
+        })?;
     opened_record
         .rewind()
         .map_err(|error| FixtureRecordInspectionError::FileIo(error.kind()))?;
@@ -191,10 +192,12 @@ pub(crate) fn inspect_unbound_synthetic_fixture_record(
     opened_record
         .read_exact(&mut bytes)
         .map_err(|error| FixtureRecordInspectionError::FileIo(error.kind()))?;
-    let after_metadata = opened_record
-        .metadata()
-        .map_err(|error| FixtureRecordInspectionError::FileIo(error.kind()))?;
-    if !after_metadata.is_file() || after_metadata.len() != SYNTHETIC_FRAME_BYTES as u64 {
+    let after_file = windows::fixture_record_identity(opened_record)
+        .map_err(|error| match error.kind() {
+            std::io::ErrorKind::InvalidData => FixtureRecordInspectionError::InvalidFileTypeOrLength,
+            _ => FixtureRecordInspectionError::FileIo(error.kind()),
+        })?;
+    if before_file != after_file {
         return Err(FixtureRecordInspectionError::InvalidFileTypeOrLength);
     }
     let paths = decode_synthetic_fixture_paths(&bytes)
@@ -215,7 +218,7 @@ pub(crate) fn inspect_unbound_synthetic_fixture_record(
 #[cfg(windows)]
 mod windows {
     use super::{AppContainerComparison, ContextComparison, ProcessContainment, ProcessKey};
-    use std::{io, mem::size_of, ptr};
+    use std::{io, mem::size_of, os::windows::io::AsRawHandle, ptr};
     use windows_sys::Win32::{
         Foundation::{
             CloseHandle, GetLastError, ERROR_INSUFFICIENT_BUFFER, FILETIME, HANDLE, WAIT_TIMEOUT,
@@ -230,8 +233,57 @@ mod windows {
             GetProcessTimes, OpenProcess, OpenProcessToken, WaitForSingleObject,
             PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
         },
+        Storage::FileSystem::{
+            GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+            FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT,
+        },
         UI::Shell::GetUserProfileDirectoryW,
     };
+
+    /// Exact identity and attributes of a fixture file HANDLE, not its path.
+    /// This is an *intra-reader stability check*, not proof that a child wrote
+    /// the file. The original fixture owner must enforce exclusive sharing
+    /// and non-following reparse-point open options before passing a handle.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub(super) struct FixtureRecordIdentity {
+        volume: u32,
+        file_index: u64,
+        length: u64,
+        modified: u64,
+        attributes: u32,
+    }
+
+    pub(super) fn fixture_record_identity(
+        opened: &std::fs::File,
+    ) -> io::Result<FixtureRecordIdentity> {
+        use virtual_clients_core::independent_engine::SYNTHETIC_FRAME_BYTES;
+
+        // Windows BY_HANDLE_FILE_INFORMATION has no uninitialized pointers;
+        // zero initialization is the documented starting state for this FFI.
+        let mut value: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+        if unsafe { GetFileInformationByHandle(opened.as_raw_handle(), &mut value) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let length = (u64::from(value.nFileSizeHigh) << 32)
+            | u64::from(value.nFileSizeLow);
+        if length != SYNTHETIC_FRAME_BYTES as u64
+            || value.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT) != 0
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Not a regular 8-byte fixture record",
+            ));
+        }
+        Ok(FixtureRecordIdentity {
+            volume: value.dwVolumeSerialNumber,
+            file_index: (u64::from(value.nFileIndexHigh) << 32)
+                | u64::from(value.nFileIndexLow),
+            length,
+            modified: (u64::from(value.ftLastWriteTime.dwHighDateTime) << 32)
+                | u64::from(value.ftLastWriteTime.dwLowDateTime),
+            attributes: value.dwFileAttributes,
+        })
+    }
 
     struct Handle(HANDLE);
     impl Drop for Handle {
@@ -601,6 +653,14 @@ mod windows {
                     .unwrap_err(),
                 NativePortError::InvalidIdentity
             );
+        }
+
+        #[test]
+        fn fixture_record_identity_refuses_non_eight_byte_files() {
+            // This is a normal test executable, never a synthetic observation.
+            let executable = std::fs::File::open(std::env::current_exe().unwrap()).unwrap();
+            let error = fixture_record_identity(&executable).unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::InvalidData);
         }
 
         #[test]
