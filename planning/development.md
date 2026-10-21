@@ -1,5 +1,27 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — reuse pinned Windows token per native pair, 22 October 2026
+
+Refactored the existing `instance_identity.rs` read-only Windows pair
+inspector: each exact pinned process now opens one `TOKEN_QUERY` handle,
+reused to inspect TokenUser, TokenSessionId, profile directory,
+TokenIsAppContainer and TokenAppContainerSid. The old stand-alone
+comparison endpoints still delegate to the same token-based helpers.
+The combined pair reads now require two OpenProcessToken calls instead
+of four, with existing process liveness/FILETIME checks and original
+sanitized boolean output preserved. No raw SID, token or user path
+is serialized, and Microsoft broker isolation is still UNKNOWN.
+
+**Proof:** exact GitHub source/consumer review. Existing Windows
+parity/stale-key regressions cover combined-vs-separate results but were
+NOT_EXECUTED. No Windows target, Minecraft or account acceptance was run.
+No new service, launcher, Tauri command, installer or admission bypass.
+
+**Next:** inspect remaining Windows signer and process context contracts
+for target-compiler compatibility; keep independent Launch/Provision
+blocked pending actual isolation/account evidence.
+
+
 ## Independent engine — reject invalid process keys before native observation, 22 October 2026
 
 In the canonical pure Rust `independent_engine/inspection.rs` and

@@ -907,12 +907,17 @@ mod windows {
         profile: Vec<u16>,
         session: u32,
     }
-    fn context(process: &Handle) -> io::Result<Context> {
+    /// One read-only token handle per process observation. The same token
+    /// is reused for user/profile/session and AppContainer SID in compare_pair.
+    fn query_token(process: &Handle) -> io::Result<Handle> {
         let mut raw = ptr::null_mut();
         if unsafe { OpenProcessToken(process.0, TOKEN_QUERY, &mut raw) } == 0 {
             return Err(io::Error::last_os_error());
         }
-        let token = Handle(raw);
+        Ok(Handle(raw))
+    }
+
+    fn context_from_token(token: &Handle) -> io::Result<Context> {
         let mut needed = 0;
         let first =
             unsafe { GetTokenInformation(token.0, TokenUser, ptr::null_mut(), 0, &mut needed) };
@@ -985,14 +990,14 @@ mod windows {
             session,
         })
     }
+    fn context(process: &Handle) -> io::Result<Context> {
+        let token = query_token(process)?;
+        context_from_token(&token)
+    }
+
     // An independent, bounded token inspection. Reuses the existing pinned
     // process handles; never reads folders, broker stores or account data.
-    fn appcontainer_sid(process: &Handle) -> io::Result<Option<Vec<u8>>> {
-        let mut raw = ptr::null_mut();
-        if unsafe { OpenProcessToken(process.0, TOKEN_QUERY, &mut raw) } == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        let token = Handle(raw);
+    fn appcontainer_sid_from_token(token: &Handle) -> io::Result<Option<Vec<u8>>> {
         let mut flag = 0u32;
         let mut needed = 0u32;
         if unsafe {
@@ -1051,6 +1056,11 @@ mod windows {
         Ok(Some(unsafe {
             std::slice::from_raw_parts(sid.cast::<u8>(), length)
         }.to_vec()))
+    }
+
+    fn appcontainer_sid(process: &Handle) -> io::Result<Option<Vec<u8>>> {
+        let token = query_token(process)?;
+        appcontainer_sid_from_token(&token)
     }
 
     /// Reuse the same pinned handle/FILETIME check as the existing desktop
@@ -1120,19 +1130,22 @@ mod windows {
         Ok(comparison)
     }
 
-    /// One coherent pairwise read: only two pinned process HANDLEs for
-    /// user/profile/session and AppContainer identity, not two independent
-    /// opens per comparison. Keeps exact-handle liveness checks at the end.
+    /// One coherent pairwise read: two pinned process HANDLEs and two
+    /// read-only token HANDLEs (one for each process). Profile/session/SIDs
+    /// are read from those exact token handles, without reopening a token
+    /// for the AppContainer query. Final process liveness is checked.
     pub(super) fn compare_pair(
         left: &ProcessKey,
         right: &ProcessKey,
     ) -> io::Result<(ContextComparison, AppContainerComparison)> {
         let left_process = pin(left)?;
         let right_process = pin(right)?;
-        let first = context(&left_process)?;
-        let second = context(&right_process)?;
-        let first_container = appcontainer_sid(&left_process)?;
-        let second_container = appcontainer_sid(&right_process)?;
+        let first_token = query_token(&left_process)?;
+        let second_token = query_token(&right_process)?;
+        let first = context_from_token(&first_token)?;
+        let second = context_from_token(&second_token)?;
+        let first_container = appcontainer_sid_from_token(&first_token)?;
+        let second_container = appcontainer_sid_from_token(&second_token)?;
         let context_result = compare_context_values(&first, &second)?;
         let container_result =
             compare_appcontainer_values(first_container.as_deref(), second_container.as_deref());
