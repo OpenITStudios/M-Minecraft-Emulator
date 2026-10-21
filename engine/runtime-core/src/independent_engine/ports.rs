@@ -2,7 +2,7 @@
 //! they are NOT registered Tauri commands, launch permission or implementations.
 //! The platform-specific owner is apps/desktop; runtime-core holds policy.
 
-use super::{ProcessIdentity, ProcessPathSnapshot, SessionSlot, StorageObservations};
+use super::{PairBoundarySnapshot, ProcessIdentity, ProcessPathSnapshot, SessionSlot, StorageObservations};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NativePortError {
@@ -59,6 +59,15 @@ pub trait CooperativePathObserverPort {
         slot: SessionSlot,
         expected: ProcessIdentity,
     ) -> Result<ProcessPathSnapshot, NativePortError>;
+}
+
+/// Cooperating pair observer, NOT global mutex enumeration or Windows broker
+/// token inspection. Missing game observations must remain Unknown.
+pub trait PairBoundaryObserverPort {
+    fn observe_pair_boundaries(
+        &self, first_slot: SessionSlot, first: ProcessIdentity,
+        second_slot: SessionSlot, second: ProcessIdentity,
+    ) -> Result<PairBoundarySnapshot, NativePortError>;
 }
 
 /// The existing workspace_surface implementation owns window behavior.

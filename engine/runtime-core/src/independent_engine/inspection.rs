@@ -6,7 +6,7 @@ use super::{
     NativePortError, ProcessIdentity, ProcessObservation, ProcessObserverPort,
     SessionSlot, StorageObservations, StorageObserverPort, StorageRouteBlocker,
     StorageRouteDomain, StorageRoutePreflight, StorageRouteRequest, StorageSurface,
-    StorageFinding, preflight_storage_route,
+    StorageFinding, StorageEvidenceSource, PairBoundaryObserverPort, preflight_storage_route,
 };
 
 #[derive(Clone, Debug)]
@@ -132,6 +132,102 @@ pub fn inspect_storage_route<P: ProcessObserverPort, S: StorageObserverPort>(
         path_risks,
         dangerous,
     })
+}
+
+
+/// Results are sample-specific, non-authorizing collector claims.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PairBoundaryFinding { Unknown, NoConflictInSample, ConflictObserved }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PairBoundaryFact {
+    pub source: StorageEvidenceSource,
+    pub finding: PairBoundaryFinding,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PairBoundarySnapshot {
+    pub first_slot: SessionSlot,
+    pub second_slot: SessionSlot,
+    pub first: ProcessIdentity,
+    pub second: ProcessIdentity,
+    pub singleton: PairBoundaryFact,
+    pub broker: PairBoundaryFact,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PairBoundaryError {
+    InvalidPair, WrongSlot, WrongProcess, InadequateSource, Native(NativePortError),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PairBoundaryIssue {
+    SingletonUnknown, SingletonConflict, BrokerUnknown, BrokerConflict,
+}
+
+/// Pending even when issues is empty; never grants access or launch.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingPairInspection {
+    pub first: ProcessIdentity,
+    pub second: ProcessIdentity,
+    pub issues: Vec<PairBoundaryIssue>,
+}
+
+fn validate_pair_fact(fact: PairBoundaryFact, broker: bool) -> Result<(), PairBoundaryError> {
+    match fact.finding {
+        PairBoundaryFinding::Unknown => Ok(()),
+        PairBoundaryFinding::NoConflictInSample
+            if fact.source == StorageEvidenceSource::MinecraftRuntime => Ok(()),
+        PairBoundaryFinding::ConflictObserved
+            if fact.source == StorageEvidenceSource::MinecraftRuntime
+                || (!broker && fact.source == StorageEvidenceSource::WindowsProcess) => Ok(()),
+        _ => Err(PairBoundaryError::InadequateSource),
+    }
+}
+
+/// Pin two different processes before/after a cooperating observer. Windows
+/// identity, AppContainer SID and named-object canaries do not authenticate
+/// game singleton or Microsoft broker compatibility. Collector source labels
+/// require independent verification and are never production readiness.
+pub fn inspect_pair_boundaries<P: ProcessObserverPort, Q: PairBoundaryObserverPort>(
+    process: &P, observer: &Q, first_slot: SessionSlot, first: ProcessIdentity,
+    second_slot: SessionSlot, second: ProcessIdentity,
+) -> Result<PendingPairInspection, PairBoundaryError> {
+    if first_slot == second_slot || first.pid == 0 || second.pid == 0
+        || first.created_file_time == 0 || second.created_file_time == 0
+        || first.pid == second.pid
+    { return Err(PairBoundaryError::InvalidPair); }
+    let left = process.observe_exact(first).map_err(PairBoundaryError::Native)?;
+    if left.identity != first { return Err(PairBoundaryError::Native(NativePortError::StaleProcess)); }
+    let right = process.observe_exact(second).map_err(PairBoundaryError::Native)?;
+    if right.identity != second { return Err(PairBoundaryError::Native(NativePortError::StaleProcess)); }
+    let snapshot = observer.observe_pair_boundaries(first_slot, first, second_slot, second)
+        .map_err(PairBoundaryError::Native)?;
+    if snapshot.first_slot != first_slot || snapshot.second_slot != second_slot {
+        return Err(PairBoundaryError::WrongSlot);
+    }
+    if snapshot.first != first || snapshot.second != second {
+        return Err(PairBoundaryError::WrongProcess);
+    }
+    validate_pair_fact(snapshot.singleton, false)?;
+    validate_pair_fact(snapshot.broker, true)?;
+    let after_left = process.observe_exact(first).map_err(PairBoundaryError::Native)?;
+    let after_right = process.observe_exact(second).map_err(PairBoundaryError::Native)?;
+    if left != after_left || right != after_right {
+        return Err(PairBoundaryError::Native(NativePortError::StaleProcess));
+    }
+    let mut issues = Vec::new();
+    match snapshot.singleton.finding {
+        PairBoundaryFinding::Unknown => issues.push(PairBoundaryIssue::SingletonUnknown),
+        PairBoundaryFinding::ConflictObserved => issues.push(PairBoundaryIssue::SingletonConflict),
+        PairBoundaryFinding::NoConflictInSample => {}
+    }
+    match snapshot.broker.finding {
+        PairBoundaryFinding::Unknown => issues.push(PairBoundaryIssue::BrokerUnknown),
+        PairBoundaryFinding::ConflictObserved => issues.push(PairBoundaryIssue::BrokerConflict),
+        PairBoundaryFinding::NoConflictInSample => {}
+    }
+    Ok(PendingPairInspection { first, second, issues })
 }
 
 #[cfg(test)]

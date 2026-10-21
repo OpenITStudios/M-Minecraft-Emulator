@@ -1,5 +1,21 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — pairwise singleton and broker source contract, 22 October 2026
+
+The canonical Rust inspection owner now exposes `inspect_pair_boundaries`
+and a narrow `PairBoundaryObserverPort`: two distinct PID/FILETIME keys
+are revalidated before and after cooperating observations. Source claims
+from Windows metadata or synthetic fixtures cannot assert absence of
+Minecraft singleton or Microsoft broker account conflict; positive
+results require independently verified real-game runtime observations.
+The result is always `PendingPairInspection`, never launch readiness.
+This is only a source contract: no registry, token, account or named-object
+enumeration and no production provider or Tauri command.
+Rust/Windows/Minecraft execution NOT_EXECUTED.
+
+**Next:** add a default all-Unknown desktop port and focused fail-closed
+tests, then document real-game compatibility acceptance without secrets.
+
 ## Independent engine — prevent duplicate-slot PID and evidence laundering, 22 October 2026
 
 **Source-first hardening:** The existing `ScopedIsolationFindings`

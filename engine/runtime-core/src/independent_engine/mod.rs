@@ -25,7 +25,9 @@ pub use fixture_wire::{
 };
 pub use identity::{ProcessIdentity, SessionSlot};
 pub use inspection::{
-    inspect_existing, inspect_storage_route, RouteBoundaryInspection, SessionInspection,
+    inspect_existing, inspect_pair_boundaries, inspect_storage_route,
+    PairBoundaryError, PairBoundaryFact, PairBoundaryFinding, PairBoundaryIssue,
+    PairBoundarySnapshot, PendingPairInspection, RouteBoundaryInspection, SessionInspection,
 };
 pub use paths::{
     inspect_cooperative_paths, review_process_path_snapshot,
@@ -39,7 +41,7 @@ pub use registry::{
 pub use operations::{OperationClass, SessionOperation};
 pub use ports::{
     CooperativePathObserverPort, DisabledIndependentProvider,
-    IndependentProviderPort, NativePortError, ProcessContainment,
+    IndependentProviderPort, NativePortError, PairBoundaryObserverPort, ProcessContainment,
     ProcessObservation, ProcessObserverPort, StorageObserverPort,
     WorkspacePresentationPort,
 };
