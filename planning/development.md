@@ -1,5 +1,29 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — wire pinned-image candidate to publisher review, 22 October 2026
+
+Added unmounted `instance_identity.rs::inspect_process_image_provenance_source`,
+reusing the pinned Windows image trust observation and the canonical
+non-authorizing `review_image_provenance`. The adapter supplies
+no signer certificate fingerprint, audited publisher allowlist,
+loaded PE-section/file match or package claim; all remain explicit
+gaps. Generic signed file TRUSTED does not make
+`OfficialGamePublisher` attested or enable Launch/Provision.
+
+Hardened WinVerifyTrust cleanup: when verification succeeds, missing
+provider state or failed `WTD_STATEACTION_CLOSE` causes a native
+error instead of silently accepting a positive signature result.
+Three desktop negative tests authored; Windows/Rust/Minecraft
+execution **NOT_EXECUTED**. No package versions, WAM/account data,
+kernel/service, installer, Tauri route, CI, `main` or worlds changed.
+
+**Next:** verify exact Windows-sys ABI on Windows target and implement
+an audit-only signer leaf certificate SHA-256 read from actual
+WinTrust provider state, with lifecycle-safe cleanup. Independently
+review legitimate official Minecraft Education signer/package
+policy and backing image semantics before ever permitting an
+official-image proof.
+
 ## Independent engine — signer identity and running image policy, 22 October 2026
 
 Added `engine/runtime-core/src/independent_engine/image_provenance.rs`

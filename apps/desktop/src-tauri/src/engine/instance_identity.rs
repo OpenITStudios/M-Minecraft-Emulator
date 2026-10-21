@@ -331,6 +331,42 @@ pub fn inspect_process_image_trust_source(
     }
 }
 
+
+/// Feed the actual Windows-source image trust observation to the canonical
+/// non-authorizing provenance reviewer. No signer leaf fingerprint, mapped PE
+/// section/file identity or package provenance is fabricated. The reviewed
+/// official release signer policy is EMPTY pending source/rights verification.
+/// A generic trusted Authenticode file must not claim a verified publisher.
+pub fn inspect_process_image_provenance_source(
+    expected: ProcessIdentity,
+) -> Result<
+    virtual_clients_core::independent_engine::PendingImageProvenance,
+    NativePortError,
+> {
+    use virtual_clients_core::independent_engine::{
+        review_image_provenance, ImageProvenanceError, PackageIdentityEvidence,
+        PinnedImageProvenanceClaim, ReviewedPublisherPolicy,
+        RunningImageBinding, StorageEvidenceSource,
+    };
+    let candidate = inspect_process_image_trust_source(expected)?;
+    let source = PinnedImageProvenanceClaim {
+        process: candidate.process,
+        observed_process: Some(candidate.process),
+        source: StorageEvidenceSource::WindowsProcess,
+        authenticode_trusted_on_disk: candidate.image_file_signature
+            == ImageFileSignatureTrust::AuthenticodeTrustedOnDisk,
+        signer_certificate: None,
+        image_binding: RunningImageBinding::QueriedExecutablePathOnly,
+        package: PackageIdentityEvidence::Unknown,
+    };
+    review_image_provenance(source, ReviewedPublisherPolicy::default())
+        .map_err(|problem| match problem {
+            ImageProvenanceError::UnpinnedOrStaleProcess => NativePortError::StaleProcess,
+            ImageProvenanceError::WrongEvidenceSource
+            | ImageProvenanceError::InvalidCertificateDigest => NativePortError::OperationFailed,
+        })
+}
+
 // Synthetic-only bounded native FILE-handle reader. The caller MUST have
 // created/owned the fixture child and independently established which fresh
 // AppContainer profile contains this ALREADY OPENED file handle. This routine
@@ -686,12 +722,21 @@ mod windows {
             WinVerifyTrust(ptr::null_mut(), &mut policy,
                 (&mut data as *mut WINTRUST_DATA).cast())
         };
+        let state_created = !data.hWVTStateData.is_null();
         data.dwStateAction = WTD_STATEACTION_CLOSE;
-        // Close the WinTrust provider context on success AND failure.
-        let _ = unsafe {
+        // Closing a successful trust state's provider must also succeed.
+        // Do not silently keep a positive on-disk trust verdict when the
+        // verification state could not be released correctly.
+        let close_status = unsafe {
             WinVerifyTrust(ptr::null_mut(), &mut policy,
                 (&mut data as *mut WINTRUST_DATA).cast())
         };
+        if status == 0 && (!state_created || close_status != 0) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "WinVerifyTrust returned incomplete or unreleased provider state",
+            ));
+        }
         let after = file_identity(&file)?;
         if before != after || image_name(&process)? != path {
             return Err(invalid("On-disk process image changed during inspection"));
@@ -1254,6 +1299,47 @@ mod tests {
         );
     }
 
+
+
+    #[test]
+    fn provenance_policy_remains_pending_even_with_mock_trusted_file_signature() {
+        use virtual_clients_core::independent_engine::{
+            review_image_provenance, ImageProvenanceGap,
+            PackageIdentityEvidence, PinnedImageProvenanceClaim,
+            ReviewedPublisherPolicy, RunningImageBinding, StorageEvidenceSource,
+        };
+        let id = ProcessIdentity::checked(51, 133400000000000051).unwrap();
+        let candidate = unpromoted_image_trust(id, true);
+        let claim = PinnedImageProvenanceClaim {
+            process: id,
+            observed_process: Some(id),
+            source: StorageEvidenceSource::WindowsProcess,
+            authenticode_trusted_on_disk: candidate.image_file_signature
+                == ImageFileSignatureTrust::AuthenticodeTrustedOnDisk,
+            signer_certificate: None,
+            image_binding: RunningImageBinding::QueriedExecutablePathOnly,
+            package: PackageIdentityEvidence::Unknown,
+        };
+        let reviewed = review_image_provenance(claim, ReviewedPublisherPolicy::default()).unwrap();
+        assert!(reviewed.gaps.contains(&ImageProvenanceGap::LeafCertificateNotObserved));
+        assert!(reviewed.gaps.contains(&ImageProvenanceGap::OfficialSignerPolicyNotReviewed));
+        assert!(reviewed.gaps.contains(&ImageProvenanceGap::RunningImageNotBoundToVerifiedFile));
+    }
+
+    #[test]
+    fn invalid_image_provenance_identity_refuses_any_native_inspection() {
+        let invalid = ProcessIdentity { pid: 11, created_file_time: 0 };
+        assert_eq!(inspect_process_image_provenance_source(invalid),
+            Err(NativePortError::InvalidIdentity));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn image_provenance_is_unavailable_without_windows_native_observation() {
+        let key = ProcessIdentity::checked(52, 133400000000000052).unwrap();
+        assert_eq!(inspect_process_image_provenance_source(key),
+            Err(NativePortError::NotImplemented));
+    }
 
     #[test]
     fn trusted_generic_signature_never_identifies_official_publisher() {

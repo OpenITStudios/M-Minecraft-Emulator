@@ -771,6 +771,27 @@ is required before attributing the on-disk signature to a running
 process. No signer parsing is attempted through file extensions,
 certificate subject display strings, WAM, account caches or UI paths.
 
+### Windows adapter to non-authorizing publisher review
+
+The desktop's existing process identity owner now has the
+**unmounted** `inspect_process_image_provenance_source` adapter.
+It feeds `inspect_process_image_trust_source` into the canonical
+Rust reviewer and deliberately leaves signer-certificate SHA-256
+unobserved, the executable-to-mapped-section identity only
+`QueriedExecutablePathOnly`, package provenance Unknown, and the
+official signer policy EMPTY. Therefore a trusted generic Windows
+signature still yields explicit publisher/image-binding gaps and
+does not change any game admission operation.
+
+The Windows trust wrapper additionally checks that a **successful**
+`WTD_STATEACTION_VERIFY` created a provider state and that the
+corresponding `WTD_STATEACTION_CLOSE` completed successfully.
+Missing or unreleased state invalidates any otherwise positive
+signature observation. The signed-file lookup remains read-only,
+cache-only for revocation, bound to a pinned process identity and
+rechecked for on-disk file metadata changes. No certificate identity,
+publisher name, package policy, WAM account or credential is guessed.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,
