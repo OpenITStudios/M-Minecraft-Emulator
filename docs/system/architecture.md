@@ -33,6 +33,19 @@ one; establish a concrete requirement and prove compatibility first.
 | Resource use | Prefer native handles and events over one PowerShell process per tab switch or a permanent polling daemon. Any later background resource policy must be reversible and measured; no thread suspension, injected rendering control or invented FPS savings. |
 | Migration/package | Existing identities and data paths stay compatible. Do not package the retired engine as the replacement. Installer, service teardown and account-data migration need separate proven recovery; source retirement alone does not uninstall anything. |
 
+## Modular engine source-first design — 21 October 2026
+
+The independent domain contract is in
+`engine/runtime-core/src/independent_engine/` and its current design
+document is [Independent Engine Architecture](independent-engine-architecture.md).
+It provides typed slot/process references, a nine-surface storage evidence
+matrix, action effect classification, and explicit adapter ports. The default
+provider rejects inspect/launch/normal-close. This code neither owns a new
+lifecycle state store nor registers a game-launch Tauri command.
+The Windows adapter, if justified, remains a separate `apps/desktop/`
+implementation; existing window recovery and native identity code are reused,
+not reimplemented. Platform acceptance remains unexecuted.
+
 The first new independent-policy implementation is
 `engine/runtime-core/src/independent_isolation.rs`: a stateless diagnostic
 classification of synthetic, OS-native, and actual Minecraft evidence. A

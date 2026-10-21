@@ -1,5 +1,24 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — source-first architecture, 21 October 2026
+
+**Operator decision:** finish modular architecture and source integration on
+GitHub branch `Local` before executing Windows/Minecraft local acceptance.
+New source-only domain contracts in `engine/runtime-core/src/independent_engine/`:
+`identity`, `storage`, `operations`, `ports`. They define exactly four
+canonical desktop slot IDs, full-width process identities, nine separate
+storage/broker boundaries, presentation versus lifecycle side effects, and
+separate native observer/provider interfaces. The default provider explicitly
+returns NotImplemented; existing Tauri/admission paths remain unchanged.
+The canonical design is [Independent Engine Architecture](../docs/system/independent-engine-architecture.md).
+Tests are authored, with Rust compilation and Windows acceptance NOT_EXECUTED.
+
+**Next source-only milestone:** implement the independent, read-only Windows
+adapter under the current desktop identity owner, then typed contract tests for
+mapping process/storage observations without credentials, sandbox DLLs,
+game launches, profile writes or services. Keep all existing account/world data.
+Do not treat the old fork source as a basis for proprietary code.
+
 ## Independent sandbox engine — ACTIVE source foundation, 21 October 2026
 
 **Operator explicitly resumed implementation in ChatGPT on 21 October 2026.**

@@ -25,6 +25,16 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+The modular, independently authored source architecture is
+[Independent Engine Architecture](independent-engine-architecture.md).
+The domain contracts live in `engine/runtime-core/src/independent_engine/`
+(`identity.rs`, `storage.rs`, `operations.rs`, `ports.rs`). They describe
+the four fixed slots, full-width PID/start-time identity, the storage-surface
+evidence matrix, effect classification, and abstract Windows adapter ports.
+The deliberately disabled provider rejects all actions. Nothing registers
+a new desktop launch route, state store, service or driver; old admission
+remains fail-closed.
+
 The independently written proof-classification policy lives in
 `engine/runtime-core/src/independent_isolation.rs`: pure in-memory findings and
 tier-separated evidence gaps for synthetic, native Windows, two-game, and four-game
