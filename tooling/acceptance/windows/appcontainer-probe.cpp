@@ -291,6 +291,13 @@ int parent(const fs::path& output, bool negative_control) {
     stop(first, a);
     require(WaitForSingleObject(b.process.hProcess, 0) == WAIT_TIMEOUT, "other-fixture-survives");
     stop(second, b);
+    // Normal-stop sentinels belong only to this run. Remove them before a
+    // second launch; otherwise the reopened child would immediately exit and
+    // produce a false persistence/lifetime failure. Preserve both canaries.
+    require(DeleteFileW((first.folder / L"stop").c_str()) != 0,
+        "clear-first-fixture-stop");
+    require(DeleteFileW((second.folder / L"stop").c_str()) != 0,
+        "clear-second-fixture-stop");
     // Two fresh child processes, using the SAME synthetic AppContainer profile
     // identities, must independently read their own previous writes.
     Child reopened_a, reopened_b;
