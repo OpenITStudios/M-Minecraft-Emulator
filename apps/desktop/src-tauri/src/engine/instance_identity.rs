@@ -215,6 +215,64 @@ pub(crate) fn inspect_unbound_synthetic_fixture_record(
     Ok(paths)
 }
 
+
+/// Legacy Windows UAC virtualization flags for an exact native process token.
+/// These flags concern a compatibility mechanism, NOT private HKCU hives,
+/// per-AppContainer registry mapping, profile ownership or Minecraft sign-in.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LegacyTokenVirtualizationObservation {
+    pub identity: ProcessIdentity,
+    pub allowed: bool,
+    pub enabled: bool,
+}
+
+/// Source-only, unmounted Windows token metadata inspection. No registry
+/// hives/values/paths or credentials are opened. This MUST NOT be converted
+/// to StorageFinding::PrivateAccessObserved.
+pub fn inspect_legacy_token_virtualization_source(
+    expected: ProcessIdentity,
+) -> Result<LegacyTokenVirtualizationObservation, NativePortError> {
+    #[cfg(windows)]
+    {
+        let key = ProcessKey {
+            pid: expected.pid,
+            created_file_time: expected.created_file_time.to_string(),
+        };
+        let (allowed, enabled) = windows::legacy_token_virtualization(&key)
+            .map_err(|error| match error.kind() {
+                std::io::ErrorKind::NotFound => NativePortError::StaleProcess,
+                std::io::ErrorKind::InvalidInput | std::io::ErrorKind::InvalidData => {
+                    NativePortError::InvalidIdentity
+                }
+                std::io::ErrorKind::PermissionDenied => NativePortError::AccessDenied,
+                _ => NativePortError::OperationFailed,
+            })?;
+        Ok(LegacyTokenVirtualizationObservation {
+            identity: expected,
+            allowed,
+            enabled,
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = expected;
+        Err(NativePortError::NotImplemented)
+    }
+}
+
+/// Diagnostic integration only: the real Windows process observer and the
+/// all-Unknown storage observer are consulted fresh, before/after the probe.
+/// The return type does not express an approved route or mutation permission.
+pub fn inspect_independent_storage_route_source(
+    request: virtual_clients_core::independent_engine::StorageRouteRequest,
+) -> Result<virtual_clients_core::independent_engine::RouteBoundaryInspection, NativePortError> {
+    virtual_clients_core::independent_engine::inspect_storage_route(
+        &WindowsProcessObserver,
+        &UnknownStorageObserver,
+        request,
+    )
+}
+
 #[cfg(windows)]
 mod windows {
     use super::{AppContainerComparison, ContextComparison, ProcessContainment, ProcessKey};
@@ -227,7 +285,8 @@ mod windows {
         Security::{
             GetLengthSid, GetTokenInformation, IsValidSid, TokenAppContainerSid,
             TokenIsAppContainer, TokenSessionId, TokenUser, TOKEN_APPCONTAINER_INFORMATION,
-            TOKEN_QUERY, TOKEN_USER,
+            TOKEN_QUERY, TOKEN_USER, TokenVirtualizationAllowed,
+            TokenVirtualizationEnabled,
         },
         System::Threading::{
             GetProcessTimes, OpenProcess, OpenProcessToken, WaitForSingleObject,
@@ -342,6 +401,45 @@ mod windows {
         live(&process)?;
         Ok(process)
     }
+    // Only legacy UAC compatibility metadata, never a registry hive query.
+    // Pin the exact PID/FILTIME process handle so no reused PID is accepted.
+    pub(super) fn legacy_token_virtualization(
+        key: &ProcessKey,
+    ) -> io::Result<(bool, bool)> {
+        let process = pin(key)?;
+        let mut raw = ptr::null_mut();
+        if unsafe { OpenProcessToken(process.0, TOKEN_QUERY, &mut raw) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let token = Handle(raw);
+        let query = |kind| -> io::Result<bool> {
+            let mut value = 0u32;
+            let mut length = 0u32;
+            if unsafe {
+                GetTokenInformation(
+                    token.0,
+                    kind,
+                    (&mut value as *mut u32).cast(),
+                    size_of::<u32>() as u32,
+                    &mut length,
+                )
+            } == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            if length != size_of::<u32>() as u32 || value > 1 {
+                return Err(invalid("Invalid legacy virtualization token flag"));
+            }
+            Ok(value != 0)
+        };
+        let allowed = query(TokenVirtualizationAllowed)?;
+        let enabled = query(TokenVirtualizationEnabled)?;
+        live(&process)?;
+        if enabled && !allowed {
+            return Err(invalid("Inconsistent legacy virtualization token flags"));
+        }
+        Ok((allowed, enabled))
+    }
+
     struct Context {
         user: Vec<u8>,
         profile: Vec<u16>,
@@ -664,6 +762,20 @@ mod windows {
         }
 
         #[test]
+        fn stale_legacy_registry_metadata_is_rejected_and_never_reads_hkcu() {
+            use virtual_clients_core::independent_engine::ProcessIdentity;
+            let current = own_key();
+            let stale = ProcessIdentity::checked(
+                current.pid,
+                current.created_file_time.parse::<u64>().unwrap() + 1,
+            ).unwrap();
+            assert_eq!(
+                super::super::inspect_legacy_token_virtualization_source(stale).unwrap_err(),
+                super::super::NativePortError::InvalidIdentity,
+            );
+        }
+
+        #[test]
         fn unbound_fixture_reader_checks_process_before_open_file_bytes() {
             use virtual_clients_core::independent_engine::ProcessIdentity;
             let key = own_key();
@@ -811,6 +923,37 @@ mod tests {
             assert_eq!(report.finding(surface), StorageFinding::Unknown);
         }
         assert_eq!(report.unresolved().len(), StorageSurface::ALL.len());
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn non_windows_legacy_registry_query_is_unavailable() {
+        let process = ProcessIdentity::checked(2, 1234567).unwrap();
+        assert_eq!(
+            inspect_legacy_token_virtualization_source(process).unwrap_err(),
+            NativePortError::NotImplemented,
+        );
+    }
+
+    #[test]
+    fn static_route_denial_has_no_windows_side_effects() {
+        use virtual_clients_core::independent_engine::{
+            RouteBoundaryInspection, StorageRouteAction, StorageRouteBlocker,
+            StorageRouteDomain, StorageRouteRequest, StorageRouteTarget,
+        };
+        let identity = ProcessIdentity::checked(2, 133400000000000000).unwrap();
+        let request = StorageRouteRequest {
+            slot: SessionSlot::Mc02,
+            expected_process: identity,
+            observed_process: None,
+            domain: StorageRouteDomain::CurrentUserRegistry,
+            target: StorageRouteTarget::HostAccountData,
+            action: StorageRouteAction::Read,
+        };
+        assert_eq!(
+            inspect_independent_storage_route_source(request).unwrap(),
+            RouteBoundaryInspection::Denied(StorageRouteBlocker::HostAccountBoundary),
+        );
     }
 
     #[cfg(not(windows))]

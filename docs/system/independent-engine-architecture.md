@@ -410,6 +410,38 @@ admission owner can authorize future lifecycle operations, and it
 continues to reject isolated launch/provision. No new state store,
 driver, filesystem I/O, HKCU writing or account/world access is added.
 
+## Read-only route inspection and legacy registry token diagnostics
+
+The existing Rust `independent_engine/inspection.rs` now connects
+`preflight_storage_route` to the canonical process and storage observer
+ports through `inspect_storage_route`. Invalid logical targets (MC01,
+another slot, host account data, unknown owner, unsupported official
+installation operations or stale caller identity) are denied **before
+either OS observer is invoked**. Candidate routes check exact PID +
+64-bit creation FILETIME, request domain-specific storage findings, and
+recheck process identity **and token category** afterwards. Process
+exit/token-category change rejects the complete observation.
+The result type is only `Denied` or `PendingNativeAcceptance`,
+never an access grant, provision right, or launch authorization. Unknown
+Roaming AppData, HKCU registry and namespace observations remain explicit.
+Self-reported all-positive observations still cannot unlock routing.
+
+In the existing Windows identity owner, read-only
+`inspect_legacy_token_virtualization_source` queries
+`TokenVirtualizationAllowed` and `TokenVirtualizationEnabled` on the
+token of the **pinned exact Windows process** and returns two sanitized
+booleans (or a failure). It does not open a registry hive, query
+`HKCU` from the host manager, touch account/profile files or claim
+a private registry view. These are **legacy Windows UAC file/registry
+virtualization flags**, not equivalent to AppContainer namespace
+separation or per-Minecraft account isolation. The native
+`inspect_independent_storage_route_source` currently composes the
+actual process observer with the deliberately all-`Unknown` storage
+adapter and is **not mounted** as a Tauri command. Rust fake-port
+regressions cover denied-before-I/O, stale process after storage,
+token changes, roaming gaps, host leaks and false positive reports;
+Windows/Rust execution is not yet available in this GitHub-only stage.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

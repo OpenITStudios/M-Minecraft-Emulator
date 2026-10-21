@@ -1,5 +1,32 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — process-bound route diagnostic inspection, 21 October 2026
+
+The canonical Rust inspection owner now exposes `inspect_storage_route`:
+it rejects host/peer/unknown/invalid routes without inspecting the OS,
+then checks pinned PID/creation FILETIME process identity before and
+after one storage observation. Any process exit or change of token
+category invalidates the report. The result is strictly diagnostic:
+`Denied` or `PendingNativeAcceptance`, carrying required, unresolved
+and dangerous boundary findings; even all-positive self-reported
+findings cannot authorize an OS operation. The existing desktop
+Windows identity owner provides an unmounted native wrapper using
+`WindowsProcessObserver` and `UnknownStorageObserver`.
+
+A separate source-only native function queries the pinned process's
+legacy `TokenVirtualizationAllowed` and `TokenVirtualizationEnabled`
+flags as two sanitized booleans. These legacy UAC values cannot prove
+private HKCU registry or AppContainer filesystem namespaces. No
+registry hive, game data, account token, or filesystem path is read.
+Rust fake-port and platform-negative tests are authored only,
+**NOT_EXECUTED** (no Windows/Rust compiler here). No CI, driver,
+service, `main`, Tauri route, launch, provision or profile mutation.
+
+**Next:** implement a strictly cooperating synthetic Windows registry
+boundary observation protocol and native-owned proof of isolation
+without accessing the host's HKCU or treating manager-side views
+as the target process's view.
+
 ## Independent engine — filesystem/registry routing policy, 21 October 2026
 
 **Source-first implementation:** extended canonical

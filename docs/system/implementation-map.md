@@ -25,6 +25,18 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+The read-only routing inspector is now
+`independent_engine/inspection.rs::inspect_storage_route`. It applies
+the canonical route policy before Windows observation, checks exact
+process identity/token category before and after storage inspection,
+and returns only **Denied** or **PendingNativeAcceptance** with explicit
+required/unresolved/dangerous surfaces. The desktop's existing
+`instance_identity.rs` exposes an unmounted source-only composition
+with the current all-Unknown storage adapter, plus a separate Win32
+read-only query for legacy UAC token virtualization flags. Those
+flags are NOT proof of HKCU registry isolation or official Minecraft
+sign-in, and the isolated Launch/Provision gate stays blocked.
+
 Independent filesystem and registry route **preflight** now lives
 in the existing `independent_engine/storage.rs` owner. Pure Rust
 `preflight_storage_route` explicitly rejects host/account data,

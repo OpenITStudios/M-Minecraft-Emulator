@@ -23,7 +23,9 @@ pub use fixture_wire::{
     SYNTHETIC_FRAME_BYTES,
 };
 pub use identity::{ProcessIdentity, SessionSlot};
-pub use inspection::{inspect_existing, SessionInspection};
+pub use inspection::{
+    inspect_existing, inspect_storage_route, RouteBoundaryInspection, SessionInspection,
+};
 pub use paths::{
     inspect_cooperative_paths, review_process_path_snapshot,
     BoundPathInspectionError, PathLocation, ProcessPathSnapshot,
