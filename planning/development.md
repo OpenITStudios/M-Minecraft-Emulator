@@ -6,8 +6,8 @@
 Box-only game data/setup recovery fixed. **722 source checks PASS**;
 native bytes from built `e2c80ad`, active engine unchanged.
 [Evidence](../docs/validation/native-pilot-localtest.md). **Product FAIL** remains.
-**Next:** review existing profiles and WAM/cache reuse. Four-account gameplay and
-live input unproven; no silent profile rewrite.
+**Next:** review local runtime upgrade: active build `f529d59` lacks the fixes;
+all three profiles lack the data rule. Four accounts confirmed for manual login.
 
 ## Windows-first efficiency — 20 October 2026
 

@@ -9,6 +9,33 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Runtime upgrade preflight — 21 October 2026
+
+At source `91c1de63cde683435200c4596c60488f7a9984fc`, the operator confirmed
+four distinct licensed accounts are available for manual sign-in. Read-only
+runtime inspection confirmed that the active developer session still uses build
+`f529d59`, not the corrected `e2c80ad` native bytes. All three owned profiles have
+an empty `WriteFilePath` query result. The explicit opt-in real-runtime test
+`actual_owned_session_inspects_three_slots` fails at `settings_verified`, so
+these profiles are **not ready for acceptance** under the current source contract.
+This failure is preserved rather than weakening the contract.
+
+The existing signed DLL reports private version `5.73.6-MIVU`, ABI `0x57230`,
+zero boxed processes across Windows sessions and Test Mode already active.
+No Minecraft process was observed. All 25 candidate artifact hashes and sizes
+match their build manifest. The current developer manager executable also
+builds successfully. No driver/service, certificate, profile or game was changed.
+
+The ignored `workspace/runtime-upgrade-review.json` records the exact old/new
+source and build identities, candidate manifest hash, proposed missing rule for
+02/03/04 and the existing journal-based restoration sequence. Candidate signing,
+service cutover and explicit profile review remain a separate privileged local
+test step; the unsigned candidate itself remains NOT_INSTALLABLE. Retain old
+payloads, service restoration journals and account-bearing data. Do not change
+boot security settings or automatically erase inherited cache to obtain a pass.
+Local inspection/build logs: `workspace/current-runtime-inspect.log` and
+`workspace/runtime-review-manager-build.log`. Four-account acceptance remains FAIL.
+
 ## Game data boundary and retained workspace recovery — 21 October 2026
 
 Source `0a8bdea49eb629f503236865fb0062488df9e68f` includes the data-profile
