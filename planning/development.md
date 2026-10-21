@@ -1,5 +1,25 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — coalesce native process pair reads, 22 October 2026
+
+Optimized the existing desktop read-only pair inspector to keep one pair of
+pinned Windows process HANDLEs for both Windows user/profile/session and
+AppContainer SID comparisons. The shared pure comparison helpers prevent
+diverging interpretations between the original individual IPC calls and
+the combined internal pair observation. The independent pair route now
+performs six process-handle opens instead of eight (two before, two inside
+the combined comparison, two after), while still checking exact PID/FILETIME
+and liveness before and after and returning only sanitized booleans.
+
+One Windows-only parity/stale-key regression is authored NOT_EXECUTED.
+This is neither a kernel/process isolator nor a Microsoft broker/account
+check, and does not enable Launch/Provision or read game data.
+No installer, Tauri command, service, CI or game profile mutation.
+
+**Next:** preserve native pair snapshot invariants and continue examining
+viable per-process Windows isolation without claiming app/gameplay proof.
+
+
 ## Independent engine — refuse zero process keys in storage evidence, 22 October 2026
 
 The canonical pure Rust `review_bound_storage_facts` now rejects PID=0

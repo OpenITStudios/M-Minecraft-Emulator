@@ -195,20 +195,19 @@ pub fn inspect_independent_process_pair_source(
     };
     let first_key = keys(first);
     let second_key = keys(second);
-    let context = compare_contexts(&first_key, &second_key)
-        .map_err(|err| {
-            #[cfg(windows)]
-            { map_native_process_error(err) }
-            #[cfg(not(windows))]
-            { let _ = err; NativePortError::NotImplemented }
-        })?;
-    let appcontainer = compare_appcontainer_identities(&first_key, &second_key)
-        .map_err(|err| {
-            #[cfg(windows)]
-            { map_native_process_error(err) }
-            #[cfg(not(windows))]
-            { let _ = err; NativePortError::NotImplemented }
-        })?;
+    // Read both sanitized comparisons using the SAME pair of pinned
+    // process handles instead of opening two fresh handle pairs.
+    let (context, appcontainer) = {
+        #[cfg(windows)]
+        {
+            windows::compare_pair(&first_key, &second_key)
+                .map_err(map_native_process_error)?
+        }
+        #[cfg(not(windows))]
+        {
+            return Err(NativePortError::NotImplemented);
+        }
+    };
     if observer.observe_exact(first)? != first_before
         || observer.observe_exact(second)? != second_before
     {
@@ -1054,28 +1053,17 @@ mod windows {
         Ok(containment)
     }
 
-    pub(super) fn compare_appcontainers(
-        left: &ProcessKey,
-        right: &ProcessKey,
-    ) -> io::Result<AppContainerComparison> {
-        let left_process = pin(left)?;
-        let right_process = pin(right)?;
-        let a = appcontainer_sid(&left_process)?;
-        let b = appcontainer_sid(&right_process)?;
-        live(&left_process)?;
-        live(&right_process)?;
+    // Inspecting the token and profile on already-pinned handles does not
+    // authenticate Microsoft/Minecraft accounts. It only returns booleans.
+    fn compare_appcontainer_values(a: Option<&[u8]>, b: Option<&[u8]>) -> AppContainerComparison {
         let both = a.is_some() && b.is_some();
-        Ok(AppContainerComparison {
+        AppContainerComparison {
             both_appcontainers: both,
             distinct_container_identities: both && a != b,
-        })
+        }
     }
 
-    pub(super) fn compare(left: &ProcessKey, right: &ProcessKey) -> io::Result<ContextComparison> {
-        let left_process = pin(left)?;
-        let right_process = pin(right)?;
-        let a = context(&left_process)?;
-        let b = context(&right_process)?;
+    fn compare_context_values(a: &Context, b: &Context) -> io::Result<ContextComparison> {
         let profile_equal = unsafe {
             CompareStringOrdinal(
                 a.profile.as_ptr(),
@@ -1088,13 +1076,56 @@ mod windows {
         if profile_equal == 0 {
             return Err(io::Error::last_os_error());
         }
-        live(&left_process)?;
-        live(&right_process)?;
         Ok(ContextComparison {
             same_windows_user: a.user == b.user,
             same_profile_directory: profile_equal == CSTR_EQUAL,
             same_windows_session: a.session == b.session,
         })
+    }
+
+    pub(super) fn compare_appcontainers(
+        left: &ProcessKey,
+        right: &ProcessKey,
+    ) -> io::Result<AppContainerComparison> {
+        let left_process = pin(left)?;
+        let right_process = pin(right)?;
+        let a = appcontainer_sid(&left_process)?;
+        let b = appcontainer_sid(&right_process)?;
+        live(&left_process)?;
+        live(&right_process)?;
+        Ok(compare_appcontainer_values(a.as_deref(), b.as_deref()))
+    }
+
+    pub(super) fn compare(left: &ProcessKey, right: &ProcessKey) -> io::Result<ContextComparison> {
+        let left_process = pin(left)?;
+        let right_process = pin(right)?;
+        let a = context(&left_process)?;
+        let b = context(&right_process)?;
+        let comparison = compare_context_values(&a, &b)?;
+        live(&left_process)?;
+        live(&right_process)?;
+        Ok(comparison)
+    }
+
+    /// One coherent pairwise read: only two pinned process HANDLEs for
+    /// user/profile/session and AppContainer identity, not two independent
+    /// opens per comparison. Keeps exact-handle liveness checks at the end.
+    pub(super) fn compare_pair(
+        left: &ProcessKey,
+        right: &ProcessKey,
+    ) -> io::Result<(ContextComparison, AppContainerComparison)> {
+        let left_process = pin(left)?;
+        let right_process = pin(right)?;
+        let first = context(&left_process)?;
+        let second = context(&right_process)?;
+        let first_container = appcontainer_sid(&left_process)?;
+        let second_container = appcontainer_sid(&right_process)?;
+        let context_result = compare_context_values(&first, &second)?;
+        let container_result =
+            compare_appcontainer_values(first_container.as_deref(), second_container.as_deref());
+        live(&left_process)?;
+        live(&right_process)?;
+        Ok((context_result, container_result))
     }
 
     #[cfg(test)]
@@ -1114,6 +1145,22 @@ mod windows {
                 created_file_time: created(&process).unwrap().to_string(),
             }
         }
+        #[test]
+        fn combined_native_pair_matches_separate_read_only_inspections() {
+            let key = own_key();
+            let (context, container) = compare_pair(&key, &key).unwrap();
+            assert_eq!(context, compare(&key, &key).unwrap());
+            assert_eq!(container, compare_appcontainers(&key, &key).unwrap());
+            assert!(!container.distinct_container_identities);
+
+            let stale = ProcessKey {
+                pid: key.pid,
+                created_file_time: "1".into(),
+            };
+            assert!(compare_pair(&key, &stale).is_err());
+            assert!(compare_pair(&stale, &key).is_err());
+        }
+
         #[test]
         fn actual_windows_context_is_private_and_rejects_stale_identity() {
             let key = own_key();
