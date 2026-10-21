@@ -31,6 +31,14 @@ test('PowerShell parses the full preparation script without execution', {skip:!w
   const result = ps(`$t=$null;$e=$null;[Management.Automation.Language.Parser]::ParseFile('${path}',[ref]$t,[ref]$e)|Out-Null;if($e.Count){$e|Out-String|Write-Error;exit 1}`);
   assert.equal(result.status, 0, result.stderr + result.stdout);
 });
+
+test('already-enabled Test Mode retains the reboot gate without another boot write', {skip:!windows}, () => {
+  const selection=source.split('\n').find(line=>line.includes('$data.state = if ($boot.testSigning'));
+  assert.ok(selection);
+  const result=ps(`$ErrorActionPreference='Stop';foreach($mode in @('Yes','No','ABSENT')){$boot=@{testSigning=$mode};$data=@{};${selection};$expected=if($mode -ceq 'Yes'){'REBOOT_REQUIRED_NO_SERVICE_CHANGES'}else{'SIGNED_TEST_COPY_READY_BOOT_UNCHANGED'};if($data.state -cne $expected){throw 'Unexpected preparation state'}};exit 0`);
+  assert.equal(result.status,0,result.stderr+result.stdout);
+  assert.doesNotMatch(selection,/bcdedit|Native|Save/);
+});
 test('bounded native runner preserves spaced arguments and rejects failure and quotes', {skip:!windows}, () => {
   const native = source.slice(source.indexOf('function Native('), source.indexOf('function Assert-Administrator'));
   const result = ps(`${native}

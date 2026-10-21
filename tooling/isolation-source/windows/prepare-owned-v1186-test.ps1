@@ -166,7 +166,8 @@ try {
         Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $session 'unsigned-engine-provenance.json')
         Copy-Item -LiteralPath $BuildReport -Destination (Join-Path $session 'unsigned-build-result.json')
         [IO.File]::WriteAllText((Join-Path $payload 'TEST-ONLY-NOT-FOR-DISTRIBUTION.txt'), 'Local development test signing only. Not a production release. See ../session.json. Never mix with official Sandboxie.')
-        $data.state = 'SIGNED_TEST_COPY_READY_BOOT_UNCHANGED'
+        # Existing Test Mode needs no boot write, but retain the manual reboot gate.
+        $data.state = if ($boot.testSigning -ceq 'Yes') { 'REBOOT_REQUIRED_NO_SERVICE_CHANGES' } else { 'SIGNED_TEST_COPY_READY_BOOT_UNCHANGED' }
         Save $data
     } else {
         $data = Get-Content -LiteralPath (Join-Path $session 'session.json') -Raw | ConvertFrom-Json
