@@ -27,6 +27,17 @@ synthetic-only result fields. Neither Windows Known Folder roaming
 redirection nor Education broker behavior is inferred from these checks.
 Updated MSVC/Windows execution is **NOT_EXECUTED** in ChatGPT/GitHub.
 
+**Current source review:** `tooling/acceptance/evaluate-appcontainer-isolation.mjs`
+is a strict-schema, offline, non-authoritative reviewer for the synthetic
+JSON output. It separates privately persistent fixture canaries from
+`APPDATA` and `FOLDERID_RoamingAppData` path observations. Even when
+both paths look private, the reviewer never claims actual known-folder
+file-access virtualization, Microsoft authentication or Minecraft readiness;
+`isolatedLaunchAllowed` is always false. Negative/malformed evidence is
+rejected; no raw account, path or SID fields are accepted. Node unit tests
+are included in `test:native-feasibility`. These are source changes, not
+new Windows or Minecraft acceptance.
+
 **Next:** execute this opt-in Windows synthetic fixture on an isolated
 Windows target and investigate supported private `RoamingAppData` routing;
 if the Win32 path remains host-wide, record NO-GO for the unmodified game

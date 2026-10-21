@@ -44,6 +44,12 @@ still separately unproven; this is not a game-ready storage provider.
 The Windows runner `test-appcontainer-isolation.ps1` validates the
 synthetic-only output fields and an explicit negative token-control path.
 
+Offline diagnostics for the synthetic native fixture are owned by
+`tooling/acceptance/evaluate-appcontainer-isolation.mjs` and its Node tests.
+The reviewer reports only path observations, rejects unexpected private
+fields, and cannot authorize a new game launch even if synthetic data passes.
+It is not a second lifecycle state store or runtime provider.
+
 The current isolation experiment is a native AppContainer fixture in
 `tooling/acceptance/windows/appcontainer-probe.cpp`, explicitly compiled/run by
 `test-appcontainer-isolation.ps1`. It launches only itself, validates two native

@@ -23,6 +23,22 @@ of the Win32 Known Folder API. Do not use these booleans to unblock a provider.
 
 
 
+The offline `evaluate-appcontainer-isolation.mjs` reviewer classifies a
+positive, sanitized fixture JSON report without treating it as verified
+Windows acceptance. `isolatedLaunchAllowed` remains false even if both
+roaming paths appear private. It rejects unexpected fields (including raw
+profile paths/SIDs), incomplete reports, malformed booleans and false gameplay
+claims. Its Node tests are included in `npm run test:native-feasibility`.
+
+After an explicit Windows fixture run, inspect the generated JSON using:
+
+```sh
+node tooling/acceptance/evaluate-appcontainer-isolation.mjs workspace/appcontainer-probe-<id>/result.json
+```
+
+This review is offline and never reads or writes Microsoft accounts, Minecraft
+worlds or Windows profiles. It does not replace direct runtime observation.
+
 From the repository root, explicitly run:
 
 ```powershell

@@ -256,6 +256,19 @@ and no Minecraft/account data is inspected. If known-folder roaming still
 points outside the container, the AppContainer candidate remains blocked for
 unmodified Education regardless of successful synthetic private-directory tests.
 
+### Strict offline AppContainer report review — 21 October 2026
+
+`tooling/acceptance/evaluate-appcontainer-isolation.mjs` provides a pure
+offline evaluation of the opt-in synthetic JSON report. A positive fixture
+requires exact schema, all expected boolean fields, synthetic proof flags
+and the explicit `NOT_EXECUTED` Minecraft fields. The reviewer can report
+whether roaming environment and known-folder paths were observed inside
+the synthetic profile, but it never claims file-access virtualization,
+Microsoft authentication, game compatibility or new-session admission.
+Even all-private path observations cannot authorize production launch.
+Auth/known-folder effects and Windows fixture execution remain unknown
+until tested. The result is not a durable state registry.
+
 ### Education-specific facts gathered in this batch
 
 The official v1.19.53 changelog records migration from ADAL to MSAL. This is a

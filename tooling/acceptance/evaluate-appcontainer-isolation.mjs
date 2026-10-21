@@ -1,0 +1,78 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Diagnostic-only review. Synthetic fixture JSON is self-reported data,
+// not an attested Windows proof or permission to launch Minecraft.
+// Reject extra fields so raw SIDs, paths and other private data cannot be
+// accidentally carried into the sanitized diagnostic response.
+export function evaluateAppContainerIsolation(report) {
+  const invalid = () => { throw new TypeError("Invalid synthetic AppContainer proof; no candidate decision can be made."); };
+  if (!report || typeof report !== "object" || Array.isArray(report)) invalid();
+  const booleanFields = [
+    "syntheticOnly", "distinctAppContainerTokens", "concurrentProcesses",
+    "privateMutexNamespaces", "ownStorageReadable", "peerStorageDenied",
+    "hostCanaryDenied", "independentNormalStop", "profilesRemoved",
+    "localAppDataEnvironmentRedirected", "localAppDataKnownFolderRedirected",
+    "roamingEnvironmentUnderContainer", "roamingKnownFolderQuerySucceeded",
+    "roamingKnownFolderUnderContainer", "syntheticPrivateRoamingWritten",
+    "syntheticPrivateRoamingPeerDenied", "syntheticPrivateRoamingPersistsAfterRestart"
+  ];
+  const allowed = new Set(["schema", "result", "minecraftRoamingCompatibility", "minecraftAcceptance", ...booleanFields]);
+  if (Object.keys(report).length !== allowed.size ||
+      Object.keys(report).some(key => !allowed.has(key)) ||
+      report.schema !== 1 || report.result !== "PASS" ||
+      report.minecraftRoamingCompatibility !== "NOT_EXECUTED" ||
+      report.minecraftAcceptance !== "NOT_EXECUTED" ||
+      booleanFields.some(key => typeof report[key] !== "boolean") ||
+      (report.roamingKnownFolderUnderContainer && !report.roamingKnownFolderQuerySucceeded)) invalid();
+  const syntheticRequired = [
+    "syntheticOnly", "distinctAppContainerTokens", "concurrentProcesses",
+    "privateMutexNamespaces", "ownStorageReadable", "peerStorageDenied",
+    "hostCanaryDenied", "independentNormalStop", "profilesRemoved",
+    "syntheticPrivateRoamingWritten", "syntheticPrivateRoamingPeerDenied",
+    "syntheticPrivateRoamingPersistsAfterRestart"
+  ];
+  if (syntheticRequired.some(key => report[key] !== true)) invalid();
+
+  const risks = [];
+  if (!report.localAppDataEnvironmentRedirected) risks.push("LOCAL_APPDATA_ENV_NOT_REDIRECTED");
+  if (!report.localAppDataKnownFolderRedirected) risks.push("LOCAL_APPDATA_KNOWN_FOLDER_NOT_REDIRECTED");
+  if (!report.roamingEnvironmentUnderContainer) risks.push("ROAMING_ENV_OUTSIDE_SYNTHETIC_PROFILE");
+  if (!report.roamingKnownFolderQuerySucceeded) {
+    risks.push("ROAMING_KNOWN_FOLDER_NOT_OBSERVED");
+  } else if (!report.roamingKnownFolderUnderContainer) {
+    risks.push("ROAMING_KNOWN_FOLDER_OUTSIDE_SYNTHETIC_PROFILE");
+  }
+  const pathObservation = !report.roamingKnownFolderQuerySucceeded
+    ? "INCOMPLETE"
+    : report.roamingEnvironmentUnderContainer && report.roamingKnownFolderUnderContainer
+      ? "PRIVATE_PATHS_REPORTED_ONLY" : "NOT_FULLY_PRIVATE_PATHS_REPORTED";
+  return {
+    schema: 1,
+    scope: "INDEPENDENT_APPCONTAINER_SYNTHETIC_REVIEW",
+    inputClass: "UNATTESTED_SYNTHETIC_FIXTURE_JSON",
+    syntheticIsolation: "REPORTED_PASS",
+    syntheticPrivateStorageAcrossProcessRestart: "REPORTED_PASS",
+    roamingPathObservation: pathObservation,
+    knownFolderDataAccessProven: false,
+    educationAuthenticationVerified: false,
+    productionProviderSelected: false,
+    productAcceptance: "NOT_EXECUTED",
+    isolatedLaunchAllowed: false,
+    risks
+  };
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    if (process.argv.length !== 3) {
+      throw new TypeError("Usage: node evaluate-appcontainer-isolation.mjs <synthetic-result.json>");
+    }
+    const report = JSON.parse(readFileSync(resolve(process.argv[2]), "utf8"));
+    console.log(JSON.stringify(evaluateAppContainerIsolation(report), null, 2));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  }
+}
