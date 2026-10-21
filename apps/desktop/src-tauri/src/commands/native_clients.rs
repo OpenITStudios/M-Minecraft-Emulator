@@ -16,6 +16,19 @@ use std::{io, sync::Mutex};
 // This limits manager-created CPU/RAM peaks, not Minecraft CPU or GPU usage.
 static MANAGER_RESOURCE_LOCK: Mutex<()> = Mutex::new(());
 
+#[tauri::command]
+pub async fn desktop_compare_process_contexts(
+    left: crate::engine::instance_identity::ProcessKey,
+    right: crate::engine::instance_identity::ProcessKey,
+) -> Result<crate::engine::instance_identity::ContextComparison, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        run_manager_operation(|| crate::engine::instance_identity::compare_contexts(&left, &right))
+    })
+    .await
+    .map_err(|_| "Windows context inspection task failed".to_string())?
+    .map_err(|error| error.to_string())
+}
+
 type SurfaceFailure = crate::engine::manager_settings::OperationFailure;
 fn surface_failure(error: impl std::fmt::Display) -> SurfaceFailure {
     SurfaceFailure::from(io::Error::other(error.to_string()))

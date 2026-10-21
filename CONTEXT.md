@@ -10,7 +10,12 @@ Product direction updated: 2026-10-14. This file contains **stable product and r
 owned fork as launch providers. An owned fork is not an independent engine.
 Desktop admission rejects new fork profile creation and isolated launches.
 Existing session observation, window recovery and normal close remain available
-to preserve data. No independent four-session provider is implemented.
+to preserve data. No independent four-session provider is implemented. The independent direction
+is a Minecraft-specific Windows engine; the first read-only context inspector
+uses Windows process/token/profile APIs without Sandboxie. Per-user RunAs is not
+selected as the authentication solution; see
+[independent architecture](docs/system/architecture.md) and
+[primary-source feasibility](docs/system/independent-isolation.md).
 Do not resume fork activation, certificate enablement or VM routes as an implied
 fallback. See [retirement register](docs/system/legacy-retirement.md) and
 [current continuation](planning/development.md).

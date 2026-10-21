@@ -9,6 +9,48 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Lightweight Windows Architecture
 
+## Independent engine direction - 21 October 2026
+
+The target is four persistent, concurrently playable Education sessions, with
+four distinct licensed accounts and browser-style tabs. Sandboxie and its fork
+are retired as new-session providers. No independent launch/isolation provider
+is implemented yet. Historical implementation descriptions below do not select
+an active Sandboxie route. See [retirement](legacy-retirement.md).
+
+Use a Minecraft-specific engine, independently implemented against documented
+Windows facilities. Reuse architectural ideas, not Sandboxie source, private
+ABI, driver, service, DLL, configuration or feature-certification dependencies.
+A Windows service or driver is not selected simply because the old engine had
+one; establish a concrete requirement and prove compatibility first.
+
+| Responsibility | Owner and required behavior |
+| --- | --- |
+| Lifecycle and admission | Existing `engine/runtime-core/` owns eventual independent session policy. Extend it when a viable adapter exists; do not reuse VM readiness/snapshot semantics for native games or create another ready flag. The desktop slot admission table keeps both retired launch routes blocked. |
+| Native process adapter | `apps/desktop/` owns Windows calls. Verify the official image, exact PID/creation identity and actual execution context. Never infer independent accounts from launch success, a title, or four PIDs. The old fork provider is recovery-only, not the new implementation. |
+| Persistent identity/data | A session must have a proven persistent storage/authentication context. Four folders or four aliases for the same Windows token are insufficient evidence. Do not clone tokens, implement Microsoft sign-in, or silently move account-bearing profiles/worlds. |
+| Presentation | Existing workspace shows the selected verified process, preserves every other process, rolls back a failed switch and restores windows on exit/failure. Selection must never call launch, stop or profile setup for an already admitted session. Retain fast handle-based checks; expensive signature/profile discovery belongs to admission. |
+| Recovery and health | Process alive, responsive window, actual rendering, signed-in account and playable world are separate observations. Unknown or denied observations remain unknown. No automatic repeated relaunch, whole-group termination, unbounded helper wait or successful-state cache may conceal failure. |
+| Resource use | Prefer native handles and events over one PowerShell process per tab switch or a permanent polling daemon. Any later background resource policy must be reversible and measured; no thread suspension, injected rendering control or invented FPS savings. |
+| Migration/package | Existing identities and data paths stay compatible. Do not package the retired engine as the replacement. Installer, service teardown and account-data migration need separate proven recovery; source retirement alone does not uninstall anything. |
+
+The first implemented independent foundation is read-only process-context
+comparison in the existing `instance_identity.rs`: handles remain pinned while
+Windows token user, configured profile directory and Windows session are compared.
+Only three booleans leave the native module. This is diagnostic evidence, not a
+launcher, isolation mechanism, credential store or admission authority.
+
+[Primary-source assessment](independent-isolation.md) records why a simple RunAs
+launcher is not selected: WAM's documented restrictions, singleton namespace scope,
+desktop access and integrity permissions remain material constraints. Education's
+actual authentication path is UNKNOWN. The next decision is a source-supported
+isolation approach with a justified two-session experiment; do not disguise a
+RunAs wrapper or a speculative custom driver as the completed engine.
+
+## Historical implementation - superseded
+
+The remaining sections describe earlier pilot implementation and explain retained
+source. Their Sandboxie route selection and availability statements are historical.
+
 ## Product outcome and one chosen implementation
 
 The user experience goal is **ADB-like lightweight control and MEmu-like

@@ -18,7 +18,12 @@ inventory below is historical dependency navigation, not authorization to activa
 the fork or enable certificates. See [retirement register](legacy-retirement.md).
 `apps/desktop/src-tauri/src/engine/instance_catalog.rs` blocks isolated Launch and
 Provision in both old routes; existing-session recovery remains available.
-**No independent replacement provider exists.**
+**No independent replacement provider exists.** Its first read-only foundation is
+`apps/desktop/src-tauri/src/engine/instance_identity.rs` →
+`desktop_compare_process_contexts` → `app/bridge/processContext.ts` → optional
+Settings diagnostics. It compares pinned process contexts without the retired
+provider, secrets, profile-file reads or launch authority. See
+[architecture](architecture.md) and [feasibility](independent-isolation.md).
 
 ## Locate work by problem
 

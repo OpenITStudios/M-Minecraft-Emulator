@@ -29,6 +29,7 @@ pub fn run() {
         // native-first pilot. Source and account-bearing guest data remain.
         // Re-enabling a route requires an explicit product decision.
         .invoke_handler(tauri::generate_handler![
+            commands::native_clients::desktop_compare_process_contexts,
             commands::native_clients::desktop_present_workspace,
             commands::native_clients::desktop_update_workspace,
             commands::native_clients::desktop_release_workspace,

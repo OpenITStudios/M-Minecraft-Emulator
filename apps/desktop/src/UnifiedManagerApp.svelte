@@ -6,11 +6,24 @@
   import type {ClientId} from './app/bridge/ownedProviderApi.js';
   import type {OwnedSnapshot} from './app/bridge/ownedProviderApi.js';
   import {managerConfiguration,operationIssue,type ManagerConfiguration} from './app/bridge/managerConfiguration.js';
+  import {compareProcessContexts,type ContextComparison} from './app/bridge/processContext.js';
   let config:ManagerConfiguration|null=null,snapshot:OwnedSnapshot|null=null;
   let page:'clients'|'settings'='clients',busy=true,checked=false;
   let issue:ReturnType<typeof operationIssue>|null=null;
   let workspace:NativeWorkspace,panel:OwnedManagerPanel,selectedClient:ClientId|null=null,workspaceBusy=false;
   let tabStates:Record<ClientId,string>={"01":"Checking","02":"Checking","03":"Checking","04":"Checking"};
+  let contextClient='02',contextResult:ContextComparison|null=null,contextError='';
+  $: contextTarget=snapshot?.clients.find(slot=>slot.clientId===contextClient)?.processes;
+  async function inspectContext(){
+    if(busy||workspaceBusy)return;
+    contextResult=null;contextError='';
+    const native=snapshot?.nativeProcesses,other=contextTarget;
+    if(native?.length!==1||other?.length!==1){contextError='Two unambiguous observed processes are required. New isolated launches remain disabled.';return;}
+    busy=true;
+    try{contextResult=await compareProcessContexts(native[0],other[0]);}
+    catch{contextError='Windows identity could not be checked. The process may have exited, its identity may have changed, or access may be denied. No isolation result is established.';}
+    finally{busy=false;}
+  }
   async function navigate(next:'clients'|'settings'){
     if(busy||workspaceBusy)return;
     busy=true;
@@ -18,7 +31,7 @@
     catch(error){issue=operationIssue(error);}finally{busy=false;}
   }
   async function prepare(){
-    busy=true;checked=false;issue=null;
+    busy=true;checked=false;issue=null;contextResult=null;contextError='';
     try{config=await managerConfiguration.load();snapshot=config.observation;checked=!!snapshot;if(config.engineError)issue=operationIssue(config.engineError);await tick();if(snapshot&&workspace){try{await workspace.reconcile(snapshot);}catch(error){issue=operationIssue(error);}}}
     catch(e){snapshot=null;issue=operationIssue(e);}finally{busy=false;}
   }
@@ -55,6 +68,13 @@
       {/if}
     </div>
     {#if page==='settings'}
+      <section class="um-settings"><details><summary>Independent engine diagnostics</summary>
+        <p>Read-only comparison of Minecraft 01 and an existing observed process. This checks Windows identity only; it does not prove separate Minecraft accounts or launch a session.</p>
+        <label>Compare with <select bind:value={contextClient} disabled={busy} on:change={()=>{contextResult=null;contextError='';}}><option value="02">Minecraft 02</option><option value="03">Minecraft 03</option><option value="04">Minecraft 04</option></select></label>
+        <button class="cm-button cm-secondary" disabled={busy||workspaceBusy||snapshot?.nativeProcesses.length!==1||contextTarget?.length!==1} on:click={inspectContext}>Check Windows identity</button>
+        {#if contextResult}<p role="status">Last explicit check: Windows user {contextResult.sameWindowsUser?'same':'different'}; configured profile directory {contextResult.sameProfileDirectory?'same':'different'}; Windows session {contextResult.sameWindowsSession?'same':'different'}. Processes may change after this check. Account isolation remains unproven.</p>{/if}
+        {#if contextError}<p role="alert">{contextError}</p>{/if}
+      </details></section>
       <section class="um-settings"><h2>Automatic setup</h2><p>No folders or executable files to choose. We check the installed game and engine before use.</p>
         <div class="um-setting"><div><h3>Minecraft Education</h3><p>{busy?'Checking installation…':config?.targetError?'Installation needs attention. Repair Minecraft Education, then check again.':config?.detectedMinecraft?'Installed · detected automatically':'Not detected. Install Minecraft Education Desktop, then check again.'}</p></div></div>
         <div class="um-setting"><div><h3>Engine</h3><p>{busy?'Checking engine…':checked?'Connected · verified for this session':'Unavailable. Check Diagnostics for the reason.'}</p></div></div>

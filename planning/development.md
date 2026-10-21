@@ -1,16 +1,22 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
-## Sandboxie retirement / independent provider - 21 October 2026
+## Independent engine foundation - 21 October 2026
 
-**ACTIVE**, base `1be9269`; user superseded fork/certificate route.
-Boundary: [retirement register](../docs/system/legacy-retirement.md).
-Desktop blocks isolated Launch/Provision on both old routes; data and existing
-session recovery remain. Independent provider NOT_IMPLEMENTED. Earlier tab and
-aperture recovery improvements are retained; no four-client acceptance.
-Desktop verification PASS: 185 frontend + 78 Rust; 8 opt-in ignored.
-Legacy receipt unchanged regression PASS; full suite stopped on assembler EPERM.
-**Next:** assess Windows per-user process/profile/desktop feasibility; establish
-singleton behavior before a two-session experiment or four-account login.
+**ACTIVE**, base `79b93ae76c03ff5d9ca128264511d2c145a0cde9`.
+User selected an independently implemented Minecraft-specific engine. Sandboxie
+launches stay retired; existing accounts/worlds/services remain untouched.
+[Architecture](../docs/system/architecture.md) and
+[API findings](../docs/system/independent-isolation.md) own the design.
+First implementation: pinned read-only Windows process context comparison in
+existing `instance_identity.rs`, typed IPC and opt-in Settings diagnostics.
+Returns booleans only; no launch/adoption/account-isolation claim or new state store.
+RunAs is not a selected production solution: WAM and singleton scope constraints;
+the Education authentication implementation remains UNKNOWN.
+Desktop verification PASS: 188 frontend + 80 Rust; 8 ignored. Two real Windows
+identity/fixture tests PASS; cross-user/game/authentication NOT_EXECUTED.
+**Next:** establish the official game's supported singleton/authentication route
+and choose a viable independent isolation mechanism before implementing launch.
+Independent provider, different-user runtime and four-client acceptance unproven.
 
 ## Windows-first efficiency — 20 October 2026
 

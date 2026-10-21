@@ -1,6 +1,346 @@
-//! Tiny identity parsing shared by eligible client windows.
-//! This validates format and nonzero values only; it is never enough to
-//! establish Sandboxie membership, an Education signature, or gameplay.
+//! Identity parsing and read-only Windows process-context evidence.
+//! Context inspection proves neither isolation, an Education signature nor gameplay.
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProcessKey {
+    pub pid: u32,
+    pub created_file_time: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextComparison {
+    pub same_windows_user: bool,
+    pub same_profile_directory: bool,
+    pub same_windows_session: bool,
+}
+
+// A comparison never grants launch/window authority or asserts Microsoft login isolation.
+pub fn compare_contexts(
+    left: &ProcessKey,
+    right: &ProcessKey,
+) -> std::io::Result<ContextComparison> {
+    #[cfg(windows)]
+    {
+        windows::compare(left, right)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (left, right);
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Windows process context is unavailable",
+        ))
+    }
+}
+
+#[cfg(windows)]
+mod windows {
+    use super::{ContextComparison, ProcessKey};
+    use std::{io, mem::size_of, ptr};
+    use windows_sys::Win32::{
+        Foundation::{
+            CloseHandle, GetLastError, ERROR_INSUFFICIENT_BUFFER, FILETIME, HANDLE, WAIT_TIMEOUT,
+        },
+        Globalization::{CompareStringOrdinal, CSTR_EQUAL},
+        Security::{
+            GetLengthSid, GetTokenInformation, IsValidSid, TokenSessionId, TokenUser, TOKEN_QUERY,
+            TOKEN_USER,
+        },
+        System::Threading::{
+            GetProcessTimes, OpenProcess, OpenProcessToken, WaitForSingleObject,
+            PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+        },
+        UI::Shell::GetUserProfileDirectoryW,
+    };
+
+    struct Handle(HANDLE);
+    impl Drop for Handle {
+        fn drop(&mut self) {
+            unsafe {
+                CloseHandle(self.0);
+            }
+        }
+    }
+    fn invalid(message: &'static str) -> io::Error {
+        io::Error::new(io::ErrorKind::InvalidData, message)
+    }
+    fn live(process: &Handle) -> io::Result<()> {
+        match unsafe { WaitForSingleObject(process.0, 0) } {
+            WAIT_TIMEOUT => Ok(()),
+            0 => Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "Observed process has exited",
+            )),
+            _ => Err(io::Error::last_os_error()),
+        }
+    }
+    fn created(process: &Handle) -> io::Result<u64> {
+        let mut times = [FILETIME {
+            dwLowDateTime: 0,
+            dwHighDateTime: 0,
+        }; 4];
+        let [a, b, c, d] = &mut times;
+        if unsafe { GetProcessTimes(process.0, a, b, c, d) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok((u64::from(a.dwHighDateTime) << 32) | u64::from(a.dwLowDateTime))
+    }
+    fn pin(key: &ProcessKey) -> io::Result<Handle> {
+        let expected = key
+            .created_file_time
+            .parse::<u64>()
+            .map_err(|_| invalid("Invalid process creation time"))?;
+        if key.pid == 0 || expected == 0 {
+            return Err(invalid("Invalid process identity"));
+        }
+        let raw = unsafe {
+            OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+                0,
+                key.pid,
+            )
+        };
+        if raw.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        let process = Handle(raw);
+        if created(&process)? != expected {
+            return Err(invalid("Process creation time changed"));
+        }
+        live(&process)?;
+        Ok(process)
+    }
+    struct Context {
+        user: Vec<u8>,
+        profile: Vec<u16>,
+        session: u32,
+    }
+    fn context(process: &Handle) -> io::Result<Context> {
+        let mut raw = ptr::null_mut();
+        if unsafe { OpenProcessToken(process.0, TOKEN_QUERY, &mut raw) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let token = Handle(raw);
+        let mut needed = 0;
+        let first =
+            unsafe { GetTokenInformation(token.0, TokenUser, ptr::null_mut(), 0, &mut needed) };
+        if first != 0
+            || unsafe { GetLastError() } != ERROR_INSUFFICIENT_BUFFER
+            || needed < size_of::<TOKEN_USER>() as u32
+            || needed > 65536
+        {
+            return Err(invalid("Windows token user size is unavailable"));
+        }
+        // Token structures contain pointers and require native alignment.
+        let mut buffer = vec![0usize; (needed as usize).div_ceil(size_of::<usize>())];
+        if unsafe {
+            GetTokenInformation(
+                token.0,
+                TokenUser,
+                buffer.as_mut_ptr().cast(),
+                needed,
+                &mut needed,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        let sid = unsafe { (*(buffer.as_ptr().cast::<TOKEN_USER>())).User.Sid };
+        if unsafe { IsValidSid(sid) } == 0 {
+            return Err(invalid("Invalid Windows token user"));
+        }
+        let length = unsafe { GetLengthSid(sid) } as usize;
+        if !(8..=68).contains(&length) {
+            return Err(invalid("Invalid Windows token user length"));
+        }
+        let user = unsafe { std::slice::from_raw_parts(sid.cast::<u8>(), length) }.to_vec();
+        let mut session = 0u32;
+        if unsafe {
+            GetTokenInformation(
+                token.0,
+                TokenSessionId,
+                (&mut session as *mut u32).cast(),
+                size_of::<u32>() as u32,
+                &mut needed,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        let mut count = 0;
+        let first = unsafe { GetUserProfileDirectoryW(token.0, ptr::null_mut(), &mut count) };
+        if first != 0
+            || unsafe { GetLastError() } != ERROR_INSUFFICIENT_BUFFER
+            || !(2..=32768).contains(&count)
+        {
+            return Err(invalid("Windows profile directory is unavailable"));
+        }
+        let mut profile = vec![0u16; count as usize];
+        if unsafe { GetUserProfileDirectoryW(token.0, profile.as_mut_ptr(), &mut count) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let end = profile
+            .iter()
+            .position(|&c| c == 0)
+            .ok_or_else(|| invalid("Invalid Windows profile directory"))?;
+        if end == 0 {
+            return Err(invalid("Empty Windows profile directory"));
+        }
+        profile.truncate(end);
+        Ok(Context {
+            user,
+            profile,
+            session,
+        })
+    }
+    pub(super) fn compare(left: &ProcessKey, right: &ProcessKey) -> io::Result<ContextComparison> {
+        let left_process = pin(left)?;
+        let right_process = pin(right)?;
+        let a = context(&left_process)?;
+        let b = context(&right_process)?;
+        let profile_equal = unsafe {
+            CompareStringOrdinal(
+                a.profile.as_ptr(),
+                a.profile.len() as i32,
+                b.profile.as_ptr(),
+                b.profile.len() as i32,
+                1,
+            )
+        };
+        if profile_equal == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        live(&left_process)?;
+        live(&right_process)?;
+        Ok(ContextComparison {
+            same_windows_user: a.user == b.user,
+            same_profile_directory: profile_equal == CSTR_EQUAL,
+            same_windows_session: a.session == b.session,
+        })
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        fn own_key() -> ProcessKey {
+            let process = Handle(unsafe {
+                OpenProcess(
+                    PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+                    0,
+                    std::process::id(),
+                )
+            });
+            assert!(!process.0.is_null());
+            ProcessKey {
+                pid: std::process::id(),
+                created_file_time: created(&process).unwrap().to_string(),
+            }
+        }
+        #[test]
+        fn actual_windows_context_is_private_and_rejects_stale_identity() {
+            let key = own_key();
+            let comparison = compare(&key, &key).unwrap();
+            assert_eq!(
+                comparison,
+                ContextComparison {
+                    same_windows_user: true,
+                    same_profile_directory: true,
+                    same_windows_session: true
+                }
+            );
+            let json = serde_json::to_value(comparison).unwrap();
+            assert_eq!(json.as_object().unwrap().len(), 3);
+            assert!(json
+                .as_object()
+                .unwrap()
+                .values()
+                .all(|value| value.is_boolean()));
+            assert!(compare(
+                &ProcessKey {
+                    pid: key.pid,
+                    created_file_time: "1".into()
+                },
+                &key
+            )
+            .is_err());
+            assert!(compare(
+                &ProcessKey {
+                    pid: 0,
+                    created_file_time: key.created_file_time.clone()
+                },
+                &key
+            )
+            .is_err());
+        }
+
+        #[test]
+        fn actual_child_identity_is_pinned_without_controlling_its_lifetime() {
+            use std::{
+                os::windows::process::CommandExt,
+                process::{Child, Command, Stdio},
+            };
+            struct Fixture(Child);
+            impl Drop for Fixture {
+                fn drop(&mut self) {
+                    let _ = self.0.kill();
+                    let _ = self.0.wait();
+                }
+            }
+            let mut fixture = Fixture(
+                Command::new(crate::engine::native_clients::system_powershell().unwrap())
+                    .args([
+                        "-NoProfile",
+                        "-NonInteractive",
+                        "-Command",
+                        "Start-Sleep -Seconds 60",
+                    ])
+                    .creation_flags(0x08000000)
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .unwrap(),
+            );
+            let process = Handle(unsafe {
+                OpenProcess(
+                    PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+                    0,
+                    fixture.0.id(),
+                )
+            });
+            assert!(!process.0.is_null());
+            let child_key = ProcessKey {
+                pid: fixture.0.id(),
+                created_file_time: created(&process).unwrap().to_string(),
+            };
+            let parent_key = own_key();
+            assert_eq!(
+                compare(&parent_key, &child_key).unwrap(),
+                ContextComparison {
+                    same_windows_user: true,
+                    same_profile_directory: true,
+                    same_windows_session: true,
+                }
+            );
+            drop(pin(&child_key).unwrap());
+            assert!(
+                fixture.0.try_wait().unwrap().is_none(),
+                "Releasing observation must not terminate a process"
+            );
+            fixture.0.kill().unwrap();
+            fixture.0.wait().unwrap();
+            // Keep the original handle alive: a dead identity must not be replaced by PID reuse.
+            assert_eq!(
+                compare(&parent_key, &child_key).unwrap_err().kind(),
+                io::ErrorKind::NotFound
+            );
+            assert_eq!(live(&process).unwrap_err().kind(), io::ErrorKind::NotFound);
+        }
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WindowIdentity {
     pub pid: u32,
