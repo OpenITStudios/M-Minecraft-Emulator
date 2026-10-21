@@ -25,6 +25,16 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+A new non-authorizing
+`independent_engine/image_provenance.rs::review_image_provenance`
+checks the gap between WinVerifyTrust on-disk success, a real
+leaf-certificate SHA-256, an independently reviewed official
+publisher policy, a proved loaded PE-section/file binding and
+package provenance. The default signer allowlist is **empty**;
+therefore a trusted generic signature cannot become Minecraft
+publisher evidence. The result is always `PendingImageProvenance`
+and never unlocks the existing Launch/Provision admission.
+
 The existing desktop process identity owner now offers an
 unmounted, read-only
 `instance_identity.rs::inspect_process_image_trust_source`.

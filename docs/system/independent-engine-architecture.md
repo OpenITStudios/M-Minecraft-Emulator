@@ -737,6 +737,40 @@ publisher policy and the real process image before returning a
 publisher-specific fact. Any such fact remains diagnostic until
 actual Windows and Minecraft acceptance are separately executed.
 
+## Publisher signer and loaded-image evidence gate — 22 October 2026
+
+The independent Rust domain adds
+`independent_engine/image_provenance.rs::review_image_provenance`.
+This is a **pure, non-authorizing reviewer**. It requires an exact
+process PID/creation FILETIME, on-disk Authenticode trust, a
+Windows-reported SHA-256 fingerprint of the **leaf signer
+certificate**, a reviewed policy derived from an independently
+obtained official Minecraft Education release, a proven mapping
+from the running process's PE section to the verified file object,
+and independently reviewed package provenance.
+
+No official certificate fingerprint or publisher name is guessed
+or hardcoded. The default publisher policy is empty, and
+`inspect_process_image_trust_source` currently does not extract
+signer certificate identity or prove loaded section identity.
+Therefore **all real source observations retain explicit gaps**.
+On-disk signature trust, an unsigned basename/filename, a valid
+Microsoft account session, or a generic Microsoft-signed system
+binary is not proof that the running executable is official
+Minecraft Education. Even a fabricated all-positive report returns
+`PendingImageProvenance`, never a verified publisher/launch flag.
+
+The next Windows adapter milestone is to extract the actual signer
+certificate from a successfully verified WinTrust provider state
+and inspect only its SHA-256 DER fingerprint while the trust state
+is alive. That extraction must fail closed for missing signer,
+multi-signature ambiguity, unsupported catalog/Store packages and
+revocation uncertainty, and be tied to the exact file handle.
+Separately, a supported loaded-image/file-object identity technique
+is required before attributing the on-disk signature to a running
+process. No signer parsing is attempted through file extensions,
+certificate subject display strings, WAM, account caches or UI paths.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

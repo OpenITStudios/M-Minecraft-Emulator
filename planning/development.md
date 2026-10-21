@@ -1,5 +1,31 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — signer identity and running image policy, 22 October 2026
+
+Added `engine/runtime-core/src/independent_engine/image_provenance.rs`
+to the existing Rust domain: an explicitly non-authorizing,
+source-scoped image/signature review. It rejects mismatched process
+identity, synthetic signer fingerprints and zero digest, and
+requires individually audited Authenticode trust, signer leaf
+SHA-256 fingerprint, reviewed official release policy, true
+mapped-PE file identity and package provenance. No issuer name or
+certificate hash is invented or activated; the allowlist starts
+empty. Six Rust regression tests authored **NOT_EXECUTED**.
+
+**Important:** the current Windows adapter still reports
+`OfficialGamePublisher::NotAttested`; it does not obtain the
+signer fingerprint nor prove the loaded process section is
+identical to the inspected disk file. All conclusions remain
+`PendingImageProvenance` and Launch/Provision stays blocked.
+No account, registry, WAM, world, installer, driver, Tauri route,
+`main` or GitHub Actions changes.
+
+**Next:** use reviewed WinTrust provider state to collect a signer
+certificate fingerprint from the exact pinned file, then address
+loaded-image/file provenance on supported Windows. Do not assume
+that signer display name alone establishes official Minecraft
+publisher authority or silently trust user-supplied fingerprints.
+
 ## Independent engine — bounded WinVerifyTrust image inspection, 22 October 2026
 
 **Source-first native owner:** added unmounted

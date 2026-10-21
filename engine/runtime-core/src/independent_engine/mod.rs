@@ -8,6 +8,7 @@ mod acceptance;
 mod evidence;
 mod fixture_wire;
 mod identity;
+mod image_provenance;
 mod inspection;
 mod paths;
 mod registry;
@@ -30,6 +31,12 @@ pub use fixture_wire::{
     SYNTHETIC_FRAME_BYTES,
 };
 pub use identity::{ProcessIdentity, SessionSlot};
+pub use image_provenance::{
+    review_image_provenance, ImageProvenanceError, ImageProvenanceGap,
+    PackageIdentityEvidence, PendingImageProvenance,
+    PinnedImageProvenanceClaim, PublisherCertificateClaim,
+    ReviewedPublisherPolicy, RunningImageBinding,
+};
 pub use inspection::{
     inspect_existing, inspect_pair_boundaries, inspect_storage_route,
     PairBoundaryError, PairBoundaryFact, PairBoundaryFinding, PairBoundaryIssue,
