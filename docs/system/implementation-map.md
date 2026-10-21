@@ -29,8 +29,7 @@ The agreed production language split is **Rust-first hybrid**:
 `engine/runtime-core/` and `apps/desktop/` own independent Rust logic and
 user-mode Windows APIs; C++ remains for synthetic fixtures, with any
 separately authored kernel C/C++ component strictly conditional on
-demonstrated need. See [Implementation language and ownership policy]
-(independent-engine-architecture.md#implementation-language-and-ownership-policy---21-october-2026).
+demonstrated need. See [Implementation language and ownership policy](independent-engine-architecture.md#implementation-language-and-ownership-policy---21-october-2026).
 No code conversion, service, or driver is authorized by this decision.
 
 The synthetic native AppContainer fixture emits separate path-query outcomes
