@@ -9,6 +9,47 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Authorized signed update prepared — 21 October 2026
+
+The operator explicitly approved local test signing, SbieSvc/SbieDrv replacement
+and the three-profile data-rule update. Preparation source:
+`71680329f5b695ac29f853c8629074a4ec1b5da6`; native build `e2c80ad`.
+
+The authorized elevated helper completed restoration of the old test engine via
+its existing journal, returning the original official service images to Running.
+It then prepared a new signed local test copy at
+`workspace/owned-tests/test-storage-20261021-104556/`. All 25 artifact hashes
+match the new receipt; all 16 PE binaries have Valid signatures from the new
+local test certificate. The original unsigned candidate and old payload/journal
+remain preserved. The copy is test-only, not a production-signed release.
+
+The new receipt is **REBOOT_REQUIRED_NO_SERVICE_CHANGES**. Its driver-loaded,
+services-changed and gameplay flags remain false. No profile/data update or
+game launch has occurred. The old session now truthfully records
+**OFFICIAL_SERVICES_RESTORED_TEST_BOOT_REMAINS**. Existing Test Mode was detected;
+no boot-setting write occurred. Do not remove either test certificate while the
+corresponding recovery/activation transaction still needs it.
+
+Preparation now selects the existing reboot-required state when its boot snapshot
+already reports Test Mode enabled. It does not redundantly write the boot entry,
+pretend a reboot happened or relax the runtime's fresh-boot check. Executed
+PowerShell regression covers enabled, disabled and absent Test Mode. Ten focused
+preparation/runtime checks pass. The actual elevated signing/preparation also
+passes, with independent post-preparation hash and signature verification.
+The complete manual source pipeline at `7168032` passes **723 checks** (Node 291,
+frontend 179, desktop Rust 76, runtime Rust 177); four existing file-symlink skips
+and eight opt-in Rust tests remain. Log: `workspace/signed-update-source-check.log`.
+
+**Next:** operator performs a normal manual restart. Then inspect the new session
+with the existing runtime script before activation, explicitly review the old
+profile ownership/data-rule update, point the manager at the verified new
+session and run manual distinct-account acceptance. Do not fabricate a boot
+timestamp, reuse a foreign receipt, erase cached account state or bypass profile
+admission. Existing profile/account/gameplay uncertainty remains unresolved.
+Local logs: `workspace/authorized-runtime-restore.log`,
+`workspace/authorized-runtime-prepare.log`,
+`workspace/authorized-runtime-update-result.json`.
+
 ## Runtime upgrade preflight — 21 October 2026
 
 At source `91c1de63cde683435200c4596c60488f7a9984fc`, the operator confirmed

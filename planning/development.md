@@ -2,12 +2,12 @@
 
 ## Owned manager / independence — 21 October 2026
 
-**ACTIVE**, source `0a8bdea49eb629f503236865fb0062488df9e68f`.
-Box-only game data/setup recovery fixed. **722 source checks PASS**;
-native bytes from built `e2c80ad`, active engine unchanged.
+**ACTIVE**, preparation `71680329f5b695ac29f853c8629074a4ec1b5da6`.
+Game data/setup recovery fixed; **723 source checks PASS**.
+Build `e2c80ad` test-signed; old engine restored, new copy awaits reboot.
 [Evidence](../docs/validation/native-pilot-localtest.md). **Product FAIL** remains.
-**Next:** review local runtime upgrade: active build `f529d59` lacks the fixes;
-all three profiles lack the data rule. Four accounts confirmed for manual login.
+**Next:** manual reboot, activate approved copy, review profile rules.
+Four accounts ready for manual login.
 
 ## Windows-first efficiency — 20 October 2026
 
