@@ -1,0 +1,10 @@
+$ErrorActionPreference = 'Stop'
+$root = '<REPOSITORY_ROOT>'
+try {
+    & "$root\tooling\isolation-source\windows\prepare-owned-v1186-test.ps1" -Stage Prepare -SessionDirectory "$root\workspace\owned-tests\test-20261020-a" -CandidateDirectory "$root\workspace\packages\owned-20261020-150022" -BuildReport "$root\workspace\builds\owned-20261020-150022\build-result.json" | Out-File -LiteralPath "$root\workspace\owned-test-prepare-result.txt" -Encoding utf8
+    'PASS' | Out-File -LiteralPath "$root\workspace\owned-test-prepare-status.txt" -Encoding utf8
+} catch {
+    $_ | Format-List * -Force | Out-String | Out-File -LiteralPath "$root\workspace\owned-test-prepare-result.txt" -Encoding utf8
+    'FAIL' | Out-File -LiteralPath "$root\workspace\owned-test-prepare-status.txt" -Encoding utf8
+    exit 1
+}

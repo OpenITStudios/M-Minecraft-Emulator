@@ -1,0 +1,20 @@
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+$phase = 'load-winrt'
+try {
+  Add-Type -AssemblyName System.Runtime.WindowsRuntime
+  $manager = [Windows.Security.Authentication.Web.Core.WebAuthenticationCoreManager,Windows.Security.Authentication.Web.Core,ContentType=WindowsRuntime]
+  $providerType = [Windows.Security.Credentials.WebAccountProvider,Windows.Security.Credentials,ContentType=WindowsRuntime]
+  $phase = 'find-provider'
+  $operation = $manager::FindAccountProviderAsync('https://login.microsoft.com')
+  $taskMethod = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.IsGenericMethodDefinition -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' } | Select-Object -First 1
+  $task = $taskMethod.MakeGenericMethod($providerType).Invoke($null, @($operation))
+  if (-not $task.Wait(8000)) { Write-Output 'PROVIDER_TIMEOUT'; exit 1460 }
+  if ($null -eq $task.Result) { Write-Output 'PROVIDER_NOT_FOUND'; exit 2 }
+  Write-Output 'PROVIDER_FOUND_NO_ACCOUNT_OR_TOKEN_REQUESTED'
+  exit 0
+} catch {
+  $failure = $_.Exception.GetBaseException()
+  Write-Output ('PHASE={0} HRESULT=0x{1:X8}' -f $phase, $failure.HResult)
+  exit $failure.HResult
+}

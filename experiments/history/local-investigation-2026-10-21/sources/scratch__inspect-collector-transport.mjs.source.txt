@@ -1,0 +1,13 @@
+import {readFileSync} from 'node:fs';
+import {spawnSync} from 'node:child_process';
+const collector=readFileSync('tooling/acceptance/windows/collect-sandboxie-feasibility.ps1','utf8');
+const bootstrap='$r=[System.IO.StreamReader]::new([Console]::OpenStandardInput(),[System.Text.Encoding]::UTF8);& ([ScriptBlock]::Create($r.ReadToEnd()))';
+const env={...process.env};
+delete env.PSModulePath;
+const result=spawnSync('C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',['-NoLogo','-NoProfile','-NonInteractive','-Command',bootstrap],{input:`& {\n${collector}\n} -SummaryOnly -ImageProof`,env,encoding:'utf8',timeout:30000,maxBuffer:65536});
+console.log(JSON.stringify({exit:result.status,error:result.error?.message,stdout:result.stdout,stderr:result.stderr}));
+const engine=readFileSync('apps/desktop/src-tauri/src/engine/native_clients.rs','utf8');
+const preflight=engine.match(/const EDUCATION_DESKTOP_PREFLIGHT: &str = r#"([\s\S]*?)"#;/)?.[1];
+if(!preflight) throw new Error('Shared preflight not found');
+const checked=spawnSync('C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',['-NoProfile','-NonInteractive','-Command',`${preflight}\nWrite-Output 'Desktop preflight PASS'`],{env,encoding:'utf8',timeout:30000,maxBuffer:65536});
+console.log(JSON.stringify({exit:checked.status,out:checked.stdout,error:checked.stderr}));

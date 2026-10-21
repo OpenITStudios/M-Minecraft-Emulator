@@ -1,0 +1,68 @@
+$ErrorActionPreference='Stop'
+$repo='<REPOSITORY_ROOT>'
+$job=Get-Content -LiteralPath (Join-Path $repo 'workspace/authorized-runtime-update-input.json') -Raw|ConvertFrom-Json
+$session=$job.newSession
+$result=[ordered]@{state='NOT_UPDATED';error=$null}
+$mutex=[Threading.Mutex]::new($false,'Global\MIVUBI.OwnedV1186.TestRuntime');$held=$false;$lock=$null;$receipt=$null
+function Demand($ok,$message){if(-not $ok){throw $message}}
+function Save {
+ [IO.File]::WriteAllText((Join-Path $session 'review.tmp'),($receipt|ConvertTo-Json -Depth 20),[Text.UTF8Encoding]::new($false))
+ Move-Item -LiteralPath (Join-Path $session 'review.tmp') -Destination (Join-Path $session 'session.json') -Force
+}
+function Native([string]$exe,[string[]]$arguments){
+ $info=[Diagnostics.ProcessStartInfo]::new();$info.FileName=$exe
+ $info.Arguments=($arguments|ForEach-Object{Demand ($_ -notmatch '["\r\n]') 'Unsafe argument';'"'+$_+'"'}) -join ' '
+ $info.UseShellExecute=$false;$info.CreateNoWindow=$true;$info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true
+ $p=[Diagnostics.Process]::Start($info);$output=$p.StandardOutput.ReadToEndAsync();$err=$p.StandardError.ReadToEndAsync()
+ try{Demand ($p.WaitForExit(25000)) 'Configuration helper timed out';Demand ($p.ExitCode -eq 0) ('Configuration helper failed: '+$err.Result);return $output.Result}finally{$p.Dispose()}
+}
+try{
+ Set-Location -LiteralPath $repo
+ Demand ((git rev-parse HEAD).Trim() -ceq '439930c36f41951487d30d01ec4a505cdd6cb5a2') 'Source changed before reviewed profile update'
+ $held=$mutex.WaitOne(0);Demand $held 'Another engine transaction is active'
+ $lock=[IO.File]::Open((Join-Path $session 'operation.lock'),'OpenOrCreate','ReadWrite','None')
+ $receipt=Get-Content -LiteralPath (Join-Path $session 'session.json') -Raw|ConvertFrom-Json
+ $priorPath=Join-Path $job.oldSession 'session.json';$prior=Get-Content -LiteralPath $priorPath -Raw|ConvertFrom-Json
+ Demand ($receipt.state -ceq 'OWNED_TEST_DRIVER_ACTIVE_NO_GAME' -and $receipt.driverLoaded -eq $true -and $receipt.servicesChanged -eq $true) 'New engine is not active'
+ Demand ($prior.state -ceq 'OFFICIAL_SERVICES_RESTORED_TEST_BOOT_REMAINS' -and $prior.servicesChanged -eq $false) 'Previous owner was not restored'
+ Demand ($receipt.runtime.PSObject.Properties.Name -notcontains 'managerCreatedProfiles' -and $receipt.runtime.PSObject.Properties.Name -notcontains 'profileDataUpgrade') 'Profile review already attempted; inspect before retry'
+ $payload=Join-Path $session 'payload'
+ foreach($item in $receipt.signedArtifacts){
+  Demand ($item.path -cmatch '^[A-Za-z0-9._/-]+$' -and $item.path.Split('/') -notcontains '..' -and -not $item.path.StartsWith('/')) 'Invalid payload path'
+  $file=Join-Path $payload $item.path;Demand ((Get-FileHash -LiteralPath $file).Hash.ToLowerInvariant() -ceq $item.sha256) 'Signed payload changed'
+  if($item.path -match '\.(exe|dll|sys)$'){$sig=Get-AuthenticodeSignature -LiteralPath $file;Demand ($sig.Status -eq 'Valid' -and $sig.SignerCertificate.Thumbprint -ceq $receipt.certificateThumbprint) 'Untrusted payload'}
+ }
+ Demand (@($receipt.signedArtifacts).Count -eq 25) 'Incomplete payload'
+ foreach($service in $receipt.runtime.services){Demand (([string](Get-ItemProperty -LiteralPath ('HKLM:\SYSTEM\CurrentControlSet\Services\'+$service.name)).ImagePath) -ceq $service.ownedImage -and [string](Get-Service $service.name).Status -eq 'Running') 'Active service differs'}
+ $dll=Join-Path $payload 'SbieDll.dll';$hash=(Get-FileHash -LiteralPath $dll).Hash.ToLowerInvariant()
+ $probe=(Native (Join-Path $PSHOME 'powershell.exe') @('-NoProfile','-NonInteractive','-File',(Join-Path $repo 'tooling/isolation-source/windows/probe-v1186-runtime.ps1'),'-DllPath',$dll,'-Sha256',$hash))|ConvertFrom-Json
+ Demand ($probe.version -ceq '5.73.6-MIVU' -and $probe.abi -eq 0x57230 -and $probe.allSessionBoxedProcesses -eq 0) 'Engine is foreign or not idle'
+ Demand (@(Get-Process -Name Minecraft.Windows -ErrorAction SilentlyContinue).Count -eq 0) 'Close Minecraft normally before updating profiles'
+ $ini=Join-Path $payload 'SbieIni.exe'
+ foreach($key in @('FileRootPath','BoxRootFolder','KeyRootPath','IpcRootPath')){Demand ([string]::IsNullOrWhiteSpace((Native $ini @('query','GlobalSettings',$key)))) 'Custom profile roots require review'}
+ $inventory=Join-Path $session 'review-profile-plan-input.json';[IO.File]::WriteAllText($inventory,'{"schema":1,"boxes":[]}',[Text.UTF8Encoding]::new($false))
+ $plans=@()
+ foreach($client in @('02','03','04')){
+  $box='MivubiEdu'+$client
+  if($client -ceq '02'){Demand ($prior.runtime.client02.box -ceq $box -and $prior.runtime.client02.configurationState -ceq 'CONFIGURED') 'Client 02 ownership unproven'}
+  else{$owned=@($prior.runtime.managerCreatedProfiles|Where-Object {$_.clientId -ceq $client -and $_.box -ceq $box -and $_.state -ceq 'COMPLETE'});Demand ($owned.Count -eq 1) 'Profile ownership unproven'}
+  $plan=(Native (Join-Path $repo 'workspace/toolchains/node/node.exe') @((Join-Path $repo 'tooling/isolation-source/windows/client02-profile-plan.mjs'),$inventory,$client))|ConvertFrom-Json
+  $reads=@($plan.guardedSteps|Where-Object operation -ceq 'REQUIRE_READBACK'|Select-Object -Skip 1)
+  Demand ($reads.Count -eq 10) 'Canonical setting closure changed'
+  foreach($step in $reads){Demand ($step.arguments[1] -ceq $box) 'Foreign box';$actual=(Native $ini @($step.arguments)).Trim();if($step.arguments[2] -ceq 'WriteFilePath'){Demand ($actual -ceq '' -and $step.expectedValue -ceq '%AppData%\Minecraft Education Edition') 'Data rule already changed'}elseif($step.arguments[2] -ceq 'Template'){$known=@('OpenCOM','AutoRecoverIgnore','LingerPrograms','BlockPorts','qWave','FileCopy','SkipHook') -join "`r`n";Demand ($actual -ceq $step.expectedValue -or $actual -ceq $known) 'Unknown template drift; review required'}else{Demand ($actual -ceq $step.expectedValue) 'Legacy settings differ; no overwrite permitted'}}
+  $plans+=@{client=$client;box=$box;reads=$reads}
+ }
+ $audit=[pscustomobject]@{state='STARTED';previousSession=$job.oldSession;previousReceiptSha256=(Get-FileHash -LiteralPath $priorPath).Hash.ToLowerInvariant();events=@()}
+ $receipt.runtime|Add-Member -NotePropertyName profileDataUpgrade -NotePropertyValue $audit;Save
+ foreach($plan in $plans){
+  $audit.events+=('write:'+ $plan.box+':WriteFilePath');Save
+  Native $ini @('set',$plan.box,'Template','OpenCOM')|Out-Null
+  Native $ini @('set',$plan.box,'WriteFilePath','%AppData%\Minecraft Education Edition')|Out-Null
+  foreach($step in $plan.reads){Demand ((Native $ini @($step.arguments)).Trim() -ceq $step.expectedValue) 'Profile readback failed; partial review preserved'}
+  $audit.events+=('verified:'+ $plan.box);Save
+ }
+ $receipt.runtime|Add-Member -NotePropertyName managerCreatedProfiles -NotePropertyValue @($plans|ForEach-Object{[pscustomobject]@{clientId=$_.client;box=$_.box;state='COMPLETE';reviewedFromSession=$job.oldSession}})
+ $audit.state='COMPLETE';Save;$result.state='THREE_PROFILES_REVIEWED_NO_GAME'
+}catch{$result.error=$_.Exception.Message;if($null -ne $receipt -and $receipt.runtime.PSObject.Properties.Name -contains 'profileDataUpgrade'){$receipt.runtime.profileDataUpgrade.state='REVIEW_REQUIRED';Save}}
+finally{if($lock){$lock.Dispose()};if($held){$mutex.ReleaseMutex()};$mutex.Dispose()}
+[IO.File]::WriteAllText((Join-Path $repo 'workspace/profile-data-upgrade-result.json'),($result|ConvertTo-Json),[Text.UTF8Encoding]::new($false))

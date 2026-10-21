@@ -1,0 +1,41 @@
+const {chromium}=require('<LOCAL_PLAYWRIGHT_MODULE>');
+const pause=ms=>new Promise(r=>setTimeout(r,ms));
+(async()=>{
+ const browser=await chromium.connectOverCDP('http://127.0.0.1:9223');
+ try{
+ const pages=browser.contexts().flatMap(c=>c.pages());
+ const page=pages.find(p=>/127\.0\.0\.1:1421|tauri\.localhost/.test(p.url()));
+ if(!page)throw Error('Developer manager page not found');
+ page.setDefaultTimeout(15000);
+ await page.getByRole('tab',{name:'Minecraft 01',exact:true}).waitFor();
+ for(let i=0;i<20;i++){if(await page.getByRole('tab',{name:'Minecraft 01',exact:true}).isEnabled())break;await pause(500);}
+ const inspect=()=>page.evaluate(async()=>{
+   const invoke=window.__TAURI_INTERNALS__.invoke;
+   const config=await invoke('desktop_manager_settings',{settings:null});
+   if(!config.observation)throw Error('Engine not verified');
+   return config.observation.nativeProcesses;
+ });
+ let native=await inspect();
+ if(!native.length)await page.evaluate(()=>window.__TAURI_INTERNALS__.invoke('desktop_open_native_minecraft'));
+ for(let i=0;i<16;i++){native=await inspect();if(native.length===1&&native[0].windowHandle!=='0x0'&&native[0].responding)break;await pause(1500);}
+ if(native.length!==1||native[0].windowHandle==='0x0'||!native[0].responding)throw Error('Native baseline did not yield one responsive window');
+ const original=native[0];
+ console.log('BASELINE: one attributed responsive native window; no world or login operation');
+ for(let i=0;i<4;i++){await pause(5000);native=await inspect();if(native.length!==1||native[0].pid!==original.pid||native[0].createdFileTime!==original.createdFileTime||!native[0].responding)throw Error('Unmodified baseline lost identity/responsiveness');}
+ console.log('BASELINE: 20 seconds identity/responsiveness PASS (idle only)');
+ await page.getByRole('tab',{name:'Minecraft 01',exact:true}).click();
+ await page.locator('.nw-stage').getByRole('heading',{name:'Minecraft 01',exact:true}).waitFor();
+ for(let i=0;i<3;i++){
+   await page.getByRole('button',{name:'Settings',exact:true}).click();
+   await page.getByText('Automatic setup',{exact:true}).waitFor();
+   native=await inspect();if(native.length!==1||native[0].pid!==original.pid||!native[0].responding)throw Error('Suspended window lost attribution/responsiveness');
+   await page.getByRole('button',{name:'Clients 04',exact:true}).click();
+   await page.locator('.nw-stage').getByRole('heading',{name:'Minecraft 01',exact:true}).waitFor();
+ }
+ await pause(10000);native=await inspect();
+ if(native.length!==1||native[0].pid!==original.pid||!native[0].responding)throw Error('Presented window lost identity/responsiveness');
+ const alerts=await page.locator('.um-alert:visible').allTextContents();if(alerts.length)throw Error(alerts.join('\n'));
+ console.log('MANAGER: actual tab adoption, three Settings suspend/resume cycles, and 10-second response PASS');
+ console.log('NOT_EXECUTED: rendered gameplay, login, direct input, visual taskbar count, Alt-Tab, multiplayer or four clients');
+ }finally{await browser.close();}
+})().catch(e=>{console.error(e.message);process.exitCode=1;});

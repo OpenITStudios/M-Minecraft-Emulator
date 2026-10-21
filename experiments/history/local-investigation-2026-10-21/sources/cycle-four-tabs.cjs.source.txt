@@ -1,0 +1,22 @@
+const {chromium}=require('<LOCAL_PLAYWRIGHT_MODULE>');
+(async()=>{
+const b=await chromium.connectOverCDP('http://127.0.0.1:9223');const p=b.contexts().flatMap(c=>c.pages()).find(p=>/1421|tauri.localhost/.test(p.url()));p.setDefaultTimeout(25000);
+const before=await p.evaluate(()=>window.__TAURI_INTERNALS__.invoke('desktop_manager_settings',{settings:null}));
+if(!before.observation)throw Error('Engine unavailable');
+const identities=new Map([['01',before.observation.nativeProcesses[0]],...before.observation.clients.map(s=>[s.clientId,s.processes[0]])]);
+if([...identities.values()].some(v=>!v||!v.responding))throw Error('Four attributed responsive clients required');
+const samples=[];
+for(let round=0;round<3;round++)for(const id of ['01','02','03','04']){
+ const started=Date.now();await p.getByRole('tab',{name:`Minecraft ${id}`,exact:true}).click();
+ await p.locator('.nw-stage').getByRole('heading',{name:`Minecraft ${id}`,exact:true}).waitFor();
+ await p.waitForFunction(()=>[...document.querySelectorAll('[role=tab]')].every(e=>!e.disabled));
+ samples.push(Date.now()-started);
+ const alerts=await p.locator('.um-alert:visible').allTextContents();if(alerts.length)throw Error(alerts.join('\n'));
+}
+const after=await p.evaluate(()=>window.__TAURI_INTERNALS__.invoke('desktop_manager_settings',{settings:null}));
+const observed=[['01',after.observation?.nativeProcesses[0]],...(after.observation?.clients||[]).map(s=>[s.clientId,s.processes[0]])];
+if(observed.length!==4)throw Error('Final four-client observation missing');
+for(const [id,current]of observed){const original=identities.get(id);if(!current||current.pid!==original.pid||current.createdFileTime!==original.createdFileTime||!current.responding)throw Error(`Client ${id} lost identity/responsiveness`);}
+samples.sort((a,b)=>a-b);console.log(`PASS: 12 real-manager tab switches; all four PID/birth identities and HWND responsiveness retained. Median switch acknowledgement ${samples[6]}ms, max ${samples.at(-1)}ms.`);
+console.log('NOT_EXECUTED: game input/rendering, actual Alt-Tab, four licensed worlds, multiplayer, 60-minute gameplay, displayed FPS.');process.exit(0);
+})().catch(e=>{console.error(e.message);process.exit(1);});

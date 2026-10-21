@@ -1,0 +1,19 @@
+const {chromium}=require('<LOCAL_PLAYWRIGHT_MODULE>');
+(async()=>{
+const b=await chromium.connectOverCDP('http://127.0.0.1:9223');const p=b.contexts().flatMap(c=>c.pages()).find(p=>/1421|tauri.localhost/.test(p.url()));
+p.setDefaultTimeout(160000);
+for(const id of ['03','04']){
+ const before=await p.evaluate(()=>window.__TAURI_INTERNALS__.invoke('desktop_manager_settings',{settings:null}));
+ const absent=!before.observation?.clients.find(slot=>slot.clientId===id)?.profileExists;
+ await p.getByRole('tab',{name:`Minecraft ${id}`,exact:true}).click();
+ const prepare=p.getByRole('button',{name:'Prepare and open',exact:true});
+ if(absent)await prepare.waitFor();
+ if(await prepare.isVisible())await prepare.click();
+ await p.locator('.nw-stage').getByRole('heading',{name:`Minecraft ${id}`,exact:true}).waitFor();
+ const config=await p.evaluate(()=>window.__TAURI_INTERNALS__.invoke('desktop_manager_settings',{settings:null}));
+ const slot=config.observation?.clients.find(s=>s.clientId===id);
+ if(slot?.status!=='RUNNING'||slot.processes.length!==1||!slot.processes[0].responding)throw Error('Client '+id+' has no unique responsive attributed window');
+ console.log('Client '+id+': profile readback and attributed responsive window PASS; no login/world interaction');
+}
+console.log('Four startup slots reached; gameplay/account isolation acceptance NOT_EXECUTED');process.exit(0);
+})().catch(e=>{console.error(e.message);process.exit(1);});

@@ -1,0 +1,12 @@
+$ErrorActionPreference='Stop'
+$repo='<REPOSITORY_ROOT>'
+$job=Get-Content -LiteralPath (Join-Path $repo 'workspace/authorized-runtime-update-input.json') -Raw|ConvertFrom-Json
+$out=[ordered]@{state='ACTIVATION_NOT_COMPLETED';error=$null}
+try {
+ Set-Location -LiteralPath $repo
+ if((git rev-parse HEAD).Trim() -cne '8f66e3b19b0b3559dc32183823cf4ea417d07a32'){throw 'Source changed before activation'}
+ & (Join-Path $repo 'tooling/isolation-source/windows/test-owned-v1186-runtime.ps1') -Stage Inspect -SessionDirectory $job.newSession *> (Join-Path $repo 'workspace/post-reboot-inspect.log')
+ & (Join-Path $repo 'tooling/isolation-source/windows/test-owned-v1186-runtime.ps1') -Stage Activate -SessionDirectory $job.newSession *> (Join-Path $repo 'workspace/post-reboot-activate.log')
+ $out.state='ACTIVATED_NO_GAME'
+} catch {$out.error=$_.Exception.Message}
+[IO.File]::WriteAllText((Join-Path $repo 'workspace/post-reboot-activation-result.json'),($out|ConvertTo-Json),[Text.UTF8Encoding]::new($false))

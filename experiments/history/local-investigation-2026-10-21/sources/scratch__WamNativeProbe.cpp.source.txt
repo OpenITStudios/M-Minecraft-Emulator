@@ -1,0 +1,30 @@
+#include <windows.h>
+#include <roapi.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Security.Authentication.Web.Core.h>
+#include <winrt/Windows.Security.Credentials.h>
+#include <cstdio>
+#include <cstring>
+int main(int argc,char**argv) {
+  const char* phase="initialize";
+  try {
+    winrt::init_apartment(winrt::apartment_type::multi_threaded);
+    if(argc==2 && std::strcmp(argv[1],"--internal-broker")==0) {
+      phase="activate-internal-broker";
+      winrt::hstring name=L"Windows.Internal.Security.Authentication.Web.TokenBrokerInternal";
+      winrt::com_ptr<IInspectable> broker;
+      winrt::check_hresult(RoActivateInstance(static_cast<HSTRING>(winrt::get_abi(name)),broker.put()));
+      std::puts("BROKER_ACTIVATED_NO_ACCOUNT_OR_TOKEN_REQUESTED");
+    } else {
+      phase="find-provider";
+      auto operation=winrt::Windows::Security::Authentication::Web::Core::WebAuthenticationCoreManager::FindAccountProviderAsync(L"https://login.microsoft.com");
+      for(int i=0;i<80 && operation.Status()==winrt::Windows::Foundation::AsyncStatus::Started;i++) Sleep(100);
+      if(operation.Status()==winrt::Windows::Foundation::AsyncStatus::Started) {std::puts("PROVIDER_TIMEOUT");return static_cast<int>(0x800705B4);}
+      phase="provider-operation";
+      auto provider=operation.GetResults();
+      if(!provider) {std::puts("PROVIDER_NOT_FOUND");return 2;}
+      std::puts("PROVIDER_FOUND_NO_ACCOUNT_OR_TOKEN_REQUESTED");
+    }
+    return 0;
+  } catch(winrt::hresult_error const& error) {std::printf("PHASE=%s HRESULT=0x%08X\n",phase,static_cast<unsigned>(error.code().value));return error.code().value;}
+}

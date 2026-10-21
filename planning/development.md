@@ -8,6 +8,9 @@ game launches, service changes or implementation until explicitly resumed.
 Start the ChatGPT discussion from the
 [discussion brief](../docs/system/independent-isolation.md#bahan-diskusi-chatgpt---21-oktober-2026).
 Architecture and retirement decisions remain in the existing linked owners there.
+[Local source archive](../experiments/history/local-investigation-2026-10-21/README.md)
+adds 29 historical snapshots plus sanitized fixture results for discussion only;
+no runtime/implementation resumed.
 Sandboxie and its fork remain retired for new product sessions; installed
 services, old profiles/accounts/worlds and legacy VM data remain preserved.
 Two synthetic native AppContainers passed token/namespace/canary/lifetime checks;

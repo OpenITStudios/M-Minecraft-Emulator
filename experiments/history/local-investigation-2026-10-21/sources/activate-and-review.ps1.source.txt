@@ -1,0 +1,5 @@
+$ErrorActionPreference='Stop'
+$repo='<REPOSITORY_ROOT>'
+& (Join-Path $repo 'workspace/post-reboot-activate.ps1')
+$r=Get-Content -LiteralPath (Join-Path $repo 'workspace/post-reboot-activation-result.json') -Raw|ConvertFrom-Json
+if($r.state -ceq 'ACTIVATED_NO_GAME') { & (Join-Path $repo 'workspace/review-profile-data-upgrade.ps1') }

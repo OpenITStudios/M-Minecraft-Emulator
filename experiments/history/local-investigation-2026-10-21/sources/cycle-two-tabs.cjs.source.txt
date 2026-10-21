@@ -1,0 +1,25 @@
+const {chromium}=require('<LOCAL_PLAYWRIGHT_MODULE>');
+(async()=>{
+ const browser=await chromium.connectOverCDP('http://127.0.0.1:9223');
+ const page=browser.contexts().flatMap(c=>c.pages()).find(p=>/tauri.localhost/.test(p.url()));
+ page.setDefaultTimeout(30000);
+ const inspect=()=>page.evaluate(async()=>{
+   const config=await window.__TAURI_INTERNALS__.invoke('desktop_manager_settings',{settings:null});
+   const observation=config.observation;if(!observation)throw Error('Engine unavailable');
+   const native=observation.nativeProcesses,owned=observation.clients.find(s=>s.clientId==='02').processes;
+   if(native.length!==1||owned.length!==1||!native[0].responding||!owned[0].responding)throw Error('Two responsive attributed sessions required');
+   return [native[0],owned[0]];
+ });
+ const before=await inspect(),samples=[];
+ for(let i=0;i<6;i++)for(const id of ['02','01']){
+   const time=Date.now();await page.getByRole('tab',{name:`Minecraft ${id}`,exact:true}).click();
+   await page.waitForFunction(id=>document.querySelector(`[role=tab][aria-selected=true]`)?.textContent===`Minecraft ${id}`&&[...document.querySelectorAll('[role=tab]')].every(tab=>!tab.disabled),id);
+   samples.push(Date.now()-time);
+   const alerts=await page.locator('.um-alert:visible').allTextContents();if(alerts.length)throw Error(alerts.join('\n'));
+ }
+ const after=await inspect();
+ for(let i=0;i<2;i++)for(const key of ['pid','createdFileTime','sessionId','windowHandle'])if(before[i][key]!==after[i][key])throw Error('Process/window identity changed');
+ samples.sort((a,b)=>a-b);
+ console.log(`PASS: 12 two-client selections, retained identities/responsiveness; median ${samples[6]}ms, max ${samples.at(-1)}ms. Rendering/input/taskbar/Alt-Tab NOT_EXECUTED.`);
+ process.exit(0);
+})().catch(error=>{console.error(error.message);process.exit(1)});

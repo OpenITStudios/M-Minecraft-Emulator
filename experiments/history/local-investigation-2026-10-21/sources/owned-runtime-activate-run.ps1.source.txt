@@ -1,0 +1,10 @@
+$ErrorActionPreference='Stop'
+$root='<REPOSITORY_ROOT>'
+try {
+ & "$root\tooling\isolation-source\windows\test-owned-v1186-runtime.ps1" -Stage Activate -SessionDirectory "$root\workspace\owned-tests\test-20261020-a" | Out-File -LiteralPath "$root\workspace\owned-runtime-activate-result.txt" -Encoding utf8
+ 'PASS' | Out-File -LiteralPath "$root\workspace\owned-runtime-activate-status.txt" -Encoding utf8
+} catch {
+ $_ | Format-List * -Force | Out-String | Out-File -LiteralPath "$root\workspace\owned-runtime-activate-result.txt" -Encoding utf8
+ 'FAIL' | Out-File -LiteralPath "$root\workspace\owned-runtime-activate-status.txt" -Encoding utf8
+ exit 1
+}

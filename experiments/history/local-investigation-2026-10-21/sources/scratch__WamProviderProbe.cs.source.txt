@@ -1,0 +1,46 @@
+using System;
+using System.Runtime.InteropServices;
+using System.Threading;
+class WamProviderProbe {
+  static bool phaseExit;
+  [DllImport("combase.dll")] static extern int RoInitialize(uint mode);
+  [DllImport("combase.dll")] static extern void RoUninitialize();
+  [DllImport("combase.dll", CharSet=CharSet.Unicode)] static extern int WindowsCreateString(string value, int length, out IntPtr text);
+  [DllImport("combase.dll")] static extern int WindowsDeleteString(IntPtr text);
+  [DllImport("combase.dll")] static extern int RoGetActivationFactory(IntPtr text, ref Guid iid, out IntPtr factory);
+  [DllImport("combase.dll")] static extern int RoActivateInstance(IntPtr text, out IntPtr instance);
+  [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int FindProvider(IntPtr self, IntPtr id, out IntPtr operation);
+  [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int GetInt(IntPtr self, out int value);
+  [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int GetPointer(IntPtr self, out IntPtr value);
+  static Delegate Slot(IntPtr obj, int slot, Type type) { return Marshal.GetDelegateForFunctionPointer(Marshal.ReadIntPtr(Marshal.ReadIntPtr(obj), slot * IntPtr.Size), type); }
+  static int Report(string phase, int hr) { Console.WriteLine("PHASE="+phase+" HRESULT=0x"+hr.ToString("X8")); if(phaseExit) { if(phase=="activate-factory")return 201; if(phase=="find-provider")return 202; if(phase=="provider-operation")return 203; if(phase=="provider-result")return 204; return 299; } return hr; }
+  [MTAThread] static int Main(string[] args) {
+    phaseExit=args.Length==1 && args[0]=="--phase-exit";
+    IntPtr className=IntPtr.Zero, providerId=IntPtr.Zero, factory=IntPtr.Zero, operation=IntPtr.Zero, info=IntPtr.Zero, provider=IntPtr.Zero;
+    int initialized=RoInitialize(1); if(initialized<0) return Report("initialize",initialized);
+    try {
+      bool internalBroker=args.Length==1 && args[0]=="--internal-broker";
+      string classId=internalBroker ? "Windows.Internal.Security.Authentication.Web.TokenBrokerInternal" : "Windows.Security.Authentication.Web.Core.WebAuthenticationCoreManager";
+      int hr=WindowsCreateString(classId,classId.Length,out className); if(hr<0)return Report("class-string",hr);
+      if(internalBroker) { hr=RoActivateInstance(className,out provider); if(hr<0)return Report("activate-internal-broker",hr); Console.WriteLine("BROKER_ACTIVATED_NO_ACCOUNT_OR_TOKEN_REQUESTED"); return 0; }
+      Guid statics=new Guid("6aca7c92-a581-4479-9c10-752eff44fd34");
+      hr=RoGetActivationFactory(className,ref statics,out factory); if(hr<0)return Report("activate-factory",hr);
+      Console.WriteLine("FACTORY_FOUND");
+      string id="https://login.microsoft.com";
+      hr=WindowsCreateString(id,id.Length,out providerId); if(hr<0)return Report("provider-string",hr);
+      // IInspectable has six slots. FindAccountProviderAsync is statics slot 11.
+      hr=((FindProvider)Slot(factory,11,typeof(FindProvider)))(factory,providerId,out operation); if(hr<0)return Report("find-provider",hr);
+      Guid asyncInfo=new Guid("00000036-0000-0000-c000-000000000046");
+      hr=Marshal.QueryInterface(operation,ref asyncInfo,out info); if(hr<0)return Report("async-info",hr);
+      int status=0;
+      for(int i=0;i<80;i++) { hr=((GetInt)Slot(info,7,typeof(GetInt)))(info,out status); if(hr<0)return Report("async-status",hr); if(status!=0)break; Thread.Sleep(100); }
+      if(status==0)return Report("timeout",unchecked((int)0x800705B4));
+      if(status==3) { int error; hr=((GetInt)Slot(info,8,typeof(GetInt)))(info,out error); return Report("provider-operation",hr<0 ? hr : error); }
+      if(status!=1)return Report("canceled",unchecked((int)0x800704C7));
+      hr=((GetPointer)Slot(operation,8,typeof(GetPointer)))(operation,out provider); if(hr<0)return Report("provider-result",hr);
+      if(provider==IntPtr.Zero)return Report("provider-not-found",2);
+      Console.WriteLine("PROVIDER_FOUND_NO_ACCOUNT_OR_TOKEN_REQUESTED"); return 0;
+    } catch(Exception ex) { return Report("probe-runtime",Marshal.GetHRForException(ex)); }
+    finally { if(provider!=IntPtr.Zero)Marshal.Release(provider); if(info!=IntPtr.Zero)Marshal.Release(info); if(operation!=IntPtr.Zero)Marshal.Release(operation); if(factory!=IntPtr.Zero)Marshal.Release(factory); if(providerId!=IntPtr.Zero)WindowsDeleteString(providerId); if(className!=IntPtr.Zero)WindowsDeleteString(className); RoUninitialize(); }
+  }
+}

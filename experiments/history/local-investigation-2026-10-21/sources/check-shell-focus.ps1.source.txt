@@ -1,0 +1,25 @@
+param([int]$ManagerPid,[int]$GamePid)
+Add-Type @'
+using System;using System.Runtime.InteropServices;
+public static class ShellFocusProbe {
+ delegate bool Each(IntPtr w,IntPtr p);
+ [DllImport("user32.dll")]static extern bool EnumWindows(Each e,IntPtr p);
+ [DllImport("user32.dll")]static extern uint GetWindowThreadProcessId(IntPtr w,out uint p);
+ [DllImport("user32.dll")]static extern IntPtr GetWindow(IntPtr w,uint c);
+ [DllImport("user32.dll")]static extern IntPtr GetWindowLongPtrW(IntPtr w,int i);
+ [DllImport("user32.dll")]static extern bool IsWindowVisible(IntPtr w);
+ [DllImport("user32.dll")]public static extern bool SetForegroundWindow(IntPtr w);
+ [DllImport("user32.dll")]public static extern IntPtr GetForegroundWindow();
+ public static IntPtr Find(int pid){IntPtr found=IntPtr.Zero;EnumWindows((w,p)=>{uint id;GetWindowThreadProcessId(w,out id);if(id==pid&&GetWindow(w,4)==IntPtr.Zero&&(GetWindowLongPtrW(w,-20).ToInt64()&0x80)!=0)found=w;return true;},IntPtr.Zero);return found;}
+ public static long[] Facts(IntPtr manager,IntPtr game){long ex=GetWindowLongPtrW(game,-20).ToInt64();int i=0,m=-1,g=-1;EnumWindows((w,p)=>{if(w==manager)m=i;if(w==game)g=i;i++;return true;},IntPtr.Zero);return new long[]{(ex&0x80)!=0?1:0,(ex&0x40000)==0?1:0,IsWindowVisible(game)?1:0,m,g,GetForegroundWindow()==manager?1:0};}
+}
+'@
+$manager=(Get-Process -Id $ManagerPid).MainWindowHandle
+$game=[ShellFocusProbe]::Find($GamePid)
+if(!$manager -or !$game){throw 'Attributed manager/game window missing'}
+$accepted=[ShellFocusProbe]::SetForegroundWindow($manager)
+Start-Sleep -Milliseconds 750
+$facts=[ShellFocusProbe]::Facts($manager,$game)
+[pscustomobject]@{FocusRequestAccepted=$accepted;ToolWindow=$facts[0];AppWindowCleared=$facts[1];Visible=$facts[2];ManagerZ=$facts[3];GameZ=$facts[4];ManagerForeground=$facts[5]}|ConvertTo-Json
+if(!$accepted){throw 'Foreground request refused; focus transition NOT_EXECUTED'}
+if($facts[0]-ne 1 -or $facts[1]-ne 1 -or $facts[2]-ne 1 -or $facts[3]-lt 0 -or $facts[4]-lt 0 -or $facts[4]-ge $facts[3]){throw 'Game hidden behind manager or shell eligible'}

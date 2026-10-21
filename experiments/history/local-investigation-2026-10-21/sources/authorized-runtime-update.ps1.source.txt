@@ -1,0 +1,18 @@
+$ErrorActionPreference='Stop'
+$repo='<REPOSITORY_ROOT>'
+$result=Join-Path $repo 'workspace/authorized-runtime-update-result.json'
+$state=[ordered]@{state='STARTED';oldRestored=$false;newPrepared=$false;bootChanged=$false;error=$null}
+try {
+  $job=Get-Content -LiteralPath (Join-Path $repo 'workspace/authorized-runtime-update-input.json') -Raw|ConvertFrom-Json
+  Set-Location -LiteralPath $repo
+  if((git rev-parse HEAD).Trim() -cne $job.expectedHead){throw 'Source HEAD changed before approved execution'}
+  if((git branch --show-current).Trim() -cne 'Local'){throw 'Local branch required'}
+  if(@(Get-Process -Name Minecraft.Windows,SandMan,SbieCtrl -ErrorAction SilentlyContinue).Count -ne 0){throw 'Close Minecraft and Sandboxie manager normally first'}
+  & (Join-Path $repo 'tooling/isolation-source/windows/test-owned-v1186-runtime.ps1') -Stage Restore -SessionDirectory $job.oldSession *> (Join-Path $repo 'workspace/authorized-runtime-restore.log')
+  $state.oldRestored=$true
+  & (Join-Path $repo 'tooling/isolation-source/windows/prepare-owned-v1186-test.ps1') -Stage Prepare -SessionDirectory $job.newSession -CandidateDirectory $job.candidate -BuildReport $job.buildReport *> (Join-Path $repo 'workspace/authorized-runtime-prepare.log')
+  $receipt=Get-Content -LiteralPath (Join-Path $job.newSession 'session.json') -Raw|ConvertFrom-Json
+  if($receipt.state -cne 'REBOOT_REQUIRED_NO_SERVICE_CHANGES'){throw 'Preparation is not ready under existing Test Mode'}
+  $state.newPrepared=$true;$state.state='MANUAL_REBOOT_REQUIRED';$state.newSession=$job.newSession
+} catch {$state.state='FAILED_REVIEW_REQUIRED';$state.error=$_.Exception.Message}
+[IO.File]::WriteAllText($result,($state|ConvertTo-Json -Depth 4),[Text.UTF8Encoding]::new($false))

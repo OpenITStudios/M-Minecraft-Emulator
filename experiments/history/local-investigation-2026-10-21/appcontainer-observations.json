@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "evidenceClass": "TARGET_WINDOWS_SYNTHETIC_ONLY",
+  "reportedSourceCommit": "d823f68456e64298aedea38d879daabe3be4aa55",
+  "provenanceLimit": "The original runtime JSON does not embed a Git SHA; commit attribution follows the recorded source/run handoff, not a cryptographic runtime attestation. No experiment was rerun for this upload.",
+  "positive": {
+    "schema": 1,
+    "result": "PASS",
+    "syntheticOnly": true,
+    "distinctAppContainerTokens": true,
+    "concurrentProcesses": true,
+    "privateMutexNamespaces": true,
+    "ownStorageReadable": true,
+    "peerStorageDenied": true,
+    "hostCanaryDenied": true,
+    "independentNormalStop": true,
+    "profilesRemoved": true,
+    "localAppDataEnvironmentRedirected": true,
+    "localAppDataKnownFolderRedirected": true,
+    "roamingEnvironmentUnderContainer": false,
+    "roamingKnownFolderQuerySucceeded": true,
+    "roamingKnownFolderUnderContainer": false,
+    "minecraftAcceptance": "NOT_EXECUTED"
+  },
+  "negativeControl": {
+    "schema": 1,
+    "result": "FAIL",
+    "stage": "actual-distinct-container-tokens",
+    "code": 0,
+    "syntheticOnly": true,
+    "profilesRemoved": true
+  }
+}

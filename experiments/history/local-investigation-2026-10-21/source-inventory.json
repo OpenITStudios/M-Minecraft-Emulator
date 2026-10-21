@@ -1,0 +1,302 @@
+{
+  "schema": 1,
+  "auditedSourceHead": "2668c21037451b6ece2497581092d86047c5c2d1",
+  "scope": "Loose authored source files immediately under workspace/ and workspace/scratch/; generated/vendor/runtime trees are excluded.",
+  "sourceFiles": [
+    {
+      "localSource": "workspace/activate-and-review.ps1",
+      "archive": "sources/activate-and-review.ps1.source.txt",
+      "originalSha256": "29f7ae93e0ff9c2fff1ba81c6b79fdfa0b698f9c48681e382f49bba1ac7ad44e",
+      "archiveSha256": "3a65427113b7e52ab8da3331a8eabc3d659ac9b3182999ddd813e16f845cf2e9",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [
+        "<REPOSITORY_ROOT>"
+      ],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/adopt-existing-tabs.cjs",
+      "archive": "sources/adopt-existing-tabs.cjs.source.txt",
+      "originalSha256": "fab8ce2359f3f4800e4d1733fce7ccf42a1c64d54d3ef367b2bc5ae17894a5c6",
+      "archiveSha256": "3e72da77e4647b78dc46fafe1a264aec85dde4fa35039bdc35b49bdf0caf9527",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [
+        "<LOCAL_PLAYWRIGHT_MODULE>"
+      ],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/authorized-runtime-update.ps1",
+      "archive": "sources/authorized-runtime-update.ps1.source.txt",
+      "originalSha256": "ca67c9c4bdb92ee45f0105aac8c72730498b78b3b22845bda1cc39a19c780735",
+      "archiveSha256": "93666b428997206ad971c8ee4196db07e4cb45afcec366425ab40e1856ba554f",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [
+        "<REPOSITORY_ROOT>"
+      ],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/check-native-open.cjs",
+      "archive": "sources/check-native-open.cjs.source.txt",
+      "originalSha256": "d47f90fe3db7aaa498817fd45bebc0c180485e6a4cb3b0af4a272779c0917821",
+      "archiveSha256": "b1042f58e3e3f0f27ce24fc8b4b7402511abea746723f4d419a8c4bccb0e1dce",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [
+        "<LOCAL_PLAYWRIGHT_MODULE>"
+      ],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/check-native-workspace.cjs",
+      "archive": "sources/check-native-workspace.cjs.source.txt",
+      "originalSha256": "b309b76a05a2372524ee69c1ec2fc04cfdf4c37771cc86676f39f371aaea4b5e",
+      "archiveSha256": "484454d3bd58a649c2b43a877bea9a823adfc2a041df17f85e1d4b85093e4e53",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [
+        "<LOCAL_PLAYWRIGHT_MODULE>"
+      ],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/check-shell-focus.ps1",
+      "archive": "sources/check-shell-focus.ps1.source.txt",
+      "originalSha256": "386089446088a01e0fedb0bbc10a4897f89f1249ed3853ea63c8c8295916e9ec",
+      "archiveSha256": "386089446088a01e0fedb0bbc10a4897f89f1249ed3853ea63c8c8295916e9ec",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/cycle-four-tabs.cjs",
+      "archive": "sources/cycle-four-tabs.cjs.source.txt",
+      "originalSha256": "c8e91509d90c385bcc79a583cc93db1bea2beac6a0c76ea59fefd0ef7e4d5846",
+      "archiveSha256": "103c4d36edc72faef8486f1864ac988ed6cdafc8fbde8584c279a2db4c0dffcb",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [
+        "<LOCAL_PLAYWRIGHT_MODULE>"
+      ],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/cycle-two-tabs.cjs",
+      "archive": "sources/cycle-two-tabs.cjs.source.txt",
+      "originalSha256": "f294fdff71c0549af036ff955996cf4214c59d83023268eeda5942e7eace50cc",
+      "archiveSha256": "5b98a01d2995ae7e21ad370a5fe66673e2a36d6074c05731afec18e7dfc3eac2",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [
+        "<LOCAL_PLAYWRIGHT_MODULE>"
+      ],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/foreground-fact.ps1",
+      "archive": "sources/foreground-fact.ps1.source.txt",
+      "originalSha256": "3c2c05267e281502aae9a47fd561ee66bd7c1760d67ff3295bf7a1902754c316",
+      "archiveSha256": "d3483c539905990c5f123d97e3b999fa4c7ef8fc60663ac664dd4ba9d598c4fa",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/inspect-managed-shell.ps1",
+      "archive": "sources/inspect-managed-shell.ps1.source.txt",
+      "originalSha256": "450273f0842403670cf5d5b501d411448daab237bcfe849d275c8e024d6e5045",
+      "archiveSha256": "8f95aca9f5031badab5ca2d0a885341da79326f8f69d29aa1ff89cd30971b523",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/owned-runtime-activate-run.ps1",
+      "archive": "sources/owned-runtime-activate-run.ps1.source.txt",
+      "originalSha256": "43e034601e8eddff71cb00b0344bb1eaa72ce25cf444d04b8dea7063d6577feb",
+      "archiveSha256": "8cc445f8bb702c84d1df1d317e8ff55124172c9c277c436ec1c739a6ea5dea9d",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [
+        "<REPOSITORY_ROOT>"
+      ],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/owned-runtime-client02-config-run.ps1",
+      "archive": "sources/owned-runtime-client02-config-run.ps1.source.txt",
+      "originalSha256": "a7ce913ee80879fc6022577cb15b5c52d5365ee7db1d6cf9c97427384cef0a6f",
+      "archiveSha256": "2f245a2237241ec51df2b72dea8b4eb1c9004247f07ccd65ba204112afd9298a",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [
+        "<REPOSITORY_ROOT>"
+      ],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/owned-runtime-restore-run.ps1",
+      "archive": "sources/owned-runtime-restore-run.ps1.source.txt",
+      "originalSha256": "a9d88705b2571b652ceea2b65f8fb70e790722e42bb5cd84bed3742b030d34b6",
+      "archiveSha256": "b8b9ad96255211a6e02cd7acafbdbd41295fb8cd4ca6bbad00aa693745bb62cd",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [
+        "<REPOSITORY_ROOT>"
+      ],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/owned-test-boot-run.ps1",
+      "archive": "sources/owned-test-boot-run.ps1.source.txt",
+      "originalSha256": "4ca40b1a83c13b660e6e095322c56693fbedf2b28ce1f89ba35d38fa80cc000d",
+      "archiveSha256": "8665ebb441bab1eaf13c4af5eb9c79bd04f2fcce2786bdb58ec24d2fd806613d",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [
+        "<REPOSITORY_ROOT>"
+      ],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/owned-test-prepare-run.ps1",
+      "archive": "sources/owned-test-prepare-run.ps1.source.txt",
+      "originalSha256": "da164ab3ab52e36388c2357aebae97274734fa8408c85b63adf2717c87617739",
+      "archiveSha256": "19871279f8f069ed64b0f1bbe707aa67b0fa05cc3ece80e685f3eb75d399e7e3",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [
+        "<REPOSITORY_ROOT>"
+      ],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/post-reboot-activate.ps1",
+      "archive": "sources/post-reboot-activate.ps1.source.txt",
+      "originalSha256": "60de9d377ee9978f7937096b29791dbf1c14020338fed63ab0f3dfd0e760be8d",
+      "archiveSha256": "a2cf9168907d6d8132958ff38a5ac5af43c9df0f068238c77e2c879387971ef0",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [
+        "<REPOSITORY_ROOT>"
+      ],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/prepare-four-tabs.cjs",
+      "archive": "sources/prepare-four-tabs.cjs.source.txt",
+      "originalSha256": "a2d613081c63a494625bb869b90efb2c0ce4e56c79404c45deda89190208f9fc",
+      "archiveSha256": "8e205312b83c2ae70cb07141321c1c1dc34b17c194a8c7342a6fc2781f1503f8",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [
+        "<LOCAL_PLAYWRIGHT_MODULE>"
+      ],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/probe-live-tabs.cjs",
+      "archive": "sources/probe-live-tabs.cjs.source.txt",
+      "originalSha256": "698f62bf10ac8e5319db1e75ed44aec31d5c271236f9b806653685dac04e22b4",
+      "archiveSha256": "27c900e8b5aab6c2d6d409f9435291c1fb3af2356a33727ce65a13424e7f437d",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [
+        "<LOCAL_PLAYWRIGHT_MODULE>"
+      ],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/review-profile-data-upgrade.ps1",
+      "archive": "sources/review-profile-data-upgrade.ps1.source.txt",
+      "originalSha256": "884a464c305fad10970a7d5adabfca6b0faee2b57459c6bb8932d1b47a55b0a3",
+      "archiveSha256": "b60455c6305271cfc60d31e772e3853bac895f352404053d8a8a128a25a48d21",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [
+        "<REPOSITORY_ROOT>"
+      ],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/scratch/build-wam-native.cmd",
+      "archive": "sources/scratch__build-wam-native.cmd.source.txt",
+      "originalSha256": "fe06d9dc98e377014d2d6975aee435e515cee540372d7616d994c547b27d6052",
+      "archiveSha256": "fe06d9dc98e377014d2d6975aee435e515cee540372d7616d994c547b27d6052",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/scratch/collector-runner.rs",
+      "archive": "sources/scratch__collector-runner.rs.source.txt",
+      "originalSha256": "89bda7f0b4cb4bb89cfa7e50fbc634263274c6257326b618025e19ad2a0ec3f7",
+      "archiveSha256": "89bda7f0b4cb4bb89cfa7e50fbc634263274c6257326b618025e19ad2a0ec3f7",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/scratch/inspect-collector-transport.mjs",
+      "archive": "sources/scratch__inspect-collector-transport.mjs.source.txt",
+      "originalSha256": "8bb02661df6087914028c4895f0a031d4ce92835441ecc465f9906bbe7bd0a74",
+      "archiveSha256": "8bb02661df6087914028c4895f0a031d4ce92835441ecc465f9906bbe7bd0a74",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/scratch/probe-wam-provider.ps1",
+      "archive": "sources/scratch__probe-wam-provider.ps1.source.txt",
+      "originalSha256": "894da0570e7fb8d0fd2146b5b4825e5cd7747daac800379cf42feda30fa285a9",
+      "archiveSha256": "894da0570e7fb8d0fd2146b5b4825e5cd7747daac800379cf42feda30fa285a9",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/scratch/SbieMessagesProbe.cs",
+      "archive": "sources/scratch__SbieMessagesProbe.cs.source.txt",
+      "originalSha256": "df1b204a8caa0deeebe642ff24f0703e3e6461559b4eaaaa13b668ccb6760bd3",
+      "archiveSha256": "df1b204a8caa0deeebe642ff24f0703e3e6461559b4eaaaa13b668ccb6760bd3",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/scratch/WamNativeProbe.cpp",
+      "archive": "sources/scratch__WamNativeProbe.cpp.source.txt",
+      "originalSha256": "d2d3b3a61e3fcc0cb62cd67734357cc17dce618ea8b232c576892cbcb784f1c2",
+      "archiveSha256": "d2d3b3a61e3fcc0cb62cd67734357cc17dce618ea8b232c576892cbcb784f1c2",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/scratch/WamProviderProbe.cs",
+      "archive": "sources/scratch__WamProviderProbe.cs.source.txt",
+      "originalSha256": "35f5e33ec0a8905c4a2873015e6da15a89ea2b69feccd4f61a8095a6fc9d9d7e",
+      "archiveSha256": "35f5e33ec0a8905c4a2873015e6da15a89ea2b69feccd4f61a8095a6fc9d9d7e",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/unified-visual-check.cjs",
+      "archive": "sources/unified-visual-check.cjs.source.txt",
+      "originalSha256": "ec9a1d874739614334e6d60286023a30ebcb8def0d52f39d7240769f9e9c6969",
+      "archiveSha256": "4296e685ff1a495e717a716c8856221548c25e23c8d58a6c165a8a89be548188",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [
+        "<LOCAL_PLAYWRIGHT_MODULE>"
+      ],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/update_tab_controller.py",
+      "archive": "sources/update_tab_controller.py.source.txt",
+      "originalSha256": "d1d8e6b5a6f1e90aa38c572cb17bbe530a3a848dd0683fd18d4c93df12975113",
+      "archiveSha256": "d1d8e6b5a6f1e90aa38c572cb17bbe530a3a848dd0683fd18d4c93df12975113",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    },
+    {
+      "localSource": "workspace/window-facts.ps1",
+      "archive": "sources/window-facts.ps1.source.txt",
+      "originalSha256": "a3a82f948cd620ec8f8a0a2570551fa94e3517820cf703a05c7e443e68accf21",
+      "archiveSha256": "ab79294e0a69c8568471f532172f0e8eb85c4edb02b252c81af7dc8bf81d612a",
+      "normalization": "UTF-8 without BOM, LF line endings",
+      "redactions": [],
+      "status": "HISTORICAL_ANALYSIS_ONLY_NOT_EXECUTED"
+    }
+  ]
+}

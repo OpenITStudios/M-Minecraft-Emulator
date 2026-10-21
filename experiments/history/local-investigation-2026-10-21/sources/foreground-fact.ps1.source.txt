@@ -1,0 +1,5 @@
+Add-Type -TypeDefinition @"
+using System;using System.Runtime.InteropServices;
+public static class ForegroundFact{[DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr w,out uint pid);}
+"@
+$w=[ForegroundFact]::GetForegroundWindow();$owner=0;[void][ForegroundFact]::GetWindowThreadProcessId($w,[ref]$owner);Get-Process -Id $owner | Select-Object ProcessName,SessionId

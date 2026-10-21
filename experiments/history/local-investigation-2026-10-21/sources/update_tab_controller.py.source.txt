@@ -1,0 +1,81 @@
+from pathlib import Path
+p=Path('apps/desktop/src-tauri/src/engine/workspace_surface.rs')
+s=p.read_text(encoding='utf-8')
+a=s.index('    static SURFACE: Mutex<Option<Lease>>')
+b=s.index('    fn prepare(',a)
+s=s[:a]+'''    struct Surfaces { active:Option<Lease>, parked:Vec<Lease>, suspended:bool }
+    static SURFACE: Mutex<Surfaces> = Mutex::new(Surfaces {active:None,parked:Vec::new(),suspended:false});
+    fn same(lease:&Lease,target:&OwnedProcess)->bool {
+        lease.saved.as_ref().is_some_and(|s| s.target.pid==target.pid && s.target.created_file_time==target.created_file_time && s.target.session_id==target.session_id && s.target.window_handle==target.window_handle)
+    }
+    pub fn is_active() -> bool {
+        SURFACE.try_lock().map(|s| s.active.is_some() || !s.parked.is_empty()).unwrap_or(true)
+    }
+    pub fn release() -> io::Result<()> {
+        let mut state=SURFACE.lock().map_err(|_|io::Error::other("Workspace state unavailable"))?;
+        let mut error=None;
+        if let Some(active)=state.active.as_mut(){match active.stop(){Ok(())=>state.active=None,Err(e)=>error=Some(e)}}
+        state.parked.retain_mut(|lease| match lease.stop(){Ok(())=>false,Err(e)=>{if error.is_none(){error=Some(e);}true}});
+        if let Some(error)=error{return Err(error);}
+        state.suspended=false;Ok(())
+    }
+    pub fn suspend()->io::Result<()> {
+        let mut state=SURFACE.lock().map_err(|_|io::Error::other("Workspace state unavailable"))?;
+        if let Some(lease)=state.active.as_mut(){if !matches!(lease.send(Command::Hide)?,Reply::Hidden){return Err(io::Error::other("Surface suspend failed"));}}
+        state.suspended=true;Ok(())
+    }
+    pub fn release_target(target:&OwnedProcess)->io::Result<()> {
+        let mut state=SURFACE.lock().map_err(|_|io::Error::other("Workspace state unavailable"))?;
+        if state.active.as_ref().is_some_and(|lease|same(lease,target)){
+            state.active.as_mut().unwrap().stop()?;state.active=None;return Ok(());
+        }
+        if let Some(index)=state.parked.iter().position(|lease|same(lease,target)){
+            state.parked[index].stop()?;state.parked.remove(index);return Ok(());
+        }
+        Err(io::Error::other("Workspace target no longer managed"))
+    }
+''' + s[b:]
+a=s.index('    pub fn present(manager:')
+b=s.index('    pub fn update(manager:',a)
+s=s[:a]+'''    pub fn present(manager:u64,viewport:Viewport,target:OwnedProcess)->io::Result<()> {
+        let viewport=viewport.validate()?;
+        let rect=native::rectangle(manager,viewport)?;
+        let mut state=SURFACE.lock().map_err(|_|io::Error::other("Workspace state unavailable"))?;
+        let command=||Command::Place{rect,focus:native::foreground(manager),manager_pid:std::process::id(),manager_window:manager};
+        if let Some(old)=state.active.as_mut(){
+            if same(old,&target){
+                if old.manager!=manager{return Err(io::Error::other("Wrong workspace window"));}
+                old.viewport=viewport;
+                if !matches!(old.send(command())?,Reply::Placed){return Err(io::Error::other("Surface presentation failed"));}
+                state.suspended=false;return Ok(());
+            }
+        }
+        let parked=state.parked.iter().position(|lease|same(lease,&target));
+        if parked.is_none() && state.parked.len()+usize::from(state.active.is_some())>=4{return Err(io::Error::other("Workspace already manages four clients"));}
+        // A retained lease owns the original checkpoint, never recapture a hidden tab.
+        let mut replacement=if let Some(index)=parked{state.parked.remove(index)}else{prepare(manager,viewport,target)?};
+        if replacement.manager!=manager{state.parked.push(replacement);return Err(io::Error::other("Wrong workspace window"));}
+        replacement.viewport=viewport;
+        let outcome=replacement.send(command());
+        if !matches!(outcome,Ok(Reply::Placed)){
+            let detail=outcome.err().map(|e|e.to_string()).unwrap_or_else(||"Invalid surface acknowledgement".into());
+            if parked.is_some(){let _=replacement.send(Command::Hide);state.parked.push(replacement);}
+            else if let Err(error)=replacement.stop(){state.parked.push(replacement);return Err(error);}
+            return Err(io::Error::other(format!("Workspace placement failed: {detail}. Previous session preserved.")));
+        }
+        if let Some(old)=state.active.as_mut(){
+            if !matches!(old.send(Command::Hide),Ok(Reply::Hidden)){
+                let _=replacement.send(Command::Hide);state.parked.push(replacement);
+                return Err(io::Error::other("Previous surface could not suspend; restore windows before continuing"));
+            }
+        }
+        if let Some(old)=state.active.take(){state.parked.push(old);}
+        state.active=Some(replacement);state.suspended=false;Ok(())
+    }
+''' + s[b:]
+s=s.replace('let Some(lease) = state.as_mut() else {','let suspended=state.suspended;\n        let Some(lease) = state.active.as_mut() else {')
+s=s.replace('if native::minimized(manager)? {','if suspended || native::minimized(manager)? {')
+s=s.replace('let lease = state.as_mut().unwrap();','let lease = state.active.as_mut().unwrap();')
+s=s.replace('SURFACE.lock().unwrap().is_some(),','SURFACE.lock().unwrap().active.is_some(),')
+s=s.replace('pub use controller::{is_active, present, release, update};','pub use controller::{is_active, present, release, release_target, suspend, update};')
+p.write_text(s,encoding='utf-8')

@@ -1,0 +1,20 @@
+param([ValidateSet(2,4)][int]$ExpectedClients=4)
+Add-Type @'
+using System;using System.Collections.Generic;using System.Runtime.InteropServices;
+public static class ManagedShellFacts {
+ delegate bool Each(IntPtr w,IntPtr p);
+ [DllImport("user32.dll")]static extern bool EnumWindows(Each e,IntPtr p);
+ [DllImport("user32.dll")]static extern uint GetWindowThreadProcessId(IntPtr w,out uint p);
+ [DllImport("user32.dll")]static extern IntPtr GetWindow(IntPtr w,uint c);
+ [DllImport("user32.dll")]static extern IntPtr GetWindowLongPtrW(IntPtr w,int i);
+ [DllImport("user32.dll")]static extern bool IsWindowVisible(IntPtr w);
+ [DllImport("user32.dll")]static extern bool GetWindowRect(IntPtr w,out Rect r);
+ [StructLayout(LayoutKind.Sequential)]struct Rect{public int L,T,R,B;}
+ public class Fact{public bool Tool,App,Visible;}
+ public static Fact[] Read(int[] pids){var list=new List<Fact>();EnumWindows((w,p)=>{uint id;GetWindowThreadProcessId(w,out id);if(Array.IndexOf(pids,(int)id)<0||GetWindow(w,4)!=IntPtr.Zero)return true;Rect r;if(!GetWindowRect(w,out r)||r.R-r.L<160||r.B-r.T<120)return true;long ex=GetWindowLongPtrW(w,-20).ToInt64();list.Add(new Fact{Tool=(ex&0x80)!=0,App=(ex&0x40000)!=0,Visible=IsWindowVisible(w)});return true;},IntPtr.Zero);return list.ToArray();}
+}
+'@
+$gameIds=@(Get-Process Minecraft.Windows -ErrorAction Stop|ForEach-Object Id)
+$facts=@([ManagedShellFacts]::Read([int[]]$gameIds))
+[pscustomobject]@{GameProcesses=$gameIds.Count;RootWindows=$facts.Count;ToolWindows=@($facts|Where-Object Tool).Count;AppWindows=@($facts|Where-Object App).Count;Visible=@($facts|Where-Object Visible).Count}|ConvertTo-Json
+if($facts.Count-ne $ExpectedClients -or @($facts|Where-Object {-not $_.Tool -or $_.App}).Count -or @($facts|Where-Object Visible).Count-ne 1){throw 'Four managed game roots with one selected visible window were not observed'}

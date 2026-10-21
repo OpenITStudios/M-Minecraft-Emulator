@@ -1,0 +1,13 @@
+const {chromium}=require('<LOCAL_PLAYWRIGHT_MODULE>');
+(async()=>{
+const b=await chromium.connectOverCDP('http://127.0.0.1:9223');const p=b.contexts().flatMap(c=>c.pages()).find(p=>/1421|tauri.localhost/.test(p.url()));
+p.setDefaultTimeout(20000);
+await p.getByRole('tab',{name:'Minecraft 01',exact:true}).waitFor();
+const config=await p.evaluate(()=>window.__TAURI_INTERNALS__.invoke('desktop_manager_settings',{settings:null}));
+if(!config.observation)throw Error('Engine not ready');
+const ids=[];if(config.observation.nativeProcesses.length===1&&config.observation.nativeProcesses[0].responding)ids.push('01');
+for(const slot of config.observation.clients)if(slot.status==='RUNNING'&&slot.processes[0]?.responding)ids.push(slot.clientId);
+for(const id of ids){await p.getByRole('tab',{name:`Minecraft ${id}`,exact:true}).click();await p.locator('.nw-stage').getByRole('heading',{name:`Minecraft ${id}`,exact:true}).waitFor();}
+const errors=await p.locator('.um-alert:visible').allTextContents();if(errors.length)throw Error(errors.join('\n'));
+console.log('Existing attributed sessions adopted: '+ids.join(', '));process.exit(0);
+})().catch(e=>{console.error(e.message);process.exit(1);});

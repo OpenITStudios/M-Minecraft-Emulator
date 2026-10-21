@@ -1,0 +1,28 @@
+const {chromium}=require('<LOCAL_PLAYWRIGHT_MODULE>');
+const fs=require('fs');
+(async()=>{
+const browser=await chromium.launch({headless:true,channel:'msedge'});
+try{
+const page=await browser.newPage();
+const catalog=JSON.parse(fs.readFileSync('engine/isolation-native/owned-runtime/minecraft-targets.json','utf8'));
+await page.addInitScript(({catalog})=>{
+const target={pid:77,createdFileTime:'134000000000000001',sessionId:1,windowHandle:'0x123',responding:true};
+let launched=false,inspections=0;window.__calls=[];
+const snapshot=()=>({schema:1,provider:'OWNED_V1186_LOCAL_TEST',operation:'Inspect',launcherExitCode:null,focusError:null,nativeProcesses:launched&&++inspections>=2?[target]:[],clients:catalog.targets.slice(1).map(t=>({clientId:t.id,box:t.profile,profileExists:false,settingsVerified:false,boxedProcessCount:0,launchAllowed:false,status:'ABSENT',processes:[]}))});
+window.__TAURI_INTERNALS__={invoke:async(command,args)=>{
+window.__calls.push(command);
+if(command==='desktop_manager_settings')return {observation:snapshot(),engineError:null,detectedMinecraft:'C:\\Game\\Minecraft.Windows.exe',targetError:null,settings:{sessionDirectory:'D:\\Engine',minecraftExecutable:'C:\\Game\\Minecraft.Windows.exe'},catalog};
+if(command==='desktop_open_native_minecraft'){launched=true;return null;}
+if(command==='desktop_owned_test_operation')return snapshot();
+if(['desktop_present_workspace','desktop_update_workspace','desktop_release_workspace'].includes(command))return null;
+throw Error(command);
+}};
+},{catalog});
+await page.goto('http://127.0.0.1:1421');
+await page.locator('.um-card').filter({has:page.getByRole('heading',{name:'Minecraft 01',exact:true})}).getByRole('button',{name:'Open',exact:true}).click();
+await page.locator('.nw-stage').getByRole('heading',{name:'Minecraft 01',exact:true}).waitFor({timeout:10000});
+const calls=await page.evaluate(()=>window.__calls);
+if(calls.filter(c=>c==='desktop_open_native_minecraft').length!==1||!calls.includes('desktop_present_workspace'))throw Error('Open did not present exactly one launched client');
+console.log('PASS: mounted Open 01 automatically observes delayed window and presents once without refresh');
+}finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exitCode=1;});

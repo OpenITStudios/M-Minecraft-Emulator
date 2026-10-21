@@ -1,0 +1,19 @@
+param([int]$GamePid)
+Add-Type -TypeDefinition @"
+using System;using System.Text;using System.Runtime.InteropServices;using System.Collections.Generic;
+public static class WindowFacts {
+ public class Info {public long Handle;public string Class;public bool Visible,Minimized,OnScreen;public int Cloaked,Left,Top,Width,Height;}
+ delegate bool Each(IntPtr w,IntPtr p);
+ [StructLayout(LayoutKind.Sequential)] struct Rect{public int L,T,R,B;}
+ [DllImport("user32.dll")]static extern bool EnumWindows(Each f,IntPtr p);
+ [DllImport("user32.dll")]static extern uint GetWindowThreadProcessId(IntPtr w,out uint p);
+ [DllImport("user32.dll")]static extern bool IsWindowVisible(IntPtr w);
+ [DllImport("user32.dll")]static extern bool IsIconic(IntPtr w);
+ [DllImport("user32.dll")]static extern bool GetWindowRect(IntPtr w,out Rect r);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern int GetClassName(IntPtr w,StringBuilder b,int n);
+ [DllImport("dwmapi.dll")]static extern int DwmGetWindowAttribute(IntPtr w,int a,out int v,int n);
+ [DllImport("user32.dll")]static extern int GetSystemMetrics(int n);
+ public static Info[] Read(int pid){var list=new List<Info>();EnumWindows((w,p)=>{uint owner;GetWindowThreadProcessId(w,out owner);if(owner!=pid)return true;Rect r;GetWindowRect(w,out r);int cloak;int hr=DwmGetWindowAttribute(w,14,out cloak,4);var name=new StringBuilder(256);GetClassName(w,name,256);int x=GetSystemMetrics(76),y=GetSystemMetrics(77),width=GetSystemMetrics(78),height=GetSystemMetrics(79);list.Add(new Info{Handle=w.ToInt64(),Class=name.ToString(),Visible=IsWindowVisible(w),Minimized=IsIconic(w),Cloaked=hr==0?cloak:-1,Left=r.L,Top=r.T,Width=r.R-r.L,Height=r.B-r.T,OnScreen=r.R>x&&r.B>y&&r.L<x+width&&r.T<y+height});return true;},IntPtr.Zero);return list.ToArray();}
+}
+"@
+[WindowFacts]::Read($GamePid)|ConvertTo-Json -Depth 3

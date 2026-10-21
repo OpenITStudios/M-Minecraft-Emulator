@@ -1,0 +1,22 @@
+using System;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
+class SbieMessagesProbe {
+  [DllImport("C:\\Program Files\\Sandboxie-Plus\\SbieDll.dll", CallingConvention=CallingConvention.StdCall, CharSet=CharSet.Unicode)]
+  static extern uint SbieApi_GetMessage(ref uint cursor,uint session,out uint id,out uint pid,StringBuilder buffer,uint length);
+  static int Main() {
+    uint cursor=0,session=(uint)Process.GetCurrentProcess().SessionId;
+    for(int i=0;i<256;i++) {
+      uint id,pid; var buffer=new StringBuilder(4096);
+      uint result=SbieApi_GetMessage(ref cursor,session,out id,out pid,buffer,8192);
+      if(result!=0) { Console.WriteLine("LOG_READ_END=0x"+result.ToString("X8"));break; }
+      string text=buffer.ToString();
+      if(text.IndexOf("WamProviderProbe",StringComparison.OrdinalIgnoreCase)>=0 || text.IndexOf("MinecraftBrokerDiagnostic",StringComparison.OrdinalIgnoreCase)>=0) {
+        Console.WriteLine("MESSAGE_ID="+id+" PID="+pid+" PROBE_MATCH=true");
+        foreach(string word in new[]{"certificate","license","trial","expired","COM","RPC","terminate","denied","TokenBroker"}) if(text.IndexOf(word,StringComparison.OrdinalIgnoreCase)>=0) Console.WriteLine("KEYWORD="+word);
+      }
+    }
+    return 0;
+  }
+}

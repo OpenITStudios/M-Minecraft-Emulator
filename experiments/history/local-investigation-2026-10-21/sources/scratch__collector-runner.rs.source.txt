@@ -1,0 +1,12 @@
+#![windows_subsystem = "windows"]
+#[path = "../../engine/runtime-core/src/provider/process.rs"]
+mod process;
+fn main() {
+    std::env::remove_var("PSModulePath");
+    let source = std::fs::read_to_string("tooling/acceptance/windows/collect-sandboxie-feasibility.ps1").unwrap();
+    let script = format!("& {{\n{}\n}} -SummaryOnly -ImageProof", source);
+    let bootstrap = "$r=[System.IO.StreamReader]::new([Console]::OpenStandardInput(),[System.Text.Encoding]::UTF8);& ([ScriptBlock]::Create($r.ReadToEnd()))";
+    let output = process::command_output_with_stdin(std::path::Path::new("C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"), ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", bootstrap], std::time::Duration::from_secs(30), script.as_bytes()).unwrap();
+    println!("bytes={} json_start={}", output.len(), output.starts_with('{'));
+    std::fs::write("workspace/scratch/collector-runner-output.json", output).unwrap();
+}

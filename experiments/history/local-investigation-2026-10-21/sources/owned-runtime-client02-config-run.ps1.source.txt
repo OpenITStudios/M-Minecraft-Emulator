@@ -1,0 +1,10 @@
+$ErrorActionPreference='Stop'
+$root='<REPOSITORY_ROOT>'
+try {
+ & "$root\tooling\isolation-source\windows\test-owned-v1186-runtime.ps1" -Stage ConfigureClient02 -SessionDirectory "$root\workspace\owned-tests\test-20261020-a" | Out-File -LiteralPath "$root\workspace\owned-runtime-client02-config-result.txt" -Encoding utf8
+ 'PASS' | Out-File -LiteralPath "$root\workspace\owned-runtime-client02-config-status.txt" -Encoding utf8
+} catch {
+ $_ | Format-List * -Force | Out-String | Out-File -LiteralPath "$root\workspace\owned-runtime-client02-config-result.txt" -Encoding utf8
+ 'FAIL' | Out-File -LiteralPath "$root\workspace\owned-runtime-client02-config-status.txt" -Encoding utf8
+ exit 1
+}
