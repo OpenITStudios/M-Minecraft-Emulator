@@ -13,6 +13,11 @@ stores. Its authored negative/unit tests are source only; source/Windows executi
 is NOT_EXECUTED in remote GitHub. No imported Sandboxie source is used by this
 module. Prior source/fork trees remain historical, not implementation inputs.
 
+The existing desktop `instance_identity.rs` also adds a read-only comparison
+of two pinned process AppContainer token identities (sanitized booleans only).
+No login, game launch, Windows service/driver or profile operation was performed.
+Windows tests are authored but NOT_EXECUTED in remote GitHub.
+
 **Next:** implement a bounded, independent Windows-native evidence adapter for
 AppContainer identity and persistent roaming verification, without promoting
 synthetic results into game launch authority. Retain current isolated Launch/

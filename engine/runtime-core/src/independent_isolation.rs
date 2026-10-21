@@ -97,8 +97,8 @@ pub enum ProofGoal {
 }
 
 type Requirement = (IsolationCheck, ProofContext);
-use IsolationCheck as Check;
-use ProofContext as Tier;
+use self::IsolationCheck as Check;
+use self::ProofContext as Tier;
 
 const SYNTHETIC: [Requirement; 5] = [
     (Check::DistinctObjectNamespaces, Tier::SyntheticFixture),

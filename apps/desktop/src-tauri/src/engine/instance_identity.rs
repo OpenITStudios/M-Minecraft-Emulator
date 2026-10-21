@@ -36,9 +36,39 @@ pub fn compare_contexts(
     }
 }
 
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AppContainerComparison {
+    /// True only when both exact processes have actual AppContainer tokens.
+    pub both_appcontainers: bool,
+    /// A distinct AppContainer SID is NOT evidence of account isolation.
+    pub distinct_container_identities: bool,
+}
+
+// Read-only and independent of any external sandbox driver. Only sanitized
+// booleans leave this process; no SID, path, token or credential is serialized.
+// This is evidence, never launch permission or proof of Minecraft sign-in.
+pub fn compare_appcontainer_identities(
+    left: &ProcessKey,
+    right: &ProcessKey,
+) -> std::io::Result<AppContainerComparison> {
+    #[cfg(windows)]
+    {
+        windows::compare_appcontainers(left, right)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (left, right);
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Windows AppContainer context is unavailable",
+        ))
+    }
+}
+
 #[cfg(windows)]
 mod windows {
-    use super::{ContextComparison, ProcessKey};
+    use super::{AppContainerComparison, ContextComparison, ProcessKey};
     use std::{io, mem::size_of, ptr};
     use windows_sys::Win32::{
         Foundation::{
@@ -46,8 +76,9 @@ mod windows {
         },
         Globalization::{CompareStringOrdinal, CSTR_EQUAL},
         Security::{
-            GetLengthSid, GetTokenInformation, IsValidSid, TokenSessionId, TokenUser, TOKEN_QUERY,
-            TOKEN_USER,
+            GetLengthSid, GetTokenInformation, IsValidSid, TokenAppContainerSid,
+            TokenIsAppContainer, TokenSessionId, TokenUser, TOKEN_APPCONTAINER_INFORMATION,
+            TOKEN_QUERY, TOKEN_USER,
         },
         System::Threading::{
             GetProcessTimes, OpenProcess, OpenProcessToken, WaitForSingleObject,
@@ -196,6 +227,91 @@ mod windows {
             session,
         })
     }
+    // An independent, bounded token inspection. Reuses the existing pinned
+    // process handles; never reads folders, broker stores or account data.
+    fn appcontainer_sid(process: &Handle) -> io::Result<Option<Vec<u8>>> {
+        let mut raw = ptr::null_mut();
+        if unsafe { OpenProcessToken(process.0, TOKEN_QUERY, &mut raw) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let token = Handle(raw);
+        let mut flag = 0u32;
+        let mut needed = 0u32;
+        if unsafe {
+            GetTokenInformation(
+                token.0,
+                TokenIsAppContainer,
+                (&mut flag as *mut u32).cast(),
+                size_of::<u32>() as u32,
+                &mut needed,
+            )
+        } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if flag == 0 {
+            return Ok(None);
+        }
+        let first = unsafe {
+            GetTokenInformation(
+                token.0,
+                TokenAppContainerSid,
+                ptr::null_mut(),
+                0,
+                &mut needed,
+            )
+        };
+        if first != 0
+            || unsafe { GetLastError() } != ERROR_INSUFFICIENT_BUFFER
+            || needed < size_of::<TOKEN_APPCONTAINER_INFORMATION>() as u32
+            || needed > 65536
+        {
+            return Err(invalid("AppContainer token identity size is unavailable"));
+        }
+        // Use word-aligned storage because the returned structure has a pointer.
+        let mut buffer = vec![0usize; (needed as usize).div_ceil(size_of::<usize>())];
+        if unsafe {
+            GetTokenInformation(
+                token.0,
+                TokenAppContainerSid,
+                buffer.as_mut_ptr().cast(),
+                needed,
+                &mut needed,
+            )
+        } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let sid = unsafe {
+            (*(buffer.as_ptr().cast::<TOKEN_APPCONTAINER_INFORMATION>())).TokenAppContainer
+        };
+        if sid.is_null() || unsafe { IsValidSid(sid) } == 0 {
+            return Err(invalid("AppContainer token SID is invalid"));
+        }
+        let length = unsafe { GetLengthSid(sid) } as usize;
+        if !(8..=68).contains(&length) {
+            return Err(invalid("AppContainer token SID length is invalid"));
+        }
+        Ok(Some(unsafe {
+            std::slice::from_raw_parts(sid.cast::<u8>(), length)
+        }.to_vec()))
+    }
+
+    pub(super) fn compare_appcontainers(
+        left: &ProcessKey,
+        right: &ProcessKey,
+    ) -> io::Result<AppContainerComparison> {
+        let left_process = pin(left)?;
+        let right_process = pin(right)?;
+        let a = appcontainer_sid(&left_process)?;
+        let b = appcontainer_sid(&right_process)?;
+        live(&left_process)?;
+        live(&right_process)?;
+        let both = a.is_some() && b.is_some();
+        Ok(AppContainerComparison {
+            both_appcontainers: both,
+            distinct_container_identities: both && a != b,
+        })
+    }
+
     pub(super) fn compare(left: &ProcessKey, right: &ProcessKey) -> io::Result<ContextComparison> {
         let left_process = pin(left)?;
         let right_process = pin(right)?;
@@ -274,6 +390,23 @@ mod windows {
                 &key
             )
             .is_err());
+        }
+
+        #[test]
+        fn appcontainer_evidence_is_bounded_and_stale_processes_are_rejected() {
+            let key = own_key();
+            let comparison = compare_appcontainers(&key, &key).unwrap();
+            assert!(!comparison.distinct_container_identities);
+            let json = serde_json::to_value(comparison).unwrap();
+            assert_eq!(json.as_object().unwrap().len(), 2);
+            assert!(json.as_object().unwrap().values().all(|v| v.is_boolean()));
+            assert!(compare_appcontainers(
+                &key,
+                &ProcessKey {
+                    pid: key.pid,
+                    created_file_time: "1".into(),
+                },
+            ).is_err());
         }
 
         #[test]

@@ -31,6 +31,12 @@ tier-separated evidence gaps for synthetic, native Windows, two-game, and four-g
 claims. It is NOT provider readiness, lifecycle persistence, or launch admission.
 The existing desktop launch block remains authoritative.
 
+The desktop's existing pinned-process identity owner now also provides a separate
+`compare_appcontainer_identities` read-only Rust API. It queries actual Windows
+AppContainer tokens and compares SIDs strictly in memory, returning only two
+booleans; this is neither a credential comparison nor a provider launch path.
+No Tauri/UI command is registered for the new API.
+
 The current isolation experiment is a native AppContainer fixture in
 `tooling/acceptance/windows/appcontainer-probe.cpp`, explicitly compiled/run by
 `test-appcontainer-isolation.ps1`. It launches only itself, validates two native
