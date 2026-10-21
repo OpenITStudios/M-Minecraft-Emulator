@@ -111,6 +111,9 @@ where
     P: ProcessObserverPort,
     Q: CooperativePathObserverPort,
 {
+    if expected.pid == 0 || expected.created_file_time == 0 {
+        return Err(BoundPathInspectionError::Native(NativePortError::InvalidIdentity));
+    }
     let before = process
         .observe_exact(expected)
         .map_err(BoundPathInspectionError::Native)?;
@@ -279,6 +282,27 @@ mod tests {
             StorageFinding::PathOutsideProfile
         );
         assert!(report.unresolved().contains(&StorageSurface::AuthenticationBroker));
+    }
+
+    #[test]
+    fn invalid_process_identity_does_not_call_cooperating_path_observer() {
+        let process = FakeProcess::default();
+        let probe = FakeProbe {
+            calls: std::cell::Cell::new(0),
+            result: sample(),
+        };
+        let valid = expected();
+        for invalid in [
+            ProcessIdentity { pid: 0, created_file_time: valid.created_file_time },
+            ProcessIdentity { pid: valid.pid, created_file_time: 0 },
+        ] {
+            assert_eq!(
+                inspect_cooperative_paths(&process, &probe, SessionSlot::Mc02, invalid).unwrap_err(),
+                BoundPathInspectionError::Native(NativePortError::InvalidIdentity)
+            );
+        }
+        assert_eq!(process.checks.get(), 0);
+        assert_eq!(probe.calls.get(), 0);
     }
 
     #[test]

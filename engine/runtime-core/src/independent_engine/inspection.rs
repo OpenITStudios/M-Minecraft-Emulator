@@ -25,6 +25,9 @@ pub fn inspect_existing<P: ProcessObserverPort, S: StorageObserverPort>(
     slot: SessionSlot,
     expected: ProcessIdentity,
 ) -> Result<SessionInspection, NativePortError> {
+    if expected.pid == 0 || expected.created_file_time == 0 {
+        return Err(NativePortError::InvalidIdentity);
+    }
     let observed = process.observe_exact(expected)?;
     if observed.identity != expected {
         return Err(NativePortError::StaleProcess);
@@ -347,6 +350,24 @@ mod tests {
                 visible_window_observed: false,
             })
         }
+    }
+
+    #[test]
+    fn invalid_identity_prevents_all_existing_inspection_io() {
+        let storage = FakeStorage::default();
+        let process = CountingProcess::default();
+        let valid = route_request().expected_process;
+        for invalid in [
+            ProcessIdentity { pid: 0, created_file_time: valid.created_file_time },
+            ProcessIdentity { pid: valid.pid, created_file_time: 0 },
+        ] {
+            assert_eq!(
+                inspect_existing(&process, &storage, SessionSlot::Mc02, invalid).unwrap_err(),
+                NativePortError::InvalidIdentity
+            );
+        }
+        assert_eq!(process.calls.get(), 0);
+        assert_eq!(storage.calls.get(), 0);
     }
 
     #[test]

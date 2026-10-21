@@ -1,5 +1,22 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — reject invalid process keys before native observation, 22 October 2026
+
+In the canonical pure Rust `independent_engine/inspection.rs` and
+`independent_engine/paths.rs` orchestration paths, a zero PID or zero
+creation FILETIME now fails immediately with `NativePortError::InvalidIdentity`
+before opening a process observer, storage observer or cooperating path
+collector. Other route and pair preflight paths already rejected such keys.
+Two negative regression tests confirm no process or storage/path port is
+called for invalid input. No new adapter, operating-system call, launch
+permission, IPC route, state store or account access was introduced.
+
+**Proof:** pinned GitHub source and call-site review. Rust unit tests authored
+NOT_EXECUTED; native Windows and Minecraft execution NOT_EXECUTED.
+**Next:** Continue source verification of native process observation and
+signature lifetime; isolated Launch/Provision remains blocked.
+
+
 ## Independent engine — repair Windows-sys 0.61 FreeLibrary binding, 22 October 2026
 
 Corrected the native WinTrust signer inspector's DLL lifetime boundary:
