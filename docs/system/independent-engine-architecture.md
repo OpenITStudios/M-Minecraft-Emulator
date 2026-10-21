@@ -634,6 +634,35 @@ diagnostic and may be invalidated by subsequent process changes. This
 new source does not register a Tauri endpoint or alter the canonical
 blocked Launch/Provision route. Windows execution remains deferred.
 
+## Singleton and Microsoft broker pair diagnostics — 22 October 2026
+
+`independent_engine/inspection.rs::inspect_pair_boundaries` now uses
+the existing pinned `ProcessObserverPort` and a minimal
+`PairBoundaryObserverPort` for two different slot/PID/creation-FILETIME
+keys. Both process identities and token categories are rechecked
+before/after a cooperative observation. Invalid slots/PIDs and
+wrong collector bindings fail closed without producing an acceptance
+record.
+
+Two separate findings are reviewed: **game singleton collisions**
+and **Microsoft WAM/MSAL account-context conflicts**. Synthetic canaries
+and Windows metadata may alert about an observed singleton conflict;
+they cannot claim no conflict for the actual Minecraft game.
+Broker status, either conflict or no-conflict, requires genuine
+Minecraft-runtime observations. Even a positive game observation
+reports `PendingPairInspection`: there is no ready/approved
+state, no broker attestation and no launch permission. The source
+of a fact is a claim until a future trusted collector verifies it.
+
+The existing desktop `instance_identity.rs` now provides an
+**unmounted** default `UnknownPairBoundaryObserver`, which intentionally
+reports both findings as `Unknown`, while reusing the exact Windows
+process observation port. No WAM token/API calls, user/profile reads,
+global mutex enumeration, Minecraft injection, driver, service or
+Tauri route were added. Eight pure Rust and three desktop source
+tests cover false positives, wrong identity, process exit and
+non-Windows behavior; native execution is not yet available.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

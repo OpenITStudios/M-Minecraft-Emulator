@@ -527,3 +527,157 @@ mod tests {
         assert!(result.storage.unresolved().contains(&StorageSurface::AuthenticationBroker));
     }
 }
+
+#[cfg(test)]
+mod pair_tests {
+    use super::*;
+    use crate::independent_engine::ProcessContainment;
+    use std::cell::Cell;
+
+    fn left() -> ProcessIdentity { ProcessIdentity::checked(701, 133400000000000701).unwrap() }
+    fn right() -> ProcessIdentity { ProcessIdentity::checked(702, 133400000000000702).unwrap() }
+    fn unknown() -> PairBoundaryFact {
+        PairBoundaryFact { source: StorageEvidenceSource::WindowsProcess,
+            finding: PairBoundaryFinding::Unknown }
+    }
+    fn sample() -> PairBoundarySnapshot {
+        PairBoundarySnapshot { first_slot: SessionSlot::Mc02,
+            second_slot: SessionSlot::Mc03, first: left(), second: right(),
+            singleton: unknown(), broker: unknown() }
+    }
+    #[derive(Default)]
+    struct Process {
+        calls: Cell<u32>,
+        change_at: Option<u32>,
+        exit_at: Option<u32>,
+    }
+    impl ProcessObserverPort for Process {
+        fn observe_exact(&self, expected: ProcessIdentity)
+            -> Result<ProcessObservation, NativePortError> {
+            let n = self.calls.get() + 1;
+            self.calls.set(n);
+            if self.exit_at == Some(n) { return Err(NativePortError::StaleProcess); }
+            Ok(ProcessObservation { identity: expected,
+                containment: if self.change_at == Some(n) {
+                    ProcessContainment::NoAppContainerToken
+                } else { ProcessContainment::AppContainerTokenObserved },
+                official_image_signature_observed: false, visible_window_observed: false })
+        }
+    }
+    struct Probe { calls: Cell<u32>, value: PairBoundarySnapshot }
+    impl PairBoundaryObserverPort for Probe {
+        fn observe_pair_boundaries(
+            &self, _: SessionSlot, _: ProcessIdentity,
+            _: SessionSlot, _: ProcessIdentity,
+        ) -> Result<PairBoundarySnapshot, NativePortError> {
+            self.calls.set(self.calls.get() + 1);
+            Ok(self.value)
+        }
+    }
+    fn probe(value: PairBoundarySnapshot) -> Probe {
+        Probe { calls: Cell::new(0), value }
+    }
+    fn inspect(p: &Process, q: &Probe)
+        -> Result<PendingPairInspection, PairBoundaryError> {
+        inspect_pair_boundaries(p, q, SessionSlot::Mc02, left(), SessionSlot::Mc03, right())
+    }
+
+    #[test]
+    fn rejects_duplicate_slot_and_pid_without_touching_observers() {
+        let p = Process::default();
+        let q = probe(sample());
+        for (a, x, b, y) in [
+            (SessionSlot::Mc02, left(), SessionSlot::Mc02, right()),
+            (SessionSlot::Mc02, left(), SessionSlot::Mc03, left()),
+            (SessionSlot::Mc02, left(), SessionSlot::Mc03,
+                ProcessIdentity { pid: left().pid, created_file_time: right().created_file_time }),
+            (SessionSlot::Mc02, ProcessIdentity { pid: 0, created_file_time: 1 },
+                SessionSlot::Mc03, right()),
+        ] {
+            assert_eq!(inspect_pair_boundaries(&p, &q, a, x, b, y),
+                Err(PairBoundaryError::InvalidPair));
+        }
+        assert_eq!(p.calls.get(), 0);
+        assert_eq!(q.calls.get(), 0);
+    }
+
+    #[test]
+    fn absent_real_game_observations_remain_two_diagnostic_gaps() {
+        let p = Process::default();
+        let q = probe(sample());
+        assert_eq!(inspect(&p, &q).unwrap().issues,
+            vec![PairBoundaryIssue::SingletonUnknown, PairBoundaryIssue::BrokerUnknown]);
+        assert_eq!(p.calls.get(), 4);
+        assert_eq!(q.calls.get(), 1);
+    }
+
+    #[test]
+    fn swapped_slot_and_process_receipts_are_not_accepted() {
+        assert_eq!(inspect(&Process::default(), &probe(PairBoundarySnapshot {
+            second_slot: SessionSlot::Mc04, ..sample()
+        })), Err(PairBoundaryError::WrongSlot));
+        assert_eq!(inspect(&Process::default(), &probe(PairBoundarySnapshot {
+            second: left(), ..sample()
+        })), Err(PairBoundaryError::WrongProcess));
+    }
+
+    #[test]
+    fn fixtures_and_windows_metadata_cannot_certify_no_singleton_conflict() {
+        for source in [StorageEvidenceSource::SyntheticFixture,
+            StorageEvidenceSource::WindowsProcess] {
+            let q = probe(PairBoundarySnapshot { singleton: PairBoundaryFact {
+                source, finding: PairBoundaryFinding::NoConflictInSample },
+                ..sample() });
+            assert_eq!(inspect(&Process::default(), &q),
+                Err(PairBoundaryError::InadequateSource));
+        }
+    }
+
+    #[test]
+    fn broker_outcomes_require_real_minecraft_observation() {
+        for source in [StorageEvidenceSource::WindowsProcess,
+            StorageEvidenceSource::SyntheticFixture] {
+            for finding in [PairBoundaryFinding::NoConflictInSample,
+                PairBoundaryFinding::ConflictObserved] {
+                let q = probe(PairBoundarySnapshot {
+                    broker: PairBoundaryFact { source, finding }, ..sample()
+                });
+                assert_eq!(inspect(&Process::default(), &q),
+                    Err(PairBoundaryError::InadequateSource));
+            }
+        }
+    }
+
+    #[test]
+    fn observed_windows_singleton_conflict_is_only_a_warning() {
+        let q = probe(PairBoundarySnapshot { singleton: PairBoundaryFact {
+            source: StorageEvidenceSource::WindowsProcess,
+            finding: PairBoundaryFinding::ConflictObserved }, ..sample() });
+        assert_eq!(inspect(&Process::default(), &q).unwrap().issues,
+            vec![PairBoundaryIssue::SingletonConflict, PairBoundaryIssue::BrokerUnknown]);
+    }
+
+    #[test]
+    fn even_two_positive_game_reports_remain_pending_not_launch_authority() {
+        let ok = PairBoundaryFact { source: StorageEvidenceSource::MinecraftRuntime,
+            finding: PairBoundaryFinding::NoConflictInSample };
+        let q = probe(PairBoundarySnapshot { singleton: ok, broker: ok, ..sample() });
+        let report = inspect(&Process::default(), &q).unwrap();
+        assert!(report.issues.is_empty());
+        assert_eq!(report.first, left());
+        assert_eq!(report.second, right());
+    }
+
+    #[test]
+    fn exited_process_or_changed_token_invalidates_whole_pair() {
+        for p in [
+            Process { exit_at: Some(4), ..Default::default() },
+            Process { change_at: Some(3), ..Default::default() },
+        ] {
+            let q = probe(sample());
+            assert_eq!(inspect(&p, &q),
+                Err(PairBoundaryError::Native(NativePortError::StaleProcess)));
+            assert_eq!(q.calls.get(), 1);
+        }
+    }
+}

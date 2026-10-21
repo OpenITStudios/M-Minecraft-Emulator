@@ -25,6 +25,15 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+The existing Rust inspection owner now implements
+`inspect_pair_boundaries` for two independently identified processes,
+with singleton and WAM/MSAL broker observations evaluated separately.
+Positive claims from Windows token metadata or synthetic fixtures are
+not accepted as game compatibility proof. The desktop identity owner
+now wires an unmounted **all-Unknown** pair observer; this adds no
+account API calls or new production routes. All outcomes remain
+pending rather than authorized.
+
 `ScopedIsolationFindings` now rejects assigning a Windows PID to
 more than one MC02–MC04 slot, including mismatched creation-time
 attempts. Failed proof and tier-specific positive proof cannot be

@@ -1,5 +1,31 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — singleton and broker pair diagnostics, 22 October 2026
+
+Implemented `inspect_pair_boundaries` plus a read-only
+`PairBoundaryObserverPort` in the canonical Rust inspection owner.
+Two exact processes are checked before/after a bounded pair reading;
+stale PID/FILETIME, token-category changes, cross-wired slots and
+inadequate proof sources fail closed. Windows token/AppContainer
+metadata or synthetic fixture flags cannot prove absence of an
+unmodified Minecraft singleton conflict or WAM/MSAL account leakage.
+The only return type is `PendingPairInspection`.
+
+The existing desktop `instance_identity.rs` now composes this with
+`WindowsProcessObserver` and `UnknownPairBoundaryObserver`,
+deliberately reporting both singleton/broker as Unknown.
+Eight core Rust + three desktop tests authored, NOT_EXECUTED;
+no compiler/Windows/Minecraft run on this HEAD.
+
+No account token, registry, user profile, game binary, Tauri route,
+service, driver, independent lifecycle manager, CI, `main`,
+installer or Minecraft world was changed. Launch/Provision
+remains blocked.
+
+**Next:** design real-game signed-image and manual WAM/session
+continuity acceptance without reading credentials, while keeping
+the two-process and four-process requirements distinct.
+
 ## Independent engine — pairwise singleton and broker source contract, 22 October 2026
 
 The canonical Rust inspection owner now exposes `inspect_pair_boundaries`
