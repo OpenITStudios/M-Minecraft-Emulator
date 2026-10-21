@@ -46,6 +46,15 @@ actual authentication path is UNKNOWN. The next decision is a source-supported
 isolation approach with a justified two-session experiment; do not disguise a
 RunAs wrapper or a speculative custom driver as the completed engine.
 
+The next isolation candidate is native unpackaged AppContainer, using documented
+Windows APIs and a distinct application identity per session, not a different
+Windows-user RunAs wrapper. Two synthetic native processes have demonstrated
+namespace/storage separation and independent lifetimes. This does not select a
+production game provider: roaming paths remained outside the container, and
+Education's MSAL broker/cache compatibility is unproven. The explicit fixture
+lives under `tooling/acceptance/windows/`; it cannot launch Minecraft. See the
+[actual findings and next proof](independent-isolation.md#native-appcontainer-candidate---21-october-2026).
+
 ## Historical implementation - superseded
 
 The remaining sections describe earlier pilot implementation and explain retained

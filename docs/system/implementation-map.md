@@ -25,6 +25,12 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+The current isolation experiment is a native AppContainer fixture in
+`tooling/acceptance/windows/appcontainer-probe.cpp`, explicitly compiled/run by
+`test-appcontainer-isolation.ps1`. It launches only itself, validates two native
+token namespaces and storage canaries, and leaves game acceptance unexecuted.
+Roaming-path redirection remains a material unresolved compatibility question.
+
 ## Locate work by problem
 
 **Historical fork source (before retirement on 21 October 2026):** the editable Sandboxie-derived

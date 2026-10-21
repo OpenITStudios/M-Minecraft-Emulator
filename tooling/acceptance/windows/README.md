@@ -1,5 +1,46 @@
 # Windows Acceptance Tooling
 
+## Independent native AppContainer proof (synthetic only)
+
+From the repository root, explicitly run:
+
+```powershell
+./tooling/acceptance/windows/test-appcontainer-isolation.ps1 -VerifyNegativeControl
+```
+
+Requires installed x64 MSVC Build Tools; downloads nothing. The script compiles
+`appcontainer-probe.cpp` with `/W4 /WX`, then launches only copies of that same
+fixture. It uses documented Windows AppContainer APIs, no Sandboxie code, DLL,
+service calls, VM or game launch. It creates two uniquely named temporary
+`Mivubi.Probe.*` AppContainer profiles and gives their SIDs read/execute rights
+only on its new fixture directory and binary. No installed file, existing profile,
+ancestor directory or account data is reconfigured. Network capabilities are absent.
+
+The positive case checks distinct actual AppContainer tokens, concurrent survival,
+the same synthetic mutex name created separately, readable own canaries, denied
+peer/host canaries, normal exit of one process while the other survives, and
+successful removal of only the two profiles it just created. Existing profile
+collisions abort; they are never adopted or deleted. The optional negative control
+deliberately reuses token A and must fail at `actual-distinct-container-tokens`.
+Its expected FAIL is not a product failure; another failure stage is an error.
+
+Results are sanitized booleans below ignored `workspace/appcontainer-probe-*`.
+Environment/known-folder path comparisons do not read profile contents and do
+not imply auth isolation. On the observed host, local AppData was redirected,
+but roaming environment and known-folder paths were not under the container.
+Those optional observations are reported independently from the core fixture PASS.
+See [independent engine findings](../../../docs/system/independent-isolation.md).
+
+Each fixture has a 20-second lifetime and the script bounds its parent to 30
+seconds. Exceptional cleanup may terminate only exact self-created fixture handles.
+Abrupt parent termination can leave synthetic profiles; the inspection-only UTF-16
+moniker receipt is written before creation and does not authorize deleting a
+profile. Never clean profiles by wildcard. No automatic retry, elevation, global
+ACL grant or existing-service removal is performed. Existing legacy services
+remain installed; independence from an installed legacy driver on a clean host
+was NOT_EXECUTED. Graphics, input, COM/authentication, Minecraft singleton behavior,
+account separation, multiplayer and four-client acceptance are NOT_EXECUTED.
+
 ## Bounded process lifetime diagnosis
 
 `watch-workspace-process.ps1 -ProcessId <observed PID> -CreatedFileTime '<observed FILETIME>' -DurationMilliseconds 60000`

@@ -82,6 +82,98 @@ Our manager must not implement Microsoft sign-in, copy credentials/token caches,
 modify game binaries or install both editions as a workaround. Preserve existing
 account-bearing profiles and worlds during all experiments and migration.
 
+## Native AppContainer candidate - 21 October 2026
+
+A supported alternative to the rejected simple RunAs assumption is a native,
+unpackaged AppContainer. Windows documents direct profile creation and launching
+via `SECURITY_CAPABILITIES` / `STARTUPINFOEX` / `CreateProcess`, without repacking
+the official game or installing our own driver. This is a selected **synthetic
+feasibility candidate**, not an accepted Education launch provider.
+[Unpackaged apps](https://learn.microsoft.com/en-us/windows/win32/secauthz/appcontainer-for-legacy-applications-),
+[launch contract](https://learn.microsoft.com/en-us/windows/win32/secauthz/implementing-an-appcontainer).
+
+Each AppContainer has a private named-object path. Windows also documents
+per-user/per-application credential identity; this supplies an investigation
+basis, not proof that MSAL/WAM will function or maintain independent accounts.
+[Named objects](https://learn.microsoft.com/en-us/windows/win32/api/securityappcontainer/nf-securityappcontainer-getappcontainernamedobjectpath),
+[isolation model](https://learn.microsoft.com/en-us/windows/win32/secauthz/appcontainer-isolation).
+
+The launch guide explicitly documents redirected `LOCALAPPDATA`, `TEMP` and
+`TMP`. Do not generalize that to every roaming path, absolute path, external
+broker, or package identity. An unpackaged AppContainer identity is not itself
+an MSIX package registration. Our fixture checks environment and known-folder
+paths separately; it does not inspect credentials or claim a usable private
+Microsoft broker.
+
+### Executed native fixture evidence
+
+Source base: `cea5c365753efddafbba8ef8ccabf2b8f40b70fa`. The independent source
+owner for this proof is `tooling/acceptance/windows/appcontainer-probe.cpp`, with
+explicit runner `test-appcontainer-isolation.ps1`. The runner compiled the real
+native code using installed x64 MSVC with warnings treated as errors and ran
+both the positive proof and a deliberately broken identity control.
+
+| Actual observation | Result / limit |
+| --- | --- |
+| Two native processes concurrently running with distinct actual AppContainer token SIDs | PASS; same underlying interactive Windows user, not two Minecraft accounts |
+| Both create the same fixed synthetic mutex name while alive | PASS; demonstrates AppContainer namespace separation, not the game's unknown singleton mechanism |
+| Each reads its own synthetic profile canary | PASS |
+| Access to peer canary and host fixture canary | Denied as expected; no real account/profile contents opened |
+| Normal stop of A while B remains alive, then normal stop of B | PASS; no rendering/input or manager-crash proof |
+| Local AppData environment and known-folder paths | Both redirected under the respective container on this host |
+| Roaming AppData environment and known-folder paths | Both remained outside the container; known-folder query succeeded. This is a material compatibility constraint, not a silent PASS for game data isolation |
+| Cleanup | Both uniquely created synthetic profiles removed after process handles closed; no existing profiles/services removed |
+| Negative control: deliberately give process B token A | Expected FAIL at `actual-distinct-container-tokens`; synthetic profiles removed. Detecting this is required for control success |
+
+The final source was exercised with:
+`./tooling/acceptance/windows/test-appcontainer-isolation.ps1 -VerifyNegativeControl`.
+This is a Windows mechanism proof, not a production provider or four-client
+acceptance. Only fixture copies were launched. No network capabilities, UI/input
+operations, Microsoft sign-in, credential API calls, game modifications, DLL
+injection, existing Windows user creation or service/driver installation occurred.
+The historical driver remains installed on the host; retest without it on a clean
+host remains NOT_EXECUTED. The code calls no Sandboxie APIs.
+
+Profile names are fresh and collisions fail closed. Cleanup uses only profiles
+successfully created in this invocation; no wildcard deletion. An ignored,
+inspection-only moniker receipt is written before creation to aid review after
+interruption. Abrupt termination can still leave synthetic profiles and must not
+be reported as successful cleanup. Source and no account material are committed.
+
+### Education-specific facts gathered in this batch
+
+The official v1.19.53 changelog records migration from ADAL to MSAL. This is a
+historical library fact, not proof that current Windows sign-in requires WAM.
+[Wild Update changelog](https://edusupport.minecraft.net/hc/en-us/articles/13961617817236-What-s-New-in-The-Wild-Update-v1-19-53).
+Current troubleshooting names `Minecraft.AdalServer.exe` during login; that
+filename alone also cannot identify the current broker or cache isolation.
+[Sign-in troubleshooting](https://edusupport.minecraft.net/hc/en-us/articles/4404976926356-Troubleshoot-the-Can-t-Connect-to-the-Service-Error).
+
+Official Education deep links open the menu if the game is not already open;
+they document content/join operations, not a separate-account profile launch
+contract. No official supported multi-instance/profile runtime switch was found
+in this bounded search; absence from search is not proof none exists.
+[Deep-link contract](https://learn.microsoft.com/en-us/minecraft/creator/reference/content/deep-links?view=minecraft-bedrock-stable#education-edition).
+
+Read-only installed-image metadata: registered Desktop `1.26.3200.0`, executable
+version `1.26.32.0`, Valid Microsoft Corporation Authenticode signature, SHA-256
+`04164c1c64458a5d984dbc1687d0e8023d1808c44ee7be03519cdf8355233eaa`.
+No Minecraft process was running at the initial inspection. Import-table metadata
+showed CEF/WinRT/network/security dependencies, but did not establish the runtime
+authentication path, singleton object or command line. No game code was patched,
+executed, disassembled or injected; no protected code was unpacked. The binary
+and install path were not committed, and no account files were inspected.
+
+**Next bounded proof:** determine whether an unmodified official Education build
+can use a private persistent roaming-data location inside a native AppContainer
+without granting host roaming access or injecting compatibility hooks. The
+observed roaming paths must be treated explicitly; changing an environment
+variable alone is not proof the game uses it. Any future game smoke-test profile
+must be preserved as potentially account-bearing and must not reuse this
+synthetic auto-delete policy. Auth compatibility, official image attribution,
+window recovery, network capabilities, code-builder/COM behavior and sustained
+multi-client acceptance remain unproven. Do not enable production launch yet.
+
 ## First experiment and acceptance order
 
 These are investigation steps, not additional product progress gates. Existing

@@ -1,22 +1,23 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
-## Independent engine foundation - 21 October 2026
+## Independent native AppContainer proof - 21 October 2026
 
-**ACTIVE**, base `79b93ae76c03ff5d9ca128264511d2c145a0cde9`.
-User selected an independently implemented Minecraft-specific engine. Sandboxie
-launches stay retired; existing accounts/worlds/services remain untouched.
-[Architecture](../docs/system/architecture.md) and
-[API findings](../docs/system/independent-isolation.md) own the design.
-First implementation: pinned read-only Windows process context comparison in
-existing `instance_identity.rs`, typed IPC and opt-in Settings diagnostics.
-Returns booleans only; no launch/adoption/account-isolation claim or new state store.
-RunAs is not a selected production solution: WAM and singleton scope constraints;
-the Education authentication implementation remains UNKNOWN.
-Desktop verification PASS: 188 frontend + 80 Rust; 8 ignored. Two real Windows
-identity/fixture tests PASS; cross-user/game/authentication NOT_EXECUTED.
-**Next:** establish the official game's supported singleton/authentication route
-and choose a viable independent isolation mechanism before implementing launch.
-Independent provider, different-user runtime and four-client acceptance unproven.
+**ACTIVE**, base `cea5c365753efddafbba8ef8ccabf2b8f40b70fa`.
+User selected independent implementation; both Sandboxie product launch routes
+remain retired. [Architecture](../docs/system/architecture.md) and
+[actual findings](../docs/system/independent-isolation.md) own the design/evidence.
+Native unpackaged AppContainer is a justified synthetic candidate, not a proven
+game provider. MSVC /W4 /WX fixture: two actual distinct container tokens,
+concurrent lifetimes, same-name mutex separation, own canary reads, denied peer/
+host canary reads and independent normal exit PASS. Temporary profiles removed.
+Negative reused-token control failed at its expected check with cleanup confirmed.
+Local AppData redirected; roaming environment and known-folder paths did NOT.
+Historical official Education changelog proves MSAL migration, not current WAM.
+Installed signed image metadata/imports cannot establish actual broker/singleton.
+No Minecraft launch, credentials, game/installed ACL changes or driver operations.
+**Next:** prove private persistent roaming storage for unmodified Education under
+AppContainer without granting host data access; preserve any future game profile.
+Independent game provider, auth, input/network and four-client acceptance unproven.
 
 ## Windows-first efficiency — 20 October 2026
 
