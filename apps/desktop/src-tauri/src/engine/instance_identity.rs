@@ -219,6 +219,48 @@ pub fn inspect_independent_process_pair_source(
     })
 }
 
+
+/// Default diagnostic: Windows identity does not reveal the unmodified
+/// game's singleton or Microsoft broker account switching behavior.
+pub struct UnknownPairBoundaryObserver;
+
+impl virtual_clients_core::independent_engine::PairBoundaryObserverPort
+    for UnknownPairBoundaryObserver
+{
+    fn observe_pair_boundaries(
+        &self, first_slot: SessionSlot, first: ProcessIdentity,
+        second_slot: SessionSlot, second: ProcessIdentity,
+    ) -> Result<virtual_clients_core::independent_engine::PairBoundarySnapshot, NativePortError> {
+        use virtual_clients_core::independent_engine::{
+            PairBoundaryFact, PairBoundaryFinding, PairBoundarySnapshot,
+            StorageEvidenceSource,
+        };
+        let unknown = PairBoundaryFact {
+            source: StorageEvidenceSource::WindowsProcess,
+            finding: PairBoundaryFinding::Unknown,
+        };
+        Ok(PairBoundarySnapshot {
+            first_slot, second_slot, first, second,
+            singleton: unknown, broker: unknown,
+        })
+    }
+}
+
+/// Source-only, not mounted as a Tauri command. Two exact process observers
+/// are rechecked; singleton and broker findings cannot be invented from SIDs.
+pub fn inspect_independent_pair_boundaries_source(
+    first_slot: SessionSlot, first: ProcessIdentity,
+    second_slot: SessionSlot, second: ProcessIdentity,
+) -> Result<
+    virtual_clients_core::independent_engine::PendingPairInspection,
+    virtual_clients_core::independent_engine::PairBoundaryError,
+> {
+    virtual_clients_core::independent_engine::inspect_pair_boundaries(
+        &WindowsProcessObserver, &UnknownPairBoundaryObserver,
+        first_slot, first, second_slot, second,
+    )
+}
+
 // Synthetic-only bounded native FILE-handle reader. The caller MUST have
 // created/owned the fixture child and independently established which fresh
 // AppContainer profile contains this ALREADY OPENED file handle. This routine
@@ -1036,6 +1078,47 @@ mod tests {
                 SessionSlot::Mc01, first, SessionSlot::Mc02, second
             ).unwrap_err(),
             NativePortError::NotImplemented
+        );
+    }
+
+
+    #[test]
+    fn default_pair_boundary_collector_keeps_both_unknown() {
+        use virtual_clients_core::independent_engine::{
+            PairBoundaryFinding, PairBoundaryObserverPort,
+        };
+        let first = ProcessIdentity::checked(101, 133400000000000101).unwrap();
+        let second = ProcessIdentity::checked(102, 133400000000000102).unwrap();
+        let observation = UnknownPairBoundaryObserver
+            .observe_pair_boundaries(SessionSlot::Mc02, first, SessionSlot::Mc03, second)
+            .unwrap();
+        assert_eq!(observation.singleton.finding, PairBoundaryFinding::Unknown);
+        assert_eq!(observation.broker.finding, PairBoundaryFinding::Unknown);
+    }
+
+    #[test]
+    fn invalid_pair_is_rejected_without_native_process_io() {
+        use virtual_clients_core::independent_engine::PairBoundaryError;
+        let identity = ProcessIdentity::checked(101, 133400000000000101).unwrap();
+        assert_eq!(
+            inspect_independent_pair_boundaries_source(
+                SessionSlot::Mc02, identity, SessionSlot::Mc03, identity,
+            ),
+            Err(PairBoundaryError::InvalidPair),
+        );
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn valid_pair_fails_closed_without_native_windows() {
+        use virtual_clients_core::independent_engine::PairBoundaryError;
+        let first = ProcessIdentity::checked(101, 133400000000000101).unwrap();
+        let second = ProcessIdentity::checked(102, 133400000000000102).unwrap();
+        assert_eq!(
+            inspect_independent_pair_boundaries_source(
+                SessionSlot::Mc02, first, SessionSlot::Mc03, second,
+            ),
+            Err(PairBoundaryError::Native(NativePortError::NotImplemented)),
         );
     }
 
