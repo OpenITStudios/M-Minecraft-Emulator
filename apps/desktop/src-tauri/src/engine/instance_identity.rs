@@ -265,6 +265,31 @@ pub fn inspect_independent_pair_boundaries_source(
 /// WinVerifyTrust's verdict for the file opened using a pinned process's
 /// image-name query. This is NOT yet identification of its publisher or a
 /// guarantee that the queried on-disk bytes equal the running PE section.
+/// Interpretation of a WinTrust result after all provider handles have been
+/// closed. Never publish signer bytes from a rejected verification, and never
+/// silently accept a successful verification without a clean state lifetime.
+/// This function does not identify the Minecraft publisher.
+fn finish_file_signature_review(
+    verified: bool,
+    had_state: bool,
+    close_succeeded: bool,
+    signer: Result<Option<[u8; 32]>, ()>,
+) -> Result<(bool, Option<[u8; 32]>), &'static str> {
+    if had_state && !close_succeeded {
+        return Err("WinTrust provider state could not be closed");
+    }
+    if !verified {
+        return Ok((false, None));
+    }
+    if !had_state {
+        return Err("WinTrust did not provide successful verification state");
+    }
+    match signer {
+        Ok(Some(digest)) if digest != [0; 32] => Ok((true, Some(digest))),
+        _ => Err("Verified WinTrust signer certificate is unavailable"),
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ImageFileSignatureTrust {
     AuthenticodeTrustedOnDisk,
@@ -513,7 +538,7 @@ pub fn inspect_independent_storage_route_source(
 
 #[cfg(windows)]
 mod windows {
-    use super::{AppContainerComparison, ContextComparison, ProcessContainment, ProcessKey};
+    use super::{AppContainerComparison, ContextComparison, ProcessContainment, ProcessKey, finish_file_signature_review};
     use std::{io, mem::size_of, os::windows::io::AsRawHandle, ptr};
     use sha2::{Digest, Sha256};
     use std::os::windows::{ffi::OsStringExt, fs::OpenOptionsExt};
@@ -705,8 +730,16 @@ mod windows {
         if provider_data.is_null() { return Err(invalid("WinTrust provider unavailable")); }
         let primary_signer = unsafe { get_signer(provider_data, 0, 0, 0) };
         if primary_signer.is_null() { return Err(invalid("WinTrust signer unavailable")); }
+        // The primary signer and its first chain certificate must have
+        // succeeded; never hash a failed/empty signer as a trusted leaf.
+        if unsafe { (*primary_signer).dwError != 0 || (*primary_signer).csCertChain == 0 } {
+            return Err(invalid("WinTrust primary signer chain is invalid"));
+        }
         let leaf = unsafe { get_certificate(primary_signer, 0) };
         if leaf.is_null() { return Err(invalid("WinTrust signer leaf unavailable")); }
+        if unsafe { (*leaf).dwError != 0 } {
+            return Err(invalid("WinTrust leaf certificate failed provider checks"));
+        }
         let context = unsafe { (*leaf).pCert };
         if context.is_null() { return Err(invalid("WinTrust leaf context missing")); }
         let encoded = unsafe { &*context };
@@ -798,27 +831,26 @@ mod windows {
             Ok(None)
         };
         data.dwStateAction = WTD_STATEACTION_CLOSE;
-        // Closing a successful trust state's provider must also succeed.
-        // Do not silently keep a positive on-disk trust verdict when the
-        // verification state could not be released correctly.
-        let close_status = unsafe {
+        // A failed signature may still allocate provider state. Close whenever
+        // there is state to release, and reject a failed close independently
+        // of the verification result.
+        let close_succeeded = !state_created || unsafe {
             WinVerifyTrust(ptr::null_mut(), &mut policy,
                 (&mut data as *mut WINTRUST_DATA).cast())
-        };
-        if status == 0 && (!state_created || close_status != 0) {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "WinVerifyTrust returned incomplete or unreleased provider state",
-            ));
-        }
-        let signer_leaf_sha256 = signer_result?;
+        } == 0;
+        let reviewed = finish_file_signature_review(
+            status == 0,
+            state_created,
+            close_succeeded,
+            signer_result.map_err(|_| ()),
+        ).map_err(invalid)?;
         let after = file_identity(&file)?;
         if before != after || image_name(&process)? != path {
             return Err(invalid("On-disk process image changed during inspection"));
         }
         live(&process)?;
         // WinVerifyTrust returns LONG; ONLY zero is a successful verification.
-        Ok((status == 0, signer_leaf_sha256))
+        Ok(reviewed)
     }
 
     pub(super) fn legacy_token_virtualization(
@@ -1432,6 +1464,39 @@ mod tests {
         }
     }
 
+
+    #[test]
+    fn wintrust_signer_review_fails_closed_on_missing_or_unreleased_state() {
+        let hash = [0x51; 32];
+        let positive = finish_file_signature_review(true, true, true, Ok(Some(hash)));
+        assert_eq!(positive, Ok((true, Some(hash))));
+        assert_eq!(
+            finish_file_signature_review(true, false, true, Ok(Some(hash))),
+            Err("WinTrust did not provide successful verification state"),
+        );
+        for verified in [true, false] {
+            assert_eq!(
+                finish_file_signature_review(verified, true, false, Ok(Some(hash))),
+                Err("WinTrust provider state could not be closed"),
+            );
+        }
+        for invalid in [Ok(None), Ok(Some([0; 32])), Err(())] {
+            assert_eq!(
+                finish_file_signature_review(true, true, true, invalid),
+                Err("Verified WinTrust signer certificate is unavailable"),
+            );
+        }
+        // Rejected signatures cannot expose an alleged certificate, even if
+        // a collector supplied a nonzero hash.
+        assert_eq!(
+            finish_file_signature_review(false, true, true, Ok(Some(hash))),
+            Ok((false, None)),
+        );
+        assert_eq!(
+            finish_file_signature_review(false, false, true, Err(())),
+            Ok((false, None)),
+        );
+    }
     #[test]
     fn leaf_digest_remains_audit_only_with_publisher_and_mapping_unattested() {
         use virtual_clients_core::independent_engine::{

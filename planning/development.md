@@ -1,5 +1,26 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — harden WinTrust signer lifecycle and chain checks, 22 October 2026
+
+Refined the existing read-only desktop image trust source owner.
+The native Windows path now rejects a primary signer with an error or empty
+chain, and a leaf certificate with a provider error, before computing its
+DER SHA-256. A bounded pure Rust adjudicator requires successful WinTrust
+verification, a usable nonzero leaf digest, an allocated state and a
+successful release. Even failed WinTrust verification cannot ignore a failed
+provider-state close or return alleged signer bytes. Native paths always
+close provider state before returning an inspection result.
+One negative regression authored NOT_EXECUTED.
+
+No official Education signer allowlist, loaded-PE binding, package attestation,
+isolation provider, Tauri command or launch admission is enabled. Windows
+compiler/MSVC ABI and Minecraft evidence remain NOT_EXECUTED.
+
+**Next:** Audit exact Windows process/image identity around Trust and
+review source-level non-authorizing isolation contracts; keep MC02–MC04
+Launch/Provision denied.
+
+
 ## Independent engine — root navigation corrected for source-first development, 22 October 2026
 
 The root README no longer routes new development through the retired
