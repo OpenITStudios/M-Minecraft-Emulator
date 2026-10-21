@@ -8,7 +8,12 @@ it('keeps focus authority in the foreground manager and geometry in the recovery
   expect(helperPlacement).not.toContain('SetForegroundWindow');
   const foreground=source.slice(source.indexOf('pub(super) fn confirm_foreground('),source.indexOf('pub(super) fn hide('));
   expect(foreground).toContain('foreground != manager && foreground != window');
-  expect(foreground).toContain('foreground == manager && SetForegroundWindow(window)');
+  expect(foreground).toMatch(/if activate\s*&& foreground == manager\s*&& GetWindowLongPtrW\(window, GWL_STYLE\) & WS_DISABLED as isize == 0/);
+  expect(foreground.indexOf('return Ok(())')).toBeLessThan(foreground.indexOf('WS_DISABLED'));
+  expect(foreground).toContain('SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE');
+  expect(foreground).not.toContain('Workspace foreground activation refused');
+  const passive=source.slice(source.indexOf('pub fn update(manager:'),source.indexOf('#[cfg(all(test, windows))]'));
+  expect(passive).toContain('lease.place(rect, false)');
   expect(source).toContain('native::confirm_foreground(');
   expect(source).not.toMatch(/AttachThreadInput|AllowSetForegroundWindow|SPI_SETFOREGROUNDLOCKTIMEOUT/);
 });

@@ -418,26 +418,55 @@ mod native {
         saved: &Saved,
         rect: Rectangle,
         manager: u64,
+        activate: bool,
     ) -> io::Result<()> {
         let (_process, window) = hwnd(&saved.target)?;
         let manager = manager as usize as HWND;
         unsafe {
             let foreground = GetForegroundWindow();
-            if (foreground != manager && foreground != window)
-                || GetWindowLongPtrW(window, GWL_STYLE) & WS_DISABLED as isize != 0
-            {
+            if foreground != manager && foreground != window {
                 return Ok(());
             }
-            // Only the foreground manager can hand its own focus to the selected game.
-            // No input-queue attachment or foreground-lock override is permitted.
-            if foreground == manager && SetForegroundWindow(window) == 0 {
-                return Err(io::Error::other(
-                    "Workspace foreground activation refused by Windows",
-                ));
+            // Passive layout/focus events must not seize input from the manager.
+            if activate
+                && foreground == manager
+                && GetWindowLongPtrW(window, GWL_STYLE) & WS_DISABLED as isize == 0
+            {
+                SetForegroundWindow(window);
+            }
+            // Keep the selected surface visible without making it topmost or forcing input.
+            if GetForegroundWindow() == manager
+                && SetWindowPos(
+                    window,
+                    HWND_TOP,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS,
+                ) == 0
+            {
+                return Err(io::Error::other("Workspace stacking update refused"));
             }
             let deadline = std::time::Instant::now() + std::time::Duration::from_millis(500);
             loop {
                 let current_foreground = GetForegroundWindow();
+                if current_foreground == manager {
+                    SetWindowPos(
+                        window,
+                        HWND_TOP,
+                        0,
+                        0,
+                        0,
+                        0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS,
+                    );
+                }
+                // WindowFromPoint skips disabled windows while Minecraft owns a modal dialog.
+                if GetWindowLongPtrW(window, GWL_STYLE) & WS_DISABLED as isize != 0 {
+                    hwnd(&saved.target)?;
+                    return Ok(());
+                }
                 let hit = WindowFromPoint(POINT {
                     x: rect.x + rect.width / 2,
                     y: rect.y + rect.height / 2,
@@ -643,7 +672,7 @@ mod native {
     pub(super) fn hide(_: &Saved) -> io::Result<()> {
         unavailable()
     }
-    pub(super) fn confirm_foreground(_: &Saved, _: Rectangle, _: u64) -> io::Result<()> {
+    pub(super) fn confirm_foreground(_: &Saved, _: Rectangle, _: u64, _: bool) -> io::Result<()> {
         unavailable()
     }
     pub(super) fn restore(_: &Saved) -> io::Result<()> {
@@ -710,7 +739,7 @@ mod controller {
             }
             error
         }
-        fn place(&mut self, rect: Rectangle) -> io::Result<()> {
+        fn place(&mut self, rect: Rectangle, activate: bool) -> io::Result<()> {
             if !matches!(
                 self.send(Command::Place {
                     rect,
@@ -726,6 +755,7 @@ mod controller {
                     .ok_or_else(|| io::Error::other("Surface checkpoint missing"))?,
                 rect,
                 self.manager,
+                activate,
             )
         }
         fn receive(&mut self) -> io::Result<Reply> {
@@ -1020,7 +1050,7 @@ mod controller {
                     return Err(io::Error::other("Wrong workspace window"));
                 }
                 old.viewport = viewport;
-                if let Err(error) = old.place(rect) {
+                if let Err(error) = old.place(rect, true) {
                     let error = old.hold_after_failure(error);
                     state.suspended = true;
                     return Err(error);
@@ -1044,18 +1074,17 @@ mod controller {
             return Err(io::Error::other("Wrong workspace window"));
         }
         replacement.viewport = viewport;
-        let outcome = replacement.place(rect);
+        let outcome = replacement.place(rect, true);
         if outcome.is_err() {
             let detail = outcome
                 .err()
                 .map(|e| e.to_string())
                 .unwrap_or_else(|| "Invalid surface acknowledgement".into());
-            if parked.is_some() {
-                let _ = replacement.send(Command::Hide);
-                state.parked.push(replacement);
-            } else if let Err(error) = replacement.stop() {
-                state.parked.push(replacement);
-                return Err(error);
+            let _ = replacement.send(Command::Hide);
+            state.parked.push(replacement);
+            if let Some(old) = state.active.as_mut() {
+                old.place(rect, false)?;
+                state.suspended = false;
             }
             return Err(io::Error::other(format!(
                 "Workspace placement failed: {detail}. Previous session preserved."
@@ -1111,7 +1140,7 @@ mod controller {
             Err(error) => return Err(error),
         };
         lease.viewport = next_viewport;
-        match lease.place(rect) {
+        match lease.place(rect, false) {
             Ok(()) => Ok(()),
             Err(error) => {
                 let error = lease.hold_after_failure(error);
@@ -1586,6 +1615,24 @@ mod controller {
                 second_original.extended_style
             );
             assert_eq!(second_restored.rect, second_original.rect);
+            // Browser-like round trips retain all four process identities and checkpoints.
+            let (_third_fixture, third) = fixture();
+            let (_fourth_fixture, fourth) = fixture();
+            let tabs = [target.clone(), second.clone(), third, fourth];
+            for tab in &tabs {
+                present(manager as usize as u64, viewport, tab.clone()).unwrap();
+            }
+            for turn in 0..12 {
+                let selected = turn % tabs.len();
+                present(manager as usize as u64, viewport, tabs[selected].clone()).unwrap();
+                for (index, tab) in tabs.iter().enumerate() {
+                    native::capture(tab.clone()).expect("Tab process/window identity was lost");
+                    let handle = u64::from_str_radix(tab.window_handle.trim_start_matches("0x"), 16)
+                        .unwrap() as usize as HWND;
+                    assert_eq!(unsafe { IsWindowVisible(handle) } != 0, index == selected);
+                }
+            }
+            release().unwrap();
             present(manager as usize as u64, viewport, target.clone()).unwrap();
             unsafe {
                 assert_ne!(PostMessageW(game_window, WM_CLOSE, 0, 0), 0);

@@ -32,8 +32,8 @@ it("mounted owned UI never auto-launches, force-kills, polls, or treats launcher
   const panel=readFileSync(new URL("../src/OwnedManagerPanel.svelte",import.meta.url),"utf8");
   expect(panel).toContain('operationBusy||externalBusy');
   expect(panel).toContain('pending[client]=true');
-  expect(panel).toContain('Close normally');
-  expect(panel).toContain('Retry after empty check');
+  expect(readFileSync(new URL('../src/NativeWorkspace.svelte',import.meta.url),'utf8')).toContain('Close game');
+  expect(panel).toContain("await act('02','Inspect')");
   expect(panel).not.toMatch(/setInterval|setTimeout|onMount|TerminateProcess/);
 });
 it("represents focus refusal separately from a successful launch and rejects malformed focus feedback",()=>{

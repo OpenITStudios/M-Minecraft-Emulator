@@ -8,7 +8,7 @@
   export let initialSnapshot:OwnedSnapshot;
   export let operationBusy=false;
   export let externalBusy=false;
-  export let selectedClient:ClientId|null=null;
+  export let tabStates:Record<ClientId,string>={"01":"Checking","02":"Checking","03":"Checking","04":"Checking"};
   export let onPresent:((client:ClientId,target:OwnedProcess)=>Promise<void>)|null=null;
   export let onRelease:(()=>Promise<void>)|null=null;
   export let onResume:(()=>Promise<void>)|null=null;
@@ -59,8 +59,12 @@
     await openClient(client);
   }
   export async function activateClient(client:ClientId){
-    if(operationBusy||externalBusy||actionBlockedReason(client))return;
+    if(operationBusy||externalBusy)return;
+    await act('02','Inspect');
+    if(!current)return;
     const target=client==='01'?snapshot.nativeProcesses[0]:snapshot.clients.find(slot=>slot.clientId===client)?.processes[0];
+    if(!target&&(client==='01'||snapshot.clients.find(slot=>slot.clientId===client)?.launchAllowed))pending[client]=false;
+    if(actionBlockedReason(client))return;
     if(target)await play(client,target);else await openClient(client);
   }
   async function play(client:ClientId,target:OwnedProcess){
@@ -116,34 +120,15 @@
   }
   $: disabled=operationBusy||externalBusy;
   $: native=snapshot.nativeProcesses[0]??null;
+  $: tabStates={
+    '02':'Checking','03':'Checking','04':'Checking',
+    '01':activeClient==='01'&&activeOperation==='Launch'?'Opening':!current?'Check needed':native?(native.responding?'Running':'Not responding'):pending['01']?'Check needed':'Not opened',
+    ...Object.fromEntries(snapshot.clients.map(slot=>[slot.clientId,ownedClientStatus(slot,current,!!pending[slot.clientId],activeClient===slot.clientId?activeOperation as OwnedOperation:null,!!closing[slot.clientId])]))
+  };
 </script>
 
-<div class="um-toolbar"><div><strong>Client status</strong><p>A detected window still needs successful display and input.</p></div><button class="cm-button cm-secondary" disabled={disabled} on:click={()=>act("02","Inspect")}>{operationBusy?"Working…":"Check all clients"}</button></div>
-<p class="um-license">Use a separate licensed Education account for each client. Sign in inside Minecraft.</p>
-{#if error}<div class="um-alert" role="alert">{error}<details><summary>Diagnostics</summary><pre>{details}</pre></details></div>{/if}
-{#if notice}<p class="um-notice" role="status">{notice}</p>{/if}
-{#if !current}<p class="um-notice" role="status">Status needs a fresh check before another operation.</p>{/if}
-<section class="um-grid" aria-label="Minecraft clients">
-  <article class="um-card" hidden={selectedClient==='01'}><div class="um-card-top"><span class="um-number">01</span><span class="um-eyebrow">NATIVE</span></div><h2>Minecraft 01</h2><span class="um-status" class:running={!!native?.responding}>{activeClient==='01'?'Starting':!current?'Needs attention':closing['01']&&native?'Closing':native?(native.responding?'Window detected':'Needs attention'):pending['01']?'Needs attention':'Ready'}</span><p>Windows Desktop installation</p>
-    <button class="cm-button um-primary" title={actionBlockedReason('01')??''} disabled={disabled||!!actionBlockedReason('01')} on:click={()=>native?play('01',native):openClient('01')}>{native?(onPresent?'Play':'Focus'):'Open'}</button>
-    {#if pending['01'] && current && !native}<button class="cm-button cm-secondary" disabled={disabled} on:click={()=>retryLaunch("01")}>Retry after empty native check</button>{/if}
-    <details class="um-actions"><summary>Window actions</summary><div><button disabled={disabled||!current||!native||native.windowHandle==='0x0'} on:click={()=>act('01','PlaceLeft',native)}>Place left</button><button disabled={disabled||!current||!native||native.windowHandle==='0x0'} on:click={()=>act('01','PlaceRight',native)}>Place right</button><button disabled={disabled||!current||!native||native.windowHandle==='0x0'} on:click={()=>act('01','Close',native)}>Close normally</button></div></details>
-  </article>
-  {#each snapshot.clients as slot (slot.clientId)}
-    {@const target=slot.processes[0]??null}
-    <article class="um-card" hidden={selectedClient===slot.clientId}><div class="um-card-top"><span class="um-number">{slot.clientId}</span><span class="um-eyebrow">OWNED</span></div><h2>Minecraft {slot.clientId}</h2><span class="um-status" class:running={slot.status==='RUNNING'&&!!target?.responding}>{ownedClientStatus(slot,current,!!pending[slot.clientId],activeClient===slot.clientId?activeOperation as OwnedOperation:null,!!closing[slot.clientId])}</span><p>{slot.box} · Persistent profile</p>
-      {#if !slot.profileExists}
-        <button class="cm-button um-primary" title={actionBlockedReason(slot.clientId)??''} disabled={disabled||!!actionBlockedReason(slot.clientId)} on:click={()=>openClient(slot.clientId)}>Open</button>
-      {:else if target}
-        <button class="cm-button um-primary" title={actionBlockedReason(slot.clientId)??''} disabled={disabled||!!actionBlockedReason(slot.clientId)} on:click={()=>play(slot.clientId,target)}>{onPresent?'Play':'Focus'}</button>
-      {:else}
-        <button class="cm-button um-primary" title={actionBlockedReason(slot.clientId)??''} disabled={disabled||!!actionBlockedReason(slot.clientId)} on:click={()=>openClient(slot.clientId)}>Open</button>
-      {/if}
-      {#if pending[slot.clientId] && current && slot.boxedProcessCount===0}<button class="cm-button cm-secondary" disabled={disabled||!slot.launchAllowed} on:click={()=>retryLaunch(slot.clientId)}>Retry after empty check · wait 30 seconds</button>{/if}
-      <details class="um-actions"><summary>Window actions</summary><div><button disabled={disabled||!current||!target||target.windowHandle==='0x0'} on:click={()=>act(slot.clientId,'PlaceLeft',target)}>Place left</button><button disabled={disabled||!current||!target||target.windowHandle==='0x0'} on:click={()=>act(slot.clientId,'PlaceRight',target)}>Place right</button><button disabled={disabled||!current||!target||target.windowHandle==='0x0'} on:click={()=>act(slot.clientId,'Close',target)}>Close normally</button></div></details>
-    </article>
-  {/each}
-</section>
+<div class="nw-session-tools"><p>Switch tabs to keep each session running. Closing a game is a separate action.</p><button class="cm-button cm-secondary" disabled={disabled} on:click={()=>act('02','Inspect')}>{operationBusy?'Working…':'Refresh sessions'}</button></div>
+{#if error}<div class="nw-operation-error" role="alert">{error}<details><summary>Details</summary><pre>{details}</pre></details></div>{/if}
 <dialog class="um-profile-dialog" bind:this={setupDialog} aria-labelledby="um-profile-title" on:cancel|preventDefault={cancelSetup}>
   <h2 id="um-profile-title">Prepare Minecraft {setupClient}</h2>
   <p>We will create its persistent game profile, then open Minecraft. Existing profiles and worlds will be preserved.</p>

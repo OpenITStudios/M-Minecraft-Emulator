@@ -7,6 +7,7 @@
   export let sessionDirectory='';
   export let activeClient:ClientId|null=null;
   export let busy=false;
+  export let tabStates:Record<ClientId,string>={'01':'Checking','02':'Checking','03':'Checking','04':'Checking'};
   export let onClose:(client:ClientId,target:OwnedProcess)=>Promise<void>=async()=>{};
   export let onSelect:(client:ClientId)=>Promise<void>=async()=>{};
   export let onRecovered:()=>void=()=>{};
@@ -66,10 +67,9 @@
     try{await restore();}catch(error){issue=operationIssue(error);}finally{working=false;}
   }
   async function retryDisplay(){
-    const retry=failedPresentation??(activeClient&&target?{client:activeClient,target}:null);
+    const retry=failedPresentation?.client??activeClient;
     if(disabled||!retry)return;
-    working=true;
-    try{await present(retry.client,retry.target);}catch{/* present retains the recovery error. */}finally{working=false;}
+    await onSelect(retry);
   }
   async function closeClient(){
     if(disabled||!activeClient||!target)return;
@@ -85,14 +85,16 @@
 </script>
 <section class="nw-stage" id="minecraft-play-area" aria-label="Active Minecraft session">
   <header><div><p class="um-eyebrow">PLAY AREA</p><h2>{activeClient?`Minecraft ${activeClient}`:'Your Minecraft workspace'}</h2></div>
-    {#if activeClient||issue}<div class="nw-actions"><button class="cm-button cm-secondary" {disabled} on:click={returnToWindows}>Restore window</button>{#if activeClient}<button class="cm-button cm-secondary" {disabled} on:click={closeClient}>Close normally</button>{/if}</div>{/if}
+    {#if activeClient}<div class="nw-actions"><button class="cm-button cm-secondary" {disabled} on:click={closeClient}>Close game</button></div>{/if}
   </header>
   <div class="nw-tabs" role="tablist" tabindex="-1" aria-label="Minecraft sessions" on:keydown={tabKey}>
-    {#each clientIds as client}<button role="tab" aria-selected={activeClient===client} aria-controls="minecraft-play-area" title={selectionBlocked(client)??''} disabled={disabled||!!selectionBlocked(client)} on:click={()=>onSelect(client)}>Minecraft {client}</button>{/each}
+    {#each clientIds as client}<button role="tab" aria-selected={activeClient===client} aria-controls="minecraft-play-area" title={selectionBlocked(client)??''} disabled={disabled} on:click={()=>onSelect(client)}><span>Minecraft {client}</span><small>{tabStates[client]}</small></button>{/each}
   </div>
-  {#if issue}<div class="um-alert" role="alert"><strong>{issue.message}</strong><p>{issue.action}</p>{#if failedPresentation||(activeClient&&target)}<button class="cm-button" {disabled} on:click={retryDisplay}>Retry display</button>{/if}<details><summary>Diagnostics</summary><pre>{issue.details}</pre></details></div>{/if}
   <div class="nw-viewport"><div class="nw-native-slot" bind:this={viewport}>
-    {#if !activeClient}<div><span class="nw-mark">M</span><h3>Choose a client to play</h3><p>Open a session or select Play. Sign in inside Minecraft.</p></div>{/if}
+    {#if !activeClient}<div><span class="nw-mark">M</span><h3>Choose a client to play</h3><p>Select one tab to open its session. Other tabs keep running.</p></div>{/if}
   </div></div>
-  <p class="nw-footnote">{activeClient?'Click inside Minecraft to play · Accounts stay inside the game':'Windows workspace · One native and three private sessions'}</p>
+  <div class="nw-feedback" aria-live="polite">
+    {#if issue}<div role="alert"><strong>{failedPresentation?'Could not show Minecraft '+failedPresentation.client:issue.message}</strong> <span>{activeClient?'Minecraft '+activeClient+' remains selected.':'Choose a tab to try again.'}</span> {#if failedPresentation||(activeClient&&target)}<button class="cm-button cm-secondary" {disabled} on:click={retryDisplay}>Try again</button>{/if}<details><summary>Details</summary><pre>{issue.details}</pre><button class="cm-button cm-secondary" {disabled} on:click={returnToWindows}>Release all windows to Windows</button></details></div>
+    {:else}<p>Only the selected tab is shown. Other sessions stay running. Click inside the game to control it.</p>{/if}
+  </div>
 </section>

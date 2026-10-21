@@ -65,12 +65,15 @@ authorized or required by this UX. Windows Sandbox remains outside the design.
 
 ## User experience
 
-One maximized English-language application contains one large playable game
-on the left and three live session previews on the right. Minecraft 01–04
-remain stable identities from the existing canonical target catalog. Selecting
-a preview promotes that session without restarting either game. The previous
-active session takes its place in the preview rail. Never present a screenshot
-as an interactive game or describe native composition as true embedded hosting.
+The operator's 21 October correction selects one row of Minecraft 01–04 tabs
+above one large play area. Duplicate lower Open/Play cards are removed. Selecting
+an unopened tab opens its session; selecting a running tab shows its existing
+process. Other sessions stay alive. Close game is a separate explicit action.
+Each tab includes a short state label. A failed switch retains the previous
+selection and reports the destination failure below the play area. Stable client
+identities come from the existing canonical target catalog. Live previews are
+outside this bounded correction. Never present a screenshot as an interactive
+game or describe native composition as true embedded hosting.
 
 The normal flow is open the manager, open a client, sign in inside Minecraft,
 and play. Startup discovers and verifies the registered Education installation

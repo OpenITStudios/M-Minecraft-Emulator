@@ -355,7 +355,20 @@ mod tests {
             .execute()
             .expect("actual live provider inspection");
         assert_eq!(result.clients.len(), 3);
-        assert!(result.clients[0].settings_verified);
+        assert!(result.clients.iter().all(|slot| slot.settings_verified));
+        for slot in &result.clients {
+            println!(
+                "LIVE_SLOT {} status={} ready={} games={} windows={}",
+                slot.client_id,
+                slot.status,
+                slot.settings_verified,
+                slot.processes.len(),
+                slot.processes
+                    .iter()
+                    .filter(|p| p.window_handle != "0x0")
+                    .count()
+            );
+        }
         println!("ACTUAL_OWNED_MANAGER_INSPECTION: three slots verified; no launch/create/window operation executed");
     }
 }

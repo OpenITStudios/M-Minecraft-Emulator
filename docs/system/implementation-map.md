@@ -22,10 +22,13 @@ verifier is `tooling/isolation-source/verify-owned-v1186.mjs` and the
 **build-only** Windows entrypoint is `tooling/isolation-source/build-owned-v1186.ps1`.
 The full native build and staging pass on 21 October 2026 at `e2c80ad`:
 three Windows stages, 16 unsigned-build binaries, five resources and four licenses.
-The resulting 25-file owned package remains NOT_INSTALLABLE; production signing,
-provider activation and gameplay remain unexecuted.
+The resulting 25-file owned package remains NOT_INSTALLABLE. A separate locally
+test-signed copy was activated after the operator's reboot/UAC approval;
+production signing and four-account gameplay remain unexecuted. See the
+[current Windows evidence](../validation/native-pilot-localtest.md).
 Standalone C/C++ policy tests compile and pass with MSVC; they are not the
-real driver build. Driver installation and owned-engine gameplay remain unexecuted.
+real driver build. Developer driver activation is observed; owned-engine gameplay
+acceptance remains unexecuted.
 See [current implementation sequence](../../planning/development.md).
 The pinned v1.18.5 Gitlink, independent fork scripts, overlays, assemblers
 and Windows transaction prototypes listed elsewhere in this guide are

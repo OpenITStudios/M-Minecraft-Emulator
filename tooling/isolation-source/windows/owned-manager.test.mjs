@@ -138,8 +138,8 @@ test('launch observation waits for an attributed window instead of a PID alone',
   const r=ps(`$ErrorActionPreference='Stop';$script:count=0;$request=@{clientId='02'};$exitCode=0;$deadline=[DateTime]::UtcNow.AddSeconds(3);function Snapshot($operation,$exitCode){$script:count++;return @{clients=@(@{clientId='02';status=$(if($script:count -eq 1){'STARTING_OR_CLOSING'}else{'RUNNING'});processes=@(@{pid=1})})}};${loop};if($count -ne 2 -or $found.status -ne 'RUNNING'){throw 'Stopped observation before window readiness'};exit 0`);
   assert.equal(r.status,0,r.stdout+r.stderr);
 });
-test('a launched game is explicitly presented and focus refusal preserves launch outcome',{skip:process.platform!=='win32'},()=>{
-  const file=fileURLToPath(new URL('./owned-manager.ps1',import.meta.url)).replaceAll("'","''");
-  const r=ps(`$ErrorActionPreference='Stop';$t=$null;$e=$null;$ast=[Management.Automation.Language.Parser]::ParseFile('${file}',[ref]$t,[ref]$e);$f=$ast.Find({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Show-LaunchedWindow'},$true);if(-not $f){throw 'Launch never presents the game window'};. ([ScriptBlock]::Create($f.Extent.Text));Add-Type 'public static class MivubiManagerWindows {public static int Calls;public static bool Refuse;public static void Act(int pid,long time,long hwnd,string operation){if(pid!=77||time!=123||hwnd!=456||operation!="Focus")throw new System.Exception("wrong identity");Calls++;if(Refuse)throw new System.Exception("focus refused");}}';$slot=@{status='RUNNING';settingsVerified=$true;processes=@(@{pid=77;createdFileTime='123';windowHandle='0x1c8'})};$result=Show-LaunchedWindow $slot;if($null -ne $result -or [MivubiManagerWindows]::Calls -ne 1){throw 'No automatic focus'};[MivubiManagerWindows]::Refuse=$true;$result=Show-LaunchedWindow $slot;if($result -notmatch 'focus refused'){throw 'Lost focus refusal'};exit 0`);
-  assert.equal(r.status,0,r.stdout+r.stderr);
+test('launch leaves presentation and focus to the tab controller',()=>{
+  assert.doesNotMatch(source,/Show-LaunchedWindow/);
+  const launch=source.slice(source.indexOf("} elseif ($request.operation -ceq 'Launch')"),source.indexOf("} elseif ($request.operation -notin"));
+  assert.doesNotMatch(launch,/MivubiManagerWindows.*Act|Focus|Close/);
 });

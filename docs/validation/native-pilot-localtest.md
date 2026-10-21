@@ -9,7 +9,75 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
-## Authorized signed update prepared — 21 October 2026
+## Multitab correction and remaining runtime failure — 21 October 2026
+
+Desktop correction based on `26e6433c2da58f1aa3f48aee05761ec93c820327`:
+one tab row replaces duplicate Open/Play cards. Every selection first obtains a
+fresh provider snapshot; an existing process is presented, never relaunched.
+Only the explicit Close game action requests a normal game close. Failed
+replacement presentation parks the destination and restores the previous surface.
+Passive geometry/focus updates do not request game input focus. Error feedback
+uses a fixed area below the viewport, avoiding error-driven geometry changes.
+
+Executed source pipeline: **728 passed** (Node 293, frontend 182, desktop Rust
+76, runtime Rust 177), four existing file-symlink skips and eight opt-in Rust
+tests excluded. Debug executable builds. The opt-in actual Windows synthetic
+surface regression passes, including twelve four-window switches with unchanged
+PID/start/session/HWND identity, selected-only visibility, normal restoration,
+pipe loss and helper crash. Logs remain under ignored `workspace/multitab-*`.
+
+Actual Minecraft observation is **PARTIAL / full acceptance not reached**. Native 01 rendered;
+02 rendered its welcome screen and 02→01 returned to the original native process.
+Launching 03 left 01 visible while loading. Four game processes were briefly
+responsive concurrently, but this did not remain stable: owned 02, 03 and later
+04 exited during the test sequence. No exit code was captured for those original
+processes, and no matching Application Error 1000 was observed. Their exit cause
+is UNKNOWN. No authentication controls were operated. Microsoft login dialogs
+appeared automatically for owned sessions.
+
+Manager focus/restart also reproduced a covered/blank surface; an explicit native
+tab retry recovered the same original 01 process. A failed 01→04 presentation
+retained visible 01, demonstrating rollback but not successful four-tab switching.
+The native stacking correction uses bounded asynchronous placement without
+topmost/parent/owner reassignment. Disabled game windows retain their modal state;
+WindowFromPoint cannot validate them because Windows skips disabled windows.
+This remains a developer experiment, not accepted embedded hosting. Four manual
+licensed logins, gameplay, background-world continuity and network acceptance
+remain NOT_EXECUTED; the operator explicitly deferred login until UX is stable.
+
+Final-build repeat without manager restart successfully displayed the sequence
+04→01→02→03→04. All four process IDs and creation times remained unchanged and
+responsive across the sequence. The actual provider independently attributed
+one RUNNING game/window to each owned slot, with every profile setting verified.
+An overlapping diagnostic inspection was correctly rejected by the runtime lock;
+the sequential retry passed. This proves that observed menu/welcome-screen tab
+round trip, not long-duration stability, independent authentication or gameplay.
+Earlier restart/focus failures and unexplained exits remain unresolved evidence.
+Settings suspension hid the selected game and preserved all four processes;
+returning to Clients still reproduced an empty surface without an immediate
+error. Explicit tab selection is recoverable, but this navigation recovery is
+not accepted. Do not request the operator's four-account login yet.
+
+## Signed engine activated and profiles reviewed — 21 October 2026
+
+After the operator's actual reboot and UAC approval, the canonical runtime
+activation completed for `workspace/owned-tests/test-storage-20261021-104556/`.
+Its receipt records service replacement and driver load; private identity is
+`5.73.6-MIVU`, ABI `0x57230`. Existing Test Mode remained unchanged. This is a
+developer test engine using existing SbieSvc/SbieDrv registrations, not production
+installation approval. Original payloads, receipts and data were preserved.
+
+The authorized profile review verified old receipt ownership and all scalar
+settings for 02–04, normalized the known manager-added templates to OpenCOM,
+and added the canonical box-only game-data WriteFilePath. All ten canonical
+settings read back for all three profiles. Sandboxie Manager had added default
+templates when ConfigLevel was absent; source `439930c` now includes ConfigLevel
+10 before enabling newly created profiles. Source `26e6433` pins the exact owned
+native tree and corrects package inspection to fifteen native deltas. Actual
+three-slot inspection, automatic setup resume and NOT_INSTALLABLE candidate
+inspection all passed. These observations do not prove separate signed-in accounts.
+
+## Historical preparation before reboot — 21 October 2026
 
 The operator explicitly approved local test signing, SbieSvc/SbieDrv replacement
 and the three-profile data-rule update. Preparation source:

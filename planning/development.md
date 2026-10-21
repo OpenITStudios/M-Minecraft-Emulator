@@ -2,12 +2,12 @@
 
 ## Owned manager / independence — 21 October 2026
 
-**ACTIVE**, preparation `71680329f5b695ac29f853c8629074a4ec1b5da6`.
-Game data/setup recovery fixed; **723 source checks PASS**.
-Build `e2c80ad` test-signed; old engine restored, new copy awaits reboot.
-[Evidence](../docs/validation/native-pilot-localtest.md). **Product FAIL** remains.
-**Next:** manual reboot, activate approved copy, review profile rules.
-Four accounts ready for manual login.
+**ACTIVE**, base `26e6433`; native `e2c80ad` activated after reboot/UAC;
+three profiles verified. One tab row, fresh selection and rollback implemented.
+**728 source checks PASS**; synthetic switches PASS. Final real 04→01→02→03→04
+retained four identities; earlier exits/focus recovery remain unresolved.
+[Evidence](../docs/validation/native-pilot-localtest.md).
+**Next:** diagnose exits/focus before operator-deferred manual login.
 
 ## Windows-first efficiency — 20 October 2026
 

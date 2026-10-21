@@ -32,15 +32,15 @@ it('structured failures keep technical output out of the primary message',()=>{
 });
 it('states distinguish ready, blocked retry, active operation, missing profile and close acknowledgement',()=>{
   const slot:OwnedSlot={clientId:'02',box:'MivubiEdu02',profileExists:true,settingsVerified:true,launchAllowed:true,boxedProcessCount:0,status:'STOPPED',processes:[]};
-  expect(ownedClientStatus(slot,true,false,null)).toBe('Ready');
+  expect(ownedClientStatus(slot,true,false,null)).toBe('Not opened');
   expect(ownedClientStatus({...slot,launchAllowed:false},true,false,null)).toBe('Needs attention');
   expect(ownedClientStatus(slot,true,true,'Launch')).toBe('Starting');
   expect(ownedClientStatus(slot,true,false,'Close')).toBe('Closing');
   expect(ownedClientStatus(slot,false,false,null)).toBe('Needs attention');
-  expect(ownedClientStatus({...slot,status:'ABSENT'},true,false,null)).toBe('Not configured');
+  expect(ownedClientStatus({...slot,status:'ABSENT'},true,false,null)).toBe('Not opened');
   expect(ownedClientStatus({...slot,status:'RUNNING'},true,false,null)).toBe('Needs attention');
   const process={pid:77,createdFileTime:'134000000000000001',sessionId:1,windowHandle:'0x123',responding:true};
-  expect(ownedClientStatus({...slot,status:'RUNNING',processes:[process]},true,false,null)).toBe('Window detected');
+  expect(ownedClientStatus({...slot,status:'RUNNING',processes:[process]},true,false,null)).toBe('Running');
   expect(ownedClientStatus({...slot,status:'RUNNING',processes:[{...process,responding:false}]},true,false,null)).toBe('Needs attention');
 });
 it('mounted dashboard has no alternate pilot panel or automatic game launch',()=>{
