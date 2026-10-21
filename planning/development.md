@@ -1,5 +1,23 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — bounded synthetic fixture wire decoder, 21 October 2026
+
+**Source-only Rust/C++ integration:** `independent_engine/fixture_wire.rs`
+now strictly decodes the existing native AppContainer fixture's 8-byte
+version-1 observation, including explicit unknown/under/outside path status,
+unsupported bits and impossible flag combinations. The fixture C++ adds
+a compile-time ABI size assertion, not another protocol or launcher.
+Rust negative tests are authored, NOT_EXECUTED here. This decoder does
+not accept or manufacture PID/creation FILETIME and cannot authenticate
+who wrote an observation file; it cannot be substituted for the existing
+`CooperativePathObserverPort`. No account/world data, sandbox runtime,
+service, driver, installer, Tauri IPC or `main` changes.
+
+**Next:** implement a bounded, read-only Windows fixture-owned record reader
+in the existing pinned process owner, with source/handle provenance checks,
+before mapping path observations to `ProcessPathSnapshot`. No local
+Minecraft acceptance until the operator resumes it.
+
 ## Independent engine — cooperating path identity contract, 21 October 2026
 
 **Source-only continuation:** The `independent_engine/paths.rs` owner now

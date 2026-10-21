@@ -2,6 +2,24 @@
 
 ## Independent native AppContainer proof (synthetic only)
 
+### Rust decoder for the existing synthetic child record
+
+The native fixture writes `Observation` records containing exactly two
+little-endian Windows DWORDs (`version=1`, bitmask flags). A compile-time
+assertion fixes this size at eight bytes; the pure Rust decoder in
+`engine/runtime-core/src/independent_engine/fixture_wire.rs` rejects
+truncated, oversized, future-version or contradictory records. Decoded
+`UnboundFixturePaths` contains three sanitized path statuses and a
+first-run/reopen phase only. Pair decoding prevents mixing initial and
+reopened fixture phases.
+
+The **binary record alone is not authenticated IPC**. It contains no
+PID, FILETIME, OS process handle, raw profile path, SID or account. The
+existing fixture parent still owns and verifies its children. A future
+Rust observer must bind file provenance to that known child handle
+before converting anonymous fixture path observations into diagnostic
+process-specific data. This decoder is never production readiness.
+
 ### Self-observed A/B paths — schema 2
 
 The native fixture now records Local AppData Known Folder, APPDATA environment,

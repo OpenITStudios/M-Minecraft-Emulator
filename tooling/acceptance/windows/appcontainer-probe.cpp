@@ -161,6 +161,8 @@ bool token_matches(HANDLE process, PSID expected) {
     return EqualSid(info->TokenAppContainer, expected) != 0;
 }
 struct Observation { DWORD version = 1, flags = 0; };
+static_assert(sizeof(DWORD) == 4 && sizeof(Observation) == 8,
+    "Synthetic fixture frame must match the Rust 8-byte decoder");
 enum : DWORD { OWN_FILE = 1, PEER_DENIED = 2, HOST_DENIED = 4, MUTEX_PRIVATE = 8,
     LOCAL_ENV = 16, LOCAL_KNOWN_FOLDER = 32, ROAMING_ENV_PRIVATE = 64,
     ROAMING_KNOWN_AVAILABLE = 128, ROAMING_KNOWN_PRIVATE = 256,

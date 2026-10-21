@@ -228,6 +228,31 @@ No IPC, launcher, profile access, Windows service, or production collector
 is implemented by this batch. The existing `UnknownStorageObserver`
 remains the active diagnostic placeholder.
 
+## Cross-language synthetic observation decoder
+
+The existing native fixture already writes one packed-by-layout, **8-byte**
+`Observation` record per cooperating child (two little-endian Windows DWORDs:
+`version=1` and `flags`), under the *fixture-owned* AppContainer profile.
+Rather than introducing another daemon, IPC endpoint or binary protocol,
+`engine/runtime-core/src/independent_engine/fixture_wire.rs` decodes this
+existing record in pure Rust. The C++ fixture now asserts the exact record
+size at compile time. The decoder accepts **exactly eight bytes**, validates
+the version, known bits, mutually exclusive phases and the consistency of
+optional roaming-query flags, and produces only `UnboundFixturePaths`.
+Paired child records must agree on their first-run/reopen phase.
+
+**Crucial trust boundary:** an 8-byte observation file has no authentication
+or embedded PID/creation FILETIME. Its bytes alone do not prove that a given
+process wrote it or that Minecraft uses the same paths. Only the fixture's
+own parent currently has the original child process handles and verifies the
+child's AppContainer token. The Rust decoder deliberately cannot construct
+`ProcessPathSnapshot` or implement `CooperativePathObserverPort` from
+an anonymous record. A future Windows adapter must independently pin the
+actual child handle, constrain its source to that child-owned profile, enforce
+bounded I/O and reject stale identities before using the full domain path
+inspection flow. No account-bearing paths, broker tokens, installed game,
+driver, service or production launch code are added.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

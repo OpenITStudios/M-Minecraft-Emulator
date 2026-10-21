@@ -25,6 +25,15 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+The existing C++ test fixture's **eight-byte Observation record** now has
+a strict pure-Rust decoder at
+`engine/runtime-core/src/independent_engine/fixture_wire.rs`.
+It rejects malformed version/length/flags, decodes independent path states,
+and requires A/B records to come from the same fixture run phase. The
+result is explicitly `UnboundFixturePaths`, **not** a verified
+`ProcessPathSnapshot`: there is still no live Rust transport or privileged
+process launch. Exact-handle provenance is the next platform boundary.
+
 The cooperating-process path contract is
 `independent_engine/paths.rs::inspect_cooperative_paths`, consuming
 `CooperativePathObserverPort` and the current `ProcessObserverPort`.
