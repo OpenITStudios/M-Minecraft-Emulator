@@ -20,11 +20,20 @@ Three negative/source-only Rust tests use fake adapters. This does not
 connect to the UI, grant a profile, authenticate, or choose a provider;
 Rust/Windows execution remains NOT_EXECUTED.
 
-**Next source-only milestone:** implement the independent, read-only Windows
-adapter under the current desktop identity owner, then typed contract tests for
-mapping process/storage observations without credentials, sandbox DLLs,
-game launches, profile writes or services. Keep all existing account/world data.
-Do not treat the old fork source as a basis for proprietary code.
+**Source adapter milestone:** The existing \`instance_identity.rs\` now
+implements the typed \`WindowsProcessObserver\` using the canonical pin
+and FILETIME check. \`inspect_independent_source\` composes that native
+process observation with an explicit all-\`Unknown\` storage observer.
+Signed Minecraft image, HWND, roaming, registry and broker are never
+claimed on this path. Windows and non-Windows negative/source tests
+are authored; compilation/execution remains NOT_EXECUTED here.
+No Tauri command or new provider was registered.
+
+**Next source-only milestone:** add a read-only, OS-grounded
+AppContainer/storage evidence interface and map only actually observed
+Windows facts; retain the full set of unknowns for Known Folder roaming
+and authentication. No launch, profile, credential, service, or driver
+operations until local acceptance is explicitly resumed.
 
 ## Independent sandbox engine — ACTIVE source foundation, 21 October 2026
 

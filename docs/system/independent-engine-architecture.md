@@ -82,6 +82,25 @@ Microsoft broker compatibility cannot be achieved with documented APIs, record
 NO-GO for that candidate rather than inserting unreviewed hooks, bypasses, or
 a large speculative custom driver.
 
+## Implemented source adapter (read-only)
+
+The existing desktop identity owner now implements the
+\`ProcessObserverPort\` through \`WindowsProcessObserver\` and
+\`inspect_independent_source\`. It calls the previously implemented
+process-handle pin and creation-FILETIME check, then returns a typed
+\`ProcessObservation\` with both official-image signature and visible
+window evidence explicitly **false**. The matched process is a Windows
+process, not an accepted Minecraft account or a verified signed game.
+
+\`UnknownStorageObserver\` currently returns \`Unknown\` for **every**
+storage and broker surface, including Roaming Known Folder, registry,
+process namespace, peer/host data and authentication. This is an
+intentional fail-closed platform-port placeholder, not a filesystem
+sandbox, second state owner or production implementation. A future
+observer must replace it with verified OS-specific evidence. The
+integration is not registered with Tauri; admission continues to
+deny isolated launches.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

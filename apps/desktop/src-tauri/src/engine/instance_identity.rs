@@ -66,6 +66,73 @@ pub fn compare_appcontainer_identities(
     }
 }
 
+
+// Actual desktop-native process observation for the independent engine's
+// read-only port. This reuses the existing pinned Windows process handle
+// check; it does NOT claim a signed Education image, visible game window,
+// persistent storage, or isolated Microsoft credentials.
+use virtual_clients_core::independent_engine::{
+    inspect_existing, NativePortError, ProcessIdentity,
+    ProcessObservation, ProcessObserverPort, SessionInspection, SessionSlot,
+    StorageObservations, StorageObserverPort,
+};
+
+pub struct WindowsProcessObserver;
+pub struct UnknownStorageObserver;
+
+impl ProcessObserverPort for WindowsProcessObserver {
+    fn observe_exact(
+        &self,
+        expected: ProcessIdentity,
+    ) -> Result<ProcessObservation, NativePortError> {
+        let key = ProcessKey {
+            pid: expected.pid,
+            created_file_time: expected.created_file_time.to_string(),
+        };
+        #[cfg(windows)]
+        {
+            windows::inspect_exact(&key).map_err(|e| match e.kind() {
+                std::io::ErrorKind::NotFound => NativePortError::StaleProcess,
+                std::io::ErrorKind::InvalidInput | std::io::ErrorKind::InvalidData => {
+                    NativePortError::InvalidIdentity
+                }
+                std::io::ErrorKind::PermissionDenied => NativePortError::AccessDenied,
+                _ => NativePortError::OperationFailed,
+            })?;
+            Ok(ProcessObservation {
+                identity: expected,
+                official_image_signature_observed: false,
+                visible_window_observed: false,
+            })
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = key;
+            Err(NativePortError::NotImplemented)
+        }
+    }
+}
+
+impl StorageObserverPort for UnknownStorageObserver {
+    fn inspect_boundaries(
+        &self,
+        _slot: SessionSlot,
+    ) -> Result<StorageObservations, NativePortError> {
+        // Never invent isolation from an AppContainer SID or private-looking path.
+        // A real OS storage observer requires its own exact scope and evidence.
+        Ok(StorageObservations::default())
+    }
+}
+
+/// Source-level, read-only integration with the existing identity owner.
+/// Not a Tauri command, not a new lifecycle controller or game launch route.
+pub fn inspect_independent_source(
+    slot: SessionSlot,
+    expected: ProcessIdentity,
+) -> Result<SessionInspection, NativePortError> {
+    inspect_existing(&WindowsProcessObserver, &UnknownStorageObserver, slot, expected)
+}
+
 #[cfg(windows)]
 mod windows {
     use super::{AppContainerComparison, ContextComparison, ProcessKey};
@@ -295,6 +362,13 @@ mod windows {
         }.to_vec()))
     }
 
+    /// Reuse the same pinned handle/FILETIME check as the existing desktop
+    /// observer. The handle is retained until the final liveness check.
+    pub(super) fn inspect_exact(expected: &ProcessKey) -> io::Result<()> {
+        let process = pin(expected)?;
+        live(&process)
+    }
+
     pub(super) fn compare_appcontainers(
         left: &ProcessKey,
         right: &ProcessKey,
@@ -410,6 +484,35 @@ mod windows {
         }
 
         #[test]
+        fn independent_source_observation_keeps_game_and_storage_unknown() {
+            use virtual_clients_core::independent_engine::{
+                ProcessIdentity, SessionSlot, StorageSurface,
+            };
+            let key = own_key();
+            let expected = ProcessIdentity::checked(
+                key.pid,
+                key.created_file_time.parse::<u64>().unwrap(),
+            ).unwrap();
+            let result = super::super::inspect_independent_source(
+                SessionSlot::Mc02,
+                expected,
+            ).unwrap();
+            assert_eq!(result.process.identity, expected);
+            assert!(!result.process.official_image_signature_observed);
+            assert!(!result.process.visible_window_observed);
+            assert!(result.storage.unresolved().contains(&StorageSurface::RoamingKnownFolder));
+            assert!(result.storage.unresolved().contains(&StorageSurface::AuthenticationBroker));
+
+            let stale = ProcessIdentity::checked(expected.pid, expected.created_file_time + 1)
+                .unwrap();
+            assert_eq!(
+                super::super::inspect_independent_source(SessionSlot::Mc02, stale)
+                    .unwrap_err(),
+                NativePortError::InvalidIdentity
+            );
+        }
+
+        #[test]
         fn actual_child_identity_is_pinned_without_controlling_its_lifetime() {
             use std::{
                 os::windows::process::CommandExt,
@@ -504,6 +607,28 @@ pub fn parse_window_identity(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn independent_storage_adapter_cannot_invent_verified_broker_or_roaming() {
+        use virtual_clients_core::independent_engine::{
+            StorageFinding, StorageSurface,
+        };
+        let report = UnknownStorageObserver.inspect_boundaries(SessionSlot::Mc02).unwrap();
+        for surface in StorageSurface::ALL {
+            assert_eq!(report.finding(surface), StorageFinding::Unknown);
+        }
+        assert_eq!(report.unresolved().len(), StorageSurface::ALL.len());
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn non_windows_source_observation_fails_closed() {
+        let process = ProcessIdentity::checked(1, 12345).unwrap();
+        assert!(matches!(
+            inspect_independent_source(SessionSlot::Mc02, process),
+            Err(NativePortError::NotImplemented)
+        ));
+    }
+
     #[test]
     fn accepts_full_width_windows_filetime_without_lossy_float_conversion() {
         assert_eq!(
