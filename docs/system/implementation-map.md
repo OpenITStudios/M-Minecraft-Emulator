@@ -25,6 +25,12 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+The independently written proof-classification policy lives in
+`engine/runtime-core/src/independent_isolation.rs`: pure in-memory findings and
+tier-separated evidence gaps for synthetic, native Windows, two-game, and four-game
+claims. It is NOT provider readiness, lifecycle persistence, or launch admission.
+The existing desktop launch block remains authoritative.
+
 The current isolation experiment is a native AppContainer fixture in
 `tooling/acceptance/windows/appcontainer-probe.cpp`, explicitly compiled/run by
 `test-appcontainer-isolation.ps1`. It launches only itself, validates two native

@@ -1,5 +1,26 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent sandbox engine — ACTIVE source foundation, 21 October 2026
+
+**Operator explicitly resumed implementation in ChatGPT on 21 October 2026.**
+Scope: independently authored, modular Minecraft-focused isolation engine with
+OpenITStudios-owned source; Sandboxie runtime/fork remains retired. The initial
+implementation is the pure evidence classification policy in
+`engine/runtime-core/src/independent_isolation.rs`, covering synthetic Windows,
+native filesystem/namespace/roaming and two-/four-game acceptance. It does not
+activate a provider or create accounts, drivers, processes, profiles or new
+stores. Its authored negative/unit tests are source only; source/Windows execution
+is NOT_EXECUTED in remote GitHub. No imported Sandboxie source is used by this
+module. Prior source/fork trees remain historical, not implementation inputs.
+
+**Next:** implement a bounded, independent Windows-native evidence adapter for
+AppContainer identity and persistent roaming verification, without promoting
+synthetic results into game launch authority. Retain current isolated Launch/
+Provision blockade; preserve old accounts/worlds/services. No GitHub Actions,
+release, main, VM or certificate changes.
+
+### Historical paused handoff (superseded by explicit resumption)
+
 ## Independent engine - PAUSED for operator discussion, 21 October 2026
 
 **PAUSED at operator request.** Last implementation/proof commit:

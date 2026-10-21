@@ -12,6 +12,7 @@ mod guest;
 mod identity;
 mod journal;
 mod lifecycle_admission;
+pub mod independent_isolation;
 mod minecraft_runtime;
 mod operation_lock;
 mod paths;

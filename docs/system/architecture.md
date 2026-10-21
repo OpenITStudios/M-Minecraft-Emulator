@@ -33,6 +33,13 @@ one; establish a concrete requirement and prove compatibility first.
 | Resource use | Prefer native handles and events over one PowerShell process per tab switch or a permanent polling daemon. Any later background resource policy must be reversible and measured; no thread suspension, injected rendering control or invented FPS savings. |
 | Migration/package | Existing identities and data paths stay compatible. Do not package the retired engine as the replacement. Installer, service teardown and account-data migration need separate proven recovery; source retirement alone does not uninstall anything. |
 
+The first new independent-policy implementation is
+`engine/runtime-core/src/independent_isolation.rs`: a stateless diagnostic
+classification of synthetic, OS-native, and actual Minecraft evidence. A
+synthetic PASS cannot satisfy Windows roaming or two/four-game acceptance.
+This module makes no launch decision, writes no profiles or credentials, and
+does not change desktop provider admission. It is owned code, not a fork.
+
 The first implemented independent foundation is read-only process-context
 comparison in the existing `instance_identity.rs`: handles remain pinned while
 Windows token user, configured profile directory and Windows session are compared.
