@@ -59,7 +59,8 @@ pub use ports::{
     WorkspacePresentationPort,
 };
 pub use storage::{
-    preflight_storage_route, StorageFinding, StorageObservations,
+    plan_private_file_access, preflight_storage_route, PendingPrivateFilePlan,
+    PrivateFilePlanError, StorageFinding, StorageObservations,
     StorageRouteAction, StorageRouteBlocker, StorageRouteDomain, StorageRoutePreflight,
     StorageRouteRequest, StorageRouteTarget, StorageSurface,
 };

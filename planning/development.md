@@ -1,5 +1,29 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — manager-owned private file access plan, 22 October 2026
+
+Implemented `plan_private_file_access` in the existing canonical Rust
+`independent_engine/storage.rs` domain. It accepts only MC02–MC04
+private-session Local/Roaming file metadata, exact PID/creation FILETIME
+binding, and bounded portable relative path components; it rejects host,
+cross-slot, official-install and registry/named-object targets. Windows
+reserved device filenames, traversal, backslash/drive/UNC paths, whitespace,
+unsupported characters and excessive depth/length fail closed. No user path
+is resolved, directory created, file opened or account-bearing data touched.
+The return type is explicitly `PendingPrivateFilePlan`, NOT an OS access
+capability or evidence of Minecraft roaming isolation. It is for
+manager-owned metadata only, not arbitrary Minecraft file names.
+
+Three new Rust unit tests cover valid MC02–MC04 plans, forbidden ownership,
+and hostile cross-platform Windows path syntax. Authored NOT_EXECUTED.
+No driver/service, IPC, Tauri route, launch provider, CI, installer or
+target Windows/Minecraft execution. Launch/Provision remains denied.
+
+**Next:** Define and source-review an independently verified native private
+root handle/ACL/reparse validation boundary before any file operation;
+keep roaming/HKCU/MSAL actual game compatibility UNKNOWN.
+
+
 ## Independent engine — reuse pinned Windows token per native pair, 22 October 2026
 
 Refactored the existing `instance_identity.rs` read-only Windows pair

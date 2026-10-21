@@ -11,6 +11,21 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Manager-owned private file plan — source only, 22 October 2026
+
+`independent_engine/storage.rs::plan_private_file_access` creates a
+**non-authorizing** bounded plan for manager-owned metadata under one
+MC02–MC04 Local/Roaming profile, using a fixed allowed component namespace.
+It rejects cross-slot/host/official-install targets, traversal, ambiguous
+Windows device names, drives and UNC paths. It never accepts arbitrary
+Minecraft world filenames or returns an absolute path. A future native
+adapter must still prove the opened private root's identity and access
+control, reject junction/reparse traversal, and bind OS process/token
+identity before any read/write. The Rust plan alone does NOT provide
+filesystem redirection, Roaming Known Folder separation, registry
+virtualization or Microsoft account isolation.
+
+
 Build a lightweight, **independently authored** Windows engine specifically for
 four concurrently playable Minecraft Education Desktop sessions, each with its
 own legitimately licensed account, persistent world/data and browser-like

@@ -246,6 +246,92 @@ pub fn preflight_storage_route(request: StorageRouteRequest) -> StorageRoutePref
     }
 }
 
+
+// Manager-owned **relative** file paths only. These are never Minecraft's
+// arbitrary world names or paths passed to Win32 file APIs. In particular,
+// a lexical path check does not detect a reparse point, ACL or volume escape.
+// Native adapters must still open an already verified private directory
+// handle, reject reparse traversals and enforce access with Windows ACLs.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingPrivateFilePlan {
+    pub slot: SessionSlot,
+    pub domain: StorageRouteDomain,
+    pub action: StorageRouteAction,
+    pub components: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PrivateFilePlanError {
+    Denied(StorageRouteBlocker),
+    NotPrivateFileStorage,
+    EmptyOrOversizedPath,
+    UnsafeComponent,
+    ReservedWindowsName,
+}
+
+fn is_reserved_windows_component(name: &str) -> bool {
+    // Windows reserves device basenames even with extensions and in any case.
+    // This is a conservative ASCII namespace for manager-owned metadata only.
+    let stem = name.split('.').next().unwrap_or("");
+    let stem = stem.to_ascii_uppercase();
+    matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$")
+        || ((stem.starts_with("COM") || stem.starts_with("LPT"))
+            && stem.len() == 4
+            && stem.as_bytes()[3].is_ascii_digit())
+}
+
+/// Plan a bounded, manager-owned file location under one logical session.
+/// This returns only a *pending plan*; it never resolves absolute paths,
+/// creates directories, follows symlinks, opens files, or grants access.
+///
+/// Deliberately restrict metadata names to portable ASCII. Minecraft world
+/// filenames and arbitrary application paths MUST NOT be passed here.
+pub fn plan_private_file_access(
+    request: StorageRouteRequest,
+    relative: &str,
+) -> Result<PendingPrivateFilePlan, PrivateFilePlanError> {
+    use PrivateFilePlanError as Failure;
+
+    match preflight_storage_route(request) {
+        StorageRoutePreflight::Denied(blocker) => return Err(Failure::Denied(blocker)),
+        StorageRoutePreflight::NeedsNativeVerification { .. } => {}
+    }
+    if !matches!(request.target, StorageRouteTarget::PrivateSession(owner) if owner == request.slot)
+        || !matches!(request.domain, StorageRouteDomain::LocalFiles | StorageRouteDomain::RoamingFiles)
+    {
+        return Err(Failure::NotPrivateFileStorage);
+    }
+    // Backslash is intentionally not accepted on *any* host platform so a
+    // Linux-based test cannot accidentally approve Windows traversal.
+    if relative.is_empty() || relative.len() > 240 || relative.starts_with('/')
+        || relative.ends_with('/') || relative.contains('\\')
+    {
+        return Err(Failure::EmptyOrOversizedPath);
+    }
+    let mut components = Vec::new();
+    for component in relative.split('/') {
+        if component.is_empty() || component.len() > 64 || component.starts_with('.')
+            || component.ends_with('.') || component.ends_with(' ')
+            || !component.bytes().all(|ch| {
+                ch.is_ascii_alphanumeric() || ch == b'_' || ch == b'-' || ch == b'.'
+            })
+        {
+            return Err(Failure::UnsafeComponent);
+        }
+        if is_reserved_windows_component(component) {
+            return Err(Failure::ReservedWindowsName);
+        }
+        components.push(component.to_owned());
+        if components.len() > 12 {
+            return Err(Failure::EmptyOrOversizedPath);
+        }
+    }
+    Ok(PendingPrivateFilePlan {
+        slot: request.slot, domain: request.domain, action: request.action,
+        components,
+    })
+}
+
 #[cfg(test)]
 mod route_tests {
     use super::*;
@@ -262,6 +348,105 @@ mod route_tests {
             target: StorageRouteTarget::PrivateSession(slot),
             action: StorageRouteAction::Read,
         }
+    }
+
+
+    #[test]
+    fn manager_owned_file_plan_accepts_bounded_relative_metadata_only() {
+        for slot in [SessionSlot::Mc02, SessionSlot::Mc03, SessionSlot::Mc04] {
+            for domain in [StorageRouteDomain::LocalFiles, StorageRouteDomain::RoamingFiles] {
+                for action in [
+                    StorageRouteAction::Read, StorageRouteAction::Create,
+                    StorageRouteAction::Update, StorageRouteAction::Delete,
+                ] {
+                    let plan = plan_private_file_access(StorageRouteRequest {
+                        domain, action, ..request(slot)
+                    }, "state/checkpoint-01.json").unwrap();
+                    assert_eq!(plan.slot, slot);
+                    assert_eq!(plan.domain, domain);
+                    assert_eq!(plan.action, action);
+                    assert_eq!(plan.components, ["state", "checkpoint-01.json"]);
+                }
+            }
+        }
+        // Planning is not a direct file path / native access permission.
+    }
+
+    #[test]
+    fn private_file_plan_rejects_cross_slot_host_and_unverified_keys() {
+        let own = request(SessionSlot::Mc02);
+        for peer in [SessionSlot::Mc01, SessionSlot::Mc03, SessionSlot::Mc04] {
+            assert_eq!(plan_private_file_access(StorageRouteRequest {
+                target: StorageRouteTarget::PrivateSession(peer), ..own
+            }, "state.json"), Err(PrivateFilePlanError::Denied(
+                StorageRouteBlocker::AnotherSession
+            )));
+        }
+        assert_eq!(plan_private_file_access(StorageRouteRequest {
+            target: StorageRouteTarget::HostAccountData, ..own
+        }, "state.json"), Err(PrivateFilePlanError::Denied(
+            StorageRouteBlocker::HostAccountBoundary
+        )));
+        assert_eq!(plan_private_file_access(StorageRouteRequest {
+            slot: SessionSlot::Mc01,
+            target: StorageRouteTarget::PrivateSession(SessionSlot::Mc01), ..own
+        }, "state.json"), Err(PrivateFilePlanError::Denied(
+            StorageRouteBlocker::NativeSlotOwnedElsewhere
+        )));
+        assert_eq!(plan_private_file_access(StorageRouteRequest {
+            observed_process: None, ..own
+        }, "state.json"), Err(PrivateFilePlanError::Denied(
+            StorageRouteBlocker::UnpinnedOrStaleProcess
+        )));
+        // An official installation must not become a mutable metadata root.
+        assert_eq!(plan_private_file_access(StorageRouteRequest {
+            target: StorageRouteTarget::OfficialInstallation,
+            action: StorageRouteAction::Read, ..own
+        }, "state.json"), Err(PrivateFilePlanError::NotPrivateFileStorage));
+        for domain in [
+            StorageRouteDomain::CurrentUserRegistry,
+            StorageRouteDomain::NamedObjects,
+        ] {
+            assert_eq!(plan_private_file_access(StorageRouteRequest {
+                domain, ..own
+            }, "state.json"), Err(PrivateFilePlanError::NotPrivateFileStorage));
+        }
+    }
+
+    #[test]
+    fn private_file_plan_refuses_windows_path_ambiguity_and_traversal() {
+        let req = request(SessionSlot::Mc02);
+        for bad in [
+            ".", "..", "../peer", "data/../peer", "./data", ".private",
+            "/root", "data/", "data//x", "\\\\server\\share",
+            "C:\\host", "C:host", "data\\peer", "a:b", "data/x*",
+            "data/x?", "data/<test>", "data/pipe|secret",
+            "data/name ", "data/name.", "data/name\tmore",
+            "data/has space", "data/emoji🙂", "data/NUl", "com1.txt",
+            "AUX.log", "prn", "LPT9", "CONIN$.txt", "CONOUT$",
+            "foo/COM0.bin",
+        ] {
+            assert!(
+                plan_private_file_access(req, bad).is_err(),
+                "Unexpected accepted unsafe relative filename: {bad}"
+            );
+        }
+        assert_eq!(
+            plan_private_file_access(req, ""),
+            Err(PrivateFilePlanError::EmptyOrOversizedPath)
+        );
+        assert_eq!(
+            plan_private_file_access(req, &"x".repeat(241)),
+            Err(PrivateFilePlanError::EmptyOrOversizedPath)
+        );
+        assert_eq!(
+            plan_private_file_access(req, &"x".repeat(65)),
+            Err(PrivateFilePlanError::UnsafeComponent)
+        );
+        assert_eq!(
+            plan_private_file_access(req, &vec!["x"; 13].join("/")),
+            Err(PrivateFilePlanError::EmptyOrOversizedPath)
+        );
     }
 
     #[test]
