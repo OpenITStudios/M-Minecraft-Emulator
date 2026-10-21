@@ -442,6 +442,31 @@ regressions cover denied-before-I/O, stale process after storage,
 token changes, roaming gaps, host leaks and false positive reports;
 Windows/Rust execution is not yet available in this GitHub-only stage.
 
+## Synthetic registry boundary contract (no host HKCU access)
+
+The canonical Rust engine now provides
+`independent_engine/registry.rs::review_synthetic_registry_probe`.
+It accepts sanitized, self-reported results only for a
+new disposable fixture-owned private hive: one exact process identity,
+its logical owning slot, peer-access denial and a separately verified
+restart process. Host HKCU, unknown/preexisting hives, cross-slot owners,
+stale PID/FILETIME and false restart continuity are rejected.
+Unexpected peer reads and missing canaries are different issues.
+Even an empty issues list is **synthetic self-reporting**, not
+proof of Windows registry virtualization or Minecraft isolation.
+
+No registry I/O is implemented here. Creating a canary key in an
+unverified AppContainer HKCU view could change host account-bearing
+data, so a future test must first prove a disposable isolated hive by
+a supported mechanism. If that cannot be established, keep the
+registry boundary Unknown and mark the candidate NO-GO.
+Legacy UAC token virtualization flags are not replacement evidence.
+
+The route inspector also distinguishes `path_risks`
+(OutsideExpectedProfile path strings) from `dangerous`
+(reported SharedOrLeaking access). Both remain unresolved; only
+the latter is a reported data-access failure. Neither grants access.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

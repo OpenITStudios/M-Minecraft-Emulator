@@ -25,6 +25,15 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+A new pure Rust synthetic registry reviewer in
+`independent_engine/registry.rs` refuses host HKCU,
+unowned/preexisting hives, cross-slot ownership and stale/reused
+process identities. It accepts only fixture-hive canary reports and
+never approves live registry isolation or Minecraft launch.
+The route inspector now separates path-outside-profile
+`path_risks` from shared-access `dangerous` findings.
+No Windows registry I/O is performed or authorized.
+
 The read-only routing inspector is now
 `independent_engine/inspection.rs::inspect_storage_route`. It applies
 the canonical route policy before Windows observation, checks exact

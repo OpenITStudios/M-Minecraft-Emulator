@@ -1,5 +1,27 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — registry feasibility and diagnostic correctness, 21 October 2026
+
+**Rust-only source milestone:** `independent_engine/registry.rs`
+defines a strict synthetic private-hive review: denies host HKCU,
+unknown/preexisting hive roots, native-slot ownership, cross-slot
+registry targets, stale PID/FILETIME and invalid restart evidence.
+It distinguishes missing probes, observed own markers, unexpected
+peer readability and restart persistence without outputting paths,
+values, SIDs, secrets or a production approval. Seven unit tests
+authored, **NOT_EXECUTED**.
+
+**Diagnostic correction:** `inspection.rs` now distinguishes
+`path_risks` (outside-profile path string) from
+`dangerous` (reported shared data access). Both remain unresolved.
+No Windows registry API, canary write, account/world/profile mutation,
+driver, service, Tauri command, provider activation, `main`, CI or
+release was added. Windows and Minecraft acceptance NOT_EXECUTED.
+
+**Next:** investigate a documented, disposable, truly isolated
+Windows private hive before any opt-in synthetic registry I/O.
+Never probe writable host HKCU while its view is unverified.
+
 ## Independent engine — process-bound route diagnostic inspection, 21 October 2026
 
 The canonical Rust inspection owner now exposes `inspect_storage_route`:

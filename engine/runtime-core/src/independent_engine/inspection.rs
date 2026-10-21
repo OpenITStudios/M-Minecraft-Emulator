@@ -49,6 +49,8 @@ pub enum RouteBoundaryInspection {
         domain: StorageRouteDomain,
         required: Vec<StorageSurface>,
         unresolved: Vec<StorageSurface>,
+        /// Private-looking paths outside the profile are not confirmed leaks.
+        path_risks: Vec<StorageSurface>,
         dangerous: Vec<StorageSurface>,
     },
 }
@@ -113,18 +115,21 @@ pub fn inspect_storage_route<P: ProcessObserverPort, S: StorageObserverPort>(
             observed.finding(*surface) != wanted
         })
         .collect();
+    let path_risks = required
+        .iter()
+        .copied()
+        .filter(|surface| observed.finding(*surface) == StorageFinding::PathOutsideProfile)
+        .collect();
     let dangerous = required
         .iter()
         .copied()
-        .filter(|surface| matches!(
-            observed.finding(*surface),
-            StorageFinding::PathOutsideProfile | StorageFinding::SharedOrLeaking
-        ))
+        .filter(|surface| observed.finding(*surface) == StorageFinding::SharedOrLeaking)
         .collect();
     Ok(RouteBoundaryInspection::PendingNativeAcceptance {
         domain,
         required: required.to_vec(),
         unresolved,
+        path_risks,
         dangerous,
     })
 }
@@ -249,12 +254,13 @@ mod tests {
         let result = inspect_storage_route(&process, &storage, request).unwrap();
         match result {
             RouteBoundaryInspection::PendingNativeAcceptance {
-                domain, required, unresolved, dangerous
+                domain, required, unresolved, path_risks, dangerous
             } => {
                 assert_eq!(domain, StorageRouteDomain::RoamingFiles);
                 assert!(required.contains(&StorageSurface::RoamingEnvironment));
                 assert!(required.contains(&StorageSurface::RoamingKnownFolder));
                 assert_eq!(required, unresolved);
+                assert!(path_risks.is_empty());
                 assert!(dangerous.is_empty());
             }
             _ => panic!("No launch grant or authorized routing state exists"),
@@ -325,9 +331,10 @@ mod tests {
         ).unwrap();
         match result {
             RouteBoundaryInspection::PendingNativeAcceptance {
-                unresolved, dangerous, ..
+                unresolved, path_risks, dangerous, ..
             } => {
                 assert!(unresolved.is_empty());
+                assert!(path_risks.is_empty());
                 assert!(dangerous.is_empty());
                 // There is intentionally no Approved or LaunchAllowed result.
             }
@@ -351,7 +358,7 @@ mod tests {
     }
 
     #[test]
-    fn unsafe_or_host_shared_paths_are_reported_as_dangerous_not_passed() {
+    fn outside_profile_path_is_not_mislabeled_as_confirmed_host_leak() {
         let result = inspect_storage_route(
             &CountingProcess::default(),
             &LeakingStorage,
@@ -359,14 +366,12 @@ mod tests {
         ).unwrap();
         match result {
             RouteBoundaryInspection::PendingNativeAcceptance {
-                unresolved, dangerous, ..
+                unresolved, path_risks, dangerous, ..
             } => {
                 assert!(unresolved.contains(&StorageSurface::RoamingKnownFolder));
                 assert!(unresolved.contains(&StorageSurface::HostDataAccess));
-                assert_eq!(
-                    dangerous,
-                    vec![StorageSurface::RoamingKnownFolder, StorageSurface::HostDataAccess]
-                );
+                assert_eq!(path_risks, vec![StorageSurface::RoamingKnownFolder]);
+                assert_eq!(dangerous, vec![StorageSurface::HostDataAccess]);
             }
             _ => panic!("Shared host access cannot pass"),
         }

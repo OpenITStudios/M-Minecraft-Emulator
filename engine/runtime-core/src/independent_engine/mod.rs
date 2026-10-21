@@ -9,6 +9,7 @@ mod fixture_wire;
 mod identity;
 mod inspection;
 mod paths;
+mod registry;
 mod operations;
 mod ports;
 mod storage;
@@ -29,6 +30,11 @@ pub use inspection::{
 pub use paths::{
     inspect_cooperative_paths, review_process_path_snapshot,
     BoundPathInspectionError, PathLocation, ProcessPathSnapshot,
+};
+pub use registry::{
+    review_synthetic_registry_probe, RegistryCanaryRead, RegistryFixtureIssue,
+    RegistryFixtureReview, RegistryProbeError, RegistryProbeScope,
+    SyntheticRegistryProbe,
 };
 pub use operations::{OperationClass, SessionOperation};
 pub use ports::{
