@@ -699,6 +699,44 @@ The evaluator has no Windows system calls, scheduler, persistence,
 Tauri endpoint or provider ownership. Existing Launch/Provision
 remains blocked, and all runtime acceptance is still NOT_EXECUTED.
 
+## Read-only on-disk Authenticode image candidate — 22 October 2026
+
+The existing desktop Windows process identity owner implements
+`inspect_process_image_trust_source(expected)`. The source
+pins an exact process by PID + full-width creation FILETIME,
+retrieves its executable name with `QueryFullProcessImageNameW`,
+opens that image **read-only** with restricted sharing, and uses
+`WinVerifyTrust(WINTRUST_ACTION_GENERIC_VERIFY_V2)` on the opened
+file handle. The call is silent (`WTD_UI_NONE`) and uses
+`WTD_CACHE_ONLY_URL_RETRIEVAL` to forbid revocation fetches.
+It closes provider state on all verification outcomes and
+rechecks file identity, image pathname and process liveness afterwards.
+The result never includes the raw executable path or certificate.
+
+**Critical security ceiling:** A trusted generic Authenticode signer
+is **not proof of Microsoft's/Mojang's authorized publisher for the
+official Minecraft Education application**. Moreover, querying the
+on-disk executable path does not prove that the already mapped PE
+section in a running process references identical immutable bytes,
+nor does it validate a Store package identity or catalog-signature
+path. These distinctions are explicit in
+`PinnedImageTrustCandidate`: the trust assessment may be
+`AuthenticodeTrustedOnDisk` while
+`OfficialGamePublisher` is **always `NotAttested`**. An absent,
+failed or uncached revocation response is reported as
+`NotVerified`, not success.
+
+The existing `ProcessObservation::official_image_signature_observed`
+remains `false`. No publisher allowlist, certificate subject
+guess, arbitrary file-picker, sign-in, game binary modification,
+Tauri command, launcher/provider activation, background thread,
+HTTP request, driver or new lifecycle owner is introduced.
+A future signed-image assessor must bind the signer certificate
+chain and package/code provenance to an explicitly reviewed
+publisher policy and the real process image before returning a
+publisher-specific fact. Any such fact remains diagnostic until
+actual Windows and Minecraft acceptance are separately executed.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

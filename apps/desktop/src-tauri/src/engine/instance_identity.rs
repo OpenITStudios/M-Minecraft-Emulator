@@ -261,6 +261,76 @@ pub fn inspect_independent_pair_boundaries_source(
     )
 }
 
+
+/// WinVerifyTrust's verdict for the file opened using a pinned process's
+/// image-name query. This is NOT yet identification of its publisher or a
+/// guarantee that the queried on-disk bytes equal the running PE section.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ImageFileSignatureTrust {
+    AuthenticodeTrustedOnDisk,
+    NotVerified,
+}
+
+/// Deliberately no positive value until an actual certificate signer chain
+/// and allowlisted official Minecraft Education publisher are established.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OfficialGamePublisher {
+    NotAttested,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PinnedImageTrustCandidate {
+    pub process: ProcessIdentity,
+    pub image_file_signature: ImageFileSignatureTrust,
+    pub publisher: OfficialGamePublisher,
+}
+
+fn unpromoted_image_trust(
+    process: ProcessIdentity,
+    signed_on_disk: bool,
+) -> PinnedImageTrustCandidate {
+    PinnedImageTrustCandidate {
+        process,
+        image_file_signature: if signed_on_disk {
+            ImageFileSignatureTrust::AuthenticodeTrustedOnDisk
+        } else {
+            ImageFileSignatureTrust::NotVerified
+        },
+        publisher: OfficialGamePublisher::NotAttested,
+    }
+}
+
+/// Source-only inspection. It NEVER returns a verified Minecraft publisher or
+/// changes ProcessObservation::official_image_signature_observed. In particular
+/// a trusted generic Windows signature cannot satisfy acceptance.rs' publisher
+/// check and cannot activate Launch/Provision.
+///
+/// The exact process handle is pinned by the canonical desktop Windows owner.
+/// Only its queried executable path is opened for non-mutating trust review;
+/// no caller-supplied paths, user profile scanning, account data or WAM access.
+pub fn inspect_process_image_trust_source(
+    expected: ProcessIdentity,
+) -> Result<PinnedImageTrustCandidate, NativePortError> {
+    if expected.pid == 0 || expected.created_file_time == 0 {
+        return Err(NativePortError::InvalidIdentity);
+    }
+    #[cfg(windows)]
+    {
+        let key = ProcessKey {
+            pid: expected.pid,
+            created_file_time: expected.created_file_time.to_string(),
+        };
+        let signed = windows::inspect_file_authenticode(&key)
+            .map_err(map_native_process_error)?;
+        Ok(unpromoted_image_trust(expected, signed))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = expected;
+        Err(NativePortError::NotImplemented)
+    }
+}
+
 // Synthetic-only bounded native FILE-handle reader. The caller MUST have
 // created/owned the fixture child and independently established which fresh
 // AppContainer profile contains this ALREADY OPENED file handle. This routine
@@ -402,11 +472,19 @@ pub fn inspect_independent_storage_route_source(
 mod windows {
     use super::{AppContainerComparison, ContextComparison, ProcessContainment, ProcessKey};
     use std::{io, mem::size_of, os::windows::io::AsRawHandle, ptr};
+    use std::os::windows::{ffi::OsStringExt, fs::OpenOptionsExt};
     use windows_sys::Win32::{
         Foundation::{
             CloseHandle, GetLastError, ERROR_INSUFFICIENT_BUFFER, FILETIME, HANDLE, WAIT_TIMEOUT,
         },
         Globalization::{CompareStringOrdinal, CSTR_EQUAL},
+        Security::WinTrust::{
+            WinVerifyTrust, WINTRUST_ACTION_GENERIC_VERIFY_V2,
+            WINTRUST_DATA, WINTRUST_DATA_0, WINTRUST_FILE_INFO,
+            WTD_CACHE_ONLY_URL_RETRIEVAL, WTD_CHOICE_FILE,
+            WTD_REVOKE_WHOLECHAIN, WTD_STATEACTION_CLOSE,
+            WTD_STATEACTION_VERIFY, WTD_UI_NONE,
+        },
         Security::{
             GetLengthSid, GetTokenInformation, IsValidSid, TokenAppContainerSid,
             TokenIsAppContainer, TokenSessionId, TokenUser, TOKEN_APPCONTAINER_INFORMATION,
@@ -414,12 +492,14 @@ mod windows {
             TokenVirtualizationEnabled,
         },
         System::Threading::{
-            GetProcessTimes, OpenProcess, OpenProcessToken, WaitForSingleObject,
-            PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+            GetProcessTimes, OpenProcess, OpenProcessToken, QueryFullProcessImageNameW,
+            WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION,
+            PROCESS_SYNCHRONIZE,
         },
         Storage::FileSystem::{
             GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
             FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT,
+            FILE_SHARE_READ,
         },
         UI::Shell::GetUserProfileDirectoryW,
     };
@@ -528,6 +608,99 @@ mod windows {
     }
     // Only legacy UAC compatibility metadata, never a registry hive query.
     // Pin the exact PID/FILTIME process handle so no reused PID is accepted.
+    /// Inspect the queryable IMAGE FILE ON DISK for the exact live process.
+    /// A separate future component must bind signer's certificate + publisher,
+    /// verify PE section identity and check target Minecraft applicability.
+    ///
+    /// hFile pins the specific opened file object used by WinVerifyTrust.
+    /// The caller cannot choose the path; no profile or credential is read.
+    /// A process executable pathname is still not cryptographic proof of
+    /// the section already mapped into that process (replacement/moves).
+    pub(super) fn inspect_file_authenticode(key: &ProcessKey) -> io::Result<bool> {
+        use std::os::windows::io::AsRawHandle;
+
+        fn image_name(process: &Handle) -> io::Result<Vec<u16>> {
+            let mut buf = vec![0u16; 32768];
+            let mut len = buf.len() as u32;
+            if unsafe {
+                QueryFullProcessImageNameW(process.0, 0, buf.as_mut_ptr(), &mut len)
+            } == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            if len == 0 || len as usize >= buf.len() {
+                return Err(invalid("Windows image path is invalid or oversized"));
+            }
+            buf.truncate(len as usize);
+            if buf.iter().any(|&character| character == 0) {
+                return Err(invalid("Invalid embedded null in image path"));
+            }
+            Ok(buf)
+        }
+
+        fn file_identity(file: &std::fs::File) -> io::Result<(u32, u64, u64, u64)> {
+            let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+            if unsafe {
+                GetFileInformationByHandle(file.as_raw_handle(), &mut info)
+            } == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            if info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+                return Err(invalid("Image file is a directory or reparse object"));
+            }
+            let length = (u64::from(info.nFileSizeHigh) << 32) | u64::from(info.nFileSizeLow);
+            if length == 0 {
+                return Err(invalid("Empty executable image file"));
+            }
+            let index = (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow);
+            let write_time = (u64::from(info.ftLastWriteTime.dwHighDateTime) << 32)
+                | u64::from(info.ftLastWriteTime.dwLowDateTime);
+            Ok((info.dwVolumeSerialNumber, index, length, write_time))
+        }
+
+        let process = pin(key)?;
+        let path = image_name(&process)?;
+        let pathname = std::path::PathBuf::from(std::ffi::OsString::from_wide(&path));
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ)
+            .open(pathname)?;
+        let before = file_identity(&file)?;
+        let mut wide = path.clone();
+        wide.push(0);
+        let mut file_info: WINTRUST_FILE_INFO = unsafe { std::mem::zeroed() };
+        file_info.cbStruct = size_of::<WINTRUST_FILE_INFO>() as u32;
+        file_info.pcwszFilePath = wide.as_ptr();
+        file_info.hFile = file.as_raw_handle();
+        let mut data: WINTRUST_DATA = unsafe { std::mem::zeroed() };
+        data.cbStruct = size_of::<WINTRUST_DATA>() as u32;
+        data.dwUIChoice = WTD_UI_NONE;
+        data.fdwRevocationChecks = WTD_REVOKE_WHOLECHAIN;
+        data.dwUnionChoice = WTD_CHOICE_FILE;
+        data.Anonymous = WINTRUST_DATA_0 { pFile: &mut file_info };
+        data.dwStateAction = WTD_STATEACTION_VERIFY;
+        // No HTTP/network revocation fetch; missing cached revocation may
+        // make trust unavailable and must not be upgraded to positive.
+        data.dwProvFlags = WTD_CACHE_ONLY_URL_RETRIEVAL;
+        let mut policy = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+        let status = unsafe {
+            WinVerifyTrust(ptr::null_mut(), &mut policy,
+                (&mut data as *mut WINTRUST_DATA).cast())
+        };
+        data.dwStateAction = WTD_STATEACTION_CLOSE;
+        // Close the WinTrust provider context on success AND failure.
+        let _ = unsafe {
+            WinVerifyTrust(ptr::null_mut(), &mut policy,
+                (&mut data as *mut WINTRUST_DATA).cast())
+        };
+        let after = file_identity(&file)?;
+        if before != after || image_name(&process)? != path {
+            return Err(invalid("On-disk process image changed during inspection"));
+        }
+        live(&process)?;
+        // WinVerifyTrust returns LONG; ONLY zero is a successful verification.
+        Ok(status == 0)
+    }
+
     pub(super) fn legacy_token_virtualization(
         key: &ProcessKey,
     ) -> io::Result<(bool, bool)> {
@@ -1081,6 +1254,40 @@ mod tests {
         );
     }
 
+
+    #[test]
+    fn trusted_generic_signature_never_identifies_official_publisher() {
+        let id = ProcessIdentity::checked(501, 133400000000000501).unwrap();
+        for trusted in [false, true] {
+            let observation = unpromoted_image_trust(id, trusted);
+            assert_eq!(observation.process, id);
+            assert_eq!(observation.publisher, OfficialGamePublisher::NotAttested);
+            assert_eq!(observation.image_file_signature, if trusted {
+                ImageFileSignatureTrust::AuthenticodeTrustedOnDisk
+            } else {
+                ImageFileSignatureTrust::NotVerified
+            });
+        }
+    }
+
+    #[test]
+    fn zero_process_identity_refuses_image_trust_inspection() {
+        for key in [
+            ProcessIdentity { pid: 0, created_file_time: 1 },
+            ProcessIdentity { pid: 3, created_file_time: 0 },
+        ] {
+            assert_eq!(inspect_process_image_trust_source(key),
+                Err(NativePortError::InvalidIdentity));
+        }
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn image_trust_inspection_fails_closed_on_non_windows() {
+        let id = ProcessIdentity::checked(11, 133400000000000011).unwrap();
+        assert_eq!(inspect_process_image_trust_source(id),
+            Err(NativePortError::NotImplemented));
+    }
 
     #[test]
     fn default_pair_boundary_collector_keeps_both_unknown() {

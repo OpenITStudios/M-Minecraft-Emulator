@@ -1,5 +1,31 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — bounded WinVerifyTrust image inspection, 22 October 2026
+
+**Source-first native owner:** added unmounted
+`instance_identity.rs::inspect_process_image_trust_source`, querying
+only a pinned process's on-disk image and using silent, cache-only
+`WinVerifyTrust` against the opened read-only file handle.
+The code checks file and process identity before/after one trust
+assessment and always returns `OfficialGamePublisher::NotAttested`,
+even for a trusted generic Authenticode signature. No claim is
+made about loaded PE section equivalence, Microsoft/Mojang signer
+identity, Store package or catalog signatures.
+
+**Proof:** exact-HEAD GitHub static source/consumer review;
+three Rust negative tests authored **NOT_EXECUTED**.
+Windows compilation/signature verification, Minecraft executable
+publisher verification and licensed game acceptance are NOT_EXECUTED.
+Only two `windows-sys` API features were added (WinTrust and
+Cryptography); no new package dependency version. The canonical
+ProcessObservation official-image flag remains false; launch,
+provision, CI, `main`, accounts/worlds and broker caches unchanged.
+
+**Next:** independent certificate signer identity/chain and official
+publisher policy review plus process image-to-file binding on the
+target Windows edition. Preserve all UNKNOWN until actual native
+test. Add no game modifications or speculative providers.
+
 ## Independent engine — stateless two/four-client Minecraft acceptance, 22 October 2026
 
 Implemented the pure Rust domain

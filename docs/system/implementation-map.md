@@ -25,6 +25,17 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+The existing desktop process identity owner now offers an
+unmounted, read-only
+`instance_identity.rs::inspect_process_image_trust_source`.
+It pins PID/creation FILETIME, queries the executable pathname,
+checks on-disk Authenticode using `WinVerifyTrust` without UI/network
+revocation fetches, and revalidates process/file identity. The
+result **always leaves the official publisher NotAttested**:
+generic Authenticode trust cannot satisfy the Minecraft publisher
+acceptance check or enable Launch/Provision. No account or world
+data is accessed.
+
 The pure domain now includes
 `independent_engine/acceptance.rs::review_game_acceptance`,
 a **stateless, non-authorizing manual Minecraft acceptance checklist**.
