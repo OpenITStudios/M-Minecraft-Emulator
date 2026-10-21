@@ -185,6 +185,8 @@ pub enum ScopedProofError {
     InvalidProcess,
     SlotNotBound,
     ProcessChanged,
+    ProcessAlreadyBoundToPeer,
+    ConflictingEvidence,
 }
 
 #[derive(Clone, Debug)]
@@ -222,6 +224,15 @@ impl ScopedIsolationFindings {
         if process.pid == 0 || process.created_file_time == 0 {
             return Err(ScopedProofError::InvalidProcess);
         }
+        // Two concurrently claimed clients may NEVER share one Windows PID.
+        // Even a different creation FILETIME on the same PID would describe
+        // a reused process, not two concurrently live Minecraft sessions.
+        if self.isolated.iter().enumerate().any(|(peer_index, entry)| {
+            peer_index != index
+                && entry.as_ref().is_some_and(|entry| entry.process.pid == process.pid)
+        }) {
+            return Err(ScopedProofError::ProcessAlreadyBoundToPeer);
+        }
         match &self.isolated[index] {
             Some(existing) if existing.process == process => Ok(()),
             Some(_) => Err(ScopedProofError::ProcessChanged),
@@ -248,6 +259,21 @@ impl ScopedIsolationFindings {
             .ok_or(ScopedProofError::SlotNotBound)?;
         if bound.process != process {
             return Err(ScopedProofError::ProcessChanged);
+        }
+        // Keep failure sticky and proof context immutable within one
+        // process-bound ledger. Corrected measurements require a new,
+        // explicitly created ephemeral review instead of overwriting a
+        // failure or upgrading a synthetic claim to Windows/game proof.
+        let prior = bound.findings.finding(check);
+        let may_record = match (prior, finding) {
+            (Finding::Unknown, _) => true,
+            (Finding::Failed, Finding::Failed) => true,
+            (Finding::Passed(old), Finding::Passed(new)) => old == new,
+            (Finding::Passed(_), Finding::Failed) => true,
+            _ => false,
+        };
+        if !may_record {
+            return Err(ScopedProofError::ConflictingEvidence);
         }
         bound.findings.record(check, finding);
         Ok(())
@@ -295,6 +321,73 @@ mod tests {
     use super::*;
 
 
+
+    #[test]
+    fn same_pid_never_represents_two_live_slots_even_if_creation_time_differs() {
+        let mut ledger = ScopedIsolationFindings::default();
+        let first = ProcessIdentity::checked(501, 133400000000000501).unwrap();
+        let same_key = first;
+        let reused = ProcessIdentity::checked(501, first.created_file_time + 1).unwrap();
+        ledger.bind_process(SessionSlot::Mc02, first).unwrap();
+        assert_eq!(ledger.bind_process(SessionSlot::Mc02, first), Ok(()));
+        for key in [same_key, reused] {
+            assert_eq!(
+                ledger.bind_process(SessionSlot::Mc03, key),
+                Err(ScopedProofError::ProcessAlreadyBoundToPeer)
+            );
+            assert_eq!(
+                ledger.bind_process(SessionSlot::Mc04, key),
+                Err(ScopedProofError::ProcessAlreadyBoundToPeer)
+            );
+        }
+        let separate = ProcessIdentity::checked(502, first.created_file_time).unwrap();
+        ledger.bind_process(SessionSlot::Mc03, separate).unwrap();
+        assert!(ledger.isolated_slot_gaps(ProofGoal::FourMinecraftClients)
+            .iter().any(|(slot, _)| *slot == SessionSlot::Mc04));
+    }
+
+    #[test]
+    fn failed_check_cannot_be_overwritten_by_pass_or_unknown_on_same_process() {
+        let mut ledger = ScopedIsolationFindings::default();
+        let identity = ProcessIdentity::checked(520, 133400000000000520).unwrap();
+        ledger.bind_process(SessionSlot::Mc02, identity).unwrap();
+        ledger.record(SessionSlot::Mc02, identity, Check::PrivateRegistryView, Finding::Failed)
+            .unwrap();
+        for changed in [Finding::Unknown, Finding::Passed(Tier::WindowsMechanism)] {
+            assert_eq!(
+                ledger.record(SessionSlot::Mc02, identity, Check::PrivateRegistryView, changed),
+                Err(ScopedProofError::ConflictingEvidence)
+            );
+        }
+        assert!(ledger.gaps_for_slot(SessionSlot::Mc02, identity, ProofGoal::WindowsStorageFeasibility)
+            .unwrap().contains(&Check::PrivateRegistryView));
+        ledger.record(SessionSlot::Mc02, identity, Check::PrivateRegistryView, Finding::Failed)
+            .unwrap();
+    }
+
+    #[test]
+    fn synthetic_pass_cannot_be_relabelled_as_windows_proof_within_one_ledger() {
+        let mut ledger = ScopedIsolationFindings::default();
+        let identity = ProcessIdentity::checked(530, 133400000000000530).unwrap();
+        ledger.bind_process(SessionSlot::Mc03, identity).unwrap();
+        ledger.record(SessionSlot::Mc03, identity, Check::PrivateRegistryView,
+            Finding::Passed(Tier::SyntheticFixture)).unwrap();
+        for changed in [Finding::Unknown, Finding::Passed(Tier::WindowsMechanism)] {
+            assert_eq!(
+                ledger.record(SessionSlot::Mc03, identity, Check::PrivateRegistryView, changed),
+                Err(ScopedProofError::ConflictingEvidence)
+            );
+        }
+        assert!(ledger.gaps_for_slot(SessionSlot::Mc03, identity, ProofGoal::WindowsStorageFeasibility)
+            .unwrap().contains(&Check::PrivateRegistryView));
+        ledger.record(SessionSlot::Mc03, identity, Check::PrivateRegistryView, Finding::Failed)
+            .unwrap();
+        assert_eq!(
+            ledger.record(SessionSlot::Mc03, identity, Check::PrivateRegistryView,
+                Finding::Passed(Tier::WindowsMechanism)),
+            Err(ScopedProofError::ConflictingEvidence)
+        );
+    }
     #[test]
     fn exact_evidence_context_cannot_substitute_between_native_and_game() {
         let mut facts = IsolationFindings::default();

@@ -136,6 +136,89 @@ pub fn inspect_independent_source(
 }
 
 
+
+/// Non-authorizing, sanitized comparison of two distinct Windows processes.
+/// Not a broker, registry, singleton, signed-image or gameplay probe. A
+/// distinct AppContainer SID by itself does NOT prove account separation.
+#[derive(Debug, PartialEq, Eq)]
+pub struct NativeProcessPairInspection {
+    pub first_slot: SessionSlot,
+    pub second_slot: SessionSlot,
+    pub first: ProcessIdentity,
+    pub second: ProcessIdentity,
+    pub context: ContextComparison,
+    pub appcontainer: AppContainerComparison,
+}
+
+#[cfg(windows)]
+fn map_native_process_error(error: std::io::Error) -> NativePortError {
+    match error.kind() {
+        std::io::ErrorKind::NotFound => NativePortError::StaleProcess,
+        std::io::ErrorKind::InvalidInput | std::io::ErrorKind::InvalidData => {
+            NativePortError::InvalidIdentity
+        }
+        std::io::ErrorKind::PermissionDenied => NativePortError::AccessDenied,
+        _ => NativePortError::OperationFailed,
+    }
+}
+
+/// Source-only pairwise Windows inspection. Validates different logical slots
+/// AND different PIDs before any platform calls. Existing process/token API
+/// owners perform the actual pinned-handle checks; final observations reject
+/// process exit or changes to the recorded AppContainer token category.
+///
+/// These separate queries are not an atomic snapshot and do not prove
+/// per-process HKCU, singleton names, Microsoft WAM/MSAL or multiplayer.
+/// The result is never registered as a Tauri command or admission action.
+pub fn inspect_independent_process_pair_source(
+    first_slot: SessionSlot,
+    first: ProcessIdentity,
+    second_slot: SessionSlot,
+    second: ProcessIdentity,
+) -> Result<NativeProcessPairInspection, NativePortError> {
+    if first_slot == second_slot
+        || first.pid == 0 || second.pid == 0
+        || first.created_file_time == 0 || second.created_file_time == 0
+        || first.pid == second.pid
+    {
+        return Err(NativePortError::InvalidIdentity);
+    }
+    let observer = WindowsProcessObserver;
+    let first_before = observer.observe_exact(first)?;
+    let second_before = observer.observe_exact(second)?;
+    if first_before.identity != first || second_before.identity != second {
+        return Err(NativePortError::StaleProcess);
+    }
+    let keys = |process: ProcessIdentity| ProcessKey {
+        pid: process.pid,
+        created_file_time: process.created_file_time.to_string(),
+    };
+    let first_key = keys(first);
+    let second_key = keys(second);
+    let context = compare_contexts(&first_key, &second_key)
+        .map_err(|err| {
+            #[cfg(windows)]
+            { map_native_process_error(err) }
+            #[cfg(not(windows))]
+            { let _ = err; NativePortError::NotImplemented }
+        })?;
+    let appcontainer = compare_appcontainer_identities(&first_key, &second_key)
+        .map_err(|err| {
+            #[cfg(windows)]
+            { map_native_process_error(err) }
+            #[cfg(not(windows))]
+            { let _ = err; NativePortError::NotImplemented }
+        })?;
+    if observer.observe_exact(first)? != first_before
+        || observer.observe_exact(second)? != second_before
+    {
+        return Err(NativePortError::StaleProcess);
+    }
+    Ok(NativeProcessPairInspection {
+        first_slot, second_slot, first, second, context, appcontainer,
+    })
+}
+
 // Synthetic-only bounded native FILE-handle reader. The caller MUST have
 // created/owned the fixture child and independently established which fresh
 // AppContainer profile contains this ALREADY OPENED file handle. This routine
@@ -910,6 +993,52 @@ pub fn parse_window_identity(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pair_comparison_rejects_same_slot_or_pid_before_native_calls() {
+        let first = ProcessIdentity::checked(71, 133400000000000071).unwrap();
+        let second = ProcessIdentity::checked(72, 133400000000000072).unwrap();
+        assert_eq!(
+            inspect_independent_process_pair_source(
+                SessionSlot::Mc02, first, SessionSlot::Mc02, second
+            ).unwrap_err(),
+            NativePortError::InvalidIdentity
+        );
+        assert_eq!(
+            inspect_independent_process_pair_source(
+                SessionSlot::Mc02, first, SessionSlot::Mc03, first
+            ).unwrap_err(),
+            NativePortError::InvalidIdentity
+        );
+        let recycled = ProcessIdentity::checked(71, first.created_file_time + 1).unwrap();
+        assert_eq!(
+            inspect_independent_process_pair_source(
+                SessionSlot::Mc02, first, SessionSlot::Mc03, recycled
+            ).unwrap_err(),
+            NativePortError::InvalidIdentity
+        );
+        let invalid = ProcessIdentity { pid: 0, created_file_time: 1 };
+        assert_eq!(
+            inspect_independent_process_pair_source(
+                SessionSlot::Mc01, invalid, SessionSlot::Mc02, second
+            ).unwrap_err(),
+            NativePortError::InvalidIdentity
+        );
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn pair_comparison_is_unavailable_without_windows_process_handles() {
+        let first = ProcessIdentity::checked(71, 133400000000000071).unwrap();
+        let second = ProcessIdentity::checked(72, 133400000000000072).unwrap();
+        assert_eq!(
+            inspect_independent_process_pair_source(
+                SessionSlot::Mc01, first, SessionSlot::Mc02, second
+            ).unwrap_err(),
+            NativePortError::NotImplemented
+        );
+    }
+
     #[test]
     fn independent_storage_adapter_cannot_invent_verified_broker_or_roaming() {
         use virtual_clients_core::independent_engine::{

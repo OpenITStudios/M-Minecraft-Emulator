@@ -601,6 +601,39 @@ Relevant Windows SDK distinctions:
   accounts known to Windows; private directories alone do not prove
   broker session separation.
 
+## Process exclusivity and read-only pair comparison — 22 October 2026
+
+The in-memory, non-authorizing `ScopedIsolationFindings` now enforces a
+unique Windows PID across MC02, MC03 and MC04, in addition to binding each
+slot to the full PID/creation FILETIME. The same PID with a different
+creation FILETIME represents process reuse, not two concurrent sessions;
+such cross-slot aliases fail closed. Within one process-bound review,
+a `Failed` finding cannot be overwritten with `Unknown` or `Passed`.
+Similarly, a `Passed(SyntheticFixture)` cannot be relabelled
+`Passed(WindowsMechanism)` by writing to the same ledger. Explicit
+new verification requires a newly created review, never carry-over
+from another process or proof tier. These are defensive checks on
+untrusted diagnostic values—not a production readiness manager.
+
+The existing Windows-native `instance_identity.rs` owner additionally
+exposes **unmounted** `inspect_independent_process_pair_source`.
+It refuses equal slots, equal PIDs even with different FILETIMEs,
+zero identities and stale process observations before returning an
+anonymous `NativeProcessPairInspection`. It reuses the existing
+pinned-handle Windows user/profile/session comparisons and AppContainer
+SID-category comparison, then rechecks both processes' PID/FILETIME
+and containment category. Unlike account telemetry, no SIDs, paths,
+tokens, broker cache values or player identifiers are returned.
+
+A matching profile, distinct AppContainer SIDs, or differing Windows
+users is **not** proof of private HKCU routing, named-object namespaces,
+Microsoft WAM/MSAL account isolation, singleton compatibility, or two
+usable Minecraft windows. Existing Win32 comparisons run in separate
+calls rather than one atomic transaction, so the output remains
+diagnostic and may be invalidated by subsequent process changes. This
+new source does not register a Tauri endpoint or alter the canonical
+blocked Launch/Provision route. Windows execution remains deferred.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

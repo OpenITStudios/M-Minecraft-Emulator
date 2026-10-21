@@ -1,5 +1,36 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — prevent duplicate-slot PID and evidence laundering, 22 October 2026
+
+**Source-first hardening:** The existing `ScopedIsolationFindings`
+now rejects one Windows PID being bound to more than one MC02–MC04
+slot, including the same PID with a different creation FILETIME.
+A failed check remains failed in the same ephemeral review, and
+a synthetic pass cannot be relabelled native/game proof by a second
+write. Three pure Rust negative regression tests authored.
+
+**Native integration:** A new unmounted
+`instance_identity.rs::inspect_independent_process_pair_source`
+compares two *different* logical slots/processes with the existing
+pinned Win32 observer and anonymous Windows user/profile/session +
+AppContainer SID comparisons. It revalidates both exact process
+identities and token categories after comparison. Identical slots,
+reused PIDs and zero keys are refused without native calls.
+Two additional source tests authored; no Tauri command, new Windows
+service, driver, WAM API, HKCU access, Minecraft launch or profile
+mutation introduced. The reported distinction is NOT broker,
+registry, singleton or signed-image proof.
+
+**Evidence:** GitHub exact-head static review. Rust native/Linux
+compilation, Windows process comparisons, Minecraft account/runtime
+and four-client acceptance all **NOT_EXECUTED**. No changes to
+`main`, CI, installer, accounts or existing worlds.
+
+**Next:** source-first define safe read-only *singleton and broker
+capability gaps* (without exposing token/cache data) and realistic
+per-process Windows observations; preserve launch blockade pending
+actual Minecraft compatibility evidence.
+
 ## Independent engine — scoped Minecraft proof and compatibility gaps, 22 October 2026
 
 **Source-first Rust contract:** the existing non-authoritative
