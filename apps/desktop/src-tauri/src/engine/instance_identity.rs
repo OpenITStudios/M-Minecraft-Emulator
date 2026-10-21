@@ -282,12 +282,15 @@ pub enum OfficialGamePublisher {
 pub struct PinnedImageTrustCandidate {
     pub process: ProcessIdentity,
     pub image_file_signature: ImageFileSignatureTrust,
+    // Audit-only DER leaf hash; NOT proof of Minecraft publisher identity.
+    pub signer_leaf_sha256: Option<[u8; 32]>,
     pub publisher: OfficialGamePublisher,
 }
 
 fn unpromoted_image_trust(
     process: ProcessIdentity,
     signed_on_disk: bool,
+    signer: Option<[u8; 32]>,
 ) -> PinnedImageTrustCandidate {
     PinnedImageTrustCandidate {
         process,
@@ -296,6 +299,7 @@ fn unpromoted_image_trust(
         } else {
             ImageFileSignatureTrust::NotVerified
         },
+        signer_leaf_sha256: if signed_on_disk { signer } else { None },
         publisher: OfficialGamePublisher::NotAttested,
     }
 }
@@ -320,9 +324,9 @@ pub fn inspect_process_image_trust_source(
             pid: expected.pid,
             created_file_time: expected.created_file_time.to_string(),
         };
-        let signed = windows::inspect_file_authenticode(&key)
+        let (signed, signer) = windows::inspect_file_authenticode(&key)
             .map_err(map_native_process_error)?;
-        Ok(unpromoted_image_trust(expected, signed))
+        Ok(unpromoted_image_trust(expected, signed, signer))
     }
     #[cfg(not(windows))]
     {
@@ -345,8 +349,8 @@ pub fn inspect_process_image_provenance_source(
 > {
     use virtual_clients_core::independent_engine::{
         review_image_provenance, ImageProvenanceError, PackageIdentityEvidence,
-        PinnedImageProvenanceClaim, ReviewedPublisherPolicy,
-        RunningImageBinding, StorageEvidenceSource,
+        PinnedImageProvenanceClaim, PublisherCertificateClaim,
+        ReviewedPublisherPolicy, RunningImageBinding, StorageEvidenceSource,
     };
     let candidate = inspect_process_image_trust_source(expected)?;
     let source = PinnedImageProvenanceClaim {
@@ -355,7 +359,10 @@ pub fn inspect_process_image_provenance_source(
         source: StorageEvidenceSource::WindowsProcess,
         authenticode_trusted_on_disk: candidate.image_file_signature
             == ImageFileSignatureTrust::AuthenticodeTrustedOnDisk,
-        signer_certificate: None,
+        signer_certificate: candidate.signer_leaf_sha256.map(|digest| PublisherCertificateClaim {
+            source: StorageEvidenceSource::WindowsProcess,
+            signer_leaf_sha256: digest,
+        }),
         image_binding: RunningImageBinding::QueriedExecutablePathOnly,
         package: PackageIdentityEvidence::Unknown,
     };
@@ -508,6 +515,7 @@ pub fn inspect_independent_storage_route_source(
 mod windows {
     use super::{AppContainerComparison, ContextComparison, ProcessContainment, ProcessKey};
     use std::{io, mem::size_of, os::windows::io::AsRawHandle, ptr};
+    use sha2::{Digest, Sha256};
     use std::os::windows::{ffi::OsStringExt, fs::OpenOptionsExt};
     use windows_sys::Win32::{
         Foundation::{
@@ -516,6 +524,7 @@ mod windows {
         Globalization::{CompareStringOrdinal, CSTR_EQUAL},
         Security::WinTrust::{
             WinVerifyTrust, WINTRUST_ACTION_GENERIC_VERIFY_V2,
+            CRYPT_PROVIDER_CERT, CRYPT_PROVIDER_DATA, CRYPT_PROVIDER_SGNR,
             WINTRUST_DATA, WINTRUST_DATA_0, WINTRUST_FILE_INFO,
             WTD_CACHE_ONLY_URL_RETRIEVAL, WTD_CHOICE_FILE,
             WTD_REVOKE_WHOLECHAIN, WTD_STATEACTION_CLOSE,
@@ -526,6 +535,9 @@ mod windows {
             TokenIsAppContainer, TokenSessionId, TokenUser, TOKEN_APPCONTAINER_INFORMATION,
             TOKEN_QUERY, TOKEN_USER, TokenVirtualizationAllowed,
             TokenVirtualizationEnabled,
+        },
+        System::LibraryLoader::{
+            FreeLibrary, GetProcAddress, LoadLibraryExW, LOAD_LIBRARY_SEARCH_SYSTEM32,
         },
         System::Threading::{
             GetProcessTimes, OpenProcess, OpenProcessToken, QueryFullProcessImageNameW,
@@ -652,7 +664,63 @@ mod windows {
     /// The caller cannot choose the path; no profile or credential is read.
     /// A process executable pathname is still not cryptographic proof of
     /// the section already mapped into that process (replacement/moves).
-    pub(super) fn inspect_file_authenticode(key: &ProcessKey) -> io::Result<bool> {
+    /// The signer certificate is borrowed from a successful verification state.
+    /// WinTrust owns every pointer until WTD_STATEACTION_CLOSE.
+    fn verified_leaf_sha256(state: HANDLE) -> io::Result<[u8; 32]> {
+        type GetProvider = unsafe extern "system" fn(HANDLE) -> *mut CRYPT_PROVIDER_DATA;
+        type GetSigner = unsafe extern "system" fn(
+            *mut CRYPT_PROVIDER_DATA, u32, i32, u32,
+        ) -> *mut CRYPT_PROVIDER_SGNR;
+        type GetCertificate =
+            unsafe extern "system" fn(*mut CRYPT_PROVIDER_SGNR, u32) -> *mut CRYPT_PROVIDER_CERT;
+
+        struct Dll(*mut std::ffi::c_void);
+        impl Drop for Dll {
+            fn drop(&mut self) { unsafe { FreeLibrary(self.0); } }
+        }
+        if state.is_null() {
+            return Err(invalid("Verified WinTrust provider state is missing"));
+        }
+        let name: Vec<u16> = "wintrust.dll".encode_utf16().chain(Some(0)).collect();
+        let dll = Dll(unsafe {
+            LoadLibraryExW(name.as_ptr(), ptr::null_mut(), LOAD_LIBRARY_SEARCH_SYSTEM32)
+        });
+        if dll.0.is_null() { return Err(io::Error::last_os_error()); }
+        // Windows documents these WTHelper exports as dynamically loaded only.
+        // Do not search the application directory for a replacement DLL.
+        let provider = unsafe {
+            GetProcAddress(dll.0, b"WTHelperProvDataFromStateData\0".as_ptr())
+        }.ok_or_else(|| invalid("WinTrust provider export unavailable"))?;
+        let signer = unsafe {
+            GetProcAddress(dll.0, b"WTHelperGetProvSignerFromChain\0".as_ptr())
+        }.ok_or_else(|| invalid("WinTrust signer export unavailable"))?;
+        let certificate = unsafe {
+            GetProcAddress(dll.0, b"WTHelperGetProvCertFromChain\0".as_ptr())
+        }.ok_or_else(|| invalid("WinTrust certificate export unavailable"))?;
+        // FARPROC and WINAPI function pointers are word-sized on Windows.
+        let get_provider: GetProvider = unsafe { std::mem::transmute(provider) };
+        let get_signer: GetSigner = unsafe { std::mem::transmute(signer) };
+        let get_certificate: GetCertificate = unsafe { std::mem::transmute(certificate) };
+        let provider_data = unsafe { get_provider(state) };
+        if provider_data.is_null() { return Err(invalid("WinTrust provider unavailable")); }
+        let primary_signer = unsafe { get_signer(provider_data, 0, 0, 0) };
+        if primary_signer.is_null() { return Err(invalid("WinTrust signer unavailable")); }
+        let leaf = unsafe { get_certificate(primary_signer, 0) };
+        if leaf.is_null() { return Err(invalid("WinTrust signer leaf unavailable")); }
+        let context = unsafe { (*leaf).pCert };
+        if context.is_null() { return Err(invalid("WinTrust leaf context missing")); }
+        let encoded = unsafe { &*context };
+        let count = encoded.cbCertEncoded as usize;
+        if encoded.pbCertEncoded.is_null() || !(1..=65536).contains(&count) {
+            return Err(invalid("WinTrust signer DER unavailable or oversized"));
+        }
+        let der = unsafe { std::slice::from_raw_parts(encoded.pbCertEncoded, count) };
+        Ok(Sha256::digest(der).into())
+    }
+
+    pub(super) fn inspect_file_authenticode(
+        key: &ProcessKey,
+    ) -> io::Result<(bool, Option<[u8; 32]>)> {
         use std::os::windows::io::AsRawHandle;
 
         fn image_name(process: &Handle) -> io::Result<Vec<u16>> {
@@ -723,6 +791,12 @@ mod windows {
                 (&mut data as *mut WINTRUST_DATA).cast())
         };
         let state_created = !data.hWVTStateData.is_null();
+        // Extract only on success and always CLOSE, even if extraction fails.
+        let signer_result = if status == 0 && state_created {
+            verified_leaf_sha256(data.hWVTStateData).map(Some)
+        } else {
+            Ok(None)
+        };
         data.dwStateAction = WTD_STATEACTION_CLOSE;
         // Closing a successful trust state's provider must also succeed.
         // Do not silently keep a positive on-disk trust verdict when the
@@ -737,13 +811,14 @@ mod windows {
                 "WinVerifyTrust returned incomplete or unreleased provider state",
             ));
         }
+        let signer_leaf_sha256 = signer_result?;
         let after = file_identity(&file)?;
         if before != after || image_name(&process)? != path {
             return Err(invalid("On-disk process image changed during inspection"));
         }
         live(&process)?;
         // WinVerifyTrust returns LONG; ONLY zero is a successful verification.
-        Ok(status == 0)
+        Ok((status == 0, signer_leaf_sha256))
     }
 
     pub(super) fn legacy_token_virtualization(
@@ -1309,7 +1384,7 @@ mod tests {
             ReviewedPublisherPolicy, RunningImageBinding, StorageEvidenceSource,
         };
         let id = ProcessIdentity::checked(51, 133400000000000051).unwrap();
-        let candidate = unpromoted_image_trust(id, true);
+        let candidate = unpromoted_image_trust(id, true, None);
         let claim = PinnedImageProvenanceClaim {
             process: id,
             observed_process: Some(id),
@@ -1345,15 +1420,46 @@ mod tests {
     fn trusted_generic_signature_never_identifies_official_publisher() {
         let id = ProcessIdentity::checked(501, 133400000000000501).unwrap();
         for trusted in [false, true] {
-            let observation = unpromoted_image_trust(id, trusted);
+            let observation = unpromoted_image_trust(id, trusted, None);
             assert_eq!(observation.process, id);
             assert_eq!(observation.publisher, OfficialGamePublisher::NotAttested);
+            assert_eq!(observation.signer_leaf_sha256, None);
             assert_eq!(observation.image_file_signature, if trusted {
                 ImageFileSignatureTrust::AuthenticodeTrustedOnDisk
             } else {
                 ImageFileSignatureTrust::NotVerified
             });
         }
+    }
+
+    #[test]
+    fn leaf_digest_remains_audit_only_with_publisher_and_mapping_unattested() {
+        use virtual_clients_core::independent_engine::{
+            review_image_provenance, ImageProvenanceGap, PackageIdentityEvidence,
+            PinnedImageProvenanceClaim, PublisherCertificateClaim, ReviewedPublisherPolicy,
+            RunningImageBinding, StorageEvidenceSource,
+        };
+        let id = ProcessIdentity::checked(703, 133400000000000703).unwrap();
+        let digest = [0x42; 32];
+        let candidate = unpromoted_image_trust(id, true, Some(digest));
+        assert_eq!(candidate.signer_leaf_sha256, Some(digest));
+        assert_eq!(candidate.publisher, OfficialGamePublisher::NotAttested);
+        let report = review_image_provenance(PinnedImageProvenanceClaim {
+            process: id, observed_process: Some(id),
+            source: StorageEvidenceSource::WindowsProcess,
+            authenticode_trusted_on_disk: true,
+            signer_certificate: Some(PublisherCertificateClaim {
+                source: StorageEvidenceSource::WindowsProcess,
+                signer_leaf_sha256: digest,
+            }),
+            image_binding: RunningImageBinding::QueriedExecutablePathOnly,
+            package: PackageIdentityEvidence::Unknown,
+        }, ReviewedPublisherPolicy::default()).unwrap();
+        assert!(!report.gaps.contains(&ImageProvenanceGap::LeafCertificateNotObserved));
+        assert!(report.gaps.contains(&ImageProvenanceGap::OfficialSignerPolicyNotReviewed));
+        assert!(report.gaps.contains(&ImageProvenanceGap::RunningImageNotBoundToVerifiedFile));
+        assert!(report.gaps.contains(&ImageProvenanceGap::PackageOriginNotReviewed));
+        assert_eq!(unpromoted_image_trust(id, false, Some(digest)).signer_leaf_sha256, None);
     }
 
     #[test]

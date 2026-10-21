@@ -1,5 +1,28 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — pinned WinTrust signer certificate fingerprint, 22 October 2026
+
+Updated unmounted Windows desktop image inspection to hash the DER bytes of
+the primary signer leaf certificate from the *successful* WinTrust provider
+state, before state CLOSE. Wintrust.dll helper exports are resolved from
+System32 rather than an application-relative path; the helper library and
+provider state are released on all paths, including extraction failures.
+Missing trusted signer data fails closed, never promotes a generic signature
+to Minecraft official publisher. A nontrusted file reports no signer digest.
+
+The existing source-scoped image provenance reviewer receives that hash as
+an audit-only claim. The official release signer allowlist stays EMPTY and
+both loaded-PE backing equality and package trust remain UNVERIFIED.
+Launch/Provision for MC02–MC04 stays BLOCKED; no accounts, game binaries,
+worlds, registry, Tauri routes, CI, driver or installer are touched.
+Rust negative regression authored; NOT_EXECUTED. Windows MSVC, Windows-sys
+ABI, signed-game and multi-client runtime tests NOT_EXECUTED.
+
+**Next:** Validate Windows Wintrust.dll helper ABI and signer lifetime
+on a supported target only when execution is authorized; meanwhile continue
+source-first image binding/package identity design without a launch grant.
+
+
 ## Independent engine — wire pinned-image candidate to publisher review, 22 October 2026
 
 Added unmounted `instance_identity.rs::inspect_process_image_provenance_source`,

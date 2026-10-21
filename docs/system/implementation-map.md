@@ -25,6 +25,11 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+The existing unmounted desktop WinTrust observer now obtains a SHA-256 DER leaf
+signer fingerprint before closing successful provider state. It is read-only
+audit data; no official publisher policy, loaded image/file identity or
+package trust is approved, and Launch/Provision stays blocked.
+
 A new non-authorizing
 `independent_engine/image_provenance.rs::review_image_provenance`
 checks the gap between WinVerifyTrust on-disk success, a real
