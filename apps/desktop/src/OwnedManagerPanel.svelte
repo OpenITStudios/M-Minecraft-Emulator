@@ -33,9 +33,13 @@
   }
   async function createAndOpen(){
     const client=setupClient;if(!client)return;setupDialog.close();compatibility=true;
-    await act(client,"Create");
-    if(current&&snapshot.clients.find(s=>s.clientId===client)?.settingsVerified)await act(client,"Launch");
-    if(!current)await onResume?.();
+    try{
+      await act(client,"Create");
+      if(current&&snapshot.clients.find(s=>s.clientId===client)?.settingsVerified)await act(client,"Launch");
+    }finally{
+      try{await onResume?.();}
+      catch(e){const issue=operationIssue(e);error=issue.message;details=issue.details;}
+    }
   }
   async function cancelSetup(){
     setupDialog.close();setupClient=null;

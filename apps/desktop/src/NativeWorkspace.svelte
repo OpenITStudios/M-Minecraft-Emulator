@@ -35,7 +35,7 @@
     try{const retained=await workspaceSurface.suspend();if(!retained){activeClient=null;target=null;updateFailed=false;}}
     catch(error){suspended=previous;throw error;}
   }
-  export async function resume(){if(activeClient&&target)await present(activeClient,target);}
+  export async function resume(){if(suspended&&activeClient&&target)await present(activeClient,target);}
   export async function reconcile(observation:OwnedSnapshot){
     if(!activeClient||!target)return;
     const processes=activeClient==='01'?observation.nativeProcesses:observation.clients.find(slot=>slot.clientId===activeClient)?.processes??[];
