@@ -125,7 +125,7 @@ struct Child {
 };
 std::wstring quote(const fs::path& value) { return L"\"" + value.wstring() + L"\""; }
 void launch(Child& child, const fs::path& binary, const fs::path& root,
-    const Profile& own, const Profile& peer) {
+    const Profile& own, const Profile& peer, bool reopen = false) {
     SIZE_T bytes = 0;
     InitializeProcThreadAttributeList(nullptr, 1, 0, &bytes);
     require(bytes > 0, "attribute-size");
@@ -140,7 +140,8 @@ void launch(Child& child, const fs::path& binary, const fs::path& root,
     STARTUPINFOEXW startup{};
     startup.StartupInfo.cb = sizeof(startup);
     startup.lpAttributeList = attributes;
-    std::wstring command = quote(binary) + L" --child " + quote(root) + L" " + quote(own.folder) + L" " + quote(peer.folder);
+    std::wstring command = quote(binary) + (reopen ? L" --child-reopen " : L" --child ")
+        + quote(root) + L" " + quote(own.folder) + L" " + quote(peer.folder);
     require(CreateProcessW(binary.c_str(), command.data(), nullptr, nullptr, FALSE,
         EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW, nullptr, root.c_str(), &startup.StartupInfo,
         &child.process) != 0, "create-contained-fixture");
@@ -162,8 +163,10 @@ bool token_matches(HANDLE process, PSID expected) {
 struct Observation { DWORD version = 1, flags = 0; };
 enum : DWORD { OWN_FILE = 1, PEER_DENIED = 2, HOST_DENIED = 4, MUTEX_PRIVATE = 8,
     LOCAL_ENV = 16, LOCAL_KNOWN_FOLDER = 32, ROAMING_ENV_PRIVATE = 64,
-    ROAMING_KNOWN_AVAILABLE = 128, ROAMING_KNOWN_PRIVATE = 256 };
-int contained(const fs::path& root, const fs::path& own, const fs::path& peer) {
+    ROAMING_KNOWN_AVAILABLE = 128, ROAMING_KNOWN_PRIVATE = 256,
+    CUSTOM_ROAMING_OWN = 512, CUSTOM_ROAMING_PEER_DENIED = 1024,
+    CUSTOM_ROAMING_CREATED = 2048, CUSTOM_ROAMING_REOPENED = 4096 };
+int contained(const fs::path& root, const fs::path& own, const fs::path& peer, bool reopen) {
     HANDLE raw = nullptr;
     require(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &raw) != 0, "child-token");
     Handle token(raw);
@@ -191,7 +194,25 @@ int contained(const fs::path& root, const fs::path& own, const fs::path& peer) {
         if (under_profile(roaming, own)) observation.flags |= ROAMING_KNOWN_PRIVATE;
     }
     if (roaming) CoTaskMemFree(roaming);
-    write(own / L"observation", &observation, sizeof(observation));
+
+    // Only fresh synthetic profile paths are opened. Do NOT write at APPDATA
+    // or SHGetKnownFolderPath(FOLDERID_RoamingAppData): on a real Windows host,
+    // those APIs may still resolve to the host's account-bearing profile.
+    const auto own_roaming = own / L"synthetic-roaming";
+    const auto peer_roaming = peer / L"synthetic-roaming";
+    if (readable(own_roaming / L"canary")) observation.flags |= CUSTOM_ROAMING_OWN;
+    if (!readable(peer_roaming / L"canary")) observation.flags |= CUSTOM_ROAMING_PEER_DENIED;
+    const auto persistent = own_roaming / L"persistent-canary";
+    if (reopen) {
+        if (readable(persistent)) observation.flags |= CUSTOM_ROAMING_REOPENED;
+    } else {
+        const char value = 'r';
+        write(persistent, &value, 1);
+        observation.flags |= CUSTOM_ROAMING_CREATED;
+    }
+
+    write(own / (reopen ? L"observation-reopen" : L"observation"),
+        &observation, sizeof(observation));
     // Bounded synthetic lifetime. No permanent worker or game control.
     const ULONGLONG deadline = GetTickCount64() + 20000;
     while (GetTickCount64() < deadline) {
@@ -200,8 +221,8 @@ int contained(const fs::path& root, const fs::path& own, const fs::path& peer) {
     }
     return 98;
 }
-Observation observe(const Profile& profile, Child& child) {
-    const auto path = profile.folder / L"observation";
+Observation observe(const Profile& profile, Child& child, bool reopen = false) {
+    const auto path = profile.folder / (reopen ? L"observation-reopen" : L"observation");
     const ULONGLONG deadline = GetTickCount64() + 5000;
     while (GetTickCount64() < deadline) {
         Handle file(CreateFileW(path.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
@@ -249,24 +270,57 @@ int parent(const fs::path& output, bool negative_control) {
     write(root / L"host-canary", &marker, 1);
     write(first.folder / L"canary", &marker, 1);
     write(second.folder / L"canary", &marker, 1);
+    // Never reuse an account-bearing profile or change existing ACLs.
+    const auto first_roaming = first.folder / L"synthetic-roaming";
+    const auto second_roaming = second.folder / L"synthetic-roaming";
+    require(fs::create_directory(first_roaming) && fs::create_directory(second_roaming),
+        "new-private-roaming-folders");
+    write(first_roaming / L"canary", &marker, 1);
+    write(second_roaming / L"canary", &marker, 1);
     Child a, b;
     launch(a, binary, root, first, second);
     // Deliberately reuse token A only in the explicit red-capable synthetic control.
     launch(b, binary, root, negative_control ? first : second, first);
     require(token_matches(a.process.hProcess, first.sid) && token_matches(b.process.hProcess, second.sid), "actual-distinct-container-tokens");
     const auto left = observe(first, a), right = observe(second, b);
-    const DWORD required = OWN_FILE | PEER_DENIED | HOST_DENIED | MUTEX_PRIVATE;
-    require((left.flags & required) == required && (right.flags & required) == required, "synthetic-isolation-contract");
+    const DWORD required = OWN_FILE | PEER_DENIED | HOST_DENIED | MUTEX_PRIVATE
+        | CUSTOM_ROAMING_OWN | CUSTOM_ROAMING_PEER_DENIED | CUSTOM_ROAMING_CREATED;
+    require((left.flags & required) == required && (right.flags & required) == required,
+        "synthetic-isolation-contract");
     require(WaitForSingleObject(a.process.hProcess, 0) == WAIT_TIMEOUT && WaitForSingleObject(b.process.hProcess, 0) == WAIT_TIMEOUT, "concurrent-fixtures");
     stop(first, a);
     require(WaitForSingleObject(b.process.hProcess, 0) == WAIT_TIMEOUT, "other-fixture-survives");
     stop(second, b);
+    // Two fresh child processes, using the SAME synthetic AppContainer profile
+    // identities, must independently read their own previous writes.
+    Child reopened_a, reopened_b;
+    launch(reopened_a, binary, root, first, second, true);
+    launch(reopened_b, binary, root, second, first, true);
+    require(token_matches(reopened_a.process.hProcess, first.sid)
+        && token_matches(reopened_b.process.hProcess, second.sid),
+        "reopened-distinct-container-tokens");
+    const auto reopened_left = observe(first, reopened_a, true);
+    const auto reopened_right = observe(second, reopened_b, true);
+    const DWORD persisted = CUSTOM_ROAMING_OWN | CUSTOM_ROAMING_PEER_DENIED
+        | CUSTOM_ROAMING_REOPENED;
+    require((reopened_left.flags & persisted) == persisted
+        && (reopened_right.flags & persisted) == persisted,
+        "private-synthetic-roaming-persistence");
+    require(WaitForSingleObject(reopened_a.process.hProcess, 0) == WAIT_TIMEOUT
+        && WaitForSingleObject(reopened_b.process.hProcess, 0) == WAIT_TIMEOUT,
+        "concurrent-reopened-fixtures");
+    stop(first, reopened_a);
+    require(WaitForSingleObject(reopened_b.process.hProcess, 0) == WAIT_TIMEOUT,
+        "other-reopened-fixture-survives");
+    stop(second, reopened_b);
+    CloseHandle(reopened_a.process.hProcess); CloseHandle(reopened_a.process.hThread); reopened_a.process = {};
+    CloseHandle(reopened_b.process.hProcess); CloseHandle(reopened_b.process.hThread); reopened_b.process = {};
     // Close process/thread handles before deleting only the two profiles created above.
     CloseHandle(a.process.hProcess); CloseHandle(a.process.hThread); a.process = {};
     CloseHandle(b.process.hProcess); CloseHandle(b.process.hThread); b.process = {};
     const bool cleaned_a = first.cleanup(), cleaned_b = second.cleanup();
     require(cleaned_a && cleaned_b, "fixture-profile-cleanup");
-    std::printf("{\"schema\":1,\"result\":\"PASS\",\"syntheticOnly\":true,\"distinctAppContainerTokens\":true,\"concurrentProcesses\":true,\"privateMutexNamespaces\":true,\"ownStorageReadable\":true,\"peerStorageDenied\":true,\"hostCanaryDenied\":true,\"independentNormalStop\":true,\"profilesRemoved\":true,\"localAppDataEnvironmentRedirected\":%s,\"localAppDataKnownFolderRedirected\":%s,\"roamingEnvironmentUnderContainer\":%s,\"roamingKnownFolderQuerySucceeded\":%s,\"roamingKnownFolderUnderContainer\":%s,\"minecraftAcceptance\":\"NOT_EXECUTED\"}\n",
+    std::printf("{\"schema\":1,\"result\":\"PASS\",\"syntheticOnly\":true,\"distinctAppContainerTokens\":true,\"concurrentProcesses\":true,\"privateMutexNamespaces\":true,\"ownStorageReadable\":true,\"peerStorageDenied\":true,\"hostCanaryDenied\":true,\"independentNormalStop\":true,\"profilesRemoved\":true,\"localAppDataEnvironmentRedirected\":%s,\"localAppDataKnownFolderRedirected\":%s,\"roamingEnvironmentUnderContainer\":%s,\"roamingKnownFolderQuerySucceeded\":%s,\"roamingKnownFolderUnderContainer\":%s,\"syntheticPrivateRoamingWritten\":true,\"syntheticPrivateRoamingPeerDenied\":true,\"syntheticPrivateRoamingPersistsAfterRestart\":true,\"minecraftRoamingCompatibility\":\"NOT_EXECUTED\",\"minecraftAcceptance\":\"NOT_EXECUTED\"}\n",
         (left.flags & LOCAL_ENV) && (right.flags & LOCAL_ENV) ? "true" : "false",
         (left.flags & LOCAL_KNOWN_FOLDER) && (right.flags & LOCAL_KNOWN_FOLDER) ? "true" : "false",
         (left.flags & ROAMING_ENV_PRIVATE) && (right.flags & ROAMING_ENV_PRIVATE) ? "true" : "false",
@@ -276,7 +330,8 @@ int parent(const fs::path& output, bool negative_control) {
 }
 int wmain(int argc, wchar_t** argv) {
     try {
-        if (argc == 5 && std::wstring(argv[1]) == L"--child") return contained(argv[2], argv[3], argv[4]);
+        if (argc == 5 && std::wstring(argv[1]) == L"--child") return contained(argv[2], argv[3], argv[4], false);
+        if (argc == 5 && std::wstring(argv[1]) == L"--child-reopen") return contained(argv[2], argv[3], argv[4], true);
         if (argc == 3 && std::wstring(argv[1]) == L"--run") return parent(argv[2], false);
         if (argc == 3 && std::wstring(argv[1]) == L"--negative-control") return parent(argv[2], true);
         throw Failure{"explicit-synthetic-run-required", ERROR_INVALID_PARAMETER};

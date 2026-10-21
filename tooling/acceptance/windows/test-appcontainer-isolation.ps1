@@ -40,6 +40,15 @@ function Invoke-SyntheticProbe([string]$Mode,[string]$Directory){
     if($Mode -eq '--negative-control'){
         if($process.ExitCode -ne 1 -or $proof.result -ne 'FAIL' -or $proof.stage -ne 'actual-distinct-container-tokens' -or -not $proof.profilesRemoved){throw "Negative control did not fail safely at its expected identity check; inspect $Directory"}
     }elseif($process.ExitCode -ne 0 -or $proof.result -ne 'PASS'){throw "Native AppContainer proof failed; evidence retained in $Directory"}
+    if($Mode -eq '--run'){
+        if(-not $proof.syntheticOnly -or -not $proof.syntheticPrivateRoamingWritten -or
+           -not $proof.syntheticPrivateRoamingPeerDenied -or
+           -not $proof.syntheticPrivateRoamingPersistsAfterRestart -or
+           $proof.minecraftRoamingCompatibility -ne 'NOT_EXECUTED' -or
+           $proof.minecraftAcceptance -ne 'NOT_EXECUTED'){
+            throw "Synthetic roaming contract missing or overclaimed; inspect $Directory"
+        }
+    }
     }finally{$process.Dispose()}
 }
 Invoke-SyntheticProbe '--run' $output

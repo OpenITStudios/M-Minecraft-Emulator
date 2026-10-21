@@ -37,6 +37,13 @@ AppContainer tokens and compares SIDs strictly in memory, returning only two
 booleans; this is neither a credential comparison nor a provider launch path.
 No Tauri/UI command is registered for the new API.
 
+The synthetic AppContainer experiment now also contains a two-process,
+two-phase **process-restart persistence** check for private
+`synthetic-roaming` canaries. Actual `RoamingAppData` API redirection is
+still separately unproven; this is not a game-ready storage provider.
+The Windows runner `test-appcontainer-isolation.ps1` validates the
+synthetic-only output fields and an explicit negative token-control path.
+
 The current isolation experiment is a native AppContainer fixture in
 `tooling/acceptance/windows/appcontainer-probe.cpp`, explicitly compiled/run by
 `test-appcontainer-isolation.ps1`. It launches only itself, validates two native

@@ -18,9 +18,19 @@ of two pinned process AppContainer token identities (sanitized booleans only).
 No login, game launch, Windows service/driver or profile operation was performed.
 Windows tests are authored but NOT_EXECUTED in remote GitHub.
 
-**Next:** implement a bounded, independent Windows-native evidence adapter for
-AppContainer identity and persistent roaming verification, without promoting
-synthetic results into game launch authority. Retain current isolated Launch/
+**Current bounded implementation:** extended the independent native
+AppContainer synthetic fixture to create private roaming-like canaries,
+stop both children, relaunch two new children under the same distinct
+AppContainer identities, verify persistent own data and denied peer reads,
+then clean only the fresh fixture profiles. The PowerShell runner asserts
+synthetic-only result fields. Neither Windows Known Folder roaming
+redirection nor Education broker behavior is inferred from these checks.
+Updated MSVC/Windows execution is **NOT_EXECUTED** in ChatGPT/GitHub.
+
+**Next:** execute this opt-in Windows synthetic fixture on an isolated
+Windows target and investigate supported private `RoamingAppData` routing;
+if the Win32 path remains host-wide, record NO-GO for the unmodified game
+unless a supported independent isolation mechanism is proven. Retain current isolated Launch/
 Provision blockade; preserve old accounts/worlds/services. No GitHub Actions,
 release, main, VM or certificate changes.
 

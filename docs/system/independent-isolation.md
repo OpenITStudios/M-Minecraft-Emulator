@@ -240,6 +240,22 @@ inspection-only moniker receipt is written before creation to aid review after
 interruption. Abrupt termination can still leave synthetic profiles and must not
 be reported as successful cleanup. Source and no account material are committed.
 
+### Synthetic private roaming persistence source — 21 October 2026
+
+A bounded extension to `tooling/acceptance/windows/appcontainer-probe.cpp`
+now tests real file creation and isolation in two temporary profile-owned
+`synthetic-roaming` directories and verifies canaries survive the normal exit
+and relaunch of **both synthetic child processes**. The optional PowerShell
+runner checks evidence fields and that Minecraft acceptance stays
+`NOT_EXECUTED`. This is a **source change**, not a new measured PASS:
+the updated MSVC fixture has not yet been executed on Windows.
+
+This does **not** fix the earlier `APPDATA` or Known Folder roaming routing.
+No host-roaming path is opened, no Windows profile is granted new permissions,
+and no Minecraft/account data is inspected. If known-folder roaming still
+points outside the container, the AppContainer candidate remains blocked for
+unmodified Education regardless of successful synthetic private-directory tests.
+
 ### Education-specific facts gathered in this batch
 
 The official v1.19.53 changelog records migration from ADAL to MSAL. This is a

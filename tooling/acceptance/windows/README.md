@@ -2,6 +2,27 @@
 
 ## Independent native AppContainer proof (synthetic only)
 
+### Persistent private roaming-like storage proof (synthetic, opt-in)
+
+The same AppContainer fixture now writes a canary under a freshly created
+`synthetic-roaming` directory **inside each synthetic AppContainer profile**.
+After both children exit normally, two new children with their original
+AppContainer identities must read their own previously written canaries while
+being denied access to the other profile. This checks storage persistence across
+**process restarts**, not Windows reboots, Minecraft profiles or Microsoft login.
+
+The report fields `syntheticPrivateRoamingWritten`,
+`syntheticPrivateRoamingPeerDenied`, and
+`syntheticPrivateRoamingPersistsAfterRestart` are only emitted as true
+after actual fixture-side checks. `minecraftRoamingCompatibility` always
+remains `NOT_EXECUTED`. The existing independent `APPDATA` environment
+and `FOLDERID_RoamingAppData` checks are path observations only and may
+still point outside the container. No synthetic test writes to those
+host-roaming paths; a synthetic custom directory is **not** a redirection
+of the Win32 Known Folder API. Do not use these booleans to unblock a provider.
+
+
+
 From the repository root, explicitly run:
 
 ```powershell
