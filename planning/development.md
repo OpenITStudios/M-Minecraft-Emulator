@@ -1,5 +1,33 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — stateless two/four-client Minecraft acceptance, 22 October 2026
+
+Implemented the pure Rust domain
+`independent_engine/acceptance.rs::review_game_acceptance`
+using canonical slots and pinned PID/creation FILETIME values.
+Two-client assessment requires MC01+MC02; four-client assessment
+requires all MC01–MC04. Missing slots and unobserved outcomes stay
+visible; duplicate slots, process alias/reuse, invalid identities
+and synthetic/Windows-only login claims fail closed. Client-local
+publisher signature, licensed sign-in, input/render, reconnect,
+world persistence and singleton observations are separate from
+joint simultaneous gameplay, account distinctness, cross-client
+multiplayer and session survival. Eight Rust tests authored
+**NOT_EXECUTED**; only GitHub source/static review.
+
+The API deliberately only returns `PendingGameAcceptance`
+regardless of reported pass count. It collects no credential,
+account identifier, world content, file paths or login cache,
+and neither verifies signatures nor launches the game itself.
+No second lifecycle/admission owner, Windows service, driver,
+Tauri route, CI, installer, main or profile mutation.
+
+**Next:** source-first add a narrow read-only signed-official-image
+verification contract to the existing desktop process identity
+owner, keeping actual WinVerifyTrust/native execution deferred.
+Then specify real-game manual acceptance order without exposing
+accounts, including two-client before four-client continuity.
+
 ## Independent engine — singleton and broker pair diagnostics, 22 October 2026
 
 Implemented `inspect_pair_boundaries` plus a read-only

@@ -25,6 +25,18 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+The pure domain now includes
+`independent_engine/acceptance.rs::review_game_acceptance`,
+a **stateless, non-authorizing manual Minecraft acceptance checklist**.
+It requires MC01+MC02 for two-client assessment and all MC01–MC04
+for four-client assessment, with process PID uniqueness, separate
+client-local checks and simultaneous cross-client checks. It
+rejects synthetic or Windows-token-only authentication claims,
+retains missing/failed checks and always returns
+`PendingGameAcceptance`, never a production provider decision.
+No login, game executable or OS process is launched or inspected
+by the validator.
+
 The existing Rust inspection owner now implements
 `inspect_pair_boundaries` for two independently identified processes,
 with singleton and WAM/MSAL broker observations evaluated separately.

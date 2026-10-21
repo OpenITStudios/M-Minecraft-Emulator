@@ -4,6 +4,7 @@
 //! registry, launcher, daemon, driver, or Sandboxie-derived implementation.
 //! The existing desktop admission and runtime lifecycle remain authoritative.
 
+mod acceptance;
 mod evidence;
 mod fixture_wire;
 mod identity;
@@ -14,6 +15,11 @@ mod operations;
 mod ports;
 mod storage;
 
+pub use acceptance::{
+    review_game_acceptance, ClientGameCheck, ClientGameSample,
+    GameTrial, GameTrialError, GroupGameCheck, JointGameSample,
+    PendingGameAcceptance, ReportedGameFinding,
+};
 pub use evidence::{
     review_bound_storage_facts, BoundStorageFact, EvidenceReviewError,
     StorageEvidenceSource, StorageProbeMethod,

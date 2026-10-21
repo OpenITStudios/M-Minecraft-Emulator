@@ -663,6 +663,39 @@ Tauri route were added. Eight pure Rust and three desktop source
 tests cover false positives, wrong identity, process exit and
 non-Windows behavior; native execution is not yet available.
 
+## Stateless, privacy-minimal actual-game acceptance contract — 22 October 2026
+
+The existing domain owner `engine/runtime-core/src/independent_engine/`
+now includes `acceptance.rs::review_game_acceptance` as a pure,
+**non-authorizing** checklist validator. For two-client trials, exactly
+MC01/MC02 are expected; for four-client trials, MC01–MC04 are expected.
+Partial reports retain explicit missing slots. Duplicate slots, the
+same PID with different FILETIMEs, zero process identities and an
+unexpected client are rejected, never interpreted as four players.
+
+Each client's future manual observations separately cover signed
+official **publisher** verification, responsive rendering/input,
+licensed sign-in, tab switch survival, reconnect account continuity,
+world persistence, multiplayer and Minecraft singleton conflicts.
+A different set of **joint** observations covers simultaneous
+playable windows, distinct licensed accounts, continuity of the
+other clients during tab switch/reconnect and cross-client multiplayer.
+Thus four individual PASS reports cannot stand in for four
+**concurrently** playable clients. A publisher-signature observation
+requires independent Windows process evidence; interactive/account
+and all joint outcomes require real Minecraft-runtime observations.
+Token/SID comparison, WAM metadata, synthetic fixtures and
+private-looking folder paths never substitute.
+
+No user names, account IDs, passwords, tokens, license secrets,
+registry contents, world files, game executable paths or screenshots
+are stored by this contract. Inputs remain claims until observed
+by authorized acceptance participants: **even all reported passes
+return `PendingGameAcceptance`, never readiness/launch permission**.
+The evaluator has no Windows system calls, scheduler, persistence,
+Tauri endpoint or provider ownership. Existing Launch/Provision
+remains blocked, and all runtime acceptance is still NOT_EXECUTED.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,
