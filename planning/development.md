@@ -18,9 +18,21 @@ No Windows registry API, canary write, account/world/profile mutation,
 driver, service, Tauri command, provider activation, `main`, CI or
 release was added. Windows and Minecraft acceptance NOT_EXECUTED.
 
-**Next:** investigate a documented, disposable, truly isolated
-Windows private hive before any opt-in synthetic registry I/O.
-Never probe writable host HKCU while its view is unverified.
+**Documented native candidate:** Microsoft `RegLoadAppKeyW`
+application hives are scoped by a returned registry handle rather
+than HKCU/HKU paths and may be backed by a new temporary fixture
+file. The canonical architecture now specifies opt-in creation,
+marker read/write, peer denial, restart persistence and cleanup
+**only within disposable synthetic hive files**. Importantly this
+does not transparently redirect Minecraft's ordinary HKCU access,
+so game compatibility remains UNKNOWN/NO-GO until observed. No
+native registry I/O was added or executed by this documentation
+update. References: Microsoft Learn `RegLoadAppKeyW` and
+application hive semantics.
+
+**Next:** implement an explicit opt-in native `RegLoadAppKeyW`
+synthetic-file fixture, with no host HKCU/HKU edits, and confirm
+that this does not imply automatic game registry redirection.
 
 ## Independent engine — process-bound route diagnostic inspection, 21 October 2026
 

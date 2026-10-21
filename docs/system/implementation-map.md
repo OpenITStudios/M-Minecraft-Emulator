@@ -25,6 +25,14 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+The documented Windows `RegLoadAppKeyW` facility is the next
+**candidate** for an opt-in, temporary application hive experiment:
+it returns an `HKEY` rooted in an application hive instead of
+writing an ordinary HKCU/HKU path. Its private-handle semantics
+do **not** redirect unmodified Minecraft's normal HKCU calls.
+See the canonical independent engine architecture for stop
+conditions and proof requirements.
+
 A new pure Rust synthetic registry reviewer in
 `independent_engine/registry.rs` refuses host HKCU,
 unowned/preexisting hives, cross-slot ownership and stale/reused

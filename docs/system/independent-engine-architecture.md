@@ -467,6 +467,41 @@ The route inspector also distinguishes `path_risks`
 (reported SharedOrLeaking access). Both remain unresolved; only
 the latter is a reported data-access failure. Neither grants access.
 
+### Windows application-hive feasibility candidate
+
+The documented Win32 `RegLoadAppKeyW` facility can load an application
+hive from a dedicated file and returns an `HKEY` accessible by handle,
+not an ordinary HKCU/HKU key path. A missing hive file can be created as
+an empty hive. Handles closed with `RegCloseKey` cause automatic unload
+when no handles remain. Microsoft documents `REG_PROCESS_APPKEY`
+as a mode that prevents a second caller from simultaneously loading
+the same application hive; this mode must not be misread as equivalent
+to per-account registry virtualization.
+
+Source-first native fixture design, **not yet implemented or executed**:
+
+1. Parent creates a fresh owned fixture profile and uniquely named
+   *new file* for each synthetic application hive; never use HKCU,
+   HKU, a host user hive, a preexisting hive file or arbitrary path.
+2. Only the returned application-hive `HKEY` may be used to seed and
+   query synthetic marker values. Close the handle before testing a
+   second process or restart, and track file rights and ownership.
+3. A cooperating synthetic child opens its own hive file through
+   `RegLoadAppKeyW` and reports sanitized own-marker, peer denial
+   and persistence results; a failed/unsupported access is unknown
+   or NO-GO, never a reason to loosen permissions on host profiles.
+4. Reject creation failures, accidentally shared markers, files
+   outside the disposable fixture root and any request to redirect
+   real user HKCU. Never copy Microsoft credentials or game hives.
+5. Only after native Windows proof, evaluate separately whether the
+   unmodified Minecraft process actually accesses a private registry
+   view. `RegLoadAppKeyW` alone does **not** replace or transparently
+   redirect the application's normal HKCU accesses.
+
+Sources: Microsoft Learn, *RegLoadAppKeyW* and *Filtering Registry
+Operations on Application Hives*. This proposal does not select a
+production provider or authorize installation.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,
