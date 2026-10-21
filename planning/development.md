@@ -1,5 +1,19 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — token-bound cooperative path inspection, 22 October 2026
+
+The Rust `independent_engine/paths.rs::inspect_cooperative_paths` now
+checks the entire process observation again after a cooperating path probe,
+not only PID/FILETIME. A changed AppContainer containment category is
+rejected even when PID and creation time are unchanged. The existing
+source only collects non-authorizing, privacy-minimal path findings.
+One Rust regression added; tests authored NOT_EXECUTED.
+No additional runtime authority, launcher or Windows mutation.
+
+**Next:** Audit read-only native collectors for verified process lifetime
+and ABI correctness before approving any independent provider.
+
+
 ## Independent engine — recheck process lifetime after storage inspection, 22 October 2026
 
 The canonical Rust `independent_engine/inspection.rs::inspect_existing`

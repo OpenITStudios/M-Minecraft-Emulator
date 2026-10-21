@@ -130,7 +130,9 @@ where
     let after = process
         .observe_exact(expected)
         .map_err(BoundPathInspectionError::Native)?;
-    if after.identity != expected {
+    if after != before {
+        // Identity alone misses a containment/token-category change during
+        // an untrusted cooperative known-folder probe.
         return Err(BoundPathInspectionError::Native(NativePortError::StaleProcess));
     }
     review_process_path_snapshot(slot, expected, snapshot)
@@ -213,6 +215,7 @@ mod tests {
         checks: std::cell::Cell<u32>,
         wrong_on_check: Option<u32>,
         failed_on_check: Option<u32>,
+        changed_containment_on: Option<u32>,
     }
 
     impl ProcessObserverPort for FakeProcess {
@@ -232,7 +235,11 @@ mod tests {
             };
             Ok(super::super::ProcessObservation {
                 identity,
-                containment: super::super::ProcessContainment::Unknown,
+                containment: if self.changed_containment_on == Some(call) {
+                    super::super::ProcessContainment::AppContainerTokenObserved
+                } else {
+                    super::super::ProcessContainment::Unknown
+                },
                 official_image_signature_observed: false,
                 visible_window_observed: false,
             })
@@ -307,6 +314,24 @@ mod tests {
         );
         assert_eq!(probe.calls.get(), 1);
         assert_eq!(process.checks.get(), 2);
+    }
+
+    #[test]
+    fn containment_change_during_path_probe_invalidates_all_observations() {
+        let process = FakeProcess {
+            changed_containment_on: Some(2),
+            ..Default::default()
+        };
+        let probe = FakeProbe {
+            calls: std::cell::Cell::new(0),
+            result: sample(),
+        };
+        assert_eq!(
+            inspect_cooperative_paths(&process, &probe, SessionSlot::Mc02, expected()).unwrap_err(),
+            BoundPathInspectionError::Native(NativePortError::StaleProcess)
+        );
+        assert_eq!(process.checks.get(), 2);
+        assert_eq!(probe.calls.get(), 1);
     }
 
     #[test]
