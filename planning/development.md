@@ -1,5 +1,32 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — bounded private directory ACE denylist, 22 October 2026
+
+The existing unmounted Windows directory HANDLE inspector now validates
+DACL structure with `IsValidAcl`/`GetAclInformation` and enumerates a
+bounded 1–64 entries using `GetAce`. A pure conservative reviewer rejects
+any nonzero access-allowed ACE for Everyone, Authenticated Users, Anonymous,
+Builtin Users or Builtin Guests, regardless of read/write mask; unsupported
+object/callback/conditional ACE formats fail closed. It bounds ACL length
+and each ACE size, validates basic SID layout and keeps Windows
+GetSecurityInfo/LocalFree ownership in the same scope. Two pure Rust tests
+were authored for broad grants, deny ACE, unsupported and malformed ACEs.
+
+A syntactically acceptable DACL is NOT **effective Windows access**. This
+filter does not authenticate the expected session owner, group SIDs, inherited
+ancestor permissions, network filesystems, Windows privileges or real
+Minecraft game filesystem routing. It never returns `Ready`, opens a
+Minecraft path, mutates a profile or permits Launch/Provision.
+
+**Proof:** GitHub exact-source static review and Microsoft GetAce /
+GetAclInformation / ACE layouts; Rust/Windows compilation and gameplay
+NOT_EXECUTED. No CI, main, installer, service or driver change.
+
+**Next:** Identify the trusted native root owner and ancestor traversal
+mechanism before any active storage operation; do not treat this conservative
+ACE filter as isolation certification.
+
+
 ## Independent engine — fail closed on invalid directory DACL/owner, 22 October 2026
 
 The unmounted Windows private-root inspection now reads OWNER and DACL

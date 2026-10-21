@@ -623,6 +623,18 @@ mod windows {
             sacl: *mut *mut std::ffi::c_void,
             security_descriptor: *mut *mut std::ffi::c_void,
         ) -> u32;
+        fn IsValidAcl(acl: *mut std::ffi::c_void) -> i32;
+        fn GetAclInformation(
+            acl: *mut std::ffi::c_void,
+            information: *mut std::ffi::c_void,
+            size: u32,
+            information_class: i32,
+        ) -> i32;
+        fn GetAce(
+            acl: *mut std::ffi::c_void,
+            index: u32,
+            ace: *mut *mut std::ffi::c_void,
+        ) -> i32;
     }
 
     /// Only a minimal negative check. A non-null DACL is not a private ACL:
@@ -631,6 +643,104 @@ mod windows {
     fn reject_invalid_directory_acl(owner_valid: bool, dacl_present: bool) -> io::Result<()> {
         if !owner_valid || !dacl_present {
             return Err(invalid("Private root owner/DACL is absent or invalid"));
+        }
+        Ok(())
+    }
+
+
+    // These well-known SID byte encodings are fixed Windows SID formats:
+    // S-1-1-0 (Everyone), S-1-5-11 (Authenticated Users),
+    // S-1-5-7 (Anonymous), S-1-5-32-545 (Builtin Users) and
+    // S-1-5-32-546 (Builtin Guests). Domain-specific groups are UNKNOWN.
+    const SID_EVERYONE: &[u8] = &[1,1,0,0,0,0,0,1,0,0,0,0];
+    const SID_AUTHENTICATED: &[u8] = &[1,1,0,0,0,0,0,5,11,0,0,0];
+    const SID_ANONYMOUS: &[u8] = &[1,1,0,0,0,0,0,5,7,0,0,0];
+    const SID_USERS: &[u8] = &[1,2,0,0,0,0,0,5,32,0,0,0,33,2,0,0];
+    const SID_GUESTS: &[u8] = &[1,2,0,0,0,0,0,5,32,0,0,0,34,2,0,0];
+
+    /// Source- and input-bounded basic ACE classifier. Never grants an
+    /// effective-access conclusion: deny ACE ordering, owner privileges,
+    /// group membership, inherited access and callback/object ACEs require
+    /// a separately authenticated Windows authorization evaluation.
+    fn reject_broad_directory_ace(ace: &[u8]) -> io::Result<()> {
+        // Simple ACCESS_ALLOWED_ACE_TYPE=0 and ACCESS_DENIED_ACE_TYPE=1.
+        // Callback, conditional and object ACE layouts differ: fail closed.
+        if ace.len() < 20 || !matches!(ace[0], 0 | 1) {
+            return Err(invalid("Unsupported or undersized private root ACE"));
+        }
+        let declared = u16::from_le_bytes([ace[2], ace[3]]) as usize;
+        let subauthorities = usize::from(ace[9]);
+        // The SID header is 8 bytes after the eight-byte ACE header/mask.
+        // A basic SID is revision 1 with no more than 15 subauthorities.
+        if declared != ace.len() || ace[8] != 1 || subauthorities > 15
+            || 16 + 4 * subauthorities != ace.len()
+        {
+            return Err(invalid("Malformed basic private root ACE SID"));
+        }
+        let sid = &ace[8..];
+        let broad = [SID_EVERYONE, SID_AUTHENTICATED, SID_ANONYMOUS, SID_USERS, SID_GUESTS]
+            .contains(&sid);
+        let mask = u32::from_le_bytes([ace[4], ace[5], ace[6], ace[7]]);
+        // Conservative policy: any nonzero allow ACE for these wide
+        // principals is unsuitable for a private manager-owned root,
+        // including read-only and inheritable ACEs for child content.
+        if ace[0] == 0 && broad && mask != 0 {
+            return Err(invalid("Private root DACL grants access to a broad group"));
+        }
+        Ok(())
+    }
+
+    #[repr(C)]
+    struct AclSizeInformation {
+        ace_count: u32,
+        acl_bytes_in_use: u32,
+        acl_bytes_free: u32,
+    }
+
+    /// The returned ACL belongs to the still-live GetSecurityInfo descriptor.
+    /// ACL size and iteration are capped to avoid unbounded native work.
+    fn inspect_directory_acl(acl: *mut std::ffi::c_void) -> io::Result<()> {
+        if acl.is_null() || unsafe { IsValidAcl(acl) } == 0 {
+            return Err(invalid("Private root DACL is missing or invalid"));
+        }
+        let mut info = AclSizeInformation {
+            ace_count: 0,
+            acl_bytes_in_use: 0,
+            acl_bytes_free: 0,
+        };
+        // ACL_INFORMATION_CLASS::AclSizeInformation = 2.
+        if unsafe {
+            GetAclInformation(
+                acl,
+                (&mut info as *mut AclSizeInformation).cast(),
+                size_of::<AclSizeInformation>() as u32,
+                2,
+            )
+        } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // Empty DACL grants nobody access and is unusable as an ordinary
+        // session profile; an oversized/complex DACL must be manually reviewed.
+        if !(1..=64).contains(&info.ace_count)
+            || !(8..=8192).contains(&info.acl_bytes_in_use)
+        {
+            return Err(invalid("Private root ACL count or size unsupported"));
+        }
+        for index in 0..info.ace_count {
+            let mut raw: *mut std::ffi::c_void = ptr::null_mut();
+            if unsafe { GetAce(acl, index, &mut raw) } == 0 || raw.is_null() {
+                return Err(invalid("Private root ACL entry unavailable"));
+            }
+            // GetAce supplies a pointer into a validated ACL allocation.
+            let base = raw.cast::<u8>();
+            let len = unsafe {
+                u16::from_le_bytes([*base.add(2), *base.add(3)]) as usize
+            };
+            if !(20..=1024).contains(&len) || len > info.acl_bytes_in_use as usize {
+                return Err(invalid("Private root ACL entry length invalid"));
+            }
+            let entry = unsafe { std::slice::from_raw_parts(base, len) };
+            reject_broad_directory_ace(entry)?;
         }
         Ok(())
     }
@@ -669,12 +779,13 @@ mod windows {
             return Err(invalid("Windows returned no private root security descriptor"));
         }
         let owner_valid = !owner.is_null() && unsafe { IsValidSid(owner) } != 0;
-        reject_invalid_directory_acl(owner_valid, !dacl.is_null())
+        reject_invalid_directory_acl(owner_valid, !dacl.is_null())?;
+        inspect_directory_acl(dacl)
     }
 
-    /// Inspect one already-open directory object and its minimal ACL metadata.
-    /// Requiring a non-null DACL/valid owner SID rules out obvious open-access
-    /// configurations, NOT any specific isolation policy or account ownership.
+    /// Inspect one already-open directory object and its bounded ACL metadata.
+    /// Refuse known broad grants and unsupported ACE structures, but this is
+    /// NOT an effective Windows permission check or proof of account ownership.
     pub(super) fn inspect_directory_handle(
         opened: &std::fs::File,
     ) -> io::Result<super::PrivateRootObjectIdentity> {
@@ -1422,6 +1533,66 @@ mod windows {
             assert!(reject_invalid_directory_acl(true, true).is_ok());
             // Even two true inputs are NOT an ACL effectiveness or
             // account-isolation attestation, just a structural check.
+        }
+
+        #[test]
+        fn basic_dacl_ace_rejects_broad_grants_and_unsupported_types() {
+            // ACL examples are synthetic only; no OS/account/registry access.
+            fn ace(kind: u8, mask: u32, sid: &[u8]) -> Vec<u8> {
+                let mut data = vec![kind, 0, 0, 0];
+                data[2..4].copy_from_slice(&((8 + sid.len()) as u16).to_le_bytes());
+                data.extend_from_slice(&mask.to_le_bytes());
+                data.extend_from_slice(sid);
+                data
+            }
+            let groups = [
+                SID_EVERYONE, SID_AUTHENTICATED, SID_ANONYMOUS,
+                SID_USERS, SID_GUESTS,
+            ];
+            for group in groups {
+                assert_eq!(
+                    reject_broad_directory_ace(&ace(0, 1, group))
+                        .unwrap_err().kind(),
+                    io::ErrorKind::InvalidData,
+                );
+                // Deny does not grant access; it cannot override a separate
+                // broad allow ACE elsewhere, which is independently rejected.
+                assert!(reject_broad_directory_ace(&ace(1, 1, group)).is_ok());
+            }
+            let custom = &[1,1,0,0,0,0,0,5,21,0,0,0];
+            assert!(reject_broad_directory_ace(&ace(0, 1, custom)).is_ok());
+            for bad in [
+                ace(5, 1, custom), // object ACE needs a different layout
+                ace(9, 1, custom), // callback ACE
+                ace(255, 1, custom),
+            ] {
+                assert_eq!(
+                    reject_broad_directory_ace(&bad).unwrap_err().kind(),
+                    io::ErrorKind::InvalidData,
+                );
+            }
+        }
+
+        #[test]
+        fn malformed_basic_ace_is_rejected_before_sid_interpretation() {
+            let world = [1,1,0,0,0,0,0,1,0,0,0,0];
+            let mut basic = vec![0,0,20,0,1,0,0,0];
+            basic.extend_from_slice(&world);
+            assert!(reject_broad_directory_ace(&basic).is_err());
+            basic[0] = 1;
+            assert!(reject_broad_directory_ace(&basic).is_ok());
+            for corrupted in [
+                { let mut x=basic.clone(); x[2]=19; x },
+                { let mut x=basic.clone(); x[8]=2; x },
+                { let mut x=basic.clone(); x[9]=16; x },
+                { let mut x=basic.clone(); x.truncate(15); x },
+            ] {
+                assert_eq!(
+                    reject_broad_directory_ace(&corrupted)
+                        .unwrap_err().kind(),
+                    io::ErrorKind::InvalidData,
+                );
+            }
         }
 
         #[test]

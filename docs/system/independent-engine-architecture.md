@@ -11,6 +11,19 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Bounded private-root ACL denial review (22 October 2026)
+
+The unmounted Windows directory HANDLE observer rejects known broad
+access-allowed ACEs (Everyone, Authenticated Users, Anonymous, Builtin Users
+and Guests). Only simple access-allow/deny ACEs with valid bounded SID layout
+are parsed; unfamiliar callback/object ACEs fail closed. The scan is
+bounded to 64 entries and 8192 ACL bytes, and never changes DACLs.
+This is a **negative-risk filter, not effective-permission proof**:
+future trusted native process/slot ownership and an OS authorization check,
+secure ancestor traversal and game access observations remain separate
+requirements before any storage mutation or Launch/Provision.
+
+
 ### Read-only private-root owner and DACL negative check (22 October 2026)
 
 The existing Windows directory-handle inspector checks `GetSecurityInfo`
