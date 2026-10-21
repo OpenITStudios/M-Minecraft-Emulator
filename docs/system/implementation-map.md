@@ -25,6 +25,17 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+Proof readiness observations are now **scoped separately per
+isolated slot (MC02–MC04) and exact PID/creation FILETIME** at
+\`engine/runtime-core/src/independent_isolation.rs\`.
+The pure diagnostic matrix requires native evidence for the actual
+Roaming Known Folder and registry view, and game-runtime evidence
+for Microsoft broker account continuity. No synthetic
+\`RegLoadAppKeyW\` lock may satisfy those checks. Reused PIDs,
+process restarts and a successful result from another slot cannot
+become four-client evidence. No second lifecycle owner or
+production provider has been introduced.
+
 The optional `-VerifyRegistryAppHivePeer` source route now
 tests `REG_PROCESS_APPKEY` **load-lock behavior across two separate
 synthetic processes**. One hive is unloaded and readable by the

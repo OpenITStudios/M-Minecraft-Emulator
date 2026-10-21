@@ -557,6 +557,50 @@ lock outcome remains a failure/unknown, not a reason to widen access.
 A later AppContainer-specific peer and true per-process registry-view
 acceptance are separate milestones.
 
+## Per-slot isolation proof ceiling and registry/broker boundary — 22 October 2026
+
+The canonical non-authorizing proof owner at
+`engine/runtime-core/src/independent_isolation.rs` now explicitly
+tracks **PrivateRoamingKnownFolder** and **PrivateRegistryView** at the
+Windows-mechanism evidence context, plus
+**DistinctBrokerAccountContexts** at the actual Minecraft-runtime
+context. A successful `RegLoadAppKeyW` synthetic hive lock or a
+`TokenVirtualizationEnabled` flag cannot satisfy a production
+registry view check. A private-looking path/environment is not a
+verified `FOLDERID_RoamingAppData` process view. Distinct game account
+sign-in alone is not proof that selecting/restarting another session
+keeps broker account context separate.
+
+Proof contexts are now **non-substitutable**: a higher-named tier
+cannot stand in for evidence collected via another mechanism
+(`MinecraftRuntime` cannot assert a Windows registry observation).
+The in-memory `ScopedIsolationFindings` only binds to MC02–MC04
+plus an exact PID/creation FILETIME. Wrong process, PID reuse, or
+an attempted MC01 adoption is rejected. Each session's gaps are
+reported separately. Even a fully positive MC02 fixture cannot
+clear MC03/MC04. On process restart, the caller must use a new
+ephemeral ledger; no stale proof carries into a new process.
+
+The proof matrix intentionally remains **diagnostic, not readiness
+state**: it contains no OS handles, registry reads, Microsoft account
+tokens, credential caches, native provider registration, or route
+authorization. Only actual future, independently collected Windows
+evidence and real Minecraft acceptance can justify capabilities.
+MC01's official/native execution is owned elsewhere; even zero
+isolated-slot gaps does not establish four-client concurrency.
+The desktop's canonical Launch/Provision gate stays disabled.
+
+Relevant Windows SDK distinctions:
+- Microsoft `RegLoadAppKeyW` loads an application hive accessible
+  through an explicit returned HKEY. It does not rewrite ordinary
+  `HKCU` access by an unmodified app.
+- Microsoft registry virtualization applies only to a limited class
+  of **32-bit** processes and certain `HKLM\\Software` writes,
+  not a general 64-bit/per-user HKCU sandbox.
+- Microsoft WAM/MSAL uses an OS broker and can facilitate access to
+  accounts known to Windows; private directories alone do not prove
+  broker session separation.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

@@ -1,5 +1,37 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — scoped Minecraft proof and compatibility gaps, 22 October 2026
+
+**Source-first Rust contract:** the existing non-authoritative
+`engine/runtime-core/src/independent_isolation.rs` owner now
+distinguishes three new mandatory domains: actual
+`FOLDERID_RoamingAppData` routing, actual Windows private registry
+view, and stable, separate Microsoft broker account context observed
+with the real Minecraft client. Proof contexts must **match exactly**
+rather than promoting a higher-named tier to an unrelated OS fact.
+
+**Cross-session correction:** `ScopedIsolationFindings` tracks the
+three independent MC02–MC04 slots under separate full-width
+PID/creation FILETIME identities. Reused PIDs, stale process records
+and host MC01 registration are rejected. New processes require a
+fresh ephemeral ledger. One synthetic or even all-positive MC02
+review cannot clear MC03/MC04. Five Rust regression tests authored,
+**NOT_EXECUTED**; source and GitHub head reviewed. No new Windows
+registry APIs, WAM calls, token/cache contents, player sign-in,
+service, driver, launcher or desktop readiness store.
+
+**External technical context:** Microsoft Learn `RegLoadAppKeyW`,
+`Registry Virtualization`, and `Acquire a token using Web Account
+Manager` distinguish explicit app-hive handles, limited UAC
+virtualization, and broker-managed identity. These are candidate
+mechanisms/background, not proof that Minecraft supports them.
+
+**Next:** source-first design of native per-slot Windows OS
+identity/registry capability observations and Minecraft broker
+compatibility acceptance (without reading secrets). Do not
+promote the synthetic lock test, activate Launch/Provision,
+or write host HKCU/roaming.
+
 ## Independent engine — two-process application-hive load-lock trial, 22 October 2026
 
 **Source-first extension:** the existing C++ application-hive
