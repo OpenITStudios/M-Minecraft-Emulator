@@ -8,7 +8,7 @@ const config=()=>({observation:null,engineError:null,settings:{sessionDirectory:
 it('tabs and cards share stale, pending, ambiguous and unresponsive action guards',()=>{
  const process={pid:77,createdFileTime:'134000000000000001',sessionId:1,windowHandle:'0x123',responding:true};
  const snapshot={nativeProcesses:[],clients:[{clientId:'02' as const,box:'MivubiEdu02',profileExists:true,settingsVerified:true,launchAllowed:true,boxedProcessCount:0,status:'STOPPED',processes:[]}]};
- expect(clientActionBlockedReason(snapshot,'02',true,false,false)).toBe(null);
+ expect(clientActionBlockedReason(snapshot,'02',true,false,false)).toMatch(/Sandboxie is retired/);
  expect(clientActionBlockedReason(snapshot,'02',false,false,false)).toMatch(/Check all clients/);
  expect(clientActionBlockedReason(snapshot,'02',true,true,false)).toMatch(/launch/);
  expect(clientActionBlockedReason({...snapshot,nativeProcesses:[{...process,responding:false}]},'01',true,false,false)).toMatch(/responding/);
@@ -27,18 +27,19 @@ it('structured failures keep technical output out of the primary message',()=>{
   const issue=operationIssue({code:'LAUNCH_PENDING',message:'Launch pending',action:'Check again',details:'At line:123 secret-stack'});
   expect(issue.message).toBe('Launch pending');expect(issue.details).toContain('line:123');expect(issue.message).not.toContain('line:123');
   expect(operationIssue('Recent launch request').message).toContain('pending');
+  expect(operationIssue('APP_COMPARTMENT_FEATURE_UNAVAILABLE: evaluation').action).toContain('five minutes');
   expect(operationIssue('Surface helper timed out after 3000 ms at place/position').action).toContain('Retry display');
   expect(operationIssue('Workspace game is covered; presentation was not confirmed').message).toBe('Minecraft is hidden behind the manager.');
 });
 it('states distinguish ready, blocked retry, active operation, missing profile and close acknowledgement',()=>{
   const slot:OwnedSlot={clientId:'02',box:'MivubiEdu02',profileExists:true,settingsVerified:true,launchAllowed:true,boxedProcessCount:0,status:'STOPPED',processes:[]};
-  expect(ownedClientStatus(slot,true,false,null)).toBe('Not opened');
-  expect(ownedClientStatus({...slot,launchAllowed:false},true,false,null)).toBe('Needs attention');
+  expect(ownedClientStatus(slot,true,false,null)).toBe('Unavailable');
+  expect(ownedClientStatus({...slot,launchAllowed:false},true,false,null)).toBe('Unavailable');
   expect(ownedClientStatus(slot,true,true,'Launch')).toBe('Starting');
   expect(ownedClientStatus(slot,true,false,'Close')).toBe('Closing');
   expect(ownedClientStatus(slot,false,false,null)).toBe('Needs attention');
-  expect(ownedClientStatus({...slot,status:'ABSENT'},true,false,null)).toBe('Not opened');
-  expect(ownedClientStatus({...slot,status:'RUNNING'},true,false,null)).toBe('Needs attention');
+  expect(ownedClientStatus({...slot,status:'ABSENT'},true,false,null)).toBe('Unavailable');
+  expect(ownedClientStatus({...slot,status:'RUNNING'},true,false,null)).toBe('Unavailable');
   const process={pid:77,createdFileTime:'134000000000000001',sessionId:1,windowHandle:'0x123',responding:true};
   expect(ownedClientStatus({...slot,status:'RUNNING',processes:[process]},true,false,null)).toBe('Running');
   expect(ownedClientStatus({...slot,status:'RUNNING',processes:[{...process,responding:false}]},true,false,null)).toBe('Needs attention');

@@ -12,14 +12,13 @@ export function clientActionBlockedReason(snapshot:Pick<OwnedSnapshot,'nativePro
   }
   if(pending)return 'A previous launch is pending. Check all clients before retrying.';
   if(client==='01')return null;
-  if(!slot||slot.boxedProcessCount!==0)return 'Check all clients before opening this session.';
-  if(!slot.profileExists)return null;
-  return slot.settingsVerified&&slot.launchAllowed?null:'This session needs a fresh check before opening.';
+  return 'Sandboxie is retired. The independent session engine is not available yet.';
 }
 export function ownedClientStatus(slot:OwnedSlot,current:boolean,pending:boolean,active:OwnedOperation|null,closing=false):string {
   if(active)return active==='Launch'?'Starting':active==='Close'?'Closing':active==='Create'?'Setting up':'Checking';
   if(!current)return 'Needs attention';
   if(closing&&slot.processes.length)return 'Closing';
+  if(slot.processes.length===0)return 'Unavailable';
   if(slot.status==='ABSENT')return 'Not opened';
   if(slot.status==='RUNNING')return slot.processes.length===1&&slot.processes[0].responding&&slot.processes[0].windowHandle!=='0x0'?'Running':'Needs attention';
   if(slot.status==='STARTING_OR_CLOSING')return 'Starting / closing';

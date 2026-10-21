@@ -79,6 +79,12 @@ pub fn admit_owned_test_operation(id: &str, operation: SlotOperation) -> std::io
             "No owned test route for this slot/operation",
         ));
     }
+    if matches!(operation, SlotOperation::Launch | SlotOperation::Provision) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "SANDBOXIE_RETIRED: new isolated sessions are disabled; independent provider is not implemented",
+        ));
+    }
     Ok(())
 }
 
@@ -88,6 +94,10 @@ pub fn admit_slot_operation(id: &str, operation: SlotOperation) -> std::io::Resu
         .into_iter()
         .find(|slot| slot.id == id)
         .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "Unknown Minecraft instance slot"))?;
+
+    if id != "01" && matches!(operation, SlotOperation::Launch | SlotOperation::Provision) {
+        return Err(Error::new(ErrorKind::Unsupported, "SANDBOXIE_RETIRED: new isolated sessions are disabled; independent provider is not implemented"));
+    }
 
     // An uninstalled future provider cannot be promoted by UI data or direct
     // Tauri invocation. Provisioning and FPS control have no active adapter.
@@ -155,7 +165,7 @@ mod tests {
             );
             assert_eq!(
                 admit_slot_operation("02", op).is_ok(),
-                matches!(op, Inspect | SelectExecutable | Launch | Focus | Place)
+                matches!(op, Inspect | SelectExecutable | Focus | Place)
             );
             for future in ["03", "04"] {
                 assert_eq!(
@@ -170,6 +180,23 @@ mod tests {
                 std::io::ErrorKind::InvalidInput
             );
         }
+    }
+
+    #[test]
+    fn retired_fork_cannot_create_or_launch_but_existing_sessions_remain_recoverable() {
+        use SlotOperation::*;
+        for id in ["02", "03", "04"] {
+            for operation in [Launch, Provision] {
+                let error = admit_owned_test_operation(id, operation).unwrap_err();
+                assert_eq!(error.kind(), std::io::ErrorKind::Unsupported);
+                assert!(error.to_string().contains("SANDBOXIE_RETIRED"));
+                assert!(admit_slot_operation(id, operation).is_err());
+            }
+            for operation in [Inspect, Focus, Place, Close] {
+                assert!(admit_owned_test_operation(id, operation).is_ok());
+            }
+        }
+        assert!(admit_slot_operation("01", Launch).is_ok());
     }
 
     #[test]

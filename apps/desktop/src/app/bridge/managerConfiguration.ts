@@ -18,6 +18,8 @@ export const managerConfiguration={load:async()=>parseManagerConfiguration(await
 export function operationIssue(error:unknown){
   if(error && typeof error==='object' && 'code' in error && 'message' in error && 'action' in error && 'details' in error && typeof error.message==='string' && typeof error.action==='string' && typeof error.details==='string')return {message:error.message,action:error.action,details:error.details};
   const details=(error instanceof Error?error.message:typeof error==='string'?error:JSON.stringify(error))??'Unknown error';
+  if(details.includes('SANDBOXIE_RETIRED'))return {message:'Sandboxie launch routes are retired.',action:'The independent session engine is not available yet. Existing sessions and saved data are preserved.',details};
+  if(details.includes('APP_COMPARTMENT_FEATURE_UNAVAILABLE'))return {message:'This engine cannot keep private sessions running.',action:'The compatibility mode requires an active engine feature certificate. Its evaluation stops games after five minutes. Resolve the engine mode before opening this session.',details};
   if(/Recent launch|Previous private launcher/.test(details))return {message:'A previous launch is still pending.',action:'Check again before retrying. The launch guard also requires 30 seconds.',details};
   if(/signature|hash|payload|service|driver|ABI|Test Mode/i.test(details))return {message:'The engine could not be verified.',action:'Check again. If this continues, open Settings → Diagnostics for the reason.',details};
   if(/surface helper.*timed out/i.test(details))return {message:'Minecraft display stopped responding.',action:'Choose Retry display. If it still fails, use Restore window. Diagnostics includes the last helper stage.',details};

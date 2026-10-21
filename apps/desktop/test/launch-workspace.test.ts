@@ -2,17 +2,39 @@ import {expect,it,vi} from 'vitest';
 import {observeWorkspaceLaunch} from '../src/app/presentation/launchWorkspace.js';
 import type {OwnedSnapshot} from '../src/app/bridge/ownedProviderApi.js';
 import {readFileSync} from 'node:fs';
+import {operationIssue} from '../src/app/bridge/managerConfiguration.js';
 
-it('selecting a running tab refreshes identity and presents it without launching or closing',async()=>{
+it('a feature preflight rejection leaves other running tabs current while unknown launch failures require inspection',async()=>{
+  const source=readFileSync(new URL('../src/OwnedManagerPanel.svelte',import.meta.url),'utf8');
+  const start=source.indexOf('async function act('),end=source.indexOf('async function nativeLaunch()',start);
+  const fn=source.slice(start,end).replace('client:ClientId,operation:OwnedOperation,target:OwnedProcess|null=null','client,operation,target=null');
+  const run=new Function('ownedProvider','operationIssue',`let operationBusy=false,externalBusy=false,current=true,licensed=true,compatibility=false,pending={},error='',notice='',details='',activeClient='',activeOperation='',sessionDirectory='test';${fn};return (async()=>{await act('02','Launch');return {current,pending};})();`);
+  for(const feature of [true,false]){
+    const result=await run({execute:async()=>{throw new Error(feature?'APP_COMPARTMENT_FEATURE_UNAVAILABLE':'unknown transport failure');}},operationIssue);
+    expect(result.current).toBe(feature);expect(result.pending['02']).toBe(!feature);
+  }
+});
+
+it('selecting a known running tab uses native retained identity checks without a full engine inspection',async()=>{
   const source=readFileSync(new URL('../src/OwnedManagerPanel.svelte',import.meta.url),'utf8');
   const start=source.indexOf('export async function activateClient('),end=source.indexOf('async function play(',start);
   const fn=source.slice(start,end).replace('export ','').replace('client:ClientId','client');
   const run=new Function('act','play','openClient','snapshot',`let operationBusy=false,externalBusy=false,current=true,pending={};const actionBlockedReason=()=>null;${fn};return activateClient('02');`);
-  const act=vi.fn(),play=vi.fn(),open=vi.fn();
+  const act=vi.fn(),play=vi.fn().mockResolvedValue(true),open=vi.fn();
   await run(act,play,open,{clients:[{clientId:'02',processes:[target]}],nativeProcesses:[]});
-  expect(act).toHaveBeenCalledExactlyOnceWith('02','Inspect');
+  expect(act).not.toHaveBeenCalled();
   expect(play).toHaveBeenCalledExactlyOnceWith('02',target);
   expect(open).not.toHaveBeenCalled();
+});
+it('a failed retained presentation refreshes provider identity rather than trapping retries on a stale process',async()=>{
+  const source=readFileSync(new URL('../src/OwnedManagerPanel.svelte',import.meta.url),'utf8');
+  const start=source.indexOf('export async function activateClient('),end=source.indexOf('async function play(',start);
+  const fn=source.slice(start,end).replace('export ','').replace('client:ClientId','client');
+  const run=new Function('act','play','openClient','snapshot',`let operationBusy=false,externalBusy=false,current=true,pending={};const actionBlockedReason=()=>null;${fn};return activateClient('02');`);
+  const inspect=vi.fn(),play=vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true),open=vi.fn();
+  await run(inspect,play,open,{clients:[{clientId:'02',processes:[target]}],nativeProcesses:[]});
+  expect(inspect).toHaveBeenCalledExactlyOnceWith('02','Inspect');
+  expect(play).toHaveBeenCalledTimes(2);expect(open).not.toHaveBeenCalled();
 });
 
 it('keeps one session tab bar and removes the duplicate launch cards',()=>{

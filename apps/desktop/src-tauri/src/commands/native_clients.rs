@@ -43,8 +43,17 @@ pub async fn desktop_present_workspace(
                 &client_id,
                 SlotOperation::Place,
             )?;
+            if crate::engine::workspace_surface::present_retained(
+                manager,
+                viewport,
+                target.clone(),
+                session_directory.clone(),
+                client_id.clone(),
+            )? {
+                return Ok(());
+            }
             let request = OwnedRequest {
-                session_directory,
+                session_directory: session_directory.clone(),
                 client_id: "02".into(),
                 operation: OwnedOperation::Inspect,
                 licensed: false,
@@ -79,7 +88,13 @@ pub async fn desktop_present_workspace(
                     "Workspace process attribution changed; check clients again",
                 ));
             }
-            crate::engine::workspace_surface::present(manager, viewport, target)
+            crate::engine::workspace_surface::present_verified(
+                manager,
+                viewport,
+                target,
+                session_directory,
+                client_id,
+            )
         })
     })
     .await

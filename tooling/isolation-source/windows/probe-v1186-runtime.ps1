@@ -25,6 +25,22 @@ public static class MivubiRuntimeProbe {
     [Out,MarshalAs(UnmanagedType.LPArray)] uint[] pids, ref uint count);
   [UnmanagedFunctionPointer(CallingConvention.StdCall,CharSet=CharSet.Unicode)]
   delegate int QueryProcess(IntPtr pid,[Out,MarshalAs(UnmanagedType.LPArray,SizeConst=34)] char[] box,IntPtr image,IntPtr sid,out uint session);
+  [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+  delegate int QueryDriverInfo(uint kind,IntPtr data,uint length);
+  public static bool AppCompartmentFeatureActive(string path) {
+    IntPtr module=LoadLibraryExW(path,IntPtr.Zero,0x1100);
+    if(module==IntPtr.Zero)throw new Exception("Feature query DLL unavailable");
+    IntPtr data=Marshal.AllocHGlobal(8);
+    try {
+      IntPtr entry=GetProcAddress(module,"SbieApi_QueryDrvInfo");
+      if(entry==IntPtr.Zero)throw new Exception("Driver feature query unavailable");
+      var query=(QueryDriverInfo)Marshal.GetDelegateForFunctionPointer(entry,typeof(QueryDriverInfo));
+      Marshal.WriteInt64(data,0);
+      if(query(uint.MaxValue,data,8)!=0)throw new Exception("Driver feature query failed");
+      ulong flags=unchecked((ulong)Marshal.ReadInt64(data));
+      return (flags&1)!=0 && (flags&0x80000000UL)!=0;
+    } finally {Marshal.FreeHGlobal(data);FreeLibrary(module);}
+  }
   public sealed class GameIdentity {
     public int Pid; public string ProcessStartUtc; public string Box;
     public int WindowsSession; public bool IdentityStable; public bool WindowPresent; public bool Responding;

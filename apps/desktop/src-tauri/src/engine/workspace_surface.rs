@@ -414,6 +414,73 @@ mod native {
         }
         Ok(())
     }
+    pub(super) fn aperture(manager: u64, rect: Option<Rectangle>) -> io::Result<()> {
+        use windows_sys::Win32::Graphics::Gdi::*;
+        let manager = manager as usize as HWND;
+        unsafe {
+            let mut pid = 0;
+            GetWindowThreadProcessId(manager, &mut pid);
+            if IsWindow(manager) == 0 || pid != std::process::id() {
+                return Err(io::Error::other("Invalid workspace aperture owner"));
+            }
+            let Some(rect) = rect else {
+                let current = CreateRectRgn(0, 0, 0, 0);
+                if current.is_null() {
+                    return Err(io::Error::last_os_error());
+                }
+                let absent = GetWindowRgn(manager, current) == ERROR;
+                DeleteObject(current);
+                if absent {
+                    return Ok(());
+                }
+                if SetWindowRgn(manager, std::ptr::null_mut(), 1) == 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                return Ok(());
+            };
+            let mut bounds: RECT = std::mem::zeroed();
+            if GetWindowRect(manager, &mut bounds) == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            let outer = CreateRectRgn(0, 0, bounds.right - bounds.left, bounds.bottom - bounds.top);
+            let hole = CreateRectRgn(
+                rect.x - bounds.left,
+                rect.y - bounds.top,
+                rect.x - bounds.left + rect.width,
+                rect.y - bounds.top + rect.height,
+            );
+            if outer.is_null() || hole.is_null() {
+                if !outer.is_null() {
+                    DeleteObject(outer);
+                }
+                if !hole.is_null() {
+                    DeleteObject(hole);
+                }
+                return Err(io::Error::last_os_error());
+            }
+            let combined = CombineRgn(outer, outer, hole, RGN_DIFF);
+            DeleteObject(hole);
+            let current = CreateRectRgn(0, 0, 0, 0);
+            if current.is_null() {
+                DeleteObject(outer);
+                return Err(io::Error::last_os_error());
+            }
+            // SetWindowRgn emits window-position events; equal regions must not create a loop.
+            let unchanged =
+                GetWindowRgn(manager, current) != ERROR && EqualRgn(current, outer) != 0;
+            DeleteObject(current);
+            if unchanged {
+                DeleteObject(outer);
+                return Ok(());
+            }
+            if combined == ERROR || SetWindowRgn(manager, outer, 1) == 0 {
+                DeleteObject(outer);
+                return Err(io::Error::other("Workspace aperture update refused"));
+            }
+            // Windows now owns outer. The game remains an independent top-level window.
+            Ok(())
+        }
+    }
     pub(super) fn confirm_foreground(
         saved: &Saved,
         rect: Rectangle,
@@ -434,33 +501,33 @@ mod native {
             {
                 SetForegroundWindow(window);
             }
-            // Keep the selected surface visible without making it topmost or forcing input.
-            if GetForegroundWindow() == manager
-                && SetWindowPos(
+            // Raise across the foreground band, then immediately restore normal shell priority.
+            let raise = || {
+                let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS;
+                let raised = SetWindowPos(window, HWND_TOPMOST, 0, 0, 0, 0, flags);
+                let restored = SetWindowPos(
                     window,
-                    HWND_TOP,
+                    if saved.extended_style & WS_EX_TOPMOST as i64 != 0 {
+                        HWND_TOPMOST
+                    } else {
+                        HWND_NOTOPMOST
+                    },
                     0,
                     0,
                     0,
                     0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS,
-                ) == 0
-            {
+                    flags,
+                );
+                raised != 0 && restored != 0
+            };
+            if GetForegroundWindow() == manager && !raise() {
                 return Err(io::Error::other("Workspace stacking update refused"));
             }
             let deadline = std::time::Instant::now() + std::time::Duration::from_millis(500);
             loop {
                 let current_foreground = GetForegroundWindow();
                 if current_foreground == manager {
-                    SetWindowPos(
-                        window,
-                        HWND_TOP,
-                        0,
-                        0,
-                        0,
-                        0,
-                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS,
-                    );
+                    raise();
                 }
                 // WindowFromPoint skips disabled windows while Minecraft owns a modal dialog.
                 if GetWindowLongPtrW(window, GWL_STYLE) & WS_DISABLED as isize != 0 {
@@ -553,6 +620,19 @@ mod native {
             let mut pid = 0;
             GetWindowThreadProcessId(foreground, &mut pid);
             let lower = foreground != window && pid == saved.manager_pid;
+            if GetWindowLongPtrW(window, GWL_EXSTYLE) & WS_EX_TOPMOST as isize != 0
+                && saved.extended_style & WS_EX_TOPMOST as i64 == 0
+            {
+                SetWindowPos(
+                    window,
+                    HWND_NOTOPMOST,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS,
+                );
+            }
             progress("restore/position")?;
             if SetWindowPos(
                 window,
@@ -672,6 +752,9 @@ mod native {
     pub(super) fn hide(_: &Saved) -> io::Result<()> {
         unavailable()
     }
+    pub(super) fn aperture(_: u64, _: Option<Rectangle>) -> io::Result<()> {
+        unavailable()
+    }
     pub(super) fn confirm_foreground(_: &Saved, _: Rectangle, _: u64, _: bool) -> io::Result<()> {
         unavailable()
     }
@@ -712,33 +795,11 @@ mod controller {
         events: mpsc::Receiver<Event>,
         viewport: Viewport,
         manager: u64,
+        authority: Option<(String, String)>,
         ended: Option<Result<(), String>>,
         saved: Option<Saved>,
     }
     impl Lease {
-        fn hold_after_failure(&mut self, error: io::Error) -> io::Error {
-            // Keep the first failure and its checkpoint. A delayed successful
-            // activation must not cover recovery controls at the old geometry.
-            // An ended helper already restores the standalone window via its reader.
-            if matches!(self.child.try_wait(), Ok(None)) {
-                match self.send(Command::Hide) {
-                    Ok(Reply::Hidden) => {}
-                    result => {
-                        return io::Error::new(
-                            error.kind(),
-                            format!(
-                                "{error}; hiding failed presentation: {}",
-                                result
-                                    .err()
-                                    .map(|e| e.to_string())
-                                    .unwrap_or_else(|| "unexpected acknowledgement".into())
-                            ),
-                        )
-                    }
-                }
-            }
-            error
-        }
         fn place(&mut self, rect: Rectangle, activate: bool) -> io::Result<()> {
             if !matches!(
                 self.send(Command::Place {
@@ -749,6 +810,8 @@ mod controller {
             ) {
                 return Err(io::Error::other("Surface presentation failed"));
             }
+            // A maximized foreground manager must not cover the independently rendered game.
+            native::aperture(self.manager, Some(rect))?;
             native::confirm_foreground(
                 self.saved
                     .as_ref()
@@ -869,6 +932,9 @@ mod controller {
             .lock()
             .map_err(|_| io::Error::other("Workspace state unavailable"))?;
         let mut error = None;
+        if let Some(lease) = state.active.iter().chain(state.parked.iter()).next() {
+            native::aperture(lease.manager, None)?;
+        }
         if let Some(active) = state.active.as_mut() {
             match active.stop() {
                 Ok(()) => state.active = None,
@@ -894,6 +960,9 @@ mod controller {
         let mut state = SURFACE
             .lock()
             .map_err(|_| io::Error::other("Workspace state unavailable"))?;
+        if let Some(lease) = state.active.as_ref() {
+            native::aperture(lease.manager, None)?;
+        }
         if let Some(lease) = state.active.as_mut() {
             if lease.child.try_wait()?.is_some()
                 || lease
@@ -922,6 +991,7 @@ mod controller {
             .as_ref()
             .is_some_and(|lease| same(lease, target))
         {
+            native::aperture(state.active.as_ref().unwrap().manager, None)?;
             state.active.as_mut().unwrap().stop()?;
             state.active = None;
             return Ok(());
@@ -993,6 +1063,18 @@ mod controller {
                 .as_ref()
                 .map_or(Ok(()), native::restore)
                 .map_err(|e| e.to_string());
+            if let Some(saved) = saved.as_ref() {
+                if let Ok(mut state) = SURFACE.try_lock() {
+                    if state
+                        .active
+                        .as_ref()
+                        .is_some_and(|lease| same(lease, &saved.target))
+                    {
+                        let _ = native::aperture(manager, None);
+                        state.suspended = true;
+                    }
+                }
+            }
             let _ = tx.send(Event::End(result));
         });
         let mut lease = Lease {
@@ -1001,6 +1083,7 @@ mod controller {
             events: rx,
             viewport,
             manager,
+            authority: None,
             ended: None,
             saved: None,
         };
@@ -1015,12 +1098,54 @@ mod controller {
         }
         Ok(lease)
     }
-    pub fn present(manager: u64, viewport: Viewport, target: OwnedProcess) -> io::Result<()> {
+    pub fn present_verified(
+        manager: u64,
+        viewport: Viewport,
+        target: OwnedProcess,
+        session: String,
+        client: String,
+    ) -> io::Result<()> {
+        present_bound(manager, viewport, target, Some((session, client)), false).map(|_| ())
+    }
+    pub fn present_retained(
+        manager: u64,
+        viewport: Viewport,
+        target: OwnedProcess,
+        session: String,
+        client: String,
+    ) -> io::Result<bool> {
+        present_bound(manager, viewport, target, Some((session, client)), true)
+    }
+    #[cfg(test)]
+    fn present(manager: u64, viewport: Viewport, target: OwnedProcess) -> io::Result<()> {
+        present_bound(manager, viewport, target, None, false).map(|_| ())
+    }
+    fn present_bound(
+        manager: u64,
+        viewport: Viewport,
+        target: OwnedProcess,
+        authority: Option<(String, String)>,
+        retained_only: bool,
+    ) -> io::Result<bool> {
         let viewport = viewport.validate()?;
         let rect = native::rectangle(manager, viewport)?;
         let mut state = SURFACE
             .lock()
             .map_err(|_| io::Error::other("Workspace state unavailable"))?;
+        // Only a previously provider-verified lease may skip expensive engine admission.
+        if retained_only
+            && !state.active.iter().chain(state.parked.iter()).any(|lease| {
+                lease.manager == manager
+                    && lease.authority == authority
+                    && same(lease, &target)
+                    && lease
+                        .saved
+                        .as_ref()
+                        .is_some_and(|saved| !native::retired(&saved.target))
+            })
+        {
+            return Ok(false);
+        }
         // A finished recovery helper must confirm restoration before its slot is reused.
         if let Some(active) = state.active.as_mut() {
             if active.child.try_wait()?.is_some()
@@ -1044,19 +1169,32 @@ mod controller {
                 state.parked.remove(index);
             }
         }
+        if retained_only
+            && !state.active.iter().chain(state.parked.iter()).any(|lease| {
+                lease.manager == manager && lease.authority == authority && same(lease, &target)
+            })
+        {
+            return Ok(false);
+        }
         if let Some(old) = state.active.as_mut() {
             if same(old, &target) {
                 if old.manager != manager {
                     return Err(io::Error::other("Wrong workspace window"));
                 }
+                old.authority = authority;
                 old.viewport = viewport;
                 if let Err(error) = old.place(rect, true) {
-                    let error = old.hold_after_failure(error);
-                    state.suspended = true;
+                    state.suspended = matches!(
+                        error.kind(),
+                        io::ErrorKind::TimedOut | io::ErrorKind::BrokenPipe
+                    );
+                    if state.suspended {
+                        native::aperture(manager, None)?;
+                    }
                     return Err(error);
                 }
                 state.suspended = false;
-                return Ok(());
+                return Ok(true);
             }
         }
         let parked = state.parked.iter().position(|lease| same(lease, &target));
@@ -1069,6 +1207,7 @@ mod controller {
         } else {
             prepare(manager, viewport, target)?
         };
+        replacement.authority = authority;
         if replacement.manager != manager {
             state.parked.push(replacement);
             return Err(io::Error::other("Wrong workspace window"));
@@ -1085,6 +1224,8 @@ mod controller {
             if let Some(old) = state.active.as_mut() {
                 old.place(rect, false)?;
                 state.suspended = false;
+            } else {
+                native::aperture(manager, None)?;
             }
             return Err(io::Error::other(format!(
                 "Workspace placement failed: {detail}. Previous session preserved."
@@ -1104,7 +1245,7 @@ mod controller {
         }
         state.active = Some(replacement);
         state.suspended = false;
-        Ok(())
+        Ok(true)
     }
     pub fn update(manager: u64, viewport: Option<Viewport>) -> io::Result<()> {
         let mut state = SURFACE
@@ -1126,6 +1267,7 @@ mod controller {
             None => lease.viewport,
         };
         if native::minimized(manager)? {
+            native::aperture(manager, None)?;
             return match lease.send(Command::Hide)? {
                 Reply::Hidden => Ok(()),
                 _ => Err(io::Error::other("Surface hide failed")),
@@ -1134,19 +1276,23 @@ mod controller {
         let rect = match native::rectangle(manager, next_viewport) {
             Ok(rect) => rect,
             // Native resize/DPI events precede the authoritative webview geometry.
-            Err(error) if viewport.is_none() && error.kind() == io::ErrorKind::WouldBlock => {
-                return Ok(())
-            }
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => return Ok(()),
             Err(error) => return Err(error),
         };
         lease.viewport = next_viewport;
+        // A transient layout/stacking failure must not hide the live session or latch suspension.
         match lease.place(rect, false) {
-            Ok(()) => Ok(()),
             Err(error) => {
-                let error = lease.hold_after_failure(error);
-                state.suspended = true;
+                state.suspended = matches!(
+                    error.kind(),
+                    io::ErrorKind::TimedOut | io::ErrorKind::BrokenPipe
+                );
+                if state.suspended {
+                    native::aperture(manager, None)?;
+                }
                 Err(error)
             }
+            Ok(()) => Ok(()),
         }
     }
 
@@ -1406,9 +1552,32 @@ mod controller {
                     present(manager as usize as u64, viewport, target.clone()).unwrap();
                     std::thread::sleep(Duration::from_millis(100));
                     let composed = native::capture(target.clone()).unwrap();
+                    unsafe {
+                        use windows_sys::Win32::Graphics::Gdi::*;
+                        let region = CreateRectRgn(0, 0, 0, 0);
+                        assert_ne!(GetWindowRgn(manager, region), ERROR);
+                        let mut bounds: RECT = std::mem::zeroed();
+                        GetWindowRect(manager, &mut bounds);
+                        assert_eq!(
+                            PtInRegion(
+                                region,
+                                composed.rect.x - bounds.left + composed.rect.width / 2,
+                                composed.rect.y - bounds.top + composed.rect.height / 2
+                            ),
+                            0,
+                            "Manager covers the game's center"
+                        );
+                        assert_ne!(PtInRegion(region, 5, 5), 0, "Manager chrome was cut out");
+                        DeleteObject(region);
+                    }
                     assert_ne!(composed.style, original.style);
                     assert_ne!(composed.extended_style & WS_EX_TOOLWINDOW as i64, 0);
                     assert_eq!(composed.extended_style & WS_EX_APPWINDOW as i64, 0);
+                    assert_eq!(
+                        composed.extended_style & WS_EX_TOPMOST as i64,
+                        original.extended_style & WS_EX_TOPMOST as i64,
+                        "Presentation retained temporary topmost priority"
+                    );
                     assert_eq!(
                         composed.rect,
                         native::rectangle(manager as usize as u64, viewport).unwrap()
@@ -1439,8 +1608,34 @@ mod controller {
                         }
                         let deadline = Instant::now() + Duration::from_secs(3);
                         loop {
+                            // The fixture manager's owning test thread must service cross-thread
+                            // region restoration just as Tauri's UI message loop does.
+                            unsafe {
+                                let mut message: MSG = std::mem::zeroed();
+                                while PeekMessageW(
+                                    &mut message,
+                                    std::ptr::null_mut(),
+                                    0,
+                                    0,
+                                    PM_REMOVE,
+                                ) != 0
+                                {
+                                    TranslateMessage(&message);
+                                    DispatchMessageW(&message);
+                                }
+                            }
                             let current = native::capture(target.clone()).unwrap();
-                            if current.style == original.style && current.rect == original.rect {
+                            let region_clear = unsafe {
+                                use windows_sys::Win32::Graphics::Gdi::*;
+                                let region = CreateRectRgn(0, 0, 0, 0);
+                                let clear = GetWindowRgn(manager, region) == ERROR;
+                                DeleteObject(region);
+                                clear
+                            };
+                            if current.style == original.style
+                                && current.rect == original.rect
+                                && region_clear
+                            {
                                 break;
                             }
                             assert!(
@@ -1453,6 +1648,16 @@ mod controller {
                     }
                     std::thread::sleep(Duration::from_millis(100));
                     let current = native::capture(target.clone()).unwrap();
+                    unsafe {
+                        use windows_sys::Win32::Graphics::Gdi::*;
+                        let region = CreateRectRgn(0, 0, 0, 0);
+                        assert_eq!(
+                            GetWindowRgn(manager, region),
+                            ERROR,
+                            "Recovery left a viewport hole"
+                        );
+                        DeleteObject(region);
+                    }
                     assert_eq!(current.style, original.style, "{mode}");
                     assert_eq!(current.rect, original.rect, "{mode}");
                     assert_eq!(
@@ -1490,8 +1695,8 @@ mod controller {
                 "A stale native resize must wait for fresh webview geometry, not poison recovery"
             );
             assert!(
-                update(manager as usize as u64, Some(viewport)).is_err(),
-                "Explicit out-of-bounds webview geometry must still be rejected"
+                update(manager as usize as u64, Some(viewport)).is_ok(),
+                "A queued out-of-bounds webview rectangle must wait for its replacement"
             );
             let smaller = Viewport {
                 width: 300.0,
@@ -1632,6 +1837,58 @@ mod controller {
                     assert_eq!(unsafe { IsWindowVisible(handle) } != 0, index == selected);
                 }
             }
+            for (index, tab) in tabs.iter().enumerate() {
+                present_verified(
+                    manager as usize as u64,
+                    viewport,
+                    tab.clone(),
+                    "test-session".into(),
+                    format!("{:02}", index + 1),
+                )
+                .unwrap();
+            }
+            assert!(!present_retained(
+                manager as usize as u64,
+                viewport,
+                tabs[0].clone(),
+                "other-session".into(),
+                "01".into()
+            )
+            .unwrap());
+            assert!(!present_retained(
+                manager as usize as u64,
+                viewport,
+                tabs[0].clone(),
+                "test-session".into(),
+                "02".into()
+            )
+            .unwrap());
+            let mut timings = Vec::new();
+            for turn in 0..40 {
+                let selected = turn % 4;
+                let start = Instant::now();
+                assert!(present_retained(
+                    manager as usize as u64,
+                    viewport,
+                    tabs[selected].clone(),
+                    "test-session".into(),
+                    format!("{:02}", selected + 1)
+                )
+                .unwrap());
+                timings.push(start.elapsed().as_millis());
+                for (index, tab) in tabs.iter().enumerate() {
+                    native::capture(tab.clone()).unwrap();
+                    let handle = u64::from_str_radix(tab.window_handle.trim_start_matches("0x"), 16)
+                        .unwrap() as usize as HWND;
+                    assert_eq!(unsafe { IsWindowVisible(handle) } != 0, index == selected);
+                }
+            }
+            timings.sort();
+            eprintln!("RETAINED_SWAP_MS p95={} max={}", timings[37], timings[39]);
+            assert!(
+                timings[39] < 2000,
+                "Retained switching blocked like full engine admission"
+            );
             release().unwrap();
             present(manager as usize as u64, viewport, target.clone()).unwrap();
             unsafe {
@@ -1649,7 +1906,9 @@ mod controller {
         }
     }
 }
-pub use controller::{is_active, present, release, release_target, suspend, update};
+pub use controller::{
+    is_active, present_retained, present_verified, release, release_target, suspend, update,
+};
 
 #[cfg(test)]
 mod tests {

@@ -192,6 +192,7 @@ try {
         }
         $entry.state='COMPLETE';SaveReceipt
     } elseif ($request.operation -ceq 'Launch') {
+        Demand ([MivubiRuntimeProbe]::AppCompartmentFeatureActive($dll)) 'APP_COMPARTMENT_FEATURE_UNAVAILABLE: the current engine lacks the active feature certificate for this compatibility mode; evaluation stops games after five minutes.'
         Demand ($request.licensed -eq $true -and $slot.settingsVerified -eq $true) 'Confirm licensing and verified profile settings before launch.'
         Demand ($slot.boxedProcessCount -eq 0) 'Profile is not empty; another launch is refused.'
         $launchKey='managerLaunch'+$request.clientId

@@ -11,9 +11,18 @@ lifecycle: ACTIVE
 
 This is a **navigation guide**, not a second implementation registry. The sole current v1.18.6 source/compile/assembly commands live in [Isolation Source Tooling](../../tooling/isolation-source/README.md); current work intent lives only in [planning/development.md](../../planning/development.md). Historical v1.18.5 entries below are for provenance and regression traceability, **not alternate active commands**. For an issue, inspect its current source owner and actual consumers.
 
+## Current direction — 21 October 2026
+
+Sandboxie and the derived fork are retired for new product sessions. The old
+inventory below is historical dependency navigation, not authorization to activate
+the fork or enable certificates. See [retirement register](legacy-retirement.md).
+`apps/desktop/src-tauri/src/engine/instance_catalog.rs` blocks isolated Launch and
+Provision in both old routes; existing-session recovery remains available.
+**No independent replacement provider exists.**
+
 ## Locate work by problem
 
-**Current native source (21 October 2026):** the editable Sandboxie-derived
+**Historical fork source (before retirement on 21 October 2026):** the editable Sandboxie-derived
 v1.18.6 implementation is **complete as source** in `engine/isolation-owned/`
 (1,627 files, 15 directly modified C/C++ files plus four reviewed project-path
 quoting fixes). The unmodified reference is

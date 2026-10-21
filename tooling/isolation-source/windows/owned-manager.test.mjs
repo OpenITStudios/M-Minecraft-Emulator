@@ -8,6 +8,14 @@ import {planOwnedMinecraftVirtual} from '../../../engine/isolation-native/owned-
 const source=readFileSync(new URL('./owned-manager.ps1',import.meta.url),'utf8');
 const probe=readFileSync(new URL('./probe-v1186-runtime.ps1',import.meta.url),'utf8');
 const ps=code=>spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',code],{encoding:'utf8',timeout:15000,windowsHide:true});
+test('inactive App Compartment feature is rejected before launch receipt or process effects',{skip:process.platform!=='win32'},()=>{
+  const block=source.slice(source.indexOf("} elseif ($request.operation -ceq 'Launch')"),source.indexOf("} elseif ($request.operation -notin"));
+  const guard=block.match(/Demand \(\[MivubiRuntimeProbe\]::AppCompartmentFeatureActive\(\$dll\)\) '[^']+'/)?.[0];
+  assert.ok(guard);assert.ok(block.indexOf(guard)<block.indexOf('$receipt.runtime|Add-Member'));
+  assert.ok(block.indexOf(guard)<block.indexOf('[Diagnostics.Process]::Start'));
+  const r=ps(`$ErrorActionPreference='Stop';function Demand($ok,$reason){if(-not $ok){throw $reason}};Add-Type 'public static class MivubiRuntimeProbe {public static bool AppCompartmentFeatureActive(string p){return false;}}';$dll='synthetic';try{${guard};throw 'launch guard skipped'}catch{if($_.Exception.Message -notmatch '^APP_COMPARTMENT_FEATURE_UNAVAILABLE:'){throw}};exit 0`);
+  assert.equal(r.status,0,r.stdout+r.stderr);
+});
 
 test('manager provenance pin follows the exact committed owned native source',()=>{
   const tree=spawnSync('git',['rev-parse','HEAD:engine/isolation-owned'],{encoding:'utf8',windowsHide:true});

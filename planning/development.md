@@ -1,13 +1,16 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
-## Owned manager / independence — 21 October 2026
+## Sandboxie retirement / independent provider - 21 October 2026
 
-**ACTIVE**, base `26e6433`; native `e2c80ad` activated after reboot/UAC;
-three profiles verified. One tab row, fresh selection and rollback implemented.
-**728 source checks PASS**; synthetic switches PASS. Final real 04→01→02→03→04
-retained four identities; earlier exits/focus recovery remain unresolved.
-[Evidence](../docs/validation/native-pilot-localtest.md).
-**Next:** diagnose exits/focus before operator-deferred manual login.
+**ACTIVE**, base `1be9269`; user superseded fork/certificate route.
+Boundary: [retirement register](../docs/system/legacy-retirement.md).
+Desktop blocks isolated Launch/Provision on both old routes; data and existing
+session recovery remain. Independent provider NOT_IMPLEMENTED. Earlier tab and
+aperture recovery improvements are retained; no four-client acceptance.
+Desktop verification PASS: 185 frontend + 78 Rust; 8 opt-in ignored.
+Legacy receipt unchanged regression PASS; full suite stopped on assembler EPERM.
+**Next:** assess Windows per-user process/profile/desktop feasibility; establish
+singleton behavior before a two-session experiment or four-account login.
 
 ## Windows-first efficiency — 20 October 2026
 
@@ -51,25 +54,6 @@ to erase these separately scoped exceptions.
 
 **Repository:** `OpenITStudios/M-Minecraft-Emulator`; all product changes on
 branch `Local`. Current operator decision: **GitHub Actions CI OFF**.
-
-## Continued development: non-blocking observer Stop
-
-The last observer source owner still used a potentially indefinite
-`JoinHandle::join()` immediately after requesting `WM_QUIT`, holding
-the global Rust manager operation lock. A message queue blocked in a
-Windows callback could freeze other manager operations indefinitely.
-In this bounded change, Stop posts at most one `WM_QUIT` per worker,
-returns a truthful `WouldBlock` while cleanup is pending, preserves the
-only worker handle, and joins **only when `is_finished()` is true**.
-A later explicit Stop confirms cleanup, including propagation of a
-`GetMessageW` or `UnhookWinEvent` failure. Startup and account/focus
-attribution are unchanged.
-
-This is a source-only correction on the CI-disabled `Local` branch.
-It is not a Windows runtime test, game FPS measurement or proof of
-four Minecraft instances. No Actions workflow is restored.
-
----
 
 ## Current work: retire CI and preserve safe foreground observation
 

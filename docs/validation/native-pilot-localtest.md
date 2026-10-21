@@ -9,6 +9,104 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Sandboxie source retirement - 21 October 2026
+
+Base: `1be9269e7c253043faca33017c71a23c967941a9`; this revision retires new
+isolated sessions at desktop admission, preserving earlier workspace recovery
+changes. Both official Sandboxie and owned-fork Launch/Provision are denied;
+existing inspection, presentation, restoration and normal close remain admitted.
+The replacement is NOT_IMPLEMENTED. No service, driver, account or world was
+removed; the currently open executable was not replaced in this batch.
+
+Executed: desktop verification PASS (185 frontend tests, 78 Rust tests, 8 opt-in
+Rust tests ignored; Svelte typecheck, frontend build, Cargo checks/format).
+Repository contract and structure checks PASS. Explicit read-only legacy-session
+regression PASS: retired launch rejected and session.json bytes unchanged.
+Full `verify:source` did NOT pass: two attempts hit EPERM renaming a temporary
+payload directory in historical assemble-private-engine.test.mjs. An initial
+retirement test compile error was corrected before final desktop verification.
+No Windows-user launch experiment or independent Minecraft runtime acceptance
+was performed. Earlier fork observations below are historical, not replacement
+acceptance. See the [retirement register](../system/legacy-retirement.md).
+
+
+## Fast tab switching, composition recovery and five-minute limit — 21 October 2026
+
+Continuation from `1be9269e7c253043faca33017c71a23c967941a9` found two full
+PowerShell engine/profile inspections per running-tab click. Admission now binds
+the existing presentation lease to its verified session directory and client.
+Retained selection validates live PID/creation/session/HWND identity natively;
+unadmitted or replaced processes still require the full provider inspection.
+A failed retained selection refreshes attribution before a bounded explicit retry.
+Foreign client/session bindings cannot use another lease. There is no second
+provider or persistent readiness store.
+
+Queued resize/DPI rectangles can be temporarily outside the new client bounds.
+Those events now wait for fresh layout rather than hiding the game and latching
+failure. The next layout event can recover; actual helper timeout/disconnection
+still suspends the broken lease for explicit recovery. Window composition also
+uses a region on the manager itself, subtracting only the validated game viewport.
+This prevents a foreground/maximized manager from covering the independent game.
+Settings, minimize, detach and helper recovery restore the normal manager region.
+Equal regions are not reapplied, avoiding self-generated window-position loops.
+The game receives no parent/owner reassignment. A foreground-band raise immediately
+restores the original topmost eligibility; no permanent always-on-top mode is added.
+See Microsoft's [SetWindowRgn ownership/coordinate contract](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowrgn).
+Windows can render the manager's native title frame in its classic style while
+the region is applied; this cosmetic side effect is observed.
+
+Executed Windows synthetic regression: forty retained four-window switches,
+p95 **2 ms**, maximum **3 ms** in the final run; PID/start/session/HWND continuity,
+selected-only visibility, aperture center/chrome geometry and recovery pass.
+Original shell eligibility and geometry restore after release, pipe loss and
+helper crash. These timings describe synthetic native operations, not Minecraft
+FPS, cold launch, Tauri round-trip latency or a long-running gameplay test.
+The stalled-helper timeout regression also passed before the final stacking edit.
+
+Actual Minecraft: 04→01→02→03→04 displayed in the four-process run; native 01
+retained its original process and existing world view. Maximize/restore displayed
+the selected native and owned game; Settings→Clients restored the selected native
+surface without an extra tab click. Minimize/restore initially exposed a lower
+third-party window through the aperture; the final foreground-band correction
+recovered native 01 on restore in the subsequent actual run. All game/account
+controls were left to the operator. In-game exclusive fullscreen, monitor/DPI
+changes, Explorer restart and long-duration four-world continuity are NOT_EXECUTED.
+
+### Separate engine blocker: App Compartment evaluation
+
+The current profiles use `NoSecurityIsolation=y`. The pinned native owner
+`core/drv/process.c` checks `Verify_CertInfo.active && Verify_CertInfo.opt_sec`;
+when absent for App Compartment, it logs MSG_6004 and schedules termination after
+`5*60*1000` ms. `process_util.c` terminates with STATUS_PROCESS_IS_TERMINATING.
+The actual owned driver feature query returned **certificateActive=false** and
+**securityFeatureActive=false**. A retained process handle observed owned game 04
+exit code **0xC000010A**. This is strong evidence for the evaluation path and
+explains why short tab demonstrations did not establish durable stability; the
+exact termination instant of all earlier exits was not captured.
+
+The existing verified read-only query owner now checks these feature bits before
+any owned Launch receipt write or process start. Missing capability fails with
+`APP_COMPARTMENT_FEATURE_UNAVAILABLE`; UI explains the five-minute evaluation.
+An actual opt-in regression against the inactive engine passed and confirmed
+the runtime receipt bytes were unchanged. No native license check was changed
+and no certificate material was read or installed. Inspect/recovery remain usable.
+**Superseded by operator decision:** Sandboxie and its derived fork are retired
+for new sessions. Certificate enablement is no longer the continuation. Desktop
+admission rejects isolated launch/provision before engine execution; the feature
+check remains historical containment in standalone legacy scripts. See
+[retirement register](../system/legacy-retirement.md).
+for this engine feature limit. No credential/world/profile data was modified.
+
+Source evidence logs: `workspace/swap-stability-*.log`,
+`workspace/owned-feature-preflight.log`, `workspace/owned-feature-source-check.log`.
+The final full source pipeline passes **732 checks** (Node 294, frontend 185,
+desktop Rust 76, runtime Rust 177), with four existing file-symlink skips and
+nine opt-in Rust tests excluded. The actual inactive-feature preflight was run
+separately and passed; it is not counted as an executed game launch.
+An earlier full source run hit EPERM while atomically renaming an isolated
+assembler test fixture; the unchanged retry passed. This was recorded separately
+from the desktop regressions, not treated as a product success.
+
 ## Multitab correction and remaining runtime failure — 21 October 2026
 
 Desktop correction based on `26e6433c2da58f1aa3f48aee05761ec93c820327`:

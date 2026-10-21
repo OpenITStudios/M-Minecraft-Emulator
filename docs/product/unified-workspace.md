@@ -7,6 +7,14 @@ authority: WORKING
 lifecycle: ACTIVE
 ---
 
+> Current direction (21 October 2026): Sandboxie and its derived fork are retired
+> for new sessions. Isolated launch/provision is blocked; independent provider is
+> not implemented. Existing-session controls preserve recovery and data. Earlier
+> fork-specific behavior below is historical. See
+> [retirement register](../system/legacy-retirement.md).
+
+
+
 # One Minecraft workspace
 
 Operator-approved design, 20 October 2026, amended by explicit operator approval
@@ -37,6 +45,19 @@ original recovery checkpoints; Settings suspends rather than detaches them.
 Startup adopts uniquely attributed responsive sessions without launching duplicates.
 These are developer mechanics; the operator's blank/unresponsive-game report
 still prevents product acceptance. Tabs alone do not prove usable gameplay.
+
+The 21 October recovery increment validates engine/profile ownership on admission
+and binds that authority to each retained lease. A running-tab swap validates the
+live process/window identity without repeating package hashing or full profile
+inventory. The manager's own region excludes the validated viewport while a game
+is presented; it becomes opaque again for Settings, minimize and recovery. A
+bounded raise restores the game's original topmost eligibility immediately.
+This remains native composition and can use a classic Windows title frame.
+In-game exclusive fullscreen is not accepted by the manager maximize/restore test.
+The current App Compartment engine feature is inactive: its five-minute evaluation
+limit prevents durable four-session acceptance. New owned launches fail preflight
+until the engine route is resolved; four Education licenses alone do not establish
+this separate engine capability. See the current Windows report for evidence.
 
 Required implementation checks before enabling a single-shell mode:
 

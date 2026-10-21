@@ -4,11 +4,16 @@ Product direction updated: 2026-10-14. This file contains **stable product and r
 
 ## Product and target
 
-**Approved product outcome (2026-10-12):** Four concurrently playable Minecraft Education Windows Desktop clients using four distinct, properly licensed accounts on one PC. **Implemented route:** official Windows Desktop installation; Client 01 native and Client 02 through a persistent licensed Sandboxie Plus box named `MinecraftClient02`. This remains a two-client pilot, not four-client support. See the [first-success and subsequent-crash report](docs/validation/two-client-first-success-2026-10-14.md) for revision-scoped observations; it does not establish stable full acceptance or resource savings. Do not modify game binaries, bypass sign-in or copy tokens/profiles.
+**Approved product outcome (2026-10-12):** Four concurrently playable Minecraft Education Windows Desktop clients using four distinct, properly licensed accounts on one PC. **Historical implemented route:** official Windows Desktop installation; Client 01 native and Client 02 through a persistent licensed Sandboxie Plus box named `MinecraftClient02`. This remains a two-client pilot, not four-client support. See the [first-success and subsequent-crash report](docs/validation/two-client-first-success-2026-10-14.md) for revision-scoped observations; it does not establish stable full acceptance or resource savings. Do not modify game binaries, bypass sign-in or copy tokens/profiles.
 
-**Selected future direction (2026-10-14):** investigate a fork/owned isolation engine integrated with the app, using REA as a developer investigation tool where artifact evidence is needed. A narrow Sandboxie-core fork is the proposed starting basis; no replacement engine or cutover exists. Source work continues through ChatGPT + GitHub; current decisions, component selection, unknowns and next batch belong to `planning/development.md`. REA is not a production game dependency.
-
-**Current active desktop is the native-and-Sandboxie two-client feasibility pilot.** The old VMware manager, Guest Agent and App Sandbox power controls remain source-only legacy routes: old UI unmounted, Tauri handlers unregistered, public Rust VM mutations blocked. No guest-data migration or playable four-client cutover has occurred. Preserve all existing disks, snapshots and guest accounts. The single deprecation register is docs/system/legacy-retirement.md. Current proof procedure: docs/validation/sandboxie-two-client-feasibility.md. Current task/status handoff: planning/development.md. The previous native-only experiment remains a historical reference.
+**Current direction (2026-10-21):** retire Sandboxie and the Sandboxie-derived
+owned fork as launch providers. An owned fork is not an independent engine.
+Desktop admission rejects new fork profile creation and isolated launches.
+Existing session observation, window recovery and normal close remain available
+to preserve data. No independent four-session provider is implemented.
+Do not resume fork activation, certificate enablement or VM routes as an implied
+fallback. See [retirement register](docs/system/legacy-retirement.md) and
+[current continuation](planning/development.md).
 
 The legacy implementation path is:
 

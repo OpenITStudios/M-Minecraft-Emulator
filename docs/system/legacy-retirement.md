@@ -9,7 +9,7 @@ lifecycle: ACTIVE
 
 # Selected Windows isolation pilot and inactive legacy inventory
 
-**Decision 2026-10-12:** Use one official Minecraft Education Desktop installation and one selected **native + Sandboxie Plus** two-client experiment before extending to the four-account target. This outcome is
+**Historical decision 2026-10-12 (superseded below):** Use one official Minecraft Education Desktop installation and one selected **native + Sandboxie Plus** two-client experiment before extending to the four-account target. This outcome is
 **UNPROVEN**. The current desktop pilot does not claim four working clients.
 
 This document is the **single deprecation register**. Executable command
@@ -17,21 +17,70 @@ authority is engine/runtime-core/src/command.rs; desktop entry is
 apps/desktop/src/main.ts; Tauri command registration is
 apps/desktop/src-tauri/src/app_bootstrap.rs. Retired code is not removed.
 
-## ACTIVE: one native + one Sandboxie Plus developer pilot
+## RETIRED: Sandboxie and the derived owned fork — 21 October 2026
 
-| Source | State / responsibility |
+The operator superseded the earlier fork selection: the replacement must be our
+own implementation using supported Windows facilities, without Sandboxie code,
+DLLs, services, driver, box configuration or feature certificates. Rebranding a
+fork does not satisfy this requirement. **The replacement is not implemented.**
+
+
+| Dependency / owner | Retirement boundary |
 | --- | --- |
-| apps/desktop/src/CompactManagerApp.svelte | ACTIVE UI; compact English-only Instances/Settings presentation of official native and isolated actions, using the existing typed native bridge |
-| apps/desktop/src-tauri/src/engine/native_clients.rs | ACTIVE LIMITED; native Windows launch, fixed Sandboxie Client 02 launch/preflight and bounded read-only observation; no authentication automation |
-| apps/desktop/src/app/bridge/nativeFeasibilityApi.ts | ACTIVE typed IPC for explicit official launch requests and strict read-only process/box candidate schema; no legacy VM backend |
-| tooling/acceptance/windows/collect-native-feasibility.ps1 | PRESERVED READ-ONLY; previous native-only feasibility collector, not the selected Client 02 route |
-| tooling/acceptance/evaluate-native-feasibility.mjs | PRESERVED HISTORICAL evaluator; not the selected Sandboxie isolation evidence authority |
-| tooling/acceptance/windows/collect-sandboxie-feasibility.ps1 | ACTIVE; canonical on-demand Sandboxie box/credential-setting/PID collector, `-SummaryOnly` for UI; full explicit CLI produces evidence file |
-| tooling/acceptance/evaluate-sandboxie-feasibility.mjs | ACTIVE evidence interpreter; operator reports never become automated Microsoft-account proof |
+| `engine/isolation-owned/`, `engine/isolation-candidates/` | Historical fork/reference source; no further product development or activation |
+| `engine/isolation-native/owned-runtime/`, `tooling/isolation-source/` | Historical build/test/transaction tools; standalone developer scripts remain, not a replacement provider |
+| Desktop `owned_provider.rs`, embedded `owned-manager.ps1` / `probe-v1186-runtime.ps1` | Still depend on Sbie DLL queries, service identity and box settings; retained for existing-session inspection/recovery/close |
+| Desktop `instance_catalog.rs` | Rejects isolated Launch/Provision on official-pilot and owned-fork paths before provider execution, including direct IPC/helper requests |
+| Desktop `workspace_surface.rs` and Svelte workspace | Reusable presentation mechanics; retained session authority still comes from the old provider and must be replaced |
+| Installed Sbie services, payloads, box roots and saved accounts/worlds | Preserved; no uninstall, reset, certificate changes or data migration in source retirement |
 
-Two-account Windows behavior, persistent authentication, multiplayer and
-four-client performance are all NOT_EXECUTED. No credentials, account
-tokens, profile copies or private worlds are stored in Git.
+New isolated sessions 02–04 are unavailable; the UI must say so. Existing observed
+sessions may be selected, restored or normally closed. Native launch 01 remains
+available at its existing command boundary. This is retirement of product launch
+admission, **not physical removal of every dependency or a completed replacement**.
+The currently running old executable is not changed by a source commit.
+
+
+### Replacement boundary and first implementation proof
+
+Use the existing lifecycle/admission owner, not a parallel manager or credentials
+store. An independent provider must own launch identity and per-instance lifetime;
+window composition must consume verified identities rather than discover games by
+name. Switching tabs changes presentation only; it must never terminate another
+process. Preserve PID/start-time/HWND checks and recovery contracts.
+
+Before implementing a launcher, establish whether supported Windows facilities can
+provide both independent Education process instances and separate persistent
+Microsoft authentication contexts on the same interactive desktop. Different game
+directories or environment variables alone do not prove either property. Separate
+Windows users/tokens/profiles are an investigation candidate, not an accepted
+solution: session placement, brokered authentication, singleton scope, graphics,
+input, permissions and persistence require evidence. A fresh Rust wrapper cannot
+be assumed to create these properties. Do not patch Minecraft, copy tokens or
+change the old driver licensing checks.
+
+Read-only API assessment (21 October 2026):
+[CreateProcessWithLogonW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createprocesswithlogonw)
+can create a process under another user's credentials and optionally load its
+profile. `LOGON_NETCREDENTIALS_ONLY` retains the caller's local token and is
+unsuitable for local identity separation. Full executable paths and deliberate
+profile/environment handling are required. Windows account credentials are a
+separate concern from Minecraft sign-in; no custom secret persistence is approved.
+This API's existence is not Education compatibility proof.
+[Kernel object namespaces](https://learn.microsoft.com/en-us/windows/win32/termserv/kernel-object-namespaces)
+are global or per-session. Inference: a second user on the same desktop does not
+automatically supply a separate named-mutex namespace. Education's singleton
+mechanism is UNKNOWN; no mutex bypass or game modification is allowed.
+**Verdict:** per-user launch remains a candidate with unresolved singleton,
+authentication and desktop-permission constraints, not a production architecture.
+Next: read-only Windows API/source feasibility review of separate Windows-user
+process creation, profile loading and interactive desktop access. Identify a
+supported two-session experiment and its constraints, or explicitly reject that
+approach. Only after proof should the provider be replaced. Four-account login is
+deferred until independent lifetimes, profile separation and recovery are proven.
+Fullscreen, cross-monitor DPI, four-account play/network and long-duration
+survival remain NOT_EXECUTED for the replacement.
+
 
 ## INACTIVE: keep source until removal is safe
 

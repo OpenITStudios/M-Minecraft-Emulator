@@ -510,9 +510,32 @@ mod launch_regression_tests {
         }
     }
     #[test]
-    #[ignore = "explicit operator-authorized live launch; may leave the attributed game running"]
-    fn actual_manager_launch_observes_owned_minecraft() {
+    fn retired_launch_is_rejected_before_session_path_or_script_execution() {
+        let mut request = OwnedRequest {
+            session_directory: "missing-retired-session".into(),
+            client_id: "02".into(),
+            operation: OwnedOperation::Launch,
+            licensed: true,
+            compatibility_confirmed: false,
+            target: None,
+        };
+        let error = (OwnedTestBackend { request: &request })
+            .execute()
+            .unwrap_err();
+        assert!(error.to_string().contains("SANDBOXIE_RETIRED"));
+        request.operation = OwnedOperation::Create;
+        request.compatibility_confirmed = true;
+        let error = (OwnedTestBackend { request: &request })
+            .execute()
+            .unwrap_err();
+        assert!(error.to_string().contains("SANDBOXIE_RETIRED"));
+    }
+    #[test]
+    #[ignore = "requires an explicitly selected legacy test session; reads receipt only"]
+    fn actual_retirement_rejects_launch_before_receipt_change() {
         let session = std::env::var("MIVUBI_TEST_OWNED_SESSION").unwrap();
+        let receipt = std::path::Path::new(&session).join("session.json");
+        let before = std::fs::read(&receipt).unwrap();
         let request = OwnedRequest {
             session_directory: session,
             client_id: "02".into(),
@@ -521,13 +544,17 @@ mod launch_regression_tests {
             compatibility_confirmed: false,
             target: None,
         };
-        let result = (OwnedTestBackend { request: &request }).execute().unwrap();
+        let error = (OwnedTestBackend { request: &request })
+            .execute()
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("SANDBOXIE_RETIRED"),
+            "Unexpected preflight failure: {error}"
+        );
         assert_eq!(
-            result.clients[0].processes.len(),
-            1,
-            "launcher exit {:?}, status {}",
-            result.launcher_exit_code,
-            result.clients[0].status
+            before,
+            std::fs::read(receipt).unwrap(),
+            "Rejected launch changed runtime ownership receipt"
         );
     }
 }

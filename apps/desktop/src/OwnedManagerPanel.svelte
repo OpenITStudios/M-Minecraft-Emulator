@@ -60,6 +60,8 @@
   }
   export async function activateClient(client:ClientId){
     if(operationBusy||externalBusy)return;
+    const retained=client==='01'?snapshot.nativeProcesses[0]:snapshot.clients.find(slot=>slot.clientId===client)?.processes[0];
+    if(current&&retained&&await play(client,retained))return;
     await act('02','Inspect');
     if(!current)return;
     const target=client==='01'?snapshot.nativeProcesses[0]:snapshot.clients.find(slot=>slot.clientId===client)?.processes[0];
@@ -68,11 +70,11 @@
     if(target)await play(client,target);else await openClient(client);
   }
   async function play(client:ClientId,target:OwnedProcess){
-    if(!onPresent){await act(client,'Focus',target);return;}
-    if(operationBusy||externalBusy)return;
-    if(actionBlockedReason(client))return;
+    if(!onPresent){await act(client,'Focus',target);return current;}
+    if(operationBusy||externalBusy)return false;
+    if(actionBlockedReason(client))return false;
     operationBusy=true;error='';details='';
-    try{await onPresent(client,target);}catch{/* The workspace owns display errors and recovery. */}
+    try{await onPresent(client,target);return true;}catch{return false;}
     finally{operationBusy=false;}
   }
   async function act(client:ClientId,operation:OwnedOperation,target:OwnedProcess|null=null){
@@ -101,7 +103,7 @@
       for(const slot of snapshot.clients){if(slot.processes.length>0)pending[slot.clientId]=false;else closing[slot.clientId]=false;}
       if(snapshot.nativeProcesses.length>0)pending["01"]=false;
       else closing['01']=false;
-    }catch(e){current=false;const issue=operationIssue(e);error=issue.message+" "+issue.action;details=issue.details;if(operation==="Launch")pending[client]=true;}
+    }catch(e){const issue=operationIssue(e);const rejectedBeforeLaunch=operation==='Launch'&&issue.details.includes('APP_COMPARTMENT_FEATURE_UNAVAILABLE');if(!rejectedBeforeLaunch)current=false;error=issue.message+" "+issue.action;details=issue.details;if(operation==="Launch")pending[client]=!rejectedBeforeLaunch;}
     finally{operationBusy=false;activeClient="";activeOperation="";}
   }
   async function nativeLaunch(){
