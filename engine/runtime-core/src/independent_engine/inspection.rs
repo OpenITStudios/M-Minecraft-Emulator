@@ -30,6 +30,13 @@ pub fn inspect_existing<P: ProcessObserverPort, S: StorageObserverPort>(
         return Err(NativePortError::StaleProcess);
     }
     let surfaces = storage.inspect_boundaries(slot, expected)?;
+    // A reading made by another collector is not a process-lifetime lease.
+    // Revalidate full PID/creation identity and token category after storage,
+    // so an exit/reuse or containment change cannot create a valid snapshot.
+    let after = process.observe_exact(expected)?;
+    if after != observed {
+        return Err(NativePortError::StaleProcess);
+    }
     Ok(SessionInspection {
         process: observed,
         storage: surfaces,
@@ -339,6 +346,34 @@ mod tests {
                 official_image_signature_observed: false,
                 visible_window_observed: false,
             })
+        }
+    }
+
+    #[test]
+    fn existing_inspection_rechecks_exact_process_after_storage_read() {
+        let key = route_request().expected_process;
+        let proc = CountingProcess::default();
+        let storage = FakeStorage::default();
+        let report = inspect_existing(&proc, &storage, SessionSlot::Mc02, key).unwrap();
+        assert_eq!(report.process.identity, key);
+        assert_eq!(proc.calls.get(), 2);
+        assert_eq!(storage.calls.get(), 1);
+    }
+
+    #[test]
+    fn existing_inspection_rejects_post_read_process_exit_or_token_change() {
+        let key = route_request().expected_process;
+        for proc in [
+            CountingProcess { stale_on: Some(2), ..Default::default() },
+            CountingProcess { changed_token_on: Some(2), ..Default::default() },
+        ] {
+            let storage = FakeStorage::default();
+            assert_eq!(
+                inspect_existing(&proc, &storage, SessionSlot::Mc02, key).unwrap_err(),
+                NativePortError::StaleProcess
+            );
+            assert_eq!(proc.calls.get(), 2);
+            assert_eq!(storage.calls.get(), 1);
         }
     }
 

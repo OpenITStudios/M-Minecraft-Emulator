@@ -1,5 +1,21 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — recheck process lifetime after storage inspection, 22 October 2026
+
+The canonical Rust `independent_engine/inspection.rs::inspect_existing`
+now re-observes the exact PID/creation FILETIME and token containment
+after the bounded storage collector. Process exit/reuse or token-category
+changes fail closed, as they already did in route and pair inspectors.
+Two new regression tests cover the positive two-observation path and
+the stale/token-change path. This is diagnostic-only; no launcher,
+profile mutation, new lifecycle state or Sandboxie dependency was added.
+
+**Proof:** GitHub source/consumer review; Rust tests authored NOT_EXECUTED.
+Windows/Rust compilation and Minecraft acceptance NOT_EXECUTED.
+**Next:** Continue source-first independent engine implementation and
+native compatibility review; never treat storage snapshots as launch proof.
+
+
 ## Independent engine — pinned WinTrust signer certificate fingerprint, 22 October 2026
 
 Updated unmounted Windows desktop image inspection to hash the DER bytes of
