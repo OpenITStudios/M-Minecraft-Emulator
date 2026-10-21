@@ -43,6 +43,17 @@ APIs does not transfer ownership of Microsoft's implementations.
 | Synthetic tooling and offline review | \`tooling/acceptance/windows/\`, \`tooling/acceptance/evaluate-appcontainer-isolation.mjs\` | No game/account access; observations never authorize launch |
 | Current continuation | \`planning/development.md\` | Decisions/next work only, not a runtime data database |
 
+## Read-only source integration
+
+`independent_engine/inspection.rs` combines `ProcessObserverPort`
+and `StorageObserverPort` without adding a lifecycle owner. The typed
+function `inspect_existing` rejects an observed PID/creation-FILETIME
+mismatch before calling the storage adapter. Negative Rust tests use
+in-memory fakes to check stale identity, denied process inspection, and
+missing roaming/authentication evidence. This is a source integration
+contract only; the real Windows adapter is not yet selected and no
+Tauri command calls it.
+
 ## Logical runtime flow (not yet wired to production)
 
 1. **Inspect target:** identify the registered, signed official Education image without modifying or duplicating the installation.

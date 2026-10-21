@@ -13,6 +13,13 @@ returns NotImplemented; existing Tauri/admission paths remain unchanged.
 The canonical design is [Independent Engine Architecture](../docs/system/independent-engine-architecture.md).
 Tests are authored, with Rust compilation and Windows acceptance NOT_EXECUTED.
 
+**Read-only orchestration closure:** `independent_engine/inspection.rs`
+takes typed observer ports, rejects stale PID/creation-time identity before
+storage probing, and exposes unresolved roaming/authentication findings.
+Three negative/source-only Rust tests use fake adapters. This does not
+connect to the UI, grant a profile, authenticate, or choose a provider;
+Rust/Windows execution remains NOT_EXECUTED.
+
 **Next source-only milestone:** implement the independent, read-only Windows
 adapter under the current desktop identity owner, then typed contract tests for
 mapping process/storage observations without credentials, sandbox DLLs,

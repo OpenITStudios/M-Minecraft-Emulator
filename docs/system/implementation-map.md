@@ -25,6 +25,11 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+A read-only orchestration closure, `independent_engine/inspection.rs`,
+joins the process-observer and storage-observer ports. It rejects mismatched
+PID/FILETIME observations before inspecting any storage boundary; no Tauri
+command, provider admission or persisted status has been created.
+
 The modular, independently authored source architecture is
 [Independent Engine Architecture](independent-engine-architecture.md).
 The domain contracts live in `engine/runtime-core/src/independent_engine/`

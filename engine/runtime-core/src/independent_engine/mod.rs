@@ -5,11 +5,13 @@
 //! The existing desktop admission and runtime lifecycle remain authoritative.
 
 mod identity;
+mod inspection;
 mod operations;
 mod ports;
 mod storage;
 
 pub use identity::{ProcessIdentity, SessionSlot};
+pub use inspection::{inspect_existing, SessionInspection};
 pub use operations::{OperationClass, SessionOperation};
 pub use ports::{
     DisabledIndependentProvider, IndependentProviderPort, NativePortError,
