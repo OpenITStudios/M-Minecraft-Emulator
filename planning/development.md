@@ -1,5 +1,28 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — read-only pinned private root handle inspection, 22 October 2026
+
+Added a Windows-only, unmounted `inspect_private_root_handle_source` to the
+existing `apps/desktop/src-tauri/src/engine/instance_identity.rs` owner.
+It accepts a caller-owned, already-open directory HANDLE; retrieves
+volume/file-index identity via GetFileInformationByHandle; refuses regular
+files, final-component reparse points and unavailable file indices.
+The caller remains responsible for opening with no reparse following and
+for actual root ownership, ancestors, ACL, process and token evidence.
+This is a bounded observation only, never an OS access capability and NOT
+proof of private Minecraft filesystem/HKCU/WAM routing.
+
+Two Windows-only Rust tests authored (regular-file rejection and disposable
+new directory identity stability). NOT_EXECUTED; no temp files or profile
+changes performed in ChatGPT or GitHub. No Tauri registration, launch,
+provision, installer, driver or service changes. Windows compiler and
+Minecraft gameplay/isolated storage remain NOT_EXECUTED.
+
+**Next:** Unify the trusted, open-directory capability with an actual native
+profile owner only after a proven Windows isolation mechanism exists; do not
+promote this observation into storage access or game readiness.
+
+
 ## Independent engine — manager-owned private file access plan, 22 October 2026
 
 Implemented `plan_private_file_access` in the existing canonical Rust

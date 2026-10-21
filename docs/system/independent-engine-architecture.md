@@ -11,6 +11,17 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Bounded Windows private-root handle inspector (22 October 2026)
+
+A new **unmounted** read-only inspector accepts an already-open directory
+HANDLE and checks regular-directory type, final reparse attribute and
+volume/file index. It does not open a caller-supplied path or authorize
+writes. Future trusted native owners must still open a verified private
+root with non-following reparse semantics, validate parent traversal and
+DACL/owner, and ensure process/token/slot binding. The helper cannot
+prove account privacy, registry virtualization or the game's path view.
+
+
 ### Manager-owned private file plan — source only, 22 October 2026
 
 `independent_engine/storage.rs::plan_private_file_access` creates a

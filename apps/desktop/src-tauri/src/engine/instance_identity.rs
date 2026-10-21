@@ -398,6 +398,28 @@ pub fn inspect_process_image_provenance_source(
         })
 }
 
+// Read-only Windows directory HANDLE verifier for a future **trusted owner**
+// of a fresh private session profile. A returned volume/file ID proves only
+// that one opened regular directory object is stable, NOT that it is the
+// session's root, has private ACLs, or redirects Minecraft's file view.
+//
+// The eventual caller must own the open capability and also validate all
+// ancestor directories, final reparse points, ACLs, token and process
+// identity. This helper cannot be used as a launch/read/write admission.
+#[cfg(windows)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct PrivateRootObjectIdentity {
+    volume: u32,
+    file_index: u64,
+}
+
+#[cfg(windows)]
+pub(crate) fn inspect_private_root_handle_source(
+    opened: &std::fs::File,
+) -> std::io::Result<PrivateRootObjectIdentity> {
+    windows::inspect_directory_handle(opened)
+}
+
 // Synthetic-only bounded native FILE-handle reader. The caller MUST have
 // created/owned the fixture child and independently established which fresh
 // AppContainer profile contains this ALREADY OPENED file handle. This routine
@@ -582,6 +604,32 @@ mod windows {
     #[link(name = "kernel32")]
     unsafe extern "system" {
         fn FreeLibrary(h_lib_module: *mut std::ffi::c_void) -> i32;
+    }
+
+    /// One already opened directory HANDLE. This does not dereference a path
+    /// or claim that an arbitrary caller owns a Minecraft/private profile.
+    pub(super) fn inspect_directory_handle(
+        opened: &std::fs::File,
+    ) -> io::Result<super::PrivateRootObjectIdentity> {
+        let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+        if unsafe { GetFileInformationByHandle(opened.as_raw_handle(), &mut info) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // Reject a regular file or final-component reparse point. The caller
+        // must have opened reparse points themselves (not their targets).
+        if info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY == 0
+            || info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
+        {
+            return Err(invalid("Private root handle is not an ordinary directory"));
+        }
+        let index = (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow);
+        if index == 0 {
+            return Err(invalid("Private root directory identity is unavailable"));
+        }
+        Ok(super::PrivateRootObjectIdentity {
+            volume: info.dwVolumeSerialNumber,
+            file_index: index,
+        })
     }
 
     /// Exact identity and attributes of a fixture file HANDLE, not its path.
@@ -1274,6 +1322,44 @@ mod windows {
                     .unwrap_err(),
                 NativePortError::InvalidIdentity
             );
+        }
+
+        #[test]
+        fn regular_file_handle_is_not_a_private_directory_root() {
+            // Read-only validation; never probes a host account folder.
+            let executable = std::fs::File::open(std::env::current_exe().unwrap()).unwrap();
+            let result = inspect_directory_handle(&executable);
+            assert_eq!(result.unwrap_err().kind(), io::ErrorKind::InvalidData);
+        }
+
+        #[test]
+        fn owned_disposable_directory_handle_has_stable_file_identity() {
+            use std::os::windows::fs::OpenOptionsExt;
+            use windows_sys::Win32::Storage::FileSystem::{
+                FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
+            };
+            // This is a future opt-in synthetic-only test fixture; the path
+            // is always new and never a Minecraft profile or preexisting box.
+            let root = std::env::temp_dir().join(format!(
+                "mivubi-disposable-root-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            ));
+            std::fs::create_dir(&root).unwrap();
+            struct OwnsDisposable(std::path::PathBuf);
+            impl Drop for OwnsDisposable {
+                fn drop(&mut self) { let _ = std::fs::remove_dir(&self.0); }
+            }
+            let _cleanup = OwnsDisposable(root.clone());
+            let handle = std::fs::OpenOptions::new()
+                .read(true)
+                .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+                .open(&root).unwrap();
+            let first = inspect_directory_handle(&handle).unwrap();
+            let second = inspect_directory_handle(&handle).unwrap();
+            assert_eq!(first, second);
+            assert_ne!(first.file_index, 0);
         }
 
         #[test]
