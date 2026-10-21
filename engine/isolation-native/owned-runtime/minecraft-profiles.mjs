@@ -18,6 +18,8 @@ const SETTINGS = Object.freeze([
   Object.freeze(["OpenProtectedStorage", "n"]),
   // A fresh box must not read through to the native client's game data.
   Object.freeze(["WriteFilePath", "%AppData%\\Minecraft Education Edition"]),
+  // Prevent the official manager from adding unrelated defaults on first view.
+  Object.freeze(["ConfigLevel", "10"]),
   // Enable LAST: never present a partially configured box as ready.
   Object.freeze(["Enabled", "y"]),
 ]);

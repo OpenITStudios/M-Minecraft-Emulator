@@ -6,6 +6,14 @@ import {
   ownedMinecraftLaunch, matchesOwnedMinecraftReadback,
 } from "./minecraft-profiles.mjs";
 
+test("complete private profiles suppress the official manager's automatic defaults migration",()=>{
+  for(const client of ["02","03","04"]){
+    const plan=planOwnedMinecraftVirtual(client,[]);
+    assert.deepEqual(plan.commands.find(step=>step.arguments[2]==='ConfigLevel')?.arguments,
+      ['set','MivubiEdu'+client,'ConfigLevel','10']);
+  }
+});
+
 test("each client hides host game data and rejects the old read-through profile", () => {
   for (const client of ["02", "03", "04"]) {
     const plan = planOwnedMinecraftVirtual(client, []);
@@ -36,7 +44,7 @@ test("three functional MIVUBI boxes have stable distinct identities", () => {
 
 test("private box setup plan uses only exact non-destructive persistent settings", () => {
   const result = planOwnedMinecraftProfiles(["DefaultBox","MinecraftClient02"]);
-  assert.equal(result.commands.length, 27);
+  assert.equal(result.commands.length, 30);
   assert.equal(result.hostChanged, false);
   assert.equal(result.driverInstalled, false);
   assert.equal(result.compatibilityProfile,
@@ -45,13 +53,13 @@ test("private box setup plan uses only exact non-destructive persistent settings
   assert.equal(result.requiresExplicitOperatorApproval, true);
   assert.equal(result.settingsReadbackVerified, false);
   for(let i=0; i<3; i++){
-    const steps=result.commands.slice(i*9, i*9+9);
+    const steps=result.commands.slice(i*10, i*10+10);
     assert.deepEqual(steps.map(step=>step.arguments[2]),
       ["AutoDelete","AutoRemove","NoSecurityIsolation","DropAdminRights",
-        "Template","OpenCredentials","OpenProtectedStorage","WriteFilePath","Enabled"]);
+        "Template","OpenCredentials","OpenProtectedStorage","WriteFilePath","ConfigLevel","Enabled"]);
     assert.deepEqual(steps.map(step=>step.arguments[3]),
-      ["n","n","y","y","OpenCOM","n","n","%AppData%\\Minecraft Education Edition","y"]);
-    assert.equal(steps[8].arguments[3],"y","enable the owned box only after configuration");
+      ["n","n","y","y","OpenCOM","n","n","%AppData%\\Minecraft Education Edition","10","y"]);
+    assert.equal(steps[9].arguments[3],"y","enable the owned box only after configuration");
   }
   for(const cmd of result.commands) {
     assert.equal(cmd.executable, "SbieIni.exe");
@@ -60,7 +68,7 @@ test("private box setup plan uses only exact non-destructive persistent settings
     assert.ok([["Enabled","y"],["AutoDelete","n"],
       ["AutoRemove","n"],["NoSecurityIsolation","y"],
       ["DropAdminRights","y"],["Template","OpenCOM"],
-      ["OpenCredentials","n"],["OpenProtectedStorage","n"],["WriteFilePath","%AppData%\\Minecraft Education Edition"]]
+      ["OpenCredentials","n"],["OpenProtectedStorage","n"],["WriteFilePath","%AppData%\\Minecraft Education Edition"],["ConfigLevel","10"]]
       .some(([k,v])=>k===cmd.arguments[2]&&v===cmd.arguments[3]));
     assert.equal(cmd.arguments.length,4);
   }
@@ -72,7 +80,7 @@ test("owned compatibility mode retains pilot settings and adds box-only game dat
     NoSecurityIsolation: "y", DropAdminRights: "y",
     Template: "OpenCOM", AutoDelete: "n", AutoRemove: "n",
     OpenCredentials: "n", OpenProtectedStorage: "n",
-    WriteFilePath: "%AppData%\\Minecraft Education Edition", Enabled: "y",
+    WriteFilePath: "%AppData%\\Minecraft Education Edition", ConfigLevel: "10", Enabled: "y",
   };
   for (const client of ["02", "03", "04"]) {
     const settings = Object.fromEntries(plan.commands
@@ -104,8 +112,8 @@ test("owned source plans require an explicit authoritative box inventory", () =>
     assert.throws(() => planOwnedMinecraftProfiles(invalid),
       /trustworthy existing box-name inventory/);
   }
-  assert.equal(planOwnedMinecraftVirtual("02", []).commands.length, 9);
-  assert.equal(planOwnedMinecraftProfiles([]).commands.length, 27);
+  assert.equal(planOwnedMinecraftVirtual("02", []).commands.length, 10);
+  assert.equal(planOwnedMinecraftProfiles([]).commands.length, 30);
 });
 
 test("owned Start launch selects only one exact profile and Education EXE",()=>{
@@ -166,15 +174,15 @@ test("one Create Virtual target plans only one native box, with Enabled last", (
     const result = planOwnedMinecraftVirtual(client, ["MinecraftClient02", "OtherBox"]);
     assert.deepEqual(result.profiles.map(p => p.client), [client]);
     assert.deepEqual(result.profiles.map(p => p.box), ["MivubiEdu" + client]);
-    assert.equal(result.commands.length, 9);
+    assert.equal(result.commands.length, 10);
     assert.ok(result.commands.every(cmd =>
       cmd.client === client && cmd.executable === "SbieIni.exe" &&
       cmd.arguments[1] === "MivubiEdu" + client));
     assert.deepEqual(result.commands.map(cmd => cmd.arguments[2]),
       ["AutoDelete", "AutoRemove", "NoSecurityIsolation", "DropAdminRights",
-        "Template", "OpenCredentials", "OpenProtectedStorage", "WriteFilePath", "Enabled"]);
+        "Template", "OpenCredentials", "OpenProtectedStorage", "WriteFilePath", "ConfigLevel", "Enabled"]);
     assert.deepEqual(result.commands.map(cmd => cmd.arguments[3]),
-      ["n", "n", "y", "y", "OpenCOM", "n", "n", "%AppData%\\Minecraft Education Edition", "y"]);
+      ["n", "n", "y", "y", "OpenCOM", "n", "n", "%AppData%\\Minecraft Education Edition", "10", "y"]);
     assert.equal(result.settingsReadbackVerified, false);
     assert.equal(result.requiresExplicitOperatorApproval, true);
     assert.equal(result.hostChanged, false);
@@ -206,14 +214,14 @@ test("bulk compatibility plan stays identical to three independently planned box
   const individual = ["02", "03", "04"]
     .flatMap(client => planOwnedMinecraftVirtual(client, ["OtherBox"]).commands);
   assert.deepEqual(bulk.commands, individual);
-  assert.equal(bulk.commands.length, 27);
+  assert.equal(bulk.commands.length, 30);
 });
 
 test("owned configuration plans verify every setting before advancing or enabling", () => {
   for (const client of ["02", "03", "04"]) {
     const result = planOwnedMinecraftVirtual(client, []);
-    assert.equal(result.commands.length, 9, "include box-only data in the write plan");
-    assert.equal(result.guardedSteps.length, 20, "disable/readback then nine write/readback pairs");
+    assert.equal(result.commands.length, 10, "include box-only data in the write plan");
+    assert.equal(result.guardedSteps.length, 22, "disable/readback then ten write/readback pairs");
     assert.equal(result.stopOnReadbackMismatch, true);
     assert.equal(result.automaticDeletionPermitted, false);
     assert.equal(result.partialConfigurationRequiresManualReview, true);
@@ -224,7 +232,7 @@ test("owned configuration plans verify every setting before advancing or enablin
     assert.deepEqual(result.guardedSteps[1].arguments,
       ["query", "MivubiEdu" + client, "Enabled"]);
     assert.equal(result.guardedSteps[1].expectedValue, "n");
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 10; i++) {
       const write = result.guardedSteps[2 + i * 2];
       const read = result.guardedSteps[3 + i * 2];
       assert.equal(write.operation, "SET");
@@ -237,12 +245,12 @@ test("owned configuration plans verify every setting before advancing or enablin
       assert.equal(read.expectedValue, write.arguments[3]);
       assert.deepEqual(result.commands[i].arguments, write.arguments);
     }
-    assert.equal(result.guardedSteps[18].arguments[2], "Enabled");
-    assert.equal(result.guardedSteps[18].arguments[3], "y");
-    assert.equal(result.guardedSteps[19].expectedValue, "y");
+    assert.equal(result.guardedSteps[20].arguments[2], "Enabled");
+    assert.equal(result.guardedSteps[20].arguments[3], "y");
+    assert.equal(result.guardedSteps[21].expectedValue, "y");
   }
   const bulk = planOwnedMinecraftProfiles([]);
-  assert.equal(bulk.guardedSteps.length, 60);
+  assert.equal(bulk.guardedSteps.length, 66);
   const singles = ["02", "03", "04"].flatMap(
     client => planOwnedMinecraftVirtual(client, []).guardedSteps);
   assert.deepEqual(bulk.guardedSteps, singles);
@@ -322,7 +330,7 @@ test("partial owned-box plans remain disabled until all other readbacks complete
     const plan = planOwnedMinecraftVirtual(client, ["MinecraftClient02"]);
     const steps = plan.guardedSteps;
     // Failure after any earlier operation must not have requested Enabled=y.
-    for (let interruptedAt = 0; interruptedAt <= 18; interruptedAt++) {
+    for (let interruptedAt = 0; interruptedAt <= 20; interruptedAt++) {
       const attempted = steps.slice(0, interruptedAt);
       const enabledWrites = attempted.filter(step =>
         step.operation === "SET" &&
@@ -335,10 +343,10 @@ test("partial owned-box plans remain disabled until all other readbacks complete
     }
     // A failed last readback is ambiguous: Enabled=y may have been written.
     // Only manual reconciliation, never an automatic delete/retry, is permitted.
-    assert.equal(steps[18].operation, "SET");
-    assert.equal(steps[18].arguments[3], "y");
-    assert.equal(steps[19].operation, "REQUIRE_READBACK");
-    assert.equal(steps[19].expectedValue, "y");
+    assert.equal(steps[20].operation, "SET");
+    assert.equal(steps[20].arguments[3], "y");
+    assert.equal(steps[21].operation, "REQUIRE_READBACK");
+    assert.equal(steps[21].expectedValue, "y");
     assert.equal(plan.hostChanged, false);
   }
 });
