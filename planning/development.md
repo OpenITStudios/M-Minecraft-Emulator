@@ -10,6 +10,8 @@ load the opposite hive while the original parent holds it with
 `REG_PROCESS_APPKEY`. Only known access/sharing/busy/lock
 refusals count as observations; unexpected success or unrelated
 API errors fail the fixture. Both A/B directions are required.
+The child requests `KEY_QUERY_VALUE` only; marker writes remain
+exclusively in the original fixture parent.
 An opt-in PowerShell switch `-VerifyRegistryAppHivePeer` selects
 this mode. Exact schema-2 receipt validates
 `bidirectionalProcessLoadLocks=OBSERVED` while

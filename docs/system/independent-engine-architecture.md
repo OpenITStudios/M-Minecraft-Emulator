@@ -541,7 +541,8 @@ own-marker read and a recognized Win32 access/sharing/lock/busy
 refusal for the opposite hive; any successful peer load or unrelated
 error fails the stage. The children take only the literal A/B
 selector plus a fixture-owned inherited working directory, not
-arbitrary registry paths or account credentials. They never write
+arbitrary registry paths or account credentials. Child hive loads
+request `KEY_QUERY_VALUE` only. They never write
 hives; only the original parent creates/writes disposable markers.
 
 A schema-2 receipt may report

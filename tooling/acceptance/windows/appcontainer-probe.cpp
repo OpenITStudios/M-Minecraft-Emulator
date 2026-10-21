@@ -517,12 +517,13 @@ struct AppHive {
 void apphive_status(LSTATUS result, const char* stage) {
     if (result != ERROR_SUCCESS) throw Failure{stage, static_cast<DWORD>(result)};
 }
-void load_fixture_apphive(const fs::path& file, AppHive& hive) {
+void load_fixture_apphive(const fs::path& file, AppHive& hive,
+    REGSAM access = KEY_QUERY_VALUE | KEY_SET_VALUE) {
     require(hive.key == nullptr, "apphive-not-fresh-handle");
     // REG_PROCESS_APPKEY limits simultaneous loads by other callers,
     // but does NOT transparently virtualize the game's HKCU.
     apphive_status(RegLoadAppKeyW(
-        file.c_str(), &hive.key, KEY_QUERY_VALUE | KEY_SET_VALUE,
+        file.c_str(), &hive.key, access,
         REG_PROCESS_APPKEY, 0), "apphive-load");
     require(hive.key != nullptr, "apphive-missing-root-handle");
 }
@@ -576,7 +577,7 @@ int apphive_readonly_peer_child(const std::wstring& choice) {
     AppHive own_hive;
     // The parent has closed the child's OWN hive. Loading/reading its
     // existing value must succeed without parent intervention or writes.
-    load_fixture_apphive(own, own_hive);
+    load_fixture_apphive(own, own_hive, KEY_QUERY_VALUE);
     require(apphive_marker_matches(own_hive, marker), "apphive-child-own-marker");
 
     // The other hive is still held by the parent using REG_PROCESS_APPKEY.
