@@ -486,7 +486,7 @@ mod windows {
         #[test]
         fn independent_source_observation_keeps_game_and_storage_unknown() {
             use virtual_clients_core::independent_engine::{
-                ProcessIdentity, SessionSlot, StorageSurface,
+                NativePortError, ProcessIdentity, SessionSlot, StorageSurface,
             };
             let key = own_key();
             let expected = ProcessIdentity::checked(

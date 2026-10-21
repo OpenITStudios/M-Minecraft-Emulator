@@ -20,10 +20,10 @@ Three negative/source-only Rust tests use fake adapters. This does not
 connect to the UI, grant a profile, authenticate, or choose a provider;
 Rust/Windows execution remains NOT_EXECUTED.
 
-**Source adapter milestone:** The existing \`instance_identity.rs\` now
-implements the typed \`WindowsProcessObserver\` using the canonical pin
-and FILETIME check. \`inspect_independent_source\` composes that native
-process observation with an explicit all-\`Unknown\` storage observer.
+**Source adapter milestone:** The existing `instance_identity.rs` now
+implements the typed `WindowsProcessObserver` using the canonical pin
+and FILETIME check. `inspect_independent_source` composes that native
+process observation with an explicit all-`Unknown` storage observer.
 Signed Minecraft image, HWND, roaming, registry and broker are never
 claimed on this path. Windows and non-Windows negative/source tests
 are authored; compilation/execution remains NOT_EXECUTED here.

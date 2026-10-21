@@ -19,8 +19,8 @@ binary and Microsoft sign-in are not modified. Selecting another tab never
 closes, stops, signs out or reprovisions another running session.
 
 This is inspired by the **capabilities** of Sandboxie, not a derived Sandboxie
-distribution. Historical upstream/fork files under \`engine/isolation-owned/\`,
-\`engine/isolation-candidates/\`, and \`tooling/isolation-source/\` remain for
+distribution. Historical upstream/fork files under `engine/isolation-owned/`,
+`engine/isolation-candidates/`, and `tooling/isolation-source/` remain for
 provenance and are **NOT** dependencies of this engine. Do not port, translate,
 copy, link or bundle Sandboxie driver/DLL/service code into this implementation.
 Source ownership, third-party dependency licenses and contributor assignments
@@ -31,17 +31,17 @@ APIs does not transfer ownership of Microsoft's implementations.
 
 | Responsibility | Canonical owner | Boundary |
 | --- | --- | --- |
-| Domain contract, lifecycle/admission policy | \`engine/runtime-core/\` | Pure rules; no Windows handles or tokens |
-| Session identity and source model | \`engine/runtime-core/src/independent_engine/identity.rs\` | Fixed 01–04 labels and full-width PID/creation time; value objects are not runtime proof |
-| Operation effect classification | \`independent_engine/operations.rs\` | Inspect, present, launch, close and provision are distinct; not another admission system |
-| Storage and authentication surface matrix | \`independent_engine/storage.rs\` | Local, roaming, registry, named objects, peer/host access, restart persistence, broker; no credential values |
-| Native provider and adapter interface | \`independent_engine/ports.rs\` | Abstract ports only; DisabledIndependentProvider rejects everything |
-| Evidence tier policy | \`engine/runtime-core/src/independent_isolation.rs\` | Synthetic, native Windows, Minecraft runtime are separate; not an acceptance registry |
-| Windows process identity and future adapter | \`apps/desktop/src-tauri/src/engine/instance_identity.rs\` | Pin handles, validate PID/FILETIME, query tokens; return sanitized observations |
-| Native window presentation/recovery | Existing \`apps/desktop/src-tauri/src/engine/workspace_surface.rs\` and Svelte workspace | Reversible presentation, no implicit lifecycle changes |
-| Authoritative route admission | Existing desktop \`instance_catalog.rs\` and canonical runtime policy | Isolated Launch/Provision remains blocked until an independent provider is genuinely accepted |
-| Synthetic tooling and offline review | \`tooling/acceptance/windows/\`, \`tooling/acceptance/evaluate-appcontainer-isolation.mjs\` | No game/account access; observations never authorize launch |
-| Current continuation | \`planning/development.md\` | Decisions/next work only, not a runtime data database |
+| Domain contract, lifecycle/admission policy | `engine/runtime-core/` | Pure rules; no Windows handles or tokens |
+| Session identity and source model | `engine/runtime-core/src/independent_engine/identity.rs` | Fixed 01–04 labels and full-width PID/creation time; value objects are not runtime proof |
+| Operation effect classification | `independent_engine/operations.rs` | Inspect, present, launch, close and provision are distinct; not another admission system |
+| Storage and authentication surface matrix | `independent_engine/storage.rs` | Local, roaming, registry, named objects, peer/host access, restart persistence, broker; no credential values |
+| Native provider and adapter interface | `independent_engine/ports.rs` | Abstract ports only; DisabledIndependentProvider rejects everything |
+| Evidence tier policy | `engine/runtime-core/src/independent_isolation.rs` | Synthetic, native Windows, Minecraft runtime are separate; not an acceptance registry |
+| Windows process identity and future adapter | `apps/desktop/src-tauri/src/engine/instance_identity.rs` | Pin handles, validate PID/FILETIME, query tokens; return sanitized observations |
+| Native window presentation/recovery | Existing `apps/desktop/src-tauri/src/engine/workspace_surface.rs` and Svelte workspace | Reversible presentation, no implicit lifecycle changes |
+| Authoritative route admission | Existing desktop `instance_catalog.rs` and canonical runtime policy | Isolated Launch/Provision remains blocked until an independent provider is genuinely accepted |
+| Synthetic tooling and offline review | `tooling/acceptance/windows/`, `tooling/acceptance/evaluate-appcontainer-isolation.mjs` | No game/account access; observations never authorize launch |
+| Current continuation | `planning/development.md` | Decisions/next work only, not a runtime data database |
 
 ## Read-only source integration
 
@@ -85,14 +85,14 @@ a large speculative custom driver.
 ## Implemented source adapter (read-only)
 
 The existing desktop identity owner now implements the
-\`ProcessObserverPort\` through \`WindowsProcessObserver\` and
-\`inspect_independent_source\`. It calls the previously implemented
+`ProcessObserverPort` through `WindowsProcessObserver` and
+`inspect_independent_source`. It calls the previously implemented
 process-handle pin and creation-FILETIME check, then returns a typed
-\`ProcessObservation\` with both official-image signature and visible
+`ProcessObservation` with both official-image signature and visible
 window evidence explicitly **false**. The matched process is a Windows
 process, not an accepted Minecraft account or a verified signed game.
 
-\`UnknownStorageObserver\` currently returns \`Unknown\` for **every**
+`UnknownStorageObserver` currently returns `Unknown` for **every**
 storage and broker surface, including Roaming Known Folder, registry,
 process namespace, peer/host data and authentication. This is an
 intentional fail-closed platform-port placeholder, not a filesystem
@@ -129,5 +129,5 @@ deny isolated launches.
 **Current evidence ceiling: REMOTE_GITHUB source architecture only.** The new
 domain modules are not an isolation implementation or runtime provider. Rust
 tests are authored but not yet compiled/executed; no Windows or Minecraft
-readiness is claimed. Branch \`Local\` only; \`main\` and GitHub Actions remain
+readiness is claimed. Branch `Local` only; `main` and GitHub Actions remain
 untouched.

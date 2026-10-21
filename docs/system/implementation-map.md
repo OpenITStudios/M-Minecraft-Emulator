@@ -26,13 +26,13 @@ provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
 The existing desktop identity owner
-\`apps/desktop/src-tauri/src/engine/instance_identity.rs\` now supplies
-a read-only \`WindowsProcessObserver\` and \`inspect_independent_source\`.
+`apps/desktop/src-tauri/src/engine/instance_identity.rs` now supplies
+a read-only `WindowsProcessObserver` and `inspect_independent_source`.
 They reuse the pinned PID/FILETIME Windows handle check and leave image,
 window and all storage/broker evidence explicitly unknown. These are
 unmounted Rust functions, not an alternate Tauri handler or launch path.
 
-A read-only orchestration closure, \`independent_engine/inspection.rs\`,
+A read-only orchestration closure, `independent_engine/inspection.rs`,
 joins the process-observer and storage-observer ports. It rejects mismatched
 PID/FILETIME observations before inspecting any storage boundary; no Tauri
 command, provider admission or persisted status has been created.
