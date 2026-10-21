@@ -1,5 +1,25 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — repair Windows-sys 0.61 FreeLibrary binding, 22 October 2026
+
+Corrected the native WinTrust signer inspector's DLL lifetime boundary:
+`windows-sys` 0.61 LibraryLoader exports LoadLibraryExW/GetProcAddress,
+but not a FreeLibrary binding in that module. The DLL owner now declares
+the exact one-function `kernel32` Win32 ABI locally and releases only a
+non-null module handle acquired using LOAD_LIBRARY_SEARCH_SYSTEM32.
+The module ownership remains scoped to signer inspection; no new
+dependency, runtime service, launcher or installation action was added.
+
+**Proof:** cross-checked against published Windows-sys 0.61.2 API index
+and Microsoft FreeLibrary requirements; exact source-only review.
+Rust Windows compiler and Minecraft execution NOT_EXECUTED.
+No new tests were executed. MC02–MC04 admission remains BLOCKED.
+
+**Next:** validate the complete Windows process-signature collector using
+a target Windows compiler when permitted, while continuing source-only
+hardening without any false publisher or game readiness claim.
+
+
 ## Independent engine — coalesce native process pair reads, 22 October 2026
 
 Optimized the existing desktop read-only pair inspector to keep one pair of

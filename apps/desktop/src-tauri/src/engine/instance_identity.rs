@@ -561,7 +561,7 @@ mod windows {
             TokenVirtualizationEnabled,
         },
         System::LibraryLoader::{
-            FreeLibrary, GetProcAddress, LoadLibraryExW, LOAD_LIBRARY_SEARCH_SYSTEM32,
+            GetProcAddress, LoadLibraryExW, LOAD_LIBRARY_SEARCH_SYSTEM32,
         },
         System::Threading::{
             GetProcessTimes, OpenProcess, OpenProcessToken, QueryFullProcessImageNameW,
@@ -575,6 +575,14 @@ mod windows {
         },
         UI::Shell::GetUserProfileDirectoryW,
     };
+
+    // Windows-sys 0.61 does not project FreeLibrary in LibraryLoader.
+    // Keep this one exact kernel32 ABI local to the loaded-system-DLL owner.
+    // No calls from DllMain, no borrowed GetModuleHandle handles.
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn FreeLibrary(h_lib_module: *mut std::ffi::c_void) -> i32;
+    }
 
     /// Exact identity and attributes of a fixture file HANDLE, not its path.
     /// This is an *intra-reader stability check*, not proof that a child wrote
@@ -700,7 +708,12 @@ mod windows {
 
         struct Dll(*mut std::ffi::c_void);
         impl Drop for Dll {
-            fn drop(&mut self) { unsafe { FreeLibrary(self.0); } }
+            fn drop(&mut self) {
+                if !self.0.is_null() {
+                    // A LoadLibraryExW-owned reference must be released once.
+                    let _ = unsafe { FreeLibrary(self.0) };
+                }
+            }
         }
         if state.is_null() {
             return Err(invalid("Verified WinTrust provider state is missing"));
