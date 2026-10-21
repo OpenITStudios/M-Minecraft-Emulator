@@ -48,6 +48,7 @@ pub struct BoundStorageFact {
 pub enum EvidenceReviewError {
     WrongSlot,
     WrongProcess,
+    InvalidProcessIdentity,
     DuplicateSurface,
     InvalidObservation,
     InadequateProofSource,
@@ -79,10 +80,15 @@ pub fn review_bound_storage_facts(
     expected: ProcessIdentity,
     facts: &[BoundStorageFact],
 ) -> Result<StorageObservations, EvidenceReviewError> {
+    // Reject invalid exact-process keys even for an EMPTY observation set;
+    // otherwise callers can attach an Unknown summary to PID 0 or FILETIME 0.
+    if expected.pid == 0 || expected.created_file_time == 0 {
+        return Err(EvidenceReviewError::InvalidProcessIdentity);
+    }
     if facts.len() > StorageSurface::ALL.len() {
         return Err(EvidenceReviewError::DuplicateSurface);
     }
-    let mut observed = [false; 9];
+    let mut observed = [false; StorageSurface::ALL.len()];
     let mut result = StorageObservations::default();
     for fact in facts {
         if fact.slot != slot {
@@ -171,6 +177,32 @@ mod tests {
             identity(), &[unavailable]).unwrap();
         assert_eq!(summary.finding(StorageSurface::AuthenticationBroker),
             StorageFinding::Unknown);
+    }
+
+    #[test]
+    fn zero_process_identity_rejected_even_when_no_storage_facts_exist() {
+        let valid = identity();
+        for invalid in [
+            ProcessIdentity { pid: 0, created_file_time: valid.created_file_time },
+            ProcessIdentity { pid: valid.pid, created_file_time: 0 },
+        ] {
+            assert_eq!(
+                review_bound_storage_facts(SessionSlot::Mc02, invalid, &[]).unwrap_err(),
+                EvidenceReviewError::InvalidProcessIdentity,
+            );
+            assert_eq!(
+                review_bound_storage_facts(
+                    SessionSlot::Mc02,
+                    invalid,
+                    &[BoundStorageFact { process: invalid, ..fact(
+                        StorageSurface::LocalAppData, StorageFinding::Unknown,
+                        StorageProbeMethod::Unavailable,
+                        StorageEvidenceSource::SyntheticFixture,
+                    ) }],
+                ).unwrap_err(),
+                EvidenceReviewError::InvalidProcessIdentity,
+            );
+        }
     }
 
     #[test]

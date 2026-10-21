@@ -1,5 +1,22 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — refuse zero process keys in storage evidence, 22 October 2026
+
+The canonical pure Rust `review_bound_storage_facts` now rejects PID=0
+or zero creation FILETIME before any observation review, even when its
+input array is empty. A specific InvalidProcessIdentity error prevents
+an Unknown storage summary from being attached to an impossible
+process. The duplicate-surface bitmap is sized from the authoritative
+StorageSurface::ALL instead of a second hardcoded count. One negative
+test covers empty and nonempty invalid identity reports.
+
+**Proof:** exact source review, one Rust regression authored NOT_EXECUTED.
+No new provider, launcher, registry/network call, account write, runtime
+admission, Windows test or Minecraft gameplay.
+**Next:** audit future native collectors and their exact-process evidence
+before any provider activation.
+
+
 ## Independent engine — harden WinTrust signer lifecycle and chain checks, 22 October 2026
 
 Refined the existing read-only desktop image trust source owner.
