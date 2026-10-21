@@ -2,6 +2,29 @@
 
 ## Independent native AppContainer proof (synthetic only)
 
+### Opt-in RegLoadAppKey application-hive fixture
+
+Use `./tooling/acceptance/windows/test-appcontainer-isolation.ps1
+-VerifyRegistryAppHive` to run an **additional** fixture under a
+newly created `workspace/appcontainer-probe-*/registry-fixture` output.
+The C++ fixture creates two new files in its own unique subdirectory,
+loads each with `RegLoadAppKeyW` and `REG_PROCESS_APPKEY`, writes
+only fixed test DWORD markers through those returned hive `HKEY`s,
+verifies independent handle views, flushes and closes both handles,
+then reloads both files to check persistence after *handle unload*.
+It never uses `HKEY_CURRENT_USER`, `HKEY_USERS`, `RegLoadKey`
+or any path in a Microsoft/Minecraft account profile. Artifacts
+remain inside the new fixture directory for inspection.
+
+The receipt explicitly reports `peerProcessDenial=NOT_EXECUTED`,
+`hostHKCUIsolation=NOT_EXECUTED` and
+`minecraftAcceptance=NOT_EXECUTED`; it is not a game-ready decision.
+It does not prove access denial between independent processes,
+persistent state after a Windows restart, or transparent HKCU routing.
+The switch is disabled by default, and Windows/MSVC execution remains
+NOT_EXECUTED during GitHub-only development.
+
+
 ### Optional native-to-Rust HANDLE handoff
 
 `./tooling/acceptance/windows/test-appcontainer-isolation.ps1 -VerifyRustHandoff`

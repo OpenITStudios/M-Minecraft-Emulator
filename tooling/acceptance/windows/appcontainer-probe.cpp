@@ -496,11 +496,122 @@ int parent(const fs::path& output, bool negative_control,
         local_status(right), env_status(right), roaming_status(right));
     return 0;
 }
+// Application-hive FEASIBILITY only: no HKCU/HKU root handles are used.
+// All registry state is written through HKEY values returned for two
+// freshly created hive files under a new, fixture-owned directory.
+// These two handles in ONE process do not establish peer-process denial.
+struct AppHive {
+    HKEY key = nullptr;
+    AppHive() = default;
+    AppHive(const AppHive&) = delete;
+    AppHive& operator=(const AppHive&) = delete;
+    ~AppHive() { if (key) RegCloseKey(key); }
+    void close() {
+        require(key != nullptr, "apphive-not-open");
+        const auto held = key;
+        key = nullptr;
+        const auto result = RegCloseKey(held);
+        if (result != ERROR_SUCCESS) throw Failure{"apphive-close", static_cast<DWORD>(result)};
+    }
+};
+void apphive_status(LSTATUS result, const char* stage) {
+    if (result != ERROR_SUCCESS) throw Failure{stage, static_cast<DWORD>(result)};
+}
+void load_fixture_apphive(const fs::path& file, AppHive& hive) {
+    require(hive.key == nullptr, "apphive-not-fresh-handle");
+    // REG_PROCESS_APPKEY limits simultaneous loads by other callers,
+    // but does NOT transparently virtualize the game's HKCU.
+    apphive_status(RegLoadAppKeyW(
+        file.c_str(), &hive.key, KEY_QUERY_VALUE | KEY_SET_VALUE,
+        REG_PROCESS_APPKEY, 0), "apphive-load");
+    require(hive.key != nullptr, "apphive-missing-root-handle");
+}
+constexpr wchar_t APPHIVE_MARKER_NAME[] = L"MivubiSyntheticMarker";
+void write_apphive_marker(AppHive& hive, DWORD marker) {
+    require(hive.key != nullptr, "apphive-write-without-root");
+    apphive_status(RegSetValueExW(
+        hive.key, APPHIVE_MARKER_NAME, 0, REG_DWORD,
+        reinterpret_cast<const BYTE*>(&marker), sizeof(marker)), "apphive-set-marker");
+}
+bool apphive_marker_matches(const AppHive& hive, DWORD wanted) {
+    require(hive.key != nullptr, "apphive-read-without-root");
+    DWORD type = 0, count = sizeof(DWORD), value = 0;
+    apphive_status(RegQueryValueExW(
+        hive.key, APPHIVE_MARKER_NAME, nullptr, &type,
+        reinterpret_cast<BYTE*>(&value), &count), "apphive-read-marker");
+    return type == REG_DWORD && count == sizeof(DWORD) && value == wanted;
+}
+void verify_apphive_file(const fs::path& root, const fs::path& file) {
+    require(file.parent_path() == root, "apphive-outside-owned-root");
+    const auto attrs = GetFileAttributesW(file.c_str());
+    require(attrs != INVALID_FILE_ATTRIBUTES
+        && (attrs & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) == 0,
+        "apphive-file-not-regular");
+}
+int run_apphive_fixture(const fs::path& output) {
+    const auto root = fs::absolute(output / L"mivubi-new-apphives");
+    // Never adopt an existing tree or hive. Output is a new random workspace
+    // directory created by the opt-in PowerShell fixture runner.
+    require(fs::exists(output) && fs::is_directory(output)
+        && !fs::is_symlink(output), "apphive-output-not-owned");
+    require(fs::create_directory(root), "apphive-fresh-root-required");
+    const auto a = root / L"synthetic-A.hiv";
+    const auto b = root / L"synthetic-B.hiv";
+    require(!fs::exists(a) && !fs::exists(b), "apphive-preexisting-file");
+    constexpr DWORD MARKER_A = 0xA11CE001;
+    constexpr DWORD MARKER_B = 0xB11CE002;
+    {
+        AppHive first, second;
+        load_fixture_apphive(a, first);
+        verify_apphive_file(root, a);
+        load_fixture_apphive(b, second);
+        verify_apphive_file(root, b);
+        write_apphive_marker(first, MARKER_A);
+        write_apphive_marker(second, MARKER_B);
+        require(apphive_marker_matches(first, MARKER_A)
+            && apphive_marker_matches(second, MARKER_B)
+            && !apphive_marker_matches(first, MARKER_B)
+            && !apphive_marker_matches(second, MARKER_A),
+            "apphive-handle-separation");
+        apphive_status(RegFlushKey(first.key), "apphive-flush-a");
+        apphive_status(RegFlushKey(second.key), "apphive-flush-b");
+        first.close();
+        second.close();
+    }
+    // Both hive roots have been closed. This tests handle-scope restart
+    // persistence, NOT a new Windows process, reboot or game account.
+    {
+        AppHive first, second;
+        load_fixture_apphive(a, first);
+        load_fixture_apphive(b, second);
+        require(apphive_marker_matches(first, MARKER_A)
+            && apphive_marker_matches(second, MARKER_B),
+            "apphive-persistence-after-reload");
+        first.close();
+        second.close();
+    }
+    verify_apphive_file(root, a);
+    verify_apphive_file(root, b);
+    // Do not claim cross-process denial or real registry redirection.
+    std::printf(
+        "{\"schema\":1,\"result\":\"PASS\",\"syntheticOnly\":true,"
+        "\"twoNewAppHives\":true,\"separateHandleMarkers\":true,"
+        "\"persistedAfterHandleReload\":true,"
+        "\"peerProcessDenial\":\"NOT_EXECUTED\","
+        "\"hostHKCUIsolation\":\"NOT_EXECUTED\","
+        "\"minecraftAcceptance\":\"NOT_EXECUTED\","
+        "\"isolatedLaunchAllowed\":false}\n");
+    // Leave ONLY new fixture-owned files under the unique workspace output
+    // for manual forensic review; never delete old account-bearing hives.
+    return 0;
+}
+
 int wmain(int argc, wchar_t** argv) {
     try {
         if (argc == 5 && std::wstring(argv[1]) == L"--child") return contained(argv[2], argv[3], argv[4], false);
         if (argc == 5 && std::wstring(argv[1]) == L"--child-reopen") return contained(argv[2], argv[3], argv[4], true);
         if (argc == 3 && std::wstring(argv[1]) == L"--run") return parent(argv[2], false);
+        if (argc == 3 && std::wstring(argv[1]) == L"--apphive-fixture") return run_apphive_fixture(argv[2]);
         if (argc == 4 && std::wstring(argv[1]) == L"--run-rust-handoff") {
             const auto helper = fs::absolute(argv[3]);
             return parent(argv[2], false, &helper);

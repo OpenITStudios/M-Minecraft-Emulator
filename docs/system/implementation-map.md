@@ -25,6 +25,15 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+An opt-in synthetic application-hive phase has been added to
+`tooling/acceptance/windows/appcontainer-probe.cpp`, reachable
+through `-VerifyRegistryAppHive` in its existing PowerShell runner.
+It creates two new registry hive files under a disposable workspace
+and uses only returned `RegLoadAppKeyW` handles to seed/read canaries
+and recheck them after close/reload. **Cross-process denial and HKCU
+redirection remain NOT_EXECUTED**; no host HKCU/HKU key or Minecraft
+data is accessed. The application-hive phase is not a provider.
+
 The documented Windows `RegLoadAppKeyW` facility is the next
 **candidate** for an opt-in, temporary application hive experiment:
 it returns an `HKEY` rooted in an application hive instead of

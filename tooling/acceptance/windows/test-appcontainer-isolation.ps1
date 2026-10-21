@@ -1,6 +1,6 @@
 # Explicit synthetic-only native Windows proof; no game/account/service operations.
 [CmdletBinding()]
-param([switch]$VerifyNegativeControl, [switch]$VerifyRustHandoff)
+param([switch]$VerifyNegativeControl, [switch]$VerifyRustHandoff, [switch]$VerifyRegistryAppHive)
 $ErrorActionPreference='Stop'
 if($env:OS -ne 'Windows_NT'){throw 'Windows AppContainer fixture requires Windows.'}
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
@@ -59,6 +59,25 @@ function Invoke-SyntheticProbe([string]$Mode,[string]$Directory){
     if($Mode -eq '--negative-control'){
         if($process.ExitCode -ne 1 -or $proof.result -ne 'FAIL' -or $proof.stage -ne 'actual-distinct-container-tokens' -or -not $proof.profilesRemoved){throw "Negative control did not fail safely at its expected identity check; inspect $Directory"}
     }elseif($process.ExitCode -ne 0 -or $proof.result -ne 'PASS'){throw "Native AppContainer proof failed; evidence retained in $Directory"}
+    if($Mode -eq '--apphive-fixture'){
+        $expected=@('schema','result','syntheticOnly','twoNewAppHives',
+            'separateHandleMarkers','persistedAfterHandleReload',
+            'peerProcessDenial','hostHKCUIsolation','minecraftAcceptance',
+            'isolatedLaunchAllowed')
+        $actual=@($proof.PSObject.Properties.Name)
+        if(@($actual|Where-Object {$_ -notin $expected}).Count -ne 0 -or
+           @($expected|Where-Object {$_ -notin $actual}).Count -ne 0 -or
+           $proof.schema -ne 1 -or $proof.syntheticOnly -ne $true -or
+           $proof.twoNewAppHives -ne $true -or
+           $proof.separateHandleMarkers -ne $true -or
+           $proof.persistedAfterHandleReload -ne $true -or
+           $proof.peerProcessDenial -ne 'NOT_EXECUTED' -or
+           $proof.hostHKCUIsolation -ne 'NOT_EXECUTED' -or
+           $proof.minecraftAcceptance -ne 'NOT_EXECUTED' -or
+           $proof.isolatedLaunchAllowed -ne $false){
+            throw "Unsafe or incomplete application-hive receipt; inspect $Directory"
+        }
+    }
     if($Mode -eq '--run'){
         if($VerifyRustHandoff -and $process.ExitCode -ne 0){throw 'Rust handoff rejection or timeout; see fixture result'}
         if($proof.schema -ne 2 -or @($proof.processPaths).Count -ne 2 -or
@@ -77,6 +96,12 @@ function Invoke-SyntheticProbe([string]$Mode,[string]$Directory){
     }finally{$process.Dispose()}
 }
 Invoke-SyntheticProbe '--run' $output
+if($VerifyRegistryAppHive){
+    # New output owned by this invocation; no host HKCU/HKU path is passed.
+    $registry=Join-Path $output 'registry-fixture'
+    [IO.Directory]::CreateDirectory($registry)|Out-Null
+    Invoke-SyntheticProbe '--apphive-fixture' $registry
+}
 if($VerifyNegativeControl){
     $negative=Join-Path $output 'negative-control'
     [IO.Directory]::CreateDirectory($negative)|Out-Null

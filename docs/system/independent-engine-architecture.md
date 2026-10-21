@@ -502,6 +502,33 @@ Sources: Microsoft Learn, *RegLoadAppKeyW* and *Filtering Registry
 Operations on Application Hives*. This proposal does not select a
 production provider or authorize installation.
 
+### Implemented opt-in application-hive phase (source only)
+
+The Windows synthetic fixture now has a separate
+`--apphive-fixture` execution route, enabled only with PowerShell
+`-VerifyRegistryAppHive`. In a newly created fixture-only directory,
+it asks `RegLoadAppKeyW` to create two previously absent application
+hive files. All marker writes and reads use only the two returned
+application-hive `HKEY` handles—not `HKEY_CURRENT_USER` or
+`HKEY_USERS`. Distinct fixed DWORD markers must remain separate
+while both hives are loaded and must persist after `RegFlushKey`,
+`RegCloseKey`, and reopening both hive files. A strict PowerShell
+receipt checker rejects unexpected fields or any claim of gameplay,
+host HKCU redirection or launch readiness.
+
+**Important:** The current phase runs within one parent process.
+Different root handles and persisted markers are not proof of
+cross-process access denial. `REG_PROCESS_APPKEY` has documented
+load restrictions, but they are not asserted as measured in this
+phase. `peerProcessDenial`, `hostHKCUIsolation` and
+`minecraftAcceptance` remain `NOT_EXECUTED`. The existing pure
+Rust `registry.rs` reviewer remains independent; its
+`RegistryCanaryRead::AccessDenied` must NOT be populated by
+this fixture until an actually separate cooperating process probes
+a fresh, isolated hive and its original child identity is verified.
+The new files are retained only inside the test workspace, not
+installed, reused or used as Minecraft profile data.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

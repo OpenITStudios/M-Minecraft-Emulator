@@ -1,5 +1,31 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — opt-in application-hive fixture source, 22 October 2026
+
+Implemented a bounded optional `--apphive-fixture` mode in the
+existing C++ Windows synthetic fixture and
+`-VerifyRegistryAppHive` switch in its PowerShell runner.
+Two new, uniquely rooted `RegLoadAppKeyW` application-hive
+files are created only within the new per-run workspace. Fixed
+test DWORD values are written/read through the returned HKEY
+handles; flush, close and reopen tests preserve distinct markers.
+No host HKCU/HKU access or account/world registry keys are touched
+by this authored route. PowerShell validates an exact sanitized
+receipt and refuses any claim of independent process denial,
+HKCU virtualization, gameplay or launch permission.
+
+**Evidence:** Source committed to GitHub Local; C++/MSVC, PowerShell,
+native Windows application-hive I/O, Minecraft sign-in and
+four-client acceptance **NOT_EXECUTED** in this environment.
+The Rust registry reviewer is unchanged; no fake positive registry
+probe is injected. Existing isolated Launch/Provision is blocked.
+No driver, service, package, main or GitHub Actions change.
+
+**Next:** add a genuinely independent cooperating synthetic Windows
+process check against the disposable application hives (not HKCU);
+only then consider peer-denial evidence, and keep ordinary Minecraft
+HKCU routing as a separate UNSUPPORTED/UNKNOWN requirement.
+
 ## Independent engine — registry feasibility and diagnostic correctness, 21 October 2026
 
 **Rust-only source milestone:** `independent_engine/registry.rs`
