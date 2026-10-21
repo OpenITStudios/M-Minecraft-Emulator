@@ -27,6 +27,44 @@ Source ownership, third-party dependency licenses and contributor assignments
 must be audited before any proprietary distribution. Using documented Windows
 APIs does not transfer ownership of Microsoft's implementations.
 
+## Implementation language and ownership policy — 21 October 2026
+
+**Approved: Rust-first hybrid architecture, not a mandatory 100% Rust rewrite.**
+The goal is an independently authored, small and auditable Minecraft-specific
+engine, not a percentage target for a programming language. Language selection
+must preserve the existing source owner and avoid speculative compatibility
+layers.
+
+| Boundary | Standard | Condition |
+| --- | --- | --- |
+| Pure domain, lifecycle/admission, isolation policy, persistence rules and recovery | **Rust** in existing `engine/runtime-core/` | No new lifecycle manager or alternate ready database |
+| Windows process identity, AppContainer inspection, path/registry observation, HWND and bounded native calls | **Rust** under existing `apps/desktop/` | Keep `unsafe` behind small audited Windows API wrappers; pin PID/creation FILETIME and return sanitized facts |
+| Privileged user-mode service/broker, if it becomes necessary | **Rust preferred** | Add only after a supported requirement, threat model, bounded IPC and installation/rollback design |
+| Filesystem minifilter/kernel helper, if Windows user-mode is insufficient | **Minimal independent C/C++ permitted** | First document why it is necessary and sufficient; WDK compatibility, signing, threat model, rollback and target-Windows proof required |
+| Synthetic Windows experiments | **Existing standalone C++ may remain** | Fixture code is test-only and cannot be packaged or represented as the production engine |
+| User interface | **Existing Tauri + Svelte** | No rewrite or duplicated desktop manager |
+| Retired Sandboxie fork, its binaries, driver, DLLs, services and configuration | **Reference history only** | Never port/translate its source into the proprietary engine or relabel GPL-derived code as independently owned |
+
+Prefer existing reviewed `windows-sys` / Windows SDK bindings to adding another
+Win32 wrapper crate for the same calls. Each native wrapper must specify handle
+ownership, lifetime, rights, error handling, size/time bounds and non-Windows
+behavior. Separate observation from mutation; no synthetic or path-only fact
+can authorize Minecraft launch, account isolation or a profile operation.
+
+Do **not** rewrite the existing C++ AppContainer fixture or add a kernel
+driver just to standardize languages. Reconsider C/C++ in production only
+when there is a documented Windows capability gap and a narrowly scoped
+interface. A C/C++ helper is not a shortcut around auth broker, singleton or
+game compatibility. Memory safety, CPU/RAM overhead and tab latency must be
+measured later on the actual target; Rust alone does not guarantee lower
+resource use than C++.
+
+This is a source-level engineering decision, **not proof of Windows compatibility
+or an authorization to install a driver/service**. The proprietary licensing
+goal additionally requires attribution/dependency and contributor-rights
+review before distribution; an original Rust implementation does not license
+third-party components on its own terms.
+
 ## One owner per responsibility
 
 | Responsibility | Canonical owner | Boundary |

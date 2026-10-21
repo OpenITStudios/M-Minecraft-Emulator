@@ -1,5 +1,25 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Rust-first hybrid decision — 21 October 2026
+
+**APPROVED, architecture-only**: Rust is the primary language for the
+independent engine domain, Win32 user-mode adapters and any later justified
+user-mode broker. Tauri/Svelte remains the UI; the existing independent C++
+AppContainer fixture stays test-only. An independently developed, minimal
+C/C++ WDK driver may be considered **only after** proving a concrete kernel
+capability gap, with security, signing and rollback review. Do not translate
+the retired Sandboxie fork, initiate a mass C++ rewrite or add another
+lifecycle authority. Canonical policy:
+[Independent Engine Architecture](../docs/system/independent-engine-architecture.md#implementation-language-and-ownership-policy---21-october-2026).
+
+**Implementation effect:** no provider activation, Windows service/driver,
+packaging, user account, world or existing runtime data change. This
+decision records future source standards, not test evidence. The prior
+source-first task remains next: bind future synthetic process-local
+path observations to independently verified PID/FILETIME and keep
+auth/roaming unknown until target acceptance. Windows/Minecraft
+acceptance remains NOT_EXECUTED.
+
 ## Independent engine — source-first A/B path collector, 21 October 2026
 
 The existing native AppContainer synthetic fixture reports separate

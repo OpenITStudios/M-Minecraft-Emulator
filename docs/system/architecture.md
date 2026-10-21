@@ -17,6 +17,15 @@ are retired as new-session providers. No independent launch/isolation provider
 is implemented yet. Historical implementation descriptions below do not select
 an active Sandboxie route. See [retirement](legacy-retirement.md).
 
+Implement the independent engine with the **Rust-first hybrid standard**:
+Rust owns policy, lifecycle, user-mode native adapters and any justified
+user-mode service. Existing C++ synthetic fixtures remain test-only; a small
+independently authored C/C++ WDK component is permitted only if a verified
+kernel requirement cannot be met by supported user-mode facilities. This is
+not a full rewrite or a commitment to develop a driver. The detailed and
+canonical language/ownership decision is in
+[independent engine architecture](independent-engine-architecture.md).
+
 Use a Minecraft-specific engine, independently implemented against documented
 Windows facilities. Reuse architectural ideas, not Sandboxie source, private
 ABI, driver, service, DLL, configuration or feature-certification dependencies.
