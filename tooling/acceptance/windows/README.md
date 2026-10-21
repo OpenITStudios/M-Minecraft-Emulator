@@ -2,6 +2,26 @@
 
 ## Independent native AppContainer proof (synthetic only)
 
+### Optional native-to-Rust HANDLE handoff
+
+`./tooling/acceptance/windows/test-appcontainer-isolation.ps1 -VerifyRustHandoff`
+builds the feature-gated Rust helper from the existing `engine/runtime-core`
+Cargo package under a new workspace directory, and opts into
+`--run-rust-handoff` in the original C++ fixture. Each of four synthetic
+record reads (A/B, initial/reopened) can then be checked by a separate
+bounded Rust subprocess. The C++ parent passes **only** two inherited
+HANDLEs via the Win32 allowlist and an expected PID/FILETIME/phase,
+not paths or credentials. An exit code other than zero fails the
+fixture. No server/daemon, release binary or new GitHub Actions
+workflow is created. This code requires Windows/MSVC/Rust x64 and has
+not been run in the GitHub-only development context.
+
+The test assumes the **original parent fixture** is the trusted owner
+of freshly created temporary profiles and process/file handles. It
+is not a production capability mechanism and cannot establish
+Minecraft roaming or authentication readiness.
+
+
 ### Rust record HANDLE identity validation
 
 The Windows-only Rust reader now applies

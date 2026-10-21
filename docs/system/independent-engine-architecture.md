@@ -345,6 +345,40 @@ file identity check alone proves a specific process wrote that file.
 The reader deliberately continues to return `UnboundFixturePaths`,
 never process-bound launch evidence.
 
+## Opt-in fixture-only inherited HANDLE handoff to Rust
+
+A new test-only binary, `engine/runtime-core/src/bin/synthetic_fixture_handoff.rs`,
+is **gated by the `synthetic-fixture-handoff` Cargo feature** and never
+registered as a desktop command, runtime provider, service or driver.
+The independent C++ fixture parent can optionally spawn it while each
+fixture child remains alive using `PROC_THREAD_ATTRIBUTE_HANDLE_LIST`.
+It duplicates precisely **two inheritable handles**: the already owned,
+read-only process handle (QUERY_LIMITED_INFORMATION + SYNCHRONIZE) and
+the exclusively opened, non-reparse eight-byte observation file handle.
+No profile path, username, SID or credential crosses the command line.
+
+The Rust helper checks the actual inherited process HANDLE's PID,
+creation FILETIME, liveness and AppContainer token, file HANDLE attributes,
+fixed size, file index/volume and write timestamp before/after a bounded
+read, and the existing pure-Rust fixture frame decoder's phase/flags.
+It then rechecks the process and exits **0 or nonzero**, without
+serializing account/path/OS identifiers. The C++ owner waits up to five
+seconds, rejects a nonzero result and rechecks its original child. The
+opt-in PowerShell switch `-VerifyRustHandoff` builds the helper with
+`--locked` under a freshly created workspace output; ordinary
+`--run` and negative controls remain unchanged.
+
+**Trust boundary:** This is a capability handoff *from the trusted,
+self-created C++ fixture parent* to a disposable test-only Rust helper,
+not remotely authenticated IPC or a general-purpose process inspector.
+Both inherited numeric HANDLE values are only meaningful in that
+specific child process; arbitrary CLI values do not grant handles.
+The parent still owns profile provenance. The helper does not prove
+game/registry/broker isolation, does not issue
+`ProcessPathSnapshot` or launch permission and cannot run Minecraft.
+The current in-product standalone Rust reader still returns
+`UnboundFixturePaths`; no admission or workspace behavior is changed.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

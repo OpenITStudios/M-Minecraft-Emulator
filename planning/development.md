@@ -1,5 +1,30 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — opt-in inherited fixture handle handoff, 21 October 2026
+
+**Source-first native-to-Rust bridge:** the original C++ fixture parent
+optionally duplicates just its owned child process query/sync HANDLE and
+exclusive eight-byte record HANDLE into a test-only Rust helper through
+`PROC_THREAD_ATTRIBUTE_HANDLE_LIST`. The helper validates PID/creation
+FILETIME, AppContainer token, file identity and strict frame phase;
+success means *synthetic parent-supplied handles were consistent*.
+The existing `engine/runtime-core` binary is gated by Cargo feature
+`synthetic-fixture-handoff`; optional Windows PS switch
+`-VerifyRustHandoff` builds it under a fresh workspace output.
+Rust source tests written, NOT_EXECUTED; Rust/MSVC/Windows/game
+acceptance NOT_EXECUTED. Lockfile entries updated for existing
+`windows-sys` v0.61 already present; no new framework dependency.
+
+This does not authenticate arbitrary caller-provided PIDs, profiles
+or Microsoft accounts, nor does it activate a service, driver,
+Tauri route or provider. The production-independent path/storage
+inspector and game launch remain unchanged and fail closed.
+
+**Next:** inspect and close any handoff Windows compilation/handle
+rights gaps via an actual opted-in Windows fixture run when available;
+continue independent filesystem/registry design source-first.
+No Minecraft local execution until deferred acceptance is resumed.
+
 ## Independent engine — strict Windows fixture file handle identity, 21 October 2026
 
 The existing Windows-only Rust reader

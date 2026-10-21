@@ -278,7 +278,75 @@ int contained(const fs::path& root, const fs::path& own, const fs::path& peer, b
     }
     return 98;
 }
-Observation observe(Child& child, bool reopen = false) {
+// Opt-in, fixture-only C++ -> Rust OS capability handoff. Only the
+// original owner chooses child and opened record; Rust receives no path,
+// profile SID, username, credentials, process launch authority or token.
+void verify_rust_handoff(const fs::path& helper, const Child& child,
+    HANDLE file, bool reopen) {
+    verify_created_child(child);
+    require(fs::is_regular_file(helper) && helper.wstring().find(L'"') == std::wstring::npos
+        && helper.wstring().find(L'\r') == std::wstring::npos
+        && helper.wstring().find(L'\n') == std::wstring::npos,
+        "rust-handoff-helper-path");
+    HANDLE child_copy = nullptr;
+    require(DuplicateHandle(GetCurrentProcess(), child.process.hProcess,
+        GetCurrentProcess(), &child_copy,
+        PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, TRUE, 0) != 0,
+        "rust-handoff-duplicate-child");
+    Handle copied_process(child_copy);
+    HANDLE file_copy = nullptr;
+    require(DuplicateHandle(GetCurrentProcess(), file, GetCurrentProcess(),
+        &file_copy, 0, TRUE, DUPLICATE_SAME_ACCESS) != 0,
+        "rust-handoff-duplicate-file");
+    Handle copied_file(file_copy);
+    HANDLE allowlist[] = {copied_process.value, copied_file.value};
+    SIZE_T attr_bytes = 0;
+    InitializeProcThreadAttributeList(nullptr, 1, 0, &attr_bytes);
+    require(attr_bytes != 0, "rust-handoff-attribute-size");
+    std::vector<uintptr_t> aligned(
+        (attr_bytes + sizeof(uintptr_t) - 1) / sizeof(uintptr_t));
+    auto attrs = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(aligned.data());
+    require(InitializeProcThreadAttributeList(attrs, 1, 0, &attr_bytes) != 0,
+        "rust-handoff-attributes");
+    struct Cleanup {
+        LPPROC_THREAD_ATTRIBUTE_LIST ptr;
+        ~Cleanup() { DeleteProcThreadAttributeList(ptr); }
+    } cleanup{attrs};
+    require(UpdateProcThreadAttribute(attrs, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+        allowlist, sizeof(allowlist), nullptr, nullptr) != 0,
+        "rust-handoff-handle-list");
+
+    STARTUPINFOEXW startup{};
+    startup.StartupInfo.cb = sizeof(startup);
+    startup.lpAttributeList = attrs;
+    const auto command = quote(helper) + L" --verify-inherited-fixture "
+        + std::to_wstring(reinterpret_cast<uintptr_t>(copied_process.value)) + L" "
+        + std::to_wstring(reinterpret_cast<uintptr_t>(copied_file.value)) + L" "
+        + std::to_wstring(child.process.dwProcessId) + L" "
+        + std::to_wstring(child.created_file_time)
+        + (reopen ? L" reopened" : L" first");
+    std::wstring mutable_command = command;
+    PROCESS_INFORMATION helper_info{};
+    require(CreateProcessW(helper.c_str(), mutable_command.data(),
+        nullptr, nullptr, TRUE, EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW,
+        nullptr, nullptr, &startup.StartupInfo, &helper_info) != 0,
+        "rust-handoff-start");
+    Handle helper_process(helper_info.hProcess), helper_thread(helper_info.hThread);
+    const auto wait = WaitForSingleObject(helper_process.value, 5000);
+    if (wait != WAIT_OBJECT_0) {
+        // Only the precisely launched synthetic Rust helper may be killed.
+        TerminateProcess(helper_process.value, 99);
+        WaitForSingleObject(helper_process.value, 3000);
+        throw Failure{"rust-handoff-timeout", WAIT_TIMEOUT};
+    }
+    DWORD exit_code = 0;
+    require(GetExitCodeProcess(helper_process.value, &exit_code) != 0
+        && exit_code == 0, "rust-handoff-rejected");
+    verify_created_child(child);
+}
+
+Observation observe(Child& child, bool reopen = false,
+    const fs::path* rust_helper = nullptr) {
     // The child and fresh profile are permanently paired by launch().
     // Never accept a second caller-selected path or profile for this child.
     verify_created_child(child);
@@ -311,6 +379,7 @@ Observation observe(Child& child, bool reopen = false) {
                     && (after.dwFileAttributes & not_regular) == 0,
                 "fixture-file-changed");
             verify_created_child(child);
+            if (rust_helper) verify_rust_handoff(*rust_helper, child, file.value, reopen);
             return value;
         }
         DWORD status = GetLastError();
@@ -329,7 +398,8 @@ void stop(Child& child) {
     require(WaitForSingleObject(child.process.hProcess, 3000) == WAIT_OBJECT_0, "fixture-normal-stop");
     DWORD code = 0; require(GetExitCodeProcess(child.process.hProcess, &code) != 0 && code == 0, "fixture-normal-exit");
 }
-int parent(const fs::path& output, bool negative_control) {
+int parent(const fs::path& output, bool negative_control,
+    const fs::path* rust_helper = nullptr) {
     const auto root = fs::absolute(output / L"fixture");
     require(fs::create_directory(root), "new-fixture-directory-required");
     GUID guid{}; hrcheck(CoCreateGuid(&guid), "unique-profile-name");
@@ -368,7 +438,8 @@ int parent(const fs::path& output, bool negative_control) {
     // Deliberately reuse token A only in the explicit red-capable synthetic control.
     launch(b, binary, root, negative_control ? first : second, first);
     require(token_matches(a.process.hProcess, first.sid) && token_matches(b.process.hProcess, second.sid), "actual-distinct-container-tokens");
-    const auto left = observe(a), right = observe(b);
+    const auto left = observe(a, false, rust_helper);
+    const auto right = observe(b, false, rust_helper);
     const DWORD required = OWN_FILE | PEER_DENIED | HOST_DENIED | MUTEX_PRIVATE
         | CUSTOM_ROAMING_OWN | CUSTOM_ROAMING_PEER_DENIED | CUSTOM_ROAMING_CREATED;
     require((left.flags & required) == required && (right.flags & required) == required,
@@ -392,8 +463,8 @@ int parent(const fs::path& output, bool negative_control) {
     require(token_matches(reopened_a.process.hProcess, first.sid)
         && token_matches(reopened_b.process.hProcess, second.sid),
         "reopened-distinct-container-tokens");
-    const auto reopened_left = observe(reopened_a, true);
-    const auto reopened_right = observe(reopened_b, true);
+    const auto reopened_left = observe(reopened_a, true, rust_helper);
+    const auto reopened_right = observe(reopened_b, true, rust_helper);
     const DWORD persisted = CUSTOM_ROAMING_OWN | CUSTOM_ROAMING_PEER_DENIED
         | CUSTOM_ROAMING_REOPENED;
     require((reopened_left.flags & persisted) == persisted
@@ -430,6 +501,10 @@ int wmain(int argc, wchar_t** argv) {
         if (argc == 5 && std::wstring(argv[1]) == L"--child") return contained(argv[2], argv[3], argv[4], false);
         if (argc == 5 && std::wstring(argv[1]) == L"--child-reopen") return contained(argv[2], argv[3], argv[4], true);
         if (argc == 3 && std::wstring(argv[1]) == L"--run") return parent(argv[2], false);
+        if (argc == 4 && std::wstring(argv[1]) == L"--run-rust-handoff") {
+            const auto helper = fs::absolute(argv[3]);
+            return parent(argv[2], false, &helper);
+        }
         if (argc == 3 && std::wstring(argv[1]) == L"--negative-control") return parent(argv[2], true);
         throw Failure{"explicit-synthetic-run-required", ERROR_INVALID_PARAMETER};
     } catch (const Failure& failure) {

@@ -25,6 +25,16 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+An opt-in, **test-only Windows HANDLE handoff** is implemented by
+the existing C++ AppContainer fixture plus
+`engine/runtime-core/src/bin/synthetic_fixture_handoff.rs`. The
+owner duplicates only child-process QUERY/SYNCHRONIZE and fixed
+record-read handles into an explicitly allowlisted Rust helper.
+The helper verifies exact PID/FILETIME, live token, file identity and
+fixture frame and returns only an exit status. Requires explicit
+`-VerifyRustHandoff`; not part of the Tauri app or isolated
+Minecraft Launch. Runtime Windows execution still NOT_EXECUTED.
+
 The unbound Windows Rust fixture record reader now checks the
 underlying **file HANDLE** using `GetFileInformationByHandle` before
 and after its eight-byte read, rejecting invalid file type,

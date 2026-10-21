@@ -1,6 +1,6 @@
 # Explicit synthetic-only native Windows proof; no game/account/service operations.
 [CmdletBinding()]
-param([switch]$VerifyNegativeControl)
+param([switch]$VerifyNegativeControl, [switch]$VerifyRustHandoff)
 $ErrorActionPreference='Stop'
 if($env:OS -ne 'Windows_NT'){throw 'Windows AppContainer fixture requires Windows.'}
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
@@ -22,10 +22,29 @@ $lines=@('@echo off',('call "'+$developer+'" -arch=amd64 -host_arch=amd64'),'if 
 [IO.File]::WriteAllLines($build,$lines,[Text.Encoding]::ASCII)
 & $env:ComSpec /d /c $build *> (Join-Path $output 'compile.log')
 if($LASTEXITCODE -ne 0){throw "Synthetic compilation failed; inspect $output\compile.log"}
+$helper=$null
+if($VerifyRustHandoff){
+    # Explicit opt-in only. Compile the Rust fixture helper inside this run's
+    # fresh workspace, never build/enable the desktop application or a driver.
+    $cargo=(Get-Command cargo -ErrorAction Stop).Source
+    $manifest=Join-Path $root 'engine/runtime-core/Cargo.toml'
+    $cargoTarget=Join-Path $output 'rust-target'
+    $previousTarget=$env:CARGO_TARGET_DIR
+    try{
+        $env:CARGO_TARGET_DIR=$cargoTarget
+        & $cargo build --locked --manifest-path $manifest --target x86_64-pc-windows-msvc --features synthetic-fixture-handoff --bin synthetic-fixture-handoff *> (Join-Path $output 'rust-compile.log')
+        if($LASTEXITCODE -ne 0){throw "Rust handoff helper compilation failed; inspect $output\rust-compile.log"}
+    }finally{$env:CARGO_TARGET_DIR=$previousTarget}
+    $helper=Join-Path $cargoTarget 'x86_64-pc-windows-msvc/debug/synthetic-fixture-handoff.exe'
+    if(-not(Test-Path -LiteralPath $helper -PathType Leaf)){throw 'Rust handoff helper artifact missing'}
+    if($helper -match '["\r\n]'){throw 'Rust helper path contains unsupported characters'}
+}
 function Invoke-SyntheticProbe([string]$Mode,[string]$Directory){
     $start=New-Object Diagnostics.ProcessStartInfo
     $start.FileName=$binary
-    $start.Arguments=$Mode+' "'+$Directory+'"'
+    $selectedMode=if($Mode -eq '--run' -and $VerifyRustHandoff){'--run-rust-handoff'}else{$Mode}
+    $start.Arguments=$selectedMode+' "'+$Directory+'"'
+    if($selectedMode -eq '--run-rust-handoff'){$start.Arguments+=' "'+$helper+'"'}
     $start.UseShellExecute=$false
     $start.CreateNoWindow=$true
     $start.RedirectStandardOutput=$true
@@ -41,6 +60,7 @@ function Invoke-SyntheticProbe([string]$Mode,[string]$Directory){
         if($process.ExitCode -ne 1 -or $proof.result -ne 'FAIL' -or $proof.stage -ne 'actual-distinct-container-tokens' -or -not $proof.profilesRemoved){throw "Negative control did not fail safely at its expected identity check; inspect $Directory"}
     }elseif($process.ExitCode -ne 0 -or $proof.result -ne 'PASS'){throw "Native AppContainer proof failed; evidence retained in $Directory"}
     if($Mode -eq '--run'){
+        if($VerifyRustHandoff -and $process.ExitCode -ne 0){throw 'Rust handoff rejection or timeout; see fixture result'}
         if($proof.schema -ne 2 -or @($proof.processPaths).Count -ne 2 -or
            $proof.processPaths[0].fixture -ne 'A' -or
            $proof.processPaths[1].fixture -ne 'B'){
