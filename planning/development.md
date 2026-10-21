@@ -38,6 +38,15 @@ surfaces still Unknown. Negative tests assert that a stale/missing
 process cannot trigger storage inspection. Windows/Rust execution remains
 NOT_EXECUTED; no Tauri launch/provider mutation or new service.
 
+**Bound storage evidence source:** `independent_engine/evidence.rs` now
+implements typed, exact-process validation for nine storage/broker
+surfaces, rejecting wrong slot, changed FILETIME, duplicated surfaces,
+synthetic positive claims, and path-as-file-access claims. The domain
+storage observation setter is crate-private, so future desktop/native
+adapters must use the reviewed conversion function rather than
+arbitrarily assign verified fields. Negative Rust tests are authored but
+NOT_EXECUTED; no Windows or Minecraft acceptance is claimed.
+
 **Next source-only milestone:** specify a native storage evidence adapter
 with exact-handle/lifetime binding and explicit known-folder/registry/broker
 unknowns; keep account-bearing paths untouched pending local acceptance.

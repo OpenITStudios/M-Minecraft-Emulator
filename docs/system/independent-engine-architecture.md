@@ -43,6 +43,26 @@ APIs does not transfer ownership of Microsoft's implementations.
 | Synthetic tooling and offline review | `tooling/acceptance/windows/`, `tooling/acceptance/evaluate-appcontainer-isolation.mjs` | No game/account access; observations never authorize launch |
 | Current continuation | `planning/development.md` | Decisions/next work only, not a runtime data database |
 
+### Bound storage evidence contract — source-only
+
+`engine/runtime-core/src/independent_engine/evidence.rs` validates diagnostic
+storage facts against one exact `SessionSlot` and one full PID/FILETIME
+`ProcessIdentity`. Its typed method/source matrix separates:
+
+- synthetic fixture canaries from native per-process observations;
+- path queries from actual canary access and restart persistence;
+- registry and named-object observations from file-system behavior;
+- host/peer access denial from ordinary private writes;
+- real Minecraft sign-in observation from Windows token/MSAL metadata.
+
+Unrecognized combinations, duplicate surfaces, mismatched identities and
+synthetic positive proofs are rejected. Broker conclusions require
+`MinecraftRuntime`-class observations. These are **unattested facts supplied
+by future collectors**, not independently verified evidence or launch permission.
+External platform crates can no longer call `StorageObservations::observe`
+directly; they must use the reviewed converter. No secret/path fields are
+transported by this contract, and no runtime probes or profile writes occur.
+
 ## Read-only source integration
 
 `independent_engine/inspection.rs` combines `ProcessObserverPort`

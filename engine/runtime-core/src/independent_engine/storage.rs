@@ -59,7 +59,10 @@ pub struct StorageObservations {
 }
 
 impl StorageObservations {
-    pub fn observe(&mut self, surface: StorageSurface, finding: StorageFinding) {
+    // Only runtime-core can directly build synthetic test observations.
+    // External Windows adapters must use reviewed, identity-bound evidence,
+    // not freely assign positive or negative isolation findings.
+    pub(crate) fn observe(&mut self, surface: StorageSurface, finding: StorageFinding) {
         self.entries[surface.index()] = finding;
     }
 

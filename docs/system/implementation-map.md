@@ -25,6 +25,13 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+Bound native storage evidence mapping is owned by
+`engine/runtime-core/src/independent_engine/evidence.rs`. It binds
+each fact to exact slot/PID/FILETIME, probe method, and evidence source
+before an observation can be recorded. Synthetic positive flags and
+path-only data cannot assert actual Minecraft storage or broker separation.
+Only pure Rust contracts/tests are added; no Windows I/O or launch path.
+
 The independent `StorageObserverPort` now accepts exact
 `ProcessIdentity` along with the slot, rather than slot alone. The
 existing pinned Windows process observer also categorizes its actual

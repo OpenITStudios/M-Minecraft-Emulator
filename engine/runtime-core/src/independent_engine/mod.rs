@@ -4,12 +4,17 @@
 //! registry, launcher, daemon, driver, or Sandboxie-derived implementation.
 //! The existing desktop admission and runtime lifecycle remain authoritative.
 
+mod evidence;
 mod identity;
 mod inspection;
 mod operations;
 mod ports;
 mod storage;
 
+pub use evidence::{
+    review_bound_storage_facts, BoundStorageFact, EvidenceReviewError,
+    StorageEvidenceSource, StorageProbeMethod,
+};
 pub use identity::{ProcessIdentity, SessionSlot};
 pub use inspection::{inspect_existing, SessionInspection};
 pub use operations::{OperationClass, SessionOperation};
