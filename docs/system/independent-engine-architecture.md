@@ -207,6 +207,27 @@ Production binding must continue to use the canonical pinned Windows
 process observer and `independent_engine/paths.rs`. This is not a game
 launch, isolated Windows roaming solution, or local runtime acceptance.
 
+## Bound cooperating-process path capture — source contract
+
+`CooperativePathObserverPort` and `inspect_cooperative_paths` require a
+previously selected `SessionSlot` and exact `ProcessIdentity`
+(PID + full 64-bit creation FILETIME). The process is inspected **before and
+after** collecting `ProcessPathSnapshot`; stale PID/creation identity,
+child exit, denied observation, wrong slot or mismatched probe identity
+invalidates the complete result. A successful inspection still contains only
+`PathOnly`, `PathOutsideProfile` or `Unknown` observations, never
+proof of actual account isolation or provider launch readiness.
+
+The eventual native collector must obtain the actual path queries from a
+**cooperating process** and validate its peer against the pinned OS handle.
+It cannot fabricate a process key from an A/B fixture label, call Known
+Folder APIs in an unrelated host process and attribute those values to the
+game, inspect user token caches, or inject hooks into Minecraft. This
+module provides the contract and deterministic fake-adapter tests only.
+No IPC, launcher, profile access, Windows service, or production collector
+is implemented by this batch. The existing `UnknownStorageObserver`
+remains the active diagnostic placeholder.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

@@ -1,5 +1,22 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — cooperating path identity contract, 21 October 2026
+
+**Source-only continuation:** The `independent_engine/paths.rs` owner now
+defines `inspect_cooperative_paths`, consuming exact-process observation
+and a bounded cooperating-path port. It rejects missing/stale process
+identity before a path read, rejects wrong process key from a probe, and
+revalidates identity after the read. The resulting Known Folder and
+environment observations remain path-only; A/B synthetic labels do
+not authenticate a Windows process or grant launch rights.
+Five Rust negative/contract tests authored, **NOT_EXECUTED** in
+REMOTE_GITHUB. No native collector, Tauri route, driver, login or
+world/profile operation. Rust-first hybrid policy unchanged.
+
+**Next:** source-only design and implement a bounded native cooperative
+test-process path transport that can bind to a pinned child handle
+without modifying Minecraft or reading account-bearing host roaming.
+
 ## Rust-first hybrid decision — 21 October 2026
 
 **APPROVED, architecture-only**: Rust is the primary language for the

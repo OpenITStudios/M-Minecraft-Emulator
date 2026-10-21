@@ -2,7 +2,7 @@
 //! they are NOT registered Tauri commands, launch permission or implementations.
 //! The platform-specific owner is apps/desktop; runtime-core holds policy.
 
-use super::{ProcessIdentity, SessionSlot, StorageObservations};
+use super::{ProcessIdentity, ProcessPathSnapshot, SessionSlot, StorageObservations};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NativePortError {
@@ -47,6 +47,18 @@ pub trait StorageObserverPort {
         slot: SessionSlot,
         expected: ProcessIdentity,
     ) -> Result<StorageObservations, NativePortError>;
+}
+
+/// The path collector must be in the cooperating process itself, or must
+/// obtain its readings over a bounded channel whose peer is authenticated
+/// against the exact Windows process handle. Returning an A/B fixture label
+/// or a host-side SHGetKnownFolderPath reading is insufficient.
+pub trait CooperativePathObserverPort {
+    fn observe_process_local_paths(
+        &self,
+        slot: SessionSlot,
+        expected: ProcessIdentity,
+    ) -> Result<ProcessPathSnapshot, NativePortError>;
 }
 
 /// The existing workspace_surface implementation owns window behavior.

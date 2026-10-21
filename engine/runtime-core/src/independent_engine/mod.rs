@@ -18,11 +18,15 @@ pub use evidence::{
 };
 pub use identity::{ProcessIdentity, SessionSlot};
 pub use inspection::{inspect_existing, SessionInspection};
-pub use paths::{review_process_path_snapshot, PathLocation, ProcessPathSnapshot};
+pub use paths::{
+    inspect_cooperative_paths, review_process_path_snapshot,
+    BoundPathInspectionError, PathLocation, ProcessPathSnapshot,
+};
 pub use operations::{OperationClass, SessionOperation};
 pub use ports::{
-    DisabledIndependentProvider, IndependentProviderPort, NativePortError,
-    ProcessContainment, ProcessObservation, ProcessObserverPort, StorageObserverPort,
+    CooperativePathObserverPort, DisabledIndependentProvider,
+    IndependentProviderPort, NativePortError, ProcessContainment,
+    ProcessObservation, ProcessObserverPort, StorageObserverPort,
     WorkspacePresentationPort,
 };
 pub use storage::{StorageFinding, StorageObservations, StorageSurface};

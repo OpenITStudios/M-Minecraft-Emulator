@@ -25,6 +25,14 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+The cooperating-process path contract is
+`independent_engine/paths.rs::inspect_cooperative_paths`, consuming
+`CooperativePathObserverPort` and the current `ProcessObserverPort`.
+It verifies exact PID/FILETIME before and after a path probe, rejects
+mismatched fixture binding and preserves path-only uncertainty. No A/B
+fixture label can independently establish process ownership. No native
+collector or desktop launch route is registered.
+
 The agreed production language split is **Rust-first hybrid**:
 `engine/runtime-core/` and `apps/desktop/` own independent Rust logic and
 user-mode Windows APIs; C++ remains for synthetic fixtures, with any
