@@ -1903,7 +1903,6 @@ dependencies = [
 name = "m-bedrock-virtual-clients-core"
 version = "0.1.0"
 dependencies = [
- "windows-sys",
  "getrandom 0.4.3",
  "serde",
  "serde_json",
@@ -1911,6 +1910,7 @@ dependencies = [
  "sysinfo",
  "ureq",
  "url",
+ "windows-sys",
 ]
 
 [[package]]
