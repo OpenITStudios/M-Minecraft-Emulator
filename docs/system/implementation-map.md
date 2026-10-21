@@ -32,6 +32,7 @@ It requires MC01+MC02 for two-client assessment and all MC01–MC04
 for four-client assessment, with process PID uniqueness, separate
 client-local checks and simultaneous cross-client checks. It
 rejects synthetic or Windows-token-only authentication claims,
+requires joint results to bind the exact process set,
 retains missing/failed checks and always returns
 `PendingGameAcceptance`, never a production provider decision.
 No login, game executable or OS process is launched or inspected

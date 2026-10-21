@@ -107,14 +107,19 @@ impl ClientGameSample {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct JointGameSample {
-    /// The joint observations apply to THIS trial's exact set of process
-    /// identities, not a prior two-client run or disconnected fixtures.
+    /// Process keys in canonical MC01–MC04 order. For a two-client run the
+    /// MC03/MC04 slots MUST be absent. A report from another run, reused PID
+    /// or newly restarted process cannot be silently applied to this trial.
+    pub processes: [Option<ProcessIdentity>; 4],
     pub checks: [ReportedGameFinding; 5],
 }
 
 impl Default for JointGameSample {
     fn default() -> Self {
-        Self { checks: [ReportedGameFinding::Unobserved; 5] }
+        Self {
+            processes: [None; 4],
+            checks: [ReportedGameFinding::Unobserved; 5],
+        }
     }
 }
 
@@ -125,6 +130,7 @@ pub enum GameTrialError {
     MissingOrInvalidProcessIdentity,
     ProcessUsedByMultipleSlots,
     WrongEvidenceSource,
+    WrongJointProcessSet,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -165,6 +171,27 @@ pub fn review_game_acceptance(
             return Err(GameTrialError::ProcessUsedByMultipleSlots);
         }
         occupied[index] = true;
+    }
+
+    // A joint observation is meaningful only if it names the exact clients
+    // in the same trial, including the native MC01 baseline. Never inherit
+    // positive observations from a prior two-client or pre-restart run.
+    let any_joint_observed = joint.checks.iter().any(|finding| {
+        *finding != ReportedGameFinding::Unobserved
+    });
+    if any_joint_observed {
+        for (index, slot) in required.iter().enumerate() {
+            let client = clients.iter().find(|client| client.slot == *slot);
+            if client.map(|item| item.process) != joint.processes[index] || client.is_none() {
+                return Err(GameTrialError::WrongJointProcessSet);
+            }
+        }
+        if joint.processes[required.len()..].iter().any(Option::is_some) {
+            return Err(GameTrialError::WrongJointProcessSet);
+        }
+    } else if joint.processes.iter().any(Option::is_some) {
+        // A claimed binding with no actual joint observation is ambiguous.
+        return Err(GameTrialError::WrongJointProcessSet);
     }
 
     // No check can be promoted from a fixture or manager-side Windows
@@ -244,11 +271,15 @@ mod tests {
         }
         client
     }
-    fn all_joint() -> JointGameSample {
-        JointGameSample {
-            checks: [ReportedGameFinding::ReportedPass(
-                StorageEvidenceSource::MinecraftRuntime); 5],
+    fn all_joint(clients: &[ClientGameSample]) -> JointGameSample {
+        let mut joint = JointGameSample::default();
+        for client in clients {
+            let index = SessionSlot::ALL.iter().position(|slot| *slot == client.slot).unwrap();
+            joint.processes[index] = Some(client.process);
         }
+        joint.checks = [ReportedGameFinding::ReportedPass(
+            StorageEvidenceSource::MinecraftRuntime); 5];
+        joint
     }
 
     #[test]
@@ -263,11 +294,12 @@ mod tests {
     #[test]
     fn two_client_run_cannot_claim_four_client_concurrency() {
         let clients = [complete(SessionSlot::Mc01, 1), complete(SessionSlot::Mc02, 2)];
-        let two = review_game_acceptance(GameTrial::TwoClients, &clients, all_joint()).unwrap();
+        let two = review_game_acceptance(GameTrial::TwoClients, &clients, all_joint(&clients)).unwrap();
         assert!(two.missing_clients.is_empty());
         assert!(two.missing_client_checks.is_empty());
         assert!(two.missing_joint_checks.is_empty());
-        let four = review_game_acceptance(GameTrial::FourClients, &clients, all_joint()).unwrap();
+        let four = review_game_acceptance(
+            GameTrial::FourClients, &clients, JointGameSample::default()).unwrap();
         assert_eq!(four.missing_clients, vec![SessionSlot::Mc03, SessionSlot::Mc04]);
         assert_eq!(four.missing_client_checks.len(), 16);
     }
@@ -331,12 +363,13 @@ mod tests {
 
     #[test]
     fn windows_or_fixture_group_claims_cannot_prove_broker_continuity() {
+        let clients = [capture(SessionSlot::Mc01, 1), capture(SessionSlot::Mc02, 2)];
         for source in [StorageEvidenceSource::WindowsProcess,
             StorageEvidenceSource::SyntheticFixture] {
-            let mut joint = JointGameSample::default();
+            let mut joint = all_joint(&clients);
             joint.checks[1] = ReportedGameFinding::ReportedPass(source);
             assert_eq!(
-                review_game_acceptance(GameTrial::TwoClients, &[], joint),
+                review_game_acceptance(GameTrial::TwoClients, &clients, joint),
                 Err(GameTrialError::WrongEvidenceSource)
             );
         }
@@ -347,10 +380,11 @@ mod tests {
         let mut client = capture(SessionSlot::Mc02, 2);
         client.checks[4] = ReportedGameFinding::ReportedFailure(
             StorageEvidenceSource::MinecraftRuntime);
-        let mut joint = JointGameSample::default();
+        let clients = [capture(SessionSlot::Mc01, 1), client];
+        let mut joint = all_joint(&clients);
         joint.checks[3] = ReportedGameFinding::ReportedFailure(
             StorageEvidenceSource::MinecraftRuntime);
-        let result = review_game_acceptance(GameTrial::TwoClients, &[client], joint).unwrap();
+        let result = review_game_acceptance(GameTrial::TwoClients, &clients, joint).unwrap();
         assert_eq!(result.failed_client_checks, vec![(
             SessionSlot::Mc02, ClientGameCheck::SignInSurvivesReconnect)]);
         assert_eq!(result.failed_joint_checks,
@@ -359,13 +393,57 @@ mod tests {
             SessionSlot::Mc02, ClientGameCheck::SignInSurvivesReconnect)));
     }
 
+
+    #[test]
+    fn joint_results_without_exact_client_scope_are_refused() {
+        let clients = [complete(SessionSlot::Mc01, 1), complete(SessionSlot::Mc02, 2)];
+        let mut unbound = JointGameSample::default();
+        unbound.checks[0] = ReportedGameFinding::ReportedPass(
+            StorageEvidenceSource::MinecraftRuntime);
+        assert_eq!(
+            review_game_acceptance(GameTrial::TwoClients, &clients, unbound),
+            Err(GameTrialError::WrongJointProcessSet)
+        );
+        let mut stale = all_joint(&clients);
+        stale.processes[1] = ProcessIdentity::checked(
+            2, clients[1].process.created_file_time + 1
+        );
+        assert_eq!(
+            review_game_acceptance(GameTrial::TwoClients, &clients, stale),
+            Err(GameTrialError::WrongJointProcessSet)
+        );
+    }
+
+    #[test]
+    fn two_client_joint_report_cannot_claim_four_client_runtime_scope() {
+        let all = [
+            complete(SessionSlot::Mc01, 1), complete(SessionSlot::Mc02, 2),
+            complete(SessionSlot::Mc03, 3), complete(SessionSlot::Mc04, 4),
+        ];
+        let old_two = all_joint(&all[..2]);
+        assert_eq!(
+            review_game_acceptance(GameTrial::FourClients, &all, old_two),
+            Err(GameTrialError::WrongJointProcessSet)
+        );
+        let full = all_joint(&all);
+        assert!(review_game_acceptance(GameTrial::FourClients, &all, full)
+            .unwrap().missing_joint_checks.is_empty());
+        let mut extra = full;
+        extra.processes[3] = None;
+        assert_eq!(
+            review_game_acceptance(GameTrial::FourClients, &all, extra),
+            Err(GameTrialError::WrongJointProcessSet)
+        );
+    }
+
     #[test]
     fn even_all_claimed_passes_only_produce_pending_manual_review() {
         let clients = [
             complete(SessionSlot::Mc01, 1), complete(SessionSlot::Mc02, 2),
             complete(SessionSlot::Mc03, 3), complete(SessionSlot::Mc04, 4),
         ];
-        let report = review_game_acceptance(GameTrial::FourClients, &clients, all_joint()).unwrap();
+        let report = review_game_acceptance(
+            GameTrial::FourClients, &clients, all_joint(&clients)).unwrap();
         assert!(report.missing_clients.is_empty());
         assert!(report.missing_client_checks.is_empty());
         assert!(report.failed_client_checks.is_empty());

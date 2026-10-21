@@ -680,6 +680,9 @@ world persistence, multiplayer and Minecraft singleton conflicts.
 A different set of **joint** observations covers simultaneous
 playable windows, distinct licensed accounts, continuity of the
 other clients during tab switch/reconnect and cross-client multiplayer.
+Each such observation is additionally bound to the **exact canonical
+set of MC01–MC04 process identities for that trial**; stale FILETIMEs,
+missing peer processes and prior two-client captures are rejected.
 Thus four individual PASS reports cannot stand in for four
 **concurrently** playable clients. A publisher-signature observation
 requires independent Windows process evidence; interactive/account

@@ -12,7 +12,10 @@ and synthetic/Windows-only login claims fail closed. Client-local
 publisher signature, licensed sign-in, input/render, reconnect,
 world persistence and singleton observations are separate from
 joint simultaneous gameplay, account distinctness, cross-client
-multiplayer and session survival. Eight Rust tests authored
+multiplayer and session survival. Joint outcomes must bind every
+required slot's exact process key, preventing old 2-client or
+pre-restart evidence from standing in for 4-client gameplay.
+Ten Rust tests authored
 **NOT_EXECUTED**; only GitHub source/static review.
 
 The API deliberately only returns `PendingGameAcceptance`
