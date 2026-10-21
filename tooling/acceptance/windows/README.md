@@ -2,6 +2,18 @@
 
 ## Independent native AppContainer proof (synthetic only)
 
+### Owner-bound synthetic process observation
+
+The C++ fixture now pairs its `Child` directly with the
+fresh `Profile` supplied at successful launch. The observation
+and stop helpers accept **only the owned Child**. They cannot be
+called with a second arbitrary profile path or an independently
+selected owner SID. This is an in-parent ownership improvement;
+the separate Rust fixture reader still lacks a transferable
+process/file capability and must return `UnboundFixturePaths`.
+The existing synthetic fixture creates only fresh AppContainer
+profiles and does not access installed account/world data.
+
 ### Original fixture parent ownership checks
 
 The native fixture parent records each child process's creation FILETIME

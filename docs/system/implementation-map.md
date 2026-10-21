@@ -25,6 +25,14 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+The synthetic C++ fixture now uses one `Child` owner binding:
+a freshly created `Profile` is paired with its original process
+handle/FILETIME during `launch`. `observe(child)` and `stop(child)`
+derive the exact fixture profile from that owner rather than accepting
+a second, potentially mismatched profile argument. This is
+synthetic-parent ownership only, not a Rust cross-process handoff
+or an independent Minecraft runtime provider.
+
 The original native C++ fixture parent now pins self-created process
 creation FILETIME and rechecks exact AppContainer SID/liveness around
 fixture record reads. Its open record handle must refer to a regular,

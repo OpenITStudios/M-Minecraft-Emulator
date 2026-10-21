@@ -298,6 +298,29 @@ it does not own the parent-created profile and process handles. A trusted,
 bounded capability handoff must be designed before creating a bound
 `ProcessPathSnapshot`.
 
+## Owned synthetic child/profile capability — 21 October 2026
+
+The C++ synthetic fixture parent now binds its newly created
+`Profile` to a noncopyable `Child` at the exact successful
+`CreateProcessW` call, after capturing the full creation FILETIME.
+`observe(child)` and `stop(child)` no longer accept an independent
+profile parameter: both derive the profile folder and expected AppContainer
+SID from the child's original borrowed owner. Before each record read
+or normal stop, they verify the owned process handle, creation FILETIME,
+liveness and SID; record files remain fixed-name, exclusive-read, non-reparse
+eight-byte fixture artifacts. The owner cannot be changed by a caller
+passing a different profile to the observation routine.
+
+Only the fixture parent owns these leases. They live in the same C++
+process, and the new source does not add runtime account profiles,
+an IPC service, or a Rust adapter that inherits OS handles. The existing
+Rust `inspect_unbound_synthetic_fixture_record` is **still unbound**:
+a C++ owner pointer is not a cross-language authenticated capability.
+Therefore these improvements do not unblock a Minecraft launcher or
+prove filesystem/registry/broker isolation. Before any Rust-bound
+handoff, the original owner must supply an OS-verified child and record
+handle using a bounded transport with explicit lifetime/rights checks.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,

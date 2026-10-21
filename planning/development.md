@@ -1,5 +1,27 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — owned synthetic child/profile pairing, 21 October 2026
+
+**Source-only fixture hardening:** the original C++ parent now binds
+each self-created `Child` to its fresh `Profile` immediately after
+a successful launch and pinned creation FILETIME. Observation and
+normal-stop operations consume only the child lease; they cannot
+take an unrelated profile argument. The source still verifies exact
+AppContainer SID, handle/liveness, file record size and file identity.
+No behavior from Rust's standalone reader is promoted to trusted
+process-specific evidence.
+
+**Evidence:** exact GitHub source-structure review; MSVC, Rust,
+Windows, Minecraft and four-account execution **NOT_EXECUTED**.
+This preserves the original standalone test fixture and does not
+install services, drivers, add new Tauri routes, or alter game worlds.
+
+**Next:** source-first implement an explicit, bounded capability
+handoff design at the native/Rust boundary. It must transmit an
+actual owner-validated handle and exact FILETIME; without that
+verification the Rust reader must continue returning
+`UnboundFixturePaths` and isolated Launch/Provision stays denied.
+
 ## Independent engine — synthetic fixture provenance hardening, 21 October 2026
 
 The existing C++ AppContainer fixture parent now pins each created

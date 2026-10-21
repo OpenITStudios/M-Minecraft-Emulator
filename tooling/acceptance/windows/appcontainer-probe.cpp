@@ -110,6 +110,9 @@ struct Profile {
 struct Child {
     PROCESS_INFORMATION process{};
     ULONGLONG created_file_time = 0;
+    // Borrowed only from the fresh Profile passed to launch(). Profile
+    // lifetime encloses all children in parent(); no second owner database.
+    const Profile* owner = nullptr;
     Child() = default;
     Child(const Child&) = delete;
     ~Child() {
@@ -135,6 +138,9 @@ ULONGLONG creation_filetime(HANDLE process) {
 }
 void launch(Child& child, const fs::path& binary, const fs::path& root,
     const Profile& own, const Profile& peer, bool reopen = false) {
+    require(child.process.hProcess == nullptr && child.owner == nullptr
+        && own.created && own.sid != nullptr && !own.folder.empty(),
+        "new-owned-fixture-child-required");
     SIZE_T bytes = 0;
     InitializeProcThreadAttributeList(nullptr, 1, 0, &bytes);
     require(bytes > 0, "attribute-size");
@@ -155,6 +161,9 @@ void launch(Child& child, const fs::path& binary, const fs::path& root,
         EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW, nullptr, root.c_str(), &startup.StartupInfo,
         &child.process) != 0, "create-contained-fixture");
     child.created_file_time = creation_filetime(child.process.hProcess);
+    require(child.created_file_time != 0, "invalid-owned-fixture-creation");
+    // Publish the owner only after process creation and FILETIME succeed.
+    child.owner = &own;
 }
 bool token_matches(HANDLE process, PSID expected) {
     HANDLE raw = nullptr;
@@ -172,7 +181,14 @@ bool token_matches(HANDLE process, PSID expected) {
 }
 // Never read a record on behalf of a different/reused or already dead PID.
 // These checks apply only to the exact child spawned by this fixture parent.
-void verify_created_child(const Child& child, const Profile& expected) {
+const Profile& owned_profile(const Child& child) {
+    require(child.owner != nullptr && child.owner->created
+        && child.owner->sid != nullptr && !child.owner->folder.empty(),
+        "fixture-owner-not-current");
+    return *child.owner;
+}
+void verify_created_child(const Child& child) {
+    const auto& expected = owned_profile(child);
     require(child.process.hProcess != nullptr && child.created_file_time != 0,
         "fixture-missing-owned-handle");
     require(WaitForSingleObject(child.process.hProcess, 0) == WAIT_TIMEOUT,
@@ -262,10 +278,11 @@ int contained(const fs::path& root, const fs::path& own, const fs::path& peer, b
     }
     return 98;
 }
-Observation observe(const Profile& profile, Child& child, bool reopen = false) {
-    // "profile" exists only because this parent just created it. Recheck
-    // the exact self-launched child handle before touching fixture-owned data.
-    verify_created_child(child, profile);
+Observation observe(Child& child, bool reopen = false) {
+    // The child and fresh profile are permanently paired by launch().
+    // Never accept a second caller-selected path or profile for this child.
+    verify_created_child(child);
+    const auto& profile = owned_profile(child);
     const auto path = profile.folder / (reopen ? L"observation-reopen" : L"observation");
     const ULONGLONG deadline = GetTickCount64() + 5000;
     while (GetTickCount64() < deadline) {
@@ -293,7 +310,7 @@ Observation observe(const Profile& profile, Child& child, bool reopen = false) {
                     && before.nFileSizeLow == after.nFileSizeLow
                     && (after.dwFileAttributes & not_regular) == 0,
                 "fixture-file-changed");
-            verify_created_child(child, profile);
+            verify_created_child(child);
             return value;
         }
         DWORD status = GetLastError();
@@ -305,7 +322,9 @@ Observation observe(const Profile& profile, Child& child, bool reopen = false) {
     }
     throw Failure{"observation-timeout", WAIT_TIMEOUT};
 }
-void stop(const Profile& profile, Child& child) {
+void stop(Child& child) {
+    verify_created_child(child);
+    const auto& profile = owned_profile(child);
     const char marker = 'x'; write(profile.folder / L"stop", &marker, 1);
     require(WaitForSingleObject(child.process.hProcess, 3000) == WAIT_OBJECT_0, "fixture-normal-stop");
     DWORD code = 0; require(GetExitCodeProcess(child.process.hProcess, &code) != 0 && code == 0, "fixture-normal-exit");
@@ -342,20 +361,22 @@ int parent(const fs::path& output, bool negative_control) {
         "new-private-roaming-folders");
     write(first_roaming / L"canary", &marker, 1);
     write(second_roaming / L"canary", &marker, 1);
+    // Profile objects were constructed before these borrowed owner leases;
+    // explicit process-handle release precedes profile cleanup below.
     Child a, b;
     launch(a, binary, root, first, second);
     // Deliberately reuse token A only in the explicit red-capable synthetic control.
     launch(b, binary, root, negative_control ? first : second, first);
     require(token_matches(a.process.hProcess, first.sid) && token_matches(b.process.hProcess, second.sid), "actual-distinct-container-tokens");
-    const auto left = observe(first, a), right = observe(second, b);
+    const auto left = observe(a), right = observe(b);
     const DWORD required = OWN_FILE | PEER_DENIED | HOST_DENIED | MUTEX_PRIVATE
         | CUSTOM_ROAMING_OWN | CUSTOM_ROAMING_PEER_DENIED | CUSTOM_ROAMING_CREATED;
     require((left.flags & required) == required && (right.flags & required) == required,
         "synthetic-isolation-contract");
     require(WaitForSingleObject(a.process.hProcess, 0) == WAIT_TIMEOUT && WaitForSingleObject(b.process.hProcess, 0) == WAIT_TIMEOUT, "concurrent-fixtures");
-    stop(first, a);
+    stop(a);
     require(WaitForSingleObject(b.process.hProcess, 0) == WAIT_TIMEOUT, "other-fixture-survives");
-    stop(second, b);
+    stop(b);
     // Normal-stop sentinels belong only to this run. Remove them before a
     // second launch; otherwise the reopened child would immediately exit and
     // produce a false persistence/lifetime failure. Preserve both canaries.
@@ -371,8 +392,8 @@ int parent(const fs::path& output, bool negative_control) {
     require(token_matches(reopened_a.process.hProcess, first.sid)
         && token_matches(reopened_b.process.hProcess, second.sid),
         "reopened-distinct-container-tokens");
-    const auto reopened_left = observe(first, reopened_a, true);
-    const auto reopened_right = observe(second, reopened_b, true);
+    const auto reopened_left = observe(reopened_a, true);
+    const auto reopened_right = observe(reopened_b, true);
     const DWORD persisted = CUSTOM_ROAMING_OWN | CUSTOM_ROAMING_PEER_DENIED
         | CUSTOM_ROAMING_REOPENED;
     require((reopened_left.flags & persisted) == persisted
@@ -381,10 +402,10 @@ int parent(const fs::path& output, bool negative_control) {
     require(WaitForSingleObject(reopened_a.process.hProcess, 0) == WAIT_TIMEOUT
         && WaitForSingleObject(reopened_b.process.hProcess, 0) == WAIT_TIMEOUT,
         "concurrent-reopened-fixtures");
-    stop(first, reopened_a);
+    stop(reopened_a);
     require(WaitForSingleObject(reopened_b.process.hProcess, 0) == WAIT_TIMEOUT,
         "other-reopened-fixture-survives");
-    stop(second, reopened_b);
+    stop(reopened_b);
     CloseHandle(reopened_a.process.hProcess); CloseHandle(reopened_a.process.hThread); reopened_a.process = {};
     CloseHandle(reopened_b.process.hProcess); CloseHandle(reopened_b.process.hThread); reopened_b.process = {};
     // Close process/thread handles before deleting only the two profiles created above.
