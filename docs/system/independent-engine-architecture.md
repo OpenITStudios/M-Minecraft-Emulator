@@ -11,6 +11,18 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Process-scoped pending private-root observation (22 October 2026)
+
+The existing Windows read-only root inspector is now composable with the
+canonical pinned-process observer: MC02–MC04, exact PID/creation FILETIME
+and AppContainer token category are checked before/after directory ACL
+inspection. The resulting `PendingPrivateRootInspection` is a diagnostic,
+**not a directory access capability** or an identity join between an
+AppContainer SID and a directory owner. A future original owner must
+authenticate that relationship and its complete ancestor chain before
+using filesystem paths or moving any game data.
+
+
 ### Bounded private-root ACL denial review (22 October 2026)
 
 The unmounted Windows directory HANDLE observer rejects known broad

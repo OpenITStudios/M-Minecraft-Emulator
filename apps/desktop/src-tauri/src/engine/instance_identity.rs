@@ -420,6 +420,70 @@ pub(crate) fn inspect_private_root_handle_source(
     windows::inspect_directory_handle(opened)
 }
 
+// This is intentionally *not* an ownership or access capability. A trusted
+// original profile owner must later prove the root's ACL/ancestor provenance
+// and AppContainer SID membership; a token category alone is insufficient.
+#[cfg(windows)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct PendingPrivateRootInspection {
+    slot: SessionSlot,
+    process: ProcessIdentity,
+    directory: PrivateRootObjectIdentity,
+}
+
+#[cfg(windows)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PrivateRootObservationError {
+    InvalidSlotOrProcess,
+    StaleProcess,
+    NotAppContainer,
+    Native(NativePortError),
+    Directory(std::io::ErrorKind),
+}
+
+#[cfg(windows)]
+fn validate_private_root_observation(
+    slot: SessionSlot,
+    expected: ProcessIdentity,
+    before: ProcessObservation,
+    after: ProcessObservation,
+) -> Result<(), PrivateRootObservationError> {
+    if slot.is_host_native() || expected.pid == 0 || expected.created_file_time == 0 {
+        return Err(PrivateRootObservationError::InvalidSlotOrProcess);
+    }
+    if before.identity != expected || after != before {
+        return Err(PrivateRootObservationError::StaleProcess);
+    }
+    if before.containment != ProcessContainment::AppContainerTokenObserved {
+        return Err(PrivateRootObservationError::NotAppContainer);
+    }
+    Ok(())
+}
+
+/// Reads one already-open root HANDLE between two exact process observations.
+/// Even a successful report cannot prove the root belongs to this process,
+/// that the AppContainer is unique, or that Minecraft resolves files here.
+#[cfg(windows)]
+pub(crate) fn inspect_private_root_for_process_source(
+    slot: SessionSlot,
+    expected: ProcessIdentity,
+    opened: &std::fs::File,
+) -> Result<PendingPrivateRootInspection, PrivateRootObservationError> {
+    if slot.is_host_native() || expected.pid == 0 || expected.created_file_time == 0 {
+        return Err(PrivateRootObservationError::InvalidSlotOrProcess);
+    }
+    let observer = WindowsProcessObserver;
+    let before = observer.observe_exact(expected).map_err(PrivateRootObservationError::Native)?;
+    // Avoid even reading a directory when the observed process is not
+    // AppContainer-scoped. This does not assert owner SID equality.
+    validate_private_root_observation(slot, expected, before, before)?;
+    let directory = inspect_private_root_handle_source(opened)
+        .map_err(|e| PrivateRootObservationError::Directory(e.kind()))?;
+    let after = observer.observe_exact(expected).map_err(PrivateRootObservationError::Native)?;
+    validate_private_root_observation(slot, expected, before, after)?;
+    Ok(PendingPrivateRootInspection { slot, process: expected, directory })
+}
+
 // Synthetic-only bounded native FILE-handle reader. The caller MUST have
 // created/owned the fixture child and independently established which fresh
 // AppContainer profile contains this ALREADY OPENED file handle. This routine
@@ -1868,6 +1932,69 @@ mod tests {
         let key = ProcessIdentity::checked(52, 133400000000000052).unwrap();
         assert_eq!(inspect_process_image_provenance_source(key),
             Err(NativePortError::NotImplemented));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn pending_root_cannot_bind_host_zero_or_stale_process() {
+        let valid = ProcessIdentity::checked(700, 133400000000000700).unwrap();
+        let observed = ProcessObservation {
+            identity: valid,
+            containment: ProcessContainment::AppContainerTokenObserved,
+            official_image_signature_observed: false,
+            visible_window_observed: false,
+        };
+        for slot in [SessionSlot::Mc01, SessionSlot::Mc02] {
+            for invalid in [
+                ProcessIdentity { pid: 0, created_file_time: valid.created_file_time },
+                ProcessIdentity { pid: valid.pid, created_file_time: 0 },
+            ] {
+                assert_eq!(
+                    validate_private_root_observation(slot, invalid, observed, observed),
+                    Err(PrivateRootObservationError::InvalidSlotOrProcess),
+                );
+            }
+        }
+        assert_eq!(
+            validate_private_root_observation(SessionSlot::Mc01, valid, observed, observed),
+            Err(PrivateRootObservationError::InvalidSlotOrProcess),
+        );
+        let stale = ProcessObservation {
+            identity: ProcessIdentity::checked(valid.pid, valid.created_file_time + 1).unwrap(),
+            ..observed
+        };
+        assert_eq!(
+            validate_private_root_observation(SessionSlot::Mc02, valid, observed, stale),
+            Err(PrivateRootObservationError::StaleProcess),
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn pending_root_requires_appcontainer_and_stable_observation() {
+        let valid = ProcessIdentity::checked(704, 133400000000000704).unwrap();
+        let isolated = ProcessObservation {
+            identity: valid,
+            containment: ProcessContainment::AppContainerTokenObserved,
+            official_image_signature_observed: false,
+            visible_window_observed: false,
+        };
+        let normal = ProcessObservation {
+            containment: ProcessContainment::NoAppContainerToken,
+            ..isolated
+        };
+        assert_eq!(
+            validate_private_root_observation(SessionSlot::Mc02, valid, normal, normal),
+            Err(PrivateRootObservationError::NotAppContainer),
+        );
+        assert_eq!(
+            validate_private_root_observation(SessionSlot::Mc03, valid, isolated, normal),
+            Err(PrivateRootObservationError::StaleProcess),
+        );
+        assert!(validate_private_root_observation(
+            SessionSlot::Mc04, valid, isolated, isolated
+        ).is_ok());
+        // A successful predicate is only one data-point, never ACL/owner proof.
     }
 
     #[test]

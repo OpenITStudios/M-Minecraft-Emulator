@@ -1,5 +1,28 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — process-bound pending root observation, 22 October 2026
+
+Added a Windows-only `inspect_private_root_for_process_source` to the
+existing desktop identity owner. The adapter refuses native MC01, zero
+PID/FILETIME and a non-AppContainer process before inspecting a directory
+HANDLE, then rechecks the full process observation after ACL inspection.
+A stale/reused process or changed containment makes the entire result
+invalid. The output is strictly `PendingPrivateRootInspection`, carrying
+slot, process key and directory file identity privately. It is unmounted,
+returns no path, credential, ACL bytes or root access permission and cannot
+select/launch/provision an isolated Minecraft session.
+
+Two Rust source regression tests cover MC01/invalid keys, stale PID/FILETIME,
+non-AppContainer and category change, authored NOT_EXECUTED. Windows compiler
+and game/runtime execution remain NOT_EXECUTED. An observed AppContainer
+category DOES NOT prove its SID matches the root's DACL owner or that
+the root is the game's Roaming/HKCU view.
+
+**Next:** Authenticate expected container SID and actual directory owner,
+with safe ancestor traversal and Windows effective access proof, before
+allowing any private profile file operation.
+
+
 ## Independent engine — bounded private directory ACE denylist, 22 October 2026
 
 The existing unmounted Windows directory HANDLE inspector now validates
