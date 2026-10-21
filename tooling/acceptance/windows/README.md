@@ -2,6 +2,33 @@
 
 ## Independent native AppContainer proof (synthetic only)
 
+### Optional two-process application-hive load-lock probe
+
+Use `test-appcontainer-isolation.ps1 -VerifyRegistryAppHivePeer`
+to run an additional source-only native fixture mode
+`--apphive-peer-fixture`. The parent first builds two **new**
+disposable hive files and checks fixed synthetic markers and
+close/reload persistence. It then starts two short-lived, separate
+instances of the **same fixture executable**. Each child receives
+only `A` or `B` as its argument and inherits the new hive-root
+directory as its working directory, not a caller-controlled hive path.
+Each child loads/reads its **unlocked own hive** while the parent
+holds `REG_PROCESS_APPKEY` on the opposite one. Only a recognized
+access/sharing/busy/lock refusal for the opposite file counts as
+an observed *process-level load lock*; unexpected success or an
+unrecognized error fails the test. Both directions are required.
+
+The schema-2 sanitized receipt reports
+`bidirectionalProcessLoadLocks=OBSERVED` only after both children
+return successfully. It keeps `peerProcessDenial=NOT_EXECUTED`,
+`hostHKCUIsolation=NOT_EXECUTED`, and
+`minecraftAcceptance=NOT_EXECUTED`, because a load lock is NOT
+proof of registry ACL protection, separate HKCU namespaces, separate
+accounts or Minecraft compatibility. The children are ordinary
+synthetic test processes—not signed Minecraft or AppContainer clients.
+The original `-VerifyRegistryAppHive` mode remains unchanged.
+All Windows/MSVC execution is **NOT_EXECUTED** in GitHub-only work.
+
 ### Opt-in RegLoadAppKey application-hive fixture
 
 Use `./tooling/acceptance/windows/test-appcontainer-isolation.ps1

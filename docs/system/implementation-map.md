@@ -25,6 +25,15 @@ Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
 [architecture](architecture.md) and [feasibility](independent-isolation.md).
 
+The optional `-VerifyRegistryAppHivePeer` source route now
+tests `REG_PROCESS_APPKEY` **load-lock behavior across two separate
+synthetic processes**. One hive is unloaded and readable by the
+child while the other is held open by the parent; then the roles
+reverse. Only a recognized load refusal counts, and the JSON
+receipt continues to mark **real peer registry ACL isolation and
+HKCU/Minecraft separation as NOT_EXECUTED**. No host registry keys,
+accounts or game worlds are accessed.
+
 An opt-in synthetic application-hive phase has been added to
 `tooling/acceptance/windows/appcontainer-probe.cpp`, reachable
 through `-VerifyRegistryAppHive` in its existing PowerShell runner.

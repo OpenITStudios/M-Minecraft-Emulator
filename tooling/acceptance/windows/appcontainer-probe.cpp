@@ -548,7 +548,85 @@ void verify_apphive_file(const fs::path& root, const fs::path& file) {
         && (attrs & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) == 0,
         "apphive-file-not-regular");
 }
-int run_apphive_fixture(const fs::path& output) {
+// This child has NO pathname argument. Its cwd is the NEW fixture hive
+// directory chosen by the already trusted parent. It reads synthetic marker
+// values only and never calls registry write APIs or ordinary HKCU/HKU.
+int apphive_readonly_peer_child(const std::wstring& choice) {
+    require(choice == L"A" || choice == L"B", "apphive-child-choice");
+    const auto root = fs::current_path();
+    require(root.filename() == L"mivubi-new-apphives"
+        && root.parent_path().filename() == L"registry-fixture",
+        "apphive-child-unowned-workdir");
+    for (const auto& directory : {root, root.parent_path()}) {
+        const auto attrs = GetFileAttributesW(directory.c_str());
+        require(attrs != INVALID_FILE_ATTRIBUTES
+            && (attrs & FILE_ATTRIBUTE_DIRECTORY) != 0
+            && (attrs & FILE_ATTRIBUTE_REPARSE_POINT) == 0,
+            "apphive-child-reparse-directory");
+    }
+    const auto a = root / L"synthetic-A.hiv";
+    const auto b = root / L"synthetic-B.hiv";
+    verify_apphive_file(root, a);
+    verify_apphive_file(root, b);
+
+    const bool choose_a = choice == L"A";
+    const auto own = choose_a ? a : b;
+    const auto peer = choose_a ? b : a;
+    const DWORD marker = choose_a ? 0xA11CE001 : 0xB11CE002;
+    AppHive own_hive;
+    // The parent has closed the child's OWN hive. Loading/reading its
+    // existing value must succeed without parent intervention or writes.
+    load_fixture_apphive(own, own_hive);
+    require(apphive_marker_matches(own_hive, marker), "apphive-child-own-marker");
+
+    // The other hive is still held by the parent using REG_PROCESS_APPKEY.
+    // Its refusal measures only process-scoped load exclusivity, not ACL
+    // isolation, HKCU redirection or inaccessible account data.
+    HKEY peer_key = nullptr;
+    const auto result = RegLoadAppKeyW(
+        peer.c_str(), &peer_key, KEY_QUERY_VALUE, REG_PROCESS_APPKEY, 0);
+    if (peer_key) {
+        RegCloseKey(peer_key);
+        throw Failure{"apphive-peer-load-returned-handle", ERROR_INVALID_DATA};
+    }
+    if (result == ERROR_SUCCESS) {
+        throw Failure{"apphive-peer-load-unexpected-success", ERROR_INVALID_DATA};
+    }
+    // Unknown failures cannot be misreported as an observed load lock.
+    require(result == ERROR_ACCESS_DENIED || result == ERROR_SHARING_VIOLATION
+        || result == ERROR_LOCK_VIOLATION || result == ERROR_BUSY,
+        "apphive-peer-load-not-a-recognized-refusal");
+    own_hive.close();
+    return 0;
+}
+
+void run_apphive_peer_subprocess(const fs::path& root, const wchar_t* own) {
+    wchar_t binary[32768]{};
+    const auto length = GetModuleFileNameW(nullptr, binary, 32768);
+    require(length != 0 && length < 32768, "apphive-peer-fixture-executable");
+    const fs::path image(binary);
+    // Child command line carries only a fixed A/B choice, not hive paths.
+    std::wstring command = quote(image) + L" --apphive-peer-child " + own;
+    STARTUPINFOW startup{};
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION process{};
+    require(CreateProcessW(image.c_str(), command.data(), nullptr, nullptr,
+        FALSE, CREATE_NO_WINDOW, nullptr, root.c_str(), &startup, &process) != 0,
+        "apphive-peer-create-child");
+    Handle owned_process(process.hProcess), owned_thread(process.hThread);
+    const auto observed = WaitForSingleObject(owned_process.value, 5000);
+    if (observed != WAIT_OBJECT_0) {
+        // Only this exact disposable test child is eligible for termination.
+        TerminateProcess(owned_process.value, 99);
+        WaitForSingleObject(owned_process.value, 3000);
+        throw Failure{"apphive-peer-child-timeout", WAIT_TIMEOUT};
+    }
+    DWORD exit_code = 0;
+    require(GetExitCodeProcess(owned_process.value, &exit_code) != 0
+        && exit_code == 0, "apphive-peer-child-rejected");
+}
+
+int run_apphive_fixture(const fs::path& output, bool verify_peer_load = false) {
     const auto root = fs::absolute(output / L"mivubi-new-apphives");
     // Never adopt an existing tree or hive. Output is a new random workspace
     // directory created by the opt-in PowerShell fixture runner.
@@ -592,6 +670,33 @@ int run_apphive_fixture(const fs::path& output) {
     }
     verify_apphive_file(root, a);
     verify_apphive_file(root, b);
+    if (verify_peer_load) {
+        // Test both directions: independently load the child's own hive
+        // while the parent holds only the OTHER hive's process appkey lock.
+        {
+            AppHive parent_b;
+            load_fixture_apphive(b, parent_b);
+            run_apphive_peer_subprocess(root, L"A");
+            parent_b.close();
+        }
+        {
+            AppHive parent_a;
+            load_fixture_apphive(a, parent_a);
+            run_apphive_peer_subprocess(root, L"B");
+            parent_a.close();
+        }
+        // A lock refusal is not a registry ACL or namespace isolation proof.
+        std::printf(
+            "{\"schema\":2,\"result\":\"PASS\",\"syntheticOnly\":true,"
+            "\"twoNewAppHives\":true,\"separateHandleMarkers\":true,"
+            "\"persistedAfterHandleReload\":true,"
+            "\"bidirectionalProcessLoadLocks\":\"OBSERVED\","
+            "\"peerProcessDenial\":\"NOT_EXECUTED\","
+            "\"hostHKCUIsolation\":\"NOT_EXECUTED\","
+            "\"minecraftAcceptance\":\"NOT_EXECUTED\","
+            "\"isolatedLaunchAllowed\":false}\n");
+        return 0;
+    }
     // Do not claim cross-process denial or real registry redirection.
     std::printf(
         "{\"schema\":1,\"result\":\"PASS\",\"syntheticOnly\":true,"
@@ -607,11 +712,18 @@ int run_apphive_fixture(const fs::path& output) {
 }
 
 int wmain(int argc, wchar_t** argv) {
+    // Silent, read-only subcommand: even an expected failure MUST NOT
+    // contaminate the parent's single JSON receipt on inherited stdout.
+    if (argc == 3 && std::wstring(argv[1]) == L"--apphive-peer-child") {
+        try { return apphive_readonly_peer_child(argv[2]); }
+        catch (...) { return 18; }
+    }
     try {
         if (argc == 5 && std::wstring(argv[1]) == L"--child") return contained(argv[2], argv[3], argv[4], false);
         if (argc == 5 && std::wstring(argv[1]) == L"--child-reopen") return contained(argv[2], argv[3], argv[4], true);
         if (argc == 3 && std::wstring(argv[1]) == L"--run") return parent(argv[2], false);
         if (argc == 3 && std::wstring(argv[1]) == L"--apphive-fixture") return run_apphive_fixture(argv[2]);
+        if (argc == 3 && std::wstring(argv[1]) == L"--apphive-peer-fixture") return run_apphive_fixture(argv[2], true);
         if (argc == 4 && std::wstring(argv[1]) == L"--run-rust-handoff") {
             const auto helper = fs::absolute(argv[3]);
             return parent(argv[2], false, &helper);

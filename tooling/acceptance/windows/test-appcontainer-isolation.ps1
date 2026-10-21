@@ -1,6 +1,6 @@
 # Explicit synthetic-only native Windows proof; no game/account/service operations.
 [CmdletBinding()]
-param([switch]$VerifyNegativeControl, [switch]$VerifyRustHandoff, [switch]$VerifyRegistryAppHive)
+param([switch]$VerifyNegativeControl, [switch]$VerifyRustHandoff, [switch]$VerifyRegistryAppHive, [switch]$VerifyRegistryAppHivePeer)
 $ErrorActionPreference='Stop'
 if($env:OS -ne 'Windows_NT'){throw 'Windows AppContainer fixture requires Windows.'}
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
@@ -59,15 +59,19 @@ function Invoke-SyntheticProbe([string]$Mode,[string]$Directory){
     if($Mode -eq '--negative-control'){
         if($process.ExitCode -ne 1 -or $proof.result -ne 'FAIL' -or $proof.stage -ne 'actual-distinct-container-tokens' -or -not $proof.profilesRemoved){throw "Negative control did not fail safely at its expected identity check; inspect $Directory"}
     }elseif($process.ExitCode -ne 0 -or $proof.result -ne 'PASS'){throw "Native AppContainer proof failed; evidence retained in $Directory"}
-    if($Mode -eq '--apphive-fixture'){
+    if($Mode -eq '--apphive-fixture' -or $Mode -eq '--apphive-peer-fixture'){
         $expected=@('schema','result','syntheticOnly','twoNewAppHives',
             'separateHandleMarkers','persistedAfterHandleReload',
             'peerProcessDenial','hostHKCUIsolation','minecraftAcceptance',
             'isolatedLaunchAllowed')
+        $withPeer=$Mode -eq '--apphive-peer-fixture'
+        if($withPeer){$expected+= 'bidirectionalProcessLoadLocks'}
         $actual=@($proof.PSObject.Properties.Name)
         if(@($actual|Where-Object {$_ -notin $expected}).Count -ne 0 -or
            @($expected|Where-Object {$_ -notin $actual}).Count -ne 0 -or
-           $proof.schema -ne 1 -or $proof.syntheticOnly -ne $true -or
+           $proof.schema -ne $(if($withPeer){2}else{1}) -or
+           ($withPeer -and $proof.bidirectionalProcessLoadLocks -ne 'OBSERVED') -or
+           $proof.syntheticOnly -ne $true -or
            $proof.twoNewAppHives -ne $true -or
            $proof.separateHandleMarkers -ne $true -or
            $proof.persistedAfterHandleReload -ne $true -or
@@ -96,11 +100,13 @@ function Invoke-SyntheticProbe([string]$Mode,[string]$Directory){
     }finally{$process.Dispose()}
 }
 Invoke-SyntheticProbe '--run' $output
-if($VerifyRegistryAppHive){
-    # New output owned by this invocation; no host HKCU/HKU path is passed.
+if($VerifyRegistryAppHive -or $VerifyRegistryAppHivePeer){
+    # A uniquely new directory and a single, explicit hive test mode.
+    # The child inherits cwd from the native parent and receives only A/B.
     $registry=Join-Path $output 'registry-fixture'
     [IO.Directory]::CreateDirectory($registry)|Out-Null
-    Invoke-SyntheticProbe '--apphive-fixture' $registry
+    $registryMode=if($VerifyRegistryAppHivePeer){'--apphive-peer-fixture'}else{'--apphive-fixture'}
+    Invoke-SyntheticProbe $registryMode $registry
 }
 if($VerifyNegativeControl){
     $negative=Join-Path $output 'negative-control'

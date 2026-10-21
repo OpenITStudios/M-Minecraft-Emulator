@@ -1,5 +1,34 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — two-process application-hive load-lock trial, 22 October 2026
+
+**Source-first extension:** the existing C++ application-hive
+fixture accepts explicit `--apphive-peer-fixture` and spawns two
+short-lived read-only child processes. Each loads its unlocked
+newly owned hive, reads the fixed own marker and attempts to
+load the opposite hive while the original parent holds it with
+`REG_PROCESS_APPKEY`. Only known access/sharing/busy/lock
+refusals count as observations; unexpected success or unrelated
+API errors fail the fixture. Both A/B directions are required.
+An opt-in PowerShell switch `-VerifyRegistryAppHivePeer` selects
+this mode. Exact schema-2 receipt validates
+`bidirectionalProcessLoadLocks=OBSERVED` while
+`peerProcessDenial`, `hostHKCUIsolation` and
+`minecraftAcceptance` remain `NOT_EXECUTED`.
+
+**Evidence ceiling:** all source committed to Local; C++/PowerShell
+compilation, native Windows process-hive checks, Minecraft and
+four-client acceptance **NOT_EXECUTED**. This proves no registry
+ACL/HKCU redirection, Microsoft broker or game isolation. No
+additional registry writes outside new disposable hive files;
+no account or world access, services, drivers, installer, main
+or GitHub Actions changes.
+
+**Next:** review Windows compilation compatibility, strengthen
+real AppContainer cross-process evidence without touching host
+HKCU, then evaluate whether any documented mechanism can
+transparently isolate unmodified Minecraft's registry usage.
+
 ## Independent engine — opt-in application-hive fixture source, 22 October 2026
 
 Implemented a bounded optional `--apphive-fixture` mode in the

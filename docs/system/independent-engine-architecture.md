@@ -529,6 +529,33 @@ a fresh, isolated hive and its original child identity is verified.
 The new files are retained only inside the test workspace, not
 installed, reused or used as Minecraft profile data.
 
+### Independent synthetic peer-process load-lock trial — source-only
+
+The optional `--apphive-peer-fixture` extends only the
+disposable `RegLoadAppKeyW` fixture. After verifying two fresh
+hives and marker persistence, the original parent keeps hive B
+loaded under `REG_PROCESS_APPKEY` and starts a short-lived child
+that loads/reads **unlocked** hive A but must fail to load hive B.
+It then reverses the roles. Both probes require an observable
+own-marker read and a recognized Win32 access/sharing/lock/busy
+refusal for the opposite hive; any successful peer load or unrelated
+error fails the stage. The children take only the literal A/B
+selector plus a fixture-owned inherited working directory, not
+arbitrary registry paths or account credentials. They never write
+hives; only the original parent creates/writes disposable markers.
+
+A schema-2 receipt may report
+`bidirectionalProcessLoadLocks=OBSERVED`, but continues to report
+`peerProcessDenial=NOT_EXECUTED` and
+`hostHKCUIsolation=NOT_EXECUTED`. The former observation measures
+exclusive **application-hive loading while another process holds
+`REG_PROCESS_APPKEY`**, not protected HKCU, registry ACL data
+isolation, process-specific application namespace, Minecraft sign-in
+or four playable clients. On real Windows the absence of a recognized
+lock outcome remains a failure/unknown, not a reason to widen access.
+A later AppContainer-specific peer and true per-process registry-view
+acceptance are separate milestones.
+
 ## Source-first implementation sequence
 
 1. **Domain baseline (authored):** typed identity, operation classification,
