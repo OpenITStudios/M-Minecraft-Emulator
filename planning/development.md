@@ -1,5 +1,40 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — classify AppContainer roaming NO-GO before provider work, 22 October 2026
+
+The canonical offline synthetic fixture reviewer in
+`tooling/acceptance/evaluate-appcontainer-isolation.mjs` now returns a
+freshly derived `candidateDisposition` and bounded `mechanismBoundaries`.
+If a cooperative fixture actually queries FOLDERID_RoamingAppData and
+reports it outside its own AppContainer, the candidate is classified as
+`NO_GO_OBSERVED_ROAMING_BOUNDARY`. A failed/missing query or apparently
+private-looking paths remain `UNVERIFIED_NO_GAME_ACCEPTANCE`. The review
+explicitly keeps HKCU registry and Microsoft broker `NOT_OBSERVED`, and
+Minecraft game filesystem `NOT_EXECUTED`, regardless of synthetic
+private folder canaries or a redirected APPDATA environment variable.
+No new readiness state, platform provider, launch permission, or extra
+fixture schema field is created. The existing desktop gate stays blocked.
+
+Regression source added for historical outside-roaming, all-private path
+reports, missing roaming query, and synthetic private-storage persistence
+that must NOT hide the roaming Known Folder incompatibility. JavaScript
+tests authored NOT_EXECUTED; no fixture, Windows or game execution.
+This is evidence interpretation, not a claim to have fixed redirection.
+
+Confirmed from Microsoft's RegLoadAppKeyW contract: an application hive
+cannot be addressed through ordinary HKCU/HKU namespaces. It therefore
+cannot transparently redirect unmodified Minecraft's existing HKCU calls.
+Microsoft's MSIX filesystem/registry virtualization descriptions apply
+to **packaged applications**, not proof of equivalent behavior for the
+current unpackaged AppContainer prototype. Neither supplies an approved
+Minecraft-specific workaround.
+
+**Next:** choose and source-evaluate an independently supported Windows
+mechanism that meets the real Roaming/HKCU/broker requirements before
+adding any Minecraft-specific independent Launch/Provision adapter.
+Do not turn a NO-GO mechanism into production by extending synthetic tests.
+
+
 ## Independent engine — audit OS AppContainer LocalAppData root by SID, 22 October 2026
 
 The existing unmounted process-bound private-root inspection now obtains

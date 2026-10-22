@@ -36,6 +36,15 @@ test("prior host observation never makes game launch available", () => {
   assert.ok(result.risks.includes("ROAMING_KNOWN_FOLDER_OUTSIDE_SYNTHETIC_PROFILE"));
   assert.equal(result.isolatedLaunchAllowed, false);
   assert.equal(result.productionProviderSelected, false);
+  assert.equal(result.candidateDisposition, "NO_GO_OBSERVED_ROAMING_BOUNDARY");
+  assert.deepEqual(result.mechanismBoundaries, {
+    localKnownFolder: "PATH_REPORTED_ONLY",
+    roamingEnvironment: "NOT_PRIVATE_IN_SAMPLE",
+    roamingKnownFolder: "NOT_PRIVATE_IN_SAMPLE",
+    hkcuRegistry: "NOT_OBSERVED",
+    microsoftBroker: "NOT_OBSERVED",
+    minecraftGameFilesystem: "NOT_EXECUTED"
+  });
   assert.equal(result.productAcceptance, "NOT_EXECUTED");
   assert.equal(result.educationAuthenticationVerified, false);
 });
@@ -50,8 +59,31 @@ test("all paths reported under profile are still not proof of auth or real file 
   }
   const result = evaluateAppContainerIsolation(report);
   assert.equal(result.roamingPathObservation, "PRIVATE_PATHS_REPORTED_ONLY");
+  assert.equal(result.candidateDisposition, "UNVERIFIED_NO_GAME_ACCEPTANCE");
+  assert.equal(result.mechanismBoundaries.roamingKnownFolder, "PATH_REPORTED_ONLY");
+  assert.equal(result.mechanismBoundaries.hkcuRegistry, "NOT_OBSERVED");
+  assert.equal(result.mechanismBoundaries.microsoftBroker, "NOT_OBSERVED");
   assert.equal(result.knownFolderDataAccessProven, false);
   assert.equal(result.isolatedLaunchAllowed, false);
+});
+
+test("roaming mechanism blocks candidate even if synthetic private roaming persistence passed", () => {
+  const source = fixture();
+  // Synthetic private storage persistence is a separate mechanism from
+  // SHGetKnownFolderPath(FOLDERID_RoamingAppData) used by normal applications.
+  source.syntheticPrivateRoamingPersistsAfterRestart = true;
+  source.roamingEnvironmentUnderContainer = true;
+  for (const child of source.processPaths) {
+    child.roamingEnvironment = "UNDER_EXPECTED_PROFILE";
+  }
+  const review = evaluateAppContainerIsolation(source);
+  assert.equal(review.syntheticPrivateStorageAcrossProcessRestart, "REPORTED_PASS");
+  assert.equal(review.candidateDisposition, "NO_GO_OBSERVED_ROAMING_BOUNDARY");
+  assert.equal(review.mechanismBoundaries.roamingEnvironment, "PATH_REPORTED_ONLY");
+  assert.equal(review.mechanismBoundaries.roamingKnownFolder, "NOT_PRIVATE_IN_SAMPLE");
+  assert.equal(review.mechanismBoundaries.hkcuRegistry, "NOT_OBSERVED");
+  assert.equal(review.educationAuthenticationVerified, false);
+  assert.equal(review.isolatedLaunchAllowed, false);
 });
 
 test("unknown known-folder query never becomes private", () => {
@@ -60,6 +92,8 @@ test("unknown known-folder query never becomes private", () => {
   report.processPaths[0].roamingKnownFolder = "UNAVAILABLE";
   const result = evaluateAppContainerIsolation(report);
   assert.equal(result.roamingPathObservation, "INCOMPLETE");
+  assert.equal(result.candidateDisposition, "UNVERIFIED_NO_GAME_ACCEPTANCE");
+  assert.equal(result.mechanismBoundaries.roamingKnownFolder, "NOT_OBSERVED");
   assert.ok(result.risks.includes("ROAMING_KNOWN_FOLDER_NOT_OBSERVED"));
 });
 

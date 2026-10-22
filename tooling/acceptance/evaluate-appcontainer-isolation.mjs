@@ -68,6 +68,32 @@ export function evaluateAppContainerIsolation(report) {
     ? "INCOMPLETE"
     : report.roamingEnvironmentUnderContainer && report.roamingKnownFolderUnderContainer
       ? "PRIVATE_PATHS_REPORTED_ONLY" : "NOT_FULLY_PRIVATE_PATHS_REPORTED";
+
+  // Candidate-only mechanism decision, derived afresh from each disposable
+  // synthetic receipt. No durable readiness bit and no replacement for the
+  // canonical desktop Launch/Provision gate.
+  //
+  // Roaming known-folder reported outside the isolated profile is a hard
+  // blocker *for this observed mechanism*, not an assumption that a private
+  // directory or APPDATA environment override fixes unmodified Minecraft.
+  // HKCU, WAM and actual game file access are never measured by this fixture.
+  const candidateDisposition = report.roamingKnownFolderQuerySucceeded
+    && !report.roamingKnownFolderUnderContainer
+      ? "NO_GO_OBSERVED_ROAMING_BOUNDARY"
+      : "UNVERIFIED_NO_GAME_ACCEPTANCE";
+  const mechanismBoundaries = {
+    localKnownFolder: report.localAppDataKnownFolderRedirected
+      ? "PATH_REPORTED_ONLY" : "NOT_PRIVATE_IN_SAMPLE",
+    roamingEnvironment: report.roamingEnvironmentUnderContainer
+      ? "PATH_REPORTED_ONLY" : "NOT_PRIVATE_IN_SAMPLE",
+    roamingKnownFolder: !report.roamingKnownFolderQuerySucceeded
+      ? "NOT_OBSERVED"
+      : report.roamingKnownFolderUnderContainer
+        ? "PATH_REPORTED_ONLY" : "NOT_PRIVATE_IN_SAMPLE",
+    hkcuRegistry: "NOT_OBSERVED",
+    microsoftBroker: "NOT_OBSERVED",
+    minecraftGameFilesystem: "NOT_EXECUTED"
+  };
   return {
     schema: 1,
     scope: "INDEPENDENT_APPCONTAINER_SYNTHETIC_REVIEW",
@@ -75,6 +101,8 @@ export function evaluateAppContainerIsolation(report) {
     syntheticIsolation: "REPORTED_PASS",
     syntheticPrivateStorageAcrossProcessRestart: "REPORTED_PASS",
     roamingPathObservation: pathObservation,
+    candidateDisposition,
+    mechanismBoundaries,
     processPaths: report.processPaths.map(p => ({
       fixture: p.fixture,
       localKnownFolder: p.localKnownFolder,

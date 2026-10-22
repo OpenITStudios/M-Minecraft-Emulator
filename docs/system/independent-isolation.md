@@ -123,6 +123,29 @@ akun, dunia, raw machine identity, signing material atau dump privat.
 
 ## Implementation direction
 
+### Explicit Roaming Known Folder candidate NO-GO (22 October 2026)
+
+The existing synthetic AppContainer evaluator now derives
+`NO_GO_OBSERVED_ROAMING_BOUNDARY` when the *in-process*
+`SHGetKnownFolderPath(FOLDERID_RoamingAppData)` fixture explicitly
+reports a path outside its own profile. Successful independent synthetic
+canaries and locally private directories cannot override this result.
+An unobserved Known Folder or a path that merely looks private stays
+`UNVERIFIED_NO_GAME_ACCEPTANCE`. Registry/HKCU, authentication broker
+and unmodified Education game file access remain NOT_OBSERVED/NOT_EXECUTED.
+This is an offline ephemeral candidate assessment, NOT a second lifecycle
+state, proof that all AppContainer use is impossible, or permission to
+enable a fallback.
+
+Microsoft `RegLoadAppKeyW` application hives require the returned
+root handle and are not mounted into normal HKCU. Do not mistake their
+isolated fixture markers for transparent unmodified Minecraft registry
+redirection. Likewise, MSIX package file/registry virtualization rules
+cannot simply be ascribed to the existing unpackaged AppContainer process.
+See the single source owner at
+`tooling/acceptance/evaluate-appcontainer-isolation.mjs`.
+
+
 Build the smallest independent, Minecraft-specific Windows session engine. Do not
 copy Sandboxie source or make its driver, DLL, service, box settings, feature
 certificate or scripts part of the replacement. Shared architectural ideas such
