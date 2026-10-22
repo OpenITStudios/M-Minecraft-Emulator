@@ -11,6 +11,34 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Bounded overlapped named-pipe fixture lifecycle — 22 October 2026
+
+The original one-client named-pipe fixture in
+[independent_pipe_server.rs](../../apps/desktop/src-tauri/src/engine/independent_pipe_server.rs)
+now uses FILE_FLAG_OVERLAPPED for both ConnectNamedPipe and ReadFile,
+with separate manual-reset events and native OVERLAPPED structures.
+Connect and exact-message read deadlines are 1500 ms each. A timeout
+requests cancellation of only the pending operation through CancelIoEx,
+then demands actual completion before releasing the OVERLAPPED/event
+or read buffer. If Windows cannot complete cancellation within the
+2500 ms fixture-only grace period, this disposable **test executable**
+aborts rather than permitting an asynchronous use-after-free.
+
+Two new Windows-native tests cover absent clients and a connected but
+silent client. Existing normal, oversized-message and forged identity
+fixture tests remain. All tests and Windows compilation are
+NOT_EXECUTED. This is still not a durable service listener; abort on
+unsettled IO is specifically UNSUITABLE for a production service.
+It does not implement filesystem/HKCU enforcement, WAM isolation or
+Minecraft startup and does not install/activate any Sandboxie component.
+
+Next: use the independently owned process lifecycle as a foundation
+for a durable, service-owned, cancel-safe IPC worker with authenticated
+tokens and failure recovery; never promote fixture passing to gameplay
+or isolation acceptance.
+
+
+
 ### Explicit-DACL native named-pipe server fixture (22 October 2026)
 
 The original, unmounted Windows backend

@@ -1,5 +1,29 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — cancel-safe overlapped IPC fixture, 22 October 2026
+
+Corrected the one-client native pipe fixture to use FILE_FLAG_OVERLAPPED,
+manual-reset events, bounded ConnectNamedPipe/ReadFile timeouts (1500 ms
+each), targeted CancelIoEx and completion acknowledgment before
+releasing OVERLAPPED or input bytes. For the disposable fixture only,
+an IO cancellation that fails to complete within 2500 ms aborts rather
+than risking use-after-free. Added native tests for a missing client and
+a client that connects but never sends a message; prior forged-identity,
+oversized and valid-message tests remain.
+
+**Proof:** GitHub pinned-source/static review only. Windows and Rust
+compilation, native IO cancellation tests and Minecraft gameplay are
+NOT_EXECUTED. No production service, kernel driver, game launch,
+account data, installed sandbox binaries or Tauri route changed.
+The fixture still cannot authenticate a privileged client or enforce
+filesystem/registry redirection. Aborting the process on stuck IO
+is not a suitable long-lived service recovery model.
+
+**Next:** design a durable service-owned named-pipe worker with
+independently owned IO memory, cancel-safe shutdown and an authenticated
+client/root trust boundary.
+
+
 ## Independent engine — explicit-DACL, last-message-token named-pipe fixture, 22 October 2026
 
 Added apps/desktop/src-tauri/src/engine/independent_pipe_server.rs:

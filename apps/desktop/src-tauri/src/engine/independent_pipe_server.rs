@@ -27,8 +27,8 @@ use virtual_clients_core::independent_engine::{
     decode_broker_probe, BrokerProbeKind, SessionSlot, BROKER_PROBE_BYTES,
 };
 use windows_sys::Win32::{
-    Foundation::{CloseHandle, GetLastError, HANDLE, INVALID_HANDLE_VALUE},
-    System::Threading::{GetCurrentProcess, GetCurrentThread},
+    Foundation::{CloseHandle, GetLastError, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT},
+    System::Threading::{GetCurrentProcess, GetCurrentThread, WaitForSingleObject},
 };
 use super::independent_pipe_peer::inspect_connected_server_pipe;
 
@@ -38,11 +38,35 @@ const TOKEN_SESSION_ID: u32 = 12;
 const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
 const ERROR_NO_TOKEN: u32 = 1008;
 const ERROR_PIPE_CONNECTED: u32 = 535;
+const ERROR_IO_PENDING: u32 = 997;
+const ERROR_MORE_DATA: u32 = 234;
+const FILE_FLAG_OVERLAPPED: u32 = 0x4000_0000;
+// Deadlines apply ONLY to the disposable fixture. A long-lived broker needs
+// a separate durable worker, never this test-only abort-on-stuck-I/O policy.
+const CONNECT_WAIT_MS: u32 = 1_500;
+const RECEIVE_WAIT_MS: u32 = 1_500;
+const CANCEL_GRACE_MS: u32 = 2_500;
 const PIPE_ACCESS_INBOUND: u32 = 0x0000_0001;
 const FILE_FLAG_FIRST_PIPE_INSTANCE: u32 = 0x0008_0000;
 const PIPE_TYPE_MESSAGE: u32 = 0x0000_0004;
 const PIPE_READMODE_MESSAGE: u32 = 0x0000_0002;
 const PIPE_REJECT_REMOTE_CLIENTS: u32 = 0x0000_0008;
+
+/// Native OVERLAPPED ABI: two ULONG_PTR fields, offset union, event HANDLE.
+/// The offset union is zero for pipes and is not treated as a pointer.
+#[repr(C)]
+struct NativeOverlapped {
+    internal: usize,
+    internal_high: usize,
+    offset: u32,
+    offset_high: u32,
+    event: HANDLE,
+}
+impl NativeOverlapped {
+    fn with_event(event: HANDLE) -> Self {
+        Self { internal: 0, internal_high: 0, offset: 0, offset_high: 0, event }
+    }
+}
 
 #[repr(C)]
 struct SidAndAttributes {
@@ -97,6 +121,15 @@ unsafe extern "system" {
         bytes_read: *mut u32, overlapped: *mut c_void,
     ) -> i32;
     fn DisconnectNamedPipe(pipe: HANDLE) -> i32;
+    fn CreateEventW(
+        attributes: *const c_void, manual_reset: i32, initial_state: i32,
+        name: *const u16,
+    ) -> HANDLE;
+    fn GetOverlappedResult(
+        pipe: HANDLE, overlapped: *mut NativeOverlapped,
+        transferred: *mut u32, wait: i32,
+    ) -> i32;
+    fn CancelIoEx(pipe: HANDLE, overlapped: *mut NativeOverlapped) -> i32;
 }
 
 struct OwnedHandle(HANDLE);
@@ -116,6 +149,55 @@ impl Drop for OwnedHandle {
             unsafe { CloseHandle(self.0) };
         }
     }
+}
+
+/// A manual-reset event and OVERLAPPED live together for one OS operation.
+fn make_overlapped() -> io::Result<(OwnedHandle, NativeOverlapped)> {
+    // SAFETY: Unnamed manual-reset event with one owning HANDLE wrapper.
+    let event = OwnedHandle::from_raw(unsafe {
+        CreateEventW(ptr::null(), 1, 0, ptr::null())
+    })?;
+    let state = NativeOverlapped::with_event(event.0);
+    Ok((event, state))
+}
+
+fn transferred_bytes(pipe: HANDLE, overlapped: &mut NativeOverlapped) -> io::Result<u32> {
+    let mut count = 0;
+    // SAFETY: This is called only after synchronous completion or a
+    // signaled manual-reset event. OVERLAPPED and all buffers remain alive.
+    if unsafe { GetOverlappedResult(pipe, overlapped, &mut count, 0) } == 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(count)
+    }
+}
+
+/// Never free/reuse an OVERLAPPED or ReadFile receive buffer with pending I/O.
+/// A finite timeout requests cancellation of only this operation, then waits
+/// for kernel completion. If even cancellation cannot settle within a short
+/// grace period, abort ONLY the disposable test executable rather than
+/// risking kernel writes to freed stack memory. Not a production policy.
+fn await_pending(
+    pipe: HANDLE, overlapped: &mut NativeOverlapped, deadline_ms: u32,
+) -> io::Result<u32> {
+    // SAFETY: Event and OVERLAPPED are retained while pending.
+    let state = unsafe { WaitForSingleObject(overlapped.event, deadline_ms) };
+    if state == WAIT_OBJECT_0 {
+        return transferred_bytes(pipe, overlapped);
+    }
+    let error = if state == WAIT_TIMEOUT {
+        io::Error::new(io::ErrorKind::TimedOut, "Fixture pipe operation timed out")
+    } else {
+        io::Error::last_os_error()
+    };
+    // SAFETY: Only the specific outstanding operation is canceled.
+    // Cancellation itself does not signify completion.
+    unsafe { CancelIoEx(pipe, overlapped) };
+    if unsafe { WaitForSingleObject(overlapped.event, CANCEL_GRACE_MS) } != WAIT_OBJECT_0 {
+        std::process::abort();
+    }
+    let _ = transferred_bytes(pipe, overlapped);
+    Err(error)
 }
 
 struct LocalBuffer(*mut c_void);
@@ -288,7 +370,7 @@ impl FixturePipeServer {
         let raw = unsafe {
             CreateNamedPipeW(
                 wide.as_ptr(),
-                PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED,
                 PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_REJECT_REMOTE_CLIENTS,
                 1, 0, BROKER_PROBE_BYTES as u32, 50, &attrs,
             )
@@ -297,38 +379,51 @@ impl FixturePipeServer {
         Ok(Self { handle, name })
     }
 
-    /// The caller must ALREADY have a live, connected fixture client that
-    /// wrote exactly one message. Never use blocking synchronous reads in a
-    /// privileged service; it needs overlapped I/O, deadlines/cancellation.
+    /// Single-connection fixture with bounded connect/read deadlines.
+    /// The same retained server HANDLE owns both asynchronous operations.
     fn read_preconnected_once(&self) -> io::Result<PendingFixtureMessage> {
-        // Avoid blocking ConnectNamedPipe in the unconnected case. This
-        // process ID is a diagnostic, not message or caller authentication.
-        let mut client_pid = 0u32;
-        if unsafe {
-            GetNamedPipeClientProcessId(self.handle.0, &mut client_pid)
-        } == 0 || client_pid == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::NotConnected, "Fixture has no connected pipe client",
-            ));
-        }
-        // A client connected before ConnectNamedPipe: ERROR_PIPE_CONNECTED
-        // is the documented success-equivalent. Never wait for a new client.
-        let connected = unsafe { ConnectNamedPipe(self.handle.0, ptr::null_mut()) };
-        if connected == 0 && unsafe { GetLastError() } != ERROR_PIPE_CONNECTED {
-            return Err(io::Error::last_os_error());
-        }
-        let mut frame = [0u8; BROKER_PROBE_BYTES];
-        let mut count = 0u32;
-        // SAFETY: Inbound-only message-mode server; exact frame buffer
-        // length and no OVERLAPPED pointer. Extra-long messages fail with
-        // ERROR_MORE_DATA and are NEVER decoded as a valid packet.
-        let ok = unsafe {
-            ReadFile(
-                self.handle.0, frame.as_mut_ptr().cast(),
-                BROKER_PROBE_BYTES as u32, &mut count, ptr::null_mut(),
+        let (_connect_event, mut connect_op) = make_overlapped()?;
+        // SAFETY: Server handle has FILE_FLAG_OVERLAPPED. The stack struct
+        // and its manual-reset event outlive the operation, including cancel.
+        let started = unsafe {
+            ConnectNamedPipe(
+                self.handle.0, (&mut connect_op as *mut NativeOverlapped).cast(),
             )
         };
-        if ok == 0 || count != BROKER_PROBE_BYTES as u32 {
+        if started == 0 {
+            match unsafe { GetLastError() } {
+                ERROR_PIPE_CONNECTED => {} // Client arrived before Connect.
+                ERROR_IO_PENDING => {
+                    await_pending(self.handle.0, &mut connect_op, CONNECT_WAIT_MS)?;
+                }
+                _ => return Err(io::Error::last_os_error()),
+            }
+        }
+        let (_read_event, mut read_op) = make_overlapped()?;
+        let mut frame = [0u8; BROKER_PROBE_BYTES];
+        // SAFETY: The receive buffer remains in scope until completion.
+        // lpNumberOfBytesRead may be NULL because the pipe uses overlapped I/O.
+        let started = unsafe {
+            ReadFile(
+                self.handle.0, frame.as_mut_ptr().cast(),
+                BROKER_PROBE_BYTES as u32, ptr::null_mut(),
+                (&mut read_op as *mut NativeOverlapped).cast(),
+            )
+        };
+        let count = if started != 0 {
+            transferred_bytes(self.handle.0, &mut read_op)?
+        } else {
+            match unsafe { GetLastError() } {
+                ERROR_IO_PENDING => await_pending(
+                    self.handle.0, &mut read_op, RECEIVE_WAIT_MS,
+                )?,
+                ERROR_MORE_DATA => return Err(io::Error::new(
+                    io::ErrorKind::InvalidData, "Oversized fixture pipe message",
+                )),
+                _ => return Err(io::Error::last_os_error()),
+            }
+        };
+        if count != BROKER_PROBE_BYTES as u32 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData, "Non-exact fixture pipe message",
             ));
@@ -502,6 +597,25 @@ mod tests {
         assert_eq!(
             server.read_preconnected_once().unwrap_err().kind(),
             io::ErrorKind::PermissionDenied,
+        );
+    }
+
+    #[test]
+    fn no_client_cannot_hang_in_connect() {
+        let server = FixturePipeServer::create().unwrap();
+        assert_eq!(
+            server.read_preconnected_once().unwrap_err().kind(),
+            io::ErrorKind::TimedOut,
+        );
+    }
+
+    #[test]
+    fn silent_client_cannot_hang_in_read() {
+        let server = FixturePipeServer::create().unwrap();
+        let _client = OpenOptions::new().write(true).open(&server.name).unwrap();
+        assert_eq!(
+            server.read_preconnected_once().unwrap_err().kind(),
+            io::ErrorKind::TimedOut,
         );
     }
 }
