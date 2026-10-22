@@ -1,6 +1,36 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Independent COW core — prefix policy and hierarchical rename hardening, 23 October 2026
+
+Corrected two bounded namespace gaps in the existing
+`engine/runtime-core/src/independent_engine/overlay.rs` implementation.
+Previously 1,024 private-only descendant prefixes blocked installing
+their encompassing parent even though compaction would reduce memory/
+quota use. A second child rule beneath an already enforced parent could
+also reject legitimate slot-authored private data unnecessarily. The
+common prefix-set preflight/commit now serves both tombstones and
+private-only policies, preserving existing host-denial boundaries,
+cross-surface separation and conservative rejection when a NEW rule
+would cover previously written private values.
+
+Single-leaf rename previously allowed source ancestor/descendant
+self-overlap, creating ambiguous file-like names after tombstoning.
+Both rename variants now refuse visible ancestor file leaves and
+destination subtree conflicts; the source subtree case also refuses
+simultaneously visible file leaf + descendant shape. All checks happen
+before private mutations, with original base data untouched.
+Five targeted Rust regression functions were authored.
+
+**Proof:** exact pinned GitHub source and static consumer review.
+Rust compiler/tests, Windows and Minecraft gameplay NOT_EXECUTED.
+No real game file/HKCU/WAM access, driver/service, CI, installer,
+new provider, branch main write or Launch/Provision enablement.
+
+**Next:** inspect remaining COW copy-up/partial-write provenance and
+allocation boundaries for one concrete source-verifiable defect
+before considering any native Windows enforcement.
+
 ## Independent COW core — canonical tombstone compaction and private writes, 23 October 2026
 
 Corrected a tangible full-quota COW bug in the existing source owner:

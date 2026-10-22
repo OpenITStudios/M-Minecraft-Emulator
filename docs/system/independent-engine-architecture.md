@@ -34,6 +34,33 @@ driver, existing Minecraft data, HKCU/WAM or Launch/Provision changes.
 A future production capability requires attested root ancestry, owner SID,
 effective cross-token peer denial and actual game-path enforcement.
 
+### COW private-only policy compaction and rename namespace safety (23 October 2026)
+
+The original bounded synthetic `independent_engine/overlay.rs` now applies
+the same canonical prefix-set capacity math to both tombstone masks and
+`private_only_prefixes`. A parent private-only boundary can compact 1,024
+redundant child rules into one without losing host-read suppression.
+Requesting a rule already enforced by a parent is a no-op even when the
+slot has subsequently authored private children; creating a genuinely
+NEW wider policy over existing private bytes is still rejected for
+ambiguous provenance BEFORE the policy set changes. Prefix comparisons
+remain case-folded ASCII and resource-surface bounded.
+
+For the fixture File surface, `rename` and `rename_tree` now reject
+destinations nested below a visible file leaf, visible destination
+subtrees and mixed source leaf-with-descendants that a real filesystem
+could not represent. Single-leaf rename also refuses ancestor/descendant
+self-overlap. RegistryValue remains a flattened synthetic value
+namespace, not a real Windows registry hierarchy. Tests authored for
+full-capacity rule coalescing, redundant rules, no host/private leak,
+rename source/destination collisions and failure atomicity.
+
+**Proof:** exact GitHub source/static review and source-level
+regression coverage; native/Rust execution NOT_EXECUTED. This is a
+synthetic namespace improvement only: it does not implement Windows
+filesystem interception, HKCU/WAM routing, a Minecraft launch provider
+or authorize any client 02–04 operation.
+
 ### Canonical tombstone masks and in-place private buffer writes (23 October 2026)
 
 The existing synthetic `independent_engine/overlay.rs` now shares ONE
