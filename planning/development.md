@@ -1,6 +1,40 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Independent service — skip unsigned/unconfigured image work and add native mapping fixture, 22 October 2026
+
+Corrected an avoidable cost in the original opt-in service IPC owner.
+As of this Local HEAD, the reviewed MIVUBI desktop signer leaf policy
+is EMPTY, so every request is necessarily non-authorizing.
+ipc_worker::compare_native_peer now refuses requests BEFORE process
+HANDLE opening, WTS/token work, WinTrust or NtQueryInformationProcess.
+The canonical signer-policy helper rejects empty, all-zero or duplicate
+DER-leaf hashes; tests cannot introduce production pins. This is an
+efficient fail-closed preflight, not a new authentication bypass.
+
+A Windows-native self-process fixture test was authored under
+peer_image.rs to require exact ProcessImageFileMapping(44) success
+against its own retained read+execute executable FILE HANDLE, plus
+the existing FILE_OBJECT identity stability check. An unsupported
+Windows native class must fail the test rather than passing using
+path equality. A pure policy test covers malformed and duplicate
+signer pins. Both newly added tests are NOT_EXECUTED.
+
+**Proof:** exact pinned GitHub source/static review and Microsoft
+NtQueryInformationProcess warning plus public native class-44
+reference. No Rust compiler, Windows-native tests, SCM or Minecraft
+tests executed. CI remains disabled. The signer policy stays EMPTY,
+readonly-ipc-pilot stays OFF by default, service not installed,
+DACL remains admin-only, independent provider disabled and
+MC02-MC04 launch/provision still BLOCKED. No installed Sandboxie,
+account/world/credential, registry or driver mutation.
+
+**Next:** run the self-process mapping fixture and review the actual
+signed desktop release signer/section identity when a Windows
+environment becomes available, before enabling an IPC client.
+
+
+
 ## Independent service — exact executable section-to-file negative check, 22 October 2026
 
 Enhanced the ORIGINAL service-owned peer_image.rs rather than adding

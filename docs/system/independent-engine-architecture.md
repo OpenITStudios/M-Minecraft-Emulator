@@ -11,6 +11,50 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Early signing-policy denial and self-process image-mapping native fixture (22 October 2026)
+
+The default-OFF, read-only native SCM IPC pilot now checks its **actual
+reviewed MIVUBI desktop signer policy BEFORE requesting any pipe-client
+OS process HANDLE, WTS token, WinTrust verification or native NT class-44
+image binding**. The checked-in reviewed DER-leaf fingerprint allowlist
+remains EMPTY, so the worker returns a non-authorizing denial immediately
+rather than allowing repeated administrator-sent diagnostic frames to
+trigger potentially expensive cryptographic verification. The
+static signer-policy validator also rejects all-zero and duplicate
+leaf fingerprints, in addition to an empty allowlist. This protects
+the future path if a reviewed release policy is ever introduced;
+it does NOT populate or guess a certificate.
+
+One explicit Windows-only **native fixture test** now compares the
+actual test process's own image section with a read+execute HANDLE
+opened from QueryFullProcessImageNameW, using the existing
+NtQueryInformationProcess(ProcessImageFileMapping=44) preflight.
+A positive result demands EXACT STATUS_SUCCESS and stable
+FILE_OBJECT identity; if a Windows version lacks the unsupported
+native information class, the test must fail honestly rather than
+promote a path match. Another source test checks the all-zero,
+duplicate and missing signer-policy cases. Both tests are authored
+but NOT_EXECUTED; neither test installs/runs a service, launches
+Minecraft, reads accounts/worlds or modifies user files.
+
+This revision deliberately DOES NOT change the named-pipe DACL,
+enable the readonly-ipc-pilot feature, introduce desktop signer
+credentials, mount per-logon endpoints or grant client authority.
+The process-image section and signer check are still source-only
+until an actual compatible Windows environment and legitimate signed
+MIVUBI desktop release can validate them. Microsoft warns that
+NtQueryInformationProcess is an internal API subject to change;
+the native mapping interface remains fail-closed on unsupported OS
+versions, not a cross-version production contract.
+
+Next: validate the native self-process mapping fixture and obtain a
+reviewed signed MIVUBI desktop build identity before permitting
+any external per-logon IPC use. Meanwhile independent Minecraft
+filesystem/HKCU/WAM enforcement remains absent and Launch/Provision
+MC02-MC04 blocked.
+
+
+
 ### Native executable image SECTION versus opened file object (22 October 2026)
 
 The independent service-owned peer_image.rs has been strengthened

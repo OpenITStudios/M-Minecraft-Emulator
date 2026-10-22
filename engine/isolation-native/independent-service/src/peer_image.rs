@@ -185,10 +185,28 @@ fn section_and_signer_observed(
     )
 }
 
+/// A reviewed release policy must contain at least one distinct, nonzero
+/// DER-leaf digest. Empty, malformed or duplicated pin sets deny all
+/// clients BEFORE any user-triggered file/WinTrust/native NT work.
+fn signer_policy_usable(pins: &[[u8; 32]]) -> bool {
+    !pins.is_empty()
+        && pins.iter().enumerate().all(|(index, pin)| {
+            *pin != [0; 32] && !pins[..index].contains(pin)
+        })
+}
+
+/// Mandatory early deny for unconfigured signing policy. With the
+/// checked-in EMPTY policy this stays FALSE, even for SYSTEM/admin
+/// callers and Windows Authenticode-trusted executables. The caller
+/// performs this BEFORE reading a peer path or loading WinTrust.
+pub(super) fn reviewed_desktop_policy_configured() -> bool {
+    signer_policy_usable(REVIEWED_DESKTOP_LEAF_SHA256)
+}
+
 fn signer_seen_against_pins(
     wintrust_ok: bool, leaf_sha256: Option<[u8; 32]>, pins: &[[u8; 32]],
 ) -> bool {
-    if !wintrust_ok || pins.is_empty() {
+    if !wintrust_ok || !signer_policy_usable(pins) {
         return false;
     }
     leaf_sha256.is_some_and(|leaf| leaf != [0; 32] && pins.contains(&leaf))
@@ -389,6 +407,38 @@ pub(super) fn inspect_os_peer_image(process: HANDLE) -> io::Result<PendingPeerIm
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn policy_preflight_rejects_empty_zero_and_duplicate_certificate_pins() {
+        assert!(!reviewed_desktop_policy_configured());
+        assert!(!signer_policy_usable(&[]));
+        assert!(!signer_policy_usable(&[[0; 32]]));
+        assert!(!signer_policy_usable(&[[1; 32], [0; 32]]));
+        assert!(!signer_policy_usable(&[[1; 32], [1; 32]]));
+        assert!(signer_policy_usable(&[[1; 32], [2; 32]]));
+        assert!(!signer_seen_against_pins(true, Some([1; 32]), &[[1; 32], [1; 32]]));
+        // Synthetic values are test-only: production signer pins remain empty.
+    }
+
+    #[test]
+    fn native_current_process_image_mapping_is_checked_against_its_own_file() {
+        // A genuine TARGET_WINDOWS fixture for undocumented class 44.
+        // A failure on an unsupported Windows build is a real failed
+        // acceptance result, NEVER permission to fall back to path-only.
+        // No Minecraft/game account, driver or user data are modified.
+        use windows_sys::Win32::System::Threading::GetCurrentProcess;
+        let process = unsafe { GetCurrentProcess() };
+        let name = queried_image_path(process).expect("query current process image");
+        let path = PathBuf::from(OsString::from_wide(&name));
+        let file = std::fs::OpenOptions::new()
+            .access_mode(FILE_GENERIC_READ_EXECUTE)
+            .share_mode(FILE_SHARE_READ)
+            .open(path).expect("read/execute access to test image");
+        let identity = file_identity(&file).expect("file identity");
+        require_process_image_section_file(process, &file)
+            .expect("OS image section must refer to the opened test binary");
+        assert_eq!(file_identity(&file).unwrap(), identity);
+    }
 
     #[test]
     fn no_reviewed_desktop_leaf_identity_is_approved_by_default() {

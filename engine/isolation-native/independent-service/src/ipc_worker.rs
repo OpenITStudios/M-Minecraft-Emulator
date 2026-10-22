@@ -635,6 +635,15 @@ impl Drop for PendingIo {
 fn compare_native_peer(
     pipe: NativeHandle, claim: UntrustedBrokerProbe,
 ) -> io::Result<bool> {
+    // No reviewed MIVUBI desktop certificate is pinned on this branch.
+    // Reject BEFORE opening the OS peer process, querying user/WTS
+    // tokens, loading WinTrust or running the internal NT class-44
+    // image-file mapping check. Repeated diagnostic requests must not
+    // incur expensive cryptographic or native I/O work when there is
+    // categorically no approved executable origin.
+    if !crate::peer_image::reviewed_desktop_policy_configured() {
+        return Ok(false);
+    }
     let mut pid = 0;
     if unsafe { GetNamedPipeClientProcessId(pipe, &mut pid) } == 0 || pid == 0 {
         return Err(io::Error::last_os_error());
