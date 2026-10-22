@@ -10,12 +10,16 @@ description = "Original Windows SCM process host for future MIVUBI isolation"
 default = []
 # EXPLICIT OPT-IN SOURCE PILOT ONLY, not a release/installer feature.
 # Does not enable Minecraft launch or privileged storage calls.
-readonly-ipc-pilot = ["dep:virtual-clients-core"]
+readonly-ipc-pilot = ["dep:virtual-clients-core", "dep:windows-sys", "dep:sha2"]
 
 # Standalone and not installed, packaged, mounted or invoked by Tauri.
 # No Sandboxie binary, DLL, driver, service or source dependency.
 [target.'cfg(windows)'.dependencies]
 windows-service = "=0.8.1"
+# Purely optional native peer-image/signature observer; all exports and
+# WinTrust structures reuse the same windows-sys 0.61 ABI as Tauri.
+windows-sys = { version = "0.61", optional = true, features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Cryptography", "Win32_Security_WinTrust", "Win32_System_LibraryLoader", "Win32_System_Threading", "Win32_Storage_FileSystem"] }
+sha2 = { version = "0.11.1", optional = true }
 # Optional: import the ONE canonical broker protocol from runtime-core
 # rather than duplicating it in the SCM service process.
 virtual-clients-core = { package = "m-bedrock-virtual-clients-core", path = "../../runtime-core", optional = true }

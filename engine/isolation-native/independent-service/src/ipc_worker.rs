@@ -674,6 +674,20 @@ fn compare_native_peer(
     if !token_evidence.all_match() {
         return Ok(false);
     }
+    // SOURCE-ONLY read-only Authenticode review against this exact,
+    // retained OS-connected client process HANDLE. No pathname, file
+    // or leaf fingerprint is accepted from the untrusted request.
+    let image = crate::peer_image::inspect_os_peer_image(process.0)?;
+    // No reviewed MIVUBI installer signer leaf is pinned in this
+    // repository. A generic Windows-trusted signature MUST NOT grant
+    // even diagnostic publisher admission: the checked-in empty policy
+    // deliberately keeps this opt-in pilot fail closed.
+    if !image.matches_reviewed_on_disk_signer() {
+        return Ok(false);
+    }
+    // Even a signer match is not real origin authentication until the
+    // running mapped PE section is bound to the verified file object.
+    // This pilot has no privileged/mutating operation or reply.
     let mut final_pid = 0u32;
     if unsafe { GetNamedPipeClientProcessId(pipe, &mut final_pid) } == 0 {
         return Err(io::Error::last_os_error());

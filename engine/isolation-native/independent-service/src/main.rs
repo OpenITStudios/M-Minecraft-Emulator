@@ -12,6 +12,8 @@ mod windows_host;
 mod ipc_worker;
 #[cfg(all(windows, feature = "readonly-ipc-pilot"))]
 mod service_identity;
+#[cfg(all(windows, feature = "readonly-ipc-pilot"))]
+mod peer_image;
 
 #[cfg(windows)]
 fn main() {

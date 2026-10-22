@@ -1,6 +1,44 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Independent engine — service-owned native desktop Authenticode preflight, 22 October 2026
+
+Added the Windows-only peer_image.rs observer to the standalone
+independent-service feature-gated source owner. It reads the actual
+OS-connected (PID + FILETIME checked) pipe-client process HANDLE
+and uses QueryFullProcessImageNameW to open the observed executable
+on disk. The read-only file HANDLE is pinned across WinVerifyTrust
+with WTD_UI_NONE, whole-chain + CACHE_ONLY_URL_RETRIEVAL, and
+verified primary signer leaf DER SHA-256 extraction through
+System32 wintrust.dll WTHelper exports. The WinTrust provider state
+always closes when allocated; file object identity/path and process
+liveness are rechecked before returning sanitized, private evidence.
+Unsigned/invalid/missing providers, changed files and unavailable
+process identities fail closed.
+
+**Reviewed publisher policy is deliberately EMPTY.** No verified
+MIVUBI installer desktop leaf fingerprint or running mapped PE
+section-to-file binding exists, so no generic signed executable
+can claim trusted MIVUBI origin. The opt-in pilot now consults
+this preflight after native WTS/token checks but still grants no
+new endpoint, reply or privileged operation. Three regression tests
+are authored for empty pin list, unknown signer, null handle.
+Existing SCM session-change revocation, admin-only DACL, default-
+OFF feature and game Launch/Provision denial are unchanged.
+
+**Proof:** pinned GitHub source review and Microsoft
+QueryFullProcessImageNameW/WinVerifyTrust/WINTRUST_DATA contracts.
+Windows Rust compilation, signature fixture tests, installed SCM
+and Minecraft native/multiclient acceptance NOT_EXECUTED. No user
+account, world, game profile, Windows driver, service installation,
+Sandboxie runtime or main branch was modified.
+
+**Next:** prove native WinTrust signing and section/file binding
+against a legitimately signed installed MIVUBI desktop release,
+before any nonadmin IPC admission.
+
+
+
 ## Independent service — fail-closed on Windows session-change notification, 22 October 2026
 
 Updated the existing independent-service/windows_host.rs SCM owner

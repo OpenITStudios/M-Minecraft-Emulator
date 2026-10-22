@@ -11,6 +11,53 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Service-owned native desktop-image Authenticode preflight (22 October 2026)
+
+The standalone, source-only Windows SCM service now includes an
+original [peer_image.rs](../../engine/isolation-native/independent-service/src/peer_image.rs)
+native observer only when `readonly-ipc-pilot` is explicitly enabled
+(default feature list remains empty). It is NOT a Tauri bridge
+or a second executable launcher. After the service's existing
+OS-connected PID/creation-FILETIME and last-message token/WTS checks,
+it uses the **same retained process HANDLE** to query the real Win32
+process executable pathname via QueryFullProcessImageNameW, opens the
+named disk file read-only and keeps its file HANDLE across
+WinVerifyTrust. The file's volume/file index/size/last-write metadata
+is checked before/after, and the queried process image pathname is
+also rechecked. Directories/reparse objects, changed file objects,
+exited processes and malformed image paths fail closed.
+
+WinVerifyTrust uses generic Authenticode V2, WTD_UI_NONE, whole-chain
+revocation and cache-only URL retrieval. Its provider state is closed
+using WTD_STATEACTION_CLOSE even on rejection, and only a successful
+provider state can yield the leaf DER certificate SHA-256. The
+WTHelper signer APIs are loaded exclusively from System32's
+wintrust.dll and the hash is calculated before the state is closed.
+No Windows signing trust evidence is ever supplied by IPC request
+bytes, logged or sent to desktop. Source tests assert the absent
+release-signer policy, wrong/untrusted/all-zero signer refusal and
+null process-HANDLE rejection.
+
+**CRITICAL boundary:** no MIVUBI desktop signer leaf is approved or
+embedded in this repo, so the static signer allowlist is EMPTY and
+the optional read-only pilot refuses publisher-origin promotion even
+when a file has a valid generic Authenticode signature. A file found
+at QueryFullProcessImageNameW's pathname is NOT automatically the
+actual PE section mapped into the running process. Signer
+pinning alone cannot fix that section/file identity gap or
+same-logon pipe-HANDLE duplication. This change does not introduce
+trusted desktop enrollment, nonadmin endpoint access, service
+installation, process launch, filesystem/HKCU/WAM enforcement,
+Minecraft account permissions or any Sandboxie runtime.
+Windows native compilation, signer collection, SCM and Minecraft
+acceptance remain NOT_EXECUTED.
+
+Next: validate service-native Rust/WinTrust ABI and prove a signed
+desktop release signer/section-file identity against the actual
+installed package before any per-logon endpoint is enabled.
+
+
+
 ### SCM session-change kill switch for opt-in diagnostic IPC (22 October 2026)
 
 The standalone service now subscribes to **SERVICE_CONTROL_SESSIONCHANGE**
