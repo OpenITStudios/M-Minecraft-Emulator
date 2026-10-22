@@ -210,7 +210,7 @@ fn open_child(
     let mut raw: HANDLE = ptr::null_mut();
     let access = FILE_READ_ATTRIBUTES | SYNCHRONIZE |
         if directory {
-            FILE_TRAVERSE | FILE_ADD_FILE | FILE_ADD_SUBDIRECTORY
+            FILE_TRAVERSE | FILE_ADD_FILE | FILE_ADD_SUBDIRECTORY | READ_CONTROL
         } else if create {
             FILE_READ_DATA | FILE_WRITE_DATA
         } else {
@@ -254,38 +254,102 @@ fn open_child(
 /// Checking a handle alone cannot attest profile SID, ancestor ACL or user.
 #[cfg(test)]
 struct FixtureFileRoot<'owner> {
+    // Both handles are retained. The child must be newly created relative
+    // to THIS parent, never adopted from an arbitrary path or root HANDLE.
+    parent: File,
+    parent_identity: FileIdentity,
+    child_name: String,
     directory: File,
     identity: FileIdentity,
-    // The live process identity comes from a retained handle owned by the
-    // engine's suspended fixture launcher, not a caller-provided PID.
     owner: &'owner SuspendedFixture,
     assigned_slot: SessionSlot,
 }
 
 #[cfg(test)]
 impl<'owner> FixtureFileRoot<'owner> {
-    fn from_open_directory(
-        directory: File,
+    /// Fixture only: the caller-supplied parent HANDLE is not a trusted
+    /// production root. No Minecraft profile or existing directory is adopted.
+    fn create_new_under_parent(
+        parent: File,
+        child_name: &str,
         owner: &'owner SuspendedFixture,
         assigned_slot: SessionSlot,
     ) -> io::Result<Self> {
         if assigned_slot.is_host_native() {
             return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied, "Host MC01 cannot own an isolated file root",
+                io::ErrorKind::PermissionDenied,
+                "Host MC01 cannot own an isolated file root",
             ));
         }
         owner.live_identity()?;
+        let parent_identity = inspect_file(&parent, true)?;
+        // FILE_CREATE, not FILE_OPEN: a pre-existing name (including a
+        // symlink/junction) is a collision, never an adopted capability.
+        let directory = open_child(&parent, child_name, true, true)?;
         let identity = inspect_file(&directory, true)?;
-        Ok(Self { directory, identity, owner, assigned_slot })
+        if identity.volume != parent_identity.volume {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Fresh fixture root crossed the parent volume",
+            ));
+        }
+        let root = Self {
+            parent, parent_identity, child_name: child_name.to_owned(),
+            directory, identity, owner, assigned_slot,
+        };
+        root.verify()?;
+        Ok(root)
+    }
+
+    /// The other test process can intentionally borrow the SAME root to
+    /// demonstrate why slot labels and file handles alone do not isolate
+    /// same-user Windows tokens. NEVER expose this as a production factory.
+    fn clone_for_fixture<'peer>(
+        &self, owner: &'peer SuspendedFixture, assigned_slot: SessionSlot,
+    ) -> io::Result<FixtureFileRoot<'peer>> {
+        self.verify()?;
+        if assigned_slot.is_host_native() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Host MC01 cannot borrow an isolated file root",
+            ));
+        }
+        owner.live_identity()?;
+        let borrowed = FixtureFileRoot {
+            parent: self.parent.try_clone()?,
+            parent_identity: self.parent_identity,
+            child_name: self.child_name.clone(),
+            directory: self.directory.try_clone()?,
+            identity: self.identity,
+            owner, assigned_slot,
+        };
+        borrowed.verify()?;
+        Ok(borrowed)
     }
 
     fn verify(&self) -> io::Result<()> {
         self.owner.live_identity()?;
-        if inspect_file(&self.directory, true)? != self.identity {
+        if inspect_file(&self.parent, true)? != self.parent_identity
+            || inspect_file(&self.directory, true)? != self.identity
+            || self.identity.volume != self.parent_identity.volume
+        {
             return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied, "Root directory identity changed",
+                io::ErrorKind::PermissionDenied,
+                "Fixture parent/root handle identity changed",
             ));
         }
+        // The relative name must STILL resolve to the exact retained root
+        // object. A filename/path comparison could not detect substitution.
+        let reopened = open_child(&self.parent, &self.child_name, true, false)?;
+        if inspect_file(&reopened, true)? != self.identity
+            || inspect_file(&self.parent, true)? != self.parent_identity
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Fixture parent-child HANDLE lineage changed",
+            ));
+        }
+        self.owner.live_identity()?;
         Ok(())
     }
 
@@ -397,20 +461,25 @@ mod tests {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let when = SystemTime::now().duration_since(UNIX_EPOCH)
             .unwrap().as_nanos();
-        let path = std::env::temp_dir().join(format!(
+        let child_name = format!(
             "mivubi-native-files-{}-{when}-{}",
             std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed),
-        ));
-        // Create new only, never adopt an existing profile/account root.
-        fs::create_dir(&path).unwrap();
-        let directory = fs::OpenOptions::new()
+        );
+        let parent_path = std::env::temp_dir();
+        let path = parent_path.join(&child_name);
+        // Only the test uses the host temp directory. Its ancestors and
+        // inherited ACL are NOT a trusted future Minecraft storage root.
+        let parent = fs::OpenOptions::new()
             .access_mode(FILE_READ_ATTRIBUTES | FILE_TRAVERSE |
                 FILE_ADD_FILE | FILE_ADD_SUBDIRECTORY | SYNCHRONIZE | READ_CONTROL)
             .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
             .custom_flags(0x0200_0000 | 0x0020_0000)
             // FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT
-            .open(&path).unwrap();
-        (path, FixtureFileRoot::from_open_directory(directory, owner, slot).unwrap())
+            .open(&parent_path).unwrap();
+        let root = FixtureFileRoot::create_new_under_parent(
+            parent, &child_name, owner, slot,
+        ).unwrap();
+        (path, root)
     }
 
     fn cleanup(path: &Path) {
@@ -439,10 +508,7 @@ mod tests {
         assert_ne!(facts.review(), PairAccessReview::PeerDeniedCandidateOnly);
         // A second owner borrows the SAME opened root handle. Its slot
         // cannot be impersonated by simply passing a different slot ID.
-        let root_b = FixtureFileRoot::from_open_directory(
-            root_a.directory.try_clone().unwrap(),
-            &owned_b, SessionSlot::Mc03,
-        ).unwrap();
+        let root_b = root_a.clone_for_fixture(&owned_b, SessionSlot::Mc03).unwrap();
         let first = root_a.open_slot(SessionSlot::Mc02, true).unwrap();
         let second = root_b.open_slot(SessionSlot::Mc03, true).unwrap();
         first.create_canary("marker.bin", 0xAABB_0002).unwrap();
@@ -471,6 +537,43 @@ mod tests {
         // Releasing the borrowed capability permits a normal fixture exit.
         owned_a.resume().unwrap().wait(Duration::from_secs(20)).unwrap();
         owned_b.resume().unwrap().wait(Duration::from_secs(20)).unwrap();
+        cleanup(&path);
+    }
+
+    #[test]
+    fn parent_bound_root_refuses_existing_child_and_rechecks_handle_lineage() {
+        let owned = FixtureJob::create().unwrap().spawn_self_test().unwrap();
+        let (path, mut root) = disposable_root(&owned, SessionSlot::Mc02);
+        // A fresh-only factory must NOT adopt an existing root, even when
+        // the caller has a real parent HANDLE and matching process.
+        assert_eq!(
+            FixtureFileRoot::create_new_under_parent(
+                root.parent.try_clone().unwrap(), &root.child_name,
+                &owned, SessionSlot::Mc02,
+            ).err().unwrap().kind(),
+            io::ErrorKind::AlreadyExists,
+        );
+        let original_parent = root.parent_identity;
+        root.parent_identity.index ^= 1;
+        assert_eq!(
+            root.open_slot(SessionSlot::Mc02, true).err().unwrap().kind(),
+            io::ErrorKind::PermissionDenied,
+        );
+        root.parent_identity = original_parent;
+        let original_name = std::mem::replace(
+            &mut root.child_name, "absent-fixture-root".to_owned(),
+        );
+        assert_eq!(
+            root.open_slot(SessionSlot::Mc02, false).err().unwrap().kind(),
+            io::ErrorKind::NotFound,
+        );
+        root.child_name = original_name;
+        let slot = root.open_slot(SessionSlot::Mc02, true).unwrap();
+        slot.create_canary("marker.bin", 37).unwrap();
+        assert_eq!(slot.read_canary("marker.bin").unwrap(), 37);
+        drop(slot);
+        drop(root);
+        owned.resume().unwrap().wait(Duration::from_secs(20)).unwrap();
         cleanup(&path);
     }
 

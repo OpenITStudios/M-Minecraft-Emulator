@@ -1,6 +1,39 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Independent engine — parent-HANDLE-bound disposable roots, 22 October 2026
+
+Hardened the EXISTING, test-only Windows NT file backend rather than
+introducing a new provider. Fixture roots are now created via
+NtCreateFile(FILE_CREATE) as a single checked child of a retained parent
+directory HANDLE. An existing root can no longer be adopted by presenting
+an arbitrary directory HANDLE after a path-based CreateDirectory. The
+factory retains parent/root volume+file-index identity, reopens the same
+relative child and checks the full process PID/FILETIME before and after
+fixture operations. Root directory HANDLEs now explicitly request
+READ_CONTROL, which the existing GetSecurityInfo/AccessCheck fixture needs.
+The cross-process shared-root regression still demonstrates that two
+same-user Windows tokens do NOT provide separate permissions.
+
+One additional Windows-only negative fixture regression was authored for
+pre-existing-root collision, tampered parent identity, changed child-name
+lineage and successful bounded marker I/O after restoring the expected
+capability. The fixture temp parent is NOT an attested service-owned
+security anchor; its ancestor chain, inherited ACL, peer denial, WAM,
+Minecraft file routing and registry interception are not proved.
+This is source hardening, NOT transparent Windows I/O isolation.
+
+**Proof:** exact GitHub source/static review at this revision. Native
+Windows Rust compilation and fixture tests NOT_EXECUTED; Minecraft and
+four-client runtime acceptance NOT_EXECUTED. No service activation,
+driver, Sandboxie provider, credential/world/profile mutation, CI,
+packaging or MC02–MC04 Launch/Provision change.
+
+**Next:** validate this fixture on Windows and establish a genuinely
+service-owned, token/ACL-attested parent root before considering any
+production private-file capability.
+
+
 ## Independent engine — avoid full-overlay copy in COW rename, 22 October 2026
 
 Optimized the canonical runtime-core independent_engine/overlay.rs

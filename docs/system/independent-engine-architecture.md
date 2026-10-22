@@ -11,6 +11,29 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Parent-HANDLE-bound disposable private roots (22 October 2026)
+
+The unmounted Windows native private-file fixture now creates its fresh
+root with NtCreateFile(FILE_CREATE) relative to a retained parent directory
+HANDLE. The root factory rejects MC01, pre-existing root-name collisions,
+final reparse objects, unexpected volume changes and stale fixture process
+identity. It retains the parent and root's OS volume/file-index identities
+and reopens the exact relative root on each bounded fixture operation,
+denying a changed parent-child HANDLE relationship. Directory open rights
+include READ_CONTROL for the already existing GetSecurityInfo/AccessCheck
+review; same-user peer tokens still demonstrate shared access, not
+isolation. A Windows negative regression covers adoption refusal and
+identity/name mismatch; source authored, NOT_EXECUTED.
+
+This is a test-only, one-level HANDLE lineage bound. The parent itself is
+opened from the disposable Windows temporary path and is NOT attested as
+a trusted service-owned ancestor. A root path, token label, or held HANDLE
+does not supply cross-process filesystem virtualization or Microsoft
+authentication separation. No production provider, SCM IPC activation,
+driver, existing Minecraft data, HKCU/WAM or Launch/Provision changes.
+A future production capability requires attested root ancestry, owner SID,
+effective cross-token peer denial and actual game-path enforcement.
+
 ### Independent COW rename without full-state clone (22 October 2026)
 
 The existing executable runtime-core independent_engine/overlay.rs
