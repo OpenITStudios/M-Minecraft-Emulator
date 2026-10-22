@@ -11,6 +11,40 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Native Windows private registry application hive (22 October 2026)
+
+The unmounted, independently authored Rust module
+[apps/desktop/src-tauri/src/engine/independent_private_hive.rs](../../apps/desktop/src-tauri/src/engine/independent_private_hive.rs)
+implements real Windows application-hive I/O using RegLoadAppKeyW,
+RegSetValueExW, RegQueryValueExW, RegFlushKey and RegCloseKey.
+The registry namespace is reached ONLY through an owned HKEY, never
+HKCU or HKU. Two disposable Windows tests create fresh per-slot
+files, check separate binary canaries, close/reopen persistence, and
+reject native MC01/preexisting hive files. The parent directory is
+opened as a Win32 HANDLE with OPEN_REPARSE_POINT and checked against
+GetFileInformationByHandle before/after operations; only fixed
+fixture-02/03/04 hive names are possible.
+
+**Proof ceiling:** Windows compile/tests NOT_EXECUTED; this is a
+non-production manager-owned fixture primitive. The ephemeral directory
+has not been verified against a trusted process SID/ACL/ancestor chain;
+the underlying API offers no transparent interception of ordinary
+Minecraft HKCU accesses. RegLoadAppKeyW application hives live in
+the unenumerable registry A namespace and require the returned HKEY
+for access. Therefore it is NOT an independent Minecraft registry
+virtualizer, storage-security boundary, WAM fix, or Launch permission.
+No Sandboxie runtime or source is linked, no account files are read,
+no Tauri command is registered and MC02–MC04 Launch/Provision stays
+blocked.
+
+Next step: identify and prove a Windows-supported way for the UNMODIFIED
+game process to resolve private per-client filesystem and HKCU paths,
+including effective ACL/peer denial and Microsoft authentication broker
+compatibility. Do not connect this manager-side hive to the game
+without real interception/enforcement proof.
+
+
+
 ### Independent Win32 process lifecycle (22 October 2026)
 
 The original Windows-only code in

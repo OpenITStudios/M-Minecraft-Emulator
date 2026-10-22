@@ -1,5 +1,33 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — native application-hive I/O under a pinned Windows directory, 22 October 2026
+
+Added an unmounted original Rust Win32 adapter at
+apps/desktop/src-tauri/src/engine/independent_private_hive.rs.
+It holds an ordinary directory HANDLE (no final reparse follow,
+no FILE_SHARE_DELETE) and checks the same directory volume/file identity
+across operations. Registry hives are loaded using RegLoadAppKeyW into
+unlisted handle-only namespace A; the adapter never opens or overrides
+HKCU/HKU. Only the constant MC02/03/04 disposable test names exist.
+Binary canary writes/reads are restricted to the returned HKEY.
+Two Windows-only tests exercise separate native hive files,
+close/reopen persistence and refusal of native MC01 or pre-existing
+hive files. Both tests are authored NOT_EXECUTED; no Windows compiler
+was available. Rust Cargo feature Win32_System_Registry was added.
+
+**Safety and limitation:** This module cannot transparently virtualize
+the unmodified Minecraft process registry. The fresh test root lacks
+a trusted SID/ACL/ancestor trust chain, and registry file creation
+is not yet handle-relative. It must remain a fixture until per-process
+ownership and native enforcement are validated. No service/driver,
+UI commands, Sandboxie binary/dependency, account/world data or
+production Launch/Provision changed. Client 02–04 remain blocked.
+
+**Next:** source-design and prove a process-bound Windows filesystem/
+HKCU interception mechanism compatible with unmodified Education
+and the Microsoft authentication broker before enabling the provider.
+
+
 ## Independent engine — first original Win32 Job Object process primitive, 22 October 2026
 
 Added a Windows-only independently authored process/job primitive in

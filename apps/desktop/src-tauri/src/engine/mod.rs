@@ -10,6 +10,9 @@ pub mod instance_identity;
 // Native Win32 job-owned fixture; never mounted as a game launch provider.
 #[cfg(windows)]
 mod independent_job;
+// Original handle-scoped Win32 application-hive prototype; fixtures only.
+#[cfg(windows)]
+mod independent_private_hive;
 pub mod manager_settings;
 pub mod native_clients;
 pub mod owned_isolation;
