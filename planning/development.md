@@ -1,5 +1,28 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — preserve COW subtree tombstones and implement bounded partial writes, 22 October 2026
+
+Fixed an edge case in the new synthetic COW engine: private write
+formerly removed an equal-key tombstone, which could make unrelated
+host descendants reappear after deleting a subtree. Tombstone
+masking now survives private writes (private entries still win during
+lookup). Added `write_at` and `truncate_file` for byte-offset
+copy-up from the immutable synthetic host view. Sparse writes
+zero-fill PRIVATE memory only; operations reject registry-value
+offsets, capacity overflow and invalid process/slot keys before
+mutation. Two Rust regression tests cover subtree resurrection,
+partial writes, sparse zero-fill, truncation and peer/host preservation,
+authored NOT_EXECUTED.
+
+This remains a synthetic in-memory behavioral core. It does not
+intercept or modify real Windows filesystem or registry calls,
+publish a launcher or establish Minecraft compatibility.
+
+**Next:** Source-audit COW namespace invariants and implement a bounded
+synthetic directory/key enumeration contract before considering any
+privileged native adapter.
+
+
 ## Independent engine — functional synthetic copy-on-write overlay core, 22 October 2026
 
 Added original Rust source in the existing canonical

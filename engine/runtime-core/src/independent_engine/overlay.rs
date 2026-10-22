@@ -101,20 +101,12 @@ fn valid_component(value: &str) -> bool {
     // later adapters ambiguous.
     let stem = value.split('.').next().unwrap_or("");
     let stem = stem.to_ascii_uppercase();
-    matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL"
+    !matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL"
         | "CONIN$" | "CONOUT$")
-        .not()
         && !(stem.len() == 4 && (
             (stem.starts_with("COM") || stem.starts_with("LPT"))
                 && stem.as_bytes()[3].is_ascii_digit()
         ))
-}
-
-trait BooleanNot {
-    fn not(self) -> bool;
-}
-impl BooleanNot for bool {
-    fn not(self) -> bool { !self }
 }
 
 /// Immutable test-supplied host view: there is no path or OS handle to
@@ -232,7 +224,9 @@ impl SyntheticSlotOverlay {
             return Err(OverlayError::CapacityExceeded);
         }
         self.private_bytes = total;
-        self.tombstones.remove(&key);
+        // A write after a subtree delete must NOT remove its prefix
+        // tombstone: that would resurrect unrelated host descendants.
+        // Reads always prefer private bytes over matching tombstones.
         self.private.insert(key, data.to_vec());
         Ok(())
     }
@@ -254,6 +248,57 @@ impl SyntheticSlotOverlay {
             .ok_or(OverlayError::MissingSource)?
             .to_vec();
         self.write(slot, process, key.clone(), &bytes)
+    }
+
+    /// A bounded partial file write first materializes the fixture base
+    /// into private memory. Offsets are byte offsets; holes are zero-filled
+    /// in the PRIVATE copy only. Registry values have no offset operation.
+    pub fn write_at(
+        &mut self,
+        host: &SyntheticBaseView,
+        slot: SessionSlot,
+        process: ProcessIdentity,
+        key: OverlayKey,
+        offset: usize,
+        data: &[u8],
+    ) -> Result<(), OverlayError> {
+        self.check(slot, process)?;
+        if key.surface != OverlaySurface::File {
+            return Err(OverlayError::InvalidName);
+        }
+        let length = offset.checked_add(data.len()).ok_or(OverlayError::EntryTooLarge)?;
+        if length > MAX_OVERLAY_ITEM_BYTES {
+            return Err(OverlayError::EntryTooLarge);
+        }
+        let mut owned = self.read(host, slot, process, &key)?
+            .map_or_else(Vec::new, |bytes| bytes.to_vec());
+        owned.resize(owned.len().max(length), 0);
+        owned[offset..length].copy_from_slice(data);
+        self.write(slot, process, key, &owned)
+    }
+
+    /// Truncation cannot silently modify a synthetic host resource.
+    /// A host fallback is copied to a private buffer before resizing.
+    pub fn truncate_file(
+        &mut self,
+        host: &SyntheticBaseView,
+        slot: SessionSlot,
+        process: ProcessIdentity,
+        key: OverlayKey,
+        length: usize,
+    ) -> Result<(), OverlayError> {
+        self.check(slot, process)?;
+        if key.surface != OverlaySurface::File {
+            return Err(OverlayError::InvalidName);
+        }
+        if length > MAX_OVERLAY_ITEM_BYTES {
+            return Err(OverlayError::EntryTooLarge);
+        }
+        let mut owned = self.read(host, slot, process, &key)?
+            .ok_or(OverlayError::MissingSource)?
+            .to_vec();
+        owned.resize(length, 0);
+        self.write(slot, process, key, &owned)
     }
 
     /// A leaf delete always masks the host fixture, including its fallback.
@@ -481,6 +526,53 @@ mod tests {
         assert_eq!(a.rename(&base, SessionSlot::Mc02, id(22), &file("world/renamed.bin"), file("world/other.bin")), Err(OverlayError::AlreadyExists));
         assert_eq!(a.read(&base, SessionSlot::Mc02, id(22), &file("world/renamed.bin")).unwrap(), Some(b"original".as_slice()));
         assert_eq!(a.rename(&base, SessionSlot::Mc02, id(22), &file("world/renamed.bin"), reg("Software\\Game\\New")), Err(OverlayError::InvalidName));
+    }
+
+    #[test]
+    fn subtree_delete_then_private_root_replacement_does_not_resurrect_host() {
+        let (base, mut box_a, _) = setup();
+        box_a.delete_tree(SessionSlot::Mc02, id(22), file("world")).unwrap();
+        box_a.write(SessionSlot::Mc02, id(22), file("world"), b"private").unwrap();
+        assert_eq!(
+            box_a.read(&base, SessionSlot::Mc02, id(22), &file("world")).unwrap(),
+            Some(b"private".as_slice()),
+        );
+        assert_eq!(
+            box_a.read(&base, SessionSlot::Mc02, id(22), &file("world/data.bin")).unwrap(),
+            None,
+        );
+    }
+
+    #[test]
+    fn partial_writes_and_truncation_copy_host_bytes_into_private_view() {
+        let (base, mut box_a, box_b) = setup();
+        let key = file("world/data.bin");
+        box_a.write_at(&base, SessionSlot::Mc02, id(22), key.clone(), 3, b"XY").unwrap();
+        assert_eq!(
+            box_a.read(&base, SessionSlot::Mc02, id(22), &key).unwrap(),
+            Some(b"oriXYnal".as_slice()),
+        );
+        box_a.truncate_file(&base, SessionSlot::Mc02, id(22), key.clone(), 3).unwrap();
+        assert_eq!(
+            box_a.read(&base, SessionSlot::Mc02, id(22), &key).unwrap(),
+            Some(b"ori".as_slice()),
+        );
+        assert_eq!(
+            box_b.read(&base, SessionSlot::Mc03, id(33), &key).unwrap(),
+            Some(b"original".as_slice()),
+        );
+        box_a.write_at(&base, SessionSlot::Mc02, id(22), file("world/sparse.bin"), 3, b"x").unwrap();
+        assert_eq!(
+            box_a.read(&base, SessionSlot::Mc02, id(22), &file("world/sparse.bin")).unwrap(),
+            Some(&[0, 0, 0, b'x'][..]),
+        );
+        assert_eq!(box_a.write_at(
+            &base, SessionSlot::Mc02, id(22), key.clone(), usize::MAX, b"x",
+        ), Err(OverlayError::EntryTooLarge));
+        assert_eq!(box_a.truncate_file(
+            &base, SessionSlot::Mc02, id(22), reg("Software\\Game\\Setting"), 1,
+        ), Err(OverlayError::InvalidName));
+        assert_eq!(base.fixture_bytes(&key), Some(b"original".as_slice()));
     }
 
     #[test]
