@@ -1,5 +1,33 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — bind native fixture storage to a retained owned process, 22 October 2026
+
+The two independently authored Windows primitives, Job Object process
+ownership and handle-relative NT storage, are now joined for
+**fixture-only lifetime enforcement**. The native launcher exposes only
+a borrowed, suspended, self-created process capability. File roots
+cannot be constructed without that capability and a single MC02/03/04
+slot. Every storage operation rechecks the process HANDLE's full
+PID/FILETIME plus non-exited status; cross-slot reuse is denied. Rust
+borrows prevent owner resume/destruction while a root or file lease
+is held. The native test suite now includes three file tests:
+distinct live owners/shared root, wrong-slot rejection, and write/read
+denial after the owned fixture terminates, plus previous traversal/
+collision checks. No process name, user-supplied PID or path creates
+a storage capability.
+
+Source/static verification only; Windows compilation and fixture
+execution NOT_EXECUTED. This does not give a private SID/DACL,
+same-user peer access denial, transparent Windows IO interception
+or WAM/Minecraft account separation. No production provider, driver,
+service, installed dependency, Tauri command, existing account/world
+file or MC02–MC04 Launch/Provision was changed.
+
+**Next:** implement and validate a trusted native service-owned root
+with Windows token-based effective access/peer-denial proof before
+selecting a filesystem/HKCU enforcement mechanism.
+
+
 ## Independent engine — native handle-relative per-slot file I/O, 22 October 2026
 
 Added an original Windows NT filesystem adapter in

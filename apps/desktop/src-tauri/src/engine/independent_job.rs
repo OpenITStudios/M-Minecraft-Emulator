@@ -15,7 +15,7 @@ use std::{ffi::OsStr, os::windows::ffi::OsStrExt, time::Duration};
 #[cfg(test)]
 use virtual_clients_core::independent_engine::ProcessIdentity;
 use windows_sys::Win32::{
-    Foundation::{CloseHandle, FILETIME, HANDLE, WAIT_OBJECT_0},
+    Foundation::{CloseHandle, FILETIME, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
     System::{
         JobObjects::{
             AssignProcessToJobObject, CreateJobObjectW, IsProcessInJob,
@@ -62,7 +62,7 @@ struct FixtureJob {
 }
 
 impl FixtureJob {
-    fn create() -> io::Result<Self> {
+    pub(super) fn create() -> io::Result<Self> {
         // SAFETY: Null parameters create a new, unnamed job with the calling
         // process security context; it cannot collide with a Sandboxie name.
         let handle = OwnedHandle::checked(unsafe {
@@ -90,7 +90,7 @@ impl FixtureJob {
     /// Only available to the Rust Windows test runner. Never accepts a
     /// game path, operator-provided executable, command or Microsoft token.
     #[cfg(test)]
-    fn spawn_self_test(self) -> io::Result<SuspendedFixture> {
+    pub(super) fn spawn_self_test(self) -> io::Result<SuspendedFixture> {
         let image = std::env::current_exe()?.canonicalize()?;
         let utf16: Vec<u16> = image.as_os_str().encode_wide().collect();
         if utf16.is_empty() || utf16.len() > 30_000 || utf16.contains(&0) {
@@ -200,7 +200,7 @@ fn pinned_identity(process: HANDLE, expected_pid: u32) -> io::Result<ProcessIden
 }
 
 #[cfg(test)]
-struct SuspendedFixture {
+pub(super) struct SuspendedFixture {
     // Dropping an un-resumed fixture closes the job first, killing its
     // suspended process and descendants without orphaning either HANDLE.
     job: FixtureJob,
@@ -211,6 +211,42 @@ struct SuspendedFixture {
 
 #[cfg(test)]
 impl SuspendedFixture {
+    /// A proof of the still-open child created by THIS job owner, rather
+    /// than a caller supplied PID or an ambient process search. The child
+    /// remains suspended while a borrowing fixture storage root is live.
+    /// This is a lifecycle check, NOT an authorization token or game sandbox.
+    pub(super) fn live_identity(&self) -> io::Result<ProcessIdentity> {
+        if pinned_identity(self.process.raw(), self.identity.pid)? != self.identity {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData, "Retained child identity changed",
+            ));
+        }
+        // SAFETY: Query this retained child HANDLE; never a PID-discovered
+        // unrelated process. Zero wait proves it has not exited.
+        match unsafe { WaitForSingleObject(self.process.raw(), 0) } {
+            WAIT_TIMEOUT => Ok(self.identity),
+            WAIT_OBJECT_0 => Err(io::Error::new(
+                io::ErrorKind::NotFound, "Owned fixture process exited",
+            )),
+            _ => Err(io::Error::last_os_error()),
+        }
+    }
+
+    /// Terminate only this engine-created disposable suspended child. This
+    /// test-only action validates that storage rejects stale process owners.
+    pub(super) fn terminate_for_test(&self) -> io::Result<()> {
+        // SAFETY: No lookup by PID; handle is owned by this fixture.
+        if unsafe { TerminateProcess(self.process.raw(), 1) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if unsafe { WaitForSingleObject(self.process.raw(), 5_000) } != WAIT_OBJECT_0 {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut, "Fixture child termination unconfirmed",
+            ));
+        }
+        Ok(())
+    }
+
     fn member_of(&self, job: &FixtureJob) -> io::Result<bool> {
         let mut member = 0;
         // SAFETY: Both OS handles remain owned and live while our child
@@ -224,8 +260,8 @@ impl SuspendedFixture {
         }
     }
 
-    fn resume(self) -> io::Result<FixtureChild> {
-        if pinned_identity(self.process.raw(), self.identity.pid)? != self.identity {
+    pub(super) fn resume(self) -> io::Result<FixtureChild> {
+        if self.live_identity().is_err() {
             terminate_failed_child(self.process.raw());
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData, "Suspended child identity changed",
@@ -245,7 +281,7 @@ impl SuspendedFixture {
 }
 
 #[cfg(test)]
-struct FixtureChild {
+pub(super) struct FixtureChild {
     // Rust fields drop in declaration order; last job handle closes before
     // the process handle, killing any remaining disposable descendants.
     job: FixtureJob,
@@ -255,7 +291,7 @@ struct FixtureChild {
 
 #[cfg(test)]
 impl FixtureChild {
-    fn wait(&self, deadline: Duration) -> io::Result<()> {
+    pub(super) fn wait(&self, deadline: Duration) -> io::Result<()> {
         let ms = (deadline.as_millis().min((u32::MAX - 1) as u128)) as u32;
         // SAFETY: The process handle remains valid for this bounded wait.
         if unsafe { WaitForSingleObject(self.process.raw(), ms) } == WAIT_OBJECT_0 {

@@ -21,7 +21,16 @@ use std::{
     ptr,
 };
 #[cfg(test)]
-use std::{fs, os::windows::fs::OpenOptionsExt, path::{Path, PathBuf}, sync::atomic::{AtomicU64, Ordering}, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    fs,
+    os::windows::fs::OpenOptionsExt,
+    path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
+    time::{SystemTime, UNIX_EPOCH},
+};
+#[cfg(test)]
+use super::independent_job::{FixtureJob, SuspendedFixture};
+#[cfg(test)]
 use virtual_clients_core::independent_engine::SessionSlot;
 use windows_sys::Win32::{
     Foundation::{CloseHandle, HANDLE},
@@ -240,18 +249,35 @@ fn open_child(
 /// The root HANDLE must already be created and authenticated by a future
 /// owner. At present it comes ONLY from fresh test temporary directories.
 /// Checking a handle alone cannot attest profile SID, ancestor ACL or user.
-struct FixtureFileRoot {
+#[cfg(test)]
+struct FixtureFileRoot<'owner> {
     directory: File,
     identity: FileIdentity,
+    // The live process identity comes from a retained handle owned by the
+    // engine's suspended fixture launcher, not a caller-provided PID.
+    owner: &'owner SuspendedFixture,
+    assigned_slot: SessionSlot,
 }
 
-impl FixtureFileRoot {
-    fn from_open_directory(directory: File) -> io::Result<Self> {
+#[cfg(test)]
+impl<'owner> FixtureFileRoot<'owner> {
+    fn from_open_directory(
+        directory: File,
+        owner: &'owner SuspendedFixture,
+        assigned_slot: SessionSlot,
+    ) -> io::Result<Self> {
+        if assigned_slot.is_host_native() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied, "Host MC01 cannot own an isolated file root",
+            ));
+        }
+        owner.live_identity()?;
         let identity = inspect_file(&directory, true)?;
-        Ok(Self { directory, identity })
+        Ok(Self { directory, identity, owner, assigned_slot })
     }
 
     fn verify(&self) -> io::Result<()> {
+        self.owner.live_identity()?;
         if inspect_file(&self.directory, true)? != self.identity {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied, "Root directory identity changed",
@@ -260,8 +286,13 @@ impl FixtureFileRoot {
         Ok(())
     }
 
-    fn open_slot(&self, slot: SessionSlot, create: bool) -> io::Result<SlotFiles<'_>> {
+    fn open_slot(&self, slot: SessionSlot, create: bool) -> io::Result<SlotFiles<'_, 'owner>> {
         self.verify()?;
+        if slot != self.assigned_slot {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied, "Fixture owner is bound to a different slot",
+            ));
+        }
         let name = match slot {
             SessionSlot::Mc01 => return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied, "Host MC01 may not own an isolated fixture root",
@@ -282,13 +313,15 @@ impl FixtureFileRoot {
     }
 }
 
-struct SlotFiles<'a> {
-    root: &'a FixtureFileRoot,
+#[cfg(test)]
+struct SlotFiles<'root, 'owner> {
+    root: &'root FixtureFileRoot<'owner>,
     directory: File,
     identity: FileIdentity,
 }
 
-impl SlotFiles<'_> {
+#[cfg(test)]
+impl SlotFiles<'_, '_> {
     fn verify(&self) -> io::Result<()> {
         self.root.verify()?;
         if inspect_file(&self.directory, true)? != self.identity ||
@@ -343,7 +376,10 @@ impl SlotFiles<'_> {
 mod tests {
     use super::*;
 
-    fn disposable_root() -> (PathBuf, FixtureFileRoot) {
+    fn disposable_root<'owner>(
+        owner: &'owner SuspendedFixture,
+        slot: SessionSlot,
+    ) -> (PathBuf, FixtureFileRoot<'owner>) {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let when = SystemTime::now().duration_since(UNIX_EPOCH)
             .unwrap().as_nanos();
@@ -360,7 +396,7 @@ mod tests {
             .custom_flags(0x0200_0000 | 0x0020_0000)
             // FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT
             .open(&path).unwrap();
-        (path, FixtureFileRoot::from_open_directory(directory).unwrap())
+        (path, FixtureFileRoot::from_open_directory(directory, owner, slot).unwrap())
     }
 
     fn cleanup(path: &Path) {
@@ -374,28 +410,53 @@ mod tests {
     }
 
     #[test]
-    fn real_native_file_handles_keep_two_slots_independent_and_persistent() {
-        let (path, root) = disposable_root();
-        let first = root.open_slot(SessionSlot::Mc02, true).unwrap();
-        let second = root.open_slot(SessionSlot::Mc03, true).unwrap();
+    fn real_native_file_handles_require_distinct_owned_process_capabilities() {
+        let owned_a = FixtureJob::create().unwrap().spawn_self_test().unwrap();
+        let owned_b = FixtureJob::create().unwrap().spawn_self_test().unwrap();
+        assert_ne!(owned_a.live_identity().unwrap().pid, owned_b.live_identity().unwrap().pid);
+
+        let (path, root_a) = disposable_root(&owned_a, SessionSlot::Mc02);
+        // A second owner borrows the SAME opened root handle. Its slot
+        // cannot be impersonated by simply passing a different slot ID.
+        let root_b = FixtureFileRoot::from_open_directory(
+            root_a.directory.try_clone().unwrap(),
+            &owned_b, SessionSlot::Mc03,
+        ).unwrap();
+        let first = root_a.open_slot(SessionSlot::Mc02, true).unwrap();
+        let second = root_b.open_slot(SessionSlot::Mc03, true).unwrap();
         first.create_canary("marker.bin", 0xAABB_0002).unwrap();
-        assert_eq!(second.read_canary("marker.bin").unwrap_err().kind(),
-            io::ErrorKind::NotFound);
+        assert_eq!(
+            second.read_canary("marker.bin").unwrap_err().kind(),
+            io::ErrorKind::NotFound,
+        );
         second.create_canary("marker.bin", 0xAABB_0003).unwrap();
         assert_eq!(first.read_canary("marker.bin").unwrap(), 0xAABB_0002);
         assert_eq!(second.read_canary("marker.bin").unwrap(), 0xAABB_0003);
+        assert_eq!(
+            root_a.open_slot(SessionSlot::Mc03, false).err().unwrap().kind(),
+            io::ErrorKind::PermissionDenied,
+        );
+        assert_eq!(
+            root_b.open_slot(SessionSlot::Mc02, false).err().unwrap().kind(),
+            io::ErrorKind::PermissionDenied,
+        );
         drop(first);
         drop(second);
-        let reopened = root.open_slot(SessionSlot::Mc02, false).unwrap();
+        let reopened = root_a.open_slot(SessionSlot::Mc02, false).unwrap();
         assert_eq!(reopened.read_canary("marker.bin").unwrap(), 0xAABB_0002);
         drop(reopened);
-        drop(root);
+        drop(root_b);
+        drop(root_a);
+        // Releasing the borrowed capability permits a normal fixture exit.
+        owned_a.resume().unwrap().wait(Duration::from_secs(20)).unwrap();
+        owned_b.resume().unwrap().wait(Duration::from_secs(20)).unwrap();
         cleanup(&path);
     }
 
     #[test]
     fn host_slot_collisions_and_untrusted_relative_names_are_refused() {
-        let (path, root) = disposable_root();
+        let owned = FixtureJob::create().unwrap().spawn_self_test().unwrap();
+        let (path, root) = disposable_root(&owned, SessionSlot::Mc04);
         assert_eq!(root.open_slot(SessionSlot::Mc01, true).err().unwrap().kind(),
             io::ErrorKind::PermissionDenied);
         let slot = root.open_slot(SessionSlot::Mc04, true).unwrap();
@@ -411,6 +472,28 @@ mod tests {
         assert_eq!(slot.read_canary("already.bin").unwrap(), 1);
         drop(slot);
         drop(root);
+        owned.resume().unwrap().wait(Duration::from_secs(20)).unwrap();
+        cleanup(&path);
+    }
+
+    #[test]
+    fn exited_engine_owned_fixture_cannot_use_held_private_file_root() {
+        let owned = FixtureJob::create().unwrap().spawn_self_test().unwrap();
+        let (path, root) = disposable_root(&owned, SessionSlot::Mc02);
+        let slot = root.open_slot(SessionSlot::Mc02, true).unwrap();
+        slot.create_canary("marker.bin", 11).unwrap();
+        owned.terminate_for_test().unwrap();
+        assert_eq!(
+            slot.read_canary("marker.bin").unwrap_err().kind(),
+            io::ErrorKind::NotFound,
+        );
+        assert_eq!(
+            slot.create_canary("already.bin", 22).unwrap_err().kind(),
+            io::ErrorKind::NotFound,
+        );
+        drop(slot);
+        drop(root);
+        drop(owned);
         cleanup(&path);
     }
 }

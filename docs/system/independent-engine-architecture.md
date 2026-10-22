@@ -11,6 +11,37 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### OS-owned process identity bound to private fixture file I/O (22 October 2026)
+
+The existing native Job Object launcher and handle-relative file backend
+now form a **single bounded process-lifetime fixture**. The file root is
+only constructible from an actual engine-created, retained, suspended
+Windows process handle. Creation checks full PID/creation FILETIME and
+live process state. Every root and file operation rechecks that same
+handle; a mismatched MC02/03/04 slot or an already-exited child is
+rejected before file access. Borrowed Rust lifetimes prevent resuming
+or dropping the fixture owner while its file root is in use.
+Three Windows-native file tests cover independent process owners,
+peer-slot rejection, persistence, invalid names/collisions and
+post-termination denial. The existing Job Object tests remain.
+
+This is **genuine manager-owned process-bound fixture I/O**, not
+transparent interception or confinement of Minecraft. No Windows
+token/ACL/effective peer denial or inherited AppData/HKCU/WAM/IPC
+virtualization is established. The root's ACL/ancestors and OS-level
+access by other same-user processes remain unverified. The native
+launcher remains test-only, no Tauri IPC or production provider is
+enabled, and no user data is touched. Windows compilation and tests
+are NOT_EXECUTED. Do NOT treat the Rust borrow as a security boundary
+against other OS processes.
+
+Next boundary: trusted service-owned root creation and **effective**
+AccessCheck/peer-denial with fresh process tokens, then a supported
+per-process filesystem/registry mediation mechanism. Do not launch
+unmodified Minecraft until these can actually be enforced.
+
+
+
 ### Native Windows handle-relative private file storage (22 October 2026)
 
 The original Win32/NT adapter at
