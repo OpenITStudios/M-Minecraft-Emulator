@@ -123,7 +123,7 @@ pub fn decode_broker_probe(
     if bytes.len() != BROKER_PROBE_BYTES {
         return Err(BrokerWireError::IncorrectLength);
     }
-    if bytes[0..4] != MAGIC {
+    if &bytes[0..4] != MAGIC.as_slice() {
         return Err(BrokerWireError::IncorrectMagic);
     }
     if u16::from_le_bytes(bytes[4..6].try_into().expect("fixed-size wire")) != SCHEMA {
