@@ -1,6 +1,39 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Independent service — native effective AccessCheck for per-logon pipe candidate, 22 October 2026
+
+Corrected the existing SDDL candidate by adding explicit SYSTEM
+Owner/Group (O:SYG:SY); Windows AccessCheck requires both. Within
+the canonical service_identity.rs owner, added non-mutating native
+descriptor conversion, checks for owner/group and non-NULL protected
+DACL, DuplicateTokenEx of a verified WTS primary user into a
+query-only SecurityImpersonation token, and Windows AccessCheck for
+the minimal FILE_WRITE_DATA|SYNCHRONIZE granted rights versus
+FILE_CREATE_PIPE_INSTANCE denial. The privilege set is capped at
+4096 aligned bytes and all ambiguous/error results fail closed.
+If additional WTSActive sessions exist, their Windows primary user
+tokens are checked against the same candidate for expected denial;
+missing evidence or active-session churn refuses this diagnostic.
+No simultaneous peer means no peer-denial proof. Two native
+regressions authored for actual current-token AccessCheck and
+missing descriptor components; no tests executed.
+
+**Proof:** pinned GitHub exact-source static review and Microsoft
+AccessCheck, SDDL, DuplicateTokenEx and named-pipe documentation.
+Rust/Windows compile, interactive token tests, SCM installation,
+ACL access on real pipe handles and Minecraft gameplay NOT_EXECUTED.
+The candidate is NEVER installed, and the admin-only pilot DACL,
+readonly-ipc-pilot default-OFF feature, provider disabled state,
+MC02–MC04 Launch/Provision block, account/world and Sandboxie
+runtime retirement remain unchanged.
+
+**Next:** Windows ABI/runtime check of candidate grant and cross-logon
+denial, then design verifiable desktop publisher/session enrollment
+and revocation prior to any actual nonadmin service endpoint.
+
+
+
 ## Independent service — per-logon least-rights ACL candidate and relogon recheck, 22 October 2026
 
 Within the existing SCM identity source owner, added a private,

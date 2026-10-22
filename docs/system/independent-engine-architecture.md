@@ -11,6 +11,49 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Native effective AccessCheck of candidate per-logon pipe policy — 22 October 2026
+
+The previously string-only logon DACL candidate is now an actual,
+**read-only Windows AccessCheck review** inside the existing
+service_identity.rs source owner (reusing the Win32 ABI pattern from
+independent_root_access.rs without coupling the SCM process to Tauri).
+The candidate SDDL now includes an explicit SYSTEM Owner and Group,
+`O:SYG:SY`, because AccessCheck rejects descriptors without them.
+The source converts its internally validated SDDL to a self-relative
+Windows security descriptor, checks that owner, group, and a non-NULL
+protected DACL exist, then duplicates the already-verified WTS
+user PRIMARY token into a SecurityImpersonation query-only token.
+It invokes Windows AccessCheck for exactly two pipe-specific rights:
+minimal FILE_WRITE_DATA|SYNCHRONIZE **must be allowed** to the intended
+logon; FILE_CREATE_PIPE_INSTANCE **must be denied**. The privilege
+set has a bounded, correctly aligned buffer and unexpected API output
+fails closed.
+
+When other local WTSActive sessions exist, the same native descriptor
+is compared against each other Windows-returned primary user token:
+both requested write rights and create-instance rights must be
+denied. Token/logon mismatches or unavailable OS queries fail closed.
+The active session set is enumerated again to detect changes. If
+there are no simultaneous peer sessions, effective peer denial is
+**not observed** and must not be claimed. Real per-logon pipe objects,
+originating-client Authenticode proof, handle-duplication resistance,
+revoke-on-logoff and filesystem/HKCU/WAM enforcement still do not exist.
+
+This reviewer applies NO security descriptor to any named pipe,
+installs NO service, emits NO authority/ACL strings to desktop and
+creates NO Minecraft session. The opt-in IPC feature remains OFF by
+default; the currently bound pilot pipe retains its administrator-only
+DACL. Two native Windows fixture tests are authored for AccessCheck
+on an interactive token and for refusing missing owner/group/DACL;
+they are NOT_EXECUTED without a Windows toolchain and machine.
+Exact-source static checks do not substitute for native proof.
+
+Next: compile and verify real Windows AccessCheck results including
+other interactive logons, then design the independently trusted
+desktop-origin and endpoint lifecycle before any nonadmin bind.
+
+
+
 ### Candidate per-logon IPC ACL policy — source-only, 22 October 2026
 
 The existing independent Windows SCM identity owner now derives a

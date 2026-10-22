@@ -5,6 +5,9 @@
 use std::{ffi::c_void, io, mem, ptr};
 type H = *mut c_void;
 const TOKEN_QUERY: u32 = 8;
+const TOKEN_DUPLICATE: u32 = 2;
+const TOKEN_IMPERSONATION: u32 = 2;
+const SECURITY_IMPERSONATION: u32 = 2;
 const TOKEN_GROUPS: u32 = 2;
 const TOKEN_USER: u32 = 1;
 const TOKEN_TYPE: u32 = 8;
@@ -24,6 +27,15 @@ struct SidAndAttributes { sid: H, attributes: u32 }
 struct TokenGroups { count: u32, groups: [SidAndAttributes; 1] }
 #[repr(C)]
 struct TokenUser { user: SidAndAttributes }
+/// ABI-equivalent Win32 GENERIC_MAPPING for file-like named-pipe rights.
+/// DesiredAccess passed to AccessCheck uses only SPECIFIC rights.
+#[repr(C)]
+struct GenericMapping {
+    generic_read: u32,
+    generic_write: u32,
+    generic_execute: u32,
+    generic_all: u32,
+}
 struct Group { sid: Vec<u8>, attributes: u32 }
 
 #[link(name = "advapi32")]
@@ -36,12 +48,37 @@ unsafe extern "system" {
     ) -> i32;
     fn IsValidSid(sid: H) -> i32;
     fn GetLengthSid(sid: H) -> u32;
+    fn ConvertStringSecurityDescriptorToSecurityDescriptorW(
+        sddl: *const u16, revision: u32, descriptor: *mut H,
+        descriptor_size: *mut u32,
+    ) -> i32;
+    fn GetSecurityDescriptorOwner(
+        descriptor: H, owner: *mut H, owner_defaulted: *mut i32,
+    ) -> i32;
+    fn GetSecurityDescriptorGroup(
+        descriptor: H, group: *mut H, group_defaulted: *mut i32,
+    ) -> i32;
+    fn GetSecurityDescriptorDacl(
+        descriptor: H, dacl_present: *mut i32,
+        dacl: *mut H, dacl_defaulted: *mut i32,
+    ) -> i32;
+    fn DuplicateTokenEx(
+        original: H, requested_access: u32, attributes: *const c_void,
+        impersonation_level: u32, token_type: u32, duplicate: *mut H,
+    ) -> i32;
+    fn AccessCheck(
+        descriptor: H, impersonation_token: H, desired: u32,
+        generic_mapping: *mut GenericMapping,
+        privilege_set: H, privilege_capacity: *mut u32,
+        granted_access: *mut u32, access_status: *mut i32,
+    ) -> i32;
 }
 #[link(name = "kernel32")]
 unsafe extern "system" {
     fn GetCurrentProcess() -> H;
     fn GetLastError() -> u32;
     fn CloseHandle(handle: H) -> i32;
+    fn LocalFree(memory: H) -> H;
 }
 const WTS_ACTIVE: i32 = 0;
 const WTS_CONNECTED: i32 = 1;
@@ -75,6 +112,18 @@ unsafe extern "system" {
     fn WTSFreeMemory(memory: H);
 }
 struct Token(H);
+
+/// The candidate descriptor is self-relative memory from LocalAlloc.
+/// It contains no stored rights on a real Windows pipe.
+struct CandidateDescriptor(H);
+impl Drop for CandidateDescriptor {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            // SAFETY: Owned output from ConvertStringSecurityDescriptorToSecurityDescriptorW.
+            let _ = unsafe { LocalFree(self.0) };
+        }
+    }
+}
 impl Drop for Token {
     fn drop(&mut self) {
         if !self.0.is_null() {
@@ -145,8 +194,162 @@ fn scoped_logon_pipe_acl_candidate(
         .map_err(|_| denied("Malformed second logon subauthority"))?);
     let scoped_principal = format!("S-1-5-5-{first}-{second}");
     Ok(format!(
-        "D:P(A;;GA;;;SY)(A;;GA;;;{verified_service})(A;;0x{SCOPED_CLIENT_PIPE_RIGHTS:08X};;;{scoped_principal})"
+        "O:SYG:SYD:P(A;;GA;;;SY)(A;;GA;;;{verified_service})(A;;0x{SCOPED_CLIENT_PIPE_RIGHTS:08X};;;{scoped_principal})"
     ))
+}
+
+/// Convert the exact candidate to a native descriptor with explicit OWNER,
+/// GROUP and non-NULL protected DACL. AccessCheck rejects descriptors that
+/// omit owner/group, and a NULL DACL would grant everyone access.
+fn candidate_descriptor(sddl: &str) -> io::Result<CandidateDescriptor> {
+    if !sddl.starts_with("O:SYG:SYD:P(") {
+        return Err(denied("A scoped descriptor must have SYSTEM owner/group and protected DACL"));
+    }
+    let wide: Vec<u16> = sddl.encode_utf16().chain(std::iter::once(0)).collect();
+    let mut raw: H = ptr::null_mut();
+    // SAFETY: NUL-terminated validated internal SDDL; LocalAlloc result.
+    let ok = unsafe {
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            wide.as_ptr(), 1, &mut raw, ptr::null_mut(),
+        )
+    };
+    let guard = CandidateDescriptor(raw);
+    if ok == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if guard.0.is_null() {
+        return Err(denied("No candidate Windows descriptor"));
+    }
+    let mut owner = ptr::null_mut();
+    let mut group = ptr::null_mut();
+    let mut dacl = ptr::null_mut();
+    let mut defaulted = 0i32;
+    let mut present = 0i32;
+    // SAFETY: All returned pointer values reference guard-owned memory.
+    // They are used only to assert non-NULL owner/group/protected DACL.
+    let valid = unsafe {
+        GetSecurityDescriptorOwner(guard.0, &mut owner, &mut defaulted) != 0
+            && GetSecurityDescriptorGroup(guard.0, &mut group, &mut defaulted) != 0
+            && GetSecurityDescriptorDacl(guard.0, &mut present, &mut dacl, &mut defaulted) != 0
+    };
+    if !valid || owner.is_null() || group.is_null() || present == 0 || dacl.is_null() {
+        return Err(denied("Candidate descriptor is missing owner, group or non-NULL DACL"));
+    }
+    Ok(guard)
+}
+
+/// Win32 AccessCheck REQUIRES a query-capable impersonation token, not the
+/// WTSQueryUserToken primary HANDLE. No impersonation is installed on the
+/// service thread and no new process/privilege is created or enabled.
+fn duplicate_for_access_check(primary: H) -> io::Result<Token> {
+    if primary.is_null() {
+        return Err(denied("Missing primary OS token for native AccessCheck"));
+    }
+    let mut duplicate: H = ptr::null_mut();
+    // SAFETY: WTSQueryUserToken provided the OS primary token; the caller
+    // retains it, and Windows independently checks its TOKEN_DUPLICATE right.
+    if unsafe {
+        DuplicateTokenEx(
+            primary, TOKEN_QUERY, ptr::null(),
+            SECURITY_IMPERSONATION, TOKEN_IMPERSONATION, &mut duplicate,
+        )
+    } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if duplicate.is_null() {
+        return Err(denied("No impersonation token returned for AccessCheck"));
+    }
+    Ok(Token(duplicate))
+}
+
+fn native_grants(descriptor: &CandidateDescriptor, client: &Token, desired: u32)
+    -> io::Result<bool>
+{
+    // Restrict this code to precisely the two candidate policy questions;
+    // generic masks, WRITE_DAC and file mutation rights are not accepted.
+    if !matches!(desired, SCOPED_CLIENT_PIPE_RIGHTS | FILE_CREATE_PIPE_INSTANCE) {
+        return Err(denied("AccessCheck asked for an unreviewed pipe permission"));
+    }
+    let mut mapping = GenericMapping {
+        generic_read: 0x0012_0089,
+        generic_write: 0x0012_0116,
+        generic_execute: 0x0012_00A0,
+        generic_all: 0x001F_01FF,
+    };
+    // The Win32 privilege-set output must be aligned; 4096 bytes is a
+    // deliberate fixed upper bound. ERROR_INSUFFICIENT_BUFFER denies.
+    let mut privileges = [0usize; 512];
+    let mut length = mem::size_of_val(&privileges) as u32;
+    let mut granted = 0u32;
+    let mut status = 0i32;
+    // SAFETY: Descriptor and query-capable impersonation token remain
+    // owned for the entire read-only access evaluation.
+    if unsafe {
+        AccessCheck(
+            descriptor.0, client.0, desired, &mut mapping,
+            privileges.as_mut_ptr().cast(), &mut length,
+            &mut granted, &mut status,
+        )
+    } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if length > mem::size_of_val(&privileges) as u32 {
+        return Err(denied("Native privilege set exceeded fixed buffer"));
+    }
+    if status != 0 && (granted & desired) != desired {
+        return Err(denied("Inconsistent native AccessCheck grant mask"));
+    }
+    Ok(status != 0)
+}
+
+/// Actually ask Windows to evaluate a candidate descriptor against the WTS
+/// primary token, and optionally the other ACTIVE, OS-enumerated logons.
+/// This is a validation gate only. No DACL is applied to an endpoint,
+/// no authorization is emitted, and all handles/descriptors are dropped.
+fn review_candidate_effective_rights(
+    candidate: &str, intended: H, active: &[u32], intended_session: u32,
+    intended_logon: &[u8],
+) -> io::Result<()> {
+    let descriptor = candidate_descriptor(candidate)?;
+    let token = duplicate_for_access_check(intended)?;
+    if !native_grants(&descriptor, &token, SCOPED_CLIENT_PIPE_RIGHTS)? {
+        return Err(denied("Windows denies expected logon's minimal pipe write rights"));
+    }
+    if native_grants(&descriptor, &token, FILE_CREATE_PIPE_INSTANCE)? {
+        return Err(denied("Windows grants client forbidden pipe-instance creation"));
+    }
+    // A second simultaneously active logon must not receive the first
+    // logon's WRITE_DATA grant. The source can evaluate 0..15 peers;
+    // absent peers, negative peer isolation is STILL NOT proven.
+    for &session in active.iter().filter(|&&id| id != intended_session) {
+        let mut raw: H = ptr::null_mut();
+        // SAFETY: This ID is from the bounded local WTSActive inventory,
+        // NEVER the broker frame or a target supplied by an IPC caller.
+        let ok = unsafe { WTSQueryUserToken(session, &mut raw) };
+        let other = Token(raw);
+        if ok == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if other.0.is_null()
+            || token_dword(other.0, TOKEN_TYPE)? != TOKEN_PRIMARY
+            || token_dword(other.0, TOKEN_SESSION_ID)? != session
+            || verified_token_logon_sid(other.0)? == intended_logon
+        {
+            return Err(denied("Other active Windows session has unusable logon evidence"));
+        }
+        let other_token = duplicate_for_access_check(other.0)?;
+        if native_grants(&descriptor, &other_token, SCOPED_CLIENT_PIPE_RIGHTS)?
+            || native_grants(&descriptor, &other_token, FILE_CREATE_PIPE_INSTANCE)?
+        {
+            return Err(denied("Windows grants another logon the candidate pipe rights"));
+        }
+    }
+    // A connected/disconnected/relogged session can change between
+    // observations. Re-enumerate at the end and fail closed on any change.
+    if enumerate_active_ids()? != active {
+        return Err(denied("WTSActive session set changed during ACL review"));
+    }
+    Ok(())
 }
 
 /// Copy a native SID only after proving its header AND entire body are
@@ -438,10 +641,16 @@ pub(super) fn verify_active_windows_logon(peer_token: H) -> io::Result<()> {
     {
         return Err(denied("Interactive Windows logon changed during observation"));
     }
-    // The policy is a negative/diagnostic preflight ONLY. No ACL is
-    // installed, no pipe is created, and the resulting string is dropped.
-    let _unused_policy = scoped_logon_pipe_acl_candidate(
+    // Build the never-mounted policy from the independently verified OS
+    // service SID and WTS user's exact logon SID. Convert it to a native
+    // descriptor and ask the real Windows AccessCheck algorithm about
+    // minimal permitted rights and forbidden client server-instance rights.
+    // These facts are diagnostic ONLY; no pipe DACL or grant is changed.
+    let candidate = scoped_logon_pipe_acl_candidate(
         &verified_service_sid, &peer_logon,
+    )?;
+    review_candidate_effective_rights(
+        &candidate, rechecked_user.0, &before, session, &peer_logon,
     )?;
     Ok(())
 }
@@ -496,6 +705,43 @@ mod tests {
     }
 
     #[test]
+    fn windows_accesscheck_probes_scoped_logon_and_refuses_pipe_instance() {
+        // Independent native fixture: does not need an installed service.
+        // Runs under the current interactive Windows user token, if the
+        // test environment actually supplies an enabled logon SID.
+        let mut raw = ptr::null_mut();
+        // SAFETY: Query/duplicate the real current TEST process token only.
+        if unsafe {
+            OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE, &mut raw)
+        } == 0 {
+            panic!("Windows test cannot open current process token");
+        }
+        assert!(!raw.is_null());
+        let primary = Token(raw);
+        let logon = verified_token_logon_sid(primary.0).unwrap();
+        let sddl = scoped_logon_pipe_acl_candidate(
+            "S-1-5-80-10-20-30-40-50", &logon,
+        ).unwrap();
+        let desc = candidate_descriptor(&sddl).unwrap();
+        let client = duplicate_for_access_check(primary.0).unwrap();
+        assert!(native_grants(&desc, &client, SCOPED_CLIENT_PIPE_RIGHTS).unwrap());
+        assert!(!native_grants(&desc, &client, FILE_CREATE_PIPE_INSTANCE).unwrap());
+    }
+
+    #[test]
+    fn native_acl_parser_does_not_accept_ownerless_or_daclless_descriptors() {
+        assert!(candidate_descriptor("D:P(A;;GA;;;SY)").is_err());
+        assert!(candidate_descriptor("O:SYG:SY").is_err());
+        // A valid candidate includes explicit owner/group and a protected
+        // non-NULL DACL. It is never installed on a named pipe here.
+        let service = "S-1-5-80-10-20-30-40-50";
+        let mut logon = vec![1, 3, 0, 0, 0, 0, 0, 5];
+        for rid in [5u32, 6, 7] { logon.extend_from_slice(&rid.to_le_bytes()); }
+        let sddl = scoped_logon_pipe_acl_candidate(service, &logon).unwrap();
+        assert!(candidate_descriptor(&sddl).is_ok());
+    }
+
+    #[test]
     fn scoped_pipe_candidate_allows_only_one_logon_to_write_data() {
         let service = "S-1-5-80-10-20-30-40-50";
         let mut logon = vec![1, 3, 0, 0, 0, 0, 0, 5];
@@ -505,7 +751,7 @@ mod tests {
         let policy = scoped_logon_pipe_acl_candidate(service, &logon).unwrap();
         assert_eq!(
             policy,
-            "D:P(A;;GA;;;SY)(A;;GA;;;S-1-5-80-10-20-30-40-50)(A;;0x00100002;;;S-1-5-5-1234-5678)",
+            "O:SYG:SYD:P(A;;GA;;;SY)(A;;GA;;;S-1-5-80-10-20-30-40-50)(A;;0x00100002;;;S-1-5-5-1234-5678)",
         );
         assert_eq!(SCOPED_CLIENT_PIPE_RIGHTS & FILE_CREATE_PIPE_INSTANCE, 0);
         assert_eq!(SCOPED_CLIENT_PIPE_RIGHTS, 0x0010_0002);
