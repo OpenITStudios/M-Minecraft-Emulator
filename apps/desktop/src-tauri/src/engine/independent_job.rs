@@ -57,7 +57,7 @@ impl Drop for OwnedHandle {
 
 /// An unnamed, local-to-this-test Job Object, not a security sandbox.
 /// The last handle closing terminates the disposable test process tree.
-struct FixtureJob {
+pub(super) struct FixtureJob {
     handle: OwnedHandle,
 }
 
