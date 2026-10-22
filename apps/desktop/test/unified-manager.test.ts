@@ -49,5 +49,20 @@ it('mounted dashboard has no alternate pilot panel or automatic game launch',()=
   expect(source).not.toMatch(/CompactManagerApp|inspectIsolatedClient02|setInterval|openOfficialMinecraft/);
   expect(source).toContain('managerConfiguration.load()');
   expect(source).not.toMatch(/managerConfiguration\.save|selectSession|selectEducationExe|Choose executable|Choose engine/);
-  expect(source).toContain('Automatic setup');expect(source).toContain('OwnedManagerPanel');
+  expect(source).toContain('Read-only status');expect(source).toContain('OwnedManagerPanel');
+});
+
+it('observed legacy snapshot never promotes independent-engine readiness in mounted UI',()=>{
+  const source=readFileSync(new URL('../src/UnifiedManagerApp.svelte',import.meta.url),'utf8');
+  // checked is only a snapshot-present flag; this cannot be advertised as
+  // verified engine isolation or even as a connected independent provider.
+  expect(source).toContain('snapshot=config.observation;checked=!!snapshot');
+  expect(source).toContain('Legacy session snapshot · {checked?\'Observed\':busy?\'Checking\':\'Unavailable\'}');
+  expect(source).toContain('Observed · diagnostic only');
+  expect(source).toContain('Not implemented · Client 02–04 Launch/Provision disabled.');
+  expect(source).toContain('account isolation or gameplay readiness');
+  expect(source).not.toMatch(/Connected · verified for this session|class:ready=\{checked\}|Minecraft and the engine are detected automatically\./);
+  expect(source).not.toContain('Engine location</h3>');
+  // Windows identity checks still provide their own explicit non-account disclaimer.
+  expect(source).toContain('Account isolation remains unproven.');
 });

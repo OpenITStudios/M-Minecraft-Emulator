@@ -1,6 +1,43 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## P0 evidence-consumer audit — separate legacy snapshot from engine readiness, 23 October 2026
+
+Audited the canonical Rust independent-engine evidence reviewers
+(`independent_engine/evidence.rs`, `inspection.rs`, `paths.rs`,
+`image_provenance.rs`), the scoped proof summary, the new package
+family comparison and both desktop admission tables. No observed
+path/package metadata can directly grant MC02–MC04 Launch/Provision:
+the storage result remains `PendingNativeAcceptance`, the publisher
+review remains `PendingImageProvenance`, the independent provider is
+disabled and `instance_catalog.rs` still rejects new sessions.
+
+**Concrete consumer bug corrected:** the ACTUALLY MOUNTED
+`UnifiedManagerApp.svelte` used `checked = !!snapshot` (a successful
+read-only legacy owned-session observation) to render
+`Engine: Connected · verified for this session` and a green
+`ready` label. This falsely suggested independent-engine readiness
+despite all provider gates remaining blocked. The UI now explicitly
+labels the observation as a legacy diagnostic snapshot, shows
+`Independent engine: Not implemented` regardless of snapshot presence,
+removes the readiness-style binding and clarifies the legacy data
+directory label. Empty snapshots no longer advertise an engine
+connection. One existing static UI regression was updated and one
+focused false-promotion regression added in the same test owner.
+
+**Proof:** exact GitHub pinned source/consumer/static review of
+the affected mounted UI and bridge; authored frontend Vitest tests
+NOT_EXECUTED. No Svelte/TypeScript build, Rust/Windows/game execution
+or four-account runtime acceptance. No Tauri IPC, driver, service,
+installer, Microsoft login, Minecraft data, Sandboxie revival, CI,
+`main` or Launch/Provision permission changed.
+
+**Next:** review Windows-native isolation feasibility based on
+documented, executable product proof criteria; do not add more
+diagnostic status flags or a new provider without an enforceable
+per-client filesystem/HKCU/broker mechanism.
+
+
 ## P0 independent engine — edition-specific isolation route decision, 23 October 2026
 
 Reviewed official Minecraft Education Windows data paths alongside
