@@ -199,12 +199,16 @@ impl ReadOnlyPipeWorker {
 
     /// A single SCM-owned loop; no extra listener daemon or worker manager.
     /// It never returns a response and never performs a profile mutation.
-    pub(crate) fn run_until_stop(&mut self, stop: &Receiver<()>) -> io::Result<()> {
+    pub(crate) fn run_until_stop(
+        &mut self,
+        stop: &Receiver<()>,
+        announce_stop: &mut dyn FnMut() -> io::Result<()>,
+    ) -> io::Result<()> {
         loop {
-            if wants_stop(stop) {
+            if wants_stop(stop, announce_stop)? {
                 return Ok(());
             }
-            let step = self.read_one(stop);
+            let step = self.read_one(stop, announce_stop);
             // SAFETY: All pending OVERLAPPED operations have settled before
             // this worker disconnects or reuses the sole pipe HANDLE.
             unsafe { DisconnectNamedPipe(self.handle.0) };
@@ -225,7 +229,11 @@ impl ReadOnlyPipeWorker {
         }
     }
 
-    fn read_one(&self, stop: &Receiver<()>) -> io::Result<Step> {
+    fn read_one(
+        &self,
+        stop: &Receiver<()>,
+        announce_stop: &mut dyn FnMut() -> io::Result<()>,
+    ) -> io::Result<Step> {
         let mut connect = PendingIo::new(self.handle.0)?;
         // SAFETY: The pipe was opened FILE_FLAG_OVERLAPPED and this stable
         // boxed OVERLAPPED/event cannot be dropped until I/O finishes.
@@ -235,7 +243,7 @@ impl ReadOnlyPipeWorker {
                 ERROR_PIPE_CONNECTED => {}
                 ERROR_IO_PENDING => {
                     connect.pending = true;
-                    if matches!(connect.complete(stop, CONNECTION_DEADLINE)?, IoCompletion::Stopped) {
+                    if matches!(connect.complete(stop, announce_stop, CONNECTION_DEADLINE)?, IoCompletion::Stopped) {
                         return Ok(Step::Stopped);
                     }
                 }
@@ -254,20 +262,31 @@ impl ReadOnlyPipeWorker {
                 BROKER_PROBE_BYTES as u32, ptr::null_mut(), read.ptr(),
             )
         };
-        let received = if started != 0 {
-            read.completed_now()?
-        } else {
+        // ERROR_MORE_DATA may arrive at ReadFile OR GetOverlappedResult.
+        // Both paths mean a malformed oversized message, never a service
+        // fatal error and never a successful 32-byte diagnostic request.
+        let received = (|| -> io::Result<Option<u32>> {
+            if started != 0 {
+                return read.completed_now().map(Some);
+            }
             match unsafe { GetLastError() } {
                 ERROR_IO_PENDING => {
                     read.pending = true;
-                    match read.complete(stop, READ_DEADLINE)? {
-                        IoCompletion::Stopped => return Ok(Step::Stopped),
-                        IoCompletion::Bytes(count) => count,
+                    match read.complete(stop, announce_stop, READ_DEADLINE)? {
+                        IoCompletion::Stopped => Ok(None),
+                        IoCompletion::Bytes(count) => Ok(Some(count)),
                     }
                 }
-                ERROR_MORE_DATA => return Ok(Step::Ignored),
-                value => return Err(io::Error::from_raw_os_error(value as i32)),
+                value => Err(io::Error::from_raw_os_error(value as i32)),
             }
+        })();
+        let received = match received {
+            Ok(Some(bytes)) => bytes,
+            Ok(None) => return Ok(Step::Stopped),
+            Err(error) if error.raw_os_error() == Some(ERROR_MORE_DATA as i32) => {
+                return Ok(Step::Ignored);
+            }
+            Err(error) => return Err(error),
         };
         if received != BROKER_PROBE_BYTES as u32 {
             return Ok(Step::Ignored);
@@ -289,10 +308,18 @@ enum Step { Stopped, Ignored }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum IoCompletion { Stopped, Bytes(u32) }
 
-fn wants_stop(stop: &Receiver<()>) -> bool {
+/// SCM STOP_PENDING must precede any potentially slow native cancellation.
+/// This is a service-process lifecycle signal, NOT game readiness.
+fn wants_stop(
+    stop: &Receiver<()>,
+    announce_stop: &mut dyn FnMut() -> io::Result<()>,
+) -> io::Result<bool> {
     match stop.try_recv() {
-        Ok(()) | Err(TryRecvError::Disconnected) => true,
-        Err(TryRecvError::Empty) => false,
+        Ok(()) | Err(TryRecvError::Disconnected) => {
+            announce_stop()?;
+            Ok(true)
+        }
+        Err(TryRecvError::Empty) => Ok(false),
     }
 }
 
@@ -329,11 +356,14 @@ impl PendingIo {
         }
     }
     fn complete(
-        &mut self, stop: &Receiver<()>, timeout: Duration,
+        &mut self,
+        stop: &Receiver<()>,
+        announce_stop: &mut dyn FnMut() -> io::Result<()>,
+        timeout: Duration,
     ) -> io::Result<IoCompletion> {
         let started = Instant::now();
         loop {
-            if wants_stop(stop) {
+            if wants_stop(stop, announce_stop)? {
                 self.drain();
                 return Ok(IoCompletion::Stopped);
             }
@@ -417,6 +447,30 @@ mod tests {
     use virtual_clients_core::independent_engine::{
         encode_broker_probe, BrokerProbeKind, ProcessIdentity, SessionSlot,
     };
+
+    #[test]
+    fn stop_signal_announces_pending_before_any_io_cleanup() {
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        tx.send(()).unwrap();
+        let mut calls = 0u32;
+        assert!(wants_stop(&rx, &mut || {
+            calls += 1;
+            Ok(())
+        }).unwrap());
+        assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn failed_stop_status_report_is_never_misclassified_as_clean_stop() {
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        tx.send(()).unwrap();
+        assert_eq!(
+            wants_stop(&rx, &mut || Err(io::Error::new(
+                io::ErrorKind::Other, "SCM unavailable",
+            ))).unwrap_err().kind(),
+            io::ErrorKind::Other,
+        );
+    }
 
     #[test]
     fn shared_wire_decoder_keeps_service_request_non_authorizing() {

@@ -1,5 +1,28 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent service IPC — publish StopPending before drain and normalize oversized messages, 22 October 2026
+
+Corrected the feature-gated service-owned IPC pilot:
+SCM Stop/Shutdown now advances HostLifecycle/SCM StopPending
+BEFORE CancelIoEx completion can block in a worker. A failed SCM
+status update becomes an error, not a clean STOPPED transition;
+RAII still drains pending kernel IO before freeing buffers.
+Immediate and asynchronously completed ERROR_MORE_DATA both
+reject an oversized request without falsely marking the host
+as failed or accepting the truncated payload. Two pure Rust
+regressions were authored for stop status announcement and
+status-report failure. No new endpoint, privileges or opcodes.
+
+**Proof:** pinned GitHub source/static review. Rust/Windows tests,
+SCM execution, privileged peer-token authentication and Minecraft
+runtime NOT_EXECUTED. Default service remains inert; pilot is
+OFF by default and no account/world/driver data were modified.
+
+**Next:** Windows compilation and SCM stop/cancellation acceptance
+of the feature-gated service-owned worker before enabling any
+privileged operations.
+
+
 ## Independent engine — service-owned opt-in IPC ingress with stop-safe cancellation, 22 October 2026
 
 The separate independent-service crate now supports the explicit

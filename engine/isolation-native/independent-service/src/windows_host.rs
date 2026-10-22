@@ -90,14 +90,32 @@ fn service_loop(
     if !report(&mut state, Signal::Ready, status)? {
         return Ok(());
     }
+    // Publish STOP_PENDING as soon as the worker notices the SCM stop
+    // signal and BEFORE waiting for overlapped I/O cancellation to drain.
+    // The worker must not return success without announcing that state.
     #[cfg(feature = "readonly-ipc-pilot")]
-    let clean_stop = pilot.run_until_stop(&stop_rx).is_ok();
+    let clean_stop = {
+        let mut announced = false;
+        let outcome = pilot.run_until_stop(&stop_rx, &mut || {
+            if !announced {
+                let accepted = report(&mut state, Signal::RequestStop, status)
+                    .map_err(|_| std::io::Error::other("SCM STOP_PENDING report failed"))?;
+                if !accepted {
+                    return Err(std::io::Error::other("Invalid SCM stop transition"));
+                }
+                announced = true;
+            }
+            Ok(())
+        });
+        outcome.is_ok() && announced
+    };
     #[cfg(not(feature = "readonly-ipc-pilot"))]
     let clean_stop = stop_rx.recv().is_ok();
     if !clean_stop {
         let _ = report(&mut state, Signal::Fatal, status)?;
         return Ok(());
     }
+    #[cfg(not(feature = "readonly-ipc-pilot"))]
     if !report(&mut state, Signal::RequestStop, status)? {
         return Ok(());
     }

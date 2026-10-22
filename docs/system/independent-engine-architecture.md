@@ -11,6 +11,28 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### SCM StopPending before service-worker cancellation (22 October 2026)
+
+Corrected the optional read-only SCM IPC pilot so an observed
+Stop/Shutdown request moves the existing `HostLifecycle`
+to `StopPending` **before** the worker waits for
+CancelIoEx/GetOverlappedResult completion. The worker receives a
+single-use stop-report callback from the SCM owner; an SCM status
+error fails the operation closed, with pending kernel I/O drained
+by its existing RAII lifetime owner. Default (non-pilot) service
+behavior is unchanged. Oversized pipe frames now map to a rejected
+message whether ERROR_MORE_DATA is returned immediately by
+ReadFile or after asynchronous completion. Two pure Rust tests
+cover stop announcement and failed reporting, while the previous
+wire contract regression remains.
+
+This is SOURCE REVIEW ONLY, native Rust/Windows tests NOT_EXECUTED.
+No service installed, launched or granted additional access.
+It remains admin-only, read-only and opt-in, with no trusted game
+profile operations or filesystem/registry enforcement.
+
+
+
 ### SCM-owned, opt-in native IPC ingress pilot (22 October 2026)
 
 The independent standalone service now has a Windows-only
