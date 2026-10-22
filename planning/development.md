@@ -1,5 +1,23 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — exact oversized/short overlapped pipe message rejection, 22 October 2026
+
+Follow-up correction in the existing Windows fixture pipe owner:
+ERROR_MORE_DATA is now mapped to InvalidData whether ReadFile returns it
+immediately OR GetOverlappedResult reports it after a pending operation.
+One additional Windows test rejects a complete 31-byte message without
+treating it as a valid diagnostic frame. Earlier tests still cover
+33-byte oversized messages, forged FILETIME, missing clients and silent
+clients. All Windows tests authored NOT_EXECUTED; static source review
+only. No new service, Minecraft launch, Windows driver or credentials
+were touched. The fixture remains internal and non-authorizing.
+
+**Next:** native Windows compilation and fixture execution when a
+compatible Windows environment becomes available; continue source
+design of a durable service worker without granting any production
+privileges until the enforcement boundary is proven.
+
+
 ## Independent engine — cancel-safe overlapped IPC fixture, 22 October 2026
 
 Corrected the one-client native pipe fixture to use FILE_FLAG_OVERLAPPED,

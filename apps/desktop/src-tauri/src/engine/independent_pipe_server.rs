@@ -410,23 +410,30 @@ impl FixturePipeServer {
                 (&mut read_op as *mut NativeOverlapped).cast(),
             )
         };
-        let count = if started != 0 {
-            transferred_bytes(self.handle.0, &mut read_op)?
+        // An oversized message can report ERROR_MORE_DATA either from
+        // the initial ReadFile call or from GetOverlappedResult after a
+        // pending read completes. Normalize BOTH to InvalidData.
+        let outcome = if started != 0 {
+            transferred_bytes(self.handle.0, &mut read_op)
         } else {
             match unsafe { GetLastError() } {
                 ERROR_IO_PENDING => await_pending(
                     self.handle.0, &mut read_op, RECEIVE_WAIT_MS,
-                )?,
-                ERROR_MORE_DATA => return Err(io::Error::new(
-                    io::ErrorKind::InvalidData, "Oversized fixture pipe message",
-                )),
-                _ => return Err(io::Error::last_os_error()),
+                ),
+                native_error => Err(io::Error::from_raw_os_error(native_error as i32)),
             }
         };
-        if count != BROKER_PROBE_BYTES as u32 {
-            return Err(io::Error::new(
+        match outcome {
+            Ok(count) if count == BROKER_PROBE_BYTES as u32 => {}
+            Ok(_) => return Err(io::Error::new(
                 io::ErrorKind::InvalidData, "Non-exact fixture pipe message",
-            ));
+            )),
+            Err(error) if error.raw_os_error() == Some(ERROR_MORE_DATA as i32) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData, "Oversized fixture pipe message",
+                ));
+            }
+            Err(error) => return Err(error),
         }
         let untrusted = decode_broker_probe(&frame).map_err(|_| {
             io::Error::new(io::ErrorKind::InvalidData, "Invalid diagnostic wire request")
@@ -581,6 +588,18 @@ mod tests {
         let mut frame = Vec::from(encode_broker_probe(current_probe()).unwrap());
         frame.push(0); // one extra byte must cause ERROR_MORE_DATA.
         client.write_all(&frame).unwrap();
+        assert_eq!(
+            server.read_preconnected_once().unwrap_err().kind(),
+            io::ErrorKind::InvalidData,
+        );
+    }
+
+    #[test]
+    fn short_complete_message_is_rejected_without_waiting_for_more_bytes() {
+        let server = FixturePipeServer::create().unwrap();
+        let mut client = OpenOptions::new().write(true).open(&server.name).unwrap();
+        let frame = encode_broker_probe(current_probe()).unwrap();
+        client.write_all(&frame[..BROKER_PROBE_BYTES - 1]).unwrap();
         assert_eq!(
             server.read_preconnected_once().unwrap_err().kind(),
             io::ErrorKind::InvalidData,
