@@ -11,6 +11,41 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Active console and RDP logon observation per IPC message (22 October 2026)
+
+The opt-in SCM worker no longer blocks named-pipe creation merely
+because no physical console user is attached. It retains its protected,
+admin-only service SID DACL and default-OFF feature. Only AFTER the
+actual pipe peer process is opened and its PID/FILETIME verified does
+the service inspect that native process token against local Windows
+Terminal Services sessions using WTSEnumerateSessionsW. Physical
+console and RDP sessions with WTSActive qualify as candidates;
+Disconnected, Connected, Listen and other states do not. Inventory
+size is capped at 128 records/16 active entries, with duplicate
+session IDs, session zero as Active and malformed data rejected.
+WTS allocations are released using WTSFreeMemory.
+
+The peer token's TokenSessionId must be an active OS-enumerated ID.
+WTSQueryUserToken (requires existing LocalSystem/SeTcbPrivilege) then
+returns the matching session's actual primary user token; its
+TokenSessionId and unique enabled logon SID must match the peer.
+The active set is enumerated again to catch session changes.
+No user token, SID, WTS name or credentials are stored or added to
+the pipe DACL. Prior last-message impersonation and User SID/session/
+logon checks remain. Two regression tests cover console plus RDP
+candidate selection and invalid, duplicate or disconnected sessions.
+
+This remains pending diagnostic evidence, NOT permission for
+Minecraft or the service to perform privileged operations. Same-logon
+pipe-handle duplication and session races are still unproven.
+Windows compilation/tests, SCM execution and game acceptance
+NOT_EXECUTED; Launch/Provision MC02–MC04 stays blocked.
+
+Next: validate native WTS/SCM behavior on Windows and design
+trusted per-logon IPC DACL enrollment without self-reported IDs.
+
+
+
 ### Physical-console token observation before gated service IPC (22 October 2026)
 
 The existing service_identity.rs now uses WTSGetActiveConsoleSessionId

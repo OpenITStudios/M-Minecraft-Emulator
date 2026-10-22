@@ -39,11 +39,37 @@ unsafe extern "system" {
     fn GetCurrentProcess() -> H;
     fn GetLastError() -> u32;
     fn CloseHandle(handle: H) -> i32;
-    fn WTSGetActiveConsoleSessionId() -> u32;
+}
+const WTS_ACTIVE: i32 = 0;
+const WTS_CONNECTED: i32 = 1;
+const WTS_DISCONNECTED: i32 = 4;
+const WTS_LISTEN: i32 = 6;
+const MAX_WTS_SESSIONS: u32 = 128;
+const MAX_ACTIVE_SESSIONS: usize = 16;
+
+#[repr(C)]
+struct WtsSessionInfo {
+    id: u32,
+    station_name: *mut u16,
+    state: i32,
+}
+struct WtsMemory(*mut WtsSessionInfo);
+impl Drop for WtsMemory {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            // SAFETY: WTS-owned allocation requires WTSFreeMemory.
+            unsafe { WTSFreeMemory(self.0.cast()) };
+        }
+    }
 }
 #[link(name = "wtsapi32")]
 unsafe extern "system" {
     fn WTSQueryUserToken(session_id: u32, token: *mut H) -> i32;
+    fn WTSEnumerateSessionsW(
+        server: H, reserved: u32, version: u32,
+        sessions: *mut *mut WtsSessionInfo, count: *mut u32,
+    ) -> i32;
+    fn WTSFreeMemory(memory: H);
 }
 struct Token(H);
 impl Drop for Token {
@@ -192,71 +218,88 @@ pub(super) fn verified_token_logon_sid(token: H) -> io::Result<Vec<u8>> {
     Ok(candidates[0].sid.clone())
 }
 
-/// The physical console is an OS-origin candidate, never a caller-chosen
-/// user/session or a value read from an untrusted broker message.
-fn possible_console_user_session(session: u32) -> bool {
-    // Modern Windows uses session zero for services; 0xFFFFFFFF means
-    // the physical console is being attached/detached.
-    session != 0 && session != u32::MAX
+/// OS-active physical-console AND RDP sessions are candidates. A
+/// WinStation name is never a security identity. No packet supplies IDs.
+fn active_ids(records: &[(u32, i32)]) -> io::Result<Vec<u32>> {
+    if records.is_empty() || records.len() > MAX_WTS_SESSIONS as usize {
+        return Err(denied("Unbounded WTS session records"));
+    }
+    let mut seen = std::collections::HashSet::new();
+    let mut active = Vec::new();
+    for &(id, state) in records {
+        if id == u32::MAX || !matches!(state, 0..=9) || !seen.insert(id) {
+            return Err(denied("Malformed or duplicated WTS session"));
+        }
+        if state == WTS_ACTIVE {
+            if id == 0 { return Err(denied("Service session zero cannot be interactive")); }
+            active.push(id);
+        }
+    }
+    if active.is_empty() || active.len() > MAX_ACTIVE_SESSIONS {
+        return Err(denied("No bounded active WTS sessions"));
+    }
+    active.sort_unstable();
+    Ok(active)
 }
 
-/// Only TokenType and TokenSessionId are supported; both are DWORD values.
-fn token_dword(token: H, class: u32) -> io::Result<u32> {
-    if token.is_null() || !matches!(class, TOKEN_TYPE | TOKEN_SESSION_ID) {
-        return Err(denied("Unsupported token metadata request"));
+/// Enumerate only the local RD host (WTS_CURRENT_SERVER_HANDLE == NULL).
+/// Buffers are always returned to the WTS allocator, not LocalFree.
+/// No station names, usernames or desktop content are read.
+fn enumerate_active_ids() -> io::Result<Vec<u32>> {
+    let mut sessions: *mut WtsSessionInfo = ptr::null_mut();
+    let mut count = 0u32;
+    // SAFETY: Native API uses Reserved=0, Version=1.
+    let success = unsafe {
+        WTSEnumerateSessionsW(ptr::null_mut(), 0, 1, &mut sessions, &mut count)
+    };
+    let owned = WtsMemory(sessions);
+    if success == 0 { return Err(io::Error::last_os_error()); }
+    if owned.0.is_null() || count == 0 || count > MAX_WTS_SESSIONS
+        || (owned.0 as usize) % mem::align_of::<WtsSessionInfo>() != 0
+    {
+        return Err(denied("Invalid WTS session allocation"));
     }
-    let mut data = 0u32;
-    let mut returned = 0u32;
-    // SAFETY: An exact native DWORD output for a query-only token handle.
-    if unsafe {
-        GetTokenInformation(
-            token, class, (&mut data as *mut u32).cast(),
-            mem::size_of::<u32>() as u32, &mut returned,
-        )
-    } == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    if returned != mem::size_of::<u32>() as u32 {
-        return Err(denied("Malformed token metadata size"));
-    }
-    Ok(data)
+    // SAFETY: Windows returns count contiguous WTS_SESSION_INFOW values;
+    // count and alignment are bounded. WinStation string is never accessed.
+    let rows = unsafe { std::slice::from_raw_parts(owned.0, count as usize) };
+    let facts: Vec<_> = rows.iter().map(|r| (r.id, r.state)).collect();
+    active_ids(&facts)
 }
 
-/// Read-only physical-console candidate check, NOT desktop enrollment.
-///
-/// WTSQueryUserToken requires an already running LocalSystem service with
-/// SeTcbPrivilege. We never enable privileges to make the call succeed,
-/// or acquire an arbitrary session from a request's PID/slot/SID.
-/// The returned primary user token is closed on every path (RAII).
-/// Its SID is NEVER inserted into the named-pipe DACL or exposed to Tauri.
-/// RDP and concurrent secondary user sessions are deliberately unsupported.
-pub(super) fn verify_physical_console_candidate() -> io::Result<()> {
-    // Service process identity is independently checked first.
-    let _ = verified_current_service_sid()?;
-    // SAFETY: Query the currently attached physical console from Windows.
-    let session = unsafe { WTSGetActiveConsoleSessionId() };
-    if !possible_console_user_session(session) {
-        return Err(denied("No usable attached physical console session"));
+/// Inspect a real peer process TOKEN, never a self-reported session or PID.
+/// The existing last-message SID/session/AuthenticationId checks remain
+/// mandatory. This function is negative evidence ONLY, not IPC admission.
+/// Windows requires LocalSystem plus SeTcbPrivilege for WTSQueryUserToken.
+/// Missing privilege or unsupported OS session fails closed.
+pub(super) fn verify_active_windows_logon(peer_token: H) -> io::Result<()> {
+    verified_current_service_sid()?;
+    let session = token_dword(peer_token, TOKEN_SESSION_ID)?;
+    if session == 0 || session == u32::MAX {
+        return Err(denied("Pipe peer token is not interactive"));
+    }
+    let peer_logon = verified_token_logon_sid(peer_token)?;
+    let before = enumerate_active_ids()?;
+    if before.binary_search(&session).is_err() {
+        return Err(denied("Connected process session is not WTSActive"));
     }
     let mut raw = ptr::null_mut();
-    // SAFETY: Windows, not user input, selects the console's user token.
-    let obtained = unsafe { WTSQueryUserToken(session, &mut raw) };
-    let token = Token(raw);
-    if obtained == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    if token.0.is_null()
-        || token_dword(token.0, TOKEN_TYPE)? != TOKEN_PRIMARY
-        || token_dword(token.0, TOKEN_SESSION_ID)? != session
+    // SAFETY: The session comes from a real peer OS token AND the local
+    // WTSActive inventory, not a caller request.
+    let success = unsafe { WTSQueryUserToken(session, &mut raw) };
+    let user = Token(raw);
+    if success == 0 { return Err(io::Error::last_os_error()); }
+    if user.0.is_null()
+        || token_dword(user.0, TOKEN_TYPE)? != TOKEN_PRIMARY
+        || token_dword(user.0, TOKEN_SESSION_ID)? != session
+        || verified_token_logon_sid(user.0)? != peer_logon
     {
-        return Err(denied("Windows console token does not match session"));
+        return Err(denied("WTS primary logon differs from OS peer token"));
     }
-    // Verify one enabled OS logon SID without persisting/returning it.
-    let _checked_logon_sid = verified_token_logon_sid(token.0)?;
-    if unsafe { WTSGetActiveConsoleSessionId() } != session {
-        return Err(denied("Physical console changed during observation"));
+    // Detect a changing active session set. Reusing a session ID between
+    // observations is still possible; this NEVER becomes authorization.
+    if enumerate_active_ids()? != before {
+        return Err(denied("Active Windows session inventory changed"));
     }
-    // Token::drop closes the privileged user token before returning.
     Ok(())
 }
 
@@ -280,17 +323,23 @@ mod tests {
         assert!(!enabled(SE_GROUP_LOGON_ID));
     }
     #[test]
-    fn console_candidate_fails_closed_for_service_or_detached_session() {
-        assert!(!possible_console_user_session(0));
-        assert!(!possible_console_user_session(u32::MAX));
-        assert!(possible_console_user_session(1));
-        assert!(possible_console_user_session(88));
+    fn active_console_and_rdp_records_are_candidates_without_names() {
+        let rows = [
+            (0, WTS_LISTEN), (4, WTS_ACTIVE), (7, WTS_DISCONNECTED),
+            (2, WTS_ACTIVE), (6, WTS_CONNECTED),
+        ];
+        assert_eq!(active_ids(&rows).unwrap(), vec![2, 4]);
     }
     #[test]
-    fn console_token_classes_are_exact_primary_and_session_dwords() {
-        assert_eq!(TOKEN_TYPE, 8);
-        assert_eq!(TOKEN_SESSION_ID, 12);
-        assert_eq!(TOKEN_PRIMARY, 1);
+    fn invalid_or_nonactive_sessions_cannot_be_admitted() {
+        assert!(active_ids(&[]).is_err());
+        assert!(active_ids(&[(0, WTS_ACTIVE)]).is_err());
+        assert!(active_ids(&[(u32::MAX, WTS_ACTIVE)]).is_err());
+        assert!(active_ids(&[(2, WTS_ACTIVE), (2, WTS_LISTEN)]).is_err());
+        assert!(active_ids(&[(2, -1)]).is_err());
+        assert!(active_ids(&[(3, WTS_DISCONNECTED)]).is_err());
+        let many: Vec<_> = (1..=17).map(|id| (id, WTS_ACTIVE)).collect();
+        assert!(active_ids(&many).is_err());
     }
     #[test]
     fn token_groups_array_is_pointer_aligned() {

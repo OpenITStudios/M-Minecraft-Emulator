@@ -1,5 +1,32 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+
+## Independent service — enumerate active console and RDP sessions per OS peer, 22 October 2026
+
+Corrected the source-only physical-console startup gate. The service
+must be able to bind before any user logs on: moved session checks
+from named-pipe creation to each received read-only IPC message.
+The existing native service identity owner now calls local
+WTSEnumerateSessionsW, frees its buffer with WTSFreeMemory, and
+accepts only bounded unique WTSActive console/RDP IDs. No WinStation
+names or broker-provided IDs are used. A real connected process
+token supplies its TokenSessionId and logon SID; WTSQueryUserToken
+for that active ID must yield the same session and logon SID as a
+primary OS token. Re-enumeration rejects inventory changes. Missing
+LocalSystem/SeTcbPrivilege, service SID, invalid session states and
+unavailable tokens fail closed. Two source tests added.
+
+**Proof:** pinned exact GitHub static source review and Microsoft
+native WTS docs; Rust compiler and Windows runtime unavailable.
+All compile, WTS/SCM, token and Minecraft acceptance NOT_EXECUTED.
+Default readonly-ipc-pilot remains OFF, named pipe remains admin-only,
+no ordinary-user enrollment/privileged IPC authorization is granted,
+and no Sandboxie runtime, game world or account data was changed.
+
+**Next:** Windows-native validation of enumeration/peer-token matching,
+then trusted per-logon DACL enrollment independent of wire claims.
+
+
 ## Independent engine — Windows-attested physical-console candidate, 22 October 2026
 
 Added a read-only WTS user-session candidate check to the existing

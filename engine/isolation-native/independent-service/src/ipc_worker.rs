@@ -28,7 +28,8 @@ use virtual_clients_core::independent_engine::{
     decode_broker_probe, UntrustedBrokerProbe, BROKER_PROBE_BYTES,
 };
 use crate::service_identity::{
-    verified_current_service_sid, verified_token_logon_sid,
+    verified_active_windows_logon, verified_current_service_sid,
+    verified_token_logon_sid,
 };
 
 type NativeHandle = *mut c_void;
@@ -337,6 +338,9 @@ fn inspect_last_message_token(
     let process_token = OwnedHandle::new(process_raw)?;
     let process_identity = token_identity(process_token.0)?;
     let process_logon_sid = verified_token_logon_sid(process_token.0)?;
+    // Verify the connected process token against local WTSActive sessions.
+    // Includes console and RDP, never an ID from the untrusted wire frame.
+    verify_active_windows_logon(process_token.0)?;
 
     // If this worker thread already impersonates anyone, refuse to
     // proceed. RevertToSelf would otherwise erase another owner's scope.
@@ -420,8 +424,8 @@ impl ReadOnlyPipeWorker {
         // Native SCM token MUST contain the Windows-resolved service SID.
         // No unverified desktop-user or caller-provided logon SID is granted.
         let service_sid = verified_current_service_sid()?;
-        // Read-only OS console candidate check. No dynamic ACL grant.
-        crate::service_identity::verify_physical_console_candidate()?;
+        // The service can bind without a logged-on user. Fresh WTSActive
+        // evidence is required PER MESSAGE from the actual OS peer token.
         let acl = format!(
             "D:P(A;;GA;;;SY)(A;;GA;;;{service_sid})(A;;0x00120002;;;BA)"
         );
