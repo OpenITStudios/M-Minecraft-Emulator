@@ -11,6 +11,18 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Package metadata is not reviewed official package origin (22 October 2026)
+
+`image_provenance.rs` never clears `PackageOriginNotReviewed` merely
+because a diagnostic supplied `ProcessPackageMetadataObserved`.
+`GetPackageFullName` proves only Windows package-identity presence.
+Official origin requires a separate authenticated package identity,
+release and signing policy, which has not been implemented. This
+prevents future source collectors from treating generic packaged
+processes as verified Minecraft images and does not alter the existing
+production launch denial.
+
+
 ### Exact-process package-form diagnostic (22 October 2026)
 
 The native owner now supports an unmounted, read-only `GetPackageFullName`

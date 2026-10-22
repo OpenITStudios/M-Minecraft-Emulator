@@ -127,9 +127,14 @@ pub fn review_image_provenance(
     if candidate.image_binding != RunningImageBinding::SectionFileObjectMatched {
         gaps.push(ImageProvenanceGap::RunningImageNotBoundToVerifiedFile);
     }
-    if candidate.package != PackageIdentityEvidence::ProcessPackageMetadataObserved {
-        gaps.push(ImageProvenanceGap::PackageOriginNotReviewed);
-    }
+    // The Windows GetPackageFullName family can establish that a process
+    // has package metadata, but it cannot attest an official Minecraft
+    // package/release origin. This reviewer has NO trusted package origin
+    // allowlist or package-signature binding. Thus even a claimed metadata
+    // observation must leave the package-origin gap unresolved.
+    let _package_metadata_observed =
+        candidate.package == PackageIdentityEvidence::ProcessPackageMetadataObserved;
+    gaps.push(ImageProvenanceGap::PackageOriginNotReviewed);
     Ok(PendingImageProvenance { process: candidate.process, gaps })
 }
 
@@ -221,7 +226,22 @@ mod tests {
     }
 
     #[test]
-    fn even_every_matching_claim_returns_only_pending_not_an_admission_grant() {
+    fn absent_and_claimed_package_metadata_both_leave_origin_unreviewed() {
+        for package in [
+            PackageIdentityEvidence::Unknown,
+            PackageIdentityEvidence::ProcessPackageMetadataObserved,
+        ] {
+            let report = review_image_provenance(PinnedImageProvenanceClaim {
+                package,
+                ..candidate()
+            }, ReviewedPublisherPolicy::default()).unwrap();
+            assert!(report.gaps.contains(&ImageProvenanceGap::PackageOriginNotReviewed));
+            assert!(report.gaps.contains(&ImageProvenanceGap::OfficialSignerPolicyNotReviewed));
+        }
+    }
+
+    #[test]
+    fn even_every_matching_claim_has_unreviewed_package_origin_not_an_admission_grant() {
         let signer = [17; 32];
         let report = review_image_provenance(PinnedImageProvenanceClaim {
             signer_certificate: Some(PublisherCertificateClaim {
@@ -235,8 +255,9 @@ mod tests {
             leaf_certificate_sha256: &[signer],
             official_release_origin_reviewed: true,
         }).unwrap();
-        assert!(report.gaps.is_empty());
+        assert_eq!(report.gaps, vec![ImageProvenanceGap::PackageOriginNotReviewed]);
         assert_eq!(report.process, key());
-        // Claims alone are not an OS signature, publisher or loaded-PE attestation.
+        // A syntactically present package claim is not trusted package origin.
+        // There is no package allowlist and no actual launcher admission.
     }
 }

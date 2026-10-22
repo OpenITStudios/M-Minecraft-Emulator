@@ -1,5 +1,33 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — never promote observed package metadata to reviewed release origin, 22 October 2026
+
+Fixed a semantic evidence gap in the canonical Rust
+`independent_engine/image_provenance.rs` reviewer. Previously a
+caller-reported `PackageIdentityEvidence::ProcessPackageMetadataObserved`
+could remove `ImageProvenanceGap::PackageOriginNotReviewed` even without
+an official signed-package allowlist or origin binding. After introducing
+the read-only `GetPackageFullName` package-form observer in the desktop
+owner, that interpretation would be misleading. The reviewer now
+**always retains the package-origin gap** until an independently reviewed
+official-package source contract is implemented; an observed package
+name, an unreviewed hash or a generic Microsoft signature cannot supply
+it. Existing regression claiming zero gaps was corrected and a
+negative test covers both absent and observed package metadata.
+Pure Rust tests authored NOT_EXECUTED because a Rust toolchain is not
+available in the ChatGPT source-execution environment; Windows target
+compiler and Minecraft acceptance also NOT_EXECUTED.
+
+This changes only diagnostic gap semantics, not lifecycle/admission,
+package installation, profiles, secrets or launch. No new signer list,
+trust policy, installer, CI or `main` modification.
+
+**Next:** Source-review exact image/package provenance when a
+legitimately reviewed official package origin is available, alongside
+supported Roaming/HKCU/WAM feasibility. MC02–MC04 Launch/Provision remains
+blocked.
+
+
 ## Independent engine — execute offline evaluator tests in ChatGPT and repair false-positive privacy assertion, 22 October 2026
 
 Ran the exact committed pure JavaScript AppContainer evaluator and eight
