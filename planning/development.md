@@ -1,5 +1,28 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — per-box private-only host fallback boundaries, 22 October 2026
+
+Extended the original synthetic `overlay.rs` COW core with an explicit
+`make_private_only` prefix policy. File and registry-value namespaces
+remain separate. Beneath such a prefix the in-memory merged read and
+enumeration no longer fall back to any synthetic host baseline;
+copy-up rejects absent private sources, while explicitly written
+private values remain readable. A peer session's policy and the immutable
+base bytes remain unchanged. The policy is bounded, per-slot, and
+bound to the existing process PID/FILETIME. Two Rust regression tests
+cover denied reads/copy-up, private writes/listing, cross-surface
+independence and peer/host integrity; authored NOT_EXECUTED.
+
+The prefix policy is a **simulation of desired sandbox read behavior**,
+not enforcement of Windows host filesystem, ACL, registry or broker
+operations. No launcher or kernel hook is registered, and no actual
+Minecraft account/world data was touched.
+
+**Next:** finish source review of COW model limitations before selecting
+a Windows API interception/enforcement mechanism with explicit
+compatibility, signing, process lifetime and rollback proofs.
+
+
 ## Independent engine — preserve COW subtree tombstones and implement bounded partial writes, 22 October 2026
 
 Fixed an edge case in the new synthetic COW engine: private write

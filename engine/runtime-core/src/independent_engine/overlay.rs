@@ -153,6 +153,9 @@ pub struct SyntheticSlotOverlay {
     process: ProcessIdentity,
     private: BTreeMap<OverlayKey, Vec<u8>>,
     tombstones: BTreeSet<OverlayKey>,
+    // Explicit read boundary: fixture host values under these prefixes may
+    // NEVER fall back, even when not deleted. Private values still override.
+    private_only_prefixes: BTreeSet<OverlayKey>,
     private_bytes: usize,
 }
 
@@ -169,6 +172,7 @@ impl SyntheticSlotOverlay {
             process,
             private: BTreeMap::new(),
             tombstones: BTreeSet::new(),
+            private_only_prefixes: BTreeSet::new(),
             private_bytes: 0,
         })
     }
@@ -184,7 +188,31 @@ impl SyntheticSlotOverlay {
         self.tombstones.iter().any(|deleted| key.at_or_below(deleted))
     }
 
-    /// Private value first, then immutable fixture base; never reads the OS.
+    fn host_fallback_denied(&self, key: &OverlayKey) -> bool {
+        self.private_only_prefixes.iter().any(|prefix| key.at_or_below(prefix))
+    }
+
+    /// Require all reads under a synthetic directory/registry prefix to
+    /// originate from this slot's PRIVATE overlay. This is a diagnostic
+    /// policy method, never a filesystem ACL or Windows hook.
+    pub fn make_private_only(
+        &mut self,
+        slot: SessionSlot,
+        process: ProcessIdentity,
+        prefix: OverlayKey,
+    ) -> Result<(), OverlayError> {
+        self.check(slot, process)?;
+        if !self.private_only_prefixes.contains(&prefix)
+            && self.private_only_prefixes.len() == MAX_OVERLAY_ITEMS
+        {
+            return Err(OverlayError::CapacityExceeded);
+        }
+        self.private_only_prefixes.insert(prefix);
+        Ok(())
+    }
+
+    /// Private value first, then optionally visible fixture base; never
+    /// reads the real Windows host OS, regardless of the configured prefix.
     pub fn read<'a>(
         &'a self,
         host: &'a SyntheticBaseView,
@@ -196,7 +224,7 @@ impl SyntheticSlotOverlay {
         if let Some(value) = self.private.get(key) {
             return Ok(Some(value.as_slice()));
         }
-        if self.masked(key) {
+        if self.masked(key) || self.host_fallback_denied(key) {
             return Ok(None);
         }
         Ok(host.fixture_bytes(key))
@@ -394,7 +422,9 @@ impl SyntheticSlotOverlay {
         self.check(slot, process)?;
         let mut seen = BTreeSet::new();
         for key in host.entries.keys() {
-            if key.at_or_below(prefix) && !self.masked(key) {
+            if key.at_or_below(prefix)
+                && !self.masked(key) && !self.host_fallback_denied(key)
+            {
                 seen.insert(key.clone());
             }
         }
@@ -573,6 +603,44 @@ mod tests {
             &base, SessionSlot::Mc02, id(22), reg("Software\\Game\\Setting"), 1,
         ), Err(OverlayError::InvalidName));
         assert_eq!(base.fixture_bytes(&key), Some(b"original".as_slice()));
+    }
+
+    #[test]
+    fn private_only_policies_block_host_fallback_but_allow_own_private_values() {
+        let (base, mut a, b) = setup();
+        a.make_private_only(SessionSlot::Mc02, id(22), file("world")).unwrap();
+        let key = file("WORLD/data.bin");
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22), &key).unwrap(), None);
+        assert_eq!(a.copy_up(&base, SessionSlot::Mc02, id(22), &key),
+            Err(OverlayError::MissingSource));
+        assert_eq!(a.list(&base, SessionSlot::Mc02, id(22), &file("world")).unwrap().len(), 0);
+        a.write(SessionSlot::Mc02, id(22), key.clone(), b"private").unwrap();
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22), &key).unwrap(),
+            Some(b"private".as_slice()));
+        assert_eq!(a.list(&base, SessionSlot::Mc02, id(22), &file("world")).unwrap(),
+            vec![file("world/data.bin")]);
+        assert_eq!(b.read(&base, SessionSlot::Mc03, id(33), &key).unwrap(),
+            Some(b"original".as_slice()));
+        assert_eq!(base.fixture_bytes(&key), Some(b"original".as_slice()));
+    }
+
+    #[test]
+    fn private_only_file_policy_does_not_change_registry_namespace() {
+        let (base, mut a, _) = setup();
+        a.make_private_only(SessionSlot::Mc02, id(22), file("world")).unwrap();
+        assert_eq!(
+            a.read(&base, SessionSlot::Mc02, id(22), &reg("Software\\Game\\Setting")).unwrap(),
+            Some(b"base-setting".as_slice()),
+        );
+        a.make_private_only(SessionSlot::Mc02, id(22), reg("Software\\Game")).unwrap();
+        assert_eq!(
+            a.read(&base, SessionSlot::Mc02, id(22), &reg("Software\\Game\\Setting")).unwrap(),
+            None,
+        );
+        assert_eq!(
+            a.make_private_only(SessionSlot::Mc03, id(33), reg("Software\\Other")),
+            Err(OverlayError::WrongOwnerOrProcess),
+        );
     }
 
     #[test]

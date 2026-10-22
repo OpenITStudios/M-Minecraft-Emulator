@@ -11,6 +11,17 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Synthetic COW private-only profile boundary (22 October 2026)
+
+`SyntheticSlotOverlay::make_private_only` blocks host baseline fallback
+under selected file or registry-value prefixes during in-memory read,
+copy-up and merged enumeration. Private values still take precedence;
+another MC02–04 slot and the original base are unaffected. This is
+a deterministic testable policy behavior, NOT real OS filesystem or
+HKCU interception, and it is not a safety barrier for unmodified
+Minecraft processes.
+
+
 ### In-memory copy-on-write namespace core (22 October 2026)
 
 `independent_engine/overlay.rs` implements a real bounded, test-only
