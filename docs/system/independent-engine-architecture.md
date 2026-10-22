@@ -11,6 +11,18 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Exact-process package-form diagnostic (22 October 2026)
+
+The native owner now supports an unmounted, read-only `GetPackageFullName`
+check on a PID/creation-FILETIME-pinned process HANDLE. It returns only
+`Packaged`/`Unpackaged` in `PendingProcessPackageObservation` and
+discards the full package name after a bounded Windows query. An error is
+never interpreted as `Unpackaged`. This is useful for distinguishing
+Windows packaging paths; neither result establishes an Education publisher,
+a supported MSIX migration, private Roaming/HKCU, Microsoft authentication,
+or production launch authority.
+
+
 ### OS-derived AppContainer LocalAppData root comparison (22 October 2026)
 
 For a pinned process with an actual AppContainer SID, an unmounted native

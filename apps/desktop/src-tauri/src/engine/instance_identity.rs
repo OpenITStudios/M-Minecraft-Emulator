@@ -398,6 +398,60 @@ pub fn inspect_process_image_provenance_source(
         })
 }
 
+/// Exact-process Windows package form, not Microsoft/Minecraft publisher
+/// identity. Package presence does not prove MSIX registry virtualization,
+/// WAM compatibility, a supported launcher or entitlement to any file.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ObservedProcessPackageForm {
+    Packaged,
+    Unpackaged,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PendingProcessPackageObservation {
+    pub process: ProcessIdentity,
+    pub package_form: ObservedProcessPackageForm,
+}
+
+/// Interpret the documented first GetPackageFullName probe. A process with no
+/// package reports APPMODEL_ERROR_NO_PACKAGE. A process with a package
+/// reports ERROR_INSUFFICIENT_BUFFER and the required UTF-16 length.
+/// Any other return value or excessive name is a failed observation, never
+/// implicitly "unpackaged".
+fn classify_package_probe(status: i32, required_chars: u32) -> Result<Option<usize>, NativePortError> {
+    match status {
+        15700 => Ok(None), // APPMODEL_ERROR_NO_PACKAGE
+        122 if (2..=1024).contains(&required_chars) => Ok(Some(required_chars as usize)),
+        _ => Err(NativePortError::OperationFailed),
+    }
+}
+
+/// Unmounted read-only package-form diagnostic. No package name is returned,
+/// logged, stored or compared to an unreviewed Minecraft publisher allowlist.
+pub fn inspect_process_package_form_source(
+    expected: ProcessIdentity,
+) -> Result<PendingProcessPackageObservation, NativePortError> {
+    if expected.pid == 0 || expected.created_file_time == 0 {
+        return Err(NativePortError::InvalidIdentity);
+    }
+    #[cfg(windows)]
+    {
+        let key = ProcessKey {
+            pid: expected.pid,
+            created_file_time: expected.created_file_time.to_string(),
+        };
+        let form = windows::inspect_package_form(&key).map_err(map_native_process_error)?;
+        Ok(PendingProcessPackageObservation {
+            process: expected, package_form: form,
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = expected;
+        Err(NativePortError::NotImplemented)
+    }
+}
+
 // Read-only Windows directory HANDLE verifier for a future **trusted owner**
 // of a fresh private session profile. A returned volume/file ID proves only
 // that one opened regular directory object is stable, NOT that it is the
@@ -643,7 +697,10 @@ pub fn inspect_independent_storage_route_source(
 
 #[cfg(windows)]
 mod windows {
-    use super::{AppContainerComparison, ContextComparison, ProcessContainment, ProcessKey, finish_file_signature_review};
+    use super::{
+        AppContainerComparison, ContextComparison, ProcessContainment, ProcessKey,
+        ObservedProcessPackageForm, classify_package_probe, finish_file_signature_review,
+    };
     use std::{io, mem::size_of, os::windows::io::AsRawHandle, ptr};
     use sha2::{Digest, Sha256};
     use std::os::windows::{ffi::OsStringExt, fs::OpenOptionsExt};
@@ -694,6 +751,9 @@ mod windows {
             handle: HANDLE, buffer: *mut u16, capacity: u32, flags: u32,
         ) -> u32;
         fn lstrlenW(text: *const u16) -> i32;
+        fn GetPackageFullName(
+            process: HANDLE, name_length: *mut u32, name: *mut u16,
+        ) -> i32;
     }
 
     // GetSecurityInfo returns a DWORD status (not GetLastError), with
@@ -1453,6 +1513,40 @@ mod windows {
         live(&process)?;
         Ok(process)
     }
+    /// Read package identity without returning its name. Calling the first
+    /// probe with a null buffer distinguishes MSIX package identity from an
+    /// ordinary unpackaged executable on the SAME pinned process HANDLE.
+    /// Metadata does not prove package origin, publisher or registry routing.
+    pub(super) fn inspect_package_form(key: &ProcessKey) -> io::Result<ObservedProcessPackageForm> {
+        let process = pin(key)?;
+        let mut size = 0u32;
+        let first = unsafe {
+            GetPackageFullName(process.0, &mut size, ptr::null_mut())
+        };
+        let needed = classify_package_probe(first, size)
+            .map_err(|_| invalid("Windows process package query failed"))?;
+        let form = if let Some(count) = needed {
+            let mut name = vec![0u16; count];
+            let mut written = count as u32;
+            let result = unsafe {
+                GetPackageFullName(process.0, &mut written, name.as_mut_ptr())
+            };
+            if result != 0 || written < 2 || written as usize > count
+                || name[written as usize - 1] != 0
+                || name[..written as usize - 1].contains(&0)
+            {
+                return Err(invalid("Windows package identity changed or is invalid"));
+            }
+            // Deliberately discard package full name: no logging, hashing,
+            // exporting or promotion to a trusted publisher is required.
+            ObservedProcessPackageForm::Packaged
+        } else {
+            ObservedProcessPackageForm::Unpackaged
+        };
+        live(&process)?;
+        Ok(form)
+    }
+
     // Only legacy UAC compatibility metadata, never a registry hive query.
     // Pin the exact PID/FILTIME process handle so no reused PID is accepted.
     /// Inspect the queryable IMAGE FILE ON DISK for the exact live process.
@@ -1960,6 +2054,22 @@ mod windows {
             ] {
                 assert!(container_sid_text(bad).is_err());
             }
+        }
+
+        #[test]
+        fn current_process_package_form_is_sanitized_and_stale_key_fails() {
+            let own = own_key();
+            let valid = inspect_package_form(&own).unwrap();
+            assert!(matches!(
+                valid,
+                ObservedProcessPackageForm::Packaged
+                    | ObservedProcessPackageForm::Unpackaged
+            ));
+            let stale = ProcessKey {
+                pid: own.pid,
+                created_file_time: "1".into(),
+            };
+            assert!(inspect_package_form(&stale).is_err());
         }
 
         #[test]
@@ -2695,6 +2805,45 @@ mod tests {
         let id = ProcessIdentity::checked(11, 133400000000000011).unwrap();
         assert_eq!(inspect_process_image_trust_source(id),
             Err(NativePortError::NotImplemented));
+    }
+
+    #[test]
+    fn package_form_probe_does_not_promote_unknown_errors_to_unpacked() {
+        assert_eq!(classify_package_probe(15700, 0), Ok(None));
+        assert_eq!(classify_package_probe(122, 2), Ok(Some(2)));
+        assert_eq!(classify_package_probe(122, 1024), Ok(Some(1024)));
+        for (status, chars) in [
+            (0, 0), (5, 0), (122, 0), (122, 1), (122, 1025),
+            (15701, 0),
+        ] {
+            assert_eq!(
+                classify_package_probe(status, chars),
+                Err(NativePortError::OperationFailed),
+            );
+        }
+    }
+
+    #[test]
+    fn package_form_query_rejects_invalid_pid_filetime_before_windows_io() {
+        for identity in [
+            ProcessIdentity { pid: 0, created_file_time: 123 },
+            ProcessIdentity { pid: 42, created_file_time: 0 },
+        ] {
+            assert_eq!(
+                inspect_process_package_form_source(identity),
+                Err(NativePortError::InvalidIdentity),
+            );
+        }
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn package_form_source_unavailable_outside_windows() {
+        let identity = ProcessIdentity::checked(42, 123).unwrap();
+        assert_eq!(
+            inspect_process_package_form_source(identity),
+            Err(NativePortError::NotImplemented),
+        );
     }
 
     #[test]

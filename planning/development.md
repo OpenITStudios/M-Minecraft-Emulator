@@ -1,5 +1,38 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — observe real Windows package form without reading package data, 22 October 2026
+
+Implemented a new read-only, unmounted package-form collector in the canonical
+desktop Windows identity owner: `inspect_process_package_form_source`. It
+uses the existing PID/FILETIME-pinned process HANDLE and documented
+`GetPackageFullName` kernel32 API to distinguish `Packaged` versus
+`Unpackaged`. The buffer-size query uses documented
+`APPMODEL_ERROR_NO_PACKAGE` (15700) and `ERROR_INSUFFICIENT_BUFFER`
+(122) semantics. Unknown errors and unbounded names fail closed; a second
+bounded query validates returned UTF-16 termination and discards the value
+without logging or exporting package full name. Final process liveness is
+rechecked on the SAME handle. Output is a `PendingProcessPackageObservation`
+with process key and only a category, never approval to launch or claim a
+trusted Microsoft/Minecraft package. Native ABI is scoped inside the
+existing Windows owner. No new dependencies, IPC command or launcher.
+
+Added a cross-platform pure classifier regression, invalid PID/FILETIME
+regression, non-Windows fallback regression, and Windows-only same-process/
+stale-key regression. Source tests authored NOT_EXECUTED. Windows MSVC
+compiler, observed installed Minecraft package form, roaming/HKCU/WAM
+and game acceptance remain NOT_EXECUTED.
+
+This source enables a real distinction needed for evaluating packaged
+Windows capabilities: **package identity is not sufficient proof that an
+unmodified Minecraft executable uses MSIX VFS/registry virtualization**.
+The official signer allowlist and loaded-image provenance are unchanged.
+
+**Next:** Run source-level pure regressions in an available ChatGPT execution
+environment if possible, then review actual package metadata and supported
+Windows isolation semantics without assuming that this permits MC02–MC04
+Launch/Provision.
+
+
 ## Independent engine — classify AppContainer roaming NO-GO before provider work, 22 October 2026
 
 The canonical offline synthetic fixture reviewer in
