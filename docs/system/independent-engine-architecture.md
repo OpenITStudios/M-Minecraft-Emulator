@@ -11,6 +11,41 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Windows HANDLE-relative file I/O consumes canonical Rust storage plans (23 October 2026)
+
+The original Windows-only `apps/desktop/src-tauri/src/engine/independent_private_files.rs`
+fixture now calls the canonical
+`engine/runtime-core/src/independent_engine/storage.rs::plan_private_file_access`
+instead of relying only on its native single-component parser. An actual
+disposable job-owned OS PID/full creation FILETIME, the fixed MC02–MC04
+slot, `LocalFiles` domain and read/create action determine the route
+request. The returned `PendingPrivateFilePlan` is NOT an access grant:
+before any `NtCreateFile` marker operation, the adapter checks its
+publicly mutable fields against a FRESH trusted fixture owner/process
+observation and regenerates the plan using that owner; altered slot,
+process, domain, action or component list is refused. Only ONE checked
+relative marker component is allowed by this fixture's native HANDLE.
+Arbitrary paths, nested plans and host-account destinations remain
+outside this I/O interface.
+
+The retained `SlotFiles` HANDLE now also reopens its fixed `mc02`,
+`mc03` or `mc04` directory relative to the pinned original root
+HANDLE, comparing the reopened volume/file index to its retained slot
+object before and after bounded marker I/O. This closes the missing
+slot-level parent/child lookup check without treating a path string as
+filesystem ownership. Two Windows-only native regressions were
+authored for valid owner-bound read/create, forged plan fields,
+unsupported nested paths, slot-name substitution and file identity
+mismatch. Existing fixture tests use the same canonical path.
+
+**Evidence ceiling:** exact GitHub source/static review; Windows Rust
+compilation and native tests NOT_EXECUTED. Roots remain disposable and
+created beneath the caller's temp ancestor, WITHOUT service-owned
+provenance, verified exclusive peer DACL rights or transparent Minecraft
+Roaming/HKCU I/O interception. It cannot authorize new sessions,
+Microsoft login or four concurrent clients. No Tauri command or
+production launch/provider route is enabled.
+
 ### Parent-HANDLE-bound disposable private roots (22 October 2026)
 
 The unmounted Windows native private-file fixture now creates its fresh

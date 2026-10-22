@@ -33,7 +33,11 @@ use super::independent_job::{FixtureJob, SuspendedFixture};
 #[cfg(test)]
 use super::independent_root_access::{self, PairAccessFacts, PairAccessReview};
 #[cfg(test)]
-use virtual_clients_core::independent_engine::SessionSlot;
+use virtual_clients_core::independent_engine::{
+    plan_private_file_access, PendingPrivateFilePlan, ProcessIdentity,
+    SessionSlot, StorageRouteAction, StorageRouteDomain,
+    StorageRouteRequest, StorageRouteTarget,
+};
 use windows_sys::Win32::{
     Foundation::{CloseHandle, HANDLE},
     Storage::FileSystem::{
@@ -387,7 +391,7 @@ impl<'owner> FixtureFileRoot<'owner> {
             ));
         }
         self.verify()?;
-        Ok(SlotFiles { root: self, directory, identity })
+        Ok(SlotFiles { root: self, directory, identity, child_name: name })
     }
 }
 
@@ -396,27 +400,116 @@ struct SlotFiles<'root, 'owner> {
     root: &'root FixtureFileRoot<'owner>,
     directory: File,
     identity: FileIdentity,
+    // Fixed canonical slot name, not supplied by a caller/plan. It must
+    // still resolve to the exact original opened child of the root HANDLE.
+    child_name: &'static str,
 }
 
 #[cfg(test)]
 impl SlotFiles<'_, '_> {
     fn verify(&self) -> io::Result<()> {
         self.root.verify()?;
-        if inspect_file(&self.directory, true)? != self.identity ||
-            self.identity.volume != self.root.identity.volume {
+        if inspect_file(&self.directory, true)? != self.identity
+            || self.identity.volume != self.root.identity.volume
+        {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied, "Slot directory identity changed",
             ));
         }
+        // Holding the directory HANDLE is insufficient: the fixed slot name
+        // must still resolve to that SAME file object beneath the retained
+        // parent/root HANDLE. Do not use a DOS path or adopt a replacement.
+        let reopened = open_child(
+            &self.root.directory, self.child_name, true, false,
+        )?;
+        if inspect_file(&reopened, true)? != self.identity
+            || inspect_file(&self.directory, true)? != self.identity
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Slot directory parent-child HANDLE lineage changed",
+            ));
+        }
+        self.root.verify()?;
         Ok(())
     }
 
-    /// Actual OS-backed, private-slot file create. No implicit host read or
-    /// fallback, overwrite, truncate, symlink traversal, or arbitrarily large
-    /// data. Partial-write failure leaves an owned object for manual review;
-    /// there is deliberately no unsafe delete/rollback by path.
-    fn create_canary(&self, name: &str, marker: u64) -> io::Result<()> {
+    // Reuse the SINGLE canonical runtime-core storage route planner. An
+    // adapter-owned request is derived from the actual fixture process,
+    // retained slot and fixed LocalFiles domain. Neither a user-selected
+    // path nor an untrusted PendingPrivateFilePlan can authorize Windows I/O.
+    fn marker_request(&self, action: StorageRouteAction)
+        -> io::Result<StorageRouteRequest>
+    {
         self.verify()?;
+        let process: ProcessIdentity = self.root.owner.live_identity()?;
+        Ok(StorageRouteRequest {
+            slot: self.root.assigned_slot,
+            expected_process: process,
+            observed_process: Some(process),
+            domain: StorageRouteDomain::LocalFiles,
+            target: StorageRouteTarget::PrivateSession(self.root.assigned_slot),
+            action,
+        })
+    }
+
+    fn marker_plan(
+        &self, name: &str, action: StorageRouteAction,
+    ) -> io::Result<PendingPrivateFilePlan> {
+        let request = self.marker_request(action)?;
+        let plan = plan_private_file_access(request, name)
+            .map_err(|_| io::Error::new(
+                io::ErrorKind::InvalidInput, "Unsafe synthetic file route or relative name",
+            ))?;
+        // This native fixture has only ONE retained slot-level directory;
+        // the Rust planner may support nested components in future owners,
+        // but it would be unsafe to silently discard any component here.
+        if plan.components.len() != 1 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput, "Nested file plans are not supported by this fixture",
+            ));
+        }
+        validate_component(&plan.components[0])?;
+        Ok(plan)
+    }
+
+    fn checked_marker_name<'plan>(
+        &self, plan: &'plan PendingPrivateFilePlan,
+        action: StorageRouteAction,
+    ) -> io::Result<&'plan str> {
+        let request = self.marker_request(action)?;
+        // Plans carry only diagnostic metadata and all their fields are
+        // publicly constructible. Re-derive using trusted OS fixture facts;
+        // wrong owner/slot, action, domain, or altered components fail closed.
+        if plan.components.len() != 1
+            || plan.slot != request.slot
+            || plan.process != request.expected_process
+            || plan.domain != request.domain
+            || plan.action != action
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied, "Unbound or unsupported synthetic file plan",
+            ));
+        }
+        let name = plan.components[0].as_str();
+        let canonical = self.marker_plan(name, action)?;
+        if &canonical != plan {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied, "File plan changed after validation",
+            ));
+        }
+        self.verify()?;
+        Ok(name)
+    }
+
+    /// Actual OS-backed file create under a process/slot-bound, checked
+    /// synthetic plan. Still NOT private access for an unmodified game:
+    /// root ancestors/ACLs and peer denial are not service-attested.
+    /// There is no host read, overwrite or cleanup-by-path rollback.
+    fn create_planned_canary(
+        &self, plan: &PendingPrivateFilePlan, marker: u64,
+    ) -> io::Result<()> {
+        let name = self.checked_marker_name(plan, StorageRouteAction::Create)?;
         let mut file = open_child(&self.directory, name, false, true)?;
         if inspect_file(&file, false)?.volume != self.identity.volume {
             return Err(io::Error::new(
@@ -429,8 +522,8 @@ impl SlotFiles<'_, '_> {
         Ok(())
     }
 
-    fn read_canary(&self, name: &str) -> io::Result<u64> {
-        self.verify()?;
+    fn read_planned_canary(&self, plan: &PendingPrivateFilePlan) -> io::Result<u64> {
+        let name = self.checked_marker_name(plan, StorageRouteAction::Read)?;
         let mut file = open_child(&self.directory, name, false, false)?;
         if inspect_file(&file, false)?.volume != self.identity.volume {
             return Err(io::Error::new(
@@ -447,6 +540,18 @@ impl SlotFiles<'_, '_> {
         }
         self.verify()?;
         Ok(u64::from_le_bytes(bytes))
+    }
+
+    // Compatibility wrappers for existing disposable native Windows tests.
+    // They MUST route via the same canonical plan, not a second path parser.
+    fn create_canary(&self, name: &str, marker: u64) -> io::Result<()> {
+        let plan = self.marker_plan(name, StorageRouteAction::Create)?;
+        self.create_planned_canary(&plan, marker)
+    }
+
+    fn read_canary(&self, name: &str) -> io::Result<u64> {
+        let plan = self.marker_plan(name, StorageRouteAction::Read)?;
+        self.read_planned_canary(&plan)
     }
 }
 
@@ -574,6 +679,82 @@ mod tests {
         drop(slot);
         drop(root);
         owned.resume().unwrap().wait(Duration::from_secs(20)).unwrap();
+        cleanup(&path);
+    }
+
+    #[test]
+    fn planned_native_markers_bind_original_slot_process_action_and_domain() {
+        let owner = FixtureJob::create().unwrap().spawn_self_test().unwrap();
+        let (path, root) = disposable_root(&owner, SessionSlot::Mc02);
+        let slot = root.open_slot(SessionSlot::Mc02, true).unwrap();
+        let create = slot.marker_plan("marker.bin", StorageRouteAction::Create).unwrap();
+        let read = slot.marker_plan("marker.bin", StorageRouteAction::Read).unwrap();
+        assert_eq!(create.components, vec!["marker.bin".to_owned()]);
+        assert_eq!(create.slot, SessionSlot::Mc02);
+        assert_eq!(create.process, owner.live_identity().unwrap());
+        assert_eq!(create.domain, StorageRouteDomain::LocalFiles);
+        assert_eq!(create.action, StorageRouteAction::Create);
+        slot.create_planned_canary(&create, 0xAABB_02).unwrap();
+        assert_eq!(slot.read_planned_canary(&read).unwrap(), 0xAABB_02);
+
+        // A pending plan is NOT an access ticket: mutate each publicly
+        // constructible field and verify the native adapter fails closed.
+        let mut wrong = create.clone();
+        wrong.slot = SessionSlot::Mc03;
+        assert_eq!(slot.create_planned_canary(&wrong, 1).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied);
+        wrong = create.clone();
+        wrong.process.created_file_time += 1;
+        assert_eq!(slot.create_planned_canary(&wrong, 1).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied);
+        wrong = create.clone();
+        wrong.domain = StorageRouteDomain::RoamingFiles;
+        assert_eq!(slot.create_planned_canary(&wrong, 1).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied);
+        wrong = create.clone();
+        wrong.action = StorageRouteAction::Read;
+        assert_eq!(slot.create_planned_canary(&wrong, 1).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied);
+        wrong = create.clone();
+        wrong.components.push("child.bin".to_owned());
+        assert_eq!(slot.create_planned_canary(&wrong, 1).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied);
+        wrong = create.clone();
+        wrong.components[0] = "../host.bin".to_owned();
+        assert_eq!(slot.create_planned_canary(&wrong, 1).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput);
+        assert_eq!(slot.read_planned_canary(&read).unwrap(), 0xAABB_02);
+        assert_eq!(slot.marker_plan("folder/marker.bin", StorageRouteAction::Read)
+            .unwrap_err().kind(), io::ErrorKind::InvalidInput);
+        assert_eq!(slot.marker_plan("CON.txt", StorageRouteAction::Create)
+            .unwrap_err().kind(), io::ErrorKind::InvalidInput);
+
+        drop(slot);
+        drop(root);
+        owner.resume().unwrap().wait(Duration::from_secs(20)).unwrap();
+        cleanup(&path);
+    }
+
+    #[test]
+    fn slot_handle_lineage_check_rejects_unrelated_child_or_changed_identity() {
+        let owner = FixtureJob::create().unwrap().spawn_self_test().unwrap();
+        let (path, root) = disposable_root(&owner, SessionSlot::Mc02);
+        let mut slot = root.open_slot(SessionSlot::Mc02, true).unwrap();
+        let original_name = slot.child_name;
+        slot.child_name = "mc03";
+        assert_eq!(slot.create_canary("marker.bin", 5).unwrap_err().kind(),
+            io::ErrorKind::NotFound);
+        slot.child_name = original_name;
+        let original_identity = slot.identity;
+        slot.identity.index ^= 1;
+        assert_eq!(slot.create_canary("marker.bin", 5).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied);
+        slot.identity = original_identity;
+        slot.create_canary("marker.bin", 11).unwrap();
+        assert_eq!(slot.read_canary("marker.bin").unwrap(), 11);
+        drop(slot);
+        drop(root);
+        owner.resume().unwrap().wait(Duration::from_secs(20)).unwrap();
         cleanup(&path);
     }
 

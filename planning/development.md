@@ -1,6 +1,44 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Native Storage — bind real HANDLE I/O to existing Rust route policy, 23 October 2026
+
+Completed a bounded **cross-layer integration** in the original
+Windows `independent_private_files.rs` owner. Existing disposable
+NT handle-relative marker create/read now passes through the canonical
+`plan_private_file_access` Rust domain preflight. Each plan is derived
+from the OS-created fixture process's actual full PID/FILETIME and
+retained MC02–MC04 slot; only `LocalFiles` Read/Create with a single
+ASCII marker component can reach native `NtCreateFile`. Publicly
+constructible pending-plan fields are revalidated against a FRESH
+fixture owner and regenerated canonical plan, preventing a stale,
+cross-slot, action/domain-swapped or nested plan from being used as
+an access capability. This is NOT a permission granted by the Rust
+plan itself.
+
+Also closed a native provenance gap: `SlotFiles::verify` previously
+checked its held slot HANDLE but never that the fixed slot NAME still
+resolved to that same directory under the retained root HANDLE.
+It now reopens the slot relative to the root, rechecks object
+volume/file index and owner lifetime, while preserving parent-root
+lineage verification. Two additional Windows-only regressions authored
+for real fixture read/create and forged plans, plus name/identity
+tampering. Existing marker tests use the new path.
+
+**Proof:** exact pinned GitHub source/static owner/consumer review
+only. Cargo/Windows Rust tests, actual Minecraft, Roaming/HKCU/WAM,
+signed-game identity and four-client acceptance NOT_EXECUTED. No
+service, driver, CI, game launch, credentials/worlds or installed
+profile mutation. The test temp parent remains untrusted for a
+production storage root; same-user peer access is STILL not isolated.
+MC02–MC04 Launch/Provision remains BLOCKED.
+
+**Next:** implement a verifiable non-test native *owner boundary*
+for genuinely service-owned private roots and peer-token ACL denial,
+without enabling game filesystem interception or a launcher until
+the mechanism is actually supported.
+
+
 ## Independent COW core — host-bound full write and file hierarchy, 23 October 2026
 
 Closed a concrete file/directory ambiguity in the canonical original
