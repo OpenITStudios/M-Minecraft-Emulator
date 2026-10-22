@@ -11,6 +11,21 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### OS-derived AppContainer LocalAppData root comparison (22 October 2026)
+
+For a pinned process with an actual AppContainer SID, an unmounted native
+observer first refuses thread impersonation and compares the target's
+TokenUser to the manager's current Windows user. Only in matching-user
+context does it call `GetAppContainerFolderPath`, then compare the OS
+location's opened volume/file ID to the caller's already-pinned root and
+perform the existing ancestor diagnostic. The response is a private
+optional boolean, never an OS access capability or stored account path.
+A missing/mismatched user context never becomes proof. Even an OS
+LocalAppData match does NOT demonstrate game RoamingAppData/HKCU,
+registry, WAM/MSAL or session singleton isolation; Launch/Provision
+remains fail-closed.
+
+
 ### Root-relative Windows NT directory handle chain (22 October 2026)
 
 The unmounted Windows ancestor probe now opens the local drive root once,

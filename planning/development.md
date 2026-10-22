@@ -1,5 +1,39 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — audit OS AppContainer LocalAppData root by SID, 22 October 2026
+
+The existing unmounted process-bound private-root inspection now obtains
+a source-scoped, **non-authorizing** OS-root observation. Using the pinned
+target's TokenUser and TokenAppContainerSid, it first rejects thread
+impersonation, then compares the target user SID with the current manager
+Windows user before calling Windows `GetAppContainerFolderPath`. The API
+resolves the caller user's AppContainer folder, not arbitrary target-user
+profiles; a user mismatch remains `None` (unknown) and does not open a
+root path. Its returned CoTaskMemAlloc UTF-16 path is bounded and released
+via `CoTaskMemFree`. For matching Windows users, a preexisting directory
+is opened with read-attributes/traverse/control access, final reparse
+following disabled, and its volume/file ID compared to the already-pinned
+root handle. An exact match also undergoes the existing handle-relative
+ancestor diagnostic; mismatch is explicit `Some(false)`. The result is
+recorded privately as `os_container_local_app_data_match: Option<bool>`
+in `PendingRootSidRelations`. No path, SID or token leaves the native
+owner; no provisioning or filesystem mutation is introduced.
+
+The AppContainer binary SID-to-text conversion is strict for
+`S-1-15-2-...` and has a new Windows-only negative regression authored
+NOT_EXECUTED. This is stronger file-identity evidence for one OS-selected
+LocalAppData location, **not** an original profile ownership certificate,
+NT effective permission test, Minecraft Roaming Known Folder/HKCU
+redirection, Microsoft WAM account separation, or authorization to launch.
+The native Windows compiler and real Windows/Minecraft execution remain
+NOT_EXECUTED. No changes to CI, `main`, installer, driver or account data.
+
+**Next:** confirm Win32 Userenv/ole32 ABI and folder semantics on an
+authorized Windows build; design how production can independently own
+and safely use a selected root without mistaking AppContainer LocalAppData
+for Minecraft Roaming/HKCU isolation.
+
+
 ## Independent engine — permit valid dot-prefixed NT directory components, 22 October 2026
 
 Removed an overbroad early guard in the new root-relative NtOpenFile

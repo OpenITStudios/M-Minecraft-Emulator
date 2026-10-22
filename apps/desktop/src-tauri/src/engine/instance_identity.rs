@@ -420,6 +420,10 @@ pub(crate) struct PendingRootSidRelations {
     owner_matches_process_user: bool,
     owner_matches_container: bool,
     container_allow_ace_observed: bool,
+    // None = manager cannot safely resolve the target user's profile
+    // (or the OS lookup was unavailable). Some only compares FILE identities.
+    // Neither state is a per-game Roaming/HKCU or access attestation.
+    os_container_local_app_data_match: Option<bool>,
 }
 
 #[cfg(windows)]
@@ -666,8 +670,9 @@ mod windows {
             GetProcAddress, LoadLibraryExW, LOAD_LIBRARY_SEARCH_SYSTEM32,
         },
         System::Threading::{
-            GetProcessTimes, OpenProcess, OpenProcessToken, QueryFullProcessImageNameW,
-            WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION,
+            GetCurrentProcess, GetCurrentThread, GetProcessTimes, OpenProcess,
+            OpenProcessToken, QueryFullProcessImageNameW, WaitForSingleObject,
+            PROCESS_QUERY_LIMITED_INFORMATION,
             PROCESS_SYNCHRONIZE,
         },
         Storage::FileSystem::{
@@ -688,6 +693,7 @@ mod windows {
         fn GetFinalPathNameByHandleW(
             handle: HANDLE, buffer: *mut u16, capacity: u32, flags: u32,
         ) -> u32;
+        fn lstrlenW(text: *const u16) -> i32;
     }
 
     // GetSecurityInfo returns a DWORD status (not GetLastError), with
@@ -718,6 +724,12 @@ mod windows {
             index: u32,
             ace: *mut *mut std::ffi::c_void,
         ) -> i32;
+        fn OpenThreadToken(
+            thread: HANDLE,
+            desired_access: u32,
+            open_as_self: i32,
+            token: *mut HANDLE,
+        ) -> i32;
     }
 
     /// Only a minimal negative check. A non-null DACL is not a private ACL:
@@ -730,6 +742,128 @@ mod windows {
         Ok(())
     }
 
+
+
+    #[link(name = "userenv")]
+    unsafe extern "system" {
+        fn GetAppContainerFolderPath(
+            appcontainer_sid: *const u16,
+            folder_path: *mut *mut u16,
+        ) -> i32;
+    }
+    #[link(name = "ole32")]
+    unsafe extern "system" {
+        fn CoTaskMemFree(memory: *mut std::ffi::c_void);
+    }
+
+    // Convert *only* an authenticated TokenAppContainerSid from its canonical
+    // SID binary representation to S-1-15-2-... . No caller-supplied or
+    // account SID string is permitted. The OS provides the actual folder path.
+    fn container_sid_text(sid: &[u8]) -> io::Result<String> {
+        if sid.len() < 16 || sid[0] != 1 || !(2..=15).contains(&sid[1])
+            || &sid[2..8] != [0, 0, 0, 0, 0, 15].as_slice()
+            || sid.len() != 8 + 4 * usize::from(sid[1])
+            || u32::from_le_bytes(sid[8..12].try_into().unwrap_or([0;4])) != 2
+        {
+            return Err(invalid("Not a canonical Windows AppContainer SID"));
+        }
+        let mut text = String::from("S-1-15");
+        for chunk in sid[8..].chunks_exact(4) {
+            let value = u32::from_le_bytes(chunk.try_into().unwrap_or([0; 4]));
+            text.push('-');
+            text.push_str(&value.to_string());
+        }
+        Ok(text)
+    }
+
+    // GetAppContainerFolderPath is CALLER-user-sensitive, not an operation
+    // performed on a process token. Refuse a thread impersonation token and
+    // a different Windows user before using it. Never report a false match
+    // when another user owns the running AppContainer.
+    fn no_thread_impersonation() -> io::Result<()> {
+        const ERROR_NO_TOKEN: u32 = 1008;
+        let mut raw: HANDLE = ptr::null_mut();
+        let result = unsafe {
+            OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, 1, &mut raw)
+        };
+        if result != 0 || !raw.is_null() {
+            if !raw.is_null() {
+                let _owned = Handle(raw);
+            }
+            return Err(invalid("AppContainer folder lookup forbidden under impersonation"));
+        }
+        if unsafe { GetLastError() } != ERROR_NO_TOKEN {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+
+    fn same_manager_windows_user(target_user: &[u8]) -> io::Result<bool> {
+        let mut raw: HANDLE = ptr::null_mut();
+        if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut raw) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let token = Handle(raw);
+        let manager = user_sid_from_token(&token)?;
+        Ok(manager == target_user)
+    }
+
+    fn appcontainer_local_app_data_path(sid: &[u8]) -> io::Result<std::path::PathBuf> {
+        use std::ffi::OsString;
+        let utf16: Vec<u16> = container_sid_text(sid)?
+            .encode_utf16().chain(Some(0)).collect();
+        let mut raw: *mut u16 = ptr::null_mut();
+        let status = unsafe { GetAppContainerFolderPath(utf16.as_ptr(), &mut raw) };
+        struct TaskPath(*mut u16);
+        impl Drop for TaskPath {
+            fn drop(&mut self) {
+                if !self.0.is_null() {
+                    unsafe { CoTaskMemFree(self.0.cast()) };
+                }
+            }
+        }
+        let owned = TaskPath(raw);
+        if status < 0 || owned.0.is_null() {
+            return Err(invalid("Windows AppContainer LocalAppData path unavailable"));
+        }
+        // The OS API returns an allocated null-terminated UTF-16 path.
+        // lstrlenW is used only on OS-owned, validated successful output.
+        let count = unsafe { lstrlenW(owned.0) };
+        if !(4..=32760).contains(&count) {
+            return Err(invalid("Invalid OS-owned AppContainer folder path size"));
+        }
+        let path = unsafe { std::slice::from_raw_parts(owned.0, count as usize) };
+        Ok(std::path::PathBuf::from(OsString::from_wide(path)))
+    }
+
+    fn os_container_local_app_data_match(
+        process_user: &[u8],
+        container: &[u8],
+        opened_root: super::PrivateRootObjectIdentity,
+    ) -> io::Result<Option<bool>> {
+        no_thread_impersonation()?;
+        if !same_manager_windows_user(process_user)? {
+            return Ok(None);
+        }
+        let path = appcontainer_local_app_data_path(container)?;
+        use windows_sys::Win32::Storage::FileSystem::{
+            FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
+            FILE_SHARE_WRITE,
+        };
+        // Existing OS-returned location only. No Create, no data reads and
+        // no accounts/worlds; do not follow the final reparse point.
+        let folder = std::fs::OpenOptions::new()
+            .access_mode(0x80 | 0x20 | 0x0002_0000) // FILE_READ_ATTRIBUTES, FILE_TRAVERSE, READ_CONTROL
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(path)?;
+        let expected = ancestor_directory_identity(&folder)?;
+        if expected != opened_root {
+            return Ok(Some(false));
+        }
+        inspect_opened_ancestor_chain(&folder, expected)?;
+        Ok(Some(true))
+    }
 
     // These well-known SID byte encodings are fixed Windows SID formats:
     // S-1-1-0 (Everyone), S-1-5-11 (Authenticated Users),
@@ -892,6 +1026,7 @@ mod windows {
             owner_matches_process_user: expected_user.is_some_and(|sid| sid == owner_sid),
             owner_matches_container: expected_container.is_some_and(|sid| sid == owner_sid),
             container_allow_ace_observed: allow,
+            os_container_local_app_data_match: None,
         })
     }
 
@@ -1207,10 +1342,13 @@ mod windows {
         let user = user_sid_from_token(&token)?;
         let container = appcontainer_sid_from_token(&token)?
             .ok_or_else(|| invalid("No AppContainer SID for scoped directory check"))?;
-        let result = inspect_directory_with_sids(opened, Some(&user), Some(&container))?;
-        inspect_opened_ancestor_chain(opened, result.0)?;
+        let (directory, mut relations) =
+            inspect_directory_with_sids(opened, Some(&user), Some(&container))?;
+        inspect_opened_ancestor_chain(opened, directory)?;
+        relations.os_container_local_app_data_match =
+            os_container_local_app_data_match(&user, &container, directory)?;
         live(&process)?;
-        Ok(result)
+        Ok((directory, relations))
     }
 
     /// Exact identity and attributes of a fixture file HANDLE, not its path.
@@ -1807,6 +1945,23 @@ mod windows {
                 created_file_time: created(&process).unwrap().to_string(),
             }
         }
+        #[test]
+        fn appcontainer_sid_text_accepts_only_canonical_binary_package_sids() {
+            let value = [
+                1u8,2,0,0,0,0,0,15,2,0,0,0,17,0,0,0,
+            ];
+            assert_eq!(container_sid_text(&value).unwrap(), "S-1-15-2-17");
+            for bad in [
+                &value[..15],
+                &[2,2,0,0,0,0,0,15,2,0,0,0,17,0,0,0][..],
+                &[1,2,0,0,0,0,0,5,2,0,0,0,17,0,0,0][..],
+                &[1,2,0,0,0,0,0,15,3,0,0,0,17,0,0,0][..],
+                &[1,16,0,0,0,0,0,15,2,0,0,0,17,0,0,0][..],
+            ] {
+                assert!(container_sid_text(bad).is_err());
+            }
+        }
+
         #[test]
         fn combined_native_pair_matches_separate_read_only_inspections() {
             let key = own_key();
