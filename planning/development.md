@@ -1,5 +1,35 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — explicit-DACL, last-message-token named-pipe fixture, 22 October 2026
+
+Added apps/desktop/src-tauri/src/engine/independent_pipe_server.rs:
+a fresh, one-instance, noninheritable, inbound-only, local-only
+message pipe protected by an explicit SDDL DACL (current fixture
+Windows user, SYSTEM, Administrators; no default Everyone/Anonymous
+grants). Its fixed 32-byte read rejects malformed, long and short
+messages before calling the existing OS client PID/full FILETIME
+observer. It then impersonates the **last successfully read message**
+and checks the SID/session of the thread's impersonation token
+against the original current-user token. Every successful impersonation
+is followed by RevertToSelf via an RAII guard; an unrevertable thread
+aborts. All outputs are explicitly PENDING diagnostics. Three authored
+Windows-native tests cover same-process local transport, oversized
+payload rejection and spoofed FILETIME denial.
+
+**Scope/proof:** exact GitHub static source review. Windows compiler
+and test execution NOT_EXECUTED; no installed service, authenticated
+privileged broker, deadline-safe overlapped server or game launch
+is claimed. Same-user fixture DACL grants are unsuitable for a
+production SYSTEM service. This remains unmounted, never receives
+accounts, worlds, tokens, runtime configuration or Minecraft
+processes. MC02–MC04 Launch/Provision remains BLOCKED; Sandboxie
+runtime is not linked or activated.
+
+**Next:** design and implement a service-owned, cancellable
+named-pipe endpoint with a restricted service/client SID policy
+before permitting any privileged operation or integration.
+
+
 ## Independent engine — typed read-only broker wire and native pipe peer inspection, 22 October 2026
 
 Added one original, versioned 32-byte broker diagnostic request contract

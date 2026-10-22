@@ -11,6 +11,48 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Explicit-DACL native named-pipe server fixture (22 October 2026)
+
+The original, unmounted Windows backend
+[apps/desktop/src-tauri/src/engine/independent_pipe_server.rs](../../apps/desktop/src-tauri/src/engine/independent_pipe_server.rs)
+implements a disposable, **one-client inbound-only** named-pipe server.
+Unlike the unsafe Windows pipe default, it builds a protected SDDL DACL
+using the actual current-user token SID plus SYSTEM/Administrators,
+creates a noninheritable pipe with FILE_FLAG_FIRST_PIPE_INSTANCE,
+PIPE_TYPE_MESSAGE, PIPE_READMODE_MESSAGE and
+PIPE_REJECT_REMOTE_CLIENTS, and permits only a fixed 32-byte
+diagnostic frame (oversized/short/malformed messages are rejected).
+The endpoint uses an exact fresh fixture name and does not run
+a permanent listener or install a service.
+
+The reader correlates the OS-reported pipe client PID and creation
+FILETIME with the untrusted frame via the existing native peer
+inspector, then impersonates the **last message's** caller using
+ImpersonateNamedPipeClient. It compares the impersonation token user
+SID and Windows session to the current fixture user, then uses an
+RAII guard for mandatory RevertToSelf; failure to revert aborts rather
+than leaving the server thread in an unsafe identity. The result
+contains sanitized pending facts ONLY. Native tests cover a local
+valid frame, a too-long message and forged process creation time.
+
+**These are Windows-only source/tests, NOT_EXECUTED.** The current
+user still has full access to this *test* pipe. That is not appropriate
+for a privileged service: the permanent design will require an
+independent service SID, per-client minimal access including a logon
+SID policy, robust overlapped/deadline/cancellation handling and
+message-to-handle authentication resistant to duplicated pipe
+handles. The fixture uses synchronous I/O only when a client is
+already connected; it must never become a persistent listener.
+There are no mutating opcodes, Tauri routes, service/driver changes,
+Minecraft launch permissions or Sandboxie runtime dependencies.
+
+Next: define the service-owned endpoint identity and connection
+lifecycle with cancel-safe overlapped I/O and its Windows-only
+acceptance contract. Never promote PID/token resemblance to
+sandbox readiness or license/account separation.
+
+
+
 ### Versioned independent broker diagnostic protocol (22 October 2026)
 
 `engine/runtime-core/src/independent_engine/broker_wire.rs`

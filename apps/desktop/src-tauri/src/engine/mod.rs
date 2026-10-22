@@ -22,6 +22,9 @@ mod independent_root_access;
 // Native pending pipe-peer PID/FILETIME check; no IPC server/launch wiring.
 #[cfg(windows)]
 mod independent_pipe_peer;
+// Explicitly ACL-protected native named-pipe fixture; unmounted/read-only.
+#[cfg(windows)]
+mod independent_pipe_server;
 pub mod manager_settings;
 pub mod native_clients;
 pub mod owned_isolation;
