@@ -21,6 +21,96 @@ bar. Selecting a tab changes presentation; another session keeps running.
 **Independent production provider: NOT_IMPLEMENTED.** No Windows-user experiment,
 Education sign-in, four-world play or multiplayer acceptance is claimed here.
 
+## P0 feasibility decision — documented Minecraft data roots, 23 October 2026
+
+**Engineering result: no supported, non-modifying four-client provider has
+been demonstrated.** The independent native Windows source remains
+diagnostic/fixture-only and MC02–MC04 Launch/Provision stays blocked. This
+conclusion is a source and official-document review, NOT a claim that a
+general solution is impossible, a passed Windows test or a new readiness
+state. The previous Windows synthetic AppContainer fixture results are
+revision-scoped and must not be promoted to unmodified Minecraft evidence.
+
+### Official Minecraft Education edition-specific storage
+
+Minecraft Education's published Windows clean-reinstall guide documents:
+
+- Traditional **Desktop .exe** world data under
+  `%APPDATA%\\Minecraft Education Edition\\games\\com.mojang\\minecraftWorlds`
+  (Roaming AppData of the logged-on Windows user).
+- **Microsoft Store appx** world data under
+  `%LOCALAPPDATA%\\Packages\\Microsoft.MinecraftEducationEdition_8wekyb3d8bbwe\\LocalState\\games\\com.mojang\\minecraftWorlds`
+  (the published Store package/user LocalState path).
+
+Source: [Minecraft Education — Clean Reinstall on PC](https://edusupport.minecraft.net/hc/en-us/articles/360047118832-Clean-Reinstall-Minecraft-Education-on-PC).
+
+These are official **edition-specific reference locations**, not
+installer-independent runtime guarantees or an authorization to inspect,
+copy, rewrite or delete user worlds. The Store and Desktop editions cannot
+coexist according to the [official installation guide](https://edusupport.minecraft.net/hc/en-us/articles/13106858087956-Windows-Installation-Guide).
+Never embed either path as a production routing shortcut.
+
+The previously executed **unpackaged AppContainer synthetic fixture** reported
+`APPDATA` and `SHGetKnownFolderPath(FOLDERID_RoamingAppData)` outside its
+expected private container, despite private LocalAppData and synthetic
+canaries. This specifically blocks that observed candidate as an assumed
+replacement for the official Desktop world's Roaming data route. It does
+NOT establish where the unmodified Education process actually wrote, how
+its Microsoft login broker behaved or that *all* AppContainer configurations
+are impossible. The existing evaluator already returns
+`NO_GO_OBSERVED_ROAMING_BOUNDARY`; add no duplicate policy gate.
+
+### Windows mechanism decision by necessary capability
+
+| Candidate | Windows-supported mechanism | Product-specific gap / decision |
+| --- | --- | --- |
+| Unpackaged AppContainer | OS SID/DACL sandbox, scoped local data and named objects; actual two-process synthetic fixture exists | **NO-GO for the observed Desktop/Roaming candidate**: in-process known-folder/environment remained outside private profile. HKCU, Store behavior, Minecraft actual world access and auth remain UNKNOWN. |
+| Full MSIX / official Store package | Documented virtualized-app AppData and HKCU behavior is **per user + per app/package**, with merged host reads under documented conditions | **Not a per-PID solution** for four sessions from one game package identity and one Windows user. Identical Package Family Name observations cannot prove per-client world/credential separation. Do not repackage or install a second edition. |
+| Package identity with external location | Supported package identity for an existing **developer-controlled** application | **Not selected** for the unmodified third-party official game. A new identity package neither confers rights to modify/re-register the official distribution nor grants per-instance HKCU/WAM isolation. |
+| Win32 app isolation (Windows 11 24H2+) | Microsoft-documented **preview**, includes AppContainer, file/privacy brokering and some app multi-instancing | **Research only**: requires packaging/developer integration and compatible supported OS. ShellExecute multi-instancing does not establish independent private worlds, HKCU or Microsoft broker contexts for the unmodified official Education app. |
+| ProjFS | User-mode projected files under one explicit **virtualization root** | **Not a general game filesystem redirector**. A provider for a chosen directory does not by itself redirect the game's pre-existing Roaming path or HKCU. |
+| RegLoadAppKeyW / RegOverridePredefKey | Handle-only app hive; latter overrides predefined keys **only for the caller process** | **Not transparent HKCU virtualization** for an external unmodified Minecraft process. Existing private hive fixture is useful but cannot authorize a game launch. |
+| Windows UAC legacy registry virtualization | Redirects selected legacy HKLM writes into user VirtualStore | **Not a per-instance HKCU solution**; excluded for 64-bit processes and manifest-specified requested execution levels. Not applicable as a general independent game registry implementation. |
+| RunAs alternate Windows user | Distinct Windows user profile and HKCU | **Not selected**: separate logon alone does not prove game singleton/display compatibility; Microsoft WAM API documentation explicitly rejects token acquisition under RunAs impersonation. Do NOT infer the actual Education client always uses WAM. |
+| File minifilter + registry callbacks | Windows kernel APIs can observe/filter I/O and registry operations | **Not selected**: requires an original signed kernel implementation, robust identity/race/recovery design, and still does not solve external authentication brokers, UI or singleton behavior automatically. No driver code/install authorization. |
+
+Windows primary-source references:
+
+- [Packaged desktop virtualized AppData/HKCU](https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes) — per-user/per-app writes and host-read fallback.
+- [Win32 app isolation preview and minimum platform](https://learn.microsoft.com/en-us/windows/win32/secauthz/app-isolation-overview) and [release notes](https://learn.microsoft.com/en-us/windows/win32/secauthz/app-isolation-release-notes).
+- [Package identity with external location](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/grant-identity-to-nonpackaged-apps-overview).
+- [ProjFS virtualization root](https://learn.microsoft.com/en-us/windows/win32/projfs/provider-overview).
+- [RegOverridePredefKey caller-only behavior](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regoverridepredefkey) and [application hive handles](https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/filtering-registry-operations-on-application-hives).
+- [Legacy Windows registry virtualization limits](https://learn.microsoft.com/en-us/windows/win32/sysinfo/registry-virtualization).
+- [MSAL WAM active interactive session / RunAs limitation](https://learn.microsoft.com/en-us/entra/msal/dotnet/acquiring-tokens/desktop-mobile/wam).
+- [Registry filter driver scope](https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/filtering-registry-calls).
+
+### Product-evidence boundary and stop decision
+
+For **any** future production candidate, require evidence that the unchanged
+legitimately installed Education client — not a synthetic fixture — can
+safely resolve private Local **and Roaming** world data, private effective
+HKCU reads/writes and cross-session access denial while preserving normal
+Microsoft-owned sign-in and singleton/window/input behavior. The user must
+manually authenticate legitimate distinct accounts inside the game; collect
+no account IDs, tokens, secrets or world files. Repeat across restart and
+pair-wise clients before four-client acceptance. A native process count,
+valid Authenticode signature, package family, token SID, private-looking
+folder, created fixture canary or installed service cannot replace any of
+these observations.
+
+**STOP:** do not begin a production minifilter, package registration,
+service activation, new login implementation, host-profile file rewrite,
+or independent client launch on the strength of this source review.
+The existing platform, provider and retired-fork admission gates remain
+authoritative; no new lifecycle gate/readiness store is introduced.
+Useful source work may continue independently of Windows runtime access,
+but actual mechanism compatibility stays `NOT_EXECUTED` until observed.
+
+**Next source-only task:** inspect the existing independent storage and
+process evidence consumers for any implied promotion of *path/package*
+metadata into game-private access; correct only a concrete leak if found.
+
 ## Bahan diskusi ChatGPT - 21 Oktober 2026
 
 Operator ingin mendiskusikan keputusan berikutnya sebelum pekerjaan dilanjutkan.

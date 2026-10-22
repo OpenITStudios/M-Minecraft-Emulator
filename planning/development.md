@@ -1,6 +1,41 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## P0 independent engine — edition-specific isolation route decision, 23 October 2026
+
+Reviewed official Minecraft Education Windows data paths alongside
+Microsoft AppContainer, MSIX, Win32 app isolation (preview), sparse
+package identity, ProjFS, RegLoadAppKeyW/RegOverridePredefKey, legacy
+UAC registry virtualization, RunAs/WAM and native kernel registry
+callbacks. The official Desktop edition's world location is beneath
+Roaming APPDATA, exactly the class whose synthetic unpackaged
+AppContainer Known Folder/environment was observed outside the
+private profile. Store world data is beneath the published per-user
+package LocalState, which does NOT imply a separate instance per PID.
+A second package or Win32 app-isolation identity cannot be attached
+to the unchanged official distribution as an assumed shortcut. Kernel
+minifilters can scope I/O but do NOT solve login broker, game singleton
+or presentation compatibility merely by existing.
+
+**Decision:** no new independent provider or driver is authorized/
+selected. This is NOT a universal impossibility result, nor a
+new runtime gate. Existing `instance_catalog.rs` still blocks
+MC02–MC04 Launch/Provision; retired Sandboxie and legacy VMware
+routes remain inactive. Keep original data untouched.
+
+**Proof:** exact GitHub repo source/static consistency plus official
+Microsoft/Minecraft public contracts. No native Windows or game
+executions on this SHA; actual Education I/O, Microsoft account
+broker, two-client gameplay and four-client acceptance NOT_EXECUTED.
+No CI, installers, service/driver, package registration, profile,
+account or world writes; `main` unchanged. Feasibility criteria
+and sources recorded in `docs/system/independent-isolation.md`.
+
+**Next:** source-review existing process/storage evidence consumers
+for a concrete path/package-to-isolation promotion error; change
+only the canonical owner if one exists.
+
+
 ## P0 independent feasibility — compare live Windows package families, 23 October 2026
 
 Added a **read-only, unmounted** Windows Package Family comparison to the
