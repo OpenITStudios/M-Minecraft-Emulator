@@ -11,6 +11,30 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Independent Win32 process lifecycle (22 October 2026)
+
+The original Windows-only code in
+[apps/desktop/src-tauri/src/engine/independent_job.rs](../../apps/desktop/src-tauri/src/engine/independent_job.rs)
+creates an unnamed Job Object, sets fixture-only KILL_ON_JOB_CLOSE,
+launches our own Rust test executable SUSPENDED, assigns the exact retained
+child HANDLE to the job, verifies PID/creation FILETIME, then resumes it.
+Failure kills only the newly created fixture. Two OS-backed tests verify
+true job membership and separate job identity.
+
+This is **not** a sandbox or a production provider. Job objects group and
+control processes; they do not virtualize real Windows filesystem, HKCU,
+named IPC, Microsoft authentication or Minecraft singleton state. The
+kill-on-close fixture policy MUST NOT be used for persistent game clients.
+No Tauri command or Minecraft launch is connected. No Sandboxie code is
+linked or called. The original DisabledIndependentProvider and Launch/
+Provision gates stay closed. Windows compilation and tests NOT_EXECUTED.
+
+Next technical boundary: per-process filesystem/registry enforcement with
+real Windows handles and an explicit independent service ownership design;
+prove identity, compatibility and recovery before enabling game launches.
+
+
+
 ### Synthetic COW private-only profile boundary (22 October 2026)
 
 `SyntheticSlotOverlay::make_private_only` blocks host baseline fallback

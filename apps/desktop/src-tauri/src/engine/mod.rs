@@ -7,6 +7,9 @@ pub mod instance_discovery;
 pub mod instance_focus;
 pub mod instance_focus_events;
 pub mod instance_identity;
+// Native Win32 job-owned fixture; never mounted as a game launch provider.
+#[cfg(windows)]
+mod independent_job;
 pub mod manager_settings;
 pub mod native_clients;
 pub mod owned_isolation;

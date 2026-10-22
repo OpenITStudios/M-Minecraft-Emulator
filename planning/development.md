@@ -1,5 +1,28 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — first original Win32 Job Object process primitive, 22 October 2026
+
+Added a Windows-only independently authored process/job primitive in
+apps/desktop/src-tauri/src/engine/independent_job.rs. It creates an OS
+Job Object, launches only the **own Rust test executable** suspended,
+assigns it to the job, obtains exact PID/full creation FILETIME, then
+resumes the main thread. Two Windows fixture tests are authored for
+actual OS job-membership and cross-job rejection. Failed enrollment,
+identity or resume terminates only that disposable child.
+
+This is a real native process lifecycle primitive, NOT a sandbox. It
+does not intercept files, HKCU, WAM, COM/IPC or game singleton state.
+Kill-on-close is restricted to disposable fixtures; a persistent game
+requires a durable service owner. No Sandboxie service, driver or DLL
+is linked or called. No provider, Tauri command, Minecraft launch, box,
+user data, installed driver or signing state is changed. MC02–MC04
+Launch/Provision remain BLOCKED. Windows compile and fixture tests
+NOT_EXECUTED; four-client gameplay NOT_EXECUTED.
+
+**Next:** design and implement a bounded, process-identity-bound native
+filesystem/registry enforcement adapter before permitting game launch.
+
+
 ## Independent engine — track synthetic host-derived copy-up provenance, 22 October 2026
 
 Strengthened private-only routing against a copy-up provenance bypass.
