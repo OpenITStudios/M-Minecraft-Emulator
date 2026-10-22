@@ -360,8 +360,11 @@ impl SyntheticSlotOverlay {
         Ok(())
     }
 
-    /// First private read of a host value can be copied up explicitly before
-    /// a partial write. A tombstone deliberately suppresses copy-up.
+    /// Materialize one visible immutable host fixture leaf into this slot.
+    /// Reject missing/masked host data or any quota excess before mutation.
+    /// An existing private value is a no-op, with its provenance unchanged.
+    /// Copy source bytes ONCE: write() would clone the payload again and
+    /// clear the host-derived tag, which is wrong for a copy-up.
     pub fn copy_up(
         &mut self,
         host: &SyntheticBaseView,
@@ -373,11 +376,24 @@ impl SyntheticSlotOverlay {
         if self.private.contains_key(key) {
             return Ok(());
         }
-        let bytes = self.read(host, slot, process, key)?
-            .ok_or(OverlayError::MissingSource)?
-            .to_vec();
-        self.write(slot, process, key.clone(), &bytes)?;
+        let visible = self.read(host, slot, process, key)?
+            .ok_or(OverlayError::MissingSource)?;
+        if visible.len() > MAX_OVERLAY_ITEM_BYTES {
+            return Err(OverlayError::EntryTooLarge);
+        }
+        if self.private.len() >= MAX_OVERLAY_ITEMS {
+            return Err(OverlayError::CapacityExceeded);
+        }
+        let total = self.private_bytes.checked_add(visible.len())
+            .ok_or(OverlayError::CapacityExceeded)?;
+        if total > MAX_OVERLAY_PRIVATE_BYTES {
+            return Err(OverlayError::CapacityExceeded);
+        }
+        // No fallible quota or source checks remain after this one copy.
+        let owned = visible.to_vec();
+        self.private.insert(key.clone(), owned);
         self.host_derived.insert(key.clone());
+        self.private_bytes = total;
         Ok(())
     }
 
@@ -402,6 +418,12 @@ impl SyntheticSlotOverlay {
             .ok_or(OverlayError::EntryTooLarge)?;
         if end > MAX_OVERLAY_ITEM_BYTES {
             return Err(OverlayError::EntryTooLarge);
+        }
+        // A zero-byte write cannot extend an existing file or implicitly
+        // create a private file. Do not copy up host bytes for a no-op;
+        // explicit write() creates an empty private value if needed.
+        if data.is_empty() {
+            return Ok(());
         }
         let private = self.private.contains_key(&key);
         let original = self.read(host, slot, process, &key)?;
@@ -1521,6 +1543,101 @@ mod tests {
         assert_eq!(a.private_byte_count(), b"one".len() + b"leaf".len());
         assert_eq!(a.read(&base, SessionSlot::Mc02, id(22),
             &file("world/data.bin")).unwrap(), Some(b"original".as_slice()));
+    }
+
+    #[test]
+    fn copy_up_is_idempotent_and_tracks_file_registry_host_provenance() {
+        let (base, mut a, b) = setup();
+        let key = file("world/data.bin");
+        a.copy_up(&base, SessionSlot::Mc02, id(22), &key).unwrap();
+        let ptr = a.private.get(&key).unwrap().as_ptr();
+        a.copy_up(&base, SessionSlot::Mc02, id(22), &key).unwrap();
+        assert_eq!(a.private.get(&key).unwrap().as_ptr(), ptr);
+        assert_eq!(a.private_byte_count(), b"original".len());
+        assert!(a.host_derived.contains(&key));
+        let reg_key = reg("Software\\Game\\Setting");
+        a.copy_up(&base, SessionSlot::Mc02, id(22), &reg_key).unwrap();
+        assert!(a.host_derived.contains(&reg_key));
+        assert_eq!(a.private_byte_count(), b"original".len() + b"base-setting".len());
+        assert_eq!(b.read(&base, SessionSlot::Mc03, id(33), &reg_key).unwrap(),
+            Some(b"base-setting".as_slice()));
+        assert_eq!(base.fixture_bytes(&key), Some(b"original".as_slice()));
+        a.make_private_only(SessionSlot::Mc02, id(22), file("vault")).unwrap();
+        assert_eq!(a.rename(&base, SessionSlot::Mc02, id(22),
+            &key, file("vault/copied.bin")),
+            Err(OverlayError::HostCopyIntoPrivateBoundary));
+        a.write(SessionSlot::Mc02, id(22), key.clone(), b"fresh").unwrap();
+        assert!(!a.host_derived.contains(&key));
+        a.copy_up(&base, SessionSlot::Mc02, id(22), &key).unwrap();
+        assert!(!a.host_derived.contains(&key));
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22), &key).unwrap(),
+            Some(b"fresh".as_slice()));
+    }
+
+    #[test]
+    fn copy_up_quota_and_hidden_host_denials_leave_state_unchanged() {
+        let (base, mut a, _) = setup();
+        let host_key = file("world/data.bin");
+        a.delete(SessionSlot::Mc02, id(22), host_key.clone()).unwrap();
+        assert_eq!(a.copy_up(&base, SessionSlot::Mc02, id(22), &host_key),
+            Err(OverlayError::MissingSource));
+        assert!(a.private.is_empty());
+        assert!(a.host_derived.is_empty());
+        assert_eq!(a.private_byte_count(), 0);
+        assert!(a.tombstones.contains(&host_key));
+        let mut full_items = SyntheticSlotOverlay::new(SessionSlot::Mc04, id(44)).unwrap();
+        for n in 0..MAX_OVERLAY_ITEMS {
+            full_items.write(SessionSlot::Mc04, id(44),
+                file(&format!("quota/item_{n:04}")), b"x").unwrap();
+        }
+        let ptr = full_items.private.get(&file("quota/item_0000")).unwrap().as_ptr();
+        assert_eq!(full_items.copy_up(&base, SessionSlot::Mc04, id(44), &host_key),
+            Err(OverlayError::CapacityExceeded));
+        assert_eq!(full_items.private.len(), MAX_OVERLAY_ITEMS);
+        assert_eq!(full_items.private_byte_count(), MAX_OVERLAY_ITEMS);
+        assert_eq!(full_items.private.get(&file("quota/item_0000")).unwrap().as_ptr(), ptr);
+        assert!(full_items.host_derived.is_empty());
+        let mut full_bytes = SyntheticSlotOverlay::new(SessionSlot::Mc04, id(44)).unwrap();
+        let data = vec![8u8; MAX_OVERLAY_ITEM_BYTES];
+        for n in 0..MAX_OVERLAY_PRIVATE_BYTES / MAX_OVERLAY_ITEM_BYTES {
+            full_bytes.write(SessionSlot::Mc04, id(44),
+                file(&format!("quota/data_{n:04}")), &data).unwrap();
+        }
+        assert_eq!(full_bytes.copy_up(&base, SessionSlot::Mc04, id(44), &host_key),
+            Err(OverlayError::CapacityExceeded));
+        assert_eq!(full_bytes.private_byte_count(), MAX_OVERLAY_PRIVATE_BYTES);
+        assert!(full_bytes.host_derived.is_empty());
+        assert_eq!(base.fixture_bytes(&host_key), Some(b"original".as_slice()));
+    }
+
+    #[test]
+    fn empty_partial_write_never_grows_or_materializes_host_data() {
+        let (base, mut a, b) = setup();
+        let host_key = file("world/data.bin");
+        let absent = file("world/absent.bin");
+        a.write_at(&base, SessionSlot::Mc02, id(22),
+            host_key.clone(), MAX_OVERLAY_ITEM_BYTES, b"").unwrap();
+        a.write_at(&base, SessionSlot::Mc02, id(22),
+            absent.clone(), 0, b"").unwrap();
+        assert!(a.private.is_empty());
+        assert!(a.host_derived.is_empty());
+        assert_eq!(a.private_byte_count(), 0);
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22),
+            &host_key).unwrap(), Some(b"original".as_slice()));
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22), &absent).unwrap(), None);
+        let key = file("world/owned.bin");
+        a.write(SessionSlot::Mc02, id(22), key.clone(), b"private").unwrap();
+        let ptr = a.private.get(&key).unwrap().as_ptr();
+        a.write_at(&base, SessionSlot::Mc02, id(22),
+            key.clone(), MAX_OVERLAY_ITEM_BYTES, b"").unwrap();
+        assert_eq!(a.private.get(&key).unwrap().as_ptr(), ptr);
+        assert_eq!(a.private.get(&key).unwrap().as_slice(), b"private");
+        assert_eq!(a.private_byte_count(), b"private".len());
+        assert_eq!(a.write_at(&base, SessionSlot::Mc02, id(22),
+            absent.clone(), MAX_OVERLAY_ITEM_BYTES + 1, b""),
+            Err(OverlayError::EntryTooLarge));
+        assert_eq!(b.read(&base, SessionSlot::Mc03, id(33), &host_key).unwrap(),
+            Some(b"original".as_slice()));
     }
 
     #[test]

@@ -1,6 +1,36 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Independent COW core — copy-up and empty partial-write correctness, 23 October 2026
+
+Fixed two concrete source problems in the single original Rust
+`independent_engine/overlay.rs` owner: `copy_up` duplicated
+an entire host fixture payload twice via `Vec::to_vec()` followed
+by a second `write()` clone; now it validates owner, visible host,
+per-item, item-count and total private byte quota and inserts ONE
+copied buffer with a persistent host-derived provenance tag.
+Repeated copy-up does not rewrite private bytes or retag
+explicitly authored full replacements.
+
+`write_at` previously extended or created a private file even
+for an empty payload and a nonzero offset. Once range-checked,
+zero-byte writes now return without host fallback import, private
+buffer growth, tag changes or mutation. Three regressions authored
+for file/registry cross-slot provenance, hidden-source and full
+byte/item quota atomicity, and no-op zero-byte writes.
+
+**Proof:** exact pinned GitHub source/consumer review.
+Rust/Cargo not available in this ChatGPT execution environment:
+Rust tests, Windows-native probes, Minecraft account/gameplay and
+four-client acceptance are NOT_EXECUTED. No CI, service,
+driver, provider activation, user data or main changes.
+MC02–MC04 Launch/Provision remains blocked.
+
+**Next:** audit full-write baseline collision and copy-up metadata
+handling to close remaining synthetic COW invariants without
+inventing a Windows virtualization provider.
+
+
 ## Independent COW core — prefix policy and hierarchical rename hardening, 23 October 2026
 
 Corrected two bounded namespace gaps in the existing

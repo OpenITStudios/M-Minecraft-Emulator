@@ -34,6 +34,28 @@ driver, existing Minecraft data, HKCU/WAM or Launch/Provision changes.
 A future production capability requires attested root ancestry, owner SID,
 effective cross-token peer denial and actual game-path enforcement.
 
+### Copy-up single-allocation and zero-byte partial writes (23 October 2026)
+
+The original pure Rust `independent_engine/overlay.rs` now performs
+an explicit copy-up by checking a visible synthetic host resource,
+per-item/1,024-entry/8-MiB private quotas and process ownership
+BEFORE copying ONE immutable fixture leaf directly into the private
+map. The previous copy-up copied the complete byte payload once
+and then passed it to `write()`, which cloned it a second time.
+The new path retains the host-derived tag; repeat copy-up on an
+existing private value is a no-op and cannot change provenance.
+
+A range-validated `write_at` with an empty byte payload is now a
+no-op. It never grows files beyond EOF, creates empty private keys,
+copies host fallback or changes the host-derived flag. Callers can
+explicitly create an empty synthetic file with `write()`.
+Three focused tests cover provenance/idempotency/peer separation,
+both private quotas and missing host atomicity, and empty writes.
+
+**Boundary:** source/static review only; Rust tests and Windows
+gameplay NOT_EXECUTED. This is synthetic in-memory data only, not
+actual Minecraft filesystem interception, HKCU, WAM or Launch authority.
+
 ### COW private-only policy compaction and rename namespace safety (23 October 2026)
 
 The original bounded synthetic `independent_engine/overlay.rs` now applies
