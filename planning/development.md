@@ -1,5 +1,25 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — read process TokenUser without profile lookup, 22 October 2026
+
+Extracted `user_sid_from_token` from the existing native Windows
+`context_from_token`, retaining exactly one bounded TokenUser query
+implementation. The process-bound root/DACL correlation now reuses
+the process TOKEN_QUERY handle to read only TokenUser and AppContainer SID,
+without calling `GetUserProfileDirectoryW` or querying the unrelated
+Windows session/profile path. The original context comparison still
+uses this exact helper and preserves its established public booleans.
+One Windows-only regression checks that the SID-only and full-context
+readers agree; it is authored NOT_EXECUTED.
+
+This is a read-only source efficiency/reliability correction, NOT
+proof of root provenance, effective permissions, Minecraft roaming,
+registry/HKCU isolation or Microsoft account separation.
+No launch, installer, account, driver, service, CI or `main` change.
+**Next:** Determine a trusted directory-ancestor ownership boundary;
+keep production MC02–MC04 Launch/Provision blocked.
+
+
 ## Independent engine — correlate pinned process SIDs with private root DACL, 22 October 2026
 
 The unmounted native private-root observer now uses the same pinned process

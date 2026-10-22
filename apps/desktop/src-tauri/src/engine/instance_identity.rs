@@ -947,8 +947,9 @@ mod windows {
     ) -> io::Result<(super::PrivateRootObjectIdentity, super::PendingRootSidRelations)> {
         let process = pin(key)?;
         let token = query_token(&process)?;
-        // Reuse the existing TokenUser reader; profile value is never returned.
-        let user = context_from_token(&token)?.user;
+        // Only TokenUser and TokenAppContainerSid are needed here.
+        // Avoid the unrelated GetUserProfileDirectoryW/session probes.
+        let user = user_sid_from_token(&token)?;
         let container = appcontainer_sid_from_token(&token)?
             .ok_or_else(|| invalid("No AppContainer SID for scoped directory check"))?;
         let result = inspect_directory_with_sids(opened, Some(&user), Some(&container))?;
@@ -1289,7 +1290,9 @@ mod windows {
         Ok(Handle(raw))
     }
 
-    fn context_from_token(token: &Handle) -> io::Result<Context> {
+    // Read the user SID only. A private-root comparison does not need a
+    // profile path or a Windows session query.
+    fn user_sid_from_token(token: &Handle) -> io::Result<Vec<u8>> {
         let mut needed = 0;
         let first =
             unsafe { GetTokenInformation(token.0, TokenUser, ptr::null_mut(), 0, &mut needed) };
@@ -1322,7 +1325,12 @@ mod windows {
         if !(8..=68).contains(&length) {
             return Err(invalid("Invalid Windows token user length"));
         }
-        let user = unsafe { std::slice::from_raw_parts(sid.cast::<u8>(), length) }.to_vec();
+        Ok(unsafe { std::slice::from_raw_parts(sid.cast::<u8>(), length) }.to_vec())
+    }
+
+    fn context_from_token(token: &Handle) -> io::Result<Context> {
+        let user = user_sid_from_token(token)?;
+        let mut needed = 0u32;
         let mut session = 0u32;
         if unsafe {
             GetTokenInformation(
@@ -1594,6 +1602,18 @@ mod windows {
                 &key
             )
             .is_err());
+        }
+
+        #[test]
+        fn token_user_only_reader_agrees_with_full_context_without_export() {
+            let key = own_key();
+            let process = pin(&key).unwrap();
+            let token = query_token(&process).unwrap();
+            let direct = user_sid_from_token(&token).unwrap();
+            let context = context_from_token(&token).unwrap();
+            assert_eq!(direct, context.user);
+            assert!(direct.len() >= 8 && direct.len() <= 68);
+            live(&process).unwrap();
         }
 
         #[test]
