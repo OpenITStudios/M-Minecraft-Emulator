@@ -6,6 +6,7 @@ use std::{ffi::c_void, io, mem, ptr};
 type H = *mut c_void;
 const TOKEN_QUERY: u32 = 8;
 const TOKEN_GROUPS: u32 = 2;
+const TOKEN_USER: u32 = 1;
 const TOKEN_TYPE: u32 = 8;
 const TOKEN_SESSION_ID: u32 = 12;
 const TOKEN_PRIMARY: u32 = 1;
@@ -21,6 +22,8 @@ const SERVICE_NAME: &str = "NT SERVICE\\MIVUBIIndependentHost";
 struct SidAndAttributes { sid: H, attributes: u32 }
 #[repr(C)]
 struct TokenGroups { count: u32, groups: [SidAndAttributes; 1] }
+#[repr(C)]
+struct TokenUser { user: SidAndAttributes }
 struct Group { sid: Vec<u8>, attributes: u32 }
 
 #[link(name = "advapi32")]
@@ -95,6 +98,42 @@ fn nt_authority_sid(sid: &[u8], n: u8, first: u32) -> bool {
 fn service_sid(sid: &[u8]) -> bool { nt_authority_sid(sid, 6, 80) }
 fn logon_sid(sid: &[u8]) -> bool { nt_authority_sid(sid, 3, 5) }
 
+/// Copy a native SID only after proving its header AND entire body are
+/// inside the returned GetTokenInformation allocation. OS API output
+/// pointers must never be dereferenced before these bounds checks.
+/// One source owner handles TokenGroups and TokenUser with the same rule.
+fn copy_bounded_sid(raw: H, words: &[usize], returned: u32) -> io::Result<Vec<u8>> {
+    let capacity = words.len().checked_mul(mem::size_of::<usize>())
+        .ok_or_else(|| denied("Token buffer capacity overflow"))?;
+    if raw.is_null() || returned == 0 || returned as usize > capacity {
+        return Err(denied("No bounded SID in token result"));
+    }
+    let base = words.as_ptr() as usize;
+    let end = base.checked_add(returned as usize)
+        .ok_or_else(|| denied("Token result address overflow"))?;
+    let start = raw as usize;
+    if start < base || start.checked_add(8).is_none_or(|value| value > end) {
+        return Err(denied("Native SID header outside returned token buffer"));
+    }
+    // SAFETY: All eight SID header bytes are now inside live aligned
+    // backing storage; neither raw pointer nor length came from IPC.
+    let header = unsafe { std::slice::from_raw_parts(raw.cast::<u8>(), 8) };
+    if header[0] != 1 || header[1] > 15 {
+        return Err(denied("Unsupported native SID revision or count"));
+    }
+    let len = 8 + usize::from(header[1]) * 4;
+    if start.checked_add(len).is_none_or(|value| value > end) {
+        return Err(denied("Native SID body outside returned token buffer"));
+    }
+    // SAFETY: Full SID body has been checked before consulting Win32.
+    if unsafe { IsValidSid(raw) } == 0
+        || unsafe { GetLengthSid(raw) } as usize != len
+    {
+        return Err(denied("Invalid bounded Windows SID"));
+    }
+    Ok(unsafe { std::slice::from_raw_parts(raw.cast::<u8>(), len) }.to_vec())
+}
+
 /// Copy actual TOKEN_GROUPS with aligned native storage. The SID bytes
 /// MUST be within the same returned buffer before any pointer is read.
 fn groups(token: H) -> io::Result<Vec<Group>> {
@@ -122,33 +161,57 @@ fn groups(token: H) -> io::Result<Vec<Group>> {
         .and_then(|n| n.checked_add(offset))
         .is_none_or(|n| n > returned as usize)
     { return Err(denied("Truncated token groups table")); }
-    let base = words.as_ptr() as usize;
-    let end = base.checked_add(returned as usize)
-        .ok_or_else(|| denied("Group address overflow"))?;
     let table = unsafe { words.as_ptr().cast::<u8>().add(offset).cast::<SidAndAttributes>() };
     let mut result = Vec::with_capacity(count);
     for index in 0..count {
+        // SAFETY: table count and native header span were bounds checked.
         let group = unsafe { *table.add(index) };
-        let start = group.sid as usize;
-        if start < base || start.checked_add(8).is_none_or(|n| n > end) {
-            return Err(denied("SID header outside returned buffer"));
-        }
-        let hdr = unsafe { std::slice::from_raw_parts(group.sid.cast::<u8>(), 8) };
-        if hdr[0] != 1 || hdr[1] > 15 { return Err(denied("Invalid SID header")); }
-        let len = 8 + usize::from(hdr[1]) * 4;
-        if start.checked_add(len).is_none_or(|n| n > end) {
-            return Err(denied("SID bytes outside returned buffer"));
-        }
-        // SAFETY: Both SID header and complete SID are verified in-bounds.
-        if unsafe { IsValidSid(group.sid) } == 0
-            || unsafe { GetLengthSid(group.sid) } as usize != len
-        { return Err(denied("Invalid OS token SID")); }
         result.push(Group {
-            sid: unsafe { std::slice::from_raw_parts(group.sid.cast::<u8>(), len) }.to_vec(),
+            sid: copy_bounded_sid(group.sid, &words, returned)?,
             attributes: group.attributes,
         });
     }
     Ok(result)
+}
+
+/// Canonical TokenUser reader shared by the native SCM identity owner
+/// and the service IPC last-message inspector. All SID pointers are
+/// required to lie entirely inside GetTokenInformation's output buffer.
+/// Never serialize or log the returned bytes.
+pub(super) fn verified_token_user_sid(token: H) -> io::Result<Vec<u8>> {
+    if token.is_null() {
+        return Err(denied("No native token for User SID"));
+    }
+    let mut needed = 0u32;
+    // SAFETY: Zero-capacity size probe for TOKEN_USER only.
+    let first = unsafe {
+        GetTokenInformation(token, TOKEN_USER, ptr::null_mut(), 0, &mut needed)
+    };
+    if first != 0 || unsafe { GetLastError() } != ERROR_INSUFFICIENT_BUFFER
+        || needed < mem::size_of::<TokenUser>() as u32 || needed > MAX_GROUP_BYTES
+    {
+        return Err(denied("Unusable native TokenUser capacity"));
+    }
+    let mut words = vec![0usize;
+        (needed as usize).div_ceil(mem::size_of::<usize>())];
+    let mut returned = needed;
+    // SAFETY: Aligned storage and exact native buffer capacity, owned
+    // until the bounded User SID has been copied.
+    if unsafe {
+        GetTokenInformation(
+            token, TOKEN_USER, words.as_mut_ptr().cast(),
+            needed, &mut returned,
+        )
+    } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if returned < mem::size_of::<TokenUser>() as u32 || returned > needed {
+        return Err(denied("Truncated or expanded native TokenUser"));
+    }
+    // SAFETY: Native TOKEN_USER layout is present within the live output;
+    // its SID pointer will be checked BEFORE any SID dereference.
+    let sid = unsafe { (*(words.as_ptr().cast::<TokenUser>())).user.sid };
+    copy_bounded_sid(sid, &words, returned)
 }
 
 /// Resolve the literal NT SERVICE account through the local Windows LSA,
@@ -277,7 +340,13 @@ pub(super) fn verify_active_windows_logon(peer_token: H) -> io::Result<()> {
     if session == 0 || session == u32::MAX {
         return Err(denied("Pipe peer token is not interactive"));
     }
+    // A process has a primary token; a thread impersonation token must
+    // not masquerade as the OS-connected process for WTS enrollment.
+    if token_dword(peer_token, TOKEN_TYPE)? != TOKEN_PRIMARY {
+        return Err(denied("Pipe peer lacks a primary Windows process token"));
+    }
     let peer_logon = verified_token_logon_sid(peer_token)?;
+    let peer_user = verified_token_user_sid(peer_token)?;
     let before = enumerate_active_ids()?;
     if before.binary_search(&session).is_err() {
         return Err(denied("Connected process session is not WTSActive"));
@@ -292,6 +361,7 @@ pub(super) fn verify_active_windows_logon(peer_token: H) -> io::Result<()> {
         || token_dword(user.0, TOKEN_TYPE)? != TOKEN_PRIMARY
         || token_dword(user.0, TOKEN_SESSION_ID)? != session
         || verified_token_logon_sid(user.0)? != peer_logon
+        || verified_token_user_sid(user.0)? != peer_user
     {
         return Err(denied("WTS primary logon differs from OS peer token"));
     }
@@ -322,6 +392,36 @@ mod tests {
         assert!(!enabled(SE_GROUP_LOGON_ID | SE_GROUP_DENY_ONLY));
         assert!(!enabled(SE_GROUP_LOGON_ID));
     }
+    #[test]
+    fn token_sid_reader_rejects_foreign_and_truncated_native_pointers() {
+        let mut words = [0usize; 8];
+        let base = words.as_mut_ptr().cast::<u8>();
+        let capacity = mem::size_of_val(&words) as u32;
+        // Neither a null pointer nor a foreign allocation is a valid
+        // TOKEN_USER/TOKEN_GROUPS SID, even if Windows reports success.
+        assert!(copy_bounded_sid(ptr::null_mut(), &words, capacity).is_err());
+        let foreign = ((base as usize) - 1) as H;
+        assert!(copy_bounded_sid(foreign, &words, capacity).is_err());
+        // A header that fits but whose complete SID extends past
+        // ReturnLength must be rejected BEFORE calling IsValidSid.
+        let native_sid: [u8; 12] = [1, 1, 0, 0, 0, 0, 0, 5, 18, 0, 0, 0];
+        // SAFETY: offset 16 plus 12 bytes fits the 64-byte word buffer.
+        let pointer = unsafe { base.add(16) };
+        unsafe { ptr::copy_nonoverlapping(native_sid.as_ptr(), pointer, native_sid.len()) };
+        assert!(copy_bounded_sid(pointer.cast(), &words, 27).is_err());
+        assert_eq!(
+            copy_bounded_sid(pointer.cast(), &words, 28).unwrap(),
+            native_sid,
+        );
+        assert!(copy_bounded_sid(pointer.cast(), &words, capacity + 1).is_err());
+    }
+
+    #[test]
+    fn native_token_user_layout_is_one_sid_and_attributes_pair() {
+        assert_eq!(mem::size_of::<TokenUser>(), mem::size_of::<SidAndAttributes>());
+        assert_eq!(mem::offset_of!(TokenUser, user), 0);
+    }
+
     #[test]
     fn active_console_and_rdp_records_are_candidates_without_names() {
         let rows = [

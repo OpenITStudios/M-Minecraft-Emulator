@@ -29,7 +29,7 @@ use virtual_clients_core::independent_engine::{
 };
 use crate::service_identity::{
     verified_active_windows_logon, verified_current_service_sid,
-    verified_token_logon_sid,
+    verified_token_logon_sid, verified_token_user_sid,
 };
 
 type NativeHandle = *mut c_void;
@@ -51,7 +51,6 @@ const CONNECTION_DEADLINE: Duration = Duration::from_millis(500);
 const READ_DEADLINE: Duration = Duration::from_millis(500);
 const WAKE_SLICE_MS: u32 = 50;
 const TOKEN_QUERY: u32 = 0x0008;
-const TOKEN_USER: u32 = 1;
 const TOKEN_IMPERSONATION_LEVEL: u32 = 9;
 const TOKEN_STATISTICS: u32 = 10;
 const TOKEN_SESSION_ID: u32 = 12;
@@ -81,15 +80,6 @@ impl Overlapped {
     }
 }
 
-#[repr(C)]
-struct SidAndAttributes {
-    sid: *mut c_void,
-    attributes: u32,
-}
-#[repr(C)]
-struct TokenUser {
-    user: SidAndAttributes,
-}
 #[repr(C)]
 #[derive(Clone, Copy, Eq, PartialEq)]
 struct Luid {
@@ -138,8 +128,6 @@ unsafe extern "system" {
         token: NativeHandle, info_class: u32, output: *mut c_void,
         capacity: u32, written: *mut u32,
     ) -> i32;
-    fn IsValidSid(sid: *const c_void) -> i32;
-    fn GetLengthSid(sid: *const c_void) -> u32;
     fn ImpersonateNamedPipeClient(pipe: NativeHandle) -> i32;
     fn RevertToSelf() -> i32;
 }
@@ -219,49 +207,6 @@ struct LocalTokenIdentity {
     logon_id: Luid,
 }
 
-fn token_user_sid(token: NativeHandle) -> io::Result<Vec<u8>> {
-    let mut capacity = 0u32;
-    // SAFETY: Size query only; Windows supplies the bounded TOKEN_USER bytes.
-    let outcome = unsafe {
-        GetTokenInformation(token, TOKEN_USER, ptr::null_mut(), 0, &mut capacity)
-    };
-    let error = unsafe { GetLastError() };
-    if outcome != 0 || error != ERROR_INSUFFICIENT_BUFFER
-        || capacity < mem::size_of::<TokenUser>() as u32 || capacity > 65_536
-    {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData, "Unusable process token User SID size",
-        ));
-    }
-    let mut storage = vec![0usize;
-        (capacity as usize).div_ceil(mem::size_of::<usize>())];
-    let mut returned = capacity;
-    // SAFETY: Aligned usize backing storage holds the full OS-provided
-    // TOKEN_USER and its variable-sized SID for this call.
-    if unsafe {
-        GetTokenInformation(
-            token, TOKEN_USER, storage.as_mut_ptr().cast(),
-            capacity, &mut returned,
-        )
-    } == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    if returned < mem::size_of::<TokenUser>() as u32 || returned > capacity {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid TokenUser return length"));
-    }
-    // SAFETY: The output begins with TOKEN_USER. The SID is validated by
-    // IsValidSid before GetLengthSid and only a bounded private copy escapes.
-    let sid = unsafe { (*(storage.as_ptr().cast::<TokenUser>())).user.sid };
-    if sid.is_null() || unsafe { IsValidSid(sid) } == 0 {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid native user SID"));
-    }
-    let len = unsafe { GetLengthSid(sid) } as usize;
-    if !(8..=68).contains(&len) {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "Unsupported SID size"));
-    }
-    Ok(unsafe { std::slice::from_raw_parts(sid.cast(), len) }.to_vec())
-}
-
 fn token_fixed_u32(token: NativeHandle, class: u32) -> io::Result<u32> {
     let mut value = 0u32;
     let mut written = 0u32;
@@ -295,7 +240,7 @@ fn token_statistics(token: NativeHandle) -> io::Result<TokenStatistics> {
 }
 
 fn token_identity(token: NativeHandle) -> io::Result<LocalTokenIdentity> {
-    let user_sid = token_user_sid(token)?;
+    let user_sid = verified_token_user_sid(token)?;
     let windows_session = token_fixed_u32(token, TOKEN_SESSION_ID)?;
     let logon_id = token_statistics(token)?.authentication_id;
     Ok(LocalTokenIdentity { user_sid, windows_session, logon_id })

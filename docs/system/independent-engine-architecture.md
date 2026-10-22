@@ -11,6 +11,42 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### One bounded Windows User SID owner for service and IPC (22 October 2026)
+
+The native Windows service IPC had a second TokenUser reader that
+called IsValidSid on the returned SID pointer without first proving
+that the entire SID lay within the live GetTokenInformation allocation.
+This is now corrected in the existing
+[service_identity.rs](../../engine/isolation-native/independent-service/src/service_identity.rs):
+a single bounded SID copier is used by both TokenGroups and TokenUser.
+It checks the returned byte count, header location, SID revision,
+subauthority count, complete SID body and native IsValidSid/length
+**in that order**. The duplicate pointer reader and unused TokenUser
+FFI declarations were removed from ipc_worker.rs. No SID is exposed
+to desktop, logged or accepted from a broker message.
+
+The service's WTSActive console/RDP peer check now also compares the
+actual process PRIMARY token's User SID to the OS-returned primary
+WTS user token, alongside the existing exact session and unique
+enabled logon SID checks. A different user sharing a session is no
+longer an acceptable diagnostic candidate. Authored Windows-only
+regressions cover foreign SID pointers, truncated return lengths,
+valid canonical SID copy and native TokenUser ABI layout. They have
+NOT been run: there is no Rust/Windows compiler in this ChatGPT
+environment. Service SID/DACL, IPC StopPending, WTS flags, default-off
+pilot and Minecraft Launch/Provision block remain unchanged.
+
+This is security *validation source*, not non-admin endpoint
+enrollment, Windows service installation, Minecraft file/registry
+isolation or four-client acceptance. No privileged mutation,
+account/world read or Sandboxie activation occurred.
+
+Next: build and run native Windows ABI/token tests when available,
+then design a scoped per-logon pipe with an OS-derived SID and
+verified publisher/desktop origin before enabling client access.
+
+
+
 ### Active console and RDP logon observation per IPC message (22 October 2026)
 
 The opt-in SCM worker no longer blocks named-pipe creation merely

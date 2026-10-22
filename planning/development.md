@@ -1,6 +1,36 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Independent service — unify bounded SID reads and cross-check WTS user, 22 October 2026
+
+Corrected two real validation gaps within the existing independent
+SCM service owners, without creating an alternate lifecycle manager.
+service_identity.rs now owns the only bounded native User SID reader
+used by the service IPC. Both TokenUser and TokenGroups reuse the
+same function, which verifies SID pointers, header and full body
+within the returned GetTokenInformation allocation BEFORE any
+IsValidSid/GetLengthSid call. The previous second TokenUser
+implementation in ipc_worker.rs was removed. Active WTS console/RDP
+observations now compare User SID from the native process primary
+token to the WTSQueryUserToken primary user, in addition to
+session, logon SID and existing last-message authentication checks.
+Tests authored for foreign/truncated SID memory and TokenUser C ABI.
+
+**Proof:** GitHub exact-source/static review and official Windows
+GetTokenInformation/WTS token contracts. Rust/Windows compilation,
+native tests, installed SCM and Minecraft all NOT_EXECUTED.
+The opt-in pilot stays disabled by default with the same protected
+admin-only DACL. Nothing enabled or installed; no account/world
+mutation, driver, Sandboxie dependency, game Launch/Provision or
+new user IPC rights. WTS evidence remains diagnostic, not binding
+to the exact process that wrote a shared pipe message.
+
+**Next:** Windows-native compiler/ABI tests, then verified per-logon
+endpoint issuance with strict access rights and no untrusted caller
+SID or PID as initial authority.
+
+
+
 ## Independent service — enumerate active console and RDP sessions per OS peer, 22 October 2026
 
 Corrected the source-only physical-console startup gate. The service
