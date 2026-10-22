@@ -980,38 +980,172 @@ mod windows {
         })
     }
 
-    // Each prefix is opened with FILE_FLAG_OPEN_REPARSE_POINT so that junctions
-    // are inspected instead of followed at the final component. The root
-    // volume/file index must be the original opened object. No content reads.
-    // Directory rename/swap and opened-name reconstruction remain unresolved.
+
+    // User-mode ntdll NtOpenFile, exactly the winternl.h six-argument ABI.
+    // RootDirectory points to an OPENED directory HANDLE, not a DOS path.
+    // These plain C-layout types are deliberately kept adjacent to the FFI;
+    // IO_STATUS_BLOCK's first union occupies one pointer-sized slot.
+    #[repr(C)]
+    struct NtUnicodeString {
+        length: u16,
+        maximum_length: u16,
+        buffer: *mut u16,
+    }
+
+    #[repr(C)]
+    struct NtObjectAttributes {
+        length: u32,
+        root_directory: HANDLE,
+        object_name: *mut NtUnicodeString,
+        attributes: u32,
+        security_descriptor: *mut std::ffi::c_void,
+        security_quality_of_service: *mut std::ffi::c_void,
+    }
+
+    #[repr(C)]
+    struct NtIoStatusBlock {
+        status_or_pointer: usize,
+        information: usize,
+    }
+
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn NtOpenFile(
+            file_handle: *mut HANDLE,
+            desired_access: u32,
+            object_attributes: *mut NtObjectAttributes,
+            io_status_block: *mut NtIoStatusBlock,
+            share_access: u32,
+            open_options: u32,
+        ) -> i32;
+    }
+
+    /// Open exactly ONE existing child component relative to an OS directory
+    /// handle. This neither creates a file nor permits read/write data I/O.
+    /// The parent stays open at least until the child has been inspected.
+    /// Final-component reparse targets are opened AS reparse objects, never
+    /// followed; a later metadata check rejects them.
+    fn open_relative_directory_metadata(
+        parent: &std::fs::File,
+        component: &str,
+    ) -> io::Result<std::fs::File> {
+        use std::os::windows::io::FromRawHandle;
+        const OBJ_CASE_INSENSITIVE: u32 = 0x40;
+        const FILE_READ_ATTRIBUTES: u32 = 0x80;
+        const FILE_TRAVERSE: u32 = 0x20;
+        const SYNCHRONIZE: u32 = 0x0010_0000;
+        const FILE_SYNCHRONOUS_IO_NONALERT: u32 = 0x20;
+        const FILE_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+        const FILE_SHARE_READ: u32 = 1;
+        const FILE_SHARE_WRITE: u32 = 2;
+
+        // Require single, unambiguous components even if a future caller
+        // bypasses the already validated opened-name parser.
+        if component.is_empty() || component == "." || component == ".."
+            || component.starts_with('.') || component.ends_with('.')
+            || component.ends_with(' ') || component.chars().any(|ch|
+                ch.is_control() || matches!(
+                    ch, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
+                ))
+        {
+            return Err(invalid("Invalid relative directory component"));
+        }
+        let mut wide: Vec<u16> = component.encode_utf16().collect();
+        if wide.is_empty() || wide.len() > 255 {
+            return Err(invalid("Relative directory name too long"));
+        }
+        let bytes = wide.len() * size_of::<u16>();
+        let length = u16::try_from(bytes)
+            .map_err(|_| invalid("Directory name exceeds NT length"))?;
+        wide.push(0);
+        let mut unicode = NtUnicodeString {
+            length,
+            maximum_length: length + 2,
+            buffer: wide.as_mut_ptr(),
+        };
+        let mut attributes = NtObjectAttributes {
+            length: size_of::<NtObjectAttributes>() as u32,
+            root_directory: parent.as_raw_handle(),
+            object_name: &mut unicode,
+            attributes: OBJ_CASE_INSENSITIVE,
+            security_descriptor: ptr::null_mut(),
+            security_quality_of_service: ptr::null_mut(),
+        };
+        let mut iosb = NtIoStatusBlock {
+            status_or_pointer: 0,
+            information: 0,
+        };
+        let mut raw: HANDLE = ptr::null_mut();
+        let status = unsafe {
+            NtOpenFile(
+                &mut raw,
+                FILE_READ_ATTRIBUTES | FILE_TRAVERSE | SYNCHRONIZE,
+                &mut attributes,
+                &mut iosb,
+                FILE_SHARE_READ | FILE_SHARE_WRITE, // no FILE_SHARE_DELETE
+                FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT,
+            )
+        };
+        if status != 0 || raw.is_null() {
+            if !raw.is_null() {
+                let _ = unsafe { CloseHandle(raw) };
+            }
+            return Err(invalid("Failed to open child relative to a directory HANDLE"));
+        }
+        // Owned NT file handles are ordinary Windows file HANDLEs. File::Drop
+        // uses CloseHandle; never close parent handles while children are in use.
+        Ok(unsafe { std::fs::File::from_raw_handle(raw) })
+    }
+
+    // Open only the volume root by DOS name. Then open each descendant by
+    // ONE component relative to a HELD parent HANDLE (NtOpenFile.RootDirectory).
+    // Holding all parent handles without FILE_SHARE_DELETE reduces rename/swap
+    // races. This cannot prove that the initial drive/root belongs to a
+    // trusted profile owner; the result remains a pending diagnostic.
     fn inspect_opened_ancestor_chain(
         opened: &std::fs::File,
         expected: super::PrivateRootObjectIdentity,
     ) -> io::Result<()> {
         use windows_sys::Win32::Storage::FileSystem::{
             FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
-            FILE_SHARE_WRITE, FILE_SHARE_DELETE,
         };
         let original_name = opened_root_name(opened)?;
         let prefixes = opened_dos_prefixes(&original_name)?;
-        for (i, prefix) in prefixes.iter().enumerate() {
-            let ancestor = std::fs::OpenOptions::new()
-                .access_mode(0x80) // FILE_READ_ATTRIBUTES; do not read contents
-                .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
-                .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
-                .open(std::path::Path::new(prefix))?;
-            let identity = ancestor_directory_identity(&ancestor)?;
+        // Only the volume root uses a pathname. The remaining components
+        // are opened relative to the preceding validated directory HANDLE.
+        // Excluding FILE_SHARE_DELETE holds each ancestor against rename.
+        let drive = std::fs::OpenOptions::new()
+            .access_mode(0x80 | 0x20 | 0x0010_0000)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(std::path::Path::new(&prefixes[0]))?;
+        let start = ancestor_directory_identity(&drive)?;
+        if start.volume != expected.volume {
+            return Err(invalid("Root drive volume mismatches opened directory"));
+        }
+        let mut held = vec![drive];
+        for prefix in prefixes.iter().skip(1) {
+            let component = prefix.rsplit('\\').next()
+                .ok_or_else(|| invalid("Missing root ancestor component"))?;
+            let child = open_relative_directory_metadata(
+                held.last().expect("root directory is always held"), component,
+            )?;
+            let identity = ancestor_directory_identity(&child)?;
             if identity.volume != expected.volume {
                 return Err(invalid("Ancestor crossed a volume boundary"));
             }
-            if i == prefixes.len() - 1 && identity != expected {
-                return Err(invalid("Final ancestor does not match opened root HANDLE"));
-            }
+            held.push(child); // all ancestors stay open until final checks
+        }
+        if ancestor_directory_identity(
+            held.last().expect("final root directory must be held"),
+        )? != expected
+        {
+            return Err(invalid("Final ancestor is not original root object"));
         }
         if ancestor_directory_identity(opened)? != expected
             || opened_root_name(opened)? != original_name
         {
-            return Err(invalid("Root changed during opened ancestor inspection"));
+            return Err(invalid("Root changed during handle-relative inspection"));
         }
         Ok(())
     }
@@ -1788,6 +1922,47 @@ mod windows {
                     .unwrap_err(),
                 NativePortError::InvalidIdentity
             );
+        }
+
+        #[test]
+        fn relative_directory_open_does_not_follow_arbitrary_path_segments() {
+            let root = std::env::temp_dir().join(format!(
+                "mivubi-relative-root-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now().duration_since(
+                    std::time::UNIX_EPOCH,
+                ).unwrap().as_nanos(),
+            ));
+            std::fs::create_dir(&root).unwrap();
+            struct Cleanup(std::path::PathBuf);
+            impl Drop for Cleanup {
+                fn drop(&mut self) {
+                    let _ = std::fs::remove_dir_all(&self.0);
+                }
+            }
+            let _cleanup = Cleanup(root.clone());
+            std::fs::create_dir(root.join("only-child")).unwrap();
+            std::fs::write(root.join("regular-file.txt"), b"synthetic").unwrap();
+            use std::os::windows::fs::OpenOptionsExt;
+            use windows_sys::Win32::Storage::FileSystem::{
+                FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
+            };
+            let parent = std::fs::OpenOptions::new()
+                .read(true)
+                .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+                .open(&root).unwrap();
+            let child = open_relative_directory_metadata(&parent, "only-child").unwrap();
+            assert!(ancestor_directory_identity(&child).is_ok());
+            // NtOpenFile may return a regular file handle when not asking for
+            // FILE_DIRECTORY_FILE: type-checking the resulting handle is mandatory.
+            if let Ok(file) = open_relative_directory_metadata(&parent, "regular-file.txt") {
+                assert!(ancestor_directory_identity(&file).is_err());
+            }
+            for bad in ["", ".", "..", r"..\peer", r"\absolute",
+                "other/child", "file:stream", "trailing.", "trailing ",
+            ] {
+                assert!(open_relative_directory_metadata(&parent, bad).is_err());
+            }
         }
 
         #[test]

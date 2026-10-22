@@ -11,6 +11,20 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Root-relative Windows NT directory handle chain (22 October 2026)
+
+The unmounted Windows ancestor probe now opens the local drive root once,
+then opens **one component per NtOpenFile call** relative to an already-open
+parent directory HANDLE. The code requests only metadata/traverse rights,
+sets `FILE_OPEN_REPARSE_POINT`, rejects non-directory/reparse results, and
+retains each ancestor handle without share-delete until file-ID/name
+rechecks finish. This removes repeated absolute prefix reopening but is
+still NOT a verified root-origin or protected filesystem capability:
+the first drive root is path-derived, NT ABI must be compiled on Windows,
+effective access and Microsoft/Minecraft app routing remain UNKNOWN.
+No operation can use this diagnostic to grant game launch or storage writes.
+
+
 ### Opened-root ancestor inspection (22 October 2026)
 
 From an existing pinned root HANDLE, Windows-only, unmounted source now

@@ -1,5 +1,38 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — root-relative NT handle ancestor traversal, 22 October 2026
+
+The unmounted native root ancestor checker was changed from reopening each
+absolute DOS path prefix to opening **only the local drive root by name**,
+then each existing directory component through user-mode
+`NtOpenFile` with `OBJECT_ATTRIBUTES.RootDirectory` set to the
+previously-opened directory HANDLE. `FILE_OPEN_REPARSE_POINT` is set for
+each single child name, and a native `GetFileInformationByHandle` check
+rejects files, reparse points, missing file IDs, cross-volume boundaries
+and final-file-identity mismatches. All ancestor directory handles are
+kept alive without FILE_SHARE_DELETE until the original opened root
+identity/name is checked again. The call requests metadata/traverse and
+synchronize access only; it cannot create, enumerate, read or write
+Minecraft data. The NT ABI structs and FFI are scoped to the existing
+Windows desktop identity owner, not a service/driver. An additional
+Windows-only disposable fixture test was authored, NOT_EXECUTED.
+
+**Proof:** exact GitHub source review plus Microsoft `NtOpenFile`,
+`OBJECT_ATTRIBUTES` and `FILE_OPEN_REPARSE_POINT` documented interfaces.
+Windows MSVC compilation and fixture execution are NOT_EXECUTED. There
+is no evidence of private root ownership, effective ACL, Roaming/HKCU
+redirection, Microsoft broker support or game acceptance. The initial
+volume-root DOS name remains an untrusted namespace input; file systems
+and future races can still be unsupported. The result is always a
+non-authorizing pending inspection. No new UI/Tauri route, profile
+mutation, installer, driver, CI or `main` change.
+
+**Next:** Audit native NT FFI ABI against the actual supported Windows
+target and design how a trusted profile owner supplies a validated root
+HANDLE to the relative walker. Never enable MC02–MC04 Launch/Provision
+using this diagnostic.
+
+
 ## Independent engine — scan opened root's Windows ancestor chain, 22 October 2026
 
 Implemented a bounded, read-only `inspect_opened_ancestor_chain` in the
