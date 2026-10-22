@@ -34,6 +34,31 @@ driver, existing Minecraft data, HKCU/WAM or Launch/Provision changes.
 A future production capability requires attested root ancestry, owner SID,
 effective cross-token peer denial and actual game-path enforcement.
 
+### Canonical tombstone masks and in-place private buffer writes (23 October 2026)
+
+The existing synthetic `independent_engine/overlay.rs` now shares ONE
+quota-preflight/compaction rule across leaf and prefix deletion plus
+single-leaf and subtree rename. Full-capacity tombstones that already
+cover a path never cause a redundant allocation; nested tombstones
+can be consolidated under a prefix instead of falsely failing when
+the original 1024-entry budget is full. Prefix coalescing preserves
+underlying host masks, unrelated namespaces and private children
+that are subsequently authored. Failed quota preflights are atomic.
+
+`write_at` and `truncate_file` now perform per-item/private-byte
+quota checks and original host-view checks BEFORE mutation, then
+reuse a previously owned private Vec in place. A host fallback
+allocates only its own bounded fixture data once; host-derived tags
+survive partial operations until an explicit full replacement.
+Focused regression source covers pointer stability, 8-MiB full quota,
+entry and tombstone limits, host immutability, profile isolation
+and registry/file-surface separation.
+
+**Proof ceiling:** exact GitHub source/static review. Rust and native
+Windows tests remain NOT_EXECUTED. This in-memory ASCII synthetic
+model has no real Windows file or registry hooks, service provider,
+Minecraft credentials/worlds or Launch/Provision permission.
+
 ### Atomic visible-subtree COW rename (23 October 2026)
 
 The existing original `engine/runtime-core/src/independent_engine/overlay.rs`

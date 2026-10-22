@@ -1,6 +1,40 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Independent COW core — canonical tombstone compaction and private writes, 23 October 2026
+
+Corrected a tangible full-quota COW bug in the existing source owner:
+`delete`/`delete_tree` previously rejected a deletion at full
+tombstone capacity even when the target was masked by a parent or
+multiple child tombstones could be replaced with ONE prefix marker.
+The same unnecessary capacity refusal also affected single-leaf
+rename. Shared private `preflight_prefix_mask` and
+`install_prefix_mask` now unify leaf/tree deletion and rename,
+coalescing redundant masks while preserving host suppression and
+unrelated file/registry surfaces. Quota failures occur before any
+private-map or tombstone mutation.
+
+Removed avoidable full-buffer clone for already-private COW
+`write_at` and `truncate_file`. Both now calculate future
+per-item/8-MiB private-byte and entry quotas before mutation, then
+mutate the owned Vec in place; only actual host fallback is copied.
+Host-derived provenance remains tagged until an explicitly authored
+full `write`. Added five focused Rust unit regressions for
+full-capacity compaction, ancestor masking, private Vec pointer
+identity, host immutability, error atomicity, and independent
+registry/file mask handling.
+
+**Proof:** pinned GitHub source/static review. Rust compilation/tests,
+native Windows isolation, actual Minecraft worlds and four-client
+acceptance NOT_EXECUTED. No new provider, IPC, service, driver, CI,
+game client launch or account/world/profile mutation. Existing
+MC02–MC04 Launch/Provision remains BLOCKED.
+
+**Next:** finish a source-only audit of COW path/name ambiguities,
+atomic rename edges and host/private boundary semantics before
+selecting a Windows enforcement adapter.
+
+
 ## Independent COW core — atomic synthetic subtree rename, 23 October 2026
 
 Implemented one complete missing domain operation in the canonical Rust
