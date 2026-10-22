@@ -26,7 +26,7 @@ use std::{
     os::windows::fs::OpenOptionsExt,
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 #[cfg(test)]
 use super::independent_job::{FixtureJob, SuspendedFixture};
