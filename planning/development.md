@@ -1,5 +1,34 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent SCM IPC — read and compare the last-message Windows token, 22 October 2026
+
+Extended the **existing** opt-in, service-owned IPC worker (not a new
+service/manager). Once the 32-byte request and actual pipe peer PID plus
+creation FILETIME are checked, it performs native OpenProcessToken and
+ImpersonateNamedPipeClient on the last message. OpenThreadToken and
+GetTokenInformation compare User SID, Windows session, logon LUID
+(TOKEN_STATISTICS.AuthenticationId), token type and impersonation level
+with the connected process token. A pre-impersonated service thread is
+refused, all errors fail closed and a RevertToSelf guard runs on
+every successful impersonation path (fatal on failed revert). Final
+pipe PID/liveness are checked again, and mismatches are discarded.
+Token/SID/logon values are not serialized, persisted, logged or used
+for credentials/Minecraft. Two regression tests cover all four negative
+evidence gates and the native ABI layout.
+
+**Proof:** GitHub pinned source and Microsoft Win32 API/ABI review.
+Rust/Windows build, SCM startup/shutdown, named-pipe token tests and
+Minecraft gameplay NOT_EXECUTED. Even full token equality is ONLY a
+pending diagnostic: duplicate pipe handles from the same logon still
+prevent strong message provenance, and service/logon SID DACLs remain
+missing. The readonly-ipc-pilot stays OFF by default, admin-only,
+unpackaged and uninstalled. No Sandboxie runtime dependency or
+MC02-04 Launch/Provision authorization was introduced.
+
+**Next:** review native Windows compilation and logon/service-SID pipe
+policy before allowing non-admin clients or real engine operations.
+
+
 ## Independent service IPC — publish StopPending before drain and normalize oversized messages, 22 October 2026
 
 Corrected the feature-gated service-owned IPC pilot:

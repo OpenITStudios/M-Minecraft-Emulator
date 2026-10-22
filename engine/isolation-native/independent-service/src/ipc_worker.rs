@@ -46,6 +46,15 @@ const SYNCHRONIZE: u32 = 0x0010_0000;
 const CONNECTION_DEADLINE: Duration = Duration::from_millis(500);
 const READ_DEADLINE: Duration = Duration::from_millis(500);
 const WAKE_SLICE_MS: u32 = 50;
+const TOKEN_QUERY: u32 = 0x0008;
+const TOKEN_USER: u32 = 1;
+const TOKEN_IMPERSONATION_LEVEL: u32 = 9;
+const TOKEN_STATISTICS: u32 = 10;
+const TOKEN_SESSION_ID: u32 = 12;
+const ERROR_NO_TOKEN: u32 = 1008;
+const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
+const TOKEN_IMPERSONATION_TYPE: u32 = 2;
+const SECURITY_IMPERSONATION: u32 = 2;
 
 #[repr(C)]
 struct SecurityAttributes {
@@ -69,6 +78,35 @@ impl Overlapped {
 }
 
 #[repr(C)]
+struct SidAndAttributes {
+    sid: *mut c_void,
+    attributes: u32,
+}
+#[repr(C)]
+struct TokenUser {
+    user: SidAndAttributes,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Eq, PartialEq)]
+struct Luid {
+    low: u32,
+    high: i32,
+}
+#[repr(C)]
+struct TokenStatistics {
+    token_id: Luid,
+    authentication_id: Luid,
+    expires: i64,
+    token_type: u32,
+    impersonation_level: u32,
+    dynamic_charged: u32,
+    dynamic_available: u32,
+    group_count: u32,
+    privilege_count: u32,
+    modified_id: Luid,
+}
+
+#[repr(C)]
 struct FileTime {
     low: u32,
     high: u32,
@@ -85,6 +123,21 @@ unsafe extern "system" {
         value: *const u16, revision: u32, descriptor: *mut *mut c_void,
         length: *mut u32,
     ) -> i32;
+    fn OpenProcessToken(
+        process: NativeHandle, rights: u32, result: *mut NativeHandle,
+    ) -> i32;
+    fn OpenThreadToken(
+        thread: NativeHandle, rights: u32, open_as_self: i32,
+        result: *mut NativeHandle,
+    ) -> i32;
+    fn GetTokenInformation(
+        token: NativeHandle, info_class: u32, output: *mut c_void,
+        capacity: u32, written: *mut u32,
+    ) -> i32;
+    fn IsValidSid(sid: *const c_void) -> i32;
+    fn GetLengthSid(sid: *const c_void) -> u32;
+    fn ImpersonateNamedPipeClient(pipe: NativeHandle) -> i32;
+    fn RevertToSelf() -> i32;
 }
 #[link(name = "kernel32")]
 unsafe extern "system" {
@@ -116,6 +169,7 @@ unsafe extern "system" {
         exit: *mut FileTime, kernel: *mut FileTime, user: *mut FileTime,
     ) -> i32;
     fn GetLastError() -> u32;
+    fn GetCurrentThread() -> NativeHandle;
     fn CloseHandle(handle: NativeHandle) -> i32;
     fn LocalFree(memory: *mut c_void) -> *mut c_void;
 }
@@ -138,6 +192,198 @@ impl Drop for OwnedHandle {
             unsafe { CloseHandle(self.0) };
         }
     }
+}
+
+/// Unconditionally leave the client's security context. Microsoft
+/// documents that continuing to run if RevertToSelf fails is unsafe.
+struct RevertGuard;
+impl Drop for RevertGuard {
+    fn drop(&mut self) {
+        // SAFETY: This guard is constructed ONLY after successful
+        // ImpersonateNamedPipeClient on the current service thread.
+        if unsafe { RevertToSelf() } == 0 {
+            std::process::abort();
+        }
+    }
+}
+
+/// Raw SID and logon data are private to this stack frame. They are never
+/// serialized, logged or used as game/account readiness evidence.
+struct LocalTokenIdentity {
+    user_sid: Vec<u8>,
+    windows_session: u32,
+    logon_id: Luid,
+}
+
+fn token_user_sid(token: NativeHandle) -> io::Result<Vec<u8>> {
+    let mut capacity = 0u32;
+    // SAFETY: Size query only; Windows supplies the bounded TOKEN_USER bytes.
+    let outcome = unsafe {
+        GetTokenInformation(token, TOKEN_USER, ptr::null_mut(), 0, &mut capacity)
+    };
+    let error = unsafe { GetLastError() };
+    if outcome != 0 || error != ERROR_INSUFFICIENT_BUFFER
+        || capacity < mem::size_of::<TokenUser>() as u32 || capacity > 65_536
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData, "Unusable process token User SID size",
+        ));
+    }
+    let mut storage = vec![0usize;
+        (capacity as usize).div_ceil(mem::size_of::<usize>())];
+    let mut returned = capacity;
+    // SAFETY: Aligned usize backing storage holds the full OS-provided
+    // TOKEN_USER and its variable-sized SID for this call.
+    if unsafe {
+        GetTokenInformation(
+            token, TOKEN_USER, storage.as_mut_ptr().cast(),
+            capacity, &mut returned,
+        )
+    } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if returned < mem::size_of::<TokenUser>() as u32 || returned > capacity {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid TokenUser return length"));
+    }
+    // SAFETY: The output begins with TOKEN_USER. The SID is validated by
+    // IsValidSid before GetLengthSid and only a bounded private copy escapes.
+    let sid = unsafe { (*(storage.as_ptr().cast::<TokenUser>())).user.sid };
+    if sid.is_null() || unsafe { IsValidSid(sid) } == 0 {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid native user SID"));
+    }
+    let len = unsafe { GetLengthSid(sid) } as usize;
+    if !(8..=68).contains(&len) {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "Unsupported SID size"));
+    }
+    Ok(unsafe { std::slice::from_raw_parts(sid.cast(), len) }.to_vec())
+}
+
+fn token_fixed_u32(token: NativeHandle, class: u32) -> io::Result<u32> {
+    let mut value = 0u32;
+    let mut written = 0u32;
+    // SAFETY: TokenSessionId and TokenImpersonationLevel are fixed DWORDs.
+    if unsafe {
+        GetTokenInformation(
+            token, class, (&mut value as *mut u32).cast(),
+            mem::size_of::<u32>() as u32, &mut written,
+        )
+    } == 0 || written != mem::size_of::<u32>() as u32 {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid token DWORD metadata"));
+    }
+    Ok(value)
+}
+
+fn token_statistics(token: NativeHandle) -> io::Result<TokenStatistics> {
+    // SAFETY: TOKEN_STATISTICS is a fixed-size C POD struct.
+    let mut result: TokenStatistics = unsafe { mem::zeroed() };
+    let mut written = 0u32;
+    if unsafe {
+        GetTokenInformation(
+            token, TOKEN_STATISTICS, (&mut result as *mut TokenStatistics).cast(),
+            mem::size_of::<TokenStatistics>() as u32, &mut written,
+        )
+    } == 0 || written != mem::size_of::<TokenStatistics>() as u32 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData, "Invalid token logon statistics",
+        ));
+    }
+    Ok(result)
+}
+
+fn token_identity(token: NativeHandle) -> io::Result<LocalTokenIdentity> {
+    let user_sid = token_user_sid(token)?;
+    let windows_session = token_fixed_u32(token, TOKEN_SESSION_ID)?;
+    let logon_id = token_statistics(token)?.authentication_id;
+    Ok(LocalTokenIdentity { user_sid, windows_session, logon_id })
+}
+
+/// These are independent negative evidence bits, NOT a security grant.
+/// Token equality is necessary for the pilot's same-connection claim,
+/// but cannot prevent same-logon pipe HANDLE duplication or prove which
+/// process sent a message with a different handle.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct PendingTokenComparison {
+    same_user: bool,
+    same_windows_session: bool,
+    same_logon_id: bool,
+    sufficient_impersonation_level: bool,
+}
+impl PendingTokenComparison {
+    fn all_match(self) -> bool {
+        self.same_user && self.same_windows_session
+            && self.same_logon_id && self.sufficient_impersonation_level
+    }
+}
+
+/// Compare the actual process token with the impersonated context of the
+/// last 32-byte message read by this SERVICE thread (not the packet fields).
+/// No file/registry/privileged call is made under impersonation.
+fn inspect_last_message_token(
+    pipe: NativeHandle, connected_process: NativeHandle,
+) -> io::Result<PendingTokenComparison> {
+    let mut process_raw = ptr::null_mut();
+    // SAFETY: Query-only token from the already retained native process
+    // HANDLE, before changing the service thread's security context.
+    if unsafe {
+        OpenProcessToken(connected_process, TOKEN_QUERY, &mut process_raw)
+    } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let process_token = OwnedHandle::new(process_raw)?;
+    let process_identity = token_identity(process_token.0)?;
+
+    // If this worker thread already impersonates anyone, refuse to
+    // proceed. RevertToSelf would otherwise erase another owner's scope.
+    let mut prior_raw = ptr::null_mut();
+    let opened = unsafe {
+        OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, 1, &mut prior_raw)
+    };
+    let error = unsafe { GetLastError() };
+    if opened != 0 || !prior_raw.is_null() {
+        if !prior_raw.is_null() {
+            let _prior = OwnedHandle::new(prior_raw)?;
+        }
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied, "Service thread already impersonating",
+        ));
+    }
+    if error != ERROR_NO_TOKEN {
+        return Err(io::Error::from_raw_os_error(error as i32));
+    }
+    // SAFETY: The pipe server has consumed ONE complete and valid message.
+    // Failure MUST NOT fall back to treating the service token as the client.
+    if unsafe { ImpersonateNamedPipeClient(pipe) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let revert = RevertGuard;
+    let inspected = (|| -> io::Result<PendingTokenComparison> {
+        let mut thread_raw = ptr::null_mut();
+        // SAFETY: We are impersonating only on the current thread. Use
+        // OpenAsSelf to query even if the client limits token DACL rights.
+        if unsafe {
+            OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, 1, &mut thread_raw)
+        } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let last_message_token = OwnedHandle::new(thread_raw)?;
+        let impersonation_level = token_fixed_u32(
+            last_message_token.0, TOKEN_IMPERSONATION_LEVEL,
+        )?;
+        let message_identity = token_identity(last_message_token.0)?;
+        let statistics = token_statistics(last_message_token.0)?;
+        let _ = &process_identity;
+        Ok(PendingTokenComparison {
+            same_user: message_identity.user_sid == process_identity.user_sid,
+            same_windows_session: message_identity.windows_session == process_identity.windows_session,
+            same_logon_id: message_identity.logon_id == process_identity.logon_id,
+            sufficient_impersonation_level: statistics.token_type == TOKEN_IMPERSONATION_TYPE
+                && statistics.impersonation_level >= SECURITY_IMPERSONATION
+                && impersonation_level >= SECURITY_IMPERSONATION,
+        })
+    })();
+    // RAII also reverts on early ? errors inside the closure.
+    drop(revert);
+    inspected
 }
 
 struct Descriptor(*mut c_void);
@@ -297,7 +543,12 @@ impl ReadOnlyPipeWorker {
             Ok(value) => value,
             Err(_) => return Ok(Step::Ignored),
         };
-        let _ = compare_native_peer(self.handle.0, claim);
+        // If connection/last-message token observations disagree, discard
+        // the packet. Even complete matching evidence is NOT permission for
+        // service-side operations; this pilot has no mutating opcodes.
+        if !matches!(compare_native_peer(self.handle.0, claim), Ok(true)) {
+            return Ok(Step::Ignored);
+        }
         // Deliberately no response, credentials, root handle, or launch.
         Ok(Step::Ignored)
     }
@@ -438,7 +689,21 @@ fn compare_native_peer(
     if unsafe { GetNamedPipeClientProcessId(pipe, &mut current_pid) } == 0 {
         return Err(io::Error::last_os_error());
     }
-    Ok(current_pid == pid)
+    // Token checks run only after the fixed frame and native connected PID
+    // and creation time have been checked; no security claim comes from
+    // the untrusted packet's correlation ID or MCxx label.
+    if current_pid != pid {
+        return Ok(false);
+    }
+    let token_evidence = inspect_last_message_token(pipe, process.0)?;
+    if !token_evidence.all_match() {
+        return Ok(false);
+    }
+    let mut final_pid = 0u32;
+    if unsafe { GetNamedPipeClientProcessId(pipe, &mut final_pid) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(final_pid == pid && unsafe { WaitForSingleObject(process.0, 0) } == WAIT_TIMEOUT)
 }
 
 #[cfg(test)]
@@ -470,6 +735,34 @@ mod tests {
             ))).unwrap_err().kind(),
             io::ErrorKind::Other,
         );
+    }
+
+    #[test]
+    fn token_identity_review_requires_every_os_property() {
+        let full = PendingTokenComparison {
+            same_user: true,
+            same_windows_session: true,
+            same_logon_id: true,
+            sufficient_impersonation_level: true,
+        };
+        assert!(full.all_match());
+        for field in 0..4 {
+            let mut missing = full;
+            match field {
+                0 => missing.same_user = false,
+                1 => missing.same_windows_session = false,
+                2 => missing.same_logon_id = false,
+                _ => missing.sufficient_impersonation_level = false,
+            }
+            assert!(!missing.all_match());
+        }
+    }
+
+    #[test]
+    fn native_token_statistics_c_layout_is_fixed() {
+        // Regression for the WinNT.h TOKEN_STATISTICS ABI projection.
+        assert_eq!(mem::size_of::<Luid>(), 8);
+        assert_eq!(mem::size_of::<TokenStatistics>(), 56);
     }
 
     #[test]

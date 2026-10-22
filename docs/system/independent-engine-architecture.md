@@ -11,6 +11,38 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Last-message Windows token correlation in service-owned IPC (22 October 2026)
+
+The opt-in SCM IPC worker now compares its OS-connected client process
+token against the **last message's impersonation token** using native
+OpenProcessToken, ImpersonateNamedPipeClient, OpenThreadToken and
+GetTokenInformation. It checks User SID bytes, Terminal Services session,
+TOKEN_STATISTICS.AuthenticationId (logon LUID), token type and
+impersonation level. A pre-existing service-thread impersonation token
+or failure to impersonate fails closed. The service uses RevertToSelf on
+every successful impersonation through a scope guard; failure aborts the
+service process instead of allowing it to continue under a caller token.
+The claimed PID/creation FILETIME is still checked against OS process
+data, and the pipe process is rechecked afterward. No security identity,
+SID, LUID, token HANDLE or credential is returned to desktop or persisted.
+
+This is diagnostic **candidate** matching only: an attacker able to
+duplicate a pipe client HANDLE inside the same Windows logon can still
+defeat message-to-process provenance. It also does not establish a
+proper service SID/logon SID pipe DACL or distinguish licensed Minecraft
+accounts, Windows registry views, WAM contexts or peer filesystem access.
+The existing service IPC feature remains explicitly DISABLED by default,
+admin-only, unmounted and free of mutating commands; matching credentials
+are never used as a launch authorization. Two tests for the required
+four negative evidence bits and C TOKEN_STATISTICS layout are authored;
+native Windows compilation and execution NOT_EXECUTED.
+
+Next: verify native Rust/Win32 ABI on a Windows target and implement a
+production-appropriate logon-SID and service-SID endpoint policy before
+accepting ordinary desktop users or exposing any privileged operations.
+
+
+
 ### SCM StopPending before service-worker cancellation (22 October 2026)
 
 Corrected the optional read-only SCM IPC pilot so an observed
