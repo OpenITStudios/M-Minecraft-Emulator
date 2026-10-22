@@ -11,6 +11,39 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Independent COW rename without full-state clone (22 October 2026)
+
+The existing executable runtime-core independent_engine/overlay.rs
+handles a synthetic copy-on-write file/registry-value namespace.
+Previously every rename cloned the entire SyntheticSlotOverlay,
+potentially copying its full 8 MiB private-data budget plus all
+private keys and tombstones simply to move one small value.
+
+Rename now checks all expected failure cases first: slot/process,
+surface, private-only/provenance, source visibility, destination
+collision, per-item bytes, tombstone capacity, destination entry
+count, and checked future private-byte budget. It then transfers
+the owned private Vec without cloning its allocation, or copies
+at most ONE synthetic immutable host value. A tombstone still masks
+the old logical source, and host-derived data remains tagged
+through rename. Failures during preflight leave the state untouched.
+An authored regression checks that the same Vec pointer is retained
+at maximum private-entry count and that item/tombstone quota denial
+does not partially change the namespace.
+
+This performance and atomicity correction is limited to domain COW
+logic and does NOT intercept real Minecraft filesystem/registry I/O,
+authorize accounts, mount a production engine provider, or alter OS
+ACLs. Rust tests, native Windows and four-client Minecraft acceptance
+remain NOT_EXECUTED. The default-off independent service, blocked
+MC02-MC04 Launch/Provision and retired Sandboxie route remain intact.
+
+Next: strengthen the trusted Windows storage-root capability boundary
+using the existing handle-relative file and hive fixtures, without
+touching live Minecraft worlds or a user's registry.
+
+
+
 ### Early signing-policy denial and self-process image-mapping native fixture (22 October 2026)
 
 The default-OFF, read-only native SCM IPC pilot now checks its **actual

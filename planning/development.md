@@ -1,6 +1,33 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Independent engine — avoid full-overlay copy in COW rename, 22 October 2026
+
+Optimized the canonical runtime-core independent_engine/overlay.rs
+rather than growing fail-closed IPC signing checks. Previously one
+rename cloned all private COW bytes (up to 8 MiB) and tombstone maps.
+Rename now checks source/destination, private-only provenance, item
+and tombstone quotas, future item count and private byte budget
+before mutation. It moves one existing private Vec directly or
+copies one bounded synthetic host fixture value, keeping original
+tombstone and derived-data tag. Public API and slot/process gates
+are unchanged. One focused regression authored: full item capacity,
+identical Vec allocation after rename, and atomic capacity refusal
+with full tombstones.
+
+**Proof:** pinned exact GitHub source/static review. No Rust compiler
+or cargo currently available; unit test NOT_EXECUTED. Windows
+file/HKCU interception, SCM service, Microsoft WAM/broker isolation,
+Minecraft gameplay and four-client acceptance NOT_EXECUTED.
+No service installation, driver, CI, Sandboxie integration, profile
+data mutation, or Launch/Provision MC02-MC04 activation.
+
+**Next:** improve first Windows private-root HANDLE provenance gate
+using the already existing disposable file/registry fixtures,
+without authenticating a game process or granting privileged IPC.
+
+
+
 ## Independent service — skip unsigned/unconfigured image work and add native mapping fixture, 22 October 2026
 
 Corrected an avoidable cost in the original opt-in service IPC owner.

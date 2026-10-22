@@ -408,8 +408,8 @@ impl SyntheticSlotOverlay {
         Ok(())
     }
 
-    /// Transactional synthetic rename. Copy-up/rename never deletes an OS
-    /// host source; a tombstone hides its old logical path in this slot only.
+    /// Transactional synthetic rename with checked quotas, no whole-state
+    /// clone, and no OS host mutation. The old key is tombstoned in this slot.
     pub fn rename(
         &mut self,
         host: &SyntheticBaseView,
@@ -437,20 +437,55 @@ impl SyntheticSlotOverlay {
         {
             return Err(OverlayError::HostCopyIntoPrivateBoundary);
         }
-        let contents = self.read(host, slot, process, old)?
-            .ok_or(OverlayError::MissingSource)?
-            .to_vec();
+        // Preflight every fallible constraint BEFORE changing this overlay.
+        // Renaming one item must not clone up to 8 MiB of unrelated data.
+        let size = self.read(host, slot, process, old)?
+            .ok_or(OverlayError::MissingSource)?.len();
         if self.read(host, slot, process, &new)?.is_some() {
             return Err(OverlayError::AlreadyExists);
         }
-        let derived = self.host_derived.contains(old) || !self.private.contains_key(old);
-        let mut trial = self.clone();
-        trial.delete(slot, process, old.clone())?;
-        trial.write(slot, process, new.clone(), &contents)?;
-        if derived {
-            trial.host_derived.insert(new);
+        let private_source = self.private.contains_key(old);
+        if size > MAX_OVERLAY_ITEM_BYTES {
+            return Err(OverlayError::EntryTooLarge);
         }
-        *self = trial;
+        // An existing tombstone needs no extra slot; otherwise deletion
+        // must have room to suppress the original host fallback.
+        if !self.tombstones.contains(old) && self.tombstones.len() >= MAX_OVERLAY_ITEMS {
+            return Err(OverlayError::CapacityExceeded);
+        }
+        let future_items = self.private.len() - usize::from(private_source) + 1;
+        if future_items > MAX_OVERLAY_ITEMS {
+            return Err(OverlayError::CapacityExceeded);
+        }
+        let previous = if private_source { size } else { 0 };
+        let future_bytes = self.private_bytes.checked_sub(previous)
+            .and_then(|remaining| remaining.checked_add(size))
+            .ok_or(OverlayError::CapacityExceeded)?;
+        if future_bytes > MAX_OVERLAY_PRIVATE_BYTES {
+            return Err(OverlayError::CapacityExceeded);
+        }
+        let derived = self.host_derived.contains(old) || !private_source;
+        // A host fallback may copy ONE bounded fixture value; failures
+        // must happen before any private map or tombstone is changed.
+        let host_copy = if private_source {
+            None
+        } else {
+            Some(host.fixture_bytes(old).ok_or(OverlayError::MissingSource)?.to_vec())
+        };
+        // No logical Result/error path remains after the first mutation.
+        // An owned private buffer is transferred without allocating a copy.
+        let moved = if private_source {
+            self.private.remove(old).expect("preflighted private COW source")
+        } else {
+            host_copy.expect("preflighted synthetic host source")
+        };
+        self.private_bytes = future_bytes;
+        self.host_derived.remove(old);
+        self.tombstones.insert(old.clone());
+        self.private.insert(new.clone(), moved);
+        if derived {
+            self.host_derived.insert(new);
+        }
         Ok(())
     }
 
@@ -600,6 +635,55 @@ mod tests {
         assert_eq!(a.rename(&base, SessionSlot::Mc02, id(22), &file("world/renamed.bin"), file("world/other.bin")), Err(OverlayError::AlreadyExists));
         assert_eq!(a.read(&base, SessionSlot::Mc02, id(22), &file("world/renamed.bin")).unwrap(), Some(b"original".as_slice()));
         assert_eq!(a.rename(&base, SessionSlot::Mc02, id(22), &file("world/renamed.bin"), reg("Software\\Game\\New")), Err(OverlayError::InvalidName));
+    }
+
+    #[test]
+    fn rename_at_item_and_tombstone_capacity_moves_bytes_atomically() {
+        let (base, mut a, _) = setup();
+        for n in 0..MAX_OVERLAY_ITEMS {
+            a.write(SessionSlot::Mc02, id(22),
+                file(&format!("quota/item_{n:04}.bin")), &[(n & 0xff) as u8]).unwrap();
+        }
+        let old = file("quota/item_0000.bin");
+        let destination = file("quota/moved.bin");
+        let original_buffer = a.private.get(&old).unwrap().as_ptr();
+        let count_before = a.private_byte_count();
+        a.rename(&base, SessionSlot::Mc02, id(22), &old, destination.clone()).unwrap();
+        assert_eq!(a.private.len(), MAX_OVERLAY_ITEMS);
+        assert_eq!(a.private_byte_count(), count_before);
+        assert_eq!(a.private.get(&destination).unwrap().as_ptr(), original_buffer);
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22), &old).unwrap(), None);
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22), &destination).unwrap(),
+            Some(&[0][..]));
+
+        // Host source may not be copied when the destination's quota is full.
+        let host_source = file("world/data.bin");
+        let host_destination = file("quota/from_host.bin");
+        assert_eq!(a.rename(&base, SessionSlot::Mc02, id(22),
+            &host_source, host_destination.clone()), Err(OverlayError::CapacityExceeded));
+        assert_eq!(a.private_byte_count(), count_before);
+        assert_eq!(a.private.len(), MAX_OVERLAY_ITEMS);
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22), &host_source).unwrap(),
+            Some(b"original".as_slice()));
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22), &host_destination).unwrap(), None);
+
+        // Full tombstones must reject even a small rename without changing
+        // its still-visible host source or creating a partial destination.
+        let mut tombstoned = SyntheticSlotOverlay::new(SessionSlot::Mc04, id(44)).unwrap();
+        for n in 0..MAX_OVERLAY_ITEMS {
+            tombstoned.delete(SessionSlot::Mc04, id(44),
+                file(&format!("removed/item_{n:04}.bin"))).unwrap();
+        }
+        let failed_destination = file("world/attempted.bin");
+        assert_eq!(tombstoned.rename(&base, SessionSlot::Mc04, id(44),
+            &host_source, failed_destination.clone()), Err(OverlayError::CapacityExceeded));
+        assert_eq!(tombstoned.private.len(), 0);
+        assert_eq!(tombstoned.tombstones.len(), MAX_OVERLAY_ITEMS);
+        assert_eq!(tombstoned.private_byte_count(), 0);
+        assert_eq!(tombstoned.read(&base, SessionSlot::Mc04, id(44), &host_source).unwrap(),
+            Some(b"original".as_slice()));
+        assert_eq!(tombstoned.read(&base, SessionSlot::Mc04, id(44),
+            &failed_destination).unwrap(), None);
     }
 
     #[test]
