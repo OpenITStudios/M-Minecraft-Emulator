@@ -11,6 +11,45 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Versioned independent broker diagnostic protocol (22 October 2026)
+
+`engine/runtime-core/src/independent_engine/broker_wire.rs`
+now owns one canonical, independently authored **32-byte little-endian
+request wire contract** (magic MIVB, schema 1, read-only probe kind,
+MC02–MC04 slot, claimed PID, full creation FILETIME, correlation ID,
+and four reserved-zero bytes). The decoder refuses extra/short bytes,
+unknown versions/ops, MC01, zero process values/correlation and
+unrecognized reserved bits. There are **NO** launch, provision,
+file/registry mutation, credential, token, or readiness opcodes.
+A correlation ID is not an authentication nonce or an anti-replay proof.
+
+The Windows-only, unmounted diagnostic adapter at
+`apps/desktop/src-tauri/src/engine/independent_pipe_peer.rs`
+accepts an **already connected server-side named-pipe HANDLE**, checks
+the real client PID using GetNamedPipeClientProcessId, opens that
+process with query/synchronize-only rights, checks complete creation
+FILETIME and live status, and rechecks the observed pipe PID. Results
+remain PENDING, never authorize a session, even on full PID/FILETIME
+match. This does **not** create or install a named-pipe listener/service.
+
+**Security boundary:** a future privileged service must use an
+explicitly restricted pipe DACL, authenticated client token/session
+and carefully bounded named-pipe impersonation with unconditional
+RevertToSelf; it must prove which message was actually read and
+bind that to a fresh, still-live OS process and verified profile.
+GetNamedPipeClientProcessId and frame contents **alone do not
+authenticate a caller**, especially with duplicated pipe handles.
+Windows-specific source/tests NOT_EXECUTED. No new desktop command,
+service, game launch, driver install, credentials or user profiles
+were changed. MC02–MC04 Launch/Provision remains blocked.
+
+Next: implement a bounded read-only named-pipe server fixture with
+explicit pipe ACL and token impersonation/revert handling, then
+source-validate the service peer-binding contract before privileged
+storage admission.
+
+
+
 ### Native Windows effective root-access evidence (22 October 2026)
 
 The original Win32 read-only inspector in

@@ -5,6 +5,7 @@
 //! The existing desktop admission and runtime lifecycle remain authoritative.
 
 mod acceptance;
+mod broker_wire;
 mod evidence;
 mod fixture_wire;
 mod identity;
@@ -17,6 +18,10 @@ mod overlay;
 mod ports;
 mod storage;
 
+pub use broker_wire::{
+    decode_broker_probe, encode_broker_probe, BrokerProbeKind, BrokerWireError,
+    UntrustedBrokerProbe, BROKER_PROBE_BYTES,
+};
 pub use acceptance::{
     review_game_acceptance, ClientGameCheck, ClientGameSample,
     GameTrial, GameTrialError, GroupGameCheck, JointGameSample,

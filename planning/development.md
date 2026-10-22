@@ -1,5 +1,37 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — typed read-only broker wire and native pipe peer inspection, 22 October 2026
+
+Added one original, versioned 32-byte broker diagnostic request contract
+in engine/runtime-core/src/independent_engine/broker_wire.rs. Exactly two
+read-only operations exist (observe process; inspect root ACL). The
+LE parser rejects malformed size/magic/version, unknown operations,
+MC01, zero/invalid PID/FILETIME/correlation and nonzero reserved bytes;
+Rust regression tests cover stable roundtrip and adversarial inputs.
+The frame is explicitly UNTRUSTED and cannot launch or configure
+Minecraft. No separate manager, credentials store or lifecycle state
+was added.
+
+An unmounted Windows-only adapter at
+apps/desktop/src-tauri/src/engine/independent_pipe_peer.rs checks
+GetNamedPipeClientProcessId against the frame's claimed PID, reopens
+the OS client's process with query-only rights, verifies full process
+creation FILETIME and live state, and rereads the pipe peer PID.
+Its result is ONLY a pending candidate; a pipe handle or message
+can be duplicated, and no client SID/session/DACL/impersonation
+validation or trusted server exists yet. It never creates a listener
+or alters an account, service, driver, installed Sandboxie or world.
+MC02–MC04 Launch/Provision stays denied. No Sandboxie code linked.
+
+**Proof:** GitHub exact-source/static review. Rust/Windows compiler
+and native IPC execution NOT_EXECUTED; Minecraft runtime NOT_EXECUTED.
+The two pure-Rust tests are authored only, not represented as PASS.
+
+**Next:** build the independently owned, read-only named-pipe server
+fixture with restrictive ACL and fail-closed client token verification
+before introducing any privileged service operations.
+
+
 ## Independent engine — read real Windows ACL rights for two owned fixture processes, 22 October 2026
 
 Introduced apps/desktop/src-tauri/src/engine/independent_root_access.rs:

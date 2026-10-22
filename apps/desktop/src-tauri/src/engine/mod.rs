@@ -19,6 +19,9 @@ mod independent_private_files;
 // Read-only real Windows AccessCheck against pinned fixture process tokens.
 #[cfg(windows)]
 mod independent_root_access;
+// Native pending pipe-peer PID/FILETIME check; no IPC server/launch wiring.
+#[cfg(windows)]
+mod independent_pipe_peer;
 pub mod manager_settings;
 pub mod native_clients;
 pub mod owned_isolation;
