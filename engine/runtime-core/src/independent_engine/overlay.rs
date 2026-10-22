@@ -1,0 +1,495 @@
+//! Independent in-memory copy-on-write namespace for synthetic file and
+//! registry-value resources. No filesystem, HKCU, Win32 hooks or game writes.
+//!
+//! A base snapshot is explicitly test-supplied and immutable. Each MC02-04
+//! session owns a separate overlay. Read merges private entries over the
+//! snapshot; deletion leaves tombstones that mask the snapshot; mutations
+//! never change base bytes. This is executable COW *domain logic*, not a
+//! Windows interception layer or Minecraft-compatible pathname adapter.
+//!
+//! Names are deliberately ASCII-only and bounded for synthetic fixtures.
+//! Arbitrary real-world Minecraft Unicode filenames, registry key metadata,
+//! directory operations, alternate streams and Windows link behavior require
+//! a separate validated native implementation before any production use.
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use super::{ProcessIdentity, SessionSlot};
+
+pub const MAX_OVERLAY_ITEM_BYTES: usize = 64 * 1024;
+pub const MAX_OVERLAY_ITEMS: usize = 1024;
+pub const MAX_OVERLAY_PRIVATE_BYTES: usize = 8 * 1024 * 1024;
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum OverlaySurface {
+    File,
+    RegistryValue,
+}
+
+impl OverlaySurface {
+    fn separator(self) -> char {
+        match self {
+            Self::File => '/',
+            Self::RegistryValue => '\\',
+        }
+    }
+}
+
+/// A resource inside a *synthetic* namespace, never an OS-qualified path.
+/// Case folding here covers ASCII fixture names only, not full Windows
+/// Unicode case mappings. These keys MUST NOT be passed to native file APIs.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct OverlayKey {
+    surface: OverlaySurface,
+    name: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OverlayError {
+    HostSlotForbidden,
+    InvalidProcess,
+    WrongOwnerOrProcess,
+    InvalidName,
+    EntryTooLarge,
+    CapacityExceeded,
+    AlreadyExists,
+    MissingSource,
+}
+
+impl OverlayKey {
+    pub fn parse(surface: OverlaySurface, input: &str) -> Result<Self, OverlayError> {
+        if input.is_empty() || input.len() > 240 || !input.is_ascii() {
+            return Err(OverlayError::InvalidName);
+        }
+        let separator = surface.separator();
+        let parts: Vec<_> = input.split(separator).collect();
+        if parts.len() > 32 || parts.iter().any(|component| !valid_component(component)) {
+            return Err(OverlayError::InvalidName);
+        }
+        Ok(Self { surface, name: input.to_ascii_lowercase() })
+    }
+
+    pub fn surface(&self) -> OverlaySurface {
+        self.surface
+    }
+
+    pub fn normalized_name(&self) -> &str {
+        &self.name
+    }
+
+    fn at_or_below(&self, prefix: &Self) -> bool {
+        if self.surface != prefix.surface {
+            return false;
+        }
+        self.name == prefix.name
+            || self.name.strip_prefix(&prefix.name).is_some_and(|rest| {
+                rest.starts_with(self.surface.separator())
+            })
+    }
+}
+
+fn valid_component(value: &str) -> bool {
+    if value.is_empty() || value.len() > 64 || value == "." || value == ".."
+        || value.ends_with('.') || value.ends_with(' ')
+        || value.as_bytes().iter().any(|c| !c.is_ascii_alphanumeric()
+            && !matches!(*c, b'-' | b'_' | b'.' | b' ' | b'$'))
+    {
+        return false;
+    }
+    // Treat dangerous DOS device basenames as invalid even with extensions.
+    // No code here opens Windows filenames, but accepting these would make
+    // later adapters ambiguous.
+    let stem = value.split('.').next().unwrap_or("");
+    let stem = stem.to_ascii_uppercase();
+    matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL"
+        | "CONIN$" | "CONOUT$")
+        .not()
+        && !(stem.len() == 4 && (
+            (stem.starts_with("COM") || stem.starts_with("LPT"))
+                && stem.as_bytes()[3].is_ascii_digit()
+        ))
+}
+
+trait BooleanNot {
+    fn not(self) -> bool;
+}
+impl BooleanNot for bool {
+    fn not(self) -> bool { !self }
+}
+
+/// Immutable test-supplied host view: there is no path or OS handle to
+/// the actual desktop account, filesystem, registry or authentication broker.
+#[derive(Clone, Debug, Default)]
+pub struct SyntheticBaseView {
+    entries: BTreeMap<OverlayKey, Vec<u8>>,
+    bytes: usize,
+}
+
+impl SyntheticBaseView {
+    pub fn insert_fixture(
+        &mut self,
+        key: OverlayKey,
+        data: &[u8],
+    ) -> Result<(), OverlayError> {
+        if data.len() > MAX_OVERLAY_ITEM_BYTES {
+            return Err(OverlayError::EntryTooLarge);
+        }
+        if self.entries.contains_key(&key) {
+            return Err(OverlayError::AlreadyExists);
+        }
+        if self.entries.len() == MAX_OVERLAY_ITEMS
+            || self.bytes + data.len() > MAX_OVERLAY_PRIVATE_BYTES
+        {
+            return Err(OverlayError::CapacityExceeded);
+        }
+        self.bytes += data.len();
+        self.entries.insert(key, data.to_vec());
+        Ok(())
+    }
+
+    pub fn fixture_bytes(&self, key: &OverlayKey) -> Option<&[u8]> {
+        self.entries.get(key).map(Vec::as_slice)
+    }
+}
+
+/// A bound, in-memory overlay; there is no process-identity trust claim.
+/// The caller must re-pin a real PID/FILETIME before using any future OS
+/// adapter. A slot/proc mismatch fails before reading or altering state.
+#[derive(Clone, Debug)]
+pub struct SyntheticSlotOverlay {
+    slot: SessionSlot,
+    process: ProcessIdentity,
+    private: BTreeMap<OverlayKey, Vec<u8>>,
+    tombstones: BTreeSet<OverlayKey>,
+    private_bytes: usize,
+}
+
+impl SyntheticSlotOverlay {
+    pub fn new(slot: SessionSlot, process: ProcessIdentity) -> Result<Self, OverlayError> {
+        if slot.is_host_native() {
+            return Err(OverlayError::HostSlotForbidden);
+        }
+        if process.pid == 0 || process.created_file_time == 0 {
+            return Err(OverlayError::InvalidProcess);
+        }
+        Ok(Self {
+            slot,
+            process,
+            private: BTreeMap::new(),
+            tombstones: BTreeSet::new(),
+            private_bytes: 0,
+        })
+    }
+
+    fn check(&self, slot: SessionSlot, process: ProcessIdentity) -> Result<(), OverlayError> {
+        if slot != self.slot || process != self.process {
+            return Err(OverlayError::WrongOwnerOrProcess);
+        }
+        Ok(())
+    }
+
+    fn masked(&self, key: &OverlayKey) -> bool {
+        self.tombstones.iter().any(|deleted| key.at_or_below(deleted))
+    }
+
+    /// Private value first, then immutable fixture base; never reads the OS.
+    pub fn read<'a>(
+        &'a self,
+        host: &'a SyntheticBaseView,
+        slot: SessionSlot,
+        process: ProcessIdentity,
+        key: &OverlayKey,
+    ) -> Result<Option<&'a [u8]>, OverlayError> {
+        self.check(slot, process)?;
+        if let Some(value) = self.private.get(key) {
+            return Ok(Some(value.as_slice()));
+        }
+        if self.masked(key) {
+            return Ok(None);
+        }
+        Ok(host.fixture_bytes(key))
+    }
+
+    /// A full replacement is always made in private memory, even when the
+    /// immutable host fixture contains the same name. No host write exists.
+    pub fn write(
+        &mut self,
+        slot: SessionSlot,
+        process: ProcessIdentity,
+        key: OverlayKey,
+        data: &[u8],
+    ) -> Result<(), OverlayError> {
+        self.check(slot, process)?;
+        if data.len() > MAX_OVERLAY_ITEM_BYTES {
+            return Err(OverlayError::EntryTooLarge);
+        }
+        let previous = self.private.get(&key).map_or(0, Vec::len);
+        if !self.private.contains_key(&key) && self.private.len() == MAX_OVERLAY_ITEMS {
+            return Err(OverlayError::CapacityExceeded);
+        }
+        let total = self.private_bytes - previous + data.len();
+        if total > MAX_OVERLAY_PRIVATE_BYTES {
+            return Err(OverlayError::CapacityExceeded);
+        }
+        self.private_bytes = total;
+        self.tombstones.remove(&key);
+        self.private.insert(key, data.to_vec());
+        Ok(())
+    }
+
+    /// First private read of a host value can be copied up explicitly before
+    /// a partial write. A tombstone deliberately suppresses copy-up.
+    pub fn copy_up(
+        &mut self,
+        host: &SyntheticBaseView,
+        slot: SessionSlot,
+        process: ProcessIdentity,
+        key: &OverlayKey,
+    ) -> Result<(), OverlayError> {
+        self.check(slot, process)?;
+        if self.private.contains_key(key) {
+            return Ok(());
+        }
+        let bytes = self.read(host, slot, process, key)?
+            .ok_or(OverlayError::MissingSource)?
+            .to_vec();
+        self.write(slot, process, key.clone(), &bytes)
+    }
+
+    /// A leaf delete always masks the host fixture, including its fallback.
+    pub fn delete(
+        &mut self,
+        slot: SessionSlot,
+        process: ProcessIdentity,
+        key: OverlayKey,
+    ) -> Result<(), OverlayError> {
+        self.check(slot, process)?;
+        if !self.tombstones.contains(&key)
+            && self.tombstones.len() == MAX_OVERLAY_ITEMS
+        {
+            return Err(OverlayError::CapacityExceeded);
+        }
+        if let Some(value) = self.private.remove(&key) {
+            self.private_bytes -= value.len();
+        }
+        self.tombstones.insert(key);
+        Ok(())
+    }
+
+    /// Hide a directory/subkey prefix in the fixture view. Later private
+    /// entries beneath it remain visible, while old host descendants do not.
+    pub fn delete_tree(
+        &mut self,
+        slot: SessionSlot,
+        process: ProcessIdentity,
+        prefix: OverlayKey,
+    ) -> Result<(), OverlayError> {
+        self.check(slot, process)?;
+        if !self.tombstones.contains(&prefix)
+            && self.tombstones.len() == MAX_OVERLAY_ITEMS
+        {
+            return Err(OverlayError::CapacityExceeded);
+        }
+        let old: Vec<_> = self.private.keys()
+            .filter(|key| key.at_or_below(&prefix))
+            .cloned()
+            .collect();
+        for key in old {
+            if let Some(bytes) = self.private.remove(&key) {
+                self.private_bytes -= bytes.len();
+            }
+        }
+        self.tombstones.insert(prefix);
+        Ok(())
+    }
+
+    /// Transactional synthetic rename. Copy-up/rename never deletes an OS
+    /// host source; a tombstone hides its old logical path in this slot only.
+    pub fn rename(
+        &mut self,
+        host: &SyntheticBaseView,
+        slot: SessionSlot,
+        process: ProcessIdentity,
+        old: &OverlayKey,
+        new: OverlayKey,
+    ) -> Result<(), OverlayError> {
+        self.check(slot, process)?;
+        if old == &new {
+            return if self.read(host, slot, process, old)?.is_some() {
+                Ok(())
+            } else {
+                Err(OverlayError::MissingSource)
+            };
+        }
+        if old.surface != new.surface {
+            return Err(OverlayError::InvalidName);
+        }
+        let contents = self.read(host, slot, process, old)?
+            .ok_or(OverlayError::MissingSource)?
+            .to_vec();
+        if self.read(host, slot, process, &new)?.is_some() {
+            return Err(OverlayError::AlreadyExists);
+        }
+        let mut trial = self.clone();
+        trial.delete(slot, process, old.clone())?;
+        trial.write(slot, process, new, &contents)?;
+        *self = trial;
+        Ok(())
+    }
+
+    /// Deterministic merged enumeration, delimited by directory/key-prefix
+    /// boundaries. Never combines different surfaces or another slot's state.
+    pub fn list(
+        &self,
+        host: &SyntheticBaseView,
+        slot: SessionSlot,
+        process: ProcessIdentity,
+        prefix: &OverlayKey,
+    ) -> Result<Vec<OverlayKey>, OverlayError> {
+        self.check(slot, process)?;
+        let mut seen = BTreeSet::new();
+        for key in host.entries.keys() {
+            if key.at_or_below(prefix) && !self.masked(key) {
+                seen.insert(key.clone());
+            }
+        }
+        for key in self.private.keys() {
+            if key.at_or_below(prefix) {
+                seen.insert(key.clone());
+            }
+        }
+        Ok(seen.into_iter().collect())
+    }
+
+    pub fn private_byte_count(&self) -> usize {
+        self.private_bytes
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn id(pid: u32) -> ProcessIdentity {
+        ProcessIdentity::checked(pid, 133400000000000000 + u64::from(pid)).unwrap()
+    }
+    fn file(value: &str) -> OverlayKey {
+        OverlayKey::parse(OverlaySurface::File, value).unwrap()
+    }
+    fn reg(value: &str) -> OverlayKey {
+        OverlayKey::parse(OverlaySurface::RegistryValue, value).unwrap()
+    }
+    fn setup() -> (SyntheticBaseView, SyntheticSlotOverlay, SyntheticSlotOverlay) {
+        let mut base = SyntheticBaseView::default();
+        base.insert_fixture(file("world/data.bin"), b"original").unwrap();
+        base.insert_fixture(file("world/other.bin"), b"second").unwrap();
+        base.insert_fixture(reg("Software\\Game\\Setting"), b"base-setting").unwrap();
+        (base,
+         SyntheticSlotOverlay::new(SessionSlot::Mc02, id(22)).unwrap(),
+         SyntheticSlotOverlay::new(SessionSlot::Mc03, id(33)).unwrap())
+    }
+
+    #[test]
+    fn fixture_paths_are_case_insensitive_but_reject_os_path_escape() {
+        assert_eq!(file("World/DATA.bin"), file("world/data.BIN"));
+        assert_eq!(reg("Software\\GAME\\Setting"), reg("software\\game\\setting"));
+        for (kind, bad) in [
+            (OverlaySurface::File, "../host"),
+            (OverlaySurface::File, "/absolute"),
+            (OverlaySurface::File, "world//file"),
+            (OverlaySurface::File, "world\\backslash"),
+            (OverlaySurface::File, "world/NUL.txt"),
+            (OverlaySurface::File, "world/com1.log"),
+            (OverlaySurface::File, "world/bad:stream"),
+            (OverlaySurface::RegistryValue, "HKCU\\..\\outside"),
+            (OverlaySurface::RegistryValue, "Software\\A/B"),
+            (OverlaySurface::RegistryValue, "\\HKCU"),
+            (OverlaySurface::RegistryValue, "Software\\\\Value"),
+            (OverlaySurface::File, "world/é"),
+        ] {
+            assert_eq!(OverlayKey::parse(kind, bad), Err(OverlayError::InvalidName));
+        }
+        assert!(OverlayKey::parse(OverlaySurface::File, "world/.cache").is_ok());
+    }
+
+    #[test]
+    fn private_copy_on_write_masks_host_without_mutating_base() {
+        let (base, mut box_a, box_b) = setup();
+        let key = file("world/data.bin");
+        assert_eq!(box_a.read(&base, SessionSlot::Mc02, id(22), &key).unwrap(), Some(b"original".as_slice()));
+        box_a.copy_up(&base, SessionSlot::Mc02, id(22), &key).unwrap();
+        assert_eq!(box_a.private_byte_count(), b"original".len());
+        box_a.write(SessionSlot::Mc02, id(22), key.clone(), b"changed").unwrap();
+        assert_eq!(box_a.read(&base, SessionSlot::Mc02, id(22), &key).unwrap(), Some(b"changed".as_slice()));
+        assert_eq!(base.fixture_bytes(&key), Some(b"original".as_slice()));
+        assert_eq!(box_b.read(&base, SessionSlot::Mc03, id(33), &key).unwrap(), Some(b"original".as_slice()));
+        box_a.delete(SessionSlot::Mc02, id(22), key.clone()).unwrap();
+        assert_eq!(box_a.read(&base, SessionSlot::Mc02, id(22), &key).unwrap(), None);
+        assert_eq!(base.fixture_bytes(&key), Some(b"original".as_slice()));
+    }
+
+    #[test]
+    fn registry_values_are_independent_of_file_names_and_peer_boxes() {
+        let (base, mut a, b) = setup();
+        let registry = reg("SOFTWARE\\Game\\Setting");
+        a.write(SessionSlot::Mc02, id(22), registry.clone(), b"a-private").unwrap();
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22), &registry).unwrap(), Some(b"a-private".as_slice()));
+        assert_eq!(b.read(&base, SessionSlot::Mc03, id(33), &registry).unwrap(), Some(b"base-setting".as_slice()));
+        a.delete(SessionSlot::Mc02, id(22), registry.clone()).unwrap();
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22), &registry).unwrap(), None);
+        assert_eq!(b.read(&base, SessionSlot::Mc03, id(33), &registry).unwrap(), Some(b"base-setting".as_slice()));
+    }
+
+    #[test]
+    fn directory_tombstones_hide_host_descendants_but_allow_new_private_children() {
+        let (base, mut box_a, box_b) = setup();
+        box_a.delete_tree(SessionSlot::Mc02, id(22), file("world")).unwrap();
+        assert_eq!(box_a.read(&base, SessionSlot::Mc02, id(22), &file("world/data.bin")).unwrap(), None);
+        box_a.write(SessionSlot::Mc02, id(22), file("world/new.bin"), b"new").unwrap();
+        let names = box_a.list(&base, SessionSlot::Mc02, id(22), &file("world")).unwrap();
+        assert_eq!(names, vec![file("world/new.bin")]);
+        assert_eq!(box_b.list(&base, SessionSlot::Mc03, id(33), &file("world")).unwrap().len(), 2);
+        assert!(box_a.list(&base, SessionSlot::Mc02, id(22), &file("worl")).unwrap().is_empty());
+    }
+
+    #[test]
+    fn pid_reuse_cross_slot_and_mc01_must_never_touch_a_box() {
+        let (base, mut box_a, _) = setup();
+        let key = file("world/data.bin");
+        for (slot, process) in [
+            (SessionSlot::Mc03, id(22)),
+            (SessionSlot::Mc02, id(33)),
+            (SessionSlot::Mc02, id(23)),
+        ] {
+            assert_eq!(box_a.read(&base, slot, process, &key), Err(OverlayError::WrongOwnerOrProcess));
+            assert_eq!(box_a.write(slot, process, key.clone(), b"poison"), Err(OverlayError::WrongOwnerOrProcess));
+        }
+        assert_eq!(SyntheticSlotOverlay::new(SessionSlot::Mc01, id(1)).unwrap_err(), OverlayError::HostSlotForbidden);
+        assert_eq!(SyntheticSlotOverlay::new(SessionSlot::Mc02,
+            ProcessIdentity { pid: 0, created_file_time: 1 }).unwrap_err(), OverlayError::InvalidProcess);
+        assert_eq!(box_a.read(&base, SessionSlot::Mc02, id(22), &key).unwrap(), Some(b"original".as_slice()));
+    }
+
+    #[test]
+    fn rename_is_atomic_and_never_changes_original_host_entries() {
+        let (base, mut a, _) = setup();
+        let old = file("world/data.bin");
+        a.rename(&base, SessionSlot::Mc02, id(22), &old, file("world/renamed.bin")).unwrap();
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22), &old).unwrap(), None);
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22), &file("world/renamed.bin")).unwrap(), Some(b"original".as_slice()));
+        assert_eq!(base.fixture_bytes(&old), Some(b"original".as_slice()));
+        assert_eq!(a.rename(&base, SessionSlot::Mc02, id(22), &file("world/renamed.bin"), file("world/other.bin")), Err(OverlayError::AlreadyExists));
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22), &file("world/renamed.bin")).unwrap(), Some(b"original".as_slice()));
+        assert_eq!(a.rename(&base, SessionSlot::Mc02, id(22), &file("world/renamed.bin"), reg("Software\\Game\\New")), Err(OverlayError::InvalidName));
+    }
+
+    #[test]
+    fn quotas_and_repeated_replacements_preserve_private_state_on_failure() {
+        let (base, mut a, _) = setup();
+        let key = file("world/new.bin");
+        a.write(SessionSlot::Mc02, id(22), key.clone(), b"small").unwrap();
+        assert_eq!(a.write(SessionSlot::Mc02, id(22), key.clone(), &vec![1; MAX_OVERLAY_ITEM_BYTES + 1]), Err(OverlayError::EntryTooLarge));
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22), &key).unwrap(), Some(b"small".as_slice()));
+        assert_eq!(a.private_byte_count(), 5);
+    }
+}

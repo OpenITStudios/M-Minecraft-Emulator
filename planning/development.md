@@ -1,5 +1,38 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — functional synthetic copy-on-write overlay core, 22 October 2026
+
+Added original Rust source in the existing canonical
+`engine/runtime-core/src/independent_engine/overlay.rs`. This is an
+**executable in-memory overlay algorithm**, not another observation-only
+check: it merges an immutable synthetic base with per-MC02–MC04 private
+entries, performs copy-up and private full-value writes, tombstone deletes,
+prefix/subtree masking, deterministic merged enumeration and transactional
+same-surface renames without ever mutating the shared base. It handles
+both file leaf resources and registry value leaves using independently
+normalized namespaces; all operations validate exact slot and process
+PID/FILETIME, deny MC01, bound path structure, individual byte counts,
+private memory quota and item count. Seven Rust unit regressions authored
+for case normalization, traversal/device denial, independent COW,
+registry separation, subtree tombstones, mismatched process/peer, atomic
+rename and quotas.
+
+**Critical limit:** `SyntheticBaseView` is deliberately an immutable
+in-memory fixture, NOT real Windows host data. Resource keys are strictly
+synthetic/ASCII: they cannot represent arbitrary Minecraft Unicode
+world filenames, ACLs, streams, hardlinks or true registry trees.
+This module does **not** hook APIs, redirect AppData/HKCU, own a
+trusted filesystem root, start a process, modify accounts or authorize
+Launch/Provision. The semantics are a useful concrete engine building
+block; they do not make the product sandbox operational.
+Rust compiler/tests and target Windows execution NOT_EXECUTED.
+
+**Next:** Integrate a safely authenticated private resource adapter that
+enforces real Windows file/registry semantics, or pause that mutation
+until signed native enforcement and broker compatibility are proved;
+do not promote the synthetic overlay to a provider.
+
+
 ## Independent engine — Windows provider feasibility and all storage escape denials, 22 October 2026
 
 Verified Microsoft's supported Windows behavior across unpackaged

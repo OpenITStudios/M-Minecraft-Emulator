@@ -13,6 +13,7 @@ mod inspection;
 mod paths;
 mod registry;
 mod operations;
+mod overlay;
 mod ports;
 mod storage;
 
@@ -52,6 +53,11 @@ pub use registry::{
     SyntheticRegistryProbe,
 };
 pub use operations::{OperationClass, SessionOperation};
+pub use overlay::{
+    OverlayError, OverlayKey, OverlaySurface, SyntheticBaseView,
+    SyntheticSlotOverlay, MAX_OVERLAY_ITEM_BYTES, MAX_OVERLAY_ITEMS,
+    MAX_OVERLAY_PRIVATE_BYTES,
+};
 pub use ports::{
     CooperativePathObserverPort, DisabledIndependentProvider,
     IndependentProviderPort, NativePortError, PairBoundaryObserverPort, ProcessContainment,

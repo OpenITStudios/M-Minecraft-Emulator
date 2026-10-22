@@ -11,6 +11,19 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### In-memory copy-on-write namespace core (22 October 2026)
+
+`independent_engine/overlay.rs` implements a real bounded, test-only
+copy-on-write namespace for synthetic file leaves and registry values:
+immutable base fallback, per-slot private shadows, host-masking leaf
+and subtree tombstones, deterministic merged enumeration, atomic rename,
+quotas, slot and PID/FILETIME guards. The base is supplied as owned bytes,
+not read from Windows. Actual game filesystem/registry I/O would require
+real Windows enforcement, Unicode/path/reparse/stream/ACL semantics,
+trusted profile root ownership and WAM compatibility. No native adapter
+or Launch/Provision authorization exists.
+
+
 ### Package metadata is not reviewed official package origin (22 October 2026)
 
 `image_provenance.rs` never clears `PackageOriginNotReviewed` merely
