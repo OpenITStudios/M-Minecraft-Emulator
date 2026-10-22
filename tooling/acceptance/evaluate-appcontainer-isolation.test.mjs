@@ -124,8 +124,31 @@ test("reject malformed inputs without leaking private fields", () => {
     assert.throws(() => evaluateAppContainerIsolation(report), TypeError);
   }
   const report = evaluateAppContainerIsolation(fixture());
-  assert.equal(JSON.stringify(report).includes("Users"), false);
-  assert.equal(JSON.stringify(report).includes("SID"), false);
+  // Avoid false positives: OUTSIDE_EXPECTED_PROFILE legitimately contains
+  // "SID". Test the exact reviewed output shape and its nested path states,
+  // not arbitrary substrings that can occur inside public enum labels.
+  assert.deepEqual(Object.keys(report).sort(), [
+    "schema", "scope", "inputClass", "syntheticIsolation",
+    "syntheticPrivateStorageAcrossProcessRestart", "roamingPathObservation",
+    "candidateDisposition", "mechanismBoundaries", "processPaths",
+    "processIdentityBound", "knownFolderDataAccessProven",
+    "educationAuthenticationVerified", "productionProviderSelected",
+    "productAcceptance", "isolatedLaunchAllowed", "risks"
+  ].sort());
+  for (const child of report.processPaths) {
+    assert.deepEqual(Object.keys(child).sort(), [
+      "fixture", "localKnownFolder", "roamingEnvironment", "roamingKnownFolder"
+    ].sort());
+    for (const field of ["localKnownFolder", "roamingEnvironment", "roamingKnownFolder"]) {
+      assert.ok([
+        "UNDER_EXPECTED_PROFILE", "OUTSIDE_EXPECTED_PROFILE", "UNAVAILABLE"
+      ].includes(child[field]));
+    }
+  }
+  for (const sensitive of ['"rawSid":', '"sid":', '"profilePath":',
+    '"userName":', '"credential":', '"token":', '"accountId":']) {
+    assert.equal(JSON.stringify(report).includes(sensitive), false);
+  }
 });
 
 test("per-process paths remain separate and never prove launch", () => {

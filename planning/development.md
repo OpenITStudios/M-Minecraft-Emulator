@@ -1,5 +1,31 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — execute offline evaluator tests in ChatGPT and repair false-positive privacy assertion, 22 October 2026
+
+Ran the exact committed pure JavaScript AppContainer evaluator and eight
+existing test callback bodies inside ChatGPT's V8 isolate, replacing only
+Node import/CLI wrappers with an equivalent minimal assertion harness.
+Baseline at `b616bf74259f56be54ece1d09d888ab37b83a87a`: 7 PASS,
+1 FAIL. The failing test looked for the raw substring `SID` anywhere
+in serialized JSON, misclassifying the legitimate public enum value
+`OUTSIDE_EXPECTED_PROFILE` as a leaked SID.
+
+Replaced the assertion in the canonical
+`tooling/acceptance/evaluate-appcontainer-isolation.test.mjs` with an
+exact output-key allowlist, an exact nested child schema/value whitelist,
+and checks for explicitly named sensitive fields. Re-ran the full eight
+test callback bodies against the unchanged evaluator using the same V8
+harness: **8 PASS, 0 FAIL**. The repository's normal Node `node --test`
+runner itself was NOT_EXECUTED; neither Windows nor Minecraft tests were
+run. This does not upgrade any AppContainer candidate's Roaming/HKCU/WAM
+or gameplay readiness.
+
+**Next:** continue source-only independent Windows engine compatibility;
+the new package-form source observer still needs a Windows target compile
+and OS execution. Keep isolated Launch/Provision blocked and GitHub
+Actions fully disabled.
+
+
 ## Independent engine — observe real Windows package form without reading package data, 22 October 2026
 
 Implemented a new read-only, unmounted package-form collector in the canonical
