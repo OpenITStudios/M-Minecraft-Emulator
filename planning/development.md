@@ -1,6 +1,40 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Independent service — per-logon least-rights ACL candidate and relogon recheck, 22 October 2026
+
+Within the existing SCM identity source owner, added a private,
+non-authorizing SDDL candidate constructor sourced ONLY from the
+Windows-resolved service SID and WTS-verified unique enabled logon
+SID. SYSTEM and the verified service SID have GA; the single
+session's logon SID gets precisely FILE_WRITE_DATA|SYNCHRONIZE
+(0x00100002), never FILE_CREATE_PIPE_INSTANCE/GENERIC_WRITE.
+Canonical service/logon syntax refuses SID/ACE injection, broad
+BUILTIN Users/Everyone and cross-logon reuse. This does NOT bind,
+update or open a per-logon pipe. The current pilot's administrator
+DACL remains unchanged and the build feature stays default-OFF.
+
+The WTSActive diagnostic additionally re-queries the user's
+native PRIMARY token after the second session enumeration,
+requiring the same User SID, SessionId, and unique enabled logon
+SID. This reduces exposure to session-number reuse but never
+promotes the result to production authentication or bypasses
+the known duplicated-handle provenance limitation. All handles
+are closed and candidate SDDL is dropped. Two source regressions
+cover precise client mask/DACL content and cross-logon/SID spoofing.
+
+**Proof:** pinned GitHub source/static review + Microsoft Windows
+named-pipe ACL/SERVICE_SID/TokenGroups documentation. No Rust
+compiler in this environment, native code/tests/SCM and Minecraft
+NOT_EXECUTED. No service/driver installation, existing Tauri routes,
+Sandboxie runtime, accounts/worlds or MC02-04 Launch/Provision changed.
+
+**Next:** native Windows source compile and effective ACL tests,
+followed by a trustable desktop-origin and logon-revocation design
+before any actual nonadmin endpoint, filesystem or registry enforcement.
+
+
+
 ## Independent service — unify bounded SID reads and cross-check WTS user, 22 October 2026
 
 Corrected two real validation gaps within the existing independent

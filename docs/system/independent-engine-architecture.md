@@ -11,6 +11,46 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Candidate per-logon IPC ACL policy — source-only, 22 October 2026
+
+The existing independent Windows SCM identity owner now derives a
+strictly non-authorizing **per-logon named-pipe DACL candidate** from
+the OS-resolved enabled NT SERVICE SID and a unique enabled
+S-1-5-5-X-Y logon SID from WTSQueryUserToken. The candidate permits
+SYSTEM and the exact service SID full control and permits the ONE
+observed interactive logon only FILE_WRITE_DATA (0x2) and
+SYNCHRONIZE (0x100000). It explicitly excludes
+FILE_CREATE_PIPE_INSTANCE (0x4) and avoids GenericWrite,
+BUILTIN Users, Authenticated Users and Builtin Administrators client
+ACE grants. Canonical string validation rejects extra SDDL ACEs,
+noncanonical SID text, missing/foreign logon subauthorities, and
+different logons produce different candidate DACLs.
+
+The current WTSActive diagnostic now also repeats WTSQueryUserToken
+AFTER the second active-session inventory: the rechecked primary
+user token must have the same User SID, Session ID, and enabled logon
+SID as the previous primary user token. This reduces (but cannot
+eliminate) reuse of a session number across logoff/logon.
+
+**Important: this is NOT an ACL applied to a pipe.** The DACL
+candidate is built from verified native observations and immediately
+discarded; no nonadmin endpoint exists, and the existing admin-only
+pipe and default-disabled readonly-ipc-pilot are untouched. Even
+an identical last-message SID/logon does not distinguish processes
+within the same logon when pipe handles can be duplicated.
+Before enabling a per-logon endpoint, Windows target verification
+must establish trusted service-created endpoints, client application
+provenance, active session revocation, actual AccessCheck denial
+for other logons, and correct service/installer/signature rollback.
+Windows tests, SCM activation, Minecraft multi-client and OS-enforced
+filesystem/HKCU/WAM interception remain NOT_EXECUTED.
+
+Next: verify native Windows logon revalidation and actual DACL
+behavior, then add service-owned per-logon endpoint admission only
+after a trustworthy desktop origin/renewal model exists.
+
+
+
 ### One bounded Windows User SID owner for service and IPC (22 October 2026)
 
 The native Windows service IPC had a second TokenUser reader that

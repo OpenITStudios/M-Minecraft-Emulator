@@ -98,6 +98,57 @@ fn nt_authority_sid(sid: &[u8], n: u8, first: u32) -> bool {
 fn service_sid(sid: &[u8]) -> bool { nt_authority_sid(sid, 6, 80) }
 fn logon_sid(sid: &[u8]) -> bool { nt_authority_sid(sid, 3, 5) }
 
+// Only the service gets GENERIC_ALL. A prospective client must never
+// receive FILE_CREATE_PIPE_INSTANCE (0x0004), GENERIC_WRITE, WRITE_DAC,
+// or privileges over the server endpoint.
+const SCOPED_CLIENT_WRITE_DATA: u32 = 0x0002;
+const SCOPED_CLIENT_SYNCHRONIZE: u32 = 0x0010_0000;
+const SCOPED_CLIENT_PIPE_RIGHTS: u32 =
+    SCOPED_CLIENT_WRITE_DATA | SCOPED_CLIENT_SYNCHRONIZE;
+const FILE_CREATE_PIPE_INSTANCE: u32 = 0x0004;
+
+/// Validate a canonical Windows NT SERVICE SID string obtained exclusively
+/// from verified_current_service_sid(). Reject injection and lookalikes.
+fn canonical_service_sid_text(text: &str) -> bool {
+    let Some(tail) = text.strip_prefix("S-1-5-80-") else {
+        return false;
+    };
+    let components: Vec<_> = tail.split('-').collect();
+    components.len() == 5 && components.iter().all(|component| {
+        component.parse::<u32>().is_ok_and(|n| n.to_string() == *component)
+    })
+}
+
+/// Build a *candidate* minimal inbound named-pipe DACL, never apply it.
+/// Both principal identities must first be obtained from Windows: the
+/// enabled current SCM service token, and WTSQueryUserToken for an
+/// independently observed active user logon. This helper has NO OS calls,
+/// does not create an endpoint, and does NOT establish client authority.
+///
+/// SYSTEM/service retain full control. Only the one verified S-1-5-5-X-Y
+/// logon is given FILE_WRITE_DATA and SYNCHRONIZE; it never receives
+/// FILE_CREATE_PIPE_INSTANCE, BUILTIN Users or Administrators grants.
+fn scoped_logon_pipe_acl_candidate(
+    verified_service: &str, verified_logon_sid: &[u8],
+) -> io::Result<String> {
+    if !canonical_service_sid_text(verified_service) || !logon_sid(verified_logon_sid) {
+        return Err(denied("Noncanonical service/logon SID cannot define pipe policy"));
+    }
+    if SCOPED_CLIENT_PIPE_RIGHTS & FILE_CREATE_PIPE_INSTANCE != 0 {
+        return Err(denied("Client rights could create a server pipe instance"));
+    }
+    // SAFETY: logon_sid validates an exact native S-1-5-5-X-Y SID with
+    // 20 bytes and two remaining little-endian subauthorities.
+    let first = u32::from_le_bytes(verified_logon_sid[12..16].try_into()
+        .map_err(|_| denied("Malformed first logon subauthority"))?);
+    let second = u32::from_le_bytes(verified_logon_sid[16..20].try_into()
+        .map_err(|_| denied("Malformed second logon subauthority"))?);
+    let scoped_principal = format!("S-1-5-5-{first}-{second}");
+    Ok(format!(
+        "D:P(A;;GA;;;SY)(A;;GA;;;{verified_service})(A;;0x{SCOPED_CLIENT_PIPE_RIGHTS:08X};;;{scoped_principal})"
+    ))
+}
+
 /// Copy a native SID only after proving its header AND entire body are
 /// inside the returned GetTokenInformation allocation. OS API output
 /// pointers must never be dereferenced before these bounds checks.
@@ -335,7 +386,7 @@ fn enumerate_active_ids() -> io::Result<Vec<u32>> {
 /// Windows requires LocalSystem plus SeTcbPrivilege for WTSQueryUserToken.
 /// Missing privilege or unsupported OS session fails closed.
 pub(super) fn verify_active_windows_logon(peer_token: H) -> io::Result<()> {
-    verified_current_service_sid()?;
+    let verified_service_sid = verified_current_service_sid()?;
     let session = token_dword(peer_token, TOKEN_SESSION_ID)?;
     if session == 0 || session == u32::MAX {
         return Err(denied("Pipe peer token is not interactive"));
@@ -370,6 +421,28 @@ pub(super) fn verify_active_windows_logon(peer_token: H) -> io::Result<()> {
     if enumerate_active_ids()? != before {
         return Err(denied("Active Windows session inventory changed"));
     }
+    // WTSActive alone does not prevent a logoff/relogon under an unchanged
+    // numerical session ID. Re-read the Windows primary logon token and
+    // require the SAME user and unique logon SID before preparing policy.
+    let mut second_raw = ptr::null_mut();
+    let fresh = unsafe { WTSQueryUserToken(session, &mut second_raw) };
+    let rechecked_user = Token(second_raw);
+    if fresh == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if rechecked_user.0.is_null()
+        || token_dword(rechecked_user.0, TOKEN_TYPE)? != TOKEN_PRIMARY
+        || token_dword(rechecked_user.0, TOKEN_SESSION_ID)? != session
+        || verified_token_user_sid(rechecked_user.0)? != peer_user
+        || verified_token_logon_sid(rechecked_user.0)? != peer_logon
+    {
+        return Err(denied("Interactive Windows logon changed during observation"));
+    }
+    // The policy is a negative/diagnostic preflight ONLY. No ACL is
+    // installed, no pipe is created, and the resulting string is dropped.
+    let _unused_policy = scoped_logon_pipe_acl_candidate(
+        &verified_service_sid, &peer_logon,
+    )?;
     Ok(())
 }
 
@@ -420,6 +493,54 @@ mod tests {
     fn native_token_user_layout_is_one_sid_and_attributes_pair() {
         assert_eq!(mem::size_of::<TokenUser>(), mem::size_of::<SidAndAttributes>());
         assert_eq!(mem::offset_of!(TokenUser, user), 0);
+    }
+
+    #[test]
+    fn scoped_pipe_candidate_allows_only_one_logon_to_write_data() {
+        let service = "S-1-5-80-10-20-30-40-50";
+        let mut logon = vec![1, 3, 0, 0, 0, 0, 0, 5];
+        for rid in [5u32, 1234, 5678] {
+            logon.extend_from_slice(&rid.to_le_bytes());
+        }
+        let policy = scoped_logon_pipe_acl_candidate(service, &logon).unwrap();
+        assert_eq!(
+            policy,
+            "D:P(A;;GA;;;SY)(A;;GA;;;S-1-5-80-10-20-30-40-50)(A;;0x00100002;;;S-1-5-5-1234-5678)",
+        );
+        assert_eq!(SCOPED_CLIENT_PIPE_RIGHTS & FILE_CREATE_PIPE_INSTANCE, 0);
+        assert_eq!(SCOPED_CLIENT_PIPE_RIGHTS, 0x0010_0002);
+        assert!(!policy.contains(";;;BA"));
+        assert!(!policy.contains(";;;BU"));
+        assert!(!policy.contains(";;;AU"));
+        assert!(!policy.contains(";;;WD"));
+    }
+
+    #[test]
+    fn scoped_pipe_candidate_rejects_forged_or_cross_logon_sids() {
+        let good_service = "S-1-5-80-10-20-30-40-50";
+        let mut logon = vec![1, 3, 0, 0, 0, 0, 0, 5];
+        for rid in [5u32, 1234, 5678] {
+            logon.extend_from_slice(&rid.to_le_bytes());
+        }
+        for service in [
+            "", "S-1-5-18", "S-1-5-80-10-20-30-40",
+            "S-1-5-80-10-20-30-40-50-60",
+            "S-1-5-80-10-20-30-40-50(A;;GA;;;WD)",
+            "S-1-5-80-01-20-30-40-50",
+        ] {
+            assert!(scoped_logon_pipe_acl_candidate(service, &logon).is_err());
+        }
+        let mut forged_logon = logon.clone();
+        forged_logon[8] = 6;
+        assert!(scoped_logon_pipe_acl_candidate(good_service, &forged_logon).is_err());
+        assert!(scoped_logon_pipe_acl_candidate(good_service, &logon[..19]).is_err());
+        assert!(scoped_logon_pipe_acl_candidate(good_service, &[1, 1, 0, 0, 0, 0, 0, 5, 18, 0, 0, 0]).is_err());
+        // A different verified logon produces a different, nonreusable DACL.
+        let mut next_logon = logon.clone();
+        next_logon[16..20].copy_from_slice(&5679u32.to_le_bytes());
+        let first = scoped_logon_pipe_acl_candidate(good_service, &logon).unwrap();
+        let second = scoped_logon_pipe_acl_candidate(good_service, &next_logon).unwrap();
+        assert_ne!(first, second);
     }
 
     #[test]
