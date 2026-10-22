@@ -47,6 +47,7 @@ const ERROR_MORE_DATA: u32 = 234;
 const WAIT_OBJECT_0: u32 = 0;
 const WAIT_TIMEOUT: u32 = 258;
 const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+const PROCESS_QUERY_INFORMATION: u32 = 0x0400;
 const SYNCHRONIZE: u32 = 0x0010_0000;
 const CONNECTION_DEADLINE: Duration = Duration::from_millis(500);
 const READ_DEADLINE: Duration = Duration::from_millis(500);
@@ -643,7 +644,10 @@ fn compare_native_peer(
     }
     // SAFETY: Query-only Windows process handle, no termination access.
     let process = OwnedHandle::new(unsafe {
-        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, pid)
+        OpenProcess(
+            PROCESS_QUERY_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
+            0, pid,
+        )
     })?;
     let mut created = FileTime { low: 0, high: 0 };
     let mut exit = FileTime { low: 0, high: 0 };
@@ -682,12 +686,13 @@ fn compare_native_peer(
     // repository. A generic Windows-trusted signature MUST NOT grant
     // even diagnostic publisher admission: the checked-in empty policy
     // deliberately keeps this opt-in pilot fail closed.
-    if !image.matches_reviewed_on_disk_signer() {
+    if !image.has_reviewed_section_bound_signer() {
         return Ok(false);
     }
-    // Even a signer match is not real origin authentication until the
-    // running mapped PE section is bound to the verified file object.
-    // This pilot has no privileged/mutating operation or reply.
+    // Even a matching signer and section/file object is not full
+    // application-origin authentication: official installed-app policy,
+    // section integrity under Windows and duplicated-pipe-handle defenses
+    // still need independent acceptance. No privileged operation/reply.
     let mut final_pid = 0u32;
     if unsafe { GetNamedPipeClientProcessId(pipe, &mut final_pid) } == 0 {
         return Err(io::Error::last_os_error());

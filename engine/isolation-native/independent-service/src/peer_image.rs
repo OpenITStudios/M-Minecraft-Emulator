@@ -1,10 +1,13 @@
 //! Win32 Authenticode observation of the exact native IPC PEER process.
 //!
-//! It is NOT executable-origin authorization. A signed file at the path
-//! reported by QueryFullProcessImageNameW is NOT proof that the running
-//! process's mapped image section came from that file. Neither a generic
-//! Windows-trusted signer nor a matching leaf fingerprint grants privileged
-//! IPC. No signing identity is guessed or embedded in this source.
+//! It is NOT executable-origin authorization. The opt-in observer asks
+//! Windows whether the file HANDLE actually backs the running image
+//! (NtQueryInformationProcess/ProcessImageFileMapping, an UNDOCUMENTED
+//! and potentially unstable Windows information class). This source-only
+//! check is required to return STATUS_SUCCESS before and after WinVerifyTrust;
+//! every other result and missing export fails closed. A generic trusted
+//! signer, even for that file, is not a trusted MIVUBI desktop publisher.
+//! No signing identity is guessed or embedded in this source.
 //!
 //! This original service-owned observer is compiled ONLY when the optional
 //! readonly-ipc-pilot feature is enabled. Its sole caller holds a process
@@ -14,7 +17,7 @@
 #![allow(dead_code)]
 
 use std::{
-    ffi::OsString, io, mem::size_of, os::windows::{
+    ffi::{c_void, OsString}, io, mem::size_of, os::windows::{
         ffi::OsStringExt,
         fs::OpenOptionsExt,
         io::AsRawHandle,
@@ -48,9 +51,99 @@ use windows_sys::Win32::{
 /// fill this list; do not add a test/self-signed certificate here.
 const REVIEWED_DESKTOP_LEAF_SHA256: &[[u8; 32]] = &[];
 
+// Windows FILE_GENERIC_READ | FILE_EXECUTE; deliberately no write, append,
+// DELETE, WRITE_DAC, write-owner, process VM_READ or process VM_WRITE rights.
+// ProcessImageFileMapping requires FILE_EXECUTE + SYNCHRONIZE on THIS HANDLE.
+// Rust OpenOptionsExt::access_mode overrides .read/.write options, so both
+// required rights must be requested explicitly.
+const FILE_GENERIC_READ_EXECUTE: u32 = 0x0012_00A9;
+const FILE_EXECUTE: u32 = 0x0000_0020;
+const FILE_SYNCHRONIZE: u32 = 0x0010_0000;
+const PROCESS_IMAGE_FILE_MAPPING_CLASS: u32 = 44;
+const STATUS_UNSUCCESSFUL: i32 = 0xC000_0001u32 as i32;
+
 #[link(name = "kernel32")]
 unsafe extern "system" {
-    fn FreeLibrary(module: *mut std::ffi::c_void) -> i32;
+    fn FreeLibrary(module: *mut c_void) -> i32;
+}
+
+/// Own every LoadLibraryExW reference, including early GetProcAddress
+/// errors. Only System32 modules can be loaded to avoid DLL search hijack.
+struct SystemDll(*mut c_void);
+impl SystemDll {
+    fn load(dll: &str) -> io::Result<Self> {
+        let name: Vec<u16> = dll.encode_utf16().chain(Some(0)).collect();
+        let module = Self(unsafe {
+            LoadLibraryExW(name.as_ptr(), ptr::null_mut(), LOAD_LIBRARY_SEARCH_SYSTEM32)
+        });
+        if module.0.is_null() {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(module)
+        }
+    }
+}
+impl Drop for SystemDll {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            // SAFETY: Owned System32 LoadLibraryExW reference.
+            unsafe { FreeLibrary(self.0) };
+        }
+    }
+}
+
+/// Only exact STATUS_SUCCESS means OS-confirmed same process image file.
+/// STATUS_UNSUCCESSFUL means different file/section or missing original;
+/// all other statuses (including unsupported classes/insufficient access)
+/// fail closed and MUST NEVER be silently upgraded to a path match.
+fn require_exact_image_file_mapping(status: i32) -> io::Result<()> {
+    if status == 0 {
+        Ok(())
+    } else if status == STATUS_UNSUCCESSFUL {
+        Err(refused("OS process image section does not match opened image file"))
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "Windows cannot prove process image section and file identity",
+        ))
+    }
+}
+
+/// Native query of a retained remote process and an EXECUTE+SYNCHRONIZE
+/// opened file HANDLE. ProcessImageFileMapping (44) is not an official
+/// stable Win32 compatibility contract. Dynamically resolve ntdll and
+/// reject missing API or any result other than STATUS_SUCCESS.
+/// The class READS the supplied HANDLE buffer, not an output structure.
+fn require_process_image_section_file(process: HANDLE, file: &std::fs::File)
+    -> io::Result<()>
+{
+    if process.is_null() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing process HANDLE"));
+    }
+    type NtQuery = unsafe extern "system" fn(
+        HANDLE, u32, *mut c_void, u32, *mut u32,
+    ) -> i32;
+    let ntdll = SystemDll::load("ntdll.dll")?;
+    // SAFETY: Exact function exported by Microsoft's native system DLL.
+    // A missing export on future Windows returns error; no fallback.
+    let symbol = unsafe {
+        GetProcAddress(ntdll.0, b"NtQueryInformationProcess\0".as_ptr())
+    }.ok_or_else(|| {
+        io::Error::new(io::ErrorKind::Unsupported, "Windows image mapping query unavailable")
+    })?;
+    let query: NtQuery = unsafe { std::mem::transmute(symbol) };
+    let mut opened_file: HANDLE = file.as_raw_handle();
+    // SAFETY: Process handle has PROCESS_QUERY_INFORMATION; file handle
+    // has FILE_EXECUTE|SYNCHRONIZE. The input buffer holds the HANDLE
+    // itself, matching the ProcessImageFileMapping class-44 contract.
+    let status = unsafe {
+        query(
+            process, PROCESS_IMAGE_FILE_MAPPING_CLASS,
+            (&mut opened_file as *mut HANDLE).cast(),
+            size_of::<HANDLE>() as u32, ptr::null_mut(),
+        )
+    };
+    require_exact_image_file_mapping(status)
 }
 
 fn refused(reason: &'static str) -> io::Error {
@@ -60,23 +153,36 @@ fn invalid(reason: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, reason)
 }
 
-/// This is ONLY on-disk signature evidence, with no mapped-section binding.
+/// Diagnostic OS section-file equality plus a verified on-disk signature.
+/// Still NOT an authorized publisher or a trusted desktop-client identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct PendingPeerImageTrust {
     leaf_sha256: [u8; 32],
     on_disk_authenticode_verified: bool,
+    os_section_file_matched: bool,
 }
 impl PendingPeerImageTrust {
-    /// Check only a leaf fingerprint against an explicitly reviewed signer
-    /// list. Even TRUE is not full application/process authentication.
-    /// With the checked-in EMPTY list, this always rejects.
-    pub(super) fn matches_reviewed_on_disk_signer(self) -> bool {
-        signer_seen_against_pins(
+    /// A reviewed signer's leaf and OS section/file equality are necessary,
+    /// but STILL NOT SUFFICIENT for privileged desktop authentication
+    /// without installed-app provenance and resistance to pipe duplication.
+    pub(super) fn has_reviewed_section_bound_signer(self) -> bool {
+        section_and_signer_observed(
+            self.os_section_file_matched,
             self.on_disk_authenticode_verified,
             Some(self.leaf_sha256),
             REVIEWED_DESKTOP_LEAF_SHA256,
         )
     }
+}
+fn section_and_signer_observed(
+    section_matched: bool,
+    authenticode_verified: bool,
+    leaf_sha256: Option<[u8; 32]>,
+    reviewed_pins: &[[u8; 32]],
+) -> bool {
+    section_matched && signer_seen_against_pins(
+        authenticode_verified, leaf_sha256, reviewed_pins,
+    )
 }
 
 fn signer_seen_against_pins(
@@ -153,25 +259,10 @@ fn trusted_leaf_sha256(state: HANDLE) -> io::Result<[u8; 32]> {
         *mut CRYPT_PROVIDER_SGNR, u32,
     ) -> *mut CRYPT_PROVIDER_CERT;
 
-    struct OwnedDll(*mut std::ffi::c_void);
-    impl Drop for OwnedDll {
-        fn drop(&mut self) {
-            if !self.0.is_null() {
-                // SAFETY: Owned LoadLibraryExW reference, never borrowed HMODULE.
-                unsafe { FreeLibrary(self.0) };
-            }
-        }
-    }
     if state.is_null() {
         return Err(invalid("WinTrust provider state missing"));
     }
-    let dll_name: Vec<u16> = "wintrust.dll".encode_utf16().chain(Some(0)).collect();
-    let dll = OwnedDll(unsafe {
-        LoadLibraryExW(dll_name.as_ptr(), ptr::null_mut(), LOAD_LIBRARY_SEARCH_SYSTEM32)
-    });
-    if dll.0.is_null() {
-        return Err(io::Error::last_os_error());
-    }
+    let dll = SystemDll::load("wintrust.dll")?;
     // SAFETY: Windows-supplied Wintrust.dll exports; calls remain in scope
     // of both the WinTrust state and the loaded, System32-only module.
     let provider = unsafe {
@@ -219,13 +310,15 @@ fn trusted_leaf_sha256(state: HANDLE) -> io::Result<[u8; 32]> {
 pub(super) fn inspect_os_peer_image(process: HANDLE) -> io::Result<PendingPeerImageTrust> {
     let original_path = queried_image_path(process)?;
     let path = PathBuf::from(OsString::from_wide(&original_path));
-    // Windows file HANDLE is held across WinVerifyTrust to limit TOCTOU
-    // on the disk file, with file sharing restricted to read-only peers.
+    // The exact file HANDLE is held across section binding and WinTrust.
+    // Explicit FILE_EXECUTE|SYNCHRONIZE lets Windows compare the kernel
+    // process image section to this specific FILE_OBJECT. No file writes.
     let file = std::fs::OpenOptions::new()
-        .read(true)
+        .access_mode(FILE_GENERIC_READ_EXECUTE)
         .share_mode(FILE_SHARE_READ)
         .open(path)?;
     let before = file_identity(&file)?;
+    require_process_image_section_file(process, &file)?;
     let mut wide = original_path.clone();
     wide.push(0);
     let mut file_info: WINTRUST_FILE_INFO = unsafe { std::mem::zeroed() };
@@ -276,6 +369,9 @@ pub(super) fn inspect_os_peer_image(process: HANDLE) -> io::Result<PendingPeerIm
     if file_identity(&file)? != before || queried_image_path(process)? != original_path {
         return Err(invalid("Queried on-disk executable changed during trust review"));
     }
+    // Recheck SAME OS IMAGE SECTION after trust provider closes and after
+    // file identity/path recheck; any NTSTATUS other than success refuses.
+    require_process_image_section_file(process, &file)?;
     // The existing caller also retains the process through its final PID/
     // FILETIME/liveness check; this extra observation rejects exit now.
     match unsafe { WaitForSingleObject(process, 0) } {
@@ -286,6 +382,7 @@ pub(super) fn inspect_os_peer_image(process: HANDLE) -> io::Result<PendingPeerIm
     Ok(PendingPeerImageTrust {
         leaf_sha256: digest,
         on_disk_authenticode_verified: true,
+        os_section_file_matched: true,
     })
 }
 
@@ -301,7 +398,8 @@ mod tests {
         assert!(!PendingPeerImageTrust {
             leaf_sha256: leaf,
             on_disk_authenticode_verified: true,
-        }.matches_reviewed_on_disk_signer());
+            os_section_file_matched: true,
+        }.has_reviewed_section_bound_signer());
     }
 
     #[test]
@@ -313,7 +411,34 @@ mod tests {
         assert!(!signer_seen_against_pins(true, None, &reviewed));
         assert!(!signer_seen_against_pins(true, Some([0; 32]), &[[0; 32]]));
         assert!(!signer_seen_against_pins(true, Some([0x76; 32]), &reviewed));
-        // Even a pinned on-disk leaf does NOT establish the image section.
+        // A matching signer without matching image section is NOT usable.
+        assert!(!section_and_signer_observed(false, true, Some(leaf), &reviewed));
+        assert!(section_and_signer_observed(true, true, Some(leaf), &reviewed));
+        assert!(!section_and_signer_observed(true, true, Some(leaf), &[]));
+        // Only OS class-44 STATUS_SUCCESS can provide section evidence.
+    }
+
+    #[test]
+    fn unsupported_native_mapping_never_falls_back_to_path_or_signature() {
+        assert!(require_exact_image_file_mapping(0).is_ok());
+        assert_eq!(
+            require_exact_image_file_mapping(STATUS_UNSUCCESSFUL).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied,
+        );
+        for status in [-1, 1, 0xC000_000Du32 as i32, 0xC000_0002u32 as i32] {
+            assert_eq!(
+                require_exact_image_file_mapping(status).unwrap_err().kind(),
+                io::ErrorKind::Unsupported,
+            );
+        }
+    }
+
+    #[test]
+    fn exact_native_file_rights_require_execute_and_synchronize_not_write() {
+        assert_eq!(FILE_GENERIC_READ_EXECUTE & FILE_EXECUTE, FILE_EXECUTE);
+        assert_eq!(FILE_GENERIC_READ_EXECUTE & FILE_SYNCHRONIZE, FILE_SYNCHRONIZE);
+        assert_eq!(FILE_GENERIC_READ_EXECUTE & 0x0000_0002, 0); // FILE_WRITE_DATA
+        assert_eq!(PROCESS_IMAGE_FILE_MAPPING_CLASS, 44);
     }
 
     #[test]

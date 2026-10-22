@@ -11,6 +11,58 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Native executable image SECTION versus opened file object (22 October 2026)
+
+The independent service-owned peer_image.rs has been strengthened
+against pathname/file-replacement ambiguity. The previous WinTrust
+observation only proved a signature on a read-only on-disk file at
+the *queried* process pathname. Now, while retaining the exact
+PID/FILETIME-checked native IPC-client process HANDLE, the service
+opens that file with explicit FILE_GENERIC_READ | FILE_EXECUTE,
+which includes FILE_EXECUTE and SYNCHRONIZE but NO write access.
+It checks the SAME file HANDLE against the kernel process executable
+image section using NtQueryInformationProcess information class
+44 (ProcessImageFileMapping) both BEFORE and AFTER the offline
+WinVerifyTrust and file-object identity review. This class compares
+the process creation image's SectionObjectPointer with the opened
+file object. The service's existing OS process handle now requests
+PROCESS_QUERY_INFORMATION (query-only) in addition to prior limited
+query/synchronize rights. No VM_READ or process mutation is needed.
+
+**Stability warning:** ProcessImageFileMapping(44) is an NT internal,
+not an official stable user-facing Windows API contract. Microsoft
+warns NtQueryInformationProcess can change in later Windows builds.
+The service therefore dynamically loads NtQueryInformationProcess
+from **System32 ntdll.dll** and requires EXACT NTSTATUS_SUCCESS (0).
+STATUS_UNSUCCESSFUL (file/section mismatch or source deleted),
+missing export, insufficient rights, unsupported class and all other
+statuses FAIL CLOSED. It does NOT replace failure with a filename
+comparison, generic trusted signature or hash-of-path workaround.
+One owned System32 DLL loader is reused for both NTDLL and WinTrust
+export lifetimes, and every borrowed provider pointer is discarded
+before WinTrust state CLOSE. Tests authored for exact status gating,
+explicit non-writing FILE access rights and section+signer pairing.
+
+The existing static approved MIVUBI desktop leaf fingerprint list
+remains EMPTY, so even an NT kernel section match plus generic
+Authenticode success **does NOT authorize** desktop origin or any
+nonadmin/privileged IPC endpoint. This is a source-only negative
+gate, not a live image attestation, and a same-logon duplicated
+pipe client handle can still masquerade as a different message
+sender. No service installation, Minecraft game access, package
+signing, user data or Sandboxie runtime changed. The opt-in pilot
+remains OFF by default; Rust and Windows execution and four-client
+Minecraft acceptance remain NOT_EXECUTED.
+
+Next: on a compatible Windows target compile and verify the
+native class-44 ABI/STATUS behavior against a pinned current process,
+an alternate file and a replaced/renamed executable, and separately
+review a real signed MIVUBI desktop publisher/install identity before
+ever allowing production per-logon IPC. The code must fail closed
+rather than enable fallback on unsupported Windows versions.
+
+
+
 ### Service-owned native desktop-image Authenticode preflight (22 October 2026)
 
 The standalone, source-only Windows SCM service now includes an

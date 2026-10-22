@@ -1,6 +1,43 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Independent service — exact executable section-to-file negative check, 22 October 2026
+
+Enhanced the ORIGINAL service-owned peer_image.rs rather than adding
+a second trust manager. Retained pipe-peer PID/full FILETIME native
+process HANDLE now requests PROCESS_QUERY_INFORMATION (query-only)
+and opens the OS-reported executable pathname read-only with
+FILE_EXECUTE + SYNCHRONIZE. Before AND after WinVerifyTrust and
+disk FILE identity/path recheck, dynamically resolved
+NtQueryInformationProcess(ProcessImageFileMapping=44) checks the
+opened file HANDLE against the process image SECTION object.
+Only NTSTATUS_SUCCESS 0 qualifies; STATUS_UNSUCCESSFUL means
+different/missing file and all other statuses fail closed with no
+fallback to queried path, file name or generic Authenticode.
+A common System32-only DLL RAII owner handles wintrust.dll and
+ntdll.dll without introducing a service driver or loader route.
+The WinTrust leaf digest still requires a reviewed policy which
+is intentionally EMPTY. Tests authored for NTSTATUS gate, explicit
+no-write FILE access mask, and section+signer dual requirement.
+
+**Proof:** pinned GitHub source/static Win32 API review; class-44
+semantics corroborated by public NT internals research, NOT an
+official stability guarantee. Microsoft explicitly warns native
+NtQueryInformationProcess may change. Compiler/Rust tests, Windows
+actual section/file matching, digital signature verification, SCM,
+Minecraft and four-client acceptance NOT_EXECUTED. This feature
+still does not authenticate a real desktop publisher, resist
+same-logon duplicated pipe handles or establish filesystem/HKCU/WAM
+isolation. readonly-ipc-pilot remains default OFF, service uninstalled,
+admin-only DACL unchanged, Launch/Provision MC02–04 blocked.
+
+**Next:** Windows-native validation of ProcessImageFileMapping and
+real signed MIVUBI installed desktop publisher/source provenance,
+then independently review handle-duplication resistant IPC identity
+before activation. No GitHub Actions or PC tests were started.
+
+
+
 ## Independent engine — service-owned native desktop Authenticode preflight, 22 October 2026
 
 Added the Windows-only peer_image.rs observer to the standalone
