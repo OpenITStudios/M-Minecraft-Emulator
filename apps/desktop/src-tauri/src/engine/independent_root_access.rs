@@ -21,6 +21,19 @@ const TOKEN_QUERY: u32 = 0x0008;
 const TOKEN_DUPLICATE: u32 = 0x0002;
 const FILE_LIST_DIRECTORY: u32 = 0x0001;
 const FILE_ADD_FILE: u32 = 0x0002;
+const FILE_ADD_SUBDIRECTORY: u32 = 0x0004;
+const FILE_READ_EA: u32 = 0x0008;
+const FILE_WRITE_EA: u32 = 0x0010;
+const FILE_TRAVERSE: u32 = 0x0020;
+const FILE_DELETE_CHILD: u32 = 0x0040;
+const FILE_READ_ATTRIBUTES: u32 = 0x0080;
+const FILE_WRITE_ATTRIBUTES: u32 = 0x0100;
+const DELETE: u32 = 0x0001_0000;
+const WRITE_DAC: u32 = 0x0004_0000;
+const WRITE_OWNER: u32 = 0x0008_0000;
+const TOKEN_USER_CLASS: u32 = 1;
+const ERROR_INSUFFICIENT_BUFFER: i32 = 122;
+const MAX_TOKEN_USER_BYTES: usize = 4096;
 const OWNER_SECURITY_INFORMATION: u32 = 0x0001;
 const GROUP_SECURITY_INFORMATION: u32 = 0x0002;
 const DACL_SECURITY_INFORMATION: u32 = 0x0004;
@@ -59,6 +72,13 @@ unsafe extern "system" {
         privileges: *mut c_void, privileges_size: *mut u32,
         granted_access: *mut u32, access_status: *mut i32,
     ) -> i32;
+    fn GetTokenInformation(
+        token: HANDLE, class: u32, data: *mut c_void,
+        capacity: u32, length: *mut u32,
+    ) -> i32;
+    fn IsValidSid(sid: *mut c_void) -> i32;
+    fn GetLengthSid(sid: *mut c_void) -> u32;
+    fn EqualSid(left: *mut c_void, right: *mut c_void) -> i32;
 }
 
 #[link(name = "kernel32")]
@@ -87,15 +107,104 @@ impl Drop for OwnedToken {
     }
 }
 
-struct OwnedDescriptor(*mut c_void);
+struct OwnedDescriptor {
+    allocation: *mut c_void,
+    // Borrowed pointer into the same LocalFree-owned descriptor allocation.
+    // Its lifetime MUST NOT outlive this object.
+    owner_sid: *mut c_void,
+}
 
 impl Drop for OwnedDescriptor {
     fn drop(&mut self) {
-        if !self.0.is_null() {
+        if !self.allocation.is_null() {
             // SAFETY: GetSecurityInfo owns this allocation via LocalFree.
-            let _ = unsafe { LocalFree(self.0) };
+            let _ = unsafe { LocalFree(self.allocation) };
         }
     }
+}
+
+// TOKEN_USER = SID_AND_ATTRIBUTES; the SID pointer references bytes in the
+// GetTokenInformation-owned output buffer, not an independent allocation.
+#[repr(C)]
+struct SidAndAttributes {
+    sid: *mut c_void,
+    attributes: u32,
+}
+#[repr(C)]
+struct TokenUserInfo {
+    user: SidAndAttributes,
+}
+
+/// Read only the process TokenUser principal. No SID bytes or paths leave
+/// this function, and the token is never modified or used to impersonate.
+/// Check both OS output-buffer boundaries and SID validity before EqualSid.
+fn token_user_matches(token: &OwnedToken, owner_sid: *mut c_void) -> io::Result<bool> {
+    if owner_sid.is_null() || unsafe { IsValidSid(owner_sid) } == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData, "Directory security owner SID is invalid",
+        ));
+    }
+    let mut needed = 0u32;
+    let first = unsafe {
+        GetTokenInformation(token.0, TOKEN_USER_CLASS, ptr::null_mut(), 0, &mut needed)
+    };
+    if first != 0 || io::Error::last_os_error().raw_os_error()
+        != Some(ERROR_INSUFFICIENT_BUFFER)
+        || (needed as usize) < mem::size_of::<TokenUserInfo>()
+        || (needed as usize) > MAX_TOKEN_USER_BYTES
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData, "Unbounded or invalid Windows TokenUser preflight",
+        ));
+    }
+    let capacity_words = (needed as usize + mem::size_of::<usize>() - 1)
+        / mem::size_of::<usize>();
+    let mut buffer = vec![0usize; capacity_words];
+    let mut returned = 0u32;
+    if unsafe {
+        GetTokenInformation(
+            token.0, TOKEN_USER_CLASS, buffer.as_mut_ptr().cast(),
+            needed, &mut returned,
+        )
+    } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if returned < mem::size_of::<TokenUserInfo>() as u32 || returned > needed {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData, "Windows TokenUser response changed size",
+        ));
+    }
+    // SAFETY: usize buffer is correctly aligned for TOKEN_USER and large
+    // enough for the returned fixed-size header, checked above.
+    let user = unsafe { &*(buffer.as_ptr().cast::<TokenUserInfo>()) };
+    let sid = user.user.sid;
+    let start = buffer.as_ptr() as usize;
+    let end = start + returned as usize;
+    let pointer = sid as usize;
+    // A SID has at least an 8-byte header. Bounds-check that header
+    // BEFORE calling IsValidSid, which inspects it via a raw pointer.
+    if sid.is_null() || pointer < start + mem::size_of::<TokenUserInfo>()
+        || pointer.checked_add(8).is_none_or(|limit| limit > end)
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData, "Windows TokenUser SID escaped its buffer",
+        ));
+    }
+    // SAFETY: Pointer bounds and the minimum header have been checked.
+    if unsafe { IsValidSid(sid) } == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData, "Windows TokenUser SID is invalid",
+        ));
+    }
+    let size = unsafe { GetLengthSid(sid) } as usize;
+    if size == 0 || pointer.checked_add(size).is_none_or(|limit| limit > end) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData, "Windows TokenUser SID exceeds its buffer",
+        ));
+    }
+    // SAFETY: Both SID pointers have been validated and are retained by
+    // the token-information buffer and the directory descriptor.
+    Ok(unsafe { EqualSid(sid, owner_sid) } != 0)
 }
 
 /// Borrowed descriptor data is valid only while its LocalFree-owned buffer
@@ -117,16 +226,26 @@ fn read_security_descriptor(directory: &File) -> io::Result<OwnedDescriptor> {
             &mut owner, &mut group, &mut dacl, ptr::null_mut(), &mut descriptor,
         )
     };
-    let guard = OwnedDescriptor(descriptor);
+    let guard = OwnedDescriptor {
+        allocation: descriptor,
+        owner_sid: owner,
+    };
     if code != 0 {
         return Err(io::Error::from_raw_os_error(code as i32));
     }
     // AccessCheck treats a NULL DACL as full access. It is NEVER acceptable
     // as a private root. Missing owner/group is also a hard NO-GO.
-    if guard.0.is_null() || owner.is_null() || group.is_null() || dacl.is_null() {
+    if guard.allocation.is_null() || owner.is_null() || group.is_null()
+        || dacl.is_null()
+    {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
             "Private root lacks owner, group or non-NULL DACL",
+        ));
+    }
+    if unsafe { IsValidSid(owner) } == 0 || unsafe { IsValidSid(group) } == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData, "Directory security owner/group SID is invalid",
         ));
     }
     Ok(guard)
@@ -162,7 +281,13 @@ fn impersonation_token(process: HANDLE) -> io::Result<OwnedToken> {
 fn allowed(descriptor: &OwnedDescriptor, token: &OwnedToken, right: u32)
     -> io::Result<bool>
 {
-    if !matches!(right, FILE_LIST_DIRECTORY | FILE_ADD_FILE) {
+    if !matches!(
+        right,
+        FILE_LIST_DIRECTORY | FILE_ADD_FILE | FILE_ADD_SUBDIRECTORY
+        | FILE_READ_EA | FILE_WRITE_EA | FILE_TRAVERSE | FILE_DELETE_CHILD
+        | FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES
+        | READ_CONTROL | DELETE | WRITE_DAC | WRITE_OWNER
+    ) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput, "Unreviewed native access right",
         ));
@@ -186,7 +311,7 @@ fn allowed(descriptor: &OwnedDescriptor, token: &OwnedToken, right: u32)
     // for this entire call. All output sizes/pointers are bounds checked.
     if unsafe {
         AccessCheck(
-            descriptor.0, token.0, right, &mut mapping,
+            descriptor.allocation, token.0, right, &mut mapping,
             privileges.as_mut_ptr().cast(), &mut length,
             &mut granted, &mut status,
         )
@@ -206,29 +331,59 @@ fn allowed(descriptor: &OwnedDescriptor, token: &OwnedToken, right: u32)
     Ok(status != 0)
 }
 
-/// Sanitized evidence: never exposes SID, token, ACL or private paths.
+/// Sanitized evidence from a REAL OS directory security descriptor and
+/// two process tokens. Booleans cannot attest the ancestor chain, service
+/// identity, inherited file ACLs, token privileges or Minecraft game I/O.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct PairAccessFacts {
+    pub directory_owner_matches_owner_user: bool,
+    pub directory_owner_matches_peer_user: bool,
     pub owner_can_list: bool,
     pub owner_can_create: bool,
     pub peer_can_list: bool,
     pub peer_can_create: bool,
+    pub peer_can_create_directory: bool,
+    pub peer_can_read_ea: bool,
+    pub peer_can_write_ea: bool,
+    pub peer_can_traverse: bool,
+    pub peer_can_read_attributes: bool,
+    pub peer_can_write_attributes: bool,
+    pub peer_can_read_security: bool,
+    pub peer_can_delete_children: bool,
+    pub peer_can_delete_directory: bool,
+    pub peer_can_change_dacl: bool,
+    pub peer_can_change_owner: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum PairAccessReview {
+    OwnerPrincipalUnverified,
+    PeerSharesOwnerPrincipal,
     OwnerCannotUseRoot,
     PeerAccessObserved,
-    // Still NOT authorization: uncontrolled peers, ancestors, privileges,
-    // tokens, Microsoft brokers and actual game paths remain unverified.
+    // STILL NOT AUTHORIZATION: privileged peer access, race-free ACL
+    // revalidation, all descendants, broker/WAM and game routing unproven.
     PeerDeniedCandidateOnly,
 }
 
 impl PairAccessFacts {
     pub fn review(self) -> PairAccessReview {
-        if !self.owner_can_list || !self.owner_can_create {
+        if !self.directory_owner_matches_owner_user {
+            PairAccessReview::OwnerPrincipalUnverified
+        } else if self.directory_owner_matches_peer_user {
+            // Two desktop clients under the same Windows user generally have
+            // the SAME directory principal, even when PID/slot differ.
+            PairAccessReview::PeerSharesOwnerPrincipal
+        } else if !self.owner_can_list || !self.owner_can_create {
             PairAccessReview::OwnerCannotUseRoot
-        } else if self.peer_can_list || self.peer_can_create {
+        } else if self.peer_can_list || self.peer_can_create
+            || self.peer_can_create_directory || self.peer_can_traverse
+            || self.peer_can_read_ea || self.peer_can_write_ea
+            || self.peer_can_read_attributes || self.peer_can_write_attributes
+            || self.peer_can_read_security
+            || self.peer_can_delete_children || self.peer_can_delete_directory
+            || self.peer_can_change_dacl || self.peer_can_change_owner
+        {
             PairAccessReview::PeerAccessObserved
         } else {
             PairAccessReview::PeerDeniedCandidateOnly
@@ -236,9 +391,46 @@ impl PairAccessFacts {
     }
 }
 
-/// Fixture integration only. Two distinct OS processes must be created by
-/// the engine itself; each retained process handle is checked before and
-/// after the actual DACL/impersonation-token queries.
+/// Native Windows HANDLE-based ACL observer that can be reused by a
+/// future reviewed root owner. The caller MUST pin both PROCESS HANDLEs,
+/// verify full PID/creation FILETIME and liveness before AND after this
+/// inspection, and independently attest the directory's ancestor chain.
+/// Passing arbitrary open handles here never grants Windows access.
+fn review_process_handles(
+    root: &File, owner_handle: HANDLE, peer_handle: HANDLE,
+) -> io::Result<PairAccessFacts> {
+    let sd = read_security_descriptor(root)?;
+    let owner_token = impersonation_token(owner_handle)?;
+    let peer_token = impersonation_token(peer_handle)?;
+    Ok(PairAccessFacts {
+        directory_owner_matches_owner_user:
+            token_user_matches(&owner_token, sd.owner_sid)?,
+        directory_owner_matches_peer_user:
+            token_user_matches(&peer_token, sd.owner_sid)?,
+        owner_can_list: allowed(&sd, &owner_token, FILE_LIST_DIRECTORY)?,
+        owner_can_create: allowed(&sd, &owner_token, FILE_ADD_FILE)?,
+        peer_can_list: allowed(&sd, &peer_token, FILE_LIST_DIRECTORY)?,
+        peer_can_create: allowed(&sd, &peer_token, FILE_ADD_FILE)?,
+        peer_can_create_directory:
+            allowed(&sd, &peer_token, FILE_ADD_SUBDIRECTORY)?,
+        peer_can_read_ea: allowed(&sd, &peer_token, FILE_READ_EA)?,
+        peer_can_write_ea: allowed(&sd, &peer_token, FILE_WRITE_EA)?,
+        peer_can_traverse: allowed(&sd, &peer_token, FILE_TRAVERSE)?,
+        peer_can_read_attributes:
+            allowed(&sd, &peer_token, FILE_READ_ATTRIBUTES)?,
+        peer_can_write_attributes:
+            allowed(&sd, &peer_token, FILE_WRITE_ATTRIBUTES)?,
+        peer_can_read_security: allowed(&sd, &peer_token, READ_CONTROL)?,
+        peer_can_delete_children:
+            allowed(&sd, &peer_token, FILE_DELETE_CHILD)?,
+        peer_can_delete_directory: allowed(&sd, &peer_token, DELETE)?,
+        peer_can_change_dacl: allowed(&sd, &peer_token, WRITE_DAC)?,
+        peer_can_change_owner: allowed(&sd, &peer_token, WRITE_OWNER)?,
+    })
+}
+
+/// Fixture integration only. Each exact process identity is rechecked before
+/// and after the native HANDLE-based observation by the original Job owner.
 #[cfg(test)]
 pub(super) fn review_fixture_pair(
     root: &File, owner: &SuspendedFixture, peer: &SuspendedFixture,
@@ -250,15 +442,7 @@ pub(super) fn review_fixture_pair(
     }
     owner.with_live_process(|owner_handle| {
         peer.with_live_process(|peer_handle| {
-            let sd = read_security_descriptor(root)?;
-            let owner_token = impersonation_token(owner_handle)?;
-            let peer_token = impersonation_token(peer_handle)?;
-            Ok(PairAccessFacts {
-                owner_can_list: allowed(&sd, &owner_token, FILE_LIST_DIRECTORY)?,
-                owner_can_create: allowed(&sd, &owner_token, FILE_ADD_FILE)?,
-                peer_can_list: allowed(&sd, &peer_token, FILE_LIST_DIRECTORY)?,
-                peer_can_create: allowed(&sd, &peer_token, FILE_ADD_FILE)?,
-            })
+            review_process_handles(root, owner_handle, peer_handle)
         })
     })
 }
@@ -267,22 +451,58 @@ pub(super) fn review_fixture_pair(
 mod tests {
     use super::*;
 
+    fn isolated_candidate() -> PairAccessFacts {
+        PairAccessFacts {
+            directory_owner_matches_owner_user: true,
+            directory_owner_matches_peer_user: false,
+            owner_can_list: true, owner_can_create: true,
+            peer_can_list: false, peer_can_create: false,
+            peer_can_create_directory: false, peer_can_traverse: false,
+            peer_can_read_ea: false, peer_can_write_ea: false,
+            peer_can_read_attributes: false, peer_can_write_attributes: false,
+            peer_can_read_security: false,
+            peer_can_delete_children: false, peer_can_delete_directory: false,
+            peer_can_change_dacl: false, peer_can_change_owner: false,
+        }
+    }
+
     #[test]
-    fn returned_facts_never_promote_unknown_owner_or_peer_access() {
-        let shared = PairAccessFacts {
-            owner_can_list: true, owner_can_create: true,
-            peer_can_list: true, peer_can_create: true,
-        };
-        assert_eq!(shared.review(), PairAccessReview::PeerAccessObserved);
-        let unusable = PairAccessFacts {
-            owner_can_list: false, owner_can_create: true,
-            peer_can_list: false, peer_can_create: false,
-        };
-        assert_eq!(unusable.review(), PairAccessReview::OwnerCannotUseRoot);
-        let candidate = PairAccessFacts {
-            owner_can_list: true, owner_can_create: true,
-            peer_can_list: false, peer_can_create: false,
-        };
+    fn candidate_requires_distinct_directory_principal_and_owner_rights() {
+        let candidate = isolated_candidate();
         assert_eq!(candidate.review(), PairAccessReview::PeerDeniedCandidateOnly);
+        assert_eq!(PairAccessFacts {
+            directory_owner_matches_owner_user: false, ..candidate
+        }.review(), PairAccessReview::OwnerPrincipalUnverified);
+        assert_eq!(PairAccessFacts {
+            directory_owner_matches_peer_user: true, ..candidate
+        }.review(), PairAccessReview::PeerSharesOwnerPrincipal);
+        assert_eq!(PairAccessFacts {
+            owner_can_list: false, ..candidate
+        }.review(), PairAccessReview::OwnerCannotUseRoot);
+        assert_eq!(PairAccessFacts {
+            owner_can_create: false, ..candidate
+        }.review(), PairAccessReview::OwnerCannotUseRoot);
+    }
+
+    #[test]
+    fn peer_mutation_and_traverse_rights_invalidate_denial_even_without_listing() {
+        let candidate = isolated_candidate();
+        for observed in [
+            PairAccessFacts { peer_can_list: true, ..candidate },
+            PairAccessFacts { peer_can_create: true, ..candidate },
+            PairAccessFacts { peer_can_create_directory: true, ..candidate },
+            PairAccessFacts { peer_can_read_ea: true, ..candidate },
+            PairAccessFacts { peer_can_write_ea: true, ..candidate },
+            PairAccessFacts { peer_can_traverse: true, ..candidate },
+            PairAccessFacts { peer_can_read_attributes: true, ..candidate },
+            PairAccessFacts { peer_can_write_attributes: true, ..candidate },
+            PairAccessFacts { peer_can_read_security: true, ..candidate },
+            PairAccessFacts { peer_can_delete_children: true, ..candidate },
+            PairAccessFacts { peer_can_delete_directory: true, ..candidate },
+            PairAccessFacts { peer_can_change_dacl: true, ..candidate },
+            PairAccessFacts { peer_can_change_owner: true, ..candidate },
+        ] {
+            assert_eq!(observed.review(), PairAccessReview::PeerAccessObserved);
+        }
     }
 }

@@ -11,6 +11,50 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Root-owner SID and effective peer ACL checks (23 October 2026)
+
+The existing Windows-only `independent_root_access.rs` now inspects the
+directory's ACTUAL owner SID from its `GetSecurityInfo` HANDLE-bound,
+READ_CONTROL-guarded, non-NULL DACL descriptor, and the original two
+processes' `TokenUser` SIDs from bounded `GetTokenInformation` buffers.
+All SID pointer/buffer sizes and validity are checked before `EqualSid`.
+Nothing is serialized: only equality booleans leave the native function.
+The root's owner must match its purported owning process user and must
+NOT match the other process's user before any candidate denial can be
+reported. This explicitly prevents equal-user MC02/MC03 fixtures from
+appearing isolated merely because a directory has a chosen slot name.
+
+The Windows HANDLE-based core is kept as a private, non-test
+`review_process_handles` function while the only current entrypoint
+remains a Job-owned fixture that verifies exact process lifetimes and
+retained file-object lineage. Future service code must separately
+attest its process handles and SERVICE SID; this function does NOT
+authenticate arbitrary callers or confer access.
+
+The pre-existing read-only `AccessCheck` owner now also queries each
+peer's create-subdirectory, traverse, file attributes, extended
+attributes, security-descriptor read, delete-child, delete-directory,
+WRITE_DAC and WRITE_OWNER rights in addition to list and create-file.
+Any **evaluated** right granted to the peer blocks
+`PeerDeniedCandidateOnly`, even if it cannot list/create files.
+This checks specific directory rights, not every way privileged
+code can access a root or its children. ACL evidence for both the
+retained root and the actual child slot directory is examined in the
+same source-only disposable native fixture path. Root/slot FILE HANDLE
+lineage and exact process identity are rechecked around these calls.
+Pure tests cover owner/peer SID candidate policy and each unsafe peer
+right; the Windows fixture tests remain opt-in test-only.
+
+**Critical limitation:** comparing TokenUser with file owner is a
+strict preliminary provenance check, NOT proof of a future SCM
+service's unique SERVICE SID/group, trusted ancestor ownership,
+privilege-restricted access, inherited ACLs on files, a race-free
+security descriptor, game-path interception or Microsoft WAM. Both
+test processes normally use the same Windows user and can access
+both roots. These diagnostics must NEVER activate Client 02–04.
+Windows compilation/native execution remains NOT_EXECUTED in ChatGPT;
+CI remains disabled.
+
 ### Windows HANDLE-relative file I/O consumes canonical Rust storage plans (23 October 2026)
 
 The original Windows-only `apps/desktop/src-tauri/src/engine/independent_private_files.rs`

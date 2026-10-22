@@ -434,6 +434,18 @@ impl SlotFiles<'_, '_> {
         Ok(())
     }
 
+    // Reuse the one canonical REAL Windows DACL AccessCheck implementation,
+    // this time against the actual retained slot child directory, not just
+    // its parent root. Nothing is granted by this diagnostic result.
+    fn assess_peer_acl(&self, peer: &SuspendedFixture) -> io::Result<PairAccessFacts> {
+        self.verify()?;
+        let facts = independent_root_access::review_fixture_pair(
+            &self.directory, self.root.owner, peer,
+        )?;
+        self.verify()?;
+        Ok(facts)
+    }
+
     // Reuse the SINGLE canonical runtime-core storage route planner. An
     // adapter-owned request is derived from the actual fixture process,
     // retained slot and fixed LocalFiles domain. Neither a user-selected
@@ -611,11 +623,31 @@ mod tests {
         assert_eq!(facts.owner_can_list, facts.peer_can_list);
         assert_eq!(facts.owner_can_create, facts.peer_can_create);
         assert_ne!(facts.review(), PairAccessReview::PeerDeniedCandidateOnly);
+        if facts.directory_owner_matches_owner_user {
+            assert!(facts.directory_owner_matches_peer_user);
+            assert_eq!(facts.review(), PairAccessReview::PeerSharesOwnerPrincipal);
+        } else {
+            assert_eq!(facts.review(), PairAccessReview::OwnerPrincipalUnverified);
+        }
         // A second owner borrows the SAME opened root handle. Its slot
         // cannot be impersonated by simply passing a different slot ID.
         let root_b = root_a.clone_for_fixture(&owned_b, SessionSlot::Mc03).unwrap();
         let first = root_a.open_slot(SessionSlot::Mc02, true).unwrap();
         let second = root_b.open_slot(SessionSlot::Mc03, true).unwrap();
+        for slot in [&first, &second] {
+            let peer = if slot.root.assigned_slot == SessionSlot::Mc02 {
+                &owned_b
+            } else {
+                &owned_a
+            };
+            let slot_facts = slot.assess_peer_acl(peer).unwrap();
+            assert_eq!(slot_facts.owner_can_list, slot_facts.peer_can_list);
+            assert_eq!(slot_facts.owner_can_create, slot_facts.peer_can_create);
+            assert_ne!(slot_facts.review(), PairAccessReview::PeerDeniedCandidateOnly);
+            if slot_facts.directory_owner_matches_owner_user {
+                assert!(slot_facts.directory_owner_matches_peer_user);
+            }
+        }
         first.create_canary("marker.bin", 0xAABB_0002).unwrap();
         assert_eq!(
             second.read_canary("marker.bin").unwrap_err().kind(),

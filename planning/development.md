@@ -1,6 +1,53 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Native Storage — verify directory owner SID and all sensitive peer rights, 23 October 2026
+
+Strengthened the one existing Windows native root ACL owner,
+`apps/desktop/src-tauri/src/engine/independent_root_access.rs`.
+Earlier `PairAccessFacts` inspected real `AccessCheck` list/create
+permissions only. A root could therefore appear to deny a peer
+while the peer still had directory creation, traversal, read/write
+attributes or extended attributes, READ_CONTROL, DELETE_CHILD,
+DELETE, WRITE_DAC or WRITE_OWNER access;
+nothing established that the directory owner SID matched its
+supposed owner process rather than the peer. The same two Windows
+processes generally have the SAME TokenUser, which cannot provide
+per-game identity by a slot label.
+
+The pure native `review_process_handles` observer is available inside
+the existing Windows module without a public Tauri/IPC surface; the
+only current caller remains the bounded original fixture owner.
+The TokenUser parser also rejects any SID pointer lacking the full
+minimum SID header inside its OS-returned buffer before validating
+or comparing SID bytes.
+
+The existing process-handle/token fixture now compares each
+TokenUser SID to the real directory owner SID via bounded
+`GetTokenInformation`, `IsValidSid` and `EqualSid`. Null DACL,
+invalid SID, mismatched owner, equal-user peer or ANY sensitive
+peer right fails the candidate ACL classification. Extra
+`SlotFiles::assess_peer_acl` examines the actual slot directory
+in addition to the retained root without duplicating AccessCheck
+logic or granting filesystem access. Two focused source-level
+tests cover candidate admission and each unsafe peer right,
+and the existing Windows fixture tests cover same-user results
+for both root and slot handles.
+
+**Proof:** exact GitHub-source/static native ABI review, with
+Microsoft GetSecurityInfo, GetTokenInformation, EqualSid and AccessCheck
+contracts consulted. Rust compilation, real native ACL experiments,
+SCM service token, official Education file/HKCU/WAM interception and
+four-client runtime acceptance NOT_EXECUTED. No service install,
+ACL change, extra provider, driver, launcher, CI, world/account
+write or main update. MC02–MC04 remains BLOCKED.
+
+**Next:** design and implement a distinct SERVICE-SID-bound root
+creation/handoff mechanism under the existing SCM service owner,
+without treating this test directory or same-user AccessCheck
+result as actual Minecraft isolation.
+
+
 ## Native Storage — bind real HANDLE I/O to existing Rust route policy, 23 October 2026
 
 Completed a bounded **cross-layer integration** in the original
