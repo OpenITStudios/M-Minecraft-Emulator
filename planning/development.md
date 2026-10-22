@@ -1,5 +1,38 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — Windows provider feasibility and all storage escape denials, 22 October 2026
+
+Verified Microsoft's supported Windows behavior across unpackaged
+AppContainer, RegLoadAppKeyW, process-local RegOverridePredefKey,
+LOGON_WITH_PROFILE user profiles, WAM interactive session requirements
+and MSIX's virtualized packaged desktop forms. Compared those against
+the single-desktop, unmodified Education 4-account requirement in
+docs/system/independent-isolation.md with direct official links.
+No complete, proven provider exists. Package form alone is not MSIX
+virtualization or game-account proof.
+
+Corrected the first wrong source owner,
+tooling/acceptance/evaluate-appcontainer-isolation.mjs: its existing
+synthetic candidate review now classifies any observed Local/Roaming
+environment or Known Folder escape as NO-GO, rather than only Roaming
+Known Folder escapes. Roaming Known Folder takes priority, so the
+historical pilot diagnosis remains identical. A missing Known Folder
+without any other observed escape remains UNVERIFIED; an observed
+APPDATA environment escape with a missing Known Folder is NO-GO.
+No schema changes, duplicate admission/lifecycle state or provider
+selection are introduced. MC02–04 production Launch/Provision is untouched.
+
+Added three adversarial JavaScript tests plus improved the missing-Known-
+Folder scenario. All evaluator callback tests were executed via ChatGPT
+V8 and the existing minimal assertions against the exact candidate
+function; Node's native test runner, Windows source/native compilation
+and Minecraft runtime remain NOT_EXECUTED.
+
+**Next:** Research genuine official Store-packaged Education runtime and
+manifest support without installing/repackaging games or enabling a
+production provider before Roaming/HKCU/WAM proofs.
+
+
 ## Independent engine — never promote observed package metadata to reviewed release origin, 22 October 2026
 
 Fixed a semantic evidence gap in the canonical Rust

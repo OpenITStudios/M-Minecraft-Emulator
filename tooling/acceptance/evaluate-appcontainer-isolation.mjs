@@ -73,14 +73,20 @@ export function evaluateAppContainerIsolation(report) {
   // synthetic receipt. No durable readiness bit and no replacement for the
   // canonical desktop Launch/Provision gate.
   //
-  // Roaming known-folder reported outside the isolated profile is a hard
-  // blocker *for this observed mechanism*, not an assumption that a private
-  // directory or APPDATA environment override fixes unmodified Minecraft.
-  // HKCU, WAM and actual game file access are never measured by this fixture.
-  const candidateDisposition = report.roamingKnownFolderQuerySucceeded
-    && !report.roamingKnownFolderUnderContainer
+  // Reject every *observed* Local/Roaming boundary escape. A query not
+  // performed is unknown, not a successful mechanism. Prefer the Known
+  // Folder failure to preserve the earlier Windows pilot diagnosis.
+  // This remains an untrusted synthetic candidate diagnostic, never launch.
+  const candidateDisposition =
+    report.roamingKnownFolderQuerySucceeded && !report.roamingKnownFolderUnderContainer
       ? "NO_GO_OBSERVED_ROAMING_BOUNDARY"
-      : "UNVERIFIED_NO_GAME_ACCEPTANCE";
+      : !report.roamingEnvironmentUnderContainer
+        ? "NO_GO_OBSERVED_ROAMING_ENV_BOUNDARY"
+        : !report.localAppDataKnownFolderRedirected
+          ? "NO_GO_OBSERVED_LOCAL_KNOWN_FOLDER_BOUNDARY"
+          : !report.localAppDataEnvironmentRedirected
+            ? "NO_GO_OBSERVED_LOCAL_ENV_BOUNDARY"
+            : "UNVERIFIED_NO_GAME_ACCEPTANCE";
   const mechanismBoundaries = {
     localKnownFolder: report.localAppDataKnownFolderRedirected
       ? "PATH_REPORTED_ONLY" : "NOT_PRIVATE_IN_SAMPLE",

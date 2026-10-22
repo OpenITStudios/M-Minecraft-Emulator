@@ -123,6 +123,46 @@ akun, dunia, raw machine identity, signing material atau dump privat.
 
 ## Implementation direction
 
+### Supported Windows mechanisms against the actual game requirements — 22 October 2026
+
+Product target: four licensed, simultaneously playable official Education
+processes on one interactive Windows desktop, preserving installation,
+worlds, user login and the existing tab UX. No binary modification,
+injected hooks, unreviewed service/driver or credential impersonation.
+
+| Mechanism | Supported or observed Windows capability | Product-critical limitation | Decision |
+| --- | --- | --- | --- |
+| Unpackaged AppContainer | Earlier synthetic pilot showed distinct process/token namespaces and private LocalAppData | Default Roaming known folder and APPDATA were observed outside the private profile. HKCU, broker and real Education behavior are unverified | **NO-GO for observed candidate** |
+| RegLoadAppKeyW | Fresh explicitly opened per-application registry hives | Keys are only reachable via the returned handle; they do NOT transparently replace normal HKCU used by an unmodified game | **Not a standalone HKCU solution** |
+| RegOverridePredefKey | Can remap predefined registry keys for its **calling process** | An external manager's call does not affect a separate game process. Requiring a call within unmodified Minecraft conflicts with the current no-binary-changes requirement | **Not a viable external route** |
+| Distinct Windows user with LOGON_WITH_PROFILE | Loads a different user's registry profile and user-context files | Microsoft WAM expects an active interactive user session and does not support arbitrary RunAs impersonation for token acquisition. Desktop/window and game singleton behavior also unresolved | **Not accepted for current single-desktop UX** |
+| Official Store / MSIX package | Some virtualized packaged desktop app types redirect AppData writes and copy-on-write registry changes | Does not imply four private package identities, private reads, four WAM contexts or Minecraft multi-instance compatibility. Desktop and Store Education installers are mutually incompatible | **Investigation candidate only** |
+| VM or new filesystem driver/broker | Potentially stronger OS isolation | VM overhead conflicts with target; an independent filter/driver cannot itself solve external Microsoft broker or game singleton compatibility, and needs signing/recovery proof | **Not selected** |
+
+Official reference contracts:
+
+- [Microsoft: AppContainer for legacy applications](https://learn.microsoft.com/en-us/windows/win32/secauthz/appcontainer-for-legacy-applications-)
+- [RegLoadAppKeyW — handle-only registry hive](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regloadappkeyw)
+- [RegOverridePredefKey — calling-process scope](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regoverridepredefkey)
+- [CreateProcessWithLogonW — interactive profile and desktop rights](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createprocesswithlogonw)
+- [MSAL WAM requires active interactive Windows session](https://learn.microsoft.com/en-us/entra/msal/dotnet/acquiring-tokens/desktop-mobile/wam)
+- [MSIX packaged desktop virtualized app behavior](https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes)
+- [Minecraft Education Windows installation guide](https://edusupport.minecraft.net/hc/en-us/articles/13106858087956-Windows-Installation-Guide)
+
+Packaged identity alone cannot identify the manifest runtime behavior or
+prove that this Education process receives filesystem and HKCU redirection.
+MSIX private AppData writes do not prove isolation of existing host reads.
+A synthetic independent registry hive does not substitute the game's
+ordinary HKCU access. WAM compatibility must be demonstrated using normal,
+game-owned sign-in; do not disable WAM, copy tokens or repackage the game.
+
+Next engineering decision: keep MC02–04 Launch/Provision denied.
+The only meaningful future provider trial must independently establish
+Roaming/AppData **actual access**, HKCU effective isolation, singleton
+behavior and distinct real login/broker contexts for the unchanged
+official image, before any readiness or launch claim.
+
+
 ### Explicit Roaming Known Folder candidate NO-GO (22 October 2026)
 
 The existing synthetic AppContainer evaluator now derives

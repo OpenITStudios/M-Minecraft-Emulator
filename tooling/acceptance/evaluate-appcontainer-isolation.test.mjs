@@ -86,15 +86,62 @@ test("roaming mechanism blocks candidate even if synthetic private roaming persi
   assert.equal(review.isolatedLaunchAllowed, false);
 });
 
-test("unknown known-folder query never becomes private", () => {
+test("unobserved known folder stays unverified if observed paths are private", () => {
   const report = fixture();
   report.roamingKnownFolderQuerySucceeded = false;
   report.processPaths[0].roamingKnownFolder = "UNAVAILABLE";
+  report.roamingEnvironmentUnderContainer = true;
+  for (const child of report.processPaths) {
+    child.roamingEnvironment = "UNDER_EXPECTED_PROFILE";
+  }
   const result = evaluateAppContainerIsolation(report);
   assert.equal(result.roamingPathObservation, "INCOMPLETE");
   assert.equal(result.candidateDisposition, "UNVERIFIED_NO_GAME_ACCEPTANCE");
   assert.equal(result.mechanismBoundaries.roamingKnownFolder, "NOT_OBSERVED");
   assert.ok(result.risks.includes("ROAMING_KNOWN_FOLDER_NOT_OBSERVED"));
+});
+
+test("missing known-folder cannot hide an escaped roaming environment", () => {
+  const report = fixture();
+  report.roamingKnownFolderQuerySucceeded = false;
+  report.processPaths[0].roamingKnownFolder = "UNAVAILABLE";
+  const result = evaluateAppContainerIsolation(report);
+  assert.equal(result.candidateDisposition, "NO_GO_OBSERVED_ROAMING_ENV_BOUNDARY");
+  assert.equal(result.mechanismBoundaries.roamingKnownFolder, "NOT_OBSERVED");
+  assert.equal(result.isolatedLaunchAllowed, false);
+});
+
+test("private known-folder cannot hide a roaming environment escape", () => {
+  const report = fixture();
+  report.roamingKnownFolderUnderContainer = true;
+  for (const child of report.processPaths) {
+    child.roamingKnownFolder = "UNDER_EXPECTED_PROFILE";
+  }
+  const result = evaluateAppContainerIsolation(report);
+  assert.equal(result.candidateDisposition, "NO_GO_OBSERVED_ROAMING_ENV_BOUNDARY");
+  assert.equal(result.mechanismBoundaries.roamingKnownFolder, "PATH_REPORTED_ONLY");
+  assert.equal(result.isolatedLaunchAllowed, false);
+});
+
+test("LocalAppData known-folder or environment escapes reject the candidate", () => {
+  const base = fixture();
+  base.roamingEnvironmentUnderContainer = true;
+  base.roamingKnownFolderUnderContainer = true;
+  for (const child of base.processPaths) {
+    child.roamingEnvironment = "UNDER_EXPECTED_PROFILE";
+    child.roamingKnownFolder = "UNDER_EXPECTED_PROFILE";
+    child.localKnownFolder = "OUTSIDE_EXPECTED_PROFILE";
+  }
+  base.localAppDataKnownFolderRedirected = false;
+  const known = evaluateAppContainerIsolation(base);
+  assert.equal(known.candidateDisposition, "NO_GO_OBSERVED_LOCAL_KNOWN_FOLDER_BOUNDARY");
+  assert.equal(known.isolatedLaunchAllowed, false);
+  base.localAppDataKnownFolderRedirected = true;
+  for (const child of base.processPaths) child.localKnownFolder = "UNDER_EXPECTED_PROFILE";
+  base.localAppDataEnvironmentRedirected = false;
+  const environment = evaluateAppContainerIsolation(base);
+  assert.equal(environment.candidateDisposition, "NO_GO_OBSERVED_LOCAL_ENV_BOUNDARY");
+  assert.equal(environment.isolatedLaunchAllowed, false);
 });
 
 test("positive synthetic flags and evidence tiers must all be consistent", () => {
