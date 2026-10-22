@@ -27,6 +27,9 @@ use std::{
 use virtual_clients_core::independent_engine::{
     decode_broker_probe, UntrustedBrokerProbe, BROKER_PROBE_BYTES,
 };
+use crate::service_identity::{
+    verified_current_service_sid, verified_token_logon_sid,
+};
 
 type NativeHandle = *mut c_void;
 const INVALID_HANDLE_VALUE: NativeHandle = -1isize as NativeHandle;
@@ -306,12 +309,14 @@ struct PendingTokenComparison {
     same_user: bool,
     same_windows_session: bool,
     same_logon_id: bool,
+    same_logon_sid: bool,
     sufficient_impersonation_level: bool,
 }
 impl PendingTokenComparison {
     fn all_match(self) -> bool {
         self.same_user && self.same_windows_session
-            && self.same_logon_id && self.sufficient_impersonation_level
+            && self.same_logon_id && self.same_logon_sid
+            && self.sufficient_impersonation_level
     }
 }
 
@@ -331,6 +336,7 @@ fn inspect_last_message_token(
     }
     let process_token = OwnedHandle::new(process_raw)?;
     let process_identity = token_identity(process_token.0)?;
+    let process_logon_sid = verified_token_logon_sid(process_token.0)?;
 
     // If this worker thread already impersonates anyone, refuse to
     // proceed. RevertToSelf would otherwise erase another owner's scope.
@@ -370,12 +376,13 @@ fn inspect_last_message_token(
             last_message_token.0, TOKEN_IMPERSONATION_LEVEL,
         )?;
         let message_identity = token_identity(last_message_token.0)?;
+        let message_logon_sid = verified_token_logon_sid(last_message_token.0)?;
         let statistics = token_statistics(last_message_token.0)?;
-        let _ = &process_identity;
         Ok(PendingTokenComparison {
             same_user: message_identity.user_sid == process_identity.user_sid,
             same_windows_session: message_identity.windows_session == process_identity.windows_session,
             same_logon_id: message_identity.logon_id == process_identity.logon_id,
+            same_logon_sid: message_logon_sid == process_logon_sid,
             sufficient_impersonation_level: statistics.token_type == TOKEN_IMPERSONATION_TYPE
                 && statistics.impersonation_level >= SECURITY_IMPERSONATION
                 && impersonation_level >= SECURITY_IMPERSONATION,
@@ -410,8 +417,13 @@ impl ReadOnlyPipeWorker {
         // FILE_CREATE_PIPE_INSTANCE overlaps a generic write bit.
         // BA gets WRITE_DATA + SYNCHRONIZE + READ_CONTROL only. This
         // is an ADMIN-ONLY source pilot, NOT a user-session IPC policy.
-        let sddl: Vec<u16> = "D:P(A;;GA;;;SY)(A;;0x00120002;;;BA)"
-            .encode_utf16().chain(std::iter::once(0)).collect();
+        // Native SCM token MUST contain the Windows-resolved service SID.
+        // No unverified desktop-user or caller-provided logon SID is granted.
+        let service_sid = verified_current_service_sid()?;
+        let acl = format!(
+            "D:P(A;;GA;;;SY)(A;;GA;;;{service_sid})(A;;0x00120002;;;BA)"
+        );
+        let sddl: Vec<u16> = acl.encode_utf16().chain(std::iter::once(0)).collect();
         let mut descriptor: *mut c_void = ptr::null_mut();
         // SAFETY: Static NUL-terminated SDDL input, one owned output.
         if unsafe {
@@ -743,15 +755,17 @@ mod tests {
             same_user: true,
             same_windows_session: true,
             same_logon_id: true,
+            same_logon_sid: true,
             sufficient_impersonation_level: true,
         };
         assert!(full.all_match());
-        for field in 0..4 {
+        for field in 0..5 {
             let mut missing = full;
             match field {
                 0 => missing.same_user = false,
                 1 => missing.same_windows_session = false,
                 2 => missing.same_logon_id = false,
+                3 => missing.same_logon_sid = false,
                 _ => missing.sufficient_impersonation_level = false,
             }
             assert!(!missing.all_match());

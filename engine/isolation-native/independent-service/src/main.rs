@@ -10,6 +10,8 @@ mod windows_host;
 // Never enable this feature in distribution before Windows security review.
 #[cfg(all(windows, feature = "readonly-ipc-pilot"))]
 mod ipc_worker;
+#[cfg(all(windows, feature = "readonly-ipc-pilot"))]
+mod service_identity;
 
 #[cfg(windows)]
 fn main() {

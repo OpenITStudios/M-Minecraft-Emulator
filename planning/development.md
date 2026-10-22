@@ -1,5 +1,33 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent service — SCM SID and last-message logon SID, 22 October 2026
+
+Created service_identity.rs under the feature-gated standalone
+independent-service crate. It checks actual Windows LookupAccountNameW
+for NT SERVICE\MIVUBIIndependentHost and verifies that SID is enabled
+(not deny-only) in the actual SCM process TOKEN_GROUPS. Endpoint
+creation now fails closed unless this is true. The protected DACL
+adds the verified service SID to SYSTEM and the existing limited
+Administrators client grant, without Users/Authenticated Users.
+
+The last-message and connected-process access tokens now also need
+matching, unique enabled SE_GROUP_LOGON_ID S-1-5-5-X-Y groups.
+Existing comparisons of User SID, Windows session, logon LUID
+and impersonation level remain required, with mandatory RevertToSelf.
+No raw SID/token value is sent to desktop or written to the repo.
+Three native regression tests authored for SID validation and ABI.
+
+**Proof:** exact GitHub source/static Win32 contract review only.
+Windows compile/SCM/pipe tests, signing and Minecraft NOT_EXECUTED.
+The pilot stays OFF by default, admin-only, uninstalled, and cannot
+perform privileged/game operations. Trusted ordinary-user SID
+enrollment and same-logon pipe handle provenance remain unresolved.
+No Sandboxie runtime or existing world/account changed.
+
+**Next:** native Windows validation of service SID, token group and
+effective DACL before considering nonadmin client authorization.
+
+
 ## Independent SCM IPC — read and compare the last-message Windows token, 22 October 2026
 
 Extended the **existing** opt-in, service-owned IPC worker (not a new

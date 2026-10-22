@@ -11,6 +11,42 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Native SCM service SID and per-logon SID binding (22 October 2026)
+
+The original, feature-gated SCM IPC worker now refuses its endpoint
+unless Windows resolves `NT SERVICE\MIVUBIIndependentHost` via
+LookupAccountNameW AND its actual process access token contains that
+S-1-5-80 SID as exactly one enabled, non-deny-only TOKEN_GROUPS entry.
+Only then does CreateNamedPipeW receive the protected ACL including
+the OS-resolved service SID, SYSTEM and the existing narrowly scoped
+administrators-only client write grant. A missing/unconfigured service
+SID fails closed before pipe creation. This source does NOT register
+or configure SERVICE_SID_TYPE_UNRESTRICTED/RESTRICTED in SCM.
+
+The last-message impersonation token and OS-connected process token
+must also have the same unique, enabled SE_GROUP_LOGON_ID SID
+(S-1-5-5-X-Y), in addition to User SID, Windows session, logon
+AuthenticationId and impersonation level. The SID bytes are read from
+bounded native TOKEN_GROUPS and never logged, persisted, returned over
+the pipe, or copied from untrusted wire values. Three native
+regressions cover service/logon SID shape, disabled/deny-only groups
+and C pointer alignment.
+
+**No ordinary-user logon SID has yet been enrolled in the pipe DACL.**
+It would be unsafe to grant a SID from a self-reported PID or frame.
+Admin-only access remains, and same-logon duplicated pipe handles
+still prevent strong message-to-process provenance. The IPC pilot
+is OFF by default; no desktop integration, service installation,
+credentials, Minecraft launch or filesystem/HKCU/WAM interception.
+Windows compile, native tests, SCM activation and four-client gameplay
+remain NOT_EXECUTED.
+
+Next: validate Windows native SID lookup, actual token groups and
+effective pipe DACL before any nonadmin enrollment or privileged
+service operations.
+
+
+
 ### Last-message Windows token correlation in service-owned IPC (22 October 2026)
 
 The opt-in SCM IPC worker now compares its OS-connected client process
