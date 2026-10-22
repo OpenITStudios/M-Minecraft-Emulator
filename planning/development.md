@@ -1,5 +1,29 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — correlate pinned process SIDs with private root DACL, 22 October 2026
+
+The unmounted native private-root observer now uses the same pinned process
+and one read-only TOKEN_QUERY handle to compare the current process user
+and AppContainer SIDs with the already-opened directory's OWNER and bounded
+basic DACL ACEs. Only three private booleans are recorded: owner matches
+process user, owner matches container, and a simple allow ACE names the
+container SID. Original directory identity, ACL structural checks and
+before/after process identity checks remain unchanged. Raw SIDs, paths,
+token handles and ACLs never enter an IPC, log or persistent state.
+A Windows-only Rust negative test for foreign SID, deny ACE and zero
+mask is authored NOT_EXECUTED.
+
+These source-scoped booleans cannot grant file access, confirm an
+original private root, resolve junctions or certify effective Windows
+permissions. The routine is not registered to a product command.
+MC02–MC04 Launch/Provision remains denied; no localtest, world,
+credentials, `main`, CI, service or installer was changed.
+
+**Next:** Source-design handle-bound ancestor traversal for a future
+trusted profile owner. Windows compiler/ABI and actual Minecraft
+storage/login compatibility remain NOT_EXECUTED.
+
+
 ## Independent engine — process-bound pending root observation, 22 October 2026
 
 Added a Windows-only `inspect_private_root_for_process_source` to the

@@ -11,6 +11,16 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Read-only process SID ↔ directory-owner/ACE correlation (22 October 2026)
+
+The existing unmounted root inspector compares a live pinned process's
+TokenUser/AppContainer SIDs with the owner and basic allow ACEs on a single
+already-opened directory. Only sanitized private booleans are produced,
+never credentials, SID bytes or a permission grant. No ownership admission,
+effective Windows access, complete ancestor traversal, game filesystem
+redirection or Microsoft WAM separation is inferred from a matching ACE.
+
+
 ### Process-scoped pending private-root observation (22 October 2026)
 
 The existing Windows read-only root inspector is now composable with the

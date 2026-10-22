@@ -413,6 +413,15 @@ pub(crate) struct PrivateRootObjectIdentity {
     file_index: u64,
 }
 
+/// Diagnostic SID comparisons; never an access or root ownership grant.
+#[cfg(windows)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct PendingRootSidRelations {
+    owner_matches_process_user: bool,
+    owner_matches_container: bool,
+    container_allow_ace_observed: bool,
+}
+
 #[cfg(windows)]
 pub(crate) fn inspect_private_root_handle_source(
     opened: &std::fs::File,
@@ -429,6 +438,7 @@ pub(crate) struct PendingPrivateRootInspection {
     slot: SessionSlot,
     process: ProcessIdentity,
     directory: PrivateRootObjectIdentity,
+    sid_relations: PendingRootSidRelations,
 }
 
 #[cfg(windows)]
@@ -477,11 +487,17 @@ pub(crate) fn inspect_private_root_for_process_source(
     // Avoid even reading a directory when the observed process is not
     // AppContainer-scoped. This does not assert owner SID equality.
     validate_private_root_observation(slot, expected, before, before)?;
-    let directory = inspect_private_root_handle_source(opened)
+    let key = ProcessKey {
+        pid: expected.pid,
+        created_file_time: expected.created_file_time.to_string(),
+    };
+    let (directory, sid_relations) = windows::inspect_directory_for_process(opened, &key)
         .map_err(|e| PrivateRootObservationError::Directory(e.kind()))?;
     let after = observer.observe_exact(expected).map_err(PrivateRootObservationError::Native)?;
     validate_private_root_observation(slot, expected, before, after)?;
-    Ok(PendingPrivateRootInspection { slot, process: expected, directory })
+    Ok(PendingPrivateRootInspection {
+        slot, process: expected, directory, sid_relations,
+    })
 }
 
 // Synthetic-only bounded native FILE-handle reader. The caller MUST have
@@ -763,7 +779,18 @@ mod windows {
 
     /// The returned ACL belongs to the still-live GetSecurityInfo descriptor.
     /// ACL size and iteration are capped to avoid unbounded native work.
-    fn inspect_directory_acl(acl: *mut std::ffi::c_void) -> io::Result<()> {
+    // Syntactic ACE reference only; token group state and ACE ordering
+    // can make a matching entry irrelevant to effective access.
+    fn basic_allow_for_sid(ace: &[u8], sid: &[u8]) -> bool {
+        ace[0] == 0
+            && u32::from_le_bytes([ace[4], ace[5], ace[6], ace[7]]) != 0
+            && &ace[8..] == sid
+    }
+
+    fn inspect_directory_acl(
+        acl: *mut std::ffi::c_void,
+        expected_container: Option<&[u8]>,
+    ) -> io::Result<bool> {
         if acl.is_null() || unsafe { IsValidAcl(acl) } == 0 {
             return Err(invalid("Private root DACL is missing or invalid"));
         }
@@ -790,6 +817,7 @@ mod windows {
         {
             return Err(invalid("Private root ACL count or size unsupported"));
         }
+        let mut container_allow = false;
         for index in 0..info.ace_count {
             let mut raw: *mut std::ffi::c_void = ptr::null_mut();
             if unsafe { GetAce(acl, index, &mut raw) } == 0 || raw.is_null() {
@@ -805,11 +833,18 @@ mod windows {
             }
             let entry = unsafe { std::slice::from_raw_parts(base, len) };
             reject_broad_directory_ace(entry)?;
+            if expected_container.is_some_and(|sid| basic_allow_for_sid(entry, sid)) {
+                container_allow = true;
+            }
         }
-        Ok(())
+        Ok(container_allow)
     }
 
-    fn inspect_directory_security(opened: &std::fs::File) -> io::Result<()> {
+    fn inspect_directory_security(
+        opened: &std::fs::File,
+        expected_user: Option<&[u8]>,
+        expected_container: Option<&[u8]>,
+    ) -> io::Result<super::PendingRootSidRelations> {
         struct Descriptor(*mut std::ffi::c_void);
         impl Drop for Descriptor {
             fn drop(&mut self) {
@@ -844,15 +879,27 @@ mod windows {
         }
         let owner_valid = !owner.is_null() && unsafe { IsValidSid(owner) } != 0;
         reject_invalid_directory_acl(owner_valid, !dacl.is_null())?;
-        inspect_directory_acl(dacl)
+        let len = unsafe { GetLengthSid(owner) } as usize;
+        if !(8..=68).contains(&len) {
+            return Err(invalid("Private root owner SID length invalid"));
+        }
+        let owner_sid = unsafe { std::slice::from_raw_parts(owner.cast::<u8>(), len) };
+        let allow = inspect_directory_acl(dacl, expected_container)?;
+        Ok(super::PendingRootSidRelations {
+            owner_matches_process_user: expected_user.is_some_and(|sid| sid == owner_sid),
+            owner_matches_container: expected_container.is_some_and(|sid| sid == owner_sid),
+            container_allow_ace_observed: allow,
+        })
     }
 
     /// Inspect one already-open directory object and its bounded ACL metadata.
     /// Refuse known broad grants and unsupported ACE structures, but this is
     /// NOT an effective Windows permission check or proof of account ownership.
-    pub(super) fn inspect_directory_handle(
+    fn inspect_directory_with_sids(
         opened: &std::fs::File,
-    ) -> io::Result<super::PrivateRootObjectIdentity> {
+        user: Option<&[u8]>,
+        container: Option<&[u8]>,
+    ) -> io::Result<(super::PrivateRootObjectIdentity, super::PendingRootSidRelations)> {
         fn snapshot(file: &std::fs::File) -> io::Result<super::PrivateRootObjectIdentity> {
             let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
             if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0 {
@@ -879,11 +926,34 @@ mod windows {
         let before = snapshot(opened)?;
         // READ_CONTROL on the already-opened object, no path traversal and
         // no read of user account files, world data, or registry keys.
-        inspect_directory_security(opened)?;
+        let relations = inspect_directory_security(opened, user, container)?;
         if snapshot(opened)? != before {
             return Err(invalid("Directory changed during ACL observation"));
         }
-        Ok(before)
+        Ok((before, relations))
+    }
+
+    pub(super) fn inspect_directory_handle(
+        opened: &std::fs::File,
+    ) -> io::Result<super::PrivateRootObjectIdentity> {
+        inspect_directory_with_sids(opened, None, None).map(|(identity, _)| identity)
+    }
+
+    /// Pin the exact process and its read-only token while inspecting one
+    /// already-opened directory; never opens a profile by a caller path.
+    pub(super) fn inspect_directory_for_process(
+        opened: &std::fs::File,
+        key: &ProcessKey,
+    ) -> io::Result<(super::PrivateRootObjectIdentity, super::PendingRootSidRelations)> {
+        let process = pin(key)?;
+        let token = query_token(&process)?;
+        // Reuse the existing TokenUser reader; profile value is never returned.
+        let user = context_from_token(&token)?.user;
+        let container = appcontainer_sid_from_token(&token)?
+            .ok_or_else(|| invalid("No AppContainer SID for scoped directory check"))?;
+        let result = inspect_directory_with_sids(opened, Some(&user), Some(&container))?;
+        live(&process)?;
+        Ok(result)
     }
 
     /// Exact identity and attributes of a fixture file HANDLE, not its path.
@@ -1657,6 +1727,24 @@ mod windows {
                     io::ErrorKind::InvalidData,
                 );
             }
+        }
+
+        #[test]
+        fn ace_sid_correlation_never_treats_deny_or_foreign_sid_as_allow() {
+            fn ace(kind: u8, mask: u32, sid: &[u8]) -> Vec<u8> {
+                let mut data = vec![kind, 0, 0, 0];
+                data[2..4].copy_from_slice(&((sid.len() + 8) as u16).to_le_bytes());
+                data.extend_from_slice(&mask.to_le_bytes());
+                data.extend_from_slice(sid);
+                data
+            }
+            let first = &[1,2,0,0,0,0,0,15,2,0,0,0,3,0,0,0];
+            let second = &[1,2,0,0,0,0,0,15,2,0,0,0,4,0,0,0];
+            assert!(basic_allow_for_sid(&ace(0, 1, first), first));
+            assert!(!basic_allow_for_sid(&ace(0, 1, first), second));
+            assert!(!basic_allow_for_sid(&ace(1, 1, first), first));
+            assert!(!basic_allow_for_sid(&ace(0, 0, first), first));
+            // All of these are only syntactic claims; no effective access.
         }
 
         #[test]
