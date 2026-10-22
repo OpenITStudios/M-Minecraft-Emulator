@@ -1,5 +1,27 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — Windows-attested physical-console candidate, 22 October 2026
+
+Added a read-only WTS user-session candidate check to the existing
+opt-in service identity owner, invoked before named-pipe creation.
+The OS provides the physical console session, not an IPC claim.
+Reject zero/detached sessions, WTSQueryUserToken failure,
+non-primary token, wrong TokenSessionId, missing enabled logon SID,
+or changing console ID. WTS user token is closed immediately; no
+account, SID, token or session ID is stored or used to widen DACL.
+RDP and secondary sessions are not covered. Two new negative tests
+were authored.
+
+**Proof:** pinned GitHub source/static review and Microsoft WTS docs.
+Rust compiler unavailable in ChatGPT environment; Windows build,
+SCM/WTS queries, tests and Minecraft NOT_EXECUTED. The source-only
+feature stays OFF by default, service uninstalled, Minecraft launch
+blocked, Sandboxie retired and existing user data untouched.
+
+**Next:** validate native WTS session identity on Windows before
+designing an authenticated nonadmin/multi-session IPC endpoint.
+
+
 ## Independent service — SCM SID and last-message logon SID, 22 October 2026
 
 Created service_identity.rs under the feature-gated standalone

@@ -6,6 +6,9 @@ use std::{ffi::c_void, io, mem, ptr};
 type H = *mut c_void;
 const TOKEN_QUERY: u32 = 8;
 const TOKEN_GROUPS: u32 = 2;
+const TOKEN_TYPE: u32 = 8;
+const TOKEN_SESSION_ID: u32 = 12;
+const TOKEN_PRIMARY: u32 = 1;
 const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
 const SE_GROUP_ENABLED: u32 = 4;
 const SE_GROUP_DENY_ONLY: u32 = 0x10;
@@ -36,6 +39,11 @@ unsafe extern "system" {
     fn GetCurrentProcess() -> H;
     fn GetLastError() -> u32;
     fn CloseHandle(handle: H) -> i32;
+    fn WTSGetActiveConsoleSessionId() -> u32;
+}
+#[link(name = "wtsapi32")]
+unsafe extern "system" {
+    fn WTSQueryUserToken(session_id: u32, token: *mut H) -> i32;
 }
 struct Token(H);
 impl Drop for Token {
@@ -184,6 +192,74 @@ pub(super) fn verified_token_logon_sid(token: H) -> io::Result<Vec<u8>> {
     Ok(candidates[0].sid.clone())
 }
 
+/// The physical console is an OS-origin candidate, never a caller-chosen
+/// user/session or a value read from an untrusted broker message.
+fn possible_console_user_session(session: u32) -> bool {
+    // Modern Windows uses session zero for services; 0xFFFFFFFF means
+    // the physical console is being attached/detached.
+    session != 0 && session != u32::MAX
+}
+
+/// Only TokenType and TokenSessionId are supported; both are DWORD values.
+fn token_dword(token: H, class: u32) -> io::Result<u32> {
+    if token.is_null() || !matches!(class, TOKEN_TYPE | TOKEN_SESSION_ID) {
+        return Err(denied("Unsupported token metadata request"));
+    }
+    let mut data = 0u32;
+    let mut returned = 0u32;
+    // SAFETY: An exact native DWORD output for a query-only token handle.
+    if unsafe {
+        GetTokenInformation(
+            token, class, (&mut data as *mut u32).cast(),
+            mem::size_of::<u32>() as u32, &mut returned,
+        )
+    } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if returned != mem::size_of::<u32>() as u32 {
+        return Err(denied("Malformed token metadata size"));
+    }
+    Ok(data)
+}
+
+/// Read-only physical-console candidate check, NOT desktop enrollment.
+///
+/// WTSQueryUserToken requires an already running LocalSystem service with
+/// SeTcbPrivilege. We never enable privileges to make the call succeed,
+/// or acquire an arbitrary session from a request's PID/slot/SID.
+/// The returned primary user token is closed on every path (RAII).
+/// Its SID is NEVER inserted into the named-pipe DACL or exposed to Tauri.
+/// RDP and concurrent secondary user sessions are deliberately unsupported.
+pub(super) fn verify_physical_console_candidate() -> io::Result<()> {
+    // Service process identity is independently checked first.
+    let _ = verified_current_service_sid()?;
+    // SAFETY: Query the currently attached physical console from Windows.
+    let session = unsafe { WTSGetActiveConsoleSessionId() };
+    if !possible_console_user_session(session) {
+        return Err(denied("No usable attached physical console session"));
+    }
+    let mut raw = ptr::null_mut();
+    // SAFETY: Windows, not user input, selects the console's user token.
+    let obtained = unsafe { WTSQueryUserToken(session, &mut raw) };
+    let token = Token(raw);
+    if obtained == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if token.0.is_null()
+        || token_dword(token.0, TOKEN_TYPE)? != TOKEN_PRIMARY
+        || token_dword(token.0, TOKEN_SESSION_ID)? != session
+    {
+        return Err(denied("Windows console token does not match session"));
+    }
+    // Verify one enabled OS logon SID without persisting/returning it.
+    let _checked_logon_sid = verified_token_logon_sid(token.0)?;
+    if unsafe { WTSGetActiveConsoleSessionId() } != session {
+        return Err(denied("Physical console changed during observation"));
+    }
+    // Token::drop closes the privileged user token before returning.
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -202,6 +278,19 @@ mod tests {
         assert!(enabled(SE_GROUP_LOGON_ID | SE_GROUP_ENABLED));
         assert!(!enabled(SE_GROUP_LOGON_ID | SE_GROUP_DENY_ONLY));
         assert!(!enabled(SE_GROUP_LOGON_ID));
+    }
+    #[test]
+    fn console_candidate_fails_closed_for_service_or_detached_session() {
+        assert!(!possible_console_user_session(0));
+        assert!(!possible_console_user_session(u32::MAX));
+        assert!(possible_console_user_session(1));
+        assert!(possible_console_user_session(88));
+    }
+    #[test]
+    fn console_token_classes_are_exact_primary_and_session_dwords() {
+        assert_eq!(TOKEN_TYPE, 8);
+        assert_eq!(TOKEN_SESSION_ID, 12);
+        assert_eq!(TOKEN_PRIMARY, 1);
     }
     #[test]
     fn token_groups_array_is_pointer_aligned() {

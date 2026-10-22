@@ -11,6 +11,31 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Physical-console token observation before gated service IPC (22 October 2026)
+
+The existing service_identity.rs now uses WTSGetActiveConsoleSessionId
+to identify only the OS-attached physical console, refusing session
+zero and 0xFFFFFFFF (attach/detach). After native service SID
+verification, WTSQueryUserToken must succeed using the service's
+existing LocalSystem/SeTcbPrivilege rights; none are enabled or
+acquired through this code. The returned user primary token must
+match TokenSessionId and have an enabled Windows logon SID.
+The console ID is rechecked after observation. All token handles
+are closed immediately; no token, SID or session identifier is
+persisted or included in an IPC message or pipe DACL.
+
+This is NOT RDP/multiuser logon enrollment or authorization.
+The feature remains opt-in and OFF by default; admin-only DACL
+and non-authorizing IPC remain unchanged. A detached/unavailable
+console fails closed before CreateNamedPipeW. No service install,
+driver or Minecraft process was changed. Rust/Windows compilation,
+native WTS queries, SCM and Minecraft tests NOT_EXECUTED.
+
+Next: validate WTS candidate against Windows SCM and design a
+trusted multi-session enrollment process before nonadmin IPC access.
+
+
+
 ### Native SCM service SID and per-logon SID binding (22 October 2026)
 
 The original, feature-gated SCM IPC worker now refuses its endpoint

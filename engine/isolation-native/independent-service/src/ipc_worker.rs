@@ -420,6 +420,8 @@ impl ReadOnlyPipeWorker {
         // Native SCM token MUST contain the Windows-resolved service SID.
         // No unverified desktop-user or caller-provided logon SID is granted.
         let service_sid = verified_current_service_sid()?;
+        // Read-only OS console candidate check. No dynamic ACL grant.
+        crate::service_identity::verify_physical_console_candidate()?;
         let acl = format!(
             "D:P(A;;GA;;;SY)(A;;GA;;;{service_sid})(A;;0x00120002;;;BA)"
         );
