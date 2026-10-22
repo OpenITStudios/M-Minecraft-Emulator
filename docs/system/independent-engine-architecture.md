@@ -11,6 +11,18 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Opened-root ancestor inspection (22 October 2026)
+
+From an existing pinned root HANDLE, Windows-only, unmounted source now
+checks up to 32 cumulative local DOS path components with no-follow
+attribute-only directory handles, refusing reparse points and final
+file-object mismatch. This is a bounded **diagnostic**, not a
+race-free access capability: the opened path, changing ancestors,
+ACL effectiveness, trusted owner/token and actual Minecraft data path
+routing must still be independently established. No file mutations,
+user-provided path, Tauri route, or launch permission is introduced.
+
+
 ### Read-only process SID ↔ directory-owner/ACE correlation (22 October 2026)
 
 The existing unmounted root inspector compares a live pinned process's

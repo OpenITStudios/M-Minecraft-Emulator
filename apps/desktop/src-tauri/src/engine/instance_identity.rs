@@ -685,6 +685,9 @@ mod windows {
     unsafe extern "system" {
         fn FreeLibrary(h_lib_module: *mut std::ffi::c_void) -> i32;
         fn LocalFree(h_mem: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+        fn GetFinalPathNameByHandleW(
+            handle: HANDLE, buffer: *mut u16, capacity: u32, flags: u32,
+        ) -> u32;
     }
 
     // GetSecurityInfo returns a DWORD status (not GetLastError), with
@@ -895,6 +898,124 @@ mod windows {
     /// Inspect one already-open directory object and its bounded ACL metadata.
     /// Refuse known broad grants and unsupported ACE structures, but this is
     /// NOT an effective Windows permission check or proof of account ownership.
+
+    // Strict read-only inspection of the prefixes of a previously opened
+    // directory. Windows returned the path, not a user/Tauri input.
+    // A path-only check is never a race-free root access capability.
+    fn opened_dos_prefixes(path: &str) -> io::Result<Vec<String>> {
+        let value = path.strip_prefix(r"\\?\")
+            .ok_or_else(|| invalid("Unsupported root path prefix"))?;
+        let bytes = value.as_bytes();
+        if bytes.len() < 4 || !bytes[0].is_ascii_alphabetic()
+            || bytes[1] != b':' || bytes[2] != b'\\'
+            || value.contains('/') || value.contains('\0')
+        {
+            return Err(invalid("Root is not an absolute local DOS drive path"));
+        }
+        let rest = &value[3..];
+        if rest.is_empty() || rest.ends_with('\\') {
+            return Err(invalid("Root has no supported directory component"));
+        }
+        let parts: Vec<&str> = rest.split('\\').collect();
+        if parts.len() > 32 {
+            return Err(invalid("Root ancestor depth exceeds safety limit"));
+        }
+        let mut current = format!("\\\\?\\{}:\\", &value[..1]);
+        let mut prefixes = vec![current.clone()];
+        for part in parts {
+            if part.is_empty() || matches!(part, "." | "..")
+                || part.ends_with('.') || part.ends_with(' ')
+                || part.chars().any(|ch| ch.is_control()
+                    || matches!(ch, ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+            {
+                return Err(invalid("Ambiguous root ancestor component"));
+            }
+            current.push_str(part);
+            prefixes.push(current.clone());
+            current.push('\\');
+        }
+        Ok(prefixes)
+    }
+
+    fn opened_root_name(file: &std::fs::File) -> io::Result<String> {
+        const FILE_NAME_OPENED: u32 = 8;
+        let handle = file.as_raw_handle();
+        let needed = unsafe {
+            GetFinalPathNameByHandleW(handle, ptr::null_mut(), 0, FILE_NAME_OPENED)
+        };
+        if !(5..=32760).contains(&needed) {
+            return Err(invalid("Opened root path unavailable or oversized"));
+        }
+        let mut name = vec![0u16; needed as usize];
+        let actual = unsafe {
+            GetFinalPathNameByHandleW(handle, name.as_mut_ptr(), needed, FILE_NAME_OPENED)
+        };
+        if actual == 0 || actual >= needed || name[..actual as usize].contains(&0) {
+            return Err(invalid("Opened root name could not be pinned"));
+        }
+        String::from_utf16(&name[..actual as usize])
+            .map_err(|_| invalid("Invalid opened root UTF-16 name"))
+    }
+
+    fn ancestor_directory_identity(file: &std::fs::File)
+        -> io::Result<super::PrivateRootObjectIdentity>
+    {
+        let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+        if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY == 0
+            || info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
+        {
+            return Err(invalid("Ancestor is a file or reparse point"));
+        }
+        let file_index = (u64::from(info.nFileIndexHigh) << 32)
+            | u64::from(info.nFileIndexLow);
+        if file_index == 0 {
+            return Err(invalid("Ancestor has no usable file index"));
+        }
+        Ok(super::PrivateRootObjectIdentity {
+            volume: info.dwVolumeSerialNumber,
+            file_index,
+        })
+    }
+
+    // Each prefix is opened with FILE_FLAG_OPEN_REPARSE_POINT so that junctions
+    // are inspected instead of followed at the final component. The root
+    // volume/file index must be the original opened object. No content reads.
+    // Directory rename/swap and opened-name reconstruction remain unresolved.
+    fn inspect_opened_ancestor_chain(
+        opened: &std::fs::File,
+        expected: super::PrivateRootObjectIdentity,
+    ) -> io::Result<()> {
+        use windows_sys::Win32::Storage::FileSystem::{
+            FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
+            FILE_SHARE_WRITE, FILE_SHARE_DELETE,
+        };
+        let original_name = opened_root_name(opened)?;
+        let prefixes = opened_dos_prefixes(&original_name)?;
+        for (i, prefix) in prefixes.iter().enumerate() {
+            let ancestor = std::fs::OpenOptions::new()
+                .access_mode(0x80) // FILE_READ_ATTRIBUTES; do not read contents
+                .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+                .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+                .open(std::path::Path::new(prefix))?;
+            let identity = ancestor_directory_identity(&ancestor)?;
+            if identity.volume != expected.volume {
+                return Err(invalid("Ancestor crossed a volume boundary"));
+            }
+            if i == prefixes.len() - 1 && identity != expected {
+                return Err(invalid("Final ancestor does not match opened root HANDLE"));
+            }
+        }
+        if ancestor_directory_identity(opened)? != expected
+            || opened_root_name(opened)? != original_name
+        {
+            return Err(invalid("Root changed during opened ancestor inspection"));
+        }
+        Ok(())
+    }
+
     fn inspect_directory_with_sids(
         opened: &std::fs::File,
         user: Option<&[u8]>,
@@ -953,6 +1074,7 @@ mod windows {
         let container = appcontainer_sid_from_token(&token)?
             .ok_or_else(|| invalid("No AppContainer SID for scoped directory check"))?;
         let result = inspect_directory_with_sids(opened, Some(&user), Some(&container))?;
+        inspect_opened_ancestor_chain(opened, result.0)?;
         live(&process)?;
         Ok(result)
     }
@@ -1669,6 +1791,30 @@ mod windows {
         }
 
         #[test]
+        fn opened_dos_chain_rejects_unc_and_traversal_without_any_os_call() {
+            let good = opened_dos_prefixes(r"\\?\C:\data\mc02").unwrap();
+            assert_eq!(good, vec![
+                r"\\?\C:\".to_owned(),
+                r"\\?\C:\data".to_owned(),
+                r"\\?\C:\data\mc02".to_owned(),
+            ]);
+            for bad in [
+                "", r"C:\data\mc02", r"\\server\share\mc02",
+                r"\\?\UNC\server\share\mc02", r"\\?\Volume{demo}\mc02",
+                r"\\?\C:\", r"\\?\C:\data\", r"\\?\C:\data\\mc02",
+                r"\\?\C:\data\..\peer", r"\\?\C:\data\.\mc02",
+                r"\\?\C:\data\bad.", r"\\?\C:\data\bad ",
+                r"\\?\C:\data\file:stream", r"\\?\C:\data/bad",
+                "\\\\?\\C:\\data\\nul\0component",
+            ] {
+                assert!(opened_dos_prefixes(bad).is_err(),
+                    "Ambiguous ancestor passed: {bad:?}");
+            }
+            let deep = format!("\\\\?\\C:\\{}", vec!["name"; 33].join("\\"));
+            assert!(opened_dos_prefixes(&deep).is_err());
+        }
+
+        #[test]
         fn regular_file_handle_is_not_a_private_directory_root() {
             // Read-only validation; never probes a host account folder.
             let executable = std::fs::File::open(std::env::current_exe().unwrap()).unwrap();
@@ -1795,6 +1941,18 @@ mod windows {
             let second = inspect_directory_handle(&handle).unwrap();
             assert_eq!(first, second);
             assert_ne!(first.file_index, 0);
+            // The optional fixture is new/disposable; ancestor inspection
+            // is expected only on supported local DOS paths.
+            if opened_root_name(&handle).ok().is_some_and(|name|
+                opened_dos_prefixes(&name).is_ok()
+            ) {
+                inspect_opened_ancestor_chain(&handle, first).unwrap();
+                assert!(inspect_opened_ancestor_chain(&handle,
+                    super::super::PrivateRootObjectIdentity {
+                        volume: first.volume,
+                        file_index: first.file_index.wrapping_add(1),
+                    }).is_err());
+            }
         }
 
         #[test]

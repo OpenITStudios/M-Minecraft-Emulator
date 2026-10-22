@@ -1,5 +1,36 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — scan opened root's Windows ancestor chain, 22 October 2026
+
+Implemented a bounded, read-only `inspect_opened_ancestor_chain` in the
+existing desktop-native Windows identity owner. It derives the opened-name
+DOS path from an already-open root HANDLE using GetFinalPathNameByHandleW
+(FILE_NAME_OPENED), rejects unsupported UNC/device/ambiguous path forms,
+and inspects every cumulative directory prefix (maximum 32 components).
+Each existing ancestor is reopened only for FILE_READ_ATTRIBUTES with
+FILE_FLAG_BACKUP_SEMANTICS and FILE_FLAG_OPEN_REPARSE_POINT. Reparse
+points, non-directory handles, cross-volume traversal, invalid file IDs,
+and mismatch against the pinned leaf directory HANDLE are rejected.
+The root's identity and opened name are checked again after the scan.
+
+The existing unmounted `inspect_directory_for_process` now applies this
+check after its process-SID/DACL relation, before final liveness inspection.
+It reads no directory contents, accounts or worlds and changes no profile.
+An authored Windows pure parser regression covers UNC, traversal and path
+ambiguity; the pre-existing disposable-directory regression now also
+exercises the ancestor check on supported DOS paths. Both NOT_EXECUTED.
+
+**Boundary:** GetFinalPathNameByHandleW path reconstruction and path-based
+reopening have TOCTOU and mount semantics limitations. This is a *pending*
+negative-risk diagnostic, not safe relative-handle access, root ownership,
+effective ACL proof, game roaming isolation or launch authorization.
+Windows MSVC/native tests and Minecraft acceptance remain NOT_EXECUTED.
+
+**Next:** Review Windows ABI and race-resistant root-relative handle
+traversal design before any real private profile file operations. Keep
+MC02–MC04 Launch/Provision blocked.
+
+
 ## Independent engine — read process TokenUser without profile lookup, 22 October 2026
 
 Extracted `user_sid_from_token` from the existing native Windows
