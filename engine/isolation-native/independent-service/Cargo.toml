@@ -1,0 +1,12 @@
+[package]
+name = "mivubi-independent-service"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.98"
+publish = false
+description = "Original Windows SCM process host for future MIVUBI isolation"
+
+# Standalone and not installed, packaged, mounted or invoked by Tauri.
+# No Sandboxie binary, DLL, driver, service or source dependency.
+[target.'cfg(windows)'.dependencies]
+windows-service = "=0.8.1"

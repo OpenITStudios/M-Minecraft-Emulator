@@ -11,6 +11,38 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Original standalone Windows SCM service host — 22 October 2026
+
+A separate original Rust crate now lives at
+`engine/isolation-native/independent-service/`. It uses the
+maintained `windows-service` 0.8.1 SCM API wrapper (no Sandboxie
+runtime), with the unique service name `MIVUBIIndependentHost`.
+The host registers with Windows SCM, reports ordered StartPending,
+Running, StopPending and Stopped states, and receives Stop/Shutdown
+via a bounded nonblocking channel. A private pure Rust lifecycle
+policy rejects invalid transitions; three tests are authored.
+
+**Security and status:** this source currently contains NO named-pipe
+listener, registry or file access, process launcher, driver, privileged
+action, service installation or installer integration. SCM RUNNING
+describes only an inert operating-system process, never Minecraft
+isolation readiness. Normal desktop/CLI invocation does not become
+a background daemon. The module is not part of the existing Tauri
+runtime or current distribution, and does not alter the legacy
+Sandboxie retirement or Minecraft Launch/Provision denial.
+
+**Evidence:** source/static review. Rust compilation, SCM launch/
+stop, Windows native tests and Minecraft acceptance NOT_EXECUTED.
+No CI or installer was enabled. It must not be installed or
+distributed as a working sandbox based on source evidence alone.
+
+Next: validate the host build and design a separately authenticated
+read-only service-owned IPC worker with cancellable I/O and trusted
+endpoint/service-SID policy. The SCM host must not reuse the desktop
+fixture DACL or elevate the existing untrusted PID wire protocol.
+
+
+
 ### Bounded overlapped named-pipe fixture lifecycle — 22 October 2026
 
 The original one-client named-pipe fixture in

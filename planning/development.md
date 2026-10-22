@@ -1,5 +1,31 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — original standalone Windows SCM service host, 22 October 2026
+
+Created a standalone crate under
+engine/isolation-native/independent-service/. It uses Windows SCM
+through windows-service 0.8.1 and adds an independently authored
+service-private StartPending -> Running -> StopPending -> Stopped
+lifecycle with nonblocking Stop/Shutdown signaling. Three pure Rust
+regression tests cover ordered stop, invalid transitions and
+terminal failure. The service name is distinct from SbieSvc.
+
+This component is an inert SCM process only: NO service registration,
+installation, Tauri/desktop connection, named pipe, privilege use,
+filesystem/registry mutation, account/session data, driver loading,
+Minecraft launch or Sandboxie dependency. SCM RUNNING does not mean
+the game sandbox engine works. Existing Launch/Provision rejection
+for MC02–MC04 stays unchanged.
+
+**Proof:** exact GitHub source/static review, tests authored but
+NOT_EXECUTED. Rust compiler, Windows SCM, packaging, signing and
+Minecraft remain NOT_EXECUTED. GitHub Actions stays disabled.
+
+**Next:** verify a native Windows build of this standalone service
+host, then implement an authenticated cancel-safe service-owned
+IPC worker without reusing the desktop fixture trust boundary.
+
+
 ## Independent engine — exact oversized/short overlapped pipe message rejection, 22 October 2026
 
 Follow-up correction in the existing Windows fixture pipe owner:
