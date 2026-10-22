@@ -1,6 +1,41 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Independent COW core — host-bound full write and file hierarchy, 23 October 2026
+
+Closed a concrete file/directory ambiguity in the canonical original
+`engine/runtime-core/src/independent_engine/overlay.rs`. Previously
+`SyntheticSlotOverlay::write` had no immutable baseline parameter,
+so a new full write could create a synthetic file leaf above visible
+host children or below a host/private file leaf; the rename engine
+would only reject that conflicting state AFTER it was created.
+The full-write API now requires `&SyntheticBaseView` and performs
+a non-mutating merged file-ancestry/subtree preflight before changing
+private bytes, tags or quotas. Baseline `insert_fixture` likewise
+rejects file leaf/ancestor collisions irrespective of insertion
+order, with checked total-byte accounting. `copy_up`, nonempty
+`write_at`, and `truncate_file` use the same preflight. Flattened
+registry values intentionally keep separate, existing semantics.
+
+Updated all owned synthetic COW write callsites and preserved negative
+rename tests by directly injecting intentionally malformed state in
+their test module (the public write API now rejects this state).
+Three regressions added for baseline collisions, full-write source
+and destination conflict atomicity, and partial/copy-up fail-closed
+behavior. Source-only development; no new provider, IPC, driver or
+Windows game-profile access.
+
+**Proof:** pinned GitHub source/consumer/static review. Actual
+Rust build/tests, Windows-native probes and Minecraft acceptance
+NOT_EXECUTED. `main`/CI, installed clients and saved world/account
+data unchanged; MC02-MC04 Launch/Provision still blocked.
+
+**Next:** complete a bounded review of remaining COW mixed
+file/directory negative states and registry-value handling, then
+continue implementation of a credible native isolation owner
+without treating fixture semantics as Windows proof.
+
+
 ## Independent COW core — copy-up and empty partial-write correctness, 23 October 2026
 
 Fixed two concrete source problems in the single original Rust

@@ -34,6 +34,35 @@ driver, existing Minecraft data, HKCU/WAM or Launch/Provision changes.
 A future production capability requires attested root ancestry, owner SID,
 effective cross-token peer denial and actual game-path enforcement.
 
+### Host-bound full writes and file-leaf hierarchy invariants (23 October 2026)
+
+The pure synthetic COW owner `engine/runtime-core/src/independent_engine/overlay.rs`
+now requires the immutable `SyntheticBaseView` when performing a full
+`SyntheticSlotOverlay::write`. Previously full writes had NO baseline input,
+so they could silently create a file named like an existing visible
+directory or place a file below an existing host/private file leaf, even
+though the later rename path rejected this shape. Both the baseline
+`insert_fixture` and full-write path now reject parent/child **File**
+leaf collisions in either direction. Full writes remain newly authored
+private data (without a host-derived tag); they do not read or overwrite
+the real host. File prefix tombstones and private-only masks determine
+which synthetic baseline descendants are actually visible.
+
+The same non-mutating preflight is reused by `copy_up`, nonempty
+`write_at`, and `truncate_file`. RegistryValue remains a deliberately
+flat synthetic namespace; case-normalized, bounded ASCII keys are NOT
+Win32 paths. Deliberately malformed states required by older negative
+rename regressions are now injected directly by test code, never by
+the public full-write operation. Three focused regressions added:
+baseline insertion order, host/private full-write collisions,
+and partial/copy-up refusal. The full-write signature change is
+source-only and has no active runtime provider consumer.
+
+**Proof:** exact GitHub source/static ownership check only.
+Rust compilation/tests NOT_EXECUTED (no Rust toolchain here).
+This does not supply Minecraft Education file redirection,
+registry/WAM virtualization, a service or launch permission.
+
 ### Copy-up single-allocation and zero-byte partial writes (23 October 2026)
 
 The original pure Rust `independent_engine/overlay.rs` now performs
