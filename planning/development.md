@@ -1,5 +1,26 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — deny untrusted synthetic host imports into private-only prefixes, 22 October 2026
+
+Tightened `independent_engine/overlay.rs` against two policy-order
+bypasses. Installing a private-only prefix after existing private bytes
+is rejected with `AmbiguousPrivateProvenance`: without a trusted
+copy-up provenance log the engine cannot know whether preexisting
+bytes came from the shared base. A rename that reads a host-backed
+source and targets a private-only prefix is rejected with
+`HostCopyIntoPrivateBoundary`, while an already privately owned
+source may be renamed there atomically. The original base and other
+slots never change. Two Rust regressions authored NOT_EXECUTED.
+
+These checks model desired confidentiality rules. They are not native
+Windows filesystem security, a real registry virtualizer, or game
+authentication proof. No privileged ops or game data were touched.
+
+**Next:** Assess the true Windows enforcement requirement to intercept
+unmodified Education filesystem/registry operations. Do not equate
+synthetic COW with functional four-instance isolation.
+
+
 ## Independent engine — per-box private-only host fallback boundaries, 22 October 2026
 
 Extended the original synthetic `overlay.rs` COW core with an explicit

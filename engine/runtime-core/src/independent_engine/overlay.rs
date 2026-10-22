@@ -54,6 +54,8 @@ pub enum OverlayError {
     CapacityExceeded,
     AlreadyExists,
     MissingSource,
+    AmbiguousPrivateProvenance,
+    HostCopyIntoPrivateBoundary,
 }
 
 impl OverlayKey {
@@ -202,9 +204,17 @@ impl SyntheticSlotOverlay {
         prefix: OverlayKey,
     ) -> Result<(), OverlayError> {
         self.check(slot, process)?;
-        if !self.private_only_prefixes.contains(&prefix)
-            && self.private_only_prefixes.len() == MAX_OVERLAY_ITEMS
-        {
+        if self.private_only_prefixes.contains(&prefix) {
+            return Ok(());
+        }
+        // A rule installed after private bytes exist cannot establish
+        // whether those bytes were originally copied from the base view.
+        // Synthetic data has no provenance receipt; fail closed rather
+        // than misrepresenting the resulting subtree as private-only.
+        if self.private.keys().any(|key| key.at_or_below(&prefix)) {
+            return Err(OverlayError::AmbiguousPrivateProvenance);
+        }
+        if self.private_only_prefixes.len() == MAX_OVERLAY_ITEMS {
             return Err(OverlayError::CapacityExceeded);
         }
         self.private_only_prefixes.insert(prefix);
@@ -396,6 +406,12 @@ impl SyntheticSlotOverlay {
         }
         if old.surface != new.surface {
             return Err(OverlayError::InvalidName);
+        }
+        // A host-backed item must not cross into a private-only region
+        // via rename without explicit, independently authorized import.
+        // There is no import capability in this synthetic model.
+        if !self.private.contains_key(old) && self.host_fallback_denied(&new) {
+            return Err(OverlayError::HostCopyIntoPrivateBoundary);
         }
         let contents = self.read(host, slot, process, old)?
             .ok_or(OverlayError::MissingSource)?
@@ -640,6 +656,47 @@ mod tests {
         assert_eq!(
             a.make_private_only(SessionSlot::Mc03, id(33), reg("Software\\Other")),
             Err(OverlayError::WrongOwnerOrProcess),
+        );
+    }
+
+    #[test]
+    fn late_private_only_rule_cannot_relabel_existing_base_copies() {
+        let (base, mut a, _) = setup();
+        let key = file("world/data.bin");
+        a.copy_up(&base, SessionSlot::Mc02, id(22), &key).unwrap();
+        assert_eq!(
+            a.make_private_only(SessionSlot::Mc02, id(22), file("world")),
+            Err(OverlayError::AmbiguousPrivateProvenance),
+        );
+        assert_eq!(
+            a.read(&base, SessionSlot::Mc02, id(22), &key).unwrap(),
+            Some(b"original".as_slice()),
+        );
+    }
+
+    #[test]
+    fn host_rename_cannot_smuggle_bytes_across_private_only_boundary() {
+        let (base, mut a, _) = setup();
+        a.make_private_only(SessionSlot::Mc02, id(22), file("isolated")).unwrap();
+        assert_eq!(
+            a.rename(&base, SessionSlot::Mc02, id(22),
+                &file("world/data.bin"), file("isolated/copied.bin")),
+            Err(OverlayError::HostCopyIntoPrivateBoundary),
+        );
+        assert_eq!(
+            a.read(&base, SessionSlot::Mc02, id(22),
+                &file("isolated/copied.bin")).unwrap(),
+            None,
+        );
+        assert_eq!(base.fixture_bytes(&file("world/data.bin")),
+            Some(b"original".as_slice()));
+        a.write(SessionSlot::Mc02, id(22), file("world/private.bin"), b"mine").unwrap();
+        a.rename(&base, SessionSlot::Mc02, id(22),
+            &file("world/private.bin"), file("isolated/renamed.bin")).unwrap();
+        assert_eq!(
+            a.read(&base, SessionSlot::Mc02, id(22),
+                &file("isolated/renamed.bin")).unwrap(),
+            Some(b"mine".as_slice()),
         );
     }
 
