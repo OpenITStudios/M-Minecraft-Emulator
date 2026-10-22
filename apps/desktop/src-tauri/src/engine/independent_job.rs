@@ -9,9 +9,10 @@
 
 #![allow(dead_code)]
 
-use std::{io, mem, ptr, time::Duration};
+use std::{io, mem, ptr};
 #[cfg(test)]
-use std::{ffi::OsStr, os::windows::ffi::OsStrExt};
+use std::{ffi::OsStr, os::windows::ffi::OsStrExt, time::Duration};
+#[cfg(test)]
 use virtual_clients_core::independent_engine::ProcessIdentity;
 use windows_sys::Win32::{
     Foundation::{CloseHandle, FILETIME, HANDLE, WAIT_OBJECT_0},
@@ -89,7 +90,7 @@ impl FixtureJob {
     /// Only available to the Rust Windows test runner. Never accepts a
     /// game path, operator-provided executable, command or Microsoft token.
     #[cfg(test)]
-    fn spawn_self_test(self) -> io::Result<FixtureChild> {
+    fn spawn_self_test(self) -> io::Result<SuspendedFixture> {
         let image = std::env::current_exe()?.canonicalize()?;
         let utf16: Vec<u16> = image.as_os_str().encode_wide().collect();
         if utf16.is_empty() || utf16.len() > 30_000 || utf16.contains(&0) {
@@ -155,14 +156,10 @@ impl FixtureJob {
                 return Err(error);
             }
         };
-        // SAFETY: Resume the exact primary thread from our own process
-        // creation AFTER successful job assignment and identity validation.
-        if unsafe { ResumeThread(thread.raw()) } == u32::MAX {
-            let error = io::Error::last_os_error();
-            terminate_failed_child(process.raw());
-            return Err(error);
-        }
-        Ok(FixtureChild { job: self, process, identity })
+        // Return the process STILL SUSPENDED. Tests and future reviewed
+        // enrollment logic can inspect real OS membership before any child
+        // instructions run; a --help process may otherwise exit too quickly.
+        Ok(SuspendedFixture { job: self, process, thread, identity })
     }
 }
 
@@ -203,6 +200,51 @@ fn pinned_identity(process: HANDLE, expected_pid: u32) -> io::Result<ProcessIden
 }
 
 #[cfg(test)]
+struct SuspendedFixture {
+    // Dropping an un-resumed fixture closes the job first, killing its
+    // suspended process and descendants without orphaning either HANDLE.
+    job: FixtureJob,
+    process: OwnedHandle,
+    thread: OwnedHandle,
+    identity: ProcessIdentity,
+}
+
+#[cfg(test)]
+impl SuspendedFixture {
+    fn member_of(&self, job: &FixtureJob) -> io::Result<bool> {
+        let mut member = 0;
+        // SAFETY: Both OS handles remain owned and live while our child
+        // is suspended. Membership evidence cannot race a quick --help exit.
+        if unsafe {
+            IsProcessInJob(self.process.raw(), job.handle.raw(), &mut member)
+        } == 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(member != 0)
+        }
+    }
+
+    fn resume(self) -> io::Result<FixtureChild> {
+        if pinned_identity(self.process.raw(), self.identity.pid)? != self.identity {
+            terminate_failed_child(self.process.raw());
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData, "Suspended child identity changed",
+            ));
+        }
+        // SAFETY: Resume exactly the retained CREATE_SUSPENDED primary thread
+        // after OS job membership has been independently observed.
+        if unsafe { ResumeThread(self.thread.raw()) } == u32::MAX {
+            let error = io::Error::last_os_error();
+            terminate_failed_child(self.process.raw());
+            return Err(error);
+        }
+        let Self { job, process, thread, identity } = self;
+        drop(thread);
+        Ok(FixtureChild { job, process, identity })
+    }
+}
+
+#[cfg(test)]
 struct FixtureChild {
     // Rust fields drop in declaration order; last job handle closes before
     // the process handle, killing any remaining disposable descendants.
@@ -232,28 +274,20 @@ mod tests {
 
     #[test]
     fn own_suspended_fixture_is_assigned_to_job_before_resume() {
-        let child = FixtureJob::create().unwrap().spawn_self_test().unwrap();
-        assert!(child.identity.pid > 0 && child.identity.created_file_time > 0);
-        let mut member = 0;
-        // SAFETY: Query OS membership using two still-open Windows handles.
-        assert_ne!(
-            unsafe { IsProcessInJob(child.process.raw(), child.job.handle.raw(), &mut member) },
-            0
-        );
-        assert_ne!(member, 0);
+        let suspended = FixtureJob::create().unwrap().spawn_self_test().unwrap();
+        assert!(suspended.identity.pid > 0 && suspended.identity.created_file_time > 0);
+        assert!(suspended.member_of(&suspended.job).unwrap());
+        let child = suspended.resume().unwrap();
         child.wait(Duration::from_secs(20)).unwrap();
     }
 
     #[test]
     fn separate_job_cannot_claim_fixture_as_member() {
-        let child = FixtureJob::create().unwrap().spawn_self_test().unwrap();
         let unrelated = FixtureJob::create().unwrap();
-        let mut member = 1;
-        assert_ne!(
-            unsafe { IsProcessInJob(child.process.raw(), unrelated.handle.raw(), &mut member) },
-            0
-        );
-        assert_eq!(member, 0);
+        let suspended = FixtureJob::create().unwrap().spawn_self_test().unwrap();
+        assert!(suspended.member_of(&suspended.job).unwrap());
+        assert!(!suspended.member_of(&unrelated).unwrap());
+        let child = suspended.resume().unwrap();
         child.wait(Duration::from_secs(20)).unwrap();
     }
 }
