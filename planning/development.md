@@ -1,6 +1,39 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Independent service — fail-closed on Windows session-change notification, 22 October 2026
+
+Updated the existing independent-service/windows_host.rs SCM owner
+and feature-gated ipc_worker.rs. With readonly-ipc-pilot compiled
+(OFF by default), Running now opts into SERVICE_ACCEPT_SESSIONCHANGE.
+Any ServiceControl::SessionChange event (logon/logoff, lock/unlock,
+console/RDP connect/disconnect, etc.) sends a bounded nonblocking
+signal through the SAME existing Stop/Shutdown receiver; duplicate
+signals coalesce and the SCM event's SessionId is not used as
+authorization. The worker reports StopPending before cancelling
+and awaiting overlapped I/O, disconnects the single admin-only
+named pipe and transitions to Stopped. It also checks the stop
+channel directly before and after native peer/token inspection.
+The ordinary default SCM host does not subscribe to session-change
+and its startup/shutdown behavior is unchanged. Two Windows-only
+service-route regressions authored.
+
+**Proof:** pinned GitHub exact-source/static review and verified
+windows-service 0.8.1 ServiceControl/ServiceControlAccept API +
+Microsoft SERVICE_CONTROL_SESSIONCHANGE documentation. Native
+Windows build, control-delivery tests, compiler/test execution,
+SCM installation, and Minecraft gameplay NOT_EXECUTED. SCM
+notifications may be missed before registration; current native
+WTS/token rechecks are still required. No nonadmin DACL applied,
+service/driver installation, credentials/world/profile mutation,
+Sandboxie runtime dependency or MC02–MC04 launch enabled.
+
+**Next:** design signer-pinned service-side desktop executable
+provenance and verify source/Windows SCM lifecycle before issuing
+per-logon endpoints or attempting filesystem/HKCU enforcement.
+
+
+
 ## Independent service — native effective AccessCheck for per-logon pipe candidate, 22 October 2026
 
 Corrected the existing SDDL candidate by adding explicit SYSTEM

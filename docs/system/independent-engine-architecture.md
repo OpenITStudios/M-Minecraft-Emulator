@@ -11,6 +11,50 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### SCM session-change kill switch for opt-in diagnostic IPC (22 October 2026)
+
+The standalone service now subscribes to **SERVICE_CONTROL_SESSIONCHANGE**
+only when Cargo feature readonly-ipc-pilot is explicitly compiled
+(default feature set stays empty). This uses the existing windows-service
+0.8.1 ServiceControl::SessionChange handler and
+ServiceControlAccept::SESSION_CHANGE; it does not register a
+Tauri handler or a Windows desktop/window notification listener.
+Every SCM session-change event (including logon, logoff, lock/unlock,
+physical or RDP connect/disconnect) coalesces into the existing bounded,
+nonblocking Stop/Shutdown channel. The service's current
+HostLifecycle transitions to StopPending when the worker observes
+the signal, cancels/drains pending overlapped I/O, closes its named
+pipe, and only then reaches Stopped. The numeric SessionId from the
+SCM notification is **deliberately not used** for auth, endpoint
+selection, privileged token access, or DACL enrollment.
+
+The IPC worker also checks the existing stop channel after parsing a
+complete read-only frame and again after native peer/token inspection,
+reducing the window where a diagnostic can be processed during
+a concurrent session change. If another message has already been
+queued, the control callback stays nonblocking and one stop signal
+is sufficient. The service is *not* automatically restarted and
+does not reopen a user's access; the conservative pilot simply stops.
+
+**Limits:** the Windows SCM can miss session events occurring before
+handler registration, and a synchronous Windows token/WTS query
+cannot be instantly interrupted. Therefore this is a fail-closed
+source-only *whole-pilot shutdown policy*, not complete, per-logon
+revocation or authentication. Fresh OS WTS/token checks for every
+message remain required. Default service binaries remain inert,
+the pipe remains admin-only, nonadmin candidate DACLs are still
+unmounted, and Minecraft Launch/Provision stays blocked. Two
+Windows-only regression tests check exact session-change acceptance
+and coalescing semantics; Windows compilation, SCM events and
+Minecraft runtime are NOT_EXECUTED.
+
+Next: implement and review service-owned signed desktop process
+image attestation with an independently reviewed allowlist before
+issuing per-logon endpoints, then validate revocation and ACL denial
+on a Windows target without activating real game privileges.
+
+
+
 ### Native effective AccessCheck of candidate per-logon pipe policy — 22 October 2026
 
 The previously string-only logon DACL candidate is now an actual,

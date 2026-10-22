@@ -29,6 +29,20 @@ fn service_main(_arguments: Vec<OsString>) {
     let _ = run_service();
 }
 
+/// A default service host remains inert: only the explicitly compiled
+/// readonly-ipc-pilot subscribes to SCM session-change notifications.
+fn running_controls() -> ServiceControlAccept {
+    let controls = ServiceControlAccept::STOP | ServiceControlAccept::SHUTDOWN;
+    #[cfg(feature = "readonly-ipc-pilot")]
+    {
+        controls | ServiceControlAccept::SESSION_CHANGE
+    }
+    #[cfg(not(feature = "readonly-ipc-pilot"))]
+    {
+        controls
+    }
+}
+
 fn service_status(phase: Phase) -> ServiceStatus {
     let pending = matches!(phase, Phase::Starting | Phase::Stopping);
     ServiceStatus {
@@ -40,7 +54,7 @@ fn service_status(phase: Phase) -> ServiceStatus {
             Phase::Stopped | Phase::Failed => ServiceState::Stopped,
         },
         controls_accepted: if phase == Phase::Running {
-            ServiceControlAccept::STOP | ServiceControlAccept::SHUTDOWN
+            running_controls()
         } else {
             ServiceControlAccept::empty()
         },
@@ -126,18 +140,43 @@ fn service_loop(
     Ok(())
 }
 
-fn run_service() -> windows_service::Result<()> {
-    // SCM callbacks are nonblocking. Multiple Stop/Shutdown controls
-    // coalesce to one bounded channel message; no game operations occur.
-    let (stop_tx, stop_rx) = mpsc::sync_channel::<()>(1);
-    let handler = move |event| match event {
+/// The SCM callback owns no logon identity and grants no new capability.
+/// For the SOURCE-ONLY pilot, *every* session-change control invalidates
+/// the whole diagnostic pipe by requesting service STOP, including logon,
+/// logoff, lock, unlock, console/RDP connect/disconnect. Ignoring the
+/// notification's numeric SessionId intentionally prevents converting a
+/// control event into authentication or a new per-logon DACL grant.
+///
+/// This is a conservative kill switch, NOT production per-session
+/// revocation. SCM can miss events before service registration; the
+/// existing per-request WTS/token recheck remains mandatory.
+fn route_control(
+    event: ServiceControl,
+    stop_tx: &mpsc::SyncSender<()>,
+) -> ServiceControlHandlerResult {
+    match event {
         ServiceControl::Stop | ServiceControl::Shutdown => {
+            let _ = stop_tx.try_send(());
+            ServiceControlHandlerResult::NoError
+        }
+        #[cfg(feature = "readonly-ipc-pilot")]
+        ServiceControl::SessionChange(_) => {
+            // Channel full means an earlier stop/revocation is already
+            // queued. Do not block the SCM control-handler thread.
             let _ = stop_tx.try_send(());
             ServiceControlHandlerResult::NoError
         }
         ServiceControl::Interrogate => ServiceControlHandlerResult::NoError,
         _ => ServiceControlHandlerResult::NotImplemented,
-    };
+    }
+}
+
+fn run_service() -> windows_service::Result<()> {
+    // SCM callbacks are nonblocking. STOP, SHUTDOWN and (pilot-only)
+    // SESSION_CHANGE coalesce to one bounded message; no account, game,
+    // token inspection or pipe cancellation runs on the SCM callback thread.
+    let (stop_tx, stop_rx) = mpsc::sync_channel::<()>(1);
+    let handler = move |event| route_control(event, &stop_tx);
     let status = service_control_handler::register(NAME, handler)?;
     let result = service_loop(&status, stop_rx);
     if result.is_err() {
@@ -145,4 +184,48 @@ fn run_service() -> windows_service::Result<()> {
         let _ = status.set_service_status(service_status(Phase::Failed));
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_change_is_accepted_only_by_opt_in_service() {
+        let running = service_status(Phase::Running);
+        assert!(running.controls_accepted.contains(
+            ServiceControlAccept::STOP | ServiceControlAccept::SHUTDOWN
+        ));
+        assert_eq!(
+            running.controls_accepted.contains(ServiceControlAccept::SESSION_CHANGE),
+            cfg!(feature = "readonly-ipc-pilot"),
+        );
+        for phase in [Phase::Starting, Phase::Stopping, Phase::Stopped, Phase::Failed] {
+            assert!(service_status(phase).controls_accepted.is_empty());
+        }
+    }
+
+    #[cfg(feature = "readonly-ipc-pilot")]
+    #[test]
+    fn any_session_change_coalesces_with_stop_and_shutdown() {
+        use windows_service::service::{
+            SessionChangeParam, SessionChangeReason, SessionNotification,
+        };
+        let (send, recv) = mpsc::sync_channel::<()>(1);
+        let event = ServiceControl::SessionChange(SessionChangeParam {
+            reason: SessionChangeReason::SessionLogoff,
+            notification: SessionNotification { size: 8, session_id: 7 },
+        });
+        assert!(matches!(
+            route_control(event, &send),
+            ServiceControlHandlerResult::NoError
+        ));
+        // A repeated or concurrent stop cannot fill an unbounded queue.
+        assert!(matches!(
+            route_control(ServiceControl::Stop, &send),
+            ServiceControlHandlerResult::NoError
+        ));
+        assert!(recv.try_recv().is_ok());
+        assert!(recv.try_recv().is_err());
+    }
 }

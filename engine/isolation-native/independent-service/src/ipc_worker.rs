@@ -2,7 +2,8 @@
 //!
 //! Compile-time feature readonly-ipc-pilot is OFF BY DEFAULT. This module
 //! never installs a service, launches a game, opens credentials/profile data,
-//! impersonates clients, changes ACLs or sends replies. It only consumes
+//! changes ACLs or sends replies. It temporarily impersonates the last
+//! message's sender for read-only token checks, always RevertToSelf, and consumes
 //! bounded, versioned READ-ONLY probes and compares OS PID/FILETIME.
 //!
 //! The pipe allows LOCAL SYSTEM and BUILTIN ADMINISTRATORS only, not normal
@@ -506,11 +507,22 @@ impl ReadOnlyPipeWorker {
             Ok(value) => value,
             Err(_) => return Ok(Step::Ignored),
         };
+        // A SESSION_CHANGE/Stop may have arrived just after the last
+        // overlapped read completed. Never inspect a packet against a
+        // session that the SCM already asked the pilot to revoke.
+        if wants_stop(stop, announce_stop)? {
+            return Ok(Step::Stopped);
+        }
         // If connection/last-message token observations disagree, discard
         // the packet. Even complete matching evidence is NOT permission for
         // service-side operations; this pilot has no mutating opcodes.
         if !matches!(compare_native_peer(self.handle.0, claim), Ok(true)) {
             return Ok(Step::Ignored);
+        }
+        // Recheck before completing a diagnostic request, since the native
+        // WTS/AccessCheck path can span a concurrent lock/logoff event.
+        if wants_stop(stop, announce_stop)? {
+            return Ok(Step::Stopped);
         }
         // Deliberately no response, credentials, root handle, or launch.
         Ok(Step::Ignored)
