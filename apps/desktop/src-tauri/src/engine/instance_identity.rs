@@ -1042,7 +1042,7 @@ mod windows {
         // Require single, unambiguous components even if a future caller
         // bypasses the already validated opened-name parser.
         if component.is_empty() || component == "." || component == ".."
-            || component.starts_with('.') || component.ends_with('.')
+            || component.ends_with('.')
             || component.ends_with(' ') || component.chars().any(|ch|
                 ch.is_control() || matches!(
                     ch, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
@@ -1942,6 +1942,7 @@ mod windows {
             }
             let _cleanup = Cleanup(root.clone());
             std::fs::create_dir(root.join("only-child")).unwrap();
+            std::fs::create_dir(root.join(".private")).unwrap();
             std::fs::write(root.join("regular-file.txt"), b"synthetic").unwrap();
             use std::os::windows::fs::OpenOptionsExt;
             use windows_sys::Win32::Storage::FileSystem::{
@@ -1953,6 +1954,10 @@ mod windows {
                 .open(&root).unwrap();
             let child = open_relative_directory_metadata(&parent, "only-child").unwrap();
             assert!(ancestor_directory_identity(&child).is_ok());
+            // Dot-prefixed names are legitimate directories; only "."/".."
+            // and ambiguous trailing/stream/path syntax are refused.
+            let hidden = open_relative_directory_metadata(&parent, ".private").unwrap();
+            assert!(ancestor_directory_identity(&hidden).is_ok());
             // NtOpenFile may return a regular file handle when not asking for
             // FILE_DIRECTORY_FILE: type-checking the resulting handle is mandatory.
             if let Ok(file) = open_relative_directory_metadata(&parent, "regular-file.txt") {
@@ -1968,6 +1973,7 @@ mod windows {
         #[test]
         fn opened_dos_chain_rejects_unc_and_traversal_without_any_os_call() {
             let good = opened_dos_prefixes(r"\\?\C:\data\mc02").unwrap();
+            assert!(opened_dos_prefixes(r"\\?\C:\data\.private").is_ok());
             assert_eq!(good, vec![
                 r"\\?\C:\".to_owned(),
                 r"\\?\C:\data".to_owned(),

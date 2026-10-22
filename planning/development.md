@@ -1,5 +1,26 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — permit valid dot-prefixed NT directory components, 22 October 2026
+
+Removed an overbroad early guard in the new root-relative NtOpenFile
+child component validator: a legitimate directory such as `.private`
+is now accepted while `.`, `..`, path separators, alternate data stream
+syntax, trailing dots/spaces and control characters remain denied.
+The already authored disposable Windows synthetic regression now also
+creates/opens one freshly owned `.private` directory and the opened-name
+parser checks an equivalent dotted component. This prevents a false
+negative on valid private-profile directory structures, not an
+authorization to access arbitrary installed game folders.
+
+**Proof:** exact source-level regression review; Windows MSVC/native tests
+NOT_EXECUTED, Minecraft game acceptance NOT_EXECUTED. No user data, game
+file, account, installer, CI, driver or Launch/Provision change.
+
+**Next:** keep the new NT ABI read-only until Windows compiler verification,
+and separately establish trusted root provenance and actual filesystem/
+registry/Microsoft broker compatibility before any product launch.
+
+
 ## Independent engine — root-relative NT handle ancestor traversal, 22 October 2026
 
 The unmounted native root ancestor checker was changed from reopening each
