@@ -1,6 +1,35 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Independent COW core — atomic synthetic subtree rename, 23 October 2026
+
+Implemented one complete missing domain operation in the canonical Rust
+`engine/runtime-core/src/independent_engine/overlay.rs`: `rename_tree`
+moves visible file/registry subtrees within one process-bound MC02–04
+overlay. Source and destination cannot overlap, the destination must
+have NO visible subtree, rewritten names must remain valid, and all
+private item/byte/tombstone capacity and host-derived private-only
+constraints are evaluated BEFORE mutation. Existing private Vec
+allocations are transferred rather than cloned; only visible bounded
+immutable host fixture leaves are copied. One tombstone masks the old
+prefix, coalescing old nested tombstones so hidden host leaves cannot
+reappear. Added five focused native-independent Rust regression tests
+for private allocations, host/base immutability, collision/depth
+atomicity, quotas, tombstone behavior and provenance.
+
+**Proof:** pinned exact-source GitHub review; Rust compilation/tests
+NOT_EXECUTED. This remains a bounded synthetic COW domain, NOT a
+Windows filesystem/registry virtualizer, Minecraft launcher, service,
+driver or independent provider. Existing admission continues denying
+MC02–MC04 Launch/Provision. No real profile, credential, world,
+Windows installation or user data is accessed.
+
+**Next:** complete a bounded same-owner audit of remaining synthetic
+COW operations for namespace/atomicity and quota consistency; then
+return to independent native enforcement once a supported OS strategy
+is established.
+
+
 ## P0 evidence-consumer audit — separate legacy snapshot from engine readiness, 23 October 2026
 
 Audited the canonical Rust independent-engine evidence reviewers

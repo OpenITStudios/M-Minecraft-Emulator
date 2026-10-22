@@ -34,6 +34,34 @@ driver, existing Minecraft data, HKCU/WAM or Launch/Provision changes.
 A future production capability requires attested root ancestry, owner SID,
 effective cross-token peer denial and actual game-path enforcement.
 
+### Atomic visible-subtree COW rename (23 October 2026)
+
+The existing original `engine/runtime-core/src/independent_engine/overlay.rs`
+now supports `SyntheticSlotOverlay::rename_tree` for **bounded synthetic
+file-directory and registry-key prefixes**. It validates exact slot/PID/
+creation FILETIME, matching resource surface, disjoint source/destination,
+strict ASCII component/depth limits and an entirely vacant destination
+subtree. The operation enumerates visible private+base leaves, preflights
+private-item/byte and tombstone quotas, and retains host-derived provenance
+when a moved value originated from the immutable synthetic baseline.
+Crossing into a private-only namespace with host-derived bytes is rejected.
+
+Owned private Vec allocations are moved rather than copied; at most the
+visible, bounded host fallback leaves are copied. Nested deletion masks
+at the source are coalesced into one prefix tombstone, preventing unrelated
+host values from reappearing. Recoverable refusal happens before any overlay
+mutation, including directory collisions, cyclic prefixes, quota exhaustion
+and oversized rewritten names. Regression source covers per-slot
+noninterference, private Vec identity, source masking, destination collision,
+depth/capacity, private-only provenance and tombstone coalescing.
+
+**Boundary:** this is COW *domain logic* for a static synthetic namespace,
+not an OS directory/registry move. It does NOT copy real filesystem
+metadata, handle Windows links, intercept Minecraft I/O, select a provider,
+isolate HKCU/WAM or confer Launch/Provision permission. The platform adapter
+and real Education acceptance remain separate. Rust tests are authored but
+NOT_EXECUTED in this ChatGPT+GitHub execution context. CI remains disabled.
+
 ### Independent COW rename without full-state clone (22 October 2026)
 
 The existing executable runtime-core independent_engine/overlay.rs

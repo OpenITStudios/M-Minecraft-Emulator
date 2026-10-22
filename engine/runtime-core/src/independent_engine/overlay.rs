@@ -489,6 +489,142 @@ impl SyntheticSlotOverlay {
         Ok(())
     }
 
+    /// Move every currently visible synthetic leaf beneath a file-directory
+    /// or registry-key prefix. Host/base data is copied at most once per
+    /// visible leaf; existing private Vec allocations are TRANSFERRED.
+    ///
+    /// This is deliberately NOT an OS directory/registry rename: names are
+    /// bounded ASCII fixture keys, there are no Windows directories, handles,
+    /// ACLs, timestamps, links, hive metadata or Minecraft data. Prefix
+    /// policies remain tied to their original names. The destination subtree
+    /// must be empty in the merged view; hidden host entries never import.
+    ///
+    /// Every recoverable failure is checked before changing private maps,
+    /// host-derived tags or tombstones. One source-prefix tombstone masks all
+    /// original host descendants, including descendants not moved.
+    pub fn rename_tree(
+        &mut self,
+        host: &SyntheticBaseView,
+        slot: SessionSlot,
+        process: ProcessIdentity,
+        from: &OverlayKey,
+        to: OverlayKey,
+    ) -> Result<(), OverlayError> {
+        self.check(slot, process)?;
+        if from.surface != to.surface {
+            return Err(OverlayError::InvalidName);
+        }
+        let sources = self.list(host, slot, process, from)?;
+        if sources.is_empty() {
+            return Err(OverlayError::MissingSource);
+        }
+        if from == &to {
+            return Ok(());
+        }
+        // A subtree cannot move into itself or its ancestor. Keeping source
+        // and destination disjoint makes the final mutation infallible.
+        if from.at_or_below(&to) || to.at_or_below(from) {
+            return Err(OverlayError::InvalidName);
+        }
+        // Reject an existing destination SUBTREE, not just exact leaf
+        // collisions. Otherwise a directory rename could merge two worlds.
+        if !self.list(host, slot, process, &to)?.is_empty() {
+            return Err(OverlayError::AlreadyExists);
+        }
+
+        let mut planned = Vec::with_capacity(sources.len());
+        let mut private_sources = 0usize;
+        let mut removed_bytes = 0usize;
+        let mut incoming_bytes = 0usize;
+        for original in sources {
+            // Each enumerated key is at/below 'from', so this is an ASCII
+            // component-bound suffix, never a raw/untrusted Windows path.
+            let suffix = &original.name[from.name.len()..];
+            let destination =
+                OverlayKey::parse(to.surface, &format!("{}{}", to.name, suffix))?;
+            let value = self.read(host, slot, process, &original)?
+                .ok_or(OverlayError::MissingSource)?;
+            if value.len() > MAX_OVERLAY_ITEM_BYTES {
+                return Err(OverlayError::EntryTooLarge);
+            }
+            let private = self.private.contains_key(&original);
+            let derived = self.host_derived.contains(&original) || !private;
+            if derived && self.host_fallback_denied(&destination) {
+                return Err(OverlayError::HostCopyIntoPrivateBoundary);
+            }
+            incoming_bytes = incoming_bytes.checked_add(value.len())
+                .ok_or(OverlayError::CapacityExceeded)?;
+            if private {
+                private_sources += 1;
+                removed_bytes = removed_bytes.checked_add(value.len())
+                    .ok_or(OverlayError::CapacityExceeded)?;
+            }
+            planned.push((original, destination, private, derived));
+        }
+
+        let future_items = self.private.len().checked_sub(private_sources)
+            .and_then(|left| left.checked_add(planned.len()))
+            .ok_or(OverlayError::CapacityExceeded)?;
+        let future_bytes = self.private_bytes.checked_sub(removed_bytes)
+            .and_then(|left| left.checked_add(incoming_bytes))
+            .ok_or(OverlayError::CapacityExceeded)?;
+        if future_items > MAX_OVERLAY_ITEMS
+            || future_bytes > MAX_OVERLAY_PRIVATE_BYTES
+        {
+            return Err(OverlayError::CapacityExceeded);
+        }
+
+        // Coalesce old descendant tombstones into ONE source-prefix mask.
+        // An existing STRICT ancestor already hides the source, but an
+        // existing exact-prefix tombstone is removed and must be reinserted.
+        let removed_tombstones = self.tombstones.iter()
+            .filter(|key| key.at_or_below(from)).count();
+        let ancestor_already_masks = self.tombstones.iter()
+            .any(|key| key != from && from.at_or_below(key));
+        let future_tombstones = self.tombstones.len() - removed_tombstones
+            + usize::from(!ancestor_already_masks);
+        if future_tombstones > MAX_OVERLAY_ITEMS {
+            return Err(OverlayError::CapacityExceeded);
+        }
+
+        // Materialize ONLY the visible host-backed leaves, after quota and
+        // provenance checks. All private-owned buffers remain un-copied.
+        // There are no remaining Result-returning operations after this.
+        let host_values: Vec<Option<Vec<u8>>> = planned.iter().map(
+            |(source, _, private, _)| {
+                if *private {
+                    None
+                } else {
+                    Some(host.fixture_bytes(source)
+                        .expect("preflighted visible synthetic base leaf")
+                        .to_vec())
+                }
+            },
+        ).collect();
+
+        for ((source, destination, private, derived), host_value)
+            in planned.into_iter().zip(host_values)
+        {
+            let bytes = if private {
+                self.private.remove(&source)
+                    .expect("preflighted private subtree leaf")
+            } else {
+                host_value.expect("preflighted host subtree leaf")
+            };
+            self.host_derived.remove(&source);
+            self.private.insert(destination.clone(), bytes);
+            if derived {
+                self.host_derived.insert(destination);
+            }
+        }
+        self.tombstones.retain(|key| !key.at_or_below(from));
+        if !ancestor_already_masks {
+            self.tombstones.insert(from.clone());
+        }
+        self.private_bytes = future_bytes;
+        Ok(())
+    }
+
     /// Deterministic merged enumeration, delimited by directory/key-prefix
     /// boundaries. Never combines different surfaces or another slot's state.
     pub fn list(
@@ -848,6 +984,156 @@ mod tests {
         assert_eq!(a.rename(&base, SessionSlot::Mc02, id(22),
             &key, file("isolated/no.bin")),
             Err(OverlayError::HostCopyIntoPrivateBoundary));
+    }
+
+    #[test]
+    fn subtree_rename_preserves_copy_on_write_and_moves_private_vectors() {
+        let (base, mut a, b) = setup();
+        let own = file("world/my-new.bin");
+        let changed = file("world/data.bin");
+        a.write_at(&base, SessionSlot::Mc02, id(22), changed.clone(), 0, b"X").unwrap();
+        a.write(SessionSlot::Mc02, id(22), own.clone(), b"mine").unwrap();
+        let original_private_allocation = a.private.get(&own).unwrap().as_ptr();
+        a.rename_tree(&base, SessionSlot::Mc02, id(22),
+            &file("world"), file("archive/mc02")).unwrap();
+        let destination = file("archive/mc02/my-new.bin");
+        assert_eq!(a.private.get(&destination).unwrap().as_ptr(),
+            original_private_allocation);
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22),
+            &file("archive/mc02/data.bin")).unwrap(), Some(b"Xriginal".as_slice()));
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22),
+            &file("archive/mc02/other.bin")).unwrap(), Some(b"second".as_slice()));
+        assert!(a.host_derived.contains(&file("archive/mc02/data.bin")));
+        assert!(a.host_derived.contains(&file("archive/mc02/other.bin")));
+        assert!(!a.host_derived.contains(&destination));
+        assert_eq!(a.private_byte_count(), b"Xriginal".len() + b"second".len() + 4);
+        assert!(a.list(&base, SessionSlot::Mc02, id(22),
+            &file("world")).unwrap().is_empty());
+        assert_eq!(base.fixture_bytes(&changed), Some(b"original".as_slice()));
+        assert_eq!(b.read(&base, SessionSlot::Mc03, id(33),
+            &changed).unwrap(), Some(b"original".as_slice()));
+        assert!(a.tombstones.contains(&file("world")));
+    }
+
+    #[test]
+    fn subtree_rename_refuses_overlap_collision_and_invalid_paths_atomically() {
+        let (mut base, mut a, _) = setup();
+        base.insert_fixture(file("destination/existing.bin"), b"exists").unwrap();
+        a.write(SessionSlot::Mc02, id(22), file("world/new.bin"), b"own").unwrap();
+        let old_private = a.private.clone();
+        let old_tags = a.host_derived.clone();
+        let old_tombstones = a.tombstones.clone();
+        let old_bytes = a.private_byte_count();
+        let too_deep = file(&(0..32).map(|_| "a").collect::<Vec<_>>().join("/"));
+        for (from, target, expected) in [
+            (file("world"), file("destination"), OverlayError::AlreadyExists),
+            (file("world"), file("world/child"), OverlayError::InvalidName),
+            (file("world/child"), file("world"), OverlayError::MissingSource),
+            (file("world"), too_deep, OverlayError::InvalidName),
+            (file("world"), reg("software\\world"), OverlayError::InvalidName),
+        ] {
+            assert_eq!(a.rename_tree(&base, SessionSlot::Mc02, id(22),
+                &from, target), Err(expected));
+            assert_eq!(a.private, old_private);
+            assert_eq!(a.host_derived, old_tags);
+            assert_eq!(a.tombstones, old_tombstones);
+            assert_eq!(a.private_byte_count(), old_bytes);
+        }
+        assert_eq!(a.rename_tree(&base, SessionSlot::Mc02, id(22),
+            &file("world"), file("world")), Ok(()));
+        assert_eq!(a.rename_tree(&base, SessionSlot::Mc02, id(22),
+            &file("absent"), file("absent")), Err(OverlayError::MissingSource));
+        assert_eq!(a.rename_tree(&base, SessionSlot::Mc03, id(33),
+            &file("world"), file("destination")), Err(OverlayError::WrongOwnerOrProcess));
+    }
+
+    #[test]
+    fn subtree_rename_observes_item_byte_and_tombstone_quotas() {
+        let (base, _, _) = setup();
+        let mut items = SyntheticSlotOverlay::new(SessionSlot::Mc04, id(44)).unwrap();
+        for n in 0..MAX_OVERLAY_ITEMS {
+            items.write(SessionSlot::Mc04, id(44),
+                file(&format!("quota/key_{n:04}")), b"x").unwrap();
+        }
+        assert_eq!(items.rename_tree(&base, SessionSlot::Mc04, id(44),
+            &file("world"), file("archive")),
+            Err(OverlayError::CapacityExceeded));
+        assert_eq!(items.private.len(), MAX_OVERLAY_ITEMS);
+        assert!(items.tombstones.is_empty());
+        assert_eq!(items.private_byte_count(), MAX_OVERLAY_ITEMS);
+
+        let mut bytes = SyntheticSlotOverlay::new(SessionSlot::Mc04, id(44)).unwrap();
+        let max_item = vec![7u8; MAX_OVERLAY_ITEM_BYTES];
+        for n in 0..MAX_OVERLAY_PRIVATE_BYTES / MAX_OVERLAY_ITEM_BYTES {
+            bytes.write(SessionSlot::Mc04, id(44),
+                file(&format!("size/key_{n:04}")), &max_item).unwrap();
+        }
+        assert_eq!(bytes.rename_tree(&base, SessionSlot::Mc04, id(44),
+            &file("world"), file("archive")),
+            Err(OverlayError::CapacityExceeded));
+        assert_eq!(bytes.private_byte_count(), MAX_OVERLAY_PRIVATE_BYTES);
+        assert_eq!(bytes.private.len(), MAX_OVERLAY_PRIVATE_BYTES / MAX_OVERLAY_ITEM_BYTES);
+        assert!(bytes.tombstones.is_empty());
+
+        let mut tombstoned = SyntheticSlotOverlay::new(SessionSlot::Mc04, id(44)).unwrap();
+        for n in 0..MAX_OVERLAY_ITEMS {
+            tombstoned.delete(SessionSlot::Mc04, id(44),
+                file(&format!("removed/leaf_{n:04}"))).unwrap();
+        }
+        assert_eq!(tombstoned.rename_tree(&base, SessionSlot::Mc04, id(44),
+            &file("world"), file("archive")),
+            Err(OverlayError::CapacityExceeded));
+        assert_eq!(tombstoned.tombstones.len(), MAX_OVERLAY_ITEMS);
+        assert_eq!(tombstoned.private_byte_count(), 0);
+        assert_eq!(tombstoned.read(&base, SessionSlot::Mc04, id(44),
+            &file("world/data.bin")).unwrap(), Some(b"original".as_slice()));
+    }
+
+    #[test]
+    fn subtree_rename_coalesces_deletes_without_resurrecting_host() {
+        let (base, mut a, _) = setup();
+        a.delete(SessionSlot::Mc02, id(22), file("world/other.bin")).unwrap();
+        a.delete(SessionSlot::Mc02, id(22), file("world/deleted.bin")).unwrap();
+        a.write(SessionSlot::Mc02, id(22), file("world/private.bin"), b"private").unwrap();
+        a.rename_tree(&base, SessionSlot::Mc02, id(22),
+            &file("world"), file("archive")).unwrap();
+        assert!(a.tombstones.contains(&file("world")));
+        assert!(!a.tombstones.contains(&file("world/other.bin")));
+        assert!(!a.tombstones.contains(&file("world/deleted.bin")));
+        assert!(a.read(&base, SessionSlot::Mc02, id(22),
+            &file("world/other.bin")).unwrap().is_none());
+        assert!(a.read(&base, SessionSlot::Mc02, id(22),
+            &file("archive/other.bin")).unwrap().is_none());
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22),
+            &file("archive/data.bin")).unwrap(), Some(b"original".as_slice()));
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22),
+            &file("archive/private.bin")).unwrap(), Some(b"private".as_slice()));
+        // Exact-prefix tombstone and private data inside it are both legal:
+        // the new prefix is masked from host, not from private leaves.
+        a.rename_tree(&base, SessionSlot::Mc02, id(22),
+            &file("archive"), file("renamed")).unwrap();
+        assert!(a.read(&base, SessionSlot::Mc02, id(22),
+            &file("archive/data.bin")).unwrap().is_none());
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22),
+            &file("renamed/private.bin")).unwrap(), Some(b"private".as_slice()));
+    }
+
+    #[test]
+    fn subtree_rename_preserves_host_provenance_into_private_only_namespace() {
+        let (base, mut a, _) = setup();
+        a.make_private_only(SessionSlot::Mc02, id(22), file("private")).unwrap();
+        assert_eq!(a.rename_tree(&base, SessionSlot::Mc02, id(22),
+            &file("world"), file("private/world")),
+            Err(OverlayError::HostCopyIntoPrivateBoundary));
+        assert!(a.tombstones.is_empty());
+        assert_eq!(a.private_byte_count(), 0);
+        a.write(SessionSlot::Mc02, id(22), file("own/profile.bin"), b"new").unwrap();
+        a.rename_tree(&base, SessionSlot::Mc02, id(22),
+            &file("own"), file("private/own")).unwrap();
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22),
+            &file("private/own/profile.bin")).unwrap(), Some(b"new".as_slice()));
+        assert!(a.read(&base, SessionSlot::Mc02, id(22),
+            &file("world/data.bin")).unwrap().is_some());
     }
 
     #[test]
