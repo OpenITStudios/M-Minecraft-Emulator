@@ -11,6 +11,39 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Native Windows effective root-access evidence (22 October 2026)
+
+The original Win32 read-only inspector in
+[apps/desktop/src-tauri/src/engine/independent_root_access.rs](../../apps/desktop/src-tauri/src/engine/independent_root_access.rs)
+uses GetSecurityInfo (OWNER, GROUP, DACL), OpenProcessToken,
+DuplicateTokenEx (SecurityImpersonation) and AccessCheck to evaluate
+FILE_LIST_DIRECTORY and FILE_ADD_FILE against the same opened directory
+HANDLE using **two distinct, engine-created, still-live process tokens**.
+Results contain only four access booleans; no SIDs, raw descriptors,
+tokens, paths or credential values escape. A NULL DACL, owner/group
+omission, an AccessCheck failure, stale PID/FILETIME, exited child or
+same-process comparison fails closed. Real Windows test fixtures
+compare a root's ACL for two sibling processes that share the same
+Windows user; identical rights must never be promoted to isolation.
+
+The bounded test root requests READ_CONTROL explicitly and remains
+borrowed from the suspended process owner. The review result can only
+be OwnerCannotUseRoot, PeerAccessObserved or
+PeerDeniedCandidateOnly. **Even PeerDeniedCandidateOnly is not a
+production readiness grant**: it cannot prove denial to *all* peers,
+privileged processes, host aliases, or game paths, nor replace a
+service-owned root, trusted SID/ancestor checks, kernel mediation,
+registry interception or WAM compatibility. Source/test code only;
+Windows compilation and native fixture execution NOT_EXECUTED.
+No driver, service, registry/config/account or game Launch path changed.
+
+Next: validate this native reviewer on Windows, then independently
+design a trusted privileged root/service and actual filesystem/
+registry mediation for unmodified Minecraft. Do not infer isolation
+from same-user ACL evidence or Job Objects.
+
+
+
 ### OS-owned process identity bound to private fixture file I/O (22 October 2026)
 
 The existing native Job Object launcher and handle-relative file backend

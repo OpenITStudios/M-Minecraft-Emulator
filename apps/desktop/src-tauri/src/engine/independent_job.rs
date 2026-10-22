@@ -247,6 +247,19 @@ impl SuspendedFixture {
         Ok(())
     }
 
+    /// Supply a retained *live* Windows process HANDLE to a narrowly
+    /// bounded inspector. The closure cannot serialize a raw OS capability
+    /// into production: this API exists in cfg(test) only.
+    pub(super) fn with_live_process<T>(
+        &self,
+        inspect: impl FnOnce(HANDLE) -> io::Result<T>,
+    ) -> io::Result<T> {
+        self.live_identity()?;
+        let result = inspect(self.process.raw())?;
+        self.live_identity()?;
+        Ok(result)
+    }
+
     fn member_of(&self, job: &FixtureJob) -> io::Result<bool> {
         let mut member = 0;
         // SAFETY: Both OS handles remain owned and live while our child

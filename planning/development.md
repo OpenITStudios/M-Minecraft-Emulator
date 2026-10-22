@@ -1,5 +1,33 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — read real Windows ACL rights for two owned fixture processes, 22 October 2026
+
+Introduced apps/desktop/src-tauri/src/engine/independent_root_access.rs:
+read-only GetSecurityInfo OWNER/GROUP/DACL plus OpenProcessToken,
+DuplicateTokenEx (SecurityImpersonation) and AccessCheck for two
+distinct engine-owned, still-live process HANDLEs. The file fixture
+root is opened with READ_CONTROL. Owner/peer directory list/create
+results are sanitized booleans; no account, SID, ACL, token or path
+data are serialized. Null DACL, missing owner/group, same process,
+expired process, unfamiliar rights or native API failure fail closed.
+The existing native file fixtures now check that different same-user
+processes retain equivalent effective root rights, so a private-looking
+folder does NOT yield an isolation claim. Tests cover classification,
+same-process refusal and stale-peer refusal. No provider is promoted.
+
+**Proof:** exact GitHub source/static review. Windows native compile
+and runtime tests NOT_EXECUTED; Minecraft gameplay NOT_EXECUTED.
+This is actual Windows authorization-API source, NOT a trusted
+per-client root or real filesystem/registry interception. A sibling
+test run with positive peer access is an explicit NO-GO for promoting
+this candidate. App data/account state and the installed Sandboxie
+driver/service remain untouched. MC02–MC04 Launch/Provision is BLOCKED.
+
+**Next:** validate the Windows native fixture tests and prove
+trusted service-owned ACL/peer boundaries before designing production
+filesystem/registry enforcement.
+
+
 ## Independent engine — bind native fixture storage to a retained owned process, 22 October 2026
 
 The two independently authored Windows primitives, Job Object process

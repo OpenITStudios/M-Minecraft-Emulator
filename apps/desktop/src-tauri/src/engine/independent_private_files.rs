@@ -31,6 +31,8 @@ use std::{
 #[cfg(test)]
 use super::independent_job::{FixtureJob, SuspendedFixture};
 #[cfg(test)]
+use super::independent_root_access::{self, PairAccessFacts, PairAccessReview};
+#[cfg(test)]
 use virtual_clients_core::independent_engine::SessionSlot;
 use windows_sys::Win32::{
     Foundation::{CloseHandle, HANDLE},
@@ -47,6 +49,7 @@ const FILE_ADD_SUBDIRECTORY: u32 = 0x0004;
 const FILE_TRAVERSE: u32 = 0x0020;
 const FILE_READ_ATTRIBUTES: u32 = 0x0080;
 const SYNCHRONIZE: u32 = 0x0010_0000;
+const READ_CONTROL: u32 = 0x0002_0000;
 const FILE_ATTRIBUTE_NORMAL: u32 = 0x0080;
 const FILE_SHARE_READ: u32 = 0x0001;
 const FILE_SHARE_WRITE: u32 = 0x0002;
@@ -286,6 +289,17 @@ impl<'owner> FixtureFileRoot<'owner> {
         Ok(())
     }
 
+    /// Read the REAL Windows DACL against the live tokens of two owned
+    /// fixtures. A positive peer-denial candidate is NOT a launch grant.
+    fn assess_peer_acl(&self, peer: &SuspendedFixture) -> io::Result<PairAccessFacts> {
+        self.verify()?;
+        let facts = independent_root_access::review_fixture_pair(
+            &self.directory, self.owner, peer,
+        )?;
+        self.verify()?;
+        Ok(facts)
+    }
+
     fn open_slot(&self, slot: SessionSlot, create: bool) -> io::Result<SlotFiles<'_, 'owner>> {
         self.verify()?;
         if slot != self.assigned_slot {
@@ -391,7 +405,7 @@ mod tests {
         fs::create_dir(&path).unwrap();
         let directory = fs::OpenOptions::new()
             .access_mode(FILE_READ_ATTRIBUTES | FILE_TRAVERSE |
-                FILE_ADD_FILE | FILE_ADD_SUBDIRECTORY | SYNCHRONIZE)
+                FILE_ADD_FILE | FILE_ADD_SUBDIRECTORY | SYNCHRONIZE | READ_CONTROL)
             .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
             .custom_flags(0x0200_0000 | 0x0020_0000)
             // FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT
@@ -416,6 +430,13 @@ mod tests {
         assert_ne!(owned_a.live_identity().unwrap().pid, owned_b.live_identity().unwrap().pid);
 
         let (path, root_a) = disposable_root(&owned_a, SessionSlot::Mc02);
+        // Same-user Windows process tokens normally inherit the SAME
+        // directory rights. This diagnostic must never report isolation
+        // merely because Rust assigned different process/slot identities.
+        let facts = root_a.assess_peer_acl(&owned_b).unwrap();
+        assert_eq!(facts.owner_can_list, facts.peer_can_list);
+        assert_eq!(facts.owner_can_create, facts.peer_can_create);
+        assert_ne!(facts.review(), PairAccessReview::PeerDeniedCandidateOnly);
         // A second owner borrows the SAME opened root handle. Its slot
         // cannot be impersonated by simply passing a different slot ID.
         let root_b = FixtureFileRoot::from_open_directory(
@@ -472,6 +493,28 @@ mod tests {
         assert_eq!(slot.read_canary("already.bin").unwrap(), 1);
         drop(slot);
         drop(root);
+        owned.resume().unwrap().wait(Duration::from_secs(20)).unwrap();
+        cleanup(&path);
+    }
+
+    #[test]
+    fn effective_acl_review_rejects_same_process_and_exited_peer() {
+        let owned = FixtureJob::create().unwrap().spawn_self_test().unwrap();
+        let peer = FixtureJob::create().unwrap().spawn_self_test().unwrap();
+        let (path, root) = disposable_root(&owned, SessionSlot::Mc02);
+        assert_eq!(
+            root.assess_peer_acl(&owned).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput,
+        );
+        // Explicitly terminate only the peer fixture; stale process identity
+        // must fail before accepting any AccessCheck result.
+        peer.terminate_for_test().unwrap();
+        assert_eq!(
+            root.assess_peer_acl(&peer).unwrap_err().kind(),
+            io::ErrorKind::NotFound,
+        );
+        drop(root);
+        drop(peer);
         owned.resume().unwrap().wait(Duration::from_secs(20)).unwrap();
         cleanup(&path);
     }

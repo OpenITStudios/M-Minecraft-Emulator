@@ -16,6 +16,9 @@ mod independent_private_hive;
 // Handle-relative native filesystem I/O; only disposable fixture callers.
 #[cfg(windows)]
 mod independent_private_files;
+// Read-only real Windows AccessCheck against pinned fixture process tokens.
+#[cfg(windows)]
+mod independent_root_access;
 pub mod manager_settings;
 pub mod native_clients;
 pub mod owned_isolation;
