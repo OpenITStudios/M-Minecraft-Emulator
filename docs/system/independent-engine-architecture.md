@@ -11,6 +11,41 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Native Windows handle-relative private file storage (22 October 2026)
+
+The original Win32/NT adapter at
+[apps/desktop/src-tauri/src/engine/independent_private_files.rs](../../apps/desktop/src-tauri/src/engine/independent_private_files.rs)
+performs actual filesystem I/O via NtCreateFile with a held parent
+directory HANDLE and a single validated relative component. It uses
+FILE_CREATE or FILE_OPEN instead of overwrite, FILE_OPEN_REPARSE_POINT
+plus GetFileInformationByHandle checks to reject reparse objects,
+and rejects hard-linked regular files. Each MC02–MC04 gets a separate
+held directory handle; MC01 and invalid/device/path-traversing names
+are refused. The adapter writes and flushes bounded eight-byte
+nonsecret fixture markers without reading from any shared host path.
+Two OS-backed tests cover per-slot noninterference, persistence,
+missing data, create collisions and unsafe names.
+
+**Status:** source implemented; Windows compile and fixture tests
+NOT_EXECUTED. The root currently comes ONLY from newly created
+disposable test directories. Validated file identity is not a
+trusted SID/ACL/ancestor capability, and this adapter DOES NOT hook,
+redirect or intercept any unmodified Minecraft file operation.
+No credential, world, host profile, driver, service, sandbox,
+production registry or account operations are performed. Existing
+Minecraft Launch/Provision remains blocked; no new provider/IPC route
+has been enabled. This adds a REAL backend file primitive while
+retaining the strict distinction from an OS sandbox. Do not widen the
+single-component/8-byte fixture API into arbitrary game data before
+enforcement, origin and crash-safe storage semantics are proven.
+
+Next: explicitly design and validate the original process-bound
+filesystem/registry enforcement layer and its privileged service or
+kernel callback boundary; supported Windows authentication behavior
+must still be proven before any production launch.
+
+
+
 ### Native Windows private registry application hive (22 October 2026)
 
 The unmounted, independently authored Rust module

@@ -13,6 +13,9 @@ mod independent_job;
 // Original handle-scoped Win32 application-hive prototype; fixtures only.
 #[cfg(windows)]
 mod independent_private_hive;
+// Handle-relative native filesystem I/O; only disposable fixture callers.
+#[cfg(windows)]
+mod independent_private_files;
 pub mod manager_settings;
 pub mod native_clients;
 pub mod owned_isolation;

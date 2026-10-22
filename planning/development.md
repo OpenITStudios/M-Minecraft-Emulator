@@ -1,5 +1,32 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — native handle-relative per-slot file I/O, 22 October 2026
+
+Added an original Windows NT filesystem adapter in
+apps/desktop/src-tauri/src/engine/independent_private_files.rs.
+It holds a pinned root directory and opens one checked child
+relative to an OS HANDLE via NtCreateFile, using FILE_CREATE/FILE_OPEN,
+FILE_OPEN_REPARSE_POINT, strict file type/volume/link inspection and
+directory HANDLEs that do not permit sharing DELETE. It creates
+separate MC02–MC04 slot directories and writes fixed, nonsecret,
+eight-byte fixture markers, flushes to real files and reopens them.
+MC01, invalid/DOS-device/traversal names, missing files and
+existing-file overwrites fail closed. Two Windows-only regression
+tests authored NOT_EXECUTED; no Windows target compile or Minecraft
+game test was run. No Sandboxie runtime/dependency is used.
+
+**Proof boundary:** This is original native disk I/O, not a file
+virtualization provider: no hook/minifilter connects to Minecraft.
+Fixture roots are freshly created but not process-SID/ACL-attested;
+the implementation is unmounted and remains unsuitable for user
+worlds/accounts. Existing MC02–MC04 Launch/Provision and production
+driver/service operations remain blocked; no existing data changed.
+
+**Next:** implement and prove the OS-enforced per-process file/
+registry redirection mechanism, its privileged owner and recovery
+contract before attempting Minecraft multi-account gameplay.
+
+
 ## Independent engine — native application-hive I/O under a pinned Windows directory, 22 October 2026
 
 Added an unmounted original Rust Win32 adapter at
