@@ -15,10 +15,10 @@
 #![allow(dead_code)]
 
 use std::{
-    ffi::{c_void, OsString},
+    ffi::{c_void, OsStr},
     io,
     mem,
-    os::windows::ffi::{OsStrExt, OsStringExt},
+    os::windows::ffi::OsStrExt,
     ptr,
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
@@ -274,7 +274,7 @@ impl FixturePipeServer {
             r"\\.\pipe\mivubi-independent-fixture-{}-{now}-{}",
             std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)
         );
-        let wide: Vec<u16> = OsString::from(&name).encode_wide()
+        let wide: Vec<u16> = OsStr::new(name.as_str()).encode_wide()
             .chain(std::iter::once(0)).collect();
         let descriptor = fixture_descriptor()?;
         let attrs = SecurityAttributes {
