@@ -426,6 +426,75 @@ fn classify_package_probe(status: i32, required_chars: u32) -> Result<Option<usi
     }
 }
 
+/// Non-authorizing, exact-process package-family comparison. MSIX app data
+/// can be scoped per package AND Windows user; two process PIDs are NOT two
+/// separate package storage identities. This is a diagnostic relation only,
+/// not filesystem/HKCU/WAM proof, official publisher attestation or a route
+/// to launch another Minecraft instance.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ObservedPackageFamilyRelation {
+    BothUnpackaged,
+    OnePackaged,
+    SamePackageFamily,
+    DifferentPackageFamilies,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PendingPackageFamilyPairObservation {
+    pub left: ProcessIdentity,
+    pub right: ProcessIdentity,
+    pub relation: ObservedPackageFamilyRelation,
+}
+
+fn classify_package_family_pair(
+    left: Option<&str>,
+    right: Option<&str>,
+) -> ObservedPackageFamilyRelation {
+    use ObservedPackageFamilyRelation as Relation;
+    match (left, right) {
+        (None, None) => Relation::BothUnpackaged,
+        (Some(_), None) | (None, Some(_)) => Relation::OnePackaged,
+        (Some(first), Some(second)) if first.eq_ignore_ascii_case(second) => {
+            Relation::SamePackageFamily
+        }
+        (Some(_), Some(_)) => Relation::DifferentPackageFamilies,
+    }
+}
+
+/// The native observer retains TWO distinct read-only process handles,
+/// checking each full PID/creation FILETIME before querying its Windows
+/// Package Family Name and rechecking both process lifetimes afterwards.
+/// Raw package names remain confined to the native stack and are discarded.
+/// Query errors are errors, NEVER interpreted as "unpackaged".
+pub fn inspect_process_package_family_pair_source(
+    left: ProcessIdentity,
+    right: ProcessIdentity,
+) -> Result<PendingPackageFamilyPairObservation, NativePortError> {
+    if left.pid == 0 || left.created_file_time == 0 ||
+        right.pid == 0 || right.created_file_time == 0 ||
+        left.pid == right.pid
+    {
+        return Err(NativePortError::InvalidIdentity);
+    }
+    #[cfg(windows)]
+    {
+        let first = ProcessKey {
+            pid: left.pid, created_file_time: left.created_file_time.to_string(),
+        };
+        let second = ProcessKey {
+            pid: right.pid, created_file_time: right.created_file_time.to_string(),
+        };
+        let relation = windows::compare_package_families(&first, &second)
+            .map_err(map_native_process_error)?;
+        Ok(PendingPackageFamilyPairObservation { left, right, relation })
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (left, right);
+        Err(NativePortError::NotImplemented)
+    }
+}
+
 /// Unmounted read-only package-form diagnostic. No package name is returned,
 /// logged, stored or compared to an unreviewed Minecraft publisher allowlist.
 pub fn inspect_process_package_form_source(
@@ -699,7 +768,8 @@ pub fn inspect_independent_storage_route_source(
 mod windows {
     use super::{
         AppContainerComparison, ContextComparison, ProcessContainment, ProcessKey,
-        ObservedProcessPackageForm, classify_package_probe, finish_file_signature_review,
+        ObservedProcessPackageForm, ObservedPackageFamilyRelation,
+        classify_package_probe, classify_package_family_pair, finish_file_signature_review,
     };
     use std::{io, mem::size_of, os::windows::io::AsRawHandle, ptr};
     use sha2::{Digest, Sha256};
@@ -752,6 +822,9 @@ mod windows {
         ) -> u32;
         fn lstrlenW(text: *const u16) -> i32;
         fn GetPackageFullName(
+            process: HANDLE, name_length: *mut u32, name: *mut u16,
+        ) -> i32;
+        fn GetPackageFamilyName(
             process: HANDLE, name_length: *mut u32, name: *mut u16,
         ) -> i32;
     }
@@ -1547,6 +1620,52 @@ mod windows {
         Ok(form)
     }
 
+    /// One read-only OS package-family query against an already pinned
+    /// process HANDLE. Cap the UTF-16 buffer and never log or return names.
+    fn package_family_name(process: &Handle) -> io::Result<Option<String>> {
+        let mut required = 0u32;
+        let first = unsafe {
+            GetPackageFamilyName(process.0, &mut required, ptr::null_mut())
+        };
+        let Some(capacity) = classify_package_probe(first, required)
+            .map_err(|_| invalid("Windows package-family query failed"))?
+        else {
+            return Ok(None);
+        };
+        let mut name = vec![0u16; capacity];
+        let mut written = capacity as u32;
+        let status = unsafe {
+            GetPackageFamilyName(process.0, &mut written, name.as_mut_ptr())
+        };
+        if status != 0 || written < 2 || written as usize > capacity
+            || name[written as usize - 1] != 0
+            || name[..written as usize - 1].contains(&0)
+        {
+            return Err(invalid("Windows package-family identity changed or is invalid"));
+        }
+        String::from_utf16(&name[..written as usize - 1])
+            .map(Some)
+            .map_err(|_| invalid("Windows returned an invalid package-family string"))
+    }
+
+    /// Package names stay within this native call. Same family means only
+    /// same OS-reported package family, not a shared user, a verified official
+    /// Minecraft identity, or observed filesystem isolation.
+    pub(super) fn compare_package_families(
+        left: &ProcessKey,
+        right: &ProcessKey,
+    ) -> io::Result<ObservedPackageFamilyRelation> {
+        let first = pin(left)?;
+        let second = pin(right)?;
+        let first_family = package_family_name(&first)?;
+        let second_family = package_family_name(&second)?;
+        live(&first)?;
+        live(&second)?;
+        Ok(classify_package_family_pair(
+            first_family.as_deref(), second_family.as_deref(),
+        ))
+    }
+
     // Only legacy UAC compatibility metadata, never a registry hive query.
     // Pin the exact PID/FILTIME process handle so no reused PID is accepted.
     /// Inspect the queryable IMAGE FILE ON DISK for the exact live process.
@@ -2070,6 +2189,22 @@ mod windows {
                 created_file_time: "1".into(),
             };
             assert!(inspect_package_form(&stale).is_err());
+        }
+
+        #[test]
+        fn current_process_family_query_agrees_with_package_form_without_exposing_names() {
+            let key = own_key();
+            let process = pin(&key).unwrap();
+            let observed = package_family_name(&process).unwrap();
+            live(&process).unwrap();
+            assert_eq!(
+                observed.is_some(),
+                inspect_package_form(&key).unwrap() == ObservedProcessPackageForm::Packaged,
+            );
+            let recycled = ProcessKey {
+                pid: key.pid, created_file_time: "1".to_owned(),
+            };
+            assert!(pin(&recycled).is_err());
         }
 
         #[test]
@@ -2805,6 +2940,62 @@ mod tests {
         let id = ProcessIdentity::checked(11, 133400000000000011).unwrap();
         assert_eq!(inspect_process_image_trust_source(id),
             Err(NativePortError::NotImplemented));
+    }
+
+    #[test]
+    fn package_family_relation_is_diagnostic_not_a_process_count() {
+        use ObservedPackageFamilyRelation as Relation;
+        assert_eq!(
+            classify_package_family_pair(None, None), Relation::BothUnpackaged
+        );
+        assert_eq!(
+            classify_package_family_pair(Some("Fixture_abcd"), None),
+            Relation::OnePackaged
+        );
+        assert_eq!(
+            classify_package_family_pair(None, Some("Fixture_abcd")),
+            Relation::OnePackaged
+        );
+        assert_eq!(
+            classify_package_family_pair(
+                Some("MinecraftFixture_abcd"), Some("minecraftfixture_ABCD"),
+            ),
+            Relation::SamePackageFamily
+        );
+        assert_eq!(
+            classify_package_family_pair(
+                Some("MinecraftFixture_abcd"), Some("DifferentFixture_abcd"),
+            ),
+            Relation::DifferentPackageFamilies
+        );
+    }
+
+    #[test]
+    fn package_family_pair_refuses_zero_duplicate_and_reused_process_ids() {
+        let first = ProcessIdentity::checked(271, 133400000000000271).unwrap();
+        let second = ProcessIdentity::checked(272, 133400000000000272).unwrap();
+        for (left, right) in [
+            (ProcessIdentity { pid: 0, ..first }, second),
+            (first, ProcessIdentity { created_file_time: 0, ..second }),
+            (first, first),
+            (first, ProcessIdentity { pid: first.pid, ..second }),
+        ] {
+            assert_eq!(
+                inspect_process_package_family_pair_source(left, right),
+                Err(NativePortError::InvalidIdentity),
+            );
+        }
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn package_family_pair_requires_windows_native_process_handles() {
+        let first = ProcessIdentity::checked(271, 133400000000000271).unwrap();
+        let second = ProcessIdentity::checked(272, 133400000000000272).unwrap();
+        assert_eq!(
+            inspect_process_package_family_pair_source(first, second),
+            Err(NativePortError::NotImplemented),
+        );
     }
 
     #[test]

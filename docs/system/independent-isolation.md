@@ -123,6 +123,39 @@ akun, dunia, raw machine identity, signing material atau dump privat.
 
 ## Implementation direction
 
+### Read-only OS Package Family comparison — 23 October 2026
+
+The existing Windows process identity owner now has an **unmounted**
+`inspect_process_package_family_pair_source` diagnostic for two DISTINCT,
+exactly pinned PID/full creation-FILETIME processes. It uses Windows
+`GetPackageFamilyName` on both retained, query-only process HANDLEs,
+with the existing bounded `GetPackageFullName` status classifier.
+An actual `APPMODEL_ERROR_NO_PACKAGE` is distinct from a query error.
+Only four sanitized outcomes exist: both unpackaged, one packaged,
+same package family or different package families. The UTF-16 OS package
+family strings are discarded; no raw names, paths, package publishers,
+account material or authentication data are exported. Tests authored
+for invalid/stale process keys, both/mixed/same/different families and
+a Windows-only self-process query consistency fixture; NOT_EXECUTED.
+
+**Scope:** identical package family is a package identity relationship,
+NOT proof of the same Windows user, private worlds, registry/HKCU data,
+Microsoft WAM or a supported Education multi-instance launch. MSIX
+state is scoped by package and user with merged reads of certain host
+AppData/registry surfaces, rather than automatically isolated by PID.
+Different package families do not attest that either is a legitimate
+Minecraft Education build, that multiple variants are installable or
+that independent licenses can authenticate simultaneously. No attempt
+is made to repackage the official game or launch a second process.
+The repo still blocks MC02–MC04 Launch/Provision.
+
+Public OS reference:
+[GetPackageFamilyName](https://learn.microsoft.com/en-us/windows/win32/api/appmodel/nf-appmodel-getpackagefamilyname)
+and [MSIX flexible virtualization](https://learn.microsoft.com/en-us/windows/msix/desktop/flexible-virtualization).
+**Next P0 evidence:** determine whether any supported, non-modifying
+Windows mechanism truly provides per-game-process Roaming/HKCU/broker
+separation before committing to a production provider or driver.
+
 ### Supported Windows mechanisms against the actual game requirements — 22 October 2026
 
 Product target: four licensed, simultaneously playable official Education

@@ -1,6 +1,37 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## P0 independent feasibility — compare live Windows package families, 23 October 2026
+
+Added a **read-only, unmounted** Windows Package Family comparison to the
+EXISTING desktop process identity owner. Two distinct OS processes must be
+pinned by full PID/creation FILETIME. Native GetPackageFamilyName is called
+with an explicit bounded UTF-16 buffer and the same strict package status
+preflight as the existing GetPackageFullName observer. Both HANDLEs remain
+live through the comparison. An absent package is distinct from a failed
+query; raw package strings never leave the native function. Only four
+sanitized relation categories are returned. Added negative unit tests
+for PID collisions/invalid keys and a Windows self-process consistency
+fixture (all tests authored, NOT_EXECUTED).
+
+**Decision:** this narrows the MSIX feasibility question without reviving
+the retired AppContainer/fork routes. MSIX package identity and private
+storage rules are package/user scoped, NOT per Minecraft PID. Matching
+package families never proves Windows-user identity, independent
+filesystem/HKCU/WAM access, verified official publisher or a separate
+licensed game client; even a different family is not an accepted
+replacement provider. No game launch, service, driver, account/profile
+write, Tauri IPC registration, CI, release or main branch change.
+
+**Proof:** exact pinned GitHub source/consumer/static review only.
+Rust/Windows execution, actual Minecraft packaging observation, game
+sign-in and four-client acceptance NOT_EXECUTED.
+Launch/Provision MC02–MC04 remains BLOCKED.
+
+**Next:** examine supported process-bound Roaming/HKCU/broker enforcement
+approaches and their documented limitations before selecting a provider.
+
+
 ## Independent engine — parent-HANDLE-bound disposable roots, 22 October 2026
 
 Hardened the EXISTING, test-only Windows NT file backend rather than
