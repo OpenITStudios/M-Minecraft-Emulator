@@ -1,5 +1,30 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — track synthetic host-derived copy-up provenance, 22 October 2026
+
+Strengthened private-only routing against a copy-up provenance bypass.
+`SyntheticSlotOverlay` now internally tracks host-derived resources
+when base values are copied into private memory, partially overwritten,
+or truncated. Moving a host-derived item through another nonprivate
+path retains its origin. Renaming it into a private-only prefix is
+denied even when the source is already in the private map. Full
+explicit overwrite is treated as newly authored synthetic bytes and
+clears the marker; deletion and subtree deletion release markers
+alongside private entries. Two Rust regressions cover direct and
+multi-step copy-up/rename and partial-write/truncate propagation.
+
+**Boundary:** This is *synthetic provenance*, not information-flow
+control of real Windows processes or memory; an application can still
+copy bytes through its own buffers. Real sandbox data policies need OS
+enforcement and a separate trust boundary. Rust tests authored
+NOT_EXECUTED, no Windows/host/game access.
+
+**Next:** Stop expanding pure-memory proof scaffolding and design
+the independently implemented native virtualization/enforcement
+layer needed to intercept unmodified Minecraft file/registry/IPC
+operations. Do not claim a live sandbox from in-memory tests.
+
+
 ## Independent engine — deny untrusted synthetic host imports into private-only prefixes, 22 October 2026
 
 Tightened `independent_engine/overlay.rs` against two policy-order

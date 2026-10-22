@@ -154,6 +154,9 @@ pub struct SyntheticSlotOverlay {
     slot: SessionSlot,
     process: ProcessIdentity,
     private: BTreeMap<OverlayKey, Vec<u8>>,
+    // An explicit host copy-up or partial update of host-derived bytes
+    // cannot later be disguised as newly authored data through rename.
+    host_derived: BTreeSet<OverlayKey>,
     tombstones: BTreeSet<OverlayKey>,
     // Explicit read boundary: fixture host values under these prefixes may
     // NEVER fall back, even when not deleted. Private values still override.
@@ -173,6 +176,7 @@ impl SyntheticSlotOverlay {
             slot,
             process,
             private: BTreeMap::new(),
+            host_derived: BTreeSet::new(),
             tombstones: BTreeSet::new(),
             private_only_prefixes: BTreeSet::new(),
             private_bytes: 0,
@@ -262,6 +266,8 @@ impl SyntheticSlotOverlay {
             return Err(OverlayError::CapacityExceeded);
         }
         self.private_bytes = total;
+        // A full replacement has newly authored content, not a copy-up.
+        self.host_derived.remove(&key);
         // A write after a subtree delete must NOT remove its prefix
         // tombstone: that would resurrect unrelated host descendants.
         // Reads always prefer private bytes over matching tombstones.
@@ -285,7 +291,9 @@ impl SyntheticSlotOverlay {
         let bytes = self.read(host, slot, process, key)?
             .ok_or(OverlayError::MissingSource)?
             .to_vec();
-        self.write(slot, process, key.clone(), &bytes)
+        self.write(slot, process, key.clone(), &bytes)?;
+        self.host_derived.insert(key.clone());
+        Ok(())
     }
 
     /// A bounded partial file write first materializes the fixture base
@@ -308,11 +316,18 @@ impl SyntheticSlotOverlay {
         if length > MAX_OVERLAY_ITEM_BYTES {
             return Err(OverlayError::EntryTooLarge);
         }
+        let derived = self.host_derived.contains(&key)
+            || (!self.private.contains_key(&key)
+                && self.read(host, slot, process, &key)?.is_some());
         let mut owned = self.read(host, slot, process, &key)?
             .map_or_else(Vec::new, |bytes| bytes.to_vec());
         owned.resize(owned.len().max(length), 0);
         owned[offset..length].copy_from_slice(data);
-        self.write(slot, process, key, &owned)
+        self.write(slot, process, key.clone(), &owned)?;
+        if derived {
+            self.host_derived.insert(key);
+        }
+        Ok(())
     }
 
     /// Truncation cannot silently modify a synthetic host resource.
@@ -332,11 +347,16 @@ impl SyntheticSlotOverlay {
         if length > MAX_OVERLAY_ITEM_BYTES {
             return Err(OverlayError::EntryTooLarge);
         }
+        let derived = self.host_derived.contains(&key) || !self.private.contains_key(&key);
         let mut owned = self.read(host, slot, process, &key)?
             .ok_or(OverlayError::MissingSource)?
             .to_vec();
         owned.resize(length, 0);
-        self.write(slot, process, key, &owned)
+        self.write(slot, process, key.clone(), &owned)?;
+        if derived {
+            self.host_derived.insert(key);
+        }
+        Ok(())
     }
 
     /// A leaf delete always masks the host fixture, including its fallback.
@@ -355,6 +375,7 @@ impl SyntheticSlotOverlay {
         if let Some(value) = self.private.remove(&key) {
             self.private_bytes -= value.len();
         }
+        self.host_derived.remove(&key);
         self.tombstones.insert(key);
         Ok(())
     }
@@ -381,6 +402,7 @@ impl SyntheticSlotOverlay {
             if let Some(bytes) = self.private.remove(&key) {
                 self.private_bytes -= bytes.len();
             }
+            self.host_derived.remove(&key);
         }
         self.tombstones.insert(prefix);
         Ok(())
@@ -410,7 +432,9 @@ impl SyntheticSlotOverlay {
         // A host-backed item must not cross into a private-only region
         // via rename without explicit, independently authorized import.
         // There is no import capability in this synthetic model.
-        if !self.private.contains_key(old) && self.host_fallback_denied(&new) {
+        if (!self.private.contains_key(old) || self.host_derived.contains(old))
+            && self.host_fallback_denied(&new)
+        {
             return Err(OverlayError::HostCopyIntoPrivateBoundary);
         }
         let contents = self.read(host, slot, process, old)?
@@ -419,9 +443,13 @@ impl SyntheticSlotOverlay {
         if self.read(host, slot, process, &new)?.is_some() {
             return Err(OverlayError::AlreadyExists);
         }
+        let derived = self.host_derived.contains(old) || !self.private.contains_key(old);
         let mut trial = self.clone();
         trial.delete(slot, process, old.clone())?;
-        trial.write(slot, process, new, &contents)?;
+        trial.write(slot, process, new.clone(), &contents)?;
+        if derived {
+            trial.host_derived.insert(new);
+        }
         *self = trial;
         Ok(())
     }
@@ -698,6 +726,44 @@ mod tests {
                 &file("isolated/renamed.bin")).unwrap(),
             Some(b"mine".as_slice()),
         );
+    }
+
+    #[test]
+    fn copied_host_bytes_cannot_be_renamed_into_private_only_prefix() {
+        let (base, mut a, _) = setup();
+        let key = file("world/data.bin");
+        a.copy_up(&base, SessionSlot::Mc02, id(22), &key).unwrap();
+        a.make_private_only(SessionSlot::Mc02, id(22), file("isolated")).unwrap();
+        assert_eq!(a.rename(&base, SessionSlot::Mc02, id(22),
+            &key, file("isolated/copied.bin")),
+            Err(OverlayError::HostCopyIntoPrivateBoundary));
+        assert_eq!(a.read(&base, SessionSlot::Mc02, id(22), &key).unwrap(),
+            Some(b"original".as_slice()));
+        a.rename(&base, SessionSlot::Mc02, id(22),
+            &key, file("world/moved.bin")).unwrap();
+        assert_eq!(a.rename(&base, SessionSlot::Mc02, id(22),
+            &file("world/moved.bin"), file("isolated/copied.bin")),
+            Err(OverlayError::HostCopyIntoPrivateBoundary));
+        // An actual newly authored full overwrite clears synthetic provenance.
+        a.write(SessionSlot::Mc02, id(22), file("world/moved.bin"), b"new").unwrap();
+        a.rename(&base, SessionSlot::Mc02, id(22),
+            &file("world/moved.bin"), file("isolated/new.bin")).unwrap();
+        assert_eq!(base.fixture_bytes(&key), Some(b"original".as_slice()));
+    }
+
+    #[test]
+    fn host_derived_partial_write_remains_tagged_until_full_replacement() {
+        let (base, mut a, _) = setup();
+        a.make_private_only(SessionSlot::Mc02, id(22), file("isolated")).unwrap();
+        let key = file("world/data.bin");
+        a.write_at(&base, SessionSlot::Mc02, id(22), key.clone(), 1, b"x").unwrap();
+        assert_eq!(a.rename(&base, SessionSlot::Mc02, id(22),
+            &key, file("isolated/no.bin")),
+            Err(OverlayError::HostCopyIntoPrivateBoundary));
+        a.truncate_file(&base, SessionSlot::Mc02, id(22), key.clone(), 2).unwrap();
+        assert_eq!(a.rename(&base, SessionSlot::Mc02, id(22),
+            &key, file("isolated/no.bin")),
+            Err(OverlayError::HostCopyIntoPrivateBoundary));
     }
 
     #[test]
