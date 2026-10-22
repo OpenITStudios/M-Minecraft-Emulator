@@ -11,6 +11,47 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### SCM-owned, opt-in native IPC ingress pilot (22 October 2026)
+
+The independent standalone service now has a Windows-only
+`readonly-ipc-pilot` Cargo feature, **OFF by default**. The feature
+adds a service-owned [ipc_worker.rs](../../engine/isolation-native/independent-service/src/ipc_worker.rs)
+and imports the ONE canonical, fixed 32-byte read-only broker parser
+from runtime-core instead of duplicating the schema. The default SCM
+host remains inert. An explicitly compiled pilot creates a single
+protected, first-instance LOCAL inbound named pipe that permits only
+SYSTEM and BUILTIN ADMINISTRATORS; administrators receive the narrowly
+scoped data-write/synchronize/read-control rights, not generic-write
+pipe-instance rights. This cannot yet serve non-admin user desktops.
+
+The worker holds its pipe, event HANDLE, boxed OVERLAPPED and receive
+buffer for their entire kernel I/O lifetimes. Stop/Shutdown interrupts
+the connect or read wait within a bounded poll interval, calls
+CancelIoEx on the exact operation and waits for final completion
+BEFORE releasing the buffer, then allows the existing SCM host to
+transition through StopPending to Stopped. If a buggy kernel I/O never
+settles, the service does not falsely report completion or deallocate
+the still-referenced memory; this is not a guarantee of bounded
+shutdown on a broken driver. Invalid, oversized, stale and
+unrecognized requests are discarded without replies or side effects.
+The service compares GetNamedPipeClientProcessId and OS-derived
+process creation FILETIME, but **never** turns these observations into
+authorization. The pilot has no account, world, root, registry or
+process-management operations.
+
+**Release boundary:** no source proof makes this an authenticated
+privileged broker. It lacks logon-SID/service-SID policy, per-message
+client token authorization and anti-handle-duplication assurances.
+Feature activation, native compilation, Windows tests, SCM
+installation, driver interaction and Minecraft gameplay are
+NOT_EXECUTED; this new capability is not mounted in the desktop
+or packaged by the installer. The previous desktop fixture remains
+separate test code, never the service runtime. The first validation
+priority is a real Windows build and token/session security review,
+not enabling Launch/Provision.
+
+
+
 ### Original standalone Windows SCM service host — 22 October 2026
 
 A separate original Rust crate now lives at

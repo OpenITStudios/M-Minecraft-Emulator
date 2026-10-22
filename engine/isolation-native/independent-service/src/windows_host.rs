@@ -77,18 +77,33 @@ fn service_loop(
     if !report(&mut state, Signal::Begin, status)? {
         return Ok(());
     }
-    // Inert host only: no service-owned IO, privileged worker or game.
+    // The opt-in pilot must bind its ACL-protected *service-owned* endpoint
+    // before reporting RUNNING. Default builds remain inert.
+    #[cfg(feature = "readonly-ipc-pilot")]
+    let mut pilot = match crate::ipc_worker::ReadOnlyPipeWorker::bind() {
+        Ok(value) => value,
+        Err(_) => {
+            let _ = report(&mut state, Signal::Fatal, status)?;
+            return Ok(());
+        }
+    };
     if !report(&mut state, Signal::Ready, status)? {
         return Ok(());
     }
-    if stop_rx.recv().is_err() {
+    #[cfg(feature = "readonly-ipc-pilot")]
+    let clean_stop = pilot.run_until_stop(&stop_rx).is_ok();
+    #[cfg(not(feature = "readonly-ipc-pilot"))]
+    let clean_stop = stop_rx.recv().is_ok();
+    if !clean_stop {
         let _ = report(&mut state, Signal::Fatal, status)?;
         return Ok(());
     }
     if !report(&mut state, Signal::RequestStop, status)? {
         return Ok(());
     }
-    // A future IPC worker must drain/cancel all its IO BEFORE CompleteStop.
+    // The opt-in pilot returns only after all pending pipe I/O has
+    // completed or cancellation has been acknowledged by Windows.
+    // Production multi-worker IPC and per-client authentication are absent.
     let _ = report(&mut state, Signal::CompleteStop, status)?;
     Ok(())
 }

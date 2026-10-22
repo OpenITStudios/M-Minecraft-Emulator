@@ -6,6 +6,11 @@ mod lifecycle;
 #[cfg(windows)]
 mod windows_host;
 
+// Service-owned, source-only IPC pilot; disabled in default binaries.
+// Never enable this feature in distribution before Windows security review.
+#[cfg(all(windows, feature = "readonly-ipc-pilot"))]
+mod ipc_worker;
+
 #[cfg(windows)]
 fn main() {
     windows_host::run_dispatcher();

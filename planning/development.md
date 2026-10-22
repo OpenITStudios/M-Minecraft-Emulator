@@ -1,5 +1,38 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Independent engine — service-owned opt-in IPC ingress with stop-safe cancellation, 22 October 2026
+
+The separate independent-service crate now supports the explicit
+compile-only feature `readonly-ipc-pilot` (OFF by default).
+With that feature, its SCM host creates one protected inbound-only,
+local-only named pipe *inside the service process* BEFORE reporting
+SCM Running. The DACL admits only SYSTEM and Administrators, with no
+generic-write pipe-instance rights for the admin client. The worker
+uses the existing canonical 32-byte broker wire (optional dependency
+on runtime-core), checks the OS-connected PID and creation FILETIME,
+then discards messages without replies or privileged effects.
+
+The worker owns all Win32 events, a boxed stable OVERLAPPED and
+bounded 32-byte receive buffers. On SCM Stop/Shutdown it cancels
+the specific operation and waits for the final OS completion before
+dropping any memory; service StopPending/Stopped is not published
+until the worker returns. A pathological kernel that never settles
+cancellation may prevent prompt stop, but cannot cause an I/O
+use-after-free. Invalid or idle connections are discarded with
+bounded retry. No service install, startup feature enablement,
+driver, world, Microsoft account, Tauri provider or Minecraft launch
+was changed. Default builds remain the previous inert SCM host.
+
+**Proof:** pinned GitHub source/static review only. Cargo compilation,
+Windows SCM/IPC execution and native security tests NOT_EXECUTED.
+The pilot is NOT authenticated for non-admin users: separate logon
+SID, service SID and message impersonation/token checks are missing.
+This new source is not safe to install or ship as an isolation engine.
+
+**Next:** perform a Windows-compatible build and review peer SID/logon
+token authentication for the service-owned pipe before activation.
+
+
 ## Independent engine — original standalone Windows SCM service host, 22 October 2026
 
 Created a standalone crate under
