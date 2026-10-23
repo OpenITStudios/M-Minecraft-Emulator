@@ -9,6 +9,42 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Authorized Start-menu reactivation trace — 23 October 2026
+
+Source baseline: `65b1aaa7b4ffef6f1335172b9f9b3088d7f70124` (`Local`). The operator explicitly approved one administrator/UAC kernel trace for 30 seconds and one additional manual Start-menu activation of official Minecraft Education. This was **not** authorization to bypass product admission or launch an unisolated duplicate executable.
+
+At preflight, the game from the earlier observation was no longer running; its exit cause was not observed. The registered official game was reopened at 15:37:43 UTC (22:37:43 WIB), with the same Valid Microsoft signature, file version `1.26.32.0`, registration `1.26.3200.0` and installed-image SHA-256 `04164c1c64458a5d984dbc1687d0e8023d1808c44ee7be03519cdf8355233eaa`. A new game lifetime was pinned before tracing. The earlier signed-in declaration is not promoted into a newly witnessed login for this reopened lifetime.
+
+### Executed capture and recovery
+
+- Installed WPR `10.0.26100` accepted the custom memory-mode profile: **Handle + Loader only**, with HandleCreate/Close/Duplicate stacks configured; 128 buffers of 256 KiB. ProcessThread, FileIO, Registry, Network, Heap, memory pages and thread contexts were not enabled. A separate name-filtered WMI subscription observed only game/helper process lifecycle metadata, not command lines.
+- After operator UAC approval, a uniquely named trace started at **15:39:38.819 UTC (22:39:38 WIB)** and recorded for 30 seconds. WPR status reported **0 dropped/lost events** for its collector. The operator reported that the additional Start-menu request returned to the **same MC01 window**; the exact click timestamp was not instrumented.
+- WPR stop returned success and the named session was confirmed **not recording** afterward. The wrapper initially reported `saved=false` because `SkipMerge=true` saved raw collector/rundown files in the temporary directory rather than the requested destination. Its subsequent cancellation found no active recording. The original failure receipt is preserved; it is not rewritten as a clean wrapper success.
+- Both exact-session raw files were recovered by copying into the ignored local run directory and comparing source/destination SHA-256. Primary trace: 32,505,856 bytes, `6500cf6ea089245850a43e7ad8788970c21eecad572f74d0768f899adf96ab8b`. Rundown: 15,728,640 bytes, `774eb87efa616b340761faffcd16a1d28df3c694ab33405f575ecfe3be08460b`. Raw ETLs, local process identities and unsanitized object/module names are **not uploaded**.
+- MC01's exact PID/creation identity matched before and after the recording and remained responsive. No game handle was closed, no sign-out performed, no game terminated, and no driver/service installed or activated. MC01 was left running.
+
+### Decoded evidence and its limits
+
+A one-off offline native decoder compiled under MSVC `/W4 /WX` and used [OpenTrace/ProcessTrace](https://learn.microsoft.com/en-us/windows/win32/api/evntrace/ns-evntrace-event_trace_logfilew) with [TDH property decoding](https://learn.microsoft.com/en-us/windows/win32/api/tdh/nf-tdh-tdhgetpropertysize), rather than guessing binary payload offsets. An intermediate narrowing-conversion warning was corrected before the final successful build.
+
+| Observation | Actual result |
+| --- | --- |
+| Existing-game object events in primary trace | 230: **115 create + 115 close**. Independent Event Log header enumeration matched this total. All 230 ObjectType/ObjectName pairs decoded without errors. |
+| Object type interpretation | The same trace's [type rundown](https://learn.microsoft.com/en-us/windows/win32/etw/obtypeevent) mapped indexes 21/22/42 to Event/Mutant/File. There were 12 Event, 12 Mutant and 206 File events; the 12 Mutant events had no object names. The 103 named events were File metadata, not file contents. |
+| Primary [image events](https://learn.microsoft.com/en-us/windows/win32/etw/image-load) | All **57** decoded successfully: no event naming `Minecraft.Windows.exe` or `Minecraft.AdalServer.exe`. No new game/helper image load was observed in this bounded trace. |
+| Loader rundown check | One existing `Minecraft.Windows.exe` image was recognized in the rundown, corroborating that the decoder recognizes that basename. Of 15,528 rundown image records, 15,526 decoded and 2 did not; those two remain undecoded. Rundown is an inventory, not a new-process launch event. |
+| WMI lifecycle subscription | No matching game/helper start/stop event was received. There was no positive lifecycle-event control in this run, so this is corroborating observation only, not a guarantee that every transient process would be detected. |
+| Call-stack / decision causality | Handle stacks were requested, but this decoder did not correlate separate kernel stack-walk records into call chains; no attached stack was decoded on the selected object records. No return-value/branch, shell-activation or window-message evidence identifies a singleton decision. |
+| Loss / cleanup | Native ProcessTrace/CloseTrace succeeded with zero reported event loss; WPR's uniquely named recording was stopped. This does not prove coverage of channels that were not enabled. |
+
+Profile SHA-256: `548070c68c684df2899357f40066cb45fcd712ee09e7087e8e0bde611fb71ec0`. Final offline decoder source/binary SHA-256: `a3dea6518c99c7330aa9f58dff9615bd20f6c97ea3dc7807c8e28d5f6e066c39` / `e050a500ac67ff70db598753f9c1801d63327d8d37d8b7819bff174ddc41b361`. These identify local-only observation tooling in ignored `workspace/tmp/`, not a committed or reproducible desktop/provider build.
+
+**Bounded conclusion:** the user saw reactivation of MC01 and no second game image/process was observed. This is consistent with reuse through Windows application activation; the precise shell/game/window/IPC mechanism is **UNKNOWN**. It is **not** evidence that a second game process reached a named-mutex check and was rejected, nor proof that Windows or Minecraft forbids another contained process.
+
+Source cross-check: [`open_native_minecraft`](../../apps/desktop/src-tauri/src/engine/native_clients.rs) intentionally refuses an existing registered process and requests `shell:AppsFolder` for MC01. That route is not an independent process-creation implementation. [`IndependentProviderPort`](../../engine/runtime-core/src/independent_engine/ports.rs) still has only a disabled implementation. A future independent provider needs supported, isolation-bound process creation; do not reuse this activation experiment as launch authority.
+
+No fresh authentication handshake, private Roaming/HKCU/auth mediation, MC02, multiplayer, performance comparison or two/four-client acceptance was exercised. Production desktop/WDK builds and those runtime outcomes remain **NOT_EXECUTED**. Current next action is recorded only in [planning/development.md](../../planning/development.md).
+
 ## Authorized official MC01 metadata observation — 23 October 2026
 
 Repository source baseline: `942c3572ca51677ab7764de2dd346530682f7019` (`Local`). The operator explicitly authorized opening official MC01 and observing process/object metadata; Microsoft login remained manual. This is a limited **TARGET_WINDOWS observation of the installed official game**, not an independent-engine acceptance run or a test of compiled desktop HEAD.
