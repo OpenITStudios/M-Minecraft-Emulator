@@ -9,6 +9,80 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Read-only Education import review — 23 October 2026
+
+Source baseline: `c20ce5c7f7ef6ab04b761e12e918dac1f6db06ef` (`Local`).
+The operator continued the bounded registered-image/import investigation after
+the self-child mutex experiment. This run used the canonical
+`Resolve-ManagerEducationTarget -RegisteredOnly` from
+`tooling/isolation-source/windows/education-target.ps1` (blob
+`90e09ca075555551a4bb6d50c8b7f7fea087ed50`, verified after materialization).
+The registered game retained a Valid Microsoft signature, file version
+`1.26.32.0` and the previously observed SHA-256. No legacy settings or
+account/cache/world files were read.
+
+MSVC dumpbin 14.44 inspected imports of the registered EXE and **three fixed,
+directly imported sibling binaries**: cohtml.WindowsDesktop.dll, libcef.dll and
+fmod.dll. Tools never loaded those modules or launched/attached to a game.
+Each file hash/length/write time was checked before and after inspection;
+dumpbin exited 0 for all four. No companion Minecraft.AdalServer.exe was found
+at the single adjacent path checked; this does not establish absence elsewhere
+or absence of an external authentication broker.
+
+| On-disk file | SHA-256 | Displayed named / ordinal imports | Selected result |
+| --- | --- | --- | --- |
+| Minecraft.Windows.exe | `04164c1c64458a5d984dbc1687d0e8023d1808c44ee7be03519cdf8355233eaa` | 96 / 4 | No displayed CreateMutexW/OpenMutexW; CreateFileMappingA/W, CreateSemaphoreA, WaitForMultipleObjects, RoGetActivationFactory, SHGetKnownFolderPath and LoadLibraryA present. |
+| cohtml.WindowsDesktop.dll | `a27223008ea7de10aaa734a17866b97adbda6e54243d4ee93d5d966fc3d2ea20` | 534 / 0 | LoadLibraryA and GetProcAddress present; no selected mutex import. |
+| libcef.dll | `11e7286038ca4acbdc6fb3bac39bb7ab43ed1a6d2b9a273805e4a9a5d4c1da37` | 634 / 47 | CreateMutexW and ReleaseMutex present, together with named-pipe, event, mapping and wait APIs. |
+| fmod.dll | `a0406da6a362d66bd59765a82881350ce575177cefc9623543277e89c08e5db4` | 121 / 18 | Event/semaphore/wait and dynamic-loader imports; CoCreateInstance present; no selected mutex import. |
+
+The main EXE emitted **LNK4078** for multiple blank-name sections with differing
+attributes; that warning remains disclosed. No protected code was unpacked,
+disassembled, patched or executed. These are the tool's displayed import entries,
+not a claim that the review recovers every actual call site. Cohtml reported
+Valid Authenticode; libcef and fmod reported NotSigned. Those metadata values
+are recorded without asserting that every installation dependency is an
+attested Microsoft image, suspect, or the module actually loaded by MC01.
+
+The EXE's four ordinal imports were separately compared with current on-disk
+System32 export metadata: SHLWAPI #219 = QISearch, WS2_32 #116 = WSACleanup,
+XINPUT1_4 #2 = XInputGetState, OLEAUT32 #146 = DispCallFunc. This is an
+on-disk export comparison, not a runtime module-resolution/caller observation.
+The bundled DLLs' ordinal entries and other dependencies were not recursively
+resolved; dynamic and indirect calls remain outside this bounded review.
+
+**Decision:** do not promote the self-child CreateMutexW/OpenMutexW primitive
+into a Minecraft singleton mechanism. A directly imported browser library
+contains CreateMutexW, but neither its purpose, object names, actual invocation
+nor the game's single-instance decision was established. Renaming all browser
+mutexes/IPC would not be justified by this evidence. Likewise, COM/WinRT or
+pipe imports do not establish the Education sign-in path or a per-client broker.
+
+The [PE import tables](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format)
+describe link dependencies; [runtime dynamic linking](https://learn.microsoft.com/en-us/windows/win32/dlls/run-time-dynamic-linking)
+can resolve additional functions. Presence is not executed-call evidence,
+and missing named imports do not prove that the game never uses an API.
+The earlier Start-menu trace still showed reactivation only, without a second
+observed process reaching a singleton rejection.
+
+Local-only collection occurred at **16:54 UTC / 23:54 WIB**. Raw dump outputs,
+full installation paths, temporary collectors and detailed JSON remain ignored
+under `workspace/tmp/education-imports-*/`. Sanitized provenance:
+
+- Main dump SHA-256: `13797182b24aac07899267a39d3f675240f70f123adb3056f443a3d8b214197e`.
+- Cohtml / CEF / audio dumps: `fc4dcb0529d2236d768cfb016956450620284388e2ae11dc52317d74e051e63e`,
+  `7a6d7d73665e97101e4014b9e339d836df9eef300a4775279d60c39c0c112564`,
+  `60d316a83be8e0c76dd723ac7c377190daf9a4818988806701cbc07733366216`.
+- Bounded bundled-import collector SHA-256:
+  `26622c77ad8f2108612f66044724afea480bd6e332982506250f3d616de529a5`.
+  It is local observation tooling, not a committed reproducible collector.
+
+Evidence ceiling: limited TARGET_WINDOWS **on-disk metadata** and exact-source
+review. Executed singleton calls, caller/return-value causality, game injection,
+independent auth/data/HKCU/worlds and two/four-client acceptance remain
+**UNKNOWN / NOT_EXECUTED**. Current continuation remains only in
+[planning/development.md](../../planning/development.md).
+
 ## Authorized Start-menu reactivation trace — 23 October 2026
 
 Source baseline: `65b1aaa7b4ffef6f1335172b9f9b3088d7f70124` (`Local`). The operator explicitly approved one administrator/UAC kernel trace for 30 seconds and one additional manual Start-menu activation of official Minecraft Education. This was **not** authorization to bypass product admission or launch an unisolated duplicate executable.
