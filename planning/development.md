@@ -21,6 +21,25 @@
 
 The historical official Sandboxie 2-client pilot later encountered a crash; it is not independent-engine acceptance. Official Sandboxie, derived fork and VMware are **retired new-launch providers**, preserved for old session recovery. PSEC/MXC is only a Windows containment candidate: a file access denial or API export does not redirect Minecraft’s Roaming path, virtualize HKCU, isolate WAM or prove game concurrency.
 
+## P0a source-feasibility decision — 23 October 2026
+
+Public Microsoft API contracts were compared with the existing read-only PSEC adapter:
+`IsProcessSecurityEnvironmentVersionSupported(DWORD, BOOLEAN*, DWORD*)`,
+`QueryProcessSecurityEnvironmentSupport(PROCESS_SECURITY_ENVIRONMENT_SUPPORT_FLAGS*)`
+and `PSE_SUPPORT_FS_DENY`/`PSE_SUPPORT_NETWORK_PROXY` agree at the signature/declared-flag level. **No Windows SDK compilation or Windows execution occurred.**
+References:
+- https://learn.microsoft.com/en-us/windows/win32/api/processmodel/nf-processmodel-isprocesssecurityenvironmentversionsupported
+- https://learn.microsoft.com/en-us/windows/win32/api/processmodel/nf-processmodel-queryprocesssecurityenvironmentsupport
+- https://learn.microsoft.com/en-us/windows/win32/api/processmodel/ne-processmodel-process_security_environment_support_flags
+
+**Candidate decisions, not runtime verdicts:**
+- PSEC/MXC ProcessContainer: **INCOMPLETE**, native filesystem/policy containment alone has no demonstrated transparent per-game Roaming/HKCU/ADAL-WAM redirection; do not promote the capability probe to Launch authority.
+- MXC IsolationSession: **NO-GO for current directly visible local Minecraft GUI** per its own supported-workloads guide (no display server inside that session); not a usable drop-in to the native workspace. https://github.com/microsoft/mxc/blob/main/docs/isolation-session/oneshot.md
+- `RegOverridePredefKey`: **NO-GO as an external transparent HKCU switch**; Windows documents that it affects only the calling process. https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regoverridepredefkey
+- MSIX AppData/HKCU redirection: **NOT independently per game PID** (per user/per app/package); no permission to repackage or re-register third-party Education. https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes
+
+**Outcome:** none of these mechanisms alone meets MC02's complete game-bound contract. An isolated process is not yet an isolated Minecraft session. Do not add another generic primitive or disable admission on the basis of this review. Seek one supported complete path; otherwise retain **NO-GO/UNKNOWN** without fake progress.
+
 ## SINGLE ACTIVE PRIORITY — P0: real MC02 isolation provider
 
 **One decision question:** Is there a supported Windows mechanism to start a **second unchanged official Minecraft Education Desktop** client next to MC01 with separate *effective* Roaming (environment AND Known Folder), Local data, HKCU reads/writes, authentication helper/broker, singleton/window behavior and playable GPU/input?
@@ -56,4 +75,4 @@ On each meaningful bounded commit, replace the **current** blocker/next status i
 
 **State:** ACTIVE P0a. **Blocker:** no validated process-bound Roaming/HKCU/Microsoft broker mediation and real gameplay for a second official Education client; latest PSEC Windows ABI and compiler acceptance are unknown.
 
-**Next:** Validate the existing PSEC Windows SDK ABI/build, then establish OR reject **one** concrete unmodified Education MC02 Roaming/HKCU/auth mediation route. Never enable MC02 based only on a capability probe.
+**Next:** Determine whether any documented, non-modifying Windows mechanism can provide **all** MC02 game boundaries together (effective Roaming, HKCU, ADAL/WAM broker, interactive GUI). Select one for a real game-bound vertical slice only if the missing mediation can be demonstrated; otherwise record a precise NO-GO and keep isolated Launch/Provision denied. Windows SDK compilation of PSEC remains NOT_EXECUTED.
