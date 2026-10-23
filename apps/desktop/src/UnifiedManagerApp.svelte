@@ -61,6 +61,14 @@
     if(busy||workspaceBusy||!config?.detectedMinecraft)return;
     busy=true;issue=null;
     try{
+      // Fast path for an already observed window: backend first tries its
+      // exact, OS-validated retained lease. New windows still need full
+      // Windows discovery/admission; no account or launch authority is cached.
+      const retained=observedSlots[client];
+      if(retained?.responding&&retained.windowHandle!=='0x0'){
+        await workspace.present(client,retained);
+        nativePending=false;return;
+      }
       const observed=await inspectNative();
       if(!observed)return;
       const process=observedSlots[client];

@@ -663,7 +663,8 @@ mod native {
                 Some(&target.created_file_time),
                 Some(&target.window_handle),
             ) else {
-                return false;
+                // An unparseable target cannot be retained as a trusted lease.
+                return true;
             };
             let window = key.hwnd as usize as HWND;
             let mut pid = 0;
@@ -673,7 +674,9 @@ mod native {
             }
             let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, target.pid);
             if process.is_null() {
-                return GetLastError() == ERROR_INVALID_PARAMETER;
+                // ACCESS_DENIED and UNKNOWN are not the same as a live,
+                // unchanged game. Deny retention until Windows can attest it.
+                return true;
             }
             let mut created: FILETIME = std::mem::zeroed();
             let mut a = created;
@@ -681,8 +684,8 @@ mod native {
             let mut c = created;
             let ok = GetProcessTimes(process, &mut created, &mut a, &mut b, &mut c);
             CloseHandle(process);
-            ok != 0
-                && (((created.dwHighDateTime as u64) << 32) | created.dwLowDateTime as u64)
+            ok == 0
+                || (((created.dwHighDateTime as u64) << 32) | created.dwLowDateTime as u64)
                     != key.created_file_time
         }
     }

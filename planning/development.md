@@ -1,5 +1,17 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## P0 responsive tab selection — retained Windows game lease, 23 October 2026
+
+Work: remove duplicated, expensive Windows/PowerShell discovery from each observed Minecraft tab selection; preserve exact OS process attribution.
+
+Decision: the mounted native workspace now uses the already-observed PID/creation-FILETIME/window reference on repeat tab selection without a redundant frontend discovery. The existing Tauri presentation command first requests `workspace_surface::present_retained`, which accepts only a previously admitted matching manager, authority, slot and process/window lease; if no validated lease exists it still re-inspects the registered official Minecraft executable before its first presentation. The canonical Win32 `retired` predicate was corrected to fail closed when PID/FILETIME parsing, OpenProcess or GetProcessTimes is unavailable, rather than treating unknown native identity as live. Original window helper still performs OS identity checks when placing/restoring windows; no second lifecycle owner, polling engine, profile or credential authority was created.
+
+Product impact: switching between already-admitted game windows no longer repeats full PowerShell registration and signature enumeration. Initial admission, replaced processes, and explicit Refresh still use actual Windows observation. This is a source-level fast path, not a measured runtime-latency claim.
+
+Proof: exact pinned GitHub source and call-path contract review; source regressions authored NOT_EXECUTED. Rust/Svelte/Windows compilation, interactive gameplay, independent MC02 session, four-client acceptance NOT_EXECUTED. No GitHub Actions, installer, game/credential/data writes, `main` or retired Launch/Provision changes.
+
+Next: establish a supported, real Windows Minecraft Education storage/HKCU/auth broker isolation mechanism before authorizing independent MC02 launch.
+
 ## Native-first startup — legacy recovery explicitly opt-in, 23 October 2026
 
 Work: unblock the actual native Minecraft workspace from retired owned engine discovery.

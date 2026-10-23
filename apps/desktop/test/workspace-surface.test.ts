@@ -43,3 +43,24 @@ it('observed-window refresh checks the selected slot rather than treating any ga
   const manager=readFileSync(new URL('../src/UnifiedManagerApp.svelte',import.meta.url),'utf8');
   expect(manager).toContain('await workspace.reconcileObserved(observedSlots)');
 });
+
+it('retained workspace windows require positive OS identity even when native queries fail',()=>{
+  const source=readFileSync(new URL('../src-tauri/src/engine/workspace_surface.rs',import.meta.url),'utf8');
+  const retired=source.slice(source.indexOf('pub(super) fn retired(target: &OwnedProcess)'),source.indexOf('pub(super) fn rectangle(manager:',source.indexOf('pub(super) fn retired(target: &OwnedProcess)')));
+  expect(retired).toContain('return true;');
+  expect(retired).toContain('if process.is_null() {');
+  expect(retired).toContain('ok == 0');
+  expect(retired).not.toContain('return GetLastError() == ERROR_INVALID_PARAMETER;');
+  expect(retired).not.toContain('ok != 0');
+});
+
+it('observed tab switching reuses an OS-checked retained lease before full PowerShell discovery',()=>{
+  const source=readFileSync(new URL('../src-tauri/src/commands/native_clients.rs',import.meta.url),'utf8');
+  const start=source.indexOf('pub async fn desktop_present_observed_window(');
+  const end=source.indexOf('pub async fn desktop_update_workspace(',start);
+  const handler=source.slice(start,end);
+  expect(handler).toContain('present_retained(');
+  expect(handler).toContain('native_clients::inspect_native_workspace()?');
+  expect(handler.indexOf('present_retained(')).toBeLessThan(handler.indexOf('native_clients::inspect_native_workspace()?'));
+  expect(handler.indexOf('native_clients::inspect_native_workspace()?')).toBeLessThan(handler.indexOf('present_verified('));
+});

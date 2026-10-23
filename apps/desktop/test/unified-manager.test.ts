@@ -105,3 +105,18 @@ it('normal Minecraft startup does not query the retired service or execute owned
   expect(bridge).toContain('includeLegacy:true');
   expect(bridge).toContain("{settings:null}");
 });
+
+it('clicking a retained observed tab does not request full frontend Windows discovery again',()=>{
+  const source=readFileSync(new URL('../src/UnifiedManagerApp.svelte',import.meta.url),'utf8');
+  const start=source.indexOf('async function activateNative(client:ClientId)');
+  const end=source.indexOf('async function switchSessionView(',start);
+  const handler=source.slice(start,end);
+  const retained=handler.indexOf('const retained=observedSlots[client];');
+  const fast=handler.indexOf('await workspace.present(client,retained);');
+  const discover=handler.indexOf('const observed=await inspectNative();');
+  expect(retained).toBeGreaterThan(-1);
+  expect(fast).toBeGreaterThan(retained);
+  expect(discover).toBeGreaterThan(fast);
+  expect(handler).toContain('await nativeFeasibility.openOfficialMinecraft()');
+  expect(handler).toContain("if(client!=='01'||observed.processes.length>0)");
+});

@@ -159,21 +159,25 @@ pub async fn desktop_present_observed_window(
                     "Unknown presentation-only window slot",
                 ));
             }
-            // The selected PID/FILETIME/HWND must still match a live registered
-            // Minecraft executable in this user's interactive Windows session.
-            // Caller-provided slot labels cannot authorize Launch/Provision.
+            let authority = "OBSERVED_WINDOWS_PRESENTATION_ONLY".to_string();
+            // Fast tab switching: a lease admitted against the registered
+            // Windows game image retains exact PID/creation-FILETIME/HWND and
+            // owner authority. The native surface revalidates its OS identity
+            // on every presentation; do not spawn PowerShell again for it.
+            if crate::engine::workspace_surface::present_retained(
+                manager, viewport, target.clone(), authority.clone(), client_id.clone(),
+            )? {
+                return Ok(());
+            }
+            // First admission or a process/window replacement must recheck the
+            // actual registered Minecraft executable from Windows. A UI slot
+            // or a process name alone never authorizes an unverified window.
             let observed = native_clients::inspect_native_workspace()?;
             if !native_clients::matches_native_workspace_target(&observed, &target) {
                 return Err(io::Error::new(
                     io::ErrorKind::PermissionDenied,
                     "Observed Minecraft window identity changed; refresh before selecting",
                 ));
-            }
-            let authority = "OBSERVED_WINDOWS_PRESENTATION_ONLY".to_string();
-            if crate::engine::workspace_surface::present_retained(
-                manager, viewport, target.clone(), authority.clone(), client_id.clone(),
-            )? {
-                return Ok(());
             }
             crate::engine::workspace_surface::present_verified(
                 manager, viewport, target, authority, client_id,
