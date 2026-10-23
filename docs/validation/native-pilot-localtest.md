@@ -9,6 +9,32 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Authorized official MC01 metadata observation — 23 October 2026
+
+Repository source baseline: `942c3572ca51677ab7764de2dd346530682f7019` (`Local`). The operator explicitly authorized opening official MC01 and observing process/object metadata; Microsoft login remained manual. This is a limited **TARGET_WINDOWS observation of the installed official game**, not an independent-engine acceptance run or a test of compiled desktop HEAD.
+
+- Windows interactive session was available on OS build 26100. The exact-HEAD registered-only resolver, Desktop/Store preflight and Start AppID-to-executable comparison were used before requesting the registered Windows launcher. No duplicate game/helper process was present at that preflight.
+- Official Desktop registration: `1.26.3200.0`; file version: `1.26.32.0`; Authenticode: Valid, Microsoft Corporation. Installed-image SHA-256: `04164c1c64458a5d984dbc1687d0e8023d1808c44ee7be03519cdf8355233eaa`.
+- Official launch request: 12:45:55 UTC (19:45:55 WIB). One game process appeared in the current interactive session. Its PID/creation FILETIME identity persisted through the 12:50:56 UTC process sample, with Windows reporting `Responding=true`. This is not a render/input/gameplay assessment.
+- The operator reported **“Game sudah masuk akun”**. This is user-declared existing signed-in state, not a witnessed fresh authentication handshake, a verified license/account identity or independent MC02 sign-in.
+
+A one-off local x64 MSVC observer used documented Windows [Process Snapshotting](https://learn.microsoft.com/en-us/windows/win32/api/processsnapshot/nf-processsnapshot-psscapturesnapshot) with capture flags `0x3c`: handles, names, basic and type-specific metadata only. No VA clone, memory pages, thread contexts, dumps or credential APIs were used. The target handle was retained; creation FILETIME, live state, session and exact registered image pathname were checked before/after observation. Names were hashed in memory; raw object names, account/profile paths, process IDs and creation timestamps are not published here.
+
+| Executed observation | Result / limit |
+| --- | --- |
+| Observer compilation | MSVC x64 C++17, `/W4 /WX`, passed for the final one-off helper; not a production Rust/WDK build. |
+| Positive observer control | A fresh known mutex in the observer's own process was found by its exact expected namespace/name hash; control object and snapshot resources released. |
+| Final MC01 handle walk | Completed; 973 total handles, 15 mutex handles, 9 named mutex handles, 8 unique named mutex names. All target identity rechecks and observer-resource cleanup succeeded. |
+| Candidate scopes | Seven unique names were session-scoped; one was global-scoped. None matched the observer's Minecraft/Mojang product-name substring heuristic. These are candidates, not identified singleton objects; generic library objects can have either scope. |
+| Unsupported/unknown handle types | 575 entries were unsupported/unknown under the PSS object enum. PSS has no ALPC enum classification here; **ALPC absence was not established**. |
+| Helper process samples | `Minecraft.AdalServer.exe` was absent from the 12:46:24 and 12:50:56 UTC samples. A transient helper or broker could have run outside these samples or under another executable. No continuous launch-to-login trace or causal attribution was obtained. |
+
+The first observer attempts did not pass the positive control: name-only/basic captures left types unavailable, and counted names initially retained trailing NUL characters. Those initial zero-mutex results are **invalid for inference**. The final version requests type-specific metadata, uses [validity flags](https://learn.microsoft.com/en-us/windows/win32/api/processsnapshot/ne-processsnapshot-pss_handle_flags)/the [object enum](https://learn.microsoft.com/en-us/windows/win32/api/processsnapshot/ne-processsnapshot-pss_object_type), normalizes trailing NULs and passes the exact named control before observing MC01.
+
+Local-only final observer source SHA-256: `7724332885ef48b30c098c9fe9c7ecb4c1306858936a589029bee46b64bea890`; binary SHA-256: `907643844b04f29113e03123bc397ad6d156edf8f4d6856ee68648c9052584ed`. Source/binary remain ignored in `workspace/tmp/`, not a new production collector or bundled dependency. These hashes identify local observation tooling; the tooling is not a committed/reproducible product build.
+
+**Conclusion:** actual MC01 metadata narrows the evidence gap to singleton causality and the unobserved login/helper activation transition. Neither a named mutex nor a global namespace proves the mechanism rejecting a second game. No handle was closed in the game, no singleton suppressed, no second launch attempted, and no game sign-out/close, driver/service/ACL/profile change, account/world/cache content read or provider activation occurred. MC01 was left open. Independent data/HKCU/auth isolation, MC02–04, multiplayer, performance comparison and gameplay acceptance remain **NOT_EXECUTED**. Current next action belongs to [planning/development.md](../../planning/development.md).
+
 ## Sandboxie source retirement - 21 October 2026
 
 Base: `1be9269e7c253043faca33017c71a23c967941a9`; this revision retires new
