@@ -7,6 +7,7 @@
 #include <vector>
 #include <set>
 #include <cstring>
+#include <winioctl.h>
 
 extern "C" __declspec(dllimport) int DependencyCanary();
 
@@ -68,7 +69,9 @@ struct Child {
         if (!info.hProcess) return true;
         DWORD state = WaitForSingleObject(info.hProcess, 0);
         if (state == WAIT_OBJECT_0) return true;
-        if (state != WAIT_TIMEOUT || !TerminateProcess(info.hProcess, 90)) return false;
+        if (state != WAIT_TIMEOUT) return false;
+        if (!TerminateProcess(info.hProcess, 90))
+            return WaitForSingleObject(info.hProcess, 0) == WAIT_OBJECT_0; // Exit may win the race.
         return WaitForSingleObject(info.hProcess, 5000) == WAIT_OBJECT_0;
     }
     ~Child() {
@@ -465,7 +468,7 @@ void directoryChecks(probe::Receipt& receipt, LONG& checks) {
     require(status == 0 && error == sentinel && io.Information == (receipt.fileRound == 0 ? 2u : 1u)
         && attributes.RootDirectory == root.value && attributes.ObjectName == &name);
     writeBytes(own.value, slotMarker(receipt, receipt.fileRound));
-    const std::set<std::wstring> expectedEntries{L"state.bin", leaf};
+    const std::set<std::wstring> expectedEntries{L"state.bin", L"nested", leaf};
     require(nativeEntries(root.value, false) == expectedEntries);
     checks |= 256;
     require(nativeEntries(root.value, true) == expectedEntries); // Restart on the same handle.
@@ -497,7 +500,7 @@ void directoryChecks(probe::Receipt& receipt, LONG& checks) {
         FILE_SHARE_READ | FILE_SHARE_WRITE, options) == static_cast<NTSTATUS>(0xc0000034UL)
         && !absent.value);
     expectFile(logicalPath + L"\\" + leaf, slotMarker(receipt, receipt.fileRound));
-    for (auto bad : {L"..\\outside.bin", L"state.bin:stream", L"sub\\file.bin", L"trailing."}) {
+    for (auto bad : {L"..\\outside.bin", L"state.bin:stream", L"sub\\..\\file.bin", L"trailing."}) {
         std::wstring invalid = bad;
         auto badName = nativeName(invalid);
         attributes.ObjectName = &badName;
@@ -510,6 +513,91 @@ void directoryChecks(probe::Receipt& receipt, LONG& checks) {
         FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
     require(hidden.value == INVALID_HANDLE_VALUE && GetLastError() == ERROR_FILE_NOT_FOUND);
     checks |= 2048;
+}
+
+
+void treeChecks(probe::Receipt& receipt, LONG& checks) {
+    const auto logical = directoryPath(receipt.fileLogicalRoot);
+    const std::wstring deep = logical + L"\\nested\\level\\deep";
+    for (const auto& suffix : {L"\\nested\\level", L"\\nested\\level\\deep"}) {
+        const BOOL created = CreateDirectoryW((logical + suffix).c_str(), nullptr);
+        const DWORD error = GetLastError();
+        require(created || (receipt.fileRound == 1 && error == ERROR_ALREADY_EXISTS));
+    }
+    checks |= 4096;
+    const auto open = reinterpret_cast<probe::NativeFileOpen>(
+        GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtOpenFile"));
+    const auto create = reinterpret_cast<probe::NativeFileCreate>(
+        GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtCreateFile"));
+    require(open && create);
+    Handle directory(CreateFileW(deep.c_str(), FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
+    require(directory.value != INVALID_HANDLE_VALUE);
+    std::wstring state = L"state.bin";
+    auto stateName = nativeName(state);
+    OBJECT_ATTRIBUTES attributes{sizeof(OBJECT_ATTRIBUTES), directory.value, &stateName,
+        OBJ_CASE_INSENSITIVE, nullptr, nullptr};
+    IO_STATUS_BLOCK io{};
+    constexpr ULONG options = 0x20 | 0x40;
+    if (receipt.fileRound == 0) {
+        Handle missing;
+        require(open(&missing.value, FILE_GENERIC_READ, &attributes, &io,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, options) == static_cast<NTSTATUS>(0xc0000034UL)
+            && !missing.value); // Host has a nested state.bin; private never falls back.
+    } else {
+        expectFile(deep + L"\\state.bin", slotMarker(receipt, 0));
+    }
+    Handle file;
+    constexpr DWORD sentinel = 0x13579bd;
+    SetLastError(sentinel);
+    const NTSTATUS status = create(&file.value, FILE_GENERIC_READ | FILE_GENERIC_WRITE,
+        &attributes, &io, nullptr, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ | FILE_SHARE_WRITE,
+        receipt.fileRound == 0 ? 2 : 1, options, nullptr, 0);
+    const DWORD error = GetLastError();
+    require(status == 0 && error == sentinel && io.Information == (receipt.fileRound == 0 ? 2u : 1u)
+        && attributes.RootDirectory == directory.value && attributes.ObjectName == &stateName
+        && attributes.Attributes == OBJ_CASE_INSENSITIVE);
+    writeBytes(file.value, slotMarker(receipt, receipt.fileRound));
+    expectFile(deep + L"\\state.bin", slotMarker(receipt, receipt.fileRound));
+    const auto ownLeaf = receipt.slot == 1 ? L"slot-A.bin" : L"slot-B.bin";
+    if (receipt.fileRound == 1) expectFile(deep + L"\\" + ownLeaf, slotMarker(receipt, 0));
+    Handle own(CreateFileW((deep + L"\\" + ownLeaf).c_str(), GENERIC_READ | GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, receipt.fileRound == 0 ? CREATE_NEW : OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL, nullptr));
+    require(own.value != INVALID_HANDLE_VALUE);
+    writeBytes(own.value, slotMarker(receipt, receipt.fileRound));
+    checks |= 8192;
+
+    require(nativeEntries(directory.value, false) == std::set<std::wstring>{L"state.bin", ownLeaf}
+        && nativeEntries(directory.value, true, nullptr) == std::set<std::wstring>{L"state.bin", ownLeaf});
+    std::wstring peer = receipt.slot == 1 ? L"slot-B.bin" : L"slot-A.bin";
+    auto peerName = nativeName(peer);
+    attributes.ObjectName = &peerName;
+    Handle absent;
+    require(open(&absent.value, FILE_GENERIC_READ, &attributes, &io,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, options) == static_cast<NTSTATUS>(0xc0000034UL)
+        && !absent.value);
+    checks |= 16384;
+
+    for (const auto& bad : {L"\\nested\\escape", L"\\nested\\escape\\state.bin"}) {
+        Handle escaped(CreateFileW((logical + bad).c_str(), GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
+        require(escaped.value == INVALID_HANDLE_VALUE);
+    }
+    Handle overwrite(CreateFileW((logical + L"\\nested\\escape\\state.bin").c_str(), GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr));
+    require(overwrite.value == INVALID_HANDLE_VALUE);
+    for (const auto& bad : {L"..\\..\\..\\guard\\state.bin", L"state.bin:stream",
+                           L"one\\two\\three\\four\\five\\six\\seven\\eight\\nine.bin"}) {
+        std::wstring path = bad;
+        auto badName = nativeName(path);
+        attributes.ObjectName = &badName;
+        Handle denied;
+        require(open(&denied.value, FILE_GENERIC_READ, &attributes, &io,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, options) == static_cast<NTSTATUS>(0xc00000bbUL)
+            && !denied.value);
+    }
+    checks |= 32768;
 }
 
 struct FileChild {
@@ -595,6 +683,7 @@ struct FileChild {
         expectFile(logicalDirectory.substr(0, separator) + L"\\outside.bin", "OUTSIDE");
         checks |= 32;
         directoryChecks(receipt, checks);
+        treeChecks(receipt, checks);
     }
     void afterPeer(probe::Receipt& receipt) {
         expectBytes(held.value, slotMarker(receipt, receipt.fileRound));
@@ -603,6 +692,13 @@ struct FileChild {
             nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
         require(root.value != INVALID_HANDLE_VALUE
             && nativeEntries(root.value, false) == std::set<std::wstring>{
+                L"state.bin", L"nested", receipt.slot == 1 ? L"slot-A.bin" : L"slot-B.bin"});
+        const auto deep = directoryPath(receipt.fileLogicalRoot) + L"\\nested\\level\\deep";
+        expectFile(deep + L"\\state.bin", slotMarker(receipt, receipt.fileRound));
+        Handle nested(CreateFileW(deep.c_str(), FILE_LIST_DIRECTORY | SYNCHRONIZE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
+        require(nested.value != INVALID_HANDLE_VALUE
+            && nativeEntries(nested.value, false) == std::set<std::wstring>{
                 L"state.bin", receipt.slot == 1 ? L"slot-A.bin" : L"slot-B.bin"});
         checks |= 64;
         InterlockedExchange(&receipt.fileChecks, checks);
@@ -739,6 +835,34 @@ struct MutexChild {
     }
 };
 
+
+void syntheticJunction(const std::wstring& link, const std::wstring& target) {
+    require(CreateDirectoryW(link.c_str(), nullptr) != FALSE);
+    Handle directory(CreateFileW(link.c_str(), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+    require(directory.value != INVALID_HANDLE_VALUE);
+    struct MountPoint {
+        ULONG tag;
+        USHORT bytes, reserved;
+        USHORT substituteOffset, substituteBytes, printOffset, printBytes;
+        wchar_t paths[1024];
+    } data{};
+    static_assert(offsetof(MountPoint, paths) == 16);
+    const std::wstring substitute = L"\\??\\" + target;
+    require(substitute.size() + target.size() + 2 < 1024);
+    data.tag = IO_REPARSE_TAG_MOUNT_POINT;
+    data.substituteBytes = static_cast<USHORT>(substitute.size() * sizeof(wchar_t));
+    data.printOffset = static_cast<USHORT>(data.substituteBytes + sizeof(wchar_t));
+    data.printBytes = static_cast<USHORT>(target.size() * sizeof(wchar_t));
+    memcpy(data.paths, substitute.c_str(), data.substituteBytes + sizeof(wchar_t));
+    memcpy(reinterpret_cast<BYTE*>(data.paths) + data.printOffset,
+        target.c_str(), data.printBytes + sizeof(wchar_t));
+    data.bytes = static_cast<USHORT>(8 + data.printOffset + data.printBytes + sizeof(wchar_t));
+    DWORD returned = 0;
+    require(DeviceIoControl(directory.value, FSCTL_SET_REPARSE_POINT, &data,
+        data.bytes + 8, nullptr, 0, &returned, nullptr) != FALSE);
+}
+
 struct FileRoots {
     std::wstring root;
     Handle logical, a, b;
@@ -751,6 +875,11 @@ struct FileRoots {
         require(CreateDirectoryW(root.c_str(), nullptr) != FALSE); // Refuse existing test roots.
         for (const auto& leaf : {L"logical", L"A", L"B"})
             require(CreateDirectoryW((root + L"\\" + leaf).c_str(), nullptr) != FALSE);
+        for (const auto& leaf : {L"guard", L"A\\nested", L"B\\nested",
+                L"logical\\nested", L"logical\\nested\\level", L"logical\\nested\\level\\deep"})
+            require(CreateDirectoryW((root + L"\\" + leaf).c_str(), nullptr) != FALSE);
+        syntheticJunction(root + L"\\A\\nested\\escape", root + L"\\guard");
+        syntheticJunction(root + L"\\B\\nested\\escape", root + L"\\guard");
         SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
         const auto open = [&](const wchar_t* leaf) {
             HANDLE result = CreateFileW((root + L"\\" + leaf).c_str(), FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY,
@@ -760,7 +889,7 @@ struct FileRoots {
             return result;
         };
         logical.value = open(L"logical"); a.value = open(L"A"); b.value = open(L"B");
-        for (const auto& leaf : {L"logical\\state.bin", L"logical\\host-only.bin", L"outside.bin"}) {
+        for (const auto& leaf : {L"logical\\state.bin", L"logical\\host-only.bin", L"logical\\nested\\level\\deep\\state.bin", L"guard\\state.bin", L"outside.bin"}) {
             Handle file(CreateFileW((root + L"\\" + leaf).c_str(), GENERIC_WRITE,
                 FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
             require(file.value != INVALID_HANDLE_VALUE);
@@ -771,6 +900,12 @@ struct FileRoots {
         expectFile(root + L"\\logical\\state.bin", "HOST");
         expectFile(root + L"\\outside.bin", "OUTSIDE");
         expectFile(root + L"\\logical\\host-only.bin", "HOST");
+        expectFile(root + L"\\logical\\nested\\level\\deep\\state.bin", "HOST");
+        expectFile(root + L"\\guard\\state.bin", "HOST");
+        expectFile(root + L"\\A\\nested\\level\\deep\\state.bin", "A" + std::to_string(round + 1));
+        expectFile(root + L"\\B\\nested\\level\\deep\\state.bin", "B" + std::to_string(round + 1));
+        expectFile(root + L"\\A\\nested\\level\\deep\\slot-A.bin", "A" + std::to_string(round + 1));
+        expectFile(root + L"\\B\\nested\\level\\deep\\slot-B.bin", "B" + std::to_string(round + 1));
         expectFile(root + L"\\A\\slot-A.bin", "A" + std::to_string(round + 1));
         expectFile(root + L"\\B\\slot-B.bin", "B" + std::to_string(round + 1));
         expectFile(root + L"\\A\\state.bin", "A" + std::to_string(round + 1));
@@ -829,8 +964,8 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
             && InterlockedCompareExchange(&second.mapping.value->mutexChecks, 0, 0) == 127
             && InterlockedCompareExchange(&first.mapping.value->nativeChecks, 0, 0) == 511
             && InterlockedCompareExchange(&second.mapping.value->nativeChecks, 0, 0) == 511
-            && InterlockedCompareExchange(&first.mapping.value->fileChecks, 0, 0) == 4095
-            && InterlockedCompareExchange(&second.mapping.value->fileChecks, 0, 0) == 4095);
+            && InterlockedCompareExchange(&first.mapping.value->fileChecks, 0, 0) == 65535
+            && InterlockedCompareExchange(&second.mapping.value->fileChecks, 0, 0) == 65535);
         require(SetEvent(finish.value) != FALSE);
         first.exitedNormally();
         second.exitedNormally();
@@ -843,7 +978,7 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
     }
     require(ReleaseMutex(host.value) != FALSE);
     std::printf("{\"case\":\"mutex-two-child\",\"selfCheck\":true,\"checks\":[127,127],"
-                "\"fileChecks\":[4095,4095],\"rounds\":2,\"persistent\":true,\"hostUnchanged\":true,\"slotMismatchRejected\":true,"
+                "\"fileChecks\":[65535,65535],\"rounds\":2,\"persistent\":true,\"hostUnchanged\":true,\"slotMismatchRejected\":true,"
                 "\"nativeChecks\":[511,511],\"distinctHostAndPeerObjects\":true,\"rawPeerAccessible\":true,"
                 "\"securityBoundary\":false,\"providerReady\":false,"
                 "\"minecraft\":\"NOT_EXECUTED\"}\n");
