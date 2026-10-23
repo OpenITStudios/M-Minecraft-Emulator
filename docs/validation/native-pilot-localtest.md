@@ -9,6 +9,86 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Offline named-mutex and caller review — 24 October 2026 WIB
+
+Source baseline: `201f7c98aeb33e95fb92a6776b0c681141ca3b82` (`Local`).
+Only the existing automatic File-mode startup ETL was consumed; its recorded
+SHA-256/length remained unchanged. No new trace, live game inspection, launch,
+injection, payload/cache/world access or service/driver action occurred.
+
+| Review | Executed result |
+| --- | --- |
+| Object inventory | 208,610 selected object-provider records: 208,551 typed create/close records plus 59 untyped opcode-34 records. All 59 prior failures are ObjectType lookups returning ERROR_NOT_FOUND on opcode 34; no create/close ObjectName lookup failed. |
+| Mutex inventory | Same **215 Mutant handle events**: 115 CreateHandle and 100 CloseHandle. **55 close records** contain names, coalescing to **25 unique names**. All 115 create payloads have empty names; this is not proof the underlying calls requested unnamed objects. |
+| Exact stack correlation | **215/215** mutex events matched by original raw timestamp + target thread within the pinned process; no nearest-time heuristic, missing keys, ambiguous keys or multiple-stack keys for these events. |
+| Named close-to-origin pairing | All **55** named closes pair with a preceding typed CreateHandle having the same recorded handle + object address, without a second live candidate. All 55 origins also have exact stacks. This associates handle lifetime metadata; it does not recover the original API arguments or return value. |
+| Caller ranges | 136 actual image-load intervals, bounded by recorded unload times where present. All user frames on the 215 matched mutex events map to one time-valid interval: zero unmapped/overlapping user frames. Kernel frames were not symbolized; unknown module names remain other-module. |
+| Named family A | 20 names / 30 closes have cache-like metadata/account-record path structure. Their paired origins/closures contain main-image, CRT and Windows base-library ranges. Cache purpose is an inference from names; no token/cache contents or library identity was inspected. |
+| Named family B | 3 names / 3 closes have Cic/MSCTF-prefixed patterns. One other name / 1 close has a WIL-error-like pattern; one name / 21 closes has a WIL-staging-like pattern and stacks including rendering/audio/COM ranges. These labels do not establish singleton purpose. No literal names or per-account identifiers are published. |
+| Decoder quality | 214,883 selected stack records decoded, 0 final stack errors, 0 image errors; six module-interval boundary self-checks passed under MSVC /W4 /WX. |
+
+**Handle events are not API-call identity.**
+[ObHandleEvent](https://learn.microsoft.com/en-us/windows/win32/etw/obhandleevent)
+describes handle creation/closure; a successful create or open API can yield a
+new handle to an existing object. Thus CreateHandle does not identify
+NtCreateMutant versus NtOpenMutant or show a singleton success/failure branch.
+Later close-time name metadata cannot be substituted for original call arguments.
+
+**59 failures delimited, not silently fixed:** Microsoft's
+[duplicate-event schema](https://learn.microsoft.com/en-us/windows/win32/etw/obhandleduplicateevent)
+assigns opcode 34 a distinct layout, including ObjectType at a different property
+position and source/target handle/process fields. Local TDH still returns
+ERROR_NOT_FOUND for ObjectType on those 59 records. Their types and duplication
+attribution remain unknown; they are neither 59 additional mutexes nor evidence
+that the runtime payload lacks ObjectType.
+
+**Stack decoder correction:** this host's TDH StackWalk metadata exposes
+Stack1…Stack32, while 202,083 selected records contain more frames. Requiring a
+TDH property for the final frame initially rejected them. The corrected consumer
+uses the [documented payload-size rule, up to 192 frames](https://learn.microsoft.com/en-us/windows/win32/etw/stackwalk-event),
+validates the raw timestamp/process/thread header and first/last available TDH
+prefix frame against the 64-bit payload, then reads the bounded remainder.
+All 214,883 selected records pass that validation. Module attribution uses
+[actual Load/Unload timing](https://learn.microsoft.com/en-us/windows/win32/etw/image-load),
+not end-of-capture inventory applied backward.
+
+### Consequence for original implementation
+
+The pinned reference
+[`Ipc_NtCreateMutant` / `Ipc_NtOpenMutant`](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/201f7c98aeb33e95fb92a6776b0c681141ca3b82/engine/isolation-candidates/sandboxie-v1.18.6/Sandboxie/core/dll/ipc.c#L3435)
+uses native OBJECT_ATTRIBUTES resolution, distinct logical/private paths,
+open/closed-path policy, preserved NTSTATUS/LastError and private-directory
+creation. Its
+[`Ipc_CreatePath`](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/201f7c98aeb33e95fb92a6776b0c681141ca3b82/engine/isolation-candidates/sandboxie-v1.18.6/Sandboxie/core/dll/ipc.c#L1233)
+calls SbieApi_CreateDirOrLink; copying a hook body would not remove the surrounding
+runtime dependency. This is behavioral reference only; no Sandboxie code is imported.
+
+The existing original DLL's fixed-name CreateMutexW/OpenMutexW fixture does not
+provide that native layer. The concrete original integration needs bounded native
+name/root resolution, per-slot private backing selection and create/open semantic
+preservation behind the existing DLL owner. Shared OS names and unclassified
+names must not be blindly rewritten. In particular, renaming a cache-like lock
+without separating its backing store can permit concurrent writes to shared
+state; these observations do not authorize private cache manipulation or broad
+mutex interception. The previous raw-peer-access limitation remains.
+
+**Decision:** no observed named family is proven to be the game's singleton.
+Do not unlock MC02 or extend the same trace analysis hoping to obtain absent
+return values/rejection. Proceed with the missing original native IPC layer and
+coherent file/registry policy, keeping game injection and production admission
+closed until separately reviewed; no further recording is required for this
+source step.
+
+Local-only consumer source / executable / sanitized output SHA-256:
+`fcfc923c9b34d037ed13c8594c0ee464a857fcfae31f59f979973578997a1a03` /
+`f3f5b0eed5cb5892725ea2062b99ff6aa41b88cffafb0f7eea4c85c250b8a416` /
+`bb898b2e1450225b6062cf851674487d62da87dfd8aefa590881e932d2a574cd`.
+Source, binary, private name list and output remain ignored local artifacts;
+this is an executed one-off analysis, not a committed reproducible tool.
+Singleton rejection, actual API variant, external broker/auth separation,
+effective private file/HKCU mediation and two/four-client acceptance remain
+**UNKNOWN / NOT_EXECUTED**.
+
 ## Automatic file-mode startup capture — 24 October 2026 WIB
 
 **Executed source:** `7357d13d91a5a6fa3b95f629e9edeefa3cac8b02` (`Local`).
