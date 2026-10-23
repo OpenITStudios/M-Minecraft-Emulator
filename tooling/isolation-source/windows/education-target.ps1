@@ -4,19 +4,24 @@ foreach($name in @('Utility','Security','Management')) {
 }
 # One installation resolver for native and owned manager operations.
 function Resolve-ManagerEducationTarget {
+    param([switch]$RegisteredOnly)
     $registered=@(foreach($view in @([Microsoft.Win32.RegistryView]::Registry32,[Microsoft.Win32.RegistryView]::Registry64)){
         $key=[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine,$view)
         try {$entry=$key.OpenSubKey('SOFTWARE\Microsoft\Microsoft Studios\Minecraft Education Edition');if($entry){try{$path=[string]$entry.GetValue('Path','');if($path){Join-Path $path 'Minecraft.Windows.exe'}}finally{$entry.Dispose()}}}finally{$key.Dispose()}
     })
     if($registered.Count -ne 1){throw 'Exactly one registered Minecraft Education Desktop installation is required.'}
     $expected=[IO.Path]::GetFullPath($registered[0])
-    $settingsPath=Join-Path $env:LOCALAPPDATA 'MinecraftInstanceManager\NativePilot\manager-settings.json'
     $selected=$expected
-    if(Test-Path -LiteralPath $settingsPath){
-        $settings=Get-Content -LiteralPath $settingsPath -Raw|ConvertFrom-Json
-        if($settings.minecraftExecutable){$selected=[IO.Path]::GetFullPath($settings.minecraftExecutable)}
+    if(-not $RegisteredOnly) {
+        # Legacy developer recovery retains its old preference behavior.
+        # Native preview never reads or trusts the retired NativePilot file.
+        $settingsPath=Join-Path $env:LOCALAPPDATA 'MinecraftInstanceManager\NativePilot\manager-settings.json'
+        if(Test-Path -LiteralPath $settingsPath){
+            $settings=Get-Content -LiteralPath $settingsPath -Raw|ConvertFrom-Json
+            if($settings.minecraftExecutable){$selected=[IO.Path]::GetFullPath($settings.minecraftExecutable)}
+        }
+        if($selected -ine $expected){throw 'Selected Minecraft executable does not match the registered Desktop installation. Update Settings.'}
     }
-    if($selected -ine $expected){throw 'Selected Minecraft executable does not match the registered Desktop installation. Update Settings.'}
     $signature=Get-AuthenticodeSignature -LiteralPath $selected
     if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '^CN=Microsoft Corporation,'){throw 'Registered Minecraft Education executable has an invalid Microsoft signature.'}
     return $selected

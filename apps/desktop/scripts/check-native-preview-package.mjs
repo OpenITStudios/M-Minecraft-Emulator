@@ -29,6 +29,10 @@ export function verifyNativePreviewPackage() {
   const cargo = source("src-tauri/Cargo.toml");
   const build = source("src-tauri/build.rs");
   const surface = source("src-tauri/src/engine/workspace_surface.rs");
+  const instance = source("src-tauri/src/engine/app_instance.rs");
+  const settings = source("src-tauri/src/engine/manager_settings.rs");
+  const gameTarget = source("../../tooling/isolation-source/windows/education-target.ps1");
+  const nativeProcess = source("src-tauri/src/engine/native_clients.rs");
   const legacy = source("scripts/prepare-package-binaries.mjs");
   const fail = (condition, reason) => {
     if (!condition) throw new Error("NATIVE_PREVIEW_PACKAGE_REFUSED: " + reason);
@@ -90,6 +94,20 @@ export function verifyNativePreviewPackage() {
   fail(!JSON.stringify(current).includes("virtual-guest-agent") &&
       !JSON.stringify(current).includes("guest/windows"),
     "Resolved native bundle still references retired Guest Agent resources.");
+  fail(instance.includes('.join("NativePilot")') &&
+      !instance.includes('.join("NativePreview")') &&
+      settings.includes('const SETTINGS_VARIANT: &str = "NativePreview"') &&
+      settings.includes('const SETTINGS_VARIANT: &str = "NativePilot"') &&
+      settings.includes(".join(SETTINGS_VARIANT)"),
+    "Preview must use separate preferences but retain the cross-version single-manager lease.");
+  fail(gameTarget.includes("param([switch]$RegisteredOnly)") &&
+      gameTarget.includes("if(-not $RegisteredOnly)") &&
+      nativeProcess.includes('"Resolve-ManagerEducationTarget -RegisteredOnly"') &&
+      nativeProcess.includes("OFFICIAL_TARGET_SELECTOR"),
+    "Preview game discovery must not read the retired NativePilot executable preference.");
+  fail(settings.includes('cfg!(feature = "native-workspace-preview") && !cfg!(debug_assertions)') &&
+      settings.includes("Retired session recovery is unavailable in the native preview"),
+    "Preview release must reject direct legacy recovery IPC before reading retired services.");
 
   return { identifier: current.identifier, resources: 0, sidecars: 0,
     installMode: current.bundle.windows.nsis.installMode, config: current };

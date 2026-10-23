@@ -3,6 +3,14 @@ use std::{fs, io, io::Read, path::PathBuf};
 
 pub const TARGETS: &str =
     include_str!("../../../../../engine/isolation-native/owned-runtime/minecraft-targets.json");
+
+// Preferences belong to the preview's own runtime data, but the desktop's
+// single-instance marker must remain shared across the older manager and the
+// preview to prevent two controllers from moving the same Minecraft window.
+#[cfg(feature = "native-workspace-preview")]
+const SETTINGS_VARIANT: &str = "NativePreview";
+#[cfg(not(feature = "native-workspace-preview"))]
+const SETTINGS_VARIANT: &str = "NativePilot";
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ManagerSettings {
@@ -34,7 +42,10 @@ impl ManagerSettings {
 fn path() -> io::Result<PathBuf> {
     let base = std::env::var_os("LOCALAPPDATA")
         .ok_or_else(|| io::Error::other("Windows application data unavailable"))?;
-    Ok(PathBuf::from(base).join("MinecraftInstanceManager/NativePilot/manager-settings.json"))
+    Ok(PathBuf::from(base)
+        .join("MinecraftInstanceManager")
+        .join(SETTINGS_VARIANT)
+        .join("manager-settings.json"))
 }
 pub fn load() -> io::Result<ManagerSettings> {
     read(&path()?)
@@ -218,6 +229,14 @@ pub fn prepare(requested: Option<ManagerSettings>) -> io::Result<serde_json::Val
 /// An explicit operator request may inspect and recover an existing legacy
 /// session, but never unlocks its retired Launch/Provision routes.
 pub fn prepare_legacy(requested: Option<ManagerSettings>) -> io::Result<serde_json::Value> {
+    if cfg!(feature = "native-workspace-preview") && !cfg!(debug_assertions) {
+        // A direct Tauri IPC call must not reach retired SCM or owned-session
+        // discovery even though the release preview hides the recovery button.
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "Retired session recovery is unavailable in the native preview",
+        ));
+    }
     prepare_with_legacy_mode(requested, true)
 }
 

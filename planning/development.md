@@ -1,5 +1,15 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Native Preview runtime state isolation — separate preferences, shared manager lease, 23 October 2026
+
+Work: close a real Windows preview-package regression: a different Tauri bundle identifier did not separate the Rust manager's explicitly constructed runtime files, and its official-game target resolver still inspected the retired NativePilot preference.
+
+Decision: the existing manager-settings owner selects `NativePreview` preferences through a compile-time feature rather than reading/writing `NativePilot`. The existing desktop **instance marker remains in the shared NativePilot location** deliberately: old manager and preview must not concurrently control the same Minecraft windows. The existing game resolver offers a `-RegisteredOnly` route that uses official Windows installation registry+signature only, with no old preference-file I/O; both native game discovery and native MC01 launch select it when the preview feature is enabled. An explicitly requested legacy recovery call is rejected in preview release *before* any owned service lookup, even on direct IPC. The original developer recovery route, legacy settings, worlds and credentials are not migrated or modified by this source change. The shared nonsecret `desktop-instance.json` lease is intentionally still written on manager startup, enforcing a single window controller across versions. No new lifecycle manager, credential cache, game copying or account mutation.
+
+Proof: pinned GitHub exact source and package-checker logic, plus targeted source assertions; Rust build, Windows file-system check, installed NSIS package and Minecraft login NOT_EXECUTED. Original `build:app` remains blocked, Actions disabled and `main` untouched.
+
+Next: verify the opt-in preview binary on a compatible Windows/MSVC environment, while independent MC02 still awaits a supported per-process Roaming/HKCU/WAM provider.
+
 ## Native Windows preview package — separate installable source route, 23 October 2026
 
 Work: remove the actual legacy-installer/debug-only blocker for the native Minecraft Education product, without reactivating VMware or Sandboxie.

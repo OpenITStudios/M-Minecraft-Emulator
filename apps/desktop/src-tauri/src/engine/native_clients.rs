@@ -244,11 +244,26 @@ if (-not $appId -or $appId.Length -gt 256 -or -not ($simpleAppId -or $desktopApp
 }
 "#;
 
+// The isolated preview resolves only the official Windows registration and
+// Authenticode signature; it does not inspect legacy NativePilot preferences.
+#[cfg(target_os = "windows")]
+const OFFICIAL_TARGET_SELECTOR: &str = if cfg!(feature = "native-workspace-preview") {
+    "Resolve-ManagerEducationTarget -RegisteredOnly"
+} else {
+    "Resolve-ManagerEducationTarget"
+};
+
 #[cfg(target_os = "windows")]
 pub fn registered_education_target() -> io::Result<String> {
     let resolver =
         include_str!("../../../../../tooling/isolation-source/windows/education-target.ps1");
-    let script = [resolver, EDUCATION_DESKTOP_PREFLIGHT, "\n$selectedTarget=Resolve-ManagerEducationTarget\nAssert-ManagerRegisteredAppId $appId $selectedTarget\n$selectedTarget"].concat();
+    let script = [
+        resolver,
+        EDUCATION_DESKTOP_PREFLIGHT,
+        "\n$selectedTarget=",
+        OFFICIAL_TARGET_SELECTOR,
+        "\nAssert-ManagerRegisteredAppId $appId $selectedTarget\n$selectedTarget",
+    ].concat();
     virtual_clients_core::bounded_command_output(
         &system_powershell()?,
         ["-NoProfile", "-NonInteractive", "-Command", &script],
@@ -288,7 +303,9 @@ Start-Process -FilePath $explorer -ArgumentList ('"shell:AppsFolder\' + $appId +
     let script = [
         resolver,
         EDUCATION_DESKTOP_PREFLIGHT,
-        "\n$selectedTarget=Resolve-ManagerEducationTarget\nAssert-ManagerRegisteredAppId $appId $selectedTarget\n",
+        "\n$selectedTarget=",
+        OFFICIAL_TARGET_SELECTOR,
+        "\nAssert-ManagerRegisteredAppId $appId $selectedTarget\n",
         SCRIPT,
     ]
     .concat();

@@ -423,6 +423,9 @@ describe("Native candidate IPC evidence", () => {
     expect(sandboxCollector).toContain("if ($gameCandidates.Count -gt 16)");
     expect(pilotLease).toContain('.join("MinecraftInstanceManager")');
     expect(pilotLease).toContain('.join("NativePilot")');
+    const settings=readFileSync(new URL("../src-tauri/src/engine/manager_settings.rs", import.meta.url),"utf8");
+    expect(settings).toContain('const SETTINGS_VARIANT: &str = "NativePilot"');
+    expect(settings).toContain('const SETTINGS_VARIANT: &str = "NativePreview"');
     expect(desktopConfig.app.windows[0].title).toBe("Minecraft Instance Manager");
     expect(desktopConfig.productName).toBe("M-Bedrock Virtual Clients");
     expect(desktopConfig.identifier).toBe("com.mivubi.mbedrock.virtualclients");
