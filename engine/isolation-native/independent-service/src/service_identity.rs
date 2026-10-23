@@ -857,12 +857,52 @@ fn expected_known_folder_final_path(path: &str) -> io::Result<String> {
     Ok(format!("\\\\?\\{path}"))
 }
 
+/// The normal SCM observer may READ the ProgramData directory. Only the
+/// separately compiled, feature-gated and LocalSystem-authenticated
+/// installer bootstrap can request FILE_ADD_SUBDIRECTORY on that parent.
+/// This is a real Windows HANDLE right, not just a named source intent.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ProgramDataOpenIntent {
+    InspectOnly,
+    #[cfg(feature = "installer-parent-bootstrap-source")]
+    CreateFixedInstallerParent,
+}
+
+fn programdata_access_mask(intent: ProgramDataOpenIntent) -> u32 {
+    let inspect = NT_FILE_READ_ATTRIBUTES | ROOT_READ_CONTROL | ROOT_TRAVERSE;
+    match intent {
+        ProgramDataOpenIntent::InspectOnly => inspect,
+        #[cfg(feature = "installer-parent-bootstrap-source")]
+        ProgramDataOpenIntent::CreateFixedInstallerParent =>
+            inspect | NT_FILE_ADD_SUBDIRECTORY,
+    }
+}
+
+/// A privileged bootstrap request must recheck the actual separate
+/// LocalSystem process token BEFORE opening a machine-wide directory
+/// HANDLE that can create children. The ordinary observer never calls
+/// this function and its build does not contain the create intent.
+#[cfg(feature = "installer-parent-bootstrap-source")]
+fn open_known_programdata_for_installer_parent(
+    expected_service: &[u8],
+) -> io::Result<File> {
+    let _actor = checked_installer_actor(expected_service)?;
+    open_known_programdata_with_intent(ProgramDataOpenIntent::CreateFixedInstallerParent)
+}
+
 /// Obtain a real nonreparse directory HANDLE from FOLDERID_ProgramData,
-/// *never* by consulting environment variables or an IPC path. Compare the
-/// OS-returned normalized HANDLE path to the Known Folder path; if any
-/// reparse traversal, drive substitution or unsupported volume syntax
-/// changes the resolved location, refuse the anchor.
+/// *never* by consulting environment variables or an IPC path. The
+/// default SCM inspection entrypoint never requests directory creation.
 fn open_known_programdata_source() -> io::Result<File> {
+    open_known_programdata_with_intent(ProgramDataOpenIntent::InspectOnly)
+}
+
+/// Compare the normalized HANDLE path to the OS Known Folder path. Keep
+/// identical validation for read-only and bootstrap handles; ONLY the
+/// verified caller's intent changes the requested native access rights.
+fn open_known_programdata_with_intent(
+    intent: ProgramDataOpenIntent,
+) -> io::Result<File> {
     require_nonimpersonating_thread()?;
     let _com = ComApartment::enter()?;
     let mut raw_path: *mut u16 = ptr::null_mut();
@@ -892,7 +932,7 @@ fn open_known_programdata_source() -> io::Result<File> {
     let wide: Vec<u16> = text.encode_utf16().chain(Some(0)).collect();
     let raw = unsafe {
         CreateFileW(
-            wide.as_ptr(), NT_FILE_READ_ATTRIBUTES | ROOT_READ_CONTROL | ROOT_TRAVERSE,
+            wide.as_ptr(), programdata_access_mask(intent),
             NT_FILE_SHARE_READ | NT_FILE_SHARE_WRITE, ptr::null_mut(),
             WIN32_OPEN_EXISTING,
             NT_FILE_FLAG_BACKUP_SEMANTICS | NT_FILE_FLAG_OPEN_REPARSE_POINT,
@@ -1294,7 +1334,10 @@ pub(crate) fn provision_installer_parent_source() -> io::Result<()> {
     let service_sid = expected_service_sid()?;
     let actor = checked_installer_actor(&service_sid)?;
     let canonical = format_exact_service_sid(&service_sid)?;
-    let programdata = open_known_programdata_source()?;
+    // FILE_CREATE below needs FILE_ADD_SUBDIRECTORY on the ProgramData
+    // parent HANDLE. The ordinary read-only Known Folder handle does NOT
+    // request this right and must not silently authorize this operation.
+    let programdata = open_known_programdata_for_installer_parent(&service_sid)?;
     let programdata_id = root_file_identity(&programdata)?;
     let active = enumerate_active_ids()?;
     let descriptor = checked_installer_acl(&service_sid, &canonical)?;
@@ -1904,6 +1947,32 @@ mod tests {
         ] {
             assert!(checked_service_root_name(forged).is_err(),
                 "Unexpected service-root path accepted: {forged}");
+        }
+    }
+
+    #[test]
+    fn programdata_handle_rights_are_read_only_unless_privileged_bootstrap() {
+        let inspect = programdata_access_mask(ProgramDataOpenIntent::InspectOnly);
+        assert_eq!(
+            inspect,
+            NT_FILE_READ_ATTRIBUTES | ROOT_READ_CONTROL | ROOT_TRAVERSE,
+        );
+        assert_eq!(inspect & NT_FILE_ADD_SUBDIRECTORY, 0);
+        assert_eq!(inspect & (ROOT_DELETE | ROOT_WRITE_DAC | ROOT_WRITE_OWNER), 0);
+        #[cfg(feature = "installer-parent-bootstrap-source")]
+        {
+            let create = programdata_access_mask(
+                ProgramDataOpenIntent::CreateFixedInstallerParent,
+            );
+            assert_eq!(create, inspect | NT_FILE_ADD_SUBDIRECTORY);
+            assert_ne!(create & NT_FILE_ADD_SUBDIRECTORY, 0);
+            assert_eq!(create & (ROOT_DELETE | ROOT_WRITE_DAC | ROOT_WRITE_OWNER), 0);
+            // The privileged branch must authenticate the caller again.
+            let source = include_str!("service_identity.rs");
+            assert!(source.contains("let _actor = checked_installer_actor(expected_service)?;"));
+            assert!(source.contains(
+                "open_known_programdata_for_installer_parent(&service_sid)?;",
+            ));
         }
     }
 

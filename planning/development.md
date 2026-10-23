@@ -1,6 +1,41 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Distribution bootstrap — ProgramData create-right fix, 23 October 2026
+
+Audited latest `Local` bootstrap source and found a concrete
+OS-boundary error: `open_known_programdata_source()` requested only
+READ_ATTRIBUTES, READ_CONTROL and TRAVERSE, but the next call tried
+to create `MIVUBIIndependentHost` as a child of that HANDLE.
+Windows requires FILE_ADD_SUBDIRECTORY for creating a child folder.
+The existing CLI would therefore be denied without that requested
+directory right.
+
+The canonical native SCM source now splits an `InspectOnly`
+ProgramData HANDLE from a feature-gated `CreateFixedInstallerParent`
+HANDLE. Only the explicit standalone distribution bootstrap can
+request FILE_ADD_SUBDIRECTORY, and it rechecks the separately owned
+LocalSystem PRIMARY process token before the privileged open.
+Both paths retain the same ProgramData Known Folder, final-HANDLE
+path and file-ID checks; neither requests DELETE, WRITE_DAC or
+WRITE_OWNER. The new source test checks both access masks and that
+bootstrap uses the privileged helper, with default-service
+inspection kept read-only. No launcher, installer or SCM startup
+registration changes.
+
+**Proof:** exact pinned GitHub source/static review and Microsoft
+file/directory access-rights docs. There is no Cargo/rustc toolchain
+in this ChatGPT container; compilation, Windows security execution
+and Minecraft acceptance remain NOT_EXECUTED. This does NOT prove
+the configured service executable is trusted or that the actual
+parent/ancestor ACL can withstand privileged peers. No GitHub
+Actions, existing root, account/world or release branch modified.
+
+**Next:** inspect the registered Windows service's true binary
+configuration/signer provenance before authorizing any privileged
+installer parent creation or packaging integration.
+
+
 ## Distribution — source-only SYSTEM installer parent bootstrap, 23 October 2026
 
 Created separate `engine/distribution/service-parent-bootstrap/`

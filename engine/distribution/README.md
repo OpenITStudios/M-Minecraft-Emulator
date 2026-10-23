@@ -167,7 +167,11 @@ source: no duplicate Windows SID, ProgramData HANDLE or ACL policy.
 The source requires an already registered SCM service with supported
 SID type, an independent nonimpersonating LocalSystem primary token,
 a real ProgramData Known Folder anchor and the exact protected
-SYSTEM/service SID two-ACE DACL. It refuses direct peer rights for
+SYSTEM/service SID two-ACE DACL. The bootstrap now opens ProgramData
+with an explicit `FILE_ADD_SUBDIRECTORY` HANDLE right, after
+rechecking that LocalSystem token; the ordinary SCM observer opens
+the SAME Known Folder for inspection without that right.
+No broad WRITE_DAC, DELETE or WRITE_OWNER request is added. It refuses direct peer rights for
 currently active Windows desktop tokens. Only the fixed existing
 SCM-name parent may be newly created with NtCreateFile(FILE_CREATE).
 Existing directories are refused, never adopted or repaired.
