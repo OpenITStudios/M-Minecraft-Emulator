@@ -2,7 +2,7 @@
   import {onMount,tick} from 'svelte';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import type {ClientId,OwnedProcess,OwnedSnapshot} from './app/bridge/ownedProviderApi.js';
-  import type {NativeWorkspaceObservation} from './app/bridge/nativeFeasibilityApi.js';
+  import type {ObservedSlotMap} from './app/presentation/nativeObservedSlots.js';
   import {operationIssue} from './app/bridge/managerConfiguration.js';
   import {listen} from '@tauri-apps/api/event';
   export let sessionDirectory='';
@@ -51,15 +51,17 @@
     const processes=activeClient==='01'?observation.nativeProcesses:observation.clients.find(slot=>slot.clientId===activeClient)?.processes??[];
     await reconcileProcesses(processes);
   }
-  export async function reconcileNative(observation:NativeWorkspaceObservation){
-    if(activeClient!=='01')return;
-    await reconcileProcesses(observation.processes);
+  export async function reconcileObserved(assignments:ObservedSlotMap){
+    if(!releaseOnly||!activeClient)return;
+    const process=assignments[activeClient];
+    await reconcileProcesses(process?[process]:[]);
   }
   export async function present(client:ClientId,process:OwnedProcess){
     issue=null;
     try{
       await tick();
-      await workspaceSurface.present(sessionDirectory,client,process,viewport.getBoundingClientRect());
+      if(releaseOnly)await workspaceSurface.presentObserved(client,process,viewport.getBoundingClientRect());
+      else await workspaceSurface.present(sessionDirectory,client,process,viewport.getBoundingClientRect());
       activeClient=client;target=process;failedPresentation=null;suspended=false;
       issue=null;onRecovered();
     }catch(error){failedPresentation={client,target:process};issue=operationIssue(error);throw error;}

@@ -135,6 +135,56 @@ pub async fn desktop_present_workspace(
     .map_err(surface_failure)
 }
 
+/// Present an existing verified Windows game window only. This does not
+/// provision, launch or attest an independent account/session provider.
+#[tauri::command]
+pub async fn desktop_present_observed_window(
+    window: tauri::WebviewWindow,
+    client_id: String,
+    target: crate::engine::owned_provider::OwnedProcess,
+    viewport: crate::engine::workspace_surface::Viewport,
+) -> Result<(), SurfaceFailure> {
+    #[cfg(windows)]
+    let manager = window.hwnd().map_err(surface_failure)?.0 as usize as u64;
+    #[cfg(not(windows))]
+    let manager = {
+        let _ = window;
+        0
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        run_manager_operation(|| {
+            if !matches!(client_id.as_str(), "01" | "02" | "03" | "04") {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Unknown presentation-only window slot",
+                ));
+            }
+            // The selected PID/FILETIME/HWND must still match a live registered
+            // Minecraft executable in this user's interactive Windows session.
+            // Caller-provided slot labels cannot authorize Launch/Provision.
+            let observed = native_clients::inspect_native_workspace()?;
+            if !native_clients::matches_native_workspace_target(&observed, &target) {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "Observed Minecraft window identity changed; refresh before selecting",
+                ));
+            }
+            let authority = "OBSERVED_WINDOWS_PRESENTATION_ONLY".to_string();
+            if crate::engine::workspace_surface::present_retained(
+                manager, viewport, target.clone(), authority.clone(), client_id.clone(),
+            )? {
+                return Ok(());
+            }
+            crate::engine::workspace_surface::present_verified(
+                manager, viewport, target, authority, client_id,
+            )
+        })
+    })
+    .await
+    .map_err(surface_failure)?
+    .map_err(surface_failure)
+}
+
 #[tauri::command]
 pub async fn desktop_update_workspace(
     window: tauri::WebviewWindow,

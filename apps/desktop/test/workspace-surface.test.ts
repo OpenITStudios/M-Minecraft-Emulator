@@ -34,23 +34,12 @@ it('rejects impossible areas and nonfinite or unsupported display scale before I
   for(const scale of [0,Infinity,NaN,9])expect(()=>workspaceViewport({x:0,y:0,width:800,height:600},scale)).toThrow();
 });
 
-it('native refresh revalidates the selected exact PID/FILETIME/window without relying on legacy snapshots',async()=>{
+it('observed-window refresh checks the selected slot rather than treating any game PID as its identity',()=>{
   const source=readFileSync(new URL('../src/NativeWorkspace.svelte',import.meta.url),'utf8');
-  const start=source.indexOf('async function reconcileProcesses(');
-  const end=source.indexOf('export async function present(',start);
-  expect(start).toBeGreaterThan(0);
-  expect(source.slice(start,end)).toContain('reconcileNative(observation:NativeWorkspaceObservation)');
+  expect(source).toContain('export async function reconcileObserved(assignments:ObservedSlotMap)');
+  expect(source).toContain('const process=assignments[activeClient]');
+  expect(source).toContain('await reconcileProcesses(process?[process]:[])');
+  expect(source).toContain('if(releaseOnly)await workspaceSurface.presentObserved');
   const manager=readFileSync(new URL('../src/UnifiedManagerApp.svelte',import.meta.url),'utf8');
-  expect(manager).toContain('await workspace.reconcileNative(result)');
-  const old={pid:41,createdFileTime:'134000000000000001',sessionId:1,windowHandle:'0x123',responding:true};
-  const activeClient='01',target={...old};
-  const released:typeof old[]=[];
-  const workspaceSurface={release:async(value:typeof old)=>{released.push(value);}};
-  const fn=source.slice(start,end).replace(/export /g,'').replace('processes:OwnedProcess[]','processes')
-    .replace('observation:OwnedSnapshot','observation').replace('observation:NativeWorkspaceObservation','observation');
-  const run=new Function('workspaceSurface','state',`let activeClient=state.activeClient,target=state.target,issue=null,suspended=false,updatePending=false;${fn};return {call:reconcileNative,state:()=>({activeClient,target})};`)(workspaceSurface,{activeClient,target});
-  await run.call({processes:[old]});expect(released).toHaveLength(0);
-  await run.call({processes:[{...old,createdFileTime:'134000000000000002'}]});
-  expect(released).toEqual([old]);
-  expect(run.state().activeClient).toBe(null);
+  expect(manager).toContain('await workspace.reconcileObserved(observedSlots)');
 });

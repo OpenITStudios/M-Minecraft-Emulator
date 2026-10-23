@@ -13,6 +13,15 @@ This is a **navigation guide**, not a second implementation registry. The sole c
 
 ## Current direction — 21 October 2026
 
+The mounted native Windows workspace now offers read-only discovery and
+presentation of up to four **already-running** registered Minecraft Education
+Desktop process/window candidates. This operates without an isolation provider,
+but does not create or authenticate an independent MC02–04 session. The
+presentation-only OS recheck is in `native_clients.rs` and the thin Tauri
+command; ephemeral slot/window mapping belongs to desktop presentation.
+New isolated Launch/Provision remains blocked; no provider admission is
+inferred from observing four processes or switching tabs.
+
 Sandboxie and the derived fork are retired for new product sessions. The old
 inventory below is historical dependency navigation, not authorization to activate
 the fork or enable certificates. See [retirement register](legacy-retirement.md).

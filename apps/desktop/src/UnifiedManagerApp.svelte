@@ -4,6 +4,7 @@
   import NativeWorkspace from './NativeWorkspace.svelte';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import {nativeFeasibility,type NativeWorkspaceObservation} from './app/bridge/nativeFeasibilityApi.js';
+  import {observedIds,reconcileObservedSlots,type ObservedSlotMap} from './app/presentation/nativeObservedSlots.js';
   import type {ClientId} from './app/bridge/ownedProviderApi.js';
   import type {OwnedSnapshot} from './app/bridge/ownedProviderApi.js';
   import {managerConfiguration,operationIssue,type ManagerConfiguration} from './app/bridge/managerConfiguration.js';
@@ -15,7 +16,13 @@
   let tabStates:Record<ClientId,string>={"01":"Checking","02":"Checking","03":"Checking","04":"Checking"};
   let contextClient='02',contextResult:ContextComparison|null=null,contextError='';
   let nativeSession:NativeWorkspaceObservation|null=null,nativeError='',nativePending=false;
-  $: if(!snapshot)tabStates={'01':nativeSession?.processes[0]?(nativeSession.processes[0].responding&&nativeSession.processes[0].windowHandle!=='0x0'?'Detected':'Starting'):nativePending?'Launch pending':nativeError?'Check needed':'Not opened','02':'Unavailable','03':'Unavailable','04':'Unavailable'};
+  let sessionView:'native'|'legacy'='native',observedSlots:ObservedSlotMap={};
+  $: if(sessionView==='native')tabStates={
+    '01':observedSlots['01']?(observedSlots['01'].responding?'Observed':'Not responding'):nativePending?'Launch pending':nativeError?'Check needed':'Not opened',
+    '02':observedSlots['02']?(observedSlots['02'].responding?'Observed':'Not responding'):'Not observed',
+    '03':observedSlots['03']?(observedSlots['03'].responding?'Observed':'Not responding'):'Not observed',
+    '04':observedSlots['04']?(observedSlots['04'].responding?'Observed':'Not responding'):'Not observed',
+  };
   $: contextTarget=snapshot?.clients.find(slot=>slot.clientId===contextClient)?.processes;
   async function inspectContext(){
     if(busy||workspaceBusy)return;
@@ -35,7 +42,7 @@
   }
   // Native Minecraft 01 control path: no retired owned-provider inspection.
   async function inspectNative(){
-    try{nativeSession=await nativeFeasibility.inspectNativeWorkspace();nativeError='';return nativeSession;}
+    try{nativeSession=await nativeFeasibility.inspectNativeWorkspace();observedSlots=reconcileObservedSlots(observedSlots,nativeSession.processes);nativeError='';return nativeSession;}
     catch(error){nativeSession=null;nativeError=operationIssue(error).details;return null;}
   }
   async function refreshNative(){
@@ -45,25 +52,29 @@
       const result=await inspectNative();
       if(result){
         nativePending=false;
-        if(workspace)await workspace.reconcileNative(result);
+        if(workspace&&sessionView==='native')await workspace.reconcileObserved(observedSlots);
       }
     }catch(error){issue=operationIssue(error);}
     finally{busy=false;}
   }
   async function activateNative(client:ClientId){
-    if(client!=='01'||busy||workspaceBusy||!config?.detectedMinecraft)return;
+    if(busy||workspaceBusy||!config?.detectedMinecraft)return;
     busy=true;issue=null;
     try{
       const observed=await inspectNative();
       if(!observed)return;
-      const process=observed.processes[0];
+      const process=observedSlots[client];
       if(process){
         if(!process.responding||process.windowHandle==='0x0'){
           nativeError='Registered Minecraft has no responsive window yet. Refresh rather than launching a duplicate.';
           return;
         }
-        await workspace.present('01',process);
+        await workspace.present(client,process);
         nativePending=false;return;
+      }
+      if(client!=='01'||observed.processes.length>0){
+        nativeError='This slot has no observed window. New isolated Minecraft 02–04 launches are not available.';
+        return;
       }
       if(nativePending){
         nativeError='A previous launch request is pending. Refresh before retrying.';
@@ -76,7 +87,7 @@
         await new Promise<void>(resolve=>setTimeout(resolve,1400));
         const next=await inspectNative();
         if(!next)return;
-        const candidate=next.processes[0];
+        const candidate=observedSlots['01'];
         if(candidate?.responding&&candidate.windowHandle!=='0x0'){
           await workspace.present('01',candidate);
           nativePending=false;return;
@@ -86,24 +97,20 @@
     }catch(error){issue=operationIssue(error);}
     finally{busy=false;}
   }
+  async function switchSessionView(next:'native'|'legacy'){
+    if(busy||workspaceBusy||next===sessionView||(next==='legacy'&&!snapshot))return;
+    busy=true;issue=null;
+    try{if(workspace)await workspace.restore();sessionView=next;await tick();}
+    catch(error){issue=operationIssue(error);}
+    finally{busy=false;}
+  }
   async function prepare(){
     busy=true;checked=false;issue=null;contextResult=null;contextError='';
-    try{config=await managerConfiguration.load();snapshot=config.observation;checked=!!snapshot;if(config.engineError&&snapshot)issue=operationIssue(config.engineError);if(config.detectedMinecraft)await inspectNative();await tick();if(workspace){try{if(snapshot)await workspace.reconcile(snapshot);else if(nativeSession)await workspace.reconcileNative(nativeSession);}catch(error){issue=operationIssue(error);}}}
+    try{config=await managerConfiguration.load();snapshot=config.observation;checked=!!snapshot;if(config.engineError&&snapshot)issue=operationIssue(config.engineError);if(config.detectedMinecraft)await inspectNative();await tick();if(workspace){try{if(sessionView==='legacy'&&snapshot)await workspace.reconcile(snapshot);else if(sessionView==='native'&&nativeSession)await workspace.reconcileObserved(observedSlots);}catch(error){issue=operationIssue(error);}}}
     catch(e){snapshot=null;issue=operationIssue(e);}finally{busy=false;}
   }
-  onMount(()=>{void (async()=>{
-    await prepare();await tick();if(!snapshot||!workspace)return;
-    busy=true;
-    try{
-      const running=snapshot.clients.filter(slot=>slot.status==='RUNNING'&&slot.processes[0]?.responding).map(slot=>({client:slot.clientId as ClientId,target:slot.processes[0]}));
-      const native=snapshot.nativeProcesses[0];if(native&&native.responding&&native.windowHandle!=='0x0')running.push({client:'01',target:native});
-      // A client exiting during admission must not prevent adopting the other sessions.
-      for(const session of running){
-        try{await workspace.present(session.client,session.target);}
-        catch{/* The workspace owns presentation errors and recovery controls. */}
-      }
-    }catch(error){issue=operationIssue(error);}finally{busy=false;}
-  })();});
+  onMount(()=>{void prepare();});
+
 </script>
 
 <svelte:head><title>Minecraft Instance Manager</title></svelte:head>
@@ -117,18 +124,22 @@
     {#if issue}<div class="um-alert" role="alert"><strong>{issue.message}</strong><p>{issue.action}</p><details><summary>Diagnostics</summary><pre>{issue.details}</pre></details></div>{/if}
     <div class="um-client-view" hidden={page!=='clients'}>
       <p role="status">Sandboxie launch routes are retired. New sessions 02–04 are unavailable while the independent engine is developed. Existing sessions and data are preserved.</p>
-      {#if config && snapshot}<div class="nw-layout"><NativeWorkspace bind:this={workspace} bind:working={workspaceBusy} sessionDirectory={config.settings.sessionDirectory} bind:activeClient={selectedClient} {tabStates} {busy} onRecovered={()=>issue=null} selectionBlocked={client=>panel?.actionBlockedReason(client)??null} onClose={(client,target)=>panel.closeClient(client,target)} onSelect={client=>panel.activateClient(client)}/><div class="nw-session-controls" aria-label="Session controls"><OwnedManagerPanel bind:this={panel} sessionDirectory={config.settings.sessionDirectory} bind:initialSnapshot={snapshot} bind:operationBusy={busy} bind:tabStates externalBusy={workspaceBusy} onPresent={(client,target)=>workspace.present(client,target)} onRelease={()=>workspace.suspend()} onResume={()=>workspace.resume()} onObserved={observation=>workspace.reconcile(observation)}/></div></div>
+      {#if config && snapshot && sessionView==='legacy'}<div class="nw-layout"><NativeWorkspace bind:this={workspace} bind:working={workspaceBusy} sessionDirectory={config.settings.sessionDirectory} bind:activeClient={selectedClient} {tabStates} {busy} onRecovered={()=>issue=null} selectionBlocked={client=>panel?.actionBlockedReason(client)??null} onClose={(client,target)=>panel.closeClient(client,target)} onSelect={client=>panel.activateClient(client)}/><div class="nw-session-controls" aria-label="Session controls"><OwnedManagerPanel bind:this={panel} sessionDirectory={config.settings.sessionDirectory} bind:initialSnapshot={snapshot} bind:operationBusy={busy} bind:tabStates externalBusy={workspaceBusy} onPresent={(client,target)=>workspace.present(client,target)} onRelease={()=>workspace.suspend()} onResume={()=>workspace.resume()} onObserved={observation=>workspace.reconcile(observation)}/><button class="cm-button cm-secondary" disabled={busy||workspaceBusy} on:click={()=>switchSessionView('native')}>Show observed Windows games</button></div></div>
       {:else}
         {#if config && config.detectedMinecraft}
           <div class="nw-layout">
-            <NativeWorkspace bind:this={workspace} bind:working={workspaceBusy} releaseOnly sessionDirectory="" bind:activeClient={selectedClient} {tabStates} {busy} onRecovered={()=>issue=null} onSelect={activateNative} selectionBlocked={client=>client==='01'?(nativeSession===null?'Refresh native status first':null):'Independent Minecraft 02–04 isolation is not implemented.'}/>
+            <NativeWorkspace bind:this={workspace} bind:working={workspaceBusy} releaseOnly sessionDirectory="" bind:activeClient={selectedClient} {tabStates} {busy} onRecovered={()=>issue=null} onSelect={activateNative} selectionBlocked={client=>nativeSession===null?'Refresh native status first':observedSlots[client]?(observedSlots[client]?.responding&&observedSlots[client]?.windowHandle!=='0x0'?null:'Game window not responding'):client==='01'&&nativeSession.processes.length===0?null:'No existing game window assigned to this tab'}/>
             <div class="nw-session-controls" aria-label="Native Minecraft controls">
-              <div class="nw-session-tools"><p>Minecraft 01 uses the official Windows installation. No Sandboxie, owned fork or VM required. Sign-in remains inside Minecraft.</p></div>
+              <div class="nw-session-tools"><p>Show up to four already-running Minecraft Education windows. Windows are observed from the official installation; this does not create separate game accounts or replace an isolation engine.</p></div>
               {#if nativeError}<p role="alert">{nativeError}</p>{/if}
-              <p>{nativeSession?.processes[0]?'Registered Minecraft window candidate detected.':'No registered Minecraft process detected.'} This is not multi-account isolation.</p>
-              <button class="cm-button" disabled={busy||workspaceBusy||nativeSession===null||nativePending} on:click={()=>activateNative('01')}>{busy?'Working…':nativeSession?.processes[0]?'Show Minecraft 01':'Open Minecraft 01'}</button>
-              <button class="cm-button cm-secondary" disabled={busy||workspaceBusy} on:click={refreshNative}>Refresh native session</button>
-              <p>Minecraft 02–04 remain disabled until a real independent provider exists. Return to Windows restores the game window without closing it.</p>
+              <p>{nativeSession?.processes.length??0} observed game process(es). Each tab follows its original process until it exits; a different process does not inherit its identity.</p>
+              <div aria-label="Observed Windows game processes">
+                {#each observedIds as id}<div class="um-setting"><strong>Window {id}</strong><span>{observedSlots[id]?('Process '+observedSlots[id]?.pid+' · observation only'):'No observed process'}</span></div>{/each}
+              </div>
+              <button class="cm-button" disabled={busy||workspaceBusy||nativeSession===null||nativePending||(nativeSession.processes.length>0&&!observedSlots['01'])} on:click={()=>activateNative('01')}>{busy?'Working…':observedSlots['01']?'Show observed window 01':'Open official Minecraft 01'}</button>
+              <button class="cm-button cm-secondary" disabled={busy||workspaceBusy} on:click={refreshNative}>Refresh Windows game windows</button>
+              {#if snapshot}<button class="cm-button cm-secondary" disabled={busy||workspaceBusy} on:click={()=>switchSessionView('legacy')}>Existing-session recovery</button>{/if}
+              <p>MC02–04 Launch/Provision remain disabled. Existing windows can be displayed but are not certified as isolated or independently signed-in. Return to Windows restores a window without closing the game.</p>
             </div>
           </div>
         {:else}

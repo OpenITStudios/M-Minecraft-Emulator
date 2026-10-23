@@ -1,4 +1,5 @@
 import { invokeRuntime } from "./invokeRuntime.js";
+import {parseObservedProcess,type OwnedProcess} from "./ownedProviderApi.js";
 
 export interface NativeProcessCandidate {
   pid: number;
@@ -477,21 +478,22 @@ export function parseForegroundEventObserverStatus(value: unknown): ForegroundEv
 export interface NativeWorkspaceObservation {
   schema:1;
   evidenceClass:"REGISTERED_IMAGE_PATH_CANDIDATE_ONLY";
-  processes:import("./ownedProviderApi.js").OwnedProcess[];
+  processes:OwnedProcess[];
 }
 export function parseNativeWorkspaceObservation(value:unknown):NativeWorkspaceObservation {
   if(!isRecord(value)||!hasOnly(value,["schema","evidenceClass","processes"])||
     value.schema!==1||value.evidenceClass!=="REGISTERED_IMAGE_PATH_CANDIDATE_ONLY"||
-    !Array.isArray(value.processes)||value.processes.length>1)
+    !Array.isArray(value.processes)||value.processes.length>4)
     throw new TypeError("Untrusted native workspace observation.");
+  const pids=new Set<number>(),windows=new Set<bigint>();
   for(const p of value.processes) {
-    if(!isRecord(p)||!hasOnly(p,["pid","createdFileTime","sessionId","windowHandle","responding"])||
-      !Number.isInteger(p.pid)||Number(p.pid)<=0||Number(p.pid)>0xffffffff||
-      typeof p.createdFileTime!=="string"||!/^[1-9][0-9]{0,19}$/.test(p.createdFileTime)||
-      BigInt(p.createdFileTime)>0xffffffffffffffffn||
-      !Number.isInteger(p.sessionId)||Number(p.sessionId)<1||Number(p.sessionId)>0xffffffff||
-      typeof p.windowHandle!=="string"||!/^0x[0-9a-f]{1,16}$/.test(p.windowHandle)||
-      typeof p.responding!=="boolean")throw new TypeError("Invalid native process/window identity.");
+    const process=parseObservedProcess(p);
+    const window=BigInt(process.windowHandle);
+    if(process.sessionId===0||pids.has(process.pid)||
+       (window!==0n&&windows.has(window)))
+      throw new TypeError("Duplicated or noninteractive native game identity.");
+    pids.add(process.pid);
+    if(window!==0n)windows.add(window);
   }
   return value as unknown as NativeWorkspaceObservation;
 }

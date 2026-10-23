@@ -72,3 +72,15 @@ it('observed legacy snapshot never promotes independent-engine readiness in moun
   expect(source).toContain('releaseOnly sessionDirectory=""');
   expect(source).toContain('Independent of retired engine snapshots');
 });
+
+it('native observed windows are primary even when a historical session can be recovered',()=>{
+  const source=readFileSync(new URL('../src/UnifiedManagerApp.svelte',import.meta.url),'utf8');
+  expect(source).toContain("sessionView:'native'|'legacy'='native'");
+  expect(source).toContain("config && snapshot && sessionView==='legacy'");
+  expect(source).toContain('reconcileObservedSlots(observedSlots,nativeSession.processes)');
+  expect(source).toContain('This slot has no observed window. New isolated Minecraft 02–04 launches are not available.');
+  expect(source).toContain('Existing-session recovery');
+  expect(source).not.toContain('for(const session of running)');
+  const bootstrap=readFileSync(new URL('../src-tauri/src/app_bootstrap.rs',import.meta.url),'utf8');
+  expect(bootstrap).toContain('commands::native_clients::desktop_present_observed_window,');
+});

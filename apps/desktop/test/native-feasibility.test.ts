@@ -524,3 +524,31 @@ describe('Official Minecraft 01 direct workspace integration',()=>{
     expect(bootstrap).toContain('commands::native_clients::desktop_inspect_native_workspace,');
   });
 });
+
+
+describe('Observed existing Windows game processes',()=>{
+  const process=(pid:number,window:string)=>({pid,createdFileTime:String(134000000000000000n+BigInt(pid)),sessionId:1,windowHandle:window,responding:true});
+  const report=(processes:unknown[])=>({schema:1,evidenceClass:'REGISTERED_IMAGE_PATH_CANDIDATE_ONLY',processes});
+  it('accepts four distinct process windows without promoting multi-account authority',()=>{
+    const p=[process(1,'0x11'),process(2,'0x12'),process(3,'0x13'),process(4,'0x14')];
+    expect(parseNativeWorkspaceObservation(report(p)).processes).toHaveLength(4);
+    expect(parseNativeWorkspaceObservation(report([p[0],p[1]])).processes).toHaveLength(2);
+    expect(()=>parseNativeWorkspaceObservation(report([...p,process(5,'0x15')]))).toThrow();
+    expect(parseNativeWorkspaceObservation(report(p))).not.toHaveProperty('authenticated');
+  });
+  it('rejects duplicate PID/HWND and retains Launch/Provision denial',()=>{
+    expect(()=>parseNativeWorkspaceObservation(report([process(1,'0x11'),process(1,'0x12')]))).toThrow();
+    expect(()=>parseNativeWorkspaceObservation(report([process(1,'0x11'),process(2,'0x11')]))).toThrow();
+    const commands=readFileSync(new URL('../src-tauri/src/commands/native_clients.rs',import.meta.url),'utf8');
+    const i=commands.indexOf('pub async fn desktop_present_observed_window(');
+    const j=commands.indexOf('pub async fn desktop_update_workspace(',i);
+    expect(i).toBeGreaterThan(0);
+    const handler=commands.slice(i,j);
+    expect(handler).toContain('matches_native_workspace_target(&observed, &target)');
+    expect(handler).toContain('native_clients::inspect_native_workspace()?');
+    expect(handler).toContain('"OBSERVED_WINDOWS_PRESENTATION_ONLY"');
+    expect(handler).not.toMatch(/run_slot_operation|SlotOperation::Launch|SlotOperation::Provision|OwnedTestBackend/);
+    const admission=readFileSync(new URL('../src-tauri/src/engine/instance_catalog.rs',import.meta.url),'utf8');
+    expect(admission).toContain('if id != "01" && matches!(operation, SlotOperation::Launch | SlotOperation::Provision)');
+  });
+});

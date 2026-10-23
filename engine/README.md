@@ -1,6 +1,6 @@
 # Emulator Engine — One Active Owner per Function
 
-The active desktop source implements a registered official Minecraft Education Windows Client 01 control path without an isolation provider (Windows runtime acceptance NOT_EXECUTED). New Client 02–04 Launch/Provision remain **blocked** until an independent, game-compatible provider is demonstrated. Sandboxie, the owned fork and VMware are retired for new sessions; old account-bearing data and recovery source are preserved. The v1.18.6 fork is **not** the independent replacement.
+The active desktop source offers an official Minecraft Education Client 01 launch and presentation of up to four **already-running** registered Windows game-window candidates without an isolation provider (Windows/Minecraft execution NOT_EXECUTED). Existing-window presentation is not new client provisioning or independent account proof. New Client 02–04 Launch/Provision remain **blocked** until an independent, game-compatible provider is demonstrated. Sandboxie, the owned fork and VMware are retired for new sessions; old account-bearing data and recovery source are preserved. The v1.18.6 fork is **not** the independent replacement.
 
 | Source | Status and unique responsibility |
 | --- | --- |

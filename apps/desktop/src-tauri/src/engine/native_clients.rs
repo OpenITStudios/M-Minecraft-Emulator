@@ -339,19 +339,23 @@ fn parse_native_workspace_observation(raw: &str) -> io::Result<NativeWorkspaceOb
         .map_err(|_| invalid_evidence("Malformed native workspace observation"))?;
     if result.schema != 1
         || result.evidence_class != "REGISTERED_IMAGE_PATH_CANDIDATE_ONLY"
-        || result.processes.len() > 1
+        || result.processes.len() > 4
     {
-        return Err(invalid_evidence("Ambiguous or unsupported native workspace observation"));
+        return Err(invalid_evidence("Too many or unsupported observed Minecraft processes"));
     }
+    let mut pids = HashSet::new();
+    let mut windows = HashSet::new();
     for process in &result.processes {
         let created = process.created_file_time.parse::<u64>()
             .map_err(|_| invalid_evidence("Invalid native process creation FILETIME"))?;
         let hwnd = process.window_handle.strip_prefix("0x")
             .and_then(|digits| u64::from_str_radix(digits, 16).ok());
-        if process.pid == 0 || created == 0 || process.session_id == 0
-            || hwnd.is_none() || process.window_handle.len() > 18
+        if process.pid == 0 || !pids.insert(process.pid) || created == 0
+            || process.session_id == 0 || hwnd.is_none()
+            || process.window_handle.len() > 18
+            || hwnd.is_some_and(|number| number != 0 && !windows.insert(number))
         {
-            return Err(invalid_evidence("Invalid native process/window identity"));
+            return Err(invalid_evidence("Duplicate or invalid native process/window identity"));
         }
     }
     Ok(result)
@@ -362,8 +366,7 @@ pub fn matches_native_workspace_target(
     observation: &NativeWorkspaceObservation,
     target: &super::owned_provider::OwnedProcess,
 ) -> bool {
-    observation.processes.len() == 1
-        && observation.processes.iter().any(|candidate| {
+    observation.processes.iter().any(|candidate| {
             candidate.pid == target.pid
                 && candidate.created_file_time == target.created_file_time
                 && candidate.session_id == target.session_id
@@ -384,7 +387,7 @@ $selectedTarget = Resolve-ManagerEducationTarget
 Assert-ManagerRegisteredAppId $appId $selectedTarget
 $session = (Get-Process -Id $PID -ErrorAction Stop).SessionId
 $items = @(
-    foreach ($process in @(Get-Process -Name 'Minecraft.Windows' -ErrorAction SilentlyContinue)) {
+    foreach ($process in @(Get-Process -Name 'Minecraft.Windows' -ErrorAction SilentlyContinue | Sort-Object Id)) {
         if ($process.SessionId -ne $session) { continue }
         try { $actual = [IO.Path]::GetFullPath([string]$process.Path) }
         catch { throw 'A candidate Minecraft process image could not be inspected.' }
@@ -408,7 +411,7 @@ $items = @(
         }
     }
 )
-if ($items.Count -gt 1) { throw 'Multiple registered Minecraft processes; native ownership is ambiguous.' }
+if ($items.Count -gt 4) { throw 'More than four registered Minecraft processes; cannot safely present an ambiguous group.' }
 [pscustomobject]@{
     schema = 1
     evidenceClass = 'REGISTERED_IMAGE_PATH_CANDIDATE_ONLY'
@@ -459,10 +462,19 @@ mod native_workspace_tests {
     #[test]
     fn native_workspace_refuses_ambiguous_or_forged_process_reports() {
         let valid = r#"{"pid":41,"createdFileTime":"134000000000000001","sessionId":1,"windowHandle":"0x123","responding":true}"#;
+        let another = r#"{"pid":42,"createdFileTime":"134000000000000002","sessionId":1,"windowHandle":"0x124","responding":true}"#;
+        let two = parse_native_workspace_observation(&format!(
+            r#"{{"schema":1,"evidenceClass":"REGISTERED_IMAGE_PATH_CANDIDATE_ONLY","processes":[{valid},{another}]}}"#,
+        )).unwrap();
+        assert_eq!(two.processes.len(), 2);
+        assert!(matches_native_workspace_target(&two, &two.processes[0]));
+        assert!(matches_native_workspace_target(&two, &two.processes[1]));
         for malformed in [
             format!(r#"{{"schema":2,"evidenceClass":"REGISTERED_IMAGE_PATH_CANDIDATE_ONLY","processes":[{valid}]}}"#),
             format!(r#"{{"schema":1,"evidenceClass":"GAMEPLAY_VERIFIED","processes":[{valid}]}}"#),
             format!(r#"{{"schema":1,"evidenceClass":"REGISTERED_IMAGE_PATH_CANDIDATE_ONLY","processes":[{valid},{valid}]}}"#),
+            format!(r#"{{"schema":1,"evidenceClass":"REGISTERED_IMAGE_PATH_CANDIDATE_ONLY","processes":[{valid},{{"pid":43,"createdFileTime":"134000000000000003","sessionId":1,"windowHandle":"0x123","responding":true}}]}}"#),
+            format!(r#"{{"schema":1,"evidenceClass":"REGISTERED_IMAGE_PATH_CANDIDATE_ONLY","processes":[{valid},{another},{valid},{another},{valid}]}}"#),
             format!(r#"{{"schema":1,"evidenceClass":"REGISTERED_IMAGE_PATH_CANDIDATE_ONLY","processes":[{valid}],"account":"secret"}}"#),
             r#"{"schema":1,"evidenceClass":"REGISTERED_IMAGE_PATH_CANDIDATE_ONLY","processes":[{"pid":0,"createdFileTime":"1","sessionId":1,"windowHandle":"0x123","responding":true}]}"#.into(),
         ] {

@@ -1,5 +1,17 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Product P0 — observable Windows Minecraft multi-window workspace, 23 October 2026
+
+Work: one real manager operation for independently started Minecraft Education windows, not another synthetic isolation gate.
+
+Decision: extend the canonical official Windows Desktop process adapter from one window candidate to four exact bounded process/PID/creation FILETIME/session/HWND observations. One new presentation-only Tauri command checks the selected running executable candidate again before using the existing workspace. UI allocates four transient presentation positions that keep their original Windows process across discovery reorder, do not borrow an exited process's account identity and do not persist tokens, accounts, profiles or worlds. Native-window management is the default view; historical owned/fork session inspection remains explicitly accessible for recovery.
+
+Operational scope: the official MC01 launch route still requests only one normal Windows-registered Desktop game and refuses a repeat if any matching game is already running. MC02–04 **Launch/Provision are still disabled**; those presentation positions may show only already-running windows. Four processes/windows do not prove four accounts or Roaming/HKCU/WAM separation. Windows developer build still must compile and real Minecraft must be observed before calling this operationally validated.
+
+Proof: exact Github source/static module + backend/IPC/frontend/test-consumer review; product test regressions authored NOT_EXECUTED. Windows compiler, Svelte/Vitest, real game login and four-client runtime NOT_EXECUTED. GitHub Actions disabled; no driver, unsigned service, installer, Minecraft binaries, account/world data, or main changed.
+
+Next: demonstrate a supported genuine Minecraft-compatible independently isolated second Windows game session before enabling MC02 Launch/Provision.
+
 ## Product P0 — usable native Minecraft 01 without retired isolation, 23 October 2026
 
 Work: official-Desktop host-native user workflow. Goal: Minecraft 01 can be inspected, explicitly opened, presented in the existing workspace and returned to Windows without a Sandboxie/owned-fork/VM session or owned developer test receipt. Clients 02–04 stay blocked.
