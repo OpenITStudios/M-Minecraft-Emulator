@@ -2,7 +2,11 @@
 //! No game launch, credential access, token modification or pipe policy
 //! promotion. The opt-in pilot remains disabled by default.
 
-use std::{ffi::c_void, io, mem, ptr};
+use std::{ffi::c_void, fs::File, io, mem, os::windows::io::AsRawHandle, ptr};
+use windows_sys::Win32::Storage::FileSystem::{
+    GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+    FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT,
+};
 type H = *mut c_void;
 const TOKEN_QUERY: u32 = 8;
 const TOKEN_DUPLICATE: u32 = 2;
@@ -19,6 +23,38 @@ const SE_GROUP_DENY_ONLY: u32 = 0x10;
 const SE_GROUP_LOGON_ID: u32 = 0xC000_0000;
 const MAX_GROUP_BYTES: u32 = 65_536;
 const SERVICE_NAME: &str = "NT SERVICE\\MIVUBIIndependentHost";
+// The service SID is an ENABLED GROUP of the SCM process token, NOT
+// automatically the TokenUser or NTFS object owner. The native candidate
+// below deliberately uses LocalSystem as owner/group and service SID as an
+// explicit allowed DACL principal.
+const LOCAL_SYSTEM_SID: [u8; 12] = [1, 1, 0, 0, 0, 0, 0, 5, 18, 0, 0, 0];
+const ROOT_FILE_ALL_ACCESS: u32 = 0x001F_01FF;
+const ROOT_DACL_PROTECTED: u16 = 0x1000;
+const ROOT_FILE_OBJECT: u32 = 1;
+const ROOT_SECURITY_FLAGS: u32 = 0x0001 | 0x0002 | 0x0004;
+const ROOT_ACL_SIZE_CLASS: u32 = 2;
+const ROOT_ACE_ALLOWED_TYPE: u8 = 0;
+const ROOT_ACE_OBJECT_AND_CONTAINER_INHERIT: u8 = 0x03;
+const ROOT_LIST: u32 = 0x0001;
+const ROOT_ADD_FILE: u32 = 0x0002;
+const ROOT_ADD_DIRECTORY: u32 = 0x0004;
+const ROOT_READ_EA: u32 = 0x0008;
+const ROOT_WRITE_EA: u32 = 0x0010;
+const ROOT_TRAVERSE: u32 = 0x0020;
+const ROOT_DELETE_CHILD: u32 = 0x0040;
+const ROOT_READ_ATTRIBUTES: u32 = 0x0080;
+const ROOT_WRITE_ATTRIBUTES: u32 = 0x0100;
+const ROOT_DELETE: u32 = 0x0001_0000;
+const ROOT_READ_CONTROL: u32 = 0x0002_0000;
+const ROOT_WRITE_DAC: u32 = 0x0004_0000;
+const ROOT_WRITE_OWNER: u32 = 0x0008_0000;
+const ROOT_CHECK_RIGHTS: [u32; 13] = [
+    ROOT_LIST, ROOT_ADD_FILE, ROOT_ADD_DIRECTORY,
+    ROOT_READ_EA, ROOT_WRITE_EA, ROOT_TRAVERSE,
+    ROOT_DELETE_CHILD, ROOT_READ_ATTRIBUTES, ROOT_WRITE_ATTRIBUTES,
+    ROOT_DELETE, ROOT_READ_CONTROL, ROOT_WRITE_DAC, ROOT_WRITE_OWNER,
+];
+const ERROR_NO_TOKEN: u32 = 1008;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -27,6 +63,15 @@ struct SidAndAttributes { sid: H, attributes: u32 }
 struct TokenGroups { count: u32, groups: [SidAndAttributes; 1] }
 #[repr(C)]
 struct TokenUser { user: SidAndAttributes }
+#[repr(C)]
+struct AclSizeInformation {
+    ace_count: u32, bytes_in_use: u32, bytes_free: u32,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct RootFileIdentity { volume: u32, index: u64 }
+/// A diagnostic-only sample, not a root capability or launch grant.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct PendingServiceRootReview { active_logons_sampled: usize }
 /// ABI-equivalent Win32 GENERIC_MAPPING for file-like named-pipe rights.
 /// DesiredAccess passed to AccessCheck uses only SPECIFIC rights.
 #[repr(C)]
@@ -48,6 +93,7 @@ unsafe extern "system" {
     ) -> i32;
     fn IsValidSid(sid: H) -> i32;
     fn GetLengthSid(sid: H) -> u32;
+    fn EqualSid(left: H, right: H) -> i32;
     fn ConvertStringSecurityDescriptorToSecurityDescriptorW(
         sddl: *const u16, revision: u32, descriptor: *mut H,
         descriptor_size: *mut u32,
@@ -72,10 +118,26 @@ unsafe extern "system" {
         privilege_set: H, privilege_capacity: *mut u32,
         granted_access: *mut u32, access_status: *mut i32,
     ) -> i32;
+    fn GetSecurityInfo(
+        handle: H, object_type: u32, information: u32,
+        owner: *mut H, group: *mut H, dacl: *mut H,
+        sacl: *mut H, descriptor: *mut H,
+    ) -> u32;
+    fn GetSecurityDescriptorControl(
+        descriptor: H, control: *mut u16, revision: *mut u32,
+    ) -> i32;
+    fn GetAclInformation(
+        acl: H, information: H, length: u32, class: u32,
+    ) -> i32;
+    fn GetAce(acl: H, index: u32, ace: *mut H) -> i32;
+    fn OpenThreadToken(
+        thread: H, desired_access: u32, open_as_self: i32, token: *mut H,
+    ) -> i32;
 }
 #[link(name = "kernel32")]
 unsafe extern "system" {
     fn GetCurrentProcess() -> H;
+    fn GetCurrentThread() -> H;
     fn GetLastError() -> u32;
     fn CloseHandle(handle: H) -> i32;
     fn LocalFree(memory: H) -> H;
@@ -270,6 +332,15 @@ fn native_grants(descriptor: &CandidateDescriptor, client: &Token, desired: u32)
     if !matches!(desired, SCOPED_CLIENT_PIPE_RIGHTS | FILE_CREATE_PIPE_INSTANCE) {
         return Err(denied("AccessCheck asked for an unreviewed pipe permission"));
     }
+    checked_native_access(descriptor, client, desired)
+}
+
+/// Generic-specific RIGHT evaluation shared by the existing pipe
+/// policy and the read-only directory-root review. NEVER call directly
+/// on untrusted requested masks; surface-specific wrappers restrict them.
+fn checked_native_access(
+    descriptor: &CandidateDescriptor, client: &Token, desired: u32,
+) -> io::Result<bool> {
     let mut mapping = GenericMapping {
         generic_read: 0x0012_0089,
         generic_write: 0x0012_0116,
@@ -300,6 +371,268 @@ fn native_grants(descriptor: &CandidateDescriptor, client: &Token, desired: u32)
         return Err(denied("Inconsistent native AccessCheck grant mask"));
     }
     Ok(status != 0)
+}
+
+/// Protected candidate for a future SERVICE-OWNED manager data root.
+/// O:SY/G:SY is deliberate: the SID of a Windows service is an enabled
+/// token GROUP, not its TokenUser. FA is inherited by future file/directory
+/// children through OI/CI; no Users, Administrators, Everyone or interactive
+/// logon grants. This function does not CREATE or modify an NTFS object.
+fn service_root_acl_candidate(verified_service: &str) -> io::Result<String> {
+    if !canonical_service_sid_text(verified_service) {
+        return Err(denied("Unverified service SID cannot define root ACL"));
+    }
+    Ok(format!(
+        "O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;{verified_service})"
+    ))
+}
+
+fn root_access(descriptor: &CandidateDescriptor, token: &Token, right: u32)
+    -> io::Result<bool>
+{
+    if !ROOT_CHECK_RIGHTS.contains(&right) {
+        return Err(denied("Unreviewed service-root access right"));
+    }
+    checked_native_access(descriptor, token, right)
+}
+
+fn require_nonimpersonating_thread() -> io::Result<()> {
+    let mut raw: H = ptr::null_mut();
+    // SAFETY: Query the CURRENT service thread only. A root must never be
+    // inspected during IPC-client impersonation or an unknown token state.
+    let ok = unsafe {
+        OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, 1, &mut raw)
+    };
+    let borrowed = Token(raw);
+    if ok != 0 || unsafe { GetLastError() } != ERROR_NO_TOKEN {
+        return Err(denied("Service-root inspector requires no thread impersonation"));
+    }
+    drop(borrowed);
+    Ok(())
+}
+
+fn root_file_identity(root: &File) -> io::Result<RootFileIdentity> {
+    // SAFETY: A retained Windows File handle is required. No pathname is
+    // consulted; reject reparse points, files and unidentifiable objects.
+    let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { mem::zeroed() };
+    if unsafe {
+        GetFileInformationByHandle(root.as_raw_handle() as H, &mut info)
+    } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY == 0
+        || info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    {
+        return Err(denied("Service-root HANDLE is not a plain NTFS directory"));
+    }
+    let index = (u64::from(info.nFileIndexHigh) << 32)
+        | u64::from(info.nFileIndexLow);
+    if index == 0 {
+        return Err(denied("Windows file identity is not available"));
+    }
+    Ok(RootFileIdentity { volume: info.dwVolumeSerialNumber, index })
+}
+
+/// Validate the exact expected two-ACE DACL rather than trusting only one
+/// sampled desktop token's AccessCheck. An arbitrary BA/WD/BU third ACE or
+/// an inherited ACE is a policy mismatch even when no such user is active.
+/// All returned ACE pointers and SID bytes remain inside their ACL span.
+fn exact_service_root_acl(dacl: H, service_sid_bytes: &[u8]) -> io::Result<()> {
+    if dacl.is_null() || !service_sid(service_sid_bytes) {
+        return Err(denied("Missing DACL or non-service group SID"));
+    }
+    let mut info = AclSizeInformation {
+        ace_count: 0, bytes_in_use: 0, bytes_free: 0,
+    };
+    if unsafe {
+        GetAclInformation(
+            dacl, (&mut info as *mut AclSizeInformation).cast(),
+            mem::size_of::<AclSizeInformation>() as u32, ROOT_ACL_SIZE_CLASS,
+        )
+    } == 0 || info.ace_count != 2 || info.bytes_in_use < 8 {
+        return Err(denied("Service-root DACL is not exactly two allow ACEs"));
+    }
+    // Validate the Windows ACL_HEADER's declared byte size as well as
+    // AclBytesInUse before using GetAce pointers. Never let an ACE body
+    // extend into memory beyond the actual returned ACL allocation.
+    // SAFETY: A successful GetAclInformation above means dacl points at a
+    // Win32 ACL header of at least 8 bytes.
+    let acl_header = unsafe { std::slice::from_raw_parts(dacl.cast::<u8>(), 8) };
+    let allocated = u16::from_le_bytes([acl_header[2], acl_header[3]]) as usize;
+    if allocated < 8 || info.bytes_in_use as usize > allocated {
+        return Err(denied("Service-root DACL byte usage exceeds ACL allocation"));
+    }
+    let beginning = dacl as usize;
+    let end = beginning.checked_add(info.bytes_in_use as usize)
+        .ok_or_else(|| denied("Invalid service-root ACL byte span"))?;
+    let mut system_found = false;
+    let mut service_found = false;
+    for index in 0..2u32 {
+        let mut ace: H = ptr::null_mut();
+        if unsafe { GetAce(dacl, index, &mut ace) } == 0 || ace.is_null() {
+            return Err(denied("Missing service-root ACE"));
+        }
+        let begin = ace as usize;
+        if begin < beginning + 8 || begin.checked_add(16).is_none_or(|n| n > end) {
+            return Err(denied("Truncated service-root ACE header"));
+        }
+        // SAFETY: The first 16 ACE bytes are confirmed inside the OS-owned
+        // ACL. This includes the SID's minimum 8-byte header at offset 8.
+        let bytes = unsafe { std::slice::from_raw_parts(ace.cast::<u8>(), 16) };
+        let length = u16::from_le_bytes([bytes[2], bytes[3]]) as usize;
+        let mask = u32::from_le_bytes(bytes[4..8].try_into()
+            .map_err(|_| denied("Malformed ACE access mask"))?);
+        let sid_len = 8 + usize::from(bytes[9]) * 4;
+        if bytes[0] != ROOT_ACE_ALLOWED_TYPE
+            || bytes[1] != ROOT_ACE_OBJECT_AND_CONTAINER_INHERIT
+            || bytes[8] != 1 || bytes[9] > 15
+            || mask != ROOT_FILE_ALL_ACCESS
+            || length != 8 + sid_len
+            || begin.checked_add(length).is_none_or(|n| n > end)
+        {
+            return Err(denied("Unexpected service-root ACE flags or size"));
+        }
+        // SAFETY: The full ACE/SID size was checked against the live ACL
+        // buffer before reading its bytes. SID values never leave this call.
+        let sid = unsafe {
+            std::slice::from_raw_parts(ace.cast::<u8>().add(8), sid_len)
+        };
+        if sid == LOCAL_SYSTEM_SID.as_slice() && !system_found {
+            system_found = true;
+        } else if sid == service_sid_bytes && !service_found {
+            service_found = true;
+        } else {
+            return Err(denied("Unknown or duplicate service-root ACL principal"));
+        }
+    }
+    if !system_found || !service_found {
+        return Err(denied("Service-root ACL lacks SYSTEM or exact service SID"));
+    }
+    Ok(())
+}
+
+/// Inspect one ALREADY-OPENED real directory HANDLE. The current process
+/// must be the expected SCM service with its verified enabled service SID;
+/// the root must have SYSTEM owner/group and an exact protected two-ACE
+/// service+SYSTEM DACL, not merely a private-looking path. No filesystem
+/// security descriptor is changed by this review. The trusted ancestor
+/// and creation/handoff mechanism are still NOT implemented.
+fn existing_root_descriptor(root: &File, service_sid: &[u8])
+    -> io::Result<CandidateDescriptor>
+{
+    let mut owner: H = ptr::null_mut();
+    let mut group: H = ptr::null_mut();
+    let mut dacl: H = ptr::null_mut();
+    let mut raw: H = ptr::null_mut();
+    // SAFETY: Root File retains READ_CONTROL; GetSecurityInfo returns one
+    // LocalFree-owned allocation whose SID/ACL pointers remain borrowed.
+    let code = unsafe {
+        GetSecurityInfo(
+            root.as_raw_handle() as H, ROOT_FILE_OBJECT,
+            ROOT_SECURITY_FLAGS,
+            &mut owner, &mut group, &mut dacl, ptr::null_mut(), &mut raw,
+        )
+    };
+    let descriptor = CandidateDescriptor(raw);
+    if code != 0 {
+        return Err(io::Error::from_raw_os_error(code as i32));
+    }
+    if descriptor.0.is_null() || owner.is_null() || group.is_null()
+        || dacl.is_null()
+        || unsafe { IsValidSid(owner) } == 0
+        || unsafe { IsValidSid(group) } == 0
+    {
+        return Err(denied("Service root is missing valid owner, group or DACL"));
+    }
+    if unsafe {
+        EqualSid(owner, LOCAL_SYSTEM_SID.as_ptr() as H)
+    } == 0 || unsafe {
+        EqualSid(group, LOCAL_SYSTEM_SID.as_ptr() as H)
+    } == 0 {
+        return Err(denied("Service-root owner and group must both be SYSTEM"));
+    }
+    let mut control = 0u16;
+    let mut revision = 0u32;
+    if unsafe {
+        GetSecurityDescriptorControl(descriptor.0, &mut control, &mut revision)
+    } == 0 || control & ROOT_DACL_PROTECTED == 0 {
+        return Err(denied("Service-root DACL is not protected against inheritance"));
+    }
+    exact_service_root_acl(dacl, service_sid)?;
+    Ok(descriptor)
+}
+
+/// Genuine Windows read-only root-policy review, NOT a root constructor,
+/// a service/desktop handle handoff, or a production authorization gate.
+/// This function is intentionally NOT CALLED by SCM startup, IPC or Tauri.
+/// Revalidates exact service group membership and OS-active peer snapshots;
+/// even success means ONLY one current sampled DACL/ACL observation.
+#[allow(dead_code)]
+fn review_existing_service_root_source(root: &File)
+    -> io::Result<PendingServiceRootReview>
+{
+    require_nonimpersonating_thread()?;
+    let service = verified_current_service_sid()?;
+    let expected = expected_service_sid()?;
+    // The dedicated service must run as LocalSystem in this candidate
+    // ownership model. Its service SID is an enabled GROUP, not TokenUser.
+    let mut raw: H = ptr::null_mut();
+    if unsafe {
+        OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE, &mut raw)
+    } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let process = Token(raw);
+    if process.0.is_null()
+        || token_dword(process.0, TOKEN_TYPE)? != TOKEN_PRIMARY
+        || verified_token_user_sid(process.0)?.as_slice() != LOCAL_SYSTEM_SID.as_slice()
+    {
+        return Err(denied("Service-root review requires a LocalSystem SCM process"));
+    }
+    let owner_token = duplicate_for_access_check(process.0)?;
+    let before = root_file_identity(root)?;
+    let descriptor = existing_root_descriptor(root, &expected)?;
+    for right in [
+        ROOT_LIST, ROOT_ADD_FILE, ROOT_ADD_DIRECTORY,
+        ROOT_TRAVERSE, ROOT_READ_CONTROL,
+    ] {
+        if !root_access(&descriptor, &owner_token, right)? {
+            return Err(denied("SCM process cannot access its candidate data root"));
+        }
+    }
+    let active = enumerate_active_ids()?;
+    for &session in &active {
+        let mut raw: H = ptr::null_mut();
+        let ok = unsafe { WTSQueryUserToken(session, &mut raw) };
+        let other = Token(raw);
+        if ok == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if other.0.is_null()
+            || token_dword(other.0, TOKEN_TYPE)? != TOKEN_PRIMARY
+            || token_dword(other.0, TOKEN_SESSION_ID)? != session
+            || verified_token_user_sid(other.0)?.as_slice() == LOCAL_SYSTEM_SID.as_slice()
+        {
+            return Err(denied("Unsupported interactive peer token for root ACL review"));
+        }
+        let peer = duplicate_for_access_check(other.0)?;
+        for right in ROOT_CHECK_RIGHTS {
+            if root_access(&descriptor, &peer, right)? {
+                return Err(denied("Peer has a direct sensitive right to service-root HANDLE"));
+            }
+        }
+    }
+    // Re-check only sample-specific properties. An ACL or token may change
+    // AFTER this function; current findings never turn into lease/launch.
+    if enumerate_active_ids()? != active
+        || verified_current_service_sid()? != service
+        || root_file_identity(root)? != before
+    {
+        return Err(denied("Native service/root/logon identity changed during review"));
+    }
+    let _ = existing_root_descriptor(root, &expected)?;
+    require_nonimpersonating_thread()?;
+    Ok(PendingServiceRootReview { active_logons_sampled: active.len() })
 }
 
 /// Actually ask Windows to evaluate a candidate descriptor against the WTS
@@ -787,6 +1120,71 @@ mod tests {
         let first = scoped_logon_pipe_acl_candidate(good_service, &logon).unwrap();
         let second = scoped_logon_pipe_acl_candidate(good_service, &next_logon).unwrap();
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn directory_root_candidate_has_system_owner_and_exact_service_only() {
+        let expected = "S-1-5-80-10-20-30-40-50";
+        assert_eq!(service_root_acl_candidate(expected).unwrap(),
+            "O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;S-1-5-80-10-20-30-40-50)");
+        for bad in [
+            "", "S-1-5-18", "S-1-5-80-10-20-30-40",
+            "S-1-5-80-10-20-30-40-50(A;;GA;;;WD)",
+            "S-1-5-80-010-20-30-40-50",
+        ] {
+            assert!(service_root_acl_candidate(bad).is_err());
+        }
+        let sddl = service_root_acl_candidate(expected).unwrap();
+        assert!(!sddl.contains(";;;BA"));
+        assert!(!sddl.contains(";;;WD"));
+        assert!(!sddl.contains(";;;AU"));
+        assert!(!sddl.contains(";;;BU"));
+        let descriptor = candidate_descriptor(&sddl).unwrap();
+        let mut actual_service = vec![1, 6, 0, 0, 0, 0, 0, 5];
+        for rid in [80u32, 10, 20, 30, 40, 50] {
+            actual_service.extend_from_slice(&rid.to_le_bytes());
+        }
+        let mut dacl: H = ptr::null_mut();
+        let mut present = 0i32;
+        let mut defaulted = 0i32;
+        assert_ne!(unsafe {
+            GetSecurityDescriptorDacl(
+                descriptor.0, &mut present, &mut dacl, &mut defaulted,
+            )
+        }, 0);
+        assert_eq!(present, 1);
+        assert!(exact_service_root_acl(dacl, &actual_service).is_ok());
+    }
+
+    #[test]
+    fn root_policy_rejects_extra_or_changed_acl_principals_and_flags() {
+        let service = "S-1-5-80-10-20-30-40-50";
+        let mut sid = vec![1, 6, 0, 0, 0, 0, 0, 5];
+        for rid in [80u32, 10, 20, 30, 40, 50] {
+            sid.extend_from_slice(&rid.to_le_bytes());
+        }
+        for invalid in [
+            format!("O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;{service})(A;;FA;;;BA)"),
+            format!("O:SYG:SYD:P(A;;FA;;;SY)(A;OICI;FA;;;{service})"),
+            format!("O:SYG:SYD:P(A;OICI;FR;;;SY)(A;OICI;FA;;;{service})"),
+            format!("O:SYG:SYD:P(A;OICI;FA;;;SY)(D;OICI;FA;;;{service})"),
+        ] {
+            let descriptor = candidate_descriptor(&invalid).unwrap();
+            let mut dacl: H = ptr::null_mut();
+            let mut present = 0i32;
+            let mut defaulted = 0i32;
+            assert_ne!(unsafe {
+                GetSecurityDescriptorDacl(
+                    descriptor.0, &mut present, &mut dacl, &mut defaulted,
+                )
+            }, 0);
+            assert_ne!(present, 0);
+            assert!(exact_service_root_acl(dacl, &sid).is_err());
+        }
+        assert!(root_access(
+            &candidate_descriptor(&service_root_acl_candidate(service).unwrap()).unwrap(),
+            &Token(ptr::null_mut()), ROOT_FILE_ALL_ACCESS,
+        ).is_err());
     }
 
     #[test]

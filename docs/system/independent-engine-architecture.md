@@ -11,6 +11,49 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### SCM service-SID-owned root policy and real HANDLE audit (23 October 2026)
+
+The original opt-in SCM `independent-service/src/service_identity.rs` now
+contains a **source-only, unmounted, read-only** native directory-root
+policy. It resolves the exact enabled MIVUBI service SID from Windows;
+the service SID is a **token group**, whereas the proposed root's owner
+and group remain **LOCAL SYSTEM** (`O:SYG:SY`). The candidate root's
+protected DACL contains precisely two inheritable file-all-access ACEs
+for SYSTEM and the verified service group. It contains no desktop
+logon, Administrators, Everyone, Users or Authenticated Users grant.
+
+`review_existing_service_root_source` accepts an **already opened**
+directory HANDLE (never a caller path). It requires a nonimpersonating
+SCM thread, the expected enabled service SID and a LocalSystem process
+TokenUser. It rejects reparse/non-directory/unstable HANDLEs; retrieves
+the actual root owner, group and DACL with `GetSecurityInfo`, checks
+`SE_DACL_PROTECTED`, and parses both ACEs with strict bounds to
+reject an extra trustee, modified allow mask, unexpected inheritance
+or DENY entry. It then asks the actual Win32 `AccessCheck` for the
+service's essential directory rights and confirms that currently
+WTSActive non-SYSTEM desktop tokens lack each reviewed file/metadata/
+deletion/security right. Service SID, active-session list, original
+directory FILE_ID and exact ACL policy are rechecked at the end.
+Only a `PendingServiceRootReview` sample can result: no grant,
+token, SID, filesystem content or Windows handle leaves this module.
+
+This code is still compiled only inside the explicitly opted-in
+`readonly-ipc-pilot` module; it is **NOT** called by SCM startup,
+the pipe worker or Tauri, and never creates or modifies a root.
+Its current source is not a root factory or a cross-process handle
+handoff. A trusted parent anchor, fresh-only NT root creation under
+it, root/child ACL inheritance checks, durable service identity,
+restricted peer privilege model and actual Minecraft file/HKCU/WAM
+routing remain open. Tests are authored but Windows/Cargo execution
+is `NOT_EXECUTED`. The default service build and Launch/Provision
+denials are unchanged.
+
+Microsoft contracts:
+[Service SID](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_sid_info),
+[GetSecurityInfo](https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-getsecurityinfo),
+[GetAclInformation](https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-getaclinformation)
+and [Security Descriptor Control](https://learn.microsoft.com/en-us/windows/win32/secauthz/security-descriptor-control).
+
 ### Root-owner SID and effective peer ACL checks (23 October 2026)
 
 The existing Windows-only `independent_root_access.rs` now inspects the

@@ -1,6 +1,47 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Independent SCM service — read-only service-SID root policy and ACL attestation, 23 October 2026
+
+Implemented a cross-boundary next step in the EXISTING, opt-in
+`engine/isolation-native/independent-service/src/service_identity.rs`
+owner. Verified the fundamental difference between Windows
+`TokenUser` and the enabled `NT SERVICE\\MIVUBIIndependentHost`
+service SID group. A proposed private root uses LocalSystem
+owner/group and an exact protected, inheritable SYSTEM+SERVICE
+two-ACE DACL. The candidate builder rejects unverified/lookalike
+SID strings; directory-DACL parsing rejects arbitrary extra trustee
+grants, altered ACE rights/flags, malformed bounds and missing
+protected DACL.
+
+Added unmounted `review_existing_service_root_source`, which
+queries a **held directory HANDLE**, checks non-reparse FILE_ID,
+owner/group SYSTEM, exact service+SYSTEM ACL, current SCM
+LocalSystem TokenUser + enabled service SID and no impersonating
+thread. It reviews OS `AccessCheck` rights for the service and
+each WTSActive desktop process user token; any sensitive peer
+right refuses the diagnostic sample. It rechecks the observed
+root identity, ACL, current service SID and active Windows sessions.
+Existing native pipe-right checks keep their original allowlist;
+directory rights use a distinct narrow allowlist. Two focused
+Windows-only Rust tests were authored for exact candidate ACL
+and extra/altered ACE refusal.
+
+**Proof:** pinned remote GitHub source/static review and Microsoft
+Service SID, GetSecurityInfo, GetAclInformation and AccessCheck
+contracts. No rustc/cargo or Windows session available:
+compilation/tests `NOT_EXECUTED`, Minecraft runtime `NOT_EXECUTED`.
+Only a PENDING read-only sample exists, not trusted root
+creation or a handle capability. `readonly-ipc-pilot` still
+defaults OFF; no SCM dispatch/startup wiring, installer, ACL
+mutation, profile/world read, driver, CI or Launch/Provision.
+
+**Next:** add a fresh-only handle-relative service-root constructor
+that uses the exact reviewed ACL under a separately attested
+trusted parent HANDLE; do not export a service/game root or
+launch Minecraft until root/peer proof is available.
+
+
 ## Native Storage — verify directory owner SID and all sensitive peer rights, 23 October 2026
 
 Strengthened the one existing Windows native root ACL owner,
