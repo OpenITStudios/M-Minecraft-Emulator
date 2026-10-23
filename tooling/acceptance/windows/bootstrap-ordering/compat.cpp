@@ -20,7 +20,7 @@ wchar_t folded(wchar_t c, bool insensitive) {
 probe::NativeFileCreate originalFileCreate = nullptr;
 probe::NativeFileOpen originalFileOpen = nullptr;
 HANDLE fileLogicalRoot = nullptr, fileOwnRoot = nullptr;
-FILE_ID_INFO logicalDirectoryId{};
+FILE_ID_INFO logicalDirectoryId{}, ownDirectoryId{};
 wchar_t logicalDevice[512]{}, logicalDos[512]{};
 
 bool sameFileId(const FILE_ID_INFO& a, const FILE_ID_INFO& b) {
@@ -41,10 +41,9 @@ bool asciiPath(const wchar_t* path, unsigned length) {
 }
 bool initializeFiles(const probe::Receipt& config, HMODULE ntdll) {
     if (config.fileRound > 1) return false;
-    FILE_ID_INFO ownId{};
     if (!directoryInfo(config.fileLogicalRoot, logicalDirectoryId)
-        || !directoryInfo(config.fileOwnRoot, ownId)
-        || sameFileId(logicalDirectoryId, ownId)) return false;
+        || !directoryInfo(config.fileOwnRoot, ownDirectoryId)
+        || sameFileId(logicalDirectoryId, ownDirectoryId)) return false;
     FILE_CASE_SENSITIVE_INFO caseInfo{};
     if (!GetFileInformationByHandleEx(config.fileLogicalRoot, FileCaseSensitiveInfo, &caseInfo, sizeof(caseInfo))
         || caseInfo.Flags != 0
@@ -83,7 +82,7 @@ bool pathPrefix(const UNICODE_STRING& name, const wchar_t* prefix, unsigned& lea
     leaf = length + 1;
     return true;
 }
-FileRoute fileRoute(const OBJECT_ATTRIBUTES& attributes) {
+FileRoute fileRoute(const OBJECT_ATTRIBUTES& attributes, UNICODE_STRING& selectedName) {
     if (attributes.Length != sizeof(OBJECT_ATTRIBUTES) || !attributes.ObjectName) return FileRoute::Other;
     const UNICODE_STRING name = *attributes.ObjectName;
     if (!name.Buffer || name.Length % sizeof(wchar_t) || name.MaximumLength < name.Length)
@@ -96,17 +95,28 @@ FileRoute fileRoute(const OBJECT_ATTRIBUTES& attributes) {
     } else {
         FILE_ID_INFO rootId{};
         if (!attributes.RootDirectory || !directoryInfo(attributes.RootDirectory, rootId)
-            || !sameFileId(rootId, logicalDirectoryId)) return FileRoute::Other;
+            || (!sameFileId(rootId, logicalDirectoryId) && !sameFileId(rootId, ownDirectoryId))) return FileRoute::Other;
     }
-    constexpr wchar_t chosen[] = L"state.bin";
-    if (count - leaf != 9) return FileRoute::Unsupported;
-    for (unsigned i = 0; i < 9; ++i)
-        if (folded(name.Buffer[leaf + i], true) != chosen[i]) return FileRoute::Unsupported;
+    const unsigned length = count - leaf;
+    if (length > 64) return FileRoute::Unsupported;
+    // shortcut: flat ASCII leaves only; extend resolution before supporting subdirectories.
+    for (unsigned i = 0; i < length; ++i) {
+        const wchar_t ch = name.Buffer[leaf + i];
+        const bool alphanumeric = (ch >= L'a' && ch <= L'z') || (ch >= L'A' && ch <= L'Z')
+            || (ch >= L'0' && ch <= L'9');
+        if (!alphanumeric && (i == 0 || (ch != L'.' && ch != L'_' && ch != L'-')))
+            return FileRoute::Unsupported;
+    }
+    if (length && name.Buffer[count - 1] == L'.') return FileRoute::Unsupported;
+    const auto bytes = static_cast<USHORT>(length * sizeof(wchar_t));
+    selectedName = {bytes, bytes, name.Buffer + leaf};
     return FileRoute::Private;
 }
-bool unsupportedFile(ACCESS_MASK access, ULONG options) {
-    return (access & (DELETE | WRITE_DAC | WRITE_OWNER | GENERIC_ALL | FILE_EXECUTE)) != 0
-        || (options & (FILE_DIRECTORY_FILE | FILE_DELETE_ON_CLOSE | FILE_OPEN_BY_FILE_ID | FILE_OPEN_REPARSE_POINT)) != 0;
+bool unsupportedFile(ACCESS_MASK access, ULONG options, bool root) {
+    return (access & (DELETE | WRITE_DAC | WRITE_OWNER | GENERIC_ALL)) != 0
+        || (!root && (access & FILE_EXECUTE))
+        || (options & (FILE_DELETE_ON_CLOSE | FILE_OPEN_BY_FILE_ID | FILE_OPEN_REPARSE_POINT)) != 0
+        || (root ? (options & FILE_NON_DIRECTORY_FILE) != 0 : (options & FILE_DIRECTORY_FILE) != 0);
 }
 NTSTATUS NTAPI translatedFileCreate(PHANDLE handle, ACCESS_MASK access, POBJECT_ATTRIBUTES attributes,
     PIO_STATUS_BLOCK io, PLARGE_INTEGER allocation, ULONG fileAttributes, ULONG share,
@@ -114,13 +124,13 @@ NTSTATUS NTAPI translatedFileCreate(PHANDLE handle, ACCESS_MASK access, POBJECT_
     const DWORD saved = GetLastError();
     NTSTATUS status;
     __try {
-        const FileRoute route = attributes ? fileRoute(*attributes) : FileRoute::Other;
-        if (route == FileRoute::Unsupported || (route == FileRoute::Private && unsupportedFile(access, options))) {
+        UNICODE_STRING name{};
+        const FileRoute route = attributes ? fileRoute(*attributes, name) : FileRoute::Other;
+        if (route == FileRoute::Unsupported || (route == FileRoute::Private
+            && (unsupportedFile(access, options, name.Length == 0) || (name.Length == 0 && disposition != 1)))) {
             status = static_cast<NTSTATUS>(0xc00000bbUL);
         } else {
             OBJECT_ATTRIBUTES copy{};
-            wchar_t leaf[] = L"state.bin";
-            UNICODE_STRING name{18, 18, leaf};
             if (route == FileRoute::Private) {
                 copy = *attributes; copy.RootDirectory = fileOwnRoot; copy.ObjectName = &name;
             }
@@ -137,13 +147,12 @@ NTSTATUS NTAPI translatedFileOpen(PHANDLE handle, ACCESS_MASK access, POBJECT_AT
     const DWORD saved = GetLastError();
     NTSTATUS status;
     __try {
-        const FileRoute route = attributes ? fileRoute(*attributes) : FileRoute::Other;
-        if (route == FileRoute::Unsupported || (route == FileRoute::Private && unsupportedFile(access, options))) {
+        UNICODE_STRING name{};
+        const FileRoute route = attributes ? fileRoute(*attributes, name) : FileRoute::Other;
+        if (route == FileRoute::Unsupported || (route == FileRoute::Private && unsupportedFile(access, options, name.Length == 0))) {
             status = static_cast<NTSTATUS>(0xc00000bbUL);
         } else {
             OBJECT_ATTRIBUTES copy{};
-            wchar_t leaf[] = L"state.bin";
-            UNICODE_STRING name{18, 18, leaf};
             if (route == FileRoute::Private) {
                 copy = *attributes; copy.RootDirectory = fileOwnRoot; copy.ObjectName = &name;
             }

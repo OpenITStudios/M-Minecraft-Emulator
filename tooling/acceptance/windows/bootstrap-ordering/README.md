@@ -4,7 +4,7 @@ This standalone Windows/MSVC x64 experiment answers one question: does an
 in-memory first import arm a synthetic canary gate before the controlled
 dependency's DllMain, the EXE TLS callback, and the EXE's main canary run?
 The default ordering mode does not hook APIs. The separate mutex mode below
-hooks a fixed mutex name and one synthetic file leaf. Neither mode isolates general filesystem/HKCU views, identifies
+hooks a fixed mutex name and one synthetic flat directory. Neither mode isolates general filesystem/HKCU views, identifies
 Minecraft's singleton, separates brokers, or approves a provider. The marker graph is intentionally
 small; success cannot establish order for every Windows/game dependency.
 
@@ -77,7 +77,7 @@ JSON contains fixed stage/case labels and booleans/counts, with
 providerReady=false and minecraft=NOT_EXECUTED. It emits no raw PID, FILETIME,
 HANDLE, username, installed game path, credentials, caches or world contents.
 
-No registry operations are mediated. Only the selected synthetic file leaf below is redirected. In the default ordering mode,
+No registry operations are mediated. Only the selected synthetic directory below is redirected. In the default ordering mode,
 "canary" means a marker at a would-be protected call site and "arm" is a shared
 flag. In mutex mode the flag follows installation of all four native mutex/file hooks in one transaction.
 This test cannot observe kernel accesses before notification, all loader work,
@@ -161,60 +161,106 @@ this host do not establish universal OS compatibility.
 ## Coherent synthetic file backing — 24 October 2026 WIB
 
 The same mutex pair command runs two generations against one newly created TEMP
-root. Only fresh HOST/OUTSIDE/A1/B1/A2/B2 markers are read or written; no existing
-host/game/account/cache/world file is opened. The tiny synthetic tree is preserved
-locally, without recursive cleanup. CreateDirectory and CREATE_NEW refuse existing
-test directories/files.
+root, now exposing a **flat private directory** instead of one fixed file.
+Only fresh synthetic markers are accessed. No existing host/game/account/cache/
+world files are opened. Test trees stay local, without recursive cleanup.
 
-NtCreateFile/NtOpenFile route exactly state.bin under the configured logical
-directory into the same slot's A/B directory. All four mutex/file hooks install
-atomically. Selected absolute NT device/DOS and directory-handle relative names
-share the mapping. Relative roots use volume/file ID, not handle number.
-OBJECT_ATTRIBUTES is copied; access/share/disposition, allocation/EA/options and
-IO_STATUS_BLOCK go to the original API. Forwarded NTSTATUS and entry LastError
-are preserved. Actual read/write handles refer to private backing: a missing
-private file stays missing, with no copying or fallback from logical HOST.
+NtCreateFile/NtOpenFile select the configured logical root itself or a flat leaf
+under it, then open the private A/B directory or its leaf. The same receipt.slot
+selects backing and mutex suffix. Root opens use an empty counted name relative
+to the inherited private directory handle; their returned handles identify that
+private directory. Directory-relative leaf access recognizes both logical and
+private root volume/file IDs, including independently opened handles.
 
-Attach rejects missing/non-directory/reparse roots, case-sensitive roots,
-non-ASCII/oversized canonical paths, identical directory IDs, or a private
-directory other than the expected A/B sibling of logical. One receipt.slot
-selects both file backing and mutex suffix. An A-to-B binding fails before
-Armed/main. Parent directory handles omit delete sharing.
+All four hooks still install atomically. Caller OBJECT_ATTRIBUTES is copied;
+leaf spelling/counts, access/share/disposition, allocation/EA/options and
+IO_STATUS_BLOCK are forwarded. NTSTATUS and entry LastError are preserved.
+Missing private files stay missing without copying/falling back to logical HOST.
+Root opens allow FILE_OPEN only; directory creation/truncation is unsupported.
 
-This is a narrow cooperative slice. Within recognized logical roots, other
-leaves/subpaths/streams and selected DELETE, owner/DACL, execute, directory,
-delete-on-close, open-by-ID or open-reparse requests return STATUS_NOT_SUPPORTED.
-Policy rejection does not synthesize IO_STATUS_BLOCK. Unrecognized roots/aliases
-pass through. Leaf reparse/hardlink attacks, handle rename/delete, inherited or
-duplicated data handles, Unicode/general path policy, directory enumeration,
-filesystem identity presentation, read COW and adversarial race containment are
-not implemented. Same-user direct private backing access remains possible;
-securityBoundary=false. Root metadata/initialization calls in this controlled
-import experiment do not establish general loader/Windows-version compatibility.
+**Enumeration needs no additional hook:** NtQueryDirectoryFile and Win32
+FindFirstFileW/FindNextFileW operate on the real private directory handle returned
+by the mapped open. Windows supplies entries, cursor/restart/filter behavior and
+NO_MORE_FILES. There is no host/private merge, synthetic query-result rewriting,
+shared enumeration cursor or second directory-state store.
 
-File mask **127**, per child per generation:
+Attach retains canonical ASCII path, volume/file-ID, non-reparse and
+case-insensitive-root checks; A/private B binding fails before Armed/main.
+Allowed leaves are 1–64 ASCII letters/digits, with dot/underscore/hyphen permitted
+after the first character; trailing dots are rejected. Empty leaf selects root.
+Subpaths, dot traversal, streams and other leaf syntax return
+STATUS_NOT_SUPPORTED under recognized logical/private roots. DELETE,
+owner/DACL, GENERIC_ALL, leaf execute, delete-on-close, open-by-ID and
+open-reparse operations remain rejected; directory option is allowed only at
+the root, and non-directory option only for leaves. Policy rejection does not
+synthesize IO_STATUS_BLOCK.
+
+This is cooperative routing, **not a security boundary**. Unknown roots/aliases
+pass through. Recursive directories, arbitrary Unicode, leaf reparse/hardlink
+attacks, handle rename/delete, inherited/duplicated data handle containment,
+filesystem identity presentation, read COW and adversarial races are missing.
+Direct same-user private backing access remains possible. Loader safety beyond
+this controlled import graph and general Windows compatibility are unproved.
+
+File mask **4095** per child/generation:
 
 | Bit | Actual check |
 | --- | --- |
-| 1 | First private open is missing despite HOST existing; relaunch reads the previous slot marker. |
-| 2 | Win32 create/open, write, truncate and flush use private backing. |
-| 4 | Absolute native open returns success/FILE_OPENED, preserves LastError and reads own marker. |
-| 8 | Counted relative native OPEN_IF preserves caller input, inheritance, IO information and read-only access. |
-| 16 | DELETE access and a different protected leaf are rejected without a file handle. |
+| 1 | Initial private state.bin is missing despite HOST; relaunch reads previous own marker. |
+| 2 | Win32 create/open, write, truncate and flush use private state.bin. |
+| 4 | Absolute native DOS-form open preserves status/information/LastError and reads own marker. |
+| 8 | Counted relative OPEN_IF preserves input, inheritance, information and read-only access. |
+| 16 | DELETE access and an alternate stream are rejected without a handle. |
 | 32 | Unselected synthetic outside file passes through unchanged. |
-| 64 | After both processes are ready, each still reads its own marker. |
+| 64 | After both children are ready, own contents and private directory entries remain unchanged. |
+| 128 | Win32 logical-directory open returns the own backing's volume/file ID. |
+| 256 | Relative native creation writes slot-A/B.bin; native multi-entry enumeration sees exactly state.bin plus own slot file. Relaunch first reads its previous marker. |
+| 512 | Restarted single-entry native enumeration on the same directory handle yields the same exact set and terminates. |
+| 1024 | Fresh-handle native wildcard filtering and Win32 enumeration see only own files. |
+| 2048 | Own handle-relative peer file is absent; absolute own leaf reads agree; traversal/stream/subpath/trailing-dot calls are rejected; host-only.bin stays absent. |
 
-The parent independently reads A/B and unchanged logical HOST/OUTSIDE while both
-children hold files/mutexes and after normal exit, in both generations. Existing
-mutex masks and early-import marker order remain required. Device-form mapping
-is implemented; the explicit absolute native test uses DOS form. This is not
-effective Minecraft Roaming/Local/Known Folder, HKCU or helper authentication.
+The parent independently reads both private files per slot and unchanged
+logical state.bin/host-only.bin plus outside.bin during and after both pairs.
+Second-generation checks include previously persisted peer files, so absence
+cannot be inferred merely from timing of first creation. Native/Win32 mutex
+controls, mismatch rejection, marker ordering and normal exits remain required.
+Device-form mapping is implemented; the explicit absolute native test uses DOS
+form. Roaming/Local/Known Folder, HKCU and authentication are not established.
 
 API contracts: [NtCreateFile](https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntcreatefile),
 [NtOpenFile](https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntopenfile),
-[GetFileInformationByHandleEx](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getfileinformationbyhandleex).
+[GetFileInformationByHandleEx](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getfileinformationbyhandleex),
+[NtQueryDirectoryFile](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntquerydirectoryfile),
+[FILE_NAMES_INFORMATION](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_names_information).
 
 ## Evidence
+
+### Executed flat directory slice — 24 October 2026 WIB
+
+Exact baseline: 661c79121d607f3c2ecfb086764048b9a8228d1e.
+Changed compiled blobs: compat.cpp e9f53325d424971e7b202adf22735de9dd42bfcb;
+probe.cpp 70d54cb23e7a1ccb1377a60fc7a92e5af5fb4d73.
+Receipt v4 and all other build inputs remain unchanged. External Detours stays
+clean at 1dbd4ea281d73d478aa8d09a8b83fbd265f715f7; no new dependency.
+
+Windows x64 26100, CMake 4.3.2, MSVC 19.44.35226 Release /W4 /WX configure/build
+and both explicit fixture commands passed (exit 0). Four ordering controls and
+summary pass. Pair: file 4095/4095, Win32 mutex 127/127, native mutex 511/511;
+two generations, private persistence, unchanged host markers and slot-mismatch
+rejection pass. Independent CIM lookup finds no remaining test image. Tracked
+checkout remains clean. Full product checks/game/two/four-client NOT_EXECUTED.
+
+Local artifact SHA-256:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| bootstrap-ordering.exe | 585dc0e40630040231f739b3eaec5242ffe1c97e2025ca40b418d7037ffed9ee |
+| bootstrap-compat.dll | 3c94c02655e86b49e82bd9bb288fc0e571e86b61786ea9f6505785d3ee135647 |
+| ordering.jsonl | 40927efb7a951dda0eccd4323ec78f5b80d713673bee402d9ebd632e0f460c36 |
+| pair.jsonl | 06180b0a270b0db4065de5f313b3885e565f4e6b072d1cad70dc02f6ab33ad22 |
+
+Earlier evidence below retains its historical SHA/scope.
+
 
 ### Executed coherent file slice — 24 October 2026 WIB
 
