@@ -1,5 +1,17 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Native Windows process inventory — no PowerShell enumeration, 23 October 2026
+
+Work: convert the mounted Minecraft Education process/window observation into OS-native Rust instead of spawning PowerShell on each Refresh, preflight, and first new-window admission.
+
+Decision: the existing `native_clients.rs` owner now enumerates Windows processes with Toolhelp32, pins a limited-query process HANDLE, checks exact registered executable pathname using CompareStringOrdinal, observes process FILETIME and interactive Windows session, enumerates top-level HWNDs with EnumWindows, and rechecks liveness/identity before publishing a maximum of four candidates. Unnamed or ambiguous image/window ownership is rejected. The original official Desktop installation and signer preflight is retained as the only remaining PowerShell call in this observation path; no game signature, broker identity, user profile or isolation claim is inferred from the native process name. One canonical observation parser validates the same typed IPC schema; backend presentation still rechecks exact identity. No new provider, lifecycle registry, profile owner, installer or MC02 Launch route.
+
+Scope: an actual implemented Windows process observer for the interactive manager (source only), rather than a new synthetic engine fixture. This removes script execution from process enumeration, not from official installation provenance; no latency, memory or gameplay measurement is inferred.
+
+Proof: exact pinned GitHub source/consumer comparison against windows-sys 0.61 and Microsoft documented Toolhelp and EnumWindows signatures; focused integration source regression authored NOT_EXECUTED. Rust compiler, Windows machine runtime, Microsoft Education game and four-client acceptance NOT_EXECUTED; GitHub Actions disabled.
+
+Next: implement a Microsoft-documented, non-modifying game-data/HKCU/broker isolation boundary for independent Minecraft 02 only after the core Windows compatibility route is established; MC02–04 remain blocked meanwhile.
+
 ## P0 responsive tab selection — retained Windows game lease, 23 October 2026
 
 Work: remove duplicated, expensive Windows/PowerShell discovery from each observed Minecraft tab selection; preserve exact OS process attribution.

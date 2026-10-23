@@ -552,3 +552,30 @@ describe('Observed existing Windows game processes',()=>{
     expect(admission).toContain('if id != "01" && matches!(operation, SlotOperation::Launch | SlotOperation::Provision)');
   });
 });
+
+
+it('official Minecraft window discovery uses native Windows process and HWND APIs, not the retired scripted enumerator',()=>{
+  const source=readFileSync(new URL('../src-tauri/src/engine/native_clients.rs',import.meta.url),'utf8');
+  const entry=source.slice(source.indexOf('mod native_workspace_windows {'),source.indexOf('#[cfg(not(target_os = "windows"))]\npub fn inspect_native_workspace'));
+  for(const call of [
+    'CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)',
+    'Process32FirstW(snapshot.0',
+    'Process32NextW(snapshot.0',
+    'QueryFullProcessImageNameW(process.0',
+    'CompareStringOrdinal(',
+    'GetProcessTimes(process.0',
+    'ProcessIdToSessionId(pid',
+    'EnumWindows(Some(enum_game_windows)',
+    'GetWindowThreadProcessId(window.selected',
+    'WaitForSingleObject(process.0, 0)',
+    'super::registered_education_target()?',
+    'parse_native_workspace_observation(&raw)',
+  ])expect(entry).toContain(call);
+  expect(entry).not.toContain('Get-Process -Name');
+  expect(entry).not.toContain('ConvertTo-Json -Depth');
+  expect(entry).not.toContain('Start-Process');
+  // Native discovery is read-only; only the existing explicit MC01 route
+  // can ask Windows to open the registered application.
+  expect(entry).not.toContain('CreateProcessW(');
+  expect(source).toContain('fn registered_native_candidate_requires_a_fresh_live_window()');
+});

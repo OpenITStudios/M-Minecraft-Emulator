@@ -376,57 +376,238 @@ pub fn matches_native_workspace_target(
         })
 }
 
+// This observer performs real Windows process/window enumeration using native
+// OS handles. Only the already-existing registered Education installation
+// preflight calls PowerShell; enumeration never executes a script.
 #[cfg(target_os = "windows")]
-pub fn inspect_native_workspace() -> io::Result<NativeWorkspaceObservation> {
-    use std::time::Duration;
+mod native_workspace_windows {
+    use super::*;
+    use std::{mem, ptr};
+    use windows_sys::Win32::{
+        Foundation::{
+            CloseHandle, FILETIME, HANDLE, ERROR_NO_MORE_FILES,
+            INVALID_HANDLE_VALUE, SYNCHRONIZE, WAIT_TIMEOUT,
+        },
+        Globalization::{CompareStringOrdinal, CSTR_EQUAL},
+        System::{
+            Diagnostics::ToolHelp::{
+                CreateToolhelp32Snapshot, Process32FirstW, Process32NextW,
+                PROCESSENTRY32W, TH32CS_SNAPPROCESS,
+            },
+            RemoteDesktop::ProcessIdToSessionId,
+            Threading::{
+                GetProcessTimes, OpenProcess, QueryFullProcessImageNameW,
+                WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION,
+            },
+        },
+        UI::WindowsAndMessaging::{
+            EnumWindows, GetAncestor, GetWindow, GetWindowThreadProcessId,
+            IsHungAppWindow, IsWindowVisible, GA_ROOT, GW_OWNER,
+        },
+    };
 
-    // Same unique official Desktop installation preflight as native launch.
-    // Query only process/window metadata, never worlds, account IDs or tokens.
-    const OBSERVE: &str = r#"
-$selectedTarget = Resolve-ManagerEducationTarget
-Assert-ManagerRegisteredAppId $appId $selectedTarget
-$session = (Get-Process -Id $PID -ErrorAction Stop).SessionId
-$items = @(
-    foreach ($process in @(Get-Process -Name 'Minecraft.Windows' -ErrorAction SilentlyContinue | Sort-Object Id)) {
-        if ($process.SessionId -ne $session) { continue }
-        try { $actual = [IO.Path]::GetFullPath([string]$process.Path) }
-        catch { throw 'A candidate Minecraft process image could not be inspected.' }
-        if (-not [string]::Equals($actual, $selectedTarget, [StringComparison]::OrdinalIgnoreCase)) {
-            continue
-        }
-        $started = $process.StartTime.ToUniversalTime()
-        $pidValue = [int]$process.Id
-        $process.Refresh()
-        if ($process.HasExited -or $process.StartTime.ToUniversalTime() -ne $started
-            -or $process.SessionId -ne $session) {
-            throw 'Minecraft process identity changed during observation.'
-        }
-        $window = $process.MainWindowHandle
-        [pscustomobject]@{
-            pid = $pidValue
-            createdFileTime = $started.ToFileTimeUtc().ToString()
-            sessionId = [int]$session
-            windowHandle = ('0x' + $window.ToInt64().ToString('x'))
-            responding = [bool]($window -ne [IntPtr]::Zero -and $process.Responding)
+    struct OwnedHandle(HANDLE);
+    impl Drop for OwnedHandle {
+        fn drop(&mut self) {
+            // Every handle here is obtained exactly once from the OS.
+            unsafe { CloseHandle(self.0); }
         }
     }
-)
-if ($items.Count -gt 4) { throw 'More than four registered Minecraft processes; cannot safely present an ambiguous group.' }
-[pscustomobject]@{
-    schema = 1
-    evidenceClass = 'REGISTERED_IMAGE_PATH_CANDIDATE_ONLY'
-    processes = @($items)
-} | ConvertTo-Json -Depth 4 -Compress
-"#;
-    let resolver =
-        include_str!("../../../../../tooling/isolation-source/windows/education-target.ps1");
-    let script = [resolver, EDUCATION_DESKTOP_PREFLIGHT, OBSERVE].concat();
-    let output = virtual_clients_core::bounded_command_output(
-        &system_powershell()?,
-        ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", &script],
-        Duration::from_secs(20),
-    )?;
-    parse_native_workspace_observation(&output)
+
+    struct GameWindow {
+        pid: u32,
+        selected: windows_sys::Win32::Foundation::HWND,
+        ambiguous: bool,
+    }
+
+    unsafe extern "system" fn enum_game_windows(
+        hwnd: windows_sys::Win32::Foundation::HWND,
+        data: isize,
+    ) -> i32 {
+        let state = &mut *(data as *mut GameWindow);
+        let mut window_pid = 0;
+        GetWindowThreadProcessId(hwnd, &mut window_pid);
+        if window_pid != state.pid
+            || IsWindowVisible(hwnd) == 0
+            || GetAncestor(hwnd, GA_ROOT) != hwnd
+            || !GetWindow(hwnd, GW_OWNER).is_null()
+        {
+            return 1;
+        }
+        if !state.selected.is_null() && state.selected != hwnd {
+            state.ambiguous = true;
+        } else {
+            state.selected = hwnd;
+        }
+        1
+    }
+
+    fn exact_windows_path(left: &[u16], right: &[u16]) -> bool {
+        // Ordinal case-insensitive comparison, not locale-specific lowercase
+        // conversion. Windows process and registered image paths must match.
+        unsafe {
+            CompareStringOrdinal(
+                left.as_ptr(), left.len() as i32,
+                right.as_ptr(), right.len() as i32, 1,
+            ) == CSTR_EQUAL
+        }
+    }
+
+    fn executable_name(entry: &PROCESSENTRY32W) -> io::Result<&[u16]> {
+        let end = entry.szExeFile.iter().position(|value| *value == 0)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Unterminated Windows executable name"))?;
+        Ok(&entry.szExeFile[..end])
+    }
+
+    fn observe_one(
+        pid: u32,
+        target_image: &[u16],
+        current_session: u32,
+    ) -> io::Result<Option<super::super::owned_provider::OwnedProcess>> {
+        let handle = unsafe {
+            OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, pid,
+            )
+        };
+        if handle.is_null() {
+            // A same-name process with inaccessible identity is not a
+            // verified official game. Do not silently exclude it.
+            return Err(io::Error::last_os_error());
+        }
+        let process = OwnedHandle(handle);
+
+        let mut session = 0;
+        if unsafe { ProcessIdToSessionId(pid, &mut session) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if session != current_session {
+            return Ok(None);
+        }
+
+        let mut image = vec![0u16; 32768];
+        let mut size = image.len() as u32;
+        if unsafe { QueryFullProcessImageNameW(process.0, 0, image.as_mut_ptr(), &mut size) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if size == 0 || !exact_windows_path(&image[..size as usize], target_image) {
+            return Ok(None);
+        }
+
+        let mut created: FILETIME = unsafe { mem::zeroed() };
+        let mut exited: FILETIME = unsafe { mem::zeroed() };
+        let mut kernel: FILETIME = unsafe { mem::zeroed() };
+        let mut user: FILETIME = unsafe { mem::zeroed() };
+        if unsafe { GetProcessTimes(process.0, &mut created, &mut exited, &mut kernel, &mut user) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let original_created = (u64::from(created.dwHighDateTime) << 32)
+            | u64::from(created.dwLowDateTime);
+        if original_created == 0 {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Missing Minecraft process creation time"));
+        }
+
+        let mut window = GameWindow {
+            pid,
+            selected: ptr::null_mut(),
+            ambiguous: false,
+        };
+        if unsafe { EnumWindows(Some(enum_game_windows), &mut window as *mut GameWindow as isize) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if window.ambiguous {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Multiple visible Minecraft root windows attributed to one process"));
+        }
+        // Recheck all process/window fields after enumeration. An exited or
+        // PID-reused game must not be published as a live selection.
+        let mut again: FILETIME = unsafe { mem::zeroed() };
+        if unsafe { GetProcessTimes(process.0, &mut again, &mut exited, &mut kernel, &mut user) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let current_created = (u64::from(again.dwHighDateTime) << 32)
+            | u64::from(again.dwLowDateTime);
+        let mut again_session = 0;
+        if unsafe { ProcessIdToSessionId(pid, &mut again_session) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if again_session != current_session || current_created != original_created
+            || unsafe { WaitForSingleObject(process.0, 0) } != WAIT_TIMEOUT
+        {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Minecraft process identity changed during native observation"));
+        }
+        if !window.selected.is_null() {
+            let mut window_pid = 0;
+            unsafe { GetWindowThreadProcessId(window.selected, &mut window_pid); }
+            if window_pid != pid {
+                return Err(io::Error::new(io::ErrorKind::InvalidData, "Minecraft HWND owner changed during observation"));
+            }
+        }
+        let responding = !window.selected.is_null()
+            && unsafe { IsHungAppWindow(window.selected) } == 0;
+        Ok(Some(super::super::owned_provider::OwnedProcess {
+            pid,
+            created_file_time: original_created.to_string(),
+            session_id: current_session,
+            window_handle: format!("0x{:x}", window.selected as usize),
+            responding,
+        }))
+    }
+
+    pub(super) fn inspect() -> io::Result<NativeWorkspaceObservation> {
+        // Only the official registered installation / Microsoft signer policy
+        // is accepted. No world files, command lines or account data are read.
+        let target = super::registered_education_target()?;
+        let target_wide: Vec<u16> = target.encode_utf16().collect();
+        let mut current_session = 0;
+        if unsafe { ProcessIdToSessionId(std::process::id(), &mut current_session) } == 0
+            || current_session == 0
+        {
+            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "Interactive Windows session required"));
+        }
+
+        let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+        if snapshot == INVALID_HANDLE_VALUE {
+            return Err(io::Error::last_os_error());
+        }
+        let snapshot = OwnedHandle(snapshot);
+        let mut entry: PROCESSENTRY32W = unsafe { mem::zeroed() };
+        entry.dwSize = mem::size_of::<PROCESSENTRY32W>() as u32;
+        if unsafe { Process32FirstW(snapshot.0, &mut entry) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let expected_image: Vec<u16> = "Minecraft.Windows.exe".encode_utf16().collect();
+        let mut processes = Vec::new();
+        loop {
+            if exact_windows_path(executable_name(&entry)?, &expected_image) {
+                if let Some(process) = observe_one(entry.th32ProcessID, &target_wide, current_session)? {
+                    processes.push(process);
+                    if processes.len() > 4 {
+                        return Err(io::Error::new(io::ErrorKind::InvalidData, "More than four registered Minecraft processes"));
+                    }
+                }
+            }
+            if unsafe { Process32NextW(snapshot.0, &mut entry) } == 0 {
+                if io::Error::last_os_error().raw_os_error() != Some(ERROR_NO_MORE_FILES as i32) {
+                    return Err(io::Error::last_os_error());
+                }
+                break;
+            }
+        }
+        processes.sort_by_key(|process| process.pid);
+        let observation = NativeWorkspaceObservation {
+            schema: 1,
+            evidence_class: "REGISTERED_IMAGE_PATH_CANDIDATE_ONLY".into(),
+            processes,
+        };
+        // Keep one canonical invariant validator for the native OS collector
+        // and previously authored malformed/duplicate process regressions.
+        let raw = serde_json::to_string(&observation).map_err(io::Error::other)?;
+        parse_native_workspace_observation(&raw)
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub fn inspect_native_workspace() -> io::Result<NativeWorkspaceObservation> {
+    native_workspace_windows::inspect()
 }
 
 #[cfg(not(target_os = "windows"))]
