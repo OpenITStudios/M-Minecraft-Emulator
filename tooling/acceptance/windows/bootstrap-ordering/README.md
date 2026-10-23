@@ -4,7 +4,7 @@ This standalone Windows/MSVC x64 experiment answers one question: does an
 in-memory first import arm a synthetic canary gate before the controlled
 dependency's DllMain, the EXE TLS callback, and the EXE's main canary run?
 The default ordering mode does not hook APIs. The separate mutex mode below
-hooks only a fixed test name. Neither mode isolates files/HKCU, identifies
+hooks a fixed mutex name and one synthetic file leaf. Neither mode isolates general filesystem/HKCU views, identifies
 Minecraft's singleton, separates brokers, or approves a provider. The marker graph is intentionally
 small; success cannot establish order for every Windows/game dependency.
 
@@ -77,9 +77,9 @@ JSON contains fixed stage/case labels and booleans/counts, with
 providerReady=false and minecraft=NOT_EXECUTED. It emits no raw PID, FILETIME,
 HANDLE, username, installed game path, credentials, caches or world contents.
 
-No filesystem/registry operations are mediated. In the default ordering mode,
+No registry operations are mediated. Only the selected synthetic file leaf below is redirected. In the default ordering mode,
 "canary" means a marker at a would-be protected call site and "arm" is a shared
-flag. In mutex mode the flag follows installation of the two native test-name hooks.
+flag. In mutex mode the flag follows installation of all four native mutex/file hooks in one transaction.
 This test cannot observe kernel accesses before notification, all loader work,
 external authentication, other module/TLS graphs or enforcement under bypass.
 
@@ -112,9 +112,10 @@ reads translate access violations into their native exception status.
 The initialization/parent handles and hooks belong to this process-lifetime
 fixture; no live DLL unload or authenticated production slot capability exists.
 
-The private **version-3** receipt (976 bytes, not a product wire schema) adds a
-native-check mask. It still binds the original child PID/creation FILETIME,
-slot/test name and only five explicitly inherited handles. Both children hold
+The private **version-4** receipt (1,000 bytes, not a product wire schema) carries
+native/file masks and the file round/root handles. It still binds the original child PID/creation FILETIME,
+slot/test name and seven explicitly inherited handles: section, four phase events,
+logical directory and the slot's private directory. Both children hold
 their own object while the parent holds the host logical object and checks the
 A/B identities. Existing Win32 controls remain bitmask **127**: fresh/existing
 create, recursive open, unnamed/missing behavior, access/inheritance flags and
@@ -148,7 +149,7 @@ Manual invocation, separately from the four ordering controls:
 
 Receipts retain providerReady=false, minecraft=NOT_EXECUTED and
 securityBoundary=false. ANSI/Ex variants, other object types, inherited/duplicated
-handle containment, file/HKCU views, real game hooks and singleton/auth behavior
+handle containment, general filesystem/HKCU views, real game hooks and singleton/auth behavior
 remain outside this slice. Real cache/input/diagnostic names are never selected.
 
 API references:
@@ -157,7 +158,92 @@ API references:
 The native export may change/unavailable on future Windows; successful checks on
 this host do not establish universal OS compatibility.
 
+## Coherent synthetic file backing — 24 October 2026 WIB
+
+The same mutex pair command runs two generations against one newly created TEMP
+root. Only fresh HOST/OUTSIDE/A1/B1/A2/B2 markers are read or written; no existing
+host/game/account/cache/world file is opened. The tiny synthetic tree is preserved
+locally, without recursive cleanup. CreateDirectory and CREATE_NEW refuse existing
+test directories/files.
+
+NtCreateFile/NtOpenFile route exactly state.bin under the configured logical
+directory into the same slot's A/B directory. All four mutex/file hooks install
+atomically. Selected absolute NT device/DOS and directory-handle relative names
+share the mapping. Relative roots use volume/file ID, not handle number.
+OBJECT_ATTRIBUTES is copied; access/share/disposition, allocation/EA/options and
+IO_STATUS_BLOCK go to the original API. Forwarded NTSTATUS and entry LastError
+are preserved. Actual read/write handles refer to private backing: a missing
+private file stays missing, with no copying or fallback from logical HOST.
+
+Attach rejects missing/non-directory/reparse roots, case-sensitive roots,
+non-ASCII/oversized canonical paths, identical directory IDs, or a private
+directory other than the expected A/B sibling of logical. One receipt.slot
+selects both file backing and mutex suffix. An A-to-B binding fails before
+Armed/main. Parent directory handles omit delete sharing.
+
+This is a narrow cooperative slice. Within recognized logical roots, other
+leaves/subpaths/streams and selected DELETE, owner/DACL, execute, directory,
+delete-on-close, open-by-ID or open-reparse requests return STATUS_NOT_SUPPORTED.
+Policy rejection does not synthesize IO_STATUS_BLOCK. Unrecognized roots/aliases
+pass through. Leaf reparse/hardlink attacks, handle rename/delete, inherited or
+duplicated data handles, Unicode/general path policy, directory enumeration,
+filesystem identity presentation, read COW and adversarial race containment are
+not implemented. Same-user direct private backing access remains possible;
+securityBoundary=false. Root metadata/initialization calls in this controlled
+import experiment do not establish general loader/Windows-version compatibility.
+
+File mask **127**, per child per generation:
+
+| Bit | Actual check |
+| --- | --- |
+| 1 | First private open is missing despite HOST existing; relaunch reads the previous slot marker. |
+| 2 | Win32 create/open, write, truncate and flush use private backing. |
+| 4 | Absolute native open returns success/FILE_OPENED, preserves LastError and reads own marker. |
+| 8 | Counted relative native OPEN_IF preserves caller input, inheritance, IO information and read-only access. |
+| 16 | DELETE access and a different protected leaf are rejected without a file handle. |
+| 32 | Unselected synthetic outside file passes through unchanged. |
+| 64 | After both processes are ready, each still reads its own marker. |
+
+The parent independently reads A/B and unchanged logical HOST/OUTSIDE while both
+children hold files/mutexes and after normal exit, in both generations. Existing
+mutex masks and early-import marker order remain required. Device-form mapping
+is implemented; the explicit absolute native test uses DOS form. This is not
+effective Minecraft Roaming/Local/Known Folder, HKCU or helper authentication.
+
+API contracts: [NtCreateFile](https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntcreatefile),
+[NtOpenFile](https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntopenfile),
+[GetFileInformationByHandleEx](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getfileinformationbyhandleex).
+
 ## Evidence
+
+### Executed coherent file slice — 24 October 2026 WIB
+
+Base source: 1a6ddb032c5d9a3572160375f588401586de979e.
+Changed compiled blobs:
+
+| Input | Git blob |
+| --- | --- |
+| compat.cpp | 9f7ab8891d639ded9b2b2119540133b24b96aaed |
+| probe.cpp | 0986fc4f98c21b025ad9910c42d36ed38ea5a09c |
+| receipt.h | 72bd06eb87833100a5a6ce6ac63176cb97630a12 |
+
+Other build inputs and the clean pinned external Detours source are unchanged.
+Windows x64 26100 / CMake 4.3.2 / MSVC 19.44.35226 Release /W4 /WX configure
+and build succeeded. Both explicit commands exited **0**. All four ordering
+controls passed. Pair output: file masks 127/127, mutex 127/127, native 511/511,
+rounds=2, persistent=true, hostUnchanged=true, slotMismatchRejected=true.
+Independent CIM lookup found no remaining test image. Tracked checkout stayed
+clean. Full product checks and Minecraft/two/four-client acceptance NOT_EXECUTED.
+
+Local artifact SHA-256:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| bootstrap-ordering.exe | 60d41245a11761bb09c6c6952f067d00b30853ea64d039f77f270cb686458e54 |
+| bootstrap-compat.dll | cdbacf2c3ba57e3baf78a53530a74fa9a284f5cbb2ff04f6a572a9b948dc6c41 |
+| ordering.jsonl | 40927efb7a951dda0eccd4323ec78f5b80d713673bee402d9ebd632e0f460c36 |
+| pair.jsonl | acf79c3778c14514992e70d3724746cb121f3a0b30266f94c7337784641d088a |
+
 
 ### Executed native IPC slice — 24 October 2026 WIB
 

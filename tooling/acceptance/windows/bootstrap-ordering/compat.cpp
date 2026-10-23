@@ -2,6 +2,7 @@
 #include <detours.h>
 #include <cstdio>
 #include <cwchar>
+#include <cstring>
 
 namespace {
 probe::NativeCreate originalCreate = nullptr;
@@ -15,6 +16,143 @@ wchar_t slotSuffix = 0;
 
 wchar_t folded(wchar_t c, bool insensitive) {
     return insensitive && c >= L'A' && c <= L'Z' ? static_cast<wchar_t>(c + L'a' - L'A') : c;
+}
+probe::NativeFileCreate originalFileCreate = nullptr;
+probe::NativeFileOpen originalFileOpen = nullptr;
+HANDLE fileLogicalRoot = nullptr, fileOwnRoot = nullptr;
+FILE_ID_INFO logicalDirectoryId{};
+wchar_t logicalDevice[512]{}, logicalDos[512]{};
+
+bool sameFileId(const FILE_ID_INFO& a, const FILE_ID_INFO& b) {
+    return a.VolumeSerialNumber == b.VolumeSerialNumber
+        && memcmp(a.FileId.Identifier, b.FileId.Identifier, sizeof(a.FileId.Identifier)) == 0;
+}
+bool directoryInfo(HANDLE handle, FILE_ID_INFO& id) {
+    FILE_ATTRIBUTE_TAG_INFO tag{};
+    if (GetFileType(handle) != FILE_TYPE_DISK
+        || !GetFileInformationByHandleEx(handle, FileAttributeTagInfo, &tag, sizeof(tag))
+        || !(tag.FileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+        || (tag.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) return false;
+    return GetFileInformationByHandleEx(handle, FileIdInfo, &id, sizeof(id)) != FALSE;
+}
+bool asciiPath(const wchar_t* path, unsigned length) {
+    for (unsigned i = 0; i < length; ++i) if (path[i] < 32 || path[i] > 126) return false;
+    return true;
+}
+bool initializeFiles(const probe::Receipt& config, HMODULE ntdll) {
+    if (config.fileRound > 1) return false;
+    FILE_ID_INFO ownId{};
+    if (!directoryInfo(config.fileLogicalRoot, logicalDirectoryId)
+        || !directoryInfo(config.fileOwnRoot, ownId)
+        || sameFileId(logicalDirectoryId, ownId)) return false;
+    FILE_CASE_SENSITIVE_INFO caseInfo{};
+    if (!GetFileInformationByHandleEx(config.fileLogicalRoot, FileCaseSensitiveInfo, &caseInfo, sizeof(caseInfo))
+        || caseInfo.Flags != 0
+        || !GetFileInformationByHandleEx(config.fileOwnRoot, FileCaseSensitiveInfo, &caseInfo, sizeof(caseInfo))
+        || caseInfo.Flags != 0) return false;
+    wchar_t ownPath[512]{};
+    const DWORD deviceLength = GetFinalPathNameByHandleW(config.fileLogicalRoot, logicalDevice, 512, VOLUME_NAME_NT);
+    const DWORD dosLength = GetFinalPathNameByHandleW(config.fileLogicalRoot, logicalDos, 512, VOLUME_NAME_DOS);
+    const DWORD ownLength = GetFinalPathNameByHandleW(config.fileOwnRoot, ownPath, 512, VOLUME_NAME_NT);
+    if (deviceLength < 9 || deviceLength >= 512 || dosLength < 7 || dosLength >= 512
+        || ownLength == 0 || ownLength >= 512
+        || !asciiPath(logicalDevice, deviceLength) || !asciiPath(logicalDos, dosLength)
+        || !asciiPath(ownPath, ownLength) || wcsncmp(logicalDos, L"\\\\?\\", 4) != 0) return false;
+    constexpr wchar_t suffix[] = L"\\logical";
+    const unsigned parentLength = deviceLength - 8;
+    if (wcscmp(logicalDevice + parentLength, suffix) != 0 || ownLength != parentLength + 2) return false;
+    for (unsigned i = 0; i < parentLength; ++i) if (ownPath[i] != logicalDevice[i]) return false;
+    if (ownPath[parentLength] != L'\\' || ownPath[parentLength + 1] != slotSuffix) return false;
+    logicalDos[1] = L'?'; // Convert the canonical Win32 extended path to its NT DOS form.
+    logicalDos[2] = L'?';
+    fileLogicalRoot = config.fileLogicalRoot;
+    fileOwnRoot = config.fileOwnRoot;
+    originalFileCreate = reinterpret_cast<probe::NativeFileCreate>(GetProcAddress(ntdll, "NtCreateFile"));
+    originalFileOpen = reinterpret_cast<probe::NativeFileOpen>(GetProcAddress(ntdll, "NtOpenFile"));
+    return originalFileCreate && originalFileOpen;
+}
+enum class FileRoute { Other, Private, Unsupported };
+bool pathPrefix(const UNICODE_STRING& name, const wchar_t* prefix, unsigned& leaf) {
+    const unsigned count = name.Length / sizeof(wchar_t);
+    const unsigned length = static_cast<unsigned>(wcslen(prefix));
+    if (count < length) return false;
+    for (unsigned i = 0; i < length; ++i)
+        if (folded(name.Buffer[i], true) != folded(prefix[i], true)) return false;
+    if (count == length) { leaf = count; return true; }
+    if (name.Buffer[length] != L'\\') return false;
+    leaf = length + 1;
+    return true;
+}
+FileRoute fileRoute(const OBJECT_ATTRIBUTES& attributes) {
+    if (attributes.Length != sizeof(OBJECT_ATTRIBUTES) || !attributes.ObjectName) return FileRoute::Other;
+    const UNICODE_STRING name = *attributes.ObjectName;
+    if (!name.Buffer || name.Length % sizeof(wchar_t) || name.MaximumLength < name.Length)
+        return FileRoute::Other;
+    const unsigned count = name.Length / sizeof(wchar_t);
+    unsigned leaf = 0;
+    if (count && name.Buffer[0] == L'\\') {
+        if (!pathPrefix(name, logicalDevice, leaf) && !pathPrefix(name, logicalDos, leaf)) return FileRoute::Other;
+        if (attributes.RootDirectory) return FileRoute::Unsupported;
+    } else {
+        FILE_ID_INFO rootId{};
+        if (!attributes.RootDirectory || !directoryInfo(attributes.RootDirectory, rootId)
+            || !sameFileId(rootId, logicalDirectoryId)) return FileRoute::Other;
+    }
+    constexpr wchar_t chosen[] = L"state.bin";
+    if (count - leaf != 9) return FileRoute::Unsupported;
+    for (unsigned i = 0; i < 9; ++i)
+        if (folded(name.Buffer[leaf + i], true) != chosen[i]) return FileRoute::Unsupported;
+    return FileRoute::Private;
+}
+bool unsupportedFile(ACCESS_MASK access, ULONG options) {
+    return (access & (DELETE | WRITE_DAC | WRITE_OWNER | GENERIC_ALL | FILE_EXECUTE)) != 0
+        || (options & (FILE_DIRECTORY_FILE | FILE_DELETE_ON_CLOSE | FILE_OPEN_BY_FILE_ID | FILE_OPEN_REPARSE_POINT)) != 0;
+}
+NTSTATUS NTAPI translatedFileCreate(PHANDLE handle, ACCESS_MASK access, POBJECT_ATTRIBUTES attributes,
+    PIO_STATUS_BLOCK io, PLARGE_INTEGER allocation, ULONG fileAttributes, ULONG share,
+    ULONG disposition, ULONG options, PVOID ea, ULONG eaLength) {
+    const DWORD saved = GetLastError();
+    NTSTATUS status;
+    __try {
+        const FileRoute route = attributes ? fileRoute(*attributes) : FileRoute::Other;
+        if (route == FileRoute::Unsupported || (route == FileRoute::Private && unsupportedFile(access, options))) {
+            status = static_cast<NTSTATUS>(0xc00000bbUL);
+        } else {
+            OBJECT_ATTRIBUTES copy{};
+            wchar_t leaf[] = L"state.bin";
+            UNICODE_STRING name{18, 18, leaf};
+            if (route == FileRoute::Private) {
+                copy = *attributes; copy.RootDirectory = fileOwnRoot; copy.ObjectName = &name;
+            }
+            SetLastError(saved);
+            status = originalFileCreate(handle, access, route == FileRoute::Private ? &copy : attributes,
+                io, allocation, fileAttributes, share, disposition, options, ea, eaLength);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { status = static_cast<NTSTATUS>(GetExceptionCode()); }
+    SetLastError(saved);
+    return status;
+}
+NTSTATUS NTAPI translatedFileOpen(PHANDLE handle, ACCESS_MASK access, POBJECT_ATTRIBUTES attributes,
+    PIO_STATUS_BLOCK io, ULONG share, ULONG options) {
+    const DWORD saved = GetLastError();
+    NTSTATUS status;
+    __try {
+        const FileRoute route = attributes ? fileRoute(*attributes) : FileRoute::Other;
+        if (route == FileRoute::Unsupported || (route == FileRoute::Private && unsupportedFile(access, options))) {
+            status = static_cast<NTSTATUS>(0xc00000bbUL);
+        } else {
+            OBJECT_ATTRIBUTES copy{};
+            wchar_t leaf[] = L"state.bin";
+            UNICODE_STRING name{18, 18, leaf};
+            if (route == FileRoute::Private) {
+                copy = *attributes; copy.RootDirectory = fileOwnRoot; copy.ObjectName = &name;
+            }
+            SetLastError(saved);
+            status = originalFileOpen(handle, access, route == FileRoute::Private ? &copy : attributes, io, share, options);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { status = static_cast<NTSTATUS>(GetExceptionCode()); }
+    SetLastError(saved);
+    return status;
 }
 bool selected(const UNICODE_STRING& name, unsigned leaf, bool insensitive) {
     const unsigned count = name.Length / sizeof(wchar_t);
@@ -121,7 +259,7 @@ bool install(const probe::Receipt& config) {
     const HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
     compareHandles = kernelbase ? reinterpret_cast<probe::CompareHandles>(
         GetProcAddress(kernelbase, "CompareObjectHandles")) : nullptr;
-    if (!originalCreate || !originalOpen || !openDirectory || !compareHandles) return false;
+    if (!originalCreate || !originalOpen || !openDirectory || !compareHandles || !initializeFiles(config, ntdll)) return false;
     DWORD session = 0;
     wchar_t path[80]{};
     if (!ProcessIdToSessionId(GetCurrentProcessId(), &session)
@@ -139,7 +277,11 @@ bool install(const probe::Receipt& config) {
         || DetourAttach(reinterpret_cast<PVOID*>(&originalCreate),
                         reinterpret_cast<PVOID>(translatedCreate)) != NO_ERROR
         || DetourAttach(reinterpret_cast<PVOID*>(&originalOpen),
-                        reinterpret_cast<PVOID>(translatedOpen)) != NO_ERROR) {
+                        reinterpret_cast<PVOID>(translatedOpen)) != NO_ERROR
+        || DetourAttach(reinterpret_cast<PVOID*>(&originalFileCreate),
+                        reinterpret_cast<PVOID>(translatedFileCreate)) != NO_ERROR
+        || DetourAttach(reinterpret_cast<PVOID*>(&originalFileOpen),
+                        reinterpret_cast<PVOID>(translatedFileOpen)) != NO_ERROR) {
         DetourTransactionAbort();
         CloseHandle(baseDirectory); baseDirectory = nullptr; return false;
     }

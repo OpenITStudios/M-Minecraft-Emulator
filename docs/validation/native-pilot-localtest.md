@@ -9,6 +9,32 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Coherent original file and IPC backing — 24 October 2026 WIB
+
+Source baseline: 1a6ddb032c5d9a3572160375f588401586de979e.
+The same owned-child DLL installs NtCreateFile/NtOpenFile alongside native mutex
+hooks in one transaction. One slot selects both mutex suffix and synthetic
+private state.bin directory. Checked roots/canonical paths select the file route;
+missing private files do not fall back to the logical HOST file or copy its data.
+Only newly created synthetic test markers were accessed.
+
+**Executed:** Windows x64 Release /W4 /WX build and both fixture commands exit 0.
+Two concurrent children, two process generations: file masks 127/127, Win32/native
+mutex masks 127/127 and 511/511. Independent parent reads confirm persistent A/B
+markers and unchanged synthetic HOST/OUTSIDE during and after each pair.
+Mismatched slot A/private B is rejected before Armed/main. Four ordering/failure/
+timeout controls pass; independent CIM lookup finds no remaining test image.
+Private receipt v4 only; no public schema or production provider change.
+
+[Exact inputs, hashes, semantics and exclusions](../../tooling/acceptance/windows/bootstrap-ordering/README.md#coherent-synthetic-file-backing--24-october-2026-wib)
+bound this evidence. Unsupported operations under recognized logical roots are
+rejected; unknown roots/aliases pass through. This remains cooperative routing,
+**not a security boundary**. Reparse/hardlink/handle containment, general file
+views, effective Roaming/Local/Known Folder, HKCU and external auth are unresolved.
+Full product checks, game injection and two/four licensed playable clients are
+**NOT_EXECUTED**. No game/account/world/cache files, new trace, service/driver,
+admission, CI or release were touched. Earlier sections describe historical SHAs.
+
 ## Original native IPC implementation — 24 October 2026 WIB
 
 Source baseline: `d5452a90bedb9a65e20a6db8e0f5138f7681bbe8`.

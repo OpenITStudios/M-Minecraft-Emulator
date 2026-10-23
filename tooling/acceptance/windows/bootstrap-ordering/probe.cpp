@@ -355,7 +355,129 @@ LONG nativeMutexChecks(probe::Receipt& receipt, HANDLE expected) {
     return checks;
 }
 
+
+std::wstring directoryPath(HANDLE root) {
+    wchar_t buffer[512]{};
+    const DWORD length = GetFinalPathNameByHandleW(root, buffer, 512, VOLUME_NAME_DOS);
+    require(length > 0 && length < 512);
+    return std::wstring(buffer, length);
+}
+void expectBytes(HANDLE file, const std::string& expected) {
+    require(file && file != INVALID_HANDLE_VALUE);
+    LARGE_INTEGER zero{};
+    require(SetFilePointerEx(file, zero, nullptr, FILE_BEGIN) != FALSE);
+    char buffer[32]{};
+    DWORD read = 0;
+    require(ReadFile(file, buffer, sizeof(buffer), &read, nullptr) != FALSE
+        && read == expected.size() && std::string(buffer, read) == expected);
+}
+void expectFile(const std::wstring& path, const std::string& expected) {
+    Handle file(CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+    expectBytes(file.value, expected);
+}
+void writeBytes(HANDLE file, const std::string& text) {
+    LARGE_INTEGER zero{};
+    require(SetFilePointerEx(file, zero, nullptr, FILE_BEGIN) != FALSE);
+    DWORD written = 0;
+    require(WriteFile(file, text.data(), static_cast<DWORD>(text.size()), &written, nullptr)
+        && written == text.size() && SetEndOfFile(file) && FlushFileBuffers(file));
+}
+std::string slotMarker(const probe::Receipt& receipt, DWORD round) {
+    return std::string(receipt.slot == 1 ? "A" : "B") + std::to_string(round + 1);
+}
+struct FileChild {
+    Handle held;
+    LONG checks = 0;
+    explicit FileChild(probe::Receipt& receipt) {
+        const auto path = directoryPath(receipt.fileLogicalRoot) + L"\\state.bin";
+        if (receipt.fileRound == 0) {
+            Handle missing(CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+            const DWORD error = GetLastError();
+            require(missing.value == INVALID_HANDLE_VALUE && error == ERROR_FILE_NOT_FOUND);
+        } else {
+            expectFile(path, slotMarker(receipt, 0));
+        }
+        checks |= 1;
+        held.value = CreateFileW(path.c_str(), GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+            receipt.fileRound == 0 ? CREATE_NEW : OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        require(held.value != INVALID_HANDLE_VALUE);
+        writeBytes(held.value, slotMarker(receipt, receipt.fileRound));
+        checks |= 2;
+
+        const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        const auto open = reinterpret_cast<probe::NativeFileOpen>(GetProcAddress(ntdll, "NtOpenFile"));
+        const auto create = reinterpret_cast<probe::NativeFileCreate>(GetProcAddress(ntdll, "NtCreateFile"));
+        require(open && create);
+        std::wstring absolutePath = L"\\??\\" + path.substr(4);
+        auto absoluteName = nativeName(absolutePath);
+        OBJECT_ATTRIBUTES attributes{sizeof(OBJECT_ATTRIBUTES), nullptr, &absoluteName,
+            OBJ_CASE_INSENSITIVE, nullptr, nullptr};
+        IO_STATUS_BLOCK io{};
+        constexpr DWORD sentinel = 0x13579bd;
+        constexpr ULONG options = 0x20 | 0x40; // synchronous, non-directory
+        Handle absolute;
+        SetLastError(sentinel);
+        const NTSTATUS status = open(&absolute.value, FILE_GENERIC_READ, &attributes, &io,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, options);
+        const DWORD error = GetLastError();
+        require(status == 0 && error == sentinel && io.Information == 1);
+        expectBytes(absolute.value, slotMarker(receipt, receipt.fileRound));
+        checks |= 4;
+
+        std::wstring counted = L"state.bin_IGNORED";
+        auto relativeName = nativeName(counted);
+        relativeName.Length = relativeName.MaximumLength = 18;
+        attributes.RootDirectory = receipt.fileLogicalRoot;
+        attributes.ObjectName = &relativeName;
+        attributes.Attributes |= OBJ_INHERIT;
+        Handle relative;
+        io = {};
+        SetLastError(sentinel);
+        const NTSTATUS created = create(&relative.value, FILE_GENERIC_READ, &attributes, &io,
+            nullptr, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            3 /* FILE_OPEN_IF */, options, nullptr, 0);
+        const DWORD createError = GetLastError();
+        DWORD flags = 0, written = 0;
+        require(created == 0 && createError == sentinel && io.Information == 1
+            && GetHandleInformation(relative.value, &flags) && (flags & HANDLE_FLAG_INHERIT)
+            && relativeName.Length == 18 && counted == L"state.bin_IGNORED"
+            && attributes.RootDirectory == receipt.fileLogicalRoot
+            && attributes.ObjectName == &relativeName);
+        expectBytes(relative.value, slotMarker(receipt, receipt.fileRound));
+        require(!WriteFile(relative.value, "X", 1, &written, nullptr)
+            && GetLastError() == ERROR_ACCESS_DENIED);
+        checks |= 8;
+
+        Handle denied;
+        SetLastError(sentinel);
+        require(open(&denied.value, FILE_GENERIC_READ | DELETE, &attributes, &io,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, options) == static_cast<NTSTATUS>(0xc00000bbUL)
+            && GetLastError() == sentinel && !denied.value);
+        std::wstring other = L"other.bin";
+        auto otherName = nativeName(other);
+        attributes.ObjectName = &otherName;
+        require(open(&denied.value, FILE_GENERIC_READ, &attributes, &io,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, options) == static_cast<NTSTATUS>(0xc00000bbUL)
+            && !denied.value);
+        checks |= 16;
+        const auto logicalDirectory = directoryPath(receipt.fileLogicalRoot);
+        const auto separator = logicalDirectory.find_last_of(L'\\');
+        require(separator != std::wstring::npos);
+        expectFile(logicalDirectory.substr(0, separator) + L"\\outside.bin", "OUTSIDE");
+        checks |= 32;
+    }
+    void afterPeer(probe::Receipt& receipt) {
+        expectBytes(held.value, slotMarker(receipt, receipt.fileRound));
+        checks |= 64;
+        InterlockedExchange(&receipt.fileChecks, checks);
+    }
+};
+
 int mutexChild(probe::Receipt& receipt) {
+    FileChild files(receipt);
     Handle first(CreateMutexW(nullptr, TRUE, receipt.logical));
     const DWORD firstError = GetLastError();
     require(first.value && firstError != ERROR_ALREADY_EXISTS);
@@ -393,6 +515,7 @@ int mutexChild(probe::Receipt& receipt) {
     require(WaitForSingleObject(receipt.go, 10000) == WAIT_OBJECT_0);
     Handle peer(OpenMutexW(SYNCHRONIZE, FALSE, receipt.peer));
     require(peer.value && WaitForSingleObject(peer.value, 0) == WAIT_TIMEOUT);
+    files.afterPeer(receipt);
     // Same-user direct backing-name access remains possible: explicitly not an ACL boundary.
     checks |= 64;
     InterlockedExchange(&receipt.mutexChecks, checks);
@@ -425,13 +548,17 @@ struct MutexChild {
     Handle ready{sharedEvent()}, done{sharedEvent()};
     Child child; // Destroy child before receipt/events, including constructor failure.
     MutexChild(DWORD slot, const std::wstring& name, HANDLE go, HANDLE finish,
-               const std::wstring& self, const std::string& compatibility) {
+               const std::wstring& self, const std::string& compatibility,
+               DWORD round, HANDLE logicalRoot, HANDLE ownRoot) {
         ZeroMemory(mapping.value, sizeof(probe::Receipt));
         auto& receipt = *mapping.value;
         receipt.magic = probe::Magic;
         receipt.version = probe::Version;
         receipt.mode = probe::MutexCase;
         receipt.slot = slot;
+        receipt.fileRound = round;
+        receipt.fileLogicalRoot = logicalRoot;
+        receipt.fileOwnRoot = ownRoot;
         receipt.ready = ready.value;
         receipt.go = go;
         receipt.done = done.value;
@@ -439,8 +566,8 @@ struct MutexChild {
         copyName(receipt.logical, name);
         copyName(receipt.own, name + (slot == 1 ? L"_A" : L"_B"));
         copyName(receipt.peer, name + (slot == 1 ? L"_B" : L"_A"));
-        HANDLE inherited[]{section.value, ready.value, go, done.value, finish};
-        Attributes attributes(inherited, 5);
+        HANDLE inherited[]{section.value, ready.value, go, done.value, finish, logicalRoot, ownRoot};
+        Attributes attributes(inherited, 7);
         auto env = environment(section.value);
         STARTUPINFOEXW startup{};
         startup.StartupInfo.cb = sizeof(startup);
@@ -478,15 +605,75 @@ struct MutexChild {
         }
     }
 };
+
+struct FileRoots {
+    std::wstring root;
+    Handle logical, a, b;
+    FileRoots() {
+        wchar_t temporary[512]{};
+        const DWORD length = GetTempPathW(512, temporary);
+        require(length > 0 && length < 512);
+        root = std::wstring(temporary) + L"MivubiFileProbe_" + std::to_wstring(GetCurrentProcessId())
+            + L"_" + std::to_wstring(GetTickCount64());
+        require(CreateDirectoryW(root.c_str(), nullptr) != FALSE); // Refuse existing test roots.
+        for (const auto& leaf : {L"logical", L"A", L"B"})
+            require(CreateDirectoryW((root + L"\\" + leaf).c_str(), nullptr) != FALSE);
+        SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
+        const auto open = [&](const wchar_t* leaf) {
+            HANDLE result = CreateFileW((root + L"\\" + leaf).c_str(), FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY,
+                FILE_SHARE_READ | FILE_SHARE_WRITE, &security, OPEN_EXISTING,
+                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+            require(result != INVALID_HANDLE_VALUE);
+            return result;
+        };
+        logical.value = open(L"logical"); a.value = open(L"A"); b.value = open(L"B");
+        for (const auto& leaf : {L"logical\\state.bin", L"outside.bin"}) {
+            Handle file(CreateFileW((root + L"\\" + leaf).c_str(), GENERIC_WRITE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
+            require(file.value != INVALID_HANDLE_VALUE);
+            writeBytes(file.value, wcscmp(leaf, L"outside.bin") == 0 ? "OUTSIDE" : "HOST");
+        }
+    }
+    void verify(DWORD round) {
+        expectFile(root + L"\\logical\\state.bin", "HOST");
+        expectFile(root + L"\\outside.bin", "OUTSIDE");
+        expectFile(root + L"\\A\\state.bin", "A" + std::to_string(round + 1));
+        expectFile(root + L"\\B\\state.bin", "B" + std::to_string(round + 1));
+    }
+    // Preserve only newly created synthetic files; no recursive cleanup or user data reads.
+};
+
 bool mutexPair(const std::wstring& self, const std::string& compatibility) {
+    FileRoots files;
     const std::wstring name = L"Local\\MivubiMutexProbe_" + std::to_wstring(GetCurrentProcessId())
         + L"_" + std::to_wstring(GetTickCount64());
     Handle host(CreateMutexW(nullptr, TRUE, name.c_str()));
     const DWORD hostError = GetLastError();
     require(host.value && hostError != ERROR_ALREADY_EXISTS);
+    {
+        Handle go(sharedEvent()), finish(sharedEvent());
+        MutexChild mismatch(1, name, go.value, finish.value, self, compatibility,
+            0, files.logical.value, files.b.value);
+        require(WaitForSingleObject(mismatch.child.info.hProcess, 10000) == WAIT_OBJECT_0);
+        DWORD code = 0;
+        require(GetExitCodeProcess(mismatch.child.info.hProcess, &code) && code != 0
+            && mismatch.mapping.value->armed == 0);
+        bool rejected = false;
+        const LONG count = mismatch.mapping.value->count;
+        require(count >= 2 && count <= probe::Capacity);
+        for (LONG i = 0; i < count; ++i) {
+            const LONG stage = mismatch.mapping.value->events[i].stage;
+            require(stage != probe::Armed && stage != probe::Main);
+            rejected = rejected || stage == probe::Rejected;
+        }
+        require(rejected);
+    }
+    for (DWORD round = 0; round < 2; ++round) {
     Handle go(sharedEvent()), finish(sharedEvent());
-    MutexChild first(1, name, go.value, finish.value, self, compatibility);
-    MutexChild second(2, name, go.value, finish.value, self, compatibility);
+    MutexChild first(1, name, go.value, finish.value, self, compatibility,
+        round, files.logical.value, files.a.value);
+    MutexChild second(2, name, go.value, finish.value, self, compatibility,
+        round, files.logical.value, files.b.value);
     first.phase(first.ready.value);
     second.phase(second.ready.value);
     {
@@ -498,13 +685,16 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
         require(original.value && WaitForSingleObject(original.value, 0) == WAIT_OBJECT_0
             && ReleaseMutex(original.value));
     }
+    files.verify(round);
     require(SetEvent(go.value) != FALSE);
     first.phase(first.done.value);
     second.phase(second.done.value);
     require(InterlockedCompareExchange(&first.mapping.value->mutexChecks, 0, 0) == 127
         && InterlockedCompareExchange(&second.mapping.value->mutexChecks, 0, 0) == 127
         && InterlockedCompareExchange(&first.mapping.value->nativeChecks, 0, 0) == 511
-        && InterlockedCompareExchange(&second.mapping.value->nativeChecks, 0, 0) == 511);
+        && InterlockedCompareExchange(&second.mapping.value->nativeChecks, 0, 0) == 511
+        && InterlockedCompareExchange(&first.mapping.value->fileChecks, 0, 0) == 127
+        && InterlockedCompareExchange(&second.mapping.value->fileChecks, 0, 0) == 127);
     require(SetEvent(finish.value) != FALSE);
     first.exitedNormally();
     second.exitedNormally();
@@ -513,8 +703,11 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
         const DWORD error = GetLastError();
         require(!gone.value && error == ERROR_FILE_NOT_FOUND);
     }
+    files.verify(round);
+    }
     require(ReleaseMutex(host.value) != FALSE);
     std::printf("{\"case\":\"mutex-two-child\",\"selfCheck\":true,\"checks\":[127,127],"
+                "\"fileChecks\":[127,127],\"rounds\":2,\"persistent\":true,\"hostUnchanged\":true,\"slotMismatchRejected\":true,"
                 "\"nativeChecks\":[511,511],\"distinctHostAndPeerObjects\":true,\"rawPeerAccessible\":true,"
                 "\"securityBoundary\":false,\"providerReady\":false,"
                 "\"minecraft\":\"NOT_EXECUTED\"}\n");

@@ -8,12 +8,16 @@
 // Fixed self-test transport, not a production slot capability or shared-state ABI.
 namespace probe {
 constexpr DWORD Magic = 0x42535431;
-constexpr DWORD Version = 3;
+constexpr DWORD Version = 4;
 constexpr LONG Capacity = 16;
 constexpr wchar_t SectionVariable[] = L"MIVUBI_BOOTSTRAP_TEST_SECTION";
 using CompareHandles = BOOL (WINAPI*)(HANDLE, HANDLE);
 using NativeCreate = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, BOOLEAN);
 using NativeOpen = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES);
+using NativeFileCreate = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES,
+    PIO_STATUS_BLOCK, PLARGE_INTEGER, ULONG, ULONG, ULONG, ULONG, PVOID, ULONG);
+using NativeFileOpen = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES,
+    PIO_STATUS_BLOCK, ULONG, ULONG);
 using NativeDirectory = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES);
 enum Mode : DWORD { Baseline, Normal, FailAttach, Timeout, MutexCase };
 enum Stage : LONG { Attach = 1, Armed, Rejected, Suppressed, Dependency, Tls, Main };
@@ -25,12 +29,14 @@ struct Receipt {
     volatile LONG count, armed;
     Event events[Capacity];
     DWORD slot;
-    volatile LONG mutexChecks, nativeChecks;
+    volatile LONG mutexChecks, nativeChecks, fileChecks;
+    DWORD fileRound;
+    HANDLE fileLogicalRoot, fileOwnRoot;
     wchar_t logical[128], own[128], peer[128];
     HANDLE ready, go, done, finish;
 };
 static_assert(sizeof(Event) == 8);
-static_assert(sizeof(Receipt) == 976);
+static_assert(sizeof(Receipt) == 1000);
 
 class View {
 public:
