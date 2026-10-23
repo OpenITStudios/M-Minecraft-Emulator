@@ -189,6 +189,20 @@ pub async fn desktop_present_observed_window(
     .map_err(surface_failure)
 }
 
+/// Activate one already-running official Minecraft game in Windows.
+/// No isolated session or new launch authority is inferred from window focus.
+#[tauri::command]
+pub async fn desktop_focus_observed_native_window(
+    target: crate::engine::owned_provider::OwnedProcess,
+) -> Result<(), SurfaceFailure> {
+    tauri::async_runtime::spawn_blocking(move || {
+        run_manager_operation(|| crate::engine::workspace_surface::focus_observed_native_window(target))
+    })
+    .await
+    .map_err(surface_failure)?
+    .map_err(surface_failure)
+}
+
 #[tauri::command]
 pub async fn desktop_update_workspace(
     window: tauri::WebviewWindow,

@@ -501,6 +501,9 @@ export function parseNativeWorkspaceObservation(value:unknown):NativeWorkspaceOb
 export const nativeFeasibility = {
   inspectNativeWorkspace:async():Promise<NativeWorkspaceObservation>=>
     parseNativeWorkspaceObservation(await invokeRuntime<unknown>("desktop_inspect_native_workspace")),
+  // Normal Windows activation, not a second Minecraft launch request.
+  focusObservedNativeWindow: (target: OwnedProcess): Promise<void> =>
+    invokeRuntime<void>("desktop_focus_observed_native_window", { target }),
   readFocusObserver: async (): Promise<ForegroundEventObserverStatus> =>
     parseForegroundEventObserverStatus(await invokeRuntime<unknown>("desktop_read_focus_observer")),
   startFocusObserver: async (): Promise<ForegroundEventObserverStatus> =>

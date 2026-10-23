@@ -76,6 +76,19 @@
     }catch(error){issue=operationIssue(error);}
     finally{busy=false;}
   }
+  async function playInWindows(client:ClientId){
+    if(busy||workspaceBusy||sessionView!=='native')return;
+    const process=observedSlots[client];
+    if(!process?.responding||process.windowHandle==='0x0')return;
+    busy=true;issue=null;
+    try{
+      // An existing managed viewport must return its game window first.
+      // If recovery fails, do not conceal it with a separate focus request.
+      if(workspace)await workspace.restore();
+      await nativeFeasibility.focusObservedNativeWindow(process);
+    }catch(error){issue=operationIssue(error);}
+    finally{busy=false;}
+  }
   async function activateNative(client:ClientId){
     if(busy||workspaceBusy||!config?.detectedMinecraft)return;
     busy=true;issue=null;
@@ -189,7 +202,7 @@
               {#if nativeError}<p role="alert">{nativeError}</p>{/if}
               <p>{nativeSession?.processes.length??0} observed game process(es). Each tab follows its original process until it exits; a different process does not inherit its identity.</p>
               <div aria-label="Observed Windows game processes">
-                {#each observedIds as id}<div class="um-setting"><strong>Window {id}</strong><span>{observedSlots[id]?('Process '+observedSlots[id]?.pid+' · observation only'):'No observed process'}</span></div>{/each}
+                {#each observedIds as id}<div class="um-setting"><div><strong>Window {id}</strong><span>{observedSlots[id]?('Process '+observedSlots[id]?.pid+' · observation only'):'No observed process'}</span></div>{#if observedSlots[id]?.responding&&observedSlots[id]?.windowHandle!=='0x0'}<button class="cm-button cm-secondary" disabled={busy||workspaceBusy} on:click={()=>playInWindows(id)}>Play in Windows</button>{/if}</div>{/each}
               </div>
               <button class="cm-button" disabled={busy||workspaceBusy||nativeSession===null||nativePending||(nativeSession.processes.length>0&&!observedSlots['01'])} on:click={()=>activateNative('01')}>{busy?'Working…':observedSlots['01']?'Show observed window 01':'Open official Minecraft 01'}</button>
               <button class="cm-button cm-secondary" disabled={busy||workspaceBusy} on:click={refreshNative}>Refresh Windows game windows</button>

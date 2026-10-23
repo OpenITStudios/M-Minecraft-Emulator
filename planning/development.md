@@ -1,5 +1,14 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Windows-native gameplay activation fallback — 23 October 2026
+
+Work: allow an official Minecraft Education game window to be used normally when optional workspace placement is unavailable.
+Decision: a new explicit Play in Windows action reuses the existing registered-game observer and native workspace window owner. The backend rechecks the official image, PID, creation FILETIME, Windows session, responsiveness and HWND, then pins the game process for a native foreground request. The frontend first restores any managed workspace. This does not launch MC02–04, isolate profiles or modify credentials/worlds.
+Proof: pinned GitHub source and consumer checks; Rust/Svelte/Windows foreground behavior, installer and Minecraft gameplay NOT_EXECUTED. GitHub Actions remains disabled.
+Unresolved: Windows foreground restrictions and actual signed preview packaging/gameplay; independent MC02–04 Roaming/HKCU/WAM provider is NOT_IMPLEMENTED.
+Next: obtain real Windows native preview + MC01 gameplay evidence, then select a Minecraft-compatible independent MC02 isolation route.
+
+
 ## Native Preview runtime state isolation — separate preferences, shared manager lease, 23 October 2026
 
 Work: close a real Windows preview-package regression: a different Tauri bundle identifier did not separate the Rust manager's explicitly constructed runtime files, and its official-game target resolver still inspected the retired NativePilot preference.

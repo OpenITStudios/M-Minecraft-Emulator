@@ -311,6 +311,43 @@ mod native {
             Ok(())
         }
     }
+    // Keep the official game playable in a normal Windows window without
+    // using the optional workspace capture helper. No game is terminated.
+    pub(super) fn focus_game_window(target: &OwnedProcess) -> io::Result<()> {
+        let (_process, window) = hwnd(target)?;
+        unsafe {
+            if IsWindowVisible(window) == 0
+                || !GetWindow(window, GW_OWNER).is_null()
+                || IsHungAppWindow(window) != 0
+            {
+                return Err(io::Error::other(
+                    "Native Minecraft window is unavailable or unresponsive; refresh first",
+                ));
+            }
+            if IsIconic(window) != 0 {
+                ShowWindow(window, SW_RESTORE);
+            }
+        }
+        // Recheck exact PID/creation-FILETIME/session/HWND after restoration,
+        // retaining the process HANDLE through the Win32 foreground request.
+        let (_rechecked_process, current_window) = hwnd(target)?;
+        if current_window != window
+            || unsafe { IsWindowVisible(window) } == 0
+            || unsafe { IsHungAppWindow(window) } != 0
+        {
+            return Err(io::Error::other(
+                "Native Minecraft window changed during restore; refresh first",
+            ));
+        }
+        if unsafe { SetForegroundWindow(window) } == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Windows refused to activate Minecraft; select its taskbar window or use Alt+Tab",
+            ));
+        }
+        Ok(())
+    }
+
     pub(super) fn capture(target: OwnedProcess) -> io::Result<Saved> {
         let (_process, window) = hwnd(&target)?;
         unsafe {
@@ -785,6 +822,27 @@ mod native {
     }
     pub(super) fn retired(_: &OwnedProcess) -> bool {
         false
+    }
+}
+
+/// Activate the exact official game process in Windows, without parenting,
+/// moving or launching it. A UI-provided PID/HWND is never sufficient.
+pub fn focus_observed_native_window(target: OwnedProcess) -> io::Result<()> {
+    let fresh = super::native_clients::inspect_native_workspace()?;
+    if !super::native_clients::matches_native_workspace_target(&fresh, &target) {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "Official Minecraft process/window identity changed; refresh before activating",
+        ));
+    }
+    #[cfg(windows)]
+    {
+        native::focus_game_window(&target)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = target;
+        Err(io::Error::new(io::ErrorKind::Unsupported, "Minecraft activation requires Windows"))
     }
 }
 
