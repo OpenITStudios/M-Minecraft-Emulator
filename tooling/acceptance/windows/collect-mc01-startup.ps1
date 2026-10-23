@@ -11,6 +11,12 @@ function Get-MC01StartupBlocker {
     return $null
 }
 
+function Get-MC01TraceBudgetBlocker {
+    param([long]$Bytes)
+    if ($Bytes -ge 268435456) { return 'TRACE_SIZE_THRESHOLD_REACHED' }
+    return $null
+}
+
 function Get-MC01ObservationBlocker {
     param([object[]]$Processes, [string]$RegisteredImage, [int]$OperatorSession, [string]$FirstIdentity)
     $games = @($Processes | Where-Object { $_.name -eq 'Minecraft.Windows' })
@@ -73,6 +79,9 @@ if ($SelfTest) {
         creationFileTime='100'; path='C:\fixture\Minecraft.Windows.exe'; identity='7:100'}
     $cases = @(
         @((Get-MC01StartupBlocker @()), $null),
+        @((Get-MC01TraceBudgetBlocker 0), $null),
+        @((Get-MC01TraceBudgetBlocker 268435455), $null),
+        @((Get-MC01TraceBudgetBlocker 268435456), 'TRACE_SIZE_THRESHOLD_REACHED'),
         @((Get-MC01StartupBlocker @($sample)), 'EXISTING_GAME_OR_HELPER_PRESERVED'),
         @((Get-MC01StartupBlocker @([pscustomobject]@{name='Minecraft.AdalServer';readable=$false})),
             'EXISTING_GAME_OR_HELPER_PRESERVED'),
@@ -116,12 +125,12 @@ $registeredImage = Resolve-ManagerEducationTarget -RegisteredOnly
 $imageHash = (Get-FileHash -LiteralPath $registeredImage -Algorithm SHA256).Hash
 $profile = Join-Path $PSScriptRoot 'mc01-startup.wprp'
 if ((Get-FileHash -LiteralPath $profile -Algorithm SHA256).Hash -ne
-    '3AAAC488F25D093D16DB6B40B1C5AE22CE3DA03ABAD1D4B11FB7A6640567D724') {
+    '6160EDF23C6BF4A9B8B812EF2027226BAC1F765712A9A9E12C3749020026DD17') {
     throw 'Recording profile differs from the reviewed Handle/Loader-only profile.'
 }
 if (-not $Record) {
     [pscustomobject]@{mode='PREFLIGHT'; status='NO_EXISTING_TARGET_OBSERVED'; registeredImageVerified=$true
-        durationSeconds=30; bufferMiB=32; recording='NOT_EXECUTED'; gameAction='NONE'
+        durationSeconds=30; bufferMiB=32; loggingMode='File'; traceStopThresholdMiB=256; recording='NOT_EXECUTED'; gameAction='NONE'
         creatorBinding='UNKNOWN'; operatorLaunchRequired=$true} | ConvertTo-Json
     return
 }
@@ -145,7 +154,7 @@ $firstIdentity = ''
 $started = $false
 $stopSucceeded = $false
 $receipt = [ordered]@{
-    schema=1; instance=$instance; durationSeconds=30; bufferMiB=32
+    schema=1; instance=$instance; durationSeconds=30; bufferMiB=32; loggingMode='File'; traceStopThresholdMiB=256
     scriptSha256=(Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash
     profileSha256=(Get-FileHash -LiteralPath $profile -Algorithm SHA256).Hash
     registeredImageSha256=$imageHash; operatorSession=$operatorSession
@@ -165,7 +174,7 @@ try {
     if (Get-MC01StartupBlocker @(Get-MC01StartupProcesses)) {
         throw 'A game/helper appeared before recording; no launch or recording is permitted.'
     }
-    $startResult = Invoke-MC01Wpr @('-start', ($profile + '!MC01Startup'), '-recordtempto', $destination, '-instancename', $instance)
+    $startResult = Invoke-MC01Wpr @('-start', ($profile + '!MC01Startup'), '-filemode', '-recordtempto', $destination, '-instancename', $instance)
     $receipt.startOutput = $startResult.output
     $receipt.startExitCode = $startResult.exitCode
     if ($startResult.exitCode -ne 0) { throw 'WPR start failed; no ready signal was issued.' }
@@ -176,6 +185,10 @@ try {
     Save-MC01StartupReceipt $receipt $receiptPath
     Write-Output 'MC01_STARTUP_READY_30_SECONDS: manually open MC01 once using the existing manager official launch route.'
     while ($timer.Elapsed.TotalSeconds -lt 30) {
+        # Stop threshold, not a hard size cap: stop/rundown can write additional data.
+        $rawBytes = [long]((Get-ChildItem -LiteralPath $destination -Filter '*.etl' -File |
+            Measure-Object -Property Length -Sum).Sum)
+        if (Get-MC01TraceBudgetBlocker $rawBytes) { throw 'TRACE_SIZE_THRESHOLD_REACHED' }
         $current = @(Get-MC01StartupProcesses)
         $reason = Get-MC01ObservationBlocker $current $registeredImage $operatorSession $firstIdentity
         if ($reason) { throw $reason }

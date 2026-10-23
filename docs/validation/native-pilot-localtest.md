@@ -9,6 +9,62 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Startup capture coverage correction — 24 October 2026 WIB
+
+**Executed collector:** exact `Local` source
+`aaf7183ecbcfe9da1554ff7207256e015ccbb896`; script/profile/resolver blobs matched
+the GitHub source before execution. The operator separately authorized each of
+two 30-second elevated Handle/Loader recordings, closed the previous game
+normally, then manually requested the retry's first MC01 launch. The collector
+did not launch, stop, restart or inject a game.
+
+| Observation | Actual evidence |
+| --- | --- |
+| First recording | Ready 17:25:13.959 UTC; finished 17:25:45.046 UTC, 23 October. No game snapshots or matching lifecycle events. Operator confirmed they had not opened MC01 in time. This is not a game launch failure. |
+| Separately approved retry | Ready 17:27:39.588 UTC; finished 17:28:10.647 UTC. One registered-path game lifetime, created 17:27:53.630 UTC, pinned by PID/creation-FILETIME/session; still the same responsive process after offline review. |
+| WMI | One game start candidate in the same session; no helper event. WMI delivery time differs from creation time, parent PID is not actual-creator proof, and absence of a helper-name event does not establish its absence. |
+| Save and stop | Start/stop returned 0 on both runs; primary + rundown ETL saved inside the private `-recordtempto` directories despite a different requested output filename. Both final named statuses said WPR is not recording. Cancellation/failure recovery was not exercised. |
+| Retry loss counters | Independent WPR status: 0. Documented ETL header EventsLost/BuffersLost: 0 in both parts; ProcessTrace/CloseTrace returned 0. |
+| **Retained timing** | Earliest retained primary Handle/Loader operation: **17:28:00.0387834 UTC**, **6.4089261 seconds after game creation**. Latest retained provider operation: approximately 17:28:10.510 UTC. Header start time does not establish retention of early events. |
+| Retained game objects | 2,677 object events: 4 Mutant (2 create, 2 close, all unnamed), 4 Event (all unnamed), 2,038 File (295 named), 631 other-type events (unnamed). No names, paths, addresses or process identities are published. |
+| Image-load coverage | Zero primary target-image Load events, including zero main EXE loads. This does not mean no modules loaded; the startup interval is missing. |
+| Decode | One-off MSVC `/W4 /WX` consumer processed 302,906 events across both parts; target object/image property errors: 0. No new stack/call-site correlation or return-value observation was performed. |
+
+**Decision:** recording ran and a game lifetime was observed, but the goal of
+retaining first-startup singleton activity **was not achieved**. The missing early interval is consistent with the 32 MiB
+circular buffer overwriting history under this workload. Zero lost-event
+counters do not certify retention of intentionally overwritten circular history.
+Do not claim that the unnamed mutexes identify a singleton or that opening MC02
+is now safe. The whole missing startup cannot be recovered from these ETLs.
+
+Timestamp review used
+[ProcessTrace's default conversion to system time](https://learn.microsoft.com/en-us/windows/win32/api/evntrace/ns-evntrace-event_trace_logfilew)
+rather than comparing raw QPC directly to creation FILETIME.
+[Microsoft logging-mode guidance](https://learn.microsoft.com/en-us/windows-hardware/test/wpt/logging-mode)
+distinguishes sequential file logging from circular memory overwrite.
+The source correction selects file mode, keeps the 30-second window and same
+metadata providers, and adds a 256 MiB visible-ETL stop threshold with documented
+polling/finalization overshoot. Thirteen guard/native-error/threshold self-checks
+passed; WPR accepted the File profile; default preflight preserved the running
+game. **No File-mode recording was performed.** Retention, budget-triggered stop
+and save/recovery for that revision remain **NOT_EXECUTED**.
+
+Raw data stayed private/local; all four ETL lengths/hashes matched receipts again
+after review. First run primary/rundown SHA-256:
+`271b1002f5381914880a0a66182f07d3e35ea91dc1b778ee5b3a8a46c4f71a10` /
+`5c10ee6330e31c015e2a437ac4387f2bc27112be235993b204592bbc13766324`.
+Retry primary/rundown SHA-256:
+`f39d53435de3e59e4c16ca072a5a1a464d171cae176e0fbcdc63005140fb94af` /
+`3d0d91325c3e3bd5821666d98cb8b5aaaa32090763a4ceb3d38845871fd8f9b3`.
+One-off coverage source/executable/output SHA-256:
+`8c9f3498bb0d4870611495b54043ccfc94ccac59861ce529e7ad40199d58d4ea` /
+`3e3828c3b3fbf0b437af16a188a9da2d667ca292a7d8f1d294a9b7f7785103d9` /
+`8eaac10c351744bef9748c8a8980760c27c35536bb85ff15e16f0621695d9fa8`.
+The one-off decoder and output remain ignored local artifacts, not a committed
+reproducible acceptance tool. Evidence ceiling is limited TARGET_WINDOWS
+metadata. Singleton causality, private data/HKCU/auth, game injection and
+two/four-client acceptance remain **UNKNOWN / NOT_EXECUTED**.
+
 ## Offline mutex-stack correlation — 24 October 2026 WIB
 
 Source baseline: `59e2565c57716894f741fa51323d557142de57d8` (`Local`).

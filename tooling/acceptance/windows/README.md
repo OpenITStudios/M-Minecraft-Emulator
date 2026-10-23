@@ -32,10 +32,17 @@ not that process. A race cannot be prevented by this observer.
 
 The fixed, hash-checked [WPR profile](./mc01-startup.wprp) requests Handle/Loader
 metadata and create/close/duplicate stacks with **32 MiB collector buffers** in
-circular memory mode for a 30-second observation window. This is not a total
-process-memory or output-file-size limit; high activity can overwrite early
-events. It excludes ProcessThread, file I/O, registry, network and memory-page
-providers. Separate WMI subscriptions filter only the two basenames and persist
+**sequential file mode** for a 30-second observation window. The collector always
+passes `-filemode`; the profile's required memory variant is not used by this
+collector. The authorized memory capture lacked the beginning of startup despite zero loss
+counters, consistent with circular overwrite; that mode is unsuitable here.
+Visible ETL lengths in the private run directory are sampled during the window;
+reaching **256 MiB** stops recording as incomplete. This is a stop threshold,
+not a hard disk quota: buffering, polling and stop/rundown writes can exceed it.
+Neither the threshold nor the 32 MiB buffer allocation limits total process
+memory. File mode still requires review of coverage and loss before any verdict.
+It excludes ProcessThread, file I/O, registry, network and memory-page providers.
+Separate WMI subscriptions filter only the two basenames and persist
 selected PID, parent PID, session and event-time fields, excluding SID and command
 line. Snapshots pin available target PID/creation-FILETIME/session/path; on-disk
 Microsoft trust/hash is not loaded-image binding. WMI event time is not process
@@ -67,16 +74,26 @@ declare success. Final status/cleanup output needs review. Collection state
 Sources: [Microsoft WPR commands](https://learn.microsoft.com/en-us/windows-hardware/test/wpt/wpr-command-line-options),
 [named instances](https://devblogs.microsoft.com/performance-diagnostics/controlling-the-event-session-name-with-the-instance-name/),
 [WMI start metadata](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/krnlprov/win32-processstarttrace),
+[logging modes](https://learn.microsoft.com/en-us/windows-hardware/test/wpt/logging-mode),
 [TraceMergeProperty scope](https://learn.microsoft.com/en-us/windows-hardware/test/wpt/tracemergeproperty).
 
-Verification against source prepared from `e13c03adf559e215a372965b9c6f3cd66fee90dd`:
-ten guard/native-error self-checks passed in Windows PowerShell 5.1; default
-preflight preserved one existing target; WPR 10.0.26100 accepted and displayed
-only the intended profile keywords/stacks/buffers. **NOT_EXECUTED:** new recording,
-raw-file placement, stop/cancel/recovery, positive startup lifecycle control,
-game startup, singleton rejection, authentication or two-client acceptance.
-Current blocker/next action belongs only to
-[planning/development.md](../../../planning/development.md).
+The two separately authorized 30-second recordings at `aaf7183ecbcfe9da1554ff7207256e015ccbb896`
+confirmed raw-part placement, successful named stop and final not-recording status
+on this Windows build. The first observed no game; the operator had not clicked.
+The second pinned one real first-launch lifetime and received one matching WMI
+start candidate, but its circular buffer retained provider activity only from
+**6.409 seconds after game creation**. Startup/singleton proof was not obtained.
+No new recording is implied by this source correction. See the
+[exact capture evidence](../../../docs/validation/native-pilot-localtest.md#startup-capture-coverage-correction--24-october-2026-wib).
+
+The revised source's thirteen guard/native-error/size-threshold self-checks passed
+in Windows PowerShell 5.1; default preflight preserved the now-running MC01.
+WPR 10.0.26100 accepted the revised File profile with the same keywords/stacks.
+**NOT_EXECUTED for the File revision:** recording, disk-threshold stop, raw save,
+recovery or startup retention. Failed-stop cancellation was not exercised by
+the two successful memory captures. Positive WMI start metadata is not complete
+creator/helper attribution or authentication evidence. Current blocker/next action
+belongs only to [planning/development.md](../../../planning/development.md).
 
 ## Early compatibility bootstrap ordering (self-child only)
 

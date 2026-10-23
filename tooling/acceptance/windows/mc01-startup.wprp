@@ -16,9 +16,9 @@
         <Stack Value="HandleDuplicate" />
       </Stacks>
     </SystemProvider>
-    <Profile Id="MC01Startup.Verbose.Memory" Name="MC01Startup"
-             Description="Thirty-second first MC01 handle and loader metadata"
-             LoggingMode="Memory" DetailLevel="Verbose">
+    <Profile Id="MC01Startup.Verbose.File" Name="MC01Startup"
+             Description="Thirty-second first MC01 handle and loader metadata to file"
+             LoggingMode="File" DetailLevel="Verbose">
       <Collectors>
         <SystemCollectorId Value="MC01StartupCollector">
           <SystemProviderId Value="MC01StartupProvider" />
@@ -30,5 +30,8 @@
         </TraceMergeProperty>
       </TraceMergeProperties>
     </Profile>
+    <Profile Id="MC01Startup.Verbose.Memory" Name="MC01Startup"
+             Description="Circular diagnostic variant; not used by startup collector"
+             LoggingMode="Memory" DetailLevel="Verbose" Base="MC01Startup.Verbose.File" />
   </Profiles>
 </WindowsPerformanceRecorder>
