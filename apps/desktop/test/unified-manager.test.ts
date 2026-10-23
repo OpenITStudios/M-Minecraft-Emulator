@@ -120,3 +120,32 @@ it('clicking a retained observed tab does not request full frontend Windows disc
   expect(handler).toContain('await nativeFeasibility.openOfficialMinecraft()');
   expect(handler).toContain("if(client!=='01'||observed.processes.length>0)");
 });
+
+
+it('native Minecraft 01/02 identity comparison uses real refreshed Windows processes, not retired snapshots',()=>{
+  const source=readFileSync(new URL('../src/UnifiedManagerApp.svelte',import.meta.url),'utf8');
+  const start=source.indexOf('async function inspectContext()');
+  const end=source.indexOf('async function navigate(',start);
+  const action=source.slice(start,end);
+  expect(action).toContain("if(sessionView==='native'&&!(await inspectNative()))");
+  expect(action).toContain("observedSlots['01']");
+  expect(action).toContain("observedSlots[contextClient]");
+  expect(action).toContain('compareProcessContexts(first,second)');
+  expect(action).toContain('first.pid===second.pid');
+  expect(action).not.toContain('OwnedTestBackend');
+  expect(source).toContain('Compare observed Windows identities');
+  expect(source).toContain('nativeSession===null||!observedSlots');
+  expect(source).toContain('Windows user {contextResult.sameWindowsUser');
+  expect(source).toContain('Account isolation remains unproven.');
+  expect(source).not.toContain("if(native?.length!==1||other?.length!==1)");
+});
+
+it('Windows comparison is invalidated when observed processes change or legacy view is opened',()=>{
+  const source=readFileSync(new URL('../src/UnifiedManagerApp.svelte',import.meta.url),'utf8');
+  const inspect=source.slice(source.indexOf('async function inspectNative()'),source.indexOf('async function refreshNative()'));
+  expect(inspect).toContain("contextResult=null;contextError='';");
+  const switcher=source.slice(source.indexOf('async function switchSessionView('),source.indexOf('async function prepare()'));
+  expect(switcher).toContain("contextResult=null;contextError='';sessionView=next");
+  expect(switcher).toContain("contextResult=null;contextError='';sessionView='legacy'");
+  expect(source).not.toContain('accountEmail:');
+});

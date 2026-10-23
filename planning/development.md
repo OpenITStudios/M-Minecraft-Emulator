@@ -1,5 +1,17 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Native pair context in the real workspace — Windows user/profile comparison, 23 October 2026
+
+Work: make actual MC01-to-MC02 Windows process-context evidence accessible in the mounted native manager, without requiring retired Sandboxie/owned-engine snapshots.
+
+Decision: the existing Settings comparison now obtains a fresh list of the official registered Minecraft Education Desktop game processes, selects the two exact, distinct PID/creation-FILETIME identities assigned to MC01 and the selected observed slot (MC02–04), and reuses the already-mounted read-only `desktop_compare_process_contexts` Rust IPC. Results are strictly the three existing booleans: Windows user, configured profile directory, Windows interactive session. All comparison state is invalidated whenever a new native process inventory is read or the user explicitly switches to legacy recovery. Failed, ambiguous, unresponsive and reused identities stay UNKNOWN, not success. No raw user SID/profile path, credentials, WAM tokens, world content, new launcher, authorization flag or parallel state owner is introduced.
+
+Product effect: an operator with two already-running official game windows can now check whether they actually share a Windows user/profile, rather than falsely equating two tabs/PIDs with two independently signed-in Minecraft accounts. This is a real Windows process-context check, **not** proof of per-process Roaming/HKCU isolation, account brokerage or independent MC02 creation.
+
+Proof: exact GitHub current source/IPC/consumer analysis and focused regression source review. Node/Vitest/Rust/Windows execution and actual Minecraft account/gameplay evidence NOT_EXECUTED. GitHub Actions disabled; original MC02–04 launch/provision denials preserved.
+
+Next: identify and prove a supported unchanged Minecraft Education process-bound storage/HKCU/WAM isolation provider before enabling MC02 independent launch.
+
 ## Native Windows process inventory — no PowerShell enumeration, 23 October 2026
 
 Work: convert the mounted Minecraft Education process/window observation into OS-native Rust instead of spawning PowerShell on each Refresh, preflight, and first new-window admission.

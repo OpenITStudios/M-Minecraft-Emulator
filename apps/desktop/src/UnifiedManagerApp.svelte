@@ -14,7 +14,7 @@
   let issue:ReturnType<typeof operationIssue>|null=null;
   let workspace:NativeWorkspace,panel:OwnedManagerPanel,selectedClient:ClientId|null=null,workspaceBusy=false;
   let tabStates:Record<ClientId,string>={"01":"Checking","02":"Checking","03":"Checking","04":"Checking"};
-  let contextClient='02',contextResult:ContextComparison|null=null,contextError='';
+  let contextClient:ClientId='02',contextResult:ContextComparison|null=null,contextError='';
   let nativeSession:NativeWorkspaceObservation|null=null,nativeError='',nativePending=false;
   let sessionView:'native'|'legacy'='native',observedSlots:ObservedSlotMap={};
   $: if(sessionView==='native')tabStates={
@@ -23,16 +23,32 @@
     '03':observedSlots['03']?(observedSlots['03'].responding?'Observed':'Not responding'):'Not observed',
     '04':observedSlots['04']?(observedSlots['04'].responding?'Observed':'Not responding'):'Not observed',
   };
-  $: contextTarget=snapshot?.clients.find(slot=>slot.clientId===contextClient)?.processes;
+  $: contextTarget=sessionView==='native'
+    ?observedSlots[contextClient]
+    :snapshot?.clients.find(slot=>slot.clientId===contextClient)?.processes[0];
   async function inspectContext(){
     if(busy||workspaceBusy)return;
     contextResult=null;contextError='';
-    const native=snapshot?.nativeProcesses,other=contextTarget;
-    if(native?.length!==1||other?.length!==1){contextError='Two unambiguous observed processes are required. New isolated launches remain disabled.';return;}
     busy=true;
-    try{contextResult=await compareProcessContexts(native[0],other[0]);}
-    catch{contextError='Windows identity could not be checked. The process may have exited, its identity may have changed, or access may be denied. No isolation result is established.';}
-    finally{busy=false;}
+    try{
+      // The active native product view compares two REAL observed Minecraft
+      // processes, not a retired owned-engine snapshot. Never accept a UI
+      // slot label alone: refresh the registered executable and PID/FILETIME.
+      if(sessionView==='native'&&!(await inspectNative())){
+        contextError='The Windows game-process inventory could not be verified. No identity comparison is available.';
+        return;
+      }
+      const first=sessionView==='native'?observedSlots['01']:snapshot?.nativeProcesses[0];
+      const second=sessionView==='native'?observedSlots[contextClient]:snapshot?.clients.find(slot=>slot.clientId===contextClient)?.processes[0];
+      if(!first||!second||first.pid===second.pid||!first.responding||!second.responding||
+        first.windowHandle==='0x0'||second.windowHandle==='0x0'){
+        contextError='Two distinct responsive Minecraft windows must be observed before comparing Windows identities. MC02–04 launches remain disabled.';
+        return;
+      }
+      contextResult=await compareProcessContexts(first,second);
+    }catch{
+      contextError='Windows identity could not be checked. A process may have exited, its FILETIME may have changed, or access may be denied. No isolation result is established.';
+    }finally{busy=false;}
   }
   async function navigate(next:'clients'|'settings'){
     if(busy||workspaceBusy)return;
@@ -42,6 +58,9 @@
   }
   // Native Minecraft 01 control path: no retired owned-provider inspection.
   async function inspectNative(){
+    // Prior comparison evidence must never survive a changed Windows game
+    // inventory, including PID reuse, sign-out or window replacement.
+    contextResult=null;contextError='';
     try{nativeSession=await nativeFeasibility.inspectNativeWorkspace();observedSlots=reconcileObservedSlots(observedSlots,nativeSession.processes);nativeError='';return nativeSession;}
     catch(error){nativeSession=null;nativeError=operationIssue(error).details;return null;}
   }
@@ -108,7 +127,7 @@
   async function switchSessionView(next:'native'|'legacy'){
     if(busy||workspaceBusy||next===sessionView||(next==='legacy'&&!snapshot))return;
     busy=true;issue=null;
-    try{if(workspace)await workspace.restore();sessionView=next;await tick();}
+    try{if(workspace)await workspace.restore();contextResult=null;contextError='';sessionView=next;await tick();}
     catch(error){issue=operationIssue(error);}
     finally{busy=false;}
   }
@@ -124,7 +143,7 @@
         return;
       }
       if(workspace)await workspace.restore();
-      sessionView='legacy';await tick();
+      contextResult=null;contextError='';sessionView='legacy';await tick();
     }catch(error){issue=operationIssue(error);}
     finally{busy=false;}
   }
@@ -185,10 +204,10 @@
     </div>
     {#if page==='settings'}
       <section class="um-settings"><details><summary>Independent engine diagnostics</summary>
-        <p>Read-only comparison of Minecraft 01 and an existing observed process. This checks Windows identity only; it does not prove separate Minecraft accounts or launch a session.</p>
+        <p>Compare two actual Minecraft Education processes in the active view (native windows by default, or an explicitly recovered legacy session). The comparison checks Windows user, profile directory, and interactive session only—not Microsoft account, WAM, world storage isolation, or gameplay. It never launches a game.</p>
         <label>Compare with <select bind:value={contextClient} disabled={busy} on:change={()=>{contextResult=null;contextError='';}}><option value="02">Minecraft 02</option><option value="03">Minecraft 03</option><option value="04">Minecraft 04</option></select></label>
-        <button class="cm-button cm-secondary" disabled={busy||workspaceBusy||snapshot?.nativeProcesses.length!==1||contextTarget?.length!==1} on:click={inspectContext}>Check Windows identity</button>
-        {#if contextResult}<p role="status">Last explicit check: Windows user {contextResult.sameWindowsUser?'same':'different'}; configured profile directory {contextResult.sameProfileDirectory?'same':'different'}; Windows session {contextResult.sameWindowsSession?'same':'different'}. Processes may change after this check. Account isolation remains unproven.</p>{/if}
+        <button class="cm-button cm-secondary" disabled={busy||workspaceBusy||(sessionView==='native'?(nativeSession===null||!observedSlots['01']||!observedSlots[contextClient]):(snapshot?.nativeProcesses.length!==1||!contextTarget))} on:click={inspectContext}>Compare observed Windows identities</button>
+        {#if contextResult}<p role="status">Last explicit Windows identity check (Minecraft 01 vs {contextClient}): Windows user {contextResult.sameWindowsUser?'same':'different'}; configured profile directory {contextResult.sameProfileDirectory?'same':'different'}; Windows session {contextResult.sameWindowsSession?'same':'different'}. These OS comparisons do not prove distinct Microsoft Education sign-ins, Roaming/HKCU mediation, WAM separation, or playable sessions. Account isolation remains unproven.</p>{/if}
         {#if contextError}<p role="alert">{contextError}</p>{/if}
       </details></section>
       <section class="um-settings"><h2>Read-only status</h2><p>Detecting Minecraft and observing legacy sessions does not verify the independent engine, account isolation or gameplay readiness.</p>
