@@ -1,5 +1,17 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Native Windows preview package — separate installable source route, 23 October 2026
+
+Work: remove the actual legacy-installer/debug-only blocker for the native Minecraft Education product, without reactivating VMware or Sandboxie.
+
+Decision: the dedicated `build:preview` NSIS command and Tauri overlay use a distinct preview identifier and per-user installation, with no guest resources, VM sidecars or inherited legacy installer hooks. An opt-in Cargo feature enables the existing parent-validated workspace helper in release preview builds only. The Rust build script binds the feature to the explicit preview identity and removal of inherited legacy payloads, and rejects non-preview release builds. The original legacy `build:app` stays blocked. Recovery-only owned adapter actions remain disabled in release; historical recovery UI is developer-only.
+
+Product effect: a source-defined separate Windows installer path for the existing MC01 official-game launcher and already-running game-window workspace. It does NOT isolate an independent MC02 account or prove signed/installed/runtime readiness. No user profile, world or account data is migrated.
+
+Proof: pinned GitHub static config/consumer review; an executable Node source-contract validator and Vitest assertions authored. Native Windows Rust/Tauri/NSIS compiler, installer, security and game runtime NOT_EXECUTED; GitHub Actions disabled.
+
+Next: establish a verified MC02 storage/HKCU/WAM-compatible provider and separately prove a Windows native-preview package before any release.
+
 ## Native pair context in the real workspace — Windows user/profile comparison, 23 October 2026
 
 Work: make actual MC01-to-MC02 Windows process-context evidence accessible in the mounted native manager, without requiring retired Sandboxie/owned-engine snapshots.

@@ -83,11 +83,18 @@ fn read_line(input: &mut impl BufRead) -> io::Result<Option<String>> {
     String::from_utf8(bytes).map(Some).map_err(io::Error::other)
 }
 
+// The normal release build remains disabled for native window capture. Only
+// the separately identified, source-reviewed preview build may use the
+// existing exact-parent/PID/HWND recovery helper outside debug builds.
+fn workspace_enabled() -> bool {
+    cfg!(debug_assertions) || cfg!(feature = "native-workspace-preview")
+}
+
 pub fn maybe_run_helper() -> bool {
     if std::env::args().nth(1).as_deref() != Some("--workspace-surface") {
         return false;
     }
-    if !cfg!(debug_assertions) {
+    if !workspace_enabled() {
         return true;
     }
     if super::dpi::configure().is_err() {
@@ -1007,8 +1014,10 @@ mod controller {
         Err(io::Error::other("Workspace target no longer managed"))
     }
     fn prepare(manager: u64, viewport: Viewport, target: OwnedProcess) -> io::Result<Lease> {
-        if !cfg!(debug_assertions) {
-            return Err(io::Error::other("Developer workspace only"));
+        if !workspace_enabled() {
+            return Err(io::Error::other(
+                "Native workspace disabled outside authorized preview or developer build",
+            ));
         }
         let viewport = viewport.validate()?;
         native::rectangle(manager, viewport)?;

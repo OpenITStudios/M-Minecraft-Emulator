@@ -76,3 +76,35 @@ describe("Emulator source verification routing", () => {
     expect(router).not.toMatch(/virtual-clients:verify|M-Bedrock-Dev/);
   });
 });
+
+
+describe("Native-only Windows preview package", () => {
+  it("isolates preview identity and payload from the retired VMware installer", async () => {
+    const {verifyNativePreviewPackage} = await import("../scripts/check-native-preview-package.mjs");
+    const actual = verifyNativePreviewPackage();
+    expect(actual.identifier).toBe("com.mivubi.minecraft.instancemanager.preview");
+    expect(actual.config.mainBinaryName).toBe("minecraft-instance-manager-preview");
+    expect(actual.installMode).toBe("currentUser");
+    expect(actual.config.bundle.resources).toEqual({});
+    expect(actual.config.bundle.externalBin).toEqual([]);
+    expect(actual.config.bundle.windows.nsis).not.toHaveProperty("installerHooks");
+    expect(actual.config.bundle.windows.nsis.startMenuFolder).toBe("Minecraft Instance Manager Preview");
+    expect(actual.config.app.security.csp).toContain("object-src 'none'");
+    expect(actual.config.app.windows[0].title).toBe("Minecraft Instance Manager Preview");
+  });
+  it("uses RFC 7396 deletions and preserves the original package hold", async () => {
+    const {mergePatch} = await import("../scripts/check-native-preview-package.mjs");
+    expect(mergePatch({a:{keep:"yes",old:"VMware"},b:[1,2]},
+      {a:{old:null},b:[]})).toEqual({a:{keep:"yes"},b:[]});
+    const legacy=readFileSync(new URL("../scripts/prepare-package-binaries.mjs",import.meta.url),"utf8");
+    expect(legacy).toContain("PACKAGE_BLOCKED_NATIVE_FEASIBILITY");
+    expect(legacy).toContain("LEGACY_PACKAGE_RELEASE_APPROVED = false");
+    const build=readFileSync(new URL("../src-tauri/build.rs",import.meta.url),"utf8");
+    expect(build).toContain("CARGO_FEATURE_NATIVE_WORKSPACE_PREVIEW");
+    expect(build).toContain("Legacy Windows release packaging is blocked");
+    const helper=readFileSync(new URL("../src-tauri/src/engine/workspace_surface.rs",import.meta.url),"utf8");
+    expect(helper).toContain('cfg!(feature = "native-workspace-preview")');
+    expect(helper).toContain("native::trusted_parent()");
+    expect(helper).toContain("if !workspace_enabled()");
+  });
+});

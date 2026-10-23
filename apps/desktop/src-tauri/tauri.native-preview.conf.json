@@ -1,0 +1,42 @@
+{
+  "productName": "Minecraft Instance Manager Preview",
+  "identifier": "com.mivubi.minecraft.instancemanager.preview",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Minecraft Instance Manager Preview",
+        "width": 1180,
+        "height": 760,
+        "minWidth": 920,
+        "minHeight": 620,
+        "resizable": true,
+        "fullscreen": false,
+        "maximized": true
+      }
+    ]
+  },
+  "bundle": {
+    "publisher": "MIVUBI-STD",
+    "shortDescription": "Preview: manage existing Minecraft Education windows",
+    "longDescription": "Preview of the native Windows Minecraft Education window manager. Supports opening the registered Client 01 and showing already running game windows. Does not provide independent Client 02–04 account isolation.",
+    "externalBin": [],
+    "resources": {
+      "../../../engine/guest/windows/": null,
+      "../../../tooling/acceptance/windows/": null,
+      "../../../engine/distribution/release-channel.json": null,
+      "../../../engine/distribution/package-contract.json": null,
+      "../../../engine/distribution/install-lifecycle-policy.json": null,
+      "../../../engine/distribution/test-upgrade.ps1": null,
+      "../../../engine/distribution/write-payload-manifest.ps1": null
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "startMenuFolder": "Minecraft Instance Manager Preview",
+        "installerHooks": null
+      }
+    }
+  },
+  "mainBinaryName": "minecraft-instance-manager-preview"
+}

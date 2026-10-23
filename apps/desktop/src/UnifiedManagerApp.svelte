@@ -193,7 +193,7 @@
               </div>
               <button class="cm-button" disabled={busy||workspaceBusy||nativeSession===null||nativePending||(nativeSession.processes.length>0&&!observedSlots['01'])} on:click={()=>activateNative('01')}>{busy?'Working…':observedSlots['01']?'Show observed window 01':'Open official Minecraft 01'}</button>
               <button class="cm-button cm-secondary" disabled={busy||workspaceBusy} on:click={refreshNative}>Refresh Windows game windows</button>
-              <button class="cm-button cm-secondary" disabled={busy||workspaceBusy} on:click={openLegacy}>Inspect existing-session recovery</button>
+              {#if import.meta.env.DEV}<button class="cm-button cm-secondary" disabled={busy||workspaceBusy} on:click={openLegacy}>Inspect existing-session recovery</button>{/if}
               <p>MC02–04 Launch/Provision remain disabled. Existing windows can be displayed but are not certified as isolated or independently signed-in. Return to Windows restores a window without closing the game.</p>
             </div>
           </div>
@@ -214,7 +214,7 @@
         <div class="um-setting"><div><h3>Minecraft Education</h3><p>{busy?'Checking installation…':config?.targetError?'Installation needs attention. Repair Minecraft Education, then check again.':config?.detectedMinecraft?'Installed · detected automatically':'Not detected. Install Minecraft Education Desktop, then check again.'}</p></div></div>
         <div class="um-setting"><div><h3>Independent engine</h3><p>Not implemented · Client 02–04 Launch/Provision disabled.</p></div></div>
         <div class="um-setting"><div><h3>Native Minecraft 01</h3><p>{nativeSession?.processes[0]?'Registered game process candidate observed':nativeError?'Observation needs attention':'Independent of retired engine snapshots'}</p></div></div>
-        <div class="um-setting"><div><h3>Legacy session snapshot</h3><p>{sessionView==='native'?'Not inspected automatically · open recovery explicitly':busy?'Checking read-only observation…':checked?'Observed · diagnostic only':'Unavailable · no engine readiness inferred'}</p></div></div>
+        <div class="um-setting"><div><h3>Legacy session snapshot</h3><p>{sessionView==='native'?(import.meta.env.DEV?'Not inspected automatically · open recovery explicitly':'Unavailable in the isolated native preview package'):busy?'Checking read-only observation…':checked?'Observed · diagnostic only':'Unavailable · no engine readiness inferred'}</p></div></div>
         <button class="cm-button" disabled={busy} on:click={prepare}>{busy?'Checking…':'Check again'}</button>
       </section>
       <section class="um-settings"><details><summary>Diagnostics</summary><p>Windows developer test. Independent installation and production signing have separate acceptance requirements.</p><h3>Minecraft location</h3><pre>{config?.settings.minecraftExecutable||config?.detectedMinecraft||'Not detected'}</pre><h3>Legacy session storage location</h3><pre>{config?.settings.sessionDirectory||'Not detected'}</pre>{#if config?.targetError}<h3>Installation details</h3><pre>{config.targetError}</pre>{/if}<h3>Client routing</h3>{#each config?.catalog.targets??[] as target}<div class="um-target"><strong>Minecraft {target.id}</strong><span>{target.kind==='NATIVE'?'Native Windows':target.profile}</span></div>{/each}</details></section>
