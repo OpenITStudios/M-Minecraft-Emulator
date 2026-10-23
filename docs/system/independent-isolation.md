@@ -68,6 +68,54 @@ An actual driver would additionally need supported OS/WDK targeting, signed depl
 
 Do not repeat generic PSEC/minifilter/private-hive fixtures or promise a complete provider from another API survey. Independent source fixes with justified value may continue; provider selection needs new game-bound evidence or a supported contract that directly resolves these specific gaps. Current continuation remains solely in [planning/development.md](../../planning/development.md).
 
+### Provider-controlled launch transaction — 23 October 2026
+
+Reviewed source baseline: `0deef9565e56b536273be6224ca6a84b97750845`.
+The operator reconfirmed **independently authored code tailored to Minecraft**,
+using Sandboxie's architecture as reference. This does not select the retired
+fork or establish equivalent compatibility. No existing Sandboxie code is
+imported by this change.
+
+This is a required transaction behind the existing
+`IndependentProviderPort::launch`, **not an implemented or fully supported
+Windows provider**. Runtime-core retains policy; the Windows adapter owns native
+handles and mediation. No new public method, launch command or persisted
+readiness store is needed to describe it.
+
+| Order | Required action and ownership | Failure behavior |
+| --- | --- | --- |
+| 1. Admit and reserve | Use the existing operation lock/admission owner. Reserve one fixed slot and its established private store; reject a live or uncertain owner. Validate the registered official image and the intended session. | Return failure before creation; never reuse a peer/host profile or overwrite old worlds. |
+| 2. Arm mediation | Before process creation, prepare a bounded, single-use creation intent tied to the trusted creator lifetime/thread, slot and verified image. File, registry and applicable IPC mediation must already cover protected startup access. | Missing coverage means no game creation. An armed intent alone is not proof that callbacks cover earlier I/O. |
+| 3. Create and bind | A future adapter may use documented process creation with a suspended initial thread, retaining original process/thread handles. Bind the resulting live process object and PID/creation identity to the intent exactly once; correlate the actual image file object. No shell activation or discovered PID may satisfy this step. | Reject ambiguous/expired/replayed intent or unexpected image. Never adopt or terminate MC01. Exact image-to-loaded-section binding remains an implementation obligation. |
+| 4. Verify before resume | Confirm private backing-file/key ownership, inherited-handle restrictions, token/session and process liveness. Children need trusted creation binding; external brokers require their own supported attribution/context mechanism. | Do not resume when a required surface is missing. Environment strings, job membership and parent PID cannot substitute for mediation. |
+| 5. Resume and report | Resume only the transaction-owned initial thread after all required mechanisms are established. Return the exact new process identity through the existing port. Existing presentation can discover/restore its window separately. | An exit or redirected activation does not become MC02 success. A returned identity is not licensed sign-in, gameplay or acceptance evidence. |
+| 6. Recover and release | Keep mediation and store ownership for the lifetime of owned processes, protected handles and outstanding operations. Manager reconnect must revalidate that ownership. | Before resume, cleanup may terminate only a provably transaction-created child, then drain operations and release transient state. After resume, use existing lifecycle/recovery policy; failure must never drop protection into host access. Preserve persistent data and unrelated sessions. |
+
+[CREATE_SUSPENDED](https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags)
+suspends the initial thread; its documented contract does not guarantee absence
+of process-creation I/O. Consequently, “create, then enroll by PID” is rejected
+as the protection boundary. The earliest protected access may precede the
+[process notification](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-_ps_create_notify_info)
+used to bind membership. That structure distinguishes creator from parent and
+permits creation rejection; it does not itself provide private file/HKCU/IPC
+views. This ordering gap must be resolved by the actual native implementation,
+not assumed away by a transaction diagram.
+
+**Unresolved implementation boundary:** trusted pre-creation attribution and
+startup-I/O coverage are NOT_IMPLEMENTED; transparent singleton/IPC and external
+authentication context remain UNKNOWN. There is no verified complete
+no-injection mechanism to plug into steps 2–4. Do not implement a direct
+`CreateProcessW` game launcher that bypasses these missing steps, or add a
+synthetic success state to fill them. This design identifies the native work;
+it does not award provider feasibility or change admission.
+
+**Review evidence:** existing provider signature/disabled implementation and
+canonical owner/consumer mapping reviewed at the pinned source; official
+creation/notification contracts checked. No executable changes, driver/service
+activation, public API changes or new runtime observations. Builds, transaction
+execution and MC01+MC02 acceptance: **NOT_EXECUTED**. Current continuation remains
+only in [planning/development.md](../../planning/development.md).
+
 ### Required behavior of the future adapter
 
 A native adapter must bind trusted process membership to an exact live process object/lifetime and stable slot profile before game code accesses protected state. Children need verified membership; externally activated helpers remain outside until a supported attribution/context route exists. PID reuse or manager reconnect must never transfer another process into a slot.
