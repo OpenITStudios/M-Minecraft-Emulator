@@ -2,7 +2,10 @@
 //! No game launch, credential access, token modification or pipe policy
 //! promotion. The opt-in pilot remains disabled by default.
 
-use std::{ffi::c_void, fs::File, io, mem, os::windows::io::AsRawHandle, ptr};
+use std::{
+    ffi::c_void, fs::File, io, mem,
+    os::windows::io::{AsRawHandle, FromRawHandle}, ptr,
+};
 use windows_sys::Win32::Storage::FileSystem::{
     GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
     FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT,
@@ -56,6 +59,27 @@ const ROOT_CHECK_RIGHTS: [u32; 13] = [
 ];
 const ERROR_NO_TOKEN: u32 = 1008;
 
+// Fixed service-managed metadata root name, NOT a Minecraft path. No IPC,
+// CLI or end-user filename reaches the native create helper.
+const SERVICE_ROOT_CHILD: &str = "mivubi-independent-root";
+const NT_FILE_CREATE: u32 = 2;
+const NT_FILE_OPEN: u32 = 1;
+const NT_FILE_CREATED: usize = 2;
+const NT_FILE_READ_ATTRIBUTES: u32 = 0x0080;
+const NT_FILE_ADD_SUBDIRECTORY: u32 = 0x0004;
+const NT_SYNCHRONIZE: u32 = 0x0010_0000;
+const NT_FILE_SHARE_READ: u32 = 0x0001;
+const NT_FILE_SHARE_WRITE: u32 = 0x0002;
+const NT_FILE_ATTRIBUTE_NORMAL: u32 = 0x0000_0080;
+const NT_OBJ_CASE_INSENSITIVE: u32 = 0x0000_0040;
+const NT_FILE_DIRECTORY_FILE: u32 = 0x0000_0001;
+const NT_FILE_SYNCHRONOUS_IO_NONALERT: u32 = 0x0000_0020;
+const NT_FILE_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+const NT_STATUS_OBJECT_NAME_COLLISION: u32 = 0xC000_0035;
+const NT_STATUS_OBJECT_NAME_NOT_FOUND: u32 = 0xC000_0034;
+const NT_STATUS_OBJECT_PATH_NOT_FOUND: u32 = 0xC000_003A;
+const NT_STATUS_ACCESS_DENIED: u32 = 0xC000_0022;
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct SidAndAttributes { sid: H, attributes: u32 }
@@ -69,6 +93,39 @@ struct AclSizeInformation {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct RootFileIdentity { volume: u32, index: u64 }
+
+/// Native user-mode ABI used only for a fixed, single-component,
+/// directory-HANDLE-relative create or open. All fields match winternl.h.
+#[repr(C)]
+struct NtUnicodeString {
+    length: u16, maximum_length: u16, buffer: *mut u16,
+}
+#[repr(C)]
+struct NtObjectAttributes {
+    length: u32,
+    root_directory: H,
+    object_name: *mut NtUnicodeString,
+    attributes: u32,
+    security_descriptor: H,
+    security_quality_of_service: H,
+}
+#[repr(C)]
+struct NtIoStatusBlock {
+    status_or_pointer: usize, information: usize,
+}
+
+/// Retain BOTH directory HANDLEs, verified file IDs and the exact fixed
+/// child name. Dropping this source-only object closes the handles but
+/// NEVER deletes a newly created directory or user/world/profile data.
+/// It is not an IPC/exportable capability.
+#[allow(dead_code)]
+struct PendingCreatedServiceRoot {
+    parent: File,
+    directory: File,
+    parent_id: RootFileIdentity,
+    directory_id: RootFileIdentity,
+}
+
 /// A diagnostic-only sample, not a root capability or launch grant.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct PendingServiceRootReview { active_logons_sampled: usize }
@@ -132,6 +189,17 @@ unsafe extern "system" {
     fn GetAce(acl: H, index: u32, ace: *mut H) -> i32;
     fn OpenThreadToken(
         thread: H, desired_access: u32, open_as_self: i32, token: *mut H,
+    ) -> i32;
+}
+#[link(name = "ntdll")]
+unsafe extern "system" {
+    fn NtCreateFile(
+        output: *mut H, desired_access: u32,
+        attributes: *mut NtObjectAttributes,
+        io_status: *mut NtIoStatusBlock,
+        allocation: *mut i64, file_attributes: u32,
+        share_access: u32, disposition: u32, options: u32,
+        ea_buffer: H, ea_length: u32,
     ) -> i32;
 }
 #[link(name = "kernel32")]
@@ -423,7 +491,7 @@ fn root_file_identity(root: &File) -> io::Result<RootFileIdentity> {
     if info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY == 0
         || info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
     {
-        return Err(denied("Service-root HANDLE is not a plain NTFS directory"));
+        return Err(denied("Service-root HANDLE is not a plain Windows directory"));
     }
     let index = (u64::from(info.nFileIndexHigh) << 32)
         | u64::from(info.nFileIndexLow);
@@ -633,6 +701,195 @@ fn review_existing_service_root_source(root: &File)
     let _ = existing_root_descriptor(root, &expected)?;
     require_nonimpersonating_thread()?;
     Ok(PendingServiceRootReview { active_logons_sampled: active.len() })
+}
+
+/// The ONLY permitted root name is fixed by code. In particular a
+/// forged parent-relative path, DOS device, arbitrary slot or reparse name
+/// cannot be smuggled through the factory's native OBJECT_ATTRIBUTES.
+fn checked_service_root_name(name: &str) -> io::Result<()> {
+    if name != SERVICE_ROOT_CHILD
+        || name.is_empty()
+        || name.len() > 64
+        || !name.is_ascii()
+        || !name.bytes().all(|b|
+            b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
+    {
+        return Err(denied("Unsupported service-root child name"));
+    }
+    Ok(())
+}
+
+fn nt_root_create_outcome(status: i32, information: usize)
+    -> io::Result<()>
+{
+    if status != 0 {
+        let kind = match status as u32 {
+            NT_STATUS_OBJECT_NAME_COLLISION => io::ErrorKind::AlreadyExists,
+            NT_STATUS_OBJECT_NAME_NOT_FOUND | NT_STATUS_OBJECT_PATH_NOT_FOUND =>
+                io::ErrorKind::NotFound,
+            NT_STATUS_ACCESS_DENIED => io::ErrorKind::PermissionDenied,
+            _ => io::ErrorKind::Other,
+        };
+        return Err(io::Error::new(
+            kind, format!("NtCreateFile refused service root (0x{:08X})", status as u32),
+        ));
+    }
+    if information != NT_FILE_CREATED {
+        // FILE_OPENED/FILE_EXISTS must never adopt a pre-existing root.
+        return Err(denied("Native service-root creation did not return FILE_CREATED"));
+    }
+    Ok(())
+}
+
+/// Atomically create OR open one fixed directory name below a retained
+/// parent HANDLE. The candidate SYSTEM/service-SID security descriptor
+/// is applied ONLY with FILE_CREATE. The open path is read-only metadata
+/// and supplies NO descriptor, preventing any implicit ACL modifications.
+/// An existing name is NEVER opened by the create path.
+fn relative_service_root(
+    parent: &File,
+    disposition: u32,
+    candidate: Option<&CandidateDescriptor>,
+) -> io::Result<File> {
+    checked_service_root_name(SERVICE_ROOT_CHILD)?;
+    if (disposition == NT_FILE_CREATE) != candidate.is_some()
+        || !matches!(disposition, NT_FILE_CREATE | NT_FILE_OPEN)
+    {
+        return Err(denied("Unsupported native root create/open disposition"));
+    }
+    let mut wide: Vec<u16> = SERVICE_ROOT_CHILD.encode_utf16().collect();
+    let byte_len = wide.len().checked_mul(mem::size_of::<u16>())
+        .filter(|len| *len <= u16::MAX as usize)
+        .ok_or_else(|| denied("Native service-root UTF-16 name exceeded bounds"))?;
+    wide.push(0);
+    let mut name = NtUnicodeString {
+        length: byte_len as u16,
+        maximum_length: (byte_len + 2) as u16,
+        buffer: wide.as_mut_ptr(),
+    };
+    let mut attributes = NtObjectAttributes {
+        length: mem::size_of::<NtObjectAttributes>() as u32,
+        root_directory: parent.as_raw_handle() as H,
+        object_name: &mut name,
+        attributes: NT_OBJ_CASE_INSENSITIVE,
+        security_descriptor: candidate.map_or(ptr::null_mut(), |v| v.0),
+        security_quality_of_service: ptr::null_mut(),
+    };
+    let mut outcome = NtIoStatusBlock {
+        status_or_pointer: 0, information: 0,
+    };
+    let mut raw: H = ptr::null_mut();
+    let access = NT_FILE_READ_ATTRIBUTES | ROOT_READ_CONTROL | NT_SYNCHRONIZE
+        | NT_FILE_ADD_SUBDIRECTORY;
+    // Do not allow DELETE sharing while this root HANDLE is retained.
+    // Root or parent substitution must still be checked after each action.
+    let code = unsafe {
+        NtCreateFile(
+            &mut raw, access, &mut attributes, &mut outcome,
+            ptr::null_mut(), NT_FILE_ATTRIBUTE_NORMAL,
+            NT_FILE_SHARE_READ | NT_FILE_SHARE_WRITE,
+            disposition,
+            NT_FILE_DIRECTORY_FILE | NT_FILE_SYNCHRONOUS_IO_NONALERT
+                | NT_FILE_OPEN_REPARSE_POINT,
+            ptr::null_mut(), 0,
+        )
+    };
+    let validity = if disposition == NT_FILE_CREATE {
+        nt_root_create_outcome(code, outcome.information)
+    } else if code == 0 {
+        Ok(())
+    } else {
+        nt_root_create_outcome(code, outcome.information)
+    };
+    if let Err(error) = validity {
+        if !raw.is_null() && raw != (-1isize as H) {
+            unsafe { CloseHandle(raw) };
+        }
+        return Err(error);
+    }
+    if raw.is_null() || raw == (-1isize as H) {
+        return Err(denied("Native service-root operation returned an invalid HANDLE"));
+    }
+    // SAFETY: A successful NtCreateFile call transfers exactly one HANDLE,
+    // which std::fs::File closes when this pending object is dropped.
+    let result = unsafe { File::from_raw_handle(raw) };
+    root_file_identity(&result)?;
+    Ok(result)
+}
+
+impl PendingCreatedServiceRoot {
+    /// Read-only revalidation. Even a successful result is not an approved
+    /// Windows filesystem virtualization owner or a Minecraft launch grant.
+    fn verify(&self) -> io::Result<PendingServiceRootReview> {
+        require_nonimpersonating_thread()?;
+        let active_before = enumerate_active_ids()?;
+        let parent_report = review_existing_service_root_source(&self.parent)?;
+        if root_file_identity(&self.parent)? != self.parent_id {
+            return Err(denied("Service parent HANDLE identity changed"));
+        }
+        let reopened = relative_service_root(&self.parent, NT_FILE_OPEN, None)?;
+        if root_file_identity(&reopened)? != self.directory_id
+            || root_file_identity(&self.directory)? != self.directory_id
+            || self.parent_id.volume != self.directory_id.volume
+            || self.parent_id == self.directory_id
+        {
+            return Err(denied("Service child is no longer attached to original parent HANDLE"));
+        }
+        let child_report = review_existing_service_root_source(&self.directory)?;
+        if root_file_identity(&self.parent)? != self.parent_id
+            || enumerate_active_ids()? != active_before
+            || parent_report.active_logons_sampled != active_before.len()
+            || child_report.active_logons_sampled != active_before.len()
+        {
+            return Err(denied("Service parent or active logons changed during root verification"));
+        }
+        require_nonimpersonating_thread()?;
+        Ok(PendingServiceRootReview {
+            active_logons_sampled: active_before.len(),
+        })
+    }
+}
+
+/// SOURCE-ONLY fresh root factory, deliberately unreachable from SCM
+/// startup, named pipe handlers, desktop IPC, installers and game launch.
+/// The supplied parent MUST be a held directory HANDLE independently
+/// anchored by a future trusted SCM installation/parent ownership path.
+/// Its current security descriptor, service SID and WTSActive peer access
+/// are reviewed here, but this DOES NOT attest ancestor-directory ACLs.
+/// No arbitrary child names, host profiles or Minecraft paths are accepted.
+///
+/// On post-create failure leave the new object untouched for deliberate
+/// review. Never remove a Windows directory automatically by pathname.
+#[allow(dead_code)]
+fn create_fresh_service_root_source(parent: File)
+    -> io::Result<PendingCreatedServiceRoot>
+{
+    checked_service_root_name(SERVICE_ROOT_CHILD)?;
+    require_nonimpersonating_thread()?;
+    let parent_id = root_file_identity(&parent)?;
+    let active_before = enumerate_active_ids()?;
+    review_existing_service_root_source(&parent)?;
+    if enumerate_active_ids()? != active_before {
+        return Err(denied("Active Windows logons changed before root creation"));
+    }
+    let service = verified_current_service_sid()?;
+    let candidate = candidate_descriptor(&service_root_acl_candidate(&service)?)?;
+    let directory = relative_service_root(&parent, NT_FILE_CREATE, Some(&candidate))?;
+    let directory_id = root_file_identity(&directory)?;
+    if parent_id.volume != directory_id.volume || parent_id == directory_id {
+        return Err(denied("Fresh service-root child was not distinct on parent volume"));
+    }
+    let created = PendingCreatedServiceRoot {
+        parent, directory, parent_id, directory_id,
+    };
+    created.verify()?;
+    if enumerate_active_ids()? != active_before
+        || verified_current_service_sid()? != service
+        || root_file_identity(&created.parent)? != created.parent_id
+    {
+        return Err(denied("SCM service or active Windows logons changed during root creation"));
+    }
+    Ok(created)
 }
 
 /// Actually ask Windows to evaluate a candidate descriptor against the WTS
@@ -1185,6 +1442,43 @@ mod tests {
             &candidate_descriptor(&service_root_acl_candidate(service).unwrap()).unwrap(),
             &Token(ptr::null_mut()), ROOT_FILE_ALL_ACCESS,
         ).is_err());
+    }
+
+    #[test]
+    fn fresh_service_root_name_is_fixed_and_cannot_accept_external_paths() {
+        assert!(checked_service_root_name(SERVICE_ROOT_CHILD).is_ok());
+        for forged in [
+            "", "..", ".", "mc02", "mivubi-independent-root/",
+            "../mivubi-independent-root", "C:\\somewhere",
+            "mivubi-independent-root\\other",
+            "mivubi-independent-root ", "mivubi-independent-root.",
+            "MIVUBI-INDEPENDENT-ROOT",
+            "NT SERVICE\\MIVUBIIndependentHost",
+        ] {
+            assert!(checked_service_root_name(forged).is_err(),
+                "Unexpected service-root path accepted: {forged}");
+        }
+    }
+
+    #[test]
+    fn nt_create_disposition_requires_created_not_existing_objects() {
+        assert!(nt_root_create_outcome(0, NT_FILE_CREATED).is_ok());
+        for existing in [0usize, 1, 3, 4, 5] {
+            assert_eq!(nt_root_create_outcome(0, existing).unwrap_err().kind(),
+                io::ErrorKind::PermissionDenied);
+        }
+        assert_eq!(
+            nt_root_create_outcome(NT_STATUS_OBJECT_NAME_COLLISION as i32, 0)
+                .unwrap_err().kind(), io::ErrorKind::AlreadyExists,
+        );
+        assert_eq!(
+            nt_root_create_outcome(NT_STATUS_OBJECT_NAME_NOT_FOUND as i32, 0)
+                .unwrap_err().kind(), io::ErrorKind::NotFound,
+        );
+        assert_eq!(
+            nt_root_create_outcome(NT_STATUS_ACCESS_DENIED as i32, 0)
+                .unwrap_err().kind(), io::ErrorKind::PermissionDenied,
+        );
     }
 
     #[test]

@@ -1,6 +1,45 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Independent SCM root — fresh HANDLE-relative creation, 23 October 2026
+
+Implemented the next bounded native source component in the existing
+`engine/isolation-native/independent-service/src/service_identity.rs`.
+Unregistered `create_fresh_service_root_source(parent: File)` accepts
+one retained Windows directory HANDLE, NOT an operator path or game
+installation. Before any write, it invokes the existing real
+service-SID/LocalSystem/protected parent-DACL + current WTSActive
+peer-access observer, requiring a nonimpersonating thread and valid
+file/volume identity. It then uses `NtCreateFile(FILE_CREATE)` relative
+to that parent with the canonical protected two-ACE SYSTEM/service-SID
+descriptor. Child name is a single hard-coded manager-only component;
+any existing child is refused, never adopted.
+
+The resulting private `PendingCreatedServiceRoot` retains both OS
+directory HANDLEs and compares volume/file-index. It reopens the
+exact child name under the pinned parent and re-runs native ACL,
+service SID, nonimpersonation and sampled peer-access checks before
+return. No automatic removal occurs if a partially created object
+fails postflight. No new service install, client process, pipe,
+Tauri command, IPC, account path or game launch has been wired.
+Two regressions were authored for fixed-path refusal and
+`FILE_CREATED`-only atomic disposition semantics.
+
+**Proof:** exact remote GitHub source/static ABI review plus Microsoft
+`NtCreateFile` and `OBJECT_ATTRIBUTES` documentation. Windows
+compilation/tests and actual SCM account/user token observation
+`NOT_EXECUTED`. This is NOT a production isolation primitive until a
+**separately attested trusted parent HANDLE/ancestor ownership chain**
+and per-client routing are implemented. It does not solve shared
+service-SID access, Minecraft Roaming/HKCU/WAM, singleton or four-client
+acceptance. Existing MC02–04 Launch/Provision remains BLOCKED;
+default service pilot OFF; no GitHub Actions/CI or main writes.
+
+**Next:** add trusted service-parent identity/ancestor-provenance
+construction under installer-owned policy, without exposing the
+unmounted root factory to Minecraft launch or arbitrary IPC requests.
+
+
 ## Independent SCM service — read-only service-SID root policy and ACL attestation, 23 October 2026
 
 Implemented a cross-boundary next step in the EXISTING, opt-in

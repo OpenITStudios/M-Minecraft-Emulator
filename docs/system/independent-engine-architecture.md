@@ -11,6 +11,45 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### SCM fresh-only root creation under a retained Windows parent HANDLE (23 October 2026)
+
+The original opt-in SCM service identity owner now includes an **unmounted**
+`create_fresh_service_root_source` routine. It accepts an already-opened
+Windows directory HANDLE, not a path or profile location. Before any
+creation it requires the existing LocalSystem/verified enabled MIVUBI
+service SID check, a nonimpersonating service thread, a real file-object
+identity and a parent protected two-ACE SYSTEM/service-SID DACL with
+observed peer denials. **This verifies the supplied parent itself, not
+the full ancestor path or a trusted SCM installer provenance.**
+
+The factory constructs only the fixed `mivubi-independent-root`
+relative child via user-mode `NtCreateFile` with
+`RootDirectory=<retained parent HANDLE>`, `FILE_CREATE`,
+`FILE_DIRECTORY_FILE`, `FILE_OPEN_REPARSE_POINT`, noninheritable
+HANDLEs and the previously validated SYSTEM-owner/service-SID
+protected security descriptor. It accepts ONLY `FILE_CREATED`, never
+`FILE_OPENED`; collisions cannot adopt old user directories.
+Afterward both parent and created directory HANDLEs, volume/file-index
+identities, actual root ACL and current active-user peer token access
+are rechecked. The fixed child is reopened relative to the retained
+parent HANDLE and must resolve to the same native file object. A
+failed post-create check does not remove the newly created directory
+or touch existing files: leave it for explicit administrative review.
+No raw SID, directory path, handle, token or credential is sent to UI.
+
+This is a **real Windows native directory-creation primitive in source**,
+not an enabled production private-root owner. Neither the trusted parent
+factory/installation chain nor a handle-transfer protocol is implemented,
+and the service and desktop do not invoke it. Windows elevated peers,
+inherited child ACLs, TOCTOU mutations, Minecraft Roaming/HKCU/WAM
+routing and four-client acceptance still have no runtime proof.
+Two source-level tests check the fixed name and no-adoption create
+disposition; Rust/Windows execution remains `NOT_EXECUTED`.
+
+Windows API contracts:
+[NtCreateFile](https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntcreatefile),
+[OBJECT_ATTRIBUTES](https://learn.microsoft.com/en-us/windows/win32/api/ntdef/ns-ntdef-_object_attributes).
+
 ### SCM service-SID-owned root policy and real HANDLE audit (23 October 2026)
 
 The original opt-in SCM `independent-service/src/service_identity.rs` now
