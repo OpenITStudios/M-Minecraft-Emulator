@@ -1,6 +1,50 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## SCM image — reusable Authenticode and bounded SHA-256 observation, 23 October 2026
+
+Implemented the next bounded source change from exact pinned HEAD
+`6686fad2f2b5a724a8ed56dc41d4fea6b3e1f82c`. Existing
+`peer_image.rs` WinTrust code was scoped to a *live* desktop IPC
+process and previously duplicated nothing. It is now factored into
+one `inspect_open_file_signer` for a READ-capable already-opened
+FILE HANDLE, retaining cache-only revocation, state cleanup and
+DER leaf SHA-256. The original peer observer continues checking
+live process-image section/file identity; generic signed files
+do NOT become approved publishers.
+
+`service_identity.rs` now opens the exact SCM-configured
+executable with FILE_READ_DATA and reuses that existing WinTrust
+primitive. It streams SHA-256 of no more than 128 MiB from the
+same retained file HANDLE, rejects truncation/extra bytes, and
+rechecks file identity and SCM registration. The resulting image
+SHA-256 and signer leaf SHA-256 form a private *pending* observation
+only. One shared WinTrust preflight regression, plus one bounded
+SHA-256 golden/truncation/overflow regression, authored.
+Source module paths and optional `sha2`/`windows-sys` features
+were updated for the separate bootstrap and opt-in service route.
+
+**No signed service release exists in current package contract:**
+`write-payload-manifest.ps1` hashes required desktop files, but
+`package-contract.json` includes neither the independent service
+nor the bootstrap. A manifest hash without an independently verified
+publisher is NOT an authorization anchor. The existing
+`require_attested_service_release_before_mutation` always-deny
+gate remains before ProgramData FILE_ADD_SUBDIRECTORY or
+NtCreateFile(FILE_CREATE).
+
+**Proof:** exact GitHub source/static contract review and official
+Windows WinTrust FILE_INFO documentation. No Rust compiler, Windows
+runtime, signed released binary or Minecraft available: build,
+tests, signer checks and four-client acceptance NOT_EXECUTED.
+GitHub Actions/CI disabled. No installer, user data, world/account,
+service startup or Launch/Provision modified.
+
+**Next:** model the independently signed service payload/installer
+release binding in the distribution owner without inventing pins
+or treating an unsigned manifest as a trusted root.
+
+
 ## Distribution bootstrap — real SCM binary-config audit and signer deny gate, 23 October 2026
 
 Audited the feature-gated privileged bootstrap from HEAD

@@ -152,6 +152,32 @@ provider unavailable
 A staged path is surfaced only while the staged installer file still exists. Missing staged files are not presented as usable update state.
 
 
+### Read-only SCM Authenticode + file digest collection
+
+The original `peer_image.rs` WinTrust helper is now reused by
+the separate feature-gated service installer bootstrap for an
+**already-opened SCM executable HANDLE**. This avoids a second
+Authenticode policy implementation. WinVerifyTrust verifies the
+on-disk certificate chain using cache-only revocation, returns the
+DER leaf SHA-256 and always closes provider state. It does **not**
+equate a generic trustworthy certificate with a reviewed MIVUBI
+publisher. The SCM adapter now opens that same file with READ_DATA,
+streams a bounded (128 MiB maximum) SHA-256 of its exact observed
+bytes, and rechecks its FILE_ID/size/mtime and SCM configuration.
+The original peer observer continues requiring its separate
+live-process section/file binding; no live service-image assertion
+is inferred from a stopped service.
+
+The desktop `package-contract.json` and
+`write-payload-manifest.ps1` currently **do not list** the independent
+SCM service or distribution bootstrap binary. No signed installer
+with verified MIVUBI service publisher pin and installed payload
+manifest exists in this HEAD. The binary and leaf digests are
+diagnostic **pending** observations only. The explicit
+`require_attested_service_release_before_mutation` denial remains
+before any parent-creation-capable ProgramData HANDLE is opened.
+No alternate signed manifest or signing identity is fabricated.
+
 ### Service binary configuration and signed-release admission
 
 A registered service **name or service SID alone is not trusted binary

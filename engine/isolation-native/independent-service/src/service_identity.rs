@@ -2,6 +2,11 @@
 //! No game launch, credential access, token modification or pipe policy
 //! promotion. The opt-in pilot remains disabled by default.
 
+#[cfg(feature = "installer-parent-bootstrap-source")]
+use std::io::{Read, Seek, SeekFrom};
+#[cfg(feature = "installer-parent-bootstrap-source")]
+use sha2::{Digest, Sha256};
+
 use std::{
     ffi::c_void, fs::File, io, mem,
     os::windows::io::{AsRawHandle, FromRawHandle}, ptr,
@@ -89,6 +94,10 @@ const MAX_SERVICE_CONFIG_BYTES: usize = 8 * 1024;
 #[cfg(feature = "installer-parent-bootstrap-source")]
 const SERVICE_IMAGE_BASENAME: &str = "mivubi-independent-service.exe";
 #[cfg(feature = "installer-parent-bootstrap-source")]
+const MAX_REVIEWED_SERVICE_IMAGE_BYTES: u64 = 128 * 1024 * 1024;
+#[cfg(feature = "installer-parent-bootstrap-source")]
+const NT_FILE_READ_DATA: u32 = 0x0000_0001;
+#[cfg(feature = "installer-parent-bootstrap-source")]
 const MAX_SERVICE_IMAGE_PATH_CHARS: usize = 2048;
 // FOLDERID_ProgramData is a machine-wide FIXED Windows Known Folder,
 // NOT caller-supplied %PROGRAMDATA%, HOME, environment or IPC path.
@@ -165,6 +174,13 @@ struct PendingScmImageConfig {
 struct ScmFileSnapshot {
     volume: u32, file_id: u64, size: u64, modified: u64,
 }
+/// Pending OS-verified signature observation and bounded file-content hash.
+#[cfg(feature = "installer-parent-bootstrap-source")]
+struct PendingSignedServiceImage {
+    image_sha256: [u8; 32],
+    leaf_certificate_sha256: [u8; 32],
+}
+
 #[cfg(feature = "installer-parent-bootstrap-source")]
 struct OwnedScmHandle(H);
 #[cfg(feature = "installer-parent-bootstrap-source")]
@@ -1406,7 +1422,8 @@ fn image_snapshot(file: &File) -> io::Result<ScmFileSnapshot> {
     let modified = (u64::from(info.ftLastWriteTime.dwHighDateTime) << 32)
         | u64::from(info.ftLastWriteTime.dwLowDateTime);
     if info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT) != 0
-        || file_id == 0 || size == 0 || info.nNumberOfLinks != 1
+        || file_id == 0 || size == 0 || size > MAX_REVIEWED_SERVICE_IMAGE_BYTES
+        || info.nNumberOfLinks != 1
     {
         return Err(denied("SCM executable file is not a unique regular file object"));
     }
@@ -1415,14 +1432,48 @@ fn image_snapshot(file: &File) -> io::Result<ScmFileSnapshot> {
     })
 }
 
+/// Stream exactly one bounded OS file object, never a service-path file
+/// reopened after signer checking. The entire content is not buffered;
+/// zero/extra bytes or a nonzero all-zero sentinel cannot be promoted.
 #[cfg(feature = "installer-parent-bootstrap-source")]
-fn inspect_registered_service_image_source(service: H) -> io::Result<()> {
+fn hash_service_contents<R: Read + Seek>(
+    file: &mut R, exact_length: u64,
+) -> io::Result<[u8; 32]> {
+    if exact_length == 0 || exact_length > MAX_REVIEWED_SERVICE_IMAGE_BYTES {
+        return Err(denied("Unbounded registered service executable length"));
+    }
+    file.seek(SeekFrom::Start(0))?;
+    let mut hasher = Sha256::new();
+    let mut remaining = exact_length;
+    let mut buffer = [0u8; 64 * 1024];
+    while remaining > 0 {
+        let count = usize::min(remaining as usize, buffer.len());
+        let read = file.read(&mut buffer[..count])?;
+        if read == 0 {
+            return Err(denied("Registered service image truncated during SHA-256 read"));
+        }
+        hasher.update(&buffer[..read]);
+        remaining -= read as u64;
+    }
+    // Reject a file that expanded after its original native metadata.
+    if file.read(&mut buffer[..1])? != 0 {
+        return Err(denied("Registered service image grew during SHA-256 read"));
+    }
+    let digest: [u8; 32] = hasher.finalize().into();
+    if digest == [0u8; 32] {
+        return Err(denied("Registered service SHA-256 cannot be all-zero"));
+    }
+    Ok(digest)
+}
+
+#[cfg(feature = "installer-parent-bootstrap-source")]
+fn inspect_registered_service_image_source(service: H) -> io::Result<PendingSignedServiceImage> {
     let first = query_scm_image_config(service)?;
     let path = &first.absolute_image_path;
     let wide: Vec<u16> = path.encode_utf16().chain(Some(0)).collect();
     let raw = unsafe {
         CreateFileW(
-            wide.as_ptr(), NT_FILE_READ_ATTRIBUTES,
+            wide.as_ptr(), NT_FILE_READ_DATA | NT_FILE_READ_ATTRIBUTES,
             NT_FILE_SHARE_READ, ptr::null_mut(), WIN32_OPEN_EXISTING,
             NT_FILE_OPEN_REPARSE_POINT, ptr::null_mut(),
         )
@@ -1430,8 +1481,14 @@ fn inspect_registered_service_image_source(service: H) -> io::Result<()> {
     if raw.is_null() || raw == (-1isize as H) {
         return Err(denied("Registered SCM executable cannot be opened as a regular file"));
     }
-    let file = unsafe { File::from_raw_handle(raw) };
+    let mut file = unsafe { File::from_raw_handle(raw) };
     let before = image_snapshot(&file)?;
+    // The WinTrust helper is shared with the original live-peer observer,
+    // but no live-service process/loaded-image assertion is claimed here.
+    let signer = crate::peer_image::inspect_open_file_signer(
+        &file, &path.encode_utf16().collect::<Vec<_>>(),
+    )?;
+    let image_sha256 = hash_service_contents(&mut file, before.size)?;
     let mut final_name = [0u16; MAX_SERVICE_IMAGE_PATH_CHARS + 8];
     let n = unsafe {
         GetFinalPathNameByHandleW(
@@ -1453,9 +1510,13 @@ fn inspect_registered_service_image_source(service: H) -> io::Result<()> {
     if first != second || image_snapshot(&file)? != before {
         return Err(denied("SCM binary or registered executable changed during review"));
     }
-    // PENDING ONLY. Signed installed-release provenance is NOT established;
-    // require_attested_service_release_before_mutation() blocks the create.
-    Ok(())
+    // PENDING ONLY. Even exact file hashing and a generic valid WinTrust
+    // chain cannot establish MIVUBI publisher, installed-release binding
+    // or permission to create a privileged service-owned root.
+    Ok(PendingSignedServiceImage {
+        image_sha256,
+        leaf_certificate_sha256: signer,
+    })
 }
 
 /// Require the installed SCM service (not just LookupAccountName) to
@@ -1491,7 +1552,12 @@ fn require_registered_scm_sid_type() -> io::Result<()> {
     }
     // Service name/SID alone are never sufficient: read actual SCM binary
     // registration and exact on-disk HANDLE metadata without trusting it.
-    inspect_registered_service_image_source(service.0)?;
+    let pending = inspect_registered_service_image_source(service.0)?;
+    if pending.image_sha256 == [0; 32]
+        || pending.leaf_certificate_sha256 == [0; 32]
+    {
+        return Err(denied("Unusable signed service-image observation"));
+    }
     Ok(())
 }
 
@@ -2201,6 +2267,26 @@ mod tests {
         ] {
             assert!(checked_service_root_name(forged).is_err(),
                 "Unexpected service-root path accepted: {forged}");
+        }
+    }
+
+    #[cfg(feature = "installer-parent-bootstrap-source")]
+    #[test]
+    fn signer_observation_hashes_only_the_bounded_held_file_bytes() {
+        use std::io::Cursor;
+        let mut file = Cursor::new(b"abc".to_vec());
+        assert_eq!(
+            hash_service_contents(&mut file, 3).unwrap(),
+            [
+                0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea,
+                0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23,
+                0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c,
+                0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00, 0x15, 0xad,
+            ],
+        );
+        for bad_length in [0, 2, 4, MAX_REVIEWED_SERVICE_IMAGE_BYTES + 1] {
+            let mut file = Cursor::new(b"abc".to_vec());
+            assert!(hash_service_contents(&mut file, bad_length).is_err());
         }
     }
 

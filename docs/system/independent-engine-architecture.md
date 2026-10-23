@@ -11,6 +11,33 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Shared Authenticode helper and bounded SCM binary fingerprint (23 October 2026)
+
+The previously live-PEER-only `independent-service/src/peer_image.rs`
+now offers one reusable `inspect_open_file_signer` primitive for
+a Windows READ-capable, already-opened FILE HANDLE and exact UTF-16
+pathname. It runs cache-only, no-UI `WinVerifyTrust`, closes the
+provider state on success/failure and returns the DER leaf-certificate
+SHA-256 with no local trust promotion. The original live IPC peer
+still requires process-image section/file equality separately;
+the stopped SCM service observer does not claim that equality.
+
+The unbundled, default-OFF distribution bootstrap links this exact
+source via its opt-in Cargo feature. Its native SCM image reader
+now requests FILE_READ_DATA, observes WinTrust and streams a
+strict 128-MiB-bounded executable SHA-256 from that SAME file
+HANDLE, then rechecks SCM configuration/file metadata/path.
+Neither generic Authenticode chain validity nor a matching file
+name is signed-release provenance. The current desktop installed
+payload manifest does not cover the independent service or
+bootstrap; approved MIVUBI publisher/payload pins are ABSENT.
+All collected signatures/digests remain private PENDING evidence.
+The explicit always-denying signed-release bootstrap gate remains
+in effect. No service, privilege or game route is mounted.
+
+Windows API: [WINTRUST_FILE_INFO](https://learn.microsoft.com/en-us/windows/win32/api/wintrust/ns-wintrust-wintrust_file_info),
+[WINTRUST_DATA](https://learn.microsoft.com/en-us/windows/win32/api/wintrust/ns-wintrust-wintrust_data).
+
 ### Native SCM executable-config and identity gate (23 October 2026)
 
 The optional standalone installer bootstrap now reads the **actual**

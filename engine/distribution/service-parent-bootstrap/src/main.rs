@@ -5,6 +5,9 @@ use std::ffi::OsString;
 #[cfg(all(windows, feature = "installer-parent-bootstrap-source"))]
 #[path = "../../../isolation-native/independent-service/src/service_identity.rs"]
 mod service_identity;
+#[cfg(all(windows, feature = "installer-parent-bootstrap-source"))]
+#[path = "../../../isolation-native/independent-service/src/peer_image.rs"]
+mod peer_image;
 
 const ACTION: &str = "--create-fixed-parent";
 

@@ -12,7 +12,12 @@ mod windows_host;
 mod ipc_worker;
 #[cfg(all(windows, feature = "readonly-ipc-pilot"))]
 mod service_identity;
-#[cfg(all(windows, feature = "readonly-ipc-pilot"))]
+// One WinTrust file-signature owner serves the read-only IPC PEER
+// observer and the explicit, unbundled installer-source feature.
+#[cfg(all(windows, any(
+    feature = "readonly-ipc-pilot",
+    feature = "installer-parent-bootstrap-source"
+)))]
 mod peer_image;
 
 #[cfg(windows)]

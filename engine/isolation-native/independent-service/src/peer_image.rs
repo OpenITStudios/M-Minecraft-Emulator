@@ -9,10 +9,12 @@
 //! signer, even for that file, is not a trusted MIVUBI desktop publisher.
 //! No signing identity is guessed or embedded in this source.
 //!
-//! This original service-owned observer is compiled ONLY when the optional
-//! readonly-ipc-pilot feature is enabled. Its sole caller holds a process
-//! HANDLE pinned by OS PID + full creation FILETIME. The probe returns only
-//! pending local evidence and never logs/serializes paths, SIDs or certs.
+//! This original service-owned observer is compiled only when the optional
+//! readonly-ipc-pilot OR the separate source-only installer-parent-bootstrap
+//! feature is enabled. Live peer callers hold PID/creation-FILETIME-pinned
+//! process HANDLEs; the unmounted installer caller verifies an opened SCM
+//! executable file HANDLE instead. Both return pending evidence only and
+//! never log/serialize paths, SIDs or certificates.
 
 #![allow(dead_code)]
 
@@ -320,24 +322,23 @@ fn trusted_leaf_sha256(state: HANDLE) -> io::Result<[u8; 32]> {
     Ok(Sha256::digest(der).into())
 }
 
-/// Read-only, native trust observation for a live, already PID/FILETIME-pinned
-/// OS process HANDLE. Never accept any caller-supplied pathname, signer pin,
-/// or file bytes from a service request. This file has NOT been bound to the
-/// running executable's mapped section; even a successful result is not
-/// authorization to open a privileged IPC endpoint.
-pub(super) fn inspect_os_peer_image(process: HANDLE) -> io::Result<PendingPeerImageTrust> {
-    let original_path = queried_image_path(process)?;
-    let path = PathBuf::from(OsString::from_wide(&original_path));
-    // The exact file HANDLE is held across section binding and WinTrust.
-    // Explicit FILE_EXECUTE|SYNCHRONIZE lets Windows compare the kernel
-    // process image section to this specific FILE_OBJECT. No file writes.
-    let file = std::fs::OpenOptions::new()
-        .access_mode(FILE_GENERIC_READ_EXECUTE)
-        .share_mode(FILE_SHARE_READ)
-        .open(path)?;
-    let before = file_identity(&file)?;
-    require_process_image_section_file(process, &file)?;
-    let mut wide = original_path.clone();
+/// Common, read-only Authenticode observation of an ALREADY OPENED file
+/// HANDLE, shared by the live process-image probe and a (possibly stopped)
+/// SCM service executable. This function NEVER says MIVUBI publisher trust:
+/// a successful OS chain only returns the DER leaf certificate SHA-256.
+///
+/// Caller MUST keep the same file HANDLE alive, have READ permission,
+/// independently check its file-ID/size/mtime before and after and bind it
+/// to an approved signed-release manifest before authorization.
+pub(super) fn inspect_open_file_signer(
+    file: &std::fs::File, original_path: &[u16],
+) -> io::Result<[u8; 32]> {
+    if original_path.is_empty() || original_path.len() > 32_767
+        || original_path.iter().any(|c| *c == 0)
+    {
+        return Err(invalid("Empty, embedded NUL or unbounded signed image pathname"));
+    }
+    let mut wide = original_path.to_vec();
     wide.push(0);
     let mut file_info: WINTRUST_FILE_INFO = unsafe { std::mem::zeroed() };
     file_info.cbStruct = size_of::<WINTRUST_FILE_INFO>() as u32;
@@ -384,6 +385,27 @@ pub(super) fn inspect_os_peer_image(process: HANDLE) -> io::Result<PendingPeerIm
     if digest == [0; 32] {
         return Err(invalid("All-zero leaf fingerprint cannot be attested"));
     }
+    Ok(digest)
+}
+
+/// Read-only, native trust observation for a live, already PID/FILETIME-pinned
+/// OS process HANDLE. Never accept any caller-supplied pathname, signer pin,
+/// or file bytes from a service request. This file has NOT been bound to the
+/// running executable's mapped section; even a successful result is not
+/// authorization to open a privileged IPC endpoint.
+pub(super) fn inspect_os_peer_image(process: HANDLE) -> io::Result<PendingPeerImageTrust> {
+    let original_path = queried_image_path(process)?;
+    let path = PathBuf::from(OsString::from_wide(&original_path));
+    // The exact file HANDLE is held across section binding and WinTrust.
+    // Explicit FILE_EXECUTE|SYNCHRONIZE lets Windows compare the kernel
+    // process image section to this specific FILE_OBJECT. No file writes.
+    let file = std::fs::OpenOptions::new()
+        .access_mode(FILE_GENERIC_READ_EXECUTE)
+        .share_mode(FILE_SHARE_READ)
+        .open(path)?;
+    let before = file_identity(&file)?;
+    require_process_image_section_file(process, &file)?;
+    let digest = inspect_open_file_signer(&file, &original_path)?;
     if file_identity(&file)? != before || queried_image_path(process)? != original_path {
         return Err(invalid("Queried on-disk executable changed during trust review"));
     }
@@ -407,6 +429,23 @@ pub(super) fn inspect_os_peer_image(process: HANDLE) -> io::Result<PendingPeerIm
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_wintrust_rejects_invalid_path_before_any_signature_io() {
+        let image = std::env::current_exe().unwrap();
+        let file = std::fs::File::open(&image).unwrap();
+        for path in [
+            vec![],
+            vec![0u16],
+            vec![67u16, 0u16, 58u16],
+            vec![88u16; 32_768],
+        ] {
+            assert_eq!(
+                inspect_open_file_signer(&file, &path).unwrap_err().kind(),
+                io::ErrorKind::InvalidData,
+            );
+        }
+    }
 
     #[test]
     fn policy_preflight_rejects_empty_zero_and_duplicate_certificate_pins() {
