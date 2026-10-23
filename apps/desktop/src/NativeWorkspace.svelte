@@ -5,6 +5,7 @@
   import {operationIssue} from './app/bridge/managerConfiguration.js';
   import {listen} from '@tauri-apps/api/event';
   export let sessionDirectory='';
+  export let releaseOnly=false;
   export let activeClient:ClientId|null=null;
   export let busy=false;
   export let tabStates:Record<ClientId,string>={'01':'Checking','02':'Checking','03':'Checking','04':'Checking'};
@@ -74,7 +75,7 @@
   async function closeClient(){
     if(disabled||!activeClient||!target)return;
     const client=activeClient,process=target;working=true;issue=null;
-    try{await workspaceSurface.release(process);activeClient=null;target=null;working=false;await tick();await onClose(client,process);}catch(error){issue=operationIssue(error);}finally{working=false;}
+    try{if(releaseOnly){await restore();}else{await workspaceSurface.release(process);activeClient=null;target=null;working=false;await tick();await onClose(client,process);}}catch(error){issue=operationIssue(error);}finally{working=false;}
   }
   onMount(()=>{
     let disposed=false,unlisten:(()=>void)|undefined;
@@ -85,10 +86,10 @@
 </script>
 <section class="nw-stage" id="minecraft-play-area" aria-label="Active Minecraft session">
   <header><div><p class="um-eyebrow">PLAY AREA</p><h2>{activeClient?`Minecraft ${activeClient}`:'Your Minecraft workspace'}</h2></div>
-    {#if activeClient}<div class="nw-actions"><button class="cm-button cm-secondary" {disabled} on:click={closeClient}>Close game</button></div>{/if}
+    {#if activeClient}<div class="nw-actions"><button class="cm-button cm-secondary" {disabled} on:click={closeClient}>{releaseOnly?"Return to Windows":"Close game"}</button></div>{/if}
   </header>
   <div class="nw-tabs" role="tablist" tabindex="-1" aria-label="Minecraft sessions" on:keydown={tabKey}>
-    {#each clientIds as client}<button role="tab" aria-selected={activeClient===client} aria-controls="minecraft-play-area" title={selectionBlocked(client)??''} disabled={disabled} on:click={()=>onSelect(client)}><span>Minecraft {client}</span><small>{tabStates[client]}</small></button>{/each}
+    {#each clientIds as client}<button role="tab" aria-selected={activeClient===client} aria-controls="minecraft-play-area" title={selectionBlocked(client)??''} disabled={disabled||!!selectionBlocked(client)} on:click={()=>onSelect(client)}><span>Minecraft {client}</span><small>{tabStates[client]}</small></button>{/each}
   </div>
   <div class="nw-viewport"><div class="nw-native-slot" bind:this={viewport}>
     {#if !activeClient}<div><span class="nw-mark">M</span><h3>Choose a client to play</h3><p>Select one tab to open its session. Other tabs keep running.</p></div>{/if}

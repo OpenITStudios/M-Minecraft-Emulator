@@ -472,7 +472,33 @@ export function parseForegroundEventObserverStatus(value: unknown): ForegroundEv
   return value as unknown as ForegroundEventObserverStatus;
 }
 
+
+/** Registered game executable path only; never account or isolation evidence. */
+export interface NativeWorkspaceObservation {
+  schema:1;
+  evidenceClass:"REGISTERED_IMAGE_PATH_CANDIDATE_ONLY";
+  processes:import("./ownedProviderApi.js").OwnedProcess[];
+}
+export function parseNativeWorkspaceObservation(value:unknown):NativeWorkspaceObservation {
+  if(!isRecord(value)||!hasOnly(value,["schema","evidenceClass","processes"])||
+    value.schema!==1||value.evidenceClass!=="REGISTERED_IMAGE_PATH_CANDIDATE_ONLY"||
+    !Array.isArray(value.processes)||value.processes.length>1)
+    throw new TypeError("Untrusted native workspace observation.");
+  for(const p of value.processes) {
+    if(!isRecord(p)||!hasOnly(p,["pid","createdFileTime","sessionId","windowHandle","responding"])||
+      !Number.isInteger(p.pid)||Number(p.pid)<=0||Number(p.pid)>0xffffffff||
+      typeof p.createdFileTime!=="string"||!/^[1-9][0-9]{0,19}$/.test(p.createdFileTime)||
+      BigInt(p.createdFileTime)>0xffffffffffffffffn||
+      !Number.isInteger(p.sessionId)||Number(p.sessionId)<1||Number(p.sessionId)>0xffffffff||
+      typeof p.windowHandle!=="string"||!/^0x[0-9a-f]{1,16}$/.test(p.windowHandle)||
+      typeof p.responding!=="boolean")throw new TypeError("Invalid native process/window identity.");
+  }
+  return value as unknown as NativeWorkspaceObservation;
+}
+
 export const nativeFeasibility = {
+  inspectNativeWorkspace:async():Promise<NativeWorkspaceObservation>=>
+    parseNativeWorkspaceObservation(await invokeRuntime<unknown>("desktop_inspect_native_workspace")),
   readFocusObserver: async (): Promise<ForegroundEventObserverStatus> =>
     parseForegroundEventObserverStatus(await invokeRuntime<unknown>("desktop_read_focus_observer")),
   startFocusObserver: async (): Promise<ForegroundEventObserverStatus> =>

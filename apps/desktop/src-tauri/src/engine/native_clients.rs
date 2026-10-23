@@ -6,6 +6,24 @@ use std::{
     time::{Duration, Instant},
 };
 
+// One native launch request at a time. A registered game candidate already
+// running must be selected, never launched again as if it were absent.
+const NATIVE_LAUNCH_RETRY_GAP: Duration = Duration::from_secs(10);
+static NATIVE_LAUNCH: Mutex<Option<Instant>> = Mutex::new(None);
+
+fn acquire_native_launch() -> io::Result<MutexGuard<'static, Option<Instant>>> {
+    let guard = NATIVE_LAUNCH.try_lock().map_err(|_| {
+        io::Error::new(io::ErrorKind::WouldBlock, "Minecraft launch request already in progress")
+    })?;
+    if guard.as_ref().is_some_and(|last| last.elapsed() < NATIVE_LAUNCH_RETRY_GAP) {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "Recent Minecraft launch request; refresh the native session before retrying",
+        ));
+    }
+    Ok(guard)
+}
+
 // One backend admission boundary for explicitly requested Client 02 launches.
 // This protects in-process callers without a worker, daemon or persisted state.
 const CLIENT_02_LAUNCH_RETRY_GAP: Duration = Duration::from_secs(30);
@@ -248,6 +266,13 @@ pub fn registered_education_target() -> io::Result<String> {
 pub fn open_native_minecraft() -> io::Result<()> {
     use std::time::Duration;
 
+    let mut launch_guard = acquire_native_launch()?;
+    if !inspect_native_workspace()?.processes.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "Registered Minecraft already has a process. Select its window instead of relaunching.",
+        ));
+    }
     // Request the single registered official application as the current
     // interactive user. This does NOT create a guaranteed second instance.
     // Never guess EXE paths, clone game files or accept arbitrary arguments.
@@ -267,7 +292,7 @@ Start-Process -FilePath $explorer -ArgumentList ('"shell:AppsFolder\' + $appId +
         SCRIPT,
     ]
     .concat();
-    virtual_clients_core::bounded_command_output(
+    let outcome = virtual_clients_core::bounded_command_output(
         &system_powershell()?,
         [
             "-NoLogo",
@@ -277,9 +302,11 @@ Start-Process -FilePath $explorer -ArgumentList ('"shell:AppsFolder\' + $appId +
             &script,
         ],
         Duration::from_secs(12),
-    )
-    .map(|_| ())
-    .map_err(|error| {
+    );
+    if outcome.is_ok() {
+        *launch_guard = Some(Instant::now());
+    }
+    outcome.map(|_| ()).map_err(|error| {
         io::Error::new(
             error.kind(),
             format!("Minecraft Education launch request failed: {error}"),
@@ -293,6 +320,155 @@ pub fn open_native_minecraft() -> io::Result<()> {
         io::ErrorKind::Unsupported,
         "The four-account MVP currently targets a Windows PC.",
     ))
+}
+
+
+// Product-facing native Client 01 observation, independent of every retired
+// isolation provider. Registered-path equality is NOT proof of an unboxed
+// process, publisher identity, Microsoft sign-in or gameplay.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NativeWorkspaceObservation {
+    pub schema: u32,
+    pub evidence_class: String,
+    pub processes: Vec<super::owned_provider::OwnedProcess>,
+}
+
+fn parse_native_workspace_observation(raw: &str) -> io::Result<NativeWorkspaceObservation> {
+    let result: NativeWorkspaceObservation = serde_json::from_str(raw)
+        .map_err(|_| invalid_evidence("Malformed native workspace observation"))?;
+    if result.schema != 1
+        || result.evidence_class != "REGISTERED_IMAGE_PATH_CANDIDATE_ONLY"
+        || result.processes.len() > 1
+    {
+        return Err(invalid_evidence("Ambiguous or unsupported native workspace observation"));
+    }
+    for process in &result.processes {
+        let created = process.created_file_time.parse::<u64>()
+            .map_err(|_| invalid_evidence("Invalid native process creation FILETIME"))?;
+        let hwnd = process.window_handle.strip_prefix("0x")
+            .and_then(|digits| u64::from_str_radix(digits, 16).ok());
+        if process.pid == 0 || created == 0 || process.session_id == 0
+            || hwnd.is_none() || process.window_handle.len() > 18
+        {
+            return Err(invalid_evidence("Invalid native process/window identity"));
+        }
+    }
+    Ok(result)
+}
+
+/// Match a freshly reobserved OS process/window before presentation.
+pub fn matches_native_workspace_target(
+    observation: &NativeWorkspaceObservation,
+    target: &super::owned_provider::OwnedProcess,
+) -> bool {
+    observation.processes.len() == 1
+        && observation.processes.iter().any(|candidate| {
+            candidate.pid == target.pid
+                && candidate.created_file_time == target.created_file_time
+                && candidate.session_id == target.session_id
+                && candidate.window_handle == target.window_handle
+                && candidate.window_handle != "0x0"
+                && candidate.responding
+        })
+}
+
+#[cfg(target_os = "windows")]
+pub fn inspect_native_workspace() -> io::Result<NativeWorkspaceObservation> {
+    use std::time::Duration;
+
+    // Same unique official Desktop installation preflight as native launch.
+    // Query only process/window metadata, never worlds, account IDs or tokens.
+    const OBSERVE: &str = r#"
+$selectedTarget = Resolve-ManagerEducationTarget
+Assert-ManagerRegisteredAppId $appId $selectedTarget
+$session = (Get-Process -Id $PID -ErrorAction Stop).SessionId
+$items = @(
+    foreach ($process in @(Get-Process -Name 'Minecraft.Windows' -ErrorAction SilentlyContinue)) {
+        if ($process.SessionId -ne $session) { continue }
+        try { $actual = [IO.Path]::GetFullPath([string]$process.Path) }
+        catch { throw 'A candidate Minecraft process image could not be inspected.' }
+        if (-not [string]::Equals($actual, $selectedTarget, [StringComparison]::OrdinalIgnoreCase)) {
+            continue
+        }
+        $started = $process.StartTime.ToUniversalTime()
+        $pidValue = [int]$process.Id
+        $process.Refresh()
+        if ($process.HasExited -or $process.StartTime.ToUniversalTime() -ne $started
+            -or $process.SessionId -ne $session) {
+            throw 'Minecraft process identity changed during observation.'
+        }
+        $window = $process.MainWindowHandle
+        [pscustomobject]@{
+            pid = $pidValue
+            createdFileTime = $started.ToFileTimeUtc().ToString()
+            sessionId = [int]$session
+            windowHandle = ('0x' + $window.ToInt64().ToString('x'))
+            responding = [bool]($window -ne [IntPtr]::Zero -and $process.Responding)
+        }
+    }
+)
+if ($items.Count -gt 1) { throw 'Multiple registered Minecraft processes; native ownership is ambiguous.' }
+[pscustomobject]@{
+    schema = 1
+    evidenceClass = 'REGISTERED_IMAGE_PATH_CANDIDATE_ONLY'
+    processes = @($items)
+} | ConvertTo-Json -Depth 4 -Compress
+"#;
+    let resolver =
+        include_str!("../../../../../tooling/isolation-source/windows/education-target.ps1");
+    let script = [resolver, EDUCATION_DESKTOP_PREFLIGHT, OBSERVE].concat();
+    let output = virtual_clients_core::bounded_command_output(
+        &system_powershell()?,
+        ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", &script],
+        Duration::from_secs(20),
+    )?;
+    parse_native_workspace_observation(&output)
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn inspect_native_workspace() -> io::Result<NativeWorkspaceObservation> {
+    Err(io::Error::new(io::ErrorKind::Unsupported, "Minecraft workspace requires Windows"))
+}
+
+#[cfg(test)]
+mod native_workspace_tests {
+    use super::*;
+
+    #[test]
+    fn registered_native_candidate_requires_a_fresh_live_window() {
+        let raw = r#"{"schema":1,"evidenceClass":"REGISTERED_IMAGE_PATH_CANDIDATE_ONLY","processes":[{"pid":41,"createdFileTime":"134000000000000001","sessionId":1,"windowHandle":"0x123","responding":true}]}"#;
+        let observed = parse_native_workspace_observation(raw).unwrap();
+        let target = observed.processes[0].clone();
+        assert!(matches_native_workspace_target(&observed, &target));
+        for changed in [
+            super::super::owned_provider::OwnedProcess { pid: 42, ..target.clone() },
+            super::super::owned_provider::OwnedProcess { created_file_time: "134000000000000002".into(), ..target.clone() },
+            super::super::owned_provider::OwnedProcess { session_id: 2, ..target.clone() },
+            super::super::owned_provider::OwnedProcess { window_handle: "0x124".into(), ..target.clone() },
+            super::super::owned_provider::OwnedProcess { responding: false, ..target.clone() },
+        ] {
+            assert!(!matches_native_workspace_target(&observed, &changed));
+        }
+        let empty = parse_native_workspace_observation(
+            r#"{"schema":1,"evidenceClass":"REGISTERED_IMAGE_PATH_CANDIDATE_ONLY","processes":[]}"#,
+        ).unwrap();
+        assert!(!matches_native_workspace_target(&empty, &target));
+    }
+
+    #[test]
+    fn native_workspace_refuses_ambiguous_or_forged_process_reports() {
+        let valid = r#"{"pid":41,"createdFileTime":"134000000000000001","sessionId":1,"windowHandle":"0x123","responding":true}"#;
+        for malformed in [
+            format!(r#"{{"schema":2,"evidenceClass":"REGISTERED_IMAGE_PATH_CANDIDATE_ONLY","processes":[{valid}]}}"#),
+            format!(r#"{{"schema":1,"evidenceClass":"GAMEPLAY_VERIFIED","processes":[{valid}]}}"#),
+            format!(r#"{{"schema":1,"evidenceClass":"REGISTERED_IMAGE_PATH_CANDIDATE_ONLY","processes":[{valid},{valid}]}}"#),
+            format!(r#"{{"schema":1,"evidenceClass":"REGISTERED_IMAGE_PATH_CANDIDATE_ONLY","processes":[{valid}],"account":"secret"}}"#),
+            r#"{"schema":1,"evidenceClass":"REGISTERED_IMAGE_PATH_CANDIDATE_ONLY","processes":[{"pid":0,"createdFileTime":"1","sessionId":1,"windowHandle":"0x123","responding":true}]}"#.into(),
+        ] {
+            assert!(parse_native_workspace_observation(&malformed).is_err());
+        }
+    }
 }
 
 // The canonical Windows evidence collector is embedded into this development

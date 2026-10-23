@@ -46,7 +46,11 @@ it('states distinguish ready, blocked retry, active operation, missing profile a
 });
 it('mounted dashboard has no alternate pilot panel or automatic game launch',()=>{
   const source=readFileSync(new URL('../src/UnifiedManagerApp.svelte',import.meta.url),'utf8');
-  expect(source).not.toMatch(/CompactManagerApp|inspectIsolatedClient02|setInterval|openOfficialMinecraft/);
+  expect(source).not.toMatch(/CompactManagerApp|inspectIsolatedClient02|setInterval/);
+  expect(source).toContain('async function activateNative(client:ClientId)');
+  expect(source).toContain('await nativeFeasibility.openOfficialMinecraft()');
+  const mounted=source.slice(source.indexOf('onMount('),source.indexOf('</script>'));
+  expect(mounted).not.toContain('openOfficialMinecraft');
   expect(source).toContain('managerConfiguration.load()');
   expect(source).not.toMatch(/managerConfiguration\.save|selectSession|selectEducationExe|Choose executable|Choose engine/);
   expect(source).toContain('Read-only status');expect(source).toContain('OwnedManagerPanel');
@@ -65,4 +69,6 @@ it('observed legacy snapshot never promotes independent-engine readiness in moun
   expect(source).not.toContain('Engine location</h3>');
   // Windows identity checks still provide their own explicit non-account disclaimer.
   expect(source).toContain('Account isolation remains unproven.');
+  expect(source).toContain('releaseOnly sessionDirectory=""');
+  expect(source).toContain('Independent of retired engine snapshots');
 });

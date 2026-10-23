@@ -489,3 +489,38 @@ describe("Client 02 retry safety — bounded official launch", () => {
     expect(launch).not.toContain("desktop_activate_owned_engine");
   });
 });
+
+
+import {parseNativeWorkspaceObservation} from '../src/app/bridge/nativeFeasibilityApi.js';
+
+describe('Official Minecraft 01 direct workspace integration',()=>{
+  const process=()=>({pid:123,createdFileTime:'134000000000000001',sessionId:1,windowHandle:'0xabc',responding:true});
+  const report=()=>({schema:1,evidenceClass:'REGISTERED_IMAGE_PATH_CANDIDATE_ONLY',processes:[process()]});
+  it('accepts one exact candidate or no running process, without sign-in claims',()=>{
+    expect(parseNativeWorkspaceObservation(report()).processes[0].pid).toBe(123);
+    expect(parseNativeWorkspaceObservation({...report(),processes:[]}).processes).toEqual([]);
+    expect(parseNativeWorkspaceObservation(report())).not.toHaveProperty('signedIn');
+  });
+  it('refuses ambiguous process identity and forged account evidence',()=>{
+    for(const bad of [
+      {...report(),schema:2},
+      {...report(),evidenceClass:'FOUR_CLIENT_READY'},
+      {...report(),processes:[process(),process()]},
+      {...report(),accountEmail:'hidden'},
+      {...report(),processes:[{...process(),sessionId:0}]},
+      {...report(),processes:[{...process(),createdFileTime:'0'}]},
+      {...report(),processes:[{...process(),windowHandle:'bad'}]},
+    ])expect(()=>parseNativeWorkspaceObservation(bad)).toThrow(TypeError);
+  });
+  it('rechecks native presentation before legacy provider access',()=>{
+    const commands=readFileSync(new URL('../src-tauri/src/commands/native_clients.rs',import.meta.url),'utf8');
+    const start=commands.indexOf('if client_id == "01" {',commands.indexOf('pub async fn desktop_present_workspace'));
+    const legacy=commands.indexOf('let request = OwnedRequest',start);
+    expect(start).toBeGreaterThan(0);
+    expect(legacy).toBeGreaterThan(start);
+    expect(commands.slice(start,legacy)).toContain('native_clients::inspect_native_workspace()?');
+    expect(commands.slice(start,legacy)).toContain('matches_native_workspace_target');
+    const bootstrap=readFileSync(new URL('../src-tauri/src/app_bootstrap.rs',import.meta.url),'utf8');
+    expect(bootstrap).toContain('commands::native_clients::desktop_inspect_native_workspace,');
+  });
+});

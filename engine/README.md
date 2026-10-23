@@ -1,9 +1,6 @@
 # Emulator Engine — One Active Owner per Function
 
-The **running pilot** is official Minecraft Education Client 01 plus
-Client 02 in the official Sandboxie Plus box `MinecraftClient02`.
-The MIVUBI-owned v1.18.6 engine is **source-only/build-only**, never
-automatically installed, loaded or substituted for that official provider.
+The active desktop source implements a registered official Minecraft Education Windows Client 01 control path without an isolation provider (Windows runtime acceptance NOT_EXECUTED). New Client 02–04 Launch/Provision remain **blocked** until an independent, game-compatible provider is demonstrated. Sandboxie, the owned fork and VMware are retired for new sessions; old account-bearing data and recovery source are preserved. The v1.18.6 fork is **not** the independent replacement.
 
 | Source | Status and unique responsibility |
 | --- | --- |

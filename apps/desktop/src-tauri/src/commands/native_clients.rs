@@ -17,6 +17,17 @@ use std::{io, sync::Mutex};
 static MANAGER_RESOURCE_LOCK: Mutex<()> = Mutex::new(());
 
 #[tauri::command]
+pub async fn desktop_inspect_native_workspace(
+) -> Result<native_clients::NativeWorkspaceObservation, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        run_manager_operation(native_clients::inspect_native_workspace)
+    })
+    .await
+    .map_err(|_| "Native Minecraft observation task failed".to_string())?
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub async fn desktop_compare_process_contexts(
     left: crate::engine::instance_identity::ProcessKey,
     right: crate::engine::instance_identity::ProcessKey,
@@ -65,6 +76,19 @@ pub async fn desktop_present_workspace(
             )? {
                 return Ok(());
             }
+            // MC01 works without retired Sandboxie, a fork or a VM.
+            // Repeat process/window observation server-side before presentation.
+            if client_id == "01" {
+                let observed = native_clients::inspect_native_workspace()?;
+                if !native_clients::matches_native_workspace_target(&observed, &target) {
+                    return Err(io::Error::other(
+                        "Native Minecraft process/window changed; refresh the registered game",
+                    ));
+                }
+                return crate::engine::workspace_surface::present_verified(
+                    manager, viewport, target, session_directory, client_id,
+                );
+            }
             let request = OwnedRequest {
                 session_directory: session_directory.clone(),
                 client_id: "02".into(),
@@ -74,20 +98,16 @@ pub async fn desktop_present_workspace(
                 target: None,
             };
             let observation = OwnedTestBackend { request: &request }.execute()?;
-            let processes = if client_id == "01" {
-                &observation.native_processes
-            } else {
-                let slot = observation
-                    .clients
-                    .iter()
-                    .find(|slot| {
-                        slot.client_id == client_id
-                            && slot.status == "RUNNING"
-                            && slot.settings_verified
-                    })
-                    .ok_or_else(|| io::Error::other("Client is not ready for the workspace"))?;
-                &slot.processes
-            };
+            let slot = observation
+                .clients
+                .iter()
+                .find(|slot| {
+                    slot.client_id == client_id
+                        && slot.status == "RUNNING"
+                        && slot.settings_verified
+                })
+                .ok_or_else(|| io::Error::other("Client is not ready for the workspace"))?;
+            let processes = &slot.processes;
             let matches = processes.len() == 1
                 && processes.iter().any(|p| {
                     p.pid == target.pid

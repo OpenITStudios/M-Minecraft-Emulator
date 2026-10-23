@@ -1,5 +1,17 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Product P0 — usable native Minecraft 01 without retired isolation, 23 October 2026
+
+Work: official-Desktop host-native user workflow. Goal: Minecraft 01 can be inspected, explicitly opened, presented in the existing workspace and returned to Windows without a Sandboxie/owned-fork/VM session or owned developer test receipt. Clients 02–04 stay blocked.
+
+Decision: The existing native Windows owner now offers an on-demand, bounded observation for one uniquely installed registered Minecraft Education Desktop image-path candidate in the active interactive session. It retains PID, creation FILETIME, session ID, HWND and responsiveness, not game accounts/worlds/tokens. The existing desktop_present_workspace command independently re-inspects full native identity for MC01 before the window lease and preserves original recovery checks for legacy clients. The mounted manager falls back to a genuine MC01 control surface if no legacy provider snapshot is available. A user must click to launch; post-launch observation is bounded and never treats the launch request as playable game proof. Return to Windows is release-only, never game termination.
+
+Limit: the route is still gated by the existing Windows developer workspace build, not a signed production installer. Same registered executable PATH does not prove Microsoft publisher, genuine host-native/unboxed containment, licensed login or concurrent gameplay. No independent filesystem/HKCU/WAM mechanism for Clients 02–04 has been demonstrated.
+
+Proof: exact pinned GitHub source and affected consumer/static review; focused Rust and frontend regressions authored, NOT_EXECUTED. Windows, Tauri build, actual game and four-client acceptance NOT_EXECUTED. GitHub Actions disabled, no driver/service activation, account/world/file migration, packaged release or main changes.
+
+Next: identify and implement one supported process-bound Roaming/HKCU/authentication isolation mechanism for unchanged Education before enabling an independent MC02 launch.
+
 
 ## SCM image — reusable Authenticode and bounded SHA-256 observation, 23 October 2026
 
