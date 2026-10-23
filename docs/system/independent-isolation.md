@@ -21,6 +21,29 @@ bar. Selecting a tab changes presentation; another session keeps running.
 **Independent production provider: NOT_IMPLEMENTED.** No Windows-user experiment,
 Education sign-in, four-world play or multiplayer acceptance is claimed here.
 
+## Microsoft PSEC/MXC native isolation candidate — 23 October 2026
+
+Microsoft introduced generally available MXC in October 2026, with native
+Process Security Environment (PSEC) capabilities on supported Windows builds.
+This is a *candidate native enforcement foundation* potentially avoiding
+a third-party kernel driver or full VM; it is NOT evidence of lower RAM/CPU
+overhead than Sandboxie. The current supported processmodel.h PSEC API replaces
+the older experimental SBOX-only CreateProcessInSandbox approach in MXC.
+Refs: https://learn.microsoft.com/en-us/windows/win32/api/_processmodel/
+and https://github.com/microsoft/mxc/blob/main/docs/process-container/os-version-support.md
+and https://blogs.windows.com/windowsdeveloper/2026/10/07/microsoft-execution-containers-policy-driven-containment-for-ai-agents/
+
+The existing Windows identity owner exposes an explicit, read-only capability
+query for PSEC major-version support and reported OS policy flags. It loads
+processmodel.dll only from System32 and does not allocate a security
+environment, create a process or touch game/account data. **This probe cannot
+approve MC02.** PSEC grants/denies file *access* but does not automatically
+redirect the real Desktop game Roaming world directory, provide per-process
+HKCU overlays, prove Microsoft ADAL/WAM isolation or solve the game's
+multi-instance/GUI behavior. The prior unpackaged AppContainer Roaming NO-GO
+still applies until a genuine game-aware mediation provider is established.
+Do not add automatic PSEC fallback to weaker AppContainer/DACL policies.
+
 ## P0 feasibility decision — documented Minecraft data roots, 23 October 2026
 
 **Engineering result: no supported, non-modifying four-client provider has

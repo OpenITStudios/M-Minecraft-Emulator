@@ -3,7 +3,7 @@
   import OwnedManagerPanel from './OwnedManagerPanel.svelte';
   import NativeWorkspace from './NativeWorkspace.svelte';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
-  import {nativeFeasibility,type NativeWorkspaceObservation,type NativeAuthFamilyObservation} from './app/bridge/nativeFeasibilityApi.js';
+  import {nativeFeasibility,type NativeWorkspaceObservation,type NativeAuthFamilyObservation,type NativePsecInspection} from './app/bridge/nativeFeasibilityApi.js';
   import {observedIds,reconcileObservedSlots,type ObservedSlotMap} from './app/presentation/nativeObservedSlots.js';
   import type {ClientId} from './app/bridge/ownedProviderApi.js';
   import type {OwnedSnapshot} from './app/bridge/ownedProviderApi.js';
@@ -17,6 +17,7 @@
   let contextClient:ClientId='02',contextResult:ContextComparison|null=null,contextError='';
   let nativeSession:NativeWorkspaceObservation|null=null,nativeError='',nativePending=false;
   let authFamily:NativeAuthFamilyObservation|null=null,authFamilyError='';
+  let nativePsec:NativePsecInspection|null=null,nativePsecError='';
   let sessionView:'native'|'legacy'='native',observedSlots:ObservedSlotMap={};
   $: if(sessionView==='native')tabStates={
     '01':observedSlots['01']?(observedSlots['01'].responding?'Observed':'Not responding'):nativePending?'Launch pending':nativeError?'Check needed':'Not opened',
@@ -75,6 +76,13 @@
         if(workspace&&sessionView==='native')await workspace.reconcileObserved(observedSlots);
       }
     }catch(error){issue=operationIssue(error);}
+    finally{busy=false;}
+  }
+  async function inspectNativePsec(){
+    if(busy||workspaceBusy||sessionView!=='native')return;
+    busy=true;nativePsec=null;nativePsecError='';
+    try{nativePsec=await nativeFeasibility.inspectNativePsecCapabilities();}
+    catch(error){nativePsecError=operationIssue(error).details;}
     finally{busy=false;}
   }
   async function inspectAuthFamily(){
@@ -226,6 +234,12 @@
     {#if page==='settings'}
       <section class="um-settings"><details><summary>Independent engine diagnostics</summary>
         {#if sessionView==='native'}
+          <p>Native Windows sandbox feasibility (PSEC API only). A supported PSEC contract provides OS-level process restriction, NOT separate Minecraft worlds, HKCU or WAM accounts.</p>
+          <button class="cm-button cm-secondary" disabled={busy||workspaceBusy} on:click={inspectNativePsec}>Check native Windows sandbox capability</button>
+          {#if nativePsec}
+            <p role="status">{nativePsec.versionSupported?'Windows PSEC 1.'+nativePsec.contractMinor+' is available; OS policy support observed.':'Native Windows PSEC 1.x is not available in this OS configuration.'} This is not proof of Minecraft-compatible isolation or permission to launch Client 02.</p>
+          {/if}
+          {#if nativePsecError}<p role="alert">{nativePsecError}</p>{/if}
           <p>Inspect the actual Minecraft.AdalServer.exe sign-in helper candidates tied by Windows process ancestry to registered game processes. This does not read credentials or WAM tokens, and absence of a helper outside the sign-in window is inconclusive.</p>
           <button class="cm-button cm-secondary" disabled={busy||workspaceBusy||!config?.detectedMinecraft} on:click={inspectAuthFamily}>Inspect game sign-in process family</button>
           {#if authFamily}<p role="status">{authFamily.games.length} registered game process(es); {authFamily.unattributedCandidateCount} unassigned same-session sign-in helper candidate(s). Parent PID and image path alone never prove isolated authentication.</p>

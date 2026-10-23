@@ -42,6 +42,7 @@ pub fn run() {
             commands::native_clients::desktop_open_native_minecraft,
             commands::native_clients::desktop_inspect_native_workspace,
             commands::native_clients::desktop_inspect_native_auth_family,
+            commands::native_clients::desktop_inspect_native_psec_capabilities,
             commands::native_clients::desktop_present_observed_window,
             commands::native_clients::desktop_focus_observed_native_window,
             commands::native_clients::desktop_inspect_native_candidates,

@@ -764,6 +764,135 @@ pub fn inspect_independent_storage_route_source(
     )
 }
 
+/// Read-only detection of the *native Windows* Process Security Environment
+/// API. It never creates a security environment, changes DACLs, launches a
+/// process, adopts a Minecraft profile or grants MC02 Launch/Provision.
+///
+/// PSEC filesystem permissions are NOT filesystem redirection; even a fully
+/// supported OS API cannot establish private Roaming AppData, HKCU or WAM.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativePsecInspection {
+    pub schema: u32,
+    pub evidence_class: &'static str,
+    pub api_present: bool,
+    pub version_supported: bool,
+    pub contract_minor: Option<u32>,
+    pub fs_deny_supported: Option<bool>,
+    pub network_proxy_supported: Option<bool>,
+}
+
+fn unavailable_psec() -> NativePsecInspection {
+    NativePsecInspection {
+        schema: 1,
+        evidence_class: "WINDOWS_PSEC_CAPABILITY_ONLY_NO_GAME_ISOLATION",
+        api_present: false,
+        version_supported: false,
+        contract_minor: None,
+        fs_deny_supported: None,
+        network_proxy_supported: None,
+    }
+}
+
+pub fn inspect_native_psec_capabilities() -> std::io::Result<NativePsecInspection> {
+    #[cfg(windows)]
+    {
+        psec_windows::inspect()
+    }
+    #[cfg(not(windows))]
+    {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Native Process Security Environment requires Windows",
+        ))
+    }
+}
+
+#[cfg(windows)]
+mod psec_windows {
+    use super::{unavailable_psec, NativePsecInspection};
+    use std::{io, mem, ptr};
+    use windows_sys::Win32::System::LibraryLoader::{
+        FreeLibrary, GetProcAddress, LoadLibraryExW, LOAD_LIBRARY_SEARCH_SYSTEM32,
+    };
+
+    // The only loaded DLL is the actual Windows System32 component. Never
+    // search PATH, an install directory, a user profile or an arbitrary DLL.
+    pub(super) fn inspect() -> io::Result<NativePsecInspection> {
+        let library: Vec<u16> = "processmodel.dll\0".encode_utf16().collect();
+        let dll = unsafe {
+            LoadLibraryExW(library.as_ptr(), ptr::null_mut(), LOAD_LIBRARY_SEARCH_SYSTEM32)
+        };
+        if dll.is_null() {
+            let error = io::Error::last_os_error();
+            if matches!(error.raw_os_error(), Some(2 | 126)) {
+                return Ok(unavailable_psec());
+            }
+            return Err(error);
+        }
+        struct LoadedDll(windows_sys::Win32::Foundation::HMODULE);
+        impl Drop for LoadedDll {
+            fn drop(&mut self) { unsafe { FreeLibrary(self.0); } }
+        }
+        let dll = LoadedDll(dll);
+
+        // Require the capability and release/creation symbols as a coherent
+        // family; an export by itself is NOT a supported PSEC contract.
+        let query = unsafe {
+            GetProcAddress(dll.0, b"QueryProcessSecurityEnvironmentSupport\0".as_ptr())
+        };
+        let version = unsafe {
+            GetProcAddress(dll.0, b"IsProcessSecurityEnvironmentVersionSupported\0".as_ptr())
+        };
+        let creator = unsafe {
+            GetProcAddress(dll.0, b"CreateProcessSecurityEnvironment\0".as_ptr())
+        };
+        let closer = unsafe {
+            GetProcAddress(dll.0, b"CloseProcessSecurityEnvironment\0".as_ptr())
+        };
+        if query.is_none() || version.is_none() || creator.is_none() || closer.is_none() {
+            return Ok(unavailable_psec());
+        }
+
+        // Signature from processmodel.h (published September 2026).
+        // BOOLEAN is one byte; HRESULT uses i32 and fails when negative.
+        type VersionCheck = unsafe extern "system" fn(u32, *mut u8, *mut u32) -> i32;
+        type SupportQuery = unsafe extern "system" fn(*mut u32) -> i32;
+        let check_version: VersionCheck = unsafe { mem::transmute(version.unwrap()) };
+        let query_support: SupportQuery = unsafe { mem::transmute(query.unwrap()) };
+        let mut available: u8 = 0;
+        let mut minor: u32 = 0;
+        if unsafe { check_version(1, &mut available, &mut minor) } < 0 {
+            return Err(io::Error::other("Native Windows PSEC version query failed"));
+        }
+        if available == 0 {
+            return Ok(NativePsecInspection {
+                api_present: true,
+                ..unavailable_psec()
+            });
+        }
+        if available != 1 {
+            return Err(io::Error::other("Invalid Windows PSEC availability response"));
+        }
+
+        let mut support_flags: u32 = 0;
+        if unsafe { query_support(&mut support_flags) } < 0 {
+            return Err(io::Error::other("Native Windows PSEC policy query failed"));
+        }
+        Ok(NativePsecInspection {
+            schema: 1,
+            evidence_class: "WINDOWS_PSEC_CAPABILITY_ONLY_NO_GAME_ISOLATION",
+            api_present: true,
+            version_supported: true,
+            contract_minor: Some(minor),
+            // Current published PROCESS_SECURITY_ENVIRONMENT_SUPPORT_FLAGS:
+            // PSE_SUPPORT_FS_DENY=1, PSE_SUPPORT_NETWORK_PROXY=2.
+            fs_deny_supported: Some(support_flags & 1 != 0),
+            network_proxy_supported: Some(support_flags & 2 != 0),
+        })
+    }
+}
+
 #[cfg(windows)]
 mod windows {
     use super::{

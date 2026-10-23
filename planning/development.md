@@ -1,5 +1,14 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Native PSEC capability reconnaissance — 23 October 2026
+
+Work: identify an actual Windows-native process security foundation that may avoid duplicating Sandboxie's general-purpose driver/service/hook stack.
+Decision: read-only PSEC 1.x capability inspection is added to the existing native identity owner, typed Tauri bridge and explicit Settings diagnostics. It loads only System32 processmodel.dll, verifies coherent creator/closer/version/query exports, queries version and policy bits, and returns sanitized OS facts; it never creates a container or launches a game. The *current* PSEC contract is preferred over the older experimental CreateProcessInSandbox SBOX path. MXC is only a candidate and grants filesystem access, not transparent Minecraft Roaming/HKCU/WAM virtualization.
+Proof: exact GitHub source/IPC/consumer review; Rust/TypeScript/Svelte execution, Windows PSEC runtime, Minecraft and four-client gameplay NOT_EXECUTED; GitHub Actions disabled.
+Unresolved: Windows actual PSEC availability, compatibility with official Education Desktop, private Roaming/HKCU/ADAL-WAM, background child and graphics, real cost versus Sandboxie.
+Next: establish or rule out a Minecraft-compatible per-process Roaming/HKCU/auth mediation route before unlocking MC02, using real target-game evidence.
+
+
 ## Real Education sign-in process-family observation — 23 October 2026
 
 Work: identify the real Minecraft.AdalServer.exe Windows subprocesses that an independent MC02 process boundary must account for; stop treating the game PID as the complete authentication process family.

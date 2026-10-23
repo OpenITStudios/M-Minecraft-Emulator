@@ -551,11 +551,43 @@ export function parseNativeAuthFamilyObservation(value: unknown): NativeAuthFami
   return value as unknown as NativeAuthFamilyObservation;
 }
 
+// OS PSEC support does not virtualize Minecraft's Roaming AppData, HKCU,
+// singleton or Microsoft sign-in, and never enables a new game instance.
+export interface NativePsecInspection {
+  schema: 1;
+  evidenceClass: "WINDOWS_PSEC_CAPABILITY_ONLY_NO_GAME_ISOLATION";
+  apiPresent: boolean;
+  versionSupported: boolean;
+  contractMinor: number | null;
+  fsDenySupported: boolean | null;
+  networkProxySupported: boolean | null;
+}
+export function parseNativePsecInspection(value: unknown): NativePsecInspection {
+  if(!isRecord(value)||!hasOnly(value,[
+    "schema","evidenceClass","apiPresent","versionSupported","contractMinor",
+    "fsDenySupported","networkProxySupported"
+  ])||value.schema!==1||value.evidenceClass!=="WINDOWS_PSEC_CAPABILITY_ONLY_NO_GAME_ISOLATION"||
+    typeof value.apiPresent!=="boolean"||typeof value.versionSupported!=="boolean"||
+    (value.versionSupported&&!value.apiPresent))
+    throw new TypeError("Untrusted Windows PSEC capability observation.");
+  if(value.versionSupported) {
+    if(typeof value.contractMinor!=="number"||!Number.isSafeInteger(value.contractMinor)||
+      value.contractMinor<0||value.contractMinor>0xffffffff||
+      typeof value.fsDenySupported!=="boolean"||typeof value.networkProxySupported!=="boolean")
+      throw new TypeError("Invalid Windows PSEC policy availability.");
+  } else if(value.contractMinor!==null||value.fsDenySupported!==null||value.networkProxySupported!==null){
+    throw new TypeError("Unsupported Windows PSEC response carried policy values.");
+  }
+  return value as unknown as NativePsecInspection;
+}
+
 export const nativeFeasibility = {
   inspectNativeWorkspace:async():Promise<NativeWorkspaceObservation>=>
     parseNativeWorkspaceObservation(await invokeRuntime<unknown>("desktop_inspect_native_workspace")),
   inspectNativeAuthFamily: async():Promise<NativeAuthFamilyObservation> =>
     parseNativeAuthFamilyObservation(await invokeRuntime<unknown>("desktop_inspect_native_auth_family")),
+  inspectNativePsecCapabilities: async():Promise<NativePsecInspection> =>
+    parseNativePsecInspection(await invokeRuntime<unknown>("desktop_inspect_native_psec_capabilities")),
   // Normal Windows activation, not a second Minecraft launch request.
   focusObservedNativeWindow: (target: OwnedProcess): Promise<void> =>
     invokeRuntime<void>("desktop_focus_observed_native_window", { target }),

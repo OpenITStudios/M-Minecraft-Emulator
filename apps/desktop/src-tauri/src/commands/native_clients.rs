@@ -40,6 +40,19 @@ pub async fn desktop_inspect_native_auth_family(
     .map_err(|error| error.to_string())
 }
 
+/// Inspect Windows PSEC OS capability only. Not Minecraft launch admission,
+/// filesystem redirection, registry/WAM isolation or a provider handshake.
+#[tauri::command]
+pub async fn desktop_inspect_native_psec_capabilities(
+) -> Result<crate::engine::instance_identity::NativePsecInspection, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        run_manager_operation(crate::engine::instance_identity::inspect_native_psec_capabilities)
+    })
+    .await
+    .map_err(|_| "Native Windows sandbox capability inspection task failed".to_string())?
+    .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 pub async fn desktop_compare_process_contexts(
     left: crate::engine::instance_identity::ProcessKey,
