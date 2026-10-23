@@ -33,3 +33,24 @@ it('rejects impossible areas and nonfinite or unsupported display scale before I
   for(const rect of [{x:-1,y:0,width:800,height:600},{x:0,y:NaN,width:800,height:600},{x:0,y:0,width:0,height:600},{x:19999,y:0,width:800,height:600}])expect(()=>workspaceViewport(rect)).toThrow();
   for(const scale of [0,Infinity,NaN,9])expect(()=>workspaceViewport({x:0,y:0,width:800,height:600},scale)).toThrow();
 });
+
+it('native refresh revalidates the selected exact PID/FILETIME/window without relying on legacy snapshots',async()=>{
+  const source=readFileSync(new URL('../src/NativeWorkspace.svelte',import.meta.url),'utf8');
+  const start=source.indexOf('async function reconcileProcesses(');
+  const end=source.indexOf('export async function present(',start);
+  expect(start).toBeGreaterThan(0);
+  expect(source.slice(start,end)).toContain('reconcileNative(observation:NativeWorkspaceObservation)');
+  const manager=readFileSync(new URL('../src/UnifiedManagerApp.svelte',import.meta.url),'utf8');
+  expect(manager).toContain('await workspace.reconcileNative(result)');
+  const old={pid:41,createdFileTime:'134000000000000001',sessionId:1,windowHandle:'0x123',responding:true};
+  const activeClient='01',target={...old};
+  const released:typeof old[]=[];
+  const workspaceSurface={release:async(value:typeof old)=>{released.push(value);}};
+  const fn=source.slice(start,end).replace(/export /g,'').replace('processes:OwnedProcess[]','processes')
+    .replace('observation:OwnedSnapshot','observation').replace('observation:NativeWorkspaceObservation','observation');
+  const run=new Function('workspaceSurface','state',`let activeClient=state.activeClient,target=state.target,issue=null,suspended=false,updatePending=false;${fn};return {call:reconcileNative,state:()=>({activeClient,target})};`)(workspaceSurface,{activeClient,target});
+  await run.call({processes:[old]});expect(released).toHaveLength(0);
+  await run.call({processes:[{...old,createdFileTime:'134000000000000002'}]});
+  expect(released).toEqual([old]);
+  expect(run.state().activeClient).toBe(null);
+});

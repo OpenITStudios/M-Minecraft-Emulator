@@ -45,7 +45,7 @@
       const result=await inspectNative();
       if(result){
         nativePending=false;
-        if(workspace&&selectedClient==='01'&&result.processes.length!==1)await workspace.restore();
+        if(workspace)await workspace.reconcileNative(result);
       }
     }catch(error){issue=operationIssue(error);}
     finally{busy=false;}
@@ -88,7 +88,7 @@
   }
   async function prepare(){
     busy=true;checked=false;issue=null;contextResult=null;contextError='';
-    try{config=await managerConfiguration.load();snapshot=config.observation;checked=!!snapshot;if(config.engineError&&snapshot)issue=operationIssue(config.engineError);if(config.detectedMinecraft)await inspectNative();await tick();if(snapshot&&workspace){try{await workspace.reconcile(snapshot);}catch(error){issue=operationIssue(error);}}}
+    try{config=await managerConfiguration.load();snapshot=config.observation;checked=!!snapshot;if(config.engineError&&snapshot)issue=operationIssue(config.engineError);if(config.detectedMinecraft)await inspectNative();await tick();if(workspace){try{if(snapshot)await workspace.reconcile(snapshot);else if(nativeSession)await workspace.reconcileNative(nativeSession);}catch(error){issue=operationIssue(error);}}}
     catch(e){snapshot=null;issue=operationIssue(e);}finally{busy=false;}
   }
   onMount(()=>{void (async()=>{

@@ -2,6 +2,7 @@
   import {onMount,tick} from 'svelte';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import type {ClientId,OwnedProcess,OwnedSnapshot} from './app/bridge/ownedProviderApi.js';
+  import type {NativeWorkspaceObservation} from './app/bridge/nativeFeasibilityApi.js';
   import {operationIssue} from './app/bridge/managerConfiguration.js';
   import {listen} from '@tauri-apps/api/event';
   export let sessionDirectory='';
@@ -38,13 +39,21 @@
     catch(error){suspended=previous;throw error;}
   }
   export async function resume(){if(suspended&&activeClient&&target)await present(activeClient,target);}
-  export async function reconcile(observation:OwnedSnapshot){
+  async function reconcileProcesses(processes:OwnedProcess[]){
     if(!activeClient||!target)return;
-    const processes=activeClient==='01'?observation.nativeProcesses:observation.clients.find(slot=>slot.clientId===activeClient)?.processes??[];
     const previous=target;
     if(processes.some(process=>process.pid===previous.pid&&process.createdFileTime===previous.createdFileTime&&process.sessionId===previous.sessionId&&process.windowHandle===previous.windowHandle))return;
     await workspaceSurface.release(previous);
     activeClient=null;target=null;issue=null;suspended=false;updatePending=false;
+  }
+  export async function reconcile(observation:OwnedSnapshot){
+    if(!activeClient)return;
+    const processes=activeClient==='01'?observation.nativeProcesses:observation.clients.find(slot=>slot.clientId===activeClient)?.processes??[];
+    await reconcileProcesses(processes);
+  }
+  export async function reconcileNative(observation:NativeWorkspaceObservation){
+    if(activeClient!=='01')return;
+    await reconcileProcesses(observation.processes);
   }
   export async function present(client:ClientId,process:OwnedProcess){
     issue=null;
