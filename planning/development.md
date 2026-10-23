@@ -67,20 +67,19 @@ MXC **IsolationSession is a different backend**, not an implicit fix: its [pinne
 
 ## SINGLE ACTIVE PRIORITY — P0: real MC02 isolation provider
 
-**One decision question:** Is there a supported Windows mechanism to start a **second unchanged official Minecraft Education Desktop** client next to MC01 with separate *effective* Roaming (environment AND Known Folder), Local data, HKCU reads/writes, authentication helper/broker, singleton/window behavior and playable GPU/input?
+**Operator direction — 23 October 2026:** build an original Minecraft-specific engine using Sandboxie's architectural ideas as reference, with independently authored code and no retired-runtime dependency. Our engine may provide transparent isolation; an official Education per-instance launch option is not a prerequisite. This supersedes the former vendor-contract-first next action, not the PSEC-only NO-GO or existing no-game-patching/no-DLL-injection constraints.
 
-1. Validate actual SDK/Win32 ABI and build first—particularly the newest native PSEC implementation—and OS/version support. Do not confuse code review or export presence with a functioning engine.
-2. Select/reject **one concrete enforcement and mediation route** based on the real game’s required filesystem, registry, broker, IPC and window behavior. Separate directories, RunAs labels, PID ancestry, AppContainer canaries, synthetic COW and policy-only denial do NOT establish effective MC02 separation.
-3. When supported, implement one **small end-to-end vertical slice** through existing Rust independent provider port, native Windows adapter and single admission owner. Do not unlock MC02 until game-bound Windows evidence confirms legitimate sign-in, independent world persistence, cross-access denial, concurrent gameplay and normal restart.
-4. When unproven, record the exact first **NO-GO/UNKNOWN** incompatibility and stop that candidate. Do not create more generic sandbox layers, speculative DLL hooks, fake-ready providers, new monitoring UI, services or test collections.
+The [architecture mapping](../docs/system/independent-isolation.md#original-engine-architecture--operator-decision-23-october-2026) maps filesystem, registry, IPC/objects, process lifecycle, authentication and presentation onto existing owners. Runtime-core retains domain/provider policy, the desktop retains native coordination and presentation, and the existing admission remains authoritative. Synthetic COW/hives and the inert service are not native mediation.
 
-**P0 exit:** MC01 and MC02 truly playable and independently licensed at the same time; separate real world writes persist after relaunch; effective HKCU/auth remain non-crossing; host/peer cannot read protected client state; interactive controls work. Source tests are supporting evidence ONLY.
+**Candidate for source assessment:** an original Windows minifilter plus registry callbacks for process-bound file/HKCU mediation. These supported mechanisms do not by themselves isolate singleton objects, ALPC or Microsoft brokers. No driver/provider implementation is selected until those gaps have a concrete justified route. No source cloning, DLL injection, syscall patching, service/driver activation or release is part of this architecture change.
+
+**P0 exit:** MC01 and MC02 playable and independently licensed together; separate worlds persist after relaunch; effective HKCU/auth do not cross; contained game access cannot expose protected host/peer state; GPU/input and recovery work. Do not promise confidentiality against the owning host user/administrator. Source tests and synthetic controls remain supporting evidence only.
 
 ## Ordered outcomes (not new test-status gates)
 
 | Stage | State | Exit |
 | --- | --- | --- |
-| **P0a Provider feasibility** | PSEC/MXC-only review DONE: NO-GO; replacement route unselected | One supported unmodified-game MC02 mechanism is established or decisively rejected with an explicit incompatibility. |
+| **P0a Provider feasibility** | ACTIVE: original mediation design; PSEC-only NO-GO retained | One supported unmodified-game MC02 mechanism is established or decisively rejected with an explicit incompatibility. |
 | P0b Two-client vertical slice | BLOCKED by P0a | Implement/validate actual MC01+MC02 private data/auth/gameplay; maintain Launch denial until ready. |
 | P1 Four-client extension | WAITING | Reuse the SAME provider for MC03/MC04; verify four licensed worlds, normal input, multiplayer/recovery. |
 | P2 Efficiency against Sandboxie | WAITING | Comparable real-game workloads for RAM, CPU, GPU, frametime, launch/switch latency and stability; optimize measured bottlenecks. |
@@ -98,6 +97,8 @@ On each meaningful bounded commit, replace the **current** blocker/next status i
 
 ## Current owner and next action
 
-**State:** P0a review of PSEC/MXC ProcessContainer **DONE — NO-GO as the complete MC02 provider**. P0b remains blocked; no independent provider has been selected. The first missing contract is effective private Roaming resolution for the unchanged game, followed by HKCU/auth mediation. Runtime compatibility remains UNKNOWN.
+**State:** ACTIVE P0a. Original-engine architecture mapping is complete at source-review level; no production provider is selected. PSEC/MXC alone remains NO-GO. The first implementation gap is native process-bound file/HKCU mediation; singleton/IPC and the actual Microsoft helper/broker route remain unresolved dependencies.
 
-**Next:** Review the official Education Desktop launch/profile/authentication contract for a vendor-supported unchanged-game per-instance profile and sign-in route. Identify an explicit supported contract before selecting another provider; if no such contract is documented, record that precise dependency as UNKNOWN rather than infer support from MSAL, process counts or another synthetic fixture. This source review does not authorize game launches, credential access, new users/services, or revival of retired providers.
+**Next:** Assess one original minifilter + registry-callback route against the complete MC02 contract: pin process membership before first protected access; preserve private Roaming/HKCU reads/writes and restart semantics; identify a documented no-injection route for actual singleton/IPC and auth-helper contexts. Record the first unsupported dependency explicitly before adding driver/provider code. Do not reimplement generic fixtures or reopen the retired providers.
+
+**This architecture change:** based on `e515fd5ab6d390d94f279dbe233414a2b3722126`; exact-source mapping of historical reference and current independent owners, plus official Windows contract review. Public interfaces and Launch/Provision denial unchanged. WDK/Rust compilation, automated suites, driver/service operations and Minecraft/gameplay acceptance **NOT_EXECUTED**.

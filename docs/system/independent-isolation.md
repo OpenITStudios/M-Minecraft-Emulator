@@ -21,6 +21,54 @@ bar. Selecting a tab changes presentation; another session keeps running.
 **Independent production provider: NOT_IMPLEMENTED.** No Windows-user experiment,
 Education sign-in, four-world play or multiplayer acceptance is claimed here.
 
+## Original engine architecture — operator decision, 23 October 2026
+
+The operator selected **an independently implemented Minecraft-specific engine, using Sandboxie's architectural ideas as reference**. This supersedes a vendor-provided per-instance launch option as a prerequisite: our engine may supply transparent isolation, if a complete supported Windows implementation can be demonstrated. It does not select the retired fork, relax the unchanged-game/no-DLL-injection rule, or establish that an original driver is sufficient. PSEC-only rejection remains valid.
+
+This section records design and responsibility, not runtime readiness. Current work and the next action live only in [planning/development.md](../../planning/development.md).
+Source inspected: `e515fd5ab6d390d94f279dbe233414a2b3722126` (`Local`). Historical Sandboxie files below are **read-only reference**, not code dependencies or templates to translate into the new implementation.
+
+### Reference architecture and existing module owners
+
+Sandboxie's reference implementation combines user-mode translation, kernel enforcement and privileged launch assistance. Its [own overview](https://sandboxie-plus.com/sandboxie/howitworks/) describes intercepting and containing changes; the pinned source below identifies the actual division of work.
+
+| Concern | Historical reference inspected | Existing independent owner / missing implementation |
+| --- | --- | --- |
+| Filesystem view | [DLL file translation](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/e515fd5ab6d390d94f279dbe233414a2b3722126/engine/isolation-owned/Sandboxie/core/dll/file.c) distinguishes true/copy paths and handles file operations; [driver file policy](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/e515fd5ab6d390d94f279dbe233414a2b3722126/engine/isolation-owned/Sandboxie/core/drv/file.c) enforces access. | `independent_engine/overlay.rs` is a bounded in-memory synthetic COW module; `storage.rs` classifies evidence. Neither redirects Windows I/O. A native adapter still needs process-bound private Roaming/Local resolution, enumeration, rename/delete and durable writes. |
+| Registry view | [DLL key translation](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/e515fd5ab6d390d94f279dbe233414a2b3722126/engine/isolation-owned/Sandboxie/core/dll/key.c) hooks open/create/query/enumerate operations; [driver key policy](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/e515fd5ab6d390d94f279dbe233414a2b3722126/engine/isolation-owned/Sandboxie/core/drv/key.c) manages registry/hive access. | `independent_engine/registry.rs` reviews synthetic reports; `overlay.rs` models values only. Missing: effective per-game HKCU routing, key metadata/enumeration, notifications, persistent hive semantics and peer denial. |
+| Objects and IPC | [DLL IPC translation](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/e515fd5ab6d390d94f279dbe233414a2b3722126/engine/isolation-owned/Sandboxie/core/dll/ipc.c) handles object/port names; [driver IPC policy](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/e515fd5ab6d390d94f279dbe233414a2b3722126/engine/isolation-owned/Sandboxie/core/drv/ipc.c) checks object access. | Existing pair-observation interfaces report evidence only. Missing: a justified namespace/IPC route for the actual game's singleton and helpers. File/registry filtering does not supply this. |
+| Process lifecycle | [Driver process tracking](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/e515fd5ab6d390d94f279dbe233414a2b3722126/engine/isolation-owned/Sandboxie/core/drv/process.c) and [service launch assistance](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/e515fd5ab6d390d94f279dbe233414a2b3722126/engine/isolation-owned/Sandboxie/core/svc/ProcessServer.cpp) bind operations to sandbox membership. | Reuse `IndependentProviderPort`, desktop exact-process identity and the single `instance_catalog.rs` admission owner. The disabled provider remains disabled; no second session registry or readiness flag. |
+| Authentication | [Credential interception](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/e515fd5ab6d390d94f279dbe233414a2b3722126/engine/isolation-owned/Sandboxie/core/dll/cred.c) contains explicit credential API handling. | These hooks are not imported or reproduced. `native_clients.rs` observes helper candidates only. The game's Microsoft-owned sign-in must work in the correct isolated context; no engine credential store, token/cache copying, broker impersonation or auth bypass. Classic credential hooks do not prove WAM compatibility. |
+| Presentation and control | Isolation and launch do not themselves provide a working embedded renderer. | Keep `workspace_surface.rs` and existing workspace presentation as the owner of selection/restore. Selection must not stop, relaunch or change a session's identity. GPU/input/fullscreen and recovery require actual game evidence. |
+
+The provider interface remains small: inspect a slot, launch it when admitted, and request normal close of an exact process. OS mediation belongs behind that interface, not in frontend controls or another generic manager. Domain policy stays in runtime-core; Windows coordination stays in the desktop adapter. The existing `independent-service/src/main.rs` is an inert, unbundled source host, not an active broker or permission to install a service.
+
+### Native mediation candidate to assess
+
+A newly authored **file minifilter plus registry-callback implementation** is a candidate for the missing file/HKCU mediation, not yet an accepted complete provider:
+
+- Microsoft documents [minifilters](https://learn.microsoft.com/en-us/windows-hardware/drivers/ifs/about-file-system-filter-drivers) as a supported kernel mechanism for filtering/modifying file I/O. Use the Filter Manager model for any future implementation; do not copy legacy syscall hooks, patch kernel tables or change host junctions/profile directories to redirect every process.
+- Microsoft documents [registry callbacks](https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/filtering-registry-calls) that can process or redirect operations. Callback availability does not implement a coherent private HKCU: key-object context, relative opens, output semantics, enumeration, reentrancy and cleanup all need design and proof.
+- [Process notifications](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/nf-ntddk-pssetcreateprocessnotifyroutineex) can track creation/exit. They are not complete provenance for broker-launched helpers. Parent PID or executable name alone must not enroll a process.
+- [Object callbacks](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/nf-wdm-obregistercallbacks) cover process/thread/desktop handle operations, not a general mutex-name or ALPC remapping facility. [Windows namespaces](https://learn.microsoft.com/en-us/windows/win32/termserv/kernel-object-namespaces) include global and per-session objects. A file/registry driver therefore cannot be presented as a complete singleton/IPC/auth solution.
+- No driver skeleton, new wire schema, privileged installer, service activation, signing-mode change or game injection is added by this design. PSEC may be reused later for a demonstrated subproblem, never as an automatic fallback or launch permit.
+
+### Required behavior of the future adapter
+
+A native adapter must bind trusted process membership to an exact live process object/lifetime and stable slot profile before game code accesses protected state. Children need verified membership; externally activated helpers remain outside until a supported attribution/context route exists. PID reuse or manager reconnect must never transfer another process into a slot.
+
+For an admitted session, logical game paths and HKCU must have one coherent private effective view, including environment/Known Folder lookups and native operations. Private game writes persist across normal close/relaunch. Host account/cache/world data and peer overlays are not a read-through COW base; shared base reads are limited to explicitly allowed non-account installation/system resources. No implicit migration of old profiles is permitted.
+
+A real file adapter must handle Windows Unicode/case behavior, relative handles, links/reparse escape, alternate streams, mapped I/O, enumeration, rename/delete and concurrent opens; the ASCII/value-only fixture is not its implementation. Failure to establish mediation blocks new launches; it must not fall back to host writes or kill unrelated clients. Manager failure must preserve recoverable session/data ownership; teardown must wait for active operations and owned processes before releasing mediation.
+
+Isolation protects clients from unintended host/peer access. It does not promise secrecy from the Windows administrator or owning user. Acceptance must distinguish the contained game's access to host/peer data from the host administrator's authority.
+
+### Acceptance implications
+
+Source review can establish a concrete supported mechanism and its limits; it cannot certify runtime mediation. Before MC02 launch is exposed, require two official games with separate manual licensed sign-ins, independently persistent worlds/HKCU/auth behavior, no host/peer crossover, concurrent GPU/input, and independent close/relaunch. Then extend the same provider to four clients, multiplayer/recovery, and measured Sandboxie comparison. Synthetic I/O/registry controls may support native implementation checks, but cannot advance game acceptance.
+
+**Evidence for this design:** source/reference and official Windows contract review only. Original minifilter/registry/IPC/auth adapter implementation, WDK compilation, driver signing/install, Minecraft launches and two/four-client acceptance are **NOT_EXECUTED / NOT_IMPLEMENTED**, as applicable.
+
 ## Microsoft PSEC/MXC native isolation candidate — 23 October 2026
 
 Microsoft introduced generally available MXC in October 2026, with native
