@@ -66,6 +66,18 @@ const SERVICE_ROOT_CHILD: &str = "mivubi-independent-root";
 // This SOURCE-ONLY module can only OPEN it; never create, adopt, repair
 // or re-ACL an arbitrary directory masquerading as the installer parent.
 const INSTALLER_PARENT_CHILD: &str = "MIVUBIIndependentHost";
+#[cfg(feature = "installer-parent-bootstrap-source")]
+const REGISTERED_SCM_NAME: &str = "MIVUBIIndependentHost";
+#[cfg(feature = "installer-parent-bootstrap-source")]
+const SC_MANAGER_CONNECT: u32 = 1;
+#[cfg(feature = "installer-parent-bootstrap-source")]
+const SERVICE_QUERY_CONFIG: u32 = 1;
+#[cfg(feature = "installer-parent-bootstrap-source")]
+const SERVICE_CONFIG_SERVICE_SID_INFO: u32 = 5;
+#[cfg(feature = "installer-parent-bootstrap-source")]
+const SERVICE_SID_TYPE_UNRESTRICTED: u32 = 1;
+#[cfg(feature = "installer-parent-bootstrap-source")]
+const SERVICE_SID_TYPE_RESTRICTED: u32 = 3;
 // FOLDERID_ProgramData is a machine-wide FIXED Windows Known Folder,
 // NOT caller-supplied %PROGRAMDATA%, HOME, environment or IPC path.
 // {62AB5D82-FDC1-4DC3-A9DD-070D1D495D97} from knownfolderid.h.
@@ -109,6 +121,31 @@ struct AclSizeInformation {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct RootFileIdentity { volume: u32, index: u64 }
+#[cfg(feature = "installer-parent-bootstrap-source")]
+#[repr(C)]
+struct ServiceSidInfo { sid_type: u32 }
+#[cfg(feature = "installer-parent-bootstrap-source")]
+struct OwnedScmHandle(H);
+#[cfg(feature = "installer-parent-bootstrap-source")]
+impl OwnedScmHandle {
+    fn checked(raw: H) -> io::Result<Self> {
+        if raw.is_null() { Err(io::Error::last_os_error()) } else { Ok(Self(raw)) }
+    }
+}
+#[cfg(feature = "installer-parent-bootstrap-source")]
+impl Drop for OwnedScmHandle {
+    fn drop(&mut self) {
+        if !self.0.is_null() { unsafe { CloseServiceHandle(self.0) }; }
+    }
+}
+#[cfg(feature = "installer-parent-bootstrap-source")]
+struct PendingInstallerParent {
+    programdata: File,
+    programdata_id: RootFileIdentity,
+    parent: File,
+    parent_id: RootFileIdentity,
+    expected_service: Vec<u8>,
+}
 
 /// The COM GUID memory representation is fixed in Windows guiddef.h.
 #[repr(C)]
@@ -177,6 +214,17 @@ unsafe extern "system" {
     fn IsValidSid(sid: H) -> i32;
     fn GetLengthSid(sid: H) -> u32;
     fn EqualSid(left: H, right: H) -> i32;
+    #[cfg(feature = "installer-parent-bootstrap-source")]
+    fn OpenSCManagerW(machine: *const u16, db: *const u16, access: u32) -> H;
+    #[cfg(feature = "installer-parent-bootstrap-source")]
+    fn OpenServiceW(manager: H, name: *const u16, access: u32) -> H;
+    #[cfg(feature = "installer-parent-bootstrap-source")]
+    fn QueryServiceConfig2W(
+        service: H, level: u32, output: *mut u8,
+        capacity: u32, required: *mut u32,
+    ) -> i32;
+    #[cfg(feature = "installer-parent-bootstrap-source")]
+    fn CloseServiceHandle(handle: H) -> i32;
     fn ConvertStringSecurityDescriptorToSecurityDescriptorW(
         sddl: *const u16, revision: u32, descriptor: *mut H,
         descriptor_size: *mut u32,
@@ -677,6 +725,35 @@ fn existing_root_descriptor(root: &File, service_sid: &[u8])
     Ok(descriptor)
 }
 
+/// Reusable Windows token/DACL peer review; this is negative evidence,
+/// not a grant and not a substitute for privilege/ancestor attestation.
+fn review_root_peer_denials(
+    descriptor: &CandidateDescriptor, active: &[u32],
+) -> io::Result<()> {
+    for &session in active {
+        let mut raw: H = ptr::null_mut();
+        let ok = unsafe { WTSQueryUserToken(session, &mut raw) };
+        let other = Token(raw);
+        if ok == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if other.0.is_null()
+            || token_dword(other.0, TOKEN_TYPE)? != TOKEN_PRIMARY
+            || token_dword(other.0, TOKEN_SESSION_ID)? != session
+            || verified_token_user_sid(other.0)?.as_slice() == LOCAL_SYSTEM_SID.as_slice()
+        {
+            return Err(denied("Unsupported interactive peer token for root ACL review"));
+        }
+        let peer = duplicate_for_access_check(other.0)?;
+        for right in ROOT_CHECK_RIGHTS {
+            if root_access(&descriptor, &peer, right)? {
+                return Err(denied("Peer has a direct sensitive right to service-root HANDLE"));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Genuine Windows read-only root-policy review, NOT a root constructor,
 /// a service/desktop handle handoff, or a production authorization gate.
 /// This function is intentionally NOT CALLED by SCM startup, IPC or Tauri.
@@ -716,27 +793,7 @@ fn review_existing_service_root_source(root: &File)
         }
     }
     let active = enumerate_active_ids()?;
-    for &session in &active {
-        let mut raw: H = ptr::null_mut();
-        let ok = unsafe { WTSQueryUserToken(session, &mut raw) };
-        let other = Token(raw);
-        if ok == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        if other.0.is_null()
-            || token_dword(other.0, TOKEN_TYPE)? != TOKEN_PRIMARY
-            || token_dword(other.0, TOKEN_SESSION_ID)? != session
-            || verified_token_user_sid(other.0)?.as_slice() == LOCAL_SYSTEM_SID.as_slice()
-        {
-            return Err(denied("Unsupported interactive peer token for root ACL review"));
-        }
-        let peer = duplicate_for_access_check(other.0)?;
-        for right in ROOT_CHECK_RIGHTS {
-            if root_access(&descriptor, &peer, right)? {
-                return Err(denied("Peer has a direct sensitive right to service-root HANDLE"));
-            }
-        }
-    }
+    review_root_peer_denials(&descriptor, &active)?;
     // Re-check only sample-specific properties. An ACL or token may change
     // AFTER this function; current findings never turn into lease/launch.
     if enumerate_active_ids()? != active
@@ -938,10 +995,17 @@ fn relative_fixed_service_child(
     parent: &File, child: &str, disposition: u32,
     candidate: Option<&CandidateDescriptor>,
 ) -> io::Result<File> {
+    // The default SCM service can OPEN its installer parent, but cannot
+    // create it. An explicitly compiled distribution bootstrap enables
+    // precisely this one extra FILE_CREATE name with reviewed DACL.
+    let installer_open = child == INSTALLER_PARENT_CHILD && disposition == NT_FILE_OPEN;
+    #[cfg(feature = "installer-parent-bootstrap-source")]
+    let installer_create = child == INSTALLER_PARENT_CHILD && disposition == NT_FILE_CREATE;
+    #[cfg(not(feature = "installer-parent-bootstrap-source"))]
+    let installer_create = false;
     if !matches!(disposition, NT_FILE_CREATE | NT_FILE_OPEN)
         || (disposition == NT_FILE_CREATE) != candidate.is_some()
-        || !(child == SERVICE_ROOT_CHILD
-            || child == INSTALLER_PARENT_CHILD && disposition == NT_FILE_OPEN)
+        || !(child == SERVICE_ROOT_CHILD || installer_open || installer_create)
     {
         return Err(denied("Unsupported native service-child name or disposition"));
     }
@@ -1106,6 +1170,165 @@ fn create_fresh_service_root_source(parent: File)
         return Err(denied("SCM service or active Windows logons changed during root creation"));
     }
     Ok(created)
+}
+
+/// Require the installed SCM service (not just LookupAccountName) to
+/// have the exact named service and a configured non-NONE service SID.
+#[cfg(feature = "installer-parent-bootstrap-source")]
+fn require_registered_scm_sid_type() -> io::Result<()> {
+    let manager = OwnedScmHandle::checked(unsafe {
+        OpenSCManagerW(ptr::null(), ptr::null(), SC_MANAGER_CONNECT)
+    })?;
+    let name: Vec<u16> = REGISTERED_SCM_NAME.encode_utf16()
+        .chain(std::iter::once(0)).collect();
+    let service = OwnedScmHandle::checked(unsafe {
+        OpenServiceW(manager.0, name.as_ptr(), SERVICE_QUERY_CONFIG)
+    })?;
+    let mut info = ServiceSidInfo { sid_type: 0 };
+    let mut required = 0u32;
+    if unsafe {
+        QueryServiceConfig2W(
+            service.0, SERVICE_CONFIG_SERVICE_SID_INFO,
+            (&mut info as *mut ServiceSidInfo).cast(),
+            mem::size_of::<ServiceSidInfo>() as u32, &mut required,
+        )
+    } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if required > mem::size_of::<ServiceSidInfo>() as u32 {
+        return Err(denied("Unexpected SCM service SID configuration size"));
+    }
+    if !matches!(
+        info.sid_type, SERVICE_SID_TYPE_UNRESTRICTED | SERVICE_SID_TYPE_RESTRICTED
+    ) {
+        return Err(denied("Registered MIVUBI SCM service lacks an enabled service SID type"));
+    }
+    Ok(())
+}
+
+/// Distribution bootstrap requires a DISTINCT LocalSystem PRIMARY process
+/// token with NO thread impersonation; the actual SCM service cannot use
+/// its own enabled service SID to self-provision its installer-owned parent.
+#[cfg(feature = "installer-parent-bootstrap-source")]
+fn checked_installer_actor(expected_service: &[u8]) -> io::Result<Token> {
+    require_nonimpersonating_thread()?;
+    let mut raw: H = ptr::null_mut();
+    if unsafe {
+        OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE, &mut raw)
+    } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let token = Token(raw);
+    if token.0.is_null()
+        || token_dword(token.0, TOKEN_TYPE)? != TOKEN_PRIMARY
+        || verified_token_user_sid(token.0)?.as_slice() != LOCAL_SYSTEM_SID.as_slice()
+        || groups(token.0)?.iter().any(|group| {
+            group.sid.as_slice() == expected_service && enabled(group.attributes)
+        })
+    {
+        return Err(denied("Bootstrap must be non-service LocalSystem actor"));
+    }
+    Ok(token)
+}
+
+#[cfg(feature = "installer-parent-bootstrap-source")]
+fn checked_installer_acl(
+    service_sid: &[u8], canonical: &str,
+) -> io::Result<CandidateDescriptor> {
+    let descriptor = candidate_descriptor(&service_root_acl_candidate(canonical)?)?;
+    let mut dacl: H = ptr::null_mut();
+    let mut present = 0i32;
+    let mut defaulted = 0i32;
+    if unsafe {
+        GetSecurityDescriptorDacl(
+            descriptor.0, &mut present, &mut dacl, &mut defaulted,
+        )
+    } == 0 || present == 0 || dacl.is_null() {
+        return Err(denied("Bootstrap root candidate is missing a DACL"));
+    }
+    exact_service_root_acl(dacl, service_sid)?;
+    Ok(descriptor)
+}
+
+#[cfg(feature = "installer-parent-bootstrap-source")]
+impl PendingInstallerParent {
+    fn verify(&self) -> io::Result<()> {
+        require_nonimpersonating_thread()?;
+        require_registered_scm_sid_type()?;
+        // A rechecked service SID/ACL is insufficient if the bootstrap
+        // process token or thread security context changes during I/O.
+        let _installer = checked_installer_actor(&self.expected_service)?;
+        let known = open_known_programdata_source()?;
+        if root_file_identity(&known)? != self.programdata_id
+            || root_file_identity(&self.programdata)? != self.programdata_id
+        {
+            return Err(denied("Installer ProgramData identity changed"));
+        }
+        verify_installer_parent_link(&self.programdata, &self.parent)?;
+        if root_file_identity(&self.parent)? != self.parent_id {
+            return Err(denied("Installer parent FILE_ID changed"));
+        }
+        let descriptor = existing_root_descriptor(&self.parent, &self.expected_service)?;
+        let active = enumerate_active_ids()?;
+        review_root_peer_denials(&descriptor, &active)?;
+        if enumerate_active_ids()? != active
+            || root_file_identity(&self.programdata)? != self.programdata_id
+            || root_file_identity(&self.parent)? != self.parent_id
+            || expected_service_sid()? != self.expected_service
+        {
+            return Err(denied("Installer root/SID/logon changed during native readback"));
+        }
+        require_nonimpersonating_thread()?;
+        let _ = checked_installer_actor(&self.expected_service)?;
+        Ok(())
+    }
+}
+
+/// Unbundled, feature-gated DISTRIBUTION bootstrap only. No arbitrary
+/// names, path arguments, ACL repair, SCM changes, deletion or game I/O.
+/// Only the fixed ProgramData/MIVUBIIndependentHost FILE_CREATE is allowed.
+#[cfg(feature = "installer-parent-bootstrap-source")]
+pub(crate) fn provision_installer_parent_source() -> io::Result<()> {
+    require_nonimpersonating_thread()?;
+    require_registered_scm_sid_type()?;
+    let service_sid = expected_service_sid()?;
+    let actor = checked_installer_actor(&service_sid)?;
+    let canonical = format_exact_service_sid(&service_sid)?;
+    let programdata = open_known_programdata_source()?;
+    let programdata_id = root_file_identity(&programdata)?;
+    let active = enumerate_active_ids()?;
+    let descriptor = checked_installer_acl(&service_sid, &canonical)?;
+    let system = duplicate_for_access_check(actor.0)?;
+    for right in [
+        ROOT_LIST, ROOT_ADD_FILE, ROOT_ADD_DIRECTORY,
+        ROOT_TRAVERSE, ROOT_READ_CONTROL,
+    ] {
+        if !root_access(&descriptor, &system, right)? {
+            return Err(denied("Installer LocalSystem lacks required root rights"));
+        }
+    }
+    review_root_peer_denials(&descriptor, &active)?;
+    if enumerate_active_ids()? != active {
+        return Err(denied("Interactive logon set changed before installer root creation"));
+    }
+    // Applying the candidate DACL on FILE_CREATE is atomic; a pre-existing
+    // name is NEVER adopted or fixed. On postflight error, never delete.
+    let parent = relative_fixed_service_child(
+        &programdata, INSTALLER_PARENT_CHILD, NT_FILE_CREATE, Some(&descriptor),
+    )?;
+    let parent_id = root_file_identity(&parent)?;
+    if parent_id.volume != programdata_id.volume || parent_id == programdata_id {
+        return Err(denied("Installer parent crossed the ProgramData file volume"));
+    }
+    let created = PendingInstallerParent {
+        programdata, programdata_id, parent, parent_id,
+        expected_service: service_sid,
+    };
+    created.verify()?;
+    if enumerate_active_ids()? != active {
+        return Err(denied("Interactive users changed during parent provisioning"));
+    }
+    Ok(())
 }
 
 /// Actually ask Windows to evaluate a candidate descriptor against the WTS
@@ -1306,6 +1529,21 @@ fn expected_service_sid() -> io::Result<Vec<u8>> {
     Ok(sid)
 }
 
+/// Only native, exact S-1-5-80 service SID bytes are formatted for ACLs.
+fn format_exact_service_sid(sid: &[u8]) -> io::Result<String> {
+    if !service_sid(sid) || sid.len() != 32 {
+        return Err(denied("Invalid Windows service SID"));
+    }
+    let mut result = String::from("S-1-5-80");
+    for part in sid[12..].chunks_exact(4) {
+        let value = u32::from_le_bytes(part.try_into()
+            .map_err(|_| denied("Invalid service SID subauthority"))?);
+        result.push('-');
+        result.push_str(&value.to_string());
+    }
+    Ok(result)
+}
+
 /// This MUST execute before creating the service-owned named pipe.
 /// Missing/disabled/deny-only SID prevents the feature from starting.
 pub(super) fn verified_current_service_sid() -> io::Result<String> {
@@ -1319,14 +1557,7 @@ pub(super) fn verified_current_service_sid() -> io::Result<String> {
     if groups(token.0)?.iter().filter(|g| g.sid == expected && enabled(g.attributes)).count() != 1 {
         return Err(denied("SCM process lacks enabled MIVUBI service SID"));
     }
-    // Only format the exact Windows-resolved S-1-5-80 SID.
-    let mut result = String::from("S-1-5-80");
-    for bytes in expected[12..].chunks_exact(4) {
-        let n = u32::from_le_bytes(bytes.try_into().map_err(|_| denied("Invalid SID bytes"))?);
-        result.push('-');
-        result.push_str(&n.to_string());
-    }
-    Ok(result)
+    format_exact_service_sid(&expected)
 }
 
 /// A unique enabled S-1-5-5-X-Y group must be marked SE_GROUP_LOGON_ID.
@@ -1708,7 +1939,8 @@ mod tests {
         // No installer-path, CLI or client profile API is exposed here.
         let source = include_str!("service_identity.rs");
         assert!(source.contains("relative_installer_parent(programdata: &File)"));
-        assert!(source.contains("child == INSTALLER_PARENT_CHILD && disposition == NT_FILE_OPEN"));
+        assert!(source.contains("let installer_open = child == INSTALLER_PARENT_CHILD && disposition == NT_FILE_OPEN;"));
+        assert!(source.contains("let installer_create = false;"));
         assert!(source.contains("verify_installer_parent_link(&programdata, &parent)?;"));
     }
 
@@ -1731,6 +1963,29 @@ mod tests {
             nt_root_create_outcome(NT_STATUS_ACCESS_DENIED as i32, 0)
                 .unwrap_err().kind(), io::ErrorKind::PermissionDenied,
         );
+    }
+
+    #[test]
+    fn canonical_service_sid_text_rejects_non_service_principal() {
+        let mut sid = vec![1, 6, 0, 0, 0, 0, 0, 5];
+        for rid in [80u32, 10, 20, 30, 40, 50] {
+            sid.extend_from_slice(&rid.to_le_bytes());
+        }
+        assert_eq!(format_exact_service_sid(&sid).unwrap(),
+            "S-1-5-80-10-20-30-40-50");
+        sid[8] = 81;
+        assert!(format_exact_service_sid(&sid).is_err());
+        assert!(format_exact_service_sid(&LOCAL_SYSTEM_SID).is_err());
+    }
+
+    #[cfg(feature = "installer-parent-bootstrap-source")]
+    #[test]
+    fn explicit_parent_bootstrap_has_no_different_acl_or_name_owner() {
+        assert_eq!(REGISTERED_SCM_NAME, INSTALLER_PARENT_CHILD);
+        let code = include_str!("service_identity.rs");
+        assert!(code.contains("require_registered_scm_sid_type()?;"));
+        assert!(code.contains("checked_installer_actor(&service_sid)?;"));
+        assert!(code.contains("let installer_create = child == INSTALLER_PARENT_CHILD && disposition == NT_FILE_CREATE;"));
     }
 
     #[test]

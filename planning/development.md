@@ -1,6 +1,39 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Distribution — source-only SYSTEM installer parent bootstrap, 23 October 2026
+
+Created separate `engine/distribution/service-parent-bootstrap/`
+Cargo binary with no default features. Its only opt-in entrypoint
+requires the exact `--create-fixed-parent` flag; it is NOT added
+to current-user NSIS/Tauri packaging. It compiles the existing
+`service_identity.rs` policy as a shared Rust source module,
+without a parallel SID/ACL policy.
+
+The shared owner now checks installed SID-enabled
+`MIVUBIIndependentHost` SCM configuration and a separate
+nonimpersonating LocalSystem PRIMARY actor. It obtains the actual
+OS service SID and ProgramData HANDLE, preflights the exact
+SYSTEM/service protected two-ACE DACL and denies listed rights
+to the current active WTS desktop tokens. It creates only the
+fixed ProgramData service parent with NT FILE_CREATE, never
+adopting or deleting existing data. Postflight reopens the parent
+and checks FILE_ID, DACL, service SID and active peer access.
+Original SCM service builds still OPEN the installer parent only;
+normal installers and service startup do not invoke this code.
+
+**Proof:** pinned GitHub source/static review, tests authored but
+NOT_EXECUTED. Rust/Windows compilation, privileged SCM service
+checks, signed installer, trusted ancestor DACLs, game filesystem
+and HKCU/WAM enforcement, four-client acceptance NOT_EXECUTED.
+No account/world, existing installation, GitHub Actions or
+release `main` changes. New-client Launch/Provision remains
+BLOCKED.
+
+**Next:** validate cross-crate compilation and an independently
+signed privileged installer contract before any packaging wiring.
+
+
 ## SCM root — OS Known Folder and installer-parent HANDLE binding, 23 October 2026
 
 Continued source implementation in the canonical opt-in

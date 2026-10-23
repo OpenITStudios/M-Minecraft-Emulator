@@ -11,6 +11,8 @@ default = []
 # EXPLICIT OPT-IN SOURCE PILOT ONLY, not a release/installer feature.
 # Does not enable Minecraft launch or privileged storage calls.
 readonly-ipc-pilot = ["dep:virtual-clients-core", "dep:windows-sys", "dep:sha2"]
+# Feature is used only by a separate, unbundled privileged distribution bootstrap.
+installer-parent-bootstrap-source = ["dep:windows-sys"]
 
 # Standalone and not installed, packaged, mounted or invoked by Tauri.
 # No Sandboxie binary, DLL, driver, service or source dependency.

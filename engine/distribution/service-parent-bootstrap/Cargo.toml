@@ -1,0 +1,17 @@
+[package]
+name = "mivubi-service-parent-bootstrap"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.98"
+publish = false
+description = "Opt-in standalone privileged SCM parent provisioner"
+
+[features]
+default = []
+# Not mounted by the current-user desktop installer or Windows service.
+installer-parent-bootstrap-source = ["dep:windows-sys"]
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", optional = true, features = [
+    "Win32_Foundation", "Win32_Storage_FileSystem"
+] }

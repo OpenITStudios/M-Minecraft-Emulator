@@ -152,6 +152,34 @@ provider unavailable
 A staged path is surfaced only while the staged installer file still exists. Missing staged files are not presented as usable update state.
 
 
+## Native installer-owned service parent (source-only)
+
+A separate, unbundled Cargo source project exists at
+`engine/distribution/service-parent-bootstrap/`. Its default feature
+set is empty; only explicitly compiling
+`installer-parent-bootstrap-source` and passing exactly
+`--create-fixed-parent` can reach its Windows routine. The current
+user-scoped desktop NSIS installer, package manifest and hooks do
+NOT build, ship or call this executable.
+
+It imports the *same* `independent-service/src/service_identity.rs`
+source: no duplicate Windows SID, ProgramData HANDLE or ACL policy.
+The source requires an already registered SCM service with supported
+SID type, an independent nonimpersonating LocalSystem primary token,
+a real ProgramData Known Folder anchor and the exact protected
+SYSTEM/service SID two-ACE DACL. It refuses direct peer rights for
+currently active Windows desktop tokens. Only the fixed existing
+SCM-name parent may be newly created with NtCreateFile(FILE_CREATE).
+Existing directories are refused, never adopted or repaired.
+Postflight verifies real parent HANDLE identity, ACL, service SID
+and peer tokens. No deletions, installer upgrades, service starts,
+profile/credential/world writes or desktop launcher changes occur.
+
+**Not approved for release:** native compilation and privileges,
+a signed privileged installer and trusted ancestor chain,
+Windows SCM installation, actual Education HKCU/Roaming/WAM routing,
+and four-client acceptance all remain unverified.
+
 ## Installer ownership authority
 
 Canonical installer behavior is defined by:

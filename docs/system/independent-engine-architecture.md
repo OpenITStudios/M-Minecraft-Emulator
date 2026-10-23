@@ -11,6 +11,22 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Opt-in installer-owned SCM parent creator (23 October 2026)
+
+The standalone distribution bootstrap is disabled in default builds,
+unbundled from Tauri/NSIS and independent of SCM startup or IPC.
+It shares the same service SID, Windows Known Folder, protected DACL
+and peer AccessCheck source as the SCM observer. With a separate
+LocalSystem primary actor and an already SID-enabled registered
+service, its only supported mutation is atomic FILE_CREATE of
+`ProgramData\\MIVUBIIndependentHost` using the retained
+ProgramData HANDLE. Exact ACL/file-object readback prevents silently
+adopting existing or alternate roots; failures never delete data.
+
+The current-user installer has no authority to provision SYSTEM
+roots. The standalone actor has not been signed, installed or run.
+This is not four-client Minecraft isolation.
+
 ### Bind service-root parent to OS ProgramData Known Folder (23 October 2026)
 
 The existing gated, unmounted Windows SCM storage owner now rejects an
