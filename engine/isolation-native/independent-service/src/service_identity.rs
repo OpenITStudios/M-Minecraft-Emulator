@@ -62,6 +62,22 @@ const ERROR_NO_TOKEN: u32 = 1008;
 // Fixed service-managed metadata root name, NOT a Minecraft path. No IPC,
 // CLI or end-user filename reaches the native create helper.
 const SERVICE_ROOT_CHILD: &str = "mivubi-independent-root";
+// Must already be installed by a separately reviewed, privileged installer.
+// This SOURCE-ONLY module can only OPEN it; never create, adopt, repair
+// or re-ACL an arbitrary directory masquerading as the installer parent.
+const INSTALLER_PARENT_CHILD: &str = "MIVUBIIndependentHost";
+// FOLDERID_ProgramData is a machine-wide FIXED Windows Known Folder,
+// NOT caller-supplied %PROGRAMDATA%, HOME, environment or IPC path.
+// {62AB5D82-FDC1-4DC3-A9DD-070D1D495D97} from knownfolderid.h.
+const PROGRAM_DATA_KNOWN_FOLDER: NativeGuid = NativeGuid {
+    data1: 0x62AB_5D82, data2: 0xFDC1, data3: 0x4DC3,
+    data4: [0xA9, 0xDD, 0x07, 0x0D, 0x1D, 0x49, 0x5D, 0x97],
+};
+const COM_MULTITHREADED: u32 = 0;
+const NT_FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+const NT_FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+const WIN32_OPEN_EXISTING: u32 = 3;
+const MAX_PROGRAMDATA_UTF16: usize = 1024;
 const NT_FILE_CREATE: u32 = 2;
 const NT_FILE_OPEN: u32 = 1;
 const NT_FILE_CREATED: usize = 2;
@@ -94,6 +110,12 @@ struct AclSizeInformation {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct RootFileIdentity { volume: u32, index: u64 }
 
+/// The COM GUID memory representation is fixed in Windows guiddef.h.
+#[repr(C)]
+struct NativeGuid {
+    data1: u32, data2: u16, data3: u16, data4: [u8; 8],
+}
+
 /// Native user-mode ABI used only for a fixed, single-component,
 /// directory-HANDLE-relative create or open. All fields match winternl.h.
 #[repr(C)]
@@ -114,12 +136,16 @@ struct NtIoStatusBlock {
     status_or_pointer: usize, information: usize,
 }
 
-/// Retain BOTH directory HANDLEs, verified file IDs and the exact fixed
-/// child name. Dropping this source-only object closes the handles but
-/// NEVER deletes a newly created directory or user/world/profile data.
-/// It is not an IPC/exportable capability.
+/// Retain ALL directory HANDLEs, verified file IDs and fixed names.
+/// Dropping this source-only object closes handles but NEVER deletes
+/// a newly created directory or user/world/profile data.
+
 #[allow(dead_code)]
 struct PendingCreatedServiceRoot {
+    // Service-parent provenance must be rechecked through the OS-known
+    // machine data anchor before every source-only root observation.
+    programdata: File,
+    programdata_id: RootFileIdentity,
     parent: File,
     directory: File,
     parent_id: RootFileIdentity,
@@ -191,6 +217,19 @@ unsafe extern "system" {
         thread: H, desired_access: u32, open_as_self: i32, token: *mut H,
     ) -> i32;
 }
+#[link(name = "shell32")]
+unsafe extern "system" {
+    fn SHGetKnownFolderPath(
+        folder: *const NativeGuid, flags: u32,
+        token: H, path: *mut *mut u16,
+    ) -> i32;
+}
+#[link(name = "ole32")]
+unsafe extern "system" {
+    fn CoInitializeEx(reserved: H, concurrency: u32) -> i32;
+    fn CoUninitialize();
+    fn CoTaskMemFree(memory: H);
+}
 #[link(name = "ntdll")]
 unsafe extern "system" {
     fn NtCreateFile(
@@ -207,6 +246,14 @@ unsafe extern "system" {
     fn GetCurrentProcess() -> H;
     fn GetCurrentThread() -> H;
     fn GetLastError() -> u32;
+    fn CreateFileW(
+        path: *const u16, access: u32, share: u32,
+        attributes: H, disposition: u32, flags: u32,
+        template: H,
+    ) -> H;
+    fn GetFinalPathNameByHandleW(
+        file: H, buffer: *mut u16, capacity: u32, flags: u32,
+    ) -> u32;
     fn CloseHandle(handle: H) -> i32;
     fn LocalFree(memory: H) -> H;
 }
@@ -703,6 +750,148 @@ fn review_existing_service_root_source(root: &File)
     Ok(PendingServiceRootReview { active_logons_sampled: active.len() })
 }
 
+/// COM initialization is paired on this thread even if a Windows Known
+/// Folder query fails. A mismatched COM apartment fails closed; no attempt
+/// is made to change or impersonate an interactive user's thread.
+struct ComApartment;
+impl ComApartment {
+    fn enter() -> io::Result<Self> {
+        let result = unsafe { CoInitializeEx(ptr::null_mut(), COM_MULTITHREADED) };
+        if result < 0 {
+            return Err(denied("SCM Known Folder lookup requires a supported COM apartment"));
+        }
+        Ok(Self)
+    }
+}
+impl Drop for ComApartment {
+    fn drop(&mut self) {
+        unsafe { CoUninitialize() };
+    }
+}
+struct KnownFolderString(*mut u16);
+impl Drop for KnownFolderString {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            unsafe { CoTaskMemFree(self.0.cast()) };
+        }
+    }
+}
+
+/// Fail closed on UNC, extended namespace, relative, dot-segment and
+/// non-ASCII known-folder paths. This is intentionally narrower than all
+/// possible Windows installations until Unicode/reparse chain validation
+/// is independently tested. No end-user path is passed to this helper.
+fn expected_known_folder_final_path(path: &str) -> io::Result<String> {
+    let bytes = path.as_bytes();
+    if bytes.len() < 4 || bytes.len() > 900
+        || !path.is_ascii()
+        || !bytes[0].is_ascii_alphabetic()
+        || bytes[1] != b':' || bytes[2] != b'\\'
+        || path.contains('/')
+        || path.ends_with('\\')
+        || path.split('\\').any(|part| {
+            part.is_empty() || part == "." || part == ".."
+                || part.ends_with('.') || part.ends_with(' ')
+                || part.contains(':') && part.len() > 2
+        })
+    {
+        return Err(denied("ProgramData Known Folder is not an unambiguous local drive path"));
+    }
+    Ok(format!("\\\\?\\{path}"))
+}
+
+/// Obtain a real nonreparse directory HANDLE from FOLDERID_ProgramData,
+/// *never* by consulting environment variables or an IPC path. Compare the
+/// OS-returned normalized HANDLE path to the Known Folder path; if any
+/// reparse traversal, drive substitution or unsupported volume syntax
+/// changes the resolved location, refuse the anchor.
+fn open_known_programdata_source() -> io::Result<File> {
+    require_nonimpersonating_thread()?;
+    let _com = ComApartment::enter()?;
+    let mut raw_path: *mut u16 = ptr::null_mut();
+    let hr = unsafe {
+        SHGetKnownFolderPath(
+            &PROGRAM_DATA_KNOWN_FOLDER, 0, ptr::null_mut(), &mut raw_path,
+        )
+    };
+    let guard = KnownFolderString(raw_path);
+    if hr != 0 || guard.0.is_null() {
+        return Err(denied("Windows ProgramData Known Folder is unavailable"));
+    }
+    let mut length = 0usize;
+    while length < MAX_PROGRAMDATA_UTF16 {
+        if unsafe { *guard.0.add(length) } == 0 {
+            break;
+        }
+        length += 1;
+    }
+    if length == 0 || length == MAX_PROGRAMDATA_UTF16 {
+        return Err(denied("Unbounded ProgramData Known Folder string"));
+    }
+    let text = String::from_utf16(unsafe {
+        std::slice::from_raw_parts(guard.0, length)
+    }).map_err(|_| denied("ProgramData Known Folder has invalid UTF-16"))?;
+    let expected = expected_known_folder_final_path(&text)?;
+    let wide: Vec<u16> = text.encode_utf16().chain(Some(0)).collect();
+    let raw = unsafe {
+        CreateFileW(
+            wide.as_ptr(), NT_FILE_READ_ATTRIBUTES | ROOT_READ_CONTROL | ROOT_TRAVERSE,
+            NT_FILE_SHARE_READ | NT_FILE_SHARE_WRITE, ptr::null_mut(),
+            WIN32_OPEN_EXISTING,
+            NT_FILE_FLAG_BACKUP_SEMANTICS | NT_FILE_FLAG_OPEN_REPARSE_POINT,
+            ptr::null_mut(),
+        )
+    };
+    if raw.is_null() || raw == (-1isize as H) {
+        return Err(io::Error::last_os_error());
+    }
+    let folder = unsafe { File::from_raw_handle(raw) };
+    root_file_identity(&folder)?;
+    let mut final_name = [0u16; MAX_PROGRAMDATA_UTF16];
+    let count = unsafe {
+        GetFinalPathNameByHandleW(
+            folder.as_raw_handle() as H,
+            final_name.as_mut_ptr(), final_name.len() as u32, 0,
+        )
+    };
+    if count == 0 || count as usize >= final_name.len() {
+        return Err(denied("ProgramData resolved HANDLE path is missing or oversized"));
+    }
+    let resolved = String::from_utf16(&final_name[..count as usize])
+        .map_err(|_| denied("ProgramData final HANDLE path has invalid UTF-16"))?;
+    if !expected.eq_ignore_ascii_case(&resolved) {
+        return Err(denied("ProgramData HANDLE resolves outside OS Known Folder"));
+    }
+    require_nonimpersonating_thread()?;
+    Ok(folder)
+}
+
+/// Require a canonical installer-created service parent immediately under
+/// ProgramData. The supplied parent HANDLE must refer to the SAME file
+/// object as the fixed child reopened relative to the OS Known Folder
+/// HANDLE. A forged path or a merely matching DACL cannot replace it.
+/// The known folder's own ancestor DACLs and elevated administrators remain
+/// separately unresolved; this returns no launch or storage admission.
+fn verify_installer_parent_link(
+    programdata: &File, parent: &File,
+) -> io::Result<()> {
+    let root = root_file_identity(programdata)?;
+    let current = root_file_identity(parent)?;
+    let reopened = relative_installer_parent(programdata)?;
+    if root.volume != current.volume || root == current
+        || root_file_identity(&reopened)? != current
+        || root_file_identity(programdata)? != root
+    {
+        return Err(denied("Installer parent is not fixed child of OS ProgramData HANDLE"));
+    }
+    Ok(())
+}
+
+fn relative_installer_parent(programdata: &File) -> io::Result<File> {
+    relative_fixed_service_child(programdata, INSTALLER_PARENT_CHILD,
+        NT_FILE_OPEN, None)
+}
+
 /// The ONLY permitted root name is fixed by code. In particular a
 /// forged parent-relative path, DOS device, arbitrary slot or reparse name
 /// cannot be smuggled through the factory's native OBJECT_ATTRIBUTES.
@@ -741,23 +930,25 @@ fn nt_root_create_outcome(status: i32, information: usize)
     Ok(())
 }
 
-/// Atomically create OR open one fixed directory name below a retained
-/// parent HANDLE. The candidate SYSTEM/service-SID security descriptor
-/// is applied ONLY with FILE_CREATE. The open path is read-only metadata
-/// and supplies NO descriptor, preventing any implicit ACL modifications.
-/// An existing name is NEVER opened by the create path.
-fn relative_service_root(
-    parent: &File,
-    disposition: u32,
+/// One HANDLE-relative native I/O helper for ONLY the two fixed names
+/// with distinct dispositions. An installer parent can ONLY be opened;
+/// only the inner service root may be newly created with the exact reviewed
+/// protected DACL. No caller-supplied path or slot is accepted.
+fn relative_fixed_service_child(
+    parent: &File, child: &str, disposition: u32,
     candidate: Option<&CandidateDescriptor>,
 ) -> io::Result<File> {
-    checked_service_root_name(SERVICE_ROOT_CHILD)?;
-    if (disposition == NT_FILE_CREATE) != candidate.is_some()
-        || !matches!(disposition, NT_FILE_CREATE | NT_FILE_OPEN)
+    if !matches!(disposition, NT_FILE_CREATE | NT_FILE_OPEN)
+        || (disposition == NT_FILE_CREATE) != candidate.is_some()
+        || !(child == SERVICE_ROOT_CHILD
+            || child == INSTALLER_PARENT_CHILD && disposition == NT_FILE_OPEN)
     {
-        return Err(denied("Unsupported native root create/open disposition"));
+        return Err(denied("Unsupported native service-child name or disposition"));
     }
-    let mut wide: Vec<u16> = SERVICE_ROOT_CHILD.encode_utf16().collect();
+    if child == SERVICE_ROOT_CHILD {
+        checked_service_root_name(child)?;
+    }
+    let mut wide: Vec<u16> = child.encode_utf16().collect();
     let byte_len = wide.len().checked_mul(mem::size_of::<u16>())
         .filter(|len| *len <= u16::MAX as usize)
         .ok_or_else(|| denied("Native service-root UTF-16 name exceeded bounds"))?;
@@ -817,11 +1008,28 @@ fn relative_service_root(
     Ok(result)
 }
 
+fn relative_service_root(
+    parent: &File,
+    disposition: u32,
+    candidate: Option<&CandidateDescriptor>,
+) -> io::Result<File> {
+    relative_fixed_service_child(
+        parent, SERVICE_ROOT_CHILD, disposition, candidate,
+    )
+}
+
 impl PendingCreatedServiceRoot {
     /// Read-only revalidation. Even a successful result is not an approved
     /// Windows filesystem virtualization owner or a Minecraft launch grant.
     fn verify(&self) -> io::Result<PendingServiceRootReview> {
         require_nonimpersonating_thread()?;
+        let fresh_os_folder = open_known_programdata_source()?;
+        if root_file_identity(&fresh_os_folder)? != self.programdata_id
+            || root_file_identity(&self.programdata)? != self.programdata_id
+        {
+            return Err(denied("Windows ProgramData Known Folder anchor changed"));
+        }
+        verify_installer_parent_link(&self.programdata, &self.parent)?;
         let active_before = enumerate_active_ids()?;
         let parent_report = review_existing_service_root_source(&self.parent)?;
         if root_file_identity(&self.parent)? != self.parent_id {
@@ -837,6 +1045,7 @@ impl PendingCreatedServiceRoot {
         }
         let child_report = review_existing_service_root_source(&self.directory)?;
         if root_file_identity(&self.parent)? != self.parent_id
+            || root_file_identity(&self.programdata)? != self.programdata_id
             || enumerate_active_ids()? != active_before
             || parent_report.active_logons_sampled != active_before.len()
             || child_report.active_logons_sampled != active_before.len()
@@ -852,10 +1061,11 @@ impl PendingCreatedServiceRoot {
 
 /// SOURCE-ONLY fresh root factory, deliberately unreachable from SCM
 /// startup, named pipe handlers, desktop IPC, installers and game launch.
-/// The supplied parent MUST be a held directory HANDLE independently
-/// anchored by a future trusted SCM installation/parent ownership path.
-/// Its current security descriptor, service SID and WTSActive peer access
-/// are reviewed here, but this DOES NOT attest ancestor-directory ACLs.
+/// The caller's parent HANDLE MUST match the fixed, existing installer
+/// directory reopened below Windows FOLDERID_ProgramData. It is never
+/// adopted by name alone; only its exact same native FILE_ID is accepted.
+/// Full drive-root ancestry ACLs, installer signature and privilege scope
+/// remain unproven: this cannot activate client or game access.
 /// No arbitrary child names, host profiles or Minecraft paths are accepted.
 ///
 /// On post-create failure leave the new object untouched for deliberate
@@ -866,6 +1076,11 @@ fn create_fresh_service_root_source(parent: File)
 {
     checked_service_root_name(SERVICE_ROOT_CHILD)?;
     require_nonimpersonating_thread()?;
+    // The OS machine-wide anchor is obtained INSIDE this source owner,
+    // not from a caller-supplied File or environment variable.
+    let programdata = open_known_programdata_source()?;
+    let programdata_id = root_file_identity(&programdata)?;
+    verify_installer_parent_link(&programdata, &parent)?;
     let parent_id = root_file_identity(&parent)?;
     let active_before = enumerate_active_ids()?;
     review_existing_service_root_source(&parent)?;
@@ -880,6 +1095,7 @@ fn create_fresh_service_root_source(parent: File)
         return Err(denied("Fresh service-root child was not distinct on parent volume"));
     }
     let created = PendingCreatedServiceRoot {
+        programdata, programdata_id,
         parent, directory, parent_id, directory_id,
     };
     created.verify()?;
@@ -1458,6 +1674,42 @@ mod tests {
             assert!(checked_service_root_name(forged).is_err(),
                 "Unexpected service-root path accepted: {forged}");
         }
+    }
+
+    #[test]
+    fn os_knownfolder_path_rejects_unc_relative_device_and_traversal() {
+        assert_eq!(expected_known_folder_final_path("C:\\ProgramData").unwrap(),
+            "\\\\?\\C:\\ProgramData");
+        assert_eq!(expected_known_folder_final_path("D:\\Machine\\Data").unwrap(),
+            "\\\\?\\D:\\Machine\\Data");
+        for path in [
+            "", "ProgramData", "C:ProgramData", "C:/ProgramData",
+            "\\\\server\\share", "\\\\?\\C:\\ProgramData",
+            "C:\\ProgramData\\..\\Users", "C:\\ProgramData\\.\\Other",
+            "C:\\ProgramData\\", "C:\\ProgramData ",
+            "C:\\ProgramData.\\Other", "C:\\Data:Stream",
+            "C:\\éxtra",
+        ] {
+            assert!(expected_known_folder_final_path(path).is_err(),
+                "Ambiguous ProgramData path accepted: {path}");
+        }
+    }
+
+    #[test]
+    fn fixed_installer_parent_cannot_be_created_or_reused_as_service_root() {
+        assert_ne!(INSTALLER_PARENT_CHILD, SERVICE_ROOT_CHILD);
+        assert_eq!(PROGRAM_DATA_KNOWN_FOLDER.data1, 0x62AB_5D82);
+        assert_eq!(PROGRAM_DATA_KNOWN_FOLDER.data2, 0xFDC1);
+        assert_eq!(PROGRAM_DATA_KNOWN_FOLDER.data3, 0x4DC3);
+        assert_eq!(PROGRAM_DATA_KNOWN_FOLDER.data4,
+            [0xA9, 0xDD, 0x07, 0x0D, 0x1D, 0x49, 0x5D, 0x97]);
+        // Parent never gets a constructor: the file must ALREADY exist
+        // with the SYSTEM/service ACL and exact expected native FILE_ID.
+        // No installer-path, CLI or client profile API is exposed here.
+        let source = include_str!("service_identity.rs");
+        assert!(source.contains("relative_installer_parent(programdata: &File)"));
+        assert!(source.contains("child == INSTALLER_PARENT_CHILD && disposition == NT_FILE_OPEN"));
+        assert!(source.contains("verify_installer_parent_link(&programdata, &parent)?;"));
     }
 
     #[test]

@@ -11,6 +11,47 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Bind service-root parent to OS ProgramData Known Folder (23 October 2026)
+
+The existing gated, unmounted Windows SCM storage owner now rejects an
+otherwise correctly ACL'd but **arbitrarily supplied parent HANDLE**. In
+`service_identity.rs`, `open_known_programdata_source` reads the real
+machine-wide `FOLDERID_ProgramData` through
+`SHGetKnownFolderPath` on a nonimpersonating, COM-initialized thread;
+it never consults `%PROGRAMDATA%`, `%APPDATA%`, a requested IPC path,
+or Minecraft data. It opens that directory using `CreateFileW`
+with `FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT`
+and no delete-sharing, refuses a final reparse object, and
+compares the normalized path returned by
+`GetFinalPathNameByHandleW` to the OS-known-folder location. This
+initial source route intentionally refuses UNC, non-ASCII,
+unsupported namespaces and redirected traversal until independently
+reviewed; it can fail closed on legitimate relocated installations.
+
+It then reopens ONLY the fixed existing
+`MIVUBIIndependentHost` installer-owned parent name with
+`NtCreateFile(FILE_OPEN)`, relative to the retained ProgramData
+HANDLE, and compares the resulting volume/file-index to the exact
+caller-supplied parent HANDLE. The parent must also satisfy the
+previous exact SYSTEM/service-SID protected ACL and effective desktop
+peer review; the factory cannot create, adopt or repair that
+installer parent. The returned pending fresh-root object now
+retains the ProgramData HANDLE and its ID, and rechecks the OS
+Known Folder identity plus parent-child HANDLE lineage before its
+ordinary root/ACL/service/WTS checks. The previously implemented
+inner child creation remains fixed-name `FILE_CREATE` only.
+
+This provides a stronger **source-only root ancestry binding**, not
+complete trusted installer provenance. The privileged installer has
+not yet created or attested the fixed parent; ACLs of drive-root
+intermediates, administrator privileges and actual Minecraft profile
+routing remain unresolved. No startup/IPC route invokes this code,
+no Windows directory was touched, and source tests are authored but
+NOT_EXECUTED. Microsoft references:
+[Known Folder IDs](https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid),
+[SHGetKnownFolderPath](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shgetknownfolderpath),
+[GetFinalPathNameByHandleW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlew).
+
 ### SCM fresh-only root creation under a retained Windows parent HANDLE (23 October 2026)
 
 The original opt-in SCM service identity owner now includes an **unmounted**

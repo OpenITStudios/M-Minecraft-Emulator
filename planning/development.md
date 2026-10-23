@@ -1,6 +1,47 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## SCM root — OS Known Folder and installer-parent HANDLE binding, 23 October 2026
+
+Continued source implementation in the canonical opt-in
+`engine/isolation-native/independent-service/src/service_identity.rs`.
+The previous fresh-root factory accepted any Windows directory HANDLE
+whose ACL looked service-owned. The factory now obtains the actual
+`FOLDERID_ProgramData` from Windows Shell API internally, with
+COM lifetime/CoTaskMemFree cleanup and nonimpersonation. It validates
+the returned machine folder as a bounded local drive path, opens a
+nonreparse HANDLE with no delete sharing, and requires the normalized
+actual HANDLE path to equal the OS-known-folder path. This
+intentionally rejects uncommon UNC, Unicode and redirected cases
+rather than falsely treating them as secure.
+
+A fixed `MIVUBIIndependentHost` directory under ProgramData is
+reopened with HANDLE-relative `NtCreateFile(FILE_OPEN)` (never
+created or repaired by this service source). The caller's parent
+HANDLE must be the SAME volume/file-index as that exact existing
+installer parent. It must still pass all pre-existing SYSTEM/service
+SID, exact DACL and active desktop peer token checks.
+`PendingCreatedServiceRoot` retains the ProgramData HANDLE and
+rechecks the OS anchor and parent link on subsequent verification.
+Only the nested `mivubi-independent-root` may be created via
+`FILE_CREATE`; service startup and IPC remain unwired.
+Two focused regressions added for rejecting ambiguous OS-known
+folder paths and ensuring the installer parent is fixed/open-only.
+
+**Proof:** pinned exact GitHub source/static review; Windows Known
+Folder API/NT file-handle semantics reviewed against Microsoft docs.
+Rust compilation/native Windows tests and Minecraft runtime
+NOT_EXECUTED. No installer deployment, service start, privilege/ACL
+changes, actual Windows root creation, user data, world/credential
+access, CI, main or Launch/Provision modification. This binds to
+an OS-owned location, NOT to an independently installed/trusted
+program's signature and NOT to all ancestor ACLs.
+
+**Next:** implement explicit installer-owned parent creation/provenance
+contract under the existing distribution owner, retaining current
+strict default OFF until Windows acceptance is possible.
+
+
 ## Independent SCM root — fresh HANDLE-relative creation, 23 October 2026
 
 Implemented the next bounded native source component in the existing
