@@ -152,6 +152,31 @@ provider unavailable
 A staged path is surfaced only while the staged installer file still exists. Missing staged files are not presented as usable update state.
 
 
+### Service binary configuration and signed-release admission
+
+A registered service **name or service SID alone is not trusted binary
+provenance**. The unbundled bootstrap now queries
+`QueryServiceConfigW` in the canonical SCM native owner, with a
+bounded 8-KiB output allocation and pointer-safe UTF-16 field reads.
+It requires an own-process, non-interactive LocalSystem service,
+manual/disabled start configuration, and a single quoted absolute
+`mivubi-independent-service.exe` pathname without arguments or
+Windows path ambiguity. The actual file HANDLE must be regular,
+nonreparse, non-hardlinked, nonempty, and resolve to the expected
+path; native FILE_ID/size/write-time and SCM registration are checked
+again. The values are never logged or exposed in desktop UI.
+
+**Bootstrap creation is still blocked by design.** Neither a valid
+service configuration nor a generically Authenticode-signed file
+establishes a reviewed, pinned MIVUBI service signer/installer
+payload. That signed-release policy has not been approved or
+verified, so the source always refuses provisioning before
+acquiring `FILE_ADD_SUBDIRECTORY` on ProgramData. Do not remove
+the gate merely to test a directory. An independently signed
+privileged installation and executable provenance implementation,
+with native Windows tests, are still prerequisites. Current-user
+NSIS and service startup remain unchanged.
+
 ## Native installer-owned service parent (source-only)
 
 A separate, unbundled Cargo source project exists at

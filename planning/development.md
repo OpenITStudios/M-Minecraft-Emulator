@@ -1,6 +1,52 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
 
+## Distribution bootstrap — real SCM binary-config audit and signer deny gate, 23 October 2026
+
+Audited the feature-gated privileged bootstrap from HEAD
+`b8b2e4130f53904552c753b60d3ecf6086a63e75`. Previously
+`require_registered_scm_sid_type` trusted an installed service NAME
+and non-NONE SERVICE_SID_INFO only, then could create a protected
+parent directory. A spoofed service registration or unexpected
+BinaryPathName was not checked at all.
+
+Added source-only read-only SCM executable inspection in the
+existing `service_identity.rs` Windows owner: bounded native
+`QueryServiceConfigW` with in-allocation UTF-16 pointer checks,
+strict quoted absolute executable/no-argument path policy,
+exact own-process LocalSystem/manual-or-disabled service type,
+plus actual HANDLE checks rejecting empty/reparse/multi-hardlink
+files and unexpected final paths. It rereads SCM configuration
+and FILE_ID/size/write-time before returning only PENDING
+diagnostics. No path, raw SID, image bytes or signer material
+is serialized. Three focused regression functions cover
+configuration/path refusal, native pointer bounds and signer
+admission denial.
+
+**Critical blocker made explicit:** The checked-in MIVUBI service
+installer/publisher signer pin and signed installed-payload binding
+are STILL ABSENT. A generic signed exe or correct metadata is not
+authorized. A new mandatory
+`require_attested_service_release_before_mutation()` refusal
+runs BEFORE bootstrap can open ProgramData with
+`FILE_ADD_SUBDIRECTORY` or call FILE_CREATE. Do NOT interpret this
+as a Windows service being installed, or alter the false gate
+to admit a fabricated signature. The previous
+`peer_image.rs` observer concerns a live desktop IPC client and
+is not equivalent to trusted SCM binary provenance.
+
+**Proof:** pinned GitHub source/static inspection and Microsoft
+QueryServiceConfigW/GetFinalPathNameByHandleW contracts. Rust
+compilation/regressions, Windows SCM/WinTrust/signed installer,
+actual Minecraft Roaming/HKCU/WAM and four-client acceptance all
+NOT_EXECUTED. No service, Tauri/NSIS resources, GitHub Actions,
+main, installed OS data or Minecraft account/world changed.
+
+**Next:** implement signed-release publisher/file identity
+provenance grounded in an actually reviewed installer manifest,
+without enabling service launch or removing the current denial.
+
+
 ## Distribution bootstrap — ProgramData create-right fix, 23 October 2026
 
 Audited latest `Local` bootstrap source and found a concrete

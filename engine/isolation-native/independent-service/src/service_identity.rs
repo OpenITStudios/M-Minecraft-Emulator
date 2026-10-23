@@ -78,6 +78,18 @@ const SERVICE_CONFIG_SERVICE_SID_INFO: u32 = 5;
 const SERVICE_SID_TYPE_UNRESTRICTED: u32 = 1;
 #[cfg(feature = "installer-parent-bootstrap-source")]
 const SERVICE_SID_TYPE_RESTRICTED: u32 = 3;
+#[cfg(feature = "installer-parent-bootstrap-source")]
+const SERVICE_WIN32_OWN_PROCESS: u32 = 0x0000_0010;
+#[cfg(feature = "installer-parent-bootstrap-source")]
+const SERVICE_DEMAND_START: u32 = 3;
+#[cfg(feature = "installer-parent-bootstrap-source")]
+const SERVICE_DISABLED: u32 = 4;
+#[cfg(feature = "installer-parent-bootstrap-source")]
+const MAX_SERVICE_CONFIG_BYTES: usize = 8 * 1024;
+#[cfg(feature = "installer-parent-bootstrap-source")]
+const SERVICE_IMAGE_BASENAME: &str = "mivubi-independent-service.exe";
+#[cfg(feature = "installer-parent-bootstrap-source")]
+const MAX_SERVICE_IMAGE_PATH_CHARS: usize = 2048;
 // FOLDERID_ProgramData is a machine-wide FIXED Windows Known Folder,
 // NOT caller-supplied %PROGRAMDATA%, HOME, environment or IPC path.
 // {62AB5D82-FDC1-4DC3-A9DD-070D1D495D97} from knownfolderid.h.
@@ -124,6 +136,35 @@ struct RootFileIdentity { volume: u32, index: u64 }
 #[cfg(feature = "installer-parent-bootstrap-source")]
 #[repr(C)]
 struct ServiceSidInfo { sid_type: u32 }
+
+// ABI-equivalent QUERY_SERVICE_CONFIGW, including native pointer alignment.
+// SCM returns pointer fields INTO the same caller-owned native output buffer.
+#[cfg(feature = "installer-parent-bootstrap-source")]
+#[repr(C)]
+struct NativeScmConfig {
+    service_type: u32,
+    start_type: u32,
+    error_control: u32,
+    binary_path: *mut u16,
+    load_group: *mut u16,
+    tag_id: u32,
+    dependencies: *mut u16,
+    service_account: *mut u16,
+    display_name: *mut u16,
+}
+#[cfg(feature = "installer-parent-bootstrap-source")]
+#[derive(Eq, PartialEq)]
+struct PendingScmImageConfig {
+    absolute_image_path: String,
+    service_type: u32,
+    start_type: u32,
+    service_account: String,
+}
+#[cfg(feature = "installer-parent-bootstrap-source")]
+#[derive(Clone, Copy, Eq, PartialEq)]
+struct ScmFileSnapshot {
+    volume: u32, file_id: u64, size: u64, modified: u64,
+}
 #[cfg(feature = "installer-parent-bootstrap-source")]
 struct OwnedScmHandle(H);
 #[cfg(feature = "installer-parent-bootstrap-source")]
@@ -221,6 +262,11 @@ unsafe extern "system" {
     #[cfg(feature = "installer-parent-bootstrap-source")]
     fn QueryServiceConfig2W(
         service: H, level: u32, output: *mut u8,
+        capacity: u32, required: *mut u32,
+    ) -> i32;
+    #[cfg(feature = "installer-parent-bootstrap-source")]
+    fn QueryServiceConfigW(
+        service: H, output: *mut NativeScmConfig,
         capacity: u32, required: *mut u32,
     ) -> i32;
     #[cfg(feature = "installer-parent-bootstrap-source")]
@@ -1212,6 +1258,206 @@ fn create_fresh_service_root_source(parent: File)
     Ok(created)
 }
 
+/// No reviewed signed MIVUBI service release / publisher certificate
+/// binding exists in this repository. The signer's leaf fingerprint list
+/// for peer_image.rs is ALSO empty and is tied to a different, live PEER
+/// process, not the registered SCM binary. A path, SCM type and generic
+/// Authenticode success cannot substitute for that independent proof.
+#[cfg(feature = "installer-parent-bootstrap-source")]
+fn require_attested_service_release_before_mutation() -> io::Result<()> {
+    Err(denied(
+        "No approved signed MIVUBI SCM service executable and signer provenance",
+    ))
+}
+
+/// A conservative COMMAND-LINE parser for the single source-owned service
+/// executable. Requiring an entirely quoted absolute binary pathname with
+/// no arguments excludes Windows unquoted-service-path ambiguity, command
+/// switches, NT device aliases, environmental expansion and ADS names.
+/// This does NOT prove the path or its publisher is trusted.
+#[cfg(feature = "installer-parent-bootstrap-source")]
+fn strict_scm_image_path(command: &str) -> io::Result<String> {
+    if command.len() < 7 || !command.starts_with('"')
+        || !command.ends_with('"') || !command.is_ascii()
+    {
+        return Err(denied("SCM image must be a quoted absolute Win32 executable"));
+    }
+    let path = &command[1..command.len()-1];
+    if path.contains('"') || path.contains('%')
+        || path.bytes().any(|b| b < 32 || matches!(b, b'<' | b'>' | b'|' | b'*' | b'?'))
+        || !path.rsplit('\\').next()
+            .is_some_and(|name| name.eq_ignore_ascii_case(SERVICE_IMAGE_BASENAME))
+    {
+        return Err(denied("SCM image contains unsupported arguments or path components"));
+    }
+    // This existing source owner insists on a local drive path without
+    // dot/parent components, noncanonical extensions or device namespaces.
+    let _ = expected_known_folder_final_path(path)?;
+    Ok(path.to_owned())
+}
+
+/// Before reading Windows' raw pointer-valued native configuration, prove
+/// every UTF-16 code unit lies inside THIS aligned SCM output allocation.
+/// Do not assume a service ImagePath or account string is NUL-terminated.
+#[cfg(feature = "installer-parent-bootstrap-source")]
+fn bounded_scm_string(
+    pointer: *mut u16, buffer: &[usize], byte_span: usize,
+) -> io::Result<String> {
+    let start = buffer.as_ptr() as usize;
+    let end = start.checked_add(byte_span)
+        .ok_or_else(|| denied("SCM configuration buffer overflow"))?;
+    let address = pointer as usize;
+    if pointer.is_null() || byte_span < mem::size_of::<NativeScmConfig>()
+        || byte_span > mem::size_of_val(buffer)
+        || address < start + mem::size_of::<NativeScmConfig>()
+        || address >= end || address % mem::align_of::<u16>() != 0
+    {
+        return Err(denied("SCM string pointer is outside its native allocation"));
+    }
+    let units = ((end - address) / mem::size_of::<u16>())
+        .min(MAX_SERVICE_IMAGE_PATH_CHARS + 1);
+    if units == 0 {
+        return Err(denied("Empty SCM string storage"));
+    }
+    // SAFETY: The pointer, address alignment and entire units span are
+    // contained within a retained usize-aligned SCM output allocation.
+    let values = unsafe { std::slice::from_raw_parts(pointer, units) };
+    let size = values.iter().position(|v| *v == 0)
+        .ok_or_else(|| denied("Unterminated SCM binary or service-account field"))?;
+    if size == 0 || size > MAX_SERVICE_IMAGE_PATH_CHARS {
+        return Err(denied("Unsupported SCM configuration string length"));
+    }
+    String::from_utf16(&values[..size])
+        .map_err(|_| denied("Invalid UTF-16 SCM configuration field"))
+}
+
+/// Read the actual SCM registration (not a registry path supplied by IPC).
+/// All Windows SCM pointers are bounded to the returned 8-KiB allocation;
+/// only sanitized, private metadata is retained and never logged/serialized.
+#[cfg(feature = "installer-parent-bootstrap-source")]
+fn query_scm_image_config(service: H) -> io::Result<PendingScmImageConfig> {
+    let mut bytes = 0u32;
+    let probed = unsafe {
+        QueryServiceConfigW(service, ptr::null_mut(), 0, &mut bytes)
+    };
+    if probed != 0 || unsafe { GetLastError() } != ERROR_INSUFFICIENT_BUFFER
+        || (bytes as usize) < mem::size_of::<NativeScmConfig>()
+        || (bytes as usize) > MAX_SERVICE_CONFIG_BYTES
+    {
+        return Err(denied("SCM image configuration requires a bounded native buffer"));
+    }
+    let capacity = bytes as usize;
+    let mut words = vec![0usize; capacity.div_ceil(mem::size_of::<usize>())];
+    let mut returned = 0u32;
+    let ok = unsafe {
+        QueryServiceConfigW(
+            service, words.as_mut_ptr().cast(), capacity as u32, &mut returned,
+        )
+    };
+    if ok == 0 || returned as usize > capacity {
+        return Err(denied("SCM image configuration changed while querying"));
+    }
+    // SAFETY: The initial SCM size probe and aligned nonempty allocation
+    // guarantee the QUERY_SERVICE_CONFIGW header fits in live memory.
+    let cfg = unsafe { &*(words.as_ptr().cast::<NativeScmConfig>()) };
+    let image_command = bounded_scm_string(cfg.binary_path, &words, capacity)?;
+    let account = bounded_scm_string(cfg.service_account, &words, capacity)?;
+    let image = strict_scm_image_path(&image_command)?;
+    let candidate = PendingScmImageConfig {
+        absolute_image_path: image,
+        service_type: cfg.service_type,
+        start_type: cfg.start_type,
+        service_account: account,
+    };
+    review_scm_config_candidate(&candidate)?;
+    Ok(candidate)
+}
+
+/// Pure, separate configuration policy used by the real SCM query and
+/// source regressions. Correct service name and a registered SID are not
+/// substitutes for a dedicated, non-interactive LocalSystem own-process
+/// service with a manually controlled start mode.
+#[cfg(feature = "installer-parent-bootstrap-source")]
+fn review_scm_config_candidate(candidate: &PendingScmImageConfig) -> io::Result<()> {
+    if candidate.service_type != SERVICE_WIN32_OWN_PROCESS
+        || !matches!(candidate.start_type, SERVICE_DEMAND_START | SERVICE_DISABLED)
+        || !candidate.service_account.eq_ignore_ascii_case("LocalSystem")
+        || strict_scm_image_path(&format!("\"{}\"", candidate.absolute_image_path))?
+            != candidate.absolute_image_path
+    {
+        return Err(denied("SCM binary type, startup policy or LocalSystem account is unsafe"));
+    }
+    Ok(())
+}
+
+/// Read-only native file inspection of the EXACT SCM-configured executable.
+/// No file data or user profile is read. A hard link/reparse point, empty PE
+/// placeholder, changed file object or unexpected final pathname fails.
+#[cfg(feature = "installer-parent-bootstrap-source")]
+fn image_snapshot(file: &File) -> io::Result<ScmFileSnapshot> {
+    let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { mem::zeroed() };
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle() as H, &mut info) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let file_id = (u64::from(info.nFileIndexHigh) << 32)
+        | u64::from(info.nFileIndexLow);
+    let size = (u64::from(info.nFileSizeHigh) << 32)
+        | u64::from(info.nFileSizeLow);
+    let modified = (u64::from(info.ftLastWriteTime.dwHighDateTime) << 32)
+        | u64::from(info.ftLastWriteTime.dwLowDateTime);
+    if info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT) != 0
+        || file_id == 0 || size == 0 || info.nNumberOfLinks != 1
+    {
+        return Err(denied("SCM executable file is not a unique regular file object"));
+    }
+    Ok(ScmFileSnapshot {
+        volume: info.dwVolumeSerialNumber, file_id, size, modified,
+    })
+}
+
+#[cfg(feature = "installer-parent-bootstrap-source")]
+fn inspect_registered_service_image_source(service: H) -> io::Result<()> {
+    let first = query_scm_image_config(service)?;
+    let path = &first.absolute_image_path;
+    let wide: Vec<u16> = path.encode_utf16().chain(Some(0)).collect();
+    let raw = unsafe {
+        CreateFileW(
+            wide.as_ptr(), NT_FILE_READ_ATTRIBUTES,
+            NT_FILE_SHARE_READ, ptr::null_mut(), WIN32_OPEN_EXISTING,
+            NT_FILE_OPEN_REPARSE_POINT, ptr::null_mut(),
+        )
+    };
+    if raw.is_null() || raw == (-1isize as H) {
+        return Err(denied("Registered SCM executable cannot be opened as a regular file"));
+    }
+    let file = unsafe { File::from_raw_handle(raw) };
+    let before = image_snapshot(&file)?;
+    let mut final_name = [0u16; MAX_SERVICE_IMAGE_PATH_CHARS + 8];
+    let n = unsafe {
+        GetFinalPathNameByHandleW(
+            file.as_raw_handle() as H, final_name.as_mut_ptr(),
+            final_name.len() as u32, 0,
+        )
+    };
+    if n == 0 || n as usize >= final_name.len() {
+        return Err(denied("SCM executable HANDLE pathname is unavailable"));
+    }
+    let canonical = String::from_utf16(&final_name[..n as usize])
+        .map_err(|_| denied("SCM executable HANDLE has invalid final path"))?;
+    if !expected_known_folder_final_path(path)?
+        .eq_ignore_ascii_case(&canonical)
+    {
+        return Err(denied("SCM executable points outside its configured file identity"));
+    }
+    let second = query_scm_image_config(service)?;
+    if first != second || image_snapshot(&file)? != before {
+        return Err(denied("SCM binary or registered executable changed during review"));
+    }
+    // PENDING ONLY. Signed installed-release provenance is NOT established;
+    // require_attested_service_release_before_mutation() blocks the create.
+    Ok(())
+}
+
 /// Require the installed SCM service (not just LookupAccountName) to
 /// have the exact named service and a configured non-NONE service SID.
 #[cfg(feature = "installer-parent-bootstrap-source")]
@@ -1243,6 +1489,9 @@ fn require_registered_scm_sid_type() -> io::Result<()> {
     ) {
         return Err(denied("Registered MIVUBI SCM service lacks an enabled service SID type"));
     }
+    // Service name/SID alone are never sufficient: read actual SCM binary
+    // registration and exact on-disk HANDLE metadata without trusting it.
+    inspect_registered_service_image_source(service.0)?;
     Ok(())
 }
 
@@ -1334,6 +1583,11 @@ pub(crate) fn provision_installer_parent_source() -> io::Result<()> {
     let service_sid = expected_service_sid()?;
     let actor = checked_installer_actor(&service_sid)?;
     let canonical = format_exact_service_sid(&service_sid)?;
+    // SCM config/path/file metadata are only PENDING evidence. Until
+    // verified signed installer publisher + binary identity is pinned,
+    // even an explicit LocalSystem bootstrap must not obtain a parent
+    // FILE_ADD_SUBDIRECTORY HANDLE or create any Windows directory.
+    require_attested_service_release_before_mutation()?;
     // FILE_CREATE below needs FILE_ADD_SUBDIRECTORY on the ProgramData
     // parent HANDLE. The ordinary read-only Known Folder handle does NOT
     // request this right and must not silently authorize this operation.
@@ -1948,6 +2202,107 @@ mod tests {
             assert!(checked_service_root_name(forged).is_err(),
                 "Unexpected service-root path accepted: {forged}");
         }
+    }
+
+    #[cfg(feature = "installer-parent-bootstrap-source")]
+    #[test]
+    fn scm_binary_config_rejects_unquoted_paths_arguments_and_wrong_service_type() {
+        let path = r"C:\Program Files\MIVUBI\mivubi-independent-service.exe";
+        assert_eq!(
+            strict_scm_image_path(&format!("\"{path}\"")).unwrap(), path,
+        );
+        for invalid in [
+            path.to_owned(),
+            format!("\"{path}\" --run"),
+            r#""C:\Windows\System32\cmd.exe""#.to_owned(),
+            r#""C:\Program Files\MIVUBI\..\evil\mivubi-independent-service.exe""#.to_owned(),
+            r#""%ProgramFiles%\MIVUBI\mivubi-independent-service.exe""#.to_owned(),
+            r#""\\server\share\mivubi-independent-service.exe""#.to_owned(),
+            r#""C:\Program Files\MIVUBI\mivubi-independent-service.exe:stream""#.to_owned(),
+        ] {
+            assert!(strict_scm_image_path(&invalid).is_err(),
+                "Unexpected accepted SCM command-line format");
+        }
+        let valid = PendingScmImageConfig {
+            absolute_image_path: path.to_owned(),
+            service_type: SERVICE_WIN32_OWN_PROCESS,
+            start_type: SERVICE_DEMAND_START,
+            service_account: "LocalSystem".to_owned(),
+        };
+        assert!(review_scm_config_candidate(&valid).is_ok());
+        assert!(review_scm_config_candidate(&PendingScmImageConfig {
+            start_type: SERVICE_DISABLED, ..PendingScmImageConfig {
+                absolute_image_path: path.to_owned(),
+                service_type: SERVICE_WIN32_OWN_PROCESS,
+                start_type: SERVICE_DEMAND_START,
+                service_account: "LocalSystem".to_owned(),
+            }
+        }).is_ok());
+        for service_type in [0u32, 1, 2, 0x20, 0x110] {
+            let variant = PendingScmImageConfig {
+                absolute_image_path: path.to_owned(), service_type,
+                start_type: SERVICE_DEMAND_START,
+                service_account: "LocalSystem".to_owned(),
+            };
+            assert!(review_scm_config_candidate(&variant).is_err());
+        }
+        for start_type in [0u32, 1, 2, 5] {
+            let variant = PendingScmImageConfig {
+                absolute_image_path: path.to_owned(),
+                service_type: SERVICE_WIN32_OWN_PROCESS, start_type,
+                service_account: "LocalSystem".to_owned(),
+            };
+            assert!(review_scm_config_candidate(&variant).is_err());
+        }
+        let wrong_user = PendingScmImageConfig {
+            absolute_image_path: path.to_owned(),
+            service_type: SERVICE_WIN32_OWN_PROCESS,
+            start_type: SERVICE_DEMAND_START,
+            service_account: "NT AUTHORITY\\NETWORK SERVICE".to_owned(),
+        };
+        assert!(review_scm_config_candidate(&wrong_user).is_err());
+    }
+
+    #[cfg(feature = "installer-parent-bootstrap-source")]
+    #[test]
+    fn scm_native_output_strings_require_buffer_lineage_and_termination() {
+        let mut words = vec![0usize; 80];
+        let header = mem::size_of::<NativeScmConfig>();
+        let content: Vec<u16> = "LocalSystem".encode_utf16().chain(Some(0)).collect();
+        assert!(header + content.len() * 2 <= mem::size_of_val(&words));
+        let pointer = unsafe {
+            words.as_mut_ptr().cast::<u8>().add(header).cast::<u16>()
+        };
+        unsafe {
+            ptr::copy_nonoverlapping(content.as_ptr(), pointer, content.len());
+        }
+        let full = mem::size_of_val(&words);
+        assert_eq!(
+            bounded_scm_string(pointer, &words, full).unwrap(), "LocalSystem",
+        );
+        assert!(bounded_scm_string(ptr::null_mut(), &words, full).is_err());
+        assert!(bounded_scm_string(words.as_mut_ptr().cast(), &words, full).is_err());
+        assert!(bounded_scm_string(pointer, &words, header + 2).is_err());
+        assert!(bounded_scm_string(pointer, &words, full + 2).is_err());
+        assert!(bounded_scm_string(unsafe {
+            pointer.cast::<u8>().add(1).cast()
+        }, &words, full).is_err());
+    }
+
+    #[cfg(feature = "installer-parent-bootstrap-source")]
+    #[test]
+    fn scm_metadata_and_generic_signature_can_never_unlock_parent_creation() {
+        assert_eq!(SERVICE_IMAGE_BASENAME, "mivubi-independent-service.exe");
+        assert_eq!(MAX_SERVICE_CONFIG_BYTES, 8192);
+        assert_eq!(
+            require_attested_service_release_before_mutation()
+                .unwrap_err().kind(), io::ErrorKind::PermissionDenied,
+        );
+        // This blocker MUST remain before a privileged ProgramData open.
+        let source = include_str!("service_identity.rs");
+        let gate = source.find("    require_attested_service_release_before_mutation()?;").unwrap();
+        let create = source.find("    let programdata = open_known_programdata_for_installer_parent(&service_sid)?;").unwrap();
+        assert!(gate < create);
     }
 
     #[test]

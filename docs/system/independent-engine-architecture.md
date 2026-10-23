@@ -11,6 +11,50 @@ lifecycle: ACTIVE
 
 ## Product invariant and licensing boundary
 
+### Native SCM executable-config and identity gate (23 October 2026)
+
+The optional standalone installer bootstrap now reads the **actual**
+registered `MIVUBIIndependentHost` configuration using the bounded
+`QueryServiceConfigW` API in the existing Windows
+`independent-service/src/service_identity.rs` owner. The code
+validates SCM's returned pointer-valued Unicode fields against their
+own at-most-8-KiB native buffer and refuses an ambiguous service
+command line, arguments, environment expansion, remote/device paths,
+wrong executable basename, non-LocalSystem service account,
+shared/interactive/driver service types and unreviewed auto-start
+policy. It opens the configured executable as a **read-only OS file
+HANDLE**, refuses reparse objects, hard links, empty files and a
+mismatched final resolved path. The SCM configuration and the native
+file object metadata are rechecked against the initial snapshot.
+
+These checks establish only **pending registered image metadata**,
+NOT proof that the service is a trusted release. Microsoft notes that
+a queried SCM configuration may reflect the *next* service start,
+rather than a binary already running. The previous live-process
+`peer_image.rs` observer also cannot be repurposed to attest a
+possibly stopped SCM executable. No approved MIVUBI installer/service
+signer pin and loaded-image/installed-payload binding exists at this
+revision. Therefore `provision_installer_parent_source` now
+**fails closed before opening a directory-creation-capable ProgramData
+HANDLE** via the explicit
+`require_attested_service_release_before_mutation` blocker.
+Installing/enabling the optional binary does NOT bypass this gate.
+
+The existing current-user NSIS hooks and package payloads are
+unmodified. No service registration, filesystem mutation or
+installer signing occurs in this source commit. Three focused
+Windows Rust regression functions cover native SCM path/config
+policy, pointer/buffer integrity and the mandatory lack of signer
+authorization. Tests/builds are authored but NOT_EXECUTED; CI
+remains disabled. Only a future independently signed, pinned and
+Windows-verified service release can justify implementing the
+currently absent positive attestation path.
+
+Official references:
+[QueryServiceConfigW](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/nf-winsvc-queryserviceconfigw),
+[QUERY_SERVICE_CONFIGW](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-query_service_configw),
+[GetFinalPathNameByHandleW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlew).
+
 ### Opt-in installer-owned SCM parent creator (23 October 2026)
 
 The standalone distribution bootstrap is disabled in default builds,
