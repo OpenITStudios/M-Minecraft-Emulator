@@ -393,6 +393,67 @@ pub fn matches_native_workspace_target(
         })
 }
 
+// Process-family evidence for the official game's transient sign-in helper.
+// Parent-PID affinity is not authentication attestation and cannot authorize
+// a new Minecraft session, WAM broker, filesystem route or launch.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NativeAuthHelperCandidate {
+    pub pid: u32,
+    pub created_file_time: String,
+    pub same_windows_user: bool,
+    pub same_profile_directory: bool,
+    pub same_windows_session: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NativeAuthGameFamily {
+    pub game_pid: u32,
+    pub game_created_file_time: String,
+    pub helper_candidates: Vec<NativeAuthHelperCandidate>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NativeAuthFamilyObservation {
+    pub schema: u32,
+    pub evidence_class: String,
+    pub games: Vec<NativeAuthGameFamily>,
+    pub unattributed_candidate_count: u32,
+}
+
+fn validate_native_auth_family(value: &NativeAuthFamilyObservation) -> io::Result<()> {
+    if value.schema != 1
+        || value.evidence_class != "REGISTERED_GAME_AUTH_HELPER_PARENT_CANDIDATES_ONLY"
+        || value.games.len() > 4 || value.unattributed_candidate_count > 16
+    {
+        return Err(invalid_evidence("Invalid native Minecraft authentication family observation"));
+    }
+    let mut games = HashSet::new();
+    let mut helpers = HashSet::new();
+    for game in &value.games {
+        if game.game_pid == 0 || !games.insert(game.game_pid)
+            || game.game_created_file_time.parse::<u64>().ok().filter(|n| *n != 0).is_none()
+            || game.helper_candidates.len() > 16
+        {
+            return Err(invalid_evidence("Invalid official game identity or authentication family size"));
+        }
+        for helper in &game.helper_candidates {
+            if helper.pid == 0 || helper.pid == game.game_pid || !helpers.insert(helper.pid)
+                || helper.created_file_time.parse::<u64>().ok().filter(|n| *n != 0).is_none()
+                || !helper.same_windows_session
+            {
+                return Err(invalid_evidence("Invalid/duplicated authentication helper process identity"));
+            }
+        }
+    }
+    if helpers.len() + value.unattributed_candidate_count as usize > 16 {
+        return Err(invalid_evidence("Too many same-session authentication helper candidates"));
+    }
+    Ok(())
+}
+
 // This observer performs real Windows process/window enumeration using native
 // OS handles. Only the already-existing registered Education installation
 // preflight calls PowerShell; enumeration never executes a script.
@@ -573,10 +634,9 @@ mod native_workspace_windows {
         }))
     }
 
-    pub(super) fn inspect() -> io::Result<NativeWorkspaceObservation> {
-        // Only the official registered installation / Microsoft signer policy
-        // is accepted. No world files, command lines or account data are read.
-        let target = super::registered_education_target()?;
+    fn inspect_for_registered_target(target: &str) -> io::Result<NativeWorkspaceObservation> {
+        // The caller first resolved the single signed registered Education
+        // image. This loop performs no PowerShell, WAM or account-file I/O.
         let target_wide: Vec<u16> = target.encode_utf16().collect();
         let mut current_session = 0;
         if unsafe { ProcessIdToSessionId(std::process::id(), &mut current_session) } == 0
@@ -624,6 +684,145 @@ mod native_workspace_windows {
         let raw = serde_json::to_string(&observation).map_err(io::Error::other)?;
         parse_native_workspace_observation(&raw)
     }
+
+    pub(super) fn inspect() -> io::Result<NativeWorkspaceObservation> {
+        let target = super::registered_education_target()?;
+        inspect_for_registered_target(&target)
+    }
+
+    /// One on-demand snapshot of actual Windows processes associated with
+    /// the game's documented Minecraft.AdalServer.exe login helper. Names
+    /// and Toolhelp parent PIDs are merely candidates; the helper could be
+    /// transient, launched by another process, or replaced while inspecting.
+    pub(super) fn inspect_auth_family() -> io::Result<NativeAuthFamilyObservation> {
+        let target = super::registered_education_target()?;
+        let before = inspect_for_registered_target(&target)?;
+        let helper_path = std::path::Path::new(&target)
+            .with_file_name("Minecraft.AdalServer.exe");
+        let helper_image: Vec<u16> = helper_path.to_string_lossy().encode_utf16().collect();
+        let expected_name: Vec<u16> = "Minecraft.AdalServer.exe".encode_utf16().collect();
+        let mut session = 0;
+        if unsafe { ProcessIdToSessionId(std::process::id(), &mut session) } == 0
+            || session == 0
+        {
+            return Err(io::Error::new(io::ErrorKind::PermissionDenied,
+                "Interactive Windows session required to inspect sign-in helper processes"));
+        }
+
+        let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+        if snapshot == INVALID_HANDLE_VALUE { return Err(io::Error::last_os_error()); }
+        let snapshot = OwnedHandle(snapshot);
+        let mut entry: PROCESSENTRY32W = unsafe { mem::zeroed() };
+        entry.dwSize = mem::size_of::<PROCESSENTRY32W>() as u32;
+        if unsafe { Process32FirstW(snapshot.0, &mut entry) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let mut games: Vec<NativeAuthGameFamily> = before.processes.iter()
+            .map(|game| NativeAuthGameFamily {
+                game_pid: game.pid,
+                game_created_file_time: game.created_file_time.clone(),
+                helper_candidates: Vec::new(),
+            }).collect();
+        let mut unattributed = 0u32;
+        let mut seen_helpers = HashSet::new();
+        loop {
+            if exact_windows_path(executable_name(&entry)?, &expected_name) {
+                let pid = entry.th32ProcessID;
+                let mut candidate_session = 0;
+                if unsafe { ProcessIdToSessionId(pid, &mut candidate_session) } == 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                // Never open handles to Minecraft sign-in helpers belonging
+                // to a different Windows login session.
+                if candidate_session == session {
+                    if !seen_helpers.insert(pid) || seen_helpers.len() > 16 {
+                        return Err(invalid_evidence("Ambiguous or excessive sign-in helpers"));
+                    }
+                    let parent_index = games.iter().position(|game| game.game_pid == entry.th32ParentProcessID);
+                    if let Some(index) = parent_index {
+                        // A verified directory match is still not an image
+                        // SECTION signature or a game-authentication verdict.
+                        if let Some(helper) = observe_one(pid, &helper_image, session)? {
+                            let parent = &games[index];
+                            let game_created = parent.game_created_file_time.parse::<u64>()
+                                .map_err(|_| invalid_evidence("Invalid registered game creation time"))?;
+                            let helper_created = helper.created_file_time.parse::<u64>()
+                                .map_err(|_| invalid_evidence("Invalid sign-in helper creation time"))?;
+                            if helper_created <= game_created {
+                                unattributed += 1;
+                            } else {
+                                let context = super::super::instance_identity::compare_contexts(
+                                    &super::super::instance_identity::ProcessKey {
+                                        pid: parent.game_pid,
+                                        created_file_time: parent.game_created_file_time.clone(),
+                                    },
+                                    &super::super::instance_identity::ProcessKey {
+                                        pid: helper.pid,
+                                        created_file_time: helper.created_file_time.clone(),
+                                    },
+                                )?;
+                                games[index].helper_candidates.push(NativeAuthHelperCandidate {
+                                    pid: helper.pid,
+                                    created_file_time: helper.created_file_time,
+                                    same_windows_user: context.same_windows_user,
+                                    same_profile_directory: context.same_profile_directory,
+                                    same_windows_session: context.same_windows_session,
+                                });
+                            }
+                        } else {
+                            // Same process NAME but wrong on-disk image path.
+                            // Do not misattribute another installed program.
+                            unattributed += 1;
+                        }
+                    } else {
+                        // The game's helper can also be broker-launched and
+                        // unrelated same-session processes can share a name.
+                        unattributed += 1;
+                    }
+                }
+            }
+            if unsafe { Process32NextW(snapshot.0, &mut entry) } == 0 {
+                if io::Error::last_os_error().raw_os_error() != Some(ERROR_NO_MORE_FILES as i32) {
+                    return Err(io::Error::last_os_error());
+                }
+                break;
+            }
+        }
+
+        // Parent PID relationships alone cannot authenticate live processes.
+        // Recheck each official game PID/FILETIME/session/HWND after helper
+        // identity comparisons to refuse a stale or replaced game process.
+        let after = inspect_for_registered_target(&target)?;
+        if before.processes.len() != after.processes.len()
+            || before.processes.iter().any(|game| !after.processes.iter().any(|fresh|
+                fresh.pid == game.pid
+                && fresh.created_file_time == game.created_file_time
+                && fresh.session_id == game.session_id
+                && fresh.window_handle == game.window_handle))
+        {
+            return Err(io::Error::new(io::ErrorKind::NotFound,
+                "Registered Minecraft process changed during authentication helper inspection"));
+        }
+        let report = NativeAuthFamilyObservation {
+            schema: 1,
+            evidence_class: "REGISTERED_GAME_AUTH_HELPER_PARENT_CANDIDATES_ONLY".into(),
+            games,
+            unattributed_candidate_count: unattributed,
+        };
+        validate_native_auth_family(&report)?;
+        Ok(report)
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub fn inspect_native_auth_family() -> io::Result<NativeAuthFamilyObservation> {
+    native_workspace_windows::inspect_auth_family()
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn inspect_native_auth_family() -> io::Result<NativeAuthFamilyObservation> {
+    Err(io::Error::new(io::ErrorKind::Unsupported,
+        "Minecraft sign-in helper inspection requires Windows"))
 }
 
 #[cfg(target_os = "windows")]

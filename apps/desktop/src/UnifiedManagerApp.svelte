@@ -3,7 +3,7 @@
   import OwnedManagerPanel from './OwnedManagerPanel.svelte';
   import NativeWorkspace from './NativeWorkspace.svelte';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
-  import {nativeFeasibility,type NativeWorkspaceObservation} from './app/bridge/nativeFeasibilityApi.js';
+  import {nativeFeasibility,type NativeWorkspaceObservation,type NativeAuthFamilyObservation} from './app/bridge/nativeFeasibilityApi.js';
   import {observedIds,reconcileObservedSlots,type ObservedSlotMap} from './app/presentation/nativeObservedSlots.js';
   import type {ClientId} from './app/bridge/ownedProviderApi.js';
   import type {OwnedSnapshot} from './app/bridge/ownedProviderApi.js';
@@ -16,6 +16,7 @@
   let tabStates:Record<ClientId,string>={"01":"Checking","02":"Checking","03":"Checking","04":"Checking"};
   let contextClient:ClientId='02',contextResult:ContextComparison|null=null,contextError='';
   let nativeSession:NativeWorkspaceObservation|null=null,nativeError='',nativePending=false;
+  let authFamily:NativeAuthFamilyObservation|null=null,authFamilyError='';
   let sessionView:'native'|'legacy'='native',observedSlots:ObservedSlotMap={};
   $: if(sessionView==='native')tabStates={
     '01':observedSlots['01']?(observedSlots['01'].responding?'Observed':'Not responding'):nativePending?'Launch pending':nativeError?'Check needed':'Not opened',
@@ -60,7 +61,7 @@
   async function inspectNative(){
     // Prior comparison evidence must never survive a changed Windows game
     // inventory, including PID reuse, sign-out or window replacement.
-    contextResult=null;contextError='';
+    contextResult=null;contextError='';authFamily=null;authFamilyError='';
     try{nativeSession=await nativeFeasibility.inspectNativeWorkspace();observedSlots=reconcileObservedSlots(observedSlots,nativeSession.processes);nativeError='';return nativeSession;}
     catch(error){nativeSession=null;nativeError=operationIssue(error).details;return null;}
   }
@@ -74,6 +75,13 @@
         if(workspace&&sessionView==='native')await workspace.reconcileObserved(observedSlots);
       }
     }catch(error){issue=operationIssue(error);}
+    finally{busy=false;}
+  }
+  async function inspectAuthFamily(){
+    if(busy||workspaceBusy||sessionView!=='native')return;
+    busy=true;authFamily=null;authFamilyError='';
+    try{authFamily=await nativeFeasibility.inspectNativeAuthFamily();}
+    catch(error){authFamilyError=operationIssue(error).details;}
     finally{busy=false;}
   }
   async function playInWindows(client:ClientId){
@@ -217,6 +225,16 @@
     </div>
     {#if page==='settings'}
       <section class="um-settings"><details><summary>Independent engine diagnostics</summary>
+        {#if sessionView==='native'}
+          <p>Inspect the actual Minecraft.AdalServer.exe sign-in helper candidates tied by Windows process ancestry to registered game processes. This does not read credentials or WAM tokens, and absence of a helper outside the sign-in window is inconclusive.</p>
+          <button class="cm-button cm-secondary" disabled={busy||workspaceBusy||!config?.detectedMinecraft} on:click={inspectAuthFamily}>Inspect game sign-in process family</button>
+          {#if authFamily}<p role="status">{authFamily.games.length} registered game process(es); {authFamily.unattributedCandidateCount} unassigned same-session sign-in helper candidate(s). Parent PID and image path alone never prove isolated authentication.</p>
+            {#each authFamily.games as game}
+              <div class="um-setting"><strong>Game PID {game.gamePid}</strong><span>{game.helperCandidates.length} direct sign-in helper candidate(s). {game.helperCandidates.some(h=>!h.sameWindowsUser||!h.sameProfileDirectory||!h.sameWindowsSession)?'Windows identity mismatch observed; investigate before isolation.':'Process ancestry is not WAM/account isolation proof.'}</span></div>
+            {/each}
+          {/if}
+          {#if authFamilyError}<p role="alert">{authFamilyError}</p>{/if}
+        {/if}
         <p>Compare two actual Minecraft Education processes in the active view (native windows by default, or an explicitly recovered legacy session). The comparison checks Windows user, profile directory, and interactive session only—not Microsoft account, WAM, world storage isolation, or gameplay. It never launches a game.</p>
         <label>Compare with <select bind:value={contextClient} disabled={busy} on:change={()=>{contextResult=null;contextError='';}}><option value="02">Minecraft 02</option><option value="03">Minecraft 03</option><option value="04">Minecraft 04</option></select></label>
         <button class="cm-button cm-secondary" disabled={busy||workspaceBusy||(sessionView==='native'?(nativeSession===null||!observedSlots['01']||!observedSlots[contextClient]):(snapshot?.nativeProcesses.length!==1||!contextTarget))} on:click={inspectContext}>Compare observed Windows identities</button>

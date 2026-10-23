@@ -498,9 +498,64 @@ export function parseNativeWorkspaceObservation(value:unknown):NativeWorkspaceOb
   return value as unknown as NativeWorkspaceObservation;
 }
 
+// Exactly bounded, non-authorizing sign-in helper process-family evidence.
+// A missing child does not mean a missing broker; a matching child does not
+// establish a different licensed Microsoft account or private WAM storage.
+export interface NativeAuthFamilyObservation {
+  schema: 1;
+  evidenceClass: "REGISTERED_GAME_AUTH_HELPER_PARENT_CANDIDATES_ONLY";
+  games: {
+    gamePid: number;
+    gameCreatedFileTime: string;
+    helperCandidates: {
+      pid: number;
+      createdFileTime: string;
+      sameWindowsUser: boolean;
+      sameProfileDirectory: boolean;
+      sameWindowsSession: boolean;
+    }[];
+  }[];
+  unattributedCandidateCount: number;
+}
+
+export function parseNativeAuthFamilyObservation(value: unknown): NativeAuthFamilyObservation {
+  if(!isRecord(value) || !hasOnly(value, ["schema", "evidenceClass", "games", "unattributedCandidateCount"]) ||
+    value.schema!==1 || value.evidenceClass!=="REGISTERED_GAME_AUTH_HELPER_PARENT_CANDIDATES_ONLY" ||
+    !Array.isArray(value.games) || value.games.length>4 ||
+    !Number.isSafeInteger(value.unattributedCandidateCount) ||
+    (value.unattributedCandidateCount as number)<0 || (value.unattributedCandidateCount as number)>16)
+    throw new TypeError("Untrusted native game/authentication family.");
+  const games=new Set<number>(),helpers=new Set<number>();
+  const validPid=(v:unknown)=>typeof v==="number"&&Number.isSafeInteger(v)&&v>0&&v<=0xffffffff;
+  const validTime=(v:unknown)=>typeof v==="string"&&/^\d{1,20}$/.test(v)&&BigInt(v)>0n&&BigInt(v)<=0xffffffffffffffffn;
+  for(const game of value.games) {
+    if(!isRecord(game)||!hasOnly(game,["gamePid","gameCreatedFileTime","helperCandidates"]) ||
+      !validPid(game.gamePid) || games.has(game.gamePid as number) ||
+      !validTime(game.gameCreatedFileTime) ||
+      !Array.isArray(game.helperCandidates)||game.helperCandidates.length>16)
+      throw new TypeError("Untrusted native game identity.");
+    games.add(game.gamePid as number);
+    for(const helper of game.helperCandidates) {
+      if(!isRecord(helper)||!hasOnly(helper,[
+        "pid","createdFileTime","sameWindowsUser","sameProfileDirectory","sameWindowsSession"
+      ])||!validPid(helper.pid)||helper.pid===game.gamePid||helpers.has(helper.pid as number)||
+        !validTime(helper.createdFileTime) ||
+        typeof helper.sameWindowsUser!=="boolean" ||
+        typeof helper.sameProfileDirectory!=="boolean" || helper.sameWindowsSession!==true)
+        throw new TypeError("Untrusted sign-in helper identity.");
+      helpers.add(helper.pid as number);
+    }
+  }
+  if(helpers.size+(value.unattributedCandidateCount as number)>16)
+    throw new TypeError("Too many sign-in helper candidates.");
+  return value as unknown as NativeAuthFamilyObservation;
+}
+
 export const nativeFeasibility = {
   inspectNativeWorkspace:async():Promise<NativeWorkspaceObservation>=>
     parseNativeWorkspaceObservation(await invokeRuntime<unknown>("desktop_inspect_native_workspace")),
+  inspectNativeAuthFamily: async():Promise<NativeAuthFamilyObservation> =>
+    parseNativeAuthFamilyObservation(await invokeRuntime<unknown>("desktop_inspect_native_auth_family")),
   // Normal Windows activation, not a second Minecraft launch request.
   focusObservedNativeWindow: (target: OwnedProcess): Promise<void> =>
     invokeRuntime<void>("desktop_focus_observed_native_window", { target }),

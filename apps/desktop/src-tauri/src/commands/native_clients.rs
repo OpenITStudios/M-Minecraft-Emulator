@@ -27,6 +27,19 @@ pub async fn desktop_inspect_native_workspace(
     .map_err(|error| error.to_string())
 }
 
+/// Read-only Windows login-helper process-family evidence for official
+/// Minecraft game instances. No account data, tokens or broker IPC.
+#[tauri::command]
+pub async fn desktop_inspect_native_auth_family(
+) -> Result<native_clients::NativeAuthFamilyObservation, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        run_manager_operation(native_clients::inspect_native_auth_family)
+    })
+    .await
+    .map_err(|_| "Native Minecraft sign-in helper inspection task failed".to_string())?
+    .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 pub async fn desktop_compare_process_contexts(
     left: crate::engine::instance_identity::ProcessKey,

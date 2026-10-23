@@ -1,5 +1,14 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Real Education sign-in process-family observation — 23 October 2026
+
+Work: identify the real Minecraft.AdalServer.exe Windows subprocesses that an independent MC02 process boundary must account for; stop treating the game PID as the complete authentication process family.
+Decision: an explicit read-only native inspector now enumerates same-session named sign-in helpers, accepts directly parented candidates only when their full image path belongs to the signed registered game's install directory, observes PID/creation FILETIME and compares Windows user/profile/session through the existing native identity owner. Other same-session helpers are counted as unassigned; all observations are bounded and game identities rechecked. The existing desktop diagnostic displays sanitized counts and equality only. No credentials, Microsoft tokens, registry/world reads, sign-in interception, service, driver, or new Launch/Provision enabled. Missing/other-parent helpers remain UNKNOWN; ancestry is not broker attestation.
+Proof: pinned GitHub source/consumer invariants only. Rust, Svelte/Vitest, Windows game/login compatibility, signed installer and four-client acceptance NOT_EXECUTED; CI remains disabled.
+Unresolved: real helper parentage over interactive sign-in, game-broker process mediation, independent MC02 Roaming/HKCU/WAM isolation.
+Next: use genuine Windows/game-boundary evidence to select a supported MC02 isolation provider; do not promote named-process diagnostics to a launch permit.
+
+
 ## Windows-native gameplay activation fallback — 23 October 2026
 
 Work: allow an official Minecraft Education game window to be used normally when optional workspace placement is unavailable.
