@@ -101,20 +101,55 @@ permits creation rejection; it does not itself provide private file/HKCU/IPC
 views. This ordering gap must be resolved by the actual native implementation,
 not assumed away by a transaction diagram.
 
-**Unresolved implementation boundary:** trusted pre-creation attribution and
-startup-I/O coverage are NOT_IMPLEMENTED; transparent singleton/IPC and external
-authentication context remain UNKNOWN. There is no verified complete
-no-injection mechanism to plug into steps 2–4. Do not implement a direct
-`CreateProcessW` game launcher that bypasses these missing steps, or add a
-synthetic success state to fill them. This design identifies the native work;
-it does not award provider feasibility or change admission.
+### Earliest-access assessment — 23 October 2026
 
-**Review evidence:** existing provider signature/disabled implementation and
-canonical owner/consumer mapping reviewed at the pinned source; official
-creation/notification contracts checked. No executable changes, driver/service
-activation, public API changes or new runtime observations. Builds, transaction
-execution and MC01+MC02 acceptance: **NOT_EXECUTED**. Current continuation remains
-only in [planning/development.md](../../planning/development.md).
+Source baseline: `a02eddbb3cc90580f538a88f538704ce8db8f666`.
+**Decision:** reject enrollment by observing a PID after launch. Retain
+`PsSetCreateProcessNotifyRoutineEx` as a documented candidate for binding the
+live child before its user-mode execution on the ordinary process-creation
+route. This resolves the ordering question for that route only; it does not
+select a complete provider or establish pre-callback I/O isolation.
+
+Microsoft's [process-creation analysis](https://www.microsoft.com/en-us/security/blog/2022/06/30/using-process-creation-properties-to-catch-evasion-techniques/)
+explains that common high-level creation APIs insert the first thread and invoke
+process notifications inside the creation syscall before user-mode execution.
+It also describes earlier image-file opening/section creation and a different
+legacy creation path. Treat this as a documented explanation of the ordinary
+route, not a guarantee of attribution for every request or creation method.
+No raw syscall or legacy threadless-process creation is selected here.
+
+| Access phase | Available binding / concrete remaining limit |
+| --- | --- |
+| Creator work before child notification | A future bounded creation intent can identify the trusted creator thread/lifetime, but no reviewed contract propagates our slot label automatically through all kernel work. Permit only established non-account installation/system reads; any required private access without attribution remains a blocker. Do not label all creator/System activity as belonging to the child. |
+| Main executable open before notification | Microsoft's analysis identifies the kernel's `GUID_ECP_CREATE_USER_PROCESS` ECP and prospective token on the main-image open. This distinguishes a creation path, not a private slot: the same Windows token can represent multiple clients. It is not a general file/HKCU/auth tag. No stable WDK consumption contract for a complete slot-binding implementation was established in this review; do not hard-code an undocumented structure from the blog image. |
+| New child's user-mode work | The [registered callback](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/nf-ntddk-pssetcreateprocessnotifyroutineex) runs on the creator thread. The [creation information](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-_ps_create_notify_info) supplies creator, image file object and rejection status. A future driver can match a single-use trusted intent, retain the live process association, and reject mismatches before allowing that route to proceed. This is a design inference, NOT_IMPLEMENTED. Callback safety restrictions apply; no synchronous user-mode approval or file/signature work is proposed inside it. |
+| Deferred, cached and mapped operations | [FLT_CALLBACK_DATA](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/fltkernel/ns-fltkernel-_flt_callback_data) can have no initiating thread; [FltGetRequestorProcess](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/fltkernel/nf-fltkernel-fltgetrequestorprocess) can identify an attached process. Retain trusted backing-object/per-open ownership established at protected open. Do not reclassify every operation by current PID or exempt KernelMode requests automatically. |
+| Registry operations | [Registry notifications](https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/registering-for-notifications) cover application and driver-originated operations. [Operation/key contexts](https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/specifying-context-information) retain associated state; they do not reveal which client caused an external broker request. Handle inheritance and existing shared keys remain explicit mediation obligations. |
+| External helper/broker work | A callback describes the actual creator, not the client that originally caused COM/IPC activation. No supported per-slot attribution/authentication context is established. Matching user, session, token or helper basename does not enroll the broker. **UNKNOWN**. |
+
+A future Windows implementation must therefore distinguish trusted creator
+intent, enrolled live child, and already-owned file/key operations. This is
+native transient ownership behind the existing provider, not another persisted
+readiness store. Cleanup must cancel unused intent and retain protection until
+owned process/operation references drain. Intent replay, creator-thread reuse,
+image mismatch and attribution loss must fail closed for the affected launch;
+unrelated system operations must not be globally denied.
+
+**Feasibility result:** ordinary-route enrollment before child user-mode code has
+a documented basis. Full protection for required pre-callback accesses remains
+UNKNOWN, with no evidence that this exact Education build makes such private
+accesses. Do not turn an unobserved access into either a proven incompatibility
+or an assumed safe read. File/HKCU mediation remains NOT_IMPLEMENTED; transparent
+singleton/IPC and authentication remain UNKNOWN. No justified production game
+launcher or driver skeleton follows from this assessment alone.
+
+**Evidence:** exact-source provider/Windows-observer review and official Microsoft
+contracts. `WindowsProcessObserver` inspects existing process identities and
+`UnknownStorageObserver` supplies unknown storage; neither is a creation gate.
+No source is copied, no public API changes, no new runtime observations.
+Compilation, native callback execution and MC01+MC02 acceptance:
+**NOT_EXECUTED**. Current continuation remains only in
+[planning/development.md](../../planning/development.md).
 
 ### Required behavior of the future adapter
 
