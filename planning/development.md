@@ -23,24 +23,47 @@ The historical official Sandboxie 2-client pilot later encountered a crash; it i
 
 ## P0a source-feasibility decision — 23 October 2026
 
-Public Microsoft API contracts were compared with the existing read-only PSEC adapter:
-`IsProcessSecurityEnvironmentVersionSupported(DWORD, BOOLEAN*, DWORD*)`,
-`QueryProcessSecurityEnvironmentSupport(PROCESS_SECURITY_ENVIRONMENT_SUPPORT_FLAGS*)`
-and `PSE_SUPPORT_FS_DENY`/`PSE_SUPPORT_NETWORK_PROXY` agree at the signature/declared-flag level. **No Windows SDK compilation or Windows execution occurred.**
-References:
-- https://learn.microsoft.com/en-us/windows/win32/api/processmodel/nf-processmodel-isprocesssecurityenvironmentversionsupported
-- https://learn.microsoft.com/en-us/windows/win32/api/processmodel/nf-processmodel-queryprocesssecurityenvironmentsupport
-- https://learn.microsoft.com/en-us/windows/win32/api/processmodel/ne-processmodel-process_security_environment_support_flags
+**Reviewed repository source:** `829e577980a1b5bd92aee17a6f93a151303ed9f7` (`Local`).
+**Reviewed Microsoft MXC source:** [`ffecec04357747d6649714f473436dfb77111be8`](https://github.com/microsoft/mxc/tree/ffecec04357747d6649714f473436dfb77111be8).
+**Decision: NO-GO for PSEC/MXC ProcessContainer alone as the complete MC02 provider under the current unchanged-game requirements.** This is a source-feasibility rejection of this concrete route, not an observed Minecraft failure or proof that every independent Windows route is impossible. Do not spend another batch adding generic PSEC/fixture layers or unlock isolated Launch.
 
-**Candidate decisions, not runtime verdicts:**
-- PSEC/MXC ProcessContainer: **INCOMPLETE**, native filesystem/policy containment alone has no demonstrated transparent per-game Roaming/HKCU/ADAL-WAM redirection; do not promote the capability probe to Launch authority.
-- MXC IsolationSession: **NO-GO for current directly visible local Minecraft GUI** per its own supported-workloads guide (no display server inside that session); not a usable drop-in to the native workspace. https://github.com/microsoft/mxc/blob/main/docs/isolation-session/oneshot.md
-- `RegOverridePredefKey`: **NO-GO as an external transparent HKCU switch**; Windows documents that it affects only the calling process. https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regoverridepredefkey
-- MSIX AppData/HKCU redirection: **NOT independently per game PID** (per user/per app/package); no permission to repackage or re-register third-party Education. https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes
+### Existing owner and consumer trace
 
-**Concrete source correction:** the earlier read-only PSEC capability FFI passed a pointer to a 32-bit support mask. The official Microsoft MXC PSEC V2 implementation uses a 64-bit output mask, while public Win32 documentation names an enum pointer without a guaranteed output allocation width. The adapter now reserves a zero-initialized 64-bit mask, so a 64-bit OS write cannot overrun a four-byte Rust local. Existing low-bit diagnostic results and the frontend wire schema remain unchanged. Source reference: [Microsoft MXC secenv.rs](https://github.com/microsoft/mxc/blob/ffecec04357747d6649714f473436dfb77111be8/src/mxc-sdk/src/backends/process_container/common/secenv.rs). Native SDK compilation and runtime **NOT_EXECUTED**; no new game isolation proof.
+- [Independent provider port](../engine/runtime-core/src/independent_engine/ports.rs): `IndependentProviderPort` is a contract; `DisabledIndependentProvider` returns `NotImplemented`. It is not a Windows launcher.
+- [Windows adapter](../apps/desktop/src-tauri/src/engine/instance_identity.rs): `WindowsProcessObserver` pins process identity; `UnknownStorageObserver` returns unknown storage observations. `inspect_native_psec_capabilities` loads System32 exports and reads version/support flags only; it neither creates nor attaches a security environment.
+- [Desktop command consumer](../apps/desktop/src-tauri/src/commands/native_clients.rs): the PSEC command returns diagnostics through the manager operation lock. Slot operations call the existing [admission owner](../apps/desktop/src-tauri/src/engine/instance_catalog.rs) before a Windows helper; isolated Launch/Provision remains denied in both normal and owned-test routes.
+- [Native game adapter](../apps/desktop/src-tauri/src/engine/native_clients.rs): MC01 uses the registered official game route. Auth-family inspection reports candidate helper relationships only; broker-launched helpers may be unattributed. It supplies no private authentication context.
 
-**Outcome:** none of these mechanisms alone meets MC02's complete game-bound contract. An isolated process is not yet an isolated Minecraft session. Do not add another generic primitive or disable admission on the basis of this review. Seek one supported complete path; otherwise retain **NO-GO/UNKNOWN** without fake progress.
+### Complete MC02 requirements against the pinned candidate
+
+| Required boundary | Mechanism found / first gap | Verdict |
+| --- | --- | --- |
+| Roaming environment AND effective Known Folder | MXC can supply an environment block, but its PSEC specification has access lists, not source-to-private-path mappings. No reviewed mechanism makes both the unchanged game's Roaming Known Folder and absolute-path accesses resolve to a persistent MC02 store. Environment substitution is insufficient. [M1][M2][W1] | **First blocking gap; NO-GO for this route** |
+| Local data and persistence | Upstream documents that native PSEC can replace `LOCALAPPDATA` with a container-profile path. That does not prove the game's actual Known Folder/file view, stable profile reuse after relaunch, private world writes or host/peer access boundaries. [M2] | **Partial OS behavior documented; game persistence UNKNOWN** |
+| HKCU reads/writes | The reviewed PSEC schema and MXC request builder contain no selectable per-game registry hive/remap. Capability grants are access permission, not evidence of a private HKCU. Our synthetic hive/COW code is not attached to Minecraft. Calling `RegOverridePredefKey` in the launcher affects that caller only. [M1][M3][W2] | **Missing mediation; NO-GO for this route** |
+| Microsoft helper / authentication broker | No reviewed configuration binds each game and its actual helper/broker to a private persistent authentication context. WAM documentation describes Windows-account integration, not a per-PSEC broker switch; it does not establish which broker this Education build uses. A helper name, parent PID or different container SID is insufficient. [W3] | **Actual Education auth path and separation UNKNOWN** |
+| Singleton and IPC | Containment and UI handle/atom restrictions exist, but the game's actual single-instance mechanism and any external helper activation are unidentified. No game-bound two-process lifetime evidence exists. [M1][M4] | **UNKNOWN** |
+| GUI, GPU and input | ProcessContainer supports retaining Win32k/GUI access when `ui.disable=false`; job UI limits remain separate restrictions. This is not proof of Minecraft rendering, D3D resources, keyboard/mouse, focus/fullscreen or cross-job broker dialogs. [M3][M4] | **GUI policy exists; game compatibility NOT_EXECUTED** |
+| Required multiplayer | MXC has egress/ingress/loopback policy, but no Minecraft host/join/reconnect acceptance. Opening network access does not isolate auth or establish multiplayer compatibility. [M1][M2] | **NOT_EXECUTED** |
+| Two licensed playable clients and safe restart | No independent game provider or concurrent manual sign-in/world-persistence proof exists. | **NOT_IMPLEMENTED / NOT_EXECUTED** |
+
+**Why this closes the candidate:** denying the existing Roaming/HKCU path can break a game; granting the host path can expose shared state. Neither action supplies the missing private mapping. No documented/configurable mediation was identified in this reviewed route. Missing schema fields do not rule out all implicit OS behavior; effective Minecraft behavior remains UNKNOWN. AppContainer does have real built-in profile, credential and object isolation; those properties do not by themselves establish this game's Roaming/HKCU/broker compatibility. Host/peer access protection also remains unverified: container isolation is not a claim of secrecy from the owning Windows user or an administrator. This conclusion is an inference from the pinned schema, request builder and API scope, not a runtime verdict. Adding broad capabilities, using audit mode that permits denied access, changing profile environment variables, or treating synthetic COW/broker fixtures as game integration cannot satisfy these gaps.
+
+MXC **IsolationSession is a different backend**, not an implicit fix: its [pinned supported-workloads guide](https://github.com/microsoft/mxc/blob/ffecec04357747d6649714f473436dfb77111be8/docs/development/architecture/backends/isolation-session/oneshot.md#supported-workloads) excludes GUI applications because the session has no display server. Keep its existing NO-GO for the current native interactive workspace. Do not infer the same GUI restriction for ProcessContainer. MSIX repackaging, RunAs impersonation, game hooks and driver/service installation are not introduced.
+
+### Primary sources and evidence ceiling
+
+- **[M1]** [Windows PSEC FlatBuffers schema](https://github.com/microsoft/mxc/blob/ffecec04357747d6649714f473436dfb77111be8/external/windows-sdk/ProcessSecurityEnvironment.fbs): filesystem access lists, capabilities, UI and network policy; no explicit path/hive remapping fields.
+- **[M2]** [MXC schema: environment and filesystem policy](https://github.com/microsoft/mxc/blob/ffecec04357747d6649714f473436dfb77111be8/docs/schema.md#environment): environment semantics, native Local AppData caveat and access-grant scope.
+- **[M3]** [PSEC request builder](https://github.com/microsoft/mxc/blob/ffecec04357747d6649714f473436dfb77111be8/src/mxc-sdk/src/backends/process_container/common/base_container_helpers.rs) and [Windows runner](https://github.com/microsoft/mxc/blob/ffecec04357747d6649714f473436dfb77111be8/src/mxc-sdk/src/backends/process_container/common/base_container_runner.rs): policy serialization and PSEC attachment to `CreateProcessW`, rather than a game-specific storage/auth provider.
+- **[M4]** [Implemented UI policy resolver](https://github.com/microsoft/mxc/blob/ffecec04357747d6649714f473436dfb77111be8/src/mxc-sdk/src/core/mxc_common/ui_policy.rs) and [UI policy guide (draft)](https://github.com/microsoft/mxc/blob/ffecec04357747d6649714f473436dfb77111be8/docs/backends/process-container/UIPolicy_Schema.md): distinguish Win32k permission, USER handles/atoms and input restrictions; policy is not game acceptance.
+- **[W1]** [SHGetKnownFolderPath](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shgetknownfolderpath): Known Folder lookup is user/token scoped; launcher environment alone is not evidence of the game's lookup.
+- **[W2]** [RegOverridePredefKey](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regoverridepredefkey): remapping applies only to the calling process.
+- **[W3]** [MSAL.NET WAM documentation](https://learn.microsoft.com/en-us/entra/msal/dotnet/acquiring-tokens/desktop-mobile/wam): broker integration context only; not a statement that Education uses MSAL.NET or WAM.
+- [Pinned Windows OS support table](https://github.com/microsoft/mxc/blob/ffecec04357747d6649714f473436dfb77111be8/docs/backends/process-container/os-version-support.md) defines backend release prerequisites; actual target OS/API compatibility remains **UNKNOWN**.
+- Existing source correction at `829e577` reserves a zero-initialized 64-bit PSEC support output, matching the [pinned MXC V2 FFI](https://github.com/microsoft/mxc/blob/ffecec04357747d6649714f473436dfb77111be8/src/mxc-sdk/src/backends/process_container/common/secenv.rs). It remains diagnostics only.
+
+**Proof performed:** exact-source owner/consumer and official upstream contract review, with pinned references; documentation consistency checks. **NOT_EXECUTED:** Rust/Windows SDK compilation, automated suites, PSEC launch, game/authentication/world accesses, GUI/GPU/input, multiplayer, clean-host and four-client acceptance. No source-execution or gameplay PASS is awarded. Only this handoff changes; public APIs, admission, CI, installed services, profiles and worlds remain untouched.
 
 ## SINGLE ACTIVE PRIORITY — P0: real MC02 isolation provider
 
@@ -57,7 +80,7 @@ References:
 
 | Stage | State | Exit |
 | --- | --- | --- |
-| **P0a Provider feasibility** | **ACTIVE** | One supported unmodified-game MC02 mechanism is established or decisively rejected with an explicit incompatibility. |
+| **P0a Provider feasibility** | PSEC/MXC-only review DONE: NO-GO; replacement route unselected | One supported unmodified-game MC02 mechanism is established or decisively rejected with an explicit incompatibility. |
 | P0b Two-client vertical slice | BLOCKED by P0a | Implement/validate actual MC01+MC02 private data/auth/gameplay; maintain Launch denial until ready. |
 | P1 Four-client extension | WAITING | Reuse the SAME provider for MC03/MC04; verify four licensed worlds, normal input, multiplayer/recovery. |
 | P2 Efficiency against Sandboxie | WAITING | Comparable real-game workloads for RAM, CPU, GPU, frametime, launch/switch latency and stability; optimize measured bottlenecks. |
@@ -75,6 +98,6 @@ On each meaningful bounded commit, replace the **current** blocker/next status i
 
 ## Current owner and next action
 
-**State:** ACTIVE P0a. **Blocker:** no validated process-bound Roaming/HKCU/Microsoft broker mediation and real gameplay for a second official Education client. The PSEC output-buffer width is corrected in source, but native Windows SDK compilation and actual PSEC/Minecraft runtime compatibility are still UNKNOWN.
+**State:** P0a review of PSEC/MXC ProcessContainer **DONE — NO-GO as the complete MC02 provider**. P0b remains blocked; no independent provider has been selected. The first missing contract is effective private Roaming resolution for the unchanged game, followed by HKCU/auth mediation. Runtime compatibility remains UNKNOWN.
 
-**Next:** Determine whether any documented, non-modifying Windows mechanism can provide **all** MC02 game boundaries together (effective Roaming, HKCU, ADAL/WAM broker, interactive GUI). Select one for a real game-bound vertical slice only if the missing mediation can be demonstrated; otherwise record a precise NO-GO and keep isolated Launch/Provision denied. Windows SDK compilation of PSEC remains NOT_EXECUTED.
+**Next:** Review the official Education Desktop launch/profile/authentication contract for a vendor-supported unchanged-game per-instance profile and sign-in route. Identify an explicit supported contract before selecting another provider; if no such contract is documented, record that precise dependency as UNKNOWN rather than infer support from MSAL, process counts or another synthetic fixture. This source review does not authorize game launches, credential access, new users/services, or revival of retired providers.
