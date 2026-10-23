@@ -9,6 +9,8 @@ lifecycle: ACTIVE
 
 # Four concurrent Minecraft Education Windows desktop clients
 
+**Current approved target (23 October 2026):** four concurrently playable, unchanged official Minecraft Education Windows Desktop clients with four distinct licensed accounts, private persistent worlds/registry/authentication, normal graphics/input and multiplayer on one PC. Only active near-term P0: MC01 plus one real isolated MC02. All Sandboxie, owned-fork and VMware routes described below are **superseded pilot history**, not current Launch providers. See [one current goal and next action](../../planning/development.md).
+
 ## Education login compatibility parity — private profile plan (15 October 2026)
 
 The private Client 02–04 profile planner now includes the exact box
@@ -50,11 +52,11 @@ official Sandboxie Plus provider. Signing, driver/service exclusivity,
 actual Microsoft WAM credential separation, REA native artifact evidence,
 and full four-client acceptance remain unexecuted.
 
-## Approved product outcome — feasibility-first (2026-10-12)
+## Historical pilot architecture — superseded (2026-10-12)
 
 Four concurrent, independently playable **Minecraft Education Windows Desktop**
 sessions with four distinct legitimately licensed accounts on one Windows PC.
-The **single selected lightweight architecture** is one native Minecraft
+The **historical pilot architecture selected at that time (now retired)** was one native Minecraft
 Education Windows Desktop process plus Minecraft Client 02 launched using
 Sandboxie Plus box `MinecraftClient02`. Both must use distinct legitimately
 licensed accounts, preserved data and normal Windows keyboard/mouse/GPU.
@@ -77,7 +79,7 @@ Legacy VMware source and saved accounts remain inactive and untouched.
 Avoid game EXE modification, injection, authentication bypass or storage of
 account secrets.
 
-## Selected scale-out direction (proposed, not proven)
+## Historical proposed fork scale-out — superseded, not active
 
 One host-native Education Client 01 plus up to three separately profiled,
 concurrent isolated Windows Desktop Clients 02–04 using a single Sandboxie-derived
@@ -119,9 +121,6 @@ The official [Windows installation guide](https://edusupport.minecraft.net/hc/en
 
 ## Proof and continuation
 
-Follow [current development handoff](../../planning/development.md), the
-[owned isolation design](../system/owned-isolation-design.md), and
-[target machine acceptance](../validation/acceptance.md). Never infer
-four-client readiness from two processes or two operator-confirmed worlds.
+Follow [current development handoff](../../planning/development.md) only for active work. The [owned fork design](../system/owned-isolation-design.md) and [VMware G0–G4 campaign](../validation/acceptance.md) are historical reference, not current tasks. Never infer four-client readiness from process/window counts.
 Source commits do not establish Windows/driver/gameplay acceptance.
 All development stays on `Local`; `main` remains untouched.

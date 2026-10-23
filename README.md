@@ -68,14 +68,7 @@ AGENTS.md → GITHUB_RULES.md → docs/system/implementation-map.md
 
 An operator does **not** need a local checkout to complete repository/source-verifiable tasks. Windows or Minecraft acceptance is a separate, higher proof context. `DEV.cmd` is an optional local developer convenience, never the remote GitHub completion requirement.
 
-**Primary development priority (22 October 2026): implement and validate
-the independent Windows engine** in Rust-first modules without copying or
-loading the retired Sandboxie fork. Complete source verifiability and
-fail-closed admission in GitHub first. Windows and Minecraft acceptance
-must remain NOT_EXECUTED until deliberately performed; no localtest is
-currently requested. See
-[Independent Engine Architecture](docs/system/independent-engine-architecture.md)
-and [current handoff](planning/development.md).
+**Current P0:** make MC01 + a second independently licensed Minecraft Education MC02 actually playable together, with effective private Roaming/HKCU/auth and persistent worlds. Only then scale to four clients, measure against Sandboxie and distribute. PSEC/fixtures do not constitute a production isolation provider. The [single current handoff](planning/development.md) owns the active blocker and one next action; [Independent Engine Architecture](docs/system/independent-engine-architecture.md) is historical reference, not a second task list.
 
 **Definition of DONE:** [Four simultaneous Minecraft Education accounts](docs/product/four-concurrent-accounts.md). **Technical status:** no four-client gameplay, independent provider or production security acceptance exists. Previous [two-client Sandboxie evidence](docs/validation/two-client-first-success-2026-10-14.md) is explicitly historical. **Current handoff:** [planning/development.md](planning/development.md). **Retirement map:** [Legacy Retirement](docs/system/legacy-retirement.md).
 

@@ -9,9 +9,13 @@ lifecycle: ACTIVE
 
 # Implementation Ownership Map
 
-This is a **navigation guide**, not a second implementation registry. The sole current v1.18.6 source/compile/assembly commands live in [Isolation Source Tooling](../../tooling/isolation-source/README.md); current work intent lives only in [planning/development.md](../../planning/development.md). Historical v1.18.5 entries below are for provenance and regression traceability, **not alternate active commands**. For an issue, inspect its current source owner and actual consumers.
+This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build tooling in [Isolation Source Tooling](../../tooling/isolation-source/README.md) is retired product history, not the native engine. The only active goal, blocker and next action are in [planning/development.md](../../planning/development.md). Treat historical `Next` here as superseded; inspect owning source and consumers.
 
-## Current direction — 21 October 2026
+## Current Codex route — 23 October 2026
+
+**Single active P0:** establish one supported, game-compatible Windows MC02 isolation provider with effectively separate Roaming AppData, HKCU and Microsoft sign-in/broker alongside MC01. Go to `engine/runtime-core/src/independent_engine/` (domain/ports), `apps/desktop/src-tauri/src/engine/instance_identity.rs` and `native_clients.rs` (native Windows) and `instance_catalog.rs` (current fail-closed Launch admission). PSEC is a candidate OS capability, not a game provider. See the [sole current handoff](../../planning/development.md); all older research below is navigation, not today's backlog.
+
+## Historical native-first transition — 21 October 2026
 
 The mounted native Windows workspace now offers read-only discovery and
 presentation of up to four **already-running** registered Minecraft Education

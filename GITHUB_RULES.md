@@ -100,10 +100,7 @@ a runner, or claim authored tests as executed. The user's choice to turn off
 CI does not permit deleting safety checks, weakening code review, or
 pretending four Minecraft instances or FPS limiting have been validated.
 
-**Only G0–G4 in `docs/validation/acceptance.md` are product-test progress
-gates.** Static checks and offline unit tests are supporting evidence, not
-new milestone flags. Previously completed CI logs remain historical evidence
-for their **specific old SHAs**, never proof for the new HEAD.
+**G0–G4 in `docs/validation/acceptance.md` are historical VMware acceptance gates, NOT current native-engine progress.** Track live native product outcomes and a single current next action only in `planning/development.md`; do not create another TODO/status system. Static checks are supporting evidence, never gameplay acceptance; old CI proves only its original SHAs.
 
 ## 8. Security
 

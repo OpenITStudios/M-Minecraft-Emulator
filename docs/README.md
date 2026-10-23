@@ -16,7 +16,7 @@ This is the **single documentation entrypoint**. Load only the domain needed for
 | Product goal: four logged-in Minecraft Education clients on one PC | [Four-account definition](./product/four-concurrent-accounts.md) | Implemented two-client pilot; [historical gameplay/crash report](./validation/two-client-first-success-2026-10-14.md) and [current handoff](../planning/development.md) have separate proof boundaries |
 | Paused VMware, App Sandbox and Guest Agent routes | [Legacy Retirement](./system/legacy-retirement.md) | Mutations blocked and account-bearing data preserved |
 | Paused VMware Base and guest setup (historical reference only) | [Base image](./product/base-image.md) | `engine/runtime-core/`, `engine/guest/windows/` (inactive) |
-| **Current v1.18.6 source/build commands** | [One isolation owner](../tooling/isolation-source/README.md) | `engine/isolation-owned/` is editable; v1.18.5 remains historical only |
+| Retired Sandboxie v1.18.6 source/build history | [Historical isolation tooling](../tooling/isolation-source/README.md) | `engine/isolation-owned/` and upstream files are historical, NOT an independent game-launch provider |
 | Architecture, ownership, naming, developer commands | [System](./system/README.md) | `apps/desktop/`, `engine/runtime-core/`, `tooling/` |
 | Source proof, Windows/VMware/ Minecraft acceptance | [Validation](./validation/README.md) | `tooling/acceptance/windows/` and live evidence |
 | Installer packaging, update and trust policy | [Distribution](../engine/distribution/README.md) | `engine/distribution/`, Tauri packaging |

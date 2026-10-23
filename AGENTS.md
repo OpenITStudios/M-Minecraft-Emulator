@@ -17,6 +17,10 @@ GitHub Actions. Never silently fall back to `main`.
 
 For material writes read `GITHUB_RULES.md`, pin exact `Local` HEAD, and consult `docs/system/implementation-map.md` before broad searching. `CONTEXT.md` holds stable facts; `planning/development.md` holds current continuation. Current source wins if either document is stale.
 
+## Current product goal and handoff
+
+**SINGLE P0:** establish a real independently playable and licensed Minecraft Education MC02 alongside MC01, with effective Roaming/HKCU/auth isolation. Only then extend MC03/04, benchmark against Sandboxie, and package. `planning/development.md` is the sole active goal/blocker/next action. Historical `Next:` entries, PSEC availability, PID counts and synthetic fixtures do not authorize isolated Launch/Provision.
+
 ## Current product mode
 
 The native-first pilot is the only active desktop route. Legacy VMware, App Sandbox pilot power operations, Base/Guest Agent preparation and VM window arrangement are intentionally disabled, not removed. Do not revive or delete legacy account-bearing data as incidental cleanup. Use docs/system/legacy-retirement.md for one inventory and removal criteria; the actual VM command gate is engine/runtime-core/src/command.rs.
