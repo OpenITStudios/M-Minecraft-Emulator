@@ -23,7 +23,7 @@ Education sign-in, four-world play or multiplayer acceptance is claimed here.
 
 ## Original engine architecture — operator decision, 23 October 2026
 
-The operator selected **an independently implemented Minecraft-specific engine, using Sandboxie's architectural ideas as reference**. This supersedes a vendor-provided per-instance launch option as a prerequisite: our engine may supply transparent isolation, if a complete supported Windows implementation can be demonstrated. It does not select the retired fork, relax the unchanged-game/no-DLL-injection rule, or establish that an original driver is sufficient. PSEC-only rejection remains valid.
+The operator selected **an independently implemented Minecraft-specific engine, using Sandboxie's architectural ideas as reference**. This supersedes a vendor-provided per-instance launch option as a prerequisite: our engine may supply transparent isolation, if a complete supported Windows implementation can be demonstrated. It does not select the retired fork or establish that an original driver is sufficient. The operator subsequently authorized development of an original in-process compatibility DLL (see the decision below), superseding the no-DLL-injection design constraint for source development only. Official game files, normal manual login and licensing remain unchanged. PSEC-only rejection remains valid.
 
 This section records design and responsibility, not runtime readiness. Current work and the next action live only in [planning/development.md](../../planning/development.md).
 Source inspected: `e515fd5ab6d390d94f279dbe233414a2b3722126` (`Local`). Historical Sandboxie files below are **read-only reference**, not code dependencies or templates to translate into the new implementation.
@@ -47,7 +47,7 @@ The provider interface remains small: inspect a slot, launch it when admitted, a
 
 Repository reviewed: `37f04ff5b19299839df38db93c64eb26f624083b`. Microsoft driver samples pinned to [`bb68ed5e770bce04dc5395ec9258dafab034184d`](https://github.com/microsoft/Windows-driver-samples/tree/bb68ed5e770bce04dc5395ec9258dafab034184d). Samples were inspected as references; no code was imported, built, installed or executed.
 
-**Decision: plausible file/HKCU mechanisms; complete MC02 provider NOT_SELECTED, game compatibility UNKNOWN.** A minifilter plus registry callbacks can provide a basis for original I/O mediation. They are not a complete replacement for Sandboxie's user-mode namespace/compatibility work. The current no-game-patching/no-DLL-injection constraints remain in force; this review does not prove that injection is necessary or that an independent engine is impossible.
+**Decision: plausible file/HKCU mechanisms; complete MC02 provider NOT_SELECTED, game compatibility UNKNOWN.** A minifilter plus registry callbacks can provide a basis for original I/O mediation. They are not a complete replacement for Sandboxie's user-mode namespace/compatibility work. This assessment was made under the then-active no-game-patching/no-DLL-injection constraints; later compatibility-DLL development authorization is recorded below. It does not prove that injection is necessary or that an independent engine is impossible.
 
 | MC02 requirement | Concrete mechanism / design consequence | Assessment |
 | --- | --- | --- |
@@ -150,6 +150,68 @@ No source is copied, no public API changes, no new runtime observations.
 Compilation, native callback execution and MC01+MC02 acceptance:
 **NOT_EXECUTED**. Current continuation remains only in
 [planning/development.md](../../planning/development.md).
+
+### Singleton/IPC decision and original compatibility scope — 23 October 2026
+
+Reviewed source: `eebfffa71280cb6a2cbca089e0418b134bef52a0`.
+**Close the file-minifilter + registry-callback + process-membership-only candidate
+as an incomplete MC02 provider.** Those mechanisms do not implement the required
+transparent object/activation boundary. This rejects the concrete component set;
+the actual Education singleton remains UNKNOWN, not a demonstrated mutex failure
+or proof that every no-injection approach is impossible.
+
+Reference source inspected at that revision:
+
+- [DLL IPC initialization](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/eebfffa71280cb6a2cbca089e0418b134bef52a0/engine/isolation-owned/Sandboxie/core/dll/ipc.c#L465) registers mutant/event/section and port hooks.
+  `Ipc_NtCreateMutant` / `Ipc_NtOpenMutant` select original or box-specific names
+  through `Ipc_GetName2`; `Ipc_NtAlpcConnectPort` additionally handles policy,
+  proxy/server coordination and box-specific connections.
+- [Driver IPC initialization](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/eebfffa71280cb6a2cbca089e0418b134bef52a0/engine/isolation-owned/Sandboxie/core/drv/ipc.c#L129)
+  registers checks through its own syscall-handler infrastructure.
+  `Ipc_CheckGenericObject` enforces box-path policy. This is not evidence that
+  documented Windows object callbacks provide equivalent generic interception.
+
+The reviewed [Windows object callback contract](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/ns-wdm-_ob_operation_registration)
+covers process/thread/desktop handles, not general mutex/event/ALPC renaming.
+[Private namespaces](https://learn.microsoft.com/en-us/windows/win32/sync/object-namespaces)
+require callers to use their alias; creating one in the manager does not rewrite
+the game's names. [Session namespaces](https://learn.microsoft.com/en-us/windows/win32/termserv/kernel-object-namespaces)
+separate session-local objects but retain global objects; four clients in one
+session do not gain four namespaces from four jobs. AppContainer has real object
+isolation, but does not resolve the previously documented complete data/auth
+provider gaps. No blanket statement that Windows lacks all object isolation is
+made.
+
+**Operator decision:** explicitly authorize development of an independently
+authored compatibility DLL loaded inside the game to mediate file/registry/IPC
+calls, without changing game files. This supersedes the earlier no-injection
+source-design constraint. It does **not** authorize game injection execution,
+driver/service installation, signing-mode changes, credential interception,
+license bypass or revival of the retired Sandboxie/fork runtime.
+
+The new candidate is an original in-process compatibility layer behind the
+existing provider, combined with whatever enforcement is independently shown
+necessary. DLL execution is not a security boundary by itself. Domain/lifecycle
+authority stays in runtime-core; native bootstrap/compatibility belongs to the
+existing `engine/isolation-native/` area and desktop Windows adapter. No public
+API or secondary manager/store is added by this decision.
+
+Before native implementation, specify one minimal bootstrap transaction:
+exact child/image binding, compatibility initialization before protected
+user-mode access, fail-closed behavior if initialization fails, and trusted
+per-slot configuration with explicit shared-system IPC exceptions. Ordinary
+`LoadLibrary` after a running game has accessed host data is too late.
+Do not copy or translate the inspected reference implementation. Do not
+preemptively rename every port, falsify arbitrary errors or hook authentication
+APIs: system/broker dependencies and error/handle semantics require explicit
+coverage. External broker state and two licensed logins remain unresolved even
+if game-local name translation succeeds.
+
+**Evidence ceiling:** source/reference and official contract review only;
+no compatibility code imported or executed. Bootstrap, DLL, effective private
+file/HKCU/object mappings: NOT_IMPLEMENTED. Exact-game singleton, broker
+separation and compatibility: UNKNOWN. Builds and Minecraft acceptance:
+NOT_EXECUTED. Isolated Launch/Provision remains denied.
 
 ### Required behavior of the future adapter
 
