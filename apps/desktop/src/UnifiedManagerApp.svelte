@@ -104,10 +104,38 @@
     catch(error){issue=operationIssue(error);}
     finally{busy=false;}
   }
+  async function openLegacy(){
+    if(busy||workspaceBusy)return;
+    busy=true;issue=null;
+    try{
+      const legacy=await managerConfiguration.loadLegacy();
+      config=legacy;snapshot=legacy.observation;checked=!!snapshot;
+      if(!snapshot){
+        issue=legacy.engineError?operationIssue(legacy.engineError):
+          operationIssue('No recoverable legacy session was observed.');
+        return;
+      }
+      if(workspace)await workspace.restore();
+      sessionView='legacy';await tick();
+    }catch(error){issue=operationIssue(error);}
+    finally{busy=false;}
+  }
   async function prepare(){
     busy=true;checked=false;issue=null;contextResult=null;contextError='';
-    try{config=await managerConfiguration.load();snapshot=config.observation;checked=!!snapshot;if(config.engineError&&snapshot)issue=operationIssue(config.engineError);if(config.detectedMinecraft)await inspectNative();await tick();if(workspace){try{if(sessionView==='legacy'&&snapshot)await workspace.reconcile(snapshot);else if(sessionView==='native'&&nativeSession)await workspace.reconcileObserved(observedSlots);}catch(error){issue=operationIssue(error);}}}
-    catch(e){snapshot=null;issue=operationIssue(e);}finally{busy=false;}
+    try{
+      config=sessionView==='legacy'?await managerConfiguration.loadLegacy():await managerConfiguration.load();
+      snapshot=config.observation;checked=!!snapshot;
+      if(config.engineError&&sessionView==='legacy')issue=operationIssue(config.engineError);
+      if(config.detectedMinecraft)await inspectNative();
+      await tick();
+      if(workspace){
+        try{
+          if(sessionView==='legacy'&&snapshot)await workspace.reconcile(snapshot);
+          else if(sessionView==='native'&&nativeSession)await workspace.reconcileObserved(observedSlots);
+        }catch(error){issue=operationIssue(error);}
+      }
+    }catch(error){snapshot=null;issue=operationIssue(error);}
+    finally{busy=false;}
   }
   onMount(()=>{void prepare();});
 
@@ -120,7 +148,7 @@
     <p class="um-sidebar-foot">Windows developer test<br/>Independent engine pending</p>
   </aside>
   <main class="um-main">
-    <header class="um-header"><div><p class="um-eyebrow">YOUR WORKSPACE</p><h1>{page==='clients'?'Minecraft clients':'Settings'}</h1><p>{page==='clients'?'Session workspace · independent engine pending.':'Read-only Minecraft and legacy session inspection; independent engine pending.'}</p></div><span class="um-engine">Legacy session snapshot · {checked?'Observed':busy?'Checking':'Unavailable'}</span></header>
+    <header class="um-header"><div><p class="um-eyebrow">YOUR WORKSPACE</p><h1>{page==='clients'?'Minecraft clients':'Settings'}</h1><p>{page==='clients'?'Session workspace · independent engine pending.':'Read-only Minecraft and legacy session inspection; independent engine pending.'}</p></div><span class="um-engine">{sessionView==='native'?'Native Windows · legacy recovery on request':checked?'Legacy session · observed':busy?'Checking legacy session':'Legacy session unavailable'}</span></header>
     {#if issue}<div class="um-alert" role="alert"><strong>{issue.message}</strong><p>{issue.action}</p><details><summary>Diagnostics</summary><pre>{issue.details}</pre></details></div>{/if}
     <div class="um-client-view" hidden={page!=='clients'}>
       <p role="status">Sandboxie launch routes are retired. New sessions 02–04 are unavailable while the independent engine is developed. Existing sessions and data are preserved.</p>
@@ -138,7 +166,7 @@
               </div>
               <button class="cm-button" disabled={busy||workspaceBusy||nativeSession===null||nativePending||(nativeSession.processes.length>0&&!observedSlots['01'])} on:click={()=>activateNative('01')}>{busy?'Working…':observedSlots['01']?'Show observed window 01':'Open official Minecraft 01'}</button>
               <button class="cm-button cm-secondary" disabled={busy||workspaceBusy} on:click={refreshNative}>Refresh Windows game windows</button>
-              {#if snapshot}<button class="cm-button cm-secondary" disabled={busy||workspaceBusy} on:click={()=>switchSessionView('legacy')}>Existing-session recovery</button>{/if}
+              <button class="cm-button cm-secondary" disabled={busy||workspaceBusy} on:click={openLegacy}>Inspect existing-session recovery</button>
               <p>MC02–04 Launch/Provision remain disabled. Existing windows can be displayed but are not certified as isolated or independently signed-in. Return to Windows restores a window without closing the game.</p>
             </div>
           </div>
@@ -159,7 +187,7 @@
         <div class="um-setting"><div><h3>Minecraft Education</h3><p>{busy?'Checking installation…':config?.targetError?'Installation needs attention. Repair Minecraft Education, then check again.':config?.detectedMinecraft?'Installed · detected automatically':'Not detected. Install Minecraft Education Desktop, then check again.'}</p></div></div>
         <div class="um-setting"><div><h3>Independent engine</h3><p>Not implemented · Client 02–04 Launch/Provision disabled.</p></div></div>
         <div class="um-setting"><div><h3>Native Minecraft 01</h3><p>{nativeSession?.processes[0]?'Registered game process candidate observed':nativeError?'Observation needs attention':'Independent of retired engine snapshots'}</p></div></div>
-        <div class="um-setting"><div><h3>Legacy session snapshot</h3><p>{busy?'Checking read-only observation…':checked?'Observed · diagnostic only':'Unavailable · no engine readiness inferred'}</p></div></div>
+        <div class="um-setting"><div><h3>Legacy session snapshot</h3><p>{sessionView==='native'?'Not inspected automatically · open recovery explicitly':busy?'Checking read-only observation…':checked?'Observed · diagnostic only':'Unavailable · no engine readiness inferred'}</p></div></div>
         <button class="cm-button" disabled={busy} on:click={prepare}>{busy?'Checking…':'Check again'}</button>
       </section>
       <section class="um-settings"><details><summary>Diagnostics</summary><p>Windows developer test. Independent installation and production signing have separate acceptance requirements.</p><h3>Minecraft location</h3><pre>{config?.settings.minecraftExecutable||config?.detectedMinecraft||'Not detected'}</pre><h3>Legacy session storage location</h3><pre>{config?.settings.sessionDirectory||'Not detected'}</pre>{#if config?.targetError}<h3>Installation details</h3><pre>{config.targetError}</pre>{/if}<h3>Client routing</h3>{#each config?.catalog.targets??[] as target}<div class="um-target"><strong>Minecraft {target.id}</strong><span>{target.kind==='NATIVE'?'Native Windows':target.profile}</span></div>{/each}</details></section>

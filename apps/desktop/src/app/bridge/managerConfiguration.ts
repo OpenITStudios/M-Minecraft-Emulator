@@ -14,7 +14,11 @@ export function parseManagerConfiguration(value:unknown):ManagerConfiguration {
   if(v.observation!==null)v.observation=parseOwnedSnapshot(v.observation);
   return v;
 }
-export const managerConfiguration={load:async()=>parseManagerConfiguration(await invokeRuntime('desktop_manager_settings',{settings:null})),save:async(settings:ManagerSettings)=>parseManagerConfiguration(await invokeRuntime('desktop_manager_settings',{settings}))};
+export const managerConfiguration={
+  load:async()=>parseManagerConfiguration(await invokeRuntime('desktop_manager_settings',{settings:null})),
+  loadLegacy:async()=>parseManagerConfiguration(await invokeRuntime('desktop_manager_settings',{settings:null,includeLegacy:true})),
+  save:async(settings:ManagerSettings)=>parseManagerConfiguration(await invokeRuntime('desktop_manager_settings',{settings})),
+};
 export function operationIssue(error:unknown){
   if(error && typeof error==='object' && 'code' in error && 'message' in error && 'action' in error && 'details' in error && typeof error.message==='string' && typeof error.action==='string' && typeof error.details==='string')return {message:error.message,action:error.action,details:error.details};
   const details=(error instanceof Error?error.message:typeof error==='string'?error:JSON.stringify(error))??'Unknown error';

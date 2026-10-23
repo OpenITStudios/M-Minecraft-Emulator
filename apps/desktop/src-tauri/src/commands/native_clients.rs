@@ -233,9 +233,16 @@ pub async fn desktop_suspend_workspace() -> Result<bool, SurfaceFailure> {
 #[tauri::command]
 pub async fn desktop_manager_settings(
     settings: Option<crate::engine::manager_settings::ManagerSettings>,
+    include_legacy: Option<bool>,
 ) -> Result<serde_json::Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        run_manager_operation(|| crate::engine::manager_settings::prepare(settings))
+        run_manager_operation(|| {
+            if include_legacy == Some(true) {
+                crate::engine::manager_settings::prepare_legacy(settings)
+            } else {
+                crate::engine::manager_settings::prepare(settings)
+            }
+        })
     })
     .await
     .map_err(|e| e.to_string())?

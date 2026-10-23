@@ -464,14 +464,14 @@ mod automatic_setup_tests {
     }
     #[test]
     #[ignore = "requires the authorized active owned Windows engine; saves verified location preferences only"]
-    fn actual_automatic_setup_verifies_and_remembers_active_engine() {
-        let first = super::super::manager_settings::prepare(None).unwrap();
+    fn actual_explicit_legacy_recovery_verifies_and_remembers_active_engine() {
+        let first = super::super::manager_settings::prepare_legacy(None).unwrap();
         assert!(first["engineError"].is_null(), "{}", first["engineError"]);
         assert!(first["observation"]["clients"].is_array());
         assert!(first["observation"]["clients"][0]["settingsVerified"]
             .as_bool()
             .unwrap());
-        let second = super::super::manager_settings::prepare(None).unwrap();
+        let second = super::super::manager_settings::prepare_legacy(None).unwrap();
         assert_eq!(first["settings"], second["settings"]);
         assert!(second["engineError"].is_null());
     }

@@ -61,8 +61,11 @@ it('observed legacy snapshot never promotes independent-engine readiness in moun
   // checked is only a snapshot-present flag; this cannot be advertised as
   // verified engine isolation or even as a connected independent provider.
   expect(source).toContain('snapshot=config.observation;checked=!!snapshot');
-  expect(source).toContain('Legacy session snapshot · {checked?\'Observed\':busy?\'Checking\':\'Unavailable\'}');
+  expect(source).toContain('Native Windows · legacy recovery on request');
   expect(source).toContain('Observed · diagnostic only');
+  expect(source).toContain("config=sessionView==='legacy'?await managerConfiguration.loadLegacy():await managerConfiguration.load()");
+  expect(source).toContain('on:click={openLegacy}');
+  expect(source).toContain('Not inspected automatically · open recovery explicitly');
   expect(source).toContain('Not implemented · Client 02–04 Launch/Provision disabled.');
   expect(source).toContain('account isolation or gameplay readiness');
   expect(source).not.toMatch(/Connected · verified for this session|class:ready=\{checked\}|Minecraft and the engine are detected automatically\./);
@@ -79,8 +82,26 @@ it('native observed windows are primary even when a historical session can be re
   expect(source).toContain("config && snapshot && sessionView==='legacy'");
   expect(source).toContain('reconcileObservedSlots(observedSlots,nativeSession.processes)');
   expect(source).toContain('This slot has no observed window. New isolated Minecraft 02–04 launches are not available.');
-  expect(source).toContain('Existing-session recovery');
+  expect(source).toContain('Inspect existing-session recovery');
   expect(source).not.toContain('for(const session of running)');
   const bootstrap=readFileSync(new URL('../src-tauri/src/app_bootstrap.rs',import.meta.url),'utf8');
   expect(bootstrap).toContain('commands::native_clients::desktop_present_observed_window,');
+});
+
+
+it('normal Minecraft startup does not query the retired service or execute owned test recovery',()=>{
+  const backend=readFileSync(new URL('../src-tauri/src/engine/manager_settings.rs',import.meta.url),'utf8');
+  const command=readFileSync(new URL('../src-tauri/src/commands/native_clients.rs',import.meta.url),'utf8');
+  const bridge=readFileSync(new URL('../src/app/bridge/managerConfiguration.ts',import.meta.url),'utf8');
+  expect(backend).toContain('prepare_with_legacy_mode(requested, false)');
+  expect(backend).toContain('prepare_with_legacy_mode(requested, true)');
+  const p=backend.slice(backend.indexOf('fn prepare_with_legacy_mode('));
+  const guard=p.indexOf('if include_legacy {');
+  expect(guard).toBeGreaterThan(0);
+  expect(p.indexOf('discover_active_session()')).toBeGreaterThan(guard);
+  expect(p.indexOf('OwnedTestBackend { request: &request }')).toBeGreaterThan(guard);
+  expect(command).toContain('include_legacy: Option<bool>');
+  expect(command).toContain('include_legacy == Some(true)');
+  expect(bridge).toContain('includeLegacy:true');
+  expect(bridge).toContain("{settings:null}");
 });

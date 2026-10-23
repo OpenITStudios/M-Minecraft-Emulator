@@ -1,5 +1,15 @@
 # Current Development Handoff — M-Minecraft-Emulator
 
+## Native-first startup — legacy recovery explicitly opt-in, 23 October 2026
+
+Work: unblock the actual native Minecraft workspace from retired owned engine discovery.
+
+Decision: the existing `manager_settings.rs` owner now separates default `prepare` (official Windows installation observation only, no legacy SCM/service lookup, owned fixture operation or automatic settings writes) from explicitly selected `prepare_legacy`. The Tauri command receives an optional `includeLegacy` flag, preserving existing IPC semantics by defaulting it to false. The mounted manager loads native Windows first and exposes a manually selected "Inspect existing-session recovery" action, using the same legacy read-only adapter only when requested. Native window display, non-destructive recovery and blocked MC02–04 launch policy are preserved. The previous ignored Windows legacy acceptance route now deliberately invokes `prepare_legacy`.
+
+Proof: exact pinned GitHub source/static wiring + regression source review. Windows/Rust/Tauri, Node/TypeScript, actual Minecraft and four-client acceptance NOT_EXECUTED; GitHub Actions disabled. No desktop/game data, registry/session identity, signed install, service or `main` change.
+
+Next: confirm independent Minecraft Education filesystem/HKCU/broker behavior through a supported non-modifying Windows mechanism before activating MC02 independent launch.
+
 ## Product P0 — observable Windows Minecraft multi-window workspace, 23 October 2026
 
 Work: one real manager operation for independently started Minecraft Education windows, not another synthetic isolation gate.

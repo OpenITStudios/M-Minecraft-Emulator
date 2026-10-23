@@ -210,8 +210,21 @@ impl From<std::io::Error> for OperationFailure {
         }
     }
 }
-/// Preferences are saved only after the existing provider proves a detected engine.
+/// Default startup is native-first and does NOT contact retired SCM/Sandboxie.
 pub fn prepare(requested: Option<ManagerSettings>) -> io::Result<serde_json::Value> {
+    prepare_with_legacy_mode(requested, false)
+}
+
+/// An explicit operator request may inspect and recover an existing legacy
+/// session, but never unlocks its retired Launch/Provision routes.
+pub fn prepare_legacy(requested: Option<ManagerSettings>) -> io::Result<serde_json::Value> {
+    prepare_with_legacy_mode(requested, true)
+}
+
+fn prepare_with_legacy_mode(
+    requested: Option<ManagerSettings>,
+    include_legacy: bool,
+) -> io::Result<serde_json::Value> {
     if let Some(value) = requested {
         save(&value)?;
     }
@@ -229,31 +242,35 @@ pub fn prepare(requested: Option<ManagerSettings>) -> io::Result<serde_json::Val
         .map(|e| format!("Saved preferences could not be read. {e}"))
         .or_else(|| detected.as_ref().err().map(|e| e.to_string()));
     let mut engine_error = None;
-    if settings.session_directory.is_empty() {
-        match super::owned_provider::discover_active_session() {
-            Ok(path) => settings.session_directory = path.to_string_lossy().into_owned(),
-            Err(error) => engine_error = Some(OperationFailure::from(error)),
-        }
-    }
     let mut observation = None;
-    if !settings.session_directory.is_empty() && detected.is_ok() {
-        let request = super::owned_provider::OwnedRequest {
-            session_directory: settings.session_directory.clone(),
-            client_id: "02".into(),
-            operation: super::owned_provider::OwnedOperation::Inspect,
-            licensed: false,
-            compatibility_confirmed: false,
-            target: None,
-        };
-        match (super::owned_provider::OwnedTestBackend { request: &request }).execute() {
-            Ok(value) => {
-                observation = Some(value);
-                if settings.minecraft_executable.is_empty() {
-                    settings.minecraft_executable = detected.as_ref().unwrap().clone();
-                }
-                save(&settings)?;
+    // No SCM query, owned test session discovery, child helper, native
+    // signature probe or legacy configuration write on normal MC01 startup.
+    if include_legacy {
+        if settings.session_directory.is_empty() {
+            match super::owned_provider::discover_active_session() {
+                Ok(path) => settings.session_directory = path.to_string_lossy().into_owned(),
+                Err(error) => engine_error = Some(OperationFailure::from(error)),
             }
-            Err(error) => engine_error = Some(OperationFailure::from(error)),
+        }
+        if !settings.session_directory.is_empty() && detected.is_ok() {
+            let request = super::owned_provider::OwnedRequest {
+                session_directory: settings.session_directory.clone(),
+                client_id: "02".into(),
+                operation: super::owned_provider::OwnedOperation::Inspect,
+                licensed: false,
+                compatibility_confirmed: false,
+                target: None,
+            };
+            match (super::owned_provider::OwnedTestBackend { request: &request }).execute() {
+                Ok(value) => {
+                    observation = Some(value);
+                    if settings.minecraft_executable.is_empty() {
+                        settings.minecraft_executable = detected.as_ref().unwrap().clone();
+                    }
+                    save(&settings)?;
+                }
+                Err(error) => engine_error = Some(OperationFailure::from(error)),
+            }
         }
     }
     Ok(
