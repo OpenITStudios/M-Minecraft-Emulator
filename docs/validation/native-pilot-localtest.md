@@ -9,6 +9,46 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Original native IPC implementation — 24 October 2026 WIB
+
+Source baseline: `d5452a90bedb9a65e20a6db8e0f5138f7681bbe8`.
+The existing original compatibility DLL now intercepts NtCreateMutant/NtOpenMutant
+instead of separate Win32 W wrappers. Its one configured test basename routes
+only when its resolved parent is the current session's BaseNamedObjects kernel
+object. Absolute, counted relative and Local-alias paths share that native layer;
+unselected/different-parent/unsupported calls pass through. NTSTATUS is preserved,
+entry LastError restored, caller attributes are copied rather than rewritten.
+This is not a generic namespace/security implementation.
+
+[Exact source inputs, API contracts and control matrix](../../tooling/acceptance/windows/bootstrap-ordering/README.md#executed-native-ipc-slice--24-october-2026-wib)
+bind this run to three changed source blobs; CMake/build configuration and external
+Detours pin remain unchanged. The fixed private receipt advances to version 3;
+no public product schema changes. No Sandboxie source/runtime was imported.
+
+**Executed:** Windows x64 Release `/W4 /WX` build; both self-test commands exit 0.
+The existing two concurrently held children report Win32 checks **127/127** and
+native checks **511/511**. Native controls cover absolute/relative/alias paths,
+counted buffers and caller immutability, case policy, existing-create NTSTATUS,
+inheritance/access, unnamed/missing calls, unrelated-root exclusion and protected
+invalid-buffer handling, with immediate LastError checks. Existing host/peer
+ownership, normal exits and object cleanup passed. All four bootstrap controls
+and summary passed; independent exact-image inspection found 0 remaining owned
+processes and 0 unknown fixture paths.
+
+**Limits:** same-user direct peer backing access still succeeds. Parent lookup
+and slot transport are cooperative, not adversarial process/store enrollment;
+unknown contexts are not fail-closed private mediation. ACL/QoS race behavior,
+ANSI/Ex paths and hostile bypass are not accepted. Real cache/input/diagnostic
+names are outside the exact test-name selection. Private file/HKCU views,
+authenticated external helpers and game integration remain missing. No trace,
+Minecraft launch/attach/injection, account/world access, service/driver operation,
+API/admission change or CI action was performed.
+
+This implements the missing narrow native IPC layer in the original DLL,
+not an independently playable MC02 provider. Next source work must make private
+file backing coherent with IPC before using cache-like locks; more successful
+mutex controls alone cannot isolate authentication.
+
 ## Offline named-mutex and caller review — 24 October 2026 WIB
 
 Source baseline: `201f7c98aeb33e95fb92a6776b0c681141ca3b82` (`Local`).

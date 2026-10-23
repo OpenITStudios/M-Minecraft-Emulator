@@ -79,53 +79,66 @@ HANDLE, username, installed game path, credentials, caches or world contents.
 
 No filesystem/registry operations are mediated. In the default ordering mode,
 "canary" means a marker at a would-be protected call site and "arm" is a shared
-flag. In mutex mode the flag follows installation of the two test-name wrappers.
+flag. In mutex mode the flag follows installation of the two native test-name hooks.
 This test cannot observe kernel accesses before notification, all loader work,
 external authentication, other module/TLS graphs or enforcement under bypass.
 
 ## Real mutex-name translation on self-owned children
 
-The optional `--run-mutex-self-test` mode uses the same fixed executable,
-early-import DLL and pinned external Detours. The DLL now links that test-only
-library to intercept **CreateMutexW and OpenMutexW**, with their original
-signatures and Win32 calling conventions. Only one exact logical name beginning
-`Local\\MivubiMutexProbe_` is translated to the controller-assigned A/B suffix.
-All other names and unnamed creates go through unchanged. No general prefix
-rules, arbitrary process attachment, game hook, file/registry mediation or
-credential interception is added.
+The optional `--run-mutex-self-test` mode reuses the same fixed executable,
+early-import DLL and pinned external Detours. **NtCreateMutant and NtOpenMutant**
+are now the single interception layer; the separate CreateMutexW/OpenMutexW
+hooks have been removed. Existing Win32 W calls and explicit native calls use
+that layer. This is original code; no Sandboxie code/runtime is imported.
 
-The version-2 fixed receipt binds slot/configuration and event handles to the
-original child PID/creation FILETIME. The parent inherits exactly its anonymous
-section and four phase events per child; it never passes host mutex handles.
-Both children must stay alive and own their respective mutexes until the
-controller releases the final phase. The parent holds the original logical
-mutex throughout. This prevents a sequential test or early release from
-masquerading as concurrent separation.
+Only the exact configured test basename from `Local\\MivubiMutexProbe_` and
+the child's actual session BaseNamedObjects directory can map to the A/B suffix.
+Counted UNICODE_STRING input is bounded; caller memory is not rewritten.
+Absolute names and RootDirectory-relative names (including Local aliases) resolve
+their parent through NtOpenDirectoryObject. CompareObjectHandles checks identity
+against a retained handle to the child's session directory, rather than comparing
+handle numbers or matching a basename in every directory. The already-loaded
+system modules supply checked exports; missing exports/initialization reject
+attach. No NtQueryObject on arbitrary handles, shared hierarchy creation, extra
+service or driver is introduced.
 
-Checks in each child (bitmask 127) cover:
+Names outside that exact selection, unnamed calls, unsupported lengths/shapes
+and unresolved/different parent contexts pass to the original API. This is
+**not fail-closed mediation for arbitrary callers**. Selected calls copy
+OBJECT_ATTRIBUTES, preserving root/flags/security pointers and replacing only
+the counted name. Native NTSTATUS is returned unchanged; entry LastError is
+restored even when internal lookup/comparison changes it. Protected parameter
+reads translate access violations into their native exception status.
+The initialization/parent handles and hooks belong to this process-lifetime
+fixture; no live DLL unload or authenticated production slot capability exists.
 
-- Fresh translated create despite the host already owning the logical name.
-- Duplicate create returns ERROR_ALREADY_EXISTS and honors handle inheritance.
-- Open of the same logical name reaches the child's owned object, with recursive
-  acquisition/release through the returned handle.
-- Unnamed create passes through; absent named open preserves ERROR_FILE_NOT_FOUND.
-- Open honors requested access and inheritance; a handle without SYNCHRONIZE
-  returns WAIT_FAILED / ERROR_ACCESS_DENIED on wait.
-- Direct open of the peer's backing name succeeds but waits with WAIT_TIMEOUT
-  while that peer owns it. This confirms a separate held object and explicitly
-  demonstrates that same-user raw backing access remains possible.
+The private **version-3** receipt (976 bytes, not a product wire schema) adds a
+native-check mask. It still binds the original child PID/creation FILETIME,
+slot/test name and only five explicitly inherited handles. Both children hold
+their own object while the parent holds the host logical object and checks the
+A/B identities. Existing Win32 controls remain bitmask **127**: fresh/existing
+create, recursive open, unnamed/missing behavior, access/inheritance flags and
+raw-peer wait/cleanup.
 
-The controller independently opens both backing names while they are held,
-checks that its host object retains original ownership, waits for both children
-to finish peer checks, then releases them. It requires normal exit, exact early
-canary order, and disappearance of both backing objects after all child handles
-close. Every wait is bounded; existing original-handle cleanup covers errors.
+Direct native controls in each child are bitmask **511**:
 
-Hook setup occurs only on the current initial thread during the fixture's DLL
-attach, in a Detours transaction. A failed setup rejects attach before arming.
-The hook wrappers perform only bounded name comparison followed by the original
-API; they do not replace GetLastError or manufacture native status codes.
-No live DLL unload is supported in this process-lifetime test.
+| Bit | Actual check |
+| --- | --- |
+| 1 | Absolute native open resolves to the Win32-owned private object. |
+| 2 | Relative directory-handle and Local-alias opens reach that same object. |
+| 4 | Counted name ignores a non-terminator tail; caller string/attributes remain unchanged. |
+| 8 | OBJ_CASE_INSENSITIVE opens the selected object; case-sensitive lowercase returns name-not-found. |
+| 16 | OBJ_OPENIF duplicate create returns STATUS_OBJECT_NAME_EXISTS and honors OBJ_INHERIT. |
+| 32 | Unnamed native create remains a distinct usable object. |
+| 64 | Limited access/inheritance is honored, wait is denied without SYNCHRONIZE, and missing open preserves native name-not-found. |
+| 128 | Same basename under the unrelated KnownDlls directory is not redirected. |
+| 256 | Invalid name-buffer access returns STATUS_ACCESS_VIOLATION, without changing LastError. |
+
+Every direct native API check captures LastError immediately. These are narrow
+cooperative controls, not proof of every invalid input, ACL/security descriptor,
+handle race, abandonment or hostile bypass. The controller still requires exact
+early-import canary ordering, normal child exits and disappearance of both
+backing objects. Same-user raw peer access **still succeeds**.
 
 Manual invocation, separately from the four ordering controls:
 
@@ -133,15 +146,56 @@ Manual invocation, separately from the four ordering controls:
 & ./workspace/bootstrap-ordering-build/Release/bootstrap-ordering.exe --run-mutex-self-test
 ~~~
 
-A successful receipt must retain providerReady=false,
-minecraft=NOT_EXECUTED and securityBoundary=false. This is compatibility name
-translation, **not an ACL/access-isolation boundary**: direct native calls,
-CreateMutexEx/ANSI variants, inherited/duplicated handles and arbitrary object
-names are outside this slice. The actual Education singleton remains UNKNOWN.
-The parent/child mapping is cooperative instrumentation, not an authenticated
-production broker.
+Receipts retain providerReady=false, minecraft=NOT_EXECUTED and
+securityBoundary=false. ANSI/Ex variants, other object types, inherited/duplicated
+handle containment, file/HKCU views, real game hooks and singleton/auth behavior
+remain outside this slice. Real cache/input/diagnostic names are never selected.
+
+API references:
+[CompareObjectHandles](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-compareobjecthandles),
+[NtOpenDirectoryObject](https://learn.microsoft.com/en-us/windows/win32/devnotes/ntopendirectoryobject).
+The native export may change/unavailable on future Windows; successful checks on
+this host do not establish universal OS compatibility.
 
 ## Evidence
+
+### Executed native IPC slice — 24 October 2026 WIB
+
+Base source: `d5452a90bedb9a65e20a6db8e0f5138f7681bbe8`.
+Compiled changed blobs:
+
+| Input | Git blob |
+| --- | --- |
+| compat.cpp | `1b1d632fce0a53d83c655264700686d858100419` |
+| probe.cpp | `88fb2291d537b7081cddd4c728616d3636d4873c` |
+| receipt.h | `aaef568b1fec93403967a276826ce1e218ebdd16` |
+
+CMakeLists.txt, dependency.cpp and compat.def remain unchanged. Trusted external
+Detours remains the same pinned clean source. Windows x64 26100, CMake 4.3.2,
+MSVC 19.44.35226/MSBuild 17.14.40 Release `/W4 /WX` build succeeded.
+An unavailable SDK KernelBase import-library link was replaced with a checked
+export from the already-loaded KernelBase module; no dependency was installed.
+
+Both self-test commands exited **0**. The two-child run reported Win32 masks
+`[127,127]` and native masks `[511,511]`; host/A/B ownership, normal exits and
+backing-object cleanup passed. All four original ordering/failure/timeout
+controls and summary selfCheck=true passed. Independent exact-image observation:
+zero remaining owned images, zero fixture candidates with inaccessible paths.
+No game process or account/world/cache contents were inspected or changed.
+
+Local SHA-256:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| bootstrap-ordering.exe | `f8e034003f26bbf9875943fbc7d94ac93a4ee4d72cc6ea7ff6a2a10ee7a12bb7` |
+| bootstrap-compat.dll | `990940a804254300d3c13097735ce8e632129dfe2c00e917df08c7279dd16249` |
+| ordering.jsonl | `40927efb7a951dda0eccd4323ec78f5b80d713673bee402d9ebd632e0f460c36` |
+| mutex.jsonl | `6863b9b373caef73064423f65827a761f914bf2974855108c0f7b4a1200c8dd1` |
+
+Artifacts remain ignored local output. Raw peer access is still possible;
+production security, real game injection, private file/HKCU/auth and two/four
+licensed playable clients remain **NOT_EXECUTED / UNKNOWN**. The historical
+Win32-only scope below describes its earlier SHA, not this native revision.
 
 ### Executed mutex slice and bootstrap regression — 23 October 2026
 

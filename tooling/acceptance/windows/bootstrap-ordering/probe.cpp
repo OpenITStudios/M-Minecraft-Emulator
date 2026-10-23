@@ -196,6 +196,165 @@ bool run(probe::Mode mode, const wchar_t* name, const std::wstring& self,
     std::printf("],\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n");
     return accepted;
 }
+UNICODE_STRING nativeName(std::wstring& text) {
+    require(text.size() <= 32767);
+    const auto bytes = static_cast<USHORT>(text.size() * sizeof(wchar_t));
+    return {bytes, bytes, text.data()};
+}
+LONG nativeMutexChecks(probe::Receipt& receipt, HANDLE expected) {
+    const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    require(ntdll != nullptr);
+    const auto create = reinterpret_cast<probe::NativeCreate>(GetProcAddress(ntdll, "NtCreateMutant"));
+    const auto open = reinterpret_cast<probe::NativeOpen>(GetProcAddress(ntdll, "NtOpenMutant"));
+    const auto directory = reinterpret_cast<probe::NativeDirectory>(GetProcAddress(ntdll, "NtOpenDirectoryObject"));
+    const auto compare = reinterpret_cast<probe::CompareHandles>(
+        GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "CompareObjectHandles"));
+    require(create && open && directory && compare);
+    DWORD session = 0;
+    require(ProcessIdToSessionId(GetCurrentProcessId(), &session) != FALSE);
+    std::wstring directoryPath = L"\\Sessions\\" + std::to_wstring(session) + L"\\BaseNamedObjects";
+    auto directoryName = nativeName(directoryPath);
+    OBJECT_ATTRIBUTES rootAttributes{sizeof(OBJECT_ATTRIBUTES), nullptr, &directoryName,
+        OBJ_CASE_INSENSITIVE, nullptr, nullptr};
+    Handle root;
+    require(directory(&root.value, 0x0002, &rootAttributes) == 0 && root.value);
+    const std::wstring base = std::wstring(receipt.logical).substr(6);
+    std::wstring absolutePath = directoryPath + L"\\" + base;
+    auto absoluteName = nativeName(absolutePath);
+    OBJECT_ATTRIBUTES attributes{sizeof(OBJECT_ATTRIBUTES), nullptr, &absoluteName,
+        OBJ_CASE_INSENSITIVE, nullptr, nullptr};
+    constexpr DWORD sentinel = 0x13579bd;
+    LONG checks = 0;
+
+    Handle absolute;
+    SetLastError(sentinel);
+    NTSTATUS status = open(&absolute.value, SYNCHRONIZE, &attributes);
+    DWORD error = GetLastError();
+    require(status == 0 && error == sentinel && absolute.value
+        && compare(absolute.value, expected));
+    checks |= 1;
+
+    std::wstring relativePath = base;
+    auto relativeName = nativeName(relativePath);
+    attributes.RootDirectory = root.value;
+    attributes.ObjectName = &relativeName;
+    Handle relative;
+    SetLastError(sentinel);
+    status = open(&relative.value, SYNCHRONIZE, &attributes);
+    error = GetLastError();
+    require(status == 0 && error == sentinel && relative.value
+        && compare(relative.value, expected));
+    std::wstring aliasPath = L"Local\\" + base;
+    auto aliasName = nativeName(aliasPath);
+    attributes.ObjectName = &aliasName;
+    Handle alias;
+    SetLastError(sentinel);
+    status = open(&alias.value, SYNCHRONIZE, &attributes);
+    error = GetLastError();
+    require(status == 0 && error == sentinel && alias.value
+        && compare(alias.value, expected));
+    checks |= 2;
+
+    std::wstring countedPath = base + L"_NOT_PART_OF_COUNTED_NAME";
+    auto countedName = nativeName(countedPath);
+    countedName.Length = countedName.MaximumLength = static_cast<USHORT>(base.size() * sizeof(wchar_t));
+    attributes.ObjectName = &countedName;
+    Handle counted;
+    SetLastError(sentinel);
+    status = open(&counted.value, SYNCHRONIZE, &attributes);
+    error = GetLastError();
+    require(status == 0 && error == sentinel && counted.value
+        && compare(counted.value, expected)
+        && countedPath == base + L"_NOT_PART_OF_COUNTED_NAME"
+        && countedName.Length == base.size() * sizeof(wchar_t)
+        && attributes.RootDirectory == root.value && attributes.ObjectName == &countedName);
+    checks |= 4;
+
+    std::wstring lowercase = base;
+    for (auto& c : lowercase) if (c >= L'A' && c <= L'Z') c = static_cast<wchar_t>(c + L'a' - L'A');
+    auto lowercaseName = nativeName(lowercase);
+    attributes.ObjectName = &lowercaseName;
+    Handle insensitive;
+    SetLastError(sentinel);
+    status = open(&insensitive.value, SYNCHRONIZE, &attributes);
+    error = GetLastError();
+    require(status == 0 && error == sentinel && insensitive.value
+        && compare(insensitive.value, expected));
+    attributes.Attributes = 0;
+    Handle sensitive;
+    SetLastError(sentinel);
+    status = open(&sensitive.value, SYNCHRONIZE, &attributes);
+    error = GetLastError();
+    require(status == static_cast<NTSTATUS>(0xc0000034UL) && !sensitive.value && error == sentinel);
+    checks |= 8;
+
+    attributes.Attributes = OBJ_OPENIF | OBJ_INHERIT | OBJ_CASE_INSENSITIVE;
+    attributes.ObjectName = &relativeName;
+    Handle existing;
+    SetLastError(sentinel);
+    status = create(&existing.value, SYNCHRONIZE | MUTEX_MODIFY_STATE, &attributes, FALSE);
+    error = GetLastError();
+    DWORD flags = 0;
+    require(status == static_cast<NTSTATUS>(0x40000000UL) && error == sentinel && existing.value
+        && compare(existing.value, expected)
+        && GetHandleInformation(existing.value, &flags) && (flags & HANDLE_FLAG_INHERIT));
+    checks |= 16;
+
+    Handle unnamed;
+    SetLastError(sentinel);
+    status = create(&unnamed.value, SYNCHRONIZE | MUTEX_MODIFY_STATE, nullptr, FALSE);
+    error = GetLastError();
+    require(status == 0 && error == sentinel && unnamed.value
+        && !compare(unnamed.value, expected)
+        && WaitForSingleObject(unnamed.value, 0) == WAIT_OBJECT_0 && ReleaseMutex(unnamed.value));
+    checks |= 32;
+
+    attributes.Attributes = OBJ_CASE_INSENSITIVE | OBJ_INHERIT;
+    Handle limited;
+    SetLastError(sentinel);
+    status = open(&limited.value, MUTEX_MODIFY_STATE, &attributes);
+    error = GetLastError();
+    require(status == 0 && error == sentinel && limited.value
+        && GetHandleInformation(limited.value, &flags) && (flags & HANDLE_FLAG_INHERIT));
+    const DWORD limitedWait = WaitForSingleObject(limited.value, 0);
+    const DWORD limitedError = GetLastError();
+    require(limitedWait == WAIT_FAILED && limitedError == ERROR_ACCESS_DENIED);
+    std::wstring missingPath = base + L"_missing";
+    auto missingName = nativeName(missingPath);
+    attributes.ObjectName = &missingName;
+    Handle missing;
+    SetLastError(sentinel);
+    status = open(&missing.value, SYNCHRONIZE, &attributes);
+    error = GetLastError();
+    require(status == static_cast<NTSTATUS>(0xc0000034UL) && !missing.value && error == sentinel);
+    checks |= 64;
+
+    std::wstring otherPath = L"\\KnownDlls";
+    auto otherName = nativeName(otherPath);
+    rootAttributes.ObjectName = &otherName;
+    Handle otherRoot;
+    require(directory(&otherRoot.value, 0x0002, &rootAttributes) == 0 && otherRoot.value);
+    attributes.RootDirectory = otherRoot.value;
+    attributes.ObjectName = &relativeName;
+    Handle wrongRoot;
+    SetLastError(sentinel);
+    status = open(&wrongRoot.value, SYNCHRONIZE, &attributes);
+    error = GetLastError();
+    require(status == static_cast<NTSTATUS>(0xc0000034UL) && !wrongRoot.value && error == sentinel);
+    checks |= 128;
+
+    UNICODE_STRING badName{2, 2, reinterpret_cast<PWSTR>(static_cast<ULONG_PTR>(1))};
+    attributes.RootDirectory = root.value;
+    attributes.ObjectName = &badName;
+    Handle malformed;
+    SetLastError(sentinel);
+    status = open(&malformed.value, SYNCHRONIZE, &attributes);
+    error = GetLastError();
+    require(status == static_cast<NTSTATUS>(0xc0000005UL) && !malformed.value && error == sentinel);
+    checks |= 256;
+    return checks;
+}
+
 int mutexChild(probe::Receipt& receipt) {
     Handle first(CreateMutexW(nullptr, TRUE, receipt.logical));
     const DWORD firstError = GetLastError();
@@ -228,6 +387,7 @@ int mutexChild(probe::Receipt& receipt) {
     const DWORD limitedError = GetLastError();
     require(limitedWait == WAIT_FAILED && limitedError == ERROR_ACCESS_DENIED);
     checks |= 32;
+    InterlockedExchange(&receipt.nativeChecks, nativeMutexChecks(receipt, first.value));
     InterlockedExchange(&receipt.mutexChecks, checks);
     require(SetEvent(receipt.ready) != FALSE);
     require(WaitForSingleObject(receipt.go, 10000) == WAIT_OBJECT_0);
@@ -342,7 +502,9 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
     first.phase(first.done.value);
     second.phase(second.done.value);
     require(InterlockedCompareExchange(&first.mapping.value->mutexChecks, 0, 0) == 127
-        && InterlockedCompareExchange(&second.mapping.value->mutexChecks, 0, 0) == 127);
+        && InterlockedCompareExchange(&second.mapping.value->mutexChecks, 0, 0) == 127
+        && InterlockedCompareExchange(&first.mapping.value->nativeChecks, 0, 0) == 511
+        && InterlockedCompareExchange(&second.mapping.value->nativeChecks, 0, 0) == 511);
     require(SetEvent(finish.value) != FALSE);
     first.exitedNormally();
     second.exitedNormally();
@@ -353,7 +515,7 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
     }
     require(ReleaseMutex(host.value) != FALSE);
     std::printf("{\"case\":\"mutex-two-child\",\"selfCheck\":true,\"checks\":[127,127],"
-                "\"distinctHostAndPeerObjects\":true,\"rawPeerAccessible\":true,"
+                "\"nativeChecks\":[511,511],\"distinctHostAndPeerObjects\":true,\"rawPeerAccessible\":true,"
                 "\"securityBoundary\":false,\"providerReady\":false,"
                 "\"minecraft\":\"NOT_EXECUTED\"}\n");
     return true;

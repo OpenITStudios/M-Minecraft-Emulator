@@ -1,5 +1,6 @@
 #pragma once
 #include <windows.h>
+#include <winternl.h>
 #if !defined(_M_X64)
 #error This self-test supports native AMD64 only
 #endif
@@ -7,9 +8,13 @@
 // Fixed self-test transport, not a production slot capability or shared-state ABI.
 namespace probe {
 constexpr DWORD Magic = 0x42535431;
-constexpr DWORD Version = 2;
+constexpr DWORD Version = 3;
 constexpr LONG Capacity = 16;
 constexpr wchar_t SectionVariable[] = L"MIVUBI_BOOTSTRAP_TEST_SECTION";
+using CompareHandles = BOOL (WINAPI*)(HANDLE, HANDLE);
+using NativeCreate = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, BOOLEAN);
+using NativeOpen = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES);
+using NativeDirectory = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES);
 enum Mode : DWORD { Baseline, Normal, FailAttach, Timeout, MutexCase };
 enum Stage : LONG { Attach = 1, Armed, Rejected, Suppressed, Dependency, Tls, Main };
 struct Event { LONG stage; LONG armed; };
@@ -20,12 +25,12 @@ struct Receipt {
     volatile LONG count, armed;
     Event events[Capacity];
     DWORD slot;
-    volatile LONG mutexChecks;
+    volatile LONG mutexChecks, nativeChecks;
     wchar_t logical[128], own[128], peer[128];
     HANDLE ready, go, done, finish;
 };
 static_assert(sizeof(Event) == 8);
-static_assert(sizeof(Receipt) == 968);
+static_assert(sizeof(Receipt) == 976);
 
 class View {
 public:
