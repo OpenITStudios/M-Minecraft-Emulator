@@ -9,6 +9,73 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Offline mutex-stack correlation — 24 October 2026 WIB
+
+Source baseline: `59e2565c57716894f741fa51323d557142de57d8` (`Local`).
+Only the already-authorized **23 October** Handle+Loader capture was consumed.
+No new trace, process attach, game launch/restart, injection or credential/data
+operation was performed. Both archived ETL hashes matched the recorded primary
+`6500cf6ea089245850a43e7ad8788970c21eecad572f74d0768f899adf96ab8b` and
+rundown `774eb87efa616b340761faffcd16a1d28df3c694ab33405f575ecfe3be08460b`
+before and after analysis. The capture receipt contains one matching PID /
+creation-FILETIME / session before and after the capture; that is the lifetime
+binding used here, not a new inspection of a running process.
+
+A local-only native consumer compiled with MSVC `/W4 /WX` and processed the
+rundown and primary files with `PROCESS_TRACE_MODE_RAW_TIMESTAMP`.
+[StackWalk EventTimeStamp](https://learn.microsoft.com/en-us/windows/win32/etw/stackwalk-event)
+was matched **exactly** with the original event timestamp plus process/thread;
+no nearest-time heuristic was used. TDH decoded StackProcess, StackThread and
+Stack1…N; bounded frame count followed the recorded 64-bit event size.
+[Image rundown ranges](https://learn.microsoft.com/en-us/windows/win32/etw/image-load)
+for that process provided module membership, with ambiguous/overlapping
+addresses left unresolved. No symbols were downloaded, no game instructions
+disassembled and no address, raw PID/TID, object name or full path is published.
+
+| Observation | Actual result |
+| --- | --- |
+| Original object events | 230; same total as the earlier decoder. |
+| Separate stack records | 60,658 overall; 305 for the pinned process, all 305 decoded. They are not 305 independently matched object events. |
+| Exact object/stack keys | 24 object events matched; 0 ambiguous object keys; 206 lacked an exact match. There were 141 unused stack keys. Missing matches remain missing, not inferred. |
+| Mutex events | Same rundown confirmed type index 22 as Mutant. All **12** matched: **6 create + 6 close**, each with one corresponding stack record. All 12 ObjectName values were empty. |
+| Module attribution | All 12 stacks contain recorded module ranges for the game, XInput, kernel32/kernelbase, ntdll and CRT, plus other module ranges. No CEF/cohtml/audio frame appeared in these matched stacks. This is module-range membership, not symbol-level function/caller attribution. |
+| Frame coverage on these mutex stacks | Create stacks: 22 frames (8 kernel); close stacks: 20 (7 kernel). User frames fit unique recorded ranges; zero unmapped/overlapping user addresses on these 12 stacks. Kernel addresses were not symbol-resolved and other-module labels were not expanded. |
+| Module inventory | 133 ranges for the pinned process; no primary target-image load/unload changes were observed. Rundown is inventory, not a new-process launch. |
+| Decode limits | Object and target-stack property errors: 0. Two image-record decodes still failed with ERROR_NOT_FOUND before PID attribution, so their process identity remains unknown. They are not silently treated as decoded. |
+
+**Loss-counter correction:** the earlier decoder read
+`EVENT_TRACE_LOGFILEW.EventsLost`, which Microsoft documents as
+[not used](https://learn.microsoft.com/en-us/windows/win32/api/evntrace/ns-evntrace-event_trace_logfilew).
+Its zero is withdrawn as corroborating loss evidence. The new consumer reads
+[TRACE_LOGFILE_HEADER.EventsLost and BuffersLost](https://learn.microsoft.com/en-us/windows/win32/api/evntrace/ns-evntrace-trace_logfile_header);
+both are **0** for both saved files. OpenTrace/ProcessTrace/CloseTrace succeeded.
+The original independent WPR collector status also reported zero loss; none of
+these counters proves coverage of channels that were never enabled.
+
+**Bounded conclusion:** actual MC01 mutex activity is correlated with main-image /
+XInput-containing stacks in this window, whereas the prior CEF import was only
+a static candidate. These **unnamed** mutex operations do not identify a named
+singleton, its object path or a rejection branch. The trace still observed no
+additional game process reaching rejection. No proof establishes which API W/Ex/
+native path was used, what its return value meant, or what happened during the
+earlier first-process startup. Do not widen name translation to every mutex or
+promote module presence into a game compatibility decision.
+
+Local-only consumer source / executable SHA-256:
+`2cb0a287272d4f7abef0afece866be371c72b2e0c16f93a543d6d55b669a24ce` /
+`4aa897b0a37827ff3aa561b56a7fffcb0975eb5c78ebaf9523c00687425449a7`.
+Sanitized correlation receipt:
+`df7f5eb578e150fb39b72329e24b24fce1f0b2582c5ebc381612c6c20859e1b4`.
+The consumer and raw data remain ignored under `workspace/tmp/`; this is an
+executed one-off analysis, not a committed reproducible tool. Verification:
+17:05 UTC on 23 October / 00:05 WIB on 24 October.
+
+Evidence ceiling: executed offline trace analysis with limited historical
+TARGET_WINDOWS metadata. The singleton decision, external broker/authentication,
+private file/HKCU mediation and two/four-client gameplay remain **UNKNOWN /
+NOT_EXECUTED**. The sole next action is in
+[planning/development.md](../../planning/development.md).
+
 ## Read-only Education import review — 23 October 2026
 
 Source baseline: `c20ce5c7f7ef6ab04b761e12e918dac1f6db06ef` (`Local`).
@@ -109,7 +176,7 @@ A one-off offline native decoder compiled under MSVC `/W4 /WX` and used [OpenTra
 | Loader rundown check | One existing `Minecraft.Windows.exe` image was recognized in the rundown, corroborating that the decoder recognizes that basename. Of 15,528 rundown image records, 15,526 decoded and 2 did not; those two remain undecoded. Rundown is an inventory, not a new-process launch event. |
 | WMI lifecycle subscription | No matching game/helper start/stop event was received. There was no positive lifecycle-event control in this run, so this is corroborating observation only, not a guarantee that every transient process would be detected. |
 | Call-stack / decision causality | Handle stacks were requested, but this decoder did not correlate separate kernel stack-walk records into call chains; no attached stack was decoded on the selected object records. No return-value/branch, shell-activation or window-message evidence identifies a singleton decision. |
-| Loss / cleanup | Native ProcessTrace/CloseTrace succeeded with zero reported event loss; WPR's uniquely named recording was stopped. This does not prove coverage of channels that were not enabled. |
+| Loss / cleanup | Native ProcessTrace/CloseTrace succeeded and WPR's uniquely named recording was stopped. The original decoder read an unused EventsLost field; its zero is not loss evidence. The offline follow-up above reads the documented trace-header counters and reports zero for these files. This does not prove coverage of channels that were not enabled. |
 
 Profile SHA-256: `548070c68c684df2899357f40066cb45fcd712ee09e7087e8e0bde611fb71ec0`. Final offline decoder source/binary SHA-256: `a3dea6518c99c7330aa9f58dff9615bd20f6c97ea3dc7807c8e28d5f6e066c39` / `e050a500ac67ff70db598753f9c1801d63327d8d37d8b7819bff174ddc41b361`. These identify local-only observation tooling in ignored `workspace/tmp/`, not a committed or reproducible desktop/provider build.
 
