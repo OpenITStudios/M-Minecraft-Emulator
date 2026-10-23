@@ -854,10 +854,13 @@ mod psec_windows {
             return Ok(unavailable_psec());
         }
 
-        // Signature from processmodel.h (published September 2026).
-        // BOOLEAN is one byte; HRESULT uses i32 and fails when negative.
+        // Version check: DWORD, BOOLEAN*, DWORD*, returning HRESULT.
+        // Current MXC PSEC V2 query uses a UINT64* output bitmask, whereas
+        // the public processmodel.h page names an enum pointer. Reserve a
+        // full eight-byte output: both a 32-bit enum write and a 64-bit V2
+        // write stay in bounds. Keep this diagnostic non-authorizing.
         type VersionCheck = unsafe extern "system" fn(u32, *mut u8, *mut u32) -> i32;
-        type SupportQuery = unsafe extern "system" fn(*mut u32) -> i32;
+        type SupportQuery = unsafe extern "system" fn(*mut u64) -> i32;
         let check_version: VersionCheck = unsafe { mem::transmute(version.unwrap()) };
         let query_support: SupportQuery = unsafe { mem::transmute(query.unwrap()) };
         let mut available: u8 = 0;
@@ -875,7 +878,7 @@ mod psec_windows {
             return Err(io::Error::other("Invalid Windows PSEC availability response"));
         }
 
-        let mut support_flags: u32 = 0;
+        let mut support_flags: u64 = 0;
         if unsafe { query_support(&mut support_flags) } < 0 {
             return Err(io::Error::other("Native Windows PSEC policy query failed"));
         }

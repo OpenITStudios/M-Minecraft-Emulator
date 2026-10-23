@@ -38,6 +38,8 @@ References:
 - `RegOverridePredefKey`: **NO-GO as an external transparent HKCU switch**; Windows documents that it affects only the calling process. https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regoverridepredefkey
 - MSIX AppData/HKCU redirection: **NOT independently per game PID** (per user/per app/package); no permission to repackage or re-register third-party Education. https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes
 
+**Concrete source correction:** the earlier read-only PSEC capability FFI passed a pointer to a 32-bit support mask. The official Microsoft MXC PSEC V2 implementation uses a 64-bit output mask, while public Win32 documentation names an enum pointer without a guaranteed output allocation width. The adapter now reserves a zero-initialized 64-bit mask, so a 64-bit OS write cannot overrun a four-byte Rust local. Existing low-bit diagnostic results and the frontend wire schema remain unchanged. Source reference: [Microsoft MXC secenv.rs](https://github.com/microsoft/mxc/blob/ffecec04357747d6649714f473436dfb77111be8/src/mxc-sdk/src/backends/process_container/common/secenv.rs). Native SDK compilation and runtime **NOT_EXECUTED**; no new game isolation proof.
+
 **Outcome:** none of these mechanisms alone meets MC02's complete game-bound contract. An isolated process is not yet an isolated Minecraft session. Do not add another generic primitive or disable admission on the basis of this review. Seek one supported complete path; otherwise retain **NO-GO/UNKNOWN** without fake progress.
 
 ## SINGLE ACTIVE PRIORITY — P0: real MC02 isolation provider
@@ -73,6 +75,6 @@ On each meaningful bounded commit, replace the **current** blocker/next status i
 
 ## Current owner and next action
 
-**State:** ACTIVE P0a. **Blocker:** no validated process-bound Roaming/HKCU/Microsoft broker mediation and real gameplay for a second official Education client; latest PSEC Windows ABI and compiler acceptance are unknown.
+**State:** ACTIVE P0a. **Blocker:** no validated process-bound Roaming/HKCU/Microsoft broker mediation and real gameplay for a second official Education client. The PSEC output-buffer width is corrected in source, but native Windows SDK compilation and actual PSEC/Minecraft runtime compatibility are still UNKNOWN.
 
 **Next:** Determine whether any documented, non-modifying Windows mechanism can provide **all** MC02 game boundaries together (effective Roaming, HKCU, ADAL/WAM broker, interactive GUI). Select one for a real game-bound vertical slice only if the missing mediation can be demonstrated; otherwise record a precise NO-GO and keep isolated Launch/Provision denied. Windows SDK compilation of PSEC remains NOT_EXECUTED.
