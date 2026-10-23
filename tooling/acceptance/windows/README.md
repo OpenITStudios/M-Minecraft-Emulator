@@ -1,5 +1,83 @@
 # Windows Acceptance Tooling
 
+## First MC01 startup metadata (opt-in, no game launcher)
+
+`collect-mc01-startup.ps1` defaults to read-only preflight. It refuses recording
+if **any** `Minecraft.Windows` or `Minecraft.AdalServer` basename is already
+running, including another session or unreadable identity. Preserve that session;
+do not close/sign out just to collect evidence. The collector never launches,
+restarts, injects or stops a game and never changes product admission.
+Installation resolution reuses
+[`Resolve-ManagerEducationTarget -RegisteredOnly`](../../isolation-source/windows/education-target.ps1);
+the operator's normal first launch belongs to the existing
+[`open_native_minecraft`](../../../apps/desktop/src-tauri/src/engine/native_clients.rs)
+owner. No direct EXE/Explorer activation is implemented here.
+
+Use **64-bit Windows PowerShell 5.1**:
+
+```powershell
+powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-mc01-startup.ps1
+powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-mc01-startup.ps1 -SelfTest
+```
+
+Only after separate approval for a new recording, and when no existing target
+session needs preserving, run the same command with `-Record` from an explicitly
+elevated Windows PowerShell. There is no automatic UAC/relaunch. Wait for
+`MC01_STARTUP_READY_30_SECONDS`, then manually request **one first MC01 launch**
+through the existing official manager route. Do not request MC02 or repeat
+activation. A target appearing before ready, another game lifetime, wrong
+registered image/session or unreadable game identity makes collection incomplete.
+A concurrently launched game is preserved; the collector stops its own trace,
+not that process. A race cannot be prevented by this observer.
+
+The fixed, hash-checked [WPR profile](./mc01-startup.wprp) requests Handle/Loader
+metadata and create/close/duplicate stacks with **32 MiB collector buffers** in
+circular memory mode for a 30-second observation window. This is not a total
+process-memory or output-file-size limit; high activity can overwrite early
+events. It excludes ProcessThread, file I/O, registry, network and memory-page
+providers. Separate WMI subscriptions filter only the two basenames and persist
+selected PID, parent PID, session and event-time fields, excluding SID and command
+line. Snapshots pin available target PID/creation-FILETIME/session/path; on-disk
+Microsoft trust/hash is not loaded-image binding. WMI event time is not process
+creation time, parent PID is only a candidate, and transient/early-exit processes
+may lack a pinned snapshot. Actual creator and completeness remain **UNKNOWN**.
+
+Raw ETL is system-wide: unrelated object names, module paths and stack addresses
+may be present. No credentials, token/cache/world contents, registry payload,
+network payload or command lines are deliberately queried. Keep raw ETL,
+WPR text and receipt private and local; publish only reviewed sanitized findings.
+Output uses a new GUID directory under the current user's TEMP, never a tracked
+report or overwrite of an older capture. The GUID WPR instance is supplied to
+every start/status/stop/cancel; cleanup never cancels a global/other recording.
+The observation window is timed; WPR start/save and finalization take additional
+time. Ordinary exceptions enter cleanup; forced process termination can leave
+its named trace requiring explicit recovery.
+
+The profile retains `SkipMerge` from the previous authorized raw capture to avoid
+normal merge enrichment. Microsoft describes TraceMergeProperty as internal use;
+profile validation is not a promise of portable recording behavior. `-recordtempto`
+requests the private run directory. On stop, primary/rundown filenames may differ
+from `startup.etl`; the receipt inventories and hashes actual local ETL parts
+without assuming one merged file. Missing files or failed stop make the result
+`INCOMPLETE`; preserve diagnostics and temporary parts, do not silently retry or
+declare success. Final status/cleanup output needs review. Collection state
+`WINDOW_OBSERVED` means only that the timer completed and local ETL was saved;
+`startupCoverage`/`singletonDecision` remain UNKNOWN and `providerReady=false`.
+
+Sources: [Microsoft WPR commands](https://learn.microsoft.com/en-us/windows-hardware/test/wpt/wpr-command-line-options),
+[named instances](https://devblogs.microsoft.com/performance-diagnostics/controlling-the-event-session-name-with-the-instance-name/),
+[WMI start metadata](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/krnlprov/win32-processstarttrace),
+[TraceMergeProperty scope](https://learn.microsoft.com/en-us/windows-hardware/test/wpt/tracemergeproperty).
+
+Verification against source prepared from `e13c03adf559e215a372965b9c6f3cd66fee90dd`:
+ten guard/native-error self-checks passed in Windows PowerShell 5.1; default
+preflight preserved one existing target; WPR 10.0.26100 accepted and displayed
+only the intended profile keywords/stacks/buffers. **NOT_EXECUTED:** new recording,
+raw-file placement, stop/cancel/recovery, positive startup lifecycle control,
+game startup, singleton rejection, authentication or two-client acceptance.
+Current blocker/next action belongs only to
+[planning/development.md](../../../planning/development.md).
+
 ## Early compatibility bootstrap ordering (self-child only)
 
 The standalone [bootstrap-ordering experiment](./bootstrap-ordering/README.md)

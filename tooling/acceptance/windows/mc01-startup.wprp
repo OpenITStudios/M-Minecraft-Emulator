@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WindowsPerformanceRecorder Version="1.0">
+  <Profiles>
+    <SystemCollector Id="MC01StartupCollector" Name="MC01 Startup Metadata">
+      <BufferSize Value="256" />
+      <Buffers Value="128" />
+    </SystemCollector>
+    <SystemProvider Id="MC01StartupProvider">
+      <Keywords>
+        <Keyword Value="Handle" />
+        <Keyword Value="Loader" />
+      </Keywords>
+      <Stacks>
+        <Stack Value="HandleCreate" />
+        <Stack Value="HandleClose" />
+        <Stack Value="HandleDuplicate" />
+      </Stacks>
+    </SystemProvider>
+    <Profile Id="MC01Startup.Verbose.Memory" Name="MC01Startup"
+             Description="Thirty-second first MC01 handle and loader metadata"
+             LoggingMode="Memory" DetailLevel="Verbose">
+      <Collectors>
+        <SystemCollectorId Value="MC01StartupCollector">
+          <SystemProviderId Value="MC01StartupProvider" />
+        </SystemCollectorId>
+      </Collectors>
+      <TraceMergeProperties>
+        <TraceMergeProperty Id="MC01StartupRaw" Name="MC01StartupRaw">
+          <SkipMerge Value="true" />
+        </TraceMergeProperty>
+      </TraceMergeProperties>
+    </Profile>
+  </Profiles>
+</WindowsPerformanceRecorder>
