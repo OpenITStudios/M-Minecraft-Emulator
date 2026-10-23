@@ -8,8 +8,12 @@ baseline, attach-failure and timeout controls. It builds only with an explicit
 opt-in and a pinned external Microsoft Detours source checkout. It accepts no
 target PID/path, is not linked into the product, and cannot approve Minecraft
 isolation. At source `d9a2fb8`, the Release build and all four self-child controls
-executed successfully on Windows x64; see the linked exact-source evidence.
-Minecraft mediation and acceptance remain **NOT_EXECUTED**.
+executed successfully on Windows x64. The same standalone tool now also checks
+real CreateMutexW/OpenMutexW translation on two self-owned children; its host,
+peer, create/open/error/access/inheritance-flag and cleanup checks passed.
+Direct peer backing access remains possible, so this is not a security boundary.
+See linked exact-source evidence. Minecraft mediation and acceptance remain
+**NOT_EXECUTED**.
 
 ## Independent native AppContainer proof (synthetic only)
 

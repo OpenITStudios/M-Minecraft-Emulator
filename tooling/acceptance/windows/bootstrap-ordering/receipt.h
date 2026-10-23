@@ -7,10 +7,10 @@
 // Fixed self-test transport, not a production slot capability or shared-state ABI.
 namespace probe {
 constexpr DWORD Magic = 0x42535431;
-constexpr DWORD Version = 1;
+constexpr DWORD Version = 2;
 constexpr LONG Capacity = 16;
 constexpr wchar_t SectionVariable[] = L"MIVUBI_BOOTSTRAP_TEST_SECTION";
-enum Mode : DWORD { Baseline, Normal, FailAttach, Timeout };
+enum Mode : DWORD { Baseline, Normal, FailAttach, Timeout, MutexCase };
 enum Stage : LONG { Attach = 1, Armed, Rejected, Suppressed, Dependency, Tls, Main };
 struct Event { LONG stage; LONG armed; };
 struct Receipt {
@@ -19,9 +19,13 @@ struct Receipt {
     DWORD mode;
     volatile LONG count, armed;
     Event events[Capacity];
+    DWORD slot;
+    volatile LONG mutexChecks;
+    wchar_t logical[128], own[128], peer[128];
+    HANDLE ready, go, done, finish;
 };
 static_assert(sizeof(Event) == 8);
-static_assert(sizeof(Receipt) == 160);
+static_assert(sizeof(Receipt) == 968);
 
 class View {
 public:
@@ -48,7 +52,7 @@ public:
         FILETIME created{}, exited{}, kernel{}, user{};
         const bool valid = GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user)
             && value->magic == Magic && value->version == Version
-            && value->pid == GetCurrentProcessId() && value->mode <= Timeout
+            && value->pid == GetCurrentProcessId() && value->mode <= MutexCase
             && value->created.dwLowDateTime == created.dwLowDateTime
             && value->created.dwHighDateTime == created.dwHighDateTime;
         if (!valid) {

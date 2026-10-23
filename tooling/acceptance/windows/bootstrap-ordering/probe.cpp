@@ -41,7 +41,7 @@ struct Mapping {
 struct Attributes {
     std::vector<BYTE> bytes;
     LPPROC_THREAD_ATTRIBUTE_LIST value = nullptr;
-    explicit Attributes(HANDLE* inherited) {
+    explicit Attributes(HANDLE* inherited, SIZE_T count = 1) {
         SIZE_T size = 0;
         InitializeProcThreadAttributeList(nullptr, 1, 0, &size);
         require(size != 0);
@@ -49,7 +49,7 @@ struct Attributes {
         value = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(bytes.data());
         require(InitializeProcThreadAttributeList(value, 1, 0, &size) != FALSE);
         if (!UpdateProcThreadAttribute(value, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
-                                       inherited, sizeof(HANDLE), nullptr, nullptr)) {
+                                       inherited, sizeof(HANDLE) * count, nullptr, nullptr)) {
             DeleteProcThreadAttributeList(value);
             value = nullptr;
             require(false);
@@ -176,6 +176,9 @@ bool run(probe::Mode mode, const wchar_t* name, const std::wstring& self,
             && count == 2 + stages[probe::Dependency] + stages[probe::Tls]
             && mapping.value->armed == 0;
         break;
+    case probe::MutexCase:
+        require(false); // Mutex mode uses the two-phase pair runner, never this path.
+        break;
     case probe::Timeout:
         accepted = timedOut && exit == 90 && count == 5 && stages[probe::Attach] == 1
             && stages[probe::Suppressed] == 1
@@ -193,11 +196,175 @@ bool run(probe::Mode mode, const wchar_t* name, const std::wstring& self,
     std::printf("],\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n");
     return accepted;
 }
+int mutexChild(probe::Receipt& receipt) {
+    Handle first(CreateMutexW(nullptr, TRUE, receipt.logical));
+    const DWORD firstError = GetLastError();
+    require(first.value && firstError != ERROR_ALREADY_EXISTS);
+    LONG checks = 1;
+    SECURITY_ATTRIBUTES inheritable{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
+    Handle duplicate(CreateMutexW(&inheritable, FALSE, receipt.logical));
+    const DWORD duplicateError = GetLastError();
+    DWORD flags = 0;
+    require(duplicate.value && duplicateError == ERROR_ALREADY_EXISTS
+        && GetHandleInformation(duplicate.value, &flags) && (flags & HANDLE_FLAG_INHERIT));
+    checks |= 2;
+    Handle opened(OpenMutexW(SYNCHRONIZE | MUTEX_MODIFY_STATE, FALSE, receipt.logical));
+    require(opened.value && WaitForSingleObject(opened.value, 0) == WAIT_OBJECT_0
+        && ReleaseMutex(opened.value));
+    checks |= 4;
+    Handle unnamed(CreateMutexW(nullptr, FALSE, nullptr));
+    require(unnamed.value && WaitForSingleObject(unnamed.value, 0) == WAIT_OBJECT_0
+        && ReleaseMutex(unnamed.value));
+    checks |= 8;
+    const std::wstring absent = std::wstring(receipt.logical) + L"_missing";
+    Handle missing(OpenMutexW(SYNCHRONIZE, FALSE, absent.c_str()));
+    const DWORD missingError = GetLastError();
+    require(!missing.value && missingError == ERROR_FILE_NOT_FOUND);
+    checks |= 16;
+    Handle limited(OpenMutexW(MUTEX_MODIFY_STATE, TRUE, receipt.logical));
+    require(limited.value && GetHandleInformation(limited.value, &flags)
+        && (flags & HANDLE_FLAG_INHERIT));
+    const DWORD limitedWait = WaitForSingleObject(limited.value, 0);
+    const DWORD limitedError = GetLastError();
+    require(limitedWait == WAIT_FAILED && limitedError == ERROR_ACCESS_DENIED);
+    checks |= 32;
+    InterlockedExchange(&receipt.mutexChecks, checks);
+    require(SetEvent(receipt.ready) != FALSE);
+    require(WaitForSingleObject(receipt.go, 10000) == WAIT_OBJECT_0);
+    Handle peer(OpenMutexW(SYNCHRONIZE, FALSE, receipt.peer));
+    require(peer.value && WaitForSingleObject(peer.value, 0) == WAIT_TIMEOUT);
+    // Same-user direct backing-name access remains possible: explicitly not an ACL boundary.
+    checks |= 64;
+    InterlockedExchange(&receipt.mutexChecks, checks);
+    require(SetEvent(receipt.done) != FALSE);
+    require(WaitForSingleObject(receipt.finish, 10000) == WAIT_OBJECT_0);
+    require(ReleaseMutex(first.value) != FALSE);
+    return 0;
+}
+
+HANDLE sharedEvent() {
+    SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
+    HANDLE event = CreateEventW(&security, TRUE, FALSE, nullptr);
+    require(event != nullptr);
+    return event;
+}
+HANDLE sharedSection() {
+    SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
+    HANDLE section = CreateFileMappingW(INVALID_HANDLE_VALUE, &security, PAGE_READWRITE,
+                                        0, sizeof(probe::Receipt), nullptr);
+    require(section != nullptr);
+    return section;
+}
+void copyName(wchar_t (&destination)[128], const std::wstring& name) {
+    require(name.size() < 128);
+    for (size_t i = 0; i <= name.size(); ++i) destination[i] = name.c_str()[i];
+}
+struct MutexChild {
+    Handle section{sharedSection()};
+    Mapping mapping{section.value};
+    Handle ready{sharedEvent()}, done{sharedEvent()};
+    Child child; // Destroy child before receipt/events, including constructor failure.
+    MutexChild(DWORD slot, const std::wstring& name, HANDLE go, HANDLE finish,
+               const std::wstring& self, const std::string& compatibility) {
+        ZeroMemory(mapping.value, sizeof(probe::Receipt));
+        auto& receipt = *mapping.value;
+        receipt.magic = probe::Magic;
+        receipt.version = probe::Version;
+        receipt.mode = probe::MutexCase;
+        receipt.slot = slot;
+        receipt.ready = ready.value;
+        receipt.go = go;
+        receipt.done = done.value;
+        receipt.finish = finish;
+        copyName(receipt.logical, name);
+        copyName(receipt.own, name + (slot == 1 ? L"_A" : L"_B"));
+        copyName(receipt.peer, name + (slot == 1 ? L"_B" : L"_A"));
+        HANDLE inherited[]{section.value, ready.value, go, done.value, finish};
+        Attributes attributes(inherited, 5);
+        auto env = environment(section.value);
+        STARTUPINFOEXW startup{};
+        startup.StartupInfo.cb = sizeof(startup);
+        startup.lpAttributeList = attributes.value;
+        std::wstring command = L"\"" + self + L"\" --bootstrap-test-child";
+        require(CreateProcessW(self.c_str(), command.data(), nullptr, nullptr, TRUE,
+            CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT
+                | CREATE_NO_WINDOW,
+            env.data(), nullptr, &startup.StartupInfo, &child.info) != FALSE);
+        receipt.pid = child.info.dwProcessId;
+        FILETIME exited{}, kernel{}, user{};
+        require(GetProcessTimes(child.info.hProcess, &receipt.created, &exited, &kernel, &user)
+            != FALSE);
+        const char* dlls[]{compatibility.c_str()};
+        require(DetourUpdateProcessWithDll(child.info.hProcess, dlls, 1) != FALSE);
+        MemoryBarrier();
+        require(ResumeThread(child.info.hThread) == 1);
+    }
+    void phase(HANDLE event) {
+        HANDLE states[]{event, child.info.hProcess};
+        require(WaitForMultipleObjects(2, states, FALSE, 10000) == WAIT_OBJECT_0);
+        require(WaitForSingleObject(child.info.hProcess, 0) == WAIT_TIMEOUT);
+    }
+    void exitedNormally() {
+        require(WaitForSingleObject(child.info.hProcess, 10000) == WAIT_OBJECT_0);
+        DWORD code = STILL_ACTIVE;
+        require(GetExitCodeProcess(child.info.hProcess, &code) != FALSE && code == 0);
+        const LONG count = InterlockedCompareExchange(&mapping.value->count, 0, 0);
+        require(count == 5 && mapping.value->armed == 1);
+        constexpr LONG stages[]{probe::Attach, probe::Armed, probe::Dependency,
+                                probe::Tls, probe::Main};
+        for (LONG i = 0; i < count; ++i) {
+            require(mapping.value->events[i].stage == stages[i]
+                && mapping.value->events[i].armed == (i == 0 ? 0 : 1));
+        }
+    }
+};
+bool mutexPair(const std::wstring& self, const std::string& compatibility) {
+    const std::wstring name = L"Local\\MivubiMutexProbe_" + std::to_wstring(GetCurrentProcessId())
+        + L"_" + std::to_wstring(GetTickCount64());
+    Handle host(CreateMutexW(nullptr, TRUE, name.c_str()));
+    const DWORD hostError = GetLastError();
+    require(host.value && hostError != ERROR_ALREADY_EXISTS);
+    Handle go(sharedEvent()), finish(sharedEvent());
+    MutexChild first(1, name, go.value, finish.value, self, compatibility);
+    MutexChild second(2, name, go.value, finish.value, self, compatibility);
+    first.phase(first.ready.value);
+    second.phase(second.ready.value);
+    {
+        Handle a(OpenMutexW(SYNCHRONIZE, FALSE, (name + L"_A").c_str()));
+        Handle b(OpenMutexW(SYNCHRONIZE, FALSE, (name + L"_B").c_str()));
+        require(a.value && b.value && WaitForSingleObject(a.value, 0) == WAIT_TIMEOUT
+            && WaitForSingleObject(b.value, 0) == WAIT_TIMEOUT);
+        Handle original(OpenMutexW(SYNCHRONIZE | MUTEX_MODIFY_STATE, FALSE, name.c_str()));
+        require(original.value && WaitForSingleObject(original.value, 0) == WAIT_OBJECT_0
+            && ReleaseMutex(original.value));
+    }
+    require(SetEvent(go.value) != FALSE);
+    first.phase(first.done.value);
+    second.phase(second.done.value);
+    require(InterlockedCompareExchange(&first.mapping.value->mutexChecks, 0, 0) == 127
+        && InterlockedCompareExchange(&second.mapping.value->mutexChecks, 0, 0) == 127);
+    require(SetEvent(finish.value) != FALSE);
+    first.exitedNormally();
+    second.exitedNormally();
+    for (const auto& suffix : {L"_A", L"_B"}) {
+        Handle gone(OpenMutexW(SYNCHRONIZE, FALSE, (name + suffix).c_str()));
+        const DWORD error = GetLastError();
+        require(!gone.value && error == ERROR_FILE_NOT_FOUND);
+    }
+    require(ReleaseMutex(host.value) != FALSE);
+    std::printf("{\"case\":\"mutex-two-child\",\"selfCheck\":true,\"checks\":[127,127],"
+                "\"distinctHostAndPeerObjects\":true,\"rawPeerAccessible\":true,"
+                "\"securityBoundary\":false,\"providerReady\":false,"
+                "\"minecraft\":\"NOT_EXECUTED\"}\n");
+    return true;
+}
+
 int childMain() {
     probe::View view;
     if (!view.open()) return 81;
     probe::record(view.value, probe::Main);
     if (DependencyCanary() != 7) return 82;
+    if (view.value->mode == probe::MutexCase) return mutexChild(*view.value);
     if (view.value->mode == probe::Timeout) {
         Sleep(INFINITE); // Deliberate owned-child timeout control, outside loader lock.
         return 83;
@@ -208,8 +375,11 @@ int childMain() {
 
 int wmain(int argc, wchar_t** argv) {
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
-    if (argc == 2 && wcscmp(argv[1], L"--bootstrap-test-child") == 0) return childMain();
-    if (argc != 2 || wcscmp(argv[1], L"--run-self-test") != 0) return 64;
+    if (argc == 2 && wcscmp(argv[1], L"--bootstrap-test-child") == 0) {
+        try { return childMain(); } catch (...) { return 85; }
+    }
+    const bool mutexTest = argc == 2 && wcscmp(argv[1], L"--run-mutex-self-test") == 0;
+    if (!mutexTest && (argc != 2 || wcscmp(argv[1], L"--run-self-test") != 0)) return 64;
     try {
         USHORT process = 0, native = 0;
         require(IsWow64Process2(GetCurrentProcess(), &process, &native) != FALSE
@@ -224,6 +394,7 @@ int wmain(int argc, wchar_t** argv) {
             require(character > 0 && character <= 0x7f);
             compatibility.push_back(static_cast<char>(character));
         }
+        if (mutexTest) return mutexPair(self, compatibility) && !cleanupFailed ? 0 : 1;
         bool passed = run(probe::Baseline, L"baseline", self, compatibility);
         passed = run(probe::Normal, L"first-import", self, compatibility) && passed;
         passed = run(probe::FailAttach, L"attach-failure", self, compatibility) && passed;

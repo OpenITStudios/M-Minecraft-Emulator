@@ -39,6 +39,7 @@ target_compile_options(probe-detours PRIVATE /W4 /WX)
 
 add_library(bootstrap-dependency SHARED dependency.cpp)
 add_library(bootstrap-compat SHARED compat.cpp compat.def)
+target_link_libraries(bootstrap-compat PRIVATE probe-detours)
 add_executable(bootstrap-ordering probe.cpp)
 target_link_libraries(bootstrap-ordering PRIVATE bootstrap-dependency probe-detours)
 add_dependencies(bootstrap-ordering bootstrap-compat)

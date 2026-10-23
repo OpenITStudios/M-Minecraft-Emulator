@@ -3,8 +3,9 @@
 This standalone Windows/MSVC x64 experiment answers one question: does an
 in-memory first import arm a synthetic canary gate before the controlled
 dependency's DllMain, the EXE TLS callback, and the EXE's main canary run?
-It does not hook APIs, isolate files/HKCU, identify Minecraft's singleton,
-separate brokers, or approve a provider. The marker graph is intentionally
+The default ordering mode does not hook APIs. The separate mutex mode below
+hooks only a fixed test name. Neither mode isolates files/HKCU, identifies
+Minecraft's singleton, separates brokers, or approves a provider. The marker graph is intentionally
 small; success cannot establish order for every Windows/game dependency.
 
 The controller only launches its **own absolute executable path**, suspended,
@@ -39,11 +40,12 @@ Build does not execute the experiment. A separately requested manual run is:
 & ./workspace/bootstrap-ordering-build/Release/bootstrap-ordering.exe --run-self-test
 ~~~
 
-The target rejects arbitrary arguments and unsupported architectures. The fixed
+The target accepts only the two fixed self-test switches and its internal child
+argument, and rejects unsupported architectures. The fixed
 compatibility import path currently requires ASCII; there is no lossy conversion
 or alternate-path fallback. Keep source and build directories separate.
 
-## Controls and receipt
+## Ordering controls and receipt
 
 Each case creates a fresh anonymous section; only that HANDLE is inherited through
 the Win32 handle allowlist. The parent binds PID and creation FILETIME while the
@@ -75,12 +77,120 @@ JSON contains fixed stage/case labels and booleans/counts, with
 providerReady=false and minecraft=NOT_EXECUTED. It emits no raw PID, FILETIME,
 HANDLE, username, installed game path, credentials, caches or world contents.
 
-No filesystem/registry operations are mediated: "canary" means a marker at a
-would-be protected call site, and "arm" is a shared flag, not an installed hook.
+No filesystem/registry operations are mediated. In the default ordering mode,
+"canary" means a marker at a would-be protected call site and "arm" is a shared
+flag. In mutex mode the flag follows installation of the two test-name wrappers.
 This test cannot observe kernel accesses before notification, all loader work,
 external authentication, other module/TLS graphs or enforcement under bypass.
 
+## Real mutex-name translation on self-owned children
+
+The optional `--run-mutex-self-test` mode uses the same fixed executable,
+early-import DLL and pinned external Detours. The DLL now links that test-only
+library to intercept **CreateMutexW and OpenMutexW**, with their original
+signatures and Win32 calling conventions. Only one exact logical name beginning
+`Local\\MivubiMutexProbe_` is translated to the controller-assigned A/B suffix.
+All other names and unnamed creates go through unchanged. No general prefix
+rules, arbitrary process attachment, game hook, file/registry mediation or
+credential interception is added.
+
+The version-2 fixed receipt binds slot/configuration and event handles to the
+original child PID/creation FILETIME. The parent inherits exactly its anonymous
+section and four phase events per child; it never passes host mutex handles.
+Both children must stay alive and own their respective mutexes until the
+controller releases the final phase. The parent holds the original logical
+mutex throughout. This prevents a sequential test or early release from
+masquerading as concurrent separation.
+
+Checks in each child (bitmask 127) cover:
+
+- Fresh translated create despite the host already owning the logical name.
+- Duplicate create returns ERROR_ALREADY_EXISTS and honors handle inheritance.
+- Open of the same logical name reaches the child's owned object, with recursive
+  acquisition/release through the returned handle.
+- Unnamed create passes through; absent named open preserves ERROR_FILE_NOT_FOUND.
+- Open honors requested access and inheritance; a handle without SYNCHRONIZE
+  returns WAIT_FAILED / ERROR_ACCESS_DENIED on wait.
+- Direct open of the peer's backing name succeeds but waits with WAIT_TIMEOUT
+  while that peer owns it. This confirms a separate held object and explicitly
+  demonstrates that same-user raw backing access remains possible.
+
+The controller independently opens both backing names while they are held,
+checks that its host object retains original ownership, waits for both children
+to finish peer checks, then releases them. It requires normal exit, exact early
+canary order, and disappearance of both backing objects after all child handles
+close. Every wait is bounded; existing original-handle cleanup covers errors.
+
+Hook setup occurs only on the current initial thread during the fixture's DLL
+attach, in a Detours transaction. A failed setup rejects attach before arming.
+The hook wrappers perform only bounded name comparison followed by the original
+API; they do not replace GetLastError or manufacture native status codes.
+No live DLL unload is supported in this process-lifetime test.
+
+Manual invocation, separately from the four ordering controls:
+
+~~~powershell
+& ./workspace/bootstrap-ordering-build/Release/bootstrap-ordering.exe --run-mutex-self-test
+~~~
+
+A successful receipt must retain providerReady=false,
+minecraft=NOT_EXECUTED and securityBoundary=false. This is compatibility name
+translation, **not an ACL/access-isolation boundary**: direct native calls,
+CreateMutexEx/ANSI variants, inherited/duplicated handles and arbitrary object
+names are outside this slice. The actual Education singleton remains UNKNOWN.
+The parent/child mapping is cooperative instrumentation, not an authenticated
+production broker.
+
 ## Evidence
+
+### Executed mutex slice and bootstrap regression — 23 October 2026
+
+Base source: `3b2ad6872a1d460de49096b84089ca631c030909`, with the exact
+compiled inputs below. Their blob IDs bind the executed snapshot to this
+change's source, independently of documentation updates.
+
+| Compiled input | Git blob |
+| --- | --- |
+| CMakeLists.txt | `fe177777862844314b42ad866cef13144601b0ba` |
+| compat.cpp | `4bfe6accc47805131f18573bda3088805dcd6556` |
+| compat.def | `b73e48f5312ce48430ffe85f101d7736b8011ac9` |
+| dependency.cpp | `aa522f6d72672caab69234e21308234f40a106e4` |
+| probe.cpp | `1cb5a6a69c7e9a3819d8f4a85b566e6cc5432e8b` |
+| receipt.h | `9b3a75f4dc37c03f565157cd267f6084551f33ea` |
+
+Windows x64 26100, CMake 4.3.2, MSVC 19.44.35226, MSBuild 17.14.40.
+Configure and Release build with /W4 /WX succeeded. Pinned external Detours
+remained clean. Both commands returned native exit **0**:
+
+- `--run-self-test`: all four original cases and summary selfCheck=true;
+  baseline detected three early markers, normal detected zero, failed attach
+  prevented main and the timeout control stopped its owned child.
+- `--run-mutex-self-test`: both children reported bitmask **127**; controller
+  verified distinct held host/A/B objects, each child's exact early-import
+  marker order, normal exits, and disappearance of both backing mutexes.
+- The deliberate raw peer open **succeeded**: rawPeerAccessible=true,
+  securityBoundary=false. This is an observed limit of name translation,
+  not a successful peer-access denial.
+- Independent exact-image CIM check: **0** test processes remaining.
+  Five ordering receipt rows and one mutex row validated. Evidence captured
+  at 16:47 UTC / 23:47 WIB. No game process, cache or world was accessed.
+
+Local artifact/receipt SHA-256 (ignored workspace output; binaries not committed):
+
+| Artifact | SHA-256 |
+| --- | --- |
+| build/Release/bootstrap-ordering.exe | `c7c8f0a2f0910ddcce229a78fae5be99db45b4084d4e028193a7be53c14b7149` |
+| build/Release/bootstrap-compat.dll | `137c3c8148eaafd9ca9985d62654c91b523132c52ee5bd6f75f01e29bc78de5d` |
+| build/Release/bootstrap-dependency.dll | `dfb45bc9736a7c16b73e5d6ba0bb28f559631ab406353d5a73c327d5c8872cd8` |
+| build/Release/probe-detours.lib | `ff0079422f20ea68667eccf9714e4604820f70a983de1aac9eb9542ce94ab284` |
+| ordering.jsonl | `40927efb7a951dda0eccd4323ec78f5b80d713673bee402d9ebd632e0f460c36` |
+| mutex.jsonl | `12105d2d49fd5763fb7af7d2c1caca6e039983a5a2232f6ef67b5fe720d5ca46` |
+
+Only the documented Win32 W-function path and controlled object graph were
+exercised. Handle **inheritance flags**, not a grandchildren inheritance test,
+were checked. Production enforcement, direct native/ANSI/Ex call coverage,
+crash/abandonment semantics, real Education singleton, persistent file/HKCU/auth
+and two/four-client gameplay remain UNKNOWN / NOT_EXECUTED.
 
 ### Executed on 23 October 2026
 
