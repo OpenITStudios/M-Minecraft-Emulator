@@ -464,18 +464,9 @@ mod native_workspace_windows {
         target_image: &[u16],
         current_session: u32,
     ) -> io::Result<Option<super::super::owned_provider::OwnedProcess>> {
-        let handle = unsafe {
-            OpenProcess(
-                PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, pid,
-            )
-        };
-        if handle.is_null() {
-            // A same-name process with inaccessible identity is not a
-            // verified official game. Do not silently exclude it.
-            return Err(io::Error::last_os_error());
-        }
-        let process = OwnedHandle(handle);
-
+        // Scope Windows enumeration to this interactive session *before*
+        // opening any other user's same-name game process. Fail closed if
+        // session attribution itself cannot be obtained.
         let mut session = 0;
         if unsafe { ProcessIdToSessionId(pid, &mut session) } == 0 {
             return Err(io::Error::last_os_error());
@@ -483,6 +474,19 @@ mod native_workspace_windows {
         if session != current_session {
             return Ok(None);
         }
+        let handle = unsafe {
+            OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, pid,
+            )
+        };
+        if handle.is_null() {
+            // An inaccessible same-session candidate is never silently
+            // excluded or promoted to an official Minecraft process.
+            return Err(io::Error::last_os_error());
+        }
+        let process = OwnedHandle(handle);
+        // Session is checked again after pinning the process HANDLE below,
+        // so a PID that changed between enumeration and open is not trusted.
 
         let mut image = vec![0u16; 32768];
         let mut size = image.len() as u32;

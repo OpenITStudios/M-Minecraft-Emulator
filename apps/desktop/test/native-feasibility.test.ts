@@ -577,5 +577,10 @@ it('official Minecraft window discovery uses native Windows process and HWND API
   // Native discovery is read-only; only the existing explicit MC01 route
   // can ask Windows to open the registered application.
   expect(entry).not.toContain('CreateProcessW(');
+  const observe=entry.slice(entry.indexOf('fn observe_one('),entry.indexOf('pub(super) fn inspect()'));
+  expect(observe.indexOf('ProcessIdToSessionId(pid, &mut session)'))
+    .toBeLessThan(observe.indexOf('OpenProcess('));
+  expect(observe).toContain('if session != current_session');
+  expect(observe).toContain('if again_session != current_session');
   expect(source).toContain('fn registered_native_candidate_requires_a_fresh_live_window()');
 });
