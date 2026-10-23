@@ -7,7 +7,9 @@ checks one first-import candidate against dependency/TLS/main canaries, with
 baseline, attach-failure and timeout controls. It builds only with an explicit
 opt-in and a pinned external Microsoft Detours source checkout. It accepts no
 target PID/path, is not linked into the product, and cannot approve Minecraft
-isolation. Windows build and execution remain **NOT_EXECUTED**.
+isolation. At source `d9a2fb8`, the Release build and all four self-child controls
+executed successfully on Windows x64; see the linked exact-source evidence.
+Minecraft mediation and acceptance remain **NOT_EXECUTED**.
 
 ## Independent native AppContainer proof (synthetic only)
 

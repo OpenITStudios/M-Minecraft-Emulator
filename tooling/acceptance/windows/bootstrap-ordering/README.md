@@ -82,7 +82,46 @@ external authentication, other module/TLS graphs or enforcement under bypass.
 
 ## Evidence
 
-Source authored and statically reviewed only. MSVC/CMake build, control execution,
-ordering result and cleanup on Windows: **NOT_EXECUTED**. Record actual results
-and exact source SHA in the existing planning/development.md handoff; a build
-exit code or loaded DLL is not MC02 acceptance.
+### Executed on 23 October 2026
+
+Exact fixture source: `d9a2fb80ad7ca362b4a9cb8a42cdb90e08cf88ae`.
+All seven materialized source/readme blobs matched GitHub before compilation.
+External Detours: clean `1dbd4ea281d73d478aa8d09a8b83fbd265f715f7`.
+Windows x64 build 26100; CMake 4.3.2, MSVC 19.44.35226,
+MSBuild 17.14.40. Configure and Release build succeeded with the committed
+/W4 /WX settings. No source correction was needed for this build.
+
+One explicit self-test run returned native exit code **0**:
+
+| Case | Observed stages / arm bits | Result |
+| --- | --- | --- |
+| baseline | dependency, EXE TLS, main: all 0 | selfCheck=true; three unarmed canaries detected |
+| first-import | attach(0), arm(1), dependency(1), TLS(1), main(1) | selfCheck=true; zero early canaries in this graph |
+| attach-failure | attach(0), rejected(0); no main | selfCheck=true; failed attach prevented main |
+| missing-arm-timeout | attach/suppressed/dependency/TLS/main: all 0 | selfCheck=true; timeout detected, owned child stopped with expected code |
+| summary | SELF_CHILD_BOOTSTRAP_ONLY | selfCheck=true, providerReady=false, minecraft=NOT_EXECUTED |
+
+The initial shell wrapper ended with status 1 from its empty Get-Process lookup;
+the native test explicitly reported PROCESS_EXIT=0. A separate successful CIM
+check found **0** remaining processes at the exact test-image path. Receipt
+validation found exactly five rows, all self-checks true, no provider readiness
+and no Minecraft acceptance. Verification recorded at 16:37 UTC / 23:37 WIB;
+no game process was inspected or modified.
+
+Artifacts remain local in ignored `workspace/tmp/bootstrap-run-*/`.
+SHA-256 values identify this particular build/run, not reproducible-build proof:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| build/Release/bootstrap-ordering.exe | `240f4005056dc54b74f4c96334338da5bf564ab63fa2822626d578283156414f` |
+| build/Release/bootstrap-compat.dll | `1bc1615588f1e9899243c2eca105b902fd038f5ff25b07dad71144fd7856ccbc` |
+| build/Release/bootstrap-dependency.dll | `66f85d93cbb0701e933fe9ead106b6b5df414dab3f06f755067fe70d52e4f39f` |
+| build/Release/probe-detours.lib | `5c527a336a95ef1440b2b9dc2c7df8140348ff0f85939bc35da5ba649aea99bf` |
+| receipt.jsonl | `40927efb7a951dda0eccd4323ec78f5b80d713673bee402d9ebd632e0f460c36` |
+
+This establishes SOURCE_EXECUTION plus limited TARGET_WINDOWS evidence for the
+specific self-owned synthetic graph and controls. It does not establish
+universal loader ordering, installed hooks, actual private file/HKCU/IPC views,
+Education singleton/broker compatibility, game injection or two/four-client
+acceptance. Those remain **NOT_EXECUTED / UNKNOWN**. Current continuation belongs
+only in `planning/development.md`.
