@@ -1,5 +1,14 @@
 # Windows Acceptance Tooling
 
+## Early compatibility bootstrap ordering (self-child only)
+
+The standalone [bootstrap-ordering experiment](./bootstrap-ordering/README.md)
+checks one first-import candidate against dependency/TLS/main canaries, with
+baseline, attach-failure and timeout controls. It builds only with an explicit
+opt-in and a pinned external Microsoft Detours source checkout. It accepts no
+target PID/path, is not linked into the product, and cannot approve Minecraft
+isolation. Windows build and execution remain **NOT_EXECUTED**.
+
 ## Independent native AppContainer proof (synthetic only)
 
 ### Optional two-process application-hive load-lock probe

@@ -1,0 +1,3 @@
+LIBRARY bootstrap-compat
+EXPORTS
+    BootstrapOrdinalOne @1
