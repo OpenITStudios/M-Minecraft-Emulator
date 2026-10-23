@@ -87,13 +87,21 @@ No new recording is implied by this source correction. See the
 [exact capture evidence](../../../docs/validation/native-pilot-localtest.md#startup-capture-coverage-correction--24-october-2026-wib).
 
 The revised source's thirteen guard/native-error/size-threshold self-checks passed
-in Windows PowerShell 5.1; default preflight preserved the now-running MC01.
-WPR 10.0.26100 accepted the revised File profile with the same keywords/stacks.
-**NOT_EXECUTED for the File revision:** recording, disk-threshold stop, raw save,
-recovery or startup retention. Failed-stop cancellation was not exercised by
-the two successful memory captures. Positive WMI start metadata is not complete
-creator/helper attribution or authentication evidence. Current blocker/next action
-belongs only to [planning/development.md](../../../planning/development.md).
+in Windows PowerShell 5.1; WPR 10.0.26100 accepted the File profile. A later
+operator-authorized one-off coordinator completed one automatic first MC01
+activation after recorder-ready from an unelevated session, using the pinned
+official activation recipe. The Tauri product command/admission lock was not
+invoked. No automatic launch mode was added to this committed collector.
+
+That File recording saved one 275.75 MiB raw ETL, stopped its named session, and
+retained the main-image Load plus first target activity 14.7091 ms after process
+creation. The 256 MiB stop threshold did not fire and is not a quota. The
+offline decoder left 59 object property failures unresolved; no singleton or
+auth verdict follows. See [automatic capture evidence](../../../docs/validation/native-pilot-localtest.md#automatic-file-mode-startup-capture--24-october-2026-wib).
+**NOT_EXECUTED:** threshold-triggered stop, failed-stop cancellation/recovery,
+product-command admission in that one-off run, or game isolation/acceptance.
+Current blocker/next action belongs only to
+[planning/development.md](../../../planning/development.md).
 
 ## Early compatibility bootstrap ordering (self-child only)
 

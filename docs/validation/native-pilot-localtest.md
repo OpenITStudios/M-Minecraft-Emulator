@@ -9,6 +9,62 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Automatic file-mode startup capture — 24 October 2026 WIB
+
+**Executed source:** `7357d13d91a5a6fa3b95f629e9edeefa3cac8b02` (`Local`).
+The operator explicitly requested automatic capture/launch, saved and closed
+MC01 normally, then requested a replacement UAC prompt after the first request
+was canceled. The canceled request produced no trace or activation. The
+replacement completed **one** File-mode recording and **one** official MC01
+activation; no automatic retry, game termination, login or world operation.
+
+The ignored one-off coordinator stayed unelevated, elevated only the exact
+committed collector, waited for its ready signal, then issued the registered
+AppsFolder activation using the exact pinned Rust owner's PowerShell preflight/
+activation recipe and registered-only resolver. Its receipt records
+`productCommandInvoked=false`: this did **not** invoke the Tauri
+`desktop_open_native_minecraft` wrapper or exercise its in-process admission/
+retry lock. It is operator-authorized diagnostic orchestration, not a new
+production launcher/provider or evidence that product admission was exercised.
+The coordinator refused existing target basenames and elevated launch callers.
+
+| Observation | Actual result |
+| --- | --- |
+| Timing | Ready **00:55:17.280 WIB**, ended **00:55:48.674 WIB**, 24 October (17:55 UTC on 23 October). |
+| Activation | One request after ready; launch caller unelevated. One readable registered-path game lifetime in the same session; one WMI name-matched start candidate. No helper event; actual creator/auth attribution remains UNKNOWN. |
+| Coverage improvement | Process created 00:55:18.2881549 WIB; first retained target Handle/Loader event 00:55:18.3028640 WIB, **14.7091 ms later**. One main EXE Load and **136** target-image Load events decoded. This supports early loader coverage, not proof of every instruction/syscall or all transient processes. |
+| Retained mutex activity | **215 Mutant events:** 115 create, 100 close; **55 events named**. These are events, not 215 distinct mutexes or 55 unique names. No singleton identity, API variant, return value or rejection branch was established. |
+| Other reviewed metadata | 1,287 Event-object events (10 named), 142,525 File-object events (32,662 named), plus other object types. Only object metadata was decoded; no file contents or object names are published. |
+| Decoder limits | **59 target object property errors**, left unresolved; 0 image property errors. No complete inventory or negative claim follows from those failures. |
+| File / stop | One raw ETL, **289,144,832 bytes (275.75 MiB)**; start/stop returned 0; final named WPR status said not recording. The 256 MiB sampling threshold did not fire; final size exceeded it, consistent with the documented non-quota behavior. No exact peak active-file measurement or overshoot cause was established. |
+| Loss / integrity | WPR reported zero loss. Saved ETL header EventsLost/BuffersLost were zero; OpenTrace/ProcessTrace/CloseTrace succeeded. SHA-256/length unchanged after review. Counters alone do not prove complete coverage. |
+| Preserved game | Same PID/creation-FILETIME lifetime remained responsive after review; no game was closed or signed out by automation. |
+
+An ignored one-off MSVC `/W4 /WX` coverage consumer read the **same single ETL
+twice**, first for object-type inventory then for event review. Event-pass count
+was **1,292,894**, not a sum of two independent files. ProcessTrace converted
+timestamps to system time before comparison to process creation FILETIME;
+[conversion contract](https://learn.microsoft.com/en-us/windows/win32/api/evntrace/ns-evntrace-event_trace_logfilew).
+No symbols were resolved; raw names/addresses were not published. Credentials
+and world payloads were not read; no new mutex-stack correlation was performed.
+
+Raw ETL SHA-256:
+`beb8753df08a7fd92fdc721454249e930e4645ab0685510ee938a3cbb15caf6c`.
+Local-only coverage source / executable / output SHA-256:
+`8cf9326c07c3e9a3eb184b37935dca9bb0c658f2520f87e52e2121d3cc4fc358` /
+`f1407c6061be2d8e766728ebe05fe491b11e2a4878689f78dc1aba1abc8e86a9` /
+`6685731ddaaef1a4725a2b1442d6230a18d616845786cd169bb5c39d47470196`.
+Raw receipt, ETL, coordinator and one-off consumer remain private/local, not
+committed reproducible tooling.
+
+**Decision:** automatic timing and File-mode raw save/normal stop were executed,
+and early loader activity is now retained. The source-only File-mode
+`NOT_EXECUTED` statements in the previous section are superseded only for these
+observed outcomes. Threshold-triggered stop, failed-stop cancellation/recovery,
+full manager-command admission, actual singleton/auth separation and two/four
+licensed playable clients remain **UNKNOWN / NOT_EXECUTED**. Next analysis can
+use this archived capture offline; no further trace or game action is implied.
+
 ## Startup capture coverage correction — 24 October 2026 WIB
 
 **Executed collector:** exact `Local` source
