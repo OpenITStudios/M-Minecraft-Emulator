@@ -1910,7 +1910,7 @@ dependencies = [
  "sysinfo",
  "ureq",
  "url",
- "windows-sys",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

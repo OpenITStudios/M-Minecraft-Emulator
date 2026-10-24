@@ -812,8 +812,9 @@ pub fn inspect_native_psec_capabilities() -> std::io::Result<NativePsecInspectio
 mod psec_windows {
     use super::{unavailable_psec, NativePsecInspection};
     use std::{io, mem, ptr};
+    use windows_sys::Win32::Foundation::FreeLibrary;
     use windows_sys::Win32::System::LibraryLoader::{
-        FreeLibrary, GetProcAddress, LoadLibraryExW, LOAD_LIBRARY_SEARCH_SYSTEM32,
+        GetProcAddress, LoadLibraryExW, LOAD_LIBRARY_SEARCH_SYSTEM32,
     };
 
     // The only loaded DLL is the actual Windows System32 component. Never
@@ -937,7 +938,7 @@ mod windows {
         Storage::FileSystem::{
             GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
             FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT,
-            FILE_SHARE_READ,
+            FILE_SHARE_READ, FILE_SHARE_WRITE,
         },
         UI::Shell::GetUserProfileDirectoryW,
     };

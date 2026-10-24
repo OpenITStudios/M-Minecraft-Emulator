@@ -1,7 +1,7 @@
 //! Private first stage of the Education bootstrap experiment.
-//! Unmounted opt-in preparation/enrollment/startup observation; no provider admission.
-//! The reviewed payload policy is empty. Only cfg(test) supplies own-build DLL hashes.
-//! Game execution requires separate runtime authorization; compatibility is UNKNOWN.
+//! Explicit same-manager startup observation only; no provider admission.
+//! Exact development payload approved for one startup experiment by the operator.
+//! Tests keep the game policy empty; direct-start game compatibility remains UNKNOWN.
 #![allow(dead_code)]
 
 use std::{
@@ -498,9 +498,23 @@ impl PendingEducationBootstrap {
     }
 }
 
-// No installer/package policy supplies a reviewed original payload yet.
-// Empty policy is deliberate: reject before DLL load, game lookup or fresh profile creation.
+// Fixed development bytes authorized for the explicit startup mode only, not packaging/admission.
+// Tests must never turn --include-ignored into game execution.
+#[cfg(test)]
 const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = None;
+#[cfg(not(test))]
+const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = Some(PayloadDigests {
+    enroller: [
+        0x76, 0x46, 0xbd, 0x2e, 0x46, 0xa5, 0xf3, 0x94, 0x84, 0x54, 0x98, 0x4f, 0xc8, 0x1d, 0xc1,
+        0x13, 0x42, 0x69, 0x1e, 0x69, 0xce, 0x86, 0x03, 0xc3, 0x29, 0xf1, 0x5b, 0x12, 0x14, 0x0e,
+        0xce, 0x83,
+    ],
+    compatibility: [
+        0x29, 0x2e, 0x1c, 0x4c, 0x47, 0x2d, 0x25, 0xc5, 0x93, 0x4a, 0x21, 0x07, 0x39, 0xcc, 0x8e,
+        0x9f, 0x30, 0x29, 0xbf, 0xd4, 0x16, 0x02, 0x50, 0xa8, 0x7c, 0x9e, 0x67, 0xec, 0xc5, 0xf6,
+        0xac, 0x06,
+    ],
+});
 #[derive(Clone, Copy)]
 struct PayloadDigests {
     enroller: [u8; 32],
@@ -696,6 +710,30 @@ pub(super) struct StartedEducationObservation {
 }
 
 impl PendingEducationBootstrap {
+    fn exit_code_after_exit(&self) -> io::Result<u32> {
+        match unsafe { WaitForSingleObject(self.process.as_raw_handle() as HANDLE, 0) } {
+            WAIT_OBJECT_0 => {}
+            WAIT_TIMEOUT => {
+                return Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "Child still alive",
+                ))
+            }
+            _ => return Err(io::Error::last_os_error()),
+        }
+        let mut code = 0;
+        if unsafe {
+            windows_sys::Win32::System::Threading::GetExitCodeProcess(
+                self.process.as_raw_handle() as HANDLE,
+                &mut code,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(code)
+    }
+
     fn resume_once(&mut self) -> io::Result<()> {
         if self.resume_attempted {
             return Err(invalid("Bootstrap resume already attempted"));
@@ -767,17 +805,8 @@ impl StartedEducationObservation {
         if !child.resume_attempted {
             return Err(invalid("Observation startup was not attempted"));
         }
+        let exit_code = child.exit_code_after_exit()?;
         let bytes = child.observation_bytes_after_exit()?;
-        let mut exit_code = 0;
-        if unsafe {
-            windows_sys::Win32::System::Threading::GetExitCodeProcess(
-                child.process.as_raw_handle() as HANDLE,
-                &mut exit_code,
-            )
-        } == 0
-        {
-            return Err(io::Error::last_os_error());
-        }
         let store = child
             .storage
             .as_ref()
@@ -824,6 +853,126 @@ pub(super) fn prepare_registered_enrolled() -> io::Result<PreparedEducationEnrol
         _children: children,
         _payload: payload,
     })
+}
+
+/// Fixed opt-in invocation in the existing manager, dispatched before creating its UI.
+/// No path/PID/options or hash override. Standard output is count/status metadata only.
+pub(super) fn maybe_run_startup_observation() -> bool {
+    let mut args = std::env::args_os().skip(1);
+    if args.next().as_deref() != Some(OsStr::new("--education-startup-observation-once")) {
+        return false;
+    }
+    let result = if args.next().is_some() {
+        Err(invalid(
+            "Startup observation accepts no additional arguments",
+        ))
+    } else {
+        run_startup_observation()
+    };
+    let code = match result {
+        Ok(code) => code,
+        Err(error) => {
+            use std::io::Write;
+            let _ = writeln!(
+                io::stderr(),
+                "{{\"event\":\"startup-refused\",\"kind\":\"{:?}\",\"osCode\":{}}}",
+                error.kind(),
+                error
+                    .raw_os_error()
+                    .map_or_else(|| "null".to_owned(), |code| code.to_string())
+            );
+            2
+        }
+    };
+    std::process::exit(code);
+}
+
+fn run_startup_observation() -> io::Result<i32> {
+    use windows_sys::Win32::{
+        Foundation::{GetLastError, ERROR_ALREADY_EXISTS},
+        System::Threading::CreateMutexW,
+    };
+    // One experiment process per interactive session; no persisted readiness/account state.
+    let name = wide(OsStr::new("Local\\MivubiEducationStartupObservation"))?;
+    let raw = unsafe { CreateMutexW(ptr::null(), 0, name.as_ptr()) };
+    if raw.is_null() {
+        return Err(io::Error::last_os_error());
+    }
+    let existed = unsafe { GetLastError() } == ERROR_ALREADY_EXISTS;
+    let _gate = unsafe { OwnedHandle::from_raw_handle(raw as _) };
+    if existed {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "Startup experiment already active",
+        ));
+    }
+    let mut launch_guard = super::acquire_native_launch()?;
+    // Preserve existing games; no termination, sign-out or activation fallback.
+    if !super::inspect_native_workspace()?.processes.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "Close the existing game normally first",
+        ));
+    }
+    let started = prepare_registered_enrolled()?.resume_for_authorized_observation()?;
+    *launch_guard = Some(std::time::Instant::now());
+    observe_until_exit(&started)
+}
+
+fn observe_until_exit(started: &StartedEducationObservation) -> io::Result<i32> {
+    use std::io::Write;
+    let mut completed = [false; 2];
+    let mut failed = false;
+    for (index, attempt) in started.attempts.iter().enumerate() {
+        let state = match attempt {
+            StartupAttempt::NotAttempted => {
+                completed[index] = true;
+                failed = true;
+                "not-attempted"
+            }
+            StartupAttempt::Resumed => "resume-call-succeeded",
+            StartupAttempt::Unconfirmed(_) => {
+                failed = true;
+                "resume-unconfirmed"
+            }
+        };
+        writeln!(io::stdout(), "{{\"event\":\"startup-attempt\",\"slot\":{},\"state\":\"{}\",\"providerReady\":false}}",
+            index + 1, state)?;
+    }
+    // Recording ends at its existing bound. Keep original handles until operator closure;
+    // dropping this runner at any time still preserves every attempted child.
+    while completed.iter().any(|done| !done) {
+        for (index, done) in completed.iter_mut().enumerate() {
+            if *done {
+                continue;
+            }
+            match started.save_after_exit(index as u32 + 1) {
+                Ok(saved) => {
+                    *done = true;
+                    writeln!(io::stdout(),
+                        "{{\"event\":\"journal-saved\",\"slot\":{},\"exitCode\":{},\"providerReady\":false}}",
+                        index + 1, saved.exit_code)?;
+                }
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {}
+                Err(error) => {
+                    *done = true;
+                    failed = true;
+                    // A rejected/incomplete journal must not erase the original child's exit outcome.
+                    let code = started.children[index]
+                        .exit_code_after_exit()
+                        .ok()
+                        .map_or_else(|| "null".to_owned(), |code| code.to_string());
+                    writeln!(io::stdout(),
+                        "{{\"event\":\"journal-failed\",\"slot\":{},\"kind\":\"{:?}\",\"exitCode\":{},\"providerReady\":false}}",
+                        index + 1, error.kind(), code)?;
+                }
+            }
+        }
+        if completed.iter().any(|done| !done) {
+            std::thread::sleep(std::time::Duration::from_millis(250));
+        }
+    }
+    Ok(i32::from(failed))
 }
 
 use std::{
@@ -1821,14 +1970,31 @@ mod tests {
             assert!(transaction.save_after_exit(3).is_err());
             for child in &transaction.children {
                 check_finished_fixture(child);
+            }
+            // First round saves both journals; permanent overwrite failures on round two
+            // must still complete both slots instead of abandoning the second.
+            assert_eq!(
+                observe_until_exit(&transaction).unwrap(),
+                if round == 1 { 0 } else { 1 }
+            );
+            for child in &transaction.children {
                 let snapshot = child.observation_bytes_after_exit().unwrap();
                 assert_eq!(u32::from_le_bytes(snapshot[48..52].try_into().unwrap()), 64);
                 assert_eq!(u32::from_le_bytes(snapshot[52..56].try_into().unwrap()), 1);
                 let slot = child.storage.as_ref().unwrap().slot;
                 if round == 1 {
-                    let saved = transaction.save_after_exit(slot).unwrap();
-                    assert_eq!(saved.exit_code, 0);
-                    assert_eq!(std::fs::read(&saved.path).unwrap(), snapshot);
+                    assert_eq!(
+                        std::fs::read(
+                            child
+                                .storage
+                                .as_ref()
+                                .unwrap()
+                                .private_path
+                                .join("startup-observation-v1.bin")
+                        )
+                        .unwrap(),
+                        snapshot
+                    );
                 }
                 assert_eq!(
                     transaction.save_after_exit(slot).err().unwrap().kind(),

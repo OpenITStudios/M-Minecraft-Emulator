@@ -5,6 +5,9 @@ mod commands;
 mod engine;
 
 fn main() {
+    if engine::native_clients::maybe_run_education_startup_observation() {
+        return;
+    }
     if engine::workspace_surface::maybe_run_helper() {
         return;
     }

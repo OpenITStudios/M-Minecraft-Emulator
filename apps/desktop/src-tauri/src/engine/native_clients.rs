@@ -1,7 +1,15 @@
-// Private, unmounted preparation for the original Education bootstrap experiment.
+// Explicit private startup experiment; ordinary product admission remains unchanged.
 #[cfg(all(windows, target_arch = "x86_64"))]
 #[path = "independent_bootstrap.rs"]
 mod independent_bootstrap;
+
+// Internal same-executable mode, never a Tauri command or Launch admission.
+pub fn maybe_run_education_startup_observation() -> bool {
+    #[cfg(all(windows, target_arch = "x86_64"))]
+    { independent_bootstrap::maybe_run_startup_observation() }
+    #[cfg(not(all(windows, target_arch = "x86_64")))]
+    { false }
+}
 
 use serde::{Deserialize, Serialize};
 use std::{
@@ -474,7 +482,7 @@ mod native_workspace_windows {
     use windows_sys::Win32::{
         Foundation::{
             CloseHandle, FILETIME, HANDLE, ERROR_NO_MORE_FILES,
-            INVALID_HANDLE_VALUE, SYNCHRONIZE, WAIT_TIMEOUT,
+            INVALID_HANDLE_VALUE, WAIT_TIMEOUT,
         },
         Globalization::{CompareStringOrdinal, CSTR_EQUAL},
         System::{
@@ -485,7 +493,7 @@ mod native_workspace_windows {
             RemoteDesktop::ProcessIdToSessionId,
             Threading::{
                 GetProcessTimes, OpenProcess, QueryFullProcessImageNameW,
-                WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION,
+                WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
             },
         },
         UI::WindowsAndMessaging::{
@@ -564,7 +572,7 @@ mod native_workspace_windows {
         }
         let handle = unsafe {
             OpenProcess(
-                PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, pid,
+                PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE, 0, pid,
             )
         };
         if handle.is_null() {

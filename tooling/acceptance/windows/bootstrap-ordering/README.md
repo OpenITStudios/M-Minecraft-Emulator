@@ -13,7 +13,8 @@ with a fixed internal child argument. It updates the resulting original process
 handle via DetourUpdateProcessWithDll and resumes the original thread. There is
 no target-path/PID CLI option, process discovery, shell activation, cross-bitness
 helper, game launch or service/driver operation. The private Rust preparation
-seam described below is unmounted and has no reviewed game payload.
+seam below is reachable only through the explicit same-manager startup mode;
+ordinary MC02–04 admission stays closed.
 The sibling compatibility DLL is fixed, and the output directory must be a
 trusted build directory. This is not an authenticated production injector.
 
@@ -54,8 +55,8 @@ removes the receipt, numeric mutex-name and sibling-directory requirements
 from the **selected storage/HKCU** installation path. It does not select a
 Minecraft provider. The desktop Rust preparer now publishes this configuration
 for two fresh slots. Its optional private enrollment seam requires separately
-reviewed DLL bytes. Its explicit private startup observation transaction is
-unmounted and the reviewed payload policy is currently empty.
+reviewed DLL bytes. Its explicit private startup observation mode now pins the
+operator-authorized development candidate; tests keep the game policy empty.
 
 The target reads a snapshot from an unnamed section through a read-only
 handle; a writable handle is rejected. The controller fills it while its
@@ -131,10 +132,11 @@ ASCII/local-drive and current mediation limits still apply.
 
 The private `prepare_registered_enrolled` seam now connects that registered-image
 preparer to the same native enrollment operation used by the own-process control.
-It first requires a source-reviewed pair of SHA-256 DLL digests. The policy is
-deliberately **None**: no DLL load, game registration lookup or fresh profile
-creation happens through this seam until a payload is reviewed. There is no
-environment, settings, path or public-command override.
+It first requires a source-reviewed pair of SHA-256 DLL digests. The exact
+startup-only candidate is now pinned in non-test builds after explicit operator
+authorization. Tests deliberately retain **None**, so --include-ignored cannot
+start Education. There is no environment, settings, path or public-command
+override. Missing or changed DLL bytes refuse before target/profile preparation.
 
 The fixed location is `independent-bootstrap/` beside the manager executable,
 with the fixed selected `bootstrap-enroll.dll` and `bootstrap-compat.dll`
@@ -153,8 +155,8 @@ fixed sibling compatibility DLL. It does not read the fixture receipt or create
 fixture keys, reopens PIDs, accepts target/DLL paths, resumes a child or launches
 a helper. Fixture canary preparation is a separate test export. The prepared pair
 cancels unstarted children before releasing module/file/directory pins. Only its
-explicit private observation transaction below can attempt resume; no product
-command or reviewed game payload enables it.
+explicit private observation transaction below can attempt resume. No ordinary
+Launch action or public Tauri command invokes it.
 
 Microsoft Detours remains the existing external development-only static dependency
 at the pinned revision, built only with BOOTSTRAP_ORDERING_TEST_ONLY=ON. Its bytes
@@ -293,11 +295,42 @@ that second control and releases both normally. They also verify live-writer,
 cancel and repeat-resume refusal. No new CLI, receipt version or observer was
 added.
 
-The registered path still rejects its empty reviewed payload policy before
-game lookup. This transaction remains unmounted; no game injection/resume
-authorization, provider admission or product launch command is added.
-The sole proposed runtime experiment and its next authorization step belong
-in planning/development.md, not a second test/status queue.
+### Operator-authorized same-manager invocation
+
+The same desktop manager has one fixed internal argument:
+`--education-startup-observation-once`, dispatched before UI startup. Extra
+arguments refuse before any game lookup; there are no target/PID/output-path or
+hash options. A session-local Windows mutex serializes experiments, and the
+existing native workspace inspection refuses when a registered game is already
+running. That game is preserved for normal operator closure. No new launcher,
+Tauri command, driver/service, account automation or public admission is added.
+
+Production builds pin only the reviewed development DLL pair: enroller SHA-256
+`7646bd2e46a5f3948454984fc81dc11342691e69ce8603c329f15b12140ece83`,
+compatibility `292e1c4c472d25c5934a210739cc8e9f3029bfd4160250a87c9e67ecc5f6ac06`.
+These files are manually staged in the fixed sibling directory, with the
+external Detours license; they are not installer resources or an approved
+production provider. The compatibility DLL directly imports SHGetKnownFolderPath
+from Shell32, so it does not assume the target already loaded that module.
+No Known Folder invocation or LoadLibrary is added inside DllMain.
+
+The runner retains the existing returned owner and polls after-exit extraction.
+A permanent journal error in one slot is reported while the other slot remains
+observed. Status-only JSON reports resume-call outcomes, exit codes and journal
+save/error; no raw names, paths, environment, credentials or game content.
+No timeout kills a game. Keep the runner alive until normal closure; ending it
+early preserves attempted children but loses journals not exported.
+
+In the actual Rust 1.98.1 preview-feature debug Tauri build (locked dependencies,
+no default features), all twelve existing bootstrap tests pass with the exact
+new module; the integration now checks both successful exports and continued
+second-slot handling when both old journal paths reject overwrite. The same
+built manager rejects extra arguments with exit 2/InvalidData and an existing
+registered MC01 with exit 2/AlreadyExists; PID/birth metadata confirms MC01
+preserved. This is build/control evidence, not an Education injected startup,
+sign-in or GUI/GPU/input acceptance. No new fixture is added. Existing build
+warnings remain. Runtime authorization and the sole current next action belong
+in planning/development.md.
 
 ## Ordering controls and receipt
 
