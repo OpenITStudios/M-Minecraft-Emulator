@@ -7,11 +7,12 @@
 // StorageAndRegistryOnly deliberately carries no singleton/broker readiness.
 namespace education_bootstrap {
 constexpr DWORD Magic = 0x45444231;
-constexpr DWORD Version = 1;
+constexpr DWORD Version = 2;
 constexpr DWORD StorageAndRegistryOnly = 1;
+constexpr DWORD StorageRegistrySelectedMutex = 2;
 constexpr wchar_t SectionVariable[] = L"MIVUBI_EDUCATION_BOOTSTRAP_SECTION";
 struct Config {
-    DWORD magic, version, bytes, slot, pid, session, scope, reserved;
+    DWORD magic, version, bytes, slot, pid, session, scope, singletonCallerRva;
     FILETIME created;
     HANDLE logicalRoot, privateRoot;
     HKEY registryRoot;
@@ -21,6 +22,11 @@ struct Config {
 static_assert(sizeof(Config) == 1136);
 static_assert(offsetof(Config, logicalId) == 64);
 static_assert(offsetof(Config, userKeyPath) == 112);
+
+inline bool validScope(const Config& config) {
+    return (config.scope == StorageAndRegistryOnly && config.singletonCallerRva == 0)
+        || (config.scope == StorageRegistrySelectedMutex && config.singletonCallerRva != 0);
+}
 
 inline bool present() {
     SetLastError(ERROR_SUCCESS);
@@ -55,8 +61,8 @@ inline bool read(Config& config) {
     FILETIME birth{}, exited{}, kernel{}, user{};
     DWORD session = 0;
     return config.magic == Magic && config.version == Version && config.bytes == sizeof(Config)
-        && config.slot >= 1 && config.slot <= 2 && config.scope == StorageAndRegistryOnly
-        && config.reserved == 0 && config.pid == GetCurrentProcessId()
+        && config.slot >= 1 && config.slot <= 2 && validScope(config)
+        && config.pid == GetCurrentProcessId()
         && config.userKeyPath[511] == 0
         && GetProcessTimes(GetCurrentProcess(), &birth, &exited, &kernel, &user)
         && birth.dwLowDateTime == config.created.dwLowDateTime

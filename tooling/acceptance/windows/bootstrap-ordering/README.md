@@ -1,5 +1,135 @@
 # Self-owned early-import ordering experiment
 
+## Current Education experiment — 24 October 2026
+
+The original self-owned controls below remain controls. The private opt-in
+same-manager `--education-startup-observation-once` path additionally runs the
+operator-authorized two-Education experiment; ordinary provider admission and
+public MC02–04 Launch remain denied. Current continuation is solely in
+`planning/development.md`. Earlier per-revision limitations below are historical
+where this section explicitly supersedes them.
+
+The observed official image is SHA-256
+`04164c1c64458a5d984dbc1687d0e8023d1808c44ee7be03519cdf8355233eaa`.
+Its main-image `CreateMutexA` return RVA `0x2cdc30` selected an initially owned
+GUID-shaped mutex. A focused transparent observation compared the native parent
+with the actual session BaseNamedObjects directory: the exiting process's outer
+Win32 result was ERROR_ALREADY_EXISTS (183), while the surviving process saw 0.
+This is callsite attribution, not static proof of the game's rejection branch.
+
+Private config v2 remains 1,136 bytes. StorageAndRegistryOnly requires a zero
+caller RVA; StorageRegistrySelectedMutex requires a nonzero reviewed RVA. An
+exact-image hash check refuses a game update before allocating/reopening stores.
+The observed caller binds one immutable process-local GUID name. Only that name
+in the verified session directory is mapped to a suffix derived from the pinned
+private directory identity; real native create/open and Win32 results are kept.
+This works independently of trace capacity/time and does not rewrite unrelated
+mutexes, game files, tokens or broker configuration.
+
+Actual outcome before the storage correction: two responsive game windows,
+operator-confirmed manual login with different accounts, followed by storage
+warnings when creating worlds in both clients. Both then exited normally with
+exit code 0. No gameplay or persistence success is claimed. A replay with the
+same stores required both accounts to sign in again.
+
+Replay uses one source-reviewed, local-only 216-byte
+`independent-bootstrap/replay-profile-pair.bin` capability. It contains a bounded
+pilot-root basename and three directory identities, never accounts, tokens or
+worlds. Its full SHA-256 is pinned in the acceptance build. The Rust owner checks
+the format/hash, ordinary ancestors, disjoint AppData roots and root/slot IDs;
+it opens the existing per-slot backing keys/directories only. Missing or changed
+stores fail, without fresh-profile fallback. This is one acceptance pair, not a
+production profile catalog; the capability and raw identities stay out of Git.
+Tests disable the real-game payload/replay policies.
+
+Diagnostic journal v3 is 31,968 bytes: 64-byte header, 64 x 496-byte startup
+records, then 160 bytes of storage diagnostics. Startup records add verified
+namespace and cached loaded-module/RVA attribution; four transparent Win32
+mutex wrappers preserve actual LastError. The original startup bound remains
+30 seconds/64 records. Separate fixed counters cover the process lifetime and
+record success or four failure classes (path validation, access/options, parent
+open, backing call). Each failure class keeps one numeric sample: operation,
+access, options, disposition, relative path length and NTSTATUS. No storage
+path, file contents or account identifier is recorded. The owner copies the
+journal only after the original child exits and creates
+`startup-observation-v3.bin` without overwriting an earlier journal.
+
+The observed replay counted `[3,138,30,141,78]` and `[3,136,30,141,78]`
+respectively (success then four failure classes). The first unsupported path
+was a directory create of relative length 35, returning STATUS_NOT_SUPPORTED.
+These numeric samples do not establish its filename or the complete cause of
+the game's storage warning. Source inspection found a definite compatibility
+defect: all spaces were rejected, including the officially documented Desktop
+data directory `Minecraft Education Edition`. See the
+[official location](https://edusupport.minecraft.net/hc/en-us/articles/360047118832-Clean-Reinstall-Minecraft-Education-on-PC).
+The correction permits interior ASCII spaces, retaining bounded depth/length,
+traversal/ADS/reparse rejection and the existing operation restrictions. The
+same self-owned two-round private-file control now creates that directory name,
+writes/reopens its marker and verifies the logical view. It failed with native
+exit 2 before the correction and passed with exit 0 afterward. This proves the
+path correction, not that all Minecraft storage operations are supported.
+
+Executed checks on these inputs: MSVC x64 Release /W4 /WX build; all four C++
+self-test modes exit 0; 14 Rust bootstrap tests including the explicit ignored
+own-executable integration cases pass under Rust 1.98.1; preview manager builds.
+The selected-mutex control proves held host/private separation and consistent
+private reopen without forged results. Replay tests prove same-directory
+selection and refusal of wrong hash/identity/missing storage. Existing tests
+retain partial-resume lifetime preservation and create-new journal refusal.
+The space-only correction subsequently crashed both games at world creation:
+both child exits were 0xC0000005, with matching Windows-reported game-module
+offset 0x245bf61. That failed build is not the consolidated correction below.
+The latest source reports a nonzero runner result for nonzero child exits
+even when both journals save; an own-executable integration case covers this.
+
+### Consolidated storage correction after the failed game run
+
+The operator rejected further incremental manual game testing. No game was
+launched after that instruction. The existing configured two-profile control
+was extended to a complete generated storage workflow, exposing attribute-query
+and mutation gaps without accessing game/account/world data.
+
+- NtQueryAttributesFile and NtQueryFullAttributesFile now use the same pinned
+  logical/private path routing as native open/create. Existence/full metadata
+  queries therefore observe the same private files as writes.
+- Ordinary non-root private files may request DELETE/GENERIC_ALL and
+  delete-on-close; file-ID opens, explicit owner/DACL changes and profile-root
+  destructive access remain refused. Synthesized failed opens clear the
+  output handle and set IO_STATUS_BLOCK consistently.
+- Native NtSetInformationFile maps rename destinations to pinned private
+  parents. Absolute logical/private, explicit-root and source-relative
+  destinations use the same validated path rules. Host/peer/outside destinations,
+  link/short-name/case-mode operations and profile-root deletion are refused.
+  Actual OS results and LastError are preserved. This does not close all
+  raw-syscall/handle/reparse bypasses or establish a security boundary.
+- Path validation supports ordinary Unicode components, leading dots and
+  base64 punctuation, rather than the fixture's former alphanumeric-only
+  subset. It retains bounded paths/depth, no ADS/traversal/control/wildcard
+  names, paired UTF-16 and no ambiguous trailing spaces/dots.
+- The existing two-slot/two-round generated workflow checks nested world-like
+  paths, private markers, Unicode/temporary filenames, flush, 64 atomic
+  replacement cycles, native relative rename, metadata parity, actual
+  free-space query, delete/delete-on-close and persistence. The unhooked
+  parent verifies actual backing markers and an unchanged host tree. It
+  also checks rename/hard-link escape denial and profile-root preservation.
+
+Current executed checks: MSVC /W4 /WX build, all four C++ modes exit 0,
+14 Rust bootstrap tests (six explicit own-executable integration cases)
+pass and the preview manager builds. The generated workflow is not a game
+world, LevelDB acceptance, persistent sign-in or evidence that the observed
+Minecraft access violation is fixed. Consolidated game acceptance is
+NOT_EXECUTED; continuation remains in the single planning handoff.
+
+Native rename semantics follow Microsoft's
+[FILE_RENAME_INFORMATION](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_rename_information)
+and [NtSetInformationFile](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntsetinformationfile)
+contracts.
+
+Unresolved: complete file-operation/alias/bypass coverage, persistent game worlds and
+authentication, helper propagation/broker isolation, complete host/peer access
+protection, required multiplayer, four clients, performance and distribution.
+No driver, service, retired Sandboxie/VM provider, public schema or CI change.
+
 This standalone Windows/MSVC x64 experiment answers one question: does an
 in-memory first import arm a synthetic canary gate before the controlled
 dependency's DllMain, the EXE TLS callback, and the EXE's main canary run?

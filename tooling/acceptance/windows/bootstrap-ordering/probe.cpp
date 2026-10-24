@@ -30,9 +30,16 @@ __declspec(allocate(".CRT$XLB")) PIMAGE_TLS_CALLBACK bootstrap_tls_callback = Bo
 
 namespace {
 bool cleanupFailed = false;
-void require(bool condition) {
-    if (!condition) throw std::runtime_error("self-test operation failed");
+unsigned lastFailureLine = 0;
+bool configuredDiagnosticChild = false;
+void requireAt(bool condition, unsigned line) {
+    if (!condition) {
+        lastFailureLine = line;
+        std::fprintf(stderr, "{\"controlFailureLine\":%u,\"win32\":%lu}\n", line, GetLastError());
+        throw std::runtime_error("self-test operation failed");
+    }
 }
+#define require(...) requireAt((__VA_ARGS__), __LINE__)
 struct Handle {
     HANDLE value = nullptr;
     explicit Handle(HANDLE handle = nullptr) : value(handle) {}
@@ -676,10 +683,22 @@ void appDataChecks(probe::Receipt& receipt, LONG& checks) {
         writeBytes(file.value, slotMarker(receipt, receipt.fileRound));
         expectFile(known + L"\\appdata.bin", slotMarker(receipt, receipt.fileRound));
         expectFile(logical + L"\\" + folder + L"\\appdata.bin", slotMarker(receipt, receipt.fileRound));
+        // Official Desktop data directory contains spaces; exercise the real pathname shape.
+        const auto education = known + L"\\Minecraft Education Edition";
+        if (receipt.fileRound == 0) require(CreateDirectoryW(education.c_str(), nullptr));
+        const auto marker = education + L"\\storage-marker.bin";
+        Handle educationFile(CreateFileW(marker.c_str(), GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, receipt.fileRound == 0 ? CREATE_NEW : OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL, nullptr));
+        require(educationFile.value != INVALID_HANDLE_VALUE);
+        if (receipt.fileRound != 0) expectBytes(educationFile.value, slotMarker(receipt, 0));
+        writeBytes(educationFile.value, slotMarker(receipt, receipt.fileRound));
+        expectFile(logical + L"\\" + folder + L"\\Minecraft Education Edition\\storage-marker.bin",
+            slotMarker(receipt, receipt.fileRound));
         Handle directory(CreateFileW(known.c_str(), FILE_LIST_DIRECTORY | SYNCHRONIZE,
             FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
         require(directory.value != INVALID_HANDLE_VALUE
-            && nativeEntries(directory.value, false) == std::set<std::wstring>{L"appdata.bin"});
+            && nativeEntries(directory.value, false) == std::set<std::wstring>{L"appdata.bin", L"Minecraft Education Edition"});
         checks |= 131072;
         PWSTR rejected = nullptr;
         constexpr DWORD sentinel = 0x13579bd;
@@ -760,11 +779,12 @@ struct FileChild {
             && GetLastError() == ERROR_ACCESS_DENIED);
         checks |= 8;
 
-        Handle denied;
+        Handle allowedDelete;
         SetLastError(sentinel);
-        require(open(&denied.value, FILE_GENERIC_READ | DELETE, &attributes, &io,
-            FILE_SHARE_READ | FILE_SHARE_WRITE, options) == static_cast<NTSTATUS>(0xc00000bbUL)
-            && GetLastError() == sentinel && !denied.value);
+        require(open(&allowedDelete.value, FILE_GENERIC_READ | DELETE, &attributes, &io,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, options) == static_cast<NTSTATUS>(0xc0000043UL)
+            && GetLastError() == sentinel && !allowedDelete.value); // Existing fixture readers deny delete sharing.
+        Handle denied;
         std::wstring other = L"state.bin:stream";
         auto otherName = nativeName(other);
         attributes.ObjectName = &otherName;
@@ -1307,7 +1327,13 @@ struct MutexChild {
     }
     void phase(HANDLE event) {
         HANDLE states[]{event, child.info.hProcess};
-        require(WaitForMultipleObjects(2, states, FALSE, 10000) == WAIT_OBJECT_0);
+        const DWORD outcome = WaitForMultipleObjects(2, states, FALSE, 10000);
+        if (outcome == WAIT_OBJECT_0 + 1) {
+            DWORD code = 0;
+            require(GetExitCodeProcess(child.info.hProcess, &code));
+            std::fprintf(stderr, "{\"controlChildExit\":%lu}\n", code);
+        }
+        require(outcome == WAIT_OBJECT_0);
         require(WaitForSingleObject(child.info.hProcess, 0) == WAIT_TIMEOUT);
     }
     void exitedNormally() {
@@ -1786,7 +1812,13 @@ struct ConfiguredChild {
     }
     void phase(HANDLE event) {
         HANDLE states[]{event, child.info.hProcess};
-        require(WaitForMultipleObjects(2, states, FALSE, 10000) == WAIT_OBJECT_0);
+        const DWORD outcome = WaitForMultipleObjects(2, states, FALSE, 10000);
+        if (outcome == WAIT_OBJECT_0 + 1) {
+            DWORD code = 0;
+            require(GetExitCodeProcess(child.info.hProcess, &code));
+            std::fprintf(stderr, "{\"controlChildExit\":%lu}\n", code);
+        }
+        require(outcome == WAIT_OBJECT_0);
         require(WaitForSingleObject(child.info.hProcess, 0) == WAIT_TIMEOUT);
     }
     void exited(bool success) {
@@ -1805,12 +1837,112 @@ struct ConfiguredChild {
     }
 };
 
+void worldStorageChecks(probe::Receipt& receipt) {
+    configuredDiagnosticChild = true;
+    auto base = directoryPath(receipt.fileLogicalRoot).substr(4);
+    for (const auto* part : {L"Roaming", L"Minecraft Education Edition", L"games", L"com.mojang",
+                             L"minecraftWorlds", L"world_A+=", L"db"}) {
+        base += std::wstring(L"\\") + part;
+        if (!receipt.fileRound) require(CreateDirectoryW(base.c_str(), nullptr)
+            || (wcscmp(part, L"Roaming") == 0 && GetLastError() == ERROR_ALREADY_EXISTS));
+        else {
+            const DWORD attributes = GetFileAttributesW(base.c_str());
+            require(attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY));
+        }
+    }
+    const auto temporary = base + L"\\.manifest.tmp";
+    const auto current = base + L"\\CURRENT";
+    const auto marker = std::to_string(receipt.slot) + "-" + std::to_string(receipt.fileRound + 1);
+    if (receipt.fileRound) expectFile(current, std::to_string(receipt.slot) + "-1");
+    {
+        Handle output(CreateFileW(temporary.c_str(), GENERIC_READ | GENERIC_WRITE | DELETE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, CREATE_NEW,
+            FILE_ATTRIBUTE_NORMAL, nullptr));
+        require(output.value != INVALID_HANDLE_VALUE);
+        writeBytes(output.value, marker);
+        require(FlushFileBuffers(output.value));
+    }
+    require(MoveFileExW(temporary.c_str(), current.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH));
+    expectFile(current, marker);
+    WIN32_FILE_ATTRIBUTE_DATA metadata{};
+    require(GetFileAttributesExW(current.c_str(), GetFileExInfoStandard, &metadata)
+        && metadata.nFileSizeHigh == 0 && metadata.nFileSizeLow == marker.size());
+    const auto ownCurrent = directoryPath(receipt.fileOwnRoot).substr(4)
+        + base.substr(directoryPath(receipt.fileLogicalRoot).size() - 4) + L"\\CURRENT";
+    WIN32_FILE_ATTRIBUTE_DATA backingMetadata{};
+    require(GetFileAttributesExW(ownCurrent.c_str(), GetFileExInfoStandard, &backingMetadata)
+        && memcmp(&metadata, &backingMetadata, sizeof(metadata)) == 0);
+    const DWORD rootAttributes = GetFileAttributesW(directoryPath(receipt.fileLogicalRoot).c_str());
+    require(rootAttributes != INVALID_FILE_ATTRIBUTES && (rootAttributes & FILE_ATTRIBUTE_DIRECTORY));
+    const auto unicodeName = base + L"\\\u4e16\u754c (A)+=.bin";
+    {
+        Handle file(CreateFileW(unicodeName.c_str(), GENERIC_ALL,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, CREATE_NEW, 0, nullptr));
+        require(file.value != INVALID_HANDLE_VALUE);
+        writeBytes(file.value, marker);
+    }
+    expectFile(unicodeName, marker);
+    require(DeleteFileW(unicodeName.c_str()));
+    const auto rename = reinterpret_cast<NTSTATUS (NTAPI*)(HANDLE, PIO_STATUS_BLOCK, PVOID, ULONG, FILE_INFORMATION_CLASS)>(
+        GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtSetInformationFile"));
+    require(rename != nullptr);
+    {
+        Handle file(CreateFileW(current.c_str(), GENERIC_READ | DELETE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, 0, nullptr));
+        require(file.value != INVALID_HANDLE_VALUE);
+        struct Rename { ULONG flags; HANDLE root; ULONG bytes; wchar_t name[32]; } info{};
+        const wchar_t next[] = L"CURRENT.next";
+        memcpy(info.name, next, sizeof(next)); info.bytes = sizeof(next) - 2;
+        IO_STATUS_BLOCK io{};
+        constexpr DWORD sentinel = 0x13579bd;
+        SetLastError(sentinel);
+        require(rename(file.value, &io, &info, static_cast<ULONG>(offsetof(Rename, name) + info.bytes),
+            static_cast<FILE_INFORMATION_CLASS>(10)) == 0 && GetLastError() == sentinel);
+    }
+    require(MoveFileExW((base + L"\\CURRENT.next").c_str(), current.c_str(), MOVEFILE_REPLACE_EXISTING));
+    expectFile(current, marker);
+    const auto disposable = base + L"\\disposable.tmp";
+    {
+        Handle file(CreateFileW(disposable.c_str(), GENERIC_READ | GENERIC_WRITE | DELETE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, CREATE_NEW,
+            FILE_FLAG_DELETE_ON_CLOSE, nullptr));
+        require(file.value != INVALID_HANDLE_VALUE);
+    }
+    require(GetFileAttributesW(disposable.c_str()) == INVALID_FILE_ATTRIBUTES && GetLastError() == ERROR_FILE_NOT_FOUND);
+    const auto deletable = base + L"\\delete-me.tmp";
+    { Handle file(CreateFileW(deletable.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, 0, nullptr));
+      require(file.value != INVALID_HANDLE_VALUE); }
+    require(DeleteFileW(deletable.c_str()));
+    // Ordinary data names and filesystem queries must behave like the backing directory.
+    ULARGE_INTEGER available{}, total{}, free{};
+    require(GetDiskFreeSpaceExW(base.c_str(), &available, &total, &free) && total.QuadPart > 0);
+    const auto source = base + L"\\escape.tmp";
+    { Handle file(CreateFileW(source.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, 0, nullptr));
+      require(file.value != INVALID_HANDLE_VALUE); }
+    const auto outside = directoryPath(receipt.fileLogicalRoot).substr(4) + L"-outside.tmp";
+    require(!MoveFileExW(source.c_str(), outside.c_str(), MOVEFILE_REPLACE_EXISTING)
+        && GetFileAttributesW(outside.c_str()) == INVALID_FILE_ATTRIBUTES);
+    require(!CreateHardLinkW(outside.c_str(), current.c_str(), nullptr)
+        && GetFileAttributesW(outside.c_str()) == INVALID_FILE_ATTRIBUTES);
+    require(DeleteFileW(source.c_str()));
+    for (unsigned iteration = 0; iteration < 16; ++iteration) {
+        { Handle checkpoint(CreateFileW(temporary.c_str(), GENERIC_READ | GENERIC_WRITE | DELETE,
+              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, CREATE_NEW, 0, nullptr));
+          require(checkpoint.value != INVALID_HANDLE_VALUE);
+          writeBytes(checkpoint.value, marker); require(FlushFileBuffers(checkpoint.value)); }
+        require(MoveFileExW(temporary.c_str(), current.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH));
+        expectFile(current, marker);
+    }
+    require(!RemoveDirectoryW(directoryPath(receipt.fileLogicalRoot).c_str()));
+}
+
 int configuredStorageChild(probe::Receipt& receipt) {
     // Candidate storage configuration must not guess or rewrite a singleton.
     Handle shared(CreateMutexW(nullptr, FALSE, receipt.logical));
     require(shared.value && GetLastError() == ERROR_ALREADY_EXISTS);
     InterlockedExchange(&receipt.nativeChecks, 1);
     RegistryChild registry(receipt);
+    worldStorageChecks(receipt);
     for (const auto& folder : {L"Roaming", L"Local"}) {
         const auto logical = directoryPath(receipt.fileLogicalRoot).substr(4) + L"\\" + folder + L"\\configured.bin";
         const auto own = directoryPath(receipt.fileOwnRoot).substr(4) + L"\\" + folder + L"\\configured.bin";
@@ -1889,6 +2021,10 @@ bool configuredStoragePair(const std::wstring& self, const std::string& compatib
             expectFile(roots.root + L"\\client-two\\" + folder + L"\\configured.bin", "2-" + std::to_string(round + 1));
         }
         for (DWORD slot = 1; slot <= 2; ++slot) {
+            const auto leaf = slot == 1 ? L"client-one" : L"client-two";
+            expectFile(roots.root + L"\\" + leaf
+                + L"\\Roaming\\Minecraft Education Edition\\games\\com.mojang\\minecraftWorlds\\world_A+=\\db\\CURRENT",
+                std::to_string(slot) + "-" + std::to_string(round + 1));
             require(RegCloseKey(stores[slot - 1].value) == ERROR_SUCCESS);
             stores[slot - 1].value = nullptr;
             require(RegOpenKeyExW(HKEY_CURRENT_USER, paths[slot - 1].c_str(), 0, KEY_ALL_ACCESS,
@@ -1900,10 +2036,13 @@ bool configuredStoragePair(const std::wstring& self, const std::string& compatib
                 && registryValue(branch.value, L"Marker") == slot * 100 + round + 1);
         }
         registry.unchanged();
+        require(GetFileAttributesW((roots.root + L"\\host-view\\Roaming\\Minecraft Education Edition").c_str())
+            == INVALID_FILE_ATTRIBUTES);
     }
     std::printf("{\"case\":\"configured-storage-pair\",\"selfCheck\":true,\"earlyPrivate\":[7,7],"
         "\"registryChecks\":[65535,65535],\"rounds\":2,\"persistent\":true,\"hostUnchanged\":true,"
         "\"invalidConfigRejected\":5,\"mainRegistryCallback\":false,\"fixtureNameRequired\":false,"
+        "\"storageWorkflow\":true,\"atomicReplaceCycles\":64,\"renameAndLinkEscapeDenied\":true,"
         "\"singleton\":\"UNKNOWN\",\"singletonRemap\":false,\"helpers\":\"UNKNOWN\",\"securityBoundary\":false,"
         "\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n");
     return true;
@@ -1998,6 +2137,66 @@ void checkStartupObservation(const education_bootstrap::Config& config, const pr
             absentSeen = true;
     }
     require(created && existed && opened && absentSeen && spawned && failedSeen);
+    // Extend the existing observation control with the four real Win32 wrappers.
+    // A fresh per-fixture GUID prevents collision with real application objects.
+    const bool scoped = config.scope == education_bootstrap::StorageRegistrySelectedMutex;
+    wchar_t guid[37]{};
+    if (scoped) {
+        unsigned short part = static_cast<unsigned short>(config.logicalId.FileId.Identifier[0]
+            | (static_cast<unsigned>(config.logicalId.FileId.Identifier[1]) << 8));
+        unsigned long long tail = 0;
+        for (unsigned i = 0; i < 6; ++i)
+            tail |= static_cast<unsigned long long>(config.logicalId.FileId.Identifier[i + 2]) << (8 * i);
+        require(swprintf_s(guid, L"feedface-%04x-4000-8000-%012llx", static_cast<unsigned>(part), tail) == 36);
+    } else require(swprintf_s(guid, L"fee1dead-%04x-4000-8000-%012llx",
+        static_cast<unsigned>(config.slot), static_cast<unsigned long long>(GetCurrentProcessId())) == 36);
+    char ansi[37]{};
+    for (unsigned i = 0; i < 36; ++i) ansi[i] = static_cast<char>(guid[i]);
+    SetLastError(sentinel);
+    Handle winW(CreateMutexW(nullptr, TRUE, guid));
+    require(winW.value && GetLastError() == static_cast<DWORD>(scoped ? ERROR_ALREADY_EXISTS : ERROR_SUCCESS));
+    SetLastError(sentinel);
+    Handle winExW(CreateMutexExW(nullptr, guid, CREATE_MUTEX_INITIAL_OWNER, MUTEX_ALL_ACCESS));
+    require(winExW.value && GetLastError() == ERROR_ALREADY_EXISTS);
+    SetLastError(sentinel);
+    Handle winA(CreateMutexA(nullptr, TRUE, ansi));
+    require(winA.value && GetLastError() == static_cast<DWORD>(scoped ? ERROR_SUCCESS : ERROR_ALREADY_EXISTS));
+    SetLastError(sentinel);
+    Handle winExA(CreateMutexExA(nullptr, ansi, CREATE_MUTEX_INITIAL_OWNER, MUTEX_ALL_ACCESS));
+    require(winExA.value && GetLastError() == ERROR_ALREADY_EXISTS);
+    const auto sameObjects = reinterpret_cast<probe::CompareHandles>(
+        GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "CompareObjectHandles"));
+    require(sameObjects && sameObjects(winW.value, winExW.value)
+        && sameObjects(winA.value, winExA.value)
+        && (sameObjects(winW.value, winA.value) != FALSE) == !scoped);
+    Handle reopened(OpenMutexW(MUTEX_ALL_ACCESS, FALSE, guid));
+    require(reopened.value && sameObjects(reopened.value, winA.value));
+    require(ReleaseMutex(scoped ? winA.value : winW.value));
+    bool outer[4]{}, scopedNative = false, mappedCreate = false, mappedOpen = false;
+    for (LONG i = 0; i < journal.claimed; ++i) {
+        const auto& event = journal.records[i];
+        if (event.nameBytes != 72 || memcmp(event.name, guid, 72) != 0) continue;
+        if (event.kind == startup_observation::CreateMutant
+            && event.namespaceKind == startup_observation::SessionBaseNamedObjects)
+            scopedNative = true;
+        if ((event.flags & startup_observation::SingletonTranslated) != 0) {
+            require(scoped && event.namespaceKind == startup_observation::SessionBaseNamedObjects);
+            if (event.kind == startup_observation::CreateMutant && event.status == 0) mappedCreate = true;
+            if (event.kind == startup_observation::OpenMutant && event.status == 0) mappedOpen = true;
+        }
+        if (event.kind >= startup_observation::Win32MutexW && event.kind <= startup_observation::Win32MutexExA
+            && event.callerModule == startup_observation::MainImage) {
+            const DWORD index = event.kind - startup_observation::Win32MutexW;
+            require(event.status == TRUE && event.returned && event.callerRva > 0
+                && event.callerRva < event.callerImageBytes
+                && event.flags == startup_observation::InitialOwner
+                && event.lastError == static_cast<DWORD>(
+                    (scoped ? index == 2 : index == 0) ? ERROR_SUCCESS : ERROR_ALREADY_EXISTS));
+            outer[index] = true;
+        }
+    }
+    require(scopedNative && outer[0] && outer[1] && outer[2] && outer[3]
+        && (!scoped || (mappedCreate && mappedOpen)));
     const auto longName = name + std::wstring(200, L'x');
     text = {static_cast<USHORT>(longName.size() * sizeof(wchar_t)),
         static_cast<USHORT>(longName.size() * sizeof(wchar_t)), const_cast<PWSTR>(longName.c_str())};
@@ -2015,7 +2214,15 @@ void checkStartupObservation(const education_bootstrap::Config& config, const pr
     journal.started -= journal.frequency * 31;
     const LONG before = journal.claimed;
     require(open(&missing, access, &attributes) < 0 && journal.claimed == before);
-    std::printf("{\"case\":\"startup-observation-control\",\"callsChecked\":6,\"bounded\":true,"
+    const LONG storageBefore = journal.storage.counts[2];
+    const auto storageProbe = directoryPath(config.privateRoot) + L"\\storage-diagnostic-only.bin";
+    SetLastError(ERROR_SUCCESS);
+    const HANDLE rejectedFile = CreateFileW(storageProbe.c_str(), WRITE_DAC, FILE_SHARE_READ | FILE_SHARE_WRITE,
+        nullptr, OPEN_ALWAYS, 0, nullptr);
+    require(rejectedFile == INVALID_HANDLE_VALUE && GetLastError() == ERROR_NOT_SUPPORTED
+        && journal.storage.counts[2] == storageBefore + 1
+        && journal.storage.first[1].committed == 1 && journal.claimed == before);
+    std::printf("{\"case\":\"startup-observation-control\",\"callsChecked\":10,\"bounded\":true,"
         "\"lastErrorPreserved\":true,\"childRole\":\"UNKNOWN\",\"providerReady\":false}\n");
 }
 
@@ -2162,7 +2369,8 @@ int wmain(int argc, wchar_t** argv) {
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
     if (argc == 2 && wcscmp(argv[1], L"--bootstrap-observation-child") == 0) return 0;
     if (argc == 2 && wcscmp(argv[1], L"--bootstrap-test-child") == 0) {
-        try { return childMain(); } catch (...) { return 85; }
+        try { return childMain(); } catch (...) { return configuredDiagnosticChild && lastFailureLine
+            ? 60000 + static_cast<int>(lastFailureLine) : 85; }
     }
     // Fixed no-argument receiver for an explicitly built Rust/C++ interoperability check.
     if (argc == 1 && education_bootstrap::present()) {

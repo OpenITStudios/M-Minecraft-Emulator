@@ -24,6 +24,10 @@ wchar_t folded(wchar_t c, bool insensitive) {
 }
 probe::NativeFileCreate originalFileCreate = nullptr;
 probe::NativeFileOpen originalFileOpen = nullptr;
+using SetFileInformation = NTSTATUS (NTAPI*)(HANDLE, PIO_STATUS_BLOCK, PVOID, ULONG, FILE_INFORMATION_CLASS);
+SetFileInformation originalSetFileInformation = nullptr;
+using QueryAttributes = NTSTATUS (NTAPI*)(POBJECT_ATTRIBUTES, PVOID);
+QueryAttributes originalQueryAttributes = nullptr, originalQueryFullAttributes = nullptr;
 HANDLE fileLogicalRoot = nullptr, fileOwnRoot = nullptr;
 FILE_ID_INFO logicalDirectoryId{}, ownDirectoryId{};
 wchar_t logicalDevice[512]{}, logicalDos[512]{}, ownDevice[512]{}, ownDos[512]{};
@@ -97,7 +101,11 @@ bool initializeFiles(const InstallConfig& config, HMODULE ntdll) {
     fileOwnRoot = config.fileOwnRoot;
     originalFileCreate = reinterpret_cast<probe::NativeFileCreate>(GetProcAddress(ntdll, "NtCreateFile"));
     originalFileOpen = reinterpret_cast<probe::NativeFileOpen>(GetProcAddress(ntdll, "NtOpenFile"));
-    return originalFileCreate && originalFileOpen;
+    originalSetFileInformation = reinterpret_cast<SetFileInformation>(GetProcAddress(ntdll, "NtSetInformationFile"));
+    originalQueryAttributes = reinterpret_cast<QueryAttributes>(GetProcAddress(ntdll, "NtQueryAttributesFile"));
+    originalQueryFullAttributes = reinterpret_cast<QueryAttributes>(GetProcAddress(ntdll, "NtQueryFullAttributesFile"));
+    return originalFileCreate && originalFileOpen && originalSetFileInformation
+        && originalQueryAttributes && originalQueryFullAttributes;
 }
 enum class FileRoute { Other, Private, Unsupported };
 bool pathPrefix(const UNICODE_STRING& name, const wchar_t* prefix, unsigned& leaf) {
@@ -118,17 +126,19 @@ bool validRelative(const wchar_t* path, unsigned count) {
     for (unsigned i = 0; i < count; ++i) {
         const wchar_t ch = path[i];
         if (ch == L'\\') {
-            if (!component || path[i - 1] == L'.' || ++depth > 8) return false;
+            if (!component || path[i - 1] == L'.' || path[i - 1] == L' ' || ++depth > 8) return false;
             component = 0;
             continue;
         }
-        const bool alphanumeric = (ch >= L'a' && ch <= L'z') || (ch >= L'A' && ch <= L'Z')
-            || (ch >= L'0' && ch <= L'9');
-        if (!alphanumeric && (!component || (ch != L'.' && ch != L'_' && ch != L'-')))
-            return false;
-        if (++component > 64) return false;
+        if (ch < 32 || ch == L':' || ch == L'/' || ch == L'"' || ch == L'<' || ch == L'>'
+            || ch == L'|' || ch == L'?' || ch == L'*' || (!component && ch == L' ')) return false;
+        if (ch >= 0xd800 && ch <= 0xdbff) {
+            if (i + 1 == count || path[i + 1] < 0xdc00 || path[i + 1] > 0xdfff) return false;
+            ++i; ++component;
+        } else if (ch >= 0xdc00 && ch <= 0xdfff) return false;
+        if (++component > 255) return false;
     }
-    return component != 0 && path[count - 1] != L'.';
+    return component != 0 && path[count - 1] != L'.' && path[count - 1] != L' ';
 }
 FileRoute fileRoute(const OBJECT_ATTRIBUTES& attributes, wchar_t (&path)[512], unsigned& length) {
     if (attributes.Length != sizeof(OBJECT_ATTRIBUTES) || !attributes.ObjectName) return FileRoute::Other;
@@ -200,11 +210,12 @@ NTSTATUS privateParent(wchar_t* path, unsigned length, HANDLE& parent,
     leaf = {bytes, bytes, path + start};
     return 0;
 }
-bool unsupportedFile(ACCESS_MASK access, ULONG options, bool root, bool newDirectory = false) {
-    return (access & (DELETE | WRITE_DAC | WRITE_OWNER | GENERIC_ALL)) != 0
+bool unsupportedFile(ACCESS_MASK access, ULONG options, bool root) {
+    return (access & (WRITE_DAC | WRITE_OWNER)) != 0
+        || (root && (access & (DELETE | GENERIC_ALL)))
         || ((access & FILE_EXECUTE) && !(root || (options & FILE_DIRECTORY_FILE)))
-        || (options & (FILE_DELETE_ON_CLOSE | FILE_OPEN_BY_FILE_ID)) != 0
-        || (!newDirectory && (options & FILE_OPEN_REPARSE_POINT))
+        || (options & FILE_OPEN_BY_FILE_ID) != 0
+        || (root && (options & FILE_DELETE_ON_CLOSE))
         || (root && (options & FILE_NON_DIRECTORY_FILE));
 }
 NTSTATUS NTAPI translatedFileCreate(PHANDLE handle, ACCESS_MASK access, POBJECT_ATTRIBUTES attributes,
@@ -214,36 +225,86 @@ NTSTATUS NTAPI translatedFileCreate(PHANDLE handle, ACCESS_MASK access, POBJECT_
     NTSTATUS status = Unsupported;
     HANDLE held[8]{};
     unsigned heldCount = 0;
+    unsigned diagnostic = 0, diagnosticLength = 0;
     __try {
         wchar_t path[512]{};
         unsigned length = 0;
         const FileRoute route = attributes ? fileRoute(*attributes, path, length) : FileRoute::Other;
+        diagnosticLength = length;
+        if (route != FileRoute::Other) diagnostic = route == FileRoute::Unsupported ? 1 : 2;
         if (route == FileRoute::Other) {
             SetLastError(saved);
             status = originalFileCreate(handle, access, attributes, io, allocation,
                 fileAttributes, share, disposition, options, ea, eaLength);
         } else if (route == FileRoute::Private
-            && !unsupportedFile(access, options, length == 0,
-                disposition == 2 && (options & FILE_DIRECTORY_FILE) != 0)
+            && !unsupportedFile(access, options, length == 0)
             && (length != 0 || disposition == 1)) {
             OBJECT_ATTRIBUTES copy = *attributes;
             UNICODE_STRING leaf{};
             status = privateParent(path, length, copy.RootDirectory, leaf, held, heldCount);
+            diagnostic = 3;
             if (status >= 0) {
                 copy.ObjectName = &leaf;
                 copy.Attributes |= DontReparse;
                 SetLastError(saved);
                 status = originalFileCreate(handle, access, &copy, io, allocation,
                     fileAttributes, share, disposition, options, ea, eaLength);
+                diagnostic = 4;
             }
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) { status = static_cast<NTSTATUS>(GetExceptionCode()); }
     while (heldCount) CloseHandle(held[--heldCount]);
+    if (status < 0 && diagnostic && diagnostic != 4) {
+        __try { if (handle) *handle = nullptr; if (io) { io->Status = status; io->Information = 0; } }
+        __except (EXCEPTION_EXECUTE_HANDLER) { status = static_cast<NTSTATUS>(GetExceptionCode()); }
+    }
+    if (diagnostic) startup_observation::storageResult(status >= 0 ? 0 : diagnostic,
+        1, access, options, disposition, diagnosticLength, status);
     SetLastError(saved);
     return status;
 }
 NTSTATUS NTAPI translatedFileOpen(PHANDLE handle, ACCESS_MASK access, POBJECT_ATTRIBUTES attributes,
     PIO_STATUS_BLOCK io, ULONG share, ULONG options) {
+    const DWORD saved = GetLastError();
+    NTSTATUS status = Unsupported;
+    HANDLE held[8]{};
+    unsigned heldCount = 0;
+    unsigned diagnostic = 0, diagnosticLength = 0;
+    __try {
+        wchar_t path[512]{};
+        unsigned length = 0;
+        const FileRoute route = attributes ? fileRoute(*attributes, path, length) : FileRoute::Other;
+        diagnosticLength = length;
+        if (route != FileRoute::Other) diagnostic = route == FileRoute::Unsupported ? 1 : 2;
+        if (route == FileRoute::Other) {
+            SetLastError(saved);
+            status = originalFileOpen(handle, access, attributes, io, share, options);
+        } else if (route == FileRoute::Private && !unsupportedFile(access, options, length == 0)) {
+            OBJECT_ATTRIBUTES copy = *attributes;
+            UNICODE_STRING leaf{};
+            status = privateParent(path, length, copy.RootDirectory, leaf, held, heldCount);
+            diagnostic = 3;
+            if (status >= 0) {
+                copy.ObjectName = &leaf;
+                copy.Attributes |= DontReparse;
+                SetLastError(saved);
+                status = originalFileOpen(handle, access, &copy, io, share, options);
+                diagnostic = 4;
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { status = static_cast<NTSTATUS>(GetExceptionCode()); }
+    while (heldCount) CloseHandle(held[--heldCount]);
+    if (status < 0 && diagnostic && diagnostic != 4) {
+        __try { if (handle) *handle = nullptr; if (io) { io->Status = status; io->Information = 0; } }
+        __except (EXCEPTION_EXECUTE_HANDLER) { status = static_cast<NTSTATUS>(GetExceptionCode()); }
+    }
+    if (diagnostic) startup_observation::storageResult(status >= 0 ? 0 : diagnostic,
+        2, access, options, 0, diagnosticLength, status);
+    SetLastError(saved);
+    return status;
+}
+
+NTSTATUS queryPrivateAttributes(QueryAttributes original, POBJECT_ATTRIBUTES attributes, PVOID output) {
     const DWORD saved = GetLastError();
     NTSTATUS status = Unsupported;
     HANDLE held[8]{};
@@ -254,18 +315,104 @@ NTSTATUS NTAPI translatedFileOpen(PHANDLE handle, ACCESS_MASK access, POBJECT_AT
         const FileRoute route = attributes ? fileRoute(*attributes, path, length) : FileRoute::Other;
         if (route == FileRoute::Other) {
             SetLastError(saved);
-            status = originalFileOpen(handle, access, attributes, io, share, options);
-        } else if (route == FileRoute::Private && !unsupportedFile(access, options, length == 0)) {
+            status = original(attributes, output);
+        } else if (route == FileRoute::Private) {
             OBJECT_ATTRIBUTES copy = *attributes;
             UNICODE_STRING leaf{};
             status = privateParent(path, length, copy.RootDirectory, leaf, held, heldCount);
             if (status >= 0) {
-                copy.ObjectName = &leaf;
-                copy.Attributes |= DontReparse;
+                copy.ObjectName = &leaf; copy.Attributes |= DontReparse;
                 SetLastError(saved);
-                status = originalFileOpen(handle, access, &copy, io, share, options);
+                status = original(&copy, output);
             }
         }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { status = static_cast<NTSTATUS>(GetExceptionCode()); }
+    while (heldCount) CloseHandle(held[--heldCount]);
+    SetLastError(saved);
+    return status;
+}
+NTSTATUS NTAPI translatedQueryAttributes(POBJECT_ATTRIBUTES attributes, PVOID output) {
+    return queryPrivateAttributes(originalQueryAttributes, attributes, output);
+}
+NTSTATUS NTAPI translatedQueryFullAttributes(POBJECT_ATTRIBUTES attributes, PVOID output) {
+    return queryPrivateAttributes(originalQueryFullAttributes, attributes, output);
+}
+
+// The returned data handle is private; name-changing operations must keep it private too.
+struct RenameInformation {
+    ULONG flags;
+    HANDLE root;
+    ULONG nameBytes;
+    wchar_t name[512];
+};
+static_assert(offsetof(RenameInformation, name) == 20);
+NTSTATUS NTAPI translatedSetInformation(HANDLE file, PIO_STATUS_BLOCK io, PVOID information,
+                                        ULONG bytes, FILE_INFORMATION_CLASS informationClass) {
+    const DWORD saved = GetLastError();
+    NTSTATUS status = Unsupported;
+    HANDLE held[8]{};
+    unsigned heldCount = 0;
+    bool handled = false;
+    __try {
+        wchar_t source[512]{};
+        const DWORD size = GetFileType(file) == FILE_TYPE_DISK
+            ? GetFinalPathNameByHandleW(file, source, 512, VOLUME_NAME_NT) : 0;
+        UNICODE_STRING sourceName{static_cast<USHORT>(size < 512 ? size * 2 : 0),
+            static_cast<USHORT>(size < 512 ? size * 2 : 0), source};
+        unsigned sourceLeaf = 0;
+        const bool own = size && size < 512 && pathPrefix(sourceName, ownDevice, sourceLeaf);
+        const ULONG kind = static_cast<ULONG>(informationClass);
+        if (own && (kind == 10 || kind == 65)) {
+            handled = true;
+            if (sourceLeaf < size && information && bytes >= offsetof(RenameInformation, name)) {
+                const auto* input = static_cast<const RenameInformation*>(information);
+                const ULONG nameBytes = input->nameBytes;
+                if (nameBytes && nameBytes % 2 == 0 && nameBytes < sizeof(input->name)
+                    && nameBytes <= bytes - offsetof(RenameInformation, name)) {
+                    wchar_t destination[512]{};
+                    UNICODE_STRING name{static_cast<USHORT>(nameBytes), static_cast<USHORT>(nameBytes),
+                        const_cast<PWSTR>(input->name)};
+                    OBJECT_ATTRIBUTES attributes{sizeof(OBJECT_ATTRIBUTES), input->root, &name,
+                        OBJ_CASE_INSENSITIVE, nullptr, nullptr};
+                    unsigned length = 0;
+                    FileRoute route = FileRoute::Unsupported;
+                    if (input->root || input->name[0] == L'\\') {
+                        route = fileRoute(attributes, destination, length);
+                    } else {
+                        // Rootless simple names are relative to the source's current parent.
+                        unsigned parent = size;
+                        while (parent > sourceLeaf && source[parent - 1] != L'\\') --parent;
+                        const unsigned prefix = parent - sourceLeaf;
+                        if (prefix + nameBytes / 2 < 512) {
+                            memcpy(destination, source + sourceLeaf, prefix * 2);
+                            memcpy(destination + prefix, input->name, nameBytes);
+                            length = prefix + nameBytes / 2;
+                            if (validRelative(destination, length)) route = FileRoute::Private;
+                        }
+                    }
+                    if (route == FileRoute::Private && length) {
+                        HANDLE parent = nullptr;
+                        UNICODE_STRING leaf{};
+                        status = privateParent(destination, length, parent, leaf, held, heldCount);
+                        if (status >= 0) {
+                            RenameInformation copy{};
+                            copy.flags = input->flags; copy.root = parent; copy.nameBytes = leaf.Length;
+                            memcpy(copy.name, leaf.Buffer, leaf.Length);
+                            SetLastError(saved);
+                            status = originalSetFileInformation(file, io, &copy,
+                                static_cast<ULONG>(offsetof(RenameInformation, name) + leaf.Length), informationClass);
+                        }
+                    }
+                }
+            }
+        } else if (own && (kind == 11 || kind == 57 || kind == 72 || kind == 31 || kind == 40 || kind == 71
+            || (sourceLeaf == size && (kind == 13 || kind == 64)))) {
+            handled = true; // No link/short-name/case-mode bypass or deletion of the profile root.
+        } else {
+            SetLastError(saved);
+            status = originalSetFileInformation(file, io, information, bytes, informationClass);
+        }
+        if (handled && status < 0 && io) { io->Status = status; io->Information = 0; }
     } __except (EXCEPTION_EXECUTE_HANDLER) { status = static_cast<NTSTATUS>(GetExceptionCode()); }
     while (heldCount) CloseHandle(held[--heldCount]);
     SetLastError(saved);
@@ -422,18 +569,205 @@ bool selectFixtureMutex(const probe::Receipt& config) {
 using CreateProcessCall = BOOL (WINAPI*)(LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES,
     LPSECURITY_ATTRIBUTES, BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION);
 CreateProcessCall originalProcess = nullptr;
+using MutexW = HANDLE (WINAPI*)(LPSECURITY_ATTRIBUTES, BOOL, LPCWSTR);
+using MutexA = HANDLE (WINAPI*)(LPSECURITY_ATTRIBUTES, BOOL, LPCSTR);
+using MutexExW = HANDLE (WINAPI*)(LPSECURITY_ATTRIBUTES, LPCWSTR, DWORD, DWORD);
+using MutexExA = HANDLE (WINAPI*)(LPSECURITY_ATTRIBUTES, LPCSTR, DWORD, DWORD);
+MutexW originalMutexW = nullptr;
+MutexA originalMutexA = nullptr;
+MutexExW originalMutexExW = nullptr;
+MutexExA originalMutexExA = nullptr;
+
+struct CallerRange { ULONG_PTR base; DWORD bytes, kind; };
+CallerRange callerRanges[4]{};
+void initializeCallerRanges() {
+    const wchar_t* modules[]{nullptr, L"kernelbase.dll", L"kernel32.dll", L"SecureEngineSDK64.dll"};
+    for (unsigned i = 0; i < 4; ++i) {
+        const HMODULE module = GetModuleHandleW(modules[i]); // Already loaded only; never LoadLibrary.
+        if (!module) continue;
+        __try {
+            const auto dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(module);
+            if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0 || dos->e_lfanew > 0x100000)
+                continue;
+            const auto nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(
+                reinterpret_cast<const BYTE*>(module) + dos->e_lfanew);
+            if (nt->Signature != IMAGE_NT_SIGNATURE || nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC
+                || !nt->OptionalHeader.SizeOfImage || nt->OptionalHeader.SizeOfImage > 0x7fffffff) continue;
+            callerRanges[i] = {reinterpret_cast<ULONG_PTR>(module), nt->OptionalHeader.SizeOfImage, i + 1};
+        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+}
+void attributeCaller(startup_observation::Record& record) {
+    for (const auto& range : callerRanges) {
+        if (range.bytes && record.caller >= range.base && record.caller - range.base < range.bytes) {
+            record.callerModule = range.kind;
+            record.callerRva = static_cast<DWORD>(record.caller - range.base);
+            record.callerImageBytes = range.bytes;
+            return;
+        }
+    }
+}
+template<class Character>
+bool copyGuidName(startup_observation::Record& record, const Character* name, bool owner) {
+    if (!name || !owner) return false; // The observed candidate is a 36-character GUID with initial ownership.
+    __try {
+        for (unsigned i = 0; i < 36; ++i) {
+            const auto ch = static_cast<wchar_t>(name[i]);
+            const bool separator = i == 8 || i == 13 || i == 18 || i == 23;
+            if (separator ? ch != L'-'
+                : !((ch >= L'0' && ch <= L'9') || (ch >= L'a' && ch <= L'f')
+                    || (ch >= L'A' && ch <= L'F'))) return false;
+            record.name[i] = ch;
+        }
+        if (name[36] != 0) return false;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    record.nameBytes = 72;
+    record.flags |= startup_observation::InitialOwner;
+    return true;
+}
+void attributeNative(startup_observation::Record& record) {
+    if (record.root && record.nameBytes && record.name[0] != L'\\'
+        && !(record.flags & startup_observation::UnreadableArguments)
+        && baseDirectory && compareHandles(reinterpret_cast<HANDLE>(record.root), baseDirectory))
+        record.namespaceKind = startup_observation::SessionBaseNamedObjects;
+    startup_observation::Record selected{};
+    if (record.nameBytes == 72 && copyGuidName(selected, record.name,
+        (record.flags & startup_observation::InitialOwner) != 0)) attributeCaller(record);
+}
+
+DWORD singletonCallerRva = 0;
+std::atomic<unsigned> singletonBinding{0};
+wchar_t singletonName[37]{}, singletonSuffix[80]{};
+bool initializeSelectedMutex(const InstallConfig& config, bool observe) {
+    if (!config.education || config.education->scope != education_bootstrap::StorageRegistrySelectedMutex)
+        return true;
+    singletonCallerRva = config.education->singletonCallerRva;
+    if (!observe || !singletonCallerRva || !callerRanges[0].bytes
+        || singletonCallerRva >= callerRanges[0].bytes) return false;
+    // The verified private directory identity supplies a stable, per-profile suffix.
+    int used = swprintf_s(singletonSuffix, L"_Mivubi_%016llx_",
+        static_cast<unsigned long long>(ownDirectoryId.VolumeSerialNumber));
+    if (used < 0) return false;
+    for (BYTE byte : ownDirectoryId.FileId.Identifier) {
+        if (swprintf_s(singletonSuffix + used, 80 - static_cast<size_t>(used), L"%02x",
+            static_cast<unsigned>(byte)) != 2) return false;
+        used += 2;
+    }
+    return true;
+}
+void bindSelectedMutex(const startup_observation::Record& record) {
+    if (!singletonCallerRva || record.callerModule != startup_observation::MainImage
+        || record.callerRva != singletonCallerRva) return;
+    unsigned empty = 0;
+    if (singletonBinding.compare_exchange_strong(empty, 1, std::memory_order_acq_rel)) {
+        memcpy(singletonName, record.name, 72);
+        singletonName[36] = 0;
+        singletonBinding.store(2, std::memory_order_release);
+    }
+}
+bool mapSelectedMutex(const startup_observation::Record& record, const OBJECT_ATTRIBUTES* source,
+    OBJECT_ATTRIBUTES& copy, UNICODE_STRING& text, wchar_t (&buffer)[256]) {
+    if (singletonBinding.load(std::memory_order_acquire) != 2 || record.nameBytes != 72
+        || record.namespaceKind != startup_observation::SessionBaseNamedObjects) return false;
+    const bool insensitive = (record.attributes & OBJ_CASE_INSENSITIVE) != 0;
+    for (unsigned i = 0; i < 36; ++i)
+        if (folded(record.name[i], insensitive) != folded(singletonName[i], insensitive)) return false;
+    __try {
+        if (!source || source->Length != sizeof(OBJECT_ATTRIBUTES)) return false;
+        if (swprintf_s(buffer, L"%s%s", singletonName, singletonSuffix) < 0) return false;
+        const auto bytes = static_cast<USHORT>(wcslen(buffer) * sizeof(wchar_t));
+        text = {bytes, bytes, buffer};
+        copy = *source;
+        copy.ObjectName = &text; // Preserve access, original root, attributes and security pointers.
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+
+void finishWin32Mutex(startup_observation::Record& record, HANDLE result, DWORD error) {
+    startup_observation::logging = true;
+    record.status = result ? TRUE : FALSE;
+    record.returned = reinterpret_cast<ULONG_PTR>(result);
+    attributeCaller(record); // Cached image bounds only; no allocation, module/file/profile lookup in hooks.
+    startup_observation::finish(record, error);
+}
+HANDLE WINAPI observedMutexW(LPSECURITY_ATTRIBUTES security, BOOL owner, LPCWSTR name) {
+    const DWORD before = GetLastError();
+    startup_observation::Record record{};
+    const bool observe = copyGuidName(record, name, owner != FALSE)
+        && startup_observation::begin(record, startup_observation::Win32MutexW, _ReturnAddress());
+    record.argument = MUTEX_ALL_ACCESS;
+    SetLastError(before);
+    const HANDLE result = originalMutexW(security, owner, name);
+    const DWORD after = GetLastError();
+    if (observe) finishWin32Mutex(record, result, after);
+    SetLastError(after);
+    return result;
+}
+HANDLE WINAPI observedMutexA(LPSECURITY_ATTRIBUTES security, BOOL owner, LPCSTR name) {
+    const DWORD before = GetLastError();
+    startup_observation::Record record{};
+    const bool candidate = copyGuidName(record, name, owner != FALSE);
+    const bool observe = candidate
+        && startup_observation::begin(record, startup_observation::Win32MutexA, _ReturnAddress());
+    if (candidate && singletonCallerRva) {
+        record.caller = reinterpret_cast<ULONG_PTR>(_ReturnAddress());
+        attributeCaller(record);
+        bindSelectedMutex(record); // Functional binding is not limited by the observation clock/capacity.
+    }
+    record.argument = MUTEX_ALL_ACCESS;
+    SetLastError(before);
+    const HANDLE result = originalMutexA(security, owner, name);
+    const DWORD after = GetLastError();
+    if (observe) finishWin32Mutex(record, result, after);
+    SetLastError(after);
+    return result;
+}
+HANDLE WINAPI observedMutexExW(LPSECURITY_ATTRIBUTES security, LPCWSTR name, DWORD flags, DWORD access) {
+    const DWORD before = GetLastError();
+    startup_observation::Record record{};
+    const bool observe = copyGuidName(record, name, (flags & CREATE_MUTEX_INITIAL_OWNER) != 0)
+        && startup_observation::begin(record, startup_observation::Win32MutexExW, _ReturnAddress());
+    record.argument = access; record.attributes = flags;
+    SetLastError(before);
+    const HANDLE result = originalMutexExW(security, name, flags, access);
+    const DWORD after = GetLastError();
+    if (observe) finishWin32Mutex(record, result, after);
+    SetLastError(after);
+    return result;
+}
+HANDLE WINAPI observedMutexExA(LPSECURITY_ATTRIBUTES security, LPCSTR name, DWORD flags, DWORD access) {
+    const DWORD before = GetLastError();
+    startup_observation::Record record{};
+    const bool observe = copyGuidName(record, name, (flags & CREATE_MUTEX_INITIAL_OWNER) != 0)
+        && startup_observation::begin(record, startup_observation::Win32MutexExA, _ReturnAddress());
+    record.argument = access; record.attributes = flags;
+    SetLastError(before);
+    const HANDLE result = originalMutexExA(security, name, flags, access);
+    const DWORD after = GetLastError();
+    if (observe) finishWin32Mutex(record, result, after);
+    SetLastError(after);
+    return result;
+}
+
 NTSTATUS NTAPI observedCreate(PHANDLE handle, ACCESS_MASK access, POBJECT_ATTRIBUTES attributes, BOOLEAN owner) {
     const DWORD before = GetLastError();
     startup_observation::Record record{};
     const bool observe = startup_observation::begin(record, startup_observation::CreateMutant, _ReturnAddress());
-    if (observe) {
+    if (observe || singletonBinding.load(std::memory_order_acquire) == 2) {
         startup_observation::logging = true;
         startup_observation::objectArguments(record, access, attributes);
         if (owner) record.flags |= startup_observation::InitialOwner;
+        attributeNative(record);
         startup_observation::logging = false;
     }
     SetLastError(before);
-    const NTSTATUS status = originalCreate(handle, access, attributes, owner);
+    OBJECT_ATTRIBUTES mapped{};
+    UNICODE_STRING text{};
+    wchar_t replacement[256]{};
+    const bool translated = mapSelectedMutex(record, attributes, mapped, text, replacement);
+    if (translated) record.flags |= startup_observation::SingletonTranslated;
+    SetLastError(before);
+    const NTSTATUS status = originalCreate(handle, access, translated ? &mapped : attributes, owner);
     const DWORD after = GetLastError();
     if (observe) {
         startup_observation::logging = true;
@@ -447,13 +781,20 @@ NTSTATUS NTAPI observedOpen(PHANDLE handle, ACCESS_MASK access, POBJECT_ATTRIBUT
     const DWORD before = GetLastError();
     startup_observation::Record record{};
     const bool observe = startup_observation::begin(record, startup_observation::OpenMutant, _ReturnAddress());
-    if (observe) {
+    if (observe || singletonBinding.load(std::memory_order_acquire) == 2) {
         startup_observation::logging = true;
         startup_observation::objectArguments(record, access, attributes);
+        attributeNative(record);
         startup_observation::logging = false;
     }
     SetLastError(before);
-    const NTSTATUS status = originalOpen(handle, access, attributes);
+    OBJECT_ATTRIBUTES mapped{};
+    UNICODE_STRING text{};
+    wchar_t replacement[256]{};
+    const bool translated = mapSelectedMutex(record, attributes, mapped, text, replacement);
+    if (translated) record.flags |= startup_observation::SingletonTranslated;
+    SetLastError(before);
+    const NTSTATUS status = originalOpen(handle, access, translated ? &mapped : attributes);
     const DWORD after = GetLastError();
     if (observe) {
         startup_observation::logging = true;
@@ -490,7 +831,15 @@ bool install(const InstallConfig& config, bool mutex) {
     const bool observe = startup_observation::active != nullptr;
     const HMODULE kernel = GetModuleHandleW(L"kernel32.dll");
     originalProcess = kernel ? reinterpret_cast<CreateProcessCall>(GetProcAddress(kernel, "CreateProcessW")) : nullptr;
-    if (observe && !originalProcess) return false;
+    if (observe) {
+        originalMutexW = kernel ? reinterpret_cast<MutexW>(GetProcAddress(kernel, "CreateMutexW")) : nullptr;
+        originalMutexA = kernel ? reinterpret_cast<MutexA>(GetProcAddress(kernel, "CreateMutexA")) : nullptr;
+        originalMutexExW = kernel ? reinterpret_cast<MutexExW>(GetProcAddress(kernel, "CreateMutexExW")) : nullptr;
+        originalMutexExA = kernel ? reinterpret_cast<MutexExA>(GetProcAddress(kernel, "CreateMutexExA")) : nullptr;
+        if (!originalProcess || !originalMutexW || !originalMutexA || !originalMutexExW || !originalMutexExA)
+            return false;
+        initializeCallerRanges();
+    }
     originalCreate = reinterpret_cast<probe::NativeCreate>(GetProcAddress(ntdll, "NtCreateMutant"));
     originalOpen = reinterpret_cast<probe::NativeOpen>(GetProcAddress(ntdll, "NtOpenMutant"));
     openDirectory = reinterpret_cast<probe::NativeDirectory>(GetProcAddress(ntdll, "NtOpenDirectoryObject"));
@@ -498,7 +847,7 @@ bool install(const InstallConfig& config, bool mutex) {
     compareHandles = kernelbase ? reinterpret_cast<probe::CompareHandles>(
         GetProcAddress(kernelbase, "CompareObjectHandles")) : nullptr;
     if (!originalCreate || !originalOpen || !openDirectory || !compareHandles || !initializeFiles(config, ntdll)
-        || !initializeAppData() || !initializeRegistry(config)) return false;
+        || !initializeAppData() || !initializeRegistry(config) || !initializeSelectedMutex(config, observe)) return false;
     DWORD session = 0;
     wchar_t path[80]{};
     if (!ProcessIdToSessionId(GetCurrentProcessId(), &session)
@@ -506,7 +855,7 @@ bool install(const InstallConfig& config, bool mutex) {
     const auto bytes = static_cast<USHORT>(wcslen(path) * sizeof(wchar_t));
     UNICODE_STRING rootName{bytes, bytes, path};
     OBJECT_ATTRIBUTES root{sizeof(OBJECT_ATTRIBUTES), nullptr, &rootName, OBJ_CASE_INSENSITIVE, nullptr, nullptr};
-    if (mutex && openDirectory(&baseDirectory, 0x0002 /* DIRECTORY_TRAVERSE */, &root) < 0) return false;
+    if ((mutex || observe) && openDirectory(&baseDirectory, 0x0002 /* DIRECTORY_TRAVERSE */, &root) < 0) return false;
 
     // One native layer serves the direct calls and the tested Win32 wrappers.
     if (!DetourRestoreAfterWith() || DetourTransactionBegin() != NO_ERROR) {
@@ -519,10 +868,20 @@ bool install(const InstallConfig& config, bool mutex) {
                         mutex ? reinterpret_cast<PVOID>(translatedOpen) : reinterpret_cast<PVOID>(observedOpen)) != NO_ERROR))
         || (observe && DetourAttach(reinterpret_cast<PVOID*>(&originalProcess),
                         reinterpret_cast<PVOID>(observedProcess)) != NO_ERROR)
+        || (observe && (DetourAttach(reinterpret_cast<PVOID*>(&originalMutexW), reinterpret_cast<PVOID>(observedMutexW)) != NO_ERROR
+            || DetourAttach(reinterpret_cast<PVOID*>(&originalMutexA), reinterpret_cast<PVOID>(observedMutexA)) != NO_ERROR
+            || DetourAttach(reinterpret_cast<PVOID*>(&originalMutexExW), reinterpret_cast<PVOID>(observedMutexExW)) != NO_ERROR
+            || DetourAttach(reinterpret_cast<PVOID*>(&originalMutexExA), reinterpret_cast<PVOID>(observedMutexExA)) != NO_ERROR))
         || DetourAttach(reinterpret_cast<PVOID*>(&originalFileCreate),
                         reinterpret_cast<PVOID>(translatedFileCreate)) != NO_ERROR
         || DetourAttach(reinterpret_cast<PVOID*>(&originalFileOpen),
                         reinterpret_cast<PVOID>(translatedFileOpen)) != NO_ERROR
+        || DetourAttach(reinterpret_cast<PVOID*>(&originalSetFileInformation),
+                        reinterpret_cast<PVOID>(translatedSetInformation)) != NO_ERROR
+        || DetourAttach(reinterpret_cast<PVOID*>(&originalQueryAttributes),
+                        reinterpret_cast<PVOID>(translatedQueryAttributes)) != NO_ERROR
+        || DetourAttach(reinterpret_cast<PVOID*>(&originalQueryFullAttributes),
+                        reinterpret_cast<PVOID>(translatedQueryFullAttributes)) != NO_ERROR
         || DetourAttach(reinterpret_cast<PVOID*>(&originalKnownPath),
                         reinterpret_cast<PVOID>(translatedKnownPath)) != NO_ERROR || !attachRegistry()) {
         DetourTransactionAbort();

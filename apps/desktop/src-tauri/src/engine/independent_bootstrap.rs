@@ -396,7 +396,23 @@ fn prepare_registered_mode(observe: bool) -> io::Result<[PendingEducationBootstr
     if super::resolve_registered_education_target(selector)? != target {
         return Err(invalid("Education registration changed during preparation"));
     }
-    let [first, second] = registered_slots()?;
+    // The scoped experiment is bound to the actually observed official image bytes/callsite.
+    // An update refuses before allocating profiles; publisher identity alone cannot authorize an RVA.
+    let expected = [
+        0x04, 0x16, 0x4c, 0x1c, 0x64, 0x45, 0x8a, 0x5d, 0x98, 0x4d, 0xbc, 0x16, 0x87, 0xd0, 0xe8,
+        0x02, 0x3d, 0x18, 0x08, 0xc4, 0x4e, 0xe7, 0xbe, 0x03, 0x51, 0x9c, 0xdf, 0x83, 0x55, 0x23,
+        0x3e, 0xaa,
+    ];
+    if observe && file_digest(&image, 256 * 1024 * 1024)? != expected {
+        return Err(invalid(
+            "Education image changed; singleton recipe requires review",
+        ));
+    }
+    let [mut first, mut second] = registered_slots(observe)?;
+    if observe {
+        first.singleton_caller_rva = 0x2cdc30;
+        second.singleton_caller_rva = 0x2cdc30;
+    }
     let first = create_unstarted_impl(
         path,
         image.try_clone()?,
@@ -418,7 +434,7 @@ fn prepare_registered_mode(observe: bool) -> io::Result<[PendingEducationBootstr
 
 const OBSERVATION_ENV: &str = "MIVUBI_EDUCATION_OBSERVATION_SECTION";
 // Must match private startup-observation.h; no public wire schema.
-const OBSERVATION_BYTES: usize = 30784;
+const OBSERVATION_BYTES: usize = 31968;
 struct StartupObservation {
     section: OwnedHandle,
 }
@@ -483,7 +499,7 @@ impl PendingEducationBootstrap {
             |offset: usize| u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap());
         let birth = u64::from_le_bytes(bytes[16..24].try_into().unwrap());
         if word(0) != 0x4f425331
-            || word(4) != 1
+            || word(4) != 3
             || word(8) != OBSERVATION_BYTES as u32
             || word(12) != self.pid
             || birth != self.created
@@ -505,14 +521,14 @@ const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = None;
 #[cfg(not(test))]
 const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = Some(PayloadDigests {
     enroller: [
-        0x76, 0x46, 0xbd, 0x2e, 0x46, 0xa5, 0xf3, 0x94, 0x84, 0x54, 0x98, 0x4f, 0xc8, 0x1d, 0xc1,
-        0x13, 0x42, 0x69, 0x1e, 0x69, 0xce, 0x86, 0x03, 0xc3, 0x29, 0xf1, 0x5b, 0x12, 0x14, 0x0e,
-        0xce, 0x83,
+        0x18, 0xf4, 0x15, 0x7b, 0x52, 0x4f, 0x14, 0x2f, 0x2b, 0xac, 0x85, 0xef, 0xd6, 0xd9, 0x5b,
+        0x5d, 0xf6, 0x9d, 0x16, 0x1a, 0x1e, 0x1a, 0x0d, 0xa6, 0xc1, 0x07, 0x88, 0xc9, 0x48, 0x68,
+        0xf3, 0x84,
     ],
     compatibility: [
-        0x29, 0x2e, 0x1c, 0x4c, 0x47, 0x2d, 0x25, 0xc5, 0x93, 0x4a, 0x21, 0x07, 0x39, 0xcc, 0x8e,
-        0x9f, 0x30, 0x29, 0xbf, 0xd4, 0x16, 0x02, 0x50, 0xa8, 0x7c, 0x9e, 0x67, 0xec, 0xc5, 0xf6,
-        0xac, 0x06,
+        0xb3, 0x04, 0x6f, 0xe7, 0xf8, 0x34, 0x4f, 0x43, 0xbd, 0xbb, 0x1c, 0x34, 0x07, 0x9c, 0xb7,
+        0x12, 0x06, 0x47, 0x51, 0x89, 0x79, 0xdf, 0x97, 0xbc, 0x5c, 0x31, 0x9d, 0xdd, 0x96, 0x86,
+        0x64, 0x23,
     ],
 });
 #[derive(Clone, Copy)]
@@ -524,6 +540,10 @@ type EnrollmentEntry =
     unsafe extern "system" fn(HANDLE, HANDLE, u32, u64, HANDLE, HANDLE, HANDLE) -> u32;
 
 fn payload_digest(file: &File) -> io::Result<[u8; 32]> {
+    file_digest(file, 32 * 1024 * 1024)
+}
+
+fn file_digest(file: &File, maximum: usize) -> io::Result<[u8; 32]> {
     use sha2::{Digest, Sha256};
     use std::io::{Read, Seek, SeekFrom};
     let mut reader = file.try_clone()?;
@@ -537,8 +557,8 @@ fn payload_digest(file: &File) -> io::Result<[u8; 32]> {
             break;
         }
         total += count;
-        if total > 32 * 1024 * 1024 {
-            return Err(invalid("Bootstrap DLL exceeds reviewed size bound"));
+        if total > maximum {
+            return Err(invalid("Bootstrap file exceeds reviewed size bound"));
         }
         hash.update(&buffer[..count]);
     }
@@ -828,7 +848,7 @@ impl StartedEducationObservation {
         ) {
             return Err(invalid("Observation output directory changed"));
         }
-        let path = store.private_path.join("startup-observation-v1.bin");
+        let path = store.private_path.join("startup-observation-v3.bin");
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -949,6 +969,7 @@ fn observe_until_exit(started: &StartedEducationObservation) -> io::Result<i32> 
             match started.save_after_exit(index as u32 + 1) {
                 Ok(saved) => {
                     *done = true;
+                    failed |= saved.exit_code != 0;
                     writeln!(io::stdout(),
                         "{{\"event\":\"journal-saved\",\"slot\":{},\"exitCode\":{},\"providerReady\":false}}",
                         index + 1, saved.exit_code)?;
@@ -1000,8 +1021,9 @@ use windows_sys::Win32::{
             PAGE_READWRITE,
         },
         Registry::{
-            RegCloseKey, RegCreateKeyExW, RegOpenCurrentUser, HKEY, HKEY_CURRENT_USER,
-            KEY_ALL_ACCESS, KEY_READ, REG_CREATED_NEW_KEY, REG_OPTION_NON_VOLATILE,
+            RegCloseKey, RegCreateKeyExW, RegOpenCurrentUser, RegOpenKeyExW, HKEY,
+            HKEY_CURRENT_USER, KEY_ALL_ACCESS, KEY_READ, REG_CREATED_NEW_KEY,
+            REG_OPTION_NON_VOLATILE,
         },
         Threading::{
             DeleteProcThreadAttributeList, GetCurrentProcess, InitializeProcThreadAttributeList,
@@ -1026,7 +1048,7 @@ struct EducationConfig {
     pid: u32,
     session: u32,
     scope: u32,
-    reserved: u32,
+    singleton_caller_rva: u32,
     created: FILETIME,
     logical_root: HANDLE,
     private_root: HANDLE,
@@ -1056,6 +1078,7 @@ struct SlotStorage {
     user_key_path: [u16; 512],
     // Fresh data persists on drop; this is not another profile/readiness database.
     private_path: PathBuf,
+    singleton_caller_rva: u32,
 }
 
 fn directory_id(file: &File) -> io::Result<FILE_ID_INFO> {
@@ -1275,6 +1298,7 @@ fn fresh_slots(logical: File, parent: &Path) -> io::Result<[SlotStorage; 2]> {
             registry,
             user_key_path,
             private_path,
+            singleton_caller_rva: 0,
         });
     }
     slots
@@ -1310,7 +1334,122 @@ fn known_folder(id: &windows_sys::core::GUID) -> io::Result<PathBuf> {
     path
 }
 
-fn registered_slots() -> io::Result<[SlotStorage; 2]> {
+// One reviewed acceptance pair only; no profile discovery, migration or token/world copying.
+#[cfg(test)]
+const REVIEWED_REPLAY: Option<[u8; 32]> = None;
+#[cfg(not(test))]
+const REVIEWED_REPLAY: Option<[u8; 32]> = Some([
+    0x41, 0xdb, 0xc7, 0xdb, 0x44, 0xd2, 0x91, 0xcd, 0x5e, 0xb9, 0xc7, 0xfc, 0x60, 0x90, 0x54, 0xa8,
+    0xbb, 0x0c, 0x76, 0x37, 0xc1, 0x04, 0xfa, 0x85, 0xe8, 0xdc, 0x42, 0x70, 0xa9, 0xa4, 0xa8, 0xaf,
+]);
+
+fn reopen_slots(
+    logical: File,
+    parent: &Path,
+    bytes: &[u8],
+    expected: [u8; 32],
+) -> io::Result<[SlotStorage; 2]> {
+    use sha2::{Digest, Sha256};
+    if bytes.len() != 216 || <[u8; 32]>::from(Sha256::digest(bytes)) != expected {
+        return Err(invalid("Unreviewed replay profile capability"));
+    }
+    let word = |at| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+    if word(0) != 0x52504c31 || word(4) != 1 || word(8) != 216 || word(12) != 0 {
+        return Err(invalid("Invalid replay profile capability"));
+    }
+    let units: Vec<u16> = bytes[16..144]
+        .chunks_exact(2)
+        .map(|b| u16::from_le_bytes(b.try_into().unwrap()))
+        .collect();
+    let end = units
+        .iter()
+        .position(|u| *u == 0)
+        .ok_or_else(|| invalid("Unterminated replay name"))?;
+    let name = String::from_utf16(&units[..end]).map_err(|_| invalid("Invalid replay name"))?;
+    let suffix = name
+        .strip_prefix("MivubiEducationPilot_")
+        .ok_or_else(|| invalid("Invalid replay root"))?;
+    if suffix.len() != 32
+        || !suffix.bytes().all(|c| c.is_ascii_hexdigit())
+        || units[end..].iter().any(|u| *u != 0)
+    {
+        return Err(invalid("Invalid replay root"));
+    }
+    let root = parent.join(name);
+    let mut pins = Vec::new();
+    for path in root.ancestors().collect::<Vec<_>>().into_iter().rev() {
+        pins.push(open_directory(path, FILE_READ_ATTRIBUTES)?);
+    }
+    let matches = |file: &File, at: usize| -> io::Result<bool> {
+        let id = directory_id(file)?;
+        Ok(
+            id.VolumeSerialNumber == u64::from_le_bytes(bytes[at..at + 8].try_into().unwrap())
+                && id.FileId.Identifier == bytes[at + 8..at + 24],
+        )
+    };
+    if !matches(pins.last().unwrap(), 144)? {
+        return Err(invalid("Replay root was replaced"));
+    }
+    let logical_path = directory_path(&logical)?
+        .to_string_lossy()
+        .to_ascii_lowercase();
+    let root_path = directory_path(pins.last().unwrap())?
+        .to_string_lossy()
+        .to_ascii_lowercase();
+    if Path::new(&logical_path).starts_with(&root_path)
+        || Path::new(&root_path).starts_with(&logical_path)
+    {
+        return Err(invalid("Overlapping replay AppData roots"));
+    }
+    let user_key_path = user_registry_path()?;
+    let mut slots = Vec::with_capacity(2);
+    for slot in 1..=2 {
+        let private = open_directory(
+            &root.join(format!("MC{slot:02}")),
+            FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY,
+        )?;
+        if !matches(&private, 168 + (slot as usize - 1) * 24)? {
+            return Err(invalid("Replay slot was replaced"));
+        }
+        let private_path = directory_path(&private)?;
+        // Open existing directories and registry only. A missing store never silently resets login.
+        for leaf in ["Roaming", "Local"] {
+            pins.push(open_directory(
+                &private_path.join(leaf),
+                FILE_READ_ATTRIBUTES,
+            )?);
+        }
+        let path = wide(OsStr::new(&format!(
+            "Software\\MivubiEducationPilot\\{}",
+            registry_leaf(&directory_id(&private)?, slot)?
+        )))?;
+        let mut key = ptr::null_mut();
+        let status = unsafe {
+            RegOpenKeyExW(
+                HKEY_CURRENT_USER,
+                path.as_ptr(),
+                0,
+                KEY_ALL_ACCESS,
+                &mut key,
+            )
+        };
+        if status != 0 {
+            return Err(io::Error::from_raw_os_error(status as i32));
+        }
+        slots.push(SlotStorage {
+            slot,
+            logical: logical.try_clone()?,
+            private,
+            registry: RegistryKey(key),
+            user_key_path,
+            private_path,
+            singleton_caller_rva: 0,
+        });
+    }
+    slots.try_into().map_err(|_| invalid("Missing replay slot"))
+}
+
+fn registered_slots(observe: bool) -> io::Result<[SlotStorage; 2]> {
     let roaming = known_folder(&FOLDERID_RoamingAppData)?;
     let local = known_folder(&FOLDERID_LocalAppData)?;
     if roaming.file_name() != Some(OsStr::new("Roaming"))
@@ -1337,7 +1476,22 @@ fn registered_slots() -> io::Result<[SlotStorage; 2]> {
             "Split Roaming/Local roots are not supported by this DLL configuration",
         ));
     }
-    fresh_slots(a, &known_folder(&FOLDERID_Profile)?)
+    let parent = known_folder(&FOLDERID_Profile)?;
+    if let Some(expected) = REVIEWED_REPLAY.filter(|_| observe) {
+        use std::io::Read;
+        let path = std::env::current_exe()?
+            .parent()
+            .ok_or_else(|| invalid("Missing replay payload root"))?
+            .join("independent-bootstrap/replay-profile-pair.bin");
+        let mut file = pin_image(&path)?;
+        if file.metadata()?.len() != 216 {
+            return Err(invalid("Invalid replay capability size"));
+        }
+        let mut bytes = [0u8; 216];
+        file.read_exact(&mut bytes)?;
+        return reopen_slots(a, &parent, &bytes, expected);
+    }
+    fresh_slots(a, &parent)
 }
 
 struct Configuration {
@@ -1409,12 +1563,17 @@ impl Configuration {
         };
         let mut config: EducationConfig = unsafe { mem::zeroed() };
         config.magic = 0x45444231;
-        config.version = 1;
+        config.version = 2;
         config.bytes = mem::size_of_val(&config) as u32;
         config.slot = storage.slot;
         config.pid = identity.0;
         config.session = interactive_session(identity.0)?;
-        config.scope = 1;
+        config.scope = if storage.singleton_caller_rva == 0 {
+            1
+        } else {
+            2
+        };
+        config.singleton_caller_rva = storage.singleton_caller_rva;
         config.created = FILETIME {
             dwLowDateTime: identity.1 as u32,
             dwHighDateTime: (identity.1 >> 32) as u32,
@@ -1802,6 +1961,7 @@ mod tests {
             registry: RegistryKey(key),
             user_key_path: store.user_key_path,
             private_path: store.private_path.clone(),
+            singleton_caller_rva: store.singleton_caller_rva,
         }
     }
 
@@ -1933,13 +2093,41 @@ mod tests {
         .unwrap();
         assert_eq!(prepare_fixture(&enroller, &baseline, &proof, false), 0);
         finish_fixture(&baseline);
+        let mut known_callsite = 0;
         for round in 1..=2 {
+            let mut first_store = clone_store(&a);
+            let mut second_store = clone_store(&b);
+            let host_mutex = if round == 2 {
+                first_store.singleton_caller_rva = known_callsite;
+                second_store.singleton_caller_rva = known_callsite;
+                assert_ne!(known_callsite, 0);
+                let id = directory_id(&a.logical).unwrap().FileId.Identifier;
+                let part = u16::from_le_bytes([id[0], id[1]]);
+                let mut bytes = [0u8; 8];
+                bytes[..6].copy_from_slice(&id[2..8]);
+                let tail = u64::from_le_bytes(bytes);
+                let name = wide(OsStr::new(&format!(
+                    "feedface-{part:04x}-4000-8000-{tail:012x}"
+                )))
+                .unwrap();
+                let raw = unsafe {
+                    windows_sys::Win32::System::Threading::CreateMutexW(
+                        ptr::null(),
+                        0,
+                        name.as_ptr(),
+                    )
+                };
+                assert!(!raw.is_null());
+                Some(unsafe { OwnedHandle::from_raw_handle(raw as _) })
+            } else {
+                None
+            };
             let first_proof = FixtureReceipt::new();
             let second_proof = FixtureReceipt::new();
             let first = create_unstarted_impl(
                 &path,
                 pin_image(&path).unwrap(),
-                Some(clone_store(&a)),
+                Some(first_store),
                 true,
                 Some(&first_proof),
             )
@@ -1947,7 +2135,7 @@ mod tests {
             let second = create_unstarted_impl(
                 &path,
                 pin_image(&path).unwrap(),
-                Some(clone_store(&b)),
+                Some(second_store),
                 true,
                 Some(&second_proof),
             )
@@ -1979,6 +2167,22 @@ mod tests {
             );
             for child in &transaction.children {
                 let snapshot = child.observation_bytes_after_exit().unwrap();
+                let count = u32::from_le_bytes(snapshot[48..52].try_into().unwrap()) as usize;
+                let callsite = (0..count)
+                    .find_map(|i| {
+                        let at = 64 + i * 496;
+                        let word = |offset| {
+                            u32::from_le_bytes(
+                                snapshot[at + offset..at + offset + 4].try_into().unwrap(),
+                            )
+                        };
+                        (word(4) == 6 && word(480) == 1).then(|| word(484))
+                    })
+                    .expect("Own executable CreateMutexA callsite");
+                if known_callsite == 0 {
+                    known_callsite = callsite;
+                }
+                assert_eq!(callsite, known_callsite);
                 assert_eq!(u32::from_le_bytes(snapshot[48..52].try_into().unwrap()), 64);
                 assert_eq!(u32::from_le_bytes(snapshot[52..56].try_into().unwrap()), 1);
                 let slot = child.storage.as_ref().unwrap().slot;
@@ -1990,7 +2194,7 @@ mod tests {
                                 .as_ref()
                                 .unwrap()
                                 .private_path
-                                .join("startup-observation-v1.bin")
+                                .join("startup-observation-v3.bin")
                         )
                         .unwrap(),
                         snapshot
@@ -2007,11 +2211,25 @@ mod tests {
                             .as_ref()
                             .unwrap()
                             .private_path
-                            .join("startup-observation-v1.bin")
+                            .join("startup-observation-v3.bin")
                     )
                     .unwrap()
                     .len(),
                     OBSERVATION_BYTES as u64
+                );
+            }
+            if let Some(host) = &host_mutex {
+                assert_eq!(
+                    unsafe { WaitForSingleObject(host.as_raw_handle() as HANDLE, 0) },
+                    WAIT_OBJECT_0
+                );
+                assert_ne!(
+                    unsafe {
+                        windows_sys::Win32::System::Threading::ReleaseMutex(
+                            host.as_raw_handle() as HANDLE
+                        )
+                    },
+                    0
                 );
             }
             for store in [&a, &b] {
@@ -2287,6 +2505,143 @@ mod tests {
             &parent,
         )
         .unwrap()
+    }
+
+    #[test]
+    #[ignore = "Requires the explicitly built own C++ payload"]
+    fn observation_reports_nonzero_child_exits_even_when_journals_save() {
+        let path = PathBuf::from(std::env::var_os("MIVUBI_BOOTSTRAP_CPP_READER").unwrap())
+            .canonicalize()
+            .unwrap();
+        let root = path.parent().unwrap();
+        let enroller = BootstrapLibrary::load(root, fixture_digests(root)).unwrap();
+        let children = test_slots().map(|store| {
+            // Force an existing receiver validation error after successful attach, not a game run.
+            let name = wide(OsStr::new("RustEnrolledRound")).unwrap();
+            let value = 2u32;
+            assert_eq!(
+                unsafe {
+                    windows_sys::Win32::System::Registry::RegSetValueExW(
+                        store.registry.0,
+                        name.as_ptr(),
+                        0,
+                        windows_sys::Win32::System::Registry::REG_DWORD,
+                        &value as *const u32 as _,
+                        4,
+                    )
+                },
+                0
+            );
+            let proof = FixtureReceipt::new();
+            let child = create_unstarted_impl(
+                &path,
+                pin_image(&path).unwrap(),
+                Some(store),
+                true,
+                Some(&proof),
+            )
+            .unwrap();
+            assert_eq!(prepare_fixture(&enroller, &child, &proof, true), 0);
+            enroller.enroll(&child).unwrap();
+            child
+        });
+        let transaction = PreparedEducationEnrollment {
+            _children: children,
+            _payload: enroller,
+        }
+        .resume_for_authorized_observation()
+        .unwrap();
+        for child in &transaction.children {
+            assert_eq!(
+                unsafe { WaitForSingleObject(child.process.as_raw_handle() as HANDLE, 10000) },
+                WAIT_OBJECT_0
+            );
+            assert_eq!(child.exit_code_after_exit().unwrap(), 86);
+        }
+        assert_eq!(observe_until_exit(&transaction).unwrap(), 1);
+        for child in &transaction.children {
+            assert_eq!(
+                std::fs::metadata(
+                    child
+                        .storage
+                        .as_ref()
+                        .unwrap()
+                        .private_path
+                        .join("startup-observation-v3.bin")
+                )
+                .unwrap()
+                .len(),
+                OBSERVATION_BYTES as u64
+            );
+        }
+    }
+
+    #[test]
+    fn replay_reopens_only_the_reviewed_existing_pair() {
+        use sha2::{Digest, Sha256};
+        let stores = test_slots();
+        let root = stores[0].private_path.parent().unwrap();
+        let parent = root.parent().unwrap();
+        let mut bytes = [0u8; 216];
+        for (at, value) in [(0, 0x52504c31u32), (4, 1), (8, 216)] {
+            bytes[at..at + 4].copy_from_slice(&value.to_le_bytes());
+        }
+        for (i, unit) in root.file_name().unwrap().encode_wide().enumerate() {
+            bytes[16 + i * 2..18 + i * 2].copy_from_slice(&unit.to_le_bytes());
+        }
+        let root_file = open_directory(root, FILE_READ_ATTRIBUTES).unwrap();
+        for (i, file) in [&root_file, &stores[0].private, &stores[1].private]
+            .iter()
+            .enumerate()
+        {
+            let id = directory_id(file).unwrap();
+            let at = 144 + i * 24;
+            bytes[at..at + 8].copy_from_slice(&id.VolumeSerialNumber.to_le_bytes());
+            bytes[at + 8..at + 24].copy_from_slice(&id.FileId.Identifier);
+        }
+        let expected: [u8; 32] = Sha256::digest(bytes).into();
+        assert!(reopen_slots(
+            stores[0].logical.try_clone().unwrap(),
+            parent,
+            &bytes,
+            [0; 32]
+        )
+        .is_err());
+        let reopened = reopen_slots(
+            stores[0].logical.try_clone().unwrap(),
+            parent,
+            &bytes,
+            expected,
+        )
+        .unwrap();
+        for i in 0..2 {
+            assert!(same_image(
+                &directory_id(&stores[i].private).unwrap(),
+                &directory_id(&reopened[i].private).unwrap()
+            ));
+            assert_eq!(stores[i].private_path, reopened[i].private_path);
+        }
+        let mut replaced = bytes;
+        replaced[168] ^= 1;
+        let expected = Sha256::digest(replaced).into();
+        assert!(reopen_slots(
+            stores[0].logical.try_clone().unwrap(),
+            parent,
+            &replaced,
+            expected
+        )
+        .is_err());
+        // A missing directory must fail, not recreate an empty profile.
+        drop(reopened);
+        std::fs::remove_dir(stores[0].private_path.join("Local")).unwrap();
+        assert!(reopen_slots(
+            stores[0].logical.try_clone().unwrap(),
+            parent,
+            &bytes,
+            Sha256::digest(bytes).into()
+        )
+        .is_err());
+        assert!(!stores[0].private_path.join("Local").exists());
     }
 
     fn read_config(child: &PendingEducationBootstrap) -> EducationConfig {

@@ -5,11 +5,14 @@
 
 // Private, local-only diagnostic bytes. Never provider readiness or authenticated evidence.
 namespace startup_observation {
-constexpr DWORD Magic = 0x4f425331, Version = 1, Capacity = 64;
+constexpr DWORD Magic = 0x4f425331, Version = 3, Capacity = 64;
 constexpr wchar_t Variable[] = L"MIVUBI_EDUCATION_OBSERVATION_SECTION";
-enum Kind : DWORD { CreateMutant = 1, OpenMutant, CreateProcess };
+enum Kind : DWORD { CreateMutant = 1, OpenMutant, CreateProcess,
+    Win32MutexW, Win32MutexExW, Win32MutexA, Win32MutexExA };
+enum Namespace : DWORD { NamespaceUnknown, SessionBaseNamedObjects };
+enum CallerModule : DWORD { CallerUnknown, MainImage, KernelBaseImage, Kernel32Image, SecureEngineImage };
 enum Flags : DWORD { TruncatedName = 1, UnreadableArguments = 2, UnreadableResult = 4,
-    ChildIdentityUnknown = 8, InitialOwner = 16 };
+    ChildIdentityUnknown = 8, InitialOwner = 16, SingletonTranslated = 32 };
 enum Loss : LONG { CapacityReached = 1, ReentrantLogger = 2, ClockOrLateReturn = 4 };
 struct Record {
     volatile LONG committed;
@@ -19,10 +22,23 @@ struct Record {
     LONG status;
     DWORD lastError, argument, attributes;
     ULONG_PTR root, returned;
-    DWORD nameBytes, childPid, childTid, reserved;
+    DWORD nameBytes, childPid, childTid, namespaceKind;
     FILETIME childCreated;
     wchar_t name[192];
+    DWORD callerModule, callerRva, callerImageBytes, reserved;
 };
+// Numeric failure shapes only: no path, file contents, account identifiers or call stacks.
+struct StorageSample {
+    volatile LONG claimed, committed;
+    DWORD operation, access, options, disposition, pathLength;
+    LONG status;
+};
+struct StorageDiagnostics {
+    volatile LONG counts[5]; // success, unsupported path, access/options, parent open, backing call
+    DWORD reserved[3];
+    StorageSample first[4];
+};
+static_assert(sizeof(StorageDiagnostics) == 160);
 struct Journal {
     DWORD magic, version, bytes, pid;
     FILETIME created;
@@ -32,12 +48,26 @@ struct Journal {
     DWORD durationMs;
     volatile LONG clockReady;
     Record records[Capacity];
+    StorageDiagnostics storage;
 };
-static_assert(sizeof(Record) == 480);
+static_assert(sizeof(Record) == 496);
 static_assert(offsetof(Journal, records) == 64);
-static_assert(sizeof(Journal) == 30784);
+static_assert(sizeof(Journal) == 31968);
 inline Journal* active = nullptr;
 inline thread_local bool logging = false;
+// Unlike the 30-second startup trace, these fixed counters cover the game lifetime.
+inline void storageResult(unsigned reason, DWORD operation, ACCESS_MASK access, ULONG options,
+                          ULONG disposition, unsigned length, NTSTATUS status) {
+    if (!active || reason > 4) return;
+    auto& value = active->storage;
+    InterlockedIncrement(&value.counts[reason]);
+    if (!reason) return;
+    auto& sample = value.first[reason - 1];
+    if (InterlockedCompareExchange(&sample.claimed, 1, 0) != 0) return;
+    sample.operation = operation; sample.access = access; sample.options = options;
+    sample.disposition = disposition; sample.pathLength = length; sample.status = status;
+    InterlockedExchange(&sample.committed, 1);
+}
 
 class View {
 public:
