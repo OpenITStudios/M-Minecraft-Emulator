@@ -103,7 +103,7 @@ the operator is working. Preserve existing accounts/worlds. Public MC02–04
 admission, retired providers and GitHub Actions remain disabled.
 
 **Source baseline:** exact remote Local
-`70cfae44112bb1afac306adab052209e122a6144`, plus the literal input blobs below.
+`f63a19d34d2cd885802224356f1041ce9961686d`, plus the literal input blobs below.
 Native preparation/enrollment remains in
 `apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`; the private config,
 enroller, compatibility DLL and own controls remain in
@@ -153,7 +153,7 @@ and operator intent; current work is source/automatic controls only.
 Game-tested manager:
 `eaa65ac1997bf6227b374bd2dce893346d7258c3fced46ed4973ac966d059687`.
 Latest source-only manager build (not launched into Minecraft):
-`9e93645f848f9b4780a6b156672b4a355f68e947d17d9a0873d86e0df34fa0db`.
+`5c6c85ee0a330e2d3d7c957d826aa694afeab45fc9c1d89ebf0aa9dc34fcc88e`.
 Compatibility DLL:
 `a59fb1803ff3d957b9691017f24dd7211a9b3f88b6a7b13988432210d67e02ec`.
 Enroller:
@@ -194,42 +194,71 @@ the low-level own-fixture positive control is not a production fallback.
 `compat.cpp::observedProcess` merely forwards CreateProcessW arguments and
 records metadata; it does not enroll children. Broker activation is separate.
 
-### Current implementation: fixed helper transaction through the Rust owner
+### Current implementation: one owner with a test-only descendant handoff module
 
-A cfg(test)-only OwnedHelperTransaction now borrows the original parent and
-pinned BootstrapLibrary in the same native owner. It creates only the fixed
-bootstrap-ordering.exe next to the pinned payload and requires the parent's
-pinned image identity. Parent PID/birth/session/slot/config, logical/private
-IDs and path, plus the exact retained/remote registry object must still match.
-A fallible duplicate of the SAME slot's existing capabilities supplies a fresh
-child config. Singleton caller RVA is cleared, observation is absent, and the
-manager calls the existing reviewed enroller ABI. Resume rechecks both live
-bindings, same-slot roots/image, then uses the existing single-attempt owner.
-Lifetime borrows retain parent/payload ownership; Drop preserves attempted
-children and cancels only original unstarted children.
+The earlier cfg(test)-only OwnedHelperTransaction in the existing bootstrap
+owner creates a fixed own helper from the same slot, borrows parent/payload
+pins, publishes fresh config and uses the reviewed enroller before one resume
+attempt. It checks PID/birth/session/image, retained directory/path and registry
+object bindings. Changed parent birth/image/registry/path and helper birth/slot
+refuse before resume. Abandoned/unstarted helpers and parent-exit races cancel
+only the exact own unstarted child; attempted parents are preserved.
 
-The new integration test keeps two own enrolled parents live and runs one
-manager-created helper per slot. Both helper enrollments, effective private
-Known Folder/HKCU checks, second private writes and host-canary checks pass.
-Unattempted parent, changed parent birth/image/registry/path and changed helper
-birth/slot refuse before resume. Repeat resume refuses. Abandoned prepared
-helpers exit 90 while both parents stay alive. Parent normal exit before helper
-resume causes refusal and original unstarted-helper cancellation with exit 90.
+The new internal module
+`apps/desktop/src-tauri/src/engine/independent_bootstrap/owned_handoff.rs`
+now accepts original suspended own descendants. The existing owner remains
+responsible for slot policy, enrollment and resume/cancel. Request transport and
+provenance checks stay in the small internal test-only module. Native wire
+layout is centralized in `owned-helper-handoff.h`, 88 bytes with C++/Rust size
+and offset assertions, separate from game config and public schemas.
 
-**Executed on these inputs:** 16 Rust bootstrap tests PASS (including the new
-explicit own-executable case), preview manager build PASS, rustfmt and diff
-whitespace checks PASS. C++ source/DLLs are unchanged in this batch. This
-transaction exists only in tests and creates a manager-owned sibling process;
-it does not yet receive/adopt a game-created descendant. No real helper or game
-was launched, activated, closed or injected during this batch.
+An enrolled own C++ parent creates its fixed self-image suspended, then holds
+original process/thread handles while reporting their sender-local values.
+The Rust manager duplicates them from its retained original parent handle;
+it does not reopen by PID. Before constructing a cancellable Pending child it
+checks parent identity/slot, exact helper receipt object, child PID/thread/birth,
+session, fixed pinned image and native parent PID. It then publishes a fresh
+same-slot config, calls the existing reviewed enroller and acknowledges transfer.
+The sender closes original handles without resume/termination after acceptance;
+the existing manager transaction owns the single resume attempt. On refusal or
+request drop the sender still owns cancellation. No receiver handle value is
+published; therefore a late sender cannot leak new handles into the receiver.
+
+The new integration test transfers actual own descendants from two live enrolled
+parents. Wrong receipt and birth are rejected. A complete valid live peer-child
+PID/thread/birth/image tuple is also rejected by native ancestry without killing
+the peer or either sender. Accepted descendants run with separate private slot
+writes; parent/host canaries remain intact and both helpers exit normally.
+Replay refuses. A second test drops requests before creation and after handle
+publication: the sender reports a refused fixture (exit 86), cancels its own
+already-created suspended child (exit 90), and committed private bytes plus host
+canaries remain unchanged. An allocation-order fix also retains the proof
+handle before mapping the request, so a failed handle clone cannot leak that
+mapping.
+
+**Executed on these inputs:** 18 Rust bootstrap tests PASS, all four C++ modes
+PASS, MSVC 19.44 x64 Release /W4 /WX build PASS, preview manager build PASS,
+rustfmt and diff whitespace PASS. New handoff Rust code is cfg(test)-only.
+Compatibility DLL/enroller and game config/public schemas remain unchanged.
+No Computer Use or game process/input operations occurred in this batch.
+
+**Scope limits:** this is a cooperative fixed-own sender; its source uses
+CREATE_SUSPENDED, and the control is not a hostile-process authentication or
+independent thread-suspend-state proof. Native parent PID follows Microsoft's
+[ProcessBasicInformation layout](https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntqueryinformationprocess),
+which Microsoft marks internal and subject to change. Missing/mismatched native
+results fail closed; there is no PID fallback. Broker activation need not have
+the game as direct parent. Actual Education helper identity/policy is still
+UNKNOWN; this control does not activate real-game child propagation.
 
 Literal code-input blobs (documentation excluded):
 
 | Input | Git blob |
 | --- | --- |
-| `independent_bootstrap.rs` | `07a2c681947e2d3b71835e99e1dacaa97e315a56` |
-| `compat.cpp` | `400e4453a18b6b9bbefe9401ef798380c003d5d7` |
-| `probe.cpp` | `0971a9776a74284de166f03248b3c6991d66c9f5` |
+| `independent_bootstrap.rs` | `eba522d4a21a74939b15e2a20ccb589e616d9962` |
+| `owned_handoff.rs` | `25a1b567245d8036a91a1520c125bc6f996a84c7` |
+| `probe.cpp` | `ceae3b0ae780ab5a65f7931e627b7bcf7f4373a3` |
+| `owned-helper-handoff.h` | `5f87ced170887b25ba5d6890aebc4db9334f50d7` |
 
 ### Remaining proof and one next action
 
@@ -241,9 +270,10 @@ Prior raw peer-access control showed name translation is not a security
 boundary. Four clients and distribution remain NOT_EXECUTED. Fixture coverage
 does not establish full stability or a development percentage.
 
-**One next action:** exercise original suspended own-descendant handle handoff
-to this existing Rust manager transaction, with process/image/slot provenance
-checks and no PID reopening. The present transaction creates its helper itself;
-that is not captured-child enrollment. Keep game-helper propagation and public
-admission disabled; actual Minecraft restart/soak acceptance waits for an
-operator-selected window without unsolicited Computer Use.
+**One next action:** identify the actual registered Education helper image and
+launch/broker relationship using existing source, install metadata and available
+read-only process/image metadata, without fresh launches or window input. Pin
+that identity and a narrow storage/registry scope before connecting any game
+helper. Record unavailable attribution as UNKNOWN; do not substitute more
+generic fixture layers or unlock public admission. Real world restart/soak
+acceptance remains deferred to an operator-selected window.

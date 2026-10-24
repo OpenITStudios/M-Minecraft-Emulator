@@ -12,6 +12,7 @@
 #include <winioctl.h>
 #include <shlobj.h>
 #include <knownfolders.h>
+#include "owned-helper-handoff.h"
 
 extern "C" __declspec(dllimport) int DependencyCanary();
 
@@ -2650,6 +2651,55 @@ void checkStartupObservation(const education_bootstrap::Config& config, const pr
         "\"lastErrorPreserved\":true,\"childRole\":\"UNKNOWN\",\"providerReady\":false}\n");
 }
 
+bool sendOwnedDescendant(HANDLE section) {
+    struct View {
+        owned_helper::Handoff* value;
+        ~View() { if (value) UnmapViewOfFile(value); }
+    } view{static_cast<owned_helper::Handoff*>(MapViewOfFile(section, FILE_MAP_READ | FILE_MAP_WRITE,
+        0, 0, sizeof(owned_helper::Handoff)))};
+    require(view.value != nullptr);
+    auto& wire = *view.value;
+    require(wire.magic == owned_helper::Magic && wire.version == 1 && wire.bytes == sizeof(wire)
+        && wire.reserved == 0 && wire.reservedEnd == 0);
+    if (InterlockedCompareExchange(&wire.decision, 0, 0) != owned_helper::Pending) return false;
+    HANDLE inherited[]{wire.configuration, wire.proof};
+    Attributes attributes(inherited, 2);
+    auto env = environment(wire.proof);
+    env.pop_back();
+    const auto setting = std::wstring(education_bootstrap::SectionVariable) + L"="
+        + std::to_wstring(reinterpret_cast<ULONG_PTR>(wire.configuration));
+    env.insert(env.end(), setting.begin(), setting.end());
+    env.push_back(0); env.push_back(0);
+    const auto self = executable();
+    std::wstring command = L"\"" + self + L"\"";
+    STARTUPINFOEXW startup{};
+    startup.StartupInfo.cb = sizeof(startup); startup.lpAttributeList = attributes.value;
+    Child descendant;
+    if (!CreateProcessW(self.c_str(), command.data(), nullptr, nullptr, TRUE,
+        CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW,
+        env.data(), nullptr, &startup.StartupInfo, &descendant.info)) {
+        wire.error = GetLastError();
+        require(SetEvent(wire.ready));
+        return false;
+    }
+    wire.process = descendant.info.hProcess; wire.thread = descendant.info.hThread;
+    wire.pid = descendant.info.dwProcessId;
+    FILETIME exited{}, kernel{}, user{};
+    if (!GetProcessTimes(descendant.info.hProcess, &wire.created, &exited, &kernel, &user))
+        wire.error = GetLastError();
+    MemoryBarrier();
+    require(SetEvent(wire.ready));
+    if (WaitForSingleObject(wire.reply, 10000) != WAIT_OBJECT_0
+        || InterlockedCompareExchange(&wire.decision, 0, 0) != owned_helper::Accepted || wire.error)
+        return false; // Existing Child guard cancels only this original suspended fixture.
+    // Receiver now owns duplicates of these exact original objects; never resume or kill them here.
+    const auto original = descendant.info;
+    descendant.info = {};
+    const BOOL threadClosed = CloseHandle(original.hThread), processClosed = CloseHandle(original.hProcess);
+    require(threadClosed && processClosed);
+    return true;
+}
+
 int readRustEnrollmentControl() {
     probe::View view;
     require(view.open() && view.value->mode == probe::ConfiguredStorage);
@@ -2704,6 +2754,7 @@ int readRustEnrollmentControl() {
     // The cached host handle must now read this slot's private marker; the parent checks the host.
     require(registryValue(receipt.cachedHostKey, L"Marker") == config.slot * 100 + 3);
     checkStartupObservation(config, receipt);
+    if (receipt.go) require(sendOwnedDescendant(receipt.go));
     // Optional existing receipt events let the Rust owner verify live Drop preservation.
     if (receipt.ready || receipt.finish) {
         require(receipt.ready && receipt.finish && SetEvent(receipt.ready));

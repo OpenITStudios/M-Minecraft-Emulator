@@ -94,7 +94,7 @@ fn pin_image(path: &Path) -> io::Result<File> {
     Ok(file)
 }
 
-/// Owns only the original handles returned by this module's CreateProcessW.
+/// Owns original CreateProcessW handles, or verified duplicates in the fixed cfg(test) handoff.
 /// Cancellation is allowed only before the first resume attempt; no PID-reopen API.
 pub(super) struct PendingEducationBootstrap {
     process: OwnedHandle,
@@ -1892,7 +1892,11 @@ fn child_environment(
     Ok(result)
 }
 
-// Fixed own-image transaction only. No descendant discovery, IPC or game-helper admission.
+#[cfg(test)]
+#[path = "independent_bootstrap/owned_handoff.rs"]
+mod owned_handoff;
+
+// Fixed own-image transaction only. No descendant discovery or game-helper admission.
 #[cfg(test)]
 struct OwnedHelperTransaction<'a> {
     child: PendingEducationBootstrap,
@@ -2597,6 +2601,252 @@ mod tests {
         assert_ne!(unsafe { UnmapViewOfFile(view) }, 0);
         let [ready, finish] = events;
         (ready, finish)
+    }
+
+    #[test]
+    #[ignore = "Requires the explicitly built own C++ payload"]
+    fn owned_descendant_handoff_preserves_provenance_and_reuses_slot() {
+        use owned_handoff::Request;
+        use windows_sys::Win32::System::Threading::SetEvent;
+        let path = PathBuf::from(std::env::var_os("MIVUBI_BOOTSTRAP_CPP_READER").unwrap())
+            .canonicalize()
+            .unwrap();
+        let library = BootstrapLibrary::load(
+            path.parent().unwrap(),
+            fixture_digests(path.parent().unwrap()),
+        )
+        .unwrap();
+        let helper_proofs = [FixtureReceipt::new(), FixtureReceipt::new()];
+        let mut parents = Vec::new();
+        let mut requests = Vec::new();
+        let mut held = Vec::new();
+        let mut barriers = Vec::new();
+        for (index, store) in test_slots().into_iter().enumerate() {
+            std::fs::write(
+                directory_path(&store.logical)
+                    .unwrap()
+                    .join("Roaming/rust-enrolled.txt"),
+                b"HOST",
+            )
+            .unwrap();
+            let proof = FixtureReceipt::new();
+            let mut parent = create_unstarted_impl(
+                &path,
+                pin_image(&path).unwrap(),
+                Some(store),
+                false,
+                Some(&proof),
+            )
+            .unwrap();
+            assert_eq!(prepare_fixture(&library, &parent, &proof, true), 0);
+            library.enroll(&parent).unwrap();
+            barriers.push(fixture_barrier(&parent, &proof));
+            let request = Request::new(&parent, &proof, &helper_proofs[index]).unwrap();
+            held.push(FixtureLifetime::new(&parent));
+            parent.resume_once().unwrap();
+            request.wait(&parent).unwrap();
+            parents.push(parent);
+            requests.push(request);
+        }
+        assert!(library
+            .accept_owned_descendant(&parents[0], &mut requests[0], &helper_proofs[1])
+            .is_err());
+        requests[0].packet().created.dwLowDateTime ^= 1;
+        assert!(library
+            .accept_owned_descendant(&parents[0], &mut requests[0], &helper_proofs[0])
+            .is_err());
+        requests[0].packet().created.dwLowDateTime ^= 1;
+        // Substitute a complete live peer-descendant tuple. PID/thread/birth/image all match;
+        // native ancestry must still reject it without killing the peer or either sender.
+        let peer = requests[1].packet();
+        let peer_tuple = (peer.process, peer.thread, peer.pid, peer.created);
+        let mut imported = Vec::new();
+        let mut remote = Vec::new();
+        for original in [peer_tuple.0, peer_tuple.1] {
+            let mut local = ptr::null_mut();
+            assert_ne!(
+                unsafe {
+                    DuplicateHandle(
+                        parents[1].process.as_raw_handle() as HANDLE,
+                        original,
+                        GetCurrentProcess(),
+                        &mut local,
+                        0,
+                        0,
+                        DUPLICATE_SAME_ACCESS,
+                    )
+                },
+                0
+            );
+            imported.push(unsafe { OwnedHandle::from_raw_handle(local as _) });
+            let mut in_sender = ptr::null_mut();
+            assert_ne!(
+                unsafe {
+                    DuplicateHandle(
+                        GetCurrentProcess(),
+                        local,
+                        parents[0].process.as_raw_handle() as HANDLE,
+                        &mut in_sender,
+                        0,
+                        0,
+                        DUPLICATE_SAME_ACCESS,
+                    )
+                },
+                0
+            );
+            remote.push(in_sender);
+        }
+        let first = requests[0].packet();
+        let original = (first.process, first.thread, first.pid, first.created);
+        first.process = remote[0];
+        first.thread = remote[1];
+        first.pid = peer_tuple.2;
+        first.created = peer_tuple.3;
+        assert!(library
+            .accept_owned_descendant(&parents[0], &mut requests[0], &helper_proofs[0])
+            .is_err());
+        assert!(parents.iter().all(|parent| parent.identity().is_ok()));
+        assert_eq!(
+            unsafe { WaitForSingleObject(imported[0].as_raw_handle() as HANDLE, 0) },
+            WAIT_TIMEOUT
+        );
+        let first = requests[0].packet();
+        first.process = original.0;
+        first.thread = original.1;
+        first.pid = original.2;
+        first.created = original.3;
+        for index in 0..2 {
+            let mut helper = library
+                .accept_owned_descendant(
+                    &parents[index],
+                    &mut requests[index],
+                    &helper_proofs[index],
+                )
+                .unwrap();
+            let lifetime = FixtureLifetime::new(&helper.child);
+            assert!(library
+                .accept_owned_descendant(
+                    &parents[index],
+                    &mut requests[index],
+                    &helper_proofs[index]
+                )
+                .is_err());
+            assert_eq!(
+                unsafe { WaitForSingleObject(barriers[index].0.as_raw_handle() as HANDLE, 10000) },
+                WAIT_OBJECT_0
+            );
+            assert_eq!(
+                helper.child.storage.as_ref().unwrap().slot,
+                index as u32 + 1
+            );
+            helper.resume().unwrap();
+            check_finished_fixture(&helper.child);
+            assert!(parents.iter().all(|parent| parent.identity().is_ok()));
+            assert_eq!(
+                std::fs::read_to_string(
+                    parents[index]
+                        .storage
+                        .as_ref()
+                        .unwrap()
+                        .private_path
+                        .join("Roaming/rust-enrolled.txt")
+                )
+                .unwrap(),
+                format!("{}:2", index + 1)
+            );
+            drop(helper);
+            drop(lifetime);
+        }
+        for (parent, barrier) in parents.iter().zip(&barriers) {
+            assert_ne!(unsafe { SetEvent(barrier.1.as_raw_handle() as HANDLE) }, 0);
+            check_finished_fixture(parent);
+        }
+        drop(held);
+    }
+
+    #[test]
+    #[ignore = "Requires the explicitly built own C++ payload"]
+    fn owned_descendant_refusal_before_and_after_publication_preserves_data() {
+        let path = PathBuf::from(std::env::var_os("MIVUBI_BOOTSTRAP_CPP_READER").unwrap())
+            .canonicalize()
+            .unwrap();
+        let library = BootstrapLibrary::load(
+            path.parent().unwrap(),
+            fixture_digests(path.parent().unwrap()),
+        )
+        .unwrap();
+        for (index, store) in test_slots().into_iter().enumerate() {
+            std::fs::write(
+                directory_path(&store.logical)
+                    .unwrap()
+                    .join("Roaming/rust-enrolled.txt"),
+                b"HOST",
+            )
+            .unwrap();
+            let private = store.private_path.clone();
+            let proof = FixtureReceipt::new();
+            let helper_proof = FixtureReceipt::new();
+            let mut parent = create_unstarted_impl(
+                &path,
+                pin_image(&path).unwrap(),
+                Some(store),
+                false,
+                Some(&proof),
+            )
+            .unwrap();
+            assert_eq!(prepare_fixture(&library, &parent, &proof, true), 0);
+            library.enroll(&parent).unwrap();
+            let mut request = owned_handoff::Request::new(&parent, &proof, &helper_proof).unwrap();
+            let lifetime = FixtureLifetime::new(&parent);
+            if index == 0 {
+                drop(request); // Sender sees refusal before it may create a descendant.
+                parent.resume_once().unwrap();
+            } else {
+                parent.resume_once().unwrap();
+                request.wait(&parent).unwrap();
+                let mut raw = ptr::null_mut();
+                assert_ne!(
+                    unsafe {
+                        DuplicateHandle(
+                            parent.process.as_raw_handle() as HANDLE,
+                            request.packet().process,
+                            GetCurrentProcess(),
+                            &mut raw,
+                            0,
+                            0,
+                            DUPLICATE_SAME_ACCESS,
+                        )
+                    },
+                    0
+                );
+                let descendant = unsafe { OwnedHandle::from_raw_handle(raw as _) };
+                drop(request); // Sender still owns and cancels this original suspended descendant.
+                assert_eq!(unsafe { WaitForSingleObject(raw, 10000) }, WAIT_OBJECT_0);
+                let mut code = 0;
+                assert_ne!(unsafe { GetExitCodeProcess(raw, &mut code) }, 0);
+                assert_eq!(code, 90);
+                drop(descendant);
+            }
+            assert_eq!(
+                unsafe { WaitForSingleObject(parent.process.as_raw_handle() as HANDLE, 10000) },
+                WAIT_OBJECT_0
+            );
+            assert_eq!(parent.exit_code_after_exit().unwrap(), 86); // Fixed fixture reports a refused handoff.
+            assert_eq!(
+                std::fs::read_to_string(private.join("Roaming/rust-enrolled.txt")).unwrap(),
+                format!("{}:1", index + 1)
+            );
+            assert_eq!(
+                std::fs::read(
+                    directory_path(&parent.storage.as_ref().unwrap().logical)
+                        .unwrap()
+                        .join("Roaming/rust-enrolled.txt")
+                )
+                .unwrap(),
+                b"HOST"
+            );
+            drop(lifetime);
+        }
     }
 
     #[test]

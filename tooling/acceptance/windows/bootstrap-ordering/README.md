@@ -238,6 +238,45 @@ helper proves an owner-side transaction, not transfer of a descendant created
 inside the game, broker activation, production helper support or game acceptance.
 No public API/schema, provider admission, persistent state, driver or CI change.
 
+### Original descendant handle handoff
+
+The test-only Rust module `independent_bootstrap/owned_handoff.rs` owns the
+fixture request transport and admission checks. The existing bootstrap owner
+still owns enrollment, slots and single-attempt resume/cancellation. The native
+fixture wire layout lives in `owned-helper-handoff.h` (88 bytes, checked C++/Rust
+offsets); it is separate from game config and public schemas.
+
+An enrolled own C++ parent creates its fixed self-image suspended and publishes
+original process/thread handle values in its private mapping. It retains those
+objects while waiting for acceptance. The Rust manager duplicates from the
+retained original parent process handle, with no OpenProcess/PID reopening.
+Before adopting cancellation ownership it checks the parent binding, exact
+receipt capability, child PID/thread/birth/session/image and native parent PID.
+Only then does it publish a fresh same-slot config, call the existing reviewed
+enroller, and acknowledge transfer. The sender closes its original handles
+without resuming or terminating an accepted child; the manager's existing
+transaction controls its one resume attempt. Refusal/drop leaves cancellation
+with the original sender; no receiver handle is ever published for it to close.
+
+The integration test transfers real own descendants from two live parents,
+rejects wrong receipt/birth, and substitutes a fully valid peer-descendant tuple
+to exercise ancestry rejection. Neither the peer descendant nor either parent
+is killed by that rejection. Accepted helpers then run with private slot writes
+and normal exits. Replay refuses. Another test drops the request before and
+after publication: the sender cancels only its own suspended descendant (exit
+90 when already created), reports refusal through the fixed receiver (exit 86),
+and its committed private bytes/host canary remain unchanged.
+
+18 Rust bootstrap tests, all four C++ modes, MSVC /W4 /WX and the preview build
+pass. New Rust transport is cfg(test)-only; production DLL/enroller and admission
+are unchanged. The cooperative fixed sender guarantees CREATE_SUSPENDED; this
+is not an authenticated hostile-process protocol or a production proof of thread
+suspend state. Broker-launched helpers may not be direct descendants. The native
+parent query follows [Microsoft's ProcessBasicInformation layout](https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntqueryinformationprocess);
+Microsoft warns the internal function/layout can change, so unavailable or
+unexpected results refuse without a PID fallback. Actual Education helper
+selection, propagation and game acceptance remain UNKNOWN/NOT_EXECUTED.
+
 ### Numbered experimental windows
 
 The fixed same-manager experiment now names each unique visible unowned game
