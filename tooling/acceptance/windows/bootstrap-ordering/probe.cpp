@@ -126,7 +126,10 @@ std::vector<wchar_t> environment(HANDLE section, HANDLE appDataRoot = nullptr) {
             const bool presentation = _wcsnicmp(item, presentation_enrollment::Variable,
                 wcslen(presentation_enrollment::Variable)) == 0
                 && item[wcslen(presentation_enrollment::Variable)] == L'=';
-            if (!configured && !observed && !presentation && !appData
+            const bool presentationSection = _wcsnicmp(item, presentation_enrollment::SectionVariable,
+                wcslen(presentation_enrollment::SectionVariable)) == 0
+                && item[wcslen(presentation_enrollment::SectionVariable)] == L'=';
+            if (!configured && !observed && !presentation && !presentationSection && !appData
                 && _wcsnicmp(item, prefix, (sizeof(prefix) / sizeof(wchar_t)) - 1) != 0)
                 result.insert(result.end(), item, item + wcslen(item) + 1);
         }
@@ -1837,12 +1840,24 @@ struct ConfigView {
     ~ConfigView() { UnmapViewOfFile(value); }
 };
 
+struct PresentationConfigView {
+    presentation_enrollment::CreationConfig* value;
+    explicit PresentationConfigView(HANDLE section) : value(static_cast<presentation_enrollment::CreationConfig*>(
+        MapViewOfFile(section, FILE_MAP_WRITE, 0, 0, sizeof(*value)))) {
+        require(value != nullptr); ZeroMemory(value, sizeof(*value));
+    }
+    ~PresentationConfigView() { UnmapViewOfFile(value); }
+};
 struct ConfiguredChild {
     Handle section{sharedSection()};
     Mapping receipt{section.value};
     Handle configSection{CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
         0, sizeof(education_bootstrap::Config), nullptr)};
     ConfigView config{configSection.value};
+    Handle presentationSection{CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
+        0, sizeof(presentation_enrollment::CreationConfig), nullptr)};
+    PresentationConfigView presentation{presentationSection.value};
+    Handle presentationRead;
     Handle readonly;
     Handle ready{sharedEvent()}, done{sharedEvent()};
     Child child;
@@ -1877,14 +1892,42 @@ struct ConfiguredChild {
             && GetFileInformationByHandleEx(target.privateRoot, FileIdInfo,
                 &target.privateId, sizeof(target.privateId)) != FALSE);
         memcpy(target.userKeyPath, status.registryUserPath, sizeof(target.userKeyPath));
+        if (presentationControl) {
+            require(DuplicateHandle(current, presentationSection.value, current, &presentationRead.value,
+                invalid == 11 ? FILE_MAP_READ | FILE_MAP_WRITE : FILE_MAP_READ, TRUE, 0));
+            auto& creation = *presentation.value;
+            HMODULE image = nullptr;
+            require(presentation_enrollment::imageMetadata(creation, image));
+            Microsoft::WRL::ComPtr<IDXGIFactory2> factory;
+            require(SUCCEEDED(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory))));
+            void** table = *reinterpret_cast<void***>(factory.Get());
+            const auto rva = [&](void* entry) -> DWORD {
+                MEMORY_BASIC_INFORMATION memory{};
+                require(VirtualQuery(entry, &memory, sizeof(memory)) && memory.AllocationBase == image
+                    && reinterpret_cast<ULONG_PTR>(entry) > reinterpret_cast<ULONG_PTR>(image));
+                const auto offset = reinterpret_cast<ULONG_PTR>(entry) - reinterpret_cast<ULONG_PTR>(image);
+                require(offset < creation.imageBytes);
+                return static_cast<DWORD>(offset);
+            };
+            creation.oldRva = rva(table[10]); creation.hwndRva = rva(table[15]);
+            creation.magic = presentation_enrollment::CreationMagic; creation.version = 1;
+            creation.bytes = sizeof(creation); creation.session = target.session;
+        }
         HANDLE inherited[]{section.value, readonly.value, ready.value, done.value, go, finish,
-            target.logicalRoot, target.privateRoot, backing, status.cachedHostKey};
-        Attributes attributes(inherited, 10);
+            target.logicalRoot, target.privateRoot, backing, status.cachedHostKey, presentationRead.value};
+        Attributes attributes(inherited, presentationControl ? 11 : 10);
         auto env = environment(section.value, target.privateRoot);
         env.pop_back();
         if (presentationControl) {
             const auto setting = std::wstring(presentation_enrollment::Variable) + L"=" + presentationControl;
-            env.insert(env.end(), setting.begin(), setting.end()); env.push_back(0);
+            if (invalid != 24) { env.insert(env.end(), setting.begin(), setting.end()); env.push_back(0); }
+            if (invalid != 14) {
+                const auto capability = std::wstring(presentation_enrollment::SectionVariable) + L"="
+                    + (invalid == 15 ? L"invalid" : invalid == 21 ? L"0"
+                        : invalid == 22 ? L"18446744073709551616" : invalid == 23 ? L"18446744073709551616000000000000000"
+                        : std::to_wstring(reinterpret_cast<ULONG_PTR>(presentationRead.value)));
+                env.insert(env.end(), capability.begin(), capability.end()); env.push_back(0);
+            }
         }
         const auto setting = std::wstring(education_bootstrap::SectionVariable) + L"="
             + std::to_wstring(reinterpret_cast<ULONG_PTR>(readonly.value));
@@ -1900,6 +1943,22 @@ struct ConfiguredChild {
         FILETIME exit{}, kernel{}, user{};
         require(GetProcessTimes(child.info.hProcess, &target.created, &exit, &kernel, &user) != FALSE);
         status.created = target.created;
+        if (presentationControl) {
+            auto& creation = *presentation.value;
+            creation.pid = target.pid; creation.created = target.created;
+            if (invalid == 6) ++creation.pid;
+            if (invalid == 7) ++creation.created.dwLowDateTime;
+            if (invalid == 8) creation.imageId.FileId.Identifier[0] ^= 1;
+            if (invalid == 9) creation.oldRva = 0;
+            if (invalid == 10) creation.oldRva = creation.imageBytes;
+            if (invalid == 12) creation.oldRva = creation.hwndRva;
+            if (invalid == 13) ++creation.session;
+            if (invalid == 16) ++creation.magic;
+            if (invalid == 17) ++creation.version;
+            if (invalid == 18) ++creation.bytes;
+            if (invalid == 19) ++creation.imageTimestamp;
+            if (invalid == 20) ++creation.imageBytes;
+        }
         if (invalid == 1) ++target.pid;
         if (invalid == 2) target.privateId.FileId.Identifier[0] ^= 1;
         if (invalid == 3) target.slot = slot == 1 ? 2 : 1;
@@ -2550,6 +2609,31 @@ void presentationChecks() {
     require(FAILED(factory->CreateSwapChainForHwnd(nullptr, selected.value, &description,
         nullptr, nullptr, &failed)) && !failed);
     require(read(&observed) && observed.candidates == 3 && observed.failures == 0);
+    // A factory recovered from a native chain must use the same creation hook.
+    ComPtr<IDXGIFactory2> recovered;
+    ComPtr<IUnknown> legacyIdentity, recoveredIdentity;
+    require(SUCCEEDED(oldChain->GetParent(IID_PPV_ARGS(&recovered)))
+        && SUCCEEDED(legacy.As(&legacyIdentity)) && SUCCEEDED(recovered.As(&recoveredIdentity))
+        && legacyIdentity.Get() == recoveredIdentity.Get());
+    oldChain.Reset();
+    require(SUCCEEDED(recovered->CreateSwapChainForHwnd(queue.Get(), selected.value,
+        &description, nullptr, nullptr, &chain)));
+    chain.Reset(); recovered.Reset(); recoveredIdentity.Reset(); legacyIdentity.Reset();
+    require(read(&observed) && observed.candidates == 4 && observed.failures == 0);
+    const LONG factoriesBefore = observed.factories;
+    // Repeated factory lifetimes must not exhaust a retained-reference registry.
+    for (unsigned lifetime = 0; lifetime < 36; ++lifetime) {
+        ComPtr<IDXGIFactory4> transient;
+        require(SUCCEEDED(CreateDXGIFactory2(0, IID_PPV_ARGS(&transient))));
+        factory = transient;
+        chain = create(selected.value);
+        chain.Reset();
+        factory.Reset();
+    }
+    require(read(&observed));
+    require(observed.factories == factoriesBefore + 36);
+    require(observed.candidates == 40);
+    require(observed.failures == 0);
 }
 
 int configuredStorageChild(probe::Receipt& receipt) {
@@ -2630,7 +2714,7 @@ bool configuredStoragePair(const std::wstring& self, const std::string& compatib
         rejected.exited(false);
         presentationControl = L"observe";
     }
-    for (DWORD invalid = 1; invalid <= 5; ++invalid) {
+    for (DWORD invalid = 1; invalid <= (presentationControl ? 24UL : 5UL); ++invalid) {
         Handle go(sharedEvent()), finish(sharedEvent());
         ConfiguredChild rejected(1, 0, roots, stores[0].value, registry, name, go.value, finish.value,
             self, compatibility, invalid);
@@ -2802,8 +2886,10 @@ bool configuredStoragePair(const std::wstring& self, const std::string& compatib
         "\"explicitHelpersChecked\":4,\"automaticHelperEnrollment\":false,"
         "\"mediatedCallerEnrollmentRefusals\":4,"
         "\"presentationEnrollmentChecked\":%s,"
+        "\"presentationInvalidCapabilitiesRejected\":%u,\"presentationCreationCoverage\":\"%s\","
         "\"singleton\":\"UNKNOWN\",\"singletonRemap\":false,\"helpers\":\"UNKNOWN\",\"securityBoundary\":false,"
-        "\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n", presentationControl ? "true" : "false");
+        "\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n", presentationControl ? "true" : "false", presentationControl ? 19U : 0U,
+        presentationControl ? "STARTUP_RVA_40_CREATIONS" : "OFF");
     return true;
 }
 
@@ -3061,6 +3147,9 @@ int readRustEnrollmentControl() {
     wchar_t presentationSetting[16]{};
     SetLastError(ERROR_SUCCESS);
     require(GetEnvironmentVariableW(presentation_enrollment::Variable, presentationSetting, 16) == 0
+        && GetLastError() == ERROR_ENVVAR_NOT_FOUND);
+    SetLastError(ERROR_SUCCESS);
+    require(GetEnvironmentVariableW(presentation_enrollment::SectionVariable, presentationSetting, 16) == 0
         && GetLastError() == ERROR_ENVVAR_NOT_FOUND);
     probe::View view;
     require(view.open() && view.value->mode == probe::ConfiguredStorage);

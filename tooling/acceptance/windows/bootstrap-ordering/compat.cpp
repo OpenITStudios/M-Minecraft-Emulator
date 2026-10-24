@@ -953,7 +953,7 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE, DWORD reason, LPVOID) {
         const bool valid = education_bootstrap::read(config);
         InstallConfig installConfig{config.slot, config.logicalRoot, config.privateRoot,
             config.registryRoot, 1, config.userKeyPath, &config};
-        if (!valid || !presentation_enrollment::prepare()
+        if (!valid || !presentation_enrollment::prepare(config)
             || !startup_observation::attach(config) || !install(installConfig, false)) {
             if (controlled) probe::record(test.value, probe::Rejected);
             return FALSE;

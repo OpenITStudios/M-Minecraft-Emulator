@@ -2,7 +2,6 @@
 #include <dxgi1_6.h>
 #include <detours.h>
 #include <atomic>
-#include <memory>
 #include <cstring>
 #include <cwchar>
 
@@ -17,24 +16,16 @@ Factory originalFactory = nullptr, originalFactory1 = nullptr;
 Factory2 originalFactory2 = nullptr;
 bool armed = false;
 thread_local bool insideFactory = false;
-struct FactoryBinding {
-    void* table[32]{}; // Complete Windows SDK IDXGIFactory7 ABI.
-    IDXGIFactory7* receiver = nullptr;
-    CreateOld createOld = nullptr;
-    CreateHwnd createHwnd = nullptr;
-    FactoryBinding* next = nullptr;
-    ~FactoryBinding() { if (receiver) receiver->Release(); }
-};
-std::atomic<FactoryBinding*> factories{nullptr};
-SRWLOCK publication = SRWLOCK_INIT;
-unsigned retained = 0;
+CreateOld originalOld = nullptr;
+CreateHwnd originalHwnd = nullptr;
+thread_local bool insideCreation = false;
 std::atomic<LONG> factoryCount{0}, candidateCount{0}, ignored{0}, failures{0};
 std::atomic<DWORD> width{0}, height{0};
-FactoryBinding* find(void* receiver) noexcept {
-    for (auto* item = factories.load(std::memory_order_acquire); item; item = item->next)
-        if (item->receiver == receiver) return item;
-    return nullptr;
-}
+struct CreationCall {
+    bool outer = !insideCreation;
+    CreationCall() { insideCreation = true; }
+    ~CreationCall() { if (outer) insideCreation = false; }
+};
 void observe(HWND window, UINT w, UINT h) noexcept {
     DWORD process = 0;
     wchar_t name[128]{};
@@ -51,11 +42,10 @@ void observe(HWND window, UINT w, UINT h) noexcept {
 }
 HRESULT STDMETHODCALLTYPE createdOld(IDXGIFactory* factory, IUnknown* device,
                                     DXGI_SWAP_CHAIN_DESC* description, IDXGISwapChain** result) {
-    auto* selected = find(factory);
-    if (!selected) { failures.fetch_add(1); return E_UNEXPECTED; }
-    const HRESULT status = selected->createOld(factory, device, description, result);
+    CreationCall call;
+    const HRESULT status = originalOld(factory, device, description, result);
     const DWORD error = GetLastError();
-    if (SUCCEEDED(status) && result && *result && description)
+    if (call.outer && SUCCEEDED(status) && result && *result && description)
         observe(description->OutputWindow, description->BufferDesc.Width, description->BufferDesc.Height);
     SetLastError(error);
     return status;
@@ -63,52 +53,12 @@ HRESULT STDMETHODCALLTYPE createdOld(IDXGIFactory* factory, IUnknown* device,
 HRESULT STDMETHODCALLTYPE createdHwnd(IDXGIFactory2* factory, IUnknown* device, HWND window,
     const DXGI_SWAP_CHAIN_DESC1* description, const DXGI_SWAP_CHAIN_FULLSCREEN_DESC* fullscreen,
     IDXGIOutput* restricted, IDXGISwapChain1** result) {
-    auto* selected = find(factory);
-    if (!selected) { failures.fetch_add(1); return E_UNEXPECTED; }
-    const HRESULT status = selected->createHwnd(factory, device, window, description, fullscreen, restricted, result);
+    CreationCall call;
+    const HRESULT status = originalHwnd(factory, device, window, description, fullscreen, restricted, result);
     const DWORD error = GetLastError();
-    if (SUCCEEDED(status) && result && *result && description) observe(window, description->Width, description->Height);
+    if (call.outer && SUCCEEDED(status) && result && *result && description) observe(window, description->Width, description->Height);
     SetLastError(error);
     return status;
-}
-void enroll(IUnknown* factory) noexcept {
-    try {
-        if (find(factory)) return;
-        auto selected = std::make_unique<FactoryBinding>();
-        if (FAILED(factory->QueryInterface(IID_PPV_ARGS(&selected->receiver)))
-            || static_cast<IUnknown*>(selected->receiver) != factory) { failures.fetch_add(1); return; }
-        MEMORY_BASIC_INFORMATION memory{};
-        if (!VirtualQuery(factory, &memory, sizeof(memory)) || memory.State != MEM_COMMIT
-            || (memory.Protect & PAGE_GUARD)
-            || !(memory.Protect & (PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY))
-            || reinterpret_cast<ULONG_PTR>(factory) % alignof(void*)) { failures.fetch_add(1); return; }
-        void** table = *reinterpret_cast<void***>(factory);
-        memcpy(selected->table, table, sizeof(selected->table));
-        selected->createOld = reinterpret_cast<CreateOld>(table[10]);
-        selected->createHwnd = reinterpret_cast<CreateHwnd>(table[15]);
-        if (!selected->createOld || !selected->createHwnd) { failures.fetch_add(1); return; }
-        selected->table[10] = reinterpret_cast<void*>(createdOld);
-        selected->table[15] = reinterpret_cast<void*>(createdHwnd);
-        HMODULE owner = nullptr;
-        if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-            reinterpret_cast<LPCWSTR>(createdHwnd), &owner)) { failures.fetch_add(1); return; }
-        // No COM, loader or allocation work while publishing the immutable list.
-        AcquireSRWLockExclusive(&publication);
-        if (find(factory) || retained >= 32) {
-            const bool full = retained >= 32;
-            ReleaseSRWLockExclusive(&publication);
-            if (full) failures.fetch_add(1);
-            return;
-        }
-        selected->next = factories.load(std::memory_order_relaxed);
-        factories.store(selected.get(), std::memory_order_release);
-        const bool installed = InterlockedCompareExchangePointer(reinterpret_cast<PVOID volatile*>(factory),
-            selected->table, table) == table;
-        ++retained;
-        selected.release(); // Bounded, process-lifetime factory identity/table.
-        ReleaseSRWLockExclusive(&publication);
-        (installed ? factoryCount : failures).fetch_add(1);
-    } catch (...) { failures.fetch_add(1); }
 }
 struct FactoryCall {
     bool outer = !insideFactory;
@@ -119,31 +69,71 @@ HRESULT WINAPI createFactory(REFIID id, void** result) {
     FactoryCall call;
     const HRESULT status = originalFactory(id, result);
     const DWORD error = GetLastError();
-    if (call.outer && SUCCEEDED(status) && result && *result) enroll(static_cast<IUnknown*>(*result));
+    if (call.outer && SUCCEEDED(status) && result && *result) factoryCount.fetch_add(1);
     SetLastError(error); return status;
 }
 HRESULT WINAPI createFactory1(REFIID id, void** result) {
     FactoryCall call;
     const HRESULT status = originalFactory1(id, result);
     const DWORD error = GetLastError();
-    if (call.outer && SUCCEEDED(status) && result && *result) enroll(static_cast<IUnknown*>(*result));
+    if (call.outer && SUCCEEDED(status) && result && *result) factoryCount.fetch_add(1);
     SetLastError(error); return status;
 }
 HRESULT WINAPI createFactory2(UINT flags, REFIID id, void** result) {
     FactoryCall call;
     const HRESULT status = originalFactory2(flags, id, result);
     const DWORD error = GetLastError();
-    if (call.outer && SUCCEEDED(status) && result && *result) enroll(static_cast<IUnknown*>(*result));
+    if (call.outer && SUCCEEDED(status) && result && *result) factoryCount.fetch_add(1);
     SetLastError(error); return status;
 }
 }
-bool prepare() noexcept {
-    wchar_t setting[16]{};
+bool prepare(const education_bootstrap::Config& process) noexcept {
+    wchar_t setting[32]{};
     SetLastError(ERROR_SUCCESS);
-    const DWORD size = GetEnvironmentVariableW(Variable, setting, 16);
-    if (!size && GetLastError() == ERROR_ENVVAR_NOT_FOUND) return true;
-    // Until the manager focus capability exists, only observation can be armed.
-    if (size != 7 || wcscmp(setting, L"observe") != 0) return false;
+    const DWORD size = GetEnvironmentVariableW(Variable, setting, 32);
+    if (!size && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
+        SetLastError(ERROR_SUCCESS);
+        return !GetEnvironmentVariableW(SectionVariable, setting, 32) && GetLastError() == ERROR_ENVVAR_NOT_FOUND;
+    }
+    // No pacing marker is accepted before a focus capability is implemented.
+    if (size != 7 || wcscmp(setting, L"observe")) return false;
+    const DWORD length = GetEnvironmentVariableW(SectionVariable, setting, 32);
+    if (!length || length >= 32) return false;
+    ULONG_PTR raw = 0;
+    for (DWORD i = 0; i < length; ++i) {
+        if (setting[i] < L'0' || setting[i] > L'9') return false;
+        const ULONG_PTR digit = setting[i] - L'0';
+        if (raw > (~static_cast<ULONG_PTR>(0) - digit) / 10) return false;
+        raw = raw * 10 + digit;
+    }
+    if (!raw) return false;
+    const HANDLE section = reinterpret_cast<HANDLE>(raw);
+    if (!SetHandleInformation(section, HANDLE_FLAG_INHERIT, 0)) return false;
+    void* writable = MapViewOfFile(section, FILE_MAP_WRITE, 0, 0, sizeof(CreationConfig));
+    if (writable) { UnmapViewOfFile(writable); CloseHandle(section); return false; }
+    const void* view = MapViewOfFile(section, FILE_MAP_READ, 0, 0, sizeof(CreationConfig));
+    if (!view) { CloseHandle(section); return false; }
+    CreationConfig config{};
+    memcpy(&config, view, sizeof(config));
+    UnmapViewOfFile(view); CloseHandle(section);
+    CreationConfig actual{}; HMODULE module = nullptr;
+    if (config.magic != CreationMagic || config.version != 1 || config.bytes != sizeof(config)
+        || config.pid != process.pid || config.session != process.session
+        || memcmp(&config.created, &process.created, sizeof(FILETIME))
+        || !imageMetadata(actual, module) || config.imageBytes != actual.imageBytes
+        || config.imageTimestamp != actual.imageTimestamp || memcmp(&config.imageId, &actual.imageId, sizeof(FILE_ID_INFO))) return false;
+    const auto entry = [&](DWORD rva) -> void* {
+        if (rva < 4096 || rva >= actual.imageBytes) return nullptr;
+        auto* address = reinterpret_cast<BYTE*>(module) + rva;
+        MEMORY_BASIC_INFORMATION memory{};
+        if (!VirtualQuery(address, &memory, sizeof(memory)) || memory.AllocationBase != module
+            || memory.State != MEM_COMMIT || memory.Type != MEM_IMAGE || (memory.Protect & PAGE_GUARD)
+            || !(memory.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY))) return nullptr;
+        return address;
+    };
+    originalOld = reinterpret_cast<CreateOld>(entry(config.oldRva));
+    originalHwnd = reinterpret_cast<CreateHwnd>(entry(config.hwndRva));
+    if (!originalOld || !originalHwnd || config.oldRva == config.hwndRva) return false;
     armed = true;
     return true;
 }
@@ -152,7 +142,9 @@ bool attach() noexcept {
     originalFactory = &CreateDXGIFactory;
     originalFactory1 = &CreateDXGIFactory1;
     originalFactory2 = &CreateDXGIFactory2;
-    return DetourAttach(reinterpret_cast<PVOID*>(&originalFactory), reinterpret_cast<PVOID>(createFactory)) == NO_ERROR
+    return DetourAttach(reinterpret_cast<PVOID*>(&originalOld), reinterpret_cast<PVOID>(createdOld)) == NO_ERROR
+        && DetourAttach(reinterpret_cast<PVOID*>(&originalHwnd), reinterpret_cast<PVOID>(createdHwnd)) == NO_ERROR
+        && DetourAttach(reinterpret_cast<PVOID*>(&originalFactory), reinterpret_cast<PVOID>(createFactory)) == NO_ERROR
         && DetourAttach(reinterpret_cast<PVOID*>(&originalFactory1), reinterpret_cast<PVOID>(createFactory1)) == NO_ERROR
         && DetourAttach(reinterpret_cast<PVOID*>(&originalFactory2), reinterpret_cast<PVOID>(createFactory2)) == NO_ERROR;
 }

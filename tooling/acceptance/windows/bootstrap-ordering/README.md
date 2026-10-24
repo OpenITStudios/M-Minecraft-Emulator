@@ -60,35 +60,49 @@ before entering native DXGI. This does not prove arbitrary concurrent displayed
 frame spacing or game compatibility. TEST/DO_NOT_WAIT and invalid sync retain
 their bypass/forwarding semantics. No live unload or reset-after-stop API exists.
 
-The existing bootstrap DLL separately supports observation-only creation
-enrollment. After validating its existing config, the exact private marker
-`MIVUBI_EDUCATION_PRESENTATION=observe` arms factory export interception.
-Default is off; malformed values refuse. The ordinary Rust child environment
-strips inherited markers, and no game-facing command sets one. The private
-config remains v2/1136 bytes.
+The existing bootstrap DLL separately supports **observation-only** creation
+enrollment. In addition to a validated storage config and the exact marker
+`MIVUBI_EDUCATION_PRESENTATION=observe`, it requires a separate read-only
+`MIVUBI_EDUCATION_PRESENTATION_SECTION` capability. Missing/malformed markers
+or capabilities refuse before application code; default is off. The ordinary
+Rust child environment and own C++ helper environment strip both variables.
+Storage config remains v2/1136 bytes; no game-facing command enables this route.
 
-It joins the existing startup Detours transaction for CreateDXGIFactory/1/2.
-DllMain copies settings/attaches exports without creating a factory, device,
-timer or render thread; see Microsoft's
-[DllMain restrictions](https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-best-practices).
-When an actual caller creates a factory, the same-address Factory7 interface
-and writable storage are checked, then an object-local table intercepts
-CreateSwapChain/CreateSwapChainForHwnd. A bounded set of factory references and
-tables stays pinned until process exit. Unsupported setup is counted without
-replacing a successful native factory result. These are experimental ABI
-interpositions, not a Microsoft-supported Minecraft integration guarantee.
+The 72-byte private capability binds PID/creation FILETIME/session, System32
+DXGI file identity, PE image size/timestamp and two creation-method RVAs.
+The own parent resolves the SDK CreateSwapChain/CreateSwapChainForHwnd entries
+from a temporary native factory **before** creating/resuming the child.
+The child validates a read-only mapping and its actual loaded System32 module,
+checks executable image ranges and joins both methods to its existing startup
+Detours transaction. Factory export hooks count native successes only.
+No factory/device/timer/render thread is created in DllMain; there is no
+late patching from a factory callback, native-vtable replacement, factory registry
+or helper-held factory/chain reference. The application retains native COM
+identity and ordinary release semantics.
 
-Only top-level own-process OGLES window candidates are counted. This class
-filter is diagnostic, not ownership authority. The observer neither retains
-swap chains nor installs pacing. Its private in-process
-`BootstrapPresentationSnapshot` export reports counts/dimensions, not readiness.
+See Microsoft's [Detours calling/transaction contract](https://github.com/microsoft/Detours/wiki/Using-Detours)
+and [PE RVA definition](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format).
+These checks bind a cooperating parent to this observed module/implementation,
+not arbitrary Microsoft provenance or a supported Minecraft extension point.
+Other creation implementations, CoreWindow/composition routes, OS updates and
+real-game startup ordering remain unproved. Live unload is unsupported; hooks
+are process-lifetime. Do not activate the route in the old game candidate.
+
+Only own-process, top-level OGLES candidates are counted; the class remains a
+diagnostic filter, not HWND authority. Native results/descriptions are preserved.
+The observer changes no returned factory/chain object and installs no pacing.
+Its existing in-process Snapshot export remains diagnostic, not readiness.
 
 Manually run `bootstrap-ordering.exe --run-presentation-enrollment-self-test`.
-Existing two-slot bootstrap children check all three factory exports, both
-creation methods, auxiliary-class exclusion, caller descriptions, failed
-creation, marker refusal and successful same-HWND recreation without chain
-pins. Real-game enrollment, wrapper compatibility and manager focus transport
-remain separate work; the sole current handoff is `planning/development.md`.
+The own two-slot/two-lifetime workflow now checks all three factory exports,
+both creation methods, auxiliary exclusion, unchanged descriptions, native
+creation failure and recreation. A factory recovered through a native chain's
+GetParent keeps native IUnknown identity and is also observed. Thirty-six
+additional factory lifetimes create/release chains without the old registry
+capacity; each enrolled child's control verifies forty eligible creations.
+Nineteen invalid capability variants and a malformed mode refuse. No
+fixture result certifies Minecraft enrollment or timing. Current continuation
+is solely in `planning/development.md`.
 
 ## Current Education experiment — 24 October 2026
 

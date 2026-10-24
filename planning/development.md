@@ -755,18 +755,76 @@ creation observer, Rust/public API, config ABI, payload pins and CI are unchange
 No game launch/input/restart/closure, account/world inspection or Computer Use
 occurred. New timing behavior in Minecraft is **NOT_EXECUTED**.
 
+### Startup creation capability without factory pins
+
+Source baseline: `1671bfebcca1f52fc93ce63fe5ff4f16ef7bc641`. This resolves
+the observer's factory-table/lifetime prerequisite before connecting pacing.
+The previous observer retained up to 32 factory interfaces/tables for process
+lifetime. An expanded own control failed before correction after additional
+factory lifetimes. The observer now leaves all native COM objects/vtables
+unchanged and retains no factory or swap-chain reference.
+
+The own controller resolves CreateSwapChain/CreateSwapChainForHwnd method RVAs
+from a temporary native factory before creating/resuming each child. A separate
+72-byte read-only capability binds PID/creation FILETIME/session, System32 DXGI
+file ID, loaded PE size/timestamp and those two RVAs. The child refuses malformed,
+writable, foreign-process/session/module or out-of-image capabilities and checks
+executable image ranges. These checks bind cooperating parent metadata; they do
+not establish complete mapped-image Authenticode provenance or compatibility
+with unknown method implementations.
+
+Both creation methods join the existing initial Detours transaction. No factory,
+device, render thread or timer is created in DllMain, and no method patch is
+installed later from factory callbacks. The three factory-export hooks count
+native successes only. Native factory/chain identities, calls and release
+behavior remain native. The observer is still default-off/observation-only;
+the storage v2/1136-byte ABI and Snapshot layout stay unchanged. No game-facing
+command supplies a capability. The actual game enrollment seam does not yet
+prepare this new optional capability.
+
+The own control checks a factory recovered from chain GetParent retains its
+canonical native IUnknown identity and remains covered by the creation hook.
+Thirty-six additional temporary factories create/release chains; each enrolled
+child verifies forty eligible creations, with auxiliary exclusion and native
+failure/description/recreation checks retained. Two slots and repeated process
+lifetimes pass. Nineteen invalid creation-capability variants (plus the existing
+five invalid storage configs and one malformed mode) refuse before main.
+
+The first helper regression exposed the new capability variable leaking into an
+explicitly enrolled own helper. Both C++ and Rust environment owners now strip
+MIVUBI_EDUCATION_PRESENTATION_SECTION as well as the mode marker. The reader
+asserts absence of both. Temporarily removing the new Rust strip reproduces
+enrollment-test failure (own reader exit 86); restoring it passes.
+
+Executed: final MSVC x64 Release /W4 /WX build; all five bootstrap modes and both
+frame-control modes pass. Rustfmt passes. A local isolated Rust 1.99.1 harness
+includes the exact independent_bootstrap module and own-helper submodule with
+real-game entry points disabled; 18 relevant tests (including ignored own-DLL
+interop tests) pass with both ambient presentation variables deliberately invalid.
+The harness's initial full run failed only the unrelated caption-window test
+because its native-window verifier was deliberately stubbed to refuse; that test
+was filtered from the scoped pass, not awarded PASS. Full Tauri build and the
+complete prior 37-test native suite were not rerun. No own control remains.
+
+The timing wrapper remains separate/test-only and unmodified. This batch
+does **not** connect FPS policy or OS focus. Inspection confirms the existing
+instance_focus_events worker is count-only; it has no authenticated child policy
+producer yet. No second observer/governor is introduced. New DLLs are local build
+artifacts; reviewed live payload pins, original profiles/accounts/worlds, public
+admission, CI and distribution are unchanged. No Computer Use or game
+launch/input/restart/closure occurred.
+
 ### Remaining proof and one next action
 
-The full five-client goal is ACTIVE. The own-control retained-reference blocker
-is repaired. Unknown game interface requirements, safe startup enrollment,
-automatic focus transport, real 144/10 pacing and background Host World health,
-five licensed playable clients, resource/soak/crash proof and helper/auth
-containment remain UNKNOWN/NOT_EXECUTED. Public admission/distribution stay deferred.
+The full five-client goal is ACTIVE. The timing wrapper lifetime and creation
+observer factory-pin prerequisites are repaired in own controls. Unknown game
+interfaces/creation implementations, process-bound FPS policy transport and
+automatic focus switching, real 144/10 pacing without slowing background Host
+World, five licensed clients, resources/soak/crash and helper/auth containment
+remain UNKNOWN/NOT_EXECUTED. This observer is not Minecraft or FPS acceptance.
 
-**One next action:** connect typed creation-time wrapping and the existing manager
-focus producer through a private, process-bound policy capability in the current
-bootstrap owners, first proving default-off/failure/stop/recreation with own
-children. Replace or explicitly resolve the observer's factory table/pin lifetime
-before treating that enrollment as production-safe. Do not patch shared rendering
-code while game threads run. Review a same-profile game candidate only after
-that control passes; preserve current runtime and account/world identities.
+**One next action:** extend the existing manager focus-event owner and private
+bootstrap capability with process-bound foreground/background/stop transport,
+then connect creation-time typed wrapping outside loader lock and prove those
+paths together with own children. Keep the old candidate unchanged until the
+integrated control passes and a same-profile candidate is reviewed.
