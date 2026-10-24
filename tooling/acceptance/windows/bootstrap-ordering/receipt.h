@@ -131,7 +131,10 @@ inline void registryCanary(Stage stage) {
     const auto open = reinterpret_cast<Open>(GetProcAddress(ntdll, "NtOpenKey"));
     const auto query = reinterpret_cast<Query>(GetProcAddress(ntdll, "NtQueryValueKey"));
     const auto set = reinterpret_cast<Set>(GetProcAddress(ntdll, "NtSetValueKey"));
-    if (!open || !query || !set) return;
+    using Enumerate = NTSTATUS (NTAPI*)(HANDLE, ULONG, ULONG, PVOID, ULONG, PULONG);
+    const auto enumValues = reinterpret_cast<Enumerate>(GetProcAddress(ntdll, "NtEnumerateValueKey"));
+    const auto enumKeys = reinterpret_cast<Enumerate>(GetProcAddress(ntdll, "NtEnumerateKey"));
+    if (!open || !query || !set || !enumValues || !enumKeys) return;
     HANDLE key = nullptr;
     constexpr DWORD sentinel = 0x13579bd;
     SetLastError(sentinel);
@@ -153,24 +156,51 @@ inline void registryCanary(Stage stage) {
     const NTSTATUS directStatus = ordinary && key
         ? query(key, &valueName, 2, &direct, sizeof(direct), &directBytes) : -1;
     if (key) CloseHandle(key);
+    Value enumerated{};
+    ULONG valueBytes = 0, keyBytes = 0;
+    struct Subkey { LARGE_INTEGER time; ULONG title, bytes; wchar_t name[32]; } subkey{};
+    SetLastError(sentinel);
+    NTSTATUS valueStatus = enumValues(receipt.cachedHostKey, 0, 2,
+        &enumerated, sizeof(enumerated), &valueBytes);
+    bool valueError = GetLastError() == sentinel;
+    if (ordinary && valueStatus == 0 && enumerated.data != expected) {
+        // The two fixture values have no guaranteed enumeration order.
+        SetLastError(sentinel);
+        valueStatus = enumValues(receipt.cachedHostKey, 1, 2,
+            &enumerated, sizeof(enumerated), &valueBytes);
+        valueError = valueError && GetLastError() == sentinel;
+    }
+    SetLastError(sentinel);
+    const NTSTATUS keyStatus = enumKeys(receipt.cachedHostKey, 0, 0,
+        &subkey, sizeof(subkey), &keyBytes);
+    const bool keyError = GetLastError() == sentinel;
     DWORD write = ordinary ? expected + 1
         : receipt.armed == 1 && !receipt.registryBaseline ? 0xdeadbeef : host;
     SetLastError(sentinel);
     const NTSTATUS written = set(receipt.cachedHostKey, &valueName, 0, REG_DWORD, &write, sizeof(write));
     const bool setError = GetLastError() == sentinel;
     const LONG bit = stage == Dependency ? 1 : stage == Tls ? 2 : stage == Main ? 4 : 0;
-    if (!openError || !queryError || !setError) return;
+    if (!openError || !queryError || !setError || !valueError || !keyError) return;
     constexpr auto denied = static_cast<NTSTATUS>(0xc0000022UL);
     if (opened == denied && queried == denied && written == denied && !key
+        && valueStatus == denied && keyStatus == denied && valueBytes == 0 && keyBytes == 0
+        && enumerated.title == 0 && enumerated.type == 0 && enumerated.bytes == 0 && enumerated.data == 0
+        && subkey.time.QuadPart == 0 && subkey.title == 0 && subkey.bytes == 0 && subkey.name[0] == 0
         && returned == 0 && value.title == 0 && value.type == 0 && value.bytes == 0 && value.data == 0)
         InterlockedOr(&receipt.earlyDenied, bit);
     if (ordinary && opened == 0 && queried == 0 && written == 0
         && value.type == REG_DWORD && value.bytes == sizeof(DWORD) && value.data == expected
         && directStatus == 0 && direct.type == REG_DWORD && direct.bytes == sizeof(DWORD)
-        && direct.data == expected)
+        && direct.data == expected && valueStatus == 0 && enumerated.type == REG_DWORD
+        && enumerated.bytes == sizeof(DWORD) && enumerated.data == expected
+        && (receipt.fileRound == 0 ? keyStatus == static_cast<NTSTATUS>(0x8000001aUL)
+            : keyStatus == 0 && (subkey.name[0] == L'N' || subkey.name[0] == L'S')))
         InterlockedOr(&receipt.earlyPrivate, bit);
     if (opened == 0 && queried == 0 && written == 0 && value.type == REG_DWORD
-        && value.bytes == sizeof(DWORD) && value.data == host && write == host)
+        && value.bytes == sizeof(DWORD) && value.data == host && write == host
+        && valueStatus == 0 && enumerated.type == REG_DWORD
+        && enumerated.bytes == sizeof(DWORD) && enumerated.data == host
+        && keyStatus == 0 && subkey.bytes == 16 && subkey.name[0] == L'H')
         InterlockedOr(&receipt.earlyAllowed, bit);
 }
 } // namespace probe

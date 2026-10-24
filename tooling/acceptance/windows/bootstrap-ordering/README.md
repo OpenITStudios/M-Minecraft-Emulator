@@ -83,7 +83,7 @@ first import until the explicit post-loader activation below. The separate
 ordinary inherited-key mode supplies private values before dependency/TLS.
 Only the selected synthetic directory tree is redirected. In the default ordering mode,
 "canary" means a marker at a would-be protected call site and "arm" is a shared
-flag. In mutex mode the flag follows installation of file/IPC/Known Folder and six registry entry-point hooks in one transaction.
+flag. In mutex mode the flag follows installation of file/IPC/Known Folder and eight registry entry-point hooks in one transaction.
 This test cannot observe kernel accesses before notification, all loader work,
 external authentication, other module/TLS graphs or enforcement under bypass.
 
@@ -300,6 +300,81 @@ Contracts:
 [SHGetKnownFolderPath](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shgetknownfolderpath),
 [KNOWN_FOLDER_FLAG](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/ne-shlobj_core-known_folder_flag),
 [Known Folders](https://learn.microsoft.com/en-us/windows/win32/shell/known-folders).
+
+## Cached registry enumeration — 24 October 2026 WIB
+
+Exact baseline: 4ad32abda10be250223d508099ece58d2cdf5b3d.
+NtEnumerateKey and NtEnumerateValueKey now use the same existing cached-handle
+route as query/set, installed in the first-import transaction. A selected cached
+HOST handle reopens the slot key only after checking its original granted
+KEY_ENUMERATE_SUB_KEYS or KEY_QUERY_VALUE right. The original native function
+receives the caller's index, information class, buffer and length unchanged;
+status, required length, partial bytes and LastError are preserved. Unsupported
+routes and impersonation refuse; unmapped handles retain native behavior.
+Application-hive preactivation denies enumeration; ordinary inherited backing
+supplies private entries before dependency/TLS/main.
+
+The same startup controls now include native value/subkey enumeration. An
+unhooked positive control sees its fresh synthetic HOST value and HostOnly
+subkey. Protected ordinary startup sees its slot's advancing private value and
+no HOST subkey; relaunch startup accepts the existing private Native/Settings
+subkeys without assuming a registry enumeration order. Application-hive startup
+denies both calls with unchanged output/length. No real registry data is seeded
+or read.
+
+Both existing pair modes reuse one enumeration regression: compare a cached
+HOST handle against its genuine private handle for two APIs, information classes
+0/1/2/99, indices 0/1/2/99 and lengths 0/1/16/64/256. It compares native status,
+returned length and all 256 output bytes, including untouched bytes. Win32
+RegEnumValueW/RegEnumKeyExW return only private names. Query-only and
+enumerate-only duplicated handles allow their respective operation and deny the
+other with equivalent outputs; cached enumeration under impersonation refuses.
+The parent rechecks the unchanged HOST value and sole HostOnly subkey.
+No new controller, backing store, transport field or switch was added.
+
+**Executed proof:** Windows x64 SDK 26100, MSVC 19.44.35226, MSBuild 17.14.40,
+CMake 4.3.2, Release /W4 /WX /permissive-. Configure/build and all three fixed
+commands exit 0. Both pair modes complete two rounds with registryChecks=65535
+(8191 prior checks + 8192 native buffer/status equivalence + 16384 Win32 private
+enumeration + 32768 rights/impersonation). Ordinary earlyPrivate=7/7;
+application-hive earlyDenied=7/7 and unhooked earlyAllowedControl=7. File/AppData,
+mutex, invalid-hive, invalid-backing, slot mismatch, ordering/failure/timeout and
+persistence controls retain their expected results. Receipt remains v7,
+2,064 bytes. No remaining bootstrap-ordering.exe was observed.
+
+| Executed source | Git blob |
+| --- | --- |
+| compat.cpp | a43dad57e9e25258f75555fa108057c8695c2ced |
+| probe.cpp | aacb8af96e20a3483e6e47fbddaff6ba12b13ce1 |
+| receipt.h | d4c4a84d5641c8ff563cb29569d4bd3bc97c0fc0 |
+| dependency.cpp | f33dcf4125062fd63992d42d78729845560282f2 |
+| CMakeLists.txt | 8aebd659bf90c05aaf6c2f166610c36834268a53 |
+| compat.def | 0bca64aeff66d33b9ab881152563370774906219 |
+
+Local evidence: workspace/tmp/registry-enumeration-1792815909405.
+SHA-256:
+
+| Artifact | Hash |
+| --- | --- |
+| bootstrap-ordering.exe | 12b1bf590c1fc91b90dff6ea06d7bd562272bec6e7761b5a248f77928c970ffc |
+| bootstrap-compat.dll | b2cd85f02df42e5f1b8e4378469902eb9f93f964a1781bf476b8d283dfb59a62 |
+| ordering.jsonl | 40927efb7a951dda0eccd4323ec78f5b80d713673bee402d9ebd632e0f460c36 |
+| pair.jsonl | 8da2467f825ce1343f084a56fd5b1632b98ab669cac411fd17feab8b327126a4 |
+| inherited.jsonl | bc110847007c386f2f00442da4182cd97bf8be3c971f4219b2a96668f8803a2e |
+
+The Microsoft [enumerate-key contract](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/nf-wdm-zwenumeratekey)
+and [enumerate-value contract](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/nf-wdm-zwenumeratevaluekey)
+describe the distinct rights, buffer/status results and use of Nt names in user
+mode. No driver/kernel invocation or blanket syscall support is inferred.
+
+**Limits:** selected, resolved cached-handle enumeration is mediated; unknown
+key-name queries, multi-value reads, deletion/rename/security/transactions,
+concurrent lifetime changes and direct-syscall bypass remain unresolved.
+This is neither complete containment nor authentication isolation. No actual game
+launch/trace/injection, account/token/world access or service/driver action
+occurred. Full product, Minecraft and two/four-client acceptance NOT_EXECUTED;
+production provider and isolated Launch remain disabled. Historical proof below
+belongs to its recorded source revisions.
 
 ## Ordinary inherited registry startup — 24 October 2026 WIB
 

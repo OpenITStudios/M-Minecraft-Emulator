@@ -486,6 +486,8 @@ using QueryObject = NTSTATUS (NTAPI*)(HANDLE, ULONG, PVOID, ULONG, PULONG);
 QueryValue originalQueryValue = nullptr;
 SetValue originalSetValue = nullptr;
 QueryObject queryObject = nullptr;
+using Enumerate = NTSTATUS (NTAPI*)(HANDLE, ULONG, ULONG, PVOID, ULONG, PULONG);
+Enumerate originalEnumerateKey = nullptr, originalEnumerateValue = nullptr;
 
 wchar_t userKeyPath[512]{}, storePrefix[512]{}, storeOwn[512]{};
 bool predefinedMapped = false;
@@ -692,9 +694,39 @@ NTSTATUS NTAPI translatedSetValue(HANDLE key, PUNICODE_STRING name, ULONG title,
     SetLastError(saved);
     return status;
 }
+NTSTATUS enumeratePrivate(HANDLE key, ULONG index, ULONG information,
+    PVOID output, ULONG length, PULONG returned, Enumerate original, ACCESS_MASK right) {
+    const DWORD saved = GetLastError();
+    NTSTATUS status = Unsupported;
+    HANDLE mapped = nullptr;
+    __try {
+        KeyRoute route = KeyRoute::Other;
+        status = openPrivateValue(key, right, mapped, route);
+        if (status >= 0) {
+            SetLastError(saved);
+            status = original(route == KeyRoute::Private ? mapped : key,
+                index, information, output, length, returned);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { status = static_cast<NTSTATUS>(GetExceptionCode()); }
+    if (mapped) CloseHandle(mapped);
+    SetLastError(saved);
+    return status;
+}
+NTSTATUS NTAPI translatedEnumerateKey(HANDLE key, ULONG index, ULONG information,
+    PVOID output, ULONG length, PULONG returned) {
+    return enumeratePrivate(key, index, information, output, length, returned,
+        originalEnumerateKey, KEY_ENUMERATE_SUB_KEYS);
+}
+NTSTATUS NTAPI translatedEnumerateValue(HANDLE key, ULONG index, ULONG information,
+    PVOID output, ULONG length, PULONG returned) {
+    return enumeratePrivate(key, index, information, output, length, returned,
+        originalEnumerateValue, KEY_QUERY_VALUE);
+}
 bool attachRegistryValues() {
     return DetourAttach(reinterpret_cast<PVOID*>(&originalQueryValue), reinterpret_cast<PVOID>(translatedQueryValue)) == NO_ERROR
-        && DetourAttach(reinterpret_cast<PVOID*>(&originalSetValue), reinterpret_cast<PVOID>(translatedSetValue)) == NO_ERROR;
+        && DetourAttach(reinterpret_cast<PVOID*>(&originalSetValue), reinterpret_cast<PVOID>(translatedSetValue)) == NO_ERROR
+        && DetourAttach(reinterpret_cast<PVOID*>(&originalEnumerateKey), reinterpret_cast<PVOID>(translatedEnumerateKey)) == NO_ERROR
+        && DetourAttach(reinterpret_cast<PVOID*>(&originalEnumerateValue), reinterpret_cast<PVOID>(translatedEnumerateValue)) == NO_ERROR;
 }
 
 bool initializeRegistry(const probe::Receipt& config) {
@@ -709,8 +741,11 @@ bool initializeRegistry(const probe::Receipt& config) {
     originalQueryValue = reinterpret_cast<QueryValue>(GetProcAddress(ntdll, "NtQueryValueKey"));
     originalSetValue = reinterpret_cast<SetValue>(GetProcAddress(ntdll, "NtSetValueKey"));
     queryObject = reinterpret_cast<QueryObject>(GetProcAddress(ntdll, "NtQueryObject"));
+    originalEnumerateKey = reinterpret_cast<Enumerate>(GetProcAddress(ntdll, "NtEnumerateKey"));
+    originalEnumerateValue = reinterpret_cast<Enumerate>(GetProcAddress(ntdll, "NtEnumerateValueKey"));
     if (!originalOpenUser || !originalOpenKey || !originalOpenKeyEx || !originalCreateKey
-        || !queryKey || !originalQueryValue || !originalSetValue || !queryObject) return false;
+        || !queryKey || !originalQueryValue || !originalSetValue || !queryObject
+        || !originalEnumerateKey || !originalEnumerateValue) return false;
     unsigned length = 0;
     while (length < 512 && config.registryUserPath[length]) ++length;
     constexpr wchar_t prefix[] = L"\\REGISTRY\\USER\\";

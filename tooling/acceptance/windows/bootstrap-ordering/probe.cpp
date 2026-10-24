@@ -858,6 +858,94 @@ NTSTATUS outsideRegistryLongStatus() {
     return status;
 }
 
+LONG registryEnumerationChecks(HKEY cached, HKEY own, DWORD slot) {
+    using Enumerate = NTSTATUS (NTAPI*)(HANDLE, ULONG, ULONG, PVOID, ULONG, PULONG);
+    const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    const auto keys = reinterpret_cast<Enumerate>(GetProcAddress(ntdll, "NtEnumerateKey"));
+    const auto values = reinterpret_cast<Enumerate>(GetProcAddress(ntdll, "NtEnumerateValueKey"));
+    require(keys && values);
+    constexpr DWORD sentinel = 0x13579bd;
+    // Compare the cached HOST handle with a real private handle, including untouched buffer bytes.
+    for (auto enumerate : {keys, values}) {
+        for (ULONG information : {0UL, 1UL, 2UL, 99UL}) {
+            for (ULONG index : {0UL, 1UL, 2UL, 99UL}) {
+                for (ULONG length : {0UL, 1UL, 16UL, 64UL, 256UL}) {
+                    alignas(8) BYTE expected[256], actual[256];
+                    memset(expected, 0xa5, sizeof(expected));
+                    memset(actual, 0xa5, sizeof(actual));
+                    ULONG expectedBytes = 0x12345678, actualBytes = 0x12345678;
+                    SetLastError(sentinel);
+                    const NTSTATUS expectedStatus = enumerate(own, index, information,
+                        length ? expected : nullptr, length, &expectedBytes);
+                    require(GetLastError() == sentinel);
+                    SetLastError(sentinel);
+                    const NTSTATUS actualStatus = enumerate(cached, index, information,
+                        length ? actual : nullptr, length, &actualBytes);
+                    require(GetLastError() == sentinel && actualStatus == expectedStatus
+                        && actualBytes == expectedBytes && memcmp(actual, expected, sizeof(actual)) == 0);
+                }
+            }
+        }
+    }
+    LONG checks = 8192;
+    std::set<std::wstring> names;
+    for (DWORD i = 0; i < 3; ++i) {
+        wchar_t name[64]{};
+        DWORD length = 64;
+        const LSTATUS status = RegEnumValueW(cached, i, name, &length, nullptr, nullptr, nullptr, nullptr);
+        if (i == 2) require(status == ERROR_NO_MORE_ITEMS);
+        else require(status == ERROR_SUCCESS && names.insert(std::wstring(name, length)).second);
+    }
+    require(names == std::set<std::wstring>{L"Marker", slot == 1 ? L"OnlyA" : L"OnlyB"});
+    names.clear();
+    for (DWORD i = 0; i < 3; ++i) {
+        wchar_t name[64]{};
+        DWORD length = 64;
+        const LSTATUS status = RegEnumKeyExW(cached, i, name, &length, nullptr, nullptr, nullptr, nullptr);
+        if (i == 2) require(status == ERROR_NO_MORE_ITEMS);
+        else require(status == ERROR_SUCCESS && names.insert(std::wstring(name, length)).second);
+    }
+    require(names == std::set<std::wstring>{L"Settings", L"Native"});
+    checks |= 16384;
+    for (ACCESS_MASK right : {static_cast<ACCESS_MASK>(KEY_QUERY_VALUE),
+                             static_cast<ACCESS_MASK>(KEY_ENUMERATE_SUB_KEYS)}) {
+        Key limitedCached, limitedOwn;
+        require(DuplicateHandle(GetCurrentProcess(), cached, GetCurrentProcess(),
+            reinterpret_cast<PHANDLE>(&limitedCached.value), right, FALSE, 0) != FALSE
+            && DuplicateHandle(GetCurrentProcess(), own, GetCurrentProcess(),
+            reinterpret_cast<PHANDLE>(&limitedOwn.value), right, FALSE, 0) != FALSE);
+        for (auto enumerate : {keys, values}) {
+            alignas(8) BYTE expected[256], actual[256];
+            memset(expected, 0xa5, sizeof(expected));
+            memset(actual, 0xa5, sizeof(actual));
+            ULONG expectedBytes = 0x12345678, actualBytes = 0x12345678;
+            const NTSTATUS expectedStatus = enumerate(limitedOwn.value, 0, 0,
+                expected, sizeof(expected), &expectedBytes);
+            SetLastError(sentinel);
+            const NTSTATUS status = enumerate(limitedCached.value, 0, 0,
+                actual, sizeof(actual), &actualBytes);
+            const bool allowed = enumerate == keys ? right == KEY_ENUMERATE_SUB_KEYS : right == KEY_QUERY_VALUE;
+            require(GetLastError() == sentinel && status == expectedStatus
+                && status == (allowed ? 0 : static_cast<NTSTATUS>(0xc0000022UL))
+                && actualBytes == expectedBytes && memcmp(actual, expected, sizeof(actual)) == 0);
+        }
+    }
+    {
+        SelfImpersonation impersonation;
+        for (auto enumerate : {keys, values}) {
+            alignas(8) BYTE output[64]{};
+            ULONG returned = 0;
+            SetLastError(sentinel);
+            require(enumerate(cached, 0, 0, output, sizeof(output), &returned)
+                == static_cast<NTSTATUS>(0xc00000bbUL) && GetLastError() == sentinel
+                && returned == 0 && output[0] == 0);
+        }
+        impersonation.finish();
+    }
+    checks |= 32768;
+    return checks;
+}
+
 struct RegistryChild {
     Key branch, hostRoot, nativeHeld;
     std::wstring hostName;
@@ -1053,6 +1141,7 @@ struct RegistryChild {
         checks |= 2048;
     }
     void afterPeer(probe::Receipt& receipt) {
+        checks |= registryEnumerationChecks(hostRoot.value, branch.value, receipt.slot);
         require(registryValue(nativeHeld.value, L"Marker") == registryMarker(receipt));
         checks |= 4096;
         require(registryValue(branch.value, L"Marker") == registryMarker(receipt));
@@ -1321,6 +1410,10 @@ struct RegistryHost {
             REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &branch.value, &disposition) == ERROR_SUCCESS
             && disposition == REG_CREATED_NEW_KEY);
         setRegistryValue(branch.value, L"Marker", 0x484f5354);
+        Key hostOnly;
+        require(RegCreateKeyExW(branch.value, L"HostOnly", 0, nullptr, REG_OPTION_NON_VOLATILE,
+            KEY_ALL_ACCESS, nullptr, &hostOnly.value, &disposition) == ERROR_SUCCESS
+            && disposition == REG_CREATED_NEW_KEY);
         require(SetHandleInformation(branch.value, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) != FALSE);
         Key root;
         require(RegOpenCurrentUser(KEY_READ, &root.value) == ERROR_SUCCESS);
@@ -1328,6 +1421,13 @@ struct RegistryHost {
     }
     void unchanged() {
         require(registryValue(branch.value, L"Marker") == 0x484f5354);
+        wchar_t name[64]{};
+        DWORD length = 64;
+        require(RegEnumKeyExW(branch.value, 0, name, &length, nullptr, nullptr, nullptr, nullptr)
+            == ERROR_SUCCESS && std::wstring(name, length) == L"HostOnly");
+        length = 64;
+        require(RegEnumKeyExW(branch.value, 1, name, &length, nullptr, nullptr, nullptr, nullptr)
+            == ERROR_NO_MORE_ITEMS);
         DWORD bytes = 0;
         require(RegQueryValueExW(branch.value, L"OnlyA", nullptr, nullptr, nullptr, &bytes) == ERROR_FILE_NOT_FOUND
             && RegQueryValueExW(branch.value, L"OnlyB", nullptr, nullptr, nullptr, &bytes) == ERROR_FILE_NOT_FOUND);
@@ -1447,8 +1547,8 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
             && InterlockedCompareExchange(&second.mapping.value->nativeChecks, 0, 0) == 511
             && InterlockedCompareExchange(&first.mapping.value->fileChecks, 0, 0) == 1048575
             && InterlockedCompareExchange(&second.mapping.value->fileChecks, 0, 0) == 1048575
-            && InterlockedCompareExchange(&first.mapping.value->registryChecks, 0, 0) == 8191
-            && InterlockedCompareExchange(&second.mapping.value->registryChecks, 0, 0) == 8191
+            && InterlockedCompareExchange(&first.mapping.value->registryChecks, 0, 0) == 65535
+            && InterlockedCompareExchange(&second.mapping.value->registryChecks, 0, 0) == 65535
             && first.mapping.value->earlyDenied == 7 && second.mapping.value->earlyDenied == 7
             && first.mapping.value->earlyAllowed == 0 && second.mapping.value->earlyAllowed == 0);
         require(SetEvent(finish.value) != FALSE);
@@ -1464,7 +1564,7 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
     }
     require(ReleaseMutex(host.value) != FALSE);
     std::printf("{\"case\":\"mutex-two-child\",\"selfCheck\":true,\"checks\":[127,127],"
-                "\"earlyDenied\":[7,7],\"earlyAllowedControl\":7,\"registryChecks\":[8191,8191],\"invalidHiveRejected\":true,\"fileChecks\":[1048575,1048575],\"rounds\":2,\"persistent\":true,\"hostUnchanged\":true,\"slotMismatchRejected\":true,\"appDataBindingRejected\":true,"
+                "\"earlyDenied\":[7,7],\"earlyAllowedControl\":7,\"registryChecks\":[65535,65535],\"invalidHiveRejected\":true,\"fileChecks\":[1048575,1048575],\"rounds\":2,\"persistent\":true,\"hostUnchanged\":true,\"slotMismatchRejected\":true,\"appDataBindingRejected\":true,"
                 "\"nativeChecks\":[511,511],\"distinctHostAndPeerObjects\":true,\"rawPeerAccessible\":true,"
                 "\"securityBoundary\":false,\"providerReady\":false,"
                 "\"minecraft\":\"NOT_EXECUTED\"}\n");
@@ -1531,7 +1631,7 @@ bool ordinaryRegistryPair(const std::wstring& self, const std::string& compatibi
         first.phase(first.done.value);
         second.phase(second.done.value);
         for (auto* receipt : {first.mapping.value, second.mapping.value})
-            require(receipt->registryChecks == 8191 && receipt->earlyPrivate == 7
+            require(receipt->registryChecks == 65535 && receipt->earlyPrivate == 7
                 && receipt->earlyDenied == 0 && receipt->earlyAllowed == 0);
         require(SetEvent(finish.value) != FALSE);
         first.exitedNormally();
@@ -1555,7 +1655,7 @@ bool ordinaryRegistryPair(const std::wstring& self, const std::string& compatibi
         }
     }
     std::printf("{\"case\":\"ordinary-inherited-registry\",\"selfCheck\":true,"
-        "\"earlyPrivate\":[7,7],\"registryChecks\":[8191,8191],\"rounds\":2,"
+        "\"earlyPrivate\":[7,7],\"registryChecks\":[65535,65535],\"rounds\":2,"
         "\"persistent\":true,\"hostUnchanged\":true,\"invalidBackingRejected\":3,"
         "\"applicationHiveLock\":false,\"securityBoundary\":false,\"providerReady\":false,"
         "\"minecraft\":\"NOT_EXECUTED\"}\n");
