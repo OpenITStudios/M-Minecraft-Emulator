@@ -307,9 +307,16 @@ root handle/file ID, then loads Registry/HKCU.dat beneath that same A/B root
 with RegLoadAppKeyW(KEY_ALL_ACCESS, REG_PROCESS_APPKEY). Windows creates an empty
 hive when that file is absent. No account/profile hive is copied or imported.
 
-A real root handle opened relative to the application hive becomes this process's
+Before remapping, the DLL resolves the native registry exports and reads only
+current-user **root-name metadata** through RegOpenCurrentUser/NtQueryKey.
+That canonical user-root name is kept in process memory, never logged or stored
+in source/receipts. A real root handle opened relative to the application hive becomes this process's
 HKEY_CURRENT_USER through RegOverridePredefKey. The original hive handle and
-mapping live until owned-process exit. Repeated initialization on the same main
+mapping live until owned-process exit. RegOpenCurrentUser, NtOpenKey,
+NtOpenKeyEx and NtCreateKey hooks install in one additional post-loader Detours
+transaction on the owned main thread. If that transaction fails, initialization
+restores the predefined mapping, closes the new hive and reports failure; the
+owned child stops. Repeated initialization on the same main
 thread is idempotent. A failed load/map returns FALSE; the controller-owned child
 stops before any test registry operation, with no host-HKCU fallback.
 
@@ -330,7 +337,7 @@ hive trees are retained; existing host registry data is neither removed nor
 recursively traversed. “Host unchanged” means the fresh HOST marker stays intact,
 not that the run creates no new synthetic registry key.
 
-Registry mask **127** per child/generation:
+Registry mask **8191** per child/generation:
 
 | Bit | Actual check |
 | --- | --- |
@@ -341,6 +348,12 @@ Registry mask **127** per child/generation:
 | 16 | Explicit flush of the private hive succeeds. |
 | 32 | After both children are ready, own marker is unchanged and peer-only value is absent. |
 | 64 | Peer application-hive load is refused while the other owned process holds it. |
+| 128 | RegOpenCurrentUser returns a private root with requested read access; relative lookup sees the same private marker. |
+| 256 | NtOpenKey and NtOpenKeyEx on an explicit native user path return own data and preserve LastError. |
+| 512 | Native relative open through a host-root handle saved before bootstrap maps into the private hive; counted input/caller attributes stay unchanged. |
+| 1024 | Native create disposition and writes agree with HKCU and persist as a Native subkey. |
+| 2048 | Selected link options, invalid-buffer, missing and conflicting-root shapes are controlled; impersonation is rejected and reverted; unrelated root and oversized unrelated-path results remain native. |
+| 4096 | A native-opened handle still reads own data after both children are ready. |
 
 The parent verifies its HOST marker during/after each pair, confirms it cannot
 load either live REG_PROCESS_APPKEY hive, then independently loads both hives
@@ -354,20 +367,77 @@ tests (registryChecks=0), while HOST stays unchanged. After confirmed exit the
 controller renames only that new invalid test file, preserves it and proceeds
 with a newly created empty hive. No corrupt-file fallback or privilege escalation.
 
-**Limits:** this is a predefined-handle Win32 HKCU view, not native registry
-mediation. RegOpenCurrentUser, explicit HKEY_USERS/native paths, previously cached
-handles, other predefined keys, impersonation, helper/descendant propagation and
-pre-main ordering remain UNKNOWN/unimplemented. Single-main-thread enrollment
-is not an authenticated/concurrent production bootstrap. File aliases/reparse
-races around hive loading are not enforced by these registry APIs. No actual
+RegOpenCurrentUser now opens a new handle relative to the private hive. It honors
+requested access and returns caller-owned handles, preserving entry LastError.
+Any thread impersonation token is rejected; no token user/group/credential data
+is read. The synthetic self-impersonation control checks refusal and successful
+RevertToSelf. This does not implement impersonated-user profiles.
+
+Native routing matches the cached current-user root at a namespace boundary.
+Absolute counted names and relative names reconstructed from NtQueryKey parent
+metadata map to the same private root. The current bounded ASCII component policy
+is reused for selected suffixes. OBJECT_ATTRIBUTES is copied; flags, access,
+class/title, output/disposition pointers are preserved. Selected nonzero open/
+create options (including registry link operations), malformed conflicting
+absolute/root shape and impersonation are refused. Other namespaces and
+unresolved relative roots pass to originals. Native NTSTATUS and entry LastError
+are preserved, including protected parameter-read exceptions. The parent root
+metadata lookup is not an authenticated handle enrollment mechanism.
+
+Before bootstrap, each child reads only the newly created synthetic HOST marker
+as a positive control. After bootstrap, explicit native and current-user routes
+must see private markers instead. The controller also reads native-created
+subkeys directly from both persisted hives after exit. No host SID, native user
+path, raw handles or metadata names are serialized.
+
+**Limits:** pre-main enrollment, direct query/set through cached host key handles,
+other-user roots, unresolved/long relative roots, transacted native entry points,
+other predefined keys, registry links outside the selected routes and descendant/
+external helper propagation remain UNKNOWN/unimplemented. Direct syscalls,
+hook tampering, concurrent enrollment/all-thread quiescence and game compatibility
+are unproved. This remains cooperative selected mediation, **not a security
+boundary**. The single owned-main-thread bootstrap still starts after loader/TLS;
+the Armed marker does not imply private registry at startup. No actual
 Minecraft/helper/authentication access or game injection was performed.
 
 Contracts:
 [RegLoadAppKeyW](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regloadappkeyw),
 [RegOverridePredefKey](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regoverridepredefkey),
-[Application hive operations](https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/filtering-registry-operations-on-application-hives).
+[Application hive operations](https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/filtering-registry-operations-on-application-hives),
+[RegOpenCurrentUser](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regopencurrentuser),
+[Native key creation](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/nf-wdm-zwcreatekey),
+[Native extended key open](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/nf-wdm-zwopenkeyex).
 
 ## Evidence
+
+### Executed current-user/native registry slice — 24 October 2026 WIB
+
+Exact baseline: 39dc07dcad1f8e232f44dc1a6d16cd88ca301005.
+Changed executed blobs: compat.cpp 7700d375428e9c716e6751d9bb5a978909707d1f;
+probe.cpp 9b3f67487e9bb0c2c9447f9b7a0159ad00021117.
+Receipt v5, exports/build inputs and clean pinned external Detours are unchanged.
+
+Windows x64 26100 / CMake 4.3.2 / MSVC 19.44.35226 Release /W4 /WX configure/build
+and both final commands exit **0**. Registry 8191/8191, file/AppData 1048575/1048575,
+native mutex 511/511 and Win32 mutex 127/127 pass across two concurrent pairs
+and relaunch. Explicit native absolute/relative/ex opens and native create agree
+with HKCU/RegOpenCurrentUser; persisted native Slot values and original HOST
+markers are independently verified. Impersonation/refusal/revert, unselected
+short/oversized namespace controls, invalid hive and all prior controls pass.
+Independent CIM lookup finds no remaining test image; tracked checkout is clean.
+Full product, pre-main registry, game/authentication and two/four-client NOT_EXECUTED.
+
+Local artifact SHA-256:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| bootstrap-ordering.exe | 5e338bf3b68578c1aa8c34995e14cb7c65cb9e8a5e02d0138372690777fe145a |
+| bootstrap-compat.dll | 62abbc622978a2bd3913d84068583f73fe7302bf2e3e4b574f50aa17d33c256b |
+| ordering.jsonl | 40927efb7a951dda0eccd4323ec78f5b80d713673bee402d9ebd632e0f460c36 |
+| pair.jsonl | e6e99ebc9a52dc735265f023319a282ca933746130f49e654b827d9fabf691b8 |
+
+Earlier evidence retains its historical SHA/scope.
+
 
 ### Executed predefined HKCU slice — 24 October 2026 WIB
 

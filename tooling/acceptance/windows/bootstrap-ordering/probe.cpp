@@ -817,10 +817,57 @@ void setRegistryValue(HKEY key, const wchar_t* name, DWORD value) {
 DWORD registryMarker(const probe::Receipt& receipt) {
     return receipt.slot * 100 + receipt.fileRound + 1;
 }
+
+using NativeRegistryOpen = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES);
+using NativeRegistryOpenEx = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, ULONG);
+using NativeRegistryCreate = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES,
+    ULONG, PUNICODE_STRING, ULONG, PULONG);
+std::wstring nativeKeyName(HKEY key) {
+    using Query = NTSTATUS (NTAPI*)(HANDLE, ULONG, PVOID, ULONG, PULONG);
+    const auto query = reinterpret_cast<Query>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryKey"));
+    require(query != nullptr);
+    alignas(8) BYTE buffer[2048]{};
+    ULONG returned = 0, bytes = 0;
+    require(query(key, 3, buffer, sizeof(buffer), &returned) == 0 && returned >= 4 && returned <= sizeof(buffer));
+    memcpy(&bytes, buffer, sizeof(bytes));
+    require(bytes % sizeof(wchar_t) == 0 && bytes <= returned - 4);
+    return std::wstring(reinterpret_cast<wchar_t*>(buffer + 4), bytes / sizeof(wchar_t));
+}
+struct SelfImpersonation {
+    bool active = true;
+    SelfImpersonation() { require(ImpersonateSelf(SecurityIdentification) != FALSE); }
+    void finish() { require(RevertToSelf() != FALSE); active = false; }
+    ~SelfImpersonation() { if (active && !RevertToSelf()) cleanupFailed = true; }
+};
+
+
+NTSTATUS outsideRegistryLongStatus() {
+    const auto open = reinterpret_cast<NativeRegistryOpen>(
+        GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtOpenKey"));
+    require(open != nullptr);
+    std::wstring path = L"\\Registry\\Machine\\" + std::wstring(1100, L'x');
+    auto name = nativeName(path);
+    OBJECT_ATTRIBUTES attributes{sizeof(OBJECT_ATTRIBUTES), nullptr, &name,
+        OBJ_CASE_INSENSITIVE, nullptr, nullptr};
+    Key rejected;
+    const NTSTATUS status = open(reinterpret_cast<PHANDLE>(&rejected.value), KEY_READ, &attributes);
+    require(status < 0 && !rejected.value);
+    return status;
+}
+
 struct RegistryChild {
-    Key branch;
+    Key branch, hostRoot, nativeHeld;
+    std::wstring hostName;
+    NTSTATUS outsideLong = 0;
     LONG checks = 0;
     explicit RegistryChild(probe::Receipt& receipt) {
+        require(RegOpenCurrentUser(KEY_READ, &hostRoot.value) == ERROR_SUCCESS);
+        outsideLong = outsideRegistryLongStatus();
+        hostName = nativeKeyName(hostRoot.value); // Ephemeral root metadata only; never serialized.
+        Key baseline;
+        require(RegOpenKeyExW(hostRoot.value, registryPath(receipt.logical).c_str(), 0,
+            KEY_READ, &baseline.value) == ERROR_SUCCESS
+            && registryValue(baseline.value, L"Marker") == 0x484f5354);
         const auto initialize = reinterpret_cast<BOOL (*)()>(
             GetProcAddress(GetModuleHandleW(L"bootstrap-compat.dll"), "BootstrapRegistry"));
         require(initialize && initialize() && initialize());
@@ -863,10 +910,123 @@ struct RegistryChild {
         setRegistryValue(nested.value, L"Slot", receipt.slot);
         require(registryValue(nested.value, L"Slot") == receipt.slot);
         checks |= 8;
+        nativeChecks(receipt);
         require(RegFlushKey(branch.value) == ERROR_SUCCESS);
         checks |= 16;
     }
+    void nativeChecks(probe::Receipt& receipt) {
+        const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        const auto open = reinterpret_cast<NativeRegistryOpen>(GetProcAddress(ntdll, "NtOpenKey"));
+        const auto openEx = reinterpret_cast<NativeRegistryOpenEx>(GetProcAddress(ntdll, "NtOpenKeyEx"));
+        const auto create = reinterpret_cast<NativeRegistryCreate>(GetProcAddress(ntdll, "NtCreateKey"));
+        require(open && openEx && create);
+        constexpr DWORD sentinel = 0x13579bd;
+        Key current, viaUser;
+        SetLastError(sentinel);
+        const LSTATUS user = RegOpenCurrentUser(KEY_READ, &current.value);
+        const DWORD userError = GetLastError();
+        require(user == ERROR_SUCCESS && userError == sentinel
+            && RegOpenKeyExW(current.value, registryPath(receipt.logical).c_str(), 0,
+                KEY_READ, &viaUser.value) == ERROR_SUCCESS
+            && registryValue(viaUser.value, L"Marker") == registryMarker(receipt));
+        checks |= 128;
+        const auto path = registryPath(receipt.logical);
+        std::wstring absolute = hostName + L"\\" + path;
+        auto name = nativeName(absolute);
+        OBJECT_ATTRIBUTES attributes{sizeof(OBJECT_ATTRIBUTES), nullptr, &name,
+            OBJ_CASE_INSENSITIVE, nullptr, nullptr};
+        Key opened;
+        SetLastError(sentinel);
+        const NTSTATUS status = open(reinterpret_cast<PHANDLE>(&opened.value), KEY_READ, &attributes);
+        const DWORD error = GetLastError();
+        require(status == 0 && error == sentinel
+            && registryValue(opened.value, L"Marker") == registryMarker(receipt));
+        SetLastError(sentinel);
+        const NTSTATUS exStatus = openEx(reinterpret_cast<PHANDLE>(&nativeHeld.value), KEY_READ, &attributes, 0);
+        const DWORD exError = GetLastError();
+        require(exStatus == 0 && exError == sentinel
+            && registryValue(nativeHeld.value, L"Marker") == registryMarker(receipt));
+        checks |= 256;
+
+        std::wstring counted = path + L"_IGNORED";
+        auto relativeName = nativeName(counted);
+        relativeName.Length = relativeName.MaximumLength = static_cast<USHORT>(path.size() * sizeof(wchar_t));
+        attributes.RootDirectory = hostRoot.value;
+        attributes.ObjectName = &relativeName;
+        Key relative;
+        SetLastError(sentinel);
+        const NTSTATUS relativeStatus = open(reinterpret_cast<PHANDLE>(&relative.value), KEY_READ, &attributes);
+        const DWORD relativeError = GetLastError();
+        require(relativeStatus == 0 && relativeError == sentinel
+            && registryValue(relative.value, L"Marker") == registryMarker(receipt)
+            && counted == path + L"_IGNORED" && attributes.RootDirectory == hostRoot.value
+            && attributes.ObjectName == &relativeName
+            && relativeName.Length == path.size() * sizeof(wchar_t));
+        checks |= 512;
+
+        std::wstring child = absolute + L"\\Native";
+        auto childName = nativeName(child);
+        attributes.RootDirectory = nullptr;
+        attributes.ObjectName = &childName;
+        ULONG disposition = 0;
+        Key created;
+        SetLastError(sentinel);
+        const NTSTATUS createStatus = create(reinterpret_cast<PHANDLE>(&created.value), KEY_ALL_ACCESS,
+            &attributes, 0, nullptr, 0, &disposition);
+        const DWORD createError = GetLastError();
+        require(createStatus == 0 && createError == sentinel
+            && disposition == static_cast<ULONG>(receipt.fileRound == 0 ? REG_CREATED_NEW_KEY : REG_OPENED_EXISTING_KEY));
+        setRegistryValue(created.value, L"Slot", receipt.slot);
+        Key viaHKCU;
+        require(RegOpenKeyExW(branch.value, L"Native", 0, KEY_READ, &viaHKCU.value) == ERROR_SUCCESS
+            && registryValue(viaHKCU.value, L"Slot") == receipt.slot);
+        checks |= 1024;
+
+        Key rejected;
+        SetLastError(sentinel);
+        require(openEx(reinterpret_cast<PHANDLE>(&rejected.value), KEY_READ, &attributes,
+            REG_OPTION_OPEN_LINK) == static_cast<NTSTATUS>(0xc00000bbUL)
+            && GetLastError() == sentinel && !rejected.value);
+        require(create(reinterpret_cast<PHANDLE>(&rejected.value), KEY_ALL_ACCESS, &attributes,
+            0, nullptr, REG_OPTION_CREATE_LINK, &disposition) == static_cast<NTSTATUS>(0xc00000bbUL)
+            && !rejected.value);
+        std::wstring absent = absolute + L"\\Missing";
+        auto missingName = nativeName(absent);
+        attributes.ObjectName = &missingName;
+        SetLastError(sentinel);
+        require(open(reinterpret_cast<PHANDLE>(&rejected.value), KEY_READ, &attributes)
+            == static_cast<NTSTATUS>(0xc0000034UL) && GetLastError() == sentinel && !rejected.value);
+        UNICODE_STRING badName{2, 2, reinterpret_cast<PWSTR>(static_cast<ULONG_PTR>(1))};
+        attributes.ObjectName = &badName;
+        SetLastError(sentinel);
+        require(open(reinterpret_cast<PHANDLE>(&rejected.value), KEY_READ, &attributes)
+            == static_cast<NTSTATUS>(0xc0000005UL) && GetLastError() == sentinel && !rejected.value);
+        attributes.ObjectName = &name;
+        attributes.RootDirectory = hostRoot.value;
+        require(open(reinterpret_cast<PHANDLE>(&rejected.value), KEY_READ, &attributes)
+            == static_cast<NTSTATUS>(0xc00000bbUL) && !rejected.value);
+        attributes.RootDirectory = nullptr;
+        {
+            SelfImpersonation impersonation;
+            require(RegOpenCurrentUser(KEY_READ, &rejected.value) == ERROR_NOT_SUPPORTED && !rejected.value);
+            require(open(reinterpret_cast<PHANDLE>(&rejected.value), KEY_READ, &attributes)
+                == static_cast<NTSTATUS>(0xc00000bbUL) && !rejected.value);
+            impersonation.finish();
+        }
+        std::wstring machine = L"\\Registry\\Machine";
+        auto machineName = nativeName(machine);
+        attributes.ObjectName = &machineName;
+        Key other;
+        SetLastError(sentinel);
+        const NTSTATUS otherStatus = open(reinterpret_cast<PHANDLE>(&other.value), KEY_READ, &attributes);
+        const DWORD otherError = GetLastError();
+        require(otherStatus == 0 && otherError == sentinel && other.value); // Root metadata, no values queried.
+        require(outsideRegistryLongStatus() == outsideLong);
+        checks |= 2048;
+    }
     void afterPeer(probe::Receipt& receipt) {
+        require(registryValue(nativeHeld.value, L"Marker") == registryMarker(receipt));
+        checks |= 4096;
         require(registryValue(branch.value, L"Marker") == registryMarker(receipt));
         DWORD bytes = 0;
         require(RegQueryValueExW(branch.value, receipt.slot == 1 ? L"OnlyB" : L"OnlyA",
@@ -1137,6 +1297,9 @@ struct RegistryHost {
                 && RegOpenKeyExW(hive.value, path.c_str(), 0, KEY_READ, &own.value) == ERROR_SUCCESS
                 && registryValue(own.value, L"Marker") == slot * 100 + round + 1
                 && registryValue(own.value, slot == 1 ? L"OnlyA" : L"OnlyB") == slot);
+            Key native;
+            require(RegOpenKeyExW(own.value, L"Native", 0, KEY_READ, &native.value) == ERROR_SUCCESS
+                && registryValue(native.value, L"Slot") == slot);
         }
     }
     // Preserve this fresh synthetic HOST key; never recurse into existing registry data.
@@ -1214,8 +1377,8 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
             && InterlockedCompareExchange(&second.mapping.value->nativeChecks, 0, 0) == 511
             && InterlockedCompareExchange(&first.mapping.value->fileChecks, 0, 0) == 1048575
             && InterlockedCompareExchange(&second.mapping.value->fileChecks, 0, 0) == 1048575
-            && InterlockedCompareExchange(&first.mapping.value->registryChecks, 0, 0) == 127
-            && InterlockedCompareExchange(&second.mapping.value->registryChecks, 0, 0) == 127);
+            && InterlockedCompareExchange(&first.mapping.value->registryChecks, 0, 0) == 8191
+            && InterlockedCompareExchange(&second.mapping.value->registryChecks, 0, 0) == 8191);
         require(SetEvent(finish.value) != FALSE);
         first.exitedNormally();
         second.exitedNormally();
@@ -1229,7 +1392,7 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
     }
     require(ReleaseMutex(host.value) != FALSE);
     std::printf("{\"case\":\"mutex-two-child\",\"selfCheck\":true,\"checks\":[127,127],"
-                "\"registryChecks\":[127,127],\"invalidHiveRejected\":true,\"fileChecks\":[1048575,1048575],\"rounds\":2,\"persistent\":true,\"hostUnchanged\":true,\"slotMismatchRejected\":true,\"appDataBindingRejected\":true,"
+                "\"registryChecks\":[8191,8191],\"invalidHiveRejected\":true,\"fileChecks\":[1048575,1048575],\"rounds\":2,\"persistent\":true,\"hostUnchanged\":true,\"slotMismatchRejected\":true,\"appDataBindingRejected\":true,"
                 "\"nativeChecks\":[511,511],\"distinctHostAndPeerObjects\":true,\"rawPeerAccessible\":true,"
                 "\"securityBoundary\":false,\"providerReady\":false,"
                 "\"minecraft\":\"NOT_EXECUTED\"}\n");

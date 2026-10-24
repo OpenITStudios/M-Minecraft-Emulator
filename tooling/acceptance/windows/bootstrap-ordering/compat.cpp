@@ -464,6 +464,178 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE, DWORD reason, LPVOID) {
 
 namespace {
 HKEY privateHive = nullptr;
+using OpenUser = LSTATUS (WINAPI*)(REGSAM, PHKEY);
+using OpenKey = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES);
+using OpenKeyEx = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, ULONG);
+using CreateKey = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, ULONG,
+    PUNICODE_STRING, ULONG, PULONG);
+using QueryKey = NTSTATUS (NTAPI*)(HANDLE, ULONG, PVOID, ULONG, PULONG);
+OpenUser originalOpenUser = nullptr;
+OpenKey originalOpenKey = nullptr;
+OpenKeyEx originalOpenKeyEx = nullptr;
+CreateKey originalCreateKey = nullptr;
+QueryKey queryKey = nullptr;
+wchar_t userKeyPath[512]{};
+bool keyName(HANDLE handle, wchar_t (&path)[512]) {
+    alignas(8) BYTE buffer[sizeof(ULONG) + sizeof(path)]{};
+    ULONG returned = 0;
+    if (queryKey(handle, 3 /* KeyNameInformation */, buffer, sizeof(buffer), &returned) < 0
+        || returned < sizeof(ULONG) || returned > sizeof(buffer)) return false;
+    ULONG bytes = 0;
+    memcpy(&bytes, buffer, sizeof(bytes));
+    if (bytes % sizeof(wchar_t) || bytes >= sizeof(path) || bytes > returned - sizeof(ULONG)) return false;
+    memcpy(path, buffer + sizeof(ULONG), bytes);
+    path[bytes / sizeof(wchar_t)] = L'\0';
+    return true;
+}
+LSTATUS noImpersonation() {
+    HANDLE token = nullptr;
+    if (OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &token)) {
+        CloseHandle(token);
+        return ERROR_NOT_SUPPORTED;
+    }
+    const DWORD error = GetLastError();
+    return error == ERROR_NO_TOKEN ? ERROR_SUCCESS : static_cast<LSTATUS>(error);
+}
+LSTATUS WINAPI translatedOpenUser(REGSAM access, PHKEY result) {
+    const DWORD saved = GetLastError();
+    if (!result) return ERROR_INVALID_PARAMETER;
+    *result = nullptr;
+    LSTATUS status = noImpersonation();
+    if (status == ERROR_SUCCESS) status = RegOpenKeyExW(privateHive, L"", 0, access, result);
+    SetLastError(saved);
+    return status;
+}
+enum class KeyRoute { Other, Private, Unsupported };
+KeyRoute registryRoute(const OBJECT_ATTRIBUTES& attributes, wchar_t (&path)[1024],
+                       UNICODE_STRING& name) {
+    if (attributes.Length != sizeof(OBJECT_ATTRIBUTES) || !attributes.ObjectName) return KeyRoute::Other;
+    const UNICODE_STRING source = *attributes.ObjectName;
+    if (!source.Buffer || source.Length % sizeof(wchar_t) || source.MaximumLength < source.Length)
+        return KeyRoute::Other;
+    const unsigned count = source.Length / sizeof(wchar_t);
+    unsigned prefix = 0;
+    bool knownUser = false;
+    if (count && source.Buffer[0] == L'\\') {
+        unsigned offset = 0;
+        if (!pathPrefix(source, userKeyPath, offset)) return KeyRoute::Other;
+        if (attributes.RootDirectory) return KeyRoute::Unsupported;
+        knownUser = true;
+    } else {
+        wchar_t parent[512]{};
+        if (!attributes.RootDirectory || !keyName(attributes.RootDirectory, parent)) return KeyRoute::Other;
+        prefix = static_cast<unsigned>(wcslen(parent));
+        const auto bytes = static_cast<USHORT>(prefix * sizeof(wchar_t));
+        UNICODE_STRING rootName{bytes, bytes, parent};
+        unsigned offset = 0;
+        knownUser = pathPrefix(rootName, userKeyPath, offset);
+        memcpy(path, parent, prefix * sizeof(wchar_t));
+        if (count) path[prefix++] = L'\\';
+    }
+    if (count >= 1024 - prefix) return knownUser ? KeyRoute::Unsupported : KeyRoute::Other;
+    memcpy(path + prefix, source.Buffer, source.Length);
+    const unsigned total = prefix + count;
+    const auto bytes = static_cast<USHORT>(total * sizeof(wchar_t));
+    UNICODE_STRING absolute{bytes, bytes, path};
+    unsigned leaf = 0;
+    if (!pathPrefix(absolute, userKeyPath, leaf)) return KeyRoute::Other;
+    if (!validRelative(path + leaf, total - leaf)) return KeyRoute::Unsupported;
+    const auto suffix = static_cast<USHORT>((total - leaf) * sizeof(wchar_t));
+    name = {suffix, suffix, path + leaf};
+    return KeyRoute::Private;
+}
+NTSTATUS NTAPI translatedOpenKey(PHANDLE result, ACCESS_MASK access, POBJECT_ATTRIBUTES attributes) {
+    const DWORD saved = GetLastError();
+    NTSTATUS status = Unsupported;
+    __try {
+        wchar_t path[1024]{};
+        UNICODE_STRING name{};
+        const auto route = attributes ? registryRoute(*attributes, path, name) : KeyRoute::Other;
+        OBJECT_ATTRIBUTES copy{};
+        if (route == KeyRoute::Private && noImpersonation() == ERROR_SUCCESS) {
+            copy = *attributes; copy.RootDirectory = privateHive; copy.ObjectName = &name;
+            SetLastError(saved);
+            status = originalOpenKey(result, access, &copy);
+        } else if (route == KeyRoute::Other) {
+            SetLastError(saved);
+            status = originalOpenKey(result, access, attributes);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { status = static_cast<NTSTATUS>(GetExceptionCode()); }
+    SetLastError(saved);
+    return status;
+}
+NTSTATUS NTAPI translatedOpenKeyEx(PHANDLE result, ACCESS_MASK access,
+                                  POBJECT_ATTRIBUTES attributes, ULONG options) {
+    const DWORD saved = GetLastError();
+    NTSTATUS status = Unsupported;
+    __try {
+        wchar_t path[1024]{};
+        UNICODE_STRING name{};
+        const auto route = attributes ? registryRoute(*attributes, path, name) : KeyRoute::Other;
+        OBJECT_ATTRIBUTES copy{};
+        if (route == KeyRoute::Private && options == 0 && noImpersonation() == ERROR_SUCCESS) {
+            copy = *attributes; copy.RootDirectory = privateHive; copy.ObjectName = &name;
+            SetLastError(saved);
+            status = originalOpenKeyEx(result, access, &copy, options);
+        } else if (route == KeyRoute::Other) {
+            SetLastError(saved);
+            status = originalOpenKeyEx(result, access, attributes, options);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { status = static_cast<NTSTATUS>(GetExceptionCode()); }
+    SetLastError(saved);
+    return status;
+}
+NTSTATUS NTAPI translatedCreateKey(PHANDLE result, ACCESS_MASK access,
+    POBJECT_ATTRIBUTES attributes, ULONG title, PUNICODE_STRING className, ULONG options, PULONG disposition) {
+    const DWORD saved = GetLastError();
+    NTSTATUS status = Unsupported;
+    __try {
+        wchar_t path[1024]{};
+        UNICODE_STRING name{};
+        const auto route = attributes ? registryRoute(*attributes, path, name) : KeyRoute::Other;
+        OBJECT_ATTRIBUTES copy{};
+        if (route == KeyRoute::Private && options == 0 && noImpersonation() == ERROR_SUCCESS) {
+            copy = *attributes; copy.RootDirectory = privateHive; copy.ObjectName = &name;
+            SetLastError(saved);
+            status = originalCreateKey(result, access, &copy, title, className, options, disposition);
+        } else if (route == KeyRoute::Other) {
+            SetLastError(saved);
+            status = originalCreateKey(result, access, attributes, title, className, options, disposition);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { status = static_cast<NTSTATUS>(GetExceptionCode()); }
+    SetLastError(saved);
+    return status;
+}
+bool initializeRegistry() {
+    const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    const HMODULE advapi = GetModuleHandleW(L"advapi32.dll");
+    if (!ntdll || !advapi) return false;
+    originalOpenUser = reinterpret_cast<OpenUser>(GetProcAddress(advapi, "RegOpenCurrentUser"));
+    originalOpenKey = reinterpret_cast<OpenKey>(GetProcAddress(ntdll, "NtOpenKey"));
+    originalOpenKeyEx = reinterpret_cast<OpenKeyEx>(GetProcAddress(ntdll, "NtOpenKeyEx"));
+    originalCreateKey = reinterpret_cast<CreateKey>(GetProcAddress(ntdll, "NtCreateKey"));
+    queryKey = reinterpret_cast<QueryKey>(GetProcAddress(ntdll, "NtQueryKey"));
+    if (!originalOpenUser || !originalOpenKey || !originalOpenKeyEx || !originalCreateKey
+        || !queryKey || noImpersonation() != ERROR_SUCCESS) return false;
+    HKEY host = nullptr;
+    if (originalOpenUser(KEY_READ, &host) != ERROR_SUCCESS) return false;
+    const bool named = keyName(host, userKeyPath);
+    RegCloseKey(host);
+    return named && userKeyPath[0] == L'\\' && userKeyPath[1];
+}
+bool installRegistry(HKEY hive) {
+    privateHive = hive;
+    if (DetourTransactionBegin() != NO_ERROR) { privateHive = nullptr; return false; }
+    if (DetourUpdateThread(GetCurrentThread()) != NO_ERROR
+        || DetourAttach(reinterpret_cast<PVOID*>(&originalOpenUser), reinterpret_cast<PVOID>(translatedOpenUser)) != NO_ERROR
+        || DetourAttach(reinterpret_cast<PVOID*>(&originalOpenKey), reinterpret_cast<PVOID>(translatedOpenKey)) != NO_ERROR
+        || DetourAttach(reinterpret_cast<PVOID*>(&originalOpenKeyEx), reinterpret_cast<PVOID>(translatedOpenKeyEx)) != NO_ERROR
+        || DetourAttach(reinterpret_cast<PVOID*>(&originalCreateKey), reinterpret_cast<PVOID>(translatedCreateKey)) != NO_ERROR) {
+        DetourTransactionAbort(); privateHive = nullptr; return false;
+    }
+    if (DetourTransactionCommit() != NO_ERROR) { privateHive = nullptr; return false; }
+    return true;
+}
 }
 extern "C" BOOL BootstrapRegistry() {
     probe::View view;
@@ -479,10 +651,14 @@ extern "C" BOOL BootstrapRegistry() {
         && (attributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY))) return FALSE;
     HKEY hive = nullptr, root = nullptr;
     if (RegLoadAppKeyW(path, &hive, KEY_ALL_ACCESS, REG_PROCESS_APPKEY, 0) != ERROR_SUCCESS) return FALSE;
+    if (!initializeRegistry()) { RegCloseKey(hive); return FALSE; }
     LSTATUS status = RegOpenKeyExW(hive, L"", 0, KEY_ALL_ACCESS, &root);
     if (status == ERROR_SUCCESS) status = RegOverridePredefKey(HKEY_CURRENT_USER, root);
     if (root) RegCloseKey(root);
+    if (status == ERROR_SUCCESS && !installRegistry(hive)) {
+        RegOverridePredefKey(HKEY_CURRENT_USER, nullptr);
+        status = ERROR_NOT_SUPPORTED;
+    }
     if (status != ERROR_SUCCESS) { RegCloseKey(hive); return FALSE; }
-    privateHive = hive; // Mapping and hive live until this owned process exits.
     return TRUE;
 }
