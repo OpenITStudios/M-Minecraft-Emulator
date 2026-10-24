@@ -462,6 +462,19 @@ impl StartupObservation {
 }
 impl PendingEducationBootstrap {
     // Raw diagnostic metadata remains private/local; copy only after the original child exits.
+    fn observation_path(&self) -> io::Result<PathBuf> {
+        if self.created == 0 {
+            return Err(invalid("Missing observation process birth"));
+        }
+        let store = self
+            .storage
+            .as_ref()
+            .ok_or_else(|| invalid("Missing observation storage"))?;
+        Ok(store
+            .private_path
+            .join(format!("startup-observation-v3-{:016x}.bin", self.created)))
+    }
+
     fn observation_bytes_after_exit(&self) -> io::Result<Vec<u8>> {
         match unsafe { WaitForSingleObject(self.process.as_raw_handle() as HANDLE, 0) } {
             WAIT_OBJECT_0 => {}
@@ -526,9 +539,9 @@ const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = Some(PayloadDigests
         0xf3, 0x84,
     ],
     compatibility: [
-        0xb3, 0x04, 0x6f, 0xe7, 0xf8, 0x34, 0x4f, 0x43, 0xbd, 0xbb, 0x1c, 0x34, 0x07, 0x9c, 0xb7,
-        0x12, 0x06, 0x47, 0x51, 0x89, 0x79, 0xdf, 0x97, 0xbc, 0x5c, 0x31, 0x9d, 0xdd, 0x96, 0x86,
-        0x64, 0x23,
+        0xa5, 0x9f, 0xb1, 0x80, 0x3f, 0xf3, 0xd9, 0x57, 0xb9, 0x69, 0x10, 0x17, 0xf2, 0x4d, 0xd7,
+        0x21, 0x1a, 0x9b, 0x3f, 0x88, 0xb6, 0xa7, 0xb1, 0x39, 0x88, 0x43, 0x22, 0x10, 0xd6, 0x7e,
+        0x02, 0xec,
     ],
 });
 #[derive(Clone, Copy)]
@@ -848,7 +861,7 @@ impl StartedEducationObservation {
         ) {
             return Err(invalid("Observation output directory changed"));
         }
-        let path = store.private_path.join("startup-observation-v3.bin");
+        let path = child.observation_path()?;
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -939,10 +952,102 @@ fn run_startup_observation() -> io::Result<i32> {
     observe_until_exit(&started)
 }
 
+fn slot_caption(slot: u32) -> io::Result<Vec<u16>> {
+    if !(1..=4).contains(&slot) {
+        return Err(invalid("Invalid Minecraft window slot"));
+    }
+    wide(OsStr::new(&format!("Minecraft - {slot}")))
+}
+
+fn label_slot_window(
+    hwnd: windows_sys::Win32::Foundation::HWND,
+    pid: u32,
+    slot: u32,
+) -> io::Result<()> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetWindowTextW, SendMessageTimeoutW, SMTO_ABORTIFHUNG, SMTO_BLOCK, SMTO_ERRORONEXIT,
+        WM_SETTEXT,
+    };
+    let caption = slot_caption(slot)?;
+    super::verify_live_client_02_window(hwnd, pid)?;
+    let mut current = [0u16; 32];
+    let length = unsafe { GetWindowTextW(hwnd, current.as_mut_ptr(), current.len() as i32) };
+    if length > 0 && current[..length as usize] == caption[..caption.len() - 1] {
+        return Ok(());
+    }
+    // System-message marshalling, bounded wait; never inject another game hook for presentation.
+    super::verify_live_client_02_window(hwnd, pid)?;
+    let mut result = 0;
+    if unsafe {
+        SendMessageTimeoutW(
+            hwnd,
+            WM_SETTEXT,
+            0,
+            caption.as_ptr() as isize,
+            SMTO_ABORTIFHUNG | SMTO_BLOCK | SMTO_ERRORONEXIT,
+            200,
+            &mut result,
+        )
+    } == 0
+        || result == 0
+    {
+        return Err(io::Error::last_os_error());
+    }
+    super::verify_live_client_02_window(hwnd, pid)
+}
+
+fn label_started_windows(started: &StartedEducationObservation) {
+    use windows_sys::Win32::{
+        Foundation::HWND,
+        UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId},
+    };
+    struct Selection {
+        pid: u32,
+        window: HWND,
+        ambiguous: bool,
+    }
+    unsafe extern "system" fn select(hwnd: HWND, data: isize) -> i32 {
+        let state = &mut *(data as *mut Selection);
+        let mut pid = 0;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        if pid == state.pid && super::verify_live_client_02_window(hwnd, pid).is_ok() {
+            if state.window.is_null() {
+                state.window = hwnd;
+            } else {
+                state.ambiguous = true;
+            }
+        }
+        1
+    }
+    for child in &started.children {
+        if !child.resume_attempted || child.identity().is_err() {
+            continue;
+        }
+        let Some(store) = &child.storage else {
+            continue;
+        };
+        let mut selection = Selection {
+            pid: child.pid,
+            window: ptr::null_mut(),
+            ambiguous: false,
+        };
+        if unsafe { EnumWindows(Some(select), &mut selection as *mut Selection as isize) } == 0
+            || selection.ambiguous
+            || selection.window.is_null()
+            || child.identity().is_err()
+        {
+            continue;
+        }
+        // The immutable store slot, never enumeration order or a matching title, assigns the number.
+        let _ = label_slot_window(selection.window, child.pid, store.slot);
+    }
+}
+
 fn observe_until_exit(started: &StartedEducationObservation) -> io::Result<i32> {
     use std::io::Write;
     let mut completed = [false; 2];
     let mut failed = false;
+    let mut caption_check = std::time::Instant::now();
     for (index, attempt) in started.attempts.iter().enumerate() {
         let state = match attempt {
             StartupAttempt::NotAttempted => {
@@ -962,6 +1067,10 @@ fn observe_until_exit(started: &StartedEducationObservation) -> io::Result<i32> 
     // Recording ends at its existing bound. Keep original handles until operator closure;
     // dropping this runner at any time still preserves every attempted child.
     while completed.iter().any(|done| !done) {
+        if caption_check.elapsed() >= std::time::Duration::from_secs(1) {
+            label_started_windows(started);
+            caption_check = std::time::Instant::now();
+        }
         for (index, done) in completed.iter_mut().enumerate() {
             if *done {
                 continue;
@@ -2094,6 +2203,7 @@ mod tests {
         assert_eq!(prepare_fixture(&enroller, &baseline, &proof, false), 0);
         finish_fixture(&baseline);
         let mut known_callsite = 0;
+        let mut saved_journals = Vec::new();
         for round in 1..=2 {
             let mut first_store = clone_store(&a);
             let mut second_store = clone_store(&b);
@@ -2159,12 +2269,8 @@ mod tests {
             for child in &transaction.children {
                 check_finished_fixture(child);
             }
-            // First round saves both journals; permanent overwrite failures on round two
-            // must still complete both slots instead of abandoning the second.
-            assert_eq!(
-                observe_until_exit(&transaction).unwrap(),
-                if round == 1 { 0 } else { 1 }
-            );
+            // Each process lifetime saves a fresh journal; repeated saves of one lifetime still refuse.
+            assert_eq!(observe_until_exit(&transaction).unwrap(), 0);
             for child in &transaction.children {
                 let snapshot = child.observation_bytes_after_exit().unwrap();
                 let count = u32::from_le_bytes(snapshot[48..52].try_into().unwrap()) as usize;
@@ -2186,35 +2292,17 @@ mod tests {
                 assert_eq!(u32::from_le_bytes(snapshot[48..52].try_into().unwrap()), 64);
                 assert_eq!(u32::from_le_bytes(snapshot[52..56].try_into().unwrap()), 1);
                 let slot = child.storage.as_ref().unwrap().slot;
-                if round == 1 {
-                    assert_eq!(
-                        std::fs::read(
-                            child
-                                .storage
-                                .as_ref()
-                                .unwrap()
-                                .private_path
-                                .join("startup-observation-v3.bin")
-                        )
-                        .unwrap(),
-                        snapshot
-                    );
-                }
+                let path = child.observation_path().unwrap();
+                assert_eq!(std::fs::read(&path).unwrap(), snapshot);
+                saved_journals.push((path, snapshot));
                 assert_eq!(
                     transaction.save_after_exit(slot).err().unwrap().kind(),
                     io::ErrorKind::AlreadyExists
                 );
                 assert_eq!(
-                    std::fs::metadata(
-                        child
-                            .storage
-                            .as_ref()
-                            .unwrap()
-                            .private_path
-                            .join("startup-observation-v3.bin")
-                    )
-                    .unwrap()
-                    .len(),
+                    std::fs::metadata(child.observation_path().unwrap())
+                        .unwrap()
+                        .len(),
                     OBSERVATION_BYTES as u64
                 );
             }
@@ -2248,6 +2336,13 @@ mod tests {
                     b"HOST"
                 );
             }
+        }
+        assert_eq!(saved_journals.len(), 4);
+        for (index, (path, bytes)) in saved_journals.iter().enumerate() {
+            assert!(saved_journals[..index]
+                .iter()
+                .all(|(previous, _)| previous != path));
+            assert_eq!(&std::fs::read(path).unwrap(), bytes);
         }
     }
 
@@ -2508,6 +2603,59 @@ mod tests {
     }
 
     #[test]
+    fn slot_captions_use_stable_numbers_and_reject_foreign_windows() {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            CreateWindowExW, DestroyWindow, GetWindowTextW, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
+        };
+        for slot in 1..=4 {
+            assert_eq!(
+                String::from_utf16_lossy(&slot_caption(slot).unwrap()),
+                format!("Minecraft - {slot}\0")
+            );
+        }
+        assert!(slot_caption(0).is_err());
+        assert!(slot_caption(5).is_err());
+        let class = wide(OsStr::new("STATIC")).unwrap();
+        let title = wide(OsStr::new("Owned caption control")).unwrap();
+        let hwnd = unsafe {
+            CreateWindowExW(
+                0,
+                class.as_ptr(),
+                title.as_ptr(),
+                WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+                0,
+                0,
+                240,
+                80,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null(),
+            )
+        };
+        assert!(!hwnd.is_null());
+        let outcome = std::panic::catch_unwind(|| {
+            assert!(
+                label_slot_window(hwnd, unsafe { GetCurrentProcessId() }.wrapping_add(1), 1)
+                    .is_err()
+            );
+            label_slot_window(hwnd, unsafe { GetCurrentProcessId() }, 2).unwrap();
+            let mut current = [0u16; 32];
+            let length = unsafe { GetWindowTextW(hwnd, current.as_mut_ptr(), 32) };
+            assert_eq!(
+                String::from_utf16_lossy(&current[..length as usize]),
+                "Minecraft - 2"
+            );
+            label_slot_window(hwnd, unsafe { GetCurrentProcessId() }, 2).unwrap();
+        });
+        assert_ne!(unsafe { DestroyWindow(hwnd) }, 0);
+        assert!(label_slot_window(hwnd, unsafe { GetCurrentProcessId() }, 1).is_err());
+        if let Err(error) = outcome {
+            std::panic::resume_unwind(error);
+        }
+    }
+
+    #[test]
     #[ignore = "Requires the explicitly built own C++ payload"]
     fn observation_reports_nonzero_child_exits_even_when_journals_save() {
         let path = PathBuf::from(std::env::var_os("MIVUBI_BOOTSTRAP_CPP_READER").unwrap())
@@ -2561,16 +2709,9 @@ mod tests {
         assert_eq!(observe_until_exit(&transaction).unwrap(), 1);
         for child in &transaction.children {
             assert_eq!(
-                std::fs::metadata(
-                    child
-                        .storage
-                        .as_ref()
-                        .unwrap()
-                        .private_path
-                        .join("startup-observation-v3.bin")
-                )
-                .unwrap()
-                .len(),
+                std::fs::metadata(child.observation_path().unwrap())
+                    .unwrap()
+                    .len(),
                 OBSERVATION_BYTES as u64
             );
         }

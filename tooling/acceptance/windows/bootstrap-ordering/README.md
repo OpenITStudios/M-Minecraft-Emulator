@@ -52,7 +52,9 @@ open, backing call). Each failure class keeps one numeric sample: operation,
 access, options, disposition, relative path length and NTSTATUS. No storage
 path, file contents or account identifier is recorded. The owner copies the
 journal only after the original child exits and creates
-`startup-observation-v3.bin` without overwriting an earlier journal.
+`startup-observation-v3-{process-birth:016x}.bin` without overwriting an earlier
+journal. Two process rounds retain four exact journals; a repeated save for the
+same lifetime still refuses. Earlier fixed-name artifacts remain untouched.
 
 The observed replay counted `[3,138,30,141,78]` and `[3,136,30,141,78]`
 respectively (success then four failure classes). The first unsupported path
@@ -81,6 +83,61 @@ both child exits were 0xC0000005, with matching Windows-reported game-module
 offset 0x245bf61. That failed build is not the consolidated correction below.
 The latest source reports a nonzero runner result for nonzero child exits
 even when both journals save; an own-executable integration case covers this.
+
+### Nested enumeration and private security access
+
+The real numbered pilot still failed at world creation. Its saved outcomes were
+MC01 access violation (0xC0000005), MC02 exit 0, manager exit 1. The existing
+configured control subsequently reproduced two remaining Windows-API gaps:
+
+1. FindFirstFileW on a nested private directory failed, although root-level
+   enumeration passed. Its native directory open retains a final separator.
+   File routing now validates the preceding components while passing that
+   separator unchanged to the OS. This does not normalize traversal, accept
+   doubled empty components or change registry validation.
+2. Explicit WRITE_OWNER/WRITE_DAC opens of ordinary private children were
+   rejected. These access masks now reach only the selected private backing
+   object for non-root paths; root destructive/security rights remain denied.
+   The live journal had recorded a WRITE_OWNER rejection. The correction does
+   not claim that this was the cause of every game sign-in/world failure.
+
+The same two-round generated workflow now checks nested Win32 enumeration and
+these access masks, with exact private markers and protected host/root controls.
+Both cases failed before correction (controller exit 2) and pass afterward.
+All four C++ modes and 15 actual Rust bootstrap tests pass; the manager builds.
+
+The corrected real run reopened both earlier profiles directly to their game
+menus with distinct player identities and no password entry or authentication
+automation. Both created, played and saved distinct test worlds concurrently,
+then closed normally with child exits 0 and runner exit 0. Multiplayer host/guest
+and normal guest departure were also observed. Post-process-restart world and
+marker acceptance remains NOT_VERIFIED; this is not a complete stability claim.
+The operator now requires source/automatic checks without Computer Use.
+
+The existing configured control additionally covers a failed replacement while
+a reader denies SHARE_DELETE: the committed and retry bytes remain unchanged,
+then replacement succeeds after release. ERROR_ACCESS_DENIED matches the actual
+unhooked Windows baseline. CREATE_NEW collision preserves committed bytes too.
+Both slots and rounds pass. These are generated files, not game databases or
+power-loss/abrupt-writer recovery acceptance. The sole current handoff records
+remaining blind spots and the next bounded automatic recovery check.
+
+### Numbered experimental windows
+
+The fixed same-manager experiment now names each unique visible unowned game
+root **Minecraft - N**, using its original child's immutable store slot.
+Formatting supports 1–4, but only the existing two-child experiment is launched.
+The manager retains original process handles and checks live birth-bound
+identity/ HWND ownership; ambiguous windows and owned authentication popups are
+left alone. It uses bounded WM_SETTEXT (200 ms) and checks once per second in
+the existing observation loop, skipping unchanged captions. There is no DLL
+title hook or data/profile rename. See Microsoft's
+[SendMessageTimeoutW contract](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendmessagetimeoutw).
+
+15 actual Rust bootstrap tests and the preview build pass on these inputs.
+The real integrated run returned two independently observed numbered windows;
+it later reached concurrent world creation/play/save and normal closure.
+Post-process-restart acceptance remains pending in the sole planning handoff. No authentication-dialog actions are automated.
 
 ### Consolidated storage correction after the failed game run
 

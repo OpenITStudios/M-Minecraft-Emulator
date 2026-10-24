@@ -176,7 +176,9 @@ FileRoute fileRoute(const OBJECT_ATTRIBUTES& attributes, wchar_t (&path)[512], u
     memcpy(path + length, name.Buffer + leaf, (count - leaf) * sizeof(wchar_t));
     length += count - leaf;
     path[length] = L'\0';
-    return validRelative(path, length) ? FileRoute::Private : FileRoute::Unsupported;
+    // FindFirstFile's native directory open retains its final separator. Keep it for the OS.
+    const unsigned validated = length > 1 && path[length - 1] == L'\\' ? length - 1 : length;
+    return validRelative(path, validated) ? FileRoute::Private : FileRoute::Unsupported;
 }
 constexpr ULONG DontReparse = 0x1000; // OBJ_DONT_REPARSE from OBJECT_ATTRIBUTES.
 constexpr NTSTATUS Unsupported = static_cast<NTSTATUS>(0xc00000bbUL);
@@ -211,8 +213,7 @@ NTSTATUS privateParent(wchar_t* path, unsigned length, HANDLE& parent,
     return 0;
 }
 bool unsupportedFile(ACCESS_MASK access, ULONG options, bool root) {
-    return (access & (WRITE_DAC | WRITE_OWNER)) != 0
-        || (root && (access & (DELETE | GENERIC_ALL)))
+    return (root && (access & (DELETE | WRITE_DAC | WRITE_OWNER | GENERIC_ALL)))
         || ((access & FILE_EXECUTE) && !(root || (options & FILE_DIRECTORY_FILE)))
         || (options & FILE_OPEN_BY_FILE_ID) != 0
         || (root && (options & FILE_DELETE_ON_CLOSE))

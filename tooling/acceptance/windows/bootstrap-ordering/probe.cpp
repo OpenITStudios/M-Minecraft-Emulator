@@ -1864,6 +1864,55 @@ void worldStorageChecks(probe::Receipt& receipt) {
     }
     require(MoveFileExW(temporary.c_str(), current.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH));
     expectFile(current, marker);
+    // A failed database checkpoint must preserve both the committed and retryable data.
+    const auto retry = base + L"\\.retry.tmp";
+    {
+        Handle checkpoint(CreateFileW(retry.c_str(), GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
+        require(checkpoint.value != INVALID_HANDLE_VALUE);
+        writeBytes(checkpoint.value, marker + "-retry");
+    }
+    {
+        Handle reader(CreateFileW(current.c_str(), GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+        require(reader.value != INVALID_HANDLE_VALUE);
+        const BOOL replaced = MoveFileExW(retry.c_str(), current.c_str(), MOVEFILE_REPLACE_EXISTING);
+        const DWORD replaceError = GetLastError();
+        // Matches the unhooked Windows replacement result for a target without SHARE_DELETE.
+        require(!replaced && replaceError == ERROR_ACCESS_DENIED);
+        expectBytes(reader.value, marker);
+        expectFile(current, marker);
+        expectFile(retry, marker + "-retry");
+        Handle collision(CreateFileW(current.c_str(), GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
+        require(collision.value == INVALID_HANDLE_VALUE && GetLastError() == ERROR_FILE_EXISTS);
+        expectBytes(reader.value, marker);
+    }
+    require(MoveFileExW(retry.c_str(), current.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH));
+    expectFile(current, marker + "-retry");
+    require(GetFileAttributesW(retry.c_str()) == INVALID_FILE_ATTRIBUTES
+        && GetLastError() == ERROR_FILE_NOT_FOUND);
+    // Restore the same per-round marker for the independent controller's backing check.
+    {
+        Handle checkpoint(CreateFileW(temporary.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
+            nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
+        require(checkpoint.value != INVALID_HANDLE_VALUE);
+        writeBytes(checkpoint.value, marker);
+    }
+    require(MoveFileExW(temporary.c_str(), current.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH));
+    WIN32_FIND_DATAW found{};
+    const HANDLE search = FindFirstFileW((base + L"\\*").c_str(), &found);
+    require(search != INVALID_HANDLE_VALUE);
+    bool currentFound = false;
+    do { if (wcscmp(found.cFileName, L"CURRENT") == 0) currentFound = true; }
+    while (FindNextFileW(search, &found));
+    const DWORD searchError = GetLastError();
+    require(FindClose(search) && searchError == ERROR_NO_MORE_FILES && currentFound);
+    for (DWORD rights : {static_cast<DWORD>(WRITE_OWNER), static_cast<DWORD>(WRITE_DAC)}) {
+        Handle security(CreateFileW(base.c_str(), rights, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+        require(security.value != INVALID_HANDLE_VALUE);
+    }
     WIN32_FILE_ATTRIBUTE_DATA metadata{};
     require(GetFileAttributesExW(current.c_str(), GetFileExInfoStandard, &metadata)
         && metadata.nFileSizeHigh == 0 && metadata.nFileSizeLow == marker.size());
@@ -2042,7 +2091,8 @@ bool configuredStoragePair(const std::wstring& self, const std::string& compatib
     std::printf("{\"case\":\"configured-storage-pair\",\"selfCheck\":true,\"earlyPrivate\":[7,7],"
         "\"registryChecks\":[65535,65535],\"rounds\":2,\"persistent\":true,\"hostUnchanged\":true,"
         "\"invalidConfigRejected\":5,\"mainRegistryCallback\":false,\"fixtureNameRequired\":false,"
-        "\"storageWorkflow\":true,\"atomicReplaceCycles\":64,\"renameAndLinkEscapeDenied\":true,"
+        "\"storageWorkflow\":true,\"atomicReplaceCycles\":64,\"failedReplacePreservesData\":true,"
+        "\"createCollisionPreservesData\":true,\"renameAndLinkEscapeDenied\":true,"
         "\"singleton\":\"UNKNOWN\",\"singletonRemap\":false,\"helpers\":\"UNKNOWN\",\"securityBoundary\":false,"
         "\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n");
     return true;
@@ -2215,10 +2265,10 @@ void checkStartupObservation(const education_bootstrap::Config& config, const pr
     const LONG before = journal.claimed;
     require(open(&missing, access, &attributes) < 0 && journal.claimed == before);
     const LONG storageBefore = journal.storage.counts[2];
-    const auto storageProbe = directoryPath(config.privateRoot) + L"\\storage-diagnostic-only.bin";
+    const auto storageProbe = directoryPath(config.privateRoot);
     SetLastError(ERROR_SUCCESS);
     const HANDLE rejectedFile = CreateFileW(storageProbe.c_str(), WRITE_DAC, FILE_SHARE_READ | FILE_SHARE_WRITE,
-        nullptr, OPEN_ALWAYS, 0, nullptr);
+        nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
     require(rejectedFile == INVALID_HANDLE_VALUE && GetLastError() == ERROR_NOT_SUPPORTED
         && journal.storage.counts[2] == storageBefore + 1
         && journal.storage.first[1].committed == 1 && journal.claimed == before);

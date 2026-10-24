@@ -97,74 +97,135 @@ On each meaningful bounded commit, replace the **current** blocker/next status i
 
 ## Current owner and next action
 
-**Operator direction — 24 October 2026:** continue to the actual two-client goal in complete integration batches. Original code only; Sandboxie is a behavioral reference. The operator authorized the private compatibility-DLL/game experiment and manual distinct-account sign-in. Public admission remains denied; no driver/service, legacy runtime, CI or main change is authorized by this experiment.
+**Operator direction — 24 October 2026:** mature the original MC01/MC02 engine,
+starting with storage correctness, stable profile reuse and failure handling.
+**No Computer Use or game-window control while the operator is working.**
+No fresh game launch/closure or login request is part of the current source batch.
+Public MC02–04 admission remains denied; CI and retired providers remain off.
 
-**Source baseline:** exact remote Local `7d11554256973a52007235ac1374a617d5666a45`, plus the input blobs recorded below. The sole native owner is `apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`, consumed only by the fixed existing manager startup argument. Existing C++ config/enroller/compatibility code in `tooling/acceptance/windows/bootstrap-ordering/` implements the selected storage/HKCU/IPC experiment. No public provider readiness is awarded.
+**Source baseline:** exact remote Local `f6ebfcafceda8bf162e6ce1958ea244918262ee7`,
+plus the literal input blobs below. Native coordination remains in
+`apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`; its only experiment
+consumer is the existing fixed startup argument. The existing C++ compatibility
+owner and control are in `tooling/acceptance/windows/bootstrap-ordering/`.
+No public API, production profile catalog, driver or service is introduced.
 
-### Observed result and current blocker
+### Confirmed defects and corrections
 
-- Focused transparent startup observation verified a main-image CreateMutexA return RVA `0x2cdc30`, a GUID-shaped name and actual session BaseNamedObjects parent identity. The process that exited saw Win32 ERROR_ALREADY_EXISTS (183); the survivor saw 0. Native informational STATUS_OBJECT_NAME_EXISTS is not itself a failed API call. Application branch disassembly remains UNKNOWN.
-- The scoped original translation uses an exact official-image SHA-256, that caller RVA and one process-local bound name. Native create/open maps only this selected name in the verified directory to a stable per-store suffix. Results are actual OS results; unrelated objects are unchanged.
-- With this translation, **two responsive official Education windows remained active**. The operator explicitly confirmed **both windows successfully signed in manually using different accounts**. This establishes that limited observed milestone, not complete authentication containment or a production provider.
-- **Both clients then failed to create a world**, showing “You are almost out of data storage space”. The screenshot and operator report establish the symptom; gameplay/world persistence has not passed.
-- Both games closed normally; the manager retained original child handles and saved both startup journals, with child exit codes 0 and manager exit 0. Both translated native mutex creates had real status 0.
-- A verified reopen of the SAME private directory/registry pair succeeded, but the operator reported **both accounts required sign-in again**. Login persistence therefore failed this run. Do not report two persistent accounts.
-- The v3 storage diagnostic replay found hundreds of rejected/missing operations in both processes: success/path/access/parent/backing counts `[3,138,30,141,78]` and `[3,136,30,141,78]`. First path sample: directory create, relative length 35, STATUS_NOT_SUPPORTED. The metadata contains no filename, so no exact game-call attribution is claimed.
-- A concrete source defect was found and corrected: path validation rejected spaces, including the documented Desktop data directory `Minecraft Education Edition`. The existing two-round own-process private-file control now uses that exact directory shape and persisted marker. It failed with exit 2 before correction and passed with exit 0 after allowing interior spaces. The later consolidated batch also supports ordinary Unicode/base64/dot-prefixed names. Traversal, ADS, ambiguous trailing spaces/dots, bounded depth/length and reparse restrictions remain.
-- **Latest game outcome: FAILED.** The operator reported both clients crashed when creating a new world on the space-only correction. Both original process exit codes were 3221225477 (0xC0000005). Windows Application Error metadata independently recorded the same game-module offset 0x245bf61 in both crashes. No crash dump, account cache or world content was read. Storage counts were [86,93,41,168,136] and [90,93,49,168,136]. This confirms continued failures, not the causal crash instruction. The runner incorrectly returned 0 because it counted journal saving only; the new source now returns failure for any nonzero child exit and retains both exit outcomes.
+- File routing rejected spaces in ordinary data paths, then nested directory
+  enumeration with a final separator. Attribute queries and ordinary private
+  delete/rename operations also had inconsistent coverage. Shared native routing
+  now supports these operations, pinned private parents and actual OS results.
+  Traversal/ADS/reparse restrictions and profile-root protection remain.
+- Explicit WRITE_OWNER/WRITE_DAC opens on ordinary private children were refused.
+  They now reach the selected actual private object; root protection remains.
+  Nested enumeration and security-open controls failed before these corrections
+  and passed afterward. They do not identify the exact old crash instruction.
+- The former fixed journal filename caused a second successful run to report
+  failure when saving over an earlier journal. The owner now uses
+  `startup-observation-v3-{process-birth:016x}.bin` with create-new semantics.
+  Two rounds preserve four distinct byte-verified journals; saving the same
+  lifetime twice still refuses. No earlier artifact is overwritten or deleted.
+- Nonzero child exits remain failures even when journals save. The original
+  handles and exit outcomes are retained; dropping a resumed transaction does
+  not kill attempted children. A fixture exit 86 still makes the runner fail.
+- Numbered captions use immutable store slots and verified original-child window
+  ownership, with a bounded message wait. Only a unique visible unowned root is
+  labelled; ambiguous windows/popups are skipped. Actual Minecraft - 1/2 titles
+  were observed. This does not enable MC03/MC04.
 
-**Operator correction: stop piecemeal manual testing.** No further game launch or login request was made after this instruction. Work continued autonomously in the existing two-profile integration control. Source found two more concrete gaps: attribute-by-name queries bypassed the redirected open calls, and ordinary DELETE/rename/delete-on-close workflows were rejected. The current batch adds native attribute/full-attribute routing, per-private-handle rename mediation, ordinary private deletion, safe filename components including leading dots/base64 punctuation/Unicode, and coherent synthesized create/open error outputs. Rename/link/short-name/case-mode escape operations and profile-root deletion remain denied; unsupported namespace/bypass coverage remains UNKNOWN.
+### Actual game evidence, separate from controls
 
-The existing configured two-slot/two-round control now exercises the official data-directory shape, world-like nested database paths, dot-prefixed temporary files, Unicode names, GENERIC_ALL on private data, flush/atomic replace, native relative rename, metadata matching, free-space query, deletion/delete-on-close, same-profile reopen and 64 replacement cycles. Its unhooked controller checks each backing marker and an unchanged host tree. Rename/hard-link escape attempts and profile-root deletion are rejected. The complete control passes. This is generated canary data, not a real Education world/database or proof that the Minecraft crash is fixed. The latest full correction has NOT_EXECUTED game acceptance.
+The earlier space-only build failed world creation in both clients with
+0xC0000005 and matching Windows-reported game-module offset 0x245bf61.
+A later pre-enumeration run recorded MC01 0xC0000005 and MC02 exit 0.
+These are historical failures; their exact causal instruction/call chain remains
+**UNKNOWN**. Capacity alone was not established as the cause. No raw crash dump,
+account cache, token or world content was inspected/copied.
 
-Drive C:, which hosts the current pair, had approximately 6.5–7.6 GiB available during inspection. Capacity alone has not been established as the cause. Do not delete worlds, caches, accounts or prior pilot roots, falsify free-space reporting, migrate profiles or copy tokens to remove the symptom.
+The corrected compatibility DLL subsequently reopened the SAME two profiles
+with distinct player identities automatically at their main menus, without
+password entry or authentication-dialog automation. Both were playable; the
+operator confirmed movement in each. The agent observed two players together
+in one world and normal guest departure while the host survived.
 
-### Source boundaries and executed proof
+Then two new distinct agent-created worlds, `UJI-MC01-Persistensi` and
+`UJI-MC02-Persistensi`, reached concurrent gameplay. In-game commands placed a
+gold block under MC01 and a diamond block under MC02, each reporting Block
+placed. Both worlds saved through normal Save & Exit. MC02's My Worlds showed
+its own test world and the preserved old world, not MC01's new test world.
+Both applications subsequently closed through their normal confirmation UI:
+**both original child exit codes 0, both journals saved, manager exit 0**.
+This is creation/play/save/clean-close evidence, not post-restart durability.
 
-The registered official image is bound to SHA-256 `04164c1c64458a5d984dbc1687d0e8023d1808c44ee7be03519cdf8355233eaa`. An update refuses before store access. Private config v2 remains 1,136 bytes; journal v3 is 31,968 bytes with 64 startup records of 496 bytes and 160 bytes of fixed storage counters/first numeric failure samples. Startup recording is still 30 seconds/64 entries; storage counts span the process lifetime. Journals are read only after the original writer exits. No credentials, token/cache/world contents, storage paths or call stacks are collected.
+A fresh same-store pair was launched for restart validation before the operator
+stopped Computer Use. Its logs confirmed both resume calls only; reopened
+accounts/worlds/markers were **NOT_VERIFIED**. Do not repeat or close this run
+without checking its actual current lifetime and operator intent. The operator
+has now explicitly requested source/automatic controls without window control.
 
-The same owner reopens one explicitly reviewed experimental pair via a hash-pinned 216-byte local capability: bounded root basename and root/MC01/MC02 directory IDs, ordinary pinned ancestors, non-overlapping logical/private roots, existing backing keys and existing Roaming/Local directories. Missing or substituted stores fail without creating a new profile. No “latest root” discovery, token/world copying or second production state store. Raw capability, directory IDs and journals stay local; tests keep real-game policies disabled.
+Game-tested manager SHA-256:
+`eaa65ac1997bf6227b374bd2dce893346d7258c3fced46ed4973ac966d059687`.
+New journal-naming manager (built; game restart acceptance NOT_VERIFIED):
+`af61d047772dff5bbe6cf8da61201f4857a07cf08c4d300ab340074b85c13730`.
+Final source-only rebuild (not launched into Minecraft):
+`8366bdaa916a099098473f4378853b5aa6d501beb3bbf3dd2a258eb1a51a46a5`.
+All three use compatibility DLL
+`a59fb1803ff3d957b9691017f24dd7211a9b3f88b6a7b13988432210d67e02ec`
+and enroller
+`18f4157b524f142f2bac85efd6d95b5df69d161a1e1a0da6c10788c94868f384`.
+Official game image is pinned to
+`04164c1c64458a5d984dbc1687d0e8023d1808c44ee7be03519cdf8355233eaa`;
+image changes refuse before store access. These artifacts are not installers.
+
+### Current automatic storage and recovery checks
+
+The existing two-profile/two-round configured control uses generated canaries,
+not actual world databases. It checks nested official directory shape, Unicode
+and temporary names, native relative rename, metadata parity, flush, 64 repeated
+replacement cycles, deletion, same-store reopen, distinct backing data and an
+unchanged host tree. Escape rename/link and root destruction remain refused.
+
+New failure-path checks keep a committed file open without SHARE_DELETE:
+replacement fails with the same ERROR_ACCESS_DENIED as an independently executed
+unhooked Windows baseline; old and retry data remain exact. After releasing the
+reader, replacement and flush succeed and the retry source disappears.
+CREATE_NEW collision also preserves the old bytes. Both slots/rounds pass.
+This checks real Windows file semantics through mediation, not LevelDB crash
+recovery, disk-full/power-loss durability or every game workload.
+
+The replay owner opens only one hash-pinned, local-only capability's existing
+root/MC01/MC02 directory identities and backing registry keys. Wrong capability,
+replaced directory, missing Local directory, overlapping roots and unreviewed
+payload are refused. There is no fresh-profile fallback or token copying.
+Raw capabilities, IDs, journals, player identities and account data stay local.
 
 Actually executed on the current code inputs:
-- MSVC 19.44 x64 Release /W4 /WX build PASS.
-- All four C++ control modes exit 0, including both-round storage/registry controls.
-- Rust 1.98.1 actual Tauri binary: **14 bootstrap tests PASS**, including the six explicitly enabled own-executable integration tests. Scope selection checks actual host/private object distinction and consistent reopen; replay rejects bad hash/directory identity/missing stores; partial-resume lifetime and journal overwrite rejection remain covered.
-- Preview manager build PASS; no installer/package/distribution run.
-- `git diff --check` PASS. Source/blob binding and final Local SHA are recorded with the delivery commit.
+- MSVC 19.44 x64 Release /W4 /WX build PASS; all four C++ modes exit 0.
+- Rust 1.98.1: **15 bootstrap tests PASS**, including six explicitly enabled
+  own-executable integration cases, journal uniqueness/overwrite protection,
+  nonzero exits, partial resume and replay rejection.
+- Preview manager build PASS; git diff whitespace check PASS.
+- No Computer Use/game interaction during this source-only batch.
 
-Executed original two-login artifacts:
-- Manager SHA-256 `a82376e52737ad61507c2b4063edc7bb056ad8169f9cd00741058ea51218a73e`.
-- Enroller `62bd34fc1add9704f1a0723b84b1d7ffb447380d20cdc3abf32a28994471180e`.
-- Compatibility DLL `1ff0e3596763f947c7eadb98df94258bd9d9e260cab88997578b811fcfb5c0d2`.
-
-Executed storage-diagnostic replay artifacts (before space correction):
-- Manager `784ffad4a8b8520192e9e6feea1fbdb307aa3fa9779d9d5983f999269a160cb4`.
-- Enroller `18f4157b524f142f2bac85efd6d95b5df69d161a1e1a0da6c10788c94868f384`.
-- Compatibility DLL `192584862a584c7ee7cd881de7c4c54bf68444fcedf3e746a71e7dbd20262c36`.
-
-Failed space-only correction artifacts:
-- Manager `b3df7fe3ec0db4abe85ab3ceb5e29fca1912707ab091dcf8f990c4df0ea5c2c8`.
-- Same diagnostic enroller as above.
-- Compatibility DLL `55bdd46ca90f5504c7db8516c284d709fa0436b367bd96cadb39b748cd032d97`.
-
-**Proof ceiling:** actual Windows compilation/tests and limited MINECRAFT_RUNTIME two-window/manual distinct-login evidence at the original artifact snapshot. **FAILED:** world creation and initial login persistence. **NOT_EXECUTED:** game acceptance of the consolidated storage correction. **UNKNOWN:** complete helper/auth/HKCU containment, all required file-operation coverage and host/peer protection. **NOT_EXECUTED:** successful two persistent worlds/gameplay acceptance, multiplayer, four clients, comparative performance, installer/distribution. Name translation is not a security boundary; prior own controls explicitly showed raw peer access. A sign-in success does not erase that limit.
-
-Consolidated storage-correction build (not launched into Minecraft):
-- Manager SHA-256 `7a8e3de13b8470a6787eabaab54283ae2fa88f3da017628718b7dfa59c04306c`.
-- Compatibility DLL `b3046fe7f8344f43bdbb1c34079cb7120647518979df97bc5c319ddd96866423`.
-- Enroller remains `18f4157b524f142f2bac85efd6d95b5df69d161a1e1a0da6c10788c94868f384`.
-
-
-Executed code-input blobs (literal file bytes; documentation is excluded):
+Literal code-input blobs (documentation excluded):
 
 | Input | Git blob |
 | --- | --- |
-| `independent_bootstrap.rs` | `877acb23733eb51c912f08232688299494c0866e` |
-| `compat.cpp` | `692a2be511ebedd6541d404ae5df187c03ce27fc` |
-| `education-config.h` | `b72a2682e1e1ae6e923c6d9b46ef3f2aac7ec52d` |
-| `enroll.cpp` | `856c6af7728d0c327b633eeca34a3d723c5f029c` |
-| `probe.cpp` | `4fa13d1d808a21469a64361d9e0e300aa66dc21a` |
-| `startup-observation.h` | `db76edfa1af742442b00c62a2acbedb240c7b1cd` |
+| `independent_bootstrap.rs` | `c9cb47840c04f0de1081e4fefa6d1300057b5b7d` |
+| `compat.cpp` | `400e4453a18b6b9bbefe9401ef798380c003d5d7` |
+| `probe.cpp` | `e863c9c3862262a991fce0b2e1b92dc2db71e580` |
 
+**Remaining blind spots:** real saved-world/marker reopen after process restart;
+long concurrent gameplay and recovery after a game crash; full helper/broker
+and HKCU/auth isolation; raw-syscall/alias/host-peer protection; disk-full,
+interrupted-write and power-loss behavior; FPS/frametime/GPU/CPU overhead and
+comparison with Sandboxie. Prior raw peer-access control showed that name
+translation is **not a security boundary**. Four clients, installer and
+comparative performance remain **NOT_EXECUTED**. No maturity percentage is
+awarded from fixture coverage.
 
-**One next action:** one consolidated two-client acceptance on the corrected build covering distinct manual login, world creation, concurrent gameplay, normal close and same-store account/world reopen. Do not ask for more incremental click/login tests, reset the stores, or promote the passing canary workflow to game acceptance. The observed crash cause and full auth/helper containment remain UNKNOWN until actual evidence resolves them; public MC02–04 Launch stays closed.
+**One next action:** extend the existing generated storage control with an
+abruptly exited writer before replacement, then verify committed/retry bytes
+and peer survival from the unhooked controller. Keep it source-only; actual
+Minecraft restart/soak acceptance waits for an operator-selected test window.
