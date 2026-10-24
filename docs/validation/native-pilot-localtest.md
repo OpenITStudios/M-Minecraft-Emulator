@@ -9,6 +9,83 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Authorized existing-MC01 reactivation — 24 October 2026 WIB
+
+**Executed exact source:** 46cb8d4a9df9e35b4b30744b08ac3b4bc4ad9423 (Local).
+The operator explicitly authorized one 30-second metadata observation and one
+reactivation of an already-running MC01. The exact committed collector and
+registered-only resolver were materialized and their Git blobs verified:
+41d377bd1a5ac152c51c6bc3a97efc4bc23de5ac /
+90e09ca075555551a4bb6d50c8b7f7fea087ed50. One unelevated Windows PowerShell 5.1
+invocation ran -Reactivation -Record and exited 0. There was no retry, UAC,
+kernel/WPR recording, direct EXE fallback, injection, game termination or
+sign-in/world operation.
+
+**New positive finding:** one additional readable process candidate on the
+registered Minecraft executable path was observed after the request, then
+received a matching polled stop notification. The original MC01 lifetime
+remained alive at the end. The extra process's role and reason for exit are
+not established; it is not an accepted second playable client.
+
+| Observation | Actual result |
+| --- | --- |
+| Invocation | 08:22:07.657–08:22:44.201 UTC / 15:22:07.657–15:22:44.201 WIB. Collection and preflight/control overhead are additional to the 30-second observation window. |
+| Control | Real self-owned PowerShell start and stop notifications passed; the caller retained the original control handle and matched birth/session metadata. |
+| Registered target | On-disk SHA-256 04164c1c64458a5d984dbc1687d0e8023d1808c44ee7be03519cdf8355233eaa, matching earlier captured image provenance. Signature/path/hash binding rechecked before request. This is not loaded PE-section binding. |
+| Request | Exactly one planned attempt; Explorer AppsFolder submission returned successfully. Caller-side interval 08:22:14.0669011–08:22:14.0855952 UTC / 15:22:14.0669011–15:22:14.0855952 WIB. Request timing does not identify the game API fulfilling it. |
+| New candidate | One readable lifetime, registered-path match, same interactive session, distinct from original MC01. Creation FILETIME is **193.4031 ms after request start**. Raw PID/path/session identifiers remain private. |
+| Event matching | Two intrinsic WMI notifications, one start and one stop, match that candidate's PID/session and creation time within the fixture's microsecond precision check. No additional helper-basename notification was retained. |
+| Timing distinction | Start notification generated at request +706.3745 ms and delivered +801.6065 ms; stop notification generated +3474.4194 ms and delivered +3569.8098 ms. These are WMI notification/delivery times, not native API return times or an exact process-exit duration. Offline review preserves UTC DateTime kind and fractional precision. |
+| Original MC01 | Original retained process identity remained live at collection end; originalPreserved=true. No window/input/gameplay or sign-in outcome was inspected. |
+| Receipt / cleanup | OBSERVATION_COMPLETED, control=true, activationSubmitted=true, no collection error; normal invocation exit 0 and subscription cleanup check passed. No game process was stopped by the collector. |
+
+### What this changes, and what it does not
+
+This capture positively establishes a newly observed registered-path process
+candidate shortly after the single activation. It therefore adds more than the
+older same-window symptom with no positively observed new lifetime. Timing is
+correlation; parent PID is not actual creator proof, and the collector does not
+identify the exact component or contract that initiated this process.
+
+The candidate could be an application entry process or a same-image helper;
+no role evidence was collected. No observation identifies a mutex, file lock,
+window message, pipe, ALPC activation, corresponding caller/return result or
+singleton rejection. Exit code, exit initiator and crash/normal-exit
+classification were **not collected**: this revision retains the original MC01
+handle but stores new candidates as snapshots only. Do not reopen that old PID
+later and attribute a different lifetime's result to it.
+
+One-second WMI polling still can miss shorter processes, so it supplies no
+complete negative inventory. No helper-name event is not proof that there is
+no broker/helper. activationTargetPid, windowResult, lifecycleCompleteness and
+singletonDecision remain UNKNOWN; providerReady remains false. Neither this
+extra process nor the original fixture passes establish private auth or two
+independently licensed playable Minecraft sessions.
+
+The single authorized request/observation is complete; no automatic repetition
+or new game instrumentation is implied. Further work must address the
+specifically missing process/decision evidence, not rename guessed cache/input/
+WIL locks or rerun the same Handle-only trace.
+
+Local evidence is retained under workspace/tmp/reactivation-approved-1792830126352.
+The raw private receipt is 2,936 bytes; it and process identity metadata were
+not uploaded. SHA-256:
+
+| Artifact | Hash |
+| --- | --- |
+| Executed collector | d272cadb92781afa8fc5806f6ce5edbcb9b707bfd479c2aacd340e77d3680a56 |
+| Private receipt | d12f14c2649d464ffc3bea69be6003a280f69c6553d75e5a62fe4e72675928aa |
+| Invocation record | 591e3619ad886fa90588dc1276fb1d61b22ebcb3dc9bcacd2c4b5fc2e2ad8ba8 |
+| Sanitized invocation summary | 7405be698bf2c7581b5af31e6cd1478e713c85a48c3743619aa817b9d1b3a6aa |
+| Sanitized lifetime review | 3490cccf5b3903bef66cc7cdd74b8a2059d737a216e34ab2e2aa74d7d884c5fd |
+
+**Proof ceiling:** limited TARGET_WINDOWS game-process/activation metadata.
+Authentication, world/cache/token contents, GUI/GPU/input, independent provider
+launch, two/four-client gameplay and new source/package builds NOT_EXECUTED.
+No collector/product code or admission changed in this evidence step.
+The rough progress estimate remains 30%; current next action is solely in
+planning/development.md.
+
 ## Singleton evidence sufficiency decision — 24 October 2026 WIB
 
 Reviewed exact Local: c3d4cc377f61647f9a2f3d5dbf1f4c079d564e5c.

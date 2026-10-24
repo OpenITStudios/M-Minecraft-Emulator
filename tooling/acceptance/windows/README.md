@@ -86,8 +86,14 @@ real-game preflight. Local artifacts:
 workspace/tmp/reactivation-1792827565190; final mock copy SHA-256
 663c3968d94bd38da5dcf0978009695d6d24b614d1b4b767da3c5441151fa205.
 The canonical registered-target resolver was not changed.
-Actual game reactivation, kernel recording, singleton/auth and two/four-client
-acceptance remain NOT_EXECUTED.
+At a subsequent separately authorized run of exact source
+46cb8d4a9df9e35b4b30744b08ac3b4bc4ad9423, one real reactivation and its bounded
+metadata observation executed: an additional registered-path process candidate
+appeared then received a stop notification while the original MC01 survived.
+Its role and exit/rejection reason remain UNKNOWN. See the
+[actual reactivation evidence](../../../docs/validation/native-pilot-localtest.md#authorized-existing-mc01-reactivation--24-october-2026-wib).
+Only the actual-reactivation NOT_EXECUTED boundary is superseded; kernel
+recording, singleton/auth and two/four-client acceptance remain NOT_EXECUTED.
 
 Sources:
 [WMI creation notification](https://learn.microsoft.com/en-us/windows/win32/wmisdk/--instancecreationevent),
