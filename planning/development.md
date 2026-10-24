@@ -651,20 +651,74 @@ presents used flags 0 and SyncInterval 1. This is compatible input to the adapte
 not proof of its installation in Minecraft. The old live runtime and accounts/
 worlds are not altered; neither new source component is deployed there.
 
+### Bootstrap creation observation and lifetime blindspot
+
+Source baseline `de75985b21ac303366126d828325a35189589441`. The existing
+compatibility/bootstrap owner now has opt-in **observation-only** factory/HWND
+swap-chain enrollment. Only the exact private environment marker
+MIVUBI_EDUCATION_PRESENTATION=observe is accepted after config validation.
+Default off and malformed-marker refusal are tested. No game-facing command
+enables it; the Rust child environment strips ambient markers. Config remains
+v2/1136 bytes; public APIs/admission and CI remain unchanged.
+
+The DLL joins its existing startup transaction for CreateDXGIFactory/1/2.
+It creates no factory/device, timer or render thread in DllMain. Actual factory
+creation supplies an object-local Factory7 table; writable storage and full
+same-address interface support are checked. References/tables are bounded and
+process-lifetime. Setup failures are diagnostics, not readiness. No shared
+creation method is patched while rendering runs.
+
+Read-only metadata on the two named game processes found an OGLES class in
+each, plus auxiliary/IME/Chrome classes. Only own-process, top-level OGLES
+candidates are counted. This is a filter, not HWND authority or actual game
+enrollment proof. A private in-process Snapshot export supplies counters and
+dimensions. No accounts, tokens, worlds or command-line content were inspected.
+
+Own bootstrap children check all three factory export versions and both
+CreateSwapChain/CreateSwapChainForHwnd methods on D3D12 WARP, auxiliary exclusion,
+unchanged descriptions, failed creation and three eligible creation events.
+After releasing a chain, same-HWND recreation succeeds: this observer retains
+**no swap-chain reference** and installs no pacing. Two slots/two lifetimes and
+the previous storage/helper controls remain intact.
+
+The timing helper separately now exchanges only the selected object's complete
+SwapChain4 table, avoiding shared Present-code patching. Native semantics and
+resize controls pass; foreign chains no longer enter its callbacks.
+
+**New negative evidence changes the next action:** native D3D12 flip recreation
+succeeds before timing installation. Once that timing adapter retains the target
+interface/identity, releasing the application's reference leaves recreation
+refusing with E_ACCESSDENIED. The exact observed error differs from the initially
+hypothesized DXGI_ERROR_INVALID_CALL. The helper explicitly reports
+BLOCKED_BY_RETAINED_REFERENCES and swapChainRebindImplemented=false. Its selfCheck
+validates the negative control, not stable recreation. The observer's successful
+recreation does not fix the timing adapter. **Do not deploy the timing binding.**
+This is an own-control limitation, not a newly proved cause of old game crashes.
+
+Executed: MSVC x64 Release /W4 /WX build; all five bootstrap modes (including
+opt-in creation observation); both timing modes; Rustfmt; 37 scoped native
+Rust tests PASS. The test shell alone supplied an invalid ambient marker.
+Removing the Rust strip reproduced failure in the enrolled own-child test;
+restoring it passed all 37 tests. The C++ reader asserts marker absence.
+Existing Rust warnings remain. No own control process remained after completion.
+
+New DLL artifacts are build/control outputs only. Reviewed payload pins, the
+old candidate/runtime, installed game files and account/world data are unchanged.
+No Computer Use, game launch/input/restart/closure or credential inspection
+occurred. Actual game enrollment/new-code gameplay remains **NOT_EXECUTED**.
+
 ### Remaining proof and one next action
 
-The five-client goal is ACTIVE. Real-game swap-chain enrollment, automatic
-OS-focus policy, background-host simulation/network health, five real licensed
-playable clients, full CPU/RAM/GPU/VRAM overhead, long soak and crash recovery
-remain UNKNOWN/NOT_EXECUTED. Full helper HKCU/auth/host-peer containment remains
-unproved. The two reviewed runtime profiles are preserved; distribution deferred.
+The full five-client goal is ACTIVE. Timing ownership/recreation must be repaired
+before deployment. Automatic focus transport, real 144/10 pacing and background
+Host World health, five licensed playable clients, full resource/soak/crash proof
+and helper/auth containment remain UNKNOWN/NOT_EXECUTED. Public admission and
+distribution stay deferred.
 
-**One next action:** add opt-in presentation enrollment at actual HWND swap-chain
-creation in the existing compatibility/bootstrap owner, outside loader lock,
-with explicit lifetime and failure reporting. Connect the existing manager's
-focus owner through the private bootstrap policy capability, rather than a second
-governor or a new public command. First verify that enrollment with own children;
-then deploy a separate same-profile runtime candidate for real 144/10 focus and
-background Host World acceptance before expanding the catalog to five. Do not
-install this adapter from DllMain, patch unknown live threads, replace the known
-runtime quietly or promote fixture results to public provider admission.
+**One next action:** replace the retained-chain timing binding with lifecycle-safe
+ownership/rebinding in the same dxgi-pacing owner; prove repeated release/recreate
+and concurrent native presentation with own data. Do not mask E_ACCESSDENIED or
+infer lifetime from a diagnostic COM refcount. Then connect creation enrollment
+and the existing manager focus owner through a private capability before a
+separately reviewed same-profile game candidate. Preserve current runtime and
+account/world identities.

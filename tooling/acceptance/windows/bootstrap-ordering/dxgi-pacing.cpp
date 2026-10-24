@@ -1,6 +1,7 @@
 #include "dxgi-pacing.h"
 #include "frame-pacing.h"
-#include <detours.h>
+#include <dxgi1_5.h>
+#include <cstring>
 #include <memory>
 
 namespace dxgi_pacing {
@@ -14,6 +15,7 @@ struct Binding {
     presentation_pacing::Pacer pacer;
     IUnknown* identity = nullptr;
     IDXGISwapChain* receiver = nullptr;
+    void* table[41]{};
     HWND window = nullptr;
     DWORD windowThread = 0;
     std::atomic<bool> enabled{true};
@@ -27,7 +29,7 @@ struct Binding {
     }
 };
 // Pinned after successful installation, matching the compatibility DLL's process lifetime.
-// A failed transaction releases its temporary binding. No live unhook/reload route exists.
+// A failed publication releases its temporary binding. No live unhook/reload route exists.
 std::atomic<Binding*> binding{nullptr};
 
 bool owns(Binding& selected, IDXGISwapChain* chain) noexcept {
@@ -127,23 +129,33 @@ bool install(IDXGISwapChain1* chain, HWND window) noexcept {
         selected->window = window;
         selected->receiver = static_cast<IDXGISwapChain*>(chain);
         selected->receiver->AddRef();
-        // The Windows SDK COM ABI places Present at slot 8, Present1 at slot 22.
+        // Pin the complete SDK SwapChain4 interface before copying its 41-method ABI.
+        IDXGISwapChain4* newest = nullptr;
+        if (FAILED(chain->QueryInterface(IID_PPV_ARGS(&newest)))) return false;
+        const bool sameInterface = static_cast<IDXGISwapChain1*>(newest) == chain;
+        newest->Release();
+        if (!sameInterface) return false;
+        MEMORY_BASIC_INFORMATION memory{};
+        if (!VirtualQuery(chain, &memory, sizeof(memory)) || memory.State != MEM_COMMIT
+            || (memory.Protect & PAGE_GUARD)
+            || !(memory.Protect & (PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY))
+            || reinterpret_cast<ULONG_PTR>(chain) % alignof(void*)) return false;
         void** table = *reinterpret_cast<void***>(chain);
         originalPresent = reinterpret_cast<Present>(table[8]);
         originalPresent1 = reinterpret_cast<Present1>(table[22]);
         if (!originalPresent || !originalPresent1 || table[8] == table[22]) return false;
+        memcpy(selected->table, table, sizeof(selected->table));
+        selected->table[8] = reinterpret_cast<void*>(pacedPresent);
+        selected->table[22] = reinterpret_cast<void*>(pacedPresent1);
         HMODULE owner = nullptr;
         if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
             reinterpret_cast<LPCWSTR>(pacedPresent), &owner)) return false;
-        if (DetourTransactionBegin() != NO_ERROR) return false;
-        if (DetourUpdateThread(GetCurrentThread()) != NO_ERROR
-            || DetourAttach(reinterpret_cast<PVOID*>(&originalPresent), reinterpret_cast<PVOID>(pacedPresent)) != NO_ERROR
-            || DetourAttach(reinterpret_cast<PVOID*>(&originalPresent1), reinterpret_cast<PVOID>(pacedPresent1)) != NO_ERROR) {
-            DetourTransactionAbort();
+        binding.store(selected.get(), std::memory_order_release);
+        if (InterlockedCompareExchangePointer(reinterpret_cast<PVOID volatile*>(chain), selected->table, table) != table) {
+            binding.store(nullptr, std::memory_order_release);
             return false;
         }
-        if (DetourTransactionCommit() != NO_ERROR) return false;
-        binding.store(selected.release(), std::memory_order_release);
+        selected.release();
         return true;
     } catch (...) { return false; }
 }

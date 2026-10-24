@@ -1,6 +1,10 @@
 #include "receipt.h"
 #include "education-config.h"
 #include "startup-observation.h"
+#include "presentation-enrollment.h"
+#include <d3d12.h>
+#include <dxgi1_6.h>
+#include <wrl/client.h>
 #include <detours.h>
 #include <cstdio>
 #include <cwchar>
@@ -33,6 +37,7 @@ namespace {
 bool cleanupFailed = false;
 unsigned lastFailureLine = 0;
 bool configuredDiagnosticChild = false;
+const wchar_t* presentationControl = nullptr;
 void requireAt(bool condition, unsigned line) {
     if (!condition) {
         lastFailureLine = line;
@@ -118,7 +123,11 @@ std::vector<wchar_t> environment(HANDLE section, HANDLE appDataRoot = nullptr) {
             const bool observed = _wcsnicmp(item, startup_observation::Variable,
                 wcslen(startup_observation::Variable)) == 0
                 && item[wcslen(startup_observation::Variable)] == L'=';
-            if (!configured && !observed && !appData && _wcsnicmp(item, prefix, (sizeof(prefix) / sizeof(wchar_t)) - 1) != 0)
+            const bool presentation = _wcsnicmp(item, presentation_enrollment::Variable,
+                wcslen(presentation_enrollment::Variable)) == 0
+                && item[wcslen(presentation_enrollment::Variable)] == L'=';
+            if (!configured && !observed && !presentation && !appData
+                && _wcsnicmp(item, prefix, (sizeof(prefix) / sizeof(wchar_t)) - 1) != 0)
                 result.insert(result.end(), item, item + wcslen(item) + 1);
         }
         const std::wstring setting = std::wstring(probe::SectionVariable) + L"="
@@ -1873,6 +1882,10 @@ struct ConfiguredChild {
         Attributes attributes(inherited, 10);
         auto env = environment(section.value, target.privateRoot);
         env.pop_back();
+        if (presentationControl) {
+            const auto setting = std::wstring(presentation_enrollment::Variable) + L"=" + presentationControl;
+            env.insert(env.end(), setting.begin(), setting.end()); env.push_back(0);
+        }
         const auto setting = std::wstring(education_bootstrap::SectionVariable) + L"="
             + std::to_wstring(reinterpret_cast<ULONG_PTR>(readonly.value));
         env.insert(env.end(), setting.begin(), setting.end());
@@ -2462,8 +2475,86 @@ void helperBindingCheck(probe::Receipt& receipt, bool bound) {
         && registryValue(parent.value, L"Marker") != 0x484f5354);
 }
 
+void presentationChecks() {
+    using namespace Microsoft::WRL;
+    using Read = BOOL (*)(presentation_enrollment::Snapshot*);
+    const auto read = reinterpret_cast<Read>(GetProcAddress(GetModuleHandleW(L"bootstrap-compat.dll"),
+        "BootstrapPresentationSnapshot"));
+    presentation_enrollment::Snapshot observed{}; observed.bytes = sizeof(observed);
+    require(read && read(&observed));
+    wchar_t setting[16]{};
+    if (!GetEnvironmentVariableW(presentation_enrollment::Variable, setting, 16)) {
+        require(!observed.armed && !observed.factories && !observed.candidates && !observed.failures);
+        return;
+    }
+    require(observed.armed == 1 && observed.factories == 0 && observed.candidates == 0);
+    struct Window {
+        HWND value;
+        explicit Window(const wchar_t* name) {
+            WNDCLASSW type{}; type.lpfnWndProc = DefWindowProcW;
+            type.hInstance = GetModuleHandleW(nullptr); type.lpszClassName = name;
+            require(RegisterClassW(&type));
+            value = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, name, L"", WS_POPUP,
+                0, 0, 16, 16, nullptr, nullptr, type.hInstance, nullptr);
+            require(value && !IsWindowVisible(value));
+        }
+        ~Window() { DestroyWindow(value); }
+    } selected(L"OGLES"), unrelated(L"MivubiPresentationAux");
+    ComPtr<IDXGIFactory4> factory;
+    require(SUCCEEDED(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory))));
+    require(read(&observed) && observed.factories == 1 && observed.failures == 0);
+    ComPtr<IDXGIFactory> legacy;
+    ComPtr<IDXGIFactory1> version1;
+    require(SUCCEEDED(CreateDXGIFactory(IID_PPV_ARGS(&legacy)))
+        && SUCCEEDED(CreateDXGIFactory1(IID_PPV_ARGS(&version1)))
+        && read(&observed) && observed.factories == 3 && observed.failures == 0);
+    ComPtr<IDXGIAdapter> warp;
+    ComPtr<ID3D12Device> device;
+    ComPtr<ID3D12CommandQueue> queue;
+    require(SUCCEEDED(factory->EnumWarpAdapter(IID_PPV_ARGS(&warp)))
+        && SUCCEEDED(D3D12CreateDevice(warp.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device))));
+    D3D12_COMMAND_QUEUE_DESC command{}; command.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+    require(SUCCEEDED(device->CreateCommandQueue(&command, IID_PPV_ARGS(&queue))));
+    DXGI_SWAP_CHAIN_DESC1 description{};
+    description.Width = description.Height = 16;
+    description.Format = DXGI_FORMAT_R8G8B8A8_UNORM; description.SampleDesc.Count = 1;
+    description.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    description.BufferCount = 2; description.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+    const auto create = [&](HWND window) {
+        ComPtr<IDXGISwapChain1> chain;
+        const auto before = description;
+        require(SUCCEEDED(factory->CreateSwapChainForHwnd(queue.Get(), window, &description,
+            nullptr, nullptr, &chain)) && memcmp(&before, &description, sizeof(before)) == 0);
+        return chain;
+    };
+    auto foreign = create(unrelated.value);
+    require(read(&observed) && observed.candidates == 0 && observed.ignored == 1);
+    auto chain = create(selected.value);
+    require(read(&observed) && observed.candidates == 1 && observed.width == 16 && observed.height == 16);
+    chain.Reset(); // The observer must not pin an obsolete flip chain on this HWND.
+    chain = create(selected.value);
+    require(read(&observed) && observed.candidates == 2 && observed.failures == 0);
+    chain.Reset();
+    DXGI_SWAP_CHAIN_DESC oldDescription{};
+    oldDescription.BufferDesc.Width = oldDescription.BufferDesc.Height = 16;
+    oldDescription.BufferDesc.Format = description.Format; oldDescription.SampleDesc.Count = 1;
+    oldDescription.BufferUsage = description.BufferUsage; oldDescription.BufferCount = 2;
+    oldDescription.OutputWindow = selected.value; oldDescription.Windowed = TRUE;
+    oldDescription.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+    const auto unchanged = oldDescription;
+    ComPtr<IDXGISwapChain> oldChain;
+    require(SUCCEEDED(legacy->CreateSwapChain(queue.Get(), &oldDescription, &oldChain))
+        && memcmp(&oldDescription, &unchanged, sizeof(unchanged)) == 0);
+    require(read(&observed) && observed.candidates == 3 && observed.failures == 0);
+    ComPtr<IDXGISwapChain1> failed;
+    require(FAILED(factory->CreateSwapChainForHwnd(nullptr, selected.value, &description,
+        nullptr, nullptr, &failed)) && !failed);
+    require(read(&observed) && observed.candidates == 3 && observed.failures == 0);
+}
+
 int configuredStorageChild(probe::Receipt& receipt) {
     configuredDiagnosticChild = true;
+    presentationChecks();
     // Candidate storage configuration must not guess or rewrite a singleton.
     Handle shared(CreateMutexW(nullptr, FALSE, receipt.logical));
     require(shared.value && GetLastError() == ERROR_ALREADY_EXISTS);
@@ -2530,6 +2621,14 @@ bool configuredStoragePair(const std::wstring& self, const std::string& compatib
         require(RegCreateKeyExW(stores[slot - 1].value, registry.path.c_str(), 0, nullptr,
             REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &branch.value, nullptr) == ERROR_SUCCESS);
         setRegistryValue(branch.value, L"Marker", slot * 100);
+    }
+    if (presentationControl) {
+        presentationControl = L"invalid";
+        Handle go(sharedEvent()), finish(sharedEvent());
+        ConfiguredChild rejected(1, 0, roots, stores[0].value, registry, name, go.value, finish.value,
+            self, compatibility);
+        rejected.exited(false);
+        presentationControl = L"observe";
     }
     for (DWORD invalid = 1; invalid <= 5; ++invalid) {
         Handle go(sharedEvent()), finish(sharedEvent());
@@ -2702,8 +2801,9 @@ bool configuredStoragePair(const std::wstring& self, const std::string& compatib
         "\"explicitHelperKnownFoldersPrivate\":true,\"explicitHelperHkcuPrivate\":true,"
         "\"explicitHelpersChecked\":4,\"automaticHelperEnrollment\":false,"
         "\"mediatedCallerEnrollmentRefusals\":4,"
+        "\"presentationEnrollmentChecked\":%s,"
         "\"singleton\":\"UNKNOWN\",\"singletonRemap\":false,\"helpers\":\"UNKNOWN\",\"securityBoundary\":false,"
-        "\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n");
+        "\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n", presentationControl ? "true" : "false");
     return true;
 }
 
@@ -2958,6 +3058,10 @@ bool sendOwnedDescendant(HANDLE section) {
 }
 
 int readRustEnrollmentControl() {
+    wchar_t presentationSetting[16]{};
+    SetLastError(ERROR_SUCCESS);
+    require(GetEnvironmentVariableW(presentation_enrollment::Variable, presentationSetting, 16) == 0
+        && GetLastError() == ERROR_ENVVAR_NOT_FOUND);
     probe::View view;
     require(view.open() && view.value->mode == probe::ConfiguredStorage);
     probe::record(view.value, probe::Main);
@@ -3121,7 +3225,9 @@ int wmain(int argc, wchar_t** argv) {
             return view.open() ? readRustEnrollmentControl() : readRustBootstrap();
         } catch (...) { return 86; }
     }
-    const bool configuredTest = argc == 2 && wcscmp(argv[1], L"--run-configured-storage-self-test") == 0;
+    const bool presentationTest = argc == 2 && wcscmp(argv[1], L"--run-presentation-enrollment-self-test") == 0;
+    presentationControl = presentationTest ? L"observe" : nullptr;
+    const bool configuredTest = presentationTest || (argc == 2 && wcscmp(argv[1], L"--run-configured-storage-self-test") == 0);
     const bool mutexTest = argc == 2 && wcscmp(argv[1], L"--run-mutex-self-test") == 0;
     const bool ordinaryTest = argc == 2 && wcscmp(argv[1], L"--run-inherited-registry-self-test") == 0;
     if (!configuredTest && !mutexTest && !ordinaryTest && (argc != 2 || wcscmp(argv[1], L"--run-self-test") != 0)) return 64;

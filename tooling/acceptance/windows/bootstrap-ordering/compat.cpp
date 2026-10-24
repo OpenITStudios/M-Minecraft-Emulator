@@ -1,6 +1,7 @@
 #include "receipt.h"
 #include "education-config.h"
 #include "startup-observation.h"
+#include "presentation-enrollment.h"
 #include <detours.h>
 #include <cstdio>
 #include <cwchar>
@@ -922,7 +923,8 @@ bool install(const InstallConfig& config, bool mutex) {
         || DetourAttach(reinterpret_cast<PVOID*>(&originalQueryFullAttributes),
                         reinterpret_cast<PVOID>(translatedQueryFullAttributes)) != NO_ERROR
         || DetourAttach(reinterpret_cast<PVOID*>(&originalKnownPath),
-                        reinterpret_cast<PVOID>(translatedKnownPath)) != NO_ERROR || !attachRegistry()) {
+                        reinterpret_cast<PVOID>(translatedKnownPath)) != NO_ERROR || !attachRegistry()
+        || !presentation_enrollment::attach()) {
         DetourTransactionAbort();
         CloseHandle(baseDirectory); baseDirectory = nullptr; return false;
     }
@@ -934,6 +936,11 @@ bool install(const InstallConfig& config, bool mutex) {
 } // namespace
 
 extern "C" void BootstrapOrdinalOne() {}
+extern "C" BOOL BootstrapPresentationSnapshot(presentation_enrollment::Snapshot* output) {
+    if (!output || output->bytes != sizeof(*output)) return FALSE;
+    *output = presentation_enrollment::snapshot();
+    return TRUE;
+}
 
 extern "C" BOOL WINAPI DllMain(HINSTANCE, DWORD reason, LPVOID) {
     if (reason != DLL_PROCESS_ATTACH) return TRUE; // Process-lifetime fixture; no live unload.
@@ -946,7 +953,8 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE, DWORD reason, LPVOID) {
         const bool valid = education_bootstrap::read(config);
         InstallConfig installConfig{config.slot, config.logicalRoot, config.privateRoot,
             config.registryRoot, 1, config.userKeyPath, &config};
-        if (!valid || !startup_observation::attach(config) || !install(installConfig, false)) {
+        if (!valid || !presentation_enrollment::prepare()
+            || !startup_observation::attach(config) || !install(installConfig, false)) {
             if (controlled) probe::record(test.value, probe::Rejected);
             return FALSE;
         }

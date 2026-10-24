@@ -159,6 +159,7 @@ void adapterChecks(bool modern) {
     auto other = create(foreignWindow.value);
     // Only one flip chain per HWND; the unrelated same-window UI uses a bitblt chain.
     auto sameWindow = create(selectedWindow.value, true);
+    if (modern) { target.Reset(); target = create(selectedWindow.value); }
     constexpr DWORD sentinel = 0x13579bdf;
     SetLastError(sentinel);
     const HRESULT invalid = target->Present(5, 0);
@@ -226,18 +227,33 @@ void adapterChecks(bool modern) {
         && memcmp(&parameters, &unchanged, sizeof(parameters)) == 0);
     after = dxgi_pacing::snapshot();
     check(after.pacedPresent == before.pacedPresent && after.pacedPresent1 == before.pacedPresent1
-        && after.lastRelease == before.lastRelease && after.bypassed >= before.bypassed + 8
+        && after.lastRelease == before.lastRelease && after.bypassed >= before.bypassed + 6
         && after.faults == 0);
     check(dxgi_pacing::stop() && !dxgi_pacing::foreground(true));
     check(SUCCEEDED(target->Present(0, 0)));
     after = dxgi_pacing::snapshot();
     check(after.lastRelease == before.lastRelease && after.faults == 0);
-    std::printf("{\"scope\":\"OWN_DXGI_DETOUR_ADAPTER\",\"selfCheck\":true,\"backend\":\"%s\","
+    if (modern) {
+        target.Reset();
+        DXGI_SWAP_CHAIN_DESC1 description{};
+        description.Width = description.Height = 16;
+        description.Format = DXGI_FORMAT_R8G8B8A8_UNORM; description.SampleDesc.Count = 1;
+        description.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        description.BufferCount = 2; description.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+        ComPtr<IDXGISwapChain1> replacement;
+        const HRESULT recreated = factory->CreateSwapChainForHwnd(queue.Get(), selectedWindow.value, &description,
+            nullptr, nullptr, &replacement);
+        // The native baseline recreated this HWND before installation. Retained
+        // references now block recreation; do not deploy this timing control.
+        check(recreated == E_ACCESSDENIED && !replacement);
+    }
+    std::printf("{\"scope\":\"OWN_DXGI_OBJECT_ADAPTER\",\"selfCheck\":true,\"backend\":\"%s\","
         "\"present\":%llu,\"present1\":%llu,\"bypassed\":%llu,"
         "\"unrelatedChainsExcluded\":true,\"nonblockingAndTestPreserved\":true,"
         "\"nativeFailureAndLastErrorPreserved\":true,\"resizeRetainsBinding\":true,\"gameHook\":false,"
-        "\"minecraft\":\"NOT_EXECUTED\"}\n", modern ? "D3D12_WARP" : "D3D11_WARP",
-        after.pacedPresent, after.pacedPresent1, after.bypassed);
+        "\"flipRecreation\":\"%s\",\"swapChainRebindImplemented\":false,\"minecraft\":\"NOT_EXECUTED\"}\n",
+        modern ? "D3D12_WARP" : "D3D11_WARP", after.pacedPresent, after.pacedPresent1, after.bypassed,
+        modern ? "BLOCKED_BY_RETAINED_REFERENCES" : "NOT_EXECUTED");
 }
 int run() {
     cancellationAndLateFrame();

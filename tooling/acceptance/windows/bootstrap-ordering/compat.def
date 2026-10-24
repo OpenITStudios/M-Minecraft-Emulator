@@ -2,3 +2,4 @@ LIBRARY bootstrap-compat
 EXPORTS
     BootstrapOrdinalOne @1
     BootstrapRegistry
+    BootstrapPresentationSnapshot

@@ -30,34 +30,50 @@ Actual presentation binding, foreground tracking, host simulation/network
 independence, five real clients and resource savings need separate runtime proof.
 Current evidence and continuation remain solely in `planning/development.md`.
 
-### DXGI adapter controls
+### Object-local timing and bootstrap creation controls
 
-`--run-self-test` now also exercises `dxgi-pacing.cpp` through real Detours
-interception of native Present and Present1 calls. Run
-`--run-d3d12-adapter-self-test` in a separate process to check D3D12 WARP
-flip-model swap chains. These are hidden own-process API controls; the D3D12
-mode does not render a representative game scene or prove displayed frames.
+The timing control now shadows the selected owned object's complete SwapChain4
+table, replacing only Present/Present1 slots. It does not patch shared DXGI
+method code. The same-address interface and writable storage are checked;
+the object is still unpublished/quiescent during installation. Existing native
+results/parameters, TEST/DO_NOT_WAIT bypass, unrelated chains and resize remain
+checked by both frame-control modes.
 
-The adapter installs once while all presentation is quiescent, outside loader
-lock. A successful binding pins its interface/COM identity and callback code module until process exit;
-there is no live unhook, rebind or DLL-unload API. It validates the exact target
-identity and own-process HWND. Matching the HWND alone never selects a chain.
-Nested Present/Present1 implementations do not consume two permits.
-A parallel presentation consumer disables pacing and records a fault rather
-than racing the core; game concurrency compatibility is still unproved.
+**Do not deploy this timing binding to a game.** It retains its target interface
+until process exit. The D3D12 control now proves native same-HWND flip recreation
+works before installation but returns E_ACCESSDENIED after the application
+releases the pinned target. Rebinding is absent. Its selfCheck includes this
+expected negative result; it does not certify recreation or stability.
 
-[DXGI_PRESENT_TEST and DO_NOT_WAIT](https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/dxgi-present)
-bypass pacing. Original sync interval, flags, Present1 parameters, HRESULT and
-native LastError pass through. Stop cancels pacing, not the caller's native
-presentation. Diagnostics describe permits/bypasses/faults, not readiness.
-Checks include unrelated/same-HWND chains, malformed sync intervals,
-[Present1 parameters](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_2/nf-dxgi1_2-idxgiswapchain1-present1),
-both rates, native errors and resize.
+The existing bootstrap DLL separately supports observation-only creation
+enrollment. After validating its existing config, the exact private marker
+`MIVUBI_EDUCATION_PRESENTATION=observe` arms factory export interception.
+Default is off; malformed values refuse. The ordinary Rust child environment
+strips inherited markers, and no game-facing command sets one. The private
+config remains v2/1136 bytes.
 
-Only `frame-pacing-control` links this adapter. The compatibility DLL, bootstrap
-transport and game artifacts are unchanged. Automatic real-chain enrollment
-and OS-focus policy are not implemented; successful controls do not unlock
-game launch or prove multiplayer health.
+It joins the existing startup Detours transaction for CreateDXGIFactory/1/2.
+DllMain copies settings/attaches exports without creating a factory, device,
+timer or render thread; see Microsoft's
+[DllMain restrictions](https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-best-practices).
+When an actual caller creates a factory, the same-address Factory7 interface
+and writable storage are checked, then an object-local table intercepts
+CreateSwapChain/CreateSwapChainForHwnd. A bounded set of factory references and
+tables stays pinned until process exit. Unsupported setup is counted without
+replacing a successful native factory result. These are experimental ABI
+interpositions, not a Microsoft-supported Minecraft integration guarantee.
+
+Only top-level own-process OGLES window candidates are counted. This class
+filter is diagnostic, not ownership authority. The observer neither retains
+swap chains nor installs pacing. Its private in-process
+`BootstrapPresentationSnapshot` export reports counts/dimensions, not readiness.
+
+Manually run `bootstrap-ordering.exe --run-presentation-enrollment-self-test`.
+Existing two-slot bootstrap children check all three factory exports, both
+creation methods, auxiliary-class exclusion, caller descriptions, failed
+creation, marker refusal and successful same-HWND recreation without chain
+pins. Real-game enrollment, lifecycle-safe pacing and manager focus transport
+remain separate work; the sole current handoff is `planning/development.md`.
 
 ## Current Education experiment — 24 October 2026
 

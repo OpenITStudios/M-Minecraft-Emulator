@@ -1842,6 +1842,7 @@ fn child_environment(
         CONFIG_ENV,
         "MIVUBI_BOOTSTRAP_TEST_SECTION",
         OBSERVATION_ENV,
+        "MIVUBI_EDUCATION_PRESENTATION",
     ]
     .iter()
     .map(|name| OsStr::new(name).encode_wide().collect())
