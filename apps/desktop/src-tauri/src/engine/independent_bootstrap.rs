@@ -1,5 +1,6 @@
 //! Private first stage of the Education bootstrap experiment.
-//! No Tauri command, provider admission, DLL injection or resume operation.
+//! Production code has no Tauri command, provider admission, DLL injection or resume.
+//! The cfg(test) bridge enrolls only the explicitly built own C++ fixture.
 //! The child remains unstarted: profile/auth mediation must precede a future
 //! separately reviewed resume path. Direct-start game compatibility is UNKNOWN.
 #![allow(dead_code)]
@@ -180,6 +181,25 @@ fn create_unstarted(
     image: File,
     storage: Option<SlotStorage>,
 ) -> io::Result<PendingEducationBootstrap> {
+    create_unstarted_impl(
+        path,
+        image,
+        storage,
+        #[cfg(test)]
+        None,
+    )
+}
+
+fn create_unstarted_impl(
+    path: &Path,
+    image: File,
+    storage: Option<SlotStorage>,
+    #[cfg(test)] proof: Option<&tests::FixtureReceipt>,
+) -> io::Result<PendingEducationBootstrap> {
+    #[cfg(test)]
+    if proof.is_some() && storage.is_none() {
+        return Err(invalid("Fixture receipt requires configured storage"));
+    }
     if !path.is_absolute() {
         return Err(invalid("Absolute bootstrap image required"));
     }
@@ -198,19 +218,34 @@ fn create_unstarted(
         .as_ref()
         .map(|_| Configuration::create())
         .transpose()?;
-    let inherited = configuration
+    let inherited: Vec<HANDLE> = configuration
         .as_ref()
-        .map(|c| [c.readonly.as_raw_handle() as HANDLE]);
-    let attributes = inherited
-        .as_ref()
-        .map(|h| InheritList::new(h))
-        .transpose()?;
+        .map(|c| vec![c.readonly.as_raw_handle() as HANDLE])
+        .unwrap_or_default();
+    #[cfg(test)]
+    let inherited = {
+        let mut handles = inherited;
+        if let Some(proof) = proof {
+            handles.push(proof.0.as_raw_handle() as HANDLE);
+        }
+        handles
+    };
+    let attributes = if inherited.is_empty() {
+        None
+    } else {
+        Some(InheritList::new(&inherited)?)
+    };
     let environment = match (&storage, &configuration) {
         (Some(store), Some(config)) => Some(child_environment(
             store,
             config.readonly.as_raw_handle() as HANDLE,
         )?),
         _ => None,
+    };
+    #[cfg(test)]
+    let environment = match (environment, proof) {
+        (Some(environment), Some(proof)) => Some(proof.environment(environment)?),
+        (environment, _) => environment,
     };
     let mut startup: STARTUPINFOEXW = unsafe { mem::zeroed() };
     startup.StartupInfo.cb = if configuration.is_some() {
@@ -257,6 +292,15 @@ fn create_unstarted(
         storage: None,
         configuration: None,
     };
+    #[cfg(test)]
+    if let Some(proof) = proof {
+        if unsafe {
+            SetHandleInformation(proof.0.as_raw_handle() as HANDLE, HANDLE_FLAG_INHERIT, 0)
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+    }
     child.created = child.identity()?.1;
     if unsafe { GetProcessIdOfThread(child._thread.as_raw_handle() as HANDLE) } != child.pid
         || interactive_session(child.pid)? != session
@@ -964,6 +1008,312 @@ mod tests {
     use super::*;
     use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetExitCodeProcess};
 
+    // Writable receipt exists only for our cooperative C++ control, never the game.
+    pub(super) struct FixtureReceipt(pub(super) OwnedHandle);
+    impl FixtureReceipt {
+        fn new() -> Self {
+            let raw = unsafe {
+                CreateFileMappingW(
+                    INVALID_HANDLE_VALUE,
+                    ptr::null(),
+                    PAGE_READWRITE,
+                    0,
+                    2064,
+                    ptr::null(),
+                )
+            };
+            assert!(!raw.is_null());
+            let owned = unsafe { OwnedHandle::from_raw_handle(raw as _) };
+            assert_ne!(
+                unsafe { SetHandleInformation(raw, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) },
+                0
+            );
+            Self(owned)
+        }
+        pub(super) fn environment(&self, environment: Vec<u16>) -> io::Result<Vec<u16>> {
+            let mut rows: Vec<Vec<u16>> = environment
+                .split(|&unit| unit == 0)
+                .filter(|row| !row.is_empty())
+                .map(|row| row.to_vec())
+                .collect();
+            rows.push(
+                format!(
+                    "MIVUBI_BOOTSTRAP_TEST_SECTION={}",
+                    self.0.as_raw_handle() as usize
+                )
+                .encode_utf16()
+                .collect(),
+            );
+            rows.sort_by(|a, b| ordinal_names(environment_name(a), environment_name(b)).unwrap());
+            let mut result = Vec::new();
+            for row in rows {
+                result.extend(row);
+                result.push(0);
+            }
+            result.push(0);
+            if result.len() > 32767 {
+                return Err(invalid("Fixture environment too large"));
+            }
+            Ok(result)
+        }
+    }
+
+    type FixtureEntry = unsafe extern "system" fn(HANDLE, HANDLE, u32, u64, HANDLE, HANDLE) -> u32;
+    struct FixtureEnroller {
+        module: windows_sys::Win32::Foundation::HMODULE,
+        prepare: FixtureEntry,
+        enroll: FixtureEntry,
+        _pins: [File; 2],
+    }
+    impl FixtureEnroller {
+        fn load(path: &Path) -> Self {
+            use windows_sys::Win32::System::LibraryLoader::{
+                LoadLibraryExW, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, LOAD_LIBRARY_SEARCH_SYSTEM32,
+            };
+            assert_eq!(path.file_name(), Some(OsStr::new("bootstrap-ordering.exe")));
+            let root = path.parent().unwrap();
+            let library = root.join("bootstrap-enroll.dll");
+            let pins = [
+                pin_image(&library).unwrap(),
+                pin_image(&root.join("bootstrap-compat.dll")).unwrap(),
+            ];
+            let name = wide(library.as_os_str()).unwrap();
+            let module = unsafe {
+                LoadLibraryExW(
+                    name.as_ptr(),
+                    ptr::null_mut(),
+                    LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32,
+                )
+            };
+            assert!(!module.is_null(), "{}", io::Error::last_os_error());
+            let prepare =
+                unsafe { GetProcAddress(module, c"PrepareOwnedFixture".as_ptr().cast()) }.unwrap();
+            let enroll =
+                unsafe { GetProcAddress(module, c"EnrollOwnedFixture".as_ptr().cast()) }.unwrap();
+            Self {
+                module,
+                prepare: unsafe {
+                    mem::transmute::<unsafe extern "system" fn() -> isize, FixtureEntry>(prepare)
+                },
+                enroll: unsafe {
+                    mem::transmute::<unsafe extern "system" fn() -> isize, FixtureEntry>(enroll)
+                },
+                _pins: pins,
+            }
+        }
+        fn call(
+            &self,
+            child: &PendingEducationBootstrap,
+            proof: &FixtureReceipt,
+            enroll: bool,
+            birth: u64,
+        ) -> u32 {
+            child.identity().unwrap();
+            let entry = if enroll { self.enroll } else { self.prepare };
+            unsafe {
+                entry(
+                    child.process.as_raw_handle() as HANDLE,
+                    child._thread.as_raw_handle() as HANDLE,
+                    child.pid,
+                    birth,
+                    child.configuration.as_ref().unwrap().as_raw_handle() as HANDLE,
+                    proof.0.as_raw_handle() as HANDLE,
+                )
+            }
+        }
+    }
+    impl Drop for FixtureEnroller {
+        fn drop(&mut self) {
+            assert_ne!(
+                unsafe { windows_sys::Win32::Foundation::FreeLibrary(self.module) },
+                0
+            );
+        }
+    }
+
+    fn clone_store(store: &SlotStorage) -> SlotStorage {
+        let mut key = ptr::null_mut();
+        assert_ne!(
+            unsafe {
+                DuplicateHandle(
+                    GetCurrentProcess(),
+                    store.registry.0,
+                    GetCurrentProcess(),
+                    &mut key,
+                    0,
+                    0,
+                    DUPLICATE_SAME_ACCESS,
+                )
+            },
+            0
+        );
+        SlotStorage {
+            slot: store.slot,
+            logical: store.logical.try_clone().unwrap(),
+            private: store.private.try_clone().unwrap(),
+            registry: RegistryKey(key),
+            user_key_path: store.user_key_path,
+            private_path: store.private_path.clone(),
+        }
+    }
+
+    fn finish_fixture(child: &PendingEducationBootstrap) {
+        // Only this fixed owned fixture can be resumed in the test module.
+        assert_eq!(
+            unsafe {
+                windows_sys::Win32::System::Threading::ResumeThread(
+                    child._thread.as_raw_handle() as HANDLE
+                )
+            },
+            1
+        );
+        assert_eq!(
+            unsafe { WaitForSingleObject(child.process.as_raw_handle() as HANDLE, 10000) },
+            WAIT_OBJECT_0
+        );
+        let mut code = 1;
+        assert_ne!(
+            unsafe { GetExitCodeProcess(child.process.as_raw_handle() as HANDLE, &mut code) },
+            0
+        );
+        assert_eq!(code, 0);
+        // Query in the unhooked parent, never through the child's translated cached key.
+        use windows_sys::Win32::System::Registry::{RegOpenKeyExW, RegQueryValueExW, REG_DWORD};
+        let name = wide(OsStr::new(&format!(
+            "Software\\EducationEntry_{}_{}",
+            child.pid, child.created
+        )))
+        .unwrap();
+        let mut host = ptr::null_mut();
+        assert_eq!(
+            unsafe { RegOpenKeyExW(HKEY_CURRENT_USER, name.as_ptr(), 0, KEY_READ, &mut host) },
+            0
+        );
+        let host = RegistryKey(host);
+        let mut marker = 0u32;
+        let mut kind = 0;
+        let mut bytes = mem::size_of_val(&marker) as u32;
+        assert_eq!(
+            unsafe {
+                RegQueryValueExW(
+                    host.0,
+                    [77u16, 97, 114, 107, 101, 114, 0].as_ptr(),
+                    ptr::null(),
+                    &mut kind,
+                    &mut marker as *mut _ as _,
+                    &mut bytes,
+                )
+            },
+            0
+        );
+        assert_eq!((kind, bytes, marker), (REG_DWORD, 4, 0x484f5354));
+    }
+
+    #[test]
+    #[ignore = "Requires the explicitly built own C++ fixture and test-only enroller DLL"]
+    fn rust_enrolls_own_fixture_before_dependency_tls_and_main() {
+        let path = PathBuf::from(
+            std::env::var_os("MIVUBI_BOOTSTRAP_CPP_READER")
+                .expect("Set the trusted built C++ fixture path"),
+        )
+        .canonicalize()
+        .unwrap();
+        let enroller = FixtureEnroller::load(&path);
+        let [a, b] = test_slots();
+        for store in [&a, &b] {
+            std::fs::write(
+                directory_path(&store.logical)
+                    .unwrap()
+                    .join("Roaming/rust-enrolled.txt"),
+                b"HOST",
+            )
+            .unwrap();
+        }
+        // A mismatched birth is rejected before mutation; original child remains cancellable.
+        let proof = FixtureReceipt::new();
+        let mut rejected = create_unstarted_impl(
+            &path,
+            pin_image(&path).unwrap(),
+            Some(clone_store(&a)),
+            Some(&proof),
+        )
+        .unwrap();
+        assert_ne!(
+            enroller.call(&rejected, &proof, true, rejected.created + 1),
+            0
+        );
+        rejected.identity().unwrap();
+        rejected.cancel().unwrap();
+        // The same live handles for a different executable are rejected before any canary creation.
+        let self_path = std::env::current_exe().unwrap().canonicalize().unwrap();
+        let proof = FixtureReceipt::new();
+        let mut wrong_image = create_unstarted_impl(
+            &self_path,
+            pin_image(&self_path).unwrap(),
+            Some(clone_store(&a)),
+            Some(&proof),
+        )
+        .unwrap();
+        assert_ne!(
+            enroller.call(&wrong_image, &proof, true, wrong_image.created),
+            0
+        );
+        wrong_image.identity().unwrap();
+        wrong_image.cancel().unwrap();
+        // Positive unhooked control must observe all three host registry canaries.
+        let proof = FixtureReceipt::new();
+        let baseline = create_unstarted_impl(
+            &path,
+            pin_image(&path).unwrap(),
+            Some(clone_store(&a)),
+            Some(&proof),
+        )
+        .unwrap();
+        assert_eq!(enroller.call(&baseline, &proof, false, baseline.created), 0);
+        finish_fixture(&baseline);
+        for round in 1..=2 {
+            let first_proof = FixtureReceipt::new();
+            let second_proof = FixtureReceipt::new();
+            let first = create_unstarted_impl(
+                &path,
+                pin_image(&path).unwrap(),
+                Some(clone_store(&a)),
+                Some(&first_proof),
+            )
+            .unwrap();
+            let second = create_unstarted_impl(
+                &path,
+                pin_image(&path).unwrap(),
+                Some(clone_store(&b)),
+                Some(&second_proof),
+            )
+            .unwrap();
+            assert_eq!(enroller.call(&first, &first_proof, true, first.created), 0);
+            assert_eq!(
+                enroller.call(&second, &second_proof, true, second.created),
+                0
+            );
+            finish_fixture(&first);
+            finish_fixture(&second);
+            for store in [&a, &b] {
+                assert_eq!(
+                    std::fs::read_to_string(store.private_path.join("Roaming/rust-enrolled.txt"))
+                        .unwrap(),
+                    format!("{}:{round}", store.slot)
+                );
+                assert_eq!(
+                    std::fs::read(
+                        directory_path(&store.logical)
+                            .unwrap()
+                            .join("Roaming/rust-enrolled.txt")
+                    )
+                    .unwrap(),
+                    b"HOST"
+                );
+            }
+        }
+    }
+
     fn test_slots() -> [SlotStorage; 2] {
         let parent = fresh_root(&std::env::temp_dir()).unwrap();
         let logical = parent.join("host-view");
@@ -1095,31 +1445,6 @@ mod tests {
         .unwrap();
         assert_eq!(path.file_name(), Some(OsStr::new("bootstrap-ordering.exe")));
         let [a, b] = test_slots();
-        let clone_store = |store: &SlotStorage| {
-            let mut key = ptr::null_mut();
-            assert_ne!(
-                unsafe {
-                    DuplicateHandle(
-                        GetCurrentProcess(),
-                        store.registry.0,
-                        GetCurrentProcess(),
-                        &mut key,
-                        0,
-                        0,
-                        DUPLICATE_SAME_ACCESS,
-                    )
-                },
-                0
-            );
-            SlotStorage {
-                slot: store.slot,
-                logical: store.logical.try_clone().unwrap(),
-                private: store.private.try_clone().unwrap(),
-                registry: RegistryKey(key),
-                user_key_path: store.user_key_path,
-                private_path: store.private_path.clone(),
-            }
-        };
         for round in 1..=2 {
             let first =
                 create_unstarted(&path, pin_image(&path).unwrap(), Some(clone_store(&a))).unwrap();

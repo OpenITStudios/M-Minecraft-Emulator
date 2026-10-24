@@ -125,25 +125,57 @@ APPDATA/LOCALAPPDATA use canonical handle-derived paths, including expansion of
 8.3 aliases; inherited overrides are replaced only in the child block.
 ASCII/local-drive and current mediation limits still apply.
 
-The default Rust checks keep their own executable suspended. One explicitly
-ignored interoperability test accepts the trusted, locally built
-bootstrap-ordering.exe path through MIVUBI_BOOTSTRAP_CPP_READER. That C++ fixture
-has a fixed no-argument configuration-receiver entry when the private section
-is present; it validates the same header, remote object IDs/key binding,
-non-inherited backing handles and environment paths, then writes only fresh
-control markers. Two relaunch rounds check separate retained stores.
+The default Rust checks keep their own executable suspended. Two explicitly
+ignored interoperability checks accept the trusted, locally built
+bootstrap-ordering.exe path through MIVUBI_BOOTSTRAP_CPP_READER. The first
+validates the no-DLL receiver ABI, object/key binding, non-inherited backing
+handles, environment and separate retained control stores.
+
+The second connects the **same Rust original suspended-process handles** to
+the test-only sibling bootstrap-enroll.dll. Its two fixed exports prepare a
+no-DLL baseline or insert only bootstrap-compat.dll into only the sibling
+bootstrap-ordering.exe image. It validates PID/birth, thread/process relationship,
+session, AMD64, pinned image file IDs and read-only configuration before creating
+fresh canaries. It never reopens a PID, accepts target/DLL paths, resumes a child,
+invokes a helper or targets the registered game. The trusted parent pins both
+DLLs against write/delete replacement through child completion. This trusted
+build-directory control is not production publisher/signature attestation.
+
+Only this cfg(test) path inherits an additional writable version-8 probe receipt;
+the normal producer still inherits only its read-only version-1 configuration.
+The baseline must observe host registry operations at dependency/TLS/main.
+The enrolled fixture must observe private native registry reads/writes/enumeration
+at all three stages after attach/arm, and write a logical Roaming path into its
+private backing. Roaming/Local Known Folder and environment paths are checked.
+Both slots retain distinct file/registry markers across two relaunches. The
+unhooked parent independently checks fresh host file/registry markers remain
+unchanged. Wrong birth and wrong image are refused before enrollment; original
+suspended children are cancelled. Receipts are cooperative instrumentation,
+not authenticated security evidence.
 
 On a compatible project toolchain, after building this C++ fixture:
 
 ~~~powershell
 $env:MIVUBI_BOOTSTRAP_CPP_READER = (Resolve-Path ./workspace/bootstrap-ordering-build/Release/bootstrap-ordering.exe).Path
 cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml cpp_receiver_consumes_rust_configuration_for_both_slots_across_relaunch -- --ignored --nocapture --test-threads=1
+cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml rust_enrolls_own_fixture_before_dependency_tls_and_main -- --ignored --nocapture --test-threads=1
 ~~~
 
-This test-only receiver is resumed; the product preparer has no resume,
-injection or public launch API. A module-only harness does not establish a
-full Tauri build, and receiver success does not establish DLL installation,
-Minecraft startup, sign-in, world persistence or containment.
+Executed against baseline `31848bb050f63fd005b30ab175beec598dc2428e`: MSVC
+19.44 x64 Release /W4 /WX build, five default Rust checks, both explicitly
+executed ignored checks and all four C++ modes pass. The unchanged module was
+compiled in an isolated Rust 1.96/windows-sys 0.61.2 harness whose Education
+resolver always refuses. Full Tauri build is NOT_EXECUTED (project requires
+Rust 1.98). Exact own-image metadata check: zero remaining fixture processes.
+Executed source blobs: Rust `f3b8048585fdca4582543591db57a154c97b64da`,
+enroller `27ea31ea18af1fc4dcc1fc19a1d83b5f6d89fd51`,
+controller `96e5f5edea86169e1fdbf854b1f5427259becb8d`,
+CMake `9831303ecec1e2f6f43f5eadd602f893040c8c70`.
+Unchanged config/receipt/compat blobs are pinned by the baseline.
+No production enrollment/resume API or public command is added. Controlled
+ordering does not establish Minecraft loader compatibility, singleton,
+helper/broker propagation, sign-in, worlds or containment. These remain
+UNKNOWN / NOT_EXECUTED; providerReady=false.
 
 ## Ordering controls and receipt
 

@@ -1906,6 +1906,65 @@ bool configuredStoragePair(const std::wstring& self, const std::string& compatib
 }
 
 
+
+int readRustEnrollmentControl() {
+    probe::View view;
+    require(view.open() && view.value->mode == probe::ConfiguredStorage);
+    probe::record(view.value, probe::Main);
+    probe::registryCanary(probe::Main);
+    require(DependencyCanary() == 7);
+    auto& receipt = *view.value;
+    const bool baseline = receipt.registryBaseline == 1;
+    const probe::Stage hooked[]{probe::Attach, probe::Armed, probe::Dependency, probe::Tls, probe::Main};
+    const probe::Stage unhooked[]{probe::Dependency, probe::Tls, probe::Main};
+    require(receipt.count == (baseline ? 3 : 5) && receipt.armed == (baseline ? 0 : 1)
+        && receipt.earlyAllowed == (baseline ? 7 : 0)
+        && receipt.earlyPrivate == (baseline ? 0 : 7) && receipt.earlyDenied == 0);
+    for (LONG i = 0; i < receipt.count; ++i) {
+        require(receipt.events[i].stage == (baseline ? unhooked[i] : hooked[i])
+            && receipt.events[i].armed == (baseline || i == 0 ? 0 : 1));
+    }
+    if (baseline) {
+        std::printf("{\"case\":\"rust-enrollment-baseline\",\"hostCanaries\":7,\"providerReady\":false}\n");
+        return 0;
+    }
+    education_bootstrap::Config config{};
+    require(education_bootstrap::read(config));
+    const auto ownPath = directoryPath(config.privateRoot).substr(4);
+    const auto logicalPath = directoryPath(config.logicalRoot).substr(4);
+    for (const auto& folder : {L"Roaming", L"Local"}) {
+        wchar_t environment[512]{};
+        require(GetEnvironmentVariableW(wcscmp(folder, L"Roaming") == 0 ? L"APPDATA" : L"LOCALAPPDATA",
+            environment, 512) > 0 && ownPath + L"\\" + folder == environment);
+        PWSTR known = nullptr;
+        require(SUCCEEDED(SHGetKnownFolderPath(wcscmp(folder, L"Roaming") == 0
+            ? FOLDERID_RoamingAppData : FOLDERID_LocalAppData, KF_FLAG_DONT_VERIFY, nullptr, &known)) && known);
+        const bool matches = ownPath + L"\\" + folder == known;
+        CoTaskMemFree(known);
+        require(matches);
+    }
+    DWORD round = 0, type = 0, bytes = sizeof(round);
+    const auto status = RegQueryValueExW(config.registryRoot, L"RustEnrolledRound", nullptr, &type,
+        reinterpret_cast<BYTE*>(&round), &bytes);
+    require(status == ERROR_FILE_NOT_FOUND || (status == ERROR_SUCCESS && type == REG_DWORD
+        && bytes == sizeof(round) && round < 2));
+    ++round;
+    setRegistryValue(config.registryRoot, L"RustEnrolledRound", round);
+    require(RegFlushKey(config.registryRoot) == ERROR_SUCCESS);
+    {
+        // A logical host path must arrive in this slot's backing directory.
+        Handle output(CreateFileW((logicalPath + L"\\Roaming\\rust-enrolled.txt").c_str(), GENERIC_WRITE,
+            FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr));
+        require(output.value != INVALID_HANDLE_VALUE);
+        writeBytes(output.value, std::to_string(config.slot) + ":" + std::to_string(round));
+    }
+    // The cached host handle must now read this slot's private marker; the parent checks the host.
+    require(registryValue(receipt.cachedHostKey, L"Marker") == config.slot * 100 + 3);
+    std::printf("{\"case\":\"rust-enrollment-control\",\"slot\":%lu,\"round\":%lu,"
+        "\"earlyPrivate\":7,\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n", config.slot, round);
+    return 0;
+}
+
 int readRustBootstrap() {
     education_bootstrap::Config config{};
     require(education_bootstrap::read(config));
@@ -1988,7 +2047,10 @@ int wmain(int argc, wchar_t** argv) {
     }
     // Fixed no-argument receiver for an explicitly built Rust/C++ interoperability check.
     if (argc == 1 && education_bootstrap::present()) {
-        try { return readRustBootstrap(); } catch (...) { return 86; }
+        try {
+            probe::View view;
+            return view.open() ? readRustEnrollmentControl() : readRustBootstrap();
+        } catch (...) { return 86; }
     }
     const bool configuredTest = argc == 2 && wcscmp(argv[1], L"--run-configured-storage-self-test") == 0;
     const bool mutexTest = argc == 2 && wcscmp(argv[1], L"--run-mutex-self-test") == 0;
