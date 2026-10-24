@@ -1,6 +1,6 @@
 //! Private first stage of the Education bootstrap experiment.
-//! Production code has no Tauri command, provider admission, DLL injection or resume.
-//! The cfg(test) bridge enrolls only the explicitly built own C++ fixture.
+//! Unmounted preparation/enrollment only; no game resume or provider admission.
+//! The reviewed payload policy is empty. Only cfg(test) supplies own-build DLL hashes.
 //! The child remains unstarted: profile/auth mediation must precede a future
 //! separately reviewed resume path. Direct-start game compatibility is UNKNOWN.
 #![allow(dead_code)]
@@ -364,6 +364,193 @@ pub(super) fn prepare_registered() -> io::Result<[PendingEducationBootstrap; 2]>
     let first = create_unstarted(path, image.try_clone()?, Some(first))?;
     let second = create_unstarted(path, image, Some(second))?;
     Ok([first, second])
+}
+
+// No installer/package policy supplies a reviewed original payload yet.
+// Empty policy is deliberate: reject before DLL load, game lookup or fresh profile creation.
+const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = None;
+#[derive(Clone, Copy)]
+struct PayloadDigests {
+    enroller: [u8; 32],
+    compatibility: [u8; 32],
+}
+type EnrollmentEntry = unsafe extern "system" fn(HANDLE, HANDLE, u32, u64, HANDLE, HANDLE) -> u32;
+
+fn payload_digest(file: &File) -> io::Result<[u8; 32]> {
+    use sha2::{Digest, Sha256};
+    use std::io::{Read, Seek, SeekFrom};
+    let mut reader = file.try_clone()?;
+    reader.seek(SeekFrom::Start(0))?;
+    let mut hash = Sha256::new();
+    let mut total = 0usize;
+    let mut buffer = [0u8; 16384];
+    loop {
+        let count = reader.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        total += count;
+        if total > 32 * 1024 * 1024 {
+            return Err(invalid("Bootstrap DLL exceeds reviewed size bound"));
+        }
+        hash.update(&buffer[..count]);
+    }
+    if total < 64 {
+        return Err(invalid("Bootstrap DLL is incomplete"));
+    }
+    Ok(hash.finalize().into())
+}
+
+struct BootstrapLibrary {
+    module: windows_sys::Win32::Foundation::HMODULE,
+    entry: EnrollmentEntry,
+    _files: [File; 2],
+    _directories: Vec<File>,
+}
+impl BootstrapLibrary {
+    fn reviewed() -> io::Result<Self> {
+        let digests = REVIEWED_EDUCATION_BOOTSTRAP.ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::Unsupported,
+                "No reviewed Education bootstrap payload",
+            )
+        })?;
+        let executable = std::env::current_exe()?;
+        let root = executable
+            .parent()
+            .ok_or_else(|| invalid("Missing bootstrap payload parent"))?
+            .join("independent-bootstrap");
+        Self::load(&root, digests)
+    }
+
+    // Only the fixed reviewed production location or cfg(test) build directory can call this.
+    fn load(root: &Path, digests: PayloadDigests) -> io::Result<Self> {
+        use windows_sys::Win32::System::LibraryLoader::{
+            LoadLibraryExW, LOAD_LIBRARY_SEARCH_SYSTEM32,
+        };
+        if !root.is_absolute()
+            || root.components().any(|component| {
+                matches!(
+                    component,
+                    std::path::Component::ParentDir | std::path::Component::CurDir
+                )
+            })
+        {
+            return Err(invalid("Absolute ordinary bootstrap directory required"));
+        }
+        // Hold every ancestor without delete sharing: reject reparses before loading code.
+        let mut directories = Vec::new();
+        for ancestor in root.ancestors().collect::<Vec<_>>().into_iter().rev() {
+            directories.push(open_directory(ancestor, FILE_READ_ATTRIBUTES)?);
+        }
+        let root = directory_path(
+            directories
+                .last()
+                .ok_or_else(|| invalid("Missing payload root"))?,
+        )?;
+        let library = root.join("bootstrap-enroll.dll");
+        let files = [
+            pin_image(&library)?,
+            pin_image(&root.join("bootstrap-compat.dll"))?,
+        ];
+        if payload_digest(&files[0])? != digests.enroller
+            || payload_digest(&files[1])? != digests.compatibility
+        {
+            return Err(invalid("Bootstrap DLL bytes do not match reviewed payload"));
+        }
+        let name = wide(library.as_os_str())?;
+        let module =
+            unsafe { LoadLibraryExW(name.as_ptr(), ptr::null_mut(), LOAD_LIBRARY_SEARCH_SYSTEM32) };
+        if module.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        let checked = (|| {
+            let mut loaded = [0u16; 512];
+            let count = unsafe {
+                windows_sys::Win32::System::LibraryLoader::GetModuleFileNameW(
+                    module,
+                    loaded.as_mut_ptr(),
+                    loaded.len() as u32,
+                )
+            } as usize;
+            if count == 0 || count >= loaded.len() {
+                return Err(invalid("Cannot bind loaded bootstrap module"));
+            }
+            let loaded = PathBuf::from(OsString::from_wide(&loaded[..count]));
+            if !same_image(&image_id(&files[0])?, &image_id(&pin_image(&loaded)?)?) {
+                return Err(invalid("Loaded bootstrap module file identity mismatch"));
+            }
+            let entry =
+                unsafe { GetProcAddress(module, c"EnrollPreparedEducationV1".as_ptr().cast()) }
+                    .ok_or_else(|| invalid("Missing bootstrap enrollment ABI v1"))?;
+            Ok(unsafe {
+                mem::transmute::<unsafe extern "system" fn() -> isize, EnrollmentEntry>(entry)
+            })
+        })();
+        match checked {
+            Ok(entry) => Ok(Self {
+                module,
+                entry,
+                _files: files,
+                _directories: directories,
+            }),
+            Err(error) => {
+                unsafe {
+                    windows_sys::Win32::Foundation::FreeLibrary(module);
+                }
+                Err(error)
+            }
+        }
+    }
+
+    fn enroll(&self, child: &PendingEducationBootstrap) -> io::Result<()> {
+        let (pid, birth) = child.identity()?;
+        let config = child
+            .configuration
+            .as_ref()
+            .ok_or_else(|| invalid("Enrollment requires published child configuration"))?;
+        let status = unsafe {
+            (self.entry)(
+                child.process.as_raw_handle() as HANDLE,
+                child._thread.as_raw_handle() as HANDLE,
+                pid,
+                birth,
+                config.as_raw_handle() as HANDLE,
+                child._image.as_raw_handle() as HANDLE,
+            )
+        };
+        if status != 0 {
+            return Err(io::Error::from_raw_os_error(status as i32));
+        }
+        child.identity()?;
+        Ok(())
+    }
+}
+impl Drop for BootstrapLibrary {
+    fn drop(&mut self) {
+        if unsafe { windows_sys::Win32::Foundation::FreeLibrary(self.module) } == 0 {
+            eprintln!("Bootstrap module cleanup is unconfirmed");
+        }
+    }
+}
+
+/// Original children are cancelled before DLL/directory pins are released (field drop order).
+/// This private prepared pair has no resume, detach, handle export or admission operation.
+pub(super) struct PreparedEducationEnrollment {
+    _children: [PendingEducationBootstrap; 2],
+    _payload: BootstrapLibrary,
+}
+
+pub(super) fn prepare_registered_enrolled() -> io::Result<PreparedEducationEnrollment> {
+    let payload = BootstrapLibrary::reviewed()?;
+    let children = prepare_registered()?;
+    for child in &children {
+        payload.enroll(child)?;
+    }
+    Ok(PreparedEducationEnrollment {
+        _children: children,
+        _payload: payload,
+    })
 }
 
 use std::{
@@ -1059,76 +1246,84 @@ mod tests {
     }
 
     type FixtureEntry = unsafe extern "system" fn(HANDLE, HANDLE, u32, u64, HANDLE, HANDLE) -> u32;
-    struct FixtureEnroller {
-        module: windows_sys::Win32::Foundation::HMODULE,
-        prepare: FixtureEntry,
-        enroll: FixtureEntry,
-        _pins: [File; 2],
-    }
-    impl FixtureEnroller {
-        fn load(path: &Path) -> Self {
-            use windows_sys::Win32::System::LibraryLoader::{
-                LoadLibraryExW, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, LOAD_LIBRARY_SEARCH_SYSTEM32,
-            };
-            assert_eq!(path.file_name(), Some(OsStr::new("bootstrap-ordering.exe")));
-            let root = path.parent().unwrap();
-            let library = root.join("bootstrap-enroll.dll");
-            let pins = [
-                pin_image(&library).unwrap(),
-                pin_image(&root.join("bootstrap-compat.dll")).unwrap(),
-            ];
-            let name = wide(library.as_os_str()).unwrap();
-            let module = unsafe {
-                LoadLibraryExW(
-                    name.as_ptr(),
-                    ptr::null_mut(),
-                    LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32,
-                )
-            };
-            assert!(!module.is_null(), "{}", io::Error::last_os_error());
-            let prepare =
-                unsafe { GetProcAddress(module, c"PrepareOwnedFixture".as_ptr().cast()) }.unwrap();
-            let enroll =
-                unsafe { GetProcAddress(module, c"EnrollOwnedFixture".as_ptr().cast()) }.unwrap();
-            Self {
-                module,
-                prepare: unsafe {
-                    mem::transmute::<unsafe extern "system" fn() -> isize, FixtureEntry>(prepare)
-                },
-                enroll: unsafe {
-                    mem::transmute::<unsafe extern "system" fn() -> isize, FixtureEntry>(enroll)
-                },
-                _pins: pins,
-            }
-        }
-        fn call(
-            &self,
-            child: &PendingEducationBootstrap,
-            proof: &FixtureReceipt,
-            enroll: bool,
-            birth: u64,
-        ) -> u32 {
-            child.identity().unwrap();
-            let entry = if enroll { self.enroll } else { self.prepare };
-            unsafe {
-                entry(
-                    child.process.as_raw_handle() as HANDLE,
-                    child._thread.as_raw_handle() as HANDLE,
-                    child.pid,
-                    birth,
-                    child.configuration.as_ref().unwrap().as_raw_handle() as HANDLE,
-                    proof.0.as_raw_handle() as HANDLE,
-                )
-            }
+    fn fixture_digests(path: &Path) -> PayloadDigests {
+        PayloadDigests {
+            enroller: payload_digest(&pin_image(&path.join("bootstrap-enroll.dll")).unwrap())
+                .unwrap(),
+            compatibility: payload_digest(&pin_image(&path.join("bootstrap-compat.dll")).unwrap())
+                .unwrap(),
         }
     }
-    impl Drop for FixtureEnroller {
-        fn drop(&mut self) {
-            assert_ne!(
-                unsafe { windows_sys::Win32::Foundation::FreeLibrary(self.module) },
-                0
-            );
+    fn prepare_fixture(
+        library: &BootstrapLibrary,
+        child: &PendingEducationBootstrap,
+        proof: &FixtureReceipt,
+        expect_enrolled: bool,
+    ) -> u32 {
+        let symbol = if expect_enrolled {
+            c"PrepareOwnedFixtureForEnrollment"
+        } else {
+            c"PrepareOwnedFixture"
+        };
+        let entry = unsafe { GetProcAddress(library.module, symbol.as_ptr().cast()) }.unwrap();
+        let entry: FixtureEntry = unsafe { mem::transmute(entry) };
+        unsafe {
+            entry(
+                child.process.as_raw_handle() as HANDLE,
+                child._thread.as_raw_handle() as HANDLE,
+                child.pid,
+                child.created,
+                child.configuration.as_ref().unwrap().as_raw_handle() as HANDLE,
+                proof.0.as_raw_handle() as HANDLE,
+            )
         }
+    }
+    fn rejected_enrollment(
+        library: &BootstrapLibrary,
+        child: &PendingEducationBootstrap,
+        birth: u64,
+        image: &File,
+    ) -> u32 {
+        unsafe {
+            (library.entry)(
+                child.process.as_raw_handle() as HANDLE,
+                child._thread.as_raw_handle() as HANDLE,
+                child.pid,
+                birth,
+                child.configuration.as_ref().unwrap().as_raw_handle() as HANDLE,
+                image.as_raw_handle() as HANDLE,
+            )
+        }
+    }
+
+    #[test]
+    fn registered_enrollment_refuses_unreviewed_payload_before_game_lookup() {
+        assert!(matches!(prepare_registered_enrolled(), Err(error)
+            if error.kind() == io::ErrorKind::Unsupported));
+    }
+
+    #[test]
+    #[ignore = "Requires the explicitly built own C++ payload"]
+    fn bootstrap_payload_rejects_mismatched_hashes_and_pins_loaded_files() {
+        let exe = PathBuf::from(std::env::var_os("MIVUBI_BOOTSTRAP_CPP_READER").unwrap())
+            .canonicalize()
+            .unwrap();
+        let root = exe.parent().unwrap();
+        let reviewed = fixture_digests(root);
+        let mut wrong = reviewed;
+        wrong.enroller[0] ^= 1;
+        assert!(BootstrapLibrary::load(root, wrong).is_err());
+        let mut wrong = reviewed;
+        wrong.compatibility[0] ^= 1;
+        assert!(BootstrapLibrary::load(root, wrong).is_err());
+        let library = BootstrapLibrary::load(root, reviewed).unwrap();
+        for leaf in ["bootstrap-enroll.dll", "bootstrap-compat.dll"] {
+            assert!(OpenOptions::new()
+                .write(true)
+                .open(root.join(leaf))
+                .is_err());
+        }
+        drop(library);
     }
 
     fn clone_store(store: &SlotStorage) -> SlotStorage {
@@ -1218,7 +1413,9 @@ mod tests {
         )
         .canonicalize()
         .unwrap();
-        let enroller = FixtureEnroller::load(&path);
+        assert_eq!(path.file_name(), Some(OsStr::new("bootstrap-ordering.exe")));
+        let root = path.parent().unwrap();
+        let enroller = BootstrapLibrary::load(root, fixture_digests(root)).unwrap();
         let [a, b] = test_slots();
         for store in [&a, &b] {
             std::fs::write(
@@ -1239,7 +1436,7 @@ mod tests {
         )
         .unwrap();
         assert_ne!(
-            enroller.call(&rejected, &proof, true, rejected.created + 1),
+            rejected_enrollment(&enroller, &rejected, rejected.created + 1, &rejected._image),
             0
         );
         rejected.identity().unwrap();
@@ -1255,7 +1452,12 @@ mod tests {
         )
         .unwrap();
         assert_ne!(
-            enroller.call(&wrong_image, &proof, true, wrong_image.created),
+            rejected_enrollment(
+                &enroller,
+                &wrong_image,
+                wrong_image.created,
+                &pin_image(&path).unwrap()
+            ),
             0
         );
         wrong_image.identity().unwrap();
@@ -1269,7 +1471,7 @@ mod tests {
             Some(&proof),
         )
         .unwrap();
-        assert_eq!(enroller.call(&baseline, &proof, false, baseline.created), 0);
+        assert_eq!(prepare_fixture(&enroller, &baseline, &proof, false), 0);
         finish_fixture(&baseline);
         for round in 1..=2 {
             let first_proof = FixtureReceipt::new();
@@ -1288,11 +1490,10 @@ mod tests {
                 Some(&second_proof),
             )
             .unwrap();
-            assert_eq!(enroller.call(&first, &first_proof, true, first.created), 0);
-            assert_eq!(
-                enroller.call(&second, &second_proof, true, second.created),
-                0
-            );
+            assert_eq!(prepare_fixture(&enroller, &first, &first_proof, true), 0);
+            enroller.enroll(&first).unwrap();
+            assert_eq!(prepare_fixture(&enroller, &second, &second_proof, true), 0);
+            enroller.enroll(&second).unwrap();
             finish_fixture(&first);
             finish_fixture(&second);
             for store in [&a, &b] {

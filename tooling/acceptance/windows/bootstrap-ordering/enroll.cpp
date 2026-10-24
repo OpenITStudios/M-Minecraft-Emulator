@@ -6,10 +6,11 @@
 #include "receipt.h"
 #include "education-config.h"
 
-// Test-only bridge. No PID reopening, target path, resume, helper or game entry point.
+// Private development adapter. Caller owns the original suspended process and pinned image.
+// No target-path/PID reopening, resume, helper, discovery or product command.
 namespace {
 HMODULE module = nullptr;
-void require(bool value) { if (!value) throw std::runtime_error("fixture enrollment refused"); }
+void require(bool value) { if (!value) throw std::runtime_error("bootstrap enrollment refused"); }
 struct File {
     HANDLE value = INVALID_HANDLE_VALUE;
     explicit File(const std::wstring& path) : value(CreateFileW(path.c_str(), GENERIC_READ,
@@ -66,55 +67,67 @@ void marker(HKEY key, DWORD value) {
     require(RegSetValueExW(key, L"Marker", 0, REG_DWORD,
         reinterpret_cast<const BYTE*>(&value), sizeof(value)) == ERROR_SUCCESS);
 }
+education_bootstrap::Config validate(HANDLE process, HANDLE thread, DWORD pid, ULONGLONG birth,
+    HANDLE configuration, HANDLE expectedImage) {
+    FILETIME created{}, exited{}, kernel{}, user{};
+    DWORD session = 0, currentSession = 0;
+    USHORT machine = 0, native = 0;
+    require(pid != GetCurrentProcessId() && GetProcessId(process) == pid && GetProcessIdOfThread(thread) == pid
+        && WaitForSingleObject(process, 0) == WAIT_TIMEOUT
+        && GetProcessTimes(process, &created, &exited, &kernel, &user)
+        && ((static_cast<ULONGLONG>(created.dwHighDateTime) << 32) | created.dwLowDateTime) == birth
+        && ProcessIdToSessionId(pid, &session) && ProcessIdToSessionId(GetCurrentProcessId(), &currentSession)
+        && session && session == currentSession
+        && IsWow64Process2(process, &machine, &native)
+        && machine == IMAGE_FILE_MACHINE_UNKNOWN && native == IMAGE_FILE_MACHINE_AMD64);
+    wchar_t actual[32768]{};
+    DWORD size = 32768;
+    require(QueryFullProcessImageNameW(process, 0, actual, &size));
+    File target(std::wstring(actual, size));
+    require(sameId(fileId(expectedImage), fileId(target.value)));
+    View writeAttempt;
+    writeAttempt.value = MapViewOfFile(configuration, FILE_MAP_WRITE, 0, 0, sizeof(education_bootstrap::Config));
+    require(!writeAttempt.value);
+    View configView;
+    configView.value = MapViewOfFile(configuration, FILE_MAP_READ, 0, 0, sizeof(education_bootstrap::Config));
+    require(configView.value != nullptr);
+    const auto config = *static_cast<const education_bootstrap::Config*>(configView.value);
+    require(config.magic == education_bootstrap::Magic && config.version == education_bootstrap::Version
+        && config.bytes == sizeof(config) && config.scope == education_bootstrap::StorageAndRegistryOnly
+        && !config.reserved && config.slot >= 1 && config.slot <= 2 && config.pid == pid
+        && config.session == session && config.created.dwHighDateTime == created.dwHighDateTime
+        && config.created.dwLowDateTime == created.dwLowDateTime && config.userKeyPath[511] == 0);
+    Key backing;
+    require(DuplicateHandle(process, config.registryRoot, GetCurrentProcess(),
+        reinterpret_cast<HANDLE*>(&backing.value), 0, FALSE, DUPLICATE_SAME_ACCESS));
+    Key userKey;
+    require(RegOpenCurrentUser(KEY_READ, &userKey.value) == ERROR_SUCCESS
+        && keyName(userKey.value) == config.userKeyPath);
+    wchar_t leaf[64]{};
+    require(probe::registryStoreLeaf(config.privateId, config.slot, leaf)
+        && _wcsicmp(keyName(backing.value).c_str(),
+            (std::wstring(config.userKeyPath) + L"\\Software\\MivubiEducationPilot\\" + leaf).c_str()) == 0);
+    return config;
+}
+void insert(HANDLE process) {
+    File compatibility(sibling(L"bootstrap-compat.dll"));
+    fileId(compatibility.value);
+    std::string import;
+    for (const wchar_t c : sibling(L"bootstrap-compat.dll")) {
+        require(c > 0 && c <= 0x7f);
+        import.push_back(static_cast<char>(c));
+    }
+    LPCSTR imports[]{import.c_str()};
+    require(DetourUpdateProcessWithDll(process, imports, 1) != FALSE);
+}
 DWORD prepare(HANDLE process, HANDLE thread, DWORD pid, ULONGLONG birth,
-    HANDLE configuration, HANDLE proof, bool enroll) {
+    HANDLE configuration, HANDLE proof, bool expectEnrolled) {
     try {
-        FILETIME created{}, exited{}, kernel{}, user{};
-        DWORD session = 0, currentSession = 0;
-        USHORT machine = 0, native = 0;
-        require(GetProcessId(process) == pid && GetProcessIdOfThread(thread) == pid
-            && WaitForSingleObject(process, 0) == WAIT_TIMEOUT
-            && GetProcessTimes(process, &created, &exited, &kernel, &user)
-            && ((static_cast<ULONGLONG>(created.dwHighDateTime) << 32) | created.dwLowDateTime) == birth
-            && ProcessIdToSessionId(pid, &session) && ProcessIdToSessionId(GetCurrentProcessId(), &currentSession)
-            && session && session == currentSession
-            && IsWow64Process2(process, &machine, &native)
-            && machine == IMAGE_FILE_MACHINE_UNKNOWN && native == IMAGE_FILE_MACHINE_AMD64);
         File expected(sibling(L"bootstrap-ordering.exe"));
-        wchar_t actual[32768]{};
-        DWORD size = 32768;
-        require(QueryFullProcessImageNameW(process, 0, actual, &size));
-        File target(std::wstring(actual, size));
-        require(sameId(fileId(expected.value), fileId(target.value)));
-        File compatibility(sibling(L"bootstrap-compat.dll"));
-        fileId(compatibility.value);
-        std::string import;
-        for (const wchar_t c : sibling(L"bootstrap-compat.dll")) {
-            require(c > 0 && c <= 0x7f);
-            import.push_back(static_cast<char>(c));
-        }
-        View writeAttempt;
-        writeAttempt.value = MapViewOfFile(configuration, FILE_MAP_WRITE, 0, 0, sizeof(education_bootstrap::Config));
-        require(!writeAttempt.value);
-        View configView;
-        configView.value = MapViewOfFile(configuration, FILE_MAP_READ, 0, 0, sizeof(education_bootstrap::Config));
-        require(configView.value != nullptr);
-        const auto config = *static_cast<const education_bootstrap::Config*>(configView.value);
-        require(config.magic == education_bootstrap::Magic && config.version == education_bootstrap::Version
-            && config.bytes == sizeof(config) && config.scope == education_bootstrap::StorageAndRegistryOnly
-            && !config.reserved && config.slot >= 1 && config.slot <= 2 && config.pid == pid
-            && config.session == session && config.created.dwHighDateTime == created.dwHighDateTime
-            && config.created.dwLowDateTime == created.dwLowDateTime && config.userKeyPath[511] == 0);
+        const auto config = validate(process, thread, pid, birth, configuration, expected.value);
         Key backing;
         require(DuplicateHandle(process, config.registryRoot, GetCurrentProcess(),
             reinterpret_cast<HANDLE*>(&backing.value), 0, FALSE, DUPLICATE_SAME_ACCESS));
-        Key userKey;
-        require(RegOpenCurrentUser(KEY_READ, &userKey.value) == ERROR_SUCCESS
-            && keyName(userKey.value) == config.userKeyPath);
-        wchar_t leaf[64]{};
-        require(probe::registryStoreLeaf(config.privateId, config.slot, leaf)
-            && _wcsicmp(keyName(backing.value).c_str(),
-                (std::wstring(config.userKeyPath) + L"\\Software\\MivubiEducationPilot\\" + leaf).c_str()) == 0);
         View proofView;
         proofView.value = MapViewOfFile(proof, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, sizeof(probe::Receipt));
         require(proofView.value != nullptr);
@@ -135,21 +148,17 @@ DWORD prepare(HANDLE process, HANDLE thread, DWORD pid, ULONGLONG birth,
         receipt.magic = probe::Magic;
         receipt.version = probe::Version;
         receipt.pid = pid;
-        receipt.created = created;
+        receipt.created = config.created;
         receipt.mode = probe::ConfiguredStorage;
         receipt.slot = config.slot;
         receipt.registryBacking = 1;
-        receipt.registryBaseline = enroll ? 0 : 1;
+        receipt.registryBaseline = expectEnrolled ? 0 : 1;
         receipt.inheritedRegistry = config.registryRoot;
         receipt.cachedHostKey = reinterpret_cast<HKEY>(cached);
         receipt.fileLogicalRoot = config.logicalRoot;
         receipt.fileOwnRoot = config.privateRoot;
         memcpy(receipt.registryUserPath, config.userKeyPath, sizeof(receipt.registryUserPath));
         require(wcscpy_s(receipt.logical, name.c_str()) == 0);
-        if (enroll) {
-            LPCSTR imports[]{import.c_str()};
-            require(DetourUpdateProcessWithDll(process, imports, 1) != FALSE);
-        }
         // Caller alone owns/resumes/cancels the original suspended child.
         return ERROR_SUCCESS;
     } catch (...) { return ERROR_INVALID_DATA; }
@@ -159,9 +168,19 @@ extern "C" __declspec(dllexport) DWORD WINAPI PrepareOwnedFixture(
     HANDLE process, HANDLE thread, DWORD pid, ULONGLONG birth, HANDLE configuration, HANDLE proof) {
     return prepare(process, thread, pid, birth, configuration, proof, false);
 }
-extern "C" __declspec(dllexport) DWORD WINAPI EnrollOwnedFixture(
+extern "C" __declspec(dllexport) DWORD WINAPI PrepareOwnedFixtureForEnrollment(
     HANDLE process, HANDLE thread, DWORD pid, ULONGLONG birth, HANDLE configuration, HANDLE proof) {
     return prepare(process, thread, pid, birth, configuration, proof, true);
+}
+// ABI v1: original process/thread, PID/birth, read-only parent config, pinned parent image.
+// No writable receipt or fixture-side registry setup is consumed by enrollment.
+extern "C" __declspec(dllexport) DWORD WINAPI EnrollPreparedEducationV1(
+    HANDLE process, HANDLE thread, DWORD pid, ULONGLONG birth, HANDLE configuration, HANDLE expectedImage) {
+    try {
+        validate(process, thread, pid, birth, configuration, expectedImage);
+        insert(process);
+        return ERROR_SUCCESS;
+    } catch (...) { return ERROR_INVALID_DATA; }
 }
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) module = instance;

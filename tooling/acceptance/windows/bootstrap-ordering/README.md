@@ -11,8 +11,9 @@ small; success cannot establish order for every Windows/game dependency.
 The controller only launches its **own absolute executable path**, suspended,
 with a fixed internal child argument. It updates the resulting original process
 handle via DetourUpdateProcessWithDll and resumes the original thread. There is
-no target-path/PID option, process discovery, shell activation, cross-bitness
-helper, game launch, service/driver operation, account access or product wiring.
+no target-path/PID CLI option, process discovery, shell activation, cross-bitness
+helper, game launch or service/driver operation. The private Rust preparation
+seam described below is unmounted and has no reviewed game payload.
 The sibling compatibility DLL is fixed, and the output directory must be a
 trusted build directory. This is not an authenticated production injector.
 
@@ -52,7 +53,9 @@ The original compatibility code now has a separate, private
 removes the receipt, numeric mutex-name and sibling-directory requirements
 from the **selected storage/HKCU** installation path. It does not select a
 Minecraft provider. The desktop Rust preparer now publishes this configuration
-for two fresh slots. It does not inject the DLL or provide a game resume operation.
+for two fresh slots. Its optional private enrollment seam requires separately
+reviewed DLL bytes and has no game resume operation; the reviewed payload policy
+is currently empty.
 
 The target reads a snapshot from an unnamed section through a read-only
 handle; a writable handle is rejected. The controller fills it while its
@@ -125,57 +128,73 @@ APPDATA/LOCALAPPDATA use canonical handle-derived paths, including expansion of
 8.3 aliases; inherited overrides are replaced only in the child block.
 ASCII/local-drive and current mediation limits still apply.
 
-The default Rust checks keep their own executable suspended. Two explicitly
-ignored interoperability checks accept the trusted, locally built
-bootstrap-ordering.exe path through MIVUBI_BOOTSTRAP_CPP_READER. The first
-validates the no-DLL receiver ABI, object/key binding, non-inherited backing
-handles, environment and separate retained control stores.
+The private `prepare_registered_enrolled` seam now connects that registered-image
+preparer to the same native enrollment operation used by the own-process control.
+It first requires a source-reviewed pair of SHA-256 DLL digests. The policy is
+deliberately **None**: no DLL load, game registration lookup or fresh profile
+creation happens through this seam until a payload is reviewed. There is no
+environment, settings, path or public-command override.
 
-The second connects the **same Rust original suspended-process handles** to
-the test-only sibling bootstrap-enroll.dll. Its two fixed exports prepare a
-no-DLL baseline or insert only bootstrap-compat.dll into only the sibling
-bootstrap-ordering.exe image. It validates PID/birth, thread/process relationship,
-session, AMD64, pinned image file IDs and read-only configuration before creating
-fresh canaries. It never reopens a PID, accepts target/DLL paths, resumes a child,
-invokes a helper or targets the registered game. The trusted parent pins both
-DLLs against write/delete replacement through child completion. This trusted
-build-directory control is not production publisher/signature attestation.
+The fixed location is `independent-bootstrap/` beside the manager executable,
+with the fixed selected `bootstrap-enroll.dll` and `bootstrap-compat.dll`
+inputs. Before loading code, the owner opens every path ancestor without delete
+sharing, rejects reparses/unsupported paths, pins both ordinary DLL files against
+write/delete replacement, and hashes those same handles (32 MiB maximum each).
+LoadLibraryEx uses the full DLL path with System32-only dependency search; loaded module
+file identity and the fixed `EnrollPreparedEducationV1` symbol are checked.
+This is exact reviewed-byte loading, not an approved publisher/release policy
+or proof of a hostile-host security boundary.
 
-Only this cfg(test) path inherits an additional writable version-8 probe receipt;
-the normal producer still inherits only its read-only version-1 configuration.
-The baseline must observe host registry operations at dependency/TLS/main.
-The enrolled fixture must observe private native registry reads/writes/enumeration
-at all three stages after attach/arm, and write a logical Roaming path into its
-private backing. Roaming/Local Known Folder and environment paths are checked.
-Both slots retain distinct file/registry markers across two relaunches. The
-unhooked parent independently checks fresh host file/registry markers remain
-unchanged. Wrong birth and wrong image are refused before enrollment; original
-suspended children are cancelled. Receipts are cooperative instrumentation,
-not authenticated security evidence.
+The private ABI receives the original process/thread, PID/birth, read-only
+configuration and original pinned image handle. Native validation checks their
+image identity/session/AMD64/config/registry binding before inserting the one
+fixed sibling compatibility DLL. It neither reads a writable receipt nor creates
+fixture keys, reopens PIDs, accepts target/DLL paths, resumes a child or launches
+a helper. Fixture canary preparation is a separate test export. The two-child
+owner cancels children before releasing module/file/directory pins; any error
+retains that cleanup order. The default registered route still cannot resume.
 
-On a compatible project toolchain, after building this C++ fixture:
+Microsoft Detours remains the existing external development-only static dependency
+at the pinned revision, built only with BOOTSTRAP_ORDERING_TEST_ONLY=ON. Its bytes
+are covered by the reviewed enroller digest, not dynamically resolved from PATH.
+No dependency, installer resource, bundle rule or release format was added.
+Production dependency/payload adoption remains undecided.
+
+The default Rust checks keep their own executable suspended. Three explicitly
+ignored checks accept the trusted built own fixture through
+MIVUBI_BOOTSTRAP_CPP_READER. They exercise the no-DLL ABI receiver, wrong DLL
+hashes/write exclusion, and complete enrollment through the shared loader/entry.
+The last prepares separate cooperative instrumentation first, then invokes the
+same receipt-independent enrollment operation used by the private game seam.
+A positive unhooked baseline sees host canaries; enrolled dependency/TLS/main
+perform private native registry reads/writes/enumeration. Roaming/Local environment
+and Known Folder paths are checked, and logical file writes arrive in private
+backing. Both stores retain distinct markers over two relaunches; the unhooked
+parent checks fresh host markers unchanged. Wrong birth/pinned-image controls
+are refused and original children cancelled. Receipts remain cooperative proof.
+
+On a compatible project toolchain after building the C++ development target:
 
 ~~~powershell
 $env:MIVUBI_BOOTSTRAP_CPP_READER = (Resolve-Path ./workspace/bootstrap-ordering-build/Release/bootstrap-ordering.exe).Path
-cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml cpp_receiver_consumes_rust_configuration_for_both_slots_across_relaunch -- --ignored --nocapture --test-threads=1
-cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml rust_enrolls_own_fixture_before_dependency_tls_and_main -- --ignored --nocapture --test-threads=1
+cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml independent_bootstrap::tests -- --include-ignored --nocapture --test-threads=1
 ~~~
 
-Executed against baseline `31848bb050f63fd005b30ab175beec598dc2428e`: MSVC
-19.44 x64 Release /W4 /WX build, five default Rust checks, both explicitly
-executed ignored checks and all four C++ modes pass. The unchanged module was
-compiled in an isolated Rust 1.96/windows-sys 0.61.2 harness whose Education
-resolver always refuses. Full Tauri build is NOT_EXECUTED (project requires
-Rust 1.98). Exact own-image metadata check: zero remaining fixture processes.
-Executed source blobs: Rust `f3b8048585fdca4582543591db57a154c97b64da`,
-enroller `27ea31ea18af1fc4dcc1fc19a1d83b5f6d89fd51`,
-controller `96e5f5edea86169e1fdbf854b1f5427259becb8d`,
-CMake `9831303ecec1e2f6f43f5eadd602f893040c8c70`.
-Unchanged config/receipt/compat blobs are pinned by the baseline.
-No production enrollment/resume API or public command is added. Controlled
-ordering does not establish Minecraft loader compatibility, singleton,
-helper/broker propagation, sign-in, worlds or containment. These remain
-UNKNOWN / NOT_EXECUTED; providerReady=false.
+Executed against baseline `6916f4d37438a7a570b9f37012d3db7739bc1564`: MSVC
+19.44 x64 Release /W4 /WX build, all nine Rust checks (three ignored checks
+explicitly included), and all four existing C++ modes pass. The unchanged Rust
+module was compiled in an isolated Rust 1.96/sha2 0.11.1/windows-sys 0.61.2 harness
+whose Education resolver always refuses. The empty-policy check returns
+Unsupported before that resolver. Full Tauri build remains NOT_EXECUTED
+(required Rust 1.98). Exact own-image metadata check: zero remaining processes.
+Executed blobs: Rust `8ddfdd7b71e6eaed8ca1abd8abd82d32abb08290`,
+enroller `af4672b1e4b26805596e4766202fbf3731d4713b`.
+Other native build inputs are unchanged at the pinned baseline.
+
+No registered game was looked up, created, injected or resumed by these checks.
+Actual singleton, helper/broker context, native/file bypass coverage, game loader
+ordering, sign-in, world persistence and containment remain UNKNOWN /
+NOT_EXECUTED. Public commands/provider admission stay unchanged; providerReady=false.
 
 ## Ordering controls and receipt
 
