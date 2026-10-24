@@ -300,6 +300,45 @@ Contracts:
 [KNOWN_FOLDER_FLAG](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/ne-shlobj_core-known_folder_flag),
 [Known Folders](https://learn.microsoft.com/en-us/windows/win32/shell/known-folders).
 
+## Inherited application-hive enrollment decision — 24 October 2026 WIB
+
+Reviewed exact source: 1910a662711080834d29382f48b2eeea148da3e4.
+**Decision: do not select parent-loaded application-hive handle inheritance alone
+as a documented production mechanism for private data before dependency/TLS.**
+This closes that specific support claim; it is not a runtime finding that Windows
+cannot inherit or use such a handle.
+
+The [RegLoadAppKeyW contract](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regloadappkeyw#remarks)
+requires each participating process to call RegLoadAppKey. REG_PROCESS_APPKEY
+also prevents another caller loading the active hive. Generic
+[registry-key handle inheritance](https://learn.microsoft.com/en-us/windows/win32/sysinfo/handle-inheritance)
+does not document an exception to the application-hive participation requirement.
+An exported function, successful handle duplication, or a single-host fixture
+would not establish that exception.
+
+| Proposed step | First unresolved contract |
+| --- | --- |
+| Parent loads slot HKCU.dat and passes its handle to a suspended child | Inheritance alone does not satisfy the documented per-process application-hive load step. |
+| Child loads before dependency/TLS | Current bootstrap runs in main; no supported earlier load boundary has been established without introducing prohibited loader-time registry setup. |
+| Remove REG_PROCESS_APPKEY | Does not remove the per-process load requirement; it also discards the load-exclusivity property tested by the current implementation. |
+| Treat early denial as readiness | Prevents selected host accesses but does not supply private values needed at startup or establish game compatibility. |
+
+**Proof ceiling:** source/official-contract review only. Application-hive inherited
+handle behavior, new builds/runtime and Minecraft acceptance: NOT_EXECUTED.
+Actual OS behavior and broader support remain UNKNOWN. Existing successful
+controls belong to their recorded source snapshots and are not promoted.
+
+Ordinary non-application registry keys are a distinct candidate:
+[RegCreateKeyExW](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regcreatekeyexw)
+documents inheritable returned handles and nonvolatile storage. That does not
+approve a provider. Any next implementation must reuse the existing DLL/slot
+path, use only fresh synthetic ordinary keys, bind the inherited key to its slot,
+exclude its private subtree from host-path translation and prove early private
+values/persistence with the same dependency/TLS controls. Do not add a second
+fallback/readiness store, copy real account registry data, weaken old tests or
+migrate/delete existing test/game stores. Current continuation remains solely in
+planning/development.md.
+
 ## Early registry boundary — 24 October 2026 WIB
 
 The original DLL now installs RegOpenCurrentUser, NtOpenKey, NtOpenKeyEx,
