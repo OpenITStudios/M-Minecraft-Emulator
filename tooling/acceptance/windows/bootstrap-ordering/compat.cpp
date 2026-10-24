@@ -3,6 +3,8 @@
 #include <cstdio>
 #include <cwchar>
 #include <cstring>
+#include <shlobj.h>
+#include <knownfolders.h>
 
 namespace {
 probe::NativeCreate originalCreate = nullptr;
@@ -21,7 +23,7 @@ probe::NativeFileCreate originalFileCreate = nullptr;
 probe::NativeFileOpen originalFileOpen = nullptr;
 HANDLE fileLogicalRoot = nullptr, fileOwnRoot = nullptr;
 FILE_ID_INFO logicalDirectoryId{}, ownDirectoryId{};
-wchar_t logicalDevice[512]{}, logicalDos[512]{}, ownDevice[512]{};
+wchar_t logicalDevice[512]{}, logicalDos[512]{}, ownDevice[512]{}, ownDos[512]{};
 
 bool sameFileId(const FILE_ID_INFO& a, const FILE_ID_INFO& b) {
     return a.VolumeSerialNumber == b.VolumeSerialNumber
@@ -52,8 +54,10 @@ bool initializeFiles(const probe::Receipt& config, HMODULE ntdll) {
     const DWORD deviceLength = GetFinalPathNameByHandleW(config.fileLogicalRoot, logicalDevice, 512, VOLUME_NAME_NT);
     const DWORD dosLength = GetFinalPathNameByHandleW(config.fileLogicalRoot, logicalDos, 512, VOLUME_NAME_DOS);
     const DWORD ownLength = GetFinalPathNameByHandleW(config.fileOwnRoot, ownDevice, 512, VOLUME_NAME_NT);
+    const DWORD ownDosLength = GetFinalPathNameByHandleW(config.fileOwnRoot, ownDos, 512, VOLUME_NAME_DOS);
     if (deviceLength < 9 || deviceLength >= 512 || dosLength < 7 || dosLength >= 512
-        || ownLength == 0 || ownLength >= 512
+        || ownLength == 0 || ownLength >= 512 || ownDosLength < 7 || ownDosLength >= 480
+        || !asciiPath(ownDos, ownDosLength) || wcsncmp(ownDos, L"\\\\?\\", 4) != 0
         || !asciiPath(logicalDevice, deviceLength) || !asciiPath(logicalDos, dosLength)
         || !asciiPath(ownDevice, ownLength) || wcsncmp(logicalDos, L"\\\\?\\", 4) != 0) return false;
     constexpr wchar_t suffix[] = L"\\logical";
@@ -63,6 +67,7 @@ bool initializeFiles(const probe::Receipt& config, HMODULE ntdll) {
     if (ownDevice[parentLength] != L'\\' || ownDevice[parentLength + 1] != slotSuffix) return false;
     logicalDos[1] = L'?'; // Convert the canonical Win32 extended path to its NT DOS form.
     logicalDos[2] = L'?';
+    ownDos[1] = ownDos[2] = L'?';
     fileLogicalRoot = config.fileLogicalRoot;
     fileOwnRoot = config.fileOwnRoot;
     originalFileCreate = reinterpret_cast<probe::NativeFileCreate>(GetProcAddress(ntdll, "NtCreateFile"));
@@ -110,7 +115,7 @@ FileRoute fileRoute(const OBJECT_ATTRIBUTES& attributes, wchar_t (&path)[512], u
     length = 0;
     if (count && name.Buffer[0] == L'\\') {
         if (!pathPrefix(name, logicalDevice, leaf) && !pathPrefix(name, logicalDos, leaf)
-            && !pathPrefix(name, ownDevice, leaf)) return FileRoute::Other;
+            && !pathPrefix(name, ownDevice, leaf) && !pathPrefix(name, ownDos, leaf)) return FileRoute::Other;
         if (attributes.RootDirectory) return FileRoute::Unsupported;
     } else {
         FILE_ID_INFO rootId{};
@@ -241,6 +246,53 @@ NTSTATUS NTAPI translatedFileOpen(PHANDLE handle, ACCESS_MASK access, POBJECT_AT
     SetLastError(saved);
     return status;
 }
+
+using KnownPath = HRESULT (WINAPI*)(REFKNOWNFOLDERID, DWORD, HANDLE, PWSTR*);
+KnownPath originalKnownPath = nullptr;
+wchar_t roamingPath[512]{}, localPath[512]{};
+bool initializeAppData() {
+    if (swprintf_s(roamingPath, L"%s\\Roaming", ownDos + 4) < 0
+        || swprintf_s(localPath, L"%s\\Local", ownDos + 4) < 0) return false;
+    wchar_t environment[512]{};
+    const DWORD roaming = GetEnvironmentVariableW(L"APPDATA", environment, 512);
+    if (!roaming || roaming >= 512 || wcscmp(environment, roamingPath) != 0) return false;
+    const DWORD local = GetEnvironmentVariableW(L"LOCALAPPDATA", environment, 512);
+    if (!local || local >= 512 || wcscmp(environment, localPath) != 0) return false;
+    // Resolve an already imported module; no shell/COM lookup or LoadLibrary in DllMain.
+    const HMODULE shell = GetModuleHandleW(L"shell32.dll");
+    originalKnownPath = shell ? reinterpret_cast<KnownPath>(
+        GetProcAddress(shell, "SHGetKnownFolderPath")) : nullptr;
+    return originalKnownPath != nullptr;
+}
+HRESULT WINAPI translatedKnownPath(REFKNOWNFOLDERID id, DWORD flags, HANDLE token, PWSTR* output) {
+    const wchar_t* selected = IsEqualGUID(id, FOLDERID_RoamingAppData) ? roamingPath
+        : IsEqualGUID(id, FOLDERID_LocalAppData) ? localPath : nullptr;
+    if (!selected) return originalKnownPath(id, flags, token, output);
+    const DWORD saved = GetLastError();
+    if (!output) return E_POINTER;
+    *output = nullptr;
+    HRESULT result = S_OK;
+    if (token) result = E_ACCESSDENIED;
+    // shortcut: default/DONT_VERIFY only; review other flag semantics before expanding coverage.
+    else if (flags & ~static_cast<DWORD>(KF_FLAG_DONT_VERIFY)) result = E_NOTIMPL;
+    else {
+        if (!(flags & KF_FLAG_DONT_VERIFY)) {
+            const DWORD attributes = GetFileAttributesW(selected);
+            if (attributes == INVALID_FILE_ATTRIBUTES) result = HRESULT_FROM_WIN32(GetLastError());
+            else if (!(attributes & FILE_ATTRIBUTE_DIRECTORY)
+                || (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) result = E_ACCESSDENIED;
+        }
+        if (SUCCEEDED(result)) {
+            const SIZE_T bytes = (wcslen(selected) + 1) * sizeof(wchar_t);
+            auto memory = static_cast<PWSTR>(CoTaskMemAlloc(bytes));
+            if (!memory) result = E_OUTOFMEMORY;
+            else { memcpy(memory, selected, bytes); *output = memory; }
+        }
+    }
+    SetLastError(saved);
+    return result;
+}
+
 bool selected(const UNICODE_STRING& name, unsigned leaf, bool insensitive) {
     const unsigned count = name.Length / sizeof(wchar_t);
     if (count - leaf != logicalLength) return false;
@@ -346,7 +398,8 @@ bool install(const probe::Receipt& config) {
     const HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
     compareHandles = kernelbase ? reinterpret_cast<probe::CompareHandles>(
         GetProcAddress(kernelbase, "CompareObjectHandles")) : nullptr;
-    if (!originalCreate || !originalOpen || !openDirectory || !compareHandles || !initializeFiles(config, ntdll)) return false;
+    if (!originalCreate || !originalOpen || !openDirectory || !compareHandles || !initializeFiles(config, ntdll)
+        || !initializeAppData()) return false;
     DWORD session = 0;
     wchar_t path[80]{};
     if (!ProcessIdToSessionId(GetCurrentProcessId(), &session)
@@ -368,7 +421,9 @@ bool install(const probe::Receipt& config) {
         || DetourAttach(reinterpret_cast<PVOID*>(&originalFileCreate),
                         reinterpret_cast<PVOID>(translatedFileCreate)) != NO_ERROR
         || DetourAttach(reinterpret_cast<PVOID*>(&originalFileOpen),
-                        reinterpret_cast<PVOID>(translatedFileOpen)) != NO_ERROR) {
+                        reinterpret_cast<PVOID>(translatedFileOpen)) != NO_ERROR
+        || DetourAttach(reinterpret_cast<PVOID*>(&originalKnownPath),
+                        reinterpret_cast<PVOID>(translatedKnownPath)) != NO_ERROR) {
         DetourTransactionAbort();
         CloseHandle(baseDirectory); baseDirectory = nullptr; return false;
     }

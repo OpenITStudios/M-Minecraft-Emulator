@@ -4,7 +4,7 @@ This standalone Windows/MSVC x64 experiment answers one question: does an
 in-memory first import arm a synthetic canary gate before the controlled
 dependency's DllMain, the EXE TLS callback, and the EXE's main canary run?
 The default ordering mode does not hook APIs. The separate mutex mode below
-hooks a fixed mutex name and one synthetic bounded directory tree. Neither mode isolates general filesystem/HKCU views, identifies
+hooks a fixed mutex name, one synthetic bounded directory tree and two Known Folder IDs. Neither mode isolates general filesystem/HKCU views, identifies
 Minecraft's singleton, separates brokers, or approves a provider. The marker graph is intentionally
 small; success cannot establish order for every Windows/game dependency.
 
@@ -79,7 +79,7 @@ HANDLE, username, installed game path, credentials, caches or world contents.
 
 No registry operations are mediated. Only the selected synthetic directory below is redirected. In the default ordering mode,
 "canary" means a marker at a would-be protected call site and "arm" is a shared
-flag. In mutex mode the flag follows installation of all four native mutex/file hooks in one transaction.
+flag. In mutex mode the flag follows installation of the four native mutex/file hooks plus SHGetKnownFolderPath in one transaction.
 This test cannot observe kernel accesses before notification, all loader work,
 external authentication, other module/TLS graphs or enforcement under bypass.
 
@@ -205,7 +205,7 @@ native and Win32 entries, cursor/restart/filter behavior and end-of-enumeration.
 There is no merged host view or synthetic query-result rewriting. The private
 receipt stays version 4; no product wire schema changes.
 
-File mask **65535**, per child/generation:
+File mask **1048575**, per child/generation:
 
 | Bit | Actual check |
 | --- | --- |
@@ -218,6 +218,10 @@ File mask **65535**, per child/generation:
 | 8192 | Deep native handle-relative create/open agrees with absolute Win32 reads; nested state/slot markers persist across relaunch and caller attributes/LastError/information are preserved. |
 | 16384 | Deep native multi/single-entry enumeration sees only own state/slot files; peer file is missing. |
 | 32768 | Newly created directory junctions are refused as final targets and intermediate components, including an attempted overwrite through them; traversal/stream/excess-depth requests fail. |
+| 65536 | APPDATA/LOCALAPPDATA, default Known Folder and DONT_VERIFY return the same expected private paths for both IDs. |
+| 131072 | Environment-path writes agree with Known Folder and logical-path reads, and private directory enumeration. |
+| 262144 | AppData files start missing despite synthetic logical HOST files; prior slot markers persist after relaunch. |
+| 524288 | Non-null tokens, unsupported flags and null output are rejected; the controller also rejects a deliberately misbound environment before main. |
 
 The parent creates private nested/escape **junctions pointing only to a fresh
 synthetic guard directory**, not any user/game location. It verifies the guard,
@@ -233,8 +237,8 @@ compatibility is not established. File symlinks, other tags, hardlinks, handle
 rename/delete, inherited/duplicated data handles, hostile races, real namespace
 presentation, Unicode and general filesystem behavior remain UNKNOWN.
 This is cooperative compatibility, **not a security boundary**; same-user direct
-private backing access remains possible. Effective Roaming/Local/Known Folder,
-HKCU, external authentication and game injection are not implemented here.
+private backing access remains possible. The narrow AppData lookup path is described below. Effective Minecraft
+Roaming/Local coverage, HKCU, external authentication and game injection are not established.
 
 API contracts:
 [OBJECT_ATTRIBUTES](https://learn.microsoft.com/en-us/windows/win32/api/ntdef/ns-ntdef-_object_attributes),
@@ -243,7 +247,92 @@ API contracts:
 [NtQueryDirectoryFile](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntquerydirectoryfile),
 [Reparse points and file operations](https://learn.microsoft.com/en-us/windows/win32/fileio/reparse-points-and-file-operations).
 
+## AppData environment and Known Folder — 24 October 2026 WIB
+
+The same controller now supplies a fresh child environment block with APPDATA
+and LOCALAPPDATA replaced by the slot's existing private Roaming/Local directories.
+It removes previous case-insensitive definitions from that copy; it does not set
+the parent/system environment. No existing profile data is seeded or copied.
+
+DLL initialization derives those two expected paths from the validated private
+directory handle and rejects disagreeing environment values. It resolves the
+SHGetKnownFolderPath export from the already-imported Shell32 module and attaches
+it in the same Detours transaction as file/IPC hooks. There is no LoadLibrary,
+COM initialization, allocator call or actual shell lookup in our DllMain.
+Shell32/Ole32/Uuid are Windows SDK links, not downloaded or bundled dependencies.
+This controlled import graph does not prove general loader/game compatibility.
+
+For FOLDERID_RoamingAppData and FOLDERID_LocalAppData, current-user (null token)
+lookup returns the private DOS path. Flags 0 verify existing private directories;
+KF_FLAG_DONT_VERIFY skips that metadata check. The caller owns a CoTaskMemAlloc
+copy and frees it with CoTaskMemFree. Entry LastError is restored and failures
+clear the output. Non-null tokens (including the Default User pseudo-handle)
+return E_ACCESSDENIED; null output returns E_POINTER. Other flags, including
+CREATE and DEFAULT_PATH, return E_NOTIMPL rather than host/default-profile paths.
+Unselected IDs forward to the original API unchanged.
+
+The native file selector also recognizes canonical own DOS paths so environment/
+Known Folder file opens use the same original private component traversal.
+The test initializes COM outside loader lock, checks both IDs/flags, writes each
+environment file and reads it through Known Folder and logical host-path mapping.
+Only newly created logical HOST markers and private A/B markers are accessed.
+Parent raw reads during/after both process generations verify no crossover,
+persistent private values and unchanged logical/guard/outside markers.
+
+A second negative binding control configures slot A/private A with the synthetic
+logical directory's AppData environment. It fails before Armed/main. Existing
+A/private B mismatch, ordering/failure/timeout, native/Win32 file and IPC controls
+remain required. Receipt version/layout remain unchanged.
+
+This is process-local selected API compatibility, not Windows profile registration
+or complete Known Folder virtualization. SHGetFolderPath, WinRT, shell/COM object
+interfaces, packaged redirection flags, LocalLow, other IDs, inherited child
+contexts, environment mutation and arbitrary hardcoded profile aliases remain
+unimplemented/unverified. The process can still mutate its own environment.
+HKCU and authentication are not isolated; no actual game was launched/injected.
+
+Contracts:
+[SHGetKnownFolderPath](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shgetknownfolderpath),
+[KNOWN_FOLDER_FLAG](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/ne-shlobj_core-known_folder_flag),
+[Known Folders](https://learn.microsoft.com/en-us/windows/win32/shell/known-folders).
+
 ## Evidence
+
+### Executed AppData lookup slice — 24 October 2026 WIB
+
+Exact baseline: d85fe6d794fbeea8b006bd8cf32cf2de18027817.
+Changed executed input blobs:
+
+| Input | Git blob |
+| --- | --- |
+| compat.cpp | 711c50d7885b7bfd5d2299a4085c2bbf668b0534 |
+| probe.cpp | 17e43f7dc6bef13fbb2822bb9f25263aeafa64d1 |
+| CMakeLists.txt | c69a5ad5127e5116f63bdfb7200f4fb16cf7c2f7 |
+
+Receipt v4 and other source inputs are unchanged. External Detours stays clean
+at 1dbd4ea281d73d478aa8d09a8b83fbd265f715f7. Windows x64 26100,
+CMake 4.3.2, MSVC 19.44.35226 Release /W4 /WX configure/build succeeds.
+An initial shadowed-local warning was corrected without weakening /WX.
+
+Both final fixture commands exit **0**. Four original ordering controls and
+summary pass; two simultaneous children across two generations pass file masks
+1048575/1048575, Win32 mutex 127/127, native mutex 511/511. AppData environment/
+Known Folder/logical-path agreement, persistence, unchanged synthetic host files,
+slot mismatch and separate AppData environment mismatch rejection pass.
+No remaining test image in independent CIM lookup; tracked checkout clean.
+Full product checks, Minecraft injection/login and two/four-client NOT_EXECUTED.
+
+Local artifact SHA-256:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| bootstrap-ordering.exe | 5aa24485e6abfb6b535e350f92c02adb028f331ea509df2cfc8e8fe4d6d51939 |
+| bootstrap-compat.dll | 0e0fef07f70bafcfa300fd735ac6d374b93106c9654bd7e0a71e5ca6eab44474 |
+| ordering.jsonl | 40927efb7a951dda0eccd4323ec78f5b80d713673bee402d9ebd632e0f460c36 |
+| pair.jsonl | 0816ca916f59501edf124669b0bb649a97fbe88daaca539df99b1bfdb3134799 |
+
+Earlier evidence retains its historical SHA/scope.
+
 
 ### Executed recursive directory slice — 24 October 2026 WIB
 

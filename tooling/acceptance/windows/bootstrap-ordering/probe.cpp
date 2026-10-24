@@ -8,6 +8,8 @@
 #include <set>
 #include <cstring>
 #include <winioctl.h>
+#include <shlobj.h>
+#include <knownfolders.h>
 
 extern "C" __declspec(dllimport) int DependencyCanary();
 
@@ -87,20 +89,32 @@ std::wstring executable() {
     path.resize(length);
     return path;
 }
-std::vector<wchar_t> environment(HANDLE section) {
+std::wstring directoryPath(HANDLE root);
+std::vector<wchar_t> environment(HANDLE section, HANDLE appDataRoot = nullptr) {
     wchar_t* original = GetEnvironmentStringsW();
     require(original != nullptr);
     std::vector<wchar_t> result;
     try {
         for (const wchar_t* item = original; *item; item += wcslen(item) + 1) {
             constexpr wchar_t prefix[] = L"MIVUBI_BOOTSTRAP_TEST_SECTION=";
-            if (_wcsnicmp(item, prefix, (sizeof(prefix) / sizeof(wchar_t)) - 1) != 0)
+            const bool appData = appDataRoot && (_wcsnicmp(item, L"APPDATA=", 8) == 0
+                || _wcsnicmp(item, L"LOCALAPPDATA=", 13) == 0);
+            if (!appData && _wcsnicmp(item, prefix, (sizeof(prefix) / sizeof(wchar_t)) - 1) != 0)
                 result.insert(result.end(), item, item + wcslen(item) + 1);
         }
         const std::wstring setting = std::wstring(probe::SectionVariable) + L"="
             + std::to_wstring(reinterpret_cast<ULONG_PTR>(section));
         result.insert(result.end(), setting.begin(), setting.end());
         result.push_back(L'\0');
+        if (appDataRoot) {
+            const auto path = directoryPath(appDataRoot);
+            require(path.substr(0, 4) == L"\\\\?\\");
+            for (const auto& appSetting : {L"APPDATA=" + path.substr(4) + L"\\Roaming",
+                                       L"LOCALAPPDATA=" + path.substr(4) + L"\\Local"}) {
+                result.insert(result.end(), appSetting.begin(), appSetting.end());
+                result.push_back(L'\0');
+            }
+        }
         result.push_back(L'\0');
     } catch (...) {
         FreeEnvironmentStringsW(original);
@@ -468,7 +482,7 @@ void directoryChecks(probe::Receipt& receipt, LONG& checks) {
     require(status == 0 && error == sentinel && io.Information == (receipt.fileRound == 0 ? 2u : 1u)
         && attributes.RootDirectory == root.value && attributes.ObjectName == &name);
     writeBytes(own.value, slotMarker(receipt, receipt.fileRound));
-    const std::set<std::wstring> expectedEntries{L"state.bin", L"nested", leaf};
+    const std::set<std::wstring> expectedEntries{L"state.bin", L"nested", L"Roaming", L"Local", leaf};
     require(nativeEntries(root.value, false) == expectedEntries);
     checks |= 256;
     require(nativeEntries(root.value, true) == expectedEntries); // Restart on the same handle.
@@ -600,6 +614,76 @@ void treeChecks(probe::Receipt& receipt, LONG& checks) {
     checks |= 32768;
 }
 
+
+struct ComApartment {
+    ComApartment() { require(SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))); }
+    ~ComApartment() { CoUninitialize(); }
+};
+std::wstring childEnvironment(const wchar_t* name) {
+    wchar_t value[512]{};
+    const DWORD length = GetEnvironmentVariableW(name, value, 512);
+    require(length > 0 && length < 512);
+    return std::wstring(value, length);
+}
+std::wstring knownPath(REFKNOWNFOLDERID id, DWORD flags = 0) {
+    PWSTR result = nullptr;
+    constexpr DWORD sentinel = 0x13579bd;
+    SetLastError(sentinel);
+    const HRESULT status = SHGetKnownFolderPath(id, flags, nullptr, &result);
+    const DWORD error = GetLastError();
+    const bool valid = status == S_OK && error == sentinel && result;
+    std::wstring path = valid ? result : L"";
+    CoTaskMemFree(result);
+    require(valid);
+    return path;
+}
+void appDataChecks(probe::Receipt& receipt, LONG& checks) {
+    ComApartment apartment;
+    const auto own = directoryPath(receipt.fileOwnRoot).substr(4);
+    const auto logical = directoryPath(receipt.fileLogicalRoot);
+    for (const auto& folder : {L"Roaming", L"Local"}) {
+        const bool roaming = wcscmp(folder, L"Roaming") == 0;
+        const auto& id = roaming ? FOLDERID_RoamingAppData : FOLDERID_LocalAppData;
+        const auto env = childEnvironment(roaming ? L"APPDATA" : L"LOCALAPPDATA");
+        const auto known = knownPath(id);
+        require(env == own + L"\\" + folder && known == env
+            && knownPath(id, KF_FLAG_DONT_VERIFY) == env);
+        checks |= 65536;
+        const auto filePath = env + L"\\appdata.bin";
+        if (receipt.fileRound == 0) {
+            Handle missing(CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+            require(missing.value == INVALID_HANDLE_VALUE && GetLastError() == ERROR_FILE_NOT_FOUND);
+        } else {
+            expectFile(filePath, slotMarker(receipt, 0));
+        }
+        checks |= 262144;
+        Handle file(CreateFileW(filePath.c_str(), GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, receipt.fileRound == 0 ? CREATE_NEW : OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL, nullptr));
+        require(file.value != INVALID_HANDLE_VALUE);
+        writeBytes(file.value, slotMarker(receipt, receipt.fileRound));
+        expectFile(known + L"\\appdata.bin", slotMarker(receipt, receipt.fileRound));
+        expectFile(logical + L"\\" + folder + L"\\appdata.bin", slotMarker(receipt, receipt.fileRound));
+        Handle directory(CreateFileW(known.c_str(), FILE_LIST_DIRECTORY | SYNCHRONIZE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
+        require(directory.value != INVALID_HANDLE_VALUE
+            && nativeEntries(directory.value, false) == std::set<std::wstring>{L"appdata.bin"});
+        checks |= 131072;
+        PWSTR rejected = nullptr;
+        constexpr DWORD sentinel = 0x13579bd;
+        SetLastError(sentinel);
+        const HRESULT foreign = SHGetKnownFolderPath(id, 0, INVALID_HANDLE_VALUE, &rejected);
+        const DWORD error = GetLastError();
+        require(foreign == E_ACCESSDENIED && error == sentinel && rejected == nullptr);
+        for (const DWORD flag : {static_cast<DWORD>(KF_FLAG_DEFAULT_PATH), static_cast<DWORD>(KF_FLAG_CREATE)}) {
+            require(SHGetKnownFolderPath(id, flag, nullptr, &rejected) == E_NOTIMPL && rejected == nullptr);
+        }
+        require(SHGetKnownFolderPath(id, 0, nullptr, nullptr) == E_POINTER);
+        checks |= 524288;
+    }
+}
+
 struct FileChild {
     Handle held;
     LONG checks = 0;
@@ -684,6 +768,7 @@ struct FileChild {
         checks |= 32;
         directoryChecks(receipt, checks);
         treeChecks(receipt, checks);
+        appDataChecks(receipt, checks);
     }
     void afterPeer(probe::Receipt& receipt) {
         expectBytes(held.value, slotMarker(receipt, receipt.fileRound));
@@ -692,7 +777,7 @@ struct FileChild {
             nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
         require(root.value != INVALID_HANDLE_VALUE
             && nativeEntries(root.value, false) == std::set<std::wstring>{
-                L"state.bin", L"nested", receipt.slot == 1 ? L"slot-A.bin" : L"slot-B.bin"});
+                L"state.bin", L"nested", L"Roaming", L"Local", receipt.slot == 1 ? L"slot-A.bin" : L"slot-B.bin"});
         const auto deep = directoryPath(receipt.fileLogicalRoot) + L"\\nested\\level\\deep";
         expectFile(deep + L"\\state.bin", slotMarker(receipt, receipt.fileRound));
         Handle nested(CreateFileW(deep.c_str(), FILE_LIST_DIRECTORY | SYNCHRONIZE,
@@ -700,6 +785,9 @@ struct FileChild {
         require(nested.value != INVALID_HANDLE_VALUE
             && nativeEntries(nested.value, false) == std::set<std::wstring>{
                 L"state.bin", receipt.slot == 1 ? L"slot-A.bin" : L"slot-B.bin"});
+        for (const auto& folder : {L"Roaming", L"Local"})
+            expectFile(directoryPath(receipt.fileLogicalRoot) + L"\\" + folder + L"\\appdata.bin",
+                slotMarker(receipt, receipt.fileRound));
         checks |= 64;
         InterlockedExchange(&receipt.fileChecks, checks);
     }
@@ -778,7 +866,7 @@ struct MutexChild {
     Child child; // Destroy child before receipt/events, including constructor failure.
     MutexChild(DWORD slot, const std::wstring& name, HANDLE go, HANDLE finish,
                const std::wstring& self, const std::string& compatibility,
-               DWORD round, HANDLE logicalRoot, HANDLE ownRoot) {
+               DWORD round, HANDLE logicalRoot, HANDLE ownRoot, bool wrongAppData = false) {
         ZeroMemory(mapping.value, sizeof(probe::Receipt));
         auto& receipt = *mapping.value;
         receipt.magic = probe::Magic;
@@ -797,7 +885,7 @@ struct MutexChild {
         copyName(receipt.peer, name + (slot == 1 ? L"_B" : L"_A"));
         HANDLE inherited[]{section.value, ready.value, go, done.value, finish, logicalRoot, ownRoot};
         Attributes attributes(inherited, 7);
-        auto env = environment(section.value);
+        auto env = environment(section.value, wrongAppData ? logicalRoot : ownRoot);
         STARTUPINFOEXW startup{};
         startup.StartupInfo.cb = sizeof(startup);
         startup.lpAttributeList = attributes.value;
@@ -875,7 +963,8 @@ struct FileRoots {
         require(CreateDirectoryW(root.c_str(), nullptr) != FALSE); // Refuse existing test roots.
         for (const auto& leaf : {L"logical", L"A", L"B"})
             require(CreateDirectoryW((root + L"\\" + leaf).c_str(), nullptr) != FALSE);
-        for (const auto& leaf : {L"guard", L"A\\nested", L"B\\nested",
+        for (const auto& leaf : {L"guard", L"A\\Roaming", L"A\\Local", L"B\\Roaming", L"B\\Local",
+                L"logical\\Roaming", L"logical\\Local", L"A\\nested", L"B\\nested",
                 L"logical\\nested", L"logical\\nested\\level", L"logical\\nested\\level\\deep"})
             require(CreateDirectoryW((root + L"\\" + leaf).c_str(), nullptr) != FALSE);
         syntheticJunction(root + L"\\A\\nested\\escape", root + L"\\guard");
@@ -889,7 +978,7 @@ struct FileRoots {
             return result;
         };
         logical.value = open(L"logical"); a.value = open(L"A"); b.value = open(L"B");
-        for (const auto& leaf : {L"logical\\state.bin", L"logical\\host-only.bin", L"logical\\nested\\level\\deep\\state.bin", L"guard\\state.bin", L"outside.bin"}) {
+        for (const auto& leaf : {L"logical\\state.bin", L"logical\\host-only.bin", L"logical\\nested\\level\\deep\\state.bin", L"guard\\state.bin", L"logical\\Roaming\\appdata.bin", L"logical\\Local\\appdata.bin", L"outside.bin"}) {
             Handle file(CreateFileW((root + L"\\" + leaf).c_str(), GENERIC_WRITE,
                 FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
             require(file.value != INVALID_HANDLE_VALUE);
@@ -902,6 +991,11 @@ struct FileRoots {
         expectFile(root + L"\\logical\\host-only.bin", "HOST");
         expectFile(root + L"\\logical\\nested\\level\\deep\\state.bin", "HOST");
         expectFile(root + L"\\guard\\state.bin", "HOST");
+        for (const auto& folder : {L"Roaming", L"Local"}) {
+            expectFile(root + L"\\logical\\" + folder + L"\\appdata.bin", "HOST");
+            expectFile(root + L"\\A\\" + folder + L"\\appdata.bin", "A" + std::to_string(round + 1));
+            expectFile(root + L"\\B\\" + folder + L"\\appdata.bin", "B" + std::to_string(round + 1));
+        }
         expectFile(root + L"\\A\\nested\\level\\deep\\state.bin", "A" + std::to_string(round + 1));
         expectFile(root + L"\\B\\nested\\level\\deep\\state.bin", "B" + std::to_string(round + 1));
         expectFile(root + L"\\A\\nested\\level\\deep\\slot-A.bin", "A" + std::to_string(round + 1));
@@ -921,10 +1015,10 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
     Handle host(CreateMutexW(nullptr, TRUE, name.c_str()));
     const DWORD hostError = GetLastError();
     require(host.value && hostError != ERROR_ALREADY_EXISTS);
-    {
+    for (const bool wrongAppData : {false, true}) {
         Handle go(sharedEvent()), finish(sharedEvent());
         MutexChild mismatch(1, name, go.value, finish.value, self, compatibility,
-            0, files.logical.value, files.b.value);
+            0, files.logical.value, wrongAppData ? files.a.value : files.b.value, wrongAppData);
         require(WaitForSingleObject(mismatch.child.info.hProcess, 10000) == WAIT_OBJECT_0);
         DWORD code = 0;
         require(GetExitCodeProcess(mismatch.child.info.hProcess, &code) && code != 0
@@ -964,8 +1058,8 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
             && InterlockedCompareExchange(&second.mapping.value->mutexChecks, 0, 0) == 127
             && InterlockedCompareExchange(&first.mapping.value->nativeChecks, 0, 0) == 511
             && InterlockedCompareExchange(&second.mapping.value->nativeChecks, 0, 0) == 511
-            && InterlockedCompareExchange(&first.mapping.value->fileChecks, 0, 0) == 65535
-            && InterlockedCompareExchange(&second.mapping.value->fileChecks, 0, 0) == 65535);
+            && InterlockedCompareExchange(&first.mapping.value->fileChecks, 0, 0) == 1048575
+            && InterlockedCompareExchange(&second.mapping.value->fileChecks, 0, 0) == 1048575);
         require(SetEvent(finish.value) != FALSE);
         first.exitedNormally();
         second.exitedNormally();
@@ -978,7 +1072,7 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
     }
     require(ReleaseMutex(host.value) != FALSE);
     std::printf("{\"case\":\"mutex-two-child\",\"selfCheck\":true,\"checks\":[127,127],"
-                "\"fileChecks\":[65535,65535],\"rounds\":2,\"persistent\":true,\"hostUnchanged\":true,\"slotMismatchRejected\":true,"
+                "\"fileChecks\":[1048575,1048575],\"rounds\":2,\"persistent\":true,\"hostUnchanged\":true,\"slotMismatchRejected\":true,\"appDataBindingRejected\":true,"
                 "\"nativeChecks\":[511,511],\"distinctHostAndPeerObjects\":true,\"rawPeerAccessible\":true,"
                 "\"securityBoundary\":false,\"providerReady\":false,"
                 "\"minecraft\":\"NOT_EXECUTED\"}\n");
