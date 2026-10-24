@@ -105,6 +105,7 @@ pub(super) struct PendingEducationBootstrap {
     created: u64,
     storage: Option<SlotStorage>,
     configuration: Option<OwnedHandle>,
+    observation: Option<StartupObservation>,
 }
 
 impl PendingEducationBootstrap {
@@ -185,6 +186,7 @@ fn create_unstarted(
         path,
         image,
         storage,
+        false,
         #[cfg(test)]
         None,
     )
@@ -194,8 +196,12 @@ fn create_unstarted_impl(
     path: &Path,
     image: File,
     storage: Option<SlotStorage>,
+    observe: bool,
     #[cfg(test)] proof: Option<&tests::FixtureReceipt>,
 ) -> io::Result<PendingEducationBootstrap> {
+    if observe && storage.is_none() {
+        return Err(invalid("Startup observation requires configured storage"));
+    }
     #[cfg(test)]
     if proof.is_some() && storage.is_none() {
         return Err(invalid("Fixture receipt requires configured storage"));
@@ -218,10 +224,18 @@ fn create_unstarted_impl(
         .as_ref()
         .map(|_| Configuration::create())
         .transpose()?;
-    let inherited: Vec<HANDLE> = configuration
+    let observation = if observe {
+        Some(StartupObservation::create()?)
+    } else {
+        None
+    };
+    let mut inherited: Vec<HANDLE> = configuration
         .as_ref()
         .map(|c| vec![c.readonly.as_raw_handle() as HANDLE])
         .unwrap_or_default();
+    if let Some(observation) = &observation {
+        inherited.push(observation.section.as_raw_handle() as HANDLE);
+    }
     #[cfg(test)]
     let inherited = {
         let mut handles = inherited;
@@ -239,6 +253,9 @@ fn create_unstarted_impl(
         (Some(store), Some(config)) => Some(child_environment(
             store,
             config.readonly.as_raw_handle() as HANDLE,
+            observation
+                .as_ref()
+                .map(|o| o.section.as_raw_handle() as HANDLE),
         )?),
         _ => None,
     };
@@ -291,11 +308,24 @@ fn create_unstarted_impl(
         created: 0,
         storage: None,
         configuration: None,
+        observation,
     };
     #[cfg(test)]
     if let Some(proof) = proof {
         if unsafe {
             SetHandleInformation(proof.0.as_raw_handle() as HANDLE, HANDLE_FLAG_INHERIT, 0)
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+    }
+    if let Some(observation) = &child.observation {
+        if unsafe {
+            SetHandleInformation(
+                observation.section.as_raw_handle() as HANDLE,
+                HANDLE_FLAG_INHERIT,
+                0,
+            )
         } == 0
         {
             return Err(io::Error::last_os_error());
@@ -353,6 +383,9 @@ fn create_unstarted_impl(
 /// Source-only two-slot preparation. No game/DLL code can be resumed here.
 /// The existing registered-image resolver remains the only target selector.
 pub(super) fn prepare_registered() -> io::Result<[PendingEducationBootstrap; 2]> {
+    prepare_registered_mode(false)
+}
+fn prepare_registered_mode(observe: bool) -> io::Result<[PendingEducationBootstrap; 2]> {
     let selector = "Resolve-ManagerEducationTarget -RegisteredOnly";
     let target = super::resolve_registered_education_target(selector)?;
     let path = Path::new(&target);
@@ -361,9 +394,103 @@ pub(super) fn prepare_registered() -> io::Result<[PendingEducationBootstrap; 2]>
         return Err(invalid("Education registration changed during preparation"));
     }
     let [first, second] = registered_slots()?;
-    let first = create_unstarted(path, image.try_clone()?, Some(first))?;
-    let second = create_unstarted(path, image, Some(second))?;
+    let first = create_unstarted_impl(
+        path,
+        image.try_clone()?,
+        Some(first),
+        observe,
+        #[cfg(test)]
+        None,
+    )?;
+    let second = create_unstarted_impl(
+        path,
+        image,
+        Some(second),
+        observe,
+        #[cfg(test)]
+        None,
+    )?;
     Ok([first, second])
+}
+
+const OBSERVATION_ENV: &str = "MIVUBI_EDUCATION_OBSERVATION_SECTION";
+// Must match private startup-observation.h; no public wire schema.
+const OBSERVATION_BYTES: usize = 30784;
+struct StartupObservation {
+    section: OwnedHandle,
+}
+impl StartupObservation {
+    fn create() -> io::Result<Self> {
+        let raw = unsafe {
+            CreateFileMappingW(
+                INVALID_HANDLE_VALUE,
+                ptr::null(),
+                PAGE_READWRITE,
+                0,
+                OBSERVATION_BYTES as u32,
+                ptr::null(),
+            )
+        };
+        if raw.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        let section = unsafe { OwnedHandle::from_raw_handle(raw as _) };
+        if unsafe { SetHandleInformation(raw, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(Self { section })
+    }
+}
+impl PendingEducationBootstrap {
+    // Raw diagnostic metadata remains private/local; copy only after the original child exits.
+    fn observation_bytes_after_exit(&self) -> io::Result<Vec<u8>> {
+        if unsafe { WaitForSingleObject(self.process.as_raw_handle() as HANDLE, 0) }
+            != WAIT_OBJECT_0
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "Observation writer is still alive",
+            ));
+        }
+        let observation = self
+            .observation
+            .as_ref()
+            .ok_or_else(|| invalid("No startup observation"))?;
+        let view = unsafe {
+            MapViewOfFile(
+                observation.section.as_raw_handle() as HANDLE,
+                FILE_MAP_READ,
+                0,
+                0,
+                OBSERVATION_BYTES,
+            )
+        };
+        if view.Value.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        let bytes =
+            unsafe { std::slice::from_raw_parts(view.Value as *const u8, OBSERVATION_BYTES) }
+                .to_vec();
+        if unsafe { UnmapViewOfFile(view) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let word =
+            |offset: usize| u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap());
+        let birth = u64::from_le_bytes(bytes[16..24].try_into().unwrap());
+        if word(0) != 0x4f425331
+            || word(4) != 1
+            || word(8) != OBSERVATION_BYTES as u32
+            || word(12) != self.pid
+            || birth != self.created
+            || word(28) != 64
+            || word(48) > 64
+            || word(56) != 30000
+            || word(60) != 1
+        {
+            return Err(invalid("Incomplete or mismatched startup observation"));
+        }
+        Ok(bytes)
+    }
 }
 
 // No installer/package policy supplies a reviewed original payload yet.
@@ -374,7 +501,8 @@ struct PayloadDigests {
     enroller: [u8; 32],
     compatibility: [u8; 32],
 }
-type EnrollmentEntry = unsafe extern "system" fn(HANDLE, HANDLE, u32, u64, HANDLE, HANDLE) -> u32;
+type EnrollmentEntry =
+    unsafe extern "system" fn(HANDLE, HANDLE, u32, u64, HANDLE, HANDLE, HANDLE) -> u32;
 
 fn payload_digest(file: &File) -> io::Result<[u8; 32]> {
     use sha2::{Digest, Sha256};
@@ -481,8 +609,8 @@ impl BootstrapLibrary {
                 return Err(invalid("Loaded bootstrap module file identity mismatch"));
             }
             let entry =
-                unsafe { GetProcAddress(module, c"EnrollPreparedEducationV1".as_ptr().cast()) }
-                    .ok_or_else(|| invalid("Missing bootstrap enrollment ABI v1"))?;
+                unsafe { GetProcAddress(module, c"EnrollPreparedEducationV2".as_ptr().cast()) }
+                    .ok_or_else(|| invalid("Missing bootstrap enrollment ABI v2"))?;
             Ok(unsafe {
                 mem::transmute::<unsafe extern "system" fn() -> isize, EnrollmentEntry>(entry)
             })
@@ -517,6 +645,10 @@ impl BootstrapLibrary {
                 birth,
                 config.as_raw_handle() as HANDLE,
                 child._image.as_raw_handle() as HANDLE,
+                child
+                    .observation
+                    .as_ref()
+                    .map_or(ptr::null_mut(), |o| o.section.as_raw_handle() as HANDLE),
             )
         };
         if status != 0 {
@@ -543,7 +675,7 @@ pub(super) struct PreparedEducationEnrollment {
 
 pub(super) fn prepare_registered_enrolled() -> io::Result<PreparedEducationEnrollment> {
     let payload = BootstrapLibrary::reviewed()?;
-    let children = prepare_registered()?;
+    let children = prepare_registered_mode(true)?;
     for child in &children {
         payload.enroll(child)?;
     }
@@ -1107,7 +1239,11 @@ fn ordinal_names(a: &[u16], b: &[u16]) -> io::Result<std::cmp::Ordering> {
     }
 }
 
-fn child_environment(storage: &SlotStorage, section: HANDLE) -> io::Result<Vec<u16>> {
+fn child_environment(
+    storage: &SlotStorage,
+    section: HANDLE,
+    observation: Option<HANDLE>,
+) -> io::Result<Vec<u16>> {
     let raw = unsafe { GetEnvironmentStringsW() };
     if raw.is_null() {
         return Err(io::Error::last_os_error());
@@ -1117,6 +1253,7 @@ fn child_environment(storage: &SlotStorage, section: HANDLE) -> io::Result<Vec<u
         "LOCALAPPDATA",
         CONFIG_ENV,
         "MIVUBI_BOOTSTRAP_TEST_SECTION",
+        OBSERVATION_ENV,
     ]
     .iter()
     .map(|name| OsStr::new(name).encode_wide().collect())
@@ -1167,6 +1304,13 @@ fn child_environment(storage: &SlotStorage, section: HANDLE) -> io::Result<Vec<u
         entry.push(61);
         entry.extend(value.encode_wide());
         rows.push(entry);
+    }
+    if let Some(section) = observation {
+        rows.push(
+            format!("{OBSERVATION_ENV}={}", section as usize)
+                .encode_utf16()
+                .collect(),
+        );
     }
     let mut compare_error = None;
     rows.sort_by(|a, b| {
@@ -1292,6 +1436,7 @@ mod tests {
                 birth,
                 child.configuration.as_ref().unwrap().as_raw_handle() as HANDLE,
                 image.as_raw_handle() as HANDLE,
+                ptr::null_mut(),
             )
         }
     }
@@ -1324,6 +1469,24 @@ mod tests {
                 .is_err());
         }
         drop(library);
+    }
+
+    #[test]
+    fn startup_observation_requires_config_and_never_reads_a_live_writer() {
+        let path = std::env::current_exe().unwrap().canonicalize().unwrap();
+        assert!(create_unstarted_impl(&path, pin_image(&path).unwrap(), None, true, None).is_err());
+        let [a, _b] = test_slots();
+        let mut child =
+            create_unstarted_impl(&path, pin_image(&path).unwrap(), Some(a), true, None).unwrap();
+        assert_eq!(
+            child.observation_bytes_after_exit().unwrap_err().kind(),
+            io::ErrorKind::WouldBlock
+        );
+        child.cancel().unwrap();
+        assert_eq!(
+            child.observation_bytes_after_exit().unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
     }
 
     fn clone_store(store: &SlotStorage) -> SlotStorage {
@@ -1432,6 +1595,7 @@ mod tests {
             &path,
             pin_image(&path).unwrap(),
             Some(clone_store(&a)),
+            false,
             Some(&proof),
         )
         .unwrap();
@@ -1448,6 +1612,7 @@ mod tests {
             &self_path,
             pin_image(&self_path).unwrap(),
             Some(clone_store(&a)),
+            false,
             Some(&proof),
         )
         .unwrap();
@@ -1468,6 +1633,7 @@ mod tests {
             &path,
             pin_image(&path).unwrap(),
             Some(clone_store(&a)),
+            false,
             Some(&proof),
         )
         .unwrap();
@@ -1480,6 +1646,7 @@ mod tests {
                 &path,
                 pin_image(&path).unwrap(),
                 Some(clone_store(&a)),
+                true,
                 Some(&first_proof),
             )
             .unwrap();
@@ -1487,6 +1654,7 @@ mod tests {
                 &path,
                 pin_image(&path).unwrap(),
                 Some(clone_store(&b)),
+                true,
                 Some(&second_proof),
             )
             .unwrap();
@@ -1496,6 +1664,11 @@ mod tests {
             enroller.enroll(&second).unwrap();
             finish_fixture(&first);
             finish_fixture(&second);
+            for child in [&first, &second] {
+                let snapshot = child.observation_bytes_after_exit().unwrap();
+                assert_eq!(u32::from_le_bytes(snapshot[48..52].try_into().unwrap()), 64);
+                assert_eq!(u32::from_le_bytes(snapshot[52..56].try_into().unwrap()), 1);
+            }
             for store in [&a, &b] {
                 assert_eq!(
                     std::fs::read_to_string(store.private_path.join("Roaming/rust-enrolled.txt"))

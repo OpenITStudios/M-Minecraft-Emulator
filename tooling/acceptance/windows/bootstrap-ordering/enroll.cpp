@@ -5,6 +5,7 @@
 #include <cstring>
 #include "receipt.h"
 #include "education-config.h"
+#include "startup-observation.h"
 
 // Private development adapter. Caller owns the original suspended process and pinned image.
 // No target-path/PID reopening, resume, helper, discovery or product command.
@@ -172,12 +173,13 @@ extern "C" __declspec(dllexport) DWORD WINAPI PrepareOwnedFixtureForEnrollment(
     HANDLE process, HANDLE thread, DWORD pid, ULONGLONG birth, HANDLE configuration, HANDLE proof) {
     return prepare(process, thread, pid, birth, configuration, proof, true);
 }
-// ABI v1: original process/thread, PID/birth, read-only parent config, pinned parent image.
+// ABI v2: original process/thread, PID/birth, read-only parent config, pinned parent image.
 // No writable receipt or fixture-side registry setup is consumed by enrollment.
-extern "C" __declspec(dllexport) DWORD WINAPI EnrollPreparedEducationV1(
-    HANDLE process, HANDLE thread, DWORD pid, ULONGLONG birth, HANDLE configuration, HANDLE expectedImage) {
+extern "C" __declspec(dllexport) DWORD WINAPI EnrollPreparedEducationV2(
+    HANDLE process, HANDLE thread, DWORD pid, ULONGLONG birth, HANDLE configuration, HANDLE expectedImage, HANDLE observation) {
     try {
-        validate(process, thread, pid, birth, configuration, expectedImage);
+        const auto config = validate(process, thread, pid, birth, configuration, expectedImage);
+        if (observation) require(startup_observation::initialize(observation, config));
         insert(process);
         return ERROR_SUCCESS;
     } catch (...) { return ERROR_INVALID_DATA; }

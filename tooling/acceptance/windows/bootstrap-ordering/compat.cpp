@@ -1,5 +1,6 @@
 #include "receipt.h"
 #include "education-config.h"
+#include "startup-observation.h"
 #include <detours.h>
 #include <cstdio>
 #include <cwchar>
@@ -419,10 +420,79 @@ bool selectFixtureMutex(const probe::Receipt& config) {
 
     return true;
 }
+
+using CreateProcessCall = BOOL (WINAPI*)(LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES,
+    LPSECURITY_ATTRIBUTES, BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION);
+CreateProcessCall originalProcess = nullptr;
+NTSTATUS NTAPI observedCreate(PHANDLE handle, ACCESS_MASK access, POBJECT_ATTRIBUTES attributes, BOOLEAN owner) {
+    const DWORD before = GetLastError();
+    startup_observation::Record record{};
+    const bool observe = startup_observation::begin(record, startup_observation::CreateMutant, _ReturnAddress());
+    if (observe) {
+        startup_observation::logging = true;
+        startup_observation::objectArguments(record, access, attributes);
+        if (owner) record.flags |= startup_observation::InitialOwner;
+        startup_observation::logging = false;
+    }
+    SetLastError(before);
+    const NTSTATUS status = originalCreate(handle, access, attributes, owner);
+    const DWORD after = GetLastError();
+    if (observe) {
+        startup_observation::logging = true;
+        startup_observation::objectResult(record, status, handle);
+        startup_observation::finish(record, after);
+    }
+    SetLastError(after);
+    return status;
+}
+NTSTATUS NTAPI observedOpen(PHANDLE handle, ACCESS_MASK access, POBJECT_ATTRIBUTES attributes) {
+    const DWORD before = GetLastError();
+    startup_observation::Record record{};
+    const bool observe = startup_observation::begin(record, startup_observation::OpenMutant, _ReturnAddress());
+    if (observe) {
+        startup_observation::logging = true;
+        startup_observation::objectArguments(record, access, attributes);
+        startup_observation::logging = false;
+    }
+    SetLastError(before);
+    const NTSTATUS status = originalOpen(handle, access, attributes);
+    const DWORD after = GetLastError();
+    if (observe) {
+        startup_observation::logging = true;
+        startup_observation::objectResult(record, status, handle);
+        startup_observation::finish(record, after);
+    }
+    SetLastError(after);
+    return status;
+}
+BOOL WINAPI observedProcess(LPCWSTR application, LPWSTR command, LPSECURITY_ATTRIBUTES processSecurity,
+    LPSECURITY_ATTRIBUTES threadSecurity, BOOL inherit, DWORD flags, LPVOID environment,
+    LPCWSTR directory, LPSTARTUPINFOW startup, LPPROCESS_INFORMATION info) {
+    const DWORD before = GetLastError();
+    startup_observation::Record record{};
+    const bool observe = startup_observation::begin(record, startup_observation::CreateProcess, _ReturnAddress());
+    if (observe) { record.argument = flags; record.attributes = inherit ? 1 : 0; }
+    SetLastError(before);
+    const BOOL result = originalProcess(application, command, processSecurity, threadSecurity,
+        inherit, flags, environment, directory, startup, info);
+    const DWORD after = GetLastError();
+    if (observe) {
+        startup_observation::logging = true;
+        startup_observation::processResult(record, result, info);
+        startup_observation::finish(record, after);
+    }
+    SetLastError(after);
+    return result;
+}
+
 bool install(const InstallConfig& config, bool mutex) {
     slotSuffix = config.slot == 1 ? L'A' : L'B';
     const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
     if (!ntdll) return false;
+    const bool observe = startup_observation::active != nullptr;
+    const HMODULE kernel = GetModuleHandleW(L"kernel32.dll");
+    originalProcess = kernel ? reinterpret_cast<CreateProcessCall>(GetProcAddress(kernel, "CreateProcessW")) : nullptr;
+    if (observe && !originalProcess) return false;
     originalCreate = reinterpret_cast<probe::NativeCreate>(GetProcAddress(ntdll, "NtCreateMutant"));
     originalOpen = reinterpret_cast<probe::NativeOpen>(GetProcAddress(ntdll, "NtOpenMutant"));
     openDirectory = reinterpret_cast<probe::NativeDirectory>(GetProcAddress(ntdll, "NtOpenDirectoryObject"));
@@ -445,10 +515,12 @@ bool install(const InstallConfig& config, bool mutex) {
         CloseHandle(baseDirectory); baseDirectory = nullptr; return false;
     }
     if (DetourUpdateThread(GetCurrentThread()) != NO_ERROR
-        || (mutex && (DetourAttach(reinterpret_cast<PVOID*>(&originalCreate),
-                        reinterpret_cast<PVOID>(translatedCreate)) != NO_ERROR
+        || ((mutex || observe) && (DetourAttach(reinterpret_cast<PVOID*>(&originalCreate),
+                        mutex ? reinterpret_cast<PVOID>(translatedCreate) : reinterpret_cast<PVOID>(observedCreate)) != NO_ERROR
             || DetourAttach(reinterpret_cast<PVOID*>(&originalOpen),
-                        reinterpret_cast<PVOID>(translatedOpen)) != NO_ERROR))
+                        mutex ? reinterpret_cast<PVOID>(translatedOpen) : reinterpret_cast<PVOID>(observedOpen)) != NO_ERROR))
+        || (observe && DetourAttach(reinterpret_cast<PVOID*>(&originalProcess),
+                        reinterpret_cast<PVOID>(observedProcess)) != NO_ERROR)
         || DetourAttach(reinterpret_cast<PVOID*>(&originalFileCreate),
                         reinterpret_cast<PVOID>(translatedFileCreate)) != NO_ERROR
         || DetourAttach(reinterpret_cast<PVOID*>(&originalFileOpen),
@@ -478,7 +550,7 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE, DWORD reason, LPVOID) {
         const bool valid = education_bootstrap::read(config);
         InstallConfig installConfig{config.slot, config.logicalRoot, config.privateRoot,
             config.registryRoot, 1, config.userKeyPath, &config};
-        if (!valid || !install(installConfig, false)) {
+        if (!valid || !startup_observation::attach(config) || !install(installConfig, false)) {
             if (controlled) probe::record(test.value, probe::Rejected);
             return FALSE;
         }

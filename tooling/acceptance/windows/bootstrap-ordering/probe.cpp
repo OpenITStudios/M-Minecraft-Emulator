@@ -1,5 +1,6 @@
 #include "receipt.h"
 #include "education-config.h"
+#include "startup-observation.h"
 #include <detours.h>
 #include <cstdio>
 #include <cwchar>
@@ -106,7 +107,10 @@ std::vector<wchar_t> environment(HANDLE section, HANDLE appDataRoot = nullptr) {
             const bool configured = _wcsnicmp(item, education_bootstrap::SectionVariable,
                 wcslen(education_bootstrap::SectionVariable)) == 0
                 && item[wcslen(education_bootstrap::SectionVariable)] == L'=';
-            if (!configured && !appData && _wcsnicmp(item, prefix, (sizeof(prefix) / sizeof(wchar_t)) - 1) != 0)
+            const bool observed = _wcsnicmp(item, startup_observation::Variable,
+                wcslen(startup_observation::Variable)) == 0
+                && item[wcslen(startup_observation::Variable)] == L'=';
+            if (!configured && !observed && !appData && _wcsnicmp(item, prefix, (sizeof(prefix) / sizeof(wchar_t)) - 1) != 0)
                 result.insert(result.end(), item, item + wcslen(item) + 1);
         }
         const std::wstring setting = std::wstring(probe::SectionVariable) + L"="
@@ -1907,6 +1911,114 @@ bool configuredStoragePair(const std::wstring& self, const std::string& compatib
 
 
 
+
+void checkStartupObservation(const education_bootstrap::Config& config, const probe::Receipt& receipt) {
+    SetLastError(ERROR_SUCCESS);
+    if (!GetEnvironmentVariableW(startup_observation::Variable, nullptr, 0)
+        && GetLastError() == ERROR_ENVVAR_NOT_FOUND) return;
+    startup_observation::View view;
+    require(view.open(config));
+    auto& journal = *view.value;
+    require(journal.clockReady == 1);
+    const auto name = L"\\Sessions\\" + std::to_wstring(config.session)
+        + L"\\BaseNamedObjects\\" + std::wstring(receipt.logical + 6);
+    require(name.size() < 192);
+    UNICODE_STRING text{static_cast<USHORT>(name.size() * sizeof(wchar_t)),
+        static_cast<USHORT>(name.size() * sizeof(wchar_t)), const_cast<PWSTR>(name.c_str())};
+    OBJECT_ATTRIBUTES attributes{sizeof(OBJECT_ATTRIBUTES), nullptr, &text,
+        OBJ_CASE_INSENSITIVE | 0x80 /* OBJ_OPENIF */, nullptr, nullptr};
+    const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    const auto create = reinterpret_cast<probe::NativeCreate>(GetProcAddress(ntdll, "NtCreateMutant"));
+    const auto open = reinterpret_cast<probe::NativeOpen>(GetProcAddress(ntdll, "NtOpenMutant"));
+    require(create && open);
+    HANDLE a = nullptr, b = nullptr, c = nullptr;
+    constexpr DWORD sentinel = 0x13579bdf, access = 0x1f0001;
+    SetLastError(sentinel);
+    require(create(&a, access, &attributes, FALSE) == 0 && a && GetLastError() == sentinel);
+    Handle first(a);
+    SetLastError(sentinel);
+    require(create(&b, access, &attributes, FALSE) == static_cast<NTSTATUS>(0x40000000)
+        && b && GetLastError() == sentinel);
+    Handle second(b);
+    attributes.Attributes = OBJ_CASE_INSENSITIVE;
+    SetLastError(sentinel);
+    require(open(&c, access, &attributes) == 0 && c && GetLastError() == sentinel);
+    Handle third(c);
+    const auto absent = name + L"_absent";
+    text = {static_cast<USHORT>(absent.size() * sizeof(wchar_t)),
+        static_cast<USHORT>(absent.size() * sizeof(wchar_t)), const_cast<PWSTR>(absent.c_str())};
+    HANDLE missing = nullptr;
+    SetLastError(sentinel);
+    require(open(&missing, access, &attributes) == static_cast<NTSTATUS>(0xc0000034)
+        && !missing && GetLastError() == sentinel);
+
+    const auto self = executable();
+    auto command = L"\"" + self + L"\" --bootstrap-observation-child";
+    STARTUPINFOW startup{sizeof(STARTUPINFOW)};
+    Child child;
+    auto& info = child.info;
+    require(CreateProcessW(self.c_str(), command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
+        nullptr, nullptr, &startup, &info));
+    const DWORD successfulError = GetLastError();
+    require(WaitForSingleObject(info.hProcess, 10000) == WAIT_OBJECT_0);
+    DWORD code = 1;
+    require(GetExitCodeProcess(info.hProcess, &code) && code == 0);
+    FILETIME birth{}, exit{}, kernel{}, user{};
+    require(GetProcessTimes(info.hProcess, &birth, &exit, &kernel, &user));
+    const auto nonexistent = self.substr(0, self.find_last_of(L"\\/") + 1) + L"missing-observation-control.exe";
+    require(GetFileAttributesW(nonexistent.c_str()) == INVALID_FILE_ATTRIBUTES);
+    PROCESS_INFORMATION failed{};
+    require(!CreateProcessW(nonexistent.c_str(), nullptr, nullptr, nullptr, FALSE, 0,
+        nullptr, nullptr, &startup, &failed) && GetLastError() == ERROR_FILE_NOT_FOUND);
+    bool created = false, existed = false, opened = false, absentSeen = false, spawned = false, failedSeen = false;
+    require(journal.losses == 0 && journal.claimed <= static_cast<LONG>(startup_observation::Capacity));
+    for (LONG i = 0; i < journal.claimed; ++i) {
+        const auto& event = journal.records[i];
+        require(event.committed == 1 && event.thread && event.caller && event.end >= event.start);
+        if (event.kind == startup_observation::CreateProcess) {
+            if (event.status == TRUE && event.childPid == info.dwProcessId) {
+                require(event.childTid == info.dwThreadId && event.flags == 0
+                    && event.childCreated.dwHighDateTime == birth.dwHighDateTime
+                    && event.childCreated.dwLowDateTime == birth.dwLowDateTime
+                    && event.argument == CREATE_NO_WINDOW && event.attributes == 0
+                    && event.lastError == successfulError);
+                spawned = true;
+            }
+            if (event.status == FALSE && event.lastError == ERROR_FILE_NOT_FOUND) failedSeen = true;
+        } else if (event.nameBytes == name.size() * sizeof(wchar_t)
+            && memcmp(event.name, name.data(), event.nameBytes) == 0) {
+            require(event.flags == 0 && event.argument == access && event.root == 0
+                && event.lastError == sentinel);
+            if (event.kind == startup_observation::CreateMutant && event.status == 0) created = true;
+            if (event.kind == startup_observation::CreateMutant && event.status == 0x40000000) existed = true;
+            if (event.kind == startup_observation::OpenMutant && event.status == 0) opened = true;
+        } else if (event.nameBytes == absent.size() * sizeof(wchar_t)
+            && memcmp(event.name, absent.data(), event.nameBytes) == 0
+            && event.kind == startup_observation::OpenMutant && event.status == static_cast<LONG>(0xc0000034))
+            absentSeen = true;
+    }
+    require(created && existed && opened && absentSeen && spawned && failedSeen);
+    const auto longName = name + std::wstring(200, L'x');
+    text = {static_cast<USHORT>(longName.size() * sizeof(wchar_t)),
+        static_cast<USHORT>(longName.size() * sizeof(wchar_t)), const_cast<PWSTR>(longName.c_str())};
+    const LONG next = journal.claimed;
+    require(next < static_cast<LONG>(startup_observation::Capacity));
+    require(open(&missing, access, &attributes) < 0 && !missing);
+    require(journal.records[next].committed == 1
+        && (journal.records[next].flags & startup_observation::TruncatedName));
+    for (DWORD i = 0; i < startup_observation::Capacity + 1; ++i) open(&missing, access, &attributes);
+    require(journal.claimed == startup_observation::Capacity
+        && journal.losses == startup_observation::CapacityReached);
+    require(startup_observation::within(journal, journal.started + journal.frequency * 30)
+        && !startup_observation::within(journal, journal.started + journal.frequency * 31));
+    // Own cooperative control only: move its clock into the past to exercise expired hooks.
+    journal.started -= journal.frequency * 31;
+    const LONG before = journal.claimed;
+    require(open(&missing, access, &attributes) < 0 && journal.claimed == before);
+    std::printf("{\"case\":\"startup-observation-control\",\"callsChecked\":6,\"bounded\":true,"
+        "\"lastErrorPreserved\":true,\"childRole\":\"UNKNOWN\",\"providerReady\":false}\n");
+}
+
 int readRustEnrollmentControl() {
     probe::View view;
     require(view.open() && view.value->mode == probe::ConfiguredStorage);
@@ -1960,6 +2072,7 @@ int readRustEnrollmentControl() {
     }
     // The cached host handle must now read this slot's private marker; the parent checks the host.
     require(registryValue(receipt.cachedHostKey, L"Marker") == config.slot * 100 + 3);
+    checkStartupObservation(config, receipt);
     std::printf("{\"case\":\"rust-enrollment-control\",\"slot\":%lu,\"round\":%lu,"
         "\"earlyPrivate\":7,\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n", config.slot, round);
     return 0;
@@ -2042,6 +2155,7 @@ int childMain() {
 
 int wmain(int argc, wchar_t** argv) {
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+    if (argc == 2 && wcscmp(argv[1], L"--bootstrap-observation-child") == 0) return 0;
     if (argc == 2 && wcscmp(argv[1], L"--bootstrap-test-child") == 0) {
         try { return childMain(); } catch (...) { return 85; }
     }

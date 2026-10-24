@@ -117,7 +117,8 @@ nonvolatile ordinary registry key bound to the private directory ID and slot.
 Existing profiles, account caches and worlds are not copied or migrated.
 Fresh data is preserved on failure/drop; no readiness/profile index is added.
 
-Only the read-only section is on the child's explicit inherited-handle list.
+Normal unstarted preparation inherits only the read-only configuration section.
+The explicit enrolled experiment also inherits the bounded diagnostic section below.
 Directory/registry handles are duplicated directly into the original suspended
 child with inheritance disabled. The parent publishes PID/FILETIME/session,
 root IDs and the current-user native key path, then discards its writable
@@ -141,14 +142,14 @@ inputs. Before loading code, the owner opens every path ancestor without delete
 sharing, rejects reparses/unsupported paths, pins both ordinary DLL files against
 write/delete replacement, and hashes those same handles (32 MiB maximum each).
 LoadLibraryEx uses the full DLL path with System32-only dependency search; loaded module
-file identity and the fixed `EnrollPreparedEducationV1` symbol are checked.
+file identity and the fixed `EnrollPreparedEducationV2` symbol are checked.
 This is exact reviewed-byte loading, not an approved publisher/release policy
 or proof of a hostile-host security boundary.
 
 The private ABI receives the original process/thread, PID/birth, read-only
-configuration and original pinned image handle. Native validation checks their
+configuration, original pinned image handle and optional observation section. Native validation checks their
 image identity/session/AMD64/config/registry binding before inserting the one
-fixed sibling compatibility DLL. It neither reads a writable receipt nor creates
+fixed sibling compatibility DLL. It does not read the fixture receipt or create
 fixture keys, reopens PIDs, accepts target/DLL paths, resumes a child or launches
 a helper. Fixture canary preparation is a separate test export. The two-child
 owner cancels children before releasing module/file/directory pins; any error
@@ -180,21 +181,78 @@ $env:MIVUBI_BOOTSTRAP_CPP_READER = (Resolve-Path ./workspace/bootstrap-ordering-
 cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml independent_bootstrap::tests -- --include-ignored --nocapture --test-threads=1
 ~~~
 
-Executed against baseline `6916f4d37438a7a570b9f37012d3db7739bc1564`: MSVC
-19.44 x64 Release /W4 /WX build, all nine Rust checks (three ignored checks
+Executed against baseline `dc605f50eafe6fe9ea2c72c4b6df1340a616e1f9`: MSVC
+19.44 x64 Release /W4 /WX build, all ten Rust checks (three ignored checks
 explicitly included), and all four existing C++ modes pass. The unchanged Rust
 module was compiled in an isolated Rust 1.96/sha2 0.11.1/windows-sys 0.61.2 harness
-whose Education resolver always refuses. The empty-policy check returns
-Unsupported before that resolver. Full Tauri build remains NOT_EXECUTED
-(required Rust 1.98). Exact own-image metadata check: zero remaining processes.
-Executed blobs: Rust `8ddfdd7b71e6eaed8ca1abd8abd82d32abb08290`,
-enroller `af4672b1e4b26805596e4766202fbf3731d4713b`.
-Other native build inputs are unchanged at the pinned baseline.
+whose Education resolver always refuses. Empty payload policy refuses before it.
+Full Tauri build remains NOT_EXECUTED (project requires Rust 1.98). Exact own-image
+metadata check: zero remaining fixture processes.
+
+| Executed input | Git blob |
+| --- | --- |
+| independent_bootstrap.rs | `18e287e3be3571be9443ec8496c8fb93c285e1d3` |
+| startup-observation.h | `7184d279d25c0cdebdc98813a034c25c3830896e` |
+| compat.cpp | `1c26d77bc99f7cf5728f4a22149f8e350a64d164` |
+| enroll.cpp | `4d75fbe9cd3150b1304af6230ef0820d98dcbe9b` |
+| probe.cpp | `108d3db6054ece10779e0acd7374ed24ce0d9d0b` |
 
 No registered game was looked up, created, injected or resumed by these checks.
 Actual singleton, helper/broker context, native/file bypass coverage, game loader
 ordering, sign-in, world persistence and containment remain UNKNOWN /
 NOT_EXECUTED. Public commands/provider admission stay unchanged; providerReady=false.
+
+## Bounded startup call observation
+
+The enrolled source path now supplies a separate, anonymous, process-bound
+[observation journal](./startup-observation.h). Private journal v1 is 30,784 bytes:
+a 64-byte header and 64 fixed 480-byte records. Education configuration v1 and
+fixture receipt v8 are unchanged; private enrollment ABI is v2. The native
+enroller initializes PID/birth/session and frequency before import insertion.
+The DLL validates that binding, clears further inheritance and starts a fixed
+30-second QPC window at attach. Capacity is finite; overflow, recursive-logger
+loss and clock/late returns have explicit loss flags. Hooks remain installed
+for the process lifetime when recording ends; there is no live detach or
+observation-triggered game/helper termination.
+
+Only three selected calls are observed in Education mode:
+
+| Call | Recorded metadata |
+| --- | --- |
+| NtCreateMutant / NtOpenMutant | Desired access, object attributes, counted UTF-16 object name (192 characters maximum with truncation/unreadable flags), raw root/output handle, initial-owner flag, NTSTATUS and ambient LastError. Native LastError is not the outer CreateMutexW wrapper's final error. |
+| CreateProcessW | Creation/inheritance flags, BOOL/LastError and returned original process/thread identities plus child birth from those original handles. No command line, application string or environment is inspected. Child image/role/authentication remain UNKNOWN. |
+
+Each record includes thread, raw immediate caller return address and start/end
+QPC values, bound to the journal's original game lifetime. No stack, module
+provenance or application rejection branch is inferred from that address.
+Relative object namespace interpretation can remain UNKNOWN. Original call
+arguments/pointers, return value and post-call LastError are preserved. These
+observers do not rename objects, add CREATE_SUSPENDED, enroll helpers or select
+an authentication account. Existing selected storage hooks still apply.
+
+This is incomplete coverage by design: alternate process APIs, brokers/COM/
+activation, calls in other processes, other IPC/file/window singleton routes
+and calls before attach are unobserved. Zero records/loss flags cannot establish
+absence of a helper or prove a complete lifecycle. Names/addresses/identities
+may contain private identifiers; raw bytes remain local and are not committed
+or exposed through a public command. The parent copies only after the original
+child exits, validates the header, and refuses a live writer. Observation is
+cooperative diagnostics; its writable journal never authorizes launch.
+
+The existing Rust-to-native integration control now exercises created/existing/
+opened/missing mutex outcomes and successful/failed CreateProcessW calls in
+each slot over two relaunches. It checks original errors and returned child
+PID/TID/birth, truncation, saturated capacity/loss flags and after-exit copy.
+Expiry is exercised by moving only the own fixture's clock into the past after
+checking the 30-second boundary; this is not a 30-second Minecraft capture.
+The sole new internal child argument exits only our own fixture immediately;
+it supplies a process-creation control and accepts no target path.
+
+The private registered enrolled path still rejects its empty reviewed-payload
+policy before game lookup and has no resume operation. Its pending owner cancels
+unstarted children on Drop; a future opt-in game runner must explicitly preserve
+resumed game lifetimes instead of treating them as pending preparations.
+Source observation preparation does not authorize actual game injection/resume.
 
 ## Ordering controls and receipt
 
