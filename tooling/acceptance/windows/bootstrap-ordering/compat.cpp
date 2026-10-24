@@ -119,18 +119,20 @@ bool pathPrefix(const UNICODE_STRING& name, const wchar_t* prefix, unsigned& lea
     leaf = length + 1;
     return true;
 }
+// A 511-character relative path has at most 255 one-character parents.
+constexpr unsigned ParentHandleCapacity = 512 / 2;
+constexpr unsigned CanonicalPrivatePathCharacters = 512 + 512;
 bool validRelative(const wchar_t* path, unsigned count, DWORD* reason = nullptr) {
     using namespace startup_observation;
     const auto reject = [reason](PathReason value) { if (reason) *reason = value; return false; };
     if (count >= 512) return reject(TotalLength);
     if (!count) return true;
-    unsigned component = 0, depth = 1;
+    unsigned component = 0;
     for (unsigned i = 0; i < count; ++i) {
         const wchar_t ch = path[i];
         if (ch == L'\\') {
             if (!component) return reject(EmptyComponent);
             if (path[i - 1] == L'.' || path[i - 1] == L' ') return reject(TrailingDotOrSpace);
-            if (++depth > 8) return reject(DepthLimit);
             component = 0;
             continue;
         }
@@ -169,10 +171,10 @@ FileRoute fileRoute(const OBJECT_ATTRIBUTES& attributes, wchar_t (&path)[512], u
         if (!attributes.RootDirectory || !directoryInfo(attributes.RootDirectory, rootId))
             return FileRoute::Other;
         if (!sameFileId(rootId, logicalDirectoryId) && !sameFileId(rootId, ownDirectoryId)) {
-            wchar_t parentPath[512]{};
+            wchar_t parentPath[CanonicalPrivatePathCharacters]{};
             const DWORD size = GetFinalPathNameByHandleW(attributes.RootDirectory,
-                parentPath, 512, VOLUME_NAME_NT);
-            if (!size || size >= 512) return FileRoute::Other;
+                parentPath, CanonicalPrivatePathCharacters, VOLUME_NAME_NT);
+            if (!size || size >= CanonicalPrivatePathCharacters) return FileRoute::Other;
             const auto bytes = static_cast<USHORT>(size * sizeof(wchar_t));
             UNICODE_STRING parent{bytes, bytes, parentPath};
             unsigned offset = 0;
@@ -205,11 +207,13 @@ FileRoute fileRoute(const OBJECT_ATTRIBUTES& attributes, wchar_t (&path)[512], u
 constexpr ULONG DontReparse = 0x1000; // OBJ_DONT_REPARSE from OBJECT_ATTRIBUTES.
 constexpr NTSTATUS Unsupported = static_cast<NTSTATUS>(0xc00000bbUL);
 NTSTATUS privateParent(wchar_t* path, unsigned length, HANDLE& parent,
-                       UNICODE_STRING& leaf, HANDLE (&held)[8], unsigned& count) {
+                       UNICODE_STRING& leaf, HANDLE (&held)[ParentHandleCapacity], unsigned& count) {
+    if (length >= 512) return Unsupported;
     parent = fileOwnRoot;
     unsigned start = 0;
     for (unsigned i = 0; i < length; ++i) {
         if (path[i] != L'\\') continue;
+        if (count >= ParentHandleCapacity) return Unsupported;
         const auto bytes = static_cast<USHORT>((i - start) * sizeof(wchar_t));
         UNICODE_STRING name{bytes, bytes, path + start};
         OBJECT_ATTRIBUTES attributes{sizeof(OBJECT_ATTRIBUTES), parent, &name,
@@ -253,7 +257,7 @@ NTSTATUS NTAPI translatedFileCreate(PHANDLE handle, ACCESS_MASK access, POBJECT_
     ULONG disposition, ULONG options, PVOID ea, ULONG eaLength) {
     const DWORD saved = GetLastError();
     NTSTATUS status = Unsupported;
-    HANDLE held[8]{};
+    HANDLE held[ParentHandleCapacity]{};
     unsigned heldCount = 0;
     unsigned diagnostic = 0, diagnosticLength = 0;
     startup_observation::PathRejection rejection{};
@@ -298,7 +302,7 @@ NTSTATUS NTAPI translatedFileOpen(PHANDLE handle, ACCESS_MASK access, POBJECT_AT
     PIO_STATUS_BLOCK io, ULONG share, ULONG options) {
     const DWORD saved = GetLastError();
     NTSTATUS status = Unsupported;
-    HANDLE held[8]{};
+    HANDLE held[ParentHandleCapacity]{};
     unsigned heldCount = 0;
     unsigned diagnostic = 0, diagnosticLength = 0;
     startup_observation::PathRejection rejection{};
@@ -339,7 +343,7 @@ NTSTATUS NTAPI translatedFileOpen(PHANDLE handle, ACCESS_MASK access, POBJECT_AT
 NTSTATUS queryPrivateAttributes(QueryAttributes original, POBJECT_ATTRIBUTES attributes, PVOID output) {
     const DWORD saved = GetLastError();
     NTSTATUS status = Unsupported;
-    HANDLE held[8]{};
+    HANDLE held[ParentHandleCapacity]{};
     unsigned heldCount = 0;
     __try {
         wchar_t path[512]{};
@@ -377,26 +381,27 @@ struct RenameInformation {
     ULONG nameBytes;
     wchar_t name[512];
 };
-static_assert(offsetof(RenameInformation, name) == 20);
+static_assert(offsetof(RenameInformation, name) == offsetof(FILE_RENAME_INFO, FileName));
+constexpr ULONG MinimumRenameBytes = sizeof(FILE_RENAME_INFO);
 NTSTATUS NTAPI translatedSetInformation(HANDLE file, PIO_STATUS_BLOCK io, PVOID information,
                                         ULONG bytes, FILE_INFORMATION_CLASS informationClass) {
     const DWORD saved = GetLastError();
     NTSTATUS status = Unsupported;
-    HANDLE held[8]{};
+    HANDLE held[ParentHandleCapacity]{};
     unsigned heldCount = 0;
     bool handled = false;
     __try {
-        wchar_t source[512]{};
+        wchar_t source[CanonicalPrivatePathCharacters]{};
         const DWORD size = GetFileType(file) == FILE_TYPE_DISK
-            ? GetFinalPathNameByHandleW(file, source, 512, VOLUME_NAME_NT) : 0;
-        UNICODE_STRING sourceName{static_cast<USHORT>(size < 512 ? size * 2 : 0),
-            static_cast<USHORT>(size < 512 ? size * 2 : 0), source};
+            ? GetFinalPathNameByHandleW(file, source, CanonicalPrivatePathCharacters, VOLUME_NAME_NT) : 0;
+        UNICODE_STRING sourceName{static_cast<USHORT>(size < CanonicalPrivatePathCharacters ? size * 2 : 0),
+            static_cast<USHORT>(size < CanonicalPrivatePathCharacters ? size * 2 : 0), source};
         unsigned sourceLeaf = 0;
-        const bool own = size && size < 512 && pathPrefix(sourceName, ownDevice, sourceLeaf);
+        const bool own = size && size < CanonicalPrivatePathCharacters && pathPrefix(sourceName, ownDevice, sourceLeaf);
         const ULONG kind = static_cast<ULONG>(informationClass);
         if (own && (kind == 10 || kind == 65)) {
             handled = true;
-            if (sourceLeaf < size && information && bytes >= offsetof(RenameInformation, name)) {
+            if (sourceLeaf < size && information && bytes >= MinimumRenameBytes) {
                 const auto* input = static_cast<const RenameInformation*>(information);
                 const ULONG nameBytes = input->nameBytes;
                 if (nameBytes && nameBytes % 2 == 0 && nameBytes < sizeof(input->name)
@@ -430,9 +435,11 @@ NTSTATUS NTAPI translatedSetInformation(HANDLE file, PIO_STATUS_BLOCK io, PVOID 
                             RenameInformation copy{};
                             copy.flags = input->flags; copy.root = parent; copy.nameBytes = leaf.Length;
                             memcpy(copy.name, leaf.Buffer, leaf.Length);
+                            // Keep the padded native structure for a one-character leaf.
+                            const auto renamedBytes = static_cast<ULONG>(offsetof(RenameInformation, name) + leaf.Length);
                             SetLastError(saved);
                             status = originalSetFileInformation(file, io, &copy,
-                                static_cast<ULONG>(offsetof(RenameInformation, name) + leaf.Length), informationClass);
+                                renamedBytes < MinimumRenameBytes ? MinimumRenameBytes : renamedBytes, informationClass);
                         }
                     }
                 }

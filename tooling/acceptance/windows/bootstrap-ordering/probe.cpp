@@ -501,7 +501,8 @@ void directoryChecks(probe::Receipt& receipt, LONG& checks) {
     require(status == 0 && error == sentinel && io.Information == (receipt.fileRound == 0 ? 2u : 1u)
         && attributes.RootDirectory == root.value && attributes.ObjectName == &name);
     writeBytes(own.value, slotMarker(receipt, receipt.fileRound));
-    const std::set<std::wstring> expectedEntries{L"state.bin", L"nested", L"Roaming", L"Local", L"Registry", leaf};
+    std::set<std::wstring> expectedEntries{L"state.bin", L"nested", L"Roaming", L"Local", L"Registry", leaf};
+    if (receipt.fileRound) expectedEntries.insert(L"a");
     require(nativeEntries(root.value, false) == expectedEntries);
     checks |= 256;
     require(nativeEntries(root.value, true) == expectedEntries); // Restart on the same handle.
@@ -620,8 +621,7 @@ void treeChecks(probe::Receipt& receipt, LONG& checks) {
     Handle overwrite(CreateFileW((logical + L"\\nested\\escape\\state.bin").c_str(), GENERIC_WRITE,
         FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr));
     require(overwrite.value == INVALID_HANDLE_VALUE);
-    for (const auto& bad : {L"..\\..\\..\\guard\\state.bin", L"state.bin:stream",
-                           L"one\\two\\three\\four\\five\\six\\seven\\eight\\nine.bin"}) {
+    for (const auto& bad : {L"..\\..\\..\\guard\\state.bin", L"state.bin:stream", L"state.bin."}) {
         std::wstring path = bad;
         auto badName = nativeName(path);
         attributes.ObjectName = &badName;
@@ -656,6 +656,88 @@ std::wstring knownPath(REFKNOWNFOLDERID id, DWORD flags = 0) {
     require(valid);
     return path;
 }
+void deepStorageChecks(probe::Receipt& receipt) {
+    const auto root = directoryPath(receipt.fileLogicalRoot);
+    std::wstring relative;
+    for (unsigned parent = 1; parent <= 255; ++parent) {
+        if (!relative.empty()) relative += L"\\";
+        relative += L"a";
+        const auto directory = root + L"\\" + relative;
+        if (receipt.fileRound == 0) require(CreateDirectoryW(directory.c_str(), nullptr));
+        else {
+            const DWORD attributes = GetFileAttributesW(directory.c_str());
+            require(attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY));
+        }
+        if (parent != 16 && parent != 255) continue;
+        const auto path = directory + L"\\x";
+        if (receipt.fileRound) expectFile(path, slotMarker(receipt, 0));
+        {
+            Handle file(CreateFileW(path.c_str(), GENERIC_READ | GENERIC_WRITE | DELETE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                receipt.fileRound ? OPEN_EXISTING : CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
+            require(file.value != INVALID_HANDLE_VALUE);
+            writeBytes(file.value, slotMarker(receipt, receipt.fileRound));
+        }
+        WIN32_FILE_ATTRIBUTE_DATA data{};
+        require(GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &data)
+            && data.nFileSizeLow == slotMarker(receipt, receipt.fileRound).size());
+        auto text = relative + L"\\x";
+        auto name = nativeName(text);
+        OBJECT_ATTRIBUTES attributes{sizeof(OBJECT_ATTRIBUTES), receipt.fileLogicalRoot, &name,
+            OBJ_CASE_INSENSITIVE, nullptr, nullptr};
+        IO_STATUS_BLOCK io{};
+        Handle file;
+        const auto open = reinterpret_cast<probe::NativeFileOpen>(
+            GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtOpenFile"));
+        require(open && open(&file.value, FILE_GENERIC_READ, &attributes, &io,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT) == 0);
+        expectBytes(file.value, slotMarker(receipt, receipt.fileRound));
+        require(CloseHandle(file.value)); file.value = nullptr;
+        {
+            Handle parentDirectory(CreateFileW(directory.c_str(), FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES,
+                FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
+            require(parentDirectory.value != INVALID_HANDLE_VALUE);
+            std::wstring leaf = L"x";
+            auto leafName = nativeName(leaf);
+            OBJECT_ATTRIBUTES relativeAttributes{sizeof(OBJECT_ATTRIBUTES), parentDirectory.value, &leafName,
+                OBJ_CASE_INSENSITIVE, nullptr, nullptr};
+            Handle reopened;
+            require(open(&reopened.value, FILE_GENERIC_READ, &relativeAttributes, &io,
+                FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT) == 0);
+            expectBytes(reopened.value, slotMarker(receipt, receipt.fileRound));
+        }
+        {
+            // Exercise the rename walker and long canonical source at both depths.
+            Handle source(CreateFileW(path.c_str(), GENERIC_READ | GENERIC_WRITE | DELETE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+            require(source.value != INVALID_HANDLE_VALUE);
+            struct Rename { ULONG flags; HANDLE root; ULONG bytes; wchar_t name[512]; } info{};
+            info.root = receipt.fileLogicalRoot;
+            info.bytes = static_cast<ULONG>(text.size() * sizeof(wchar_t));
+            memcpy(info.name, text.data(), info.bytes);
+            info.name[text.size() - 1] = L'y';
+            const auto rename = reinterpret_cast<NTSTATUS (NTAPI*)(HANDLE, PIO_STATUS_BLOCK,
+                PVOID, ULONG, FILE_INFORMATION_CLASS)>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtSetInformationFile"));
+            require(rename);
+            const NTSTATUS renamed = rename(source.value, &io, &info,
+                static_cast<ULONG>(offsetof(Rename, name) + info.bytes), static_cast<FILE_INFORMATION_CLASS>(10));
+            require(renamed == 0);
+            info.name[text.size() - 1] = L'x';
+            require(rename(source.value, &io, &info,
+                static_cast<ULONG>(offsetof(Rename, name) + info.bytes), static_cast<FILE_INFORMATION_CLASS>(10)) == 0);
+        }
+        if (parent == 255) {
+            require(text.size() == 511);
+            text += L"xx"; // Still refuse the existing total-length boundary.
+            name = nativeName(text);
+            Handle denied;
+            require(open(&denied.value, FILE_GENERIC_READ, &attributes, &io,
+                FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_NON_DIRECTORY_FILE) == static_cast<NTSTATUS>(0xc00000bbUL)
+                && !denied.value);
+        }
+    }
+}
+
 void appDataChecks(probe::Receipt& receipt, LONG& checks) {
     ComApartment apartment;
     const auto own = directoryPath(receipt.fileOwnRoot).substr(4);
@@ -801,6 +883,7 @@ struct FileChild {
         directoryChecks(receipt, checks);
         treeChecks(receipt, checks);
         appDataChecks(receipt, checks);
+        deepStorageChecks(receipt);
     }
     void afterPeer(probe::Receipt& receipt) {
         expectBytes(held.value, slotMarker(receipt, receipt.fileRound));
@@ -809,7 +892,7 @@ struct FileChild {
             nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
         require(root.value != INVALID_HANDLE_VALUE
             && nativeEntries(root.value, false) == std::set<std::wstring>{
-                L"state.bin", L"nested", L"Roaming", L"Local", L"Registry", receipt.slot == 1 ? L"slot-A.bin" : L"slot-B.bin"});
+                L"a", L"state.bin", L"nested", L"Roaming", L"Local", L"Registry", receipt.slot == 1 ? L"slot-A.bin" : L"slot-B.bin"});
         const auto deep = directoryPath(receipt.fileLogicalRoot) + L"\\nested\\level\\deep";
         expectFile(deep + L"\\state.bin", slotMarker(receipt, receipt.fileRound));
         Handle nested(CreateFileW(deep.c_str(), FILE_LIST_DIRECTORY | SYNCHRONIZE,
@@ -1415,6 +1498,8 @@ struct FileRoots {
         }
     }
     void verify(DWORD round) {
+        require(GetFileAttributesW((root + L"\\logical\\a").c_str()) == INVALID_FILE_ATTRIBUTES
+            && GetLastError() == ERROR_FILE_NOT_FOUND);
         expectFile(root + L"\\logical\\state.bin", "HOST");
         expectFile(root + L"\\outside.bin", "OUTSIDE");
         expectFile(root + L"\\logical\\host-only.bin", "HOST");
@@ -2637,7 +2722,7 @@ void checkStartupObservation(const education_bootstrap::Config& config, const pr
     const auto fileCreate = reinterpret_cast<probe::NativeFileCreate>(
         GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtCreateFile"));
     require(fileCreate && journal.storage.counts[1] == 0);
-    for (const wchar_t* invalid : {L"a\\b\\c\\d\\e\\f\\g\\h\\i", L"invalid:stream"}) {
+    for (const wchar_t* invalid : {L"invalid:stream", L"invalid."}) {
         const auto bytes = static_cast<USHORT>(wcslen(invalid) * sizeof(wchar_t));
         UNICODE_STRING path{bytes, bytes, const_cast<PWSTR>(invalid)};
         OBJECT_ATTRIBUTES relative{sizeof(OBJECT_ATTRIBUTES), config.logicalRoot, &path,
@@ -2652,10 +2737,10 @@ void checkStartupObservation(const education_bootstrap::Config& config, const pr
             && GetLastError() == 0x13579bdf);
     }
     require(journal.storage.counts[1] == 2 && journal.storage.first[0].committed == 1
-        && journal.storage.first[0].operation == 1 && journal.storage.first[0].pathLength == 17
+        && journal.storage.first[0].operation == 1 && journal.storage.first[0].pathLength == 14
         && journal.storage.reserved[0] == 1
         && journal.storage.reserved[1] == startup_observation::ComposedPath
-        && journal.storage.reserved[2] == startup_observation::DepthLimit); // First sample wins.
+        && journal.storage.reserved[2] == startup_observation::UnsupportedCharacter); // First sample wins.
     const auto name = L"\\Sessions\\" + std::to_wstring(config.session)
         + L"\\BaseNamedObjects\\" + std::wstring(receipt.logical + 6);
     require(name.size() < 192);

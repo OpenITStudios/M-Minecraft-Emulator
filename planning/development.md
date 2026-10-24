@@ -2,11 +2,35 @@
 
 **Authority:** `Local` is the only active development branch. This is the **single current goal, blocker and next action**, not a chronological TODO file. The previous 3,009-line ledger with 105 historical `Next:` entries is [preserved at commit `d239a299e04c`](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/d239a299e04c23d2324b52325714600c00c34498/planning/development.md). All its former next actions are superseded; Git history preserves implementation decisions.
 
-## Goal — playable four-client Minecraft Education engine
+## Goal — five clients with foreground rendering policy
 
-**Four simultaneous unmodified official Minecraft Education Windows Desktop clients MC01–MC04 on one PC**, each with a different legitimately licensed Microsoft Education account, separate persistent worlds, effective filesystem/HKCU/auth contexts, responsive GPU/input/window controls, required multiplayer and safe recovery. Users sign in normally in the game. No game patch, Microsoft credential or token copying, bypass of licensing, or implicit deletion/migration of existing account/world data.
+**Operator direction — 25 October 2026:** five independent, legitimately licensed
+official Education clients (Minecraft - 1 through Minecraft - 5) on i7-14700
+without iGPU, 32 GB RAM, RTX 3070 8 GB VRAM and 512 GB SSD. One account uses
+Education **Host World**; four join that same world through Education multiplayer.
+This supersedes the four-client target. Host role stays with its account when
+foreground focus changes. The controlled client has a **144 FPS ceiling**;
+all other clients, including a background host, have a **10 FPS ceiling**.
+Neither number is a guaranteed achieved rate. Background rendering must preserve
+host simulation, saves and networking; that separation remains UNKNOWN until
+measured in the actual game. Resolution, monitor refresh and free SSD capacity
+are not established.
 
-**Near-term delivery = MC01 + independent MC02**, not four window tabs. Two real independently signed-in games must play concurrently, keep separate world writes across normal close/relaunch and avoid host/peer registry or authentication crossover. Scale the same verified provider to MC03/MC04 only after this is proven. “Lighter than Sandboxie” requires comparable CPU/RAM/GPU/frametime/soak measurements; it is not yet a fact.
+Retain the original provider and existing accounts/worlds, normal licensed login,
+no token copying, no Sandboxie/VMware, Local only and CI disabled. No Computer Use
+or game launch/input/restart during the operator's work. Use the existing
+native/bootstrap owners and resource admission; no second manager or readiness
+store. Preserve the proved MC01/MC02 restart result while developing MC03–MC05.
+Public admission stays closed until the relevant runtime acceptance.
+
+**Actual starting point at `ad7ad7446b1a104879ca8b6a2655435872c57abc`:** the
+operator confirmed two different accounts sign in automatically after restart,
+their gold/diamond world markers persist, gameplay is smooth, and Chromium no
+longer opens with worlds. Long soak and full authentication containment remain
+unproved. Five clients, a per-client renderer limiter and 144/10 FPS switching are
+**NOT_IMPLEMENTED / NOT_EXECUTED**; successful fixtures do not establish these.
+The historical sections below preserve prior evidence and rejected candidates;
+their older scope/next instructions do not replace this goal.
 
 ## Exact source-state baseline (`d239a299e04c`)
 
@@ -493,21 +517,54 @@ The eight-component validator limit is now a demonstrated residual storage
 restriction, not an unknown hypothesis. Its exact requested filenames remain
 unknown and the current Temp fix does not change that depth policy.
 
+### Five-client prerequisite: bounded deep storage traversal
+
+Source baseline: `ad7ad7446b1a104879ca8b6a2655435872c57abc`. The existing
+compat.cpp validator no longer rejects paths solely for exceeding eight
+components. Its existing 511-character relative-path bound supplies a 256-handle
+parent capacity; each ancestor remains pinned, and every opened directory retains
+its non-reparse/case checks. Create/open/query/rename use that same walker.
+Traversal, ADS, malformed names, length and profile-root protections remain.
+The shared registry validator also stops imposing the artificial eight-level
+limit; this is not new authentication acceptance.
+
+Long private paths need the canonical root plus the relative suffix. The existing
+parent/source identity buffers now accommodate both, avoiding an unclassified
+native fall-through when a legitimate private canonical path exceeds 511
+characters. Deep rename also exposed INFO_LENGTH_MISMATCH for a one-character
+destination: the translated request now retains the padded native structure
+minimum, and undersized incoming requests remain refused.
+
+The own-data control creates 16 and 255 parent directories in both private slots,
+checks Win32 create/query, native root-relative and deep-directory-relative reads,
+native rename to/from a one-character name, distinct slot bytes and persistence
+over two process lifetimes. A 511-character suffix succeeds and an overlength
+suffix refuses. The host view is checked unchanged. The strengthened control
+failed before correction. These are real Windows own-executable operations,
+not Minecraft execution or a newly proved cause of the old crashes.
+
+Executed: MSVC 19.44 x64 Release /W4 /WX build, all four C++ control modes and
+37 scoped native-client Rust tests pass on the final inputs. Existing Rust
+warnings remain. No frontend/Rust API, game payload pin, installed game file,
+profile or live candidate is changed. Updated DLLs are source/control artifacts
+only; runtime deployment and Minecraft acceptance for this repair are
+**NOT_EXECUTED**.
+
 ### Remaining proof and one next action
 
-UNKNOWN/NOT_EXECUTED: long concurrent gameplay and game crash recovery,
-actual Education authentication helper/broker
-attribution and propagation, full HKCU/auth/host-peer containment, partial
-writes/disk-full/power loss and comparative FPS/frametime/GPU/CPU overhead.
-Prior raw peer-access control showed name translation is not a security
-boundary. Four clients and distribution remain NOT_EXECUTED. Fixture coverage
-does not establish full stability or a development percentage.
+The five-client goal is ACTIVE. Per-process rendering pacing, automatic focus
+switching, background-host simulation/network health, CPU/RAM/GPU/VRAM overhead,
+five licensed playable clients, long soak and crash recovery remain
+UNKNOWN/NOT_EXECUTED. Full helper HKCU/auth/host-peer containment remains unproved;
+name translation alone is not a security boundary. Distribution remains deferred.
 
-**One next action:** correct the demonstrated eight-component storage depth
-restriction in the existing validator/parent walker with a capacity derived
-from the already bounded relative path length, and verify deep native/Win32
-operations with own data. Keep traversal, ADS, reparse and profile-root guards;
-do not suppress the rejection or hide browser windows. Preserve the current
-games; further game restart/soak requires an operator-selected window. Actual
-authentication attribution/crash recovery remain UNKNOWN, and public admission
-stays closed despite the now-confirmed two-client account/world restart result.
+**One next action:** identify and bind the actual game-world presentation path
+for the pinned official Education image, then implement opt-in per-client 144/10
+pacing in the existing native compatibility route with an own-renderer control.
+Do not treat loaded graphics DLLs, swap-chain queue latency, CPU priority or an
+API fixture as proof of game FPS or independent host ticking. The installed main
+image has no direct graphics imports identifying that path; bundled EGL/D3D
+libraries alone are inconclusive. No live game process was available during this
+read-only metadata check. Runtime attribution must use a suitable operator window,
+without Computer Use. Then verify host health before scaling the same provider
+and persistent slot catalog to five; preserve MC01/MC02 identities.
