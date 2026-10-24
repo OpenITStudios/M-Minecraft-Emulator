@@ -103,7 +103,7 @@ starting with storage correctness, stable profile reuse and failure handling.
 No fresh game launch/closure or login request is part of the current source batch.
 Public MC02–04 admission remains denied; CI and retired providers remain off.
 
-**Source baseline:** exact remote Local `b28f684a1565037f41f4b65da133ddf87158da00`,
+**Source baseline:** exact remote Local `946d2b99e9909d9bf250ef64caed628c9ac6b4b0`,
 plus the literal input blobs below. Native coordination remains in
 `apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`; its only experiment
 consumer is the existing fixed startup argument. The existing C++ compatibility
@@ -241,6 +241,45 @@ it requires mediation remain UNKNOWN; automatic direct-child enrollment would
 not itself cover broker-activated processes. This is not a proven cause of old
 crashes, nor authorization to inject into arbitrary helpers or change brokers.
 
+**Fixed-helper comparison:** the configured control now launches a fixed own
+helper from each enrolled parent in both normal rounds. It receives a fresh
+PID/birth-bound Baseline report and bounded handles, not the parent's mutable
+receipt or bootstrap capability. With only the inherited private APPDATA and
+LOCALAPPDATA, both effective Known Folder paths differ from the private paths;
+HKCU and RegOpenCurrentUser read only the freshly generated host canary marker.
+This is a measured descendant gap in our fixture, not identification of the
+actual Education helper or its authentication path.
+
+A separate explicit bootstrap control on the same own image uses the same
+slot's pinned backing objects and a fresh child-bound read-only config, scoped
+to storage/registry with singleton caller RVA zero. Both Known Folders and both
+HKCU access forms then resolve to the private slot marker. Each configured run
+checks four unbound and four explicitly bootstrapped helpers. The enrolled
+parent remains private after each helper exits; earlier host/tree checks and
+storage/crash controls still pass. No account key, token, cache or game world
+is read/copied; only generated canaries and directory metadata are accessed.
+
+The existing EnrollPreparedEducationV2 API was also exercised from the mediated
+parent. A correct child configuration is refused with ERROR_INVALID_DATA; the
+caller's effective RegOpenCurrentUser key name is confirmed different from
+config.userKeyPath. The current API validates an unmediated manager's user
+context. Keep that refusal. The low-level own-fixture positive control proves
+only the DLL mechanism and is not a production fallback around enrollment.
+
+**Decision:** helper enrollment must be coordinated by the existing trusted
+manager/native owner using the original child handles, identity and same-slot
+capabilities. Do not transplant the manager enroller into an already mediated
+parent, inherit the parent's PID/config blindly, or install arbitrary-child
+hooks. A descendant route also does not cover independently broker-activated
+processes; actual Education helper/broker attribution remains UNKNOWN.
+
+Final executed checks: MSVC 19.44 /W4 /WX build, all four C++ modes, eight
+repeated enlarged configured runs, 15 Rust bootstrap tests and diff whitespace
+check PASS. No production DLL/enroller/manager code or schema changes in this
+batch, and no game launch/input/Computer Use. The result is a narrower proven
+integration requirement, not completed production helper propagation or a
+resolution of the old game access violation.
+
 The replay owner opens only one hash-pinned, local-only capability's existing
 root/MC01/MC02 directory identities and backing registry keys. Wrong capability,
 replaced directory, missing Local directory, overlapping roots and unreviewed
@@ -261,7 +300,7 @@ Literal code-input blobs (documentation excluded):
 | --- | --- |
 | `independent_bootstrap.rs` | `c9cb47840c04f0de1081e4fefa6d1300057b5b7d` |
 | `compat.cpp` | `400e4453a18b6b9bbefe9401ef798380c003d5d7` |
-| `probe.cpp` | `237e6aea99c94f85c74937d9df16573deff594dc` |
+| `probe.cpp` | `0971a9776a74284de166f03248b3c6991d66c9f5` |
 
 **Remaining blind spots:** real saved-world/marker reopen after process restart;
 long concurrent gameplay and recovery after a game crash; full helper/broker
@@ -272,8 +311,9 @@ translation is **not a security boundary**. Four clients, installer and
 comparative performance remain **NOT_EXECUTED**. No maturity percentage is
 awarded from fixture coverage.
 
-**One next action:** use a fixed self-owned helper to verify inherited environment
-versus effective Known Folder/HKCU, then identify the narrowest existing owner
-change needed for proven helper mediation. Do not infer the actual Education
-broker route, expand arbitrary-child enrollment or use game UI. Minecraft
-restart/soak acceptance remains deferred to an operator-selected test window.
+**One next action:** implement a private fixed-own-helper transaction through
+the existing Rust native owner and reviewed enroller, preserving original
+process/thread/PID/birth, pinned image and same-slot backing checks. Prove
+wrong/replaced bindings refuse before resume. Keep real-game automatic helper
+propagation and public admission disabled; actual helper attribution and
+Minecraft restart/soak acceptance remain pending without game UI control.

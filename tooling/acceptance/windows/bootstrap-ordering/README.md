@@ -174,6 +174,40 @@ silently expand hooks to arbitrary children or declare independent authenticatio
 containment from these storage controls. Continuation remains solely in the
 existing planning handoff.
 
+### Fixed helper context comparison
+
+The configured control launches its own fixed `--bootstrap-helper-view` receiver
+from each enrolled parent in both normal rounds. A fresh PID/birth-bound
+Baseline receipt is used, so the helper cannot mutate the parent's receipt.
+The unbound case inherits only its report and one generated-directory handle;
+the parent's bootstrap/observation variables are removed. The private APPDATA
+and LOCALAPPDATA values are retained. Both effective Known Folder results differ
+from those private paths, and HKCU plus RegOpenCurrentUser read the generated
+host marker. These are read-only metadata/canary queries, not account reads.
+
+A separate low-level positive control explicitly bootstraps the same own image,
+using a fresh read-only per-child configuration, original process/thread handles
+and the same slot's backing capabilities. It restricts scope to storage/registry
+with zero singleton caller RVA. Both Known Folders and both HKCU access forms
+then resolve to the selected private slot marker. After each helper exits, the
+parent retains its own private Known Folder and registry view. Four unbound and
+four explicitly bootstrapped helper cases pass per configured run, in addition
+to the storage/crash controls.
+
+The existing EnrollPreparedEducationV2 API is also checked from the mediated
+parent: even correct child configuration is refused with ERROR_INVALID_DATA.
+The test confirms that this caller's effective RegOpenCurrentUser key name
+differs from config.userKeyPath; the API validates an unmediated manager's user
+context. This is a routing boundary, not permission to weaken validation. The
+low-level own-image positive control is not a production fallback. Production
+must hand the original child identity and capabilities to the existing trusted
+manager owner; no automatic descendant enrollment is enabled by these controls.
+
+MSVC /W4 /WX, all four modes, eight repeated configured runs and 15 Rust
+bootstrap tests pass. Production DLL/manager/enroller code and all private/public
+schemas are unchanged. Real Education helper/broker attribution, propagation,
+authentication separation and game crash recovery remain UNKNOWN/NOT_EXECUTED.
+
 ### Numbered experimental windows
 
 The fixed same-manager experiment now names each unique visible unowned game

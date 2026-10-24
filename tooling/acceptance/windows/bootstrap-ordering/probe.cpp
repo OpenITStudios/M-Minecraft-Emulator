@@ -2089,7 +2089,150 @@ int mappedStorageChild(probe::Receipt& receipt) {
     return 0;
 }
 
+int helperViewMain() {
+    probe::View report;
+    require(report.open() && report.value->mode == probe::Baseline);
+    auto& status = *report.value;
+    const bool bound = status.registryBacking == 1;
+    require((GetModuleHandleW(L"bootstrap-compat.dll") != nullptr) == bound
+        && education_bootstrap::present() == bound);
+    const auto privatePath = directoryPath(status.fileOwnRoot).substr(4);
+    LONG fileChecks = 0;
+    for (const auto& folder : {L"Roaming", L"Local"}) {
+        const bool roaming = wcscmp(folder, L"Roaming") == 0;
+        const auto expected = privatePath + L"\\" + folder;
+        require(childEnvironment(roaming ? L"APPDATA" : L"LOCALAPPDATA") == expected);
+        fileChecks |= roaming ? 1 : 2;
+        PWSTR known = nullptr;
+        require(SUCCEEDED(SHGetKnownFolderPath(roaming ? FOLDERID_RoamingAppData : FOLDERID_LocalAppData,
+            KF_FLAG_DONT_VERIFY, nullptr, &known)) && known);
+        const bool matches = _wcsicmp(known, expected.c_str()) == 0;
+        CoTaskMemFree(known);
+        require(matches == bound);
+        fileChecks |= roaming ? 4 : 8;
+    }
+    // Read only the freshly generated host canary, never an account/authentication key.
+    Key direct, current, relative;
+    const auto path = registryPath(status.logical);
+    const DWORD expectedMarker = bound ? registryMarker(status) : 0x484f5354;
+    require(RegOpenKeyExW(HKEY_CURRENT_USER, path.c_str(), 0, KEY_READ, &direct.value) == ERROR_SUCCESS
+        && registryValue(direct.value, L"Marker") == expectedMarker);
+    require(RegOpenCurrentUser(KEY_READ, &current.value) == ERROR_SUCCESS
+        && RegOpenKeyExW(current.value, path.c_str(), 0, KEY_READ, &relative.value) == ERROR_SUCCESS
+        && registryValue(relative.value, L"Marker") == expectedMarker);
+    InterlockedExchange(&status.fileChecks, fileChecks);
+    InterlockedExchange(&status.registryChecks, 3);
+    return 0;
+}
+
+void helperBindingCheck(probe::Receipt& receipt, bool bound) {
+    Handle section(sharedSection());
+    Mapping report(section.value);
+    ZeroMemory(report.value, sizeof(probe::Receipt));
+    report.value->magic = probe::Magic; report.value->version = probe::Version;
+    report.value->mode = probe::Baseline; report.value->slot = receipt.slot;
+    report.value->registryBacking = bound ? 1 : 0; report.value->fileRound = receipt.fileRound;
+    copyName(report.value->logical, receipt.logical);
+    Handle privateRoot;
+    require(DuplicateHandle(GetCurrentProcess(), receipt.fileOwnRoot, GetCurrentProcess(),
+        &privateRoot.value, 0, TRUE, DUPLICATE_SAME_ACCESS));
+    report.value->fileOwnRoot = privateRoot.value;
+    Handle configSection(CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
+        0, sizeof(education_bootstrap::Config), nullptr));
+    require(configSection.value != nullptr);
+    ConfigView config(configSection.value);
+    Handle readonly, logicalRoot;
+    Key registryRoot;
+    std::vector<HANDLE> inherited{section.value, privateRoot.value};
+    if (bound) {
+        // Test-only explicit bootstrap of this fixed own executable; never a child-discovery hook.
+        require(education_bootstrap::read(*config.value));
+        require(config.value->scope == education_bootstrap::StorageAndRegistryOnly
+            && config.value->singletonCallerRva == 0);
+        require(DuplicateHandle(GetCurrentProcess(), config.value->logicalRoot, GetCurrentProcess(),
+            &logicalRoot.value, 0, TRUE, DUPLICATE_SAME_ACCESS));
+        require(DuplicateHandle(GetCurrentProcess(), config.value->registryRoot, GetCurrentProcess(),
+            reinterpret_cast<PHANDLE>(&registryRoot.value), 0, TRUE, DUPLICATE_SAME_ACCESS));
+        require(DuplicateHandle(GetCurrentProcess(), configSection.value, GetCurrentProcess(),
+            &readonly.value, FILE_MAP_READ, TRUE, 0));
+        config.value->logicalRoot = logicalRoot.value; config.value->privateRoot = privateRoot.value;
+        config.value->registryRoot = registryRoot.value;
+        inherited.push_back(logicalRoot.value); inherited.push_back(registryRoot.value);
+        inherited.push_back(readonly.value);
+    }
+    Attributes attributes(inherited.data(), inherited.size());
+    // Preserve the private environment; strip the parent's process-bound bootstrap capabilities.
+    auto env = environment(section.value);
+    if (bound) {
+        env.pop_back();
+        const auto setting = std::wstring(education_bootstrap::SectionVariable) + L"="
+            + std::to_wstring(reinterpret_cast<ULONG_PTR>(readonly.value));
+        env.insert(env.end(), setting.begin(), setting.end());
+        env.push_back(0); env.push_back(0);
+    }
+    const auto self = executable();
+    std::wstring command = L"\"" + self + L"\" --bootstrap-helper-view";
+    STARTUPINFOEXW startup{};
+    startup.StartupInfo.cb = sizeof(startup); startup.lpAttributeList = attributes.value;
+    Child helper;
+    require(CreateProcessW(self.c_str(), command.data(), nullptr, nullptr, TRUE,
+        CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW,
+        env.data(), nullptr, &startup.StartupInfo, &helper.info));
+    report.value->pid = helper.info.dwProcessId;
+    FILETIME exited{}, kernel{}, user{};
+    require(GetProcessTimes(helper.info.hProcess, &report.value->created, &exited, &kernel, &user));
+    if (bound) {
+        config.value->pid = helper.info.dwProcessId; config.value->created = report.value->created;
+        const auto separator = self.find_last_of(L"\\/");
+        require(separator != std::wstring::npos);
+        struct Library {
+            HMODULE value;
+            ~Library() { if (value && !FreeLibrary(value)) cleanupFailed = true; }
+        } library{LoadLibraryExW((self.substr(0, separator + 1) + L"bootstrap-enroll.dll").c_str(), nullptr,
+            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32)};
+        require(library.value != nullptr);
+        using Enroll = DWORD (WINAPI*)(HANDLE, HANDLE, DWORD, ULONGLONG, HANDLE, HANDLE, HANDLE);
+        const auto enroll = reinterpret_cast<Enroll>(GetProcAddress(library.value, "EnrollPreparedEducationV2"));
+        require(enroll != nullptr);
+        Handle image(CreateFileW(self.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+            FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+        require(image.value != INVALID_HANDLE_VALUE);
+        const ULONGLONG birth = (static_cast<ULONGLONG>(report.value->created.dwHighDateTime) << 32)
+            | report.value->created.dwLowDateTime;
+        Key callerUser;
+        require(RegOpenCurrentUser(KEY_READ, &callerUser.value) == ERROR_SUCCESS
+            && nativeKeyName(callerUser.value) != config.value->userKeyPath);
+        // This API belongs to the unmediated manager; a mediated caller must remain refused.
+        require(enroll(helper.info.hProcess, helper.info.hThread, helper.info.dwProcessId, birth,
+            readonly.value, image.value, nullptr) == ERROR_INVALID_DATA);
+        // Separate low-level positive control on this own fixture only; never a production fallback.
+        std::string compatibility;
+        for (const auto c : self.substr(0, separator + 1) + L"bootstrap-compat.dll") {
+            require(c > 0 && c <= 0x7f); compatibility.push_back(static_cast<char>(c));
+        }
+        const char* dlls[]{compatibility.c_str()};
+        require(DetourUpdateProcessWithDll(helper.info.hProcess, dlls, 1));
+    }
+    MemoryBarrier();
+    require(ResumeThread(helper.info.hThread) == 1);
+    require(WaitForSingleObject(helper.info.hProcess, 10000) == WAIT_OBJECT_0);
+    DWORD code = STILL_ACTIVE;
+    require(GetExitCodeProcess(helper.info.hProcess, &code) && code == 0);
+    require(!cleanupFailed);
+    require(report.value->count == 2 && report.value->armed == 0
+        && report.value->fileChecks == 15 && report.value->registryChecks == 3);
+    // The enrolled parent still has its own effective Known Folder and HKCU after its helper exits.
+    const auto own = directoryPath(receipt.fileOwnRoot).substr(4);
+    require(knownPath(FOLDERID_RoamingAppData) == own + L"\\Roaming"
+        && knownPath(FOLDERID_LocalAppData) == own + L"\\Local");
+    Key parent;
+    require(RegOpenKeyExW(HKEY_CURRENT_USER, registryPath(receipt.logical).c_str(), 0,
+        KEY_READ, &parent.value) == ERROR_SUCCESS
+        && registryValue(parent.value, L"Marker") != 0x484f5354);
+}
+
 int configuredStorageChild(probe::Receipt& receipt) {
+    configuredDiagnosticChild = true;
     // Candidate storage configuration must not guess or rewrite a singleton.
     Handle shared(CreateMutexW(nullptr, FALSE, receipt.logical));
     require(shared.value && GetLastError() == ERROR_ALREADY_EXISTS);
@@ -2097,6 +2240,8 @@ int configuredStorageChild(probe::Receipt& receipt) {
     if (receipt.fileRound == 2 || receipt.fileRound == 3) return interruptedStorageChild(receipt);
     if (receipt.fileRound == 4 || receipt.fileRound == 5) return mappedStorageChild(receipt);
     RegistryChild registry(receipt);
+    helperBindingCheck(receipt, false);
+    helperBindingCheck(receipt, true);
     worldStorageChecks(receipt);
     for (const auto& folder : {L"Roaming", L"Local"}) {
         const auto logical = directoryPath(receipt.fileLogicalRoot).substr(4) + L"\\" + folder + L"\\configured.bin";
@@ -2317,6 +2462,11 @@ bool configuredStoragePair(const std::wstring& self, const std::string& compatib
         "\"createCollisionPreservesData\":true,\"renameAndLinkEscapeDenied\":true,"
         "\"interruptedWriterRecovered\":true,\"peerSurvived\":true,\"exclusiveRetryReopen\":true,"
         "\"postReplaceMappedWriterRecovered\":true,\"byteRangeLocksVerified\":true,"
+        "\"unboundHelperEnvironmentPrivate\":true,\"unboundHelperKnownFoldersPrivate\":false,"
+        "\"unboundHelperHkcuPrivate\":false,\"unboundHelpersChecked\":4,"
+        "\"explicitHelperKnownFoldersPrivate\":true,\"explicitHelperHkcuPrivate\":true,"
+        "\"explicitHelpersChecked\":4,\"automaticHelperEnrollment\":false,"
+        "\"mediatedCallerEnrollmentRefusals\":4,"
         "\"singleton\":\"UNKNOWN\",\"singletonRemap\":false,\"helpers\":\"UNKNOWN\",\"securityBoundary\":false,"
         "\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n");
     return true;
@@ -2642,6 +2792,9 @@ int childMain() {
 int wmain(int argc, wchar_t** argv) {
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
     if (argc == 2 && wcscmp(argv[1], L"--bootstrap-observation-child") == 0) return 0;
+    if (argc == 2 && wcscmp(argv[1], L"--bootstrap-helper-view") == 0) {
+        try { return helperViewMain(); } catch (...) { return 87; }
+    }
     if (argc == 2 && wcscmp(argv[1], L"--bootstrap-test-child") == 0) {
         try { return childMain(); } catch (...) { return configuredDiagnosticChild && lastFailureLine
             ? 60000 + static_cast<int>(lastFailureLine) : 85; }
