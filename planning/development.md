@@ -103,7 +103,7 @@ the operator is working. Preserve existing accounts/worlds. Public MC02–04
 admission, retired providers and GitHub Actions remain disabled.
 
 **Source baseline:** exact remote Local
-`fdab689d8e3c150a28f651993f9c8b6da5e3abad`, plus the earlier handoff input blobs below.
+`e5f51a4a269facc2187fa9fb530148ab6a4ea9f2`, plus the earlier handoff input blobs below.
 Native preparation/enrollment remains in
 `apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`; the private config,
 enroller, compatibility DLL and own controls remain in
@@ -153,10 +153,10 @@ and operator intent; current work is source/automatic controls only.
 Game-tested manager:
 `eaa65ac1997bf6227b374bd2dce893346d7258c3fced46ed4973ac966d059687`.
 Latest source-only manager build (not launched into Minecraft):
-`5c6c85ee0a330e2d3d7c957d826aa694afeab45fc9c1d89ebf0aa9dc34fcc88e`.
-Compatibility DLL:
+`790c5b774ef731ffea5fe314394daff69f32c8a0e95eadfa667f0462537062bb`.
+Game-tested compatibility DLL:
 `a59fb1803ff3d957b9691017f24dd7211a9b3f88b6a7b13988432210d67e02ec`.
-Enroller:
+Game-tested enroller:
 `18f4157b524f142f2bac85efd6d95b5df69d161a1e1a0da6c10788c94868f384`.
 Official game image:
 `04164c1c64458a5d984dbc1687d0e8023d1808c44ee7be03519cdf8355233eaa`.
@@ -368,6 +368,54 @@ configured-storage control PASS after its pre-fix private-directory failure;
 all four C++ modes PASS; all 36 scoped native-client Rust tests PASS; diff
 whitespace PASS. No Rust/frontend source or public schema changed in this batch.
 
+### Current candidate: reviewed payload pair and mandatory existing-profile replay
+
+The native review traced BootstrapLibrary::reviewed/load, the read-only config
+and enroller ABI, original suspended child ownership, DLL attach, replay and
+one-shot resume consumers. The manager hashes both pinned ordinary DLL files
+before loading code or preparing game stores, pins every ordinary ancestor and
+binds the loaded enroller file identity. The enroller checks original process,
+thread/birth/session/image and per-slot registry binding; DLL config validates
+the pinned storage IDs. Helper propagation remains test-only; the game observer
+does not automatically suspend/enroll children. These are cooperative source
+and own-control properties, not full hostile-process or loaded-game attestation.
+
+One persistency risk was corrected in registered_slots: observation previously
+fell through to fresh_slots if REVIEWED_REPLAY was absent. It now refuses with
+Unsupported before Known Folders, registry/store access or profile allocation.
+The explicit preparation-only route retains its existing fresh-store behavior.
+The new absent-policy regression passes with the deliberately empty test
+policy, without touching real profiles. Existing replay tests still check
+wrong capability hash/identity/missing stores and no fresh-profile fallback.
+
+The current source/control DLL pair is now pinned for the private opt-in
+acceptance path, without enabling public admission. New source-only artifacts:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Manager | `790c5b774ef731ffea5fe314394daff69f32c8a0e95eadfa667f0462537062bb` |
+| Enroller | `2091e9d25e63e90a4241c43f84fa9f2588e7ab6273612286e565d0e96ff932ed` |
+| Compatibility DLL | `4cc1a12146b38aad58e1b0ad43926fbffdbdfe5d2b1c111e456e62f78801cb17` |
+
+A separate local acceptance-candidate-20261025-e5f51a4 directory holds only
+these new code artifacts and a byte/hash-verified copy of the existing 216-byte
+replay metadata capability. Its local manifest records the exact code hashes
+and source commit; no capability bytes, profile IDs, raw journals or machine
+paths are committed. No profile directory, token/cache, account or world content
+was read/copied. The old/live staged manager and payload remain untouched.
+Installed game image hash still matches the recorded official hash.
+
+Executed on these Rust inputs and the unchanged reviewed native pair: all 37
+scoped native-client tests PASS (including 19 bootstrap cases), preview manager
+build PASS, rustfmt and whitespace PASS. The actual staged candidate was run
+only with an invalid extra argument: its original process exited 2 with
+startup-refused/InvalidData before entering the game/store inspection path.
+This tests refusal only, not loading the payload or game startup. A first GUI
+process invocation lacked a waited exit result; its absence was confirmed
+before the waited control was run. The waited process's exit was verified.
+Read-only metadata confirms the same two existing responding game lifetimes;
+no new game, restart, closure, window input or Computer Use occurred.
+
 ### Remaining proof and one next action
 
 UNKNOWN/NOT_EXECUTED: real saved-world/marker reopen after restart, long
@@ -378,11 +426,11 @@ Prior raw peer-access control showed name translation is not a security
 boundary. Four clients and distribution remain NOT_EXECUTED. Fixture coverage
 does not establish full stability or a development percentage.
 
-**One next action:** review the final native payload changes and their game
-bootstrap consumers together before any future staged acceptance build. Keep
-current game payload pins closed until that review; do not hot-replace or
-restart live games. The historical path rejections still need a future
-authorized startup/normal-exit journal with detail, and saved-world restart,
-authentication attribution and soak acceptance remain deferred to an
-operator-selected window. Do not bind the absent legacy helper or unlock
-public admission from own-data controls.
+**One next action:** run one integrated same-profile acceptance with the staged
+candidate in an operator-selected window: saved accounts and both known worlds/
+markers after full restart, concurrent gameplay, normal save/close and numeric
+storage journal review. Do not launch, close or control the current games while
+the operator works. Historical path failures still require new detail-bearing
+journals; current-version authentication attribution and crash recovery remain
+UNKNOWN. Do not bind the absent legacy helper or unlock public admission from
+own-data controls. Candidate preparation is complete; game acceptance is not.

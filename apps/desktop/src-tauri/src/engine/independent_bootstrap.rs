@@ -534,14 +534,14 @@ const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = None;
 #[cfg(not(test))]
 const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = Some(PayloadDigests {
     enroller: [
-        0x18, 0xf4, 0x15, 0x7b, 0x52, 0x4f, 0x14, 0x2f, 0x2b, 0xac, 0x85, 0xef, 0xd6, 0xd9, 0x5b,
-        0x5d, 0xf6, 0x9d, 0x16, 0x1a, 0x1e, 0x1a, 0x0d, 0xa6, 0xc1, 0x07, 0x88, 0xc9, 0x48, 0x68,
-        0xf3, 0x84,
+        0x20, 0x91, 0xe9, 0xd2, 0x5e, 0x63, 0xe9, 0x0a, 0x42, 0x41, 0xc4, 0x3f, 0x84, 0xfa, 0x9f,
+        0x25, 0x88, 0xe7, 0xab, 0x62, 0x73, 0x61, 0x22, 0x86, 0xe5, 0x65, 0xd0, 0xe9, 0x6f, 0xf9,
+        0x32, 0xed,
     ],
     compatibility: [
-        0xa5, 0x9f, 0xb1, 0x80, 0x3f, 0xf3, 0xd9, 0x57, 0xb9, 0x69, 0x10, 0x17, 0xf2, 0x4d, 0xd7,
-        0x21, 0x1a, 0x9b, 0x3f, 0x88, 0xb6, 0xa7, 0xb1, 0x39, 0x88, 0x43, 0x22, 0x10, 0xd6, 0x7e,
-        0x02, 0xec,
+        0x4c, 0xc1, 0xa1, 0x21, 0x46, 0xb3, 0x8a, 0xad, 0x58, 0xe1, 0xb0, 0xad, 0x43, 0x92, 0x6f,
+        0xbf, 0xfd, 0xbd, 0xfe, 0x5d, 0x2b, 0x1c, 0x11, 0x1e, 0x45, 0x6e, 0x62, 0xf7, 0x88, 0x01,
+        0xcb, 0x17,
     ],
 });
 #[derive(Clone, Copy)]
@@ -1559,6 +1559,18 @@ fn reopen_slots(
 }
 
 fn registered_slots(observe: bool) -> io::Result<[SlotStorage; 2]> {
+    // Authorized observation reuses an existing pair or refuses. An unset
+    // review policy must never silently become fresh account/world storage.
+    let replay = if observe {
+        Some(REVIEWED_REPLAY.ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::Unsupported,
+                "No reviewed existing Education profile pair",
+            )
+        })?)
+    } else {
+        None
+    };
     let roaming = known_folder(&FOLDERID_RoamingAppData)?;
     let local = known_folder(&FOLDERID_LocalAppData)?;
     if roaming.file_name() != Some(OsStr::new("Roaming"))
@@ -1586,7 +1598,7 @@ fn registered_slots(observe: bool) -> io::Result<[SlotStorage; 2]> {
         ));
     }
     let parent = known_folder(&FOLDERID_Profile)?;
-    if let Some(expected) = REVIEWED_REPLAY.filter(|_| observe) {
+    if let Some(expected) = replay {
         use std::io::Read;
         let path = std::env::current_exe()?
             .parent()
@@ -2192,6 +2204,14 @@ mod tests {
     #[test]
     fn registered_enrollment_refuses_unreviewed_payload_before_game_lookup() {
         assert!(matches!(prepare_registered_enrolled(), Err(error)
+            if error.kind() == io::ErrorKind::Unsupported));
+    }
+
+    #[test]
+    fn registered_observation_requires_replay_policy_before_storage_lookup() {
+        // Test policy is deliberately absent. Refuse before Known Folders,
+        // registry access or fresh profile allocation; never involve the game.
+        assert!(matches!(registered_slots(true), Err(error)
             if error.kind() == io::ErrorKind::Unsupported));
     }
 
