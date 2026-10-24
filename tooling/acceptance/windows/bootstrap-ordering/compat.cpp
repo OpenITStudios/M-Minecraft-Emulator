@@ -283,10 +283,8 @@ bool initializeAppData() {
     if (!roaming || roaming >= 512 || wcscmp(environment, roamingPath) != 0) return false;
     const DWORD local = GetEnvironmentVariableW(L"LOCALAPPDATA", environment, 512);
     if (!local || local >= 512 || wcscmp(environment, localPath) != 0) return false;
-    // Resolve an already imported module; no shell/COM lookup or LoadLibrary in DllMain.
-    const HMODULE shell = GetModuleHandleW(L"shell32.dll");
-    originalKnownPath = shell ? reinterpret_cast<KnownPath>(
-        GetProcAddress(shell, "SHGetKnownFolderPath")) : nullptr;
+    // A direct import makes Shell32 a loader dependency; do not assume the target imported it.
+    originalKnownPath = &SHGetKnownFolderPath;
     return originalKnownPath != nullptr;
 }
 HRESULT WINAPI translatedKnownPath(REFKNOWNFOLDERID id, DWORD flags, HANDLE token, PWSTR* output) {
