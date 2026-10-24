@@ -1,5 +1,8 @@
 #include "frame-pacing.h"
+#include "dxgi-pacing.h"
 #include <d3d11.h>
+#include <d3d12.h>
+#include <dxgi1_4.h>
 #include <wrl/client.h>
 #include <array>
 #include <cstdio>
@@ -14,7 +17,13 @@ using Microsoft::WRL::ComPtr;
 using presentation_pacing::Outcome;
 using presentation_pacing::Permit;
 constexpr wchar_t WindowClass[] = L"MivubiOwnHiddenPacingControl";
-void check(bool condition) { if (!condition) throw std::runtime_error("Pacing control failed"); }
+void checkAt(bool condition, unsigned line) {
+    if (!condition) {
+        std::fprintf(stderr, "{\"pacingControlFailureLine\":%u}\n", line);
+        throw std::runtime_error("Pacing control failed");
+    }
+}
+#define check(...) checkAt((__VA_ARGS__), __LINE__)
 LONGLONG clockNow() {
     LARGE_INTEGER value{};
     check(QueryPerformanceCounter(&value) != FALSE);
@@ -114,6 +123,122 @@ void cancellationAndLateFrame() {
     check(second.outcome == Outcome::Frame && third.outcome == Outcome::Frame
         && third.released - second.released >= (frequency.QuadPart + 143) / 144);
 }
+void adapterChecks(bool modern) {
+    HiddenWindow selectedWindow, foreignWindow;
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    check(SUCCEEDED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, 0,
+        nullptr, 0, D3D11_SDK_VERSION, &device, nullptr, &context)));
+    ComPtr<IDXGIFactory4> factory;
+    check(SUCCEEDED(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory))));
+    ComPtr<ID3D12Device> device12;
+    ComPtr<ID3D12CommandQueue> queue;
+    if (modern) {
+        ComPtr<IDXGIAdapter> warp;
+        check(SUCCEEDED(factory->EnumWarpAdapter(IID_PPV_ARGS(&warp)))
+            && SUCCEEDED(D3D12CreateDevice(warp.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device12))));
+        D3D12_COMMAND_QUEUE_DESC description{};
+        description.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+        check(SUCCEEDED(device12->CreateCommandQueue(&description, IID_PPV_ARGS(&queue))));
+    }
+    const auto create = [&](HWND window, bool shadow = false) {
+        DXGI_SWAP_CHAIN_DESC1 description{};
+        description.Width = description.Height = 16;
+        description.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        description.SampleDesc.Count = 1;
+        description.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        description.BufferCount = modern && !shadow ? 2 : 1;
+        description.SwapEffect = modern && !shadow ? DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL : DXGI_SWAP_EFFECT_DISCARD;
+        ComPtr<IDXGISwapChain1> chain;
+        IUnknown* presenter = modern && !shadow ? static_cast<IUnknown*>(queue.Get()) : device.Get();
+        check(SUCCEEDED(factory->CreateSwapChainForHwnd(presenter, window, &description,
+            nullptr, nullptr, &chain)));
+        return chain;
+    };
+    auto target = create(selectedWindow.value);
+    auto other = create(foreignWindow.value);
+    // Only one flip chain per HWND; the unrelated same-window UI uses a bitblt chain.
+    auto sameWindow = create(selectedWindow.value, true);
+    constexpr DWORD sentinel = 0x13579bdf;
+    SetLastError(sentinel);
+    const HRESULT invalid = target->Present(5, 0);
+    const DWORD invalidError = GetLastError();
+    check(FAILED(invalid));
+    DXGI_PRESENT_PARAMETERS parameters{};
+    const auto unchanged = parameters;
+    SetLastError(sentinel);
+    const HRESULT invalidNewer = target->Present1(5, 0, &parameters);
+    const DWORD invalidNewerError = GetLastError();
+    check(FAILED(invalidNewer));
+    check(!dxgi_pacing::install(nullptr, selectedWindow.value));
+    check(!dxgi_pacing::install(target.Get(), foreignWindow.value));
+    check(dxgi_pacing::install(target.Get(), selectedWindow.value));
+    check(!dxgi_pacing::install(other.Get(), foreignWindow.value));
+    LARGE_INTEGER frequency{};
+    check(QueryPerformanceFrequency(&frequency));
+    check(dxgi_pacing::foreground(true));
+    check(SUCCEEDED(target->Present(0, 0)));
+    auto before = dxgi_pacing::snapshot();
+    check(before.pacedPresent == 1 && before.lastCeiling == 144);
+    check(SUCCEEDED(target->Present1(0, 0, &parameters)));
+    auto after = dxgi_pacing::snapshot();
+    check(after.pacedPresent == 1 && after.pacedPresent1 == 1
+        && after.lastRelease - before.lastRelease >= (frequency.QuadPart + 143) / 144
+        && memcmp(&parameters, &unchanged, sizeof(parameters)) == 0);
+    check(dxgi_pacing::foreground(false));
+    before = after;
+    check(SUCCEEDED(target->Present1(0, 0, &parameters)));
+    after = dxgi_pacing::snapshot();
+    check(after.lastCeiling == 10 && after.pacedPresent1 == 2
+        && after.lastRelease - before.lastRelease >= (frequency.QuadPart + 9) / 10);
+    if (modern) {
+        ComPtr<ID3D12Fence> fence;
+        Event idle;
+        check(SUCCEEDED(device12->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)))
+            && SUCCEEDED(queue->Signal(fence.Get(), 1))
+            && SUCCEEDED(fence->SetEventOnCompletion(1, idle.value))
+            && WaitForSingleObject(idle.value, 10000) == WAIT_OBJECT_0);
+    }
+    check(SUCCEEDED(target->ResizeBuffers(0, 24, 24, DXGI_FORMAT_UNKNOWN, 0)));
+    before = after;
+    check(SUCCEEDED(target->Present(0, 0)));
+    after = dxgi_pacing::snapshot();
+    check(after.pacedPresent == 2 && after.lastCeiling == 10
+        && after.lastRelease - before.lastRelease >= (frequency.QuadPart + 9) / 10);
+    before = after;
+    check(SUCCEEDED(other->Present(0, 0)));
+    check(SUCCEEDED(sameWindow->Present1(0, 0, &parameters)));
+    check(SUCCEEDED(target->Present(0, DXGI_PRESENT_TEST)));
+    check(SUCCEEDED(target->Present1(0, DXGI_PRESENT_TEST, &parameters)));
+    // Native DO_NOT_WAIT may legitimately report WAS_STILL_DRAWING; preserve it.
+    const HRESULT nonblocking = target->Present(0, DXGI_PRESENT_DO_NOT_WAIT);
+    check(SUCCEEDED(nonblocking) || nonblocking == DXGI_ERROR_WAS_STILL_DRAWING);
+    const HRESULT nonblockingNewer = target->Present1(0, DXGI_PRESENT_DO_NOT_WAIT, &parameters);
+    check(SUCCEEDED(nonblockingNewer) || nonblockingNewer == DXGI_ERROR_WAS_STILL_DRAWING);
+    SetLastError(sentinel);
+    const HRESULT forwarded = target->Present(5, 0);
+    const DWORD forwardedError = GetLastError();
+    check(forwarded == invalid && forwardedError == invalidError);
+    SetLastError(sentinel);
+    const HRESULT forwardedNewer = target->Present1(5, 0, &parameters);
+    const DWORD forwardedNewerError = GetLastError();
+    check(forwardedNewer == invalidNewer && forwardedNewerError == invalidNewerError
+        && memcmp(&parameters, &unchanged, sizeof(parameters)) == 0);
+    after = dxgi_pacing::snapshot();
+    check(after.pacedPresent == before.pacedPresent && after.pacedPresent1 == before.pacedPresent1
+        && after.lastRelease == before.lastRelease && after.bypassed >= before.bypassed + 8
+        && after.faults == 0);
+    check(dxgi_pacing::stop() && !dxgi_pacing::foreground(true));
+    check(SUCCEEDED(target->Present(0, 0)));
+    after = dxgi_pacing::snapshot();
+    check(after.lastRelease == before.lastRelease && after.faults == 0);
+    std::printf("{\"scope\":\"OWN_DXGI_DETOUR_ADAPTER\",\"selfCheck\":true,\"backend\":\"%s\","
+        "\"present\":%llu,\"present1\":%llu,\"bypassed\":%llu,"
+        "\"unrelatedChainsExcluded\":true,\"nonblockingAndTestPreserved\":true,"
+        "\"nativeFailureAndLastErrorPreserved\":true,\"resizeRetainsBinding\":true,\"gameHook\":false,"
+        "\"minecraft\":\"NOT_EXECUTED\"}\n", modern ? "D3D12_WARP" : "D3D11_WARP",
+        after.pacedPresent, after.pacedPresent1, after.bypassed);
+}
 int run() {
     cancellationAndLateFrame();
     WNDCLASSW type{};
@@ -175,6 +300,7 @@ int run() {
     const double stopMs = 1000.0 * static_cast<double>(stopped - stopStarted)
         / static_cast<double>(frequency.QuadPart);
     check(maxPromotionMs < 100 && stopMs < 1000);
+    adapterChecks(false);
     std::printf("{\"scope\":\"FIVE_OWN_HIDDEN_DXGI_RENDERERS\",\"selfCheck\":true,"
         "\"foregroundCeiling\":144,\"backgroundCeiling\":10,\"releaseSamples\":%u,"
         "\"occludedPresents\":%u,\"elapsedSeconds\":%.3f,\"processCpuSeconds\":%.3f,"
@@ -186,8 +312,19 @@ int run() {
 }
 } // namespace
 int wmain(int argc, wchar_t** argv) {
-    if (argc != 2 || wcscmp(argv[1], L"--run-self-test") != 0) return 64;
-    try { return run(); }
+    if (argc != 2) return 64;
+    const bool modern = wcscmp(argv[1], L"--run-d3d12-adapter-self-test") == 0;
+    if (!modern && wcscmp(argv[1], L"--run-self-test") != 0) return 64;
+    try {
+        if (!modern) return run();
+        WNDCLASSW type{};
+        type.lpfnWndProc = DefWindowProcW;
+        type.hInstance = GetModuleHandleW(nullptr);
+        type.lpszClassName = WindowClass;
+        check(RegisterClassW(&type) != 0);
+        adapterChecks(true);
+        return 0;
+    }
     catch (...) {
         std::printf("{\"scope\":\"FIVE_OWN_HIDDEN_DXGI_RENDERERS\",\"selfCheck\":false,"
             "\"minecraft\":\"NOT_EXECUTED\"}\n");

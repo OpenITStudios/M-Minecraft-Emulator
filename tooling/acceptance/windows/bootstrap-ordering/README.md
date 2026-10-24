@@ -25,10 +25,39 @@ API failures are explicit errors, without a spinning-loop fallback.
 Output describes **permit timing and own-process CPU**, not displayed FPS.
 Real DXGI Present calls in this hidden software fixture are not Minecraft's
 D3D12 world workload. Policy changes are synthetic, not actual OS focus tracking.
-No DLL, private enrollment transport or game provider consumes this core yet.
+The native DXGI adapter below now consumes the core in this control only; no game provider or enrollment transport consumes it.
 Actual presentation binding, foreground tracking, host simulation/network
 independence, five real clients and resource savings need separate runtime proof.
 Current evidence and continuation remain solely in `planning/development.md`.
+
+### DXGI adapter controls
+
+`--run-self-test` now also exercises `dxgi-pacing.cpp` through real Detours
+interception of native Present and Present1 calls. Run
+`--run-d3d12-adapter-self-test` in a separate process to check D3D12 WARP
+flip-model swap chains. These are hidden own-process API controls; the D3D12
+mode does not render a representative game scene or prove displayed frames.
+
+The adapter installs once while all presentation is quiescent, outside loader
+lock. A successful binding pins its interface/COM identity and callback code module until process exit;
+there is no live unhook, rebind or DLL-unload API. It validates the exact target
+identity and own-process HWND. Matching the HWND alone never selects a chain.
+Nested Present/Present1 implementations do not consume two permits.
+A parallel presentation consumer disables pacing and records a fault rather
+than racing the core; game concurrency compatibility is still unproved.
+
+[DXGI_PRESENT_TEST and DO_NOT_WAIT](https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/dxgi-present)
+bypass pacing. Original sync interval, flags, Present1 parameters, HRESULT and
+native LastError pass through. Stop cancels pacing, not the caller's native
+presentation. Diagnostics describe permits/bypasses/faults, not readiness.
+Checks include unrelated/same-HWND chains, malformed sync intervals,
+[Present1 parameters](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_2/nf-dxgi1_2-idxgiswapchain1-present1),
+both rates, native errors and resize.
+
+Only `frame-pacing-control` links this adapter. The compatibility DLL, bootstrap
+transport and game artifacts are unchanged. Automatic real-chain enrollment
+and OS-focus policy are not implemented; successful controls do not unlock
+game launch or prove multiplayer health.
 
 ## Current Education experiment — 24 October 2026
 

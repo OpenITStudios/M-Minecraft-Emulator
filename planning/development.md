@@ -607,20 +607,64 @@ for these samples; they are no controlled optimization/capacity comparison.
 The games remain with the operator; no save, closure, game input or Computer Use
 was performed.
 
+### Window/chain-bound DXGI adapter
+
+Source baseline `46bf3917a3192fa0b3c19689d7b2342fbfc71f34`. The native
+`dxgi-pacing.cpp` adapter now consumes the existing pacing core through actual
+Microsoft Detours interception of Present and Present1 in the own renderer
+control. It is linked only into that explicit test executable. The compatibility
+DLL, enrollment ABI, game payload pins, public APIs/admission and CI are unchanged.
+No game process operation, Computer Use, token or world-content inspection was
+performed in this batch.
+
+An explicit quiescent installation validates and retains one own-process
+window, swap-chain interface and canonical COM identity. The callback's code module is pinned against unload. Successful hook state
+is process-lifetime, with no live unload/rebind API; failed installation releases
+its temporary references/timer. Same-HWND chains with different identities are
+excluded. Thread-local nesting avoids double pacing when the native Present1
+implementation enters Present. A competing rendering consumer records a fault
+and disables pacing instead of racing/serializing the single-consumer clock.
+Concurrency fault handling exists in source but is not real-game acceptance.
+
+TEST, DO_NOT_WAIT and invalid sync intervals bypass the clock. Both wrappers
+restore caller LastError before the native call and retain native LastError/
+HRESULT afterward. Sync/flags/Present1 parameter pointers are forwarded unchanged.
+Stop disables waiting while forwarding the original presentation; no fake native
+success is returned. A timing error is diagnostic failure, not policy readiness.
+
+Final executed MSVC x64 Release /W4 /WX build and both control modes PASS:
+- Five hidden D3D11 renderers retain 144/10 release timing; final run 549 samples,
+  3.047 seconds, 0.047 process CPU seconds, maximum synthetic promotion 0.905 ms,
+  joined stop 5.016 ms. No displayed/game FPS inference.
+- Actual detours on D3D11 WARP and separately D3D12 WARP flip chains each recorded
+  two paced Present calls, two paced Present1 calls and nine bypasses. Native
+  failures/LastError, caller parameters, test/nonblocking behavior, wrong-window/
+  duplicate-install refusal, unrelated and same-HWND chains, stop and resize
+  retain their tested behavior.
+- D3D12 queue work is fenced before resize. Its small hidden swap-chain API
+  control does not render a representative scene or prove hardware performance.
+- Invalid CLI input still refuses with original exit 64. No leftover control
+  process was found after these synchronous runs.
+
+The earlier local PresentMon CSV was also rechecked: all 5,461 captured real-game
+presents used flags 0 and SyncInterval 1. This is compatible input to the adapter,
+not proof of its installation in Minecraft. The old live runtime and accounts/
+worlds are not altered; neither new source component is deployed there.
+
 ### Remaining proof and one next action
 
-The five-client goal is ACTIVE. The timing core is implemented for its own
-renderer control only. Actual game presentation binding, automatic OS-focus
-switching, background-host simulation/network health, full CPU/RAM/GPU/VRAM
-overhead, five licensed playable clients, long soak and crash recovery remain
-UNKNOWN/NOT_EXECUTED. Full helper HKCU/auth/host-peer containment remains unproved;
-name translation alone is not a security boundary. Distribution stays deferred.
+The five-client goal is ACTIVE. Real-game swap-chain enrollment, automatic
+OS-focus policy, background-host simulation/network health, five real licensed
+playable clients, full CPU/RAM/GPU/VRAM overhead, long soak and crash recovery
+remain UNKNOWN/NOT_EXECUTED. Full helper HKCU/auth/host-peer containment remains
+unproved. The two reviewed runtime profiles are preserved; distribution deferred.
 
-**One next action:** bind a window/chain-specific opt-in DXGI Present/Present1
-adapter to the existing compatibility route and pacing core, first through the
-own-renderer control. Preserve caller results/flags and exclude unrelated swap
-chains; initialize graphics outside loader lock. Use the existing lifecycle/
-focus owner instead of a second governor. Then verify real 144/10 switching and
-background Host World health before extending the persistent catalog to five.
-Preserve profiles; do not confuse the old live runtime with source artifacts or
-open public admission from a fixture. Coordinate restarts with normal save/close.
+**One next action:** add opt-in presentation enrollment at actual HWND swap-chain
+creation in the existing compatibility/bootstrap owner, outside loader lock,
+with explicit lifetime and failure reporting. Connect the existing manager's
+focus owner through the private bootstrap policy capability, rather than a second
+governor or a new public command. First verify that enrollment with own children;
+then deploy a separate same-profile runtime candidate for real 144/10 focus and
+background Host World acceptance before expanding the catalog to five. Do not
+install this adapter from DllMain, patch unknown live threads, replace the known
+runtime quietly or promote fixture results to public provider admission.
