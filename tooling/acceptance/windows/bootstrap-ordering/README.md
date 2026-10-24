@@ -40,7 +40,7 @@ Build does not execute the experiment. A separately requested manual run is:
 & ./workspace/bootstrap-ordering-build/Release/bootstrap-ordering.exe --run-self-test
 ~~~
 
-The target accepts only the two fixed self-test switches and its internal child
+The target accepts only the three fixed self-test switches and its internal child
 argument, and rejects unsupported architectures. The fixed
 compatibility import path currently requires ASCII; there is no lossy conversion
 or alternate-path fallback. Keep source and build directories separate.
@@ -78,8 +78,9 @@ JSON contains fixed stage/case labels and booleans/counts, with
 providerReady=false and minecraft=NOT_EXECUTED. It emits no raw PID, FILETIME,
 HANDLE, username, installed game path, credentials, caches or world contents.
 
-Selected registry open/query/set calls are denied from first import until the
-explicit post-loader private-hive activation below.
+In application-hive mode, selected registry open/query/set calls are denied from
+first import until the explicit post-loader activation below. The separate
+ordinary inherited-key mode supplies private values before dependency/TLS.
 Only the selected synthetic directory tree is redirected. In the default ordering mode,
 "canary" means a marker at a would-be protected call site and "arm" is a shared
 flag. In mutex mode the flag follows installation of file/IPC/Known Folder and six registry entry-point hooks in one transaction.
@@ -299,6 +300,101 @@ Contracts:
 [SHGetKnownFolderPath](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shgetknownfolderpath),
 [KNOWN_FOLDER_FLAG](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/ne-shlobj_core-known_folder_flag),
 [Known Folders](https://learn.microsoft.com/en-us/windows/win32/shell/known-folders).
+
+## Ordinary inherited registry startup — 24 October 2026 WIB
+
+Exact baseline: 919fbdae2a8d04a1a35dcda10a8e2d159de8c9c3.
+The new **test-only ordinary-key candidate** supplies synthetic private values
+during dependency DllMain, EXE TLS and the first main canary. It does not inherit
+an application hive or claim an exception to RegLoadAppKey's process rules.
+
+~~~powershell
+& ./workspace/bootstrap-ordering-build/Release/bootstrap-ordering.exe --run-inherited-registry-self-test
+~~~
+
+The existing controller creates two fresh REG_OPTION_NON_VOLATILE ordinary
+registry roots under its unique synthetic Software test prefix. Each root name
+binds the existing slot's directory volume/file ID and A/B label; the child
+validates the inherited key's native name and granted rights against those
+existing file/slot identities. The fixed handle allowlist adds only the own-slot
+key (nine handles total); the peer key is not inherited. Missing keys, a wrong
+slot's key and an event handle masquerading as a key reject attach before arm.
+
+The same DLL registry owner publishes the validated ordinary key before the
+existing hook transaction is armed. It does not load/create a hive, override
+HKCU or perform profile/COM setup in DllMain. Native host-user path opens and
+cached host-key query/set use the existing translation. Its own backing subtree
+bypasses host-path remapping so it cannot recursively map into itself; direct
+container/peer backing paths under that reserved prefix are unsupported.
+Main-thread BootstrapRegistry then applies the existing predefined HKCU mapping,
+idempotently. The application-hive mode retains its distinct main-thread load,
+early denial, invalid-hive and REG_PROCESS_APPKEY load-lock controls.
+
+The startup canary checks both a native logical open and the inherited cached
+HOST handle against a slot-specific value, then advances that private value at
+each stage. Dependency/TLS/main are bits 1/2/4 in earlyPrivate. Both children
+remain live through the existing ready/go/done/finish phases and exercise the
+shared registry regression checks. After normal exit, the parent closes and
+reopens each ordinary root without recreation/reseeding, verifies both slot
+values and absent peer-only values, and launches the second round. HOST remains
+unchanged. Receipt v7 is 2,064 bytes; this is private fixture transport only.
+
+**Executed proof:** Windows x64, SDK 26100, MSVC 19.44.35226, MSBuild 17.14.40,
+CMake 4.3.2, Release /W4 /WX /permissive-. Configure/build and all three final
+commands exit 0. Ordinary earlyPrivate=7/7 and registryChecks=8191/8191 in both
+rounds; all three invalid-backing controls reject. In ordinary mode registry bit
+64 means reserved backing-container rejection, **not** application-hive
+load-lock isolation. The original ordering positive/failure/timeout controls
+and mutex/file/AppData/application-hive pair also pass unchanged expectations:
+earlyDenied=7/7, earlyAllowedControl=7, registry=8191/8191,
+file=1048575/1048575, Win32 mutex=127/127, native mutex=511/511.
+No remaining bootstrap-ordering.exe was observed after the final runs.
+The first wrong-object control accidentally repeated a handle in the Windows
+inheritance list; replacing it with a distinct event made it exercise DLL
+rejection rather than process-creation failure. Temporary diagnostics were
+removed before the final build/runs.
+
+Executed source blobs:
+
+| File | Git blob |
+| --- | --- |
+| compat.cpp | ebcc7d7ac0f55e4a406ff160a766062e42d7439c |
+| probe.cpp | b307460c2ddcc1d06f6f3593507b541ff575a6da |
+| receipt.h | 07159770f6870925105409b99ac31fc70e6701cd |
+| dependency.cpp | f33dcf4125062fd63992d42d78729845560282f2 |
+| CMakeLists.txt | 8aebd659bf90c05aaf6c2f166610c36834268a53 |
+| compat.def | 0bca64aeff66d33b9ab881152563370774906219 |
+
+Local evidence retained under workspace/tmp/inherited-registry-1792815456654;
+no raw key names, file IDs, user paths or handles are published.
+SHA-256:
+
+| Artifact | Hash |
+| --- | --- |
+| bootstrap-ordering.exe | 5b6118ebf7c7879234aa8d970d1785e790f0465005bfadbb5327485740ce899b |
+| bootstrap-compat.dll | 2221d748088ef85c7c8c646f18c4db8ba5f8a201f035f4be3f513d131268308e |
+| ordering.jsonl | 40927efb7a951dda0eccd4323ec78f5b80d713673bee402d9ebd632e0f460c36 |
+| pair.jsonl | b34ec1559e3fb3727ad7e336550455067fab6119338d49d6016ac527ae994707 |
+| inherited.jsonl | aaaa57f829d12344d0cdf2ac239d8ad1167ad4477b24a15becf87653ab9da05d |
+
+**Limits:** these are ordinary keys in the Windows user's registry, not portable
+HKCU.dat files. Fresh synthetic keys are retained; no migration or deletion of
+old stores is performed. This candidate has no REG_PROCESS_APPKEY load lock and
+does not establish peer ACL denial, secrecy from the host user, complete
+mediation or production readiness. Cached enumeration/multiple-value/delete/
+rename/security/transaction operations, unresolved paths and direct syscalls
+remain uncovered. The existing test AppData/IPC hooks are installed, but this
+new command asserts only registry behavior, not a new combined game boundary.
+No authentication broker, game process or world was accessed; full product,
+Minecraft, reboot and two/four-client acceptance remain NOT_EXECUTED.
+DisabledIndependentProvider and MC02–04 admission remain closed.
+
+Official contracts:
+[RegCreateKeyExW](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regcreatekeyexw)
+documents ordinary nonvolatile keys and SECURITY_ATTRIBUTES handle inheritance;
+[Handle Inheritance](https://learn.microsoft.com/en-us/windows/win32/sysinfo/handle-inheritance)
+includes registry keys. Those contracts support this backing choice, not
+Minecraft compatibility or complete user-mode hook enforcement.
 
 ## Inherited application-hive enrollment decision — 24 October 2026 WIB
 

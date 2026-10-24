@@ -867,15 +867,23 @@ struct RegistryChild {
         hostRoot.value = receipt.cachedHostKey; // Only the fresh synthetic host branch is inherited.
         hostName = receipt.registryUserPath;
         outsideLong = outsideRegistryLongStatus();
-        require(receipt.earlyDenied == 7 && receipt.earlyAllowed == 0);
-        Key deniedRoot;
-        require(RegOpenCurrentUser(KEY_READ, &deniedRoot.value) == ERROR_ACCESS_DENIED && !deniedRoot.value);
-        DWORD type = 0, value = 0, bytes = sizeof(value);
-        require(RegQueryValueExW(hostRoot.value, L"Marker", nullptr, &type,
-            reinterpret_cast<BYTE*>(&value), &bytes) == ERROR_ACCESS_DENIED);
-        const DWORD sameHost = 0x484f5354;
-        require(RegSetValueExW(hostRoot.value, L"Marker", 0, REG_DWORD,
-            reinterpret_cast<const BYTE*>(&sameHost), sizeof(sameHost)) == ERROR_ACCESS_DENIED);
+        const bool ordinary = receipt.registryBacking == 1;
+        require(receipt.earlyAllowed == 0);
+        if (ordinary) {
+            require(receipt.earlyPrivate == 7 && receipt.earlyDenied == 0);
+            require(registryValue(hostRoot.value, L"Marker")
+                == receipt.slot * 100 + (receipt.fileRound ? 1 : 0) + 3);
+        } else {
+            require(receipt.earlyDenied == 7 && receipt.earlyPrivate == 0);
+            Key deniedRoot;
+            require(RegOpenCurrentUser(KEY_READ, &deniedRoot.value) == ERROR_ACCESS_DENIED && !deniedRoot.value);
+            DWORD type = 0, value = 0, bytes = sizeof(value);
+            require(RegQueryValueExW(hostRoot.value, L"Marker", nullptr, &type,
+                reinterpret_cast<BYTE*>(&value), &bytes) == ERROR_ACCESS_DENIED);
+            const DWORD sameHost = 0x484f5354;
+            require(RegSetValueExW(hostRoot.value, L"Marker", 0, REG_DWORD,
+                reinterpret_cast<const BYTE*>(&sameHost), sizeof(sameHost)) == ERROR_ACCESS_DENIED);
+        }
         const auto initialize = reinterpret_cast<BOOL (*)()>(
             GetProcAddress(GetModuleHandleW(L"bootstrap-compat.dll"), "BootstrapRegistry"));
         require(initialize && initialize() && initialize());
@@ -883,7 +891,10 @@ struct RegistryChild {
         const auto path = registryPath(receipt.logical);
         Key previous;
         const LSTATUS opened = RegOpenKeyExW(HKEY_CURRENT_USER, path.c_str(), 0, KEY_READ, &previous.value);
-        if (receipt.fileRound == 0) require(opened == ERROR_FILE_NOT_FOUND && !previous.value);
+        if (ordinary) require(opened == ERROR_SUCCESS
+            && registryValue(previous.value, L"Marker")
+                == receipt.slot * 100 + (receipt.fileRound ? 1 : 0) + 3);
+        else if (receipt.fileRound == 0) require(opened == ERROR_FILE_NOT_FOUND && !previous.value);
         else {
             require(opened == ERROR_SUCCESS
                 && registryValue(previous.value, L"Marker") == receipt.slot * 100 + 1);
@@ -892,7 +903,7 @@ struct RegistryChild {
         DWORD disposition = 0;
         require(RegCreateKeyExW(HKEY_CURRENT_USER, path.c_str(), 0, nullptr,
             REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &branch.value, &disposition) == ERROR_SUCCESS
-            && disposition == static_cast<DWORD>(receipt.fileRound == 0 ? REG_CREATED_NEW_KEY : REG_OPENED_EXISTING_KEY));
+            && disposition == static_cast<DWORD>(!ordinary && receipt.fileRound == 0 ? REG_CREATED_NEW_KEY : REG_OPENED_EXISTING_KEY));
         setRegistryValue(branch.value, L"Marker", registryMarker(receipt));
         setRegistryValue(branch.value, receipt.slot == 1 ? L"OnlyA" : L"OnlyB", receipt.slot);
         std::set<std::wstring> names;
@@ -1049,13 +1060,27 @@ struct RegistryChild {
         require(RegQueryValueExW(branch.value, receipt.slot == 1 ? L"OnlyB" : L"OnlyA",
             nullptr, nullptr, nullptr, &bytes) == ERROR_FILE_NOT_FOUND);
         checks |= 32;
-        auto peer = directoryPath(receipt.fileOwnRoot).substr(4);
-        require(!peer.empty() && (peer.back() == L'A' || peer.back() == L'B'));
-        peer.back() = receipt.slot == 1 ? L'B' : L'A';
-        Key denied;
-        const LSTATUS status = RegLoadAppKeyW((peer + L"\\Registry\\HKCU.dat").c_str(),
-            &denied.value, KEY_READ, 0, 0);
-        require(status != ERROR_SUCCESS && !denied.value);
+        if (receipt.registryBacking == 1) {
+            // The ordinary store has no app-hive lock. Its container path must not bypass routing.
+            auto container = nativeKeyName(receipt.inheritedRegistry);
+            container.resize(container.find_last_of(L'\\'));
+            auto name = nativeName(container);
+            OBJECT_ATTRIBUTES attributes{sizeof(OBJECT_ATTRIBUTES), nullptr, &name,
+                OBJ_CASE_INSENSITIVE, nullptr, nullptr};
+            const auto open = reinterpret_cast<NativeRegistryOpen>(
+                GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtOpenKey"));
+            Key denied;
+            require(open && open(reinterpret_cast<PHANDLE>(&denied.value), KEY_READ, &attributes)
+                == static_cast<NTSTATUS>(0xc00000bbUL) && !denied.value);
+        } else {
+            auto peer = directoryPath(receipt.fileOwnRoot).substr(4);
+            require(!peer.empty() && (peer.back() == L'A' || peer.back() == L'B'));
+            peer.back() = receipt.slot == 1 ? L'B' : L'A';
+            Key denied;
+            const LSTATUS status = RegLoadAppKeyW((peer + L"\\Registry\\HKCU.dat").c_str(),
+                &denied.value, KEY_READ, 0, 0);
+            require(status != ERROR_SUCCESS && !denied.value);
+        }
         checks |= 64;
         InterlockedExchange(&receipt.registryChecks, checks);
     }
@@ -1137,7 +1162,8 @@ struct MutexChild {
     MutexChild(DWORD slot, const std::wstring& name, HANDLE go, HANDLE finish,
                const std::wstring& self, const std::string& compatibility,
                DWORD round, HANDLE logicalRoot, HANDLE ownRoot, HKEY cachedHostKey,
-               const std::wstring& userPath, bool wrongAppData = false, bool registryBaseline = false) {
+               const std::wstring& userPath, bool wrongAppData = false, bool registryBaseline = false,
+               HKEY inheritedRegistry = nullptr, bool ordinaryRegistry = false) {
         ZeroMemory(mapping.value, sizeof(probe::Receipt));
         auto& receipt = *mapping.value;
         receipt.magic = probe::Magic;
@@ -1147,6 +1173,8 @@ struct MutexChild {
         receipt.fileRound = round;
         receipt.registryBaseline = registryBaseline ? 1 : 0;
         receipt.cachedHostKey = cachedHostKey;
+        receipt.registryBacking = ordinaryRegistry ? 1 : 0;
+        receipt.inheritedRegistry = inheritedRegistry;
         require(userPath.size() < 512);
         memcpy(receipt.registryUserPath, userPath.c_str(), (userPath.size() + 1) * sizeof(wchar_t));
         receipt.fileLogicalRoot = logicalRoot;
@@ -1158,8 +1186,8 @@ struct MutexChild {
         copyName(receipt.logical, name);
         copyName(receipt.own, name + (slot == 1 ? L"_A" : L"_B"));
         copyName(receipt.peer, name + (slot == 1 ? L"_B" : L"_A"));
-        HANDLE inherited[]{section.value, ready.value, go, done.value, finish, logicalRoot, ownRoot, cachedHostKey};
-        Attributes attributes(inherited, 8);
+        HANDLE inherited[]{section.value, ready.value, go, done.value, finish, logicalRoot, ownRoot, cachedHostKey, inheritedRegistry};
+        Attributes attributes(inherited, inheritedRegistry ? 9 : 8);
         auto env = environment(section.value, wrongAppData ? logicalRoot : ownRoot);
         STARTUPINFOEXW startup{};
         startup.StartupInfo.cb = sizeof(startup);
@@ -1443,6 +1471,97 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
     return true;
 }
 
+
+bool ordinaryRegistryPair(const std::wstring& self, const std::string& compatibility) {
+    FileRoots files;
+    const std::wstring name = L"Local\\MivubiMutexProbe_" + std::to_wstring(GetCurrentProcessId())
+        + L"_" + std::to_wstring(GetTickCount64());
+    RegistryHost registry(name);
+    Key stores[2];
+    std::wstring paths[2];
+    SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
+    for (DWORD slot = 1; slot <= 2; ++slot) {
+        FILE_ID_INFO id{};
+        require(GetFileInformationByHandleEx(slot == 1 ? files.a.value : files.b.value,
+            FileIdInfo, &id, sizeof(id)) != FALSE);
+        wchar_t leaf[64]{};
+        require(probe::registryStoreLeaf(id, slot, leaf));
+        paths[slot - 1] = registry.path + L"_Stores\\" + leaf;
+        DWORD disposition = 0;
+        require(RegCreateKeyExW(HKEY_CURRENT_USER, paths[slot - 1].c_str(), 0, nullptr,
+            REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, &security, &stores[slot - 1].value,
+            &disposition) == ERROR_SUCCESS && disposition == REG_CREATED_NEW_KEY);
+        Key branch;
+        require(RegCreateKeyExW(stores[slot - 1].value, registry.path.c_str(), 0, nullptr,
+            REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &branch.value, &disposition)
+            == ERROR_SUCCESS && disposition == REG_CREATED_NEW_KEY);
+        setRegistryValue(branch.value, L"Marker", slot * 100);
+    }
+    for (DWORD invalid = 0; invalid < 3; ++invalid) {
+        Handle go(sharedEvent()), finish(sharedEvent());
+        // Wrong slot, wrong object type, and absent backing never fall back to the host/app-hive.
+        Handle wrongType(sharedEvent());
+        HKEY backing = invalid == 0 ? stores[1].value
+            : invalid == 1 ? reinterpret_cast<HKEY>(wrongType.value) : nullptr;
+        MutexChild rejected(1, name, go.value, finish.value, self, compatibility,
+            0, files.logical.value, files.a.value, registry.branch.value, registry.userPath,
+            false, false, backing, true);
+        require(WaitForSingleObject(rejected.child.info.hProcess, 10000) == WAIT_OBJECT_0);
+        DWORD code = 0;
+        require(GetExitCodeProcess(rejected.child.info.hProcess, &code) && code != 0
+            && rejected.mapping.value->armed == 0 && rejected.mapping.value->earlyPrivate == 0);
+        bool marked = false;
+        for (LONG i = 0; i < rejected.mapping.value->count && i < probe::Capacity; ++i)
+            marked = marked || rejected.mapping.value->events[i].stage == probe::Rejected;
+        require(marked);
+        registry.unchanged();
+    }
+    for (DWORD round = 0; round < 2; ++round) {
+        Handle go(sharedEvent()), finish(sharedEvent());
+        MutexChild first(1, name, go.value, finish.value, self, compatibility,
+            round, files.logical.value, files.a.value, registry.branch.value, registry.userPath,
+            false, false, stores[0].value, true);
+        MutexChild second(2, name, go.value, finish.value, self, compatibility,
+            round, files.logical.value, files.b.value, registry.branch.value, registry.userPath,
+            false, false, stores[1].value, true);
+        first.phase(first.ready.value);
+        second.phase(second.ready.value);
+        registry.unchanged();
+        require(SetEvent(go.value) != FALSE);
+        first.phase(first.done.value);
+        second.phase(second.done.value);
+        for (auto* receipt : {first.mapping.value, second.mapping.value})
+            require(receipt->registryChecks == 8191 && receipt->earlyPrivate == 7
+                && receipt->earlyDenied == 0 && receipt->earlyAllowed == 0);
+        require(SetEvent(finish.value) != FALSE);
+        first.exitedNormally();
+        second.exitedNormally();
+        registry.unchanged();
+        for (DWORD slot = 1; slot <= 2; ++slot) {
+            auto& store = stores[slot - 1];
+            require(RegCloseKey(store.value) == ERROR_SUCCESS);
+            store.value = nullptr;
+            // Reopen ordinary nonvolatile backing; do not recreate or reseed it on relaunch.
+            require(RegOpenKeyExW(HKEY_CURRENT_USER, paths[slot - 1].c_str(), 0,
+                KEY_ALL_ACCESS, &store.value) == ERROR_SUCCESS
+                && SetHandleInformation(store.value, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT));
+            Key branch;
+            require(RegOpenKeyExW(store.value, registry.path.c_str(), 0, KEY_READ, &branch.value)
+                == ERROR_SUCCESS && registryValue(branch.value, L"Marker") == slot * 100 + round + 1
+                && registryValue(branch.value, slot == 1 ? L"OnlyA" : L"OnlyB") == slot);
+            DWORD bytes = 0;
+            require(RegQueryValueExW(branch.value, slot == 1 ? L"OnlyB" : L"OnlyA",
+                nullptr, nullptr, nullptr, &bytes) == ERROR_FILE_NOT_FOUND);
+        }
+    }
+    std::printf("{\"case\":\"ordinary-inherited-registry\",\"selfCheck\":true,"
+        "\"earlyPrivate\":[7,7],\"registryChecks\":[8191,8191],\"rounds\":2,"
+        "\"persistent\":true,\"hostUnchanged\":true,\"invalidBackingRejected\":3,"
+        "\"applicationHiveLock\":false,\"securityBoundary\":false,\"providerReady\":false,"
+        "\"minecraft\":\"NOT_EXECUTED\"}\n");
+    return true;
+}
+
 int childMain() {
     probe::View view;
     if (!view.open()) return 81;
@@ -1450,6 +1569,15 @@ int childMain() {
     probe::registryCanary(probe::Main);
     if (DependencyCanary() != 7) return 82;
     if (view.value->mode == probe::MutexCase && view.value->registryBaseline) return 0;
+    if (view.value->mode == probe::MutexCase && view.value->registryBacking == 1) {
+        RegistryChild registry(*view.value);
+        require(SetEvent(view.value->ready) != FALSE);
+        require(WaitForSingleObject(view.value->go, 10000) == WAIT_OBJECT_0);
+        registry.afterPeer(*view.value);
+        require(SetEvent(view.value->done) != FALSE);
+        require(WaitForSingleObject(view.value->finish, 10000) == WAIT_OBJECT_0);
+        return 0;
+    }
     if (view.value->mode == probe::MutexCase) return mutexChild(*view.value);
     if (view.value->mode == probe::Timeout) {
         Sleep(INFINITE); // Deliberate owned-child timeout control, outside loader lock.
@@ -1465,7 +1593,8 @@ int wmain(int argc, wchar_t** argv) {
         try { return childMain(); } catch (...) { return 85; }
     }
     const bool mutexTest = argc == 2 && wcscmp(argv[1], L"--run-mutex-self-test") == 0;
-    if (!mutexTest && (argc != 2 || wcscmp(argv[1], L"--run-self-test") != 0)) return 64;
+    const bool ordinaryTest = argc == 2 && wcscmp(argv[1], L"--run-inherited-registry-self-test") == 0;
+    if (!mutexTest && !ordinaryTest && (argc != 2 || wcscmp(argv[1], L"--run-self-test") != 0)) return 64;
     try {
         USHORT process = 0, native = 0;
         require(IsWow64Process2(GetCurrentProcess(), &process, &native) != FALSE
@@ -1480,6 +1609,7 @@ int wmain(int argc, wchar_t** argv) {
             require(character > 0 && character <= 0x7f);
             compatibility.push_back(static_cast<char>(character));
         }
+        if (ordinaryTest) return ordinaryRegistryPair(self, compatibility) && !cleanupFailed ? 0 : 1;
         if (mutexTest) return mutexPair(self, compatibility) && !cleanupFailed ? 0 : 1;
         bool passed = run(probe::Baseline, L"baseline", self, compatibility);
         passed = run(probe::Normal, L"first-import", self, compatibility) && passed;

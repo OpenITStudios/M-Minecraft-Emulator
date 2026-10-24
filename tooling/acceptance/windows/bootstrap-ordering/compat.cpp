@@ -487,7 +487,8 @@ QueryValue originalQueryValue = nullptr;
 SetValue originalSetValue = nullptr;
 QueryObject queryObject = nullptr;
 
-wchar_t userKeyPath[512]{};
+wchar_t userKeyPath[512]{}, storePrefix[512]{}, storeOwn[512]{};
+bool predefinedMapped = false;
 bool keyName(HANDLE handle, wchar_t (&path)[512]) {
     alignas(8) BYTE buffer[sizeof(ULONG) + sizeof(path)]{};
     ULONG returned = 0;
@@ -551,6 +552,10 @@ KeyRoute registryRoute(const OBJECT_ATTRIBUTES& attributes, wchar_t (&path)[1024
     const auto bytes = static_cast<USHORT>(total * sizeof(wchar_t));
     UNICODE_STRING absolute{bytes, bytes, path};
     unsigned leaf = 0;
+    if (storePrefix[0] && pathPrefix(absolute, storePrefix, leaf)) {
+        // Only our backing subtree bypasses translation; peer/container paths are refused.
+        return pathPrefix(absolute, storeOwn, leaf) ? KeyRoute::Other : KeyRoute::Unsupported;
+    }
     if (!pathPrefix(absolute, userKeyPath, leaf)) return KeyRoute::Other;
     if (!validRelative(path + leaf, total - leaf)) return KeyRoute::Unsupported;
     const auto suffix = static_cast<USHORT>((total - leaf) * sizeof(wchar_t));
@@ -713,7 +718,22 @@ bool initializeRegistry(const probe::Receipt& config) {
     for (unsigned i = 0; prefix[i]; ++i)
         if (folded(config.registryUserPath[i], true) != folded(prefix[i], true)) return false;
     memcpy(userKeyPath, config.registryUserPath, (length + 1) * sizeof(wchar_t));
-    return true; // Receipt metadata only; no registry/profile setup while under loader lock.
+    if ((config.registryBacking == 1) != (config.inheritedRegistry != nullptr)) return false;
+    if (config.registryBacking == 1) {
+        wchar_t leaf[64]{}, expected[512]{}, actual[512]{};
+        if (!probe::registryStoreLeaf(ownDirectoryId, config.slot, leaf)
+            || swprintf_s(storePrefix, L"%s\\Software\\%s_Stores", userKeyPath, logical) < 0
+            || swprintf_s(expected, L"%s\\%s", storePrefix, leaf) < 0
+            || !keyName(config.inheritedRegistry, actual) || _wcsicmp(actual, expected) != 0)
+            return false;
+        PUBLIC_OBJECT_BASIC_INFORMATION info{};
+        ULONG returned = 0;
+        if (queryObject(config.inheritedRegistry, 0, &info, sizeof(info), &returned) < 0
+            || (info.GrantedAccess & KEY_ALL_ACCESS) != KEY_ALL_ACCESS) return false;
+        memcpy(storeOwn, expected, (wcslen(expected) + 1) * sizeof(wchar_t));
+        privateHive.store(config.inheritedRegistry);
+    }
+    return true; // Handle/name metadata only; no load/create/profile/COM setup under loader lock.
 }
 bool attachRegistry() {
     return DetourAttach(reinterpret_cast<PVOID*>(&originalOpenUser), reinterpret_cast<PVOID>(translatedOpenUser)) == NO_ERROR
@@ -727,20 +747,24 @@ extern "C" BOOL BootstrapRegistry() {
     probe::View view;
     if (!view.open() || view.value->mode != probe::MutexCase || view.value->armed != 1
         || view.value->fileOwnRoot != fileOwnRoot) return FALSE;
-    if (privateHive.load()) return TRUE; // Owned main thread only; not a concurrent enrollment API.
+    if (predefinedMapped) return TRUE; // Owned main thread only; not concurrent enrollment.
     FILE_ID_INFO id{};
     if (!directoryInfo(fileOwnRoot, id) || !sameFileId(id, ownDirectoryId)) return FALSE;
-    wchar_t path[512]{};
-    if (swprintf_s(path, L"%s\\Registry\\HKCU.dat", ownDos + 4) < 0) return FALSE;
-    const DWORD attributes = GetFileAttributesW(path);
-    if (attributes != INVALID_FILE_ATTRIBUTES
-        && (attributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY))) return FALSE;
-    HKEY hive = nullptr, root = nullptr;
-    if (RegLoadAppKeyW(path, &hive, KEY_ALL_ACCESS, REG_PROCESS_APPKEY, 0) != ERROR_SUCCESS) return FALSE;
+    HKEY hive = privateHive.load(), root = nullptr;
+    const bool loadedHere = !hive;
+    if (loadedHere) {
+        wchar_t path[512]{};
+        if (swprintf_s(path, L"%s\\Registry\\HKCU.dat", ownDos + 4) < 0) return FALSE;
+        const DWORD attributes = GetFileAttributesW(path);
+        if (attributes != INVALID_FILE_ATTRIBUTES
+            && (attributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY))) return FALSE;
+        if (RegLoadAppKeyW(path, &hive, KEY_ALL_ACCESS, REG_PROCESS_APPKEY, 0) != ERROR_SUCCESS) return FALSE;
+    }
     LSTATUS status = RegOpenKeyExW(hive, L"", 0, KEY_ALL_ACCESS, &root);
     if (status == ERROR_SUCCESS) status = RegOverridePredefKey(HKEY_CURRENT_USER, root);
     if (root) RegCloseKey(root);
-    if (status != ERROR_SUCCESS) { RegCloseKey(hive); return FALSE; }
-    privateHive.store(hive); // Publish only after the predefined mapping is complete.
+    if (status != ERROR_SUCCESS) { if (loadedHere) RegCloseKey(hive); return FALSE; }
+    privateHive.store(hive);
+    predefinedMapped = true;
     return TRUE;
 }

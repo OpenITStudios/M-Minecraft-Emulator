@@ -8,7 +8,7 @@
 // Fixed self-test transport, not a production slot capability or shared-state ABI.
 namespace probe {
 constexpr DWORD Magic = 0x42535431;
-constexpr DWORD Version = 6;
+constexpr DWORD Version = 7;
 constexpr LONG Capacity = 16;
 constexpr wchar_t SectionVariable[] = L"MIVUBI_BOOTSTRAP_TEST_SECTION";
 using CompareHandles = BOOL (WINAPI*)(HANDLE, HANDLE);
@@ -31,7 +31,9 @@ struct Receipt {
     DWORD slot;
     volatile LONG mutexChecks, nativeChecks, fileChecks, registryChecks;
     DWORD fileRound, registryBaseline;
-    volatile LONG earlyDenied, earlyAllowed;
+    volatile LONG earlyDenied, earlyAllowed, earlyPrivate;
+    DWORD registryBacking;
+    HKEY inheritedRegistry;
     HKEY cachedHostKey;
     wchar_t registryUserPath[512];
     HANDLE fileLogicalRoot, fileOwnRoot;
@@ -39,7 +41,25 @@ struct Receipt {
     HANDLE ready, go, done, finish;
 };
 static_assert(sizeof(Event) == 8);
-static_assert(sizeof(Receipt) == 2048);
+static_assert(sizeof(Receipt) == 2064);
+
+
+inline bool registryStoreLeaf(const FILE_ID_INFO& id, DWORD slot, wchar_t (&leaf)[64]) {
+    if (slot < 1 || slot > 2) return false;
+    constexpr wchar_t hex[] = L"0123456789abcdef";
+    unsigned n = 0;
+    for (unsigned i = 0; i < 16; ++i)
+        leaf[n++] = hex[(id.VolumeSerialNumber >> ((15 - i) * 4)) & 15];
+    leaf[n++] = L'_';
+    for (BYTE byte : id.FileId.Identifier) {
+        leaf[n++] = hex[byte >> 4];
+        leaf[n++] = hex[byte & 15];
+    }
+    leaf[n++] = L'_';
+    leaf[n++] = slot == 1 ? L'A' : L'B';
+    leaf[n] = 0;
+    return true;
+}
 
 class View {
 public:
@@ -66,7 +86,7 @@ public:
         FILETIME created{}, exited{}, kernel{}, user{};
         const bool valid = GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user)
             && value->magic == Magic && value->version == Version
-            && value->pid == GetCurrentProcessId() && value->mode <= MutexCase && value->registryBaseline <= 1
+            && value->pid == GetCurrentProcessId() && value->mode <= MutexCase && value->registryBaseline <= 1 && value->registryBacking <= 1
             && value->created.dwLowDateTime == created.dwLowDateTime
             && value->created.dwHighDateTime == created.dwHighDateTime;
         if (!valid) {
@@ -117,7 +137,6 @@ inline void registryCanary(Stage stage) {
     SetLastError(sentinel);
     const NTSTATUS opened = open(&key, KEY_READ, &attributes);
     const bool openError = GetLastError() == sentinel;
-    if (key) CloseHandle(key);
     wchar_t marker[] = L"Marker";
     UNICODE_STRING valueName{12, 12, marker};
     struct Value { ULONG title, type, bytes, data; } value{};
@@ -126,7 +145,16 @@ inline void registryCanary(Stage stage) {
     const NTSTATUS queried = query(receipt.cachedHostKey, &valueName, 2, &value, sizeof(value), &returned);
     const bool queryError = GetLastError() == sentinel;
     constexpr DWORD host = 0x484f5354;
-    DWORD write = receipt.armed == 1 && !receipt.registryBaseline ? 0xdeadbeef : host;
+    const bool ordinary = receipt.registryBacking == 1 && receipt.armed == 1 && !receipt.registryBaseline;
+    const DWORD index = stage == Dependency ? 0 : stage == Tls ? 1 : 2;
+    const DWORD expected = receipt.slot * 100 + (receipt.fileRound ? 1 : 0) + index;
+    Value direct{};
+    ULONG directBytes = 0;
+    const NTSTATUS directStatus = ordinary && key
+        ? query(key, &valueName, 2, &direct, sizeof(direct), &directBytes) : -1;
+    if (key) CloseHandle(key);
+    DWORD write = ordinary ? expected + 1
+        : receipt.armed == 1 && !receipt.registryBaseline ? 0xdeadbeef : host;
     SetLastError(sentinel);
     const NTSTATUS written = set(receipt.cachedHostKey, &valueName, 0, REG_DWORD, &write, sizeof(write));
     const bool setError = GetLastError() == sentinel;
@@ -136,6 +164,11 @@ inline void registryCanary(Stage stage) {
     if (opened == denied && queried == denied && written == denied && !key
         && returned == 0 && value.title == 0 && value.type == 0 && value.bytes == 0 && value.data == 0)
         InterlockedOr(&receipt.earlyDenied, bit);
+    if (ordinary && opened == 0 && queried == 0 && written == 0
+        && value.type == REG_DWORD && value.bytes == sizeof(DWORD) && value.data == expected
+        && directStatus == 0 && direct.type == REG_DWORD && direct.bytes == sizeof(DWORD)
+        && direct.data == expected)
+        InterlockedOr(&receipt.earlyPrivate, bit);
     if (opened == 0 && queried == 0 && written == 0 && value.type == REG_DWORD
         && value.bytes == sizeof(DWORD) && value.data == host && write == host)
         InterlockedOr(&receipt.earlyAllowed, bit);
