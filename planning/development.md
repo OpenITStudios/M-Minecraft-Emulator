@@ -103,7 +103,7 @@ the operator is working. Preserve existing accounts/worlds. Public MC02–04
 admission, retired providers and GitHub Actions remain disabled.
 
 **Source baseline:** exact remote Local
-`f63a19d34d2cd885802224356f1041ce9961686d`, plus the literal input blobs below.
+`6a261e4db6a0a1c984e1f7685557e79776750331`, plus the literal input blobs below.
 Native preparation/enrollment remains in
 `apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`; the private config,
 enroller, compatibility DLL and own controls remain in
@@ -194,7 +194,7 @@ the low-level own-fixture positive control is not a production fallback.
 `compat.cpp::observedProcess` merely forwards CreateProcessW arguments and
 records metadata; it does not enroll children. Broker activation is separate.
 
-### Current implementation: one owner with a test-only descendant handoff module
+### Existing implementation: one owner with a test-only descendant handoff module
 
 The earlier cfg(test)-only OwnedHelperTransaction in the existing bootstrap
 owner creates a fixed own helper from the same slot, borrows parent/payload
@@ -260,6 +260,50 @@ Literal code-input blobs (documentation excluded):
 | `probe.cpp` | `ceae3b0ae780ab5a65f7931e627b7bcf7f4373a3` |
 | `owned-helper-handoff.h` | `5f87ced170887b25ba5d6890aebc4db9334f50d7` |
 
+### Current audit: installed helper coverage and fresh-window refusal
+
+Read-only installed-file and process/module metadata found Education 1.26.32.0
+with the same official image hash recorded above. Its installed tree contains
+Minecraft.Windows.exe, Minecraft.CodeBuilder.exe and MinecraftEducationUpdater.exe;
+Minecraft.AdalServer.exe is absent. Two existing game processes were responding
+and were preserved. Neither a live legacy helper nor a matching ADAL/MSAL/broker
+module was observed; both game processes loaded libcef.dll. This snapshot does
+not identify the actual sign-in route or exclude transient/OS broker activity.
+No process command line, account/cache/world content or credentials were read.
+
+The existing observer hard-coded the legacy helper name. It now refuses with
+Unsupported/UNKNOWN before process inspection when that candidate is absent,
+and rejects a non-file candidate. The existing UI explicitly labels its legacy
+coverage and treats an empty candidate snapshot as inconclusive. Existence
+alone does not establish signature, attribution or permission to enroll it.
+There is no automatic helper fallback, new public API or game propagation.
+The official [connection troubleshooting article](https://edusupport.minecraft.net/hc/en-us/articles/4404976926356-Troubleshoot-the-Can-t-Connect-to-the-Service-Error)
+names the legacy helper, but does not establish its presence in this installed
+version. The historical [1.19.53 update notes](https://edusupport.minecraft.net/hc/en-us/articles/13961617817236-What-s-New-in-The-Wild-Update-v1-19-53)
+describe migration to MSAL; they do not specify a current isolation mechanism.
+
+The scoped regression run also exposed an existing fresh-window guard defect:
+it checked observed responsiveness but accepted a target marked nonresponding.
+The original regression failed before correction. The existing matcher now
+requires both target and fresh candidate to respond, retaining exact PID,
+birth, session and HWND matching. Its focus and placement consumers therefore
+refuse this stale target instead of presenting it. No window was operated.
+
+Closed original-run journals were decoded only after their writers had exited.
+Each slot recorded two unsupported path shapes and no access/options rejects;
+the first sample was a relative create, length 121, status 0xC00000BB. The
+metadata does not expose the exact path or establish which validation failed.
+Missing-object parent/backing statuses can also be normal existence probes;
+they are not automatically corruption. These residual operations remain
+UNKNOWN; no path guard was relaxed on an unproved hypothesis.
+
+Executed on this source: all 36 scoped native-client Rust tests PASS, including
+18 bootstrap tests and the new missing/non-file helper control. These use
+own generated fixtures, not Minecraft or the retired runtime. Frontend
+typecheck PASS (zero errors/warnings; available Node 24.14.1, below the declared
+24.22.0 range). No new game acceptance, installer, Computer Use, game launch,
+closure, sign-in or window input occurred. Existing source warnings remain.
+
 ### Remaining proof and one next action
 
 UNKNOWN/NOT_EXECUTED: real saved-world/marker reopen after restart, long
@@ -270,10 +314,10 @@ Prior raw peer-access control showed name translation is not a security
 boundary. Four clients and distribution remain NOT_EXECUTED. Fixture coverage
 does not establish full stability or a development percentage.
 
-**One next action:** identify the actual registered Education helper image and
-launch/broker relationship using existing source, install metadata and available
-read-only process/image metadata, without fresh launches or window input. Pin
-that identity and a narrow storage/registry scope before connecting any game
-helper. Record unavailable attribution as UNKNOWN; do not substitute more
-generic fixture layers or unlock public admission. Real world restart/soak
-acceptance remains deferred to an operator-selected window.
+**One next action:** trace the two residual storage rejections to their exact
+validation branch using existing route code and non-sensitive journal metadata;
+add only the minimum branch classification if existing evidence cannot
+distinguish them. Keep strict path boundaries and account/world contents
+untouched. Actual current-version authentication attribution stays UNKNOWN;
+do not bind the absent legacy helper or unlock public admission. Real world
+restart/soak acceptance remains deferred to an operator-selected window.

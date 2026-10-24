@@ -401,7 +401,7 @@ pub fn matches_native_workspace_target(
     observation: &NativeWorkspaceObservation,
     target: &super::owned_provider::OwnedProcess,
 ) -> bool {
-    observation.processes.iter().any(|candidate| {
+    target.responding && observation.processes.iter().any(|candidate| {
             candidate.pid == target.pid
                 && candidate.created_file_time == target.created_file_time
                 && candidate.session_id == target.session_id
@@ -439,6 +439,22 @@ pub struct NativeAuthFamilyObservation {
     pub evidence_class: String,
     pub games: Vec<NativeAuthGameFamily>,
     pub unattributed_candidate_count: u32,
+}
+
+fn legacy_auth_helper_path(target: &std::path::Path) -> io::Result<std::path::PathBuf> {
+    let helper = target.with_file_name("Minecraft.AdalServer.exe");
+    let metadata = match std::fs::symlink_metadata(&helper) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Err(io::Error::new(io::ErrorKind::Unsupported,
+                "This installation does not include the legacy Minecraft.AdalServer.exe helper. Authentication routing is UNKNOWN; this inspection covers that helper only."));
+        }
+        Err(error) => return Err(error),
+    };
+    if !metadata.file_type().is_file() {
+        return Err(invalid_evidence("Legacy sign-in helper candidate is not an ordinary file"));
+    }
+    Ok(helper) // Existence is not signature, runtime attribution or enrollment approval.
 }
 
 fn validate_native_auth_family(value: &NativeAuthFamilyObservation) -> io::Result<()> {
@@ -709,14 +725,13 @@ mod native_workspace_windows {
     }
 
     /// One on-demand snapshot of actual Windows processes associated with
-    /// the game's documented Minecraft.AdalServer.exe login helper. Names
+    /// the documented legacy Minecraft.AdalServer.exe candidate, when installed. Names
     /// and Toolhelp parent PIDs are merely candidates; the helper could be
     /// transient, launched by another process, or replaced while inspecting.
     pub(super) fn inspect_auth_family() -> io::Result<NativeAuthFamilyObservation> {
         let target = super::registered_education_target()?;
+        let helper_path = legacy_auth_helper_path(std::path::Path::new(&target))?;
         let before = inspect_for_registered_target(&target)?;
-        let helper_path = std::path::Path::new(&target)
-            .with_file_name("Minecraft.AdalServer.exe");
         let helper_image: Vec<u16> = helper_path.to_string_lossy().encode_utf16().collect();
         let expected_name: Vec<u16> = "Minecraft.AdalServer.exe".encode_utf16().collect();
         let mut session = 0;
@@ -1787,6 +1802,26 @@ mod tests {
         validate_education_path,
     };
     use serde_json::json;
+
+    #[test]
+    fn legacy_helper_inspection_refuses_missing_or_non_file_candidate() {
+        let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let root = std::env::temp_dir().join(format!("mivubi-helper-inspection-{}-{unique}", std::process::id()));
+        std::fs::create_dir(&root).unwrap();
+        let target = root.join("Minecraft.Windows.exe");
+        let helper = root.join("Minecraft.AdalServer.exe");
+        let missing = super::legacy_auth_helper_path(&target).unwrap_err();
+        assert_eq!(missing.kind(), std::io::ErrorKind::Unsupported);
+        assert!(missing.to_string().contains("UNKNOWN"));
+        assert!(!helper.exists());
+        std::fs::create_dir(&helper).unwrap();
+        assert_eq!(super::legacy_auth_helper_path(&target).unwrap_err().kind(), std::io::ErrorKind::InvalidData);
+        std::fs::remove_dir(&helper).unwrap();
+        std::fs::OpenOptions::new().write(true).create_new(true).open(&helper).unwrap();
+        assert_eq!(super::legacy_auth_helper_path(&target).unwrap(), helper);
+        std::fs::remove_file(&helper).unwrap();
+        std::fs::remove_dir(&root).unwrap();
+    }
 
     fn fixture() -> serde_json::Value {
         json!({

@@ -240,8 +240,8 @@
             <p role="status">{nativePsec.versionSupported?'Windows PSEC 1.'+nativePsec.contractMinor+' is available; OS policy support observed.':'Native Windows PSEC 1.x is not available in this OS configuration.'} This is not proof of Minecraft-compatible isolation or permission to launch Client 02.</p>
           {/if}
           {#if nativePsecError}<p role="alert">{nativePsecError}</p>{/if}
-          <p>Inspect the actual Minecraft.AdalServer.exe sign-in helper candidates tied by Windows process ancestry to registered game processes. This does not read credentials or WAM tokens, and absence of a helper outside the sign-in window is inconclusive.</p>
-          <button class="cm-button cm-secondary" disabled={busy||workspaceBusy||!config?.detectedMinecraft} on:click={inspectAuthFamily}>Inspect game sign-in process family</button>
+          <p>This inspection covers the legacy Minecraft.AdalServer.exe helper only. If this installation does not include it, authentication routing remains unknown. A snapshot without candidates is inconclusive; credentials and tokens are not read.</p>
+          <button class="cm-button cm-secondary" disabled={busy||workspaceBusy||!config?.detectedMinecraft} on:click={inspectAuthFamily}>Inspect legacy login-helper candidates</button>
           {#if authFamily}<p role="status">{authFamily.games.length} registered game process(es); {authFamily.unattributedCandidateCount} unassigned same-session sign-in helper candidate(s). Parent PID and image path alone never prove isolated authentication.</p>
             {#each authFamily.games as game}
               <div class="um-setting"><strong>Game PID {game.gamePid}</strong><span>{game.helperCandidates.length} direct sign-in helper candidate(s). {game.helperCandidates.some(h=>!h.sameWindowsUser||!h.sameProfileDirectory||!h.sameWindowsSession)?'Windows identity mismatch observed; investigate before isolation.':'Process ancestry is not WAM/account isolation proof.'}</span></div>
