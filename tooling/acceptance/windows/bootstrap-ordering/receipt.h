@@ -8,7 +8,7 @@
 // Fixed self-test transport, not a production slot capability or shared-state ABI.
 namespace probe {
 constexpr DWORD Magic = 0x42535431;
-constexpr DWORD Version = 4;
+constexpr DWORD Version = 5;
 constexpr LONG Capacity = 16;
 constexpr wchar_t SectionVariable[] = L"MIVUBI_BOOTSTRAP_TEST_SECTION";
 using CompareHandles = BOOL (WINAPI*)(HANDLE, HANDLE);
@@ -29,7 +29,7 @@ struct Receipt {
     volatile LONG count, armed;
     Event events[Capacity];
     DWORD slot;
-    volatile LONG mutexChecks, nativeChecks, fileChecks;
+    volatile LONG mutexChecks, nativeChecks, fileChecks, registryChecks;
     DWORD fileRound;
     HANDLE fileLogicalRoot, fileOwnRoot;
     wchar_t logical[128], own[128], peer[128];

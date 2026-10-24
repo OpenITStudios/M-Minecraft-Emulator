@@ -77,7 +77,8 @@ JSON contains fixed stage/case labels and booleans/counts, with
 providerReady=false and minecraft=NOT_EXECUTED. It emits no raw PID, FILETIME,
 HANDLE, username, installed game path, credentials, caches or world contents.
 
-No registry operations are mediated. Only the selected synthetic directory below is redirected. In the default ordering mode,
+Predefined HKCU is remapped only after the explicit post-loader step below.
+Only the selected synthetic directory tree is redirected. In the default ordering mode,
 "canary" means a marker at a would-be protected call site and "arm" is a shared
 flag. In mutex mode the flag follows installation of the four native mutex/file hooks plus SHGetKnownFolderPath in one transaction.
 This test cannot observe kernel accesses before notification, all loader work,
@@ -112,8 +113,8 @@ reads translate access violations into their native exception status.
 The initialization/parent handles and hooks belong to this process-lifetime
 fixture; no live DLL unload or authenticated production slot capability exists.
 
-The private **version-4** receipt (1,000 bytes, not a product wire schema) carries
-native/file masks and the file round/root handles. It still binds the original child PID/creation FILETIME,
+The private **version-5** receipt (1,000 bytes, not a product wire schema) carries
+native/file/registry masks and the file round/root handles. It still binds the original child PID/creation FILETIME,
 slot/test name and seven explicitly inherited handles: section, four phase events,
 logical directory and the slot's private directory. Both children hold
 their own object while the parent holds the host logical object and checks the
@@ -203,7 +204,7 @@ an existing-reparse open path. Root/non-directory contradictions are rejected.
 **Enumeration needs no hook:** real private directory handles let Windows supply
 native and Win32 entries, cursor/restart/filter behavior and end-of-enumeration.
 There is no merged host view or synthetic query-result rewriting. The private
-receipt stays version 4; no product wire schema changes.
+receipt is version 5; no product wire schema changes.
 
 File mask **1048575**, per child/generation:
 
@@ -282,21 +283,130 @@ persistent private values and unchanged logical/guard/outside markers.
 A second negative binding control configures slot A/private A with the synthetic
 logical directory's AppData environment. It fails before Armed/main. Existing
 A/private B mismatch, ordering/failure/timeout, native/Win32 file and IPC controls
-remain required. Receipt version/layout remain unchanged.
+remain required. The current private receipt version is described above; product schemas remain unchanged.
 
 This is process-local selected API compatibility, not Windows profile registration
 or complete Known Folder virtualization. SHGetFolderPath, WinRT, shell/COM object
 interfaces, packaged redirection flags, LocalLow, other IDs, inherited child
 contexts, environment mutation and arbitrary hardcoded profile aliases remain
 unimplemented/unverified. The process can still mutate its own environment.
-HKCU and authentication are not isolated; no actual game was launched/injected.
+The bounded post-loader predefined HKCU view is described below. Complete
+registry/authentication isolation is unproved; no game was launched/injected.
 
 Contracts:
 [SHGetKnownFolderPath](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shgetknownfolderpath),
 [KNOWN_FOLDER_FLAG](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/ne-shlobj_core-known_folder_flag),
 [Known Folders](https://learn.microsoft.com/en-us/windows/win32/shell/known-folders).
 
+## Post-loader private HKCU — 24 October 2026 WIB
+
+The same DLL now exports **test-only BootstrapRegistry**, called by the fixed
+owned child's main thread before its registry/file/AppData tests. It validates
+the PID/creation-bound receipt, MutexCase/armed state and the configured private
+root handle/file ID, then loads Registry/HKCU.dat beneath that same A/B root
+with RegLoadAppKeyW(KEY_ALL_ACCESS, REG_PROCESS_APPKEY). Windows creates an empty
+hive when that file is absent. No account/profile hive is copied or imported.
+
+A real root handle opened relative to the application hive becomes this process's
+HKEY_CURRENT_USER through RegOverridePredefKey. The original hive handle and
+mapping live until owned-process exit. Repeated initialization on the same main
+thread is idempotent. A failed load/map returns FALSE; the controller-owned child
+stops before any test registry operation, with no host-HKCU fallback.
+
+This is an explicit **post-loader** step: no registry API or hive loading was
+added to our DllMain, dependency DllMain or TLS callback. The existing Armed bit
+still denotes installed file/IPC/Known Folder hooks; it is NOT proof that HKCU
+was private during loader/TLS work or before main. There is no product provider
+readiness flag, production registry API, arbitrary hive-path/PID option or
+background service. Advapi32 is an SDK link, not an installed dependency.
+
+The controller creates exactly one fresh uniquely named synthetic HOST key under
+HKCU/Software for each run, refusing an existing test key, and writes a HOST DWORD.
+Children access that same logical path through remapped HKCU. New hives initially
+lack it, then contain independent A/B markers, slot-only values and a relative
+Settings subkey. RegFlushKey explicitly persists this test data. No existing
+account/auth key/value is inspected or copied. The fresh HOST test key and TEMP
+hive trees are retained; existing host registry data is neither removed nor
+recursively traversed. “Host unchanged” means the fresh HOST marker stays intact,
+not that the run creates no new synthetic registry key.
+
+Registry mask **127** per child/generation:
+
+| Bit | Actual check |
+| --- | --- |
+| 1 | In-child DLL initialization succeeds twice on the owned main thread. |
+| 2 | HOST test path is absent in a new private hive; relaunch sees its own previous marker. |
+| 4 | Create/open disposition, writes and exact value enumeration contain only Marker plus own OnlyA/OnlyB value. |
+| 8 | Read-only handles deny writes, typed reads agree and relative Settings writes work. |
+| 16 | Explicit flush of the private hive succeeds. |
+| 32 | After both children are ready, own marker is unchanged and peer-only value is absent. |
+| 64 | Peer application-hive load is refused while the other owned process holds it. |
+
+The parent verifies its HOST marker during/after each pair, confirms it cannot
+load either live REG_PROCESS_APPKEY hive, then independently loads both hives
+after normal child exit to read persisted A/B values. Closing those observation
+handles lets the next generation reopen the same private hive. This observed
+API load exclusivity is not a claim of raw-file confidentiality from the host user.
+
+A separate negative control places only an invalid synthetic hive file in fresh
+slot A. The owned child exits with its operation-failure code before registry
+tests (registryChecks=0), while HOST stays unchanged. After confirmed exit the
+controller renames only that new invalid test file, preserves it and proceeds
+with a newly created empty hive. No corrupt-file fallback or privilege escalation.
+
+**Limits:** this is a predefined-handle Win32 HKCU view, not native registry
+mediation. RegOpenCurrentUser, explicit HKEY_USERS/native paths, previously cached
+handles, other predefined keys, impersonation, helper/descendant propagation and
+pre-main ordering remain UNKNOWN/unimplemented. Single-main-thread enrollment
+is not an authenticated/concurrent production bootstrap. File aliases/reparse
+races around hive loading are not enforced by these registry APIs. No actual
+Minecraft/helper/authentication access or game injection was performed.
+
+Contracts:
+[RegLoadAppKeyW](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regloadappkeyw),
+[RegOverridePredefKey](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regoverridepredefkey),
+[Application hive operations](https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/filtering-registry-operations-on-application-hives).
+
 ## Evidence
+
+### Executed predefined HKCU slice — 24 October 2026 WIB
+
+Exact baseline: 4469a7281cc214cbfbf2664b762b8d9dd3774781.
+Executed changed inputs:
+
+| Input | Git blob |
+| --- | --- |
+| compat.cpp | eed657a3ef8e7196ec33bf1746e11a74716cf8a1 |
+| probe.cpp | ca5be511d64755e1a9f0d8bd1e83f16f4e051931 |
+| CMakeLists.txt | 8aebd659bf90c05aaf6c2f166610c36834268a53 |
+| receipt.h | 2a2e0844bb32656165efad05f5416be75a06150b |
+| compat.def | 0bca64aeff66d33b9ab881152563370774906219 |
+
+Receipt advances to v5; the new LONG occupies prior alignment padding, so size
+remains 1,000 bytes. dependency.cpp is unchanged; external Detours remains clean
+at 1dbd4ea281d73d478aa8d09a8b83fbd265f715f7. Windows x64 26100,
+CMake 4.3.2 / MSVC 19.44.35226 Release /W4 /WX build succeeds. An initial
+signed/unsigned comparison warning was corrected; no check was disabled.
+
+Both final self-test commands exit **0**. Registry masks 127/127, file masks
+1048575/1048575, Win32/native mutex masks 127/127 and 511/511 pass in two
+simultaneous pairs across relaunch. Independent persisted-hive/host checks,
+live load-exclusivity and invalidHiveRejected=true pass, alongside all prior
+AppData/file/junction/mismatch controls and four ordering/failure/timeout cases.
+No remaining test image in CIM lookup; tracked checkout clean. Full product,
+pre-main registry, Minecraft/authentication and two/four-client NOT_EXECUTED.
+
+Local artifact SHA-256:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| bootstrap-ordering.exe | 57a42cbb1a1efd4ed7293ab352bdeb1f730657a1b8d6ceb1420e08d9747b81d6 |
+| bootstrap-compat.dll | 0c575a85f1e37ad7d4e07c1f527908a72d09e54644c874a1160c3a5f51f779e5 |
+| ordering.jsonl | 40927efb7a951dda0eccd4323ec78f5b80d713673bee402d9ebd632e0f460c36 |
+| pair.jsonl | 265d8e97f0619208f3d7ca393a84ef3ad855251ba3c41fc84280737c00d3fe3f |
+
+Earlier evidence retains its historical SHA/scope.
+
 
 ### Executed AppData lookup slice — 24 October 2026 WIB
 

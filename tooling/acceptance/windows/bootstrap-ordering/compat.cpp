@@ -461,3 +461,28 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE, DWORD reason, LPVOID) {
     probe::record(view.value, probe::Armed);
     return TRUE;
 }
+
+namespace {
+HKEY privateHive = nullptr;
+}
+extern "C" BOOL BootstrapRegistry() {
+    probe::View view;
+    if (!view.open() || view.value->mode != probe::MutexCase || view.value->armed != 1
+        || view.value->fileOwnRoot != fileOwnRoot) return FALSE;
+    if (privateHive) return TRUE; // Owned main thread only; not a concurrent enrollment API.
+    FILE_ID_INFO id{};
+    if (!directoryInfo(fileOwnRoot, id) || !sameFileId(id, ownDirectoryId)) return FALSE;
+    wchar_t path[512]{};
+    if (swprintf_s(path, L"%s\\Registry\\HKCU.dat", ownDos + 4) < 0) return FALSE;
+    const DWORD attributes = GetFileAttributesW(path);
+    if (attributes != INVALID_FILE_ATTRIBUTES
+        && (attributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY))) return FALSE;
+    HKEY hive = nullptr, root = nullptr;
+    if (RegLoadAppKeyW(path, &hive, KEY_ALL_ACCESS, REG_PROCESS_APPKEY, 0) != ERROR_SUCCESS) return FALSE;
+    LSTATUS status = RegOpenKeyExW(hive, L"", 0, KEY_ALL_ACCESS, &root);
+    if (status == ERROR_SUCCESS) status = RegOverridePredefKey(HKEY_CURRENT_USER, root);
+    if (root) RegCloseKey(root);
+    if (status != ERROR_SUCCESS) { RegCloseKey(hive); return FALSE; }
+    privateHive = hive; // Mapping and hive live until this owned process exits.
+    return TRUE;
+}

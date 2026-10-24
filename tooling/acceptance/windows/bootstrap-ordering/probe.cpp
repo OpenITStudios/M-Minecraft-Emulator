@@ -482,7 +482,7 @@ void directoryChecks(probe::Receipt& receipt, LONG& checks) {
     require(status == 0 && error == sentinel && io.Information == (receipt.fileRound == 0 ? 2u : 1u)
         && attributes.RootDirectory == root.value && attributes.ObjectName == &name);
     writeBytes(own.value, slotMarker(receipt, receipt.fileRound));
-    const std::set<std::wstring> expectedEntries{L"state.bin", L"nested", L"Roaming", L"Local", leaf};
+    const std::set<std::wstring> expectedEntries{L"state.bin", L"nested", L"Roaming", L"Local", L"Registry", leaf};
     require(nativeEntries(root.value, false) == expectedEntries);
     checks |= 256;
     require(nativeEntries(root.value, true) == expectedEntries); // Restart on the same handle.
@@ -777,7 +777,7 @@ struct FileChild {
             nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
         require(root.value != INVALID_HANDLE_VALUE
             && nativeEntries(root.value, false) == std::set<std::wstring>{
-                L"state.bin", L"nested", L"Roaming", L"Local", receipt.slot == 1 ? L"slot-A.bin" : L"slot-B.bin"});
+                L"state.bin", L"nested", L"Roaming", L"Local", L"Registry", receipt.slot == 1 ? L"slot-A.bin" : L"slot-B.bin"});
         const auto deep = directoryPath(receipt.fileLogicalRoot) + L"\\nested\\level\\deep";
         expectFile(deep + L"\\state.bin", slotMarker(receipt, receipt.fileRound));
         Handle nested(CreateFileW(deep.c_str(), FILE_LIST_DIRECTORY | SYNCHRONIZE,
@@ -793,7 +793,99 @@ struct FileChild {
     }
 };
 
+
+struct Key {
+    HKEY value = nullptr;
+    Key() = default;
+    Key(const Key&) = delete;
+    Key& operator=(const Key&) = delete;
+    ~Key() { if (value) RegCloseKey(value); }
+};
+std::wstring registryPath(const std::wstring& name) {
+    return L"Software\\" + name.substr(6);
+}
+DWORD registryValue(HKEY key, const wchar_t* name) {
+    DWORD type = 0, value = 0, bytes = sizeof(value);
+    require(RegQueryValueExW(key, name, nullptr, &type, reinterpret_cast<BYTE*>(&value), &bytes)
+        == ERROR_SUCCESS && type == REG_DWORD && bytes == sizeof(value));
+    return value;
+}
+void setRegistryValue(HKEY key, const wchar_t* name, DWORD value) {
+    require(RegSetValueExW(key, name, 0, REG_DWORD, reinterpret_cast<const BYTE*>(&value),
+        sizeof(value)) == ERROR_SUCCESS);
+}
+DWORD registryMarker(const probe::Receipt& receipt) {
+    return receipt.slot * 100 + receipt.fileRound + 1;
+}
+struct RegistryChild {
+    Key branch;
+    LONG checks = 0;
+    explicit RegistryChild(probe::Receipt& receipt) {
+        const auto initialize = reinterpret_cast<BOOL (*)()>(
+            GetProcAddress(GetModuleHandleW(L"bootstrap-compat.dll"), "BootstrapRegistry"));
+        require(initialize && initialize() && initialize());
+        checks |= 1;
+        const auto path = registryPath(receipt.logical);
+        Key previous;
+        const LSTATUS opened = RegOpenKeyExW(HKEY_CURRENT_USER, path.c_str(), 0, KEY_READ, &previous.value);
+        if (receipt.fileRound == 0) require(opened == ERROR_FILE_NOT_FOUND && !previous.value);
+        else {
+            require(opened == ERROR_SUCCESS
+                && registryValue(previous.value, L"Marker") == receipt.slot * 100 + 1);
+        }
+        checks |= 2;
+        DWORD disposition = 0;
+        require(RegCreateKeyExW(HKEY_CURRENT_USER, path.c_str(), 0, nullptr,
+            REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &branch.value, &disposition) == ERROR_SUCCESS
+            && disposition == static_cast<DWORD>(receipt.fileRound == 0 ? REG_CREATED_NEW_KEY : REG_OPENED_EXISTING_KEY));
+        setRegistryValue(branch.value, L"Marker", registryMarker(receipt));
+        setRegistryValue(branch.value, receipt.slot == 1 ? L"OnlyA" : L"OnlyB", receipt.slot);
+        std::set<std::wstring> names;
+        for (DWORD i = 0; i < 3; ++i) {
+            wchar_t name[64]{};
+            DWORD characters = 64;
+            const LSTATUS status = RegEnumValueW(branch.value, i, name, &characters, nullptr,
+                nullptr, nullptr, nullptr);
+            if (i == 2) require(status == ERROR_NO_MORE_ITEMS);
+            else require(status == ERROR_SUCCESS && names.insert(std::wstring(name, characters)).second);
+        }
+        require(names == std::set<std::wstring>{L"Marker", receipt.slot == 1 ? L"OnlyA" : L"OnlyB"});
+        checks |= 4;
+        Key readonly;
+        require(RegOpenKeyExW(HKEY_CURRENT_USER, path.c_str(), 0, KEY_READ, &readonly.value) == ERROR_SUCCESS);
+        const DWORD wrong = 0;
+        require(RegSetValueExW(readonly.value, L"Marker", 0, REG_DWORD,
+            reinterpret_cast<const BYTE*>(&wrong), sizeof(wrong)) == ERROR_ACCESS_DENIED
+            && registryValue(readonly.value, L"Marker") == registryMarker(receipt));
+        Key nested;
+        require(RegCreateKeyExW(branch.value, L"Settings", 0, nullptr, REG_OPTION_NON_VOLATILE,
+            KEY_ALL_ACCESS, nullptr, &nested.value, nullptr) == ERROR_SUCCESS);
+        setRegistryValue(nested.value, L"Slot", receipt.slot);
+        require(registryValue(nested.value, L"Slot") == receipt.slot);
+        checks |= 8;
+        require(RegFlushKey(branch.value) == ERROR_SUCCESS);
+        checks |= 16;
+    }
+    void afterPeer(probe::Receipt& receipt) {
+        require(registryValue(branch.value, L"Marker") == registryMarker(receipt));
+        DWORD bytes = 0;
+        require(RegQueryValueExW(branch.value, receipt.slot == 1 ? L"OnlyB" : L"OnlyA",
+            nullptr, nullptr, nullptr, &bytes) == ERROR_FILE_NOT_FOUND);
+        checks |= 32;
+        auto peer = directoryPath(receipt.fileOwnRoot).substr(4);
+        require(!peer.empty() && (peer.back() == L'A' || peer.back() == L'B'));
+        peer.back() = receipt.slot == 1 ? L'B' : L'A';
+        Key denied;
+        const LSTATUS status = RegLoadAppKeyW((peer + L"\\Registry\\HKCU.dat").c_str(),
+            &denied.value, KEY_READ, 0, 0);
+        require(status != ERROR_SUCCESS && !denied.value);
+        checks |= 64;
+        InterlockedExchange(&receipt.registryChecks, checks);
+    }
+};
+
 int mutexChild(probe::Receipt& receipt) {
+    RegistryChild registry(receipt);
     FileChild files(receipt);
     Handle first(CreateMutexW(nullptr, TRUE, receipt.logical));
     const DWORD firstError = GetLastError();
@@ -833,6 +925,7 @@ int mutexChild(probe::Receipt& receipt) {
     Handle peer(OpenMutexW(SYNCHRONIZE, FALSE, receipt.peer));
     require(peer.value && WaitForSingleObject(peer.value, 0) == WAIT_TIMEOUT);
     files.afterPeer(receipt);
+    registry.afterPeer(receipt);
     // Same-user direct backing-name access remains possible: explicitly not an ACL boundary.
     checks |= 64;
     InterlockedExchange(&receipt.mutexChecks, checks);
@@ -963,7 +1056,7 @@ struct FileRoots {
         require(CreateDirectoryW(root.c_str(), nullptr) != FALSE); // Refuse existing test roots.
         for (const auto& leaf : {L"logical", L"A", L"B"})
             require(CreateDirectoryW((root + L"\\" + leaf).c_str(), nullptr) != FALSE);
-        for (const auto& leaf : {L"guard", L"A\\Roaming", L"A\\Local", L"B\\Roaming", L"B\\Local",
+        for (const auto& leaf : {L"guard", L"A\\Registry", L"B\\Registry", L"A\\Roaming", L"A\\Local", L"B\\Roaming", L"B\\Local",
                 L"logical\\Roaming", L"logical\\Local", L"A\\nested", L"B\\nested",
                 L"logical\\nested", L"logical\\nested\\level", L"logical\\nested\\level\\deep"})
             require(CreateDirectoryW((root + L"\\" + leaf).c_str(), nullptr) != FALSE);
@@ -1008,10 +1101,52 @@ struct FileRoots {
     // Preserve only newly created synthetic files; no recursive cleanup or user data reads.
 };
 
+
+struct RegistryHost {
+    Key branch;
+    std::wstring path;
+    explicit RegistryHost(const std::wstring& name) : path(registryPath(name)) {
+        DWORD disposition = 0;
+        require(RegCreateKeyExW(HKEY_CURRENT_USER, path.c_str(), 0, nullptr,
+            REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &branch.value, &disposition) == ERROR_SUCCESS
+            && disposition == REG_CREATED_NEW_KEY);
+        setRegistryValue(branch.value, L"Marker", 0x484f5354);
+    }
+    void unchanged() {
+        require(registryValue(branch.value, L"Marker") == 0x484f5354);
+        DWORD bytes = 0;
+        require(RegQueryValueExW(branch.value, L"OnlyA", nullptr, nullptr, nullptr, &bytes) == ERROR_FILE_NOT_FOUND
+            && RegQueryValueExW(branch.value, L"OnlyB", nullptr, nullptr, nullptr, &bytes) == ERROR_FILE_NOT_FOUND);
+    }
+    void exclusive(const std::wstring& root) {
+        unchanged();
+        for (const auto& slot : {L"A", L"B"}) {
+            Key denied;
+            require(RegLoadAppKeyW((root + L"\\" + slot + L"\\Registry\\HKCU.dat").c_str(),
+                &denied.value, KEY_READ, 0, 0) != ERROR_SUCCESS && !denied.value);
+        }
+    }
+    void persisted(const std::wstring& root, DWORD round) {
+        unchanged();
+        DWORD slot = 0;
+        for (const auto& leaf : {L"A", L"B"}) {
+            ++slot;
+            Key hive, own;
+            require(RegLoadAppKeyW((root + L"\\" + leaf + L"\\Registry\\HKCU.dat").c_str(),
+                &hive.value, KEY_READ, REG_PROCESS_APPKEY, 0) == ERROR_SUCCESS
+                && RegOpenKeyExW(hive.value, path.c_str(), 0, KEY_READ, &own.value) == ERROR_SUCCESS
+                && registryValue(own.value, L"Marker") == slot * 100 + round + 1
+                && registryValue(own.value, slot == 1 ? L"OnlyA" : L"OnlyB") == slot);
+        }
+    }
+    // Preserve this fresh synthetic HOST key; never recurse into existing registry data.
+};
+
 bool mutexPair(const std::wstring& self, const std::string& compatibility) {
     FileRoots files;
     const std::wstring name = L"Local\\MivubiMutexProbe_" + std::to_wstring(GetCurrentProcessId())
         + L"_" + std::to_wstring(GetTickCount64());
+    RegistryHost registry(name);
     Handle host(CreateMutexW(nullptr, TRUE, name.c_str()));
     const DWORD hostError = GetLastError();
     require(host.value && hostError != ERROR_ALREADY_EXISTS);
@@ -1033,6 +1168,24 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
         }
         require(rejected);
     }
+    {
+        const auto path = files.root + L"\\A\\Registry\\HKCU.dat";
+        {
+            Handle invalid(CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                FILE_ATTRIBUTE_NORMAL, nullptr));
+            require(invalid.value != INVALID_HANDLE_VALUE);
+            writeBytes(invalid.value, "INVALID_SYNTHETIC_HIVE");
+        }
+        Handle go(sharedEvent()), finish(sharedEvent());
+        MutexChild rejected(1, name, go.value, finish.value, self, compatibility,
+            0, files.logical.value, files.a.value);
+        require(WaitForSingleObject(rejected.child.info.hProcess, 10000) == WAIT_OBJECT_0);
+        DWORD code = 0;
+        require(GetExitCodeProcess(rejected.child.info.hProcess, &code) && code == 85
+            && rejected.mapping.value->registryChecks == 0);
+        registry.unchanged();
+        require(MoveFileW(path.c_str(), (files.root + L"\\A\\Registry\\invalid.dat").c_str()) != FALSE);
+    }
     for (DWORD round = 0; round < 2; ++round) {
         Handle go(sharedEvent()), finish(sharedEvent());
         MutexChild first(1, name, go.value, finish.value, self, compatibility,
@@ -1051,6 +1204,7 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
                 && ReleaseMutex(original.value));
         }
         files.verify(round);
+        registry.exclusive(files.root);
         require(SetEvent(go.value) != FALSE);
         first.phase(first.done.value);
         second.phase(second.done.value);
@@ -1059,7 +1213,9 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
             && InterlockedCompareExchange(&first.mapping.value->nativeChecks, 0, 0) == 511
             && InterlockedCompareExchange(&second.mapping.value->nativeChecks, 0, 0) == 511
             && InterlockedCompareExchange(&first.mapping.value->fileChecks, 0, 0) == 1048575
-            && InterlockedCompareExchange(&second.mapping.value->fileChecks, 0, 0) == 1048575);
+            && InterlockedCompareExchange(&second.mapping.value->fileChecks, 0, 0) == 1048575
+            && InterlockedCompareExchange(&first.mapping.value->registryChecks, 0, 0) == 127
+            && InterlockedCompareExchange(&second.mapping.value->registryChecks, 0, 0) == 127);
         require(SetEvent(finish.value) != FALSE);
         first.exitedNormally();
         second.exitedNormally();
@@ -1069,10 +1225,11 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
             require(!gone.value && error == ERROR_FILE_NOT_FOUND);
         }
         files.verify(round);
+        registry.persisted(files.root, round);
     }
     require(ReleaseMutex(host.value) != FALSE);
     std::printf("{\"case\":\"mutex-two-child\",\"selfCheck\":true,\"checks\":[127,127],"
-                "\"fileChecks\":[1048575,1048575],\"rounds\":2,\"persistent\":true,\"hostUnchanged\":true,\"slotMismatchRejected\":true,\"appDataBindingRejected\":true,"
+                "\"registryChecks\":[127,127],\"invalidHiveRejected\":true,\"fileChecks\":[1048575,1048575],\"rounds\":2,\"persistent\":true,\"hostUnchanged\":true,\"slotMismatchRejected\":true,\"appDataBindingRejected\":true,"
                 "\"nativeChecks\":[511,511],\"distinctHostAndPeerObjects\":true,\"rawPeerAccessible\":true,"
                 "\"securityBoundary\":false,\"providerReady\":false,"
                 "\"minecraft\":\"NOT_EXECUTED\"}\n");
