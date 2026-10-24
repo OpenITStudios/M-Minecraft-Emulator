@@ -103,7 +103,7 @@ starting with storage correctness, stable profile reuse and failure handling.
 No fresh game launch/closure or login request is part of the current source batch.
 Public MC02–04 admission remains denied; CI and retired providers remain off.
 
-**Source baseline:** exact remote Local `f6ebfcafceda8bf162e6ce1958ea244918262ee7`,
+**Source baseline:** exact remote Local `15e7c6a56ce5260e27d96dd5bc86397ab5ed62a0`,
 plus the literal input blobs below. Native coordination remains in
 `apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`; its only experiment
 consumer is the existing fixed startup argument. The existing C++ compatibility
@@ -194,6 +194,26 @@ CREATE_NEW collision also preserves the old bytes. Both slots/rounds pass.
 This checks real Windows file semantics through mediation, not LevelDB crash
 recovery, disk-full/power-loss durability or every game workload.
 
+**Interrupted-writer batch:** after the two normal rounds, two own children
+flush distinct generated checkpoints and wait on controller events. The parent
+terminates only the original first self-child handle (known exit 91) before
+checkpoint close/replacement. It independently verifies exact old and retry
+bytes in the private backing tree and opens the retry file exclusively, proving
+release of the dead writer's handle. The other child remains live, resumes and
+completes its own replacement. A new enrolled first child reopens the SAME
+profile and pending data, completes replacement and exits 0; the peer also exits
+0. Parent checks both distinct final markers, removed retry names, preserved
+prior CURRENT files and unchanged host data. Generated registry canaries alone
+are reseeded to their existing startup baseline; no game store is read/reset.
+
+The new configured case passed eight repeated runs. The other three C++ modes
+and all 15 Rust bootstrap tests passed against the rebuilt own control. The
+compatibility DLL and manager source are unchanged from the baseline commit;
+this batch found no new production defect and adds regression evidence only.
+No game process was launched, activated or terminated. This covers interruption
+after an acknowledged flush and before replacement, not power loss, torn writes,
+disk-full, post-replacement interruption or LevelDB/game crash recovery.
+
 The replay owner opens only one hash-pinned, local-only capability's existing
 root/MC01/MC02 directory identities and backing registry keys. Wrong capability,
 replaced directory, missing Local directory, overlapping roots and unreviewed
@@ -214,18 +234,18 @@ Literal code-input blobs (documentation excluded):
 | --- | --- |
 | `independent_bootstrap.rs` | `c9cb47840c04f0de1081e4fefa6d1300057b5b7d` |
 | `compat.cpp` | `400e4453a18b6b9bbefe9401ef798380c003d5d7` |
-| `probe.cpp` | `e863c9c3862262a991fce0b2e1b92dc2db71e580` |
+| `probe.cpp` | `3817e4c570ef018ed8843a73e20a5a76084fe23b` |
 
 **Remaining blind spots:** real saved-world/marker reopen after process restart;
 long concurrent gameplay and recovery after a game crash; full helper/broker
 and HKCU/auth isolation; raw-syscall/alias/host-peer protection; disk-full,
-interrupted-write and power-loss behavior; FPS/frametime/GPU/CPU overhead and
+partial-write, post-replacement interruption and power-loss behavior; FPS/frametime/GPU/CPU overhead and
 comparison with Sandboxie. Prior raw peer-access control showed that name
 translation is **not a security boundary**. Four clients, installer and
 comparative performance remain **NOT_EXECUTED**. No maturity percentage is
 awarded from fixture coverage.
 
-**One next action:** extend the existing generated storage control with an
-abruptly exited writer before replacement, then verify committed/retry bytes
-and peer survival from the unhooked controller. Keep it source-only; actual
-Minecraft restart/soak acceptance waits for an operator-selected test window.
+**One next action:** extend the same generated control to interrupt a writer
+after replacement and verify reopen sees the committed new bytes, while checking
+real byte-range locking/mapped-file compatibility. Keep game UI untouched;
+actual Minecraft restart/soak acceptance waits for an operator-selected window.

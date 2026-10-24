@@ -1835,6 +1835,14 @@ struct ConfiguredChild {
                 && status.events[1].stage == probe::Rejected && status.earlyPrivate == 0);
         }
     }
+    void recoveryExited(DWORD expected) {
+        require(WaitForSingleObject(child.info.hProcess, 10000) == WAIT_OBJECT_0);
+        DWORD code = 0;
+        require(GetExitCodeProcess(child.info.hProcess, &code) && code == expected);
+        const auto& status = *receipt.value;
+        require(status.armed == 1 && status.count == 5 && status.earlyPrivate == 7
+            && status.nativeChecks == 1);
+    }
 };
 
 void worldStorageChecks(probe::Receipt& receipt) {
@@ -1985,11 +1993,49 @@ void worldStorageChecks(probe::Receipt& receipt) {
     require(!RemoveDirectoryW(directoryPath(receipt.fileLogicalRoot).c_str()));
 }
 
+int interruptedStorageChild(probe::Receipt& receipt) {
+    configuredDiagnosticChild = true;
+    const auto base = directoryPath(receipt.fileLogicalRoot).substr(4)
+        + L"\\Roaming\\Minecraft Education Edition\\games\\com.mojang\\minecraftWorlds\\world_A+=\\db";
+    const auto current = base + L"\\recovery-current";
+    const auto retry = base + L"\\.recovery-retry.tmp";
+    const auto committed = std::to_string(receipt.slot) + "-committed";
+    const auto pending = std::to_string(receipt.slot) + "-pending";
+    if (receipt.fileRound == 2) {
+        Handle original(CreateFileW(current.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
+            nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
+        require(original.value != INVALID_HANDLE_VALUE);
+        writeBytes(original.value, committed);
+    }
+    expectFile(current, committed);
+    {
+        Handle checkpoint(CreateFileW(retry.c_str(), GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+            receipt.fileRound == 2 ? CREATE_NEW : OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+        require(checkpoint.value != INVALID_HANDLE_VALUE);
+        if (receipt.fileRound == 2) writeBytes(checkpoint.value, pending);
+        else expectBytes(checkpoint.value, pending);
+        // Parent interrupts only its own first child here, before close or replacement.
+        require(SetEvent(receipt.ready));
+        require(WaitForSingleObject(receipt.go, 10000) == WAIT_OBJECT_0);
+    }
+    expectFile(current, committed);
+    expectFile(retry, pending);
+    require(MoveFileExW(retry.c_str(), current.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH));
+    expectFile(current, pending);
+    require(GetFileAttributesW(retry.c_str()) == INVALID_FILE_ATTRIBUTES
+        && GetLastError() == ERROR_FILE_NOT_FOUND);
+    require(SetEvent(receipt.done));
+    require(WaitForSingleObject(receipt.finish, 10000) == WAIT_OBJECT_0);
+    return 0;
+}
+
 int configuredStorageChild(probe::Receipt& receipt) {
     // Candidate storage configuration must not guess or rewrite a singleton.
     Handle shared(CreateMutexW(nullptr, FALSE, receipt.logical));
     require(shared.value && GetLastError() == ERROR_ALREADY_EXISTS);
     InterlockedExchange(&receipt.nativeChecks, 1);
+    if (receipt.fileRound == 2 || receipt.fileRound == 3) return interruptedStorageChild(receipt);
     RegistryChild registry(receipt);
     worldStorageChecks(receipt);
     for (const auto& folder : {L"Roaming", L"Local"}) {
@@ -2088,11 +2134,64 @@ bool configuredStoragePair(const std::wstring& self, const std::string& compatib
         require(GetFileAttributesW((roots.root + L"\\host-view\\Roaming\\Minecraft Education Edition").c_str())
             == INVALID_FILE_ATTRIBUTES);
     }
+    {
+        Handle go(sharedEvent()), finish(sharedEvent());
+        // Re-arm only generated registry canaries for the existing nonzero-round startup check.
+        for (DWORD slot = 1; slot <= 2; ++slot) {
+            Key branch;
+            require(RegOpenKeyExW(stores[slot - 1].value, registry.path.c_str(), 0, KEY_ALL_ACCESS,
+                &branch.value) == ERROR_SUCCESS);
+            setRegistryValue(branch.value, L"Marker", slot * 100 + 1);
+        }
+        ConfiguredChild interrupted(1, 2, roots, stores[0].value, registry, name, go.value, finish.value,
+            self, compatibility);
+        ConfiguredChild peer(2, 2, roots, stores[1].value, registry, name, go.value, finish.value,
+            self, compatibility);
+        interrupted.phase(interrupted.ready.value); peer.phase(peer.ready.value);
+        // Original self-child handle only; never discover or terminate an external process.
+        require(TerminateProcess(interrupted.child.info.hProcess, 91));
+        interrupted.recoveryExited(91);
+        const auto suffix = L"\\Roaming\\Minecraft Education Edition\\games\\com.mojang\\minecraftWorlds\\world_A+=\\db";
+        const auto first = roots.root + L"\\client-one" + suffix;
+        expectFile(first + L"\\recovery-current", "1-committed");
+        expectFile(first + L"\\.recovery-retry.tmp", "1-pending");
+        {
+            Handle released(CreateFileW((first + L"\\.recovery-retry.tmp").c_str(), GENERIC_READ | GENERIC_WRITE,
+                0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+            require(released.value != INVALID_HANDLE_VALUE);
+            expectBytes(released.value, "1-pending");
+        }
+        peer.phase(peer.ready.value); // It survived and still waits at its own checkpoint.
+        require(SetEvent(go.value));
+        peer.phase(peer.done.value);
+        {
+            Key branch;
+            require(RegOpenKeyExW(stores[0].value, registry.path.c_str(), 0, KEY_ALL_ACCESS,
+                &branch.value) == ERROR_SUCCESS);
+            setRegistryValue(branch.value, L"Marker", 101);
+        }
+        ConfiguredChild reopened(1, 3, roots, stores[0].value, registry, name, go.value, finish.value,
+            self, compatibility);
+        reopened.phase(reopened.ready.value); reopened.phase(reopened.done.value);
+        for (DWORD slot = 1; slot <= 2; ++slot) {
+            const auto own = roots.root + (slot == 1 ? L"\\client-one" : L"\\client-two") + suffix;
+            expectFile(own + L"\\recovery-current", std::to_string(slot) + "-pending");
+            require(GetFileAttributesW((own + L"\\.recovery-retry.tmp").c_str()) == INVALID_FILE_ATTRIBUTES
+                && GetLastError() == ERROR_FILE_NOT_FOUND);
+            expectFile(own + L"\\CURRENT", std::to_string(slot) + "-2");
+        }
+        require(SetEvent(finish.value));
+        reopened.recoveryExited(0); peer.recoveryExited(0);
+        registry.unchanged();
+        require(GetFileAttributesW((roots.root + L"\\host-view\\Roaming\\Minecraft Education Edition").c_str())
+            == INVALID_FILE_ATTRIBUTES);
+    }
     std::printf("{\"case\":\"configured-storage-pair\",\"selfCheck\":true,\"earlyPrivate\":[7,7],"
         "\"registryChecks\":[65535,65535],\"rounds\":2,\"persistent\":true,\"hostUnchanged\":true,"
         "\"invalidConfigRejected\":5,\"mainRegistryCallback\":false,\"fixtureNameRequired\":false,"
         "\"storageWorkflow\":true,\"atomicReplaceCycles\":64,\"failedReplacePreservesData\":true,"
         "\"createCollisionPreservesData\":true,\"renameAndLinkEscapeDenied\":true,"
+        "\"interruptedWriterRecovered\":true,\"peerSurvived\":true,\"exclusiveRetryReopen\":true,"
         "\"singleton\":\"UNKNOWN\",\"singletonRemap\":false,\"helpers\":\"UNKNOWN\",\"securityBoundary\":false,"
         "\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n");
     return true;

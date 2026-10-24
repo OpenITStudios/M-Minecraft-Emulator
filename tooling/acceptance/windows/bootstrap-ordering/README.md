@@ -119,8 +119,33 @@ a reader denies SHARE_DELETE: the committed and retry bytes remain unchanged,
 then replacement succeeds after release. ERROR_ACCESS_DENIED matches the actual
 unhooked Windows baseline. CREATE_NEW collision preserves committed bytes too.
 Both slots and rounds pass. These are generated files, not game databases or
-power-loss/abrupt-writer recovery acceptance. The sole current handoff records
-remaining blind spots and the next bounded automatic recovery check.
+power-loss recovery acceptance.
+
+### Interrupted writer and live peer control
+
+The same `--run-configured-storage-self-test` now adds a synchronized recovery
+phase after the two normal rounds. Only its original self-child handle is
+terminated, with known exit 91, after the generated retry file is flushed and
+before its handle closes or replacement starts. The unhooked controller verifies
+exact committed/retry backing bytes and exclusively reopens the retry file,
+proving the dead writer's file handle was released. The peer stays alive at
+its own checkpoint, then completes its replacement and exits normally.
+
+A newly enrolled own child reopens the same first profile, verifies both files,
+replaces the committed file and exits normally. The controller independently
+checks both private results, absence of retry names, unchanged earlier CURRENT
+markers and an unchanged host tree. Generated registry canaries are reseeded
+for their existing nonzero-round startup expectation; no real game/account
+store is opened or reset. Receipt/config/public schemas are unchanged.
+
+The configured control passed eight repeated scheduling runs, all four C++
+modes passed and 15 Rust bootstrap tests passed against the rebuilt control.
+Output keeps `providerReady:false`, `securityBoundary:false` and
+`minecraft:NOT_EXECUTED`. This covers process interruption after a successful
+flush and before rename only. It does not implement a game database recovery
+algorithm or prove partial writes, disk-full, power loss, post-rename crashes,
+WAM isolation or live Minecraft crash recovery. Continuation is recorded only
+in the existing planning handoff.
 
 ### Numbered experimental windows
 
