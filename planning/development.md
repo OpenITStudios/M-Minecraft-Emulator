@@ -707,18 +707,66 @@ old candidate/runtime, installed game files and account/world data are unchanged
 No Computer Use, game launch/input/restart/closure or credential inspection
 occurred. Actual game enrollment/new-code gameplay remains **NOT_EXECUTED**.
 
+### Lifecycle-safe typed timing ownership
+
+Source baseline: `00e7ad99a352a77956fd1a10b09e9d59c0eb7933`. This supersedes
+the retained-interface timing experiment above. The timing owner and its own
+control now use an unpublished typed COM wrapper rather than replacing the
+native object's vtable. One caller-owned reference transfers only on success;
+failure preserves the original pointer/reference. Public swap-chain ancestry
+through SwapChain4 and optional SwapChainMedia use one canonical IUnknown.
+Wrapper aliases keep it alive; its final release drops all native references
+before clearing the live binding. The process-lifetime policy retains clocks/
+counters only. Recreated chains inherit current policy and sticky stop.
+
+An intermediate, uncommitted native-table/private-data-lifetime attempt crashed
+the own control on final native Release. A local debugger stack placed the access
+violation in native DXGI deletion dispatch; the exact private-vtable dependency
+was not established. That approach was discarded. No game was attached to it.
+The final typed wrapper leaves native implementation storage/dispatch unchanged.
+
+Unknown native-supported interfaces outside the wrapper's declared set are
+explicitly refused/counted instead of returning a different native IUnknown
+identity. The own controls observed zero such requests, which is not proof of
+Minecraft's interface requirements. This compatibility gap prevents deployment
+approval. The observer's factory tables/pins are unchanged by this timing fix.
+
+Executed on final code: MSVC x64 Release /W4 /WX build; both timing modes exit 0.
+D3D11 WARP and D3D12 WARP each pass four repeated same-HWND release/recreate
+cycles, five created/five destroyed bindings and zero remaining live bindings.
+An application IUnknown alias retains the wrapper until its own release.
+All recreated chains retain 10 FPS release intervals. Native device/backbuffer
+identity, private-data forwarding, resize, canonical identity (including optional
+Media), native error/LastError and TEST/DO_NOT_WAIT bypass controls pass.
+
+Two simultaneous callers on each backend complete eight Present/Present1 calls
+without faults. The HWND owner pumps messages. Only permit acquisition is
+serialized; the lock is released before native DXGI. This proves the exercised
+concurrency path, not arbitrary multithread displayed-FPS spacing.
+Each mode reports six paced Present, ten Present1 and seven bypasses, zero
+unsupported-interface requests. The five-own-renderer control reports 550
+release samples over 3.036 seconds, 0.062 process CPU seconds, 2.562 ms maximum
+synthetic promotion and 4.431 ms joined stop. No displayed/game FPS inference.
+Invalid CLI input still exits 64; no frame-control process remains.
+
+Only dxgi-pacing.cpp/.h, its control and documentation change. The timing owner
+remains linked solely into the explicit control executable. Compatibility DLL,
+creation observer, Rust/public API, config ABI, payload pins and CI are unchanged.
+No game launch/input/restart/closure, account/world inspection or Computer Use
+occurred. New timing behavior in Minecraft is **NOT_EXECUTED**.
+
 ### Remaining proof and one next action
 
-The full five-client goal is ACTIVE. Timing ownership/recreation must be repaired
-before deployment. Automatic focus transport, real 144/10 pacing and background
-Host World health, five licensed playable clients, full resource/soak/crash proof
-and helper/auth containment remain UNKNOWN/NOT_EXECUTED. Public admission and
-distribution stay deferred.
+The full five-client goal is ACTIVE. The own-control retained-reference blocker
+is repaired. Unknown game interface requirements, safe startup enrollment,
+automatic focus transport, real 144/10 pacing and background Host World health,
+five licensed playable clients, resource/soak/crash proof and helper/auth
+containment remain UNKNOWN/NOT_EXECUTED. Public admission/distribution stay deferred.
 
-**One next action:** replace the retained-chain timing binding with lifecycle-safe
-ownership/rebinding in the same dxgi-pacing owner; prove repeated release/recreate
-and concurrent native presentation with own data. Do not mask E_ACCESSDENIED or
-infer lifetime from a diagnostic COM refcount. Then connect creation enrollment
-and the existing manager focus owner through a private capability before a
-separately reviewed same-profile game candidate. Preserve current runtime and
-account/world identities.
+**One next action:** connect typed creation-time wrapping and the existing manager
+focus producer through a private, process-bound policy capability in the current
+bootstrap owners, first proving default-off/failure/stop/recreation with own
+children. Replace or explicitly resolve the observer's factory table/pin lifetime
+before treating that enrollment as production-safe. Do not patch shared rendering
+code while game threads run. Review a same-profile game candidate only after
+that control passes; preserve current runtime and account/world identities.

@@ -3,7 +3,8 @@
 ## Opt-in rendering timer control
 
 The explicit test-only CMake configuration also builds
-`frame-pacing-control.exe`. Run manually with `--run-self-test`; other arguments
+`frame-pacing-control.exe`. Run manually with `--run-self-test`, or
+`--run-d3d12-adapter-self-test` for the D3D12 adapter control. Other arguments
 refuse. It creates five **hidden, non-activating, self-owned** 16×16 D3D11 WARP
 swap chains. It never opens Minecraft, changes foreground focus, sends input,
 installs a service/driver or starts an overlay.
@@ -30,20 +31,34 @@ Actual presentation binding, foreground tracking, host simulation/network
 independence, five real clients and resource savings need separate runtime proof.
 Current evidence and continuation remain solely in `planning/development.md`.
 
-### Object-local timing and bootstrap creation controls
+### Typed timing wrapper and bootstrap creation controls
 
-The timing control now shadows the selected owned object's complete SwapChain4
-table, replacing only Present/Present1 slots. It does not patch shared DXGI
-method code. The same-address interface and writable storage are checked;
-the object is still unpublished/quiescent during installation. Existing native
-results/parameters, TEST/DO_NOT_WAIT bypass, unrelated chains and resize remain
-checked by both frame-control modes.
+The timing adapter transfers one caller-owned IDXGISwapChain1 reference into
+a typed COM wrapper before publication. It implements the public swap-chain
+ancestry through IDXGISwapChain4 and optional IDXGISwapChainMedia. All aliases
+share one canonical IUnknown; the wrapper owns its own reference count.
+The native object and its vtable remain unchanged. The final wrapper release
+drops all native references before allowing another chain to bind. Process
+policy retains only clocks/counters, so replacement chains inherit the ceiling
+and sticky stop state without retaining old graphics resources.
 
-**Do not deploy this timing binding to a game.** It retains its target interface
-until process exit. The D3D12 control now proves native same-HWND flip recreation
-works before installation but returns E_ACCESSDENIED after the application
-releases the pinned target. Rebinding is absent. Its selfCheck includes this
-expected negative result; it does not certify recreation or stability.
+This replaces the retained-native-reference/table experiment whose negative
+control blocked flip recreation. Do not infer native lifetime from AddRef/Release
+return values; see Microsoft's [reference-count rules](https://learn.microsoft.com/en-us/windows/win32/com/rules-for-managing-reference-counts)
+and [QueryInterface identity rules](https://learn.microsoft.com/en-us/windows/win32/com/rules-for-implementing-queryinterface).
+A native-supported interface outside the declared wrapper set returns
+E_NOINTERFACE and increments unsupported/fault counters rather than leaking a
+different inner IUnknown identity. Actual Minecraft extension requirements
+remain UNKNOWN; the wrapper is not approved for deployment.
+
+Both own-renderer modes check normal aliases/final release, four same-HWND
+release/recreate cycles, inherited 10 FPS deadlines, native device/backbuffer
+identity, private-data forwarding, resize and native failure/LastError behavior.
+Two independent presentation callers complete eight native calls while the HWND
+owner pumps messages. Only the permit clock is serialized; the lock is released
+before entering native DXGI. This does not prove arbitrary concurrent displayed
+frame spacing or game compatibility. TEST/DO_NOT_WAIT and invalid sync retain
+their bypass/forwarding semantics. No live unload or reset-after-stop API exists.
 
 The existing bootstrap DLL separately supports observation-only creation
 enrollment. After validating its existing config, the exact private marker
@@ -72,7 +87,7 @@ Manually run `bootstrap-ordering.exe --run-presentation-enrollment-self-test`.
 Existing two-slot bootstrap children check all three factory exports, both
 creation methods, auxiliary-class exclusion, caller descriptions, failed
 creation, marker refusal and successful same-HWND recreation without chain
-pins. Real-game enrollment, lifecycle-safe pacing and manager focus transport
+pins. Real-game enrollment, wrapper compatibility and manager focus transport
 remain separate work; the sole current handoff is `planning/development.md`.
 
 ## Current Education experiment — 24 October 2026

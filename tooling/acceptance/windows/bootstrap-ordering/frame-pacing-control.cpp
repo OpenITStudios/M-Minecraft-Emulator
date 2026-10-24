@@ -2,7 +2,7 @@
 #include "dxgi-pacing.h"
 #include <d3d11.h>
 #include <d3d12.h>
-#include <dxgi1_4.h>
+#include <dxgi1_5.h>
 #include <wrl/client.h>
 #include <array>
 #include <cstdio>
@@ -171,10 +171,33 @@ void adapterChecks(bool modern) {
     const HRESULT invalidNewer = target->Present1(5, 0, &parameters);
     const DWORD invalidNewerError = GetLastError();
     check(FAILED(invalidNewer));
-    check(!dxgi_pacing::install(nullptr, selectedWindow.value));
-    check(!dxgi_pacing::install(target.Get(), foreignWindow.value));
-    check(dxgi_pacing::install(target.Get(), selectedWindow.value));
-    check(!dxgi_pacing::install(other.Get(), foreignWindow.value));
+    check(!dxgi_pacing::wrap(nullptr, selectedWindow.value));
+    auto* unchangedTarget = target.Get();
+    check(!dxgi_pacing::wrap(target.GetAddressOf(), foreignWindow.value) && target.Get() == unchangedTarget);
+    check(dxgi_pacing::wrap(target.GetAddressOf(), selectedWindow.value));
+    check(!dxgi_pacing::wrap(other.GetAddressOf(), foreignWindow.value));
+    // Forward real resource/identity operations, then release buffers before resize.
+    {
+        DXGI_SWAP_CHAIN_DESC1 description{};
+        HWND actualWindow = nullptr;
+        check(SUCCEEDED(target->GetDesc1(&description)) && description.Width == 16
+            && SUCCEEDED(target->GetHwnd(&actualWindow)) && actualWindow == selectedWindow.value);
+        ComPtr<IUnknown> actualDevice, expectedDevice;
+        if (modern) check(SUCCEEDED(device12.As(&expectedDevice)));
+        else check(SUCCEEDED(device.As(&expectedDevice)));
+        check(SUCCEEDED(target->GetDevice(IID_PPV_ARGS(&actualDevice)))
+            && actualDevice.Get() == expectedDevice.Get());
+        ComPtr<IUnknown> buffer, bufferAgain;
+        check(SUCCEEDED(target->GetBuffer(0, IID_PPV_ARGS(&buffer)))
+            && SUCCEEDED(target->GetBuffer(0, IID_PPV_ARGS(&bufferAgain)))
+            && buffer.Get() == bufferAgain.Get());
+        const GUID key{0xfec1a1fb, 0x531b, 0x423f, {0x85,0xb2,0x71,0x20,0x45,0x26,0xdd,0xea}};
+        const UINT marker = 0x576170;
+        UINT observed = 0, bytes = sizeof(observed);
+        check(SUCCEEDED(target->SetPrivateData(key, sizeof(marker), &marker))
+            && SUCCEEDED(target->GetPrivateData(key, &bytes, &observed))
+            && bytes == sizeof(marker) && observed == marker);
+    }
     LARGE_INTEGER frequency{};
     check(QueryPerformanceFrequency(&frequency));
     check(dxgi_pacing::foreground(true));
@@ -229,31 +252,94 @@ void adapterChecks(bool modern) {
     check(after.pacedPresent == before.pacedPresent && after.pacedPresent1 == before.pacedPresent1
         && after.lastRelease == before.lastRelease && after.bypassed >= before.bypassed + 6
         && after.faults == 0);
+    // All standard aliases share the wrapper's canonical IUnknown.
+    {
+        ComPtr<IDXGISwapChain4> newest;
+        ComPtr<IUnknown> identity, identityAgain;
+        check(SUCCEEDED(target.As(&newest)) && SUCCEEDED(target.As(&identity))
+            && SUCCEEDED(newest.As(&identityAgain)) && identity.Get() == identityAgain.Get());
+        ComPtr<IDXGISwapChainMedia> media;
+        if (SUCCEEDED(target.As(&media))) {
+            ComPtr<IUnknown> mediaIdentity;
+            check(SUCCEEDED(media.As(&mediaIdentity)) && mediaIdentity.Get() == identity.Get());
+        }
+        const GUID unsupported{0x04c4e64d, 0x89d3, 0x40de, {0x8b,0x16,0x95,0xc3,0xf7,0xf0,0xad,0x80}};
+        void* absent = reinterpret_cast<void*>(1);
+        check(target->QueryInterface(unsupported, &absent) == E_NOINTERFACE && absent == nullptr);
+        check(newest->QueryInterface(__uuidof(IUnknown), nullptr) == E_POINTER);
+    }
+    const auto createdBefore = dxgi_pacing::snapshot().createdBindings;
+    for (unsigned generation = 0; generation < 4; ++generation) {
+        // An application alias legitimately keeps the object alive.
+        ComPtr<IUnknown> alias;
+        check(SUCCEEDED(target.As(&alias)));
+        target.Reset();
+        check(dxgi_pacing::snapshot().liveBindings == 1);
+        alias.Reset();
+        after = dxgi_pacing::snapshot();
+        check(after.liveBindings == 0 && after.createdBindings == after.destroyedBindings);
+        target = create(selectedWindow.value);
+        check(dxgi_pacing::wrap(target.GetAddressOf(), selectedWindow.value));
+        before = after;
+        check(SUCCEEDED(target->Present1(0, 0, &parameters)));
+        after = dxgi_pacing::snapshot();
+        check(after.lastCeiling == 10 && after.lastRelease - before.lastRelease
+            >= (frequency.QuadPart + 9) / 10);
+    }
+    check(after.createdBindings == createdBefore + 4 && after.faults == 0);
+    // Separate callers share the clock without holding our lock in native DXGI.
+    // Keep the HWND owner pumping: DXGI may send messages to this thread.
+    before = after;
+    check(dxgi_pacing::foreground(true));
+    Event begin;
+    std::atomic<unsigned> completed{0}, failed{0};
+    std::array<std::thread, 2> callers;
+    for (unsigned index = 0; index < callers.size(); ++index) {
+        callers[index] = std::thread([&, chain = target, index] {
+            if (WaitForSingleObject(begin.value, 10000) != WAIT_OBJECT_0) failed.fetch_add(1);
+            else for (unsigned frame = 0; frame < 4; ++frame) {
+                DXGI_PRESENT_PARAMETERS ownParameters{};
+                const HRESULT hr = index ? chain->Present1(0, 0, &ownParameters) : chain->Present(0, 0);
+                if (FAILED(hr)) failed.fetch_add(1);
+            }
+            completed.fetch_add(1);
+        });
+    }
+    check(SetEvent(begin.value));
+    const auto deadline = GetTickCount64() + 15000;
+    while (completed.load() != callers.size()) {
+        if (GetTickCount64() >= deadline) {
+            std::fprintf(stderr, "Own presentation concurrency control timed out\n");
+            ExitProcess(1); // Only this disposable test executable, never a game.
+        }
+        MsgWaitForMultipleObjectsEx(0, nullptr, 10, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        MSG message{};
+        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&message); DispatchMessageW(&message);
+        }
+    }
+    for (auto& caller : callers) caller.join();
+    after = dxgi_pacing::snapshot();
+    check(failed.load() == 0 && after.faults == 0
+        && after.pacedPresent == before.pacedPresent + 4
+        && after.pacedPresent1 == before.pacedPresent1 + 4 && after.lastCeiling == 144);
     check(dxgi_pacing::stop() && !dxgi_pacing::foreground(true));
+    before = dxgi_pacing::snapshot();
     check(SUCCEEDED(target->Present(0, 0)));
     after = dxgi_pacing::snapshot();
     check(after.lastRelease == before.lastRelease && after.faults == 0);
-    if (modern) {
-        target.Reset();
-        DXGI_SWAP_CHAIN_DESC1 description{};
-        description.Width = description.Height = 16;
-        description.Format = DXGI_FORMAT_R8G8B8A8_UNORM; description.SampleDesc.Count = 1;
-        description.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-        description.BufferCount = 2; description.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-        ComPtr<IDXGISwapChain1> replacement;
-        const HRESULT recreated = factory->CreateSwapChainForHwnd(queue.Get(), selectedWindow.value, &description,
-            nullptr, nullptr, &replacement);
-        // The native baseline recreated this HWND before installation. Retained
-        // references now block recreation; do not deploy this timing control.
-        check(recreated == E_ACCESSDENIED && !replacement);
-    }
-    std::printf("{\"scope\":\"OWN_DXGI_OBJECT_ADAPTER\",\"selfCheck\":true,\"backend\":\"%s\","
-        "\"present\":%llu,\"present1\":%llu,\"bypassed\":%llu,"
-        "\"unrelatedChainsExcluded\":true,\"nonblockingAndTestPreserved\":true,"
-        "\"nativeFailureAndLastErrorPreserved\":true,\"resizeRetainsBinding\":true,\"gameHook\":false,"
-        "\"flipRecreation\":\"%s\",\"swapChainRebindImplemented\":false,\"minecraft\":\"NOT_EXECUTED\"}\n",
-        modern ? "D3D12_WARP" : "D3D11_WARP", after.pacedPresent, after.pacedPresent1, after.bypassed,
-        modern ? "BLOCKED_BY_RETAINED_REFERENCES" : "NOT_EXECUTED");
+    target.Reset();
+    after = dxgi_pacing::snapshot();
+    check(after.liveBindings == 0 && after.createdBindings == after.destroyedBindings);
+    std::printf("{\"scope\":\"OWN_DXGI_TYPED_WRAPPER\",\"selfCheck\":true,\"backend\":\"%s\","
+        "\"present\":%llu,\"present1\":%llu,\"bypassed\":%llu,\"recreatedChains\":4,"
+        "\"liveBindings\":%u,\"createdBindings\":%llu,\"destroyedBindings\":%llu,"
+        "\"unsupportedNativeInterfaces\":%llu,\"nativeFailureAndLastErrorPreserved\":true,"
+        "\"identityAndAliasesChecked\":true,\"resourceForwardingChecked\":true,\"concurrentCalls\":8,\"resizeRetainsBinding\":true,\"gameHook\":false,"
+        "\"minecraft\":\"NOT_EXECUTED\"}\n", modern ? "D3D12_WARP" : "D3D11_WARP",
+        after.pacedPresent, after.pacedPresent1, after.bypassed, after.liveBindings,
+        after.createdBindings, after.destroyedBindings, after.unsupportedInterfaces);
+
 }
 int run() {
     cancellationAndLateFrame();
