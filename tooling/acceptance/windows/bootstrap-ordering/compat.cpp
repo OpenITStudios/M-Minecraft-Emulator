@@ -119,28 +119,37 @@ bool pathPrefix(const UNICODE_STRING& name, const wchar_t* prefix, unsigned& lea
     leaf = length + 1;
     return true;
 }
-bool validRelative(const wchar_t* path, unsigned count) {
-    if (count >= 512) return false;
+bool validRelative(const wchar_t* path, unsigned count, DWORD* reason = nullptr) {
+    using namespace startup_observation;
+    const auto reject = [reason](PathReason value) { if (reason) *reason = value; return false; };
+    if (count >= 512) return reject(TotalLength);
     if (!count) return true;
     unsigned component = 0, depth = 1;
     for (unsigned i = 0; i < count; ++i) {
         const wchar_t ch = path[i];
         if (ch == L'\\') {
-            if (!component || path[i - 1] == L'.' || path[i - 1] == L' ' || ++depth > 8) return false;
+            if (!component) return reject(EmptyComponent);
+            if (path[i - 1] == L'.' || path[i - 1] == L' ') return reject(TrailingDotOrSpace);
+            if (++depth > 8) return reject(DepthLimit);
             component = 0;
             continue;
         }
         if (ch < 32 || ch == L':' || ch == L'/' || ch == L'"' || ch == L'<' || ch == L'>'
-            || ch == L'|' || ch == L'?' || ch == L'*' || (!component && ch == L' ')) return false;
+            || ch == L'|' || ch == L'?' || ch == L'*') return reject(UnsupportedCharacter);
+        if (!component && ch == L' ') return reject(LeadingSpace);
         if (ch >= 0xd800 && ch <= 0xdbff) {
-            if (i + 1 == count || path[i + 1] < 0xdc00 || path[i + 1] > 0xdfff) return false;
+            if (i + 1 == count || path[i + 1] < 0xdc00 || path[i + 1] > 0xdfff) return reject(InvalidUtf16);
             ++i; ++component;
-        } else if (ch >= 0xdc00 && ch <= 0xdfff) return false;
-        if (++component > 255) return false;
+        } else if (ch >= 0xdc00 && ch <= 0xdfff) return reject(InvalidUtf16);
+        if (++component > 255) return reject(ComponentLength);
     }
-    return component != 0 && path[count - 1] != L'.' && path[count - 1] != L' ';
+    if (!component) return reject(EmptyComponent);
+    if (path[count - 1] == L'.' || path[count - 1] == L' ') return reject(TrailingDotOrSpace);
+    return true;
 }
-FileRoute fileRoute(const OBJECT_ATTRIBUTES& attributes, wchar_t (&path)[512], unsigned& length) {
+FileRoute fileRoute(const OBJECT_ATTRIBUTES& attributes, wchar_t (&path)[512], unsigned& length,
+                    startup_observation::PathRejection* rejection = nullptr) {
+    using namespace startup_observation;
     if (attributes.Length != sizeof(OBJECT_ATTRIBUTES) || !attributes.ObjectName) return FileRoute::Other;
     const UNICODE_STRING name = *attributes.ObjectName;
     if (!name.Buffer || name.Length % sizeof(wchar_t) || name.MaximumLength < name.Length)
@@ -151,7 +160,10 @@ FileRoute fileRoute(const OBJECT_ATTRIBUTES& attributes, wchar_t (&path)[512], u
     if (count && name.Buffer[0] == L'\\') {
         if (!pathPrefix(name, logicalDevice, leaf) && !pathPrefix(name, logicalDos, leaf)
             && !pathPrefix(name, ownDevice, leaf) && !pathPrefix(name, ownDos, leaf)) return FileRoute::Other;
-        if (attributes.RootDirectory) return FileRoute::Unsupported;
+        if (attributes.RootDirectory) {
+            if (rejection) *rejection = {AbsoluteRootConflict, RootConflict};
+            return FileRoute::Unsupported;
+        }
     } else {
         FILE_ID_INFO rootId{};
         if (!attributes.RootDirectory || !directoryInfo(attributes.RootDirectory, rootId))
@@ -167,18 +179,28 @@ FileRoute fileRoute(const OBJECT_ATTRIBUTES& attributes, wchar_t (&path)[512], u
             if (!pathPrefix(parent, logicalDevice, offset) && !pathPrefix(parent, ownDevice, offset))
                 return FileRoute::Other;
             length = size - offset;
-            if (!validRelative(parentPath + offset, length)) return FileRoute::Unsupported;
+            DWORD reason = 0;
+            if (!validRelative(parentPath + offset, length, &reason)) {
+                if (rejection) *rejection = {RelativeParent, reason};
+                return FileRoute::Unsupported;
+            }
             memcpy(path, parentPath + offset, length * sizeof(wchar_t));
             if (count) path[length++] = L'\\';
         }
     }
-    if (count - leaf >= 512 - length) return FileRoute::Unsupported;
+    if (count - leaf >= 512 - length) {
+        if (rejection) *rejection = {ComposedPath, TotalLength};
+        return FileRoute::Unsupported;
+    }
     memcpy(path + length, name.Buffer + leaf, (count - leaf) * sizeof(wchar_t));
     length += count - leaf;
     path[length] = L'\0';
     // FindFirstFile's native directory open retains its final separator. Keep it for the OS.
     const unsigned validated = length > 1 && path[length - 1] == L'\\' ? length - 1 : length;
-    return validRelative(path, validated) ? FileRoute::Private : FileRoute::Unsupported;
+    DWORD reason = 0;
+    if (validRelative(path, validated, &reason)) return FileRoute::Private;
+    if (rejection) *rejection = {ComposedPath, reason};
+    return FileRoute::Unsupported;
 }
 constexpr ULONG DontReparse = 0x1000; // OBJ_DONT_REPARSE from OBJECT_ATTRIBUTES.
 constexpr NTSTATUS Unsupported = static_cast<NTSTATUS>(0xc00000bbUL);
@@ -227,10 +249,11 @@ NTSTATUS NTAPI translatedFileCreate(PHANDLE handle, ACCESS_MASK access, POBJECT_
     HANDLE held[8]{};
     unsigned heldCount = 0;
     unsigned diagnostic = 0, diagnosticLength = 0;
+    startup_observation::PathRejection rejection{};
     __try {
         wchar_t path[512]{};
         unsigned length = 0;
-        const FileRoute route = attributes ? fileRoute(*attributes, path, length) : FileRoute::Other;
+        const FileRoute route = attributes ? fileRoute(*attributes, path, length, &rejection) : FileRoute::Other;
         diagnosticLength = length;
         if (route != FileRoute::Other) diagnostic = route == FileRoute::Unsupported ? 1 : 2;
         if (route == FileRoute::Other) {
@@ -260,7 +283,7 @@ NTSTATUS NTAPI translatedFileCreate(PHANDLE handle, ACCESS_MASK access, POBJECT_
         __except (EXCEPTION_EXECUTE_HANDLER) { status = static_cast<NTSTATUS>(GetExceptionCode()); }
     }
     if (diagnostic) startup_observation::storageResult(status >= 0 ? 0 : diagnostic,
-        1, access, options, disposition, diagnosticLength, status);
+        1, access, options, disposition, diagnosticLength, status, rejection);
     SetLastError(saved);
     return status;
 }
@@ -271,10 +294,11 @@ NTSTATUS NTAPI translatedFileOpen(PHANDLE handle, ACCESS_MASK access, POBJECT_AT
     HANDLE held[8]{};
     unsigned heldCount = 0;
     unsigned diagnostic = 0, diagnosticLength = 0;
+    startup_observation::PathRejection rejection{};
     __try {
         wchar_t path[512]{};
         unsigned length = 0;
-        const FileRoute route = attributes ? fileRoute(*attributes, path, length) : FileRoute::Other;
+        const FileRoute route = attributes ? fileRoute(*attributes, path, length, &rejection) : FileRoute::Other;
         diagnosticLength = length;
         if (route != FileRoute::Other) diagnostic = route == FileRoute::Unsupported ? 1 : 2;
         if (route == FileRoute::Other) {
@@ -300,7 +324,7 @@ NTSTATUS NTAPI translatedFileOpen(PHANDLE handle, ACCESS_MASK access, POBJECT_AT
         __except (EXCEPTION_EXECUTE_HANDLER) { status = static_cast<NTSTATUS>(GetExceptionCode()); }
     }
     if (diagnostic) startup_observation::storageResult(status >= 0 ? 0 : diagnostic,
-        2, access, options, 0, diagnosticLength, status);
+        2, access, options, 0, diagnosticLength, status, rejection);
     SetLastError(saved);
     return status;
 }

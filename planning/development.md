@@ -103,7 +103,7 @@ the operator is working. Preserve existing accounts/worlds. Public MC02–04
 admission, retired providers and GitHub Actions remain disabled.
 
 **Source baseline:** exact remote Local
-`6a261e4db6a0a1c984e1f7685557e79776750331`, plus the literal input blobs below.
+`7bff56494db89a0a9e279751bd0c6ec05d4e290d`, plus the earlier handoff input blobs below.
 Native preparation/enrollment remains in
 `apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`; the private config,
 enroller, compatibility DLL and own controls remain in
@@ -251,7 +251,7 @@ results fail closed; there is no PID fallback. Broker activation need not have
 the game as direct parent. Actual Education helper identity/policy is still
 UNKNOWN; this control does not activate real-game child propagation.
 
-Literal code-input blobs (documentation excluded):
+Earlier descendant-handoff code-input blobs (documentation excluded):
 
 | Input | Git blob |
 | --- | --- |
@@ -304,6 +304,36 @@ typecheck PASS (zero errors/warnings; available Node 24.14.1, below the declared
 24.22.0 range). No new game acceptance, installer, Computer Use, game launch,
 closure, sign-in or window input occurred. Existing source warnings remain.
 
+### Current change: distinguish the existing path rejection branches
+
+Source inspection cannot distinguish the old length-121 samples: both parent
+and composed-name validation share the same diagnostic class, and several
+rules reject paths below the total length limit. No exact failing filename or
+cause can be inferred. The existing validator now optionally returns only a
+numeric reason, and native create/open attach the validation stage to the
+first unsupported-path sample. No policy is relaxed and no new routing owner
+or logger is introduced. Query/rename/registry callers retain their existing
+boolean behavior. The private journal's existing three reserved words carry
+detail schema 1/stage/reason, published before the sample commit flag. Its
+size/version/offsets and Rust copying behavior remain unchanged; old zeros
+mean unavailable. No filenames, path hashes or account/world content is logged.
+
+An own-executable control sends a nine-component relative create followed by
+an ADS-shaped name through the real mediated NtCreateFile. It verifies both
+refusals, null handles, native status, unchanged LastError and first-sample
+composed/depth detail surviving the later distinct failure. The existing
+Rust-to-C++ two-slot/two-lifetime test failed with the original logger and
+passed after publication. This is diagnostic regression evidence, not a
+Minecraft storage fix or crash-resolution claim. The new C++ artifacts are
+source/control builds only; reviewed real-game payload pins and staged/live
+artifacts are unchanged. No game process, input or data operation is performed.
+
+Executed on these inputs: MSVC 19.44 x64 Release /W4 /WX build PASS, all four
+C++ control modes PASS, and all 36 scoped native-client Rust tests (including
+18 bootstrap cases and the strengthened observation control) PASS. Diff
+whitespace check PASS. This batch does not change Rust/frontend source or
+claim a new preview-manager/frontend/game acceptance build.
+
 ### Remaining proof and one next action
 
 UNKNOWN/NOT_EXECUTED: real saved-world/marker reopen after restart, long
@@ -314,10 +344,11 @@ Prior raw peer-access control showed name translation is not a security
 boundary. Four clients and distribution remain NOT_EXECUTED. Fixture coverage
 does not establish full stability or a development percentage.
 
-**One next action:** trace the two residual storage rejections to their exact
-validation branch using existing route code and non-sensitive journal metadata;
-add only the minimum branch classification if existing evidence cannot
-distinguish them. Keep strict path boundaries and account/world contents
-untouched. Actual current-version authentication attribution stays UNKNOWN;
-do not bind the absent legacy helper or unlock public admission. Real world
-restart/soak acceptance remains deferred to an operator-selected window.
+**One next action:** audit the handle-relative rename/delete paths against the
+same pinned-parent policy and actual Windows failure results, using only
+generated private data. The two historical game path rejections remain UNKNOWN
+until a future authorized startup/normal-exit run supplies schema-1 detail;
+do not restart the current games for that purpose. Actual current-version
+authentication attribution stays UNKNOWN; do not bind the absent legacy helper
+or unlock public admission. Real world restart/soak acceptance remains deferred
+to an operator-selected window.

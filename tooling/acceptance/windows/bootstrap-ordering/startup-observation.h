@@ -28,6 +28,10 @@ struct Record {
     DWORD callerModule, callerRva, callerImageBytes, reserved;
 };
 // Numeric failure shapes only: no path, file contents, account identifiers or call stacks.
+enum PathStage : DWORD { PathStageUnknown = 0, AbsoluteRootConflict = 1, RelativeParent = 2, ComposedPath = 3 };
+enum PathReason : DWORD { PathReasonUnknown = 0, TotalLength = 1, EmptyComponent = 2, TrailingDotOrSpace = 3,
+    DepthLimit = 4, UnsupportedCharacter = 5, LeadingSpace = 6, InvalidUtf16 = 7, ComponentLength = 8, RootConflict = 9 };
+struct PathRejection { DWORD stage = 0, reason = 0; };
 struct StorageSample {
     volatile LONG claimed, committed;
     DWORD operation, access, options, disposition, pathLength;
@@ -35,10 +39,14 @@ struct StorageSample {
 };
 struct StorageDiagnostics {
     volatile LONG counts[5]; // success, unsupported path, access/options, parent open, backing call
+    // Optional first unsupported-path detail: schema (0=unavailable, 1=defined), stage, reason.
+    // Published by first[0].committed; old v3 journals keep zeros. Size/offsets stay unchanged.
     DWORD reserved[3];
     StorageSample first[4];
 };
 static_assert(sizeof(StorageDiagnostics) == 160);
+static_assert(offsetof(StorageDiagnostics, reserved) == 20);
+static_assert(offsetof(StorageDiagnostics, first) == 32);
 struct Journal {
     DWORD magic, version, bytes, pid;
     FILETIME created;
@@ -57,7 +65,8 @@ inline Journal* active = nullptr;
 inline thread_local bool logging = false;
 // Unlike the 30-second startup trace, these fixed counters cover the game lifetime.
 inline void storageResult(unsigned reason, DWORD operation, ACCESS_MASK access, ULONG options,
-                          ULONG disposition, unsigned length, NTSTATUS status) {
+                          ULONG disposition, unsigned length, NTSTATUS status,
+                          PathRejection path = {}) {
     if (!active || reason > 4) return;
     auto& value = active->storage;
     InterlockedIncrement(&value.counts[reason]);
@@ -66,6 +75,9 @@ inline void storageResult(unsigned reason, DWORD operation, ACCESS_MASK access, 
     if (InterlockedCompareExchange(&sample.claimed, 1, 0) != 0) return;
     sample.operation = operation; sample.access = access; sample.options = options;
     sample.disposition = disposition; sample.pathLength = length; sample.status = status;
+    if (reason == 1) {
+        value.reserved[0] = 1; value.reserved[1] = path.stage; value.reserved[2] = path.reason;
+    }
     InterlockedExchange(&sample.committed, 1);
 }
 

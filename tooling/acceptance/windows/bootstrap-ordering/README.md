@@ -56,6 +56,30 @@ journal only after the original child exits and creates
 journal. Two process rounds retain four exact journals; a repeated save for the
 same lifetime still refuses. Earlier fixed-name artifacts remain untouched.
 
+The same v3 layout now uses the three reserved storage words (journal offsets
+31,828/31,832/31,836) for optional first-path detail: schema 1, stage, reason.
+Read them only after `storage.first[0].committed == 1` (or after original writer
+exit with that commit flag). Schema 0 in earlier journals means unavailable;
+never infer a reason from their path length. Stage 1 is absolute-name/root
+conflict, 2 is relative-parent validation, 3 is composed-relative validation.
+Reasons are 1 total length, 2 empty component, 3 trailing dot/space, 4 depth,
+5 unsupported character, 6 leading space, 7 invalid UTF-16, 8 component length,
+9 absolute-root conflict; zero means unknown. The first sample wins, with its
+detail published before the existing commit flag. No paths/hashes, new records,
+buffer expansion, public schema or admission changes are introduced. Native
+create/open pass detail from the existing validator; query/rename/registry
+policy is unchanged. Existing limits and OS errors remain unchanged.
+
+The own-executable observation control sends a nine-component relative create
+and an ADS-shaped generated name through the actual mediated NtCreateFile.
+Both refuse without a handle or write and preserve LastError. The first sample
+records composed/depth, and the later distinct rejection cannot overwrite it.
+The control failed before detail publication and passed afterward; it runs in
+both slots across two lifetimes. This closes a diagnostic ambiguity, not the
+two real-game length-121 rejections: older journals cannot acquire missing
+detail retroactively. New native artifacts remain source/control builds until
+explicitly reviewed; existing game payload digest pins are not updated here.
+
 The observed replay counted `[3,138,30,141,78]` and `[3,136,30,141,78]`
 respectively (success then four failure classes). The first unsupported path
 was a directory create of relative length 35, returning STATUS_NOT_SUPPORTED.

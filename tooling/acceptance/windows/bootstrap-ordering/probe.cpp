@@ -2484,6 +2484,29 @@ void checkStartupObservation(const education_bootstrap::Config& config, const pr
     require(view.open(config));
     auto& journal = *view.value;
     require(journal.clockReady == 1);
+    // Exercise actual mediated routing with generated names, never game paths.
+    const auto fileCreate = reinterpret_cast<probe::NativeFileCreate>(
+        GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtCreateFile"));
+    require(fileCreate && journal.storage.counts[1] == 0);
+    for (const wchar_t* invalid : {L"a\\b\\c\\d\\e\\f\\g\\h\\i", L"invalid:stream"}) {
+        const auto bytes = static_cast<USHORT>(wcslen(invalid) * sizeof(wchar_t));
+        UNICODE_STRING path{bytes, bytes, const_cast<PWSTR>(invalid)};
+        OBJECT_ATTRIBUTES relative{sizeof(OBJECT_ATTRIBUTES), config.logicalRoot, &path,
+            OBJ_CASE_INSENSITIVE, nullptr, nullptr};
+        IO_STATUS_BLOCK io{};
+        HANDLE output = nullptr;
+        SetLastError(0x13579bdf);
+        require(fileCreate(&output, GENERIC_WRITE, &relative, &io, nullptr, 0,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, 5, FILE_NON_DIRECTORY_FILE, nullptr, 0)
+                == static_cast<NTSTATUS>(0xc00000bb)
+            && output == nullptr && io.Status == static_cast<NTSTATUS>(0xc00000bb)
+            && GetLastError() == 0x13579bdf);
+    }
+    require(journal.storage.counts[1] == 2 && journal.storage.first[0].committed == 1
+        && journal.storage.first[0].operation == 1 && journal.storage.first[0].pathLength == 17
+        && journal.storage.reserved[0] == 1
+        && journal.storage.reserved[1] == startup_observation::ComposedPath
+        && journal.storage.reserved[2] == startup_observation::DepthLimit); // First sample wins.
     const auto name = L"\\Sessions\\" + std::to_wstring(config.session)
         + L"\\BaseNamedObjects\\" + std::wstring(receipt.logical + 6);
     require(name.size() < 192);
