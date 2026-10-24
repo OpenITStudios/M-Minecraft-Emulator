@@ -1,3 +1,8 @@
+// Private, unmounted preparation for the original Education bootstrap experiment.
+#[cfg(windows)]
+#[path = "independent_bootstrap.rs"]
+mod independent_bootstrap;
+
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
@@ -255,13 +260,18 @@ const OFFICIAL_TARGET_SELECTOR: &str = if cfg!(feature = "native-workspace-previ
 
 #[cfg(target_os = "windows")]
 pub fn registered_education_target() -> io::Result<String> {
+    resolve_registered_education_target(OFFICIAL_TARGET_SELECTOR)
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_registered_education_target(selector: &str) -> io::Result<String> {
     let resolver =
         include_str!("../../../../../tooling/isolation-source/windows/education-target.ps1");
     let script = [
         resolver,
         EDUCATION_DESKTOP_PREFLIGHT,
         "\n$selectedTarget=",
-        OFFICIAL_TARGET_SELECTOR,
+        selector,
         "\nAssert-ManagerRegisteredAppId $appId $selectedTarget\n$selectedTarget",
     ].concat();
     virtual_clients_core::bounded_command_output(
