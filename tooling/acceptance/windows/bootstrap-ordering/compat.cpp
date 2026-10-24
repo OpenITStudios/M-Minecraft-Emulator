@@ -5,6 +5,7 @@
 #include <cstring>
 #include <shlobj.h>
 #include <knownfolders.h>
+#include <atomic>
 
 namespace {
 probe::NativeCreate originalCreate = nullptr;
@@ -369,6 +370,8 @@ NTSTATUS NTAPI translatedOpen(PHANDLE handle, ACCESS_MASK access, POBJECT_ATTRIB
     SetLastError(saved);
     return status;
 }
+bool initializeRegistry(const probe::Receipt& config);
+bool attachRegistry();
 bool install(const probe::Receipt& config) {
     constexpr wchar_t prefix[] = L"Local\\MivubiMutexProbe_";
     unsigned length = 0;
@@ -399,7 +402,7 @@ bool install(const probe::Receipt& config) {
     compareHandles = kernelbase ? reinterpret_cast<probe::CompareHandles>(
         GetProcAddress(kernelbase, "CompareObjectHandles")) : nullptr;
     if (!originalCreate || !originalOpen || !openDirectory || !compareHandles || !initializeFiles(config, ntdll)
-        || !initializeAppData()) return false;
+        || !initializeAppData() || !initializeRegistry(config)) return false;
     DWORD session = 0;
     wchar_t path[80]{};
     if (!ProcessIdToSessionId(GetCurrentProcessId(), &session)
@@ -423,7 +426,7 @@ bool install(const probe::Receipt& config) {
         || DetourAttach(reinterpret_cast<PVOID*>(&originalFileOpen),
                         reinterpret_cast<PVOID>(translatedFileOpen)) != NO_ERROR
         || DetourAttach(reinterpret_cast<PVOID*>(&originalKnownPath),
-                        reinterpret_cast<PVOID>(translatedKnownPath)) != NO_ERROR) {
+                        reinterpret_cast<PVOID>(translatedKnownPath)) != NO_ERROR || !attachRegistry()) {
         DetourTransactionAbort();
         CloseHandle(baseDirectory); baseDirectory = nullptr; return false;
     }
@@ -463,7 +466,9 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE, DWORD reason, LPVOID) {
 }
 
 namespace {
-HKEY privateHive = nullptr;
+std::atomic<HKEY> privateHive{nullptr};
+static_assert(std::atomic<HKEY>::is_always_lock_free);
+constexpr NTSTATUS RegistryDenied = static_cast<NTSTATUS>(0xc0000022UL);
 using OpenUser = LSTATUS (WINAPI*)(REGSAM, PHKEY);
 using OpenKey = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES);
 using OpenKeyEx = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, ULONG);
@@ -475,6 +480,13 @@ OpenKey originalOpenKey = nullptr;
 OpenKeyEx originalOpenKeyEx = nullptr;
 CreateKey originalCreateKey = nullptr;
 QueryKey queryKey = nullptr;
+using QueryValue = NTSTATUS (NTAPI*)(HANDLE, PUNICODE_STRING, ULONG, PVOID, ULONG, PULONG);
+using SetValue = NTSTATUS (NTAPI*)(HANDLE, PUNICODE_STRING, ULONG, ULONG, PVOID, ULONG);
+using QueryObject = NTSTATUS (NTAPI*)(HANDLE, ULONG, PVOID, ULONG, PULONG);
+QueryValue originalQueryValue = nullptr;
+SetValue originalSetValue = nullptr;
+QueryObject queryObject = nullptr;
+
 wchar_t userKeyPath[512]{};
 bool keyName(HANDLE handle, wchar_t (&path)[512]) {
     alignas(8) BYTE buffer[sizeof(ULONG) + sizeof(path)]{};
@@ -501,8 +513,9 @@ LSTATUS WINAPI translatedOpenUser(REGSAM access, PHKEY result) {
     const DWORD saved = GetLastError();
     if (!result) return ERROR_INVALID_PARAMETER;
     *result = nullptr;
-    LSTATUS status = noImpersonation();
-    if (status == ERROR_SUCCESS) status = RegOpenKeyExW(privateHive, L"", 0, access, result);
+    const HKEY hive = privateHive.load();
+    LSTATUS status = hive ? noImpersonation() : ERROR_ACCESS_DENIED;
+    if (status == ERROR_SUCCESS) status = RegOpenKeyExW(hive, L"", 0, access, result);
     SetLastError(saved);
     return status;
 }
@@ -551,11 +564,14 @@ NTSTATUS NTAPI translatedOpenKey(PHANDLE result, ACCESS_MASK access, POBJECT_ATT
         wchar_t path[1024]{};
         UNICODE_STRING name{};
         const auto route = attributes ? registryRoute(*attributes, path, name) : KeyRoute::Other;
+        const HKEY hive = privateHive.load();
         OBJECT_ATTRIBUTES copy{};
-        if (route == KeyRoute::Private && noImpersonation() == ERROR_SUCCESS) {
-            copy = *attributes; copy.RootDirectory = privateHive; copy.ObjectName = &name;
+        if (route == KeyRoute::Private && hive && noImpersonation() == ERROR_SUCCESS) {
+            copy = *attributes; copy.RootDirectory = hive; copy.ObjectName = &name;
             SetLastError(saved);
             status = originalOpenKey(result, access, &copy);
+        } else if (route == KeyRoute::Private && !hive) {
+            status = RegistryDenied;
         } else if (route == KeyRoute::Other) {
             SetLastError(saved);
             status = originalOpenKey(result, access, attributes);
@@ -572,11 +588,14 @@ NTSTATUS NTAPI translatedOpenKeyEx(PHANDLE result, ACCESS_MASK access,
         wchar_t path[1024]{};
         UNICODE_STRING name{};
         const auto route = attributes ? registryRoute(*attributes, path, name) : KeyRoute::Other;
+        const HKEY hive = privateHive.load();
         OBJECT_ATTRIBUTES copy{};
-        if (route == KeyRoute::Private && options == 0 && noImpersonation() == ERROR_SUCCESS) {
-            copy = *attributes; copy.RootDirectory = privateHive; copy.ObjectName = &name;
+        if (route == KeyRoute::Private && hive && options == 0 && noImpersonation() == ERROR_SUCCESS) {
+            copy = *attributes; copy.RootDirectory = hive; copy.ObjectName = &name;
             SetLastError(saved);
             status = originalOpenKeyEx(result, access, &copy, options);
+        } else if (route == KeyRoute::Private && !hive) {
+            status = RegistryDenied;
         } else if (route == KeyRoute::Other) {
             SetLastError(saved);
             status = originalOpenKeyEx(result, access, attributes, options);
@@ -593,11 +612,14 @@ NTSTATUS NTAPI translatedCreateKey(PHANDLE result, ACCESS_MASK access,
         wchar_t path[1024]{};
         UNICODE_STRING name{};
         const auto route = attributes ? registryRoute(*attributes, path, name) : KeyRoute::Other;
+        const HKEY hive = privateHive.load();
         OBJECT_ATTRIBUTES copy{};
-        if (route == KeyRoute::Private && options == 0 && noImpersonation() == ERROR_SUCCESS) {
-            copy = *attributes; copy.RootDirectory = privateHive; copy.ObjectName = &name;
+        if (route == KeyRoute::Private && hive && options == 0 && noImpersonation() == ERROR_SUCCESS) {
+            copy = *attributes; copy.RootDirectory = hive; copy.ObjectName = &name;
             SetLastError(saved);
             status = originalCreateKey(result, access, &copy, title, className, options, disposition);
+        } else if (route == KeyRoute::Private && !hive) {
+            status = RegistryDenied;
         } else if (route == KeyRoute::Other) {
             SetLastError(saved);
             status = originalCreateKey(result, access, attributes, title, className, options, disposition);
@@ -606,7 +628,71 @@ NTSTATUS NTAPI translatedCreateKey(PHANDLE result, ACCESS_MASK access,
     SetLastError(saved);
     return status;
 }
-bool initializeRegistry() {
+
+NTSTATUS openPrivateValue(HANDLE source, ACCESS_MASK right, HANDLE& mapped, KeyRoute& route) {
+    wchar_t sourceName[512]{};
+    if (!keyName(source, sourceName)) { route = KeyRoute::Other; return 0; }
+    const auto bytes = static_cast<USHORT>(wcslen(sourceName) * sizeof(wchar_t));
+    UNICODE_STRING name{bytes, bytes, sourceName};
+    OBJECT_ATTRIBUTES attributes{sizeof(OBJECT_ATTRIBUTES), nullptr, &name,
+        OBJ_CASE_INSENSITIVE, nullptr, nullptr};
+    wchar_t path[1024]{};
+    UNICODE_STRING selected{};
+    route = registryRoute(attributes, path, selected);
+    if (route == KeyRoute::Other) return 0;
+    if (route != KeyRoute::Private) return Unsupported;
+    const HKEY hive = privateHive.load();
+    if (!hive) return RegistryDenied;
+    if (noImpersonation() != ERROR_SUCCESS) return Unsupported;
+    PUBLIC_OBJECT_BASIC_INFORMATION info{};
+    ULONG returned = 0;
+    if (queryObject(source, 0 /* ObjectBasicInformation */, &info, sizeof(info), &returned) < 0
+        || (info.GrantedAccess & right) != right) return RegistryDenied;
+    attributes.RootDirectory = hive;
+    attributes.ObjectName = &selected;
+    return originalOpenKey(&mapped, right, &attributes);
+}
+NTSTATUS NTAPI translatedQueryValue(HANDLE key, PUNICODE_STRING name, ULONG information,
+    PVOID output, ULONG length, PULONG returned) {
+    const DWORD saved = GetLastError();
+    NTSTATUS status = Unsupported;
+    HANDLE mapped = nullptr;
+    __try {
+        KeyRoute route = KeyRoute::Other;
+        status = openPrivateValue(key, KEY_QUERY_VALUE, mapped, route);
+        if (status >= 0) {
+            SetLastError(saved);
+            status = originalQueryValue(route == KeyRoute::Private ? mapped : key,
+                name, information, output, length, returned);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { status = static_cast<NTSTATUS>(GetExceptionCode()); }
+    if (mapped) CloseHandle(mapped);
+    SetLastError(saved);
+    return status;
+}
+NTSTATUS NTAPI translatedSetValue(HANDLE key, PUNICODE_STRING name, ULONG title,
+    ULONG type, PVOID data, ULONG bytes) {
+    const DWORD saved = GetLastError();
+    NTSTATUS status = Unsupported;
+    HANDLE mapped = nullptr;
+    __try {
+        KeyRoute route = KeyRoute::Other;
+        status = openPrivateValue(key, KEY_SET_VALUE, mapped, route);
+        if (status >= 0) {
+            SetLastError(saved);
+            status = originalSetValue(route == KeyRoute::Private ? mapped : key, name, title, type, data, bytes);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { status = static_cast<NTSTATUS>(GetExceptionCode()); }
+    if (mapped) CloseHandle(mapped);
+    SetLastError(saved);
+    return status;
+}
+bool attachRegistryValues() {
+    return DetourAttach(reinterpret_cast<PVOID*>(&originalQueryValue), reinterpret_cast<PVOID>(translatedQueryValue)) == NO_ERROR
+        && DetourAttach(reinterpret_cast<PVOID*>(&originalSetValue), reinterpret_cast<PVOID>(translatedSetValue)) == NO_ERROR;
+}
+
+bool initializeRegistry(const probe::Receipt& config) {
     const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
     const HMODULE advapi = GetModuleHandleW(L"advapi32.dll");
     if (!ntdll || !advapi) return false;
@@ -615,33 +701,33 @@ bool initializeRegistry() {
     originalOpenKeyEx = reinterpret_cast<OpenKeyEx>(GetProcAddress(ntdll, "NtOpenKeyEx"));
     originalCreateKey = reinterpret_cast<CreateKey>(GetProcAddress(ntdll, "NtCreateKey"));
     queryKey = reinterpret_cast<QueryKey>(GetProcAddress(ntdll, "NtQueryKey"));
+    originalQueryValue = reinterpret_cast<QueryValue>(GetProcAddress(ntdll, "NtQueryValueKey"));
+    originalSetValue = reinterpret_cast<SetValue>(GetProcAddress(ntdll, "NtSetValueKey"));
+    queryObject = reinterpret_cast<QueryObject>(GetProcAddress(ntdll, "NtQueryObject"));
     if (!originalOpenUser || !originalOpenKey || !originalOpenKeyEx || !originalCreateKey
-        || !queryKey || noImpersonation() != ERROR_SUCCESS) return false;
-    HKEY host = nullptr;
-    if (originalOpenUser(KEY_READ, &host) != ERROR_SUCCESS) return false;
-    const bool named = keyName(host, userKeyPath);
-    RegCloseKey(host);
-    return named && userKeyPath[0] == L'\\' && userKeyPath[1];
+        || !queryKey || !originalQueryValue || !originalSetValue || !queryObject) return false;
+    unsigned length = 0;
+    while (length < 512 && config.registryUserPath[length]) ++length;
+    constexpr wchar_t prefix[] = L"\\REGISTRY\\USER\\";
+    if (length <= 15 || length >= 512) return false;
+    for (unsigned i = 0; prefix[i]; ++i)
+        if (folded(config.registryUserPath[i], true) != folded(prefix[i], true)) return false;
+    memcpy(userKeyPath, config.registryUserPath, (length + 1) * sizeof(wchar_t));
+    return true; // Receipt metadata only; no registry/profile setup while under loader lock.
 }
-bool installRegistry(HKEY hive) {
-    privateHive = hive;
-    if (DetourTransactionBegin() != NO_ERROR) { privateHive = nullptr; return false; }
-    if (DetourUpdateThread(GetCurrentThread()) != NO_ERROR
-        || DetourAttach(reinterpret_cast<PVOID*>(&originalOpenUser), reinterpret_cast<PVOID>(translatedOpenUser)) != NO_ERROR
-        || DetourAttach(reinterpret_cast<PVOID*>(&originalOpenKey), reinterpret_cast<PVOID>(translatedOpenKey)) != NO_ERROR
-        || DetourAttach(reinterpret_cast<PVOID*>(&originalOpenKeyEx), reinterpret_cast<PVOID>(translatedOpenKeyEx)) != NO_ERROR
-        || DetourAttach(reinterpret_cast<PVOID*>(&originalCreateKey), reinterpret_cast<PVOID>(translatedCreateKey)) != NO_ERROR) {
-        DetourTransactionAbort(); privateHive = nullptr; return false;
-    }
-    if (DetourTransactionCommit() != NO_ERROR) { privateHive = nullptr; return false; }
-    return true;
+bool attachRegistry() {
+    return DetourAttach(reinterpret_cast<PVOID*>(&originalOpenUser), reinterpret_cast<PVOID>(translatedOpenUser)) == NO_ERROR
+        && DetourAttach(reinterpret_cast<PVOID*>(&originalOpenKey), reinterpret_cast<PVOID>(translatedOpenKey)) == NO_ERROR
+        && DetourAttach(reinterpret_cast<PVOID*>(&originalOpenKeyEx), reinterpret_cast<PVOID>(translatedOpenKeyEx)) == NO_ERROR
+        && DetourAttach(reinterpret_cast<PVOID*>(&originalCreateKey), reinterpret_cast<PVOID>(translatedCreateKey)) == NO_ERROR
+        && attachRegistryValues();
 }
 }
 extern "C" BOOL BootstrapRegistry() {
     probe::View view;
     if (!view.open() || view.value->mode != probe::MutexCase || view.value->armed != 1
         || view.value->fileOwnRoot != fileOwnRoot) return FALSE;
-    if (privateHive) return TRUE; // Owned main thread only; not a concurrent enrollment API.
+    if (privateHive.load()) return TRUE; // Owned main thread only; not a concurrent enrollment API.
     FILE_ID_INFO id{};
     if (!directoryInfo(fileOwnRoot, id) || !sameFileId(id, ownDirectoryId)) return FALSE;
     wchar_t path[512]{};
@@ -651,14 +737,10 @@ extern "C" BOOL BootstrapRegistry() {
         && (attributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY))) return FALSE;
     HKEY hive = nullptr, root = nullptr;
     if (RegLoadAppKeyW(path, &hive, KEY_ALL_ACCESS, REG_PROCESS_APPKEY, 0) != ERROR_SUCCESS) return FALSE;
-    if (!initializeRegistry()) { RegCloseKey(hive); return FALSE; }
     LSTATUS status = RegOpenKeyExW(hive, L"", 0, KEY_ALL_ACCESS, &root);
     if (status == ERROR_SUCCESS) status = RegOverridePredefKey(HKEY_CURRENT_USER, root);
     if (root) RegCloseKey(root);
-    if (status == ERROR_SUCCESS && !installRegistry(hive)) {
-        RegOverridePredefKey(HKEY_CURRENT_USER, nullptr);
-        status = ERROR_NOT_SUPPORTED;
-    }
     if (status != ERROR_SUCCESS) { RegCloseKey(hive); return FALSE; }
+    privateHive.store(hive); // Publish only after the predefined mapping is complete.
     return TRUE;
 }

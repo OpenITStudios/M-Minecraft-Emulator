@@ -67,8 +67,9 @@ stops the remaining cases and emits an incomplete-operation receipt:
 Stages: 1=compat attach, 2=arm, 3=attach rejected, 4=arm suppressed,
 5=dependency DllMain canary, 6=EXE TLS canary, 7=main canary.
 Each event includes the observed arm bit. At most 16 records are accepted;
-overflow, invalid stages and malformed transport fail. DllMain never waits
-for a controller handshake or calls registry/COM/known-folder APIs.
+overflow, invalid stages and malformed transport fail. Our compatibility DllMain never waits for a controller handshake or performs
+registry/profile/COM/Known Folder setup. Controlled dependency/TLS native registry
+probes below deliberately exercise the installed gate, without high-level setup.
 
 The parent reads only after confirmed child exit, with bounded waits. Cleanup
 uses the original process handle; no PID reopen or unrelated termination occurs.
@@ -77,10 +78,11 @@ JSON contains fixed stage/case labels and booleans/counts, with
 providerReady=false and minecraft=NOT_EXECUTED. It emits no raw PID, FILETIME,
 HANDLE, username, installed game path, credentials, caches or world contents.
 
-Predefined HKCU is remapped only after the explicit post-loader step below.
+Selected registry open/query/set calls are denied from first import until the
+explicit post-loader private-hive activation below.
 Only the selected synthetic directory tree is redirected. In the default ordering mode,
 "canary" means a marker at a would-be protected call site and "arm" is a shared
-flag. In mutex mode the flag follows installation of the four native mutex/file hooks plus SHGetKnownFolderPath in one transaction.
+flag. In mutex mode the flag follows installation of file/IPC/Known Folder and six registry entry-point hooks in one transaction.
 This test cannot observe kernel accesses before notification, all loader work,
 external authentication, other module/TLS graphs or enforcement under bypass.
 
@@ -113,10 +115,10 @@ reads translate access violations into their native exception status.
 The initialization/parent handles and hooks belong to this process-lifetime
 fixture; no live DLL unload or authenticated production slot capability exists.
 
-The private **version-5** receipt (1,000 bytes, not a product wire schema) carries
+The private **version-6** receipt (2,048 bytes, not a product wire schema) carries
 native/file/registry masks and the file round/root handles. It still binds the original child PID/creation FILETIME,
-slot/test name and seven explicitly inherited handles: section, four phase events,
-logical directory and the slot's private directory. Both children hold
+slot/test name and eight explicitly inherited handles: section, four phase events,
+logical/private directories and one fresh synthetic HOST registry key. Both children hold
 their own object while the parent holds the host logical object and checks the
 A/B identities. Existing Win32 controls remain bitmask **127**: fresh/existing
 create, recursive open, unnamed/missing behavior, access/inheritance flags and
@@ -204,7 +206,7 @@ an existing-reparse open path. Root/non-directory contradictions are rejected.
 **Enumeration needs no hook:** real private directory handles let Windows supply
 native and Win32 entries, cursor/restart/filter behavior and end-of-enumeration.
 There is no merged host view or synthetic query-result rewriting. The private
-receipt is version 5; no product wire schema changes.
+receipt is version 6; no product wire schema changes.
 
 File mask **1048575**, per child/generation:
 
@@ -298,6 +300,56 @@ Contracts:
 [KNOWN_FOLDER_FLAG](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/ne-shlobj_core-known_folder_flag),
 [Known Folders](https://learn.microsoft.com/en-us/windows/win32/shell/known-folders).
 
+## Early registry boundary — 24 October 2026 WIB
+
+The original DLL now installs RegOpenCurrentUser, NtOpenKey, NtOpenKeyEx,
+NtCreateKey, NtQueryValueKey and NtSetValueKey alongside its existing hooks in the
+first-import transaction. Before privateHive is published, selected current-user
+opens and cached-handle value query/set return ACCESS_DENIED. There is no host
+fallback. Unselected namespaces/unresolved shapes retain their documented limits.
+
+The controller obtains current-user root-name metadata before launching children
+and transports it only in their anonymous PID/creation-bound section. No SID or
+native user path is written to logs/files/Git. Initialization in our DllMain
+checks/copies that bounded metadata and resolves already-loaded exports; it does
+not open a user profile, load a hive, override HKCU or initialize COM.
+
+Only one new synthetic HOST branch handle is inherited, never the real user root.
+Dependency DllMain, EXE TLS and the start of main each attempt three native
+operations: absolute open of the fresh HOST test branch, query of its HOST marker
+through the inherited cached handle, and a different marker write. All must be
+denied with LastError preserved and the query output/length untouched. The parent
+checks that the synthetic HOST value remains intact. These are controlled native
+probes, not a claim that arbitrary registry APIs are loader-safe.
+
+A separately controlled child without the compatibility DLL executes the same
+three probes successfully at all three stages. Its write keeps the exact HOST
+value, and it exits before file/hive tests. This positive control detects missing
+or malformed probes; it is never a production fallback or provider launch route.
+Stage masks use 1=dependency, 2=TLS, 4=main: protected earlyDenied=7/7, earlyAllowed=0;
+unhooked control earlyAllowed=7, earlyDenied=0. Original four ordering cases remain.
+
+The main-thread BootstrapRegistry then loads/maps its slot hive and publishes
+the retained handle atomically. No second registry-hook installation occurs.
+Once active, cached HOST-branch query/set calls reopen the corresponding private
+key for that operation. NtQueryObject basic metadata verifies the original
+handle's granted query/set rights, preventing a read-only host handle from gaining
+write access through translation. Temporary private handles close on normal and
+protected-exception paths. Tests duplicate the inherited handle read-only and
+check query success/write denial after activation.
+
+This establishes denial then private routing only for the tested graph and
+selected entry points. It does not prove that a game tolerates denied early
+registry requests, that the gate covers code before this import, or that private
+registry data is available to dependency/TLS. Cached enumeration, multiple-value
+queries, delete/rename/security/transaction paths, unrecognized handles, direct
+syscalls, other users and external helpers are not covered here.
+
+API contracts:
+[Handle inheritance](https://learn.microsoft.com/en-us/windows/win32/sysinfo/handle-inheritance),
+[RegCreateKeyEx](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regcreatekeyexw).
+Registry-object metadata is not registry value/authentication content.
+
 ## Post-loader private HKCU — 24 October 2026 WIB
 
 The same DLL now exports **test-only BootstrapRegistry**, called by the fixed
@@ -307,23 +359,19 @@ root handle/file ID, then loads Registry/HKCU.dat beneath that same A/B root
 with RegLoadAppKeyW(KEY_ALL_ACCESS, REG_PROCESS_APPKEY). Windows creates an empty
 hive when that file is absent. No account/profile hive is copied or imported.
 
-Before remapping, the DLL resolves the native registry exports and reads only
-current-user **root-name metadata** through RegOpenCurrentUser/NtQueryKey.
-That canonical user-root name is kept in process memory, never logged or stored
-in source/receipts. A real root handle opened relative to the application hive becomes this process's
-HKEY_CURRENT_USER through RegOverridePredefKey. The original hive handle and
-mapping live until owned-process exit. RegOpenCurrentUser, NtOpenKey,
-NtOpenKeyEx and NtCreateKey hooks install in one additional post-loader Detours
-transaction on the owned main thread. If that transaction fails, initialization
-restores the predefined mapping, closes the new hive and reports failure; the
-owned child stops. Repeated initialization on the same main
-thread is idempotent. A failed load/map returns FALSE; the controller-owned child
+The current-user namespace is already bound to controller-supplied ephemeral
+metadata by the early gate. A real root handle opened relative to the application
+hive becomes this process's HKEY_CURRENT_USER through RegOverridePredefKey. That
+mapping and hive handle live until exit. Successful main-thread activation
+publishes the hive atomically; failed load/map returns FALSE and the owned child
+stops without opening registry test data on the host. Repeated initialization
+on the same owned main thread is idempotent. A failed load/map returns FALSE; the controller-owned child
 stops before any test registry operation, with no host-HKCU fallback.
 
-This is an explicit **post-loader** step: no registry API or hive loading was
-added to our DllMain, dependency DllMain or TLS callback. The existing Armed bit
-still denotes installed file/IPC/Known Folder hooks; it is NOT proof that HKCU
-was private during loader/TLS work or before main. There is no product provider
+This is an explicit **post-loader** step: no hive loading, HKCU remapping or
+COM setup was added to DllMain/TLS. Only the controlled native probes above run
+in dependency/TLS callbacks. The existing Armed bit now denotes installed hooks and the selected early denial
+gate; it is NOT proof that private HKCU data was available during loader/TLS. There is no product provider
 readiness flag, production registry API, arbitrary hive-path/PID option or
 background service. Advapi32 is an SDK link, not an installed dependency.
 
@@ -350,7 +398,7 @@ Registry mask **8191** per child/generation:
 | 64 | Peer application-hive load is refused while the other owned process holds it. |
 | 128 | RegOpenCurrentUser returns a private root with requested read access; relative lookup sees the same private marker. |
 | 256 | NtOpenKey and NtOpenKeyEx on an explicit native user path return own data and preserve LastError. |
-| 512 | Native relative open through a host-root handle saved before bootstrap maps into the private hive; counted input/caller attributes stay unchanged. |
+| 512 | Native zero-length counted relative open and direct query/set through the inherited synthetic HOST branch map privately; caller data stays unchanged and duplicated read-only handles cannot write. |
 | 1024 | Native create disposition and writes agree with HKCU and persist as a Native subkey. |
 | 2048 | Selected link options, invalid-buffer, missing and conflicting-root shapes are controlled; impersonation is rejected and reverted; unrelated root and oversized unrelated-path results remain native. |
 | 4096 | A native-opened handle still reads own data after both children are ready. |
@@ -384,20 +432,20 @@ unresolved relative roots pass to originals. Native NTSTATUS and entry LastError
 are preserved, including protected parameter-read exceptions. The parent root
 metadata lookup is not an authenticated handle enrollment mechanism.
 
-Before bootstrap, each child reads only the newly created synthetic HOST marker
-as a positive control. After bootstrap, explicit native and current-user routes
-must see private markers instead. The controller also reads native-created
-subkeys directly from both persisted hives after exit. No host SID, native user
-path, raw handles or metadata names are serialized.
+Before bootstrap the protected children cannot read/write the synthetic HOST
+marker; the separate unhooked positive control can. After activation, selected
+native/current-user and cached-handle query/set routes see private data instead. The controller also reads native-created
+subkeys directly from both persisted hives after exit. User-root paths/handles exist only in the anonymous test transport and process
+memory; none are written to source, log files or evidence artifacts.
 
-**Limits:** pre-main enrollment, direct query/set through cached host key handles,
+**Limits:** private data availability before main, cached enumeration/multiple-value/delete/rename/security operations,
 other-user roots, unresolved/long relative roots, transacted native entry points,
 other predefined keys, registry links outside the selected routes and descendant/
 external helper propagation remain UNKNOWN/unimplemented. Direct syscalls,
 hook tampering, concurrent enrollment/all-thread quiescence and game compatibility
 are unproved. This remains cooperative selected mediation, **not a security
 boundary**. The single owned-main-thread bootstrap still starts after loader/TLS;
-the Armed marker does not imply private registry at startup. No actual
+the Armed marker implies the selected denial gate, not private data at startup. No actual
 Minecraft/helper/authentication access or game injection was performed.
 
 Contracts:
@@ -409,6 +457,46 @@ Contracts:
 [Native extended key open](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/nf-wdm-zwopenkeyex).
 
 ## Evidence
+
+### Executed early gate and cached-value slice — 24 October 2026 WIB
+
+Exact baseline: 9a0e90e94064229957d5b797f1b4b4c07d2e5784.
+Changed executed input blobs:
+
+| Input | Git blob |
+| --- | --- |
+| compat.cpp | 123ddbb88ecf3c6e9b23b8298d4dab3bd553f6ff |
+| probe.cpp | 03278d782adfa2603996714d3829eb6cc84fb549 |
+| receipt.h | eb07b43e3d66357df2a8dd046f56e6d12b0107bf |
+| dependency.cpp | f33dcf4125062fd63992d42d78729845560282f2 |
+
+Private receipt v6 is 2,048 bytes. Build config/export inputs and clean pinned
+external Detours are unchanged. Windows x64 26100 / CMake 4.3.2 / MSVC 19.44.35226
+Release /W4 /WX configure/build and both final commands exit **0**. Protected
+earlyDenied=7/7; separate unhooked earlyAllowed=7. Cached query/write isolation and
+granted-access checks pass, together with registry 8191/8191, file/AppData
+1048575/1048575, native mutex 511/511, Win32 mutex 127/127, two-generation
+persistence, invalid hive, mismatches, junctions and all four ordering controls.
+No remaining test image in CIM lookup; tracked checkout clean.
+
+The positive control initially exposed an invalid native name at TLS: formatted
+wide-string construction was not reliable before EXE CRT initialization. The
+probe now constructs its bounded path directly, without a formatter/CRT startup
+dependency. Final diagnostic line/status logging was removed. No test expectation
+or native error was weakened. Full product, actual game startup/authentication and
+two/four licensed clients remain NOT_EXECUTED.
+
+Local artifact SHA-256:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| bootstrap-ordering.exe | 78db7166709718c5b447f6b25a7c08cc6f3d2c41fc309963114ad2732ea20540 |
+| bootstrap-compat.dll | 004511f864041afbbfc5e5290bd38b3487315668d2df40cb175950fd358ecefe |
+| ordering.jsonl | 40927efb7a951dda0eccd4323ec78f5b80d713673bee402d9ebd632e0f460c36 |
+| pair.jsonl | b34ec1559e3fb3727ad7e336550455067fab6119338d49d6016ac527ae994707 |
+
+Earlier evidence retains its historical SHA/scope.
+
 
 ### Executed current-user/native registry slice — 24 October 2026 WIB
 

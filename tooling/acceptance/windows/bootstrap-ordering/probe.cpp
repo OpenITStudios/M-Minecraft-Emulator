@@ -14,7 +14,10 @@
 extern "C" __declspec(dllimport) int DependencyCanary();
 
 void NTAPI BootstrapTls(PVOID, DWORD reason, PVOID) {
-    if (reason == DLL_PROCESS_ATTACH) probe::canary(probe::Tls);
+    if (reason == DLL_PROCESS_ATTACH) {
+        probe::canary(probe::Tls);
+        probe::registryCanary(probe::Tls);
+    }
 }
 #pragma section(".CRT$XLB", long, read)
 extern "C" {
@@ -861,13 +864,18 @@ struct RegistryChild {
     NTSTATUS outsideLong = 0;
     LONG checks = 0;
     explicit RegistryChild(probe::Receipt& receipt) {
-        require(RegOpenCurrentUser(KEY_READ, &hostRoot.value) == ERROR_SUCCESS);
+        hostRoot.value = receipt.cachedHostKey; // Only the fresh synthetic host branch is inherited.
+        hostName = receipt.registryUserPath;
         outsideLong = outsideRegistryLongStatus();
-        hostName = nativeKeyName(hostRoot.value); // Ephemeral root metadata only; never serialized.
-        Key baseline;
-        require(RegOpenKeyExW(hostRoot.value, registryPath(receipt.logical).c_str(), 0,
-            KEY_READ, &baseline.value) == ERROR_SUCCESS
-            && registryValue(baseline.value, L"Marker") == 0x484f5354);
+        require(receipt.earlyDenied == 7 && receipt.earlyAllowed == 0);
+        Key deniedRoot;
+        require(RegOpenCurrentUser(KEY_READ, &deniedRoot.value) == ERROR_ACCESS_DENIED && !deniedRoot.value);
+        DWORD type = 0, value = 0, bytes = sizeof(value);
+        require(RegQueryValueExW(hostRoot.value, L"Marker", nullptr, &type,
+            reinterpret_cast<BYTE*>(&value), &bytes) == ERROR_ACCESS_DENIED);
+        const DWORD sameHost = 0x484f5354;
+        require(RegSetValueExW(hostRoot.value, L"Marker", 0, REG_DWORD,
+            reinterpret_cast<const BYTE*>(&sameHost), sizeof(sameHost)) == ERROR_ACCESS_DENIED);
         const auto initialize = reinterpret_cast<BOOL (*)()>(
             GetProcAddress(GetModuleHandleW(L"bootstrap-compat.dll"), "BootstrapRegistry"));
         require(initialize && initialize() && initialize());
@@ -948,9 +956,9 @@ struct RegistryChild {
             && registryValue(nativeHeld.value, L"Marker") == registryMarker(receipt));
         checks |= 256;
 
-        std::wstring counted = path + L"_IGNORED";
+        std::wstring counted = L"_IGNORED";
         auto relativeName = nativeName(counted);
-        relativeName.Length = relativeName.MaximumLength = static_cast<USHORT>(path.size() * sizeof(wchar_t));
+        relativeName.Length = relativeName.MaximumLength = 0;
         attributes.RootDirectory = hostRoot.value;
         attributes.ObjectName = &relativeName;
         Key relative;
@@ -959,9 +967,18 @@ struct RegistryChild {
         const DWORD relativeError = GetLastError();
         require(relativeStatus == 0 && relativeError == sentinel
             && registryValue(relative.value, L"Marker") == registryMarker(receipt)
-            && counted == path + L"_IGNORED" && attributes.RootDirectory == hostRoot.value
+            && counted == L"_IGNORED" && attributes.RootDirectory == hostRoot.value
             && attributes.ObjectName == &relativeName
-            && relativeName.Length == path.size() * sizeof(wchar_t));
+            && relativeName.Length == 0);
+        require(registryValue(hostRoot.value, L"Marker") == registryMarker(receipt));
+        setRegistryValue(hostRoot.value, L"Marker", registryMarker(receipt));
+        Key cachedReadonly;
+        require(DuplicateHandle(GetCurrentProcess(), hostRoot.value, GetCurrentProcess(),
+            reinterpret_cast<PHANDLE>(&cachedReadonly.value), KEY_QUERY_VALUE, FALSE, 0) != FALSE);
+        const DWORD deniedWrite = 0;
+        require(RegSetValueExW(cachedReadonly.value, L"Marker", 0, REG_DWORD,
+            reinterpret_cast<const BYTE*>(&deniedWrite), sizeof(deniedWrite)) == ERROR_ACCESS_DENIED
+            && registryValue(cachedReadonly.value, L"Marker") == registryMarker(receipt));
         checks |= 512;
 
         std::wstring child = absolute + L"\\Native";
@@ -1119,7 +1136,8 @@ struct MutexChild {
     Child child; // Destroy child before receipt/events, including constructor failure.
     MutexChild(DWORD slot, const std::wstring& name, HANDLE go, HANDLE finish,
                const std::wstring& self, const std::string& compatibility,
-               DWORD round, HANDLE logicalRoot, HANDLE ownRoot, bool wrongAppData = false) {
+               DWORD round, HANDLE logicalRoot, HANDLE ownRoot, HKEY cachedHostKey,
+               const std::wstring& userPath, bool wrongAppData = false, bool registryBaseline = false) {
         ZeroMemory(mapping.value, sizeof(probe::Receipt));
         auto& receipt = *mapping.value;
         receipt.magic = probe::Magic;
@@ -1127,6 +1145,10 @@ struct MutexChild {
         receipt.mode = probe::MutexCase;
         receipt.slot = slot;
         receipt.fileRound = round;
+        receipt.registryBaseline = registryBaseline ? 1 : 0;
+        receipt.cachedHostKey = cachedHostKey;
+        require(userPath.size() < 512);
+        memcpy(receipt.registryUserPath, userPath.c_str(), (userPath.size() + 1) * sizeof(wchar_t));
         receipt.fileLogicalRoot = logicalRoot;
         receipt.fileOwnRoot = ownRoot;
         receipt.ready = ready.value;
@@ -1136,8 +1158,8 @@ struct MutexChild {
         copyName(receipt.logical, name);
         copyName(receipt.own, name + (slot == 1 ? L"_A" : L"_B"));
         copyName(receipt.peer, name + (slot == 1 ? L"_B" : L"_A"));
-        HANDLE inherited[]{section.value, ready.value, go, done.value, finish, logicalRoot, ownRoot};
-        Attributes attributes(inherited, 7);
+        HANDLE inherited[]{section.value, ready.value, go, done.value, finish, logicalRoot, ownRoot, cachedHostKey};
+        Attributes attributes(inherited, 8);
         auto env = environment(section.value, wrongAppData ? logicalRoot : ownRoot);
         STARTUPINFOEXW startup{};
         startup.StartupInfo.cb = sizeof(startup);
@@ -1152,7 +1174,7 @@ struct MutexChild {
         require(GetProcessTimes(child.info.hProcess, &receipt.created, &exited, &kernel, &user)
             != FALSE);
         const char* dlls[]{compatibility.c_str()};
-        require(DetourUpdateProcessWithDll(child.info.hProcess, dlls, 1) != FALSE);
+        if (!registryBaseline) require(DetourUpdateProcessWithDll(child.info.hProcess, dlls, 1) != FALSE);
         MemoryBarrier();
         require(ResumeThread(child.info.hThread) == 1);
     }
@@ -1264,13 +1286,17 @@ struct FileRoots {
 
 struct RegistryHost {
     Key branch;
-    std::wstring path;
+    std::wstring path, userPath;
     explicit RegistryHost(const std::wstring& name) : path(registryPath(name)) {
         DWORD disposition = 0;
         require(RegCreateKeyExW(HKEY_CURRENT_USER, path.c_str(), 0, nullptr,
             REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &branch.value, &disposition) == ERROR_SUCCESS
             && disposition == REG_CREATED_NEW_KEY);
         setRegistryValue(branch.value, L"Marker", 0x484f5354);
+        require(SetHandleInformation(branch.value, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) != FALSE);
+        Key root;
+        require(RegOpenCurrentUser(KEY_READ, &root.value) == ERROR_SUCCESS);
+        userPath = nativeKeyName(root.value);
     }
     void unchanged() {
         require(registryValue(branch.value, L"Marker") == 0x484f5354);
@@ -1313,10 +1339,26 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
     Handle host(CreateMutexW(nullptr, TRUE, name.c_str()));
     const DWORD hostError = GetLastError();
     require(host.value && hostError != ERROR_ALREADY_EXISTS);
+    {
+        Handle go(sharedEvent()), finish(sharedEvent());
+        MutexChild baseline(1, name, go.value, finish.value, self, compatibility,
+            0, files.logical.value, files.a.value, registry.branch.value, registry.userPath, false, true);
+        require(WaitForSingleObject(baseline.child.info.hProcess, 10000) == WAIT_OBJECT_0);
+        DWORD code = 1;
+        require(GetExitCodeProcess(baseline.child.info.hProcess, &code) && code == 0);
+        const auto& receipt = *baseline.mapping.value;
+        require(receipt.count == 3 && receipt.armed == 0 && receipt.earlyAllowed == 7
+            && receipt.earlyDenied == 0 && receipt.registryChecks == 0);
+        constexpr LONG stages[]{probe::Dependency, probe::Tls, probe::Main};
+        for (LONG i = 0; i < 3; ++i)
+            require(receipt.events[i].stage == stages[i] && receipt.events[i].armed == 0);
+        registry.unchanged();
+    }
     for (const bool wrongAppData : {false, true}) {
         Handle go(sharedEvent()), finish(sharedEvent());
         MutexChild mismatch(1, name, go.value, finish.value, self, compatibility,
-            0, files.logical.value, wrongAppData ? files.a.value : files.b.value, wrongAppData);
+            0, files.logical.value, wrongAppData ? files.a.value : files.b.value,
+            registry.branch.value, registry.userPath, wrongAppData);
         require(WaitForSingleObject(mismatch.child.info.hProcess, 10000) == WAIT_OBJECT_0);
         DWORD code = 0;
         require(GetExitCodeProcess(mismatch.child.info.hProcess, &code) && code != 0
@@ -1341,7 +1383,7 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
         }
         Handle go(sharedEvent()), finish(sharedEvent());
         MutexChild rejected(1, name, go.value, finish.value, self, compatibility,
-            0, files.logical.value, files.a.value);
+            0, files.logical.value, files.a.value, registry.branch.value, registry.userPath);
         require(WaitForSingleObject(rejected.child.info.hProcess, 10000) == WAIT_OBJECT_0);
         DWORD code = 0;
         require(GetExitCodeProcess(rejected.child.info.hProcess, &code) && code == 85
@@ -1352,9 +1394,9 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
     for (DWORD round = 0; round < 2; ++round) {
         Handle go(sharedEvent()), finish(sharedEvent());
         MutexChild first(1, name, go.value, finish.value, self, compatibility,
-            round, files.logical.value, files.a.value);
+            round, files.logical.value, files.a.value, registry.branch.value, registry.userPath);
         MutexChild second(2, name, go.value, finish.value, self, compatibility,
-            round, files.logical.value, files.b.value);
+            round, files.logical.value, files.b.value, registry.branch.value, registry.userPath);
         first.phase(first.ready.value);
         second.phase(second.ready.value);
         {
@@ -1378,7 +1420,9 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
             && InterlockedCompareExchange(&first.mapping.value->fileChecks, 0, 0) == 1048575
             && InterlockedCompareExchange(&second.mapping.value->fileChecks, 0, 0) == 1048575
             && InterlockedCompareExchange(&first.mapping.value->registryChecks, 0, 0) == 8191
-            && InterlockedCompareExchange(&second.mapping.value->registryChecks, 0, 0) == 8191);
+            && InterlockedCompareExchange(&second.mapping.value->registryChecks, 0, 0) == 8191
+            && first.mapping.value->earlyDenied == 7 && second.mapping.value->earlyDenied == 7
+            && first.mapping.value->earlyAllowed == 0 && second.mapping.value->earlyAllowed == 0);
         require(SetEvent(finish.value) != FALSE);
         first.exitedNormally();
         second.exitedNormally();
@@ -1392,7 +1436,7 @@ bool mutexPair(const std::wstring& self, const std::string& compatibility) {
     }
     require(ReleaseMutex(host.value) != FALSE);
     std::printf("{\"case\":\"mutex-two-child\",\"selfCheck\":true,\"checks\":[127,127],"
-                "\"registryChecks\":[8191,8191],\"invalidHiveRejected\":true,\"fileChecks\":[1048575,1048575],\"rounds\":2,\"persistent\":true,\"hostUnchanged\":true,\"slotMismatchRejected\":true,\"appDataBindingRejected\":true,"
+                "\"earlyDenied\":[7,7],\"earlyAllowedControl\":7,\"registryChecks\":[8191,8191],\"invalidHiveRejected\":true,\"fileChecks\":[1048575,1048575],\"rounds\":2,\"persistent\":true,\"hostUnchanged\":true,\"slotMismatchRejected\":true,\"appDataBindingRejected\":true,"
                 "\"nativeChecks\":[511,511],\"distinctHostAndPeerObjects\":true,\"rawPeerAccessible\":true,"
                 "\"securityBoundary\":false,\"providerReady\":false,"
                 "\"minecraft\":\"NOT_EXECUTED\"}\n");
@@ -1403,7 +1447,9 @@ int childMain() {
     probe::View view;
     if (!view.open()) return 81;
     probe::record(view.value, probe::Main);
+    probe::registryCanary(probe::Main);
     if (DependencyCanary() != 7) return 82;
+    if (view.value->mode == probe::MutexCase && view.value->registryBaseline) return 0;
     if (view.value->mode == probe::MutexCase) return mutexChild(*view.value);
     if (view.value->mode == probe::Timeout) {
         Sleep(INFINITE); // Deliberate owned-child timeout control, outside loader lock.
