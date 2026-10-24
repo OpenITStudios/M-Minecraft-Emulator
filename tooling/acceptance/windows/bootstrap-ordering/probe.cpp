@@ -2030,12 +2030,72 @@ int interruptedStorageChild(probe::Receipt& receipt) {
     return 0;
 }
 
+std::string mappedMarker(DWORD slot) {
+    std::string bytes(16, '\0');
+    bytes.replace(0, 8, std::to_string(slot) + "-mapped");
+    return bytes;
+}
+
+int mappedStorageChild(probe::Receipt& receipt) {
+    configuredDiagnosticChild = true;
+    const auto base = directoryPath(receipt.fileLogicalRoot).substr(4)
+        + L"\\Roaming\\Minecraft Education Edition\\games\\com.mojang\\minecraftWorlds\\world_A+=\\db";
+    const auto current = base + L"\\mapping-current";
+    const auto retry = base + L"\\.mapping-retry.tmp";
+    const auto expected = mappedMarker(receipt.slot);
+    if (receipt.fileRound == 4) {
+        Handle previous(CreateFileW(current.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
+            nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
+        require(previous.value != INVALID_HANDLE_VALUE);
+        writeBytes(previous.value, "previous");
+    } else {
+        expectFile(current, expected);
+        require(GetFileAttributesW(retry.c_str()) == INVALID_FILE_ATTRIBUTES
+            && GetLastError() == ERROR_FILE_NOT_FOUND);
+    }
+    {
+        Handle checkpoint(CreateFileW((receipt.fileRound == 4 ? retry : current).c_str(),
+            GENERIC_READ | GENERIC_WRITE | DELETE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+            receipt.fileRound == 4 ? CREATE_NEW : OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+        require(checkpoint.value != INVALID_HANDLE_VALUE);
+        if (receipt.fileRound == 4) {
+            LARGE_INTEGER size{}; size.QuadPart = expected.size();
+            require(SetFilePointerEx(checkpoint.value, size, nullptr, FILE_BEGIN) && SetEndOfFile(checkpoint.value));
+        }
+        Handle mapping(CreateFileMappingW(checkpoint.value, nullptr, PAGE_READWRITE, 0, 0, nullptr));
+        require(mapping.value != nullptr);
+        struct View {
+            void* value;
+            ~View() { if (value) UnmapViewOfFile(value); }
+        } view{MapViewOfFile(mapping.value, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, expected.size())};
+        require(view.value != nullptr);
+        if (receipt.fileRound == 4) {
+            memcpy(view.value, expected.data(), expected.size());
+            require(FlushViewOfFile(view.value, expected.size()) && FlushFileBuffers(checkpoint.value));
+            require(MoveFileExW(retry.c_str(), current.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH));
+        } else require(memcmp(view.value, expected.data(), expected.size()) == 0);
+        OVERLAPPED region{}; region.Offset = 8;
+        require(LockFileEx(checkpoint.value, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
+            0, 1, 0, &region));
+        // Interrupt only the owned writer after rename, while its mapping and byte lock remain live.
+        require(SetEvent(receipt.ready));
+        require(WaitForSingleObject(receipt.go, 10000) == WAIT_OBJECT_0);
+        require(UnlockFileEx(checkpoint.value, 0, 1, 0, &region));
+    }
+    expectFile(current, expected);
+    require(SetEvent(receipt.done));
+    require(WaitForSingleObject(receipt.finish, 10000) == WAIT_OBJECT_0);
+    return 0;
+}
+
 int configuredStorageChild(probe::Receipt& receipt) {
     // Candidate storage configuration must not guess or rewrite a singleton.
     Handle shared(CreateMutexW(nullptr, FALSE, receipt.logical));
     require(shared.value && GetLastError() == ERROR_ALREADY_EXISTS);
     InterlockedExchange(&receipt.nativeChecks, 1);
     if (receipt.fileRound == 2 || receipt.fileRound == 3) return interruptedStorageChild(receipt);
+    if (receipt.fileRound == 4 || receipt.fileRound == 5) return mappedStorageChild(receipt);
     RegistryChild registry(receipt);
     worldStorageChecks(receipt);
     for (const auto& folder : {L"Roaming", L"Local"}) {
@@ -2186,12 +2246,77 @@ bool configuredStoragePair(const std::wstring& self, const std::string& compatib
         require(GetFileAttributesW((roots.root + L"\\host-view\\Roaming\\Minecraft Education Edition").c_str())
             == INVALID_FILE_ATTRIBUTES);
     }
+    {
+        Handle go(sharedEvent()), finish(sharedEvent());
+        for (DWORD slot = 1; slot <= 2; ++slot) {
+            Key branch;
+            require(RegOpenKeyExW(stores[slot - 1].value, registry.path.c_str(), 0, KEY_ALL_ACCESS,
+                &branch.value) == ERROR_SUCCESS);
+            setRegistryValue(branch.value, L"Marker", slot * 100 + 1);
+        }
+        ConfiguredChild interrupted(1, 4, roots, stores[0].value, registry, name, go.value, finish.value,
+            self, compatibility);
+        ConfiguredChild peer(2, 4, roots, stores[1].value, registry, name, go.value, finish.value,
+            self, compatibility);
+        interrupted.phase(interrupted.ready.value); peer.phase(peer.ready.value);
+        const auto suffix = L"\\Roaming\\Minecraft Education Edition\\games\\com.mojang\\minecraftWorlds\\world_A+=\\db";
+        for (DWORD slot = 1; slot <= 2; ++slot) {
+            const auto path = roots.root + (slot == 1 ? L"\\client-one" : L"\\client-two") + suffix + L"\\mapping-current";
+            Handle contender(CreateFileW(path.c_str(), GENERIC_READ | GENERIC_WRITE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, 0, nullptr));
+            require(contender.value != INVALID_HANDLE_VALUE);
+            OVERLAPPED overlap{}; overlap.Offset = 8;
+            require(!LockFileEx(contender.value, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
+                0, 1, 0, &overlap) && GetLastError() == ERROR_LOCK_VIOLATION);
+            OVERLAPPED separate{}; separate.Offset = 9;
+            require(LockFileEx(contender.value, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
+                0, 1, 0, &separate) && UnlockFileEx(contender.value, 0, 1, 0, &separate));
+        }
+        require(TerminateProcess(interrupted.child.info.hProcess, 92));
+        interrupted.recoveryExited(92);
+        const auto first = roots.root + L"\\client-one" + suffix;
+        {
+            Handle released(CreateFileW((first + L"\\mapping-current").c_str(), GENERIC_READ | GENERIC_WRITE,
+                0, nullptr, OPEN_EXISTING, 0, nullptr));
+            require(released.value != INVALID_HANDLE_VALUE);
+            OVERLAPPED region{}; region.Offset = 8;
+            require(LockFileEx(released.value, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
+                0, 1, 0, &region) && UnlockFileEx(released.value, 0, 1, 0, &region));
+            expectBytes(released.value, mappedMarker(1));
+        }
+        require(GetFileAttributesW((first + L"\\.mapping-retry.tmp").c_str()) == INVALID_FILE_ATTRIBUTES
+            && GetLastError() == ERROR_FILE_NOT_FOUND);
+        peer.phase(peer.ready.value);
+        require(SetEvent(go.value)); peer.phase(peer.done.value);
+        {
+            Key branch;
+            require(RegOpenKeyExW(stores[0].value, registry.path.c_str(), 0, KEY_ALL_ACCESS,
+                &branch.value) == ERROR_SUCCESS);
+            setRegistryValue(branch.value, L"Marker", 101);
+        }
+        ConfiguredChild reopened(1, 5, roots, stores[0].value, registry, name, go.value, finish.value,
+            self, compatibility);
+        reopened.phase(reopened.ready.value); reopened.phase(reopened.done.value);
+        require(SetEvent(finish.value));
+        reopened.recoveryExited(0); peer.recoveryExited(0);
+        for (DWORD slot = 1; slot <= 2; ++slot) {
+            const auto own = roots.root + (slot == 1 ? L"\\client-one" : L"\\client-two") + suffix;
+            expectFile(own + L"\\mapping-current", mappedMarker(slot));
+            expectFile(own + L"\\CURRENT", std::to_string(slot) + "-2");
+            require(GetFileAttributesW((own + L"\\.mapping-retry.tmp").c_str()) == INVALID_FILE_ATTRIBUTES
+                && GetLastError() == ERROR_FILE_NOT_FOUND);
+        }
+        registry.unchanged();
+        require(GetFileAttributesW((roots.root + L"\\host-view\\Roaming\\Minecraft Education Edition").c_str())
+            == INVALID_FILE_ATTRIBUTES);
+    }
     std::printf("{\"case\":\"configured-storage-pair\",\"selfCheck\":true,\"earlyPrivate\":[7,7],"
         "\"registryChecks\":[65535,65535],\"rounds\":2,\"persistent\":true,\"hostUnchanged\":true,"
         "\"invalidConfigRejected\":5,\"mainRegistryCallback\":false,\"fixtureNameRequired\":false,"
         "\"storageWorkflow\":true,\"atomicReplaceCycles\":64,\"failedReplacePreservesData\":true,"
         "\"createCollisionPreservesData\":true,\"renameAndLinkEscapeDenied\":true,"
         "\"interruptedWriterRecovered\":true,\"peerSurvived\":true,\"exclusiveRetryReopen\":true,"
+        "\"postReplaceMappedWriterRecovered\":true,\"byteRangeLocksVerified\":true,"
         "\"singleton\":\"UNKNOWN\",\"singletonRemap\":false,\"helpers\":\"UNKNOWN\",\"securityBoundary\":false,"
         "\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n");
     return true;

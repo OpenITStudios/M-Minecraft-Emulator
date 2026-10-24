@@ -141,11 +141,38 @@ store is opened or reset. Receipt/config/public schemas are unchanged.
 The configured control passed eight repeated scheduling runs, all four C++
 modes passed and 15 Rust bootstrap tests passed against the rebuilt control.
 Output keeps `providerReady:false`, `securityBoundary:false` and
-`minecraft:NOT_EXECUTED`. This covers process interruption after a successful
-flush and before rename only. It does not implement a game database recovery
-algorithm or prove partial writes, disk-full, power loss, post-rename crashes,
-WAM isolation or live Minecraft crash recovery. Continuation is recorded only
-in the existing planning handoff.
+`minecraft:NOT_EXECUTED`. This first phase covers process interruption after a
+successful flush and before rename. It does not implement a game database
+recovery algorithm or prove partial writes, disk-full, power loss, WAM isolation
+or live Minecraft crash recovery.
+
+The same configured mode now includes a second phase after replacement. Each
+own child maps a generated 16-byte file read/write, writes a distinct slot
+marker, flushes the view and backing file, renames it over a previous file, then
+holds the mapped view and an exclusive byte lock at offset 8. The unhooked
+controller verifies overlapping LockFileEx fails with ERROR_LOCK_VIOLATION,
+while a separate range at offset 9 can be locked/unlocked in both profiles.
+It terminates only its original first child (exit 92), then exclusively reopens
+the replaced backing file, locks the formerly occupied range and verifies
+the exact new bytes. The retry filename is absent. A new enrolled child checks
+the same data through a mapped view and normal reads; the live peer completes
+and both exit 0. Earlier CURRENT markers and host data remain unchanged.
+
+All four modes and 15 Rust bootstrap tests pass; the enlarged configured mode
+also passed eight repeated runs. No additional mediation hooks or production
+fix were needed in this batch. This is a flushed mapped-file/Win32 byte-lock
+compatibility check, not a guarantee that mapped memory obeys byte locks, that
+all file mapping modes work, or that an Education database survives every crash.
+
+Source audit also confirms that `observedProcess` forwards CreateProcessW's
+original arguments and only records metadata; its hook is observation-gated.
+The enroller binds only the explicitly supplied suspended original process.
+There is no automatic descendant enrollment here. Environment inheritance is
+not proof of child Known Folder/HKCU mediation or broker isolation. The actual
+game helper/broker route and its need for mediation remain UNKNOWN. Do not
+silently expand hooks to arbitrary children or declare independent authentication
+containment from these storage controls. Continuation remains solely in the
+existing planning handoff.
 
 ### Numbered experimental windows
 

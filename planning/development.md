@@ -103,7 +103,7 @@ starting with storage correctness, stable profile reuse and failure handling.
 No fresh game launch/closure or login request is part of the current source batch.
 Public MC02–04 admission remains denied; CI and retired providers remain off.
 
-**Source baseline:** exact remote Local `15e7c6a56ce5260e27d96dd5bc86397ab5ed62a0`,
+**Source baseline:** exact remote Local `b28f684a1565037f41f4b65da133ddf87158da00`,
 plus the literal input blobs below. Native coordination remains in
 `apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`; its only experiment
 consumer is the existing fixed startup argument. The existing C++ compatibility
@@ -212,7 +212,34 @@ compatibility DLL and manager source are unchanged from the baseline commit;
 this batch found no new production defect and adds regression evidence only.
 No game process was launched, activated or terminated. This covers interruption
 after an acknowledged flush and before replacement, not power loss, torn writes,
-disk-full, post-replacement interruption or LevelDB/game crash recovery.
+disk-full or LevelDB/game crash recovery.
+
+**Post-replacement/mapped-file batch:** a second synchronized phase maps a
+16-byte generated file per slot, writes distinct bytes, flushes both mapped view
+and file, and replaces the old file while retaining the view and an exclusive
+byte lock at offset 8. The unhooked controller proves an overlapping lock fails
+with ERROR_LOCK_VIOLATION and a non-overlapping range at offset 9 succeeds in
+each profile. Only its original first self-child is terminated (exit 92).
+Exclusive backing-file reopen, reacquisition of the formerly locked range and
+exact new bytes prove release of the dead writer's handle/lock and retention
+of the flushed replacement. Retry names are absent. A new enrolled first child
+checks the same bytes through mapping and normal reads; peer survival, both
+normal exits, preserved previous CURRENT markers and unchanged host tree are
+also checked. Eight repeated enlarged configured runs, the other three C++
+modes, 15 Rust bootstrap tests and diff whitespace checks all pass. Production
+DLL/manager source is unchanged; no new production defect was found. This is
+not partial-write/disk-full/power-loss or real-game database acceptance, and
+it does not claim that memory-mapped access is restricted by byte locks.
+
+**Material source-audit blind spot:** `compat.cpp::observedProcess` simply
+forwards original CreateProcessW arguments and records bounded metadata; that
+hook is installed only with observation enabled. `enroll.cpp` binds the original
+explicitly supplied suspended process only. No descendant-enrollment mechanism
+exists in this route. Inherited APPDATA alone does not provide a helper's
+Known Folder/HKCU mediation. The actual Education helper/broker path and whether
+it requires mediation remain UNKNOWN; automatic direct-child enrollment would
+not itself cover broker-activated processes. This is not a proven cause of old
+crashes, nor authorization to inject into arbitrary helpers or change brokers.
 
 The replay owner opens only one hash-pinned, local-only capability's existing
 root/MC01/MC02 directory identities and backing registry keys. Wrong capability,
@@ -234,18 +261,19 @@ Literal code-input blobs (documentation excluded):
 | --- | --- |
 | `independent_bootstrap.rs` | `c9cb47840c04f0de1081e4fefa6d1300057b5b7d` |
 | `compat.cpp` | `400e4453a18b6b9bbefe9401ef798380c003d5d7` |
-| `probe.cpp` | `3817e4c570ef018ed8843a73e20a5a76084fe23b` |
+| `probe.cpp` | `237e6aea99c94f85c74937d9df16573deff594dc` |
 
 **Remaining blind spots:** real saved-world/marker reopen after process restart;
 long concurrent gameplay and recovery after a game crash; full helper/broker
 and HKCU/auth isolation; raw-syscall/alias/host-peer protection; disk-full,
-partial-write, post-replacement interruption and power-loss behavior; FPS/frametime/GPU/CPU overhead and
+partial-write and power-loss behavior; FPS/frametime/GPU/CPU overhead and
 comparison with Sandboxie. Prior raw peer-access control showed that name
 translation is **not a security boundary**. Four clients, installer and
 comparative performance remain **NOT_EXECUTED**. No maturity percentage is
 awarded from fixture coverage.
 
-**One next action:** extend the same generated control to interrupt a writer
-after replacement and verify reopen sees the committed new bytes, while checking
-real byte-range locking/mapped-file compatibility. Keep game UI untouched;
-actual Minecraft restart/soak acceptance waits for an operator-selected window.
+**One next action:** use a fixed self-owned helper to verify inherited environment
+versus effective Known Folder/HKCU, then identify the narrowest existing owner
+change needed for proven helper mediation. Do not infer the actual Education
+broker route, expand arbitrary-child enrollment or use game UI. Minecraft
+restart/soak acceptance remains deferred to an operator-selected test window.
