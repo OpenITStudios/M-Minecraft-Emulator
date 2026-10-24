@@ -1,11 +1,108 @@
 # Windows Acceptance Tooling
 
+## Existing MC01 reactivation/lifecycle diagnostics (explicit opt-in)
+
+The same [collect-mc01-startup.ps1](./collect-mc01-startup.ps1) now has a separate
+reactivation diagnostic path. Default invocation and ordinary -Record retain
+their existing first-startup behavior and refusal of existing game/helper
+processes. This opt-in is not a product launch command, isolation provider or
+authorization to run a second game executable.
+
+Use 64-bit Windows PowerShell 5.1. Source preparation does not itself authorize
+game activity:
+
+~~~powershell
+# Pure guard checks; no game/registration observation or activation.
+powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-mc01-startup.ps1 -SelfTest
+# Actual observer control: creates/releases only its own hidden PowerShell child.
+powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-mc01-startup.ps1 -LifecycleSelfTest
+# Read-only reactivation preflight, requiring one existing official MC01.
+powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-mc01-startup.ps1 -Reactivation
+~~~
+
+Only after explicit approval of **one new registered MC01 reactivation and a
+30-second metadata observation**, add -Record to -Reactivation. The caller must
+be unelevated in an interactive session. The tool never elevates or starts WPR
+in this mode. It verifies the existing registered Desktop image/signature/hash,
+Start-app GUID/path binding, absence of the Store edition and exactly one
+readable same-session game. It retains the original process handle/creation
+FILETIME and repeats binding checks before the one Explorer AppsFolder request.
+There is no direct-EXE fallback, retry, arbitrary target/PID/arguments, game
+termination, sign-in/out, DLL/driver operation or product admission change.
+
+The selected observer uses WMI intrinsic __InstanceCreationEvent and
+__InstanceDeletionEvent with a fixed one-second polling interval. This is an
+explicit weaker observation choice, **not an automatic fallback**: the initial
+Win32_ProcessStartTrace control was denied access on this host, so that native
+trace mechanism is not used for the new unelevated mode. The old elevated
+first-startup collector remains unchanged. Intrinsic polling can miss a process
+that appears and exits between polls. Passing controls or observing no additional
+process **does not prove complete coverage, shell-only reuse or a game mutex
+rejection**.
+
+Before any activation, a fixed hidden PowerShell child waits on its own input
+pipe. Start and stop must both be observed within bounded waits, matched to its
+original process identity/session and WMI creation time (microsecond precision).
+Only this self-created control may be stopped on control failure. Control failure
+or failed revalidation prevents the activation request. Self-test combinations
+with activation/recording are rejected. Cleanup removes only this invocation's
+GUID subscriptions and queued events and checks for remaining owned subscribers.
+
+The local receipt records caller-side request start/end UTC and QPC ticks,
+submission outcome, initial MC01 identity and positively observed process
+candidates/new snapshots. The planned attempt is journaled before the call;
+activationSubmitted means only that Explorer submission returned successfully,
+not that a second game started or that a game PID was returned. Events carry
+allowlisted names/PID/parent/session/birth/event/delivery times; snapshots store
+registration-match flags rather than full paths. Parent PID is not actual
+creator evidence. The collector does not read CommandLine/SID properties or export the whole WMI
+TargetInstance object. No credentials, token/cache/world contents or
+IPC payloads are accessed. Receipts remain private in a new GUID TEMP directory;
+at most 256 selected events and 256 new lifetime candidates are retained.
+The original game is never terminated or signed out by this observer; a concurrent
+exit or identity/collection error makes the result incomplete, without retry.
+
+OBSERVATION_COMPLETED means the timed observer finished. activationTargetPid,
+windowResult, lifecycleCompleteness and singletonDecision remain UNKNOWN;
+authentication is NOT_EXECUTED and providerReady=false. An actual game-bound
+API/object/result/rejection still requires separately reviewed instrumentation.
+
+**Executed source proof — 24 October 2026 WIB:** exact baseline
+d8fd9a6a85e2d9338ab0366fbef388a1ba0f309c; final collector Git blob
+41d377bd1a5ac152c51c6bc3a97efc4bc23de5ac, SHA-256
+d272cadb92781afa8fc5806f6ce5edbcb9b707bfd479c2aacd340e77d3680a56.
+Windows PowerShell 5.1: -SelfTest exits 0 with 19 guard/native-error checks;
+-LifecycleSelfTest exits 0 with both real intrinsic control notifications and
+cleanup. Two conflicting-switch invocations refuse. The legacy startup body
+from its original preflight onward is byte-identical to the baseline.
+
+A retained local-only mocked collector copy exercised the full 30-second
+orchestration/receipt path with game, registration, events/control and activation
+dependencies replaced: successful receipt, one mock submission, original
+self-process preserved; forced control failure yields INCOMPLETE at control
+stage, zero attempted/submitted activations and unchanged mock activation marker.
+This is mocked orchestration, **not** an executed Minecraft request or complete
+real-game preflight. Local artifacts:
+workspace/tmp/reactivation-1792827565190; final mock copy SHA-256
+663c3968d94bd38da5dcf0978009695d6d24b614d1b4b767da3c5441151fa205.
+The canonical registered-target resolver was not changed.
+Actual game reactivation, kernel recording, singleton/auth and two/four-client
+acceptance remain NOT_EXECUTED.
+
+Sources:
+[WMI creation notification](https://learn.microsoft.com/en-us/windows/win32/wmisdk/--instancecreationevent),
+[deletion notification](https://learn.microsoft.com/en-us/windows/win32/wmisdk/--instancedeletionevent),
+[WITHIN polling](https://learn.microsoft.com/en-us/windows/win32/wmisdk/within-clause).
+The [evidence sufficiency decision](../../../docs/validation/native-pilot-localtest.md#singleton-evidence-sufficiency-decision--24-october-2026-wib)
+explains the missing game-specific discriminator. Current continuation remains
+solely in planning/development.md.
+
 ## First MC01 startup metadata (opt-in, no game launcher)
 
 `collect-mc01-startup.ps1` defaults to read-only preflight. It refuses recording
 if **any** `Minecraft.Windows` or `Minecraft.AdalServer` basename is already
 running, including another session or unreadable identity. Preserve that session;
-do not close/sign out just to collect evidence. The collector never launches,
+do not close/sign out just to collect evidence. In default/first-startup mode, the collector never launches,
 restarts, injects or stops a game and never changes product admission.
 Installation resolution reuses
 [`Resolve-ManagerEducationTarget -RegisteredOnly`](../../isolation-source/windows/education-target.ps1);
