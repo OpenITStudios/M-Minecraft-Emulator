@@ -550,21 +550,77 @@ profile or live candidate is changed. Updated DLLs are source/control artifacts
 only; runtime deployment and Minecraft acceptance for this repair are
 **NOT_EXECUTED**.
 
+### Per-client pacing core and actual DXGI attribution
+
+Source baseline `91ae21cacb63366f59f05421ac9d2cbceef24026`. The timing core
+lives beside the existing compatibility experiment, not in a second lifecycle/
+resource manager. `frame-pacing.h` has one rendering consumer and an event-driven
+policy producer. Fixed 144/10 ceilings use QPC and a high-resolution one-shot
+waitable timer. Policy changes and stop interrupt a pending wait; there is no
+polling, global timer-resolution change, suspension, priority manipulation or
+catch-up burst. Construct outside loader lock. It is **not yet connected to
+the compatibility DLL or Minecraft**.
+
+The opt-in `frame-pacing-control` target creates five own hidden, non-activating
+D3D11 WARP swap chains. Synthetic foreground policy rotates through all five.
+Final MSVC x64 Release /W4 /WX build/control passed: 554 release samples over
+3.056 seconds, 0.062 process CPU seconds, maximum policy promotion 0.019 ms,
+joined stop 4.408 ms. Every adjacent release obeyed its selected ceiling.
+Cancellation while waiting, a deliberately delayed frame without catch-up and
+invalid-argument exit 64 passed. These observations describe this small
+own-renderer fixture, not displayed/hardware FPS or Minecraft performance.
+Neither actual focus tracking nor host ticking is proved by this fixture.
+
+The operator explicitly selected a runtime window and authorized opening the
+prior two-profile candidate without Computer Use. No game was initially active.
+The original manager was started with retained process/wait/output handles after
+verifying its 5912f5da manager, 2091e9d2 enroller, 4cc1a121 compatibility and
+41dbc7db replay hashes. This is the previously tested ad7ad74 runtime;
+**91ae21c's storage repair is not deployed there**. Both games responded; the
+operator reported both saved worlds open.
+
+Read-only loaded-module metadata found D3D12/DXGI/D3D12Core in both games, with
+no EGL/OpenGL module in that filtered snapshot. Module presence alone was not
+promoted to presentation proof. The official
+[PresentMon v2.3.1 console](https://github.com/GameTechDev/PresentMon/releases/tag/v2.3.1)
+was downloaded only into ignored local tooling, verified against release
+SHA-256 364e5d98d4d134bd54dd25c22ed2ca2f4883f8bc3ed6502bee0c151e3436d30c
+and a Valid Authenticode signature. Non-elevated capture refused access; the
+authorized UAC launch completed with original collector exit 0. No service,
+overlay or input tracking was enabled.
+
+The 20-second capture attributed 2,589/2,872 presents to the original game PIDs:
+**DXGI only, one swap chain per PID, SyncInterval 1, Composed: Flip**. Mean
+msBetweenPresents was 7.722/6.963; p95 7.632/7.504. This selects the DXGI adapter
+candidate; it does not identify Present versus Present1 callsites, attest a
+hook, prove displayed FPS or establish a foreground/background limiter. Raw
+PIDs, addresses and CSV remain local.
+
+The existing read-only process sampler completed 30.01 seconds/six samples
+without PID birth-identity loss. Selected-game mean CPU was 12.86%/21.58% of
+28 host logical processors; maximum working sets were 2397.70/2547.14 MiB.
+Single-instance dedicated GPU-memory counter maxima were 758.33/989.35 MiB.
+These omit full helper families and are not total VRAM proof. The sampler's
+legacy Native/Sandboxie labels identify selected inputs only: **no Sandboxie
+runtime was activated**. Foreground and host/guest roles were not recorded
+for these samples; they are no controlled optimization/capacity comparison.
+The games remain with the operator; no save, closure, game input or Computer Use
+was performed.
+
 ### Remaining proof and one next action
 
-The five-client goal is ACTIVE. Per-process rendering pacing, automatic focus
-switching, background-host simulation/network health, CPU/RAM/GPU/VRAM overhead,
-five licensed playable clients, long soak and crash recovery remain
+The five-client goal is ACTIVE. The timing core is implemented for its own
+renderer control only. Actual game presentation binding, automatic OS-focus
+switching, background-host simulation/network health, full CPU/RAM/GPU/VRAM
+overhead, five licensed playable clients, long soak and crash recovery remain
 UNKNOWN/NOT_EXECUTED. Full helper HKCU/auth/host-peer containment remains unproved;
-name translation alone is not a security boundary. Distribution remains deferred.
+name translation alone is not a security boundary. Distribution stays deferred.
 
-**One next action:** identify and bind the actual game-world presentation path
-for the pinned official Education image, then implement opt-in per-client 144/10
-pacing in the existing native compatibility route with an own-renderer control.
-Do not treat loaded graphics DLLs, swap-chain queue latency, CPU priority or an
-API fixture as proof of game FPS or independent host ticking. The installed main
-image has no direct graphics imports identifying that path; bundled EGL/D3D
-libraries alone are inconclusive. No live game process was available during this
-read-only metadata check. Runtime attribution must use a suitable operator window,
-without Computer Use. Then verify host health before scaling the same provider
-and persistent slot catalog to five; preserve MC01/MC02 identities.
+**One next action:** bind a window/chain-specific opt-in DXGI Present/Present1
+adapter to the existing compatibility route and pacing core, first through the
+own-renderer control. Preserve caller results/flags and exclude unrelated swap
+chains; initialize graphics outside loader lock. Use the existing lifecycle/
+focus owner instead of a second governor. Then verify real 144/10 switching and
+background Host World health before extending the persistent catalog to five.
+Preserve profiles; do not confuse the old live runtime with source artifacts or
+open public admission from a fixture. Coordinate restarts with normal save/close.

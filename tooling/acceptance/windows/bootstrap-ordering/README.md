@@ -1,5 +1,35 @@
 # Self-owned early-import ordering experiment
 
+## Opt-in rendering timer control
+
+The explicit test-only CMake configuration also builds
+`frame-pacing-control.exe`. Run manually with `--run-self-test`; other arguments
+refuse. It creates five **hidden, non-activating, self-owned** 16×16 D3D11 WARP
+swap chains. It never opens Minecraft, changes foreground focus, sends input,
+installs a service/driver or starts an overlay.
+
+`frame-pacing.h` owns the monotonic deadline, interruptible high-resolution
+timer and stop state. One rendering thread calls `wait_for_frame`; a policy
+producer calls `foreground(bool)` or `stop()`. Stop/join the consumer before
+destruction; construct outside loader lock. Fixed ceilings are 144/10.
+Deadlines follow the last release, without catch-up bursts. A policy event
+interrupts a background wait without polling or global timer-resolution changes.
+The control checks release intervals, both rates per renderer, promotion,
+cancellation, a deliberately late frame and invalid arguments.
+
+It uses Microsoft's [high-resolution waitable timer](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-createwaitabletimerexw),
+[relative one-shot due time](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-setwaitabletimerex)
+and [QPC clock](https://learn.microsoft.com/en-us/windows/win32/sysinfo/acquiring-high-resolution-time-stamps).
+API failures are explicit errors, without a spinning-loop fallback.
+
+Output describes **permit timing and own-process CPU**, not displayed FPS.
+Real DXGI Present calls in this hidden software fixture are not Minecraft's
+D3D12 world workload. Policy changes are synthetic, not actual OS focus tracking.
+No DLL, private enrollment transport or game provider consumes this core yet.
+Actual presentation binding, foreground tracking, host simulation/network
+independence, five real clients and resource savings need separate runtime proof.
+Current evidence and continuation remain solely in `planning/development.md`.
+
 ## Current Education experiment — 24 October 2026
 
 The original self-owned controls below remain controls. The private opt-in
