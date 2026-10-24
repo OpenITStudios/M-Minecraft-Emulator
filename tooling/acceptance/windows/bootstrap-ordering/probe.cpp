@@ -1846,6 +1846,150 @@ struct ConfiguredChild {
     }
 };
 
+// Same native mutation workflow runs unmediated and in both private slots.
+// All names/bytes are generated canaries; no game database is opened.
+void nativeStorageMutationChecks(const std::wstring& base, bool mediated = false) {
+    using SetInformation = NTSTATUS (NTAPI*)(HANDLE, PIO_STATUS_BLOCK, PVOID, ULONG, FILE_INFORMATION_CLASS);
+    const auto set = reinterpret_cast<SetInformation>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtSetInformationFile"));
+    require(set != nullptr);
+    constexpr DWORD sharing = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+    constexpr DWORD sentinel = 0x13579bdf;
+    const auto read = [](const std::wstring& path, const std::string& bytes) {
+        Handle file(CreateFileW(path.c_str(), GENERIC_READ, sharing, nullptr, OPEN_EXISTING, 0, nullptr));
+        expectBytes(file.value, bytes);
+    };
+    const auto check = [](NTSTATUS actual, NTSTATUS expected) {
+        if (actual != expected) std::printf("{\"mutationStatus\":%lu,\"expected\":%lu}\n",
+            static_cast<ULONG>(actual), static_cast<ULONG>(expected));
+        require(actual == expected && GetLastError() == sentinel);
+    };
+    for (ULONG kind : {10UL, 65UL}) for (unsigned form = 0; form < 3; ++form) {
+        const auto sourcePath = base + L"\\mutation-source.bin";
+        const auto targetPath = base + L"\\mutation-target.bin";
+        {
+            Handle target(CreateFileW(targetPath.c_str(), GENERIC_WRITE, sharing,
+                nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
+            require(target.value != INVALID_HANDLE_VALUE);
+            writeBytes(target.value, "OLD-COMMITTED");
+        }
+        {
+            Handle source(CreateFileW(sourcePath.c_str(), GENERIC_READ | GENERIC_WRITE | DELETE,
+                sharing, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
+            require(source.value != INVALID_HANDLE_VALUE);
+            writeBytes(source.value, "NEW-CHECKPOINT");
+            FILE_ID_INFO sourceId{};
+            require(GetFileInformationByHandleEx(source.value, FileIdInfo, &sourceId, sizeof(sourceId)));
+            Handle directory(CreateFileW(base.c_str(), FILE_TRAVERSE | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                sharing, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
+            if (directory.value == INVALID_HANDLE_VALUE) std::printf("{\"traverseDirectoryOpenError\":%lu}\n", GetLastError());
+            require(directory.value != INVALID_HANDLE_VALUE);
+            if (mediated) {
+                // The same ambiguous access on an ordinary file must remain refused.
+                Handle execute(CreateFileW(sourcePath.c_str(), FILE_EXECUTE | FILE_READ_ATTRIBUTES,
+                    sharing, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
+                require(execute.value == INVALID_HANDLE_VALUE);
+                expectBytes(source.value, "NEW-CHECKPOINT");
+                const auto absent = base + L"\\execute-create.bin";
+                Handle create(CreateFileW(absent.c_str(), FILE_EXECUTE, sharing, nullptr, CREATE_NEW,
+                    FILE_FLAG_BACKUP_SEMANTICS, nullptr));
+                require(create.value == INVALID_HANDLE_VALUE
+                    && GetFileAttributesW(absent.c_str()) == INVALID_FILE_ATTRIBUTES
+                    && GetLastError() == ERROR_FILE_NOT_FOUND);
+            }
+            std::wstring nativeBase = L"\\??\\" + base;
+            auto baseName = nativeName(nativeBase);
+            OBJECT_ATTRIBUTES openAttributes{sizeof(OBJECT_ATTRIBUTES), nullptr, &baseName,
+                OBJ_CASE_INSENSITIVE, nullptr, nullptr};
+            const auto open = reinterpret_cast<probe::NativeFileOpen>(
+                GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtOpenFile"));
+            Handle reopened;
+            IO_STATUS_BLOCK opened{};
+            SetLastError(sentinel);
+            require(open != nullptr);
+            check(open(&reopened.value, FILE_TRAVERSE | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                &openAttributes, &opened, sharing, FILE_SYNCHRONOUS_IO_NONALERT), 0);
+            std::wstring name = form == 2 ? targetPath : L"mutation-target.bin";
+            if (form == 2) { // Ordinary NT DOS absolute name, not a Win32 path.
+                require(name.size() > 2 && name[1] == L':');
+                name = L"\\??\\" + name;
+            }
+            struct Rename { ULONG flags; HANDLE root; ULONG bytes; wchar_t name[512]; } info{};
+            require(name.size() < 512);
+            info.root = form == 1 ? directory.value : nullptr;
+            info.bytes = static_cast<ULONG>(name.size() * sizeof(wchar_t));
+            memcpy(info.name, name.data(), info.bytes);
+            const auto rename = [&](ULONG flags, NTSTATUS expected, HANDLE object = nullptr) {
+                info.flags = flags;
+                const auto before = info;
+                IO_STATUS_BLOCK io{};
+                SetLastError(sentinel);
+                const auto status = set(object ? object : source.value, &io, &info,
+                    static_cast<ULONG>(offsetof(Rename, name) + info.bytes), static_cast<FILE_INFORMATION_CLASS>(kind));
+                if (status != expected) std::printf("{\"renameClass\":%lu,\"form\":%u,\"flags\":%lu}\n", kind, form, flags);
+                check(status, expected);
+                require(memcmp(&before, &info, sizeof(info)) == 0);
+            };
+            {
+                Handle limited(CreateFileW(sourcePath.c_str(), GENERIC_READ, sharing, nullptr, OPEN_EXISTING, 0, nullptr));
+                require(limited.value != INVALID_HANDLE_VALUE);
+                rename(1, static_cast<NTSTATUS>(0xc0000022), limited.value);
+                expectBytes(limited.value, "NEW-CHECKPOINT"); read(targetPath, "OLD-COMMITTED");
+            }
+            rename(0, static_cast<NTSTATUS>(0xc0000035)); // Collision keeps both generations.
+            expectBytes(source.value, "NEW-CHECKPOINT"); read(targetPath, "OLD-COMMITTED");
+            require(SetFileAttributesW(targetPath.c_str(), FILE_ATTRIBUTE_READONLY));
+            rename(1, static_cast<NTSTATUS>(0xc0000022));
+            expectBytes(source.value, "NEW-CHECKPOINT"); read(targetPath, "OLD-COMMITTED");
+            require(SetFileAttributesW(targetPath.c_str(), FILE_ATTRIBUTE_NORMAL));
+            {
+                Handle busy(CreateFileW(targetPath.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    nullptr, OPEN_EXISTING, 0, nullptr));
+                require(busy.value != INVALID_HANDLE_VALUE);
+                rename(1, static_cast<NTSTATUS>(0xc0000022));
+                expectBytes(busy.value, "OLD-COMMITTED"); expectBytes(source.value, "NEW-CHECKPOINT");
+            }
+            {
+                Handle snapshot(CreateFileW(targetPath.c_str(), GENERIC_READ, sharing, nullptr, OPEN_EXISTING, 0, nullptr));
+                require(snapshot.value != INVALID_HANDLE_VALUE);
+                // Classic replacement refuses an open target. Ex POSIX can preserve its old reader.
+                rename(kind == 65 ? 3 : 1, kind == 65 ? 0 : static_cast<NTSTATUS>(0xc0000022));
+                expectBytes(snapshot.value, "OLD-COMMITTED");
+            }
+            if (kind == 10) rename(1, 0);
+            read(targetPath, "NEW-CHECKPOINT");
+            Handle replacement(CreateFileW(targetPath.c_str(), GENERIC_READ, sharing, nullptr, OPEN_EXISTING, 0, nullptr));
+            require(replacement.value != INVALID_HANDLE_VALUE);
+            FILE_ID_INFO renamed{};
+            require(GetFileInformationByHandleEx(replacement.value, FileIdInfo, &renamed, sizeof(renamed))
+                && memcmp(&sourceId, &renamed, sizeof(sourceId)) == 0);
+            require(GetFileAttributesW(sourcePath.c_str()) == INVALID_FILE_ATTRIBUTES
+                && GetLastError() == ERROR_FILE_NOT_FOUND);
+            // Delete/cancel must follow Windows, for both classic and Ex forms.
+            for (ULONG flags : {1UL, 0UL}) {
+                IO_STATUS_BLOCK io{};
+                SetLastError(sentinel);
+                check(set(source.value, &io, &flags, kind == 10 ? 1 : sizeof(flags),
+                    static_cast<FILE_INFORMATION_CLASS>(kind == 10 ? 13 : 64)), 0);
+            }
+        }
+        read(targetPath, "NEW-CHECKPOINT"); // Cancellation survived original handle closure.
+        for (bool allowed : {false, true}) {
+            Handle target(CreateFileW(targetPath.c_str(), GENERIC_READ | (allowed ? DELETE : 0),
+                sharing, nullptr, OPEN_EXISTING, 0, nullptr));
+            require(target.value != INVALID_HANDLE_VALUE);
+            ULONG flags = 1;
+            IO_STATUS_BLOCK io{};
+            SetLastError(sentinel);
+            check(set(target.value, &io, &flags, kind == 10 ? 1 : sizeof(flags),
+                static_cast<FILE_INFORMATION_CLASS>(kind == 10 ? 13 : 64)),
+                allowed ? 0 : static_cast<NTSTATUS>(0xc0000022));
+            expectBytes(target.value, "NEW-CHECKPOINT");
+        }
+        require(GetFileAttributesW(targetPath.c_str()) == INVALID_FILE_ATTRIBUTES
+            && GetLastError() == ERROR_FILE_NOT_FOUND);
+    }
+}
+
 void worldStorageChecks(probe::Receipt& receipt) {
     configuredDiagnosticChild = true;
     auto base = directoryPath(receipt.fileLogicalRoot).substr(4);
@@ -1859,6 +2003,7 @@ void worldStorageChecks(probe::Receipt& receipt) {
             require(attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY));
         }
     }
+    nativeStorageMutationChecks(base, true);
     const auto temporary = base + L"\\.manifest.tmp";
     const auto current = base + L"\\CURRENT";
     const auto marker = std::to_string(receipt.slot) + "-" + std::to_string(receipt.fileRound + 1);
@@ -2273,6 +2418,10 @@ int configuredStorageChild(probe::Receipt& receipt) {
 
 bool configuredStoragePair(const std::wstring& self, const std::string& compatibility) {
     ConfiguredRoots roots;
+    const auto reference = roots.root + L"\\native-reference";
+    require(CreateDirectoryW(reference.c_str(), nullptr));
+    nativeStorageMutationChecks(reference); // Same assertions against real unmediated Windows.
+    require(RemoveDirectoryW(reference.c_str()));
     const auto name = L"Local\\EducationCanary_" + std::to_wstring(GetCurrentProcessId())
         + L"_" + std::to_wstring(GetTickCount64());
     RegistryHost registry(name);

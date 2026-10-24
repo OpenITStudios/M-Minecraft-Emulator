@@ -110,6 +110,32 @@ even when both journals save; an own-executable integration case covers this.
 
 ### Nested enumeration and private security access
 
+The native mutation audit additionally found that an existing directory opened
+with FILE_TRAVERSE but without an explicit FILE_DIRECTORY_FILE option was
+rejected as a file execution request. Windows aliases FILE_TRAVERSE and
+FILE_EXECUTE to the same access bit. The unmediated reference succeeded, while
+the configured private child failed at that directory open before correction.
+Existing private opens now require DIRECTORY_FILE in the actual OS call when
+that bit is present. NtCreateFile permits this inference only for FILE_OPEN;
+ambiguous create/overwrite and explicit NON_DIRECTORY requests remain refused.
+NtOpenFile uses the same helper. A generated ordinary file cannot acquire
+that access, and refused creation leaves no file or directory behind.
+
+The same generated mutation workflow runs once against unmediated Windows and
+in both private slots over two lifetimes. It checks classic/Ex rename with
+rootless, directory-handle-relative and NT absolute names: collision, missing
+DELETE access, read-only and busy targets preserve old committed and new retry
+bytes; successful replacement retains the source file identity at the target.
+On this host classic replacement of an open target refuses, while Ex POSIX
+replacement leaves its existing reader on the old bytes and new opens see the
+new generation. Both classic/Ex delete marking can be cancelled before closure;
+missing DELETE access refuses, and authorized deletion removes only the
+generated target. Inputs and native LastError stay unchanged. See Microsoft's
+[rename contract](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_rename_information)
+and [delete flags](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-_file_disposition_information_ex).
+This is host/filesystem-specific control evidence, not a crash diagnosis for
+the two historical length-121 game rejections or a new Minecraft acceptance run.
+
 The real numbered pilot still failed at world creation. Its saved outcomes were
 MC01 access violation (0xC0000005), MC02 exit 0, manager exit 1. The existing
 configured control subsequently reproduced two remaining Windows-API gaps:

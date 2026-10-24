@@ -103,7 +103,7 @@ the operator is working. Preserve existing accounts/worlds. Public MC02–04
 admission, retired providers and GitHub Actions remain disabled.
 
 **Source baseline:** exact remote Local
-`7bff56494db89a0a9e279751bd0c6ec05d4e290d`, plus the earlier handoff input blobs below.
+`fdab689d8e3c150a28f651993f9c8b6da5e3abad`, plus the earlier handoff input blobs below.
 Native preparation/enrollment remains in
 `apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`; the private config,
 enroller, compatibility DLL and own controls remain in
@@ -334,6 +334,40 @@ C++ control modes PASS, and all 36 scoped native-client Rust tests (including
 whitespace check PASS. This batch does not change Rust/frontend source or
 claim a new preview-manager/frontend/game acceptance build.
 
+### Current repair: directory traversal during native rename workflows
+
+The audit found a concrete compatibility defect in compat.cpp::unsupportedFile:
+FILE_TRAVERSE shares FILE_EXECUTE's bit, so an existing child directory opened
+without explicit DIRECTORY_FILE was rejected. The unmediated reference passed
+its mutation workflow, while the private child failed at that directory open
+before correction. The existing native create/open owner now forces the actual
+OS open to DIRECTORY_FILE for that access. NtCreateFile permits unspecified-type
+inference only for FILE_OPEN, not create/overwrite. Explicit NON_DIRECTORY and
+ambiguous creation requests remain refused; a new regular-file traversal check
+and absent-after-refused-create check pass. No generic sandbox layer or new
+public interface is added. Other-path calls retain their original options.
+
+One shared own-data workflow checks six rename combinations (classic/Ex x
+rootless/directory-handle-relative/NT absolute), both delete forms, unchanged
+caller buffers/LastError and successful target file identity. It runs on actual
+unmediated Windows, then both private slots over two lifetimes. Collision,
+read-only/busy targets and missing DELETE access preserve both generations.
+Classic replacement of an open target refuses on this host; Ex POSIX preserves
+its old reader while new opens see the replacement. Delete/cancel survives
+handle closure, insufficient rights cannot delete, and permitted deletion
+removes the generated target. Both native NtOpenFile and Win32/NtCreateFile
+directory traversal paths pass. Existing world-workflow canaries remain intact.
+
+This fixes a demonstrated source/control defect, not a proved cause of the old
+game crashes or length-121 path failures. The new native artifacts are not
+deployed; real-game payload hashes, staged artifacts and live games remain
+unchanged. Actual Minecraft acceptance on this repair remains NOT_EXECUTED.
+
+Final executed checks: MSVC 19.44 x64 Release /W4 /WX build PASS; strengthened
+configured-storage control PASS after its pre-fix private-directory failure;
+all four C++ modes PASS; all 36 scoped native-client Rust tests PASS; diff
+whitespace PASS. No Rust/frontend source or public schema changed in this batch.
+
 ### Remaining proof and one next action
 
 UNKNOWN/NOT_EXECUTED: real saved-world/marker reopen after restart, long
@@ -344,11 +378,11 @@ Prior raw peer-access control showed name translation is not a security
 boundary. Four clients and distribution remain NOT_EXECUTED. Fixture coverage
 does not establish full stability or a development percentage.
 
-**One next action:** audit the handle-relative rename/delete paths against the
-same pinned-parent policy and actual Windows failure results, using only
-generated private data. The two historical game path rejections remain UNKNOWN
-until a future authorized startup/normal-exit run supplies schema-1 detail;
-do not restart the current games for that purpose. Actual current-version
-authentication attribution stays UNKNOWN; do not bind the absent legacy helper
-or unlock public admission. Real world restart/soak acceptance remains deferred
-to an operator-selected window.
+**One next action:** review the final native payload changes and their game
+bootstrap consumers together before any future staged acceptance build. Keep
+current game payload pins closed until that review; do not hot-replace or
+restart live games. The historical path rejections still need a future
+authorized startup/normal-exit journal with detail, and saved-world restart,
+authentication attribution and soak acceptance remain deferred to an
+operator-selected window. Do not bind the absent legacy helper or unlock
+public admission from own-data controls.

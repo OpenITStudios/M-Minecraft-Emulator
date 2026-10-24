@@ -234,12 +234,19 @@ NTSTATUS privateParent(wchar_t* path, unsigned length, HANDLE& parent,
     leaf = {bytes, bytes, path + start};
     return 0;
 }
-bool unsupportedFile(ACCESS_MASK access, ULONG options, bool root) {
+bool unsupportedFile(ACCESS_MASK access, ULONG options, bool root, bool existing) {
     return (root && (access & (DELETE | WRITE_DAC | WRITE_OWNER | GENERIC_ALL)))
-        || ((access & FILE_EXECUTE) && !(root || (options & FILE_DIRECTORY_FILE)))
+        || ((access & FILE_EXECUTE) && !(root || (options & FILE_DIRECTORY_FILE)
+            || (existing && !(options & FILE_NON_DIRECTORY_FILE))))
         || (options & FILE_OPEN_BY_FILE_ID) != 0
         || (root && (options & FILE_DELETE_ON_CLOSE))
         || (root && (options & FILE_NON_DIRECTORY_FILE));
+}
+ULONG privateOpenOptions(ACCESS_MASK access, ULONG options) {
+    // FILE_TRAVERSE and FILE_EXECUTE share a bit. An unspecified-type existing
+    // open may traverse a directory, but must never gain that access to a file.
+    // Create/overwrite without explicit DIRECTORY_FILE remains refused above.
+    return (access & FILE_EXECUTE) ? options | FILE_DIRECTORY_FILE : options;
 }
 NTSTATUS NTAPI translatedFileCreate(PHANDLE handle, ACCESS_MASK access, POBJECT_ATTRIBUTES attributes,
     PIO_STATUS_BLOCK io, PLARGE_INTEGER allocation, ULONG fileAttributes, ULONG share,
@@ -261,7 +268,7 @@ NTSTATUS NTAPI translatedFileCreate(PHANDLE handle, ACCESS_MASK access, POBJECT_
             status = originalFileCreate(handle, access, attributes, io, allocation,
                 fileAttributes, share, disposition, options, ea, eaLength);
         } else if (route == FileRoute::Private
-            && !unsupportedFile(access, options, length == 0)
+            && !unsupportedFile(access, options, length == 0, disposition == 1)
             && (length != 0 || disposition == 1)) {
             OBJECT_ATTRIBUTES copy = *attributes;
             UNICODE_STRING leaf{};
@@ -272,7 +279,7 @@ NTSTATUS NTAPI translatedFileCreate(PHANDLE handle, ACCESS_MASK access, POBJECT_
                 copy.Attributes |= DontReparse;
                 SetLastError(saved);
                 status = originalFileCreate(handle, access, &copy, io, allocation,
-                    fileAttributes, share, disposition, options, ea, eaLength);
+                    fileAttributes, share, disposition, privateOpenOptions(access, options), ea, eaLength);
                 diagnostic = 4;
             }
         }
@@ -304,7 +311,7 @@ NTSTATUS NTAPI translatedFileOpen(PHANDLE handle, ACCESS_MASK access, POBJECT_AT
         if (route == FileRoute::Other) {
             SetLastError(saved);
             status = originalFileOpen(handle, access, attributes, io, share, options);
-        } else if (route == FileRoute::Private && !unsupportedFile(access, options, length == 0)) {
+        } else if (route == FileRoute::Private && !unsupportedFile(access, options, length == 0, true)) {
             OBJECT_ATTRIBUTES copy = *attributes;
             UNICODE_STRING leaf{};
             status = privateParent(path, length, copy.RootDirectory, leaf, held, heldCount);
@@ -313,7 +320,7 @@ NTSTATUS NTAPI translatedFileOpen(PHANDLE handle, ACCESS_MASK access, POBJECT_AT
                 copy.ObjectName = &leaf;
                 copy.Attributes |= DontReparse;
                 SetLastError(saved);
-                status = originalFileOpen(handle, access, &copy, io, share, options);
+                status = originalFileOpen(handle, access, &copy, io, share, privateOpenOptions(access, options));
                 diagnostic = 4;
             }
         }
