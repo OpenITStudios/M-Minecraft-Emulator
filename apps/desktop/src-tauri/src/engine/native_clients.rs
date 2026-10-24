@@ -1,5 +1,5 @@
 // Private, unmounted preparation for the original Education bootstrap experiment.
-#[cfg(windows)]
+#[cfg(all(windows, target_arch = "x86_64"))]
 #[path = "independent_bootstrap.rs"]
 mod independent_bootstrap;
 

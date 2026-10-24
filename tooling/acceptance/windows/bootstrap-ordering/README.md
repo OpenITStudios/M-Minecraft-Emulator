@@ -51,8 +51,8 @@ The original compatibility code now has a separate, private
 [Education bootstrap configuration](./education-config.h). This source seam
 removes the receipt, numeric mutex-name and sibling-directory requirements
 from the **selected storage/HKCU** installation path. It does not select a
-Minecraft provider. The desktop Rust preparer does not yet produce or inject
-this configuration and still has no resume operation.
+Minecraft provider. The desktop Rust preparer now publishes this configuration
+for two fresh slots. It does not inject the DLL or provide a game resume operation.
 
 The target reads a snapshot from an unnamed section through a read-only
 handle; a writable handle is rejected. The controller fills it while its
@@ -101,6 +101,49 @@ private version 1, 1,136 bytes. Neither is a public product wire schema.
 DLL and controlled processes. It is not Minecraft activation, licensed sign-in,
 world persistence, helper isolation or general host/peer access protection.
 Every result retains providerReady=false and minecraft=NOT_EXECUTED.
+
+## Rust owner to native configuration bridge
+
+The private AMD64 desktop module
+[independent_bootstrap.rs](../../../../apps/desktop/src-tauri/src/engine/independent_bootstrap.rs)
+now prepares MC01 and MC02 through the same registered-image creation path.
+It uses actual Roaming/Local Known Folder metadata, requires their supported
+common AppData parent, and creates new GUID-named pilot storage beneath the
+Windows profile, outside that logical AppData tree. Each slot has its own
+nonvolatile ordinary registry key bound to the private directory ID and slot.
+Existing profiles, account caches and worlds are not copied or migrated.
+Fresh data is preserved on failure/drop; no readiness/profile index is added.
+
+Only the read-only section is on the child's explicit inherited-handle list.
+Directory/registry handles are duplicated directly into the original suspended
+child with inheritance disabled. The parent publishes PID/FILETIME/session,
+root IDs and the current-user native key path, then discards its writable
+section view/handle. The receiver disables further section inheritance.
+These mechanisms follow the Windows [handle-list contract](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute)
+and [Unicode environment rules](https://learn.microsoft.com/en-us/windows/win32/procthread/changing-environment-variables).
+APPDATA/LOCALAPPDATA use canonical handle-derived paths, including expansion of
+8.3 aliases; inherited overrides are replaced only in the child block.
+ASCII/local-drive and current mediation limits still apply.
+
+The default Rust checks keep their own executable suspended. One explicitly
+ignored interoperability test accepts the trusted, locally built
+bootstrap-ordering.exe path through MIVUBI_BOOTSTRAP_CPP_READER. That C++ fixture
+has a fixed no-argument configuration-receiver entry when the private section
+is present; it validates the same header, remote object IDs/key binding,
+non-inherited backing handles and environment paths, then writes only fresh
+control markers. Two relaunch rounds check separate retained stores.
+
+On a compatible project toolchain, after building this C++ fixture:
+
+~~~powershell
+$env:MIVUBI_BOOTSTRAP_CPP_READER = (Resolve-Path ./workspace/bootstrap-ordering-build/Release/bootstrap-ordering.exe).Path
+cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml cpp_receiver_consumes_rust_configuration_for_both_slots_across_relaunch -- --ignored --nocapture --test-threads=1
+~~~
+
+This test-only receiver is resumed; the product preparer has no resume,
+injection or public launch API. A module-only harness does not establish a
+full Tauri build, and receiver success does not establish DLL installation,
+Minecraft startup, sign-in, world persistence or containment.
 
 ## Ordering controls and receipt
 

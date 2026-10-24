@@ -1905,6 +1905,56 @@ bool configuredStoragePair(const std::wstring& self, const std::string& compatib
     return true;
 }
 
+
+int readRustBootstrap() {
+    education_bootstrap::Config config{};
+    require(education_bootstrap::read(config));
+    const HANDLE handles[]{config.logicalRoot, config.privateRoot, reinterpret_cast<HANDLE>(config.registryRoot)};
+    for (HANDLE handle : handles) {
+        DWORD flags = 0;
+        require(GetHandleInformation(handle, &flags) && !(flags & HANDLE_FLAG_INHERIT));
+    }
+    FILE_ID_INFO logical{}, own{};
+    require(GetFileInformationByHandleEx(config.logicalRoot, FileIdInfo, &logical, sizeof(logical))
+        && GetFileInformationByHandleEx(config.privateRoot, FileIdInfo, &own, sizeof(own)));
+    require(logical.VolumeSerialNumber == config.logicalId.VolumeSerialNumber
+        && memcmp(logical.FileId.Identifier, config.logicalId.FileId.Identifier, 16) == 0
+        && own.VolumeSerialNumber == config.privateId.VolumeSerialNumber
+        && memcmp(own.FileId.Identifier, config.privateId.FileId.Identifier, 16) == 0);
+    wchar_t leaf[64]{};
+    require(probe::registryStoreLeaf(own, config.slot, leaf));
+    Key user;
+    require(RegOpenCurrentUser(KEY_READ, &user.value) == ERROR_SUCCESS);
+    const auto actualUser = nativeKeyName(user.value);
+    require(actualUser == config.userKeyPath);
+    const auto expected = actualUser + L"\\Software\\MivubiEducationPilot\\" + leaf;
+    require(_wcsicmp(nativeKeyName(config.registryRoot).c_str(), expected.c_str()) == 0);
+    const auto ownPath = directoryPath(config.privateRoot).substr(4);
+    for (const auto& folder : {L"Roaming", L"Local"}) {
+        wchar_t environment[512]{};
+        require(GetEnvironmentVariableW(wcscmp(folder, L"Roaming") == 0 ? L"APPDATA" : L"LOCALAPPDATA",
+            environment, 512) > 0 && ownPath + L"\\" + folder == environment);
+    }
+    DWORD round = 0, type = 0, bytes = sizeof(round);
+    const auto status = RegQueryValueExW(config.registryRoot, L"RustBridgeRound", nullptr, &type,
+        reinterpret_cast<BYTE*>(&round), &bytes);
+    require(status == ERROR_FILE_NOT_FOUND || (status == ERROR_SUCCESS && type == REG_DWORD
+        && bytes == sizeof(round) && round < 2));
+    ++round;
+    setRegistryValue(config.registryRoot, L"RustBridgeRound", round);
+    require(RegFlushKey(config.registryRoot) == ERROR_SUCCESS);
+    {
+        Handle output(CreateFileW((ownPath + L"\\Roaming\\rust-bridge.txt").c_str(), GENERIC_WRITE,
+            FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr));
+        require(output.value != INVALID_HANDLE_VALUE);
+        writeBytes(output.value, std::to_string(config.slot) + ":" + std::to_string(round));
+    }
+    std::printf("{\"case\":\"rust-config-reader\",\"slot\":%lu,\"round\":%lu,"
+        "\"selfCheck\":true,\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n",
+        config.slot, round);
+    return 0;
+}
+
 int childMain() {
     probe::View view;
     if (!view.open()) return 81;
@@ -1935,6 +1985,10 @@ int wmain(int argc, wchar_t** argv) {
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
     if (argc == 2 && wcscmp(argv[1], L"--bootstrap-test-child") == 0) {
         try { return childMain(); } catch (...) { return 85; }
+    }
+    // Fixed no-argument receiver for an explicitly built Rust/C++ interoperability check.
+    if (argc == 1 && education_bootstrap::present()) {
+        try { return readRustBootstrap(); } catch (...) { return 86; }
     }
     const bool configuredTest = argc == 2 && wcscmp(argv[1], L"--run-configured-storage-self-test") == 0;
     const bool mutexTest = argc == 2 && wcscmp(argv[1], L"--run-mutex-self-test") == 0;

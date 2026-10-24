@@ -41,6 +41,7 @@ inline bool read(Config& config) {
     }
     if (!raw) return false;
     const HANDLE section = reinterpret_cast<HANDLE>(raw);
+    if (!SetHandleInformation(section, HANDLE_FLAG_INHERIT, 0)) return false;
     // A target receives a read-only capability, never the parent's writable handle.
     void* writable = MapViewOfFile(section, FILE_MAP_WRITE, 0, 0, sizeof(Config));
     if (writable) { UnmapViewOfFile(writable); return false; }
