@@ -1,8 +1,7 @@
 //! Private first stage of the Education bootstrap experiment.
-//! Unmounted preparation/enrollment only; no game resume or provider admission.
+//! Unmounted opt-in preparation/enrollment/startup observation; no provider admission.
 //! The reviewed payload policy is empty. Only cfg(test) supplies own-build DLL hashes.
-//! The child remains unstarted: profile/auth mediation must precede a future
-//! separately reviewed resume path. Direct-start game compatibility is UNKNOWN.
+//! Game execution requires separate runtime authorization; compatibility is UNKNOWN.
 #![allow(dead_code)]
 
 use std::{
@@ -96,7 +95,7 @@ fn pin_image(path: &Path) -> io::Result<File> {
 }
 
 /// Owns only the original handles returned by this module's CreateProcessW.
-/// There is intentionally no resume, detach, raw-handle export or PID-reopen API.
+/// Cancellation is allowed only before the first resume attempt; no PID-reopen API.
 pub(super) struct PendingEducationBootstrap {
     process: OwnedHandle,
     _thread: OwnedHandle,
@@ -106,6 +105,7 @@ pub(super) struct PendingEducationBootstrap {
     storage: Option<SlotStorage>,
     configuration: Option<OwnedHandle>,
     observation: Option<StartupObservation>,
+    resume_attempted: bool,
 }
 
 impl PendingEducationBootstrap {
@@ -136,9 +136,11 @@ impl PendingEducationBootstrap {
     }
 
     pub(super) fn cancel(&mut self) -> io::Result<()> {
+        if self.resume_attempted {
+            return Err(invalid("A resumed or uncertain child must be preserved"));
+        }
         let process = self.process.as_raw_handle() as HANDLE;
-        // SAFETY: This is exclusively an engine-created child whose primary thread
-        // has no production resume path. Tests may resume only our C++ control executable.
+        // SAFETY: Only an engine-created child with no resume attempt is cancellable.
         match unsafe { WaitForSingleObject(process, 0) } {
             WAIT_OBJECT_0 => return Ok(()),
             WAIT_TIMEOUT => {}
@@ -158,7 +160,7 @@ impl PendingEducationBootstrap {
 
 impl Drop for PendingEducationBootstrap {
     fn drop(&mut self) {
-        if self.cancel().is_err() {
+        if !self.resume_attempted && self.cancel().is_err() {
             eprintln!("Unstarted Education bootstrap child cleanup is unconfirmed");
         }
     }
@@ -309,6 +311,7 @@ fn create_unstarted_impl(
         storage: None,
         configuration: None,
         observation,
+        resume_attempted: false,
     };
     #[cfg(test)]
     if let Some(proof) = proof {
@@ -444,13 +447,15 @@ impl StartupObservation {
 impl PendingEducationBootstrap {
     // Raw diagnostic metadata remains private/local; copy only after the original child exits.
     fn observation_bytes_after_exit(&self) -> io::Result<Vec<u8>> {
-        if unsafe { WaitForSingleObject(self.process.as_raw_handle() as HANDLE, 0) }
-            != WAIT_OBJECT_0
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::WouldBlock,
-                "Observation writer is still alive",
-            ));
+        match unsafe { WaitForSingleObject(self.process.as_raw_handle() as HANDLE, 0) } {
+            WAIT_OBJECT_0 => {}
+            WAIT_TIMEOUT => {
+                return Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "Observation writer is still alive",
+                ))
+            }
+            _ => return Err(io::Error::last_os_error()),
         }
         let observation = self
             .observation
@@ -667,10 +672,146 @@ impl Drop for BootstrapLibrary {
 }
 
 /// Original children are cancelled before DLL/directory pins are released (field drop order).
-/// This private prepared pair has no resume, detach, handle export or admission operation.
+/// Only the explicit observation transaction below can attempt resume; no public admission.
 pub(super) struct PreparedEducationEnrollment {
     _children: [PendingEducationBootstrap; 2],
     _payload: BootstrapLibrary,
+}
+
+/// Per-slot startup result, never game readiness. Unexpected suspend counts are not retried.
+#[derive(Debug)]
+pub(super) enum StartupAttempt {
+    NotAttempted,
+    Resumed,
+    Unconfirmed(io::Error),
+}
+
+/// Retains the same process/config/storage/journal and payload pins while observed.
+/// Drop closes handles and cancels only children whose resume was never attempted.
+/// No job object, timeout termination, automatic helper enrollment or admission.
+pub(super) struct StartedEducationObservation {
+    children: [PendingEducationBootstrap; 2],
+    pub(super) attempts: [StartupAttempt; 2],
+    _payload: BootstrapLibrary,
+}
+
+impl PendingEducationBootstrap {
+    fn resume_once(&mut self) -> io::Result<()> {
+        if self.resume_attempted {
+            return Err(invalid("Bootstrap resume already attempted"));
+        }
+        self.identity()?;
+        // Set before the call: even an ambiguous failure must never fall back to kill-on-drop.
+        self.resume_attempted = true;
+        let previous = unsafe {
+            windows_sys::Win32::System::Threading::ResumeThread(
+                self._thread.as_raw_handle() as HANDLE
+            )
+        };
+        match previous {
+            1 => Ok(()),
+            u32::MAX => Err(io::Error::last_os_error()),
+            _ => Err(invalid(
+                "Unexpected suspend count; child preserved without retry",
+            )),
+        }
+    }
+}
+
+impl PreparedEducationEnrollment {
+    /// Unmounted, separately authorized experiment only. Empty reviewed policy prevents
+    /// constructing this pair for Education. Preflight errors cancel only unstarted children;
+    /// after any attempt return the owner and outcomes even on partial failure.
+    pub(super) fn resume_for_authorized_observation(
+        self,
+    ) -> io::Result<StartedEducationObservation> {
+        for child in &self._children {
+            child.identity()?;
+        }
+        let Self {
+            _children: mut children,
+            _payload,
+        } = self;
+        let mut attempts = [StartupAttempt::NotAttempted, StartupAttempt::NotAttempted];
+        for (child, attempt) in children.iter_mut().zip(&mut attempts) {
+            match child.resume_once() {
+                Ok(()) => *attempt = StartupAttempt::Resumed,
+                Err(error) => {
+                    *attempt = StartupAttempt::Unconfirmed(error);
+                    break;
+                }
+            }
+        }
+        Ok(StartedEducationObservation {
+            children,
+            attempts,
+            _payload,
+        })
+    }
+}
+
+pub(super) struct SavedStartupObservation {
+    pub(super) path: PathBuf,
+    pub(super) exit_code: u32,
+}
+impl StartedEducationObservation {
+    /// Caller polls after the operator closes the game normally. Does not wait, kill,
+    /// infer normal exit from a code, or collect account/world/command-line content.
+    /// Close the manager early and the journal is lost, while attempted children survive.
+    pub(super) fn save_after_exit(&self, slot: u32) -> io::Result<SavedStartupObservation> {
+        use std::io::Write;
+        let child = self
+            .children
+            .get(slot.checked_sub(1).unwrap_or(u32::MAX) as usize)
+            .ok_or_else(|| invalid("Only observation slots 1 and 2 exist"))?;
+        if !child.resume_attempted {
+            return Err(invalid("Observation startup was not attempted"));
+        }
+        let bytes = child.observation_bytes_after_exit()?;
+        let mut exit_code = 0;
+        if unsafe {
+            windows_sys::Win32::System::Threading::GetExitCodeProcess(
+                child.process.as_raw_handle() as HANDLE,
+                &mut exit_code,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        let store = child
+            .storage
+            .as_ref()
+            .ok_or_else(|| invalid("Missing observation storage"))?;
+        // Pin all ordinary ancestors until the create-new write completes; reject substituted paths.
+        let mut pins = Vec::new();
+        for ancestor in store
+            .private_path
+            .ancestors()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+        {
+            pins.push(open_directory(ancestor, FILE_READ_ATTRIBUTES)?);
+        }
+        if !same_image(
+            &directory_id(pins.last().unwrap())?,
+            &directory_id(&store.private)?,
+        ) {
+            return Err(invalid("Observation output directory changed"));
+        }
+        let path = store.private_path.join("startup-observation-v1.bin");
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .share_mode(FILE_SHARE_READ)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(&path)?;
+        image_id(&file)?;
+        file.write_all(&bytes)?;
+        file.sync_all()?;
+        // A failed write leaves an incomplete local artifact; never overwrite it on retry.
+        Ok(SavedStartupObservation { path, exit_code })
+    }
 }
 
 pub(super) fn prepare_registered_enrolled() -> io::Result<PreparedEducationEnrollment> {
@@ -1525,6 +1666,10 @@ mod tests {
             },
             1
         );
+        check_finished_fixture(child);
+    }
+
+    fn check_finished_fixture(child: &PendingEducationBootstrap) {
         assert_eq!(
             unsafe { WaitForSingleObject(child.process.as_raw_handle() as HANDLE, 10000) },
             WAIT_OBJECT_0
@@ -1662,12 +1807,46 @@ mod tests {
             enroller.enroll(&first).unwrap();
             assert_eq!(prepare_fixture(&enroller, &second, &second_proof, true), 0);
             enroller.enroll(&second).unwrap();
-            finish_fixture(&first);
-            finish_fixture(&second);
-            for child in [&first, &second] {
+            let transaction = PreparedEducationEnrollment {
+                _children: [first, second],
+                _payload: BootstrapLibrary::load(root, fixture_digests(root)).unwrap(),
+            }
+            .resume_for_authorized_observation()
+            .unwrap();
+            assert!(transaction
+                .attempts
+                .iter()
+                .all(|a| matches!(a, StartupAttempt::Resumed)));
+            assert!(transaction.save_after_exit(0).is_err());
+            assert!(transaction.save_after_exit(3).is_err());
+            for child in &transaction.children {
+                check_finished_fixture(child);
                 let snapshot = child.observation_bytes_after_exit().unwrap();
                 assert_eq!(u32::from_le_bytes(snapshot[48..52].try_into().unwrap()), 64);
                 assert_eq!(u32::from_le_bytes(snapshot[52..56].try_into().unwrap()), 1);
+                let slot = child.storage.as_ref().unwrap().slot;
+                if round == 1 {
+                    let saved = transaction.save_after_exit(slot).unwrap();
+                    assert_eq!(saved.exit_code, 0);
+                    assert_eq!(std::fs::read(&saved.path).unwrap(), snapshot);
+                }
+                assert_eq!(
+                    transaction.save_after_exit(slot).err().unwrap().kind(),
+                    io::ErrorKind::AlreadyExists
+                );
+                assert_eq!(
+                    std::fs::metadata(
+                        child
+                            .storage
+                            .as_ref()
+                            .unwrap()
+                            .private_path
+                            .join("startup-observation-v1.bin")
+                    )
+                    .unwrap()
+                    .len(),
+                    OBSERVATION_BYTES as u64
+                );
             }
             for store in [&a, &b] {
                 assert_eq!(
@@ -1685,6 +1864,248 @@ mod tests {
                     b"HOST"
                 );
             }
+        }
+    }
+
+    // Test-only duplicates of the original owned fixture handles; bounded panic cleanup
+    // can terminate only this control, never a game or a PID-opened process.
+    struct FixtureLifetime {
+        process: OwnedHandle,
+        thread: OwnedHandle,
+    }
+    impl FixtureLifetime {
+        fn new(child: &PendingEducationBootstrap) -> Self {
+            fn copy(raw: HANDLE) -> OwnedHandle {
+                let mut result = ptr::null_mut();
+                assert_ne!(
+                    unsafe {
+                        DuplicateHandle(
+                            GetCurrentProcess(),
+                            raw,
+                            GetCurrentProcess(),
+                            &mut result,
+                            0,
+                            0,
+                            DUPLICATE_SAME_ACCESS,
+                        )
+                    },
+                    0
+                );
+                unsafe { OwnedHandle::from_raw_handle(result as _) }
+            }
+            Self {
+                process: copy(child.process.as_raw_handle() as HANDLE),
+                thread: copy(child._thread.as_raw_handle() as HANDLE),
+            }
+        }
+        fn raw(&self) -> HANDLE {
+            self.process.as_raw_handle() as HANDLE
+        }
+    }
+    impl Drop for FixtureLifetime {
+        fn drop(&mut self) {
+            if unsafe { WaitForSingleObject(self.raw(), 0) } != WAIT_OBJECT_0 {
+                unsafe {
+                    TerminateProcess(self.raw(), 91);
+                    WaitForSingleObject(self.raw(), 5000);
+                }
+            }
+        }
+    }
+
+    fn fixture_barrier(
+        child: &PendingEducationBootstrap,
+        proof: &FixtureReceipt,
+    ) -> (OwnedHandle, OwnedHandle) {
+        use windows_sys::Win32::System::Threading::CreateEventW;
+        let view = unsafe {
+            MapViewOfFile(
+                proof.0.as_raw_handle() as HANDLE,
+                FILE_MAP_WRITE,
+                0,
+                0,
+                2064,
+            )
+        };
+        assert!(!view.Value.is_null());
+        let events = [2032usize, 2056usize].map(|offset| {
+            let raw = unsafe { CreateEventW(ptr::null(), 1, 0, ptr::null()) };
+            assert!(!raw.is_null());
+            let own = unsafe { OwnedHandle::from_raw_handle(raw as _) };
+            let mut remote = ptr::null_mut();
+            assert_ne!(
+                unsafe {
+                    DuplicateHandle(
+                        GetCurrentProcess(),
+                        raw,
+                        child.process.as_raw_handle() as HANDLE,
+                        &mut remote,
+                        0,
+                        0,
+                        DUPLICATE_SAME_ACCESS,
+                    )
+                },
+                0
+            );
+            unsafe {
+                ptr::write((view.Value as *mut u8).add(offset) as *mut HANDLE, remote);
+            }
+            own
+        });
+        assert_ne!(unsafe { UnmapViewOfFile(view) }, 0);
+        let [ready, finish] = events;
+        (ready, finish)
+    }
+
+    #[test]
+    #[ignore = "Requires the explicitly built own C++ payload"]
+    fn observation_transaction_preserves_attempted_children_on_partial_resume_and_drop() {
+        use windows_sys::Win32::System::Threading::{ResumeThread, SetEvent, SuspendThread};
+        let path = PathBuf::from(std::env::var_os("MIVUBI_BOOTSTRAP_CPP_READER").unwrap())
+            .canonicalize()
+            .unwrap();
+        assert_eq!(path.file_name(), Some(OsStr::new("bootstrap-ordering.exe")));
+        let root = path.parent().unwrap();
+        let library = BootstrapLibrary::load(root, fixture_digests(root)).unwrap();
+        let [a, b] = test_slots();
+        let proofs = [FixtureReceipt::new(), FixtureReceipt::new()];
+        let children = [a, b]
+            .into_iter()
+            .zip(&proofs)
+            .map(|(store, proof)| {
+                std::fs::write(
+                    directory_path(&store.logical)
+                        .unwrap()
+                        .join("Roaming/rust-enrolled.txt"),
+                    b"HOST",
+                )
+                .unwrap();
+                let child = create_unstarted_impl(
+                    &path,
+                    pin_image(&path).unwrap(),
+                    Some(store),
+                    true,
+                    Some(proof),
+                )
+                .unwrap();
+                assert_eq!(prepare_fixture(&library, &child, proof, true), 0);
+                library.enroll(&child).unwrap();
+                child
+            })
+            .collect::<Vec<_>>();
+        let children: [PendingEducationBootstrap; 2] = children.try_into().ok().unwrap();
+        let held = children.each_ref().map(FixtureLifetime::new);
+        let barriers = [
+            fixture_barrier(&children[0], &proofs[0]),
+            fixture_barrier(&children[1], &proofs[1]),
+        ];
+        // Force the second call to report "still suspended", after the first has started.
+        assert_eq!(
+            unsafe { SuspendThread(children[1]._thread.as_raw_handle() as HANDLE) },
+            1
+        );
+        let mut transaction = PreparedEducationEnrollment {
+            _children: children,
+            _payload: library,
+        }
+        .resume_for_authorized_observation()
+        .unwrap();
+        assert!(matches!(transaction.attempts[0], StartupAttempt::Resumed));
+        assert!(matches!(
+            transaction.attempts[1],
+            StartupAttempt::Unconfirmed(_)
+        ));
+        assert_eq!(
+            unsafe { WaitForSingleObject(barriers[0].0.as_raw_handle() as HANDLE, 10000) },
+            WAIT_OBJECT_0
+        );
+        assert_eq!(
+            transaction.save_after_exit(1).err().unwrap().kind(),
+            io::ErrorKind::WouldBlock
+        );
+        for child in &mut transaction.children {
+            assert!(child.cancel().is_err());
+            assert!(child.resume_once().is_err());
+        }
+        drop(transaction);
+        for lifetime in &held {
+            assert_eq!(
+                unsafe { WaitForSingleObject(lifetime.raw(), 0) },
+                WAIT_TIMEOUT
+            );
+        }
+        // Explicit recovery/normal finish only for our controlled executable.
+        assert_eq!(
+            unsafe { ResumeThread(held[1].thread.as_raw_handle() as HANDLE) },
+            1
+        );
+        assert_eq!(
+            unsafe { WaitForSingleObject(barriers[1].0.as_raw_handle() as HANDLE, 10000) },
+            WAIT_OBJECT_0
+        );
+        for (_, finish) in &barriers {
+            assert_ne!(unsafe { SetEvent(finish.as_raw_handle() as HANDLE) }, 0);
+        }
+        for lifetime in &held {
+            assert_eq!(
+                unsafe { WaitForSingleObject(lifetime.raw(), 10000) },
+                WAIT_OBJECT_0
+            );
+            let mut exit = 1;
+            assert_ne!(unsafe { GetExitCodeProcess(lifetime.raw(), &mut exit) }, 0);
+            assert_eq!(exit, 0);
+        }
+    }
+
+    #[test]
+    #[ignore = "Requires the explicitly built own C++ payload"]
+    fn transaction_preflight_and_not_attempted_children_keep_unstarted_cleanup() {
+        use windows_sys::Win32::System::Threading::SuspendThread;
+        let path = PathBuf::from(std::env::var_os("MIVUBI_BOOTSTRAP_CPP_READER").unwrap())
+            .canonicalize()
+            .unwrap();
+        let root = path.parent().unwrap();
+        for preflight_failure in [true, false] {
+            // No execution or enrollment in these ownership failure branches.
+            let mut children =
+                [0, 1].map(|_| create_unstarted(&path, pin_image(&path).unwrap(), None).unwrap());
+            let held = children.each_ref().map(FixtureLifetime::new);
+            if preflight_failure {
+                children[1].cancel().unwrap();
+            } else {
+                assert_eq!(
+                    unsafe { SuspendThread(children[0]._thread.as_raw_handle() as HANDLE) },
+                    1
+                );
+            }
+            let prepared = PreparedEducationEnrollment {
+                _children: children,
+                _payload: BootstrapLibrary::load(root, fixture_digests(root)).unwrap(),
+            };
+            let started = prepared.resume_for_authorized_observation();
+            if preflight_failure {
+                assert!(started.is_err());
+            } else {
+                let started = started.unwrap();
+                assert!(matches!(
+                    started.attempts[0],
+                    StartupAttempt::Unconfirmed(_)
+                ));
+                assert!(matches!(started.attempts[1], StartupAttempt::NotAttempted));
+                drop(started);
+            }
+            assert_eq!(
+                unsafe { WaitForSingleObject(held[1].raw(), 5000) },
+                WAIT_OBJECT_0
+            );
+            assert_eq!(
+                unsafe { WaitForSingleObject(held[0].raw(), 0) },
+                if preflight_failure {
+                    WAIT_OBJECT_0
+                } else {
+                    WAIT_TIMEOUT
+                }
+            );
         }
     }
 

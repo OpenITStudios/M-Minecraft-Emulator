@@ -2073,6 +2073,11 @@ int readRustEnrollmentControl() {
     // The cached host handle must now read this slot's private marker; the parent checks the host.
     require(registryValue(receipt.cachedHostKey, L"Marker") == config.slot * 100 + 3);
     checkStartupObservation(config, receipt);
+    // Optional existing receipt events let the Rust owner verify live Drop preservation.
+    if (receipt.ready || receipt.finish) {
+        require(receipt.ready && receipt.finish && SetEvent(receipt.ready));
+        require(WaitForSingleObject(receipt.finish, 10000) == WAIT_OBJECT_0);
+    }
     std::printf("{\"case\":\"rust-enrollment-control\",\"slot\":%lu,\"round\":%lu,"
         "\"earlyPrivate\":7,\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n", config.slot, round);
     return 0;

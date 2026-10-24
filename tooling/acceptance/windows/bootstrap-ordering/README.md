@@ -54,8 +54,8 @@ removes the receipt, numeric mutex-name and sibling-directory requirements
 from the **selected storage/HKCU** installation path. It does not select a
 Minecraft provider. The desktop Rust preparer now publishes this configuration
 for two fresh slots. Its optional private enrollment seam requires separately
-reviewed DLL bytes and has no game resume operation; the reviewed payload policy
-is currently empty.
+reviewed DLL bytes. Its explicit private startup observation transaction is
+unmounted and the reviewed payload policy is currently empty.
 
 The target reads a snapshot from an unnamed section through a read-only
 handle; a writable handle is rejected. The controller fills it while its
@@ -151,9 +151,10 @@ configuration, original pinned image handle and optional observation section. Na
 image identity/session/AMD64/config/registry binding before inserting the one
 fixed sibling compatibility DLL. It does not read the fixture receipt or create
 fixture keys, reopens PIDs, accepts target/DLL paths, resumes a child or launches
-a helper. Fixture canary preparation is a separate test export. The two-child
-owner cancels children before releasing module/file/directory pins; any error
-retains that cleanup order. The default registered route still cannot resume.
+a helper. Fixture canary preparation is a separate test export. The prepared pair
+cancels unstarted children before releasing module/file/directory pins. Only its
+explicit private observation transaction below can attempt resume; no product
+command or reviewed game payload enables it.
 
 Microsoft Detours remains the existing external development-only static dependency
 at the pinned revision, built only with BOOTSTRAP_ORDERING_TEST_ONLY=ON. Its bytes
@@ -161,11 +162,11 @@ are covered by the reviewed enroller digest, not dynamically resolved from PATH.
 No dependency, installer resource, bundle rule or release format was added.
 Production dependency/payload adoption remains undecided.
 
-The default Rust checks keep their own executable suspended. Three explicitly
+The default Rust checks keep their own executable suspended. Five explicitly
 ignored checks accept the trusted built own fixture through
 MIVUBI_BOOTSTRAP_CPP_READER. They exercise the no-DLL ABI receiver, wrong DLL
 hashes/write exclusion, and complete enrollment through the shared loader/entry.
-The last prepares separate cooperative instrumentation first, then invokes the
+The enrollment check prepares separate cooperative instrumentation, then invokes the
 same receipt-independent enrollment operation used by the private game seam.
 A positive unhooked baseline sees host canaries; enrolled dependency/TLS/main
 perform private native registry reads/writes/enumeration. Roaming/Local environment
@@ -181,21 +182,21 @@ $env:MIVUBI_BOOTSTRAP_CPP_READER = (Resolve-Path ./workspace/bootstrap-ordering-
 cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml independent_bootstrap::tests -- --include-ignored --nocapture --test-threads=1
 ~~~
 
-Executed against baseline `dc605f50eafe6fe9ea2c72c4b6df1340a616e1f9`: MSVC
-19.44 x64 Release /W4 /WX build, all ten Rust checks (three ignored checks
-explicitly included), and all four existing C++ modes pass. The unchanged Rust
-module was compiled in an isolated Rust 1.96/sha2 0.11.1/windows-sys 0.61.2 harness
-whose Education resolver always refuses. Empty payload policy refuses before it.
-Full Tauri build remains NOT_EXECUTED (project requires Rust 1.98). Exact own-image
-metadata check: zero remaining fixture processes.
+Executed against baseline `66cea89add4d32163ceb4ae4cb10c4f24b2d25db`: MSVC
+19.44 x64 Release /W4 /WX build, all twelve Rust checks (five ignored checks
+explicitly included), and all four existing C++ modes pass. The exact Rust
+module was compiled without warnings in an isolated Rust 1.96/sha2 0.11.1/
+windows-sys 0.61.2 harness whose Education resolver always refuses.
+Full Tauri build remains NOT_EXECUTED (project requires Rust 1.98).
+Exact own-image CIM check: zero remaining fixture processes.
 
 | Executed input | Git blob |
 | --- | --- |
-| independent_bootstrap.rs | `18e287e3be3571be9443ec8496c8fb93c285e1d3` |
+| independent_bootstrap.rs | `1d01c5c7f533de8c79844ca8d51ac25cd8614e66` |
 | startup-observation.h | `7184d279d25c0cdebdc98813a034c25c3830896e` |
 | compat.cpp | `1c26d77bc99f7cf5728f4a22149f8e350a64d164` |
 | enroll.cpp | `4d75fbe9cd3150b1304af6230ef0820d98dcbe9b` |
-| probe.cpp | `108d3db6054ece10779e0acd7374ed24ce0d9d0b` |
+| probe.cpp | `d8076314cce943e27d19f289f08e91405900d750` |
 
 No registered game was looked up, created, injected or resumed by these checks.
 Actual singleton, helper/broker context, native/file bypass coverage, game loader
@@ -248,11 +249,55 @@ checking the 30-second boundary; this is not a 30-second Minecraft capture.
 The sole new internal child argument exits only our own fixture immediately;
 it supplies a process-creation control and accepts no target path.
 
-The private registered enrolled path still rejects its empty reviewed-payload
-policy before game lookup and has no resume operation. Its pending owner cancels
-unstarted children on Drop; a future opt-in game runner must explicitly preserve
-resumed game lifetimes instead of treating them as pending preparations.
-Source observation preparation does not authorize actual game injection/resume.
+### Explicit startup transaction and exit extraction
+
+The private prepared pair has one consuming
+`resume_for_authorized_observation` operation. It preflights both original
+process lifetimes, calls ResumeThread once per slot and stops on error. Only
+previous suspend count 1 is Resumed; unexpected counts or API errors are
+Unconfirmed, with later slots NotAttempted. These are startup-call outcomes,
+never game readiness. The Windows [ResumeThread contract](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-resumethread)
+defines those counts; there is no retry to force an unknown child to run.
+
+Before the OS call the child irreversibly disables cancellation. Partial
+failure, observation expiry and owner Drop cannot terminate any attempted
+child. Preflight errors and untouched children retain unstarted cleanup.
+The returned owner retains the same handles/config/stores/journals and payload
+pins. Closing the manager releases its handles/pins and loses journals that
+were not exported; it preserves attempted processes, following Windows
+[CloseHandle semantics](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-closehandle).
+An uncertain call may leave a suspended child; this is reported without an
+automatic retry or kill. Preservation does not prove successful startup.
+
+After the operator closes a game normally, `save_after_exit(slot)` polls
+the original process without a blocking wait. Live writers refuse; other wait
+errors propagate. A signaled exit permits header-validated snapshot extraction
+and the observed exit code. [GetExitCodeProcess](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getexitcodeprocess)
+does not by itself prove normal user closure, and code 259 is not used as a
+liveness test. No crash/normal-close inference is made.
+
+Extraction revalidates/pins the existing slot directory and all ordinary
+ancestors, then writes/syncs `startup-observation-v1.bin` with create-new
+semantics. No arbitrary output path, overwrite, profile migration or deletion.
+A failed write can leave a partial local file and later attempts refuse it.
+Raw metadata stays local, outside Git and public commands. Keep the owner alive
+until both games are closed and each journal is extracted.
+
+The existing two-slot/two-round integration uses this transaction and checks
+after-exit persistence, invalid slots and overwrite refusal. Two additional
+own-executable ownership checks cover preflight/NotAttempted cleanup and partial
+resume uncertainty. Optional ready/finish barriers use existing private receipt
+events solely in the Rust-owned C++ control; they prove the first child remains
+live after owner Drop while the second remains suspended. The test alone recovers
+that second control and releases both normally. They also verify live-writer,
+cancel and repeat-resume refusal. No new CLI, receipt version or observer was
+added.
+
+The registered path still rejects its empty reviewed payload policy before
+game lookup. This transaction remains unmounted; no game injection/resume
+authorization, provider admission or product launch command is added.
+The sole proposed runtime experiment and its next authorization step belong
+in planning/development.md, not a second test/status queue.
 
 ## Ordering controls and receipt
 
