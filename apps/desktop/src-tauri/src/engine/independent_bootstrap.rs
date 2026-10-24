@@ -1183,6 +1183,7 @@ struct SlotStorage {
     slot: u32,
     logical: File,
     private: File,
+    temporary: [File; 2], // Retain ordinary Local and Local/Temp without delete sharing.
     registry: RegistryKey,
     user_key_path: [u16; 512],
     // Fresh data persists on drop; this is not another profile/readiness database.
@@ -1350,6 +1351,19 @@ fn user_registry_path() -> io::Result<[u16; 512]> {
     Ok(result)
 }
 
+fn private_temporary(private: &File) -> io::Result<[File; 2]> {
+    let access = FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY;
+    let local = open_directory(&directory_path(private)?.join("Local"), access)?;
+    let path = directory_path(&local)?.join("Temp");
+    match std::fs::create_dir(&path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(error),
+    }
+    let temporary = open_directory(&path, access)?;
+    Ok([local, temporary]) // Never follow a reparse, clear a cache or copy a profile.
+}
+
 fn fresh_slots(logical: File, parent: &Path) -> io::Result<[SlotStorage; 2]> {
     let logical_path = directory_path(&logical)?;
     let root = fresh_root(parent)?;
@@ -1403,6 +1417,7 @@ fn fresh_slots(logical: File, parent: &Path) -> io::Result<[SlotStorage; 2]> {
         slots.push(SlotStorage {
             slot,
             logical: logical.try_clone()?,
+            temporary: private_temporary(&private)?,
             private,
             registry,
             user_key_path,
@@ -1548,6 +1563,7 @@ fn reopen_slots(
         slots.push(SlotStorage {
             slot,
             logical: logical.try_clone()?,
+            temporary: private_temporary(&private)?,
             private,
             registry: RegistryKey(key),
             user_key_path,
@@ -1821,6 +1837,8 @@ fn child_environment(
     let reserved: Vec<Vec<u16>> = [
         "APPDATA",
         "LOCALAPPDATA",
+        "TMP",
+        "TEMP",
         CONFIG_ENV,
         "MIVUBI_BOOTSTRAP_TEST_SECTION",
         OBSERVATION_ENV,
@@ -1859,6 +1877,7 @@ fn child_environment(
         FreeEnvironmentStringsW(raw);
     }
     copied?;
+    let temporary = directory_path(&storage.temporary[1])?.into_os_string();
     for (key, value) in [
         (
             "APPDATA",
@@ -1868,6 +1887,8 @@ fn child_environment(
             "LOCALAPPDATA",
             storage.private_path.join("Local").into_os_string(),
         ),
+        ("TMP", temporary.clone()),
+        ("TEMP", temporary),
         (CONFIG_ENV, OsString::from(format!("{}", section as usize))),
     ] {
         let mut entry: Vec<u16> = OsStr::new(key).encode_wide().collect();
@@ -2086,6 +2107,10 @@ impl SlotStorage {
             slot: self.slot,
             logical: self.logical.try_clone()?,
             private: self.private.try_clone()?,
+            temporary: [
+                self.temporary[0].try_clone()?,
+                self.temporary[1].try_clone()?,
+            ],
             registry,
             user_key_path: self.user_key_path,
             private_path: self.private_path.clone(),
@@ -3321,7 +3346,7 @@ mod tests {
     fn replay_reopens_only_the_reviewed_existing_pair() {
         use sha2::{Digest, Sha256};
         let stores = test_slots();
-        let root = stores[0].private_path.parent().unwrap();
+        let root = stores[0].private_path.parent().unwrap().to_path_buf();
         let parent = root.parent().unwrap();
         let mut bytes = [0u8; 216];
         for (at, value) in [(0, 0x52504c31u32), (4, 1), (8, 216)] {
@@ -3330,7 +3355,7 @@ mod tests {
         for (i, unit) in root.file_name().unwrap().encode_wide().enumerate() {
             bytes[16 + i * 2..18 + i * 2].copy_from_slice(&unit.to_le_bytes());
         }
-        let root_file = open_directory(root, FILE_READ_ATTRIBUTES).unwrap();
+        let root_file = open_directory(&root, FILE_READ_ATTRIBUTES).unwrap();
         for (i, file) in [&root_file, &stores[0].private, &stores[1].private]
             .iter()
             .enumerate()
@@ -3341,6 +3366,13 @@ mod tests {
             bytes[at + 8..at + 24].copy_from_slice(&id.FileId.Identifier);
         }
         let expected: [u8; 32] = Sha256::digest(bytes).into();
+        for store in &stores {
+            std::fs::write(
+                store.private_path.join("Local/Temp/replay-temp-canary.bin"),
+                format!("slot-{}", store.slot),
+            )
+            .unwrap();
+        }
         assert!(reopen_slots(
             stores[0].logical.try_clone().unwrap(),
             parent,
@@ -3361,6 +3393,19 @@ mod tests {
                 &directory_id(&reopened[i].private).unwrap()
             ));
             assert_eq!(stores[i].private_path, reopened[i].private_path);
+            assert!(same_image(
+                &directory_id(&stores[i].temporary[1]).unwrap(),
+                &directory_id(&reopened[i].temporary[1]).unwrap()
+            ));
+            assert_eq!(
+                std::fs::read(
+                    reopened[i]
+                        .private_path
+                        .join("Local/Temp/replay-temp-canary.bin")
+                )
+                .unwrap(),
+                format!("slot-{}", i + 1).as_bytes()
+            );
         }
         let mut replaced = bytes;
         replaced[168] ^= 1;
@@ -3374,15 +3419,15 @@ mod tests {
         .is_err());
         // A missing directory must fail, not recreate an empty profile.
         drop(reopened);
-        std::fs::remove_dir(stores[0].private_path.join("Local")).unwrap();
-        assert!(reopen_slots(
-            stores[0].logical.try_clone().unwrap(),
-            parent,
-            &bytes,
-            Sha256::digest(bytes).into()
-        )
-        .is_err());
-        assert!(!stores[0].private_path.join("Local").exists());
+        let local = stores[0].private_path.join("Local");
+        let logical = stores[0].logical.try_clone().unwrap();
+        std::fs::remove_file(local.join("Temp/replay-temp-canary.bin")).unwrap();
+        assert!(std::fs::remove_dir(local.join("Temp")).is_err()); // Live storage pins protect it.
+        drop(stores);
+        std::fs::remove_dir(local.join("Temp")).unwrap();
+        std::fs::remove_dir(&local).unwrap();
+        assert!(reopen_slots(logical, parent, &bytes, Sha256::digest(bytes).into()).is_err());
+        assert!(!local.exists());
     }
 
     fn read_config(child: &PendingEducationBootstrap) -> EducationConfig {

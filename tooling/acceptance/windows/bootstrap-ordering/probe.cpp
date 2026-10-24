@@ -2896,6 +2896,13 @@ int readRustEnrollmentControl() {
     education_bootstrap::Config config{};
     require(education_bootstrap::read(config));
     const auto ownPath = directoryPath(config.privateRoot).substr(4);
+    // Path identity must be private even for an unmediated descendant (e.g. CEF).
+    for (const auto* variable : {L"TMP", L"TEMP"}) {
+        require(childEnvironment(variable) == ownPath + L"\\Local\\Temp");
+    }
+    wchar_t temporary[512]{};
+    require(GetTempPathW(512, temporary) > 0
+        && std::wstring(temporary) == ownPath + L"\\Local\\Temp\\");
     const auto logicalPath = directoryPath(config.logicalRoot).substr(4);
     for (const auto& folder : {L"Roaming", L"Local"}) {
         wchar_t environment[512]{};

@@ -103,7 +103,7 @@ the operator is working. Preserve existing accounts/worlds. Public MC02–04
 admission, retired providers and GitHub Actions remain disabled.
 
 **Source baseline:** exact remote Local
-`e5f51a4a269facc2187fa9fb530148ab6a4ea9f2`, plus the earlier handoff input blobs below.
+`e2905a3e0bb3c4ae94693417b90d3002ecc35c7d`, plus the earlier handoff input blobs below.
 Native preparation/enrollment remains in
 `apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`; the private config,
 enroller, compatibility DLL and own controls remain in
@@ -150,13 +150,13 @@ stopped. Reopened accounts/worlds/markers after that full process restart remain
 NOT_VERIFIED. Do not repeat or close that run without checking actual lifetime
 and operator intent; current work is source/automatic controls only.
 
-Game-tested manager:
+Earlier create/play/save/clean-close manager:
 `eaa65ac1997bf6227b374bd2dce893346d7258c3fced46ed4973ac966d059687`.
-Latest source-only manager build (not launched into Minecraft):
-`790c5b774ef731ffea5fe314394daff69f32c8a0e95eadfa667f0462537062bb`.
-Game-tested compatibility DLL:
+Current manager exercised by two-client runtime (not release acceptance):
+`5912f5dad64a3730c0df9b90a3ba0ea781059d556ef181b349fc21b762fb40e8`.
+Earlier game-tested compatibility DLL:
 `a59fb1803ff3d957b9691017f24dd7211a9b3f88b6a7b13988432210d67e02ec`.
-Game-tested enroller:
+Earlier game-tested enroller:
 `18f4157b524f142f2bac85efd6d95b5df69d161a1e1a0da6c10788c94868f384`.
 Official game image:
 `04164c1c64458a5d984dbc1687d0e8023d1808c44ee7be03519cdf8355233eaa`.
@@ -368,7 +368,7 @@ configured-storage control PASS after its pre-fix private-directory failure;
 all four C++ modes PASS; all 36 scoped native-client Rust tests PASS; diff
 whitespace PASS. No Rust/frontend source or public schema changed in this batch.
 
-### Current candidate: reviewed payload pair and mandatory existing-profile replay
+### Previous candidate: reviewed payload pair and mandatory existing-profile replay
 
 The native review traced BootstrapLibrary::reviewed/load, the read-only config
 and enroller ABI, original suspended child ownership, DLL attach, replay and
@@ -416,21 +416,98 @@ before the waited control was run. The waited process's exit was verified.
 Read-only metadata confirms the same two existing responding game lifetimes;
 no new game, restart, closure, window input or Computer Use occurred.
 
+### Current repair and actual runtime: private Temp identity for CEF
+
+On 25 October the operator selected an integrated acceptance window, finished
+using the old games, and authorized the new pair. Both previous original game
+processes exited 0 with saved journals; the old manager was absent, without a
+retained exit-code handle for that older run. The e2905a3
+candidate reopened the reviewed same pair and loaded its exact compatibility
+DLL in both games. The operator reported smooth play, but opening worlds also
+produced an unexpected full Chromium New Tab window (screenshot supplied).
+
+Read-only process/module metadata found bundled Minecraft.CodeBuilder.exe
+descendants of one game, loading the installed libcef.dll. Predicate-only WMI
+queries classified GPU/renderer/utility roles and technical switch/path patterns;
+no command-line strings, URLs, credentials, cache or world contents were read.
+There was no untyped CodeBuilder browser process in that snapshot. The known
+private pilot basename and MC01/MC02 patterns did not match after user-data-dir;
+Temp/minecraftpe patterns did. These predicates do not expose an exact path or
+alone attest its ownership. The helper lacks an individual Authenticode
+signature; installed ancestry is not publisher approval or enrollment policy.
+
+CEF branch 6723 (matching the installed Chromium 130 family) documents a
+[root-cache process singleton and default Chrome-window relaunch behavior](https://raw.githubusercontent.com/chromiumembedded/cef/6723/include/cef_browser_process_handler.h).
+Its [settings contract](https://raw.githubusercontent.com/chromiumembedded/cef/6723/include/internal/cef_types.h)
+requires separate root-cache identities for independent instances. Source review
+found APPDATA/LOCALAPPDATA were private but TMP/TEMP were inherited unchanged.
+Native file redirection alone therefore could not supply a distinct temp path
+identity to the unmediated CEF subprocesses or cache-based singleton decisions.
+
+The existing SlotStorage owner now retains ordinary Local and Local/Temp handles
+with FILE_LIST_DIRECTORY/READ_ATTRIBUTES and no delete sharing. An existing
+Temp directory is opened, never cleared; only a missing empty Temp child under
+the pinned Local is created. Missing Local still refuses replay, and reparses
+are rejected by the existing directory validator. child_environment replaces
+TMP and TEMP case-insensitively with that canonical private physical path.
+Duplicated own-helper storage keeps the same pins. No game file, profile root,
+wire schema, DLL hook, token/cache/world data or real helper enrollment changed.
+
+The actual own-executable GetTempPathW/TMP/TEMP control failed before this fix
+and passed in both slots/two lifetimes afterward. Replay verifies same Temp IDs
+and retained distinct canary bytes, live pins refuse removal, and after dropping
+only own fixture pins a missing Local still refuses without recreating it.
+An attribute-only directory handle did not prevent removal on this Windows
+host; adding directory-list access made the pin-removal regression pass.
+All 37 scoped native Rust tests, preview manager build, rustfmt and whitespace
+checks PASS. The final test-only pin-removal refinement removes only the own
+canary first, so it proves denial on an empty Temp rather than a nonempty-folder
+failure. Product runtime code is unchanged from the exercised manager.
+The native DLL pair remains byte-identical to e2905a3: enroller
+2091e9d25e63e90a4241c43f84fa9f2588e7ab6273612286e565d0e96ff932ed and
+compatibility 4cc1a12146b38aad58e1b0ad43926fbffdbdfe5d2b1c111e456e62f78801cb17.
+
+After normal user save/close, both e2905a3 original children and manager exited
+0. With explicit operator authorization, the separate private-temp candidate
+(current manager hash above, same DLL pair and replay metadata) launched the
+same profiles. The operator then confirmed Chromium no longer appears in
+either world, automatic sign-in succeeded, gameplay is smooth, and both gold
+and diamond world markers survived restart. These account/world/gameplay facts
+are operator-confirmed, not UI automation or token inspection. Exact duration,
+long soak and forced game-crash recovery are not established. No Computer Use
+was performed. The current games were preserved after the report.
+
+Post-world metadata found six CEF descendants per original game; all matching
+MC01 user-data-dir patterns belonged to the first game, all matching MC02
+patterns to the second. Both original games remained responding. This plus the
+controlled Temp change and disappearance of the popup supports the shared-temp/
+CEF identity diagnosis, without claiming a traced CefInitialize call stack or
+full helper HKCU/authentication containment. The local private-temp candidate
+manifest binds its exact files/source commit; private runtime IDs remain local.
+
+The closed e2905a3 journals finally identify the older two length-121 create
+rejections in each slot: detail schema 1, stage ComposedPath (3), DepthLimit (4).
+Counts were [314,2,0,46,46] and [322,2,0,358,46]. The writer identities and
+headers were validated only after original exit; no filenames were collected.
+The eight-component validator limit is now a demonstrated residual storage
+restriction, not an unknown hypothesis. Its exact requested filenames remain
+unknown and the current Temp fix does not change that depth policy.
+
 ### Remaining proof and one next action
 
-UNKNOWN/NOT_EXECUTED: real saved-world/marker reopen after restart, long
-concurrent gameplay and game crash recovery, actual Education helper/broker
+UNKNOWN/NOT_EXECUTED: long concurrent gameplay and game crash recovery,
+actual Education authentication helper/broker
 attribution and propagation, full HKCU/auth/host-peer containment, partial
 writes/disk-full/power loss and comparative FPS/frametime/GPU/CPU overhead.
 Prior raw peer-access control showed name translation is not a security
 boundary. Four clients and distribution remain NOT_EXECUTED. Fixture coverage
 does not establish full stability or a development percentage.
 
-**One next action:** run one integrated same-profile acceptance with the staged
-candidate in an operator-selected window: saved accounts and both known worlds/
-markers after full restart, concurrent gameplay, normal save/close and numeric
-storage journal review. Do not launch, close or control the current games while
-the operator works. Historical path failures still require new detail-bearing
-journals; current-version authentication attribution and crash recovery remain
-UNKNOWN. Do not bind the absent legacy helper or unlock public admission from
-own-data controls. Candidate preparation is complete; game acceptance is not.
+**One next action:** correct the demonstrated eight-component storage depth
+restriction in the existing validator/parent walker with a capacity derived
+from the already bounded relative path length, and verify deep native/Win32
+operations with own data. Keep traversal, ADS, reparse and profile-root guards;
+do not suppress the rejection or hide browser windows. Preserve the current
+games; further game restart/soak requires an operator-selected window. Actual
+authentication attribution/crash recovery remain UNKNOWN, and public admission
+stays closed despite the now-confirmed two-client account/world restart result.
