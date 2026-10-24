@@ -1,4 +1,5 @@
 #include "receipt.h"
+#include "education-config.h"
 #include <detours.h>
 #include <cstdio>
 #include <cwchar>
@@ -102,7 +103,10 @@ std::vector<wchar_t> environment(HANDLE section, HANDLE appDataRoot = nullptr) {
             constexpr wchar_t prefix[] = L"MIVUBI_BOOTSTRAP_TEST_SECTION=";
             const bool appData = appDataRoot && (_wcsnicmp(item, L"APPDATA=", 8) == 0
                 || _wcsnicmp(item, L"LOCALAPPDATA=", 13) == 0);
-            if (!appData && _wcsnicmp(item, prefix, (sizeof(prefix) / sizeof(wchar_t)) - 1) != 0)
+            const bool configured = _wcsnicmp(item, education_bootstrap::SectionVariable,
+                wcslen(education_bootstrap::SectionVariable)) == 0
+                && item[wcslen(education_bootstrap::SectionVariable)] == L'=';
+            if (!configured && !appData && _wcsnicmp(item, prefix, (sizeof(prefix) / sizeof(wchar_t)) - 1) != 0)
                 result.insert(result.end(), item, item + wcslen(item) + 1);
         }
         const std::wstring setting = std::wstring(probe::SectionVariable) + L"="
@@ -972,9 +976,11 @@ struct RegistryChild {
             require(RegSetValueExW(hostRoot.value, L"Marker", 0, REG_DWORD,
                 reinterpret_cast<const BYTE*>(&sameHost), sizeof(sameHost)) == ERROR_ACCESS_DENIED);
         }
-        const auto initialize = reinterpret_cast<BOOL (*)()>(
-            GetProcAddress(GetModuleHandleW(L"bootstrap-compat.dll"), "BootstrapRegistry"));
-        require(initialize && initialize() && initialize());
+        if (receipt.mode != probe::ConfiguredStorage) {
+            const auto initialize = reinterpret_cast<BOOL (*)()>(
+                GetProcAddress(GetModuleHandleW(L"bootstrap-compat.dll"), "BootstrapRegistry"));
+            require(initialize && initialize() && initialize());
+        } // Configured storage must work without calling into the compatibility DLL from main.
         checks |= 1;
         const auto path = registryPath(receipt.logical);
         Key previous;
@@ -1662,12 +1668,250 @@ bool ordinaryRegistryPair(const std::wstring& self, const std::string& compatibi
     return true;
 }
 
+
+struct ConfiguredRoots {
+    std::wstring root;
+    Handle logical, a, b;
+    ConfiguredRoots() {
+        wchar_t temporary[512]{};
+        const DWORD length = GetTempPathW(512, temporary);
+        require(length > 0 && length < 512);
+        root = std::wstring(temporary) + L"MivubiEducationConfig_" + std::to_wstring(GetCurrentProcessId())
+            + L"_" + std::to_wstring(GetTickCount64());
+        require(CreateDirectoryW(root.c_str(), nullptr) != FALSE);
+        SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
+        for (const auto& leaf : {L"host-view", L"client-one", L"client-two"}) {
+            const auto path = root + L"\\" + leaf;
+            require(CreateDirectoryW(path.c_str(), nullptr) != FALSE);
+            for (const auto& child : {L"Roaming", L"Local"})
+                require(CreateDirectoryW((path + L"\\" + child).c_str(), nullptr) != FALSE);
+            HANDLE opened = CreateFileW(path.c_str(), FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY,
+                FILE_SHARE_READ | FILE_SHARE_WRITE, &security, OPEN_EXISTING,
+                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+            require(opened != INVALID_HANDLE_VALUE);
+            if (wcscmp(leaf, L"host-view") == 0) logical.value = opened;
+            else if (wcscmp(leaf, L"client-one") == 0) a.value = opened;
+            else b.value = opened;
+        }
+        for (const auto& folder : {L"Roaming", L"Local"}) {
+            Handle file(CreateFileW((root + L"\\host-view\\" + folder + L"\\configured.bin").c_str(),
+                GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
+            require(file.value != INVALID_HANDLE_VALUE);
+            writeBytes(file.value, "HOST");
+        }
+    }
+};
+
+struct ConfigView {
+    education_bootstrap::Config* value;
+    explicit ConfigView(HANDLE section) : value(static_cast<education_bootstrap::Config*>(
+        MapViewOfFile(section, FILE_MAP_WRITE, 0, 0, sizeof(education_bootstrap::Config)))) {
+        require(value != nullptr);
+        ZeroMemory(value, sizeof(*value));
+    }
+    ~ConfigView() { UnmapViewOfFile(value); }
+};
+
+struct ConfiguredChild {
+    Handle section{sharedSection()};
+    Mapping receipt{section.value};
+    Handle configSection{CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
+        0, sizeof(education_bootstrap::Config), nullptr)};
+    ConfigView config{configSection.value};
+    Handle readonly;
+    Handle ready{sharedEvent()}, done{sharedEvent()};
+    Child child;
+    ConfiguredChild(DWORD slot, DWORD round, ConfiguredRoots& roots, HKEY backing,
+        RegistryHost& registry, const std::wstring& name, HANDLE go, HANDLE finish,
+        const std::wstring& self, const std::string& compatibility, DWORD invalid = 0) {
+        const HANDLE current = GetCurrentProcess();
+        require(DuplicateHandle(current, configSection.value, current, &readonly.value,
+            invalid == 5 ? FILE_MAP_READ | FILE_MAP_WRITE : FILE_MAP_READ, TRUE, 0) != FALSE);
+        auto& status = *receipt.value;
+        ZeroMemory(&status, sizeof(status));
+        status.magic = probe::Magic; status.version = probe::Version;
+        status.mode = probe::ConfiguredStorage; status.slot = slot; status.fileRound = round;
+        status.registryBacking = 1; status.inheritedRegistry = backing;
+        status.cachedHostKey = registry.branch.value;
+        status.fileLogicalRoot = roots.logical.value;
+        status.fileOwnRoot = slot == 1 ? roots.a.value : roots.b.value;
+        status.ready = ready.value; status.done = done.value; status.go = go; status.finish = finish;
+        copyName(status.logical, name);
+        require(registry.userPath.size() < 512);
+        memcpy(status.registryUserPath, registry.userPath.c_str(),
+            (registry.userPath.size() + 1) * sizeof(wchar_t));
+        auto& target = *config.value;
+        target.magic = education_bootstrap::Magic; target.version = education_bootstrap::Version;
+        target.bytes = sizeof(target); target.slot = slot;
+        target.scope = education_bootstrap::StorageAndRegistryOnly;
+        target.logicalRoot = status.fileLogicalRoot; target.privateRoot = status.fileOwnRoot;
+        target.registryRoot = backing;
+        require(ProcessIdToSessionId(GetCurrentProcessId(), &target.session) != FALSE);
+        require(GetFileInformationByHandleEx(target.logicalRoot, FileIdInfo,
+            &target.logicalId, sizeof(target.logicalId)) != FALSE
+            && GetFileInformationByHandleEx(target.privateRoot, FileIdInfo,
+                &target.privateId, sizeof(target.privateId)) != FALSE);
+        memcpy(target.userKeyPath, status.registryUserPath, sizeof(target.userKeyPath));
+        HANDLE inherited[]{section.value, readonly.value, ready.value, done.value, go, finish,
+            target.logicalRoot, target.privateRoot, backing, status.cachedHostKey};
+        Attributes attributes(inherited, 10);
+        auto env = environment(section.value, target.privateRoot);
+        env.pop_back();
+        const auto setting = std::wstring(education_bootstrap::SectionVariable) + L"="
+            + std::to_wstring(reinterpret_cast<ULONG_PTR>(readonly.value));
+        env.insert(env.end(), setting.begin(), setting.end());
+        env.push_back(0); env.push_back(0);
+        STARTUPINFOEXW startup{};
+        startup.StartupInfo.cb = sizeof(startup); startup.lpAttributeList = attributes.value;
+        std::wstring command = L"\"" + self + L"\" --bootstrap-test-child";
+        require(CreateProcessW(self.c_str(), command.data(), nullptr, nullptr, TRUE,
+            CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW,
+            env.data(), nullptr, &startup.StartupInfo, &child.info) != FALSE);
+        target.pid = status.pid = child.info.dwProcessId;
+        FILETIME exit{}, kernel{}, user{};
+        require(GetProcessTimes(child.info.hProcess, &target.created, &exit, &kernel, &user) != FALSE);
+        status.created = target.created;
+        if (invalid == 1) ++target.pid;
+        if (invalid == 2) target.privateId.FileId.Identifier[0] ^= 1;
+        if (invalid == 3) target.slot = slot == 1 ? 2 : 1;
+        if (invalid == 4) ++target.created.dwLowDateTime;
+        const char* dlls[]{compatibility.c_str()};
+        require(DetourUpdateProcessWithDll(child.info.hProcess, dlls, 1) != FALSE);
+        MemoryBarrier();
+        require(ResumeThread(child.info.hThread) == 1);
+    }
+    void phase(HANDLE event) {
+        HANDLE states[]{event, child.info.hProcess};
+        require(WaitForMultipleObjects(2, states, FALSE, 10000) == WAIT_OBJECT_0);
+        require(WaitForSingleObject(child.info.hProcess, 0) == WAIT_TIMEOUT);
+    }
+    void exited(bool success) {
+        require(WaitForSingleObject(child.info.hProcess, 10000) == WAIT_OBJECT_0);
+        DWORD code = 0;
+        require(GetExitCodeProcess(child.info.hProcess, &code) != FALSE
+            && (success ? code == 0 : code != 0));
+        const auto& status = *receipt.value;
+        require(status.armed == (success ? 1 : 0));
+        if (success) require(status.count == 5 && status.earlyPrivate == 7
+            && status.earlyAllowed == 0 && status.registryChecks == 65535 && status.nativeChecks == 1);
+        else {
+            require(status.count == 2 && status.events[0].stage == probe::Attach
+                && status.events[1].stage == probe::Rejected && status.earlyPrivate == 0);
+        }
+    }
+};
+
+int configuredStorageChild(probe::Receipt& receipt) {
+    // Candidate storage configuration must not guess or rewrite a singleton.
+    Handle shared(CreateMutexW(nullptr, FALSE, receipt.logical));
+    require(shared.value && GetLastError() == ERROR_ALREADY_EXISTS);
+    InterlockedExchange(&receipt.nativeChecks, 1);
+    RegistryChild registry(receipt);
+    for (const auto& folder : {L"Roaming", L"Local"}) {
+        const auto logical = directoryPath(receipt.fileLogicalRoot).substr(4) + L"\\" + folder + L"\\configured.bin";
+        const auto own = directoryPath(receipt.fileOwnRoot).substr(4) + L"\\" + folder + L"\\configured.bin";
+        if (!receipt.fileRound) {
+            Handle absent(CreateFileW(logical.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+            require(absent.value == INVALID_HANDLE_VALUE && GetLastError() == ERROR_FILE_NOT_FOUND);
+        } else expectFile(logical, std::to_string(receipt.slot) + "-1");
+        Handle output(CreateFileW(logical.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
+            nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr));
+        require(output.value != INVALID_HANDLE_VALUE);
+        writeBytes(output.value, std::to_string(receipt.slot) + "-" + std::to_string(receipt.fileRound + 1));
+        const auto id = wcscmp(folder, L"Roaming") == 0 ? FOLDERID_RoamingAppData : FOLDERID_LocalAppData;
+        PWSTR known = nullptr;
+        require(SUCCEEDED(SHGetKnownFolderPath(id, KF_FLAG_DONT_VERIFY, nullptr, &known)) && known);
+        const bool matches = own == std::wstring(known) + L"\\configured.bin";
+        CoTaskMemFree(known);
+        require(matches);
+    }
+    require(SetEvent(receipt.ready) != FALSE);
+    require(WaitForSingleObject(receipt.go, 10000) == WAIT_OBJECT_0);
+    registry.afterPeer(receipt);
+    require(SetEvent(receipt.done) != FALSE);
+    require(WaitForSingleObject(receipt.finish, 10000) == WAIT_OBJECT_0);
+    return 0;
+}
+
+bool configuredStoragePair(const std::wstring& self, const std::string& compatibility) {
+    ConfiguredRoots roots;
+    const auto name = L"Local\\EducationCanary_" + std::to_wstring(GetCurrentProcessId())
+        + L"_" + std::to_wstring(GetTickCount64());
+    RegistryHost registry(name);
+    Handle unchangedMutex(CreateMutexW(nullptr, TRUE, name.c_str()));
+    require(unchangedMutex.value && GetLastError() != ERROR_ALREADY_EXISTS);
+    Key stores[2];
+    std::wstring paths[2];
+    SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
+    for (DWORD slot = 1; slot <= 2; ++slot) {
+        FILE_ID_INFO id{};
+        require(GetFileInformationByHandleEx(slot == 1 ? roots.a.value : roots.b.value,
+            FileIdInfo, &id, sizeof(id)) != FALSE);
+        wchar_t leaf[64]{};
+        require(probe::registryStoreLeaf(id, slot, leaf));
+        paths[slot - 1] = L"Software\\MivubiEducationPilot\\" + std::wstring(leaf);
+        DWORD disposition = 0;
+        require(RegCreateKeyExW(HKEY_CURRENT_USER, paths[slot - 1].c_str(), 0, nullptr,
+            REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, &security, &stores[slot - 1].value,
+            &disposition) == ERROR_SUCCESS && disposition == REG_CREATED_NEW_KEY);
+        Key branch;
+        require(RegCreateKeyExW(stores[slot - 1].value, registry.path.c_str(), 0, nullptr,
+            REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, nullptr, &branch.value, nullptr) == ERROR_SUCCESS);
+        setRegistryValue(branch.value, L"Marker", slot * 100);
+    }
+    for (DWORD invalid = 1; invalid <= 5; ++invalid) {
+        Handle go(sharedEvent()), finish(sharedEvent());
+        ConfiguredChild rejected(1, 0, roots, stores[0].value, registry, name, go.value, finish.value,
+            self, compatibility, invalid);
+        rejected.exited(false);
+        registry.unchanged();
+    }
+    for (DWORD round = 0; round < 2; ++round) {
+        Handle go(sharedEvent()), finish(sharedEvent());
+        ConfiguredChild first(1, round, roots, stores[0].value, registry, name, go.value, finish.value,
+            self, compatibility);
+        ConfiguredChild second(2, round, roots, stores[1].value, registry, name, go.value, finish.value,
+            self, compatibility);
+        first.phase(first.ready.value); second.phase(second.ready.value);
+        registry.unchanged();
+        require(SetEvent(go.value) != FALSE);
+        first.phase(first.done.value); second.phase(second.done.value);
+        require(SetEvent(finish.value) != FALSE);
+        first.exited(true); second.exited(true);
+        for (const auto& folder : {L"Roaming", L"Local"}) {
+            expectFile(roots.root + L"\\host-view\\" + folder + L"\\configured.bin", "HOST");
+            expectFile(roots.root + L"\\client-one\\" + folder + L"\\configured.bin", "1-" + std::to_string(round + 1));
+            expectFile(roots.root + L"\\client-two\\" + folder + L"\\configured.bin", "2-" + std::to_string(round + 1));
+        }
+        for (DWORD slot = 1; slot <= 2; ++slot) {
+            require(RegCloseKey(stores[slot - 1].value) == ERROR_SUCCESS);
+            stores[slot - 1].value = nullptr;
+            require(RegOpenKeyExW(HKEY_CURRENT_USER, paths[slot - 1].c_str(), 0, KEY_ALL_ACCESS,
+                &stores[slot - 1].value) == ERROR_SUCCESS
+                && SetHandleInformation(stores[slot - 1].value, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT));
+            Key branch;
+            require(RegOpenKeyExW(stores[slot - 1].value, registry.path.c_str(), 0, KEY_READ,
+                &branch.value) == ERROR_SUCCESS
+                && registryValue(branch.value, L"Marker") == slot * 100 + round + 1);
+        }
+        registry.unchanged();
+    }
+    std::printf("{\"case\":\"configured-storage-pair\",\"selfCheck\":true,\"earlyPrivate\":[7,7],"
+        "\"registryChecks\":[65535,65535],\"rounds\":2,\"persistent\":true,\"hostUnchanged\":true,"
+        "\"invalidConfigRejected\":5,\"mainRegistryCallback\":false,\"fixtureNameRequired\":false,"
+        "\"singleton\":\"UNKNOWN\",\"singletonRemap\":false,\"helpers\":\"UNKNOWN\",\"securityBoundary\":false,"
+        "\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n");
+    return true;
+}
+
 int childMain() {
     probe::View view;
     if (!view.open()) return 81;
     probe::record(view.value, probe::Main);
     probe::registryCanary(probe::Main);
     if (DependencyCanary() != 7) return 82;
+    if (view.value->mode == probe::ConfiguredStorage) return configuredStorageChild(*view.value);
     if (view.value->mode == probe::MutexCase && view.value->registryBaseline) return 0;
     if (view.value->mode == probe::MutexCase && view.value->registryBacking == 1) {
         RegistryChild registry(*view.value);
@@ -1692,9 +1936,10 @@ int wmain(int argc, wchar_t** argv) {
     if (argc == 2 && wcscmp(argv[1], L"--bootstrap-test-child") == 0) {
         try { return childMain(); } catch (...) { return 85; }
     }
+    const bool configuredTest = argc == 2 && wcscmp(argv[1], L"--run-configured-storage-self-test") == 0;
     const bool mutexTest = argc == 2 && wcscmp(argv[1], L"--run-mutex-self-test") == 0;
     const bool ordinaryTest = argc == 2 && wcscmp(argv[1], L"--run-inherited-registry-self-test") == 0;
-    if (!mutexTest && !ordinaryTest && (argc != 2 || wcscmp(argv[1], L"--run-self-test") != 0)) return 64;
+    if (!configuredTest && !mutexTest && !ordinaryTest && (argc != 2 || wcscmp(argv[1], L"--run-self-test") != 0)) return 64;
     try {
         USHORT process = 0, native = 0;
         require(IsWow64Process2(GetCurrentProcess(), &process, &native) != FALSE
@@ -1709,6 +1954,7 @@ int wmain(int argc, wchar_t** argv) {
             require(character > 0 && character <= 0x7f);
             compatibility.push_back(static_cast<char>(character));
         }
+        if (configuredTest) return configuredStoragePair(self, compatibility) && !cleanupFailed ? 0 : 1;
         if (ordinaryTest) return ordinaryRegistryPair(self, compatibility) && !cleanupFailed ? 0 : 1;
         if (mutexTest) return mutexPair(self, compatibility) && !cleanupFailed ? 0 : 1;
         bool passed = run(probe::Baseline, L"baseline", self, compatibility);

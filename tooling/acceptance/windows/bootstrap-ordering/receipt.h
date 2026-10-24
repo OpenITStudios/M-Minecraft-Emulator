@@ -8,7 +8,7 @@
 // Fixed self-test transport, not a production slot capability or shared-state ABI.
 namespace probe {
 constexpr DWORD Magic = 0x42535431;
-constexpr DWORD Version = 7;
+constexpr DWORD Version = 8;
 constexpr LONG Capacity = 16;
 constexpr wchar_t SectionVariable[] = L"MIVUBI_BOOTSTRAP_TEST_SECTION";
 using CompareHandles = BOOL (WINAPI*)(HANDLE, HANDLE);
@@ -19,7 +19,7 @@ using NativeFileCreate = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBU
 using NativeFileOpen = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES,
     PIO_STATUS_BLOCK, ULONG, ULONG);
 using NativeDirectory = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES);
-enum Mode : DWORD { Baseline, Normal, FailAttach, Timeout, MutexCase };
+enum Mode : DWORD { Baseline, Normal, FailAttach, Timeout, MutexCase, ConfiguredStorage };
 enum Stage : LONG { Attach = 1, Armed, Rejected, Suppressed, Dependency, Tls, Main };
 struct Event { LONG stage; LONG armed; };
 struct Receipt {
@@ -86,7 +86,7 @@ public:
         FILETIME created{}, exited{}, kernel{}, user{};
         const bool valid = GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user)
             && value->magic == Magic && value->version == Version
-            && value->pid == GetCurrentProcessId() && value->mode <= MutexCase && value->registryBaseline <= 1 && value->registryBacking <= 1
+            && value->pid == GetCurrentProcessId() && value->mode <= ConfiguredStorage && value->registryBaseline <= 1 && value->registryBacking <= 1
             && value->created.dwLowDateTime == created.dwLowDateTime
             && value->created.dwHighDateTime == created.dwHighDateTime;
         if (!valid) {
@@ -109,7 +109,7 @@ inline void canary(Stage stage) {
 
 inline void registryCanary(Stage stage) {
     View view;
-    if (!view.open() || view.value->mode != MutexCase) return;
+    if (!view.open() || (view.value->mode != MutexCase && view.value->mode != ConfiguredStorage)) return;
     auto& receipt = *view.value;
     wchar_t path[768]{};
     unsigned count = 0;

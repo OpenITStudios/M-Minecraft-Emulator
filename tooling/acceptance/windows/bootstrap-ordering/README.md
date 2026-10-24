@@ -40,10 +40,67 @@ Build does not execute the experiment. A separately requested manual run is:
 & ./workspace/bootstrap-ordering-build/Release/bootstrap-ordering.exe --run-self-test
 ~~~
 
-The target accepts only the three fixed self-test switches and its internal child
+The target accepts only the four fixed self-test switches and its internal child
 argument, and rejects unsupported architectures. The fixed
 compatibility import path currently requires ASCII; there is no lossy conversion
 or alternate-path fallback. Keep source and build directories separate.
+
+## Process-bound storage configuration
+
+The original compatibility code now has a separate, private
+[Education bootstrap configuration](./education-config.h). This source seam
+removes the receipt, numeric mutex-name and sibling-directory requirements
+from the **selected storage/HKCU** installation path. It does not select a
+Minecraft provider. The desktop Rust preparer does not yet produce or inject
+this configuration and still has no resume operation.
+
+The target reads a snapshot from an unnamed section through a read-only
+handle; a writable handle is rejected. The controller fills it while its
+new child is suspended. PID, creation FILETIME, interactive session, version,
+size and scope are checked; logical/private directory IDs are rechecked from
+the supplied handles. Nested/overlapping roots are refused. The ordinary
+registry backing must match the private directory's volume/file ID and slot
+under the current user's fresh Education-pilot subtree. The current process's TokenUser SID metadata must match the supplied current-user
+key path; no existing account values are queried. Formatting follows the official
+[SID string syntax](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-dtyp/c92a27b1-c772-4fa7-a432-15df5f1b66a1).
+
+This follows Windows [unnamed-section handle sharing](https://learn.microsoft.com/en-us/windows/win32/memory/sharing-files-and-memory)
+and [mapping access rights](https://learn.microsoft.com/en-us/windows/win32/memory/file-mapping-security-and-access-rights).
+A read-only target handle does not authenticate a hostile same-user controller,
+prevent the parent from updating its own mapping, or prove full containment.
+
+Initialization uses token/handle metadata rather than opening a user registry
+root, loading a hive/profile, performing COM setup or looking up Known Folders
+under loader lock. Windows [DllMain restrictions](https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-best-practices)
+still require game-specific loader validation beyond this controlled marker graph.
+
+The DLL installs the existing bounded file/Known Folder/native HKCU hooks from
+this configuration during attach. The inherited ordinary key is immediately
+available to those hooks; the application does not need to call
+BootstrapRegistry, RegLoadAppKey or RegOverridePredefKey from main.
+No mutex is selected or rewritten in this storage-only scope. All earlier
+unsupported file aliases/operations, cached registry operations, direct native
+bypasses, helper propagation and authentication uncertainties remain.
+
+The one integration control is:
+
+~~~powershell
+& ./workspace/bootstrap-ordering-build/Release/bootstrap-ordering.exe --run-configured-storage-self-test
+~~~
+
+It launches only its own executable with two fresh private directory/key stores,
+using directory names outside the old fixture layout. Dependency/TLS/main access
+the private registry before any main callback; Roaming/Local file views and
+Known Folder paths use the selected store. Two rounds check persistence and
+unchanged synthetic host/peer markers. Five malformed process/slot/handle
+bindings are rejected; a shared mutex deliberately remains shared.
+The probe receipt is private version 8; the independent configuration is
+private version 1, 1,136 bytes. Neither is a public product wire schema.
+
+**Evidence ceiling:** this is an integration of our configuration producer,
+DLL and controlled processes. It is not Minecraft activation, licensed sign-in,
+world persistence, helper isolation or general host/peer access protection.
+Every result retains providerReady=false and minecraft=NOT_EXECUTED.
 
 ## Ordering controls and receipt
 

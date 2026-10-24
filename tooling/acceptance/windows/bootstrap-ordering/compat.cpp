@@ -1,4 +1,5 @@
 #include "receipt.h"
+#include "education-config.h"
 #include <detours.h>
 #include <cstdio>
 #include <cwchar>
@@ -42,8 +43,15 @@ bool asciiPath(const wchar_t* path, unsigned length) {
     for (unsigned i = 0; i < length; ++i) if (path[i] < 32 || path[i] > 126) return false;
     return true;
 }
-bool initializeFiles(const probe::Receipt& config, HMODULE ntdll) {
-    if (config.fileRound > 1) return false;
+struct InstallConfig {
+    DWORD slot;
+    HANDLE fileLogicalRoot, fileOwnRoot;
+    HKEY inheritedRegistry;
+    DWORD registryBacking;
+    const wchar_t* registryUserPath;
+    const education_bootstrap::Config* education = nullptr;
+};
+bool initializeFiles(const InstallConfig& config, HMODULE ntdll) {
     if (!directoryInfo(config.fileLogicalRoot, logicalDirectoryId)
         || !directoryInfo(config.fileOwnRoot, ownDirectoryId)
         || sameFileId(logicalDirectoryId, ownDirectoryId)) return false;
@@ -61,11 +69,26 @@ bool initializeFiles(const probe::Receipt& config, HMODULE ntdll) {
         || !asciiPath(ownDos, ownDosLength) || wcsncmp(ownDos, L"\\\\?\\", 4) != 0
         || !asciiPath(logicalDevice, deviceLength) || !asciiPath(logicalDos, dosLength)
         || !asciiPath(ownDevice, ownLength) || wcsncmp(logicalDos, L"\\\\?\\", 4) != 0) return false;
-    constexpr wchar_t suffix[] = L"\\logical";
-    const unsigned parentLength = deviceLength - 8;
-    if (wcscmp(logicalDevice + parentLength, suffix) != 0 || ownLength != parentLength + 2) return false;
-    for (unsigned i = 0; i < parentLength; ++i) if (ownDevice[i] != logicalDevice[i]) return false;
-    if (ownDevice[parentLength] != L'\\' || ownDevice[parentLength + 1] != slotSuffix) return false;
+    if (config.education) {
+        if (!sameFileId(logicalDirectoryId, config.education->logicalId)
+            || !sameFileId(ownDirectoryId, config.education->privateId)) return false;
+        const auto contains = [](const wchar_t* root, unsigned rootLength,
+                                 const wchar_t* child, unsigned childLength) {
+            if (childLength < rootLength) return false;
+            for (unsigned i = 0; i < rootLength; ++i)
+                if (folded(root[i], true) != folded(child[i], true)) return false;
+            return childLength == rootLength || child[rootLength] == L'\\';
+        };
+        // Nested views would route backing paths ambiguously. Refuse, never fall back.
+        if (contains(logicalDevice, deviceLength, ownDevice, ownLength)
+            || contains(ownDevice, ownLength, logicalDevice, deviceLength)) return false;
+    } else {
+        constexpr wchar_t suffix[] = L"\\logical";
+        const unsigned parentLength = deviceLength - 8;
+        if (wcscmp(logicalDevice + parentLength, suffix) != 0 || ownLength != parentLength + 2) return false;
+        for (unsigned i = 0; i < parentLength; ++i) if (ownDevice[i] != logicalDevice[i]) return false;
+        if (ownDevice[parentLength] != L'\\' || ownDevice[parentLength + 1] != slotSuffix) return false;
+    }
     logicalDos[1] = L'?'; // Convert the canonical Win32 extended path to its NT DOS form.
     logicalDos[2] = L'?';
     ownDos[1] = ownDos[2] = L'?';
@@ -370,9 +393,10 @@ NTSTATUS NTAPI translatedOpen(PHANDLE handle, ACCESS_MASK access, POBJECT_ATTRIB
     SetLastError(saved);
     return status;
 }
-bool initializeRegistry(const probe::Receipt& config);
+bool initializeRegistry(const InstallConfig& config);
 bool attachRegistry();
-bool install(const probe::Receipt& config) {
+bool selectFixtureMutex(const probe::Receipt& config) {
+    if (config.fileRound > 1) return false;
     constexpr wchar_t prefix[] = L"Local\\MivubiMutexProbe_";
     unsigned length = 0;
     while (length < 124 && config.logical[length]) ++length;
@@ -393,6 +417,10 @@ bool install(const probe::Receipt& config) {
     logicalLength = length - localPrefix;
     for (unsigned i = 0; i < logicalLength; ++i) logical[i] = config.logical[localPrefix + i];
 
+    return true;
+}
+bool install(const InstallConfig& config, bool mutex) {
+    slotSuffix = config.slot == 1 ? L'A' : L'B';
     const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
     if (!ntdll) return false;
     originalCreate = reinterpret_cast<probe::NativeCreate>(GetProcAddress(ntdll, "NtCreateMutant"));
@@ -410,17 +438,17 @@ bool install(const probe::Receipt& config) {
     const auto bytes = static_cast<USHORT>(wcslen(path) * sizeof(wchar_t));
     UNICODE_STRING rootName{bytes, bytes, path};
     OBJECT_ATTRIBUTES root{sizeof(OBJECT_ATTRIBUTES), nullptr, &rootName, OBJ_CASE_INSENSITIVE, nullptr, nullptr};
-    if (openDirectory(&baseDirectory, 0x0002 /* DIRECTORY_TRAVERSE */, &root) < 0) return false;
+    if (mutex && openDirectory(&baseDirectory, 0x0002 /* DIRECTORY_TRAVERSE */, &root) < 0) return false;
 
     // One native layer serves the direct calls and the tested Win32 wrappers.
     if (!DetourRestoreAfterWith() || DetourTransactionBegin() != NO_ERROR) {
         CloseHandle(baseDirectory); baseDirectory = nullptr; return false;
     }
     if (DetourUpdateThread(GetCurrentThread()) != NO_ERROR
-        || DetourAttach(reinterpret_cast<PVOID*>(&originalCreate),
+        || (mutex && (DetourAttach(reinterpret_cast<PVOID*>(&originalCreate),
                         reinterpret_cast<PVOID>(translatedCreate)) != NO_ERROR
-        || DetourAttach(reinterpret_cast<PVOID*>(&originalOpen),
-                        reinterpret_cast<PVOID>(translatedOpen)) != NO_ERROR
+            || DetourAttach(reinterpret_cast<PVOID*>(&originalOpen),
+                        reinterpret_cast<PVOID>(translatedOpen)) != NO_ERROR))
         || DetourAttach(reinterpret_cast<PVOID*>(&originalFileCreate),
                         reinterpret_cast<PVOID>(translatedFileCreate)) != NO_ERROR
         || DetourAttach(reinterpret_cast<PVOID*>(&originalFileOpen),
@@ -441,6 +469,25 @@ extern "C" void BootstrapOrdinalOne() {}
 
 extern "C" BOOL WINAPI DllMain(HINSTANCE, DWORD reason, LPVOID) {
     if (reason != DLL_PROCESS_ATTACH) return TRUE; // Process-lifetime fixture; no live unload.
+    if (education_bootstrap::present()) {
+        education_bootstrap::Config config{};
+        // The optional receipt is solely for our controlled executable's assertions.
+        probe::View test;
+        const bool controlled = test.open() && test.value->mode == probe::ConfiguredStorage;
+        if (controlled) probe::record(test.value, probe::Attach);
+        const bool valid = education_bootstrap::read(config);
+        InstallConfig installConfig{config.slot, config.logicalRoot, config.privateRoot,
+            config.registryRoot, 1, config.userKeyPath, &config};
+        if (!valid || !install(installConfig, false)) {
+            if (controlled) probe::record(test.value, probe::Rejected);
+            return FALSE;
+        }
+        if (controlled) {
+            InterlockedExchange(&test.value->armed, 1);
+            probe::record(test.value, probe::Armed);
+        }
+        return TRUE; // Selected storage hooks only; no provider/auth/singleton assertion.
+    }
     probe::View view;
     if (!view.open()) return FALSE;
     probe::record(view.value, probe::Attach);
@@ -453,7 +500,10 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE, DWORD reason, LPVOID) {
         return TRUE;
     }
     if (view.value->mode == probe::MutexCase) {
-        if (!install(*view.value)) {
+        const auto& source = *view.value;
+        const InstallConfig config{source.slot, source.fileLogicalRoot, source.fileOwnRoot,
+            source.inheritedRegistry, source.registryBacking, source.registryUserPath};
+        if (!selectFixtureMutex(source) || !install(config, true)) {
             probe::record(view.value, probe::Rejected);
             return FALSE;
         }
@@ -729,7 +779,7 @@ bool attachRegistryValues() {
         && DetourAttach(reinterpret_cast<PVOID*>(&originalEnumerateValue), reinterpret_cast<PVOID>(translatedEnumerateValue)) == NO_ERROR;
 }
 
-bool initializeRegistry(const probe::Receipt& config) {
+bool initializeRegistry(const InstallConfig& config) {
     const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
     const HMODULE advapi = GetModuleHandleW(L"advapi32.dll");
     if (!ntdll || !advapi) return false;
@@ -756,9 +806,40 @@ bool initializeRegistry(const probe::Receipt& config) {
     if ((config.registryBacking == 1) != (config.inheritedRegistry != nullptr)) return false;
     if (config.registryBacking == 1) {
         wchar_t leaf[64]{}, expected[512]{}, actual[512]{};
-        if (!probe::registryStoreLeaf(ownDirectoryId, config.slot, leaf)
-            || swprintf_s(storePrefix, L"%s\\Software\\%s_Stores", userKeyPath, logical) < 0
-            || swprintf_s(expected, L"%s\\%s", storePrefix, leaf) < 0
+        if (!probe::registryStoreLeaf(ownDirectoryId, config.slot, leaf)) return false;
+        if (config.education) {
+            // The inherited ordinary backing is available before any EXE-main cooperation.
+            // Token identity metadata only: no registry/profile open under loader lock.
+            HANDLE token = nullptr;
+            if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return false;
+            alignas(8) BYTE bytes[256]{};
+            DWORD returned = 0;
+            const BOOL queried = GetTokenInformation(token, TokenUser, bytes, sizeof(bytes), &returned);
+            CloseHandle(token);
+            if (!queried || returned < sizeof(TOKEN_USER)) return false;
+            const auto sid = reinterpret_cast<TOKEN_USER*>(bytes)->User.Sid;
+            if (!IsValidSid(sid)) return false;
+            const auto authority = GetSidIdentifierAuthority(sid);
+            unsigned long long authorityValue = 0;
+            for (BYTE byte : authority->Value) authorityValue = (authorityValue << 8) | byte;
+            wchar_t actualUser[512]{};
+            // MS-DTYP SID string syntax: decimal below 2^32, otherwise 12 hex digits.
+            const int formatted = authorityValue < 0x100000000ULL
+                ? swprintf_s(actualUser, L"\\REGISTRY\\USER\\S-1-%lu", static_cast<DWORD>(authorityValue))
+                : swprintf_s(actualUser, L"\\REGISTRY\\USER\\S-1-0x%012llx", authorityValue);
+            if (formatted < 0) return false;
+            const BYTE count = *GetSidSubAuthorityCount(sid);
+            for (BYTE i = 0; i < count; ++i) {
+                const size_t used = wcslen(actualUser);
+                if (swprintf_s(actualUser + used, 512 - used, L"-%lu", *GetSidSubAuthority(sid, i)) < 0)
+                    return false;
+            }
+            if (_wcsicmp(actualUser, userKeyPath) != 0
+                || swprintf_s(storePrefix, L"%s\\Software\\MivubiEducationPilot", userKeyPath) < 0)
+                return false;
+        } else if (swprintf_s(storePrefix, L"%s\\Software\\%s_Stores", userKeyPath, logical) < 0)
+            return false;
+        if (swprintf_s(expected, L"%s\\%s", storePrefix, leaf) < 0
             || !keyName(config.inheritedRegistry, actual) || _wcsicmp(actual, expected) != 0)
             return false;
         PUBLIC_OBJECT_BASIC_INFORMATION info{};
