@@ -9,6 +9,93 @@ lifecycle: ACTIVE
 
 # Minecraft Instance Manager — Windows local test (native + Sandboxie)
 
+## Singleton evidence sufficiency decision — 24 October 2026 WIB
+
+Reviewed exact Local: c3d4cc377f61647f9a2f3d5dbf1f4c079d564e5c.
+**Decision: the archived startup/reactivation evidence cannot select a
+Minecraft singleton object or interception policy.** No observed name is
+promoted into the original DLL's fixed-name policy. This audit closes the
+question of whether another pass over those same handle/stack records can
+supply the missing call result/rejection; it cannot recover data not recorded.
+
+The archived automatic startup ETL still measures 289,144,832 bytes and hashes
+to beb8753df08a7fd92fdc721454249e930e4645ab0685510ee938a3cbb15caf6c.
+Its existing local analyzer source/binary/sanitized output hashes still match
+the prior named-mutex review:
+fcfc923c9b34d037ed13c8594c0ee464a857fcfae31f59f979973578997a1a03 /
+f3f5b0eed5cb5892725ea2062b99ff6aa41b88cffafb0f7eea4c85c250b8a416 /
+bb898b2e1450225b6062cf851674487d62da87dfd8aefa590881e932d2a574cd.
+Integrity and saved JSON/source were reviewed again; the decoder was not rerun
+and no new ETL was created. Raw names, paths, process IDs and addresses remain
+local. The receipt binds the captured image hash
+04164c1c64458a5d984dbc1687d0e8023d1808c44ee7be03519cdf8355233eaa,
+one sampled game lifetime and one lifecycle candidate. This is historical
+image binding, not a fresh validation of the installed build.
+
+| Existing evidence | What it supports | Missing discriminator |
+| --- | --- | --- |
+| Automatic startup: 215 mutex handle events, all with exact timestamp/thread stack matches; 55 named closes / 25 unique names | MC01 handle lifetimes and caller-module ranges | No second game reaching a rejection; no original API arguments, return status or branch. |
+| Earlier Start-menu retry: same MC01 window reported; no new game image/process positively observed | Reactivation symptom in that bounded window | Exact click/activation-result correlation and complete transient-process coverage were not established. |
+| Cache-like, input and WIL-like name families | Candidate subsystem labels inferred from metadata | Purpose as a game singleton remains UNKNOWN; cache locks must not be renamed over shared backing data. |
+| 59 opcode-34 ObjectType failures | A delimited duplicate-record decoding gap | They remain untyped; fixing them cannot manufacture an unrecorded API result or rejection branch. |
+| Static EXE/CEF imports | Available link dependencies | Invocation, instance scope and singleton purpose are not established by imports. |
+
+[ObHandleEvent](https://learn.microsoft.com/en-us/windows/win32/etw/obhandleevent)
+records handle creation/closure, not the full create/open API call and its
+decision. The current source trace makes a further distinction:
+native_clients.rs::open_native_minecraft requests Explorer shell:AppsFolder
+after registered Desktop target verification; it refuses an already-running
+registered game. The old one-off diagnostic used the same activation recipe,
+not that product command or an isolation-bound CreateProcess implementation.
+The resolver's Assert-ManagerRegisteredAppId accepts a known-folder GUID plus
+relative executable path; the product preflight rejects a mixed Store/Desktop
+installation.
+
+**Rejected shortcut:** do not replace that Desktop observation with
+IApplicationActivationManager merely to obtain a PID. Microsoft's
+[interface](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nn-shobjidl_core-iapplicationactivationmanager)
+and [ActivateApplication contract](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-iapplicationactivationmanager-activateapplication)
+document Windows Store activation and the PID fulfilling its launch contract.
+No reviewed contract establishes that the current known-folder/path Desktop
+AppID is supported by it. This is an applicability gap, not an executed failure
+of that API. The Explorer request's success/PID likewise cannot be substituted
+for a returned game-process identity.
+
+### Precisely missing bounded observation
+
+Prepare the next observation in the existing MC01 acceptance owner, keeping
+its default read-only preflight and first-startup refusal unchanged:
+
+1. Verify one existing official MC01 lifetime, image hash and interactive session;
+   retain its original process handle/creation time. No sign-in or world action.
+2. Start a bounded process-lifecycle observer with an independently observable
+   self-owned start/stop positive control. Capture only allowlisted process/image/
+   time/session metadata; no command lines, IPC payloads, tokens or cache/world
+   contents. Missing/inaccessible/transient identities remain UNKNOWN even if
+   the positive control passes.
+3. Mark the exact request start/end and issue at most one separately authorized
+   registered Desktop reactivation, without a direct EXE fallback, retries,
+   UAC-elevated game caller, process termination or injection. Preserve MC01.
+4. Correlate any positively observed new game lifetime with that request and the
+   existing window/lifetime. Same-window return alone remains a reactivation
+   observation, not proof that a second process reached a mutex check or that
+   Explorer alone made the reuse decision.
+5. If a distinct game does reach an instance decision, identification still needs
+   the specific API/object scope and returned result tied to its caller/lifetime.
+   Such target-call observation is a separate instrumentation/authorization
+   boundary; a Handle-only recording or a generic rename rule cannot supply it.
+
+Only observation source preparation is the next source task. No reactivation,
+new recording, debugger/injection, direct duplicate launch, sign-out or
+driver/service operation is authorized by this audit or by a fixture success.
+
+**Proof ceiling:** exact-source/official-contract review plus executed archive
+integrity and saved-metadata review. New decoder/build/runtime observation,
+independent login/gameplay and two/four-client acceptance: NOT_EXECUTED.
+Provider NOT_SELECTED; MC02–04 Launch/Provision remains denied. Progress estimate
+remains the handoff's rough 30%; this audit adds no accepted Minecraft pair.
+Current next action lives solely in planning/development.md.
+
 ## Coherent original file and IPC backing — 24 October 2026 WIB
 
 Source baseline: 1a6ddb032c5d9a3572160375f588401586de979e.
