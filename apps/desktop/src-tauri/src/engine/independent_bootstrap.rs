@@ -1892,6 +1892,192 @@ fn child_environment(
     Ok(result)
 }
 
+// Fixed own-image transaction only. No descendant discovery, IPC or game-helper admission.
+#[cfg(test)]
+struct OwnedHelperTransaction<'a> {
+    child: PendingEducationBootstrap,
+    parent: &'a PendingEducationBootstrap,
+    _payload: &'a BootstrapLibrary,
+}
+
+#[cfg(test)]
+fn checked_slot_binding(child: &PendingEducationBootstrap) -> io::Result<&SlotStorage> {
+    let (pid, birth) = child.identity()?;
+    let store = child
+        .storage
+        .as_ref()
+        .ok_or_else(|| invalid("Missing parent slot"))?;
+    let section = child
+        .configuration
+        .as_ref()
+        .ok_or_else(|| invalid("Missing parent config"))?;
+    let view = unsafe {
+        MapViewOfFile(
+            section.as_raw_handle() as HANDLE,
+            FILE_MAP_READ,
+            0,
+            0,
+            mem::size_of::<EducationConfig>(),
+        )
+    };
+    if view.Value.is_null() {
+        return Err(io::Error::last_os_error());
+    }
+    let config = unsafe { ptr::read(view.Value as *const EducationConfig) };
+    if unsafe { UnmapViewOfFile(view) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if config.magic != 0x45444231
+        || config.version != 2
+        || config.bytes != mem::size_of::<EducationConfig>() as u32
+        || config.pid != pid
+        || config.slot != store.slot
+        || !(1..=2).contains(&store.slot)
+        || config.created.dwLowDateTime != birth as u32
+        || config.created.dwHighDateTime != (birth >> 32) as u32
+        || config.session != interactive_session(pid)?
+        || config.user_key_path != store.user_key_path
+        || config.singleton_caller_rva != store.singleton_caller_rva
+        || config.scope
+            != if store.singleton_caller_rva == 0 {
+                1
+            } else {
+                2
+            }
+        || !same_image(&config.logical_id, &directory_id(&store.logical)?)
+        || !same_image(&config.private_id, &directory_id(&store.private)?)
+        || !same_image(
+            &config.private_id,
+            &directory_id(&open_directory(&store.private_path, FILE_READ_ATTRIBUTES)?)?,
+        )
+    {
+        return Err(invalid("Parent slot binding changed"));
+    }
+    let mut key = ptr::null_mut();
+    if unsafe {
+        DuplicateHandle(
+            child.process.as_raw_handle() as HANDLE,
+            config.registry_root,
+            windows_sys::Win32::System::Threading::GetCurrentProcess(),
+            &mut key,
+            0,
+            0,
+            DUPLICATE_SAME_ACCESS,
+        )
+    } == 0
+    {
+        return Err(io::Error::last_os_error());
+    }
+    let key = RegistryKey(key);
+    if unsafe { windows_sys::Win32::Foundation::CompareObjectHandles(key.0, store.registry.0) } == 0
+    {
+        return Err(invalid("Parent registry binding changed"));
+    }
+    Ok(store)
+}
+
+#[cfg(test)]
+impl BootstrapLibrary {
+    fn prepare_owned_helper<'a>(
+        &'a self,
+        parent: &'a PendingEducationBootstrap,
+        proof: &tests::FixtureReceipt,
+    ) -> io::Result<OwnedHelperTransaction<'a>> {
+        if !parent.resume_attempted {
+            return Err(invalid("Helper requires an attempted parent"));
+        }
+        let store = checked_slot_binding(parent)?;
+        let path = directory_path(
+            self._directories
+                .last()
+                .ok_or_else(|| invalid("Missing payload root"))?,
+        )?
+        .join("bootstrap-ordering.exe");
+        let image = pin_image(&path)?;
+        if !same_image(&image_id(&image)?, &image_id(&parent._image)?) {
+            return Err(invalid("Only the fixed original own image may be a helper"));
+        }
+        let mut copied = store.duplicate()?;
+        copied.singleton_caller_rva = 0;
+        let child = create_unstarted_impl(&path, image, Some(copied), false, Some(proof))?;
+        let status = tests::prepare_fixture(self, &child, proof, true);
+        if status != 0 {
+            return Err(io::Error::from_raw_os_error(status as i32));
+        }
+        self.enroll(&child)?;
+        parent.identity()?;
+        let transaction = OwnedHelperTransaction {
+            child,
+            parent,
+            _payload: self,
+        };
+        transaction.verify()?;
+        Ok(transaction)
+    }
+}
+
+#[cfg(test)]
+impl OwnedHelperTransaction<'_> {
+    fn verify(&self) -> io::Result<()> {
+        let parent = checked_slot_binding(self.parent)?;
+        let helper = checked_slot_binding(&self.child)?;
+        if parent.slot != helper.slot
+            || helper.singleton_caller_rva != 0
+            || self.child.observation.is_some()
+            || !same_image(
+                &directory_id(&parent.private)?,
+                &directory_id(&helper.private)?,
+            )
+            || !same_image(
+                &directory_id(&parent.logical)?,
+                &directory_id(&helper.logical)?,
+            )
+            || !same_image(
+                &image_id(&self.parent._image)?,
+                &image_id(&self.child._image)?,
+            )
+        {
+            return Err(invalid("Helper slot/image binding changed"));
+        }
+        Ok(())
+    }
+    fn resume(&mut self) -> io::Result<()> {
+        self.verify()?;
+        self.child.resume_once()
+    }
+}
+
+#[cfg(test)]
+impl SlotStorage {
+    fn duplicate(&self) -> io::Result<Self> {
+        let mut key = ptr::null_mut();
+        if unsafe {
+            DuplicateHandle(
+                windows_sys::Win32::System::Threading::GetCurrentProcess(),
+                self.registry.0,
+                windows_sys::Win32::System::Threading::GetCurrentProcess(),
+                &mut key,
+                0,
+                0,
+                DUPLICATE_SAME_ACCESS,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        let registry = RegistryKey(key);
+        Ok(Self {
+            slot: self.slot,
+            logical: self.logical.try_clone()?,
+            private: self.private.try_clone()?,
+            registry,
+            user_key_path: self.user_key_path,
+            private_path: self.private_path.clone(),
+            singleton_caller_rva: self.singleton_caller_rva,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1956,7 +2142,7 @@ mod tests {
                 .unwrap(),
         }
     }
-    fn prepare_fixture(
+    pub(super) fn prepare_fixture(
         library: &BootstrapLibrary,
         child: &PendingEducationBootstrap,
         proof: &FixtureReceipt,
@@ -2048,30 +2234,7 @@ mod tests {
     }
 
     fn clone_store(store: &SlotStorage) -> SlotStorage {
-        let mut key = ptr::null_mut();
-        assert_ne!(
-            unsafe {
-                DuplicateHandle(
-                    GetCurrentProcess(),
-                    store.registry.0,
-                    GetCurrentProcess(),
-                    &mut key,
-                    0,
-                    0,
-                    DUPLICATE_SAME_ACCESS,
-                )
-            },
-            0
-        );
-        SlotStorage {
-            slot: store.slot,
-            logical: store.logical.try_clone().unwrap(),
-            private: store.private.try_clone().unwrap(),
-            registry: RegistryKey(key),
-            user_key_path: store.user_key_path,
-            private_path: store.private_path.clone(),
-            singleton_caller_rva: store.singleton_caller_rva,
-        }
+        store.duplicate().unwrap()
     }
 
     fn finish_fixture(child: &PendingEducationBootstrap) {
@@ -2434,6 +2597,173 @@ mod tests {
         assert_ne!(unsafe { UnmapViewOfFile(view) }, 0);
         let [ready, finish] = events;
         (ready, finish)
+    }
+
+    #[test]
+    #[ignore = "Requires the explicitly built own C++ payload"]
+    fn manager_owned_helper_transaction_keeps_slot_and_rejects_changed_bindings() {
+        use windows_sys::Win32::System::Threading::SetEvent;
+        let path = PathBuf::from(std::env::var_os("MIVUBI_BOOTSTRAP_CPP_READER").unwrap())
+            .canonicalize()
+            .unwrap();
+        let root = path.parent().unwrap();
+        let library = BootstrapLibrary::load(root, fixture_digests(root)).unwrap();
+        let stores = test_slots();
+        let mut parents = Vec::new();
+        let mut held = Vec::new();
+        let mut barriers = Vec::new();
+        for store in stores {
+            std::fs::write(
+                directory_path(&store.logical)
+                    .unwrap()
+                    .join("Roaming/rust-enrolled.txt"),
+                b"HOST",
+            )
+            .unwrap();
+            let proof = FixtureReceipt::new();
+            let mut parent = create_unstarted_impl(
+                &path,
+                pin_image(&path).unwrap(),
+                Some(store),
+                false,
+                Some(&proof),
+            )
+            .unwrap();
+            assert_eq!(prepare_fixture(&library, &parent, &proof, true), 0);
+            library.enroll(&parent).unwrap();
+            assert!(library
+                .prepare_owned_helper(&parent, &FixtureReceipt::new())
+                .is_err());
+            let barrier = fixture_barrier(&parent, &proof);
+            held.push(FixtureLifetime::new(&parent));
+            parent.resume_once().unwrap();
+            assert_eq!(
+                unsafe { WaitForSingleObject(barrier.0.as_raw_handle() as HANDLE, 10000) },
+                WAIT_OBJECT_0
+            );
+            parents.push(parent);
+            barriers.push(barrier);
+        }
+        for index in 0..2 {
+            parents[index].created ^= 1;
+            assert!(library
+                .prepare_owned_helper(&parents[index], &FixtureReceipt::new())
+                .is_err());
+            parents[index].created ^= 1;
+            let original_image = mem::replace(
+                &mut parents[index]._image,
+                pin_image(&std::env::current_exe().unwrap()).unwrap(),
+            );
+            assert!(library
+                .prepare_owned_helper(&parents[index], &FixtureReceipt::new())
+                .is_err());
+            parents[index]._image = original_image;
+            let mut foreign = parents[1 - index]
+                .storage
+                .as_ref()
+                .unwrap()
+                .duplicate()
+                .unwrap();
+            mem::swap(
+                &mut parents[index].storage.as_mut().unwrap().registry,
+                &mut foreign.registry,
+            );
+            assert!(library
+                .prepare_owned_helper(&parents[index], &FixtureReceipt::new())
+                .is_err());
+            mem::swap(
+                &mut parents[index].storage.as_mut().unwrap().registry,
+                &mut foreign.registry,
+            );
+            let original_path = mem::replace(
+                &mut parents[index].storage.as_mut().unwrap().private_path,
+                foreign.private_path.clone(),
+            );
+            assert!(library
+                .prepare_owned_helper(&parents[index], &FixtureReceipt::new())
+                .is_err());
+            parents[index].storage.as_mut().unwrap().private_path = original_path;
+            let abandoned_proof = FixtureReceipt::new();
+            let abandoned = library
+                .prepare_owned_helper(&parents[index], &abandoned_proof)
+                .unwrap();
+            let abandoned_lifetime = FixtureLifetime::new(&abandoned.child);
+            drop(abandoned);
+            assert_eq!(
+                unsafe { WaitForSingleObject(abandoned_lifetime.raw(), 10000) },
+                WAIT_OBJECT_0
+            );
+            let mut abandoned_code = 0;
+            assert_ne!(
+                unsafe { GetExitCodeProcess(abandoned_lifetime.raw(), &mut abandoned_code) },
+                0
+            );
+            assert_eq!(abandoned_code, 90);
+            assert!(parents.iter().all(|parent| parent.identity().is_ok()));
+            let proof = FixtureReceipt::new();
+            let mut helper = library
+                .prepare_owned_helper(&parents[index], &proof)
+                .unwrap();
+            let helper_lifetime = FixtureLifetime::new(&helper.child);
+            let config = read_config(&helper.child);
+            assert_ne!(
+                helper.child.identity().unwrap(),
+                parents[index].identity().unwrap()
+            );
+            assert_eq!(
+                (config.slot, config.scope, config.singleton_caller_rva),
+                (index as u32 + 1, 1, 0)
+            );
+            assert!(helper.child.observation.is_none());
+            helper.child.created ^= 1;
+            assert!(helper.resume().is_err());
+            assert!(!helper.child.resume_attempted);
+            helper.child.created ^= 1;
+            let slot = helper.child.storage.as_ref().unwrap().slot;
+            helper.child.storage.as_mut().unwrap().slot = 3 - slot;
+            assert!(helper.resume().is_err());
+            assert!(!helper.child.resume_attempted);
+            helper.child.storage.as_mut().unwrap().slot = slot;
+            helper.resume().unwrap();
+            check_finished_fixture(&helper.child);
+            assert!(helper.resume().is_err());
+            assert!(parents.iter().all(|parent| parent.identity().is_ok()));
+            let store = parents[index].storage.as_ref().unwrap();
+            assert_eq!(
+                std::fs::read_to_string(store.private_path.join("Roaming/rust-enrolled.txt"))
+                    .unwrap(),
+                format!("{}:2", store.slot)
+            );
+            assert_eq!(
+                std::fs::read(
+                    directory_path(&store.logical)
+                        .unwrap()
+                        .join("Roaming/rust-enrolled.txt")
+                )
+                .unwrap(),
+                b"HOST"
+            );
+            drop(helper);
+            drop(helper_lifetime);
+        }
+        for (parent, barrier) in parents.iter().zip(&barriers) {
+            let proof = FixtureReceipt::new();
+            let mut helper = library.prepare_owned_helper(parent, &proof).unwrap();
+            let lifetime = FixtureLifetime::new(&helper.child);
+            assert_ne!(unsafe { SetEvent(barrier.1.as_raw_handle() as HANDLE) }, 0);
+            check_finished_fixture(parent);
+            assert!(helper.resume().is_err());
+            assert!(!helper.child.resume_attempted);
+            drop(helper);
+            assert_eq!(
+                unsafe { WaitForSingleObject(lifetime.raw(), 10000) },
+                WAIT_OBJECT_0
+            );
+            let mut code = 0;
+            assert_ne!(unsafe { GetExitCodeProcess(lifetime.raw(), &mut code) }, 0);
+            assert_eq!(code, 90);
+        }
+        drop(held);
     }
 
     #[test]

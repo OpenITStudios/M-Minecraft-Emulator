@@ -97,223 +97,153 @@ On each meaningful bounded commit, replace the **current** blocker/next status i
 
 ## Current owner and next action
 
-**Operator direction — 24 October 2026:** mature the original MC01/MC02 engine,
-starting with storage correctness, stable profile reuse and failure handling.
-**No Computer Use or game-window control while the operator is working.**
-No fresh game launch/closure or login request is part of the current source batch.
-Public MC02–04 admission remains denied; CI and retired providers remain off.
+**Operator direction — 24 October 2026:** mature the original MC01/MC02 engine
+without Computer Use, game-window input, fresh game launches or closures while
+the operator is working. Preserve existing accounts/worlds. Public MC02–04
+admission, retired providers and GitHub Actions remain disabled.
 
-**Source baseline:** exact remote Local `946d2b99e9909d9bf250ef64caed628c9ac6b4b0`,
-plus the literal input blobs below. Native coordination remains in
-`apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`; its only experiment
-consumer is the existing fixed startup argument. The existing C++ compatibility
-owner and control are in `tooling/acceptance/windows/bootstrap-ordering/`.
-No public API, production profile catalog, driver or service is introduced.
+**Source baseline:** exact remote Local
+`70cfae44112bb1afac306adab052209e122a6144`, plus the literal input blobs below.
+Native preparation/enrollment remains in
+`apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`; the private config,
+enroller, compatibility DLL and own controls remain in
+`tooling/acceptance/windows/bootstrap-ordering/`. No second lifecycle owner,
+production profile catalog, public command/schema, driver or service is added.
 
-### Confirmed defects and corrections
+### Confirmed defects already corrected
 
-- File routing rejected spaces in ordinary data paths, then nested directory
-  enumeration with a final separator. Attribute queries and ordinary private
-  delete/rename operations also had inconsistent coverage. Shared native routing
-  now supports these operations, pinned private parents and actual OS results.
-  Traversal/ADS/reparse restrictions and profile-root protection remain.
-- Explicit WRITE_OWNER/WRITE_DAC opens on ordinary private children were refused.
-  They now reach the selected actual private object; root protection remains.
-  Nested enumeration and security-open controls failed before these corrections
-  and passed afterward. They do not identify the exact old crash instruction.
-- The former fixed journal filename caused a second successful run to report
-  failure when saving over an earlier journal. The owner now uses
-  `startup-observation-v3-{process-birth:016x}.bin` with create-new semantics.
-  Two rounds preserve four distinct byte-verified journals; saving the same
-  lifetime twice still refuses. No earlier artifact is overwritten or deleted.
-- Nonzero child exits remain failures even when journals save. The original
-  handles and exit outcomes are retained; dropping a resumed transaction does
-  not kill attempted children. A fixture exit 86 still makes the runner fail.
-- Numbered captions use immutable store slots and verified original-child window
-  ownership, with a bounded message wait. Only a unique visible unowned root is
-  labelled; ambiguous windows/popups are skipped. Actual Minecraft - 1/2 titles
-  were observed. This does not enable MC03/MC04.
+- Private path validation rejected ordinary spaces and nested enumeration's
+  final directory separator. Attribute queries and ordinary delete/rename
+  coverage also differed from open/create. Shared routing now uses pinned
+  private parents and actual OS results; root/destructive/reparse restrictions
+  remain. WRITE_OWNER/WRITE_DAC on ordinary private children reaches the actual
+  private object; profile-root security/destructive operations remain refused.
+  The enumeration/security-open reproductions failed before and passed after.
+- Fixed journal names falsely failed later successful runs. Per-process-birth
+  `startup-observation-v3-{birth:016x}.bin` names preserve four exact journals
+  over two rounds; create-new still rejects a repeat save of one lifetime.
+- Nonzero original child exits remain runner failures even if journals save.
+  Original process handles are retained; attempted children are not killed on
+  manager drop. Captions use immutable slots: actual Minecraft - 1/2 observed.
 
-### Actual game evidence, separate from controls
+### Actual game evidence and its boundary
 
-The earlier space-only build failed world creation in both clients with
-0xC0000005 and matching Windows-reported game-module offset 0x245bf61.
-A later pre-enumeration run recorded MC01 0xC0000005 and MC02 exit 0.
-These are historical failures; their exact causal instruction/call chain remains
-**UNKNOWN**. Capacity alone was not established as the cause. No raw crash dump,
-account cache, token or world content was inspected/copied.
+The earlier space-only build crashed both games at world creation with
+0xC0000005 and Windows-reported game-module offset 0x245bf61. A later
+pre-enumeration run recorded MC01 0xC0000005 and MC02 exit 0. The exact causal
+instruction/call chain remains UNKNOWN; drive capacity was not established as
+the cause. No raw crash dump or account/token/cache/world content was inspected.
 
-The corrected compatibility DLL subsequently reopened the SAME two profiles
-with distinct player identities automatically at their main menus, without
-password entry or authentication-dialog automation. Both were playable; the
-operator confirmed movement in each. The agent observed two players together
-in one world and normal guest departure while the host survived.
+The corrected DLL later reopened the SAME two profiles to their main menus
+with distinct player identities and no password entry/authentication automation.
+Both were playable; the operator confirmed movement in each. Two players were
+observed in one world, followed by normal guest departure with the host alive.
 
-Then two new distinct agent-created worlds, `UJI-MC01-Persistensi` and
-`UJI-MC02-Persistensi`, reached concurrent gameplay. In-game commands placed a
-gold block under MC01 and a diamond block under MC02, each reporting Block
-placed. Both worlds saved through normal Save & Exit. MC02's My Worlds showed
-its own test world and the preserved old world, not MC01's new test world.
-Both applications subsequently closed through their normal confirmation UI:
-**both original child exit codes 0, both journals saved, manager exit 0**.
-This is creation/play/save/clean-close evidence, not post-restart durability.
+Two new distinct test worlds, UJI-MC01-Persistensi and UJI-MC02-Persistensi,
+then reached concurrent gameplay. In-game commands placed gold under MC01 and
+diamond under MC02, each reporting Block placed. Both saved via normal Save &
+Exit. MC02's world list showed its own test world and the preserved old world,
+not MC01's new world. Both apps closed normally: both original child exits 0,
+both journals saved, manager exit 0. This is create/play/save/clean-close evidence.
+A later same-store launch confirmed resume calls only before Computer Use was
+stopped. Reopened accounts/worlds/markers after that full process restart remain
+NOT_VERIFIED. Do not repeat or close that run without checking actual lifetime
+and operator intent; current work is source/automatic controls only.
 
-A fresh same-store pair was launched for restart validation before the operator
-stopped Computer Use. Its logs confirmed both resume calls only; reopened
-accounts/worlds/markers were **NOT_VERIFIED**. Do not repeat or close this run
-without checking its actual current lifetime and operator intent. The operator
-has now explicitly requested source/automatic controls without window control.
-
-Game-tested manager SHA-256:
+Game-tested manager:
 `eaa65ac1997bf6227b374bd2dce893346d7258c3fced46ed4973ac966d059687`.
-New journal-naming manager (built; game restart acceptance NOT_VERIFIED):
-`af61d047772dff5bbe6cf8da61201f4857a07cf08c4d300ab340074b85c13730`.
-Final source-only rebuild (not launched into Minecraft):
-`8366bdaa916a099098473f4378853b5aa6d501beb3bbf3dd2a258eb1a51a46a5`.
-All three use compatibility DLL
-`a59fb1803ff3d957b9691017f24dd7211a9b3f88b6a7b13988432210d67e02ec`
-and enroller
+Latest source-only manager build (not launched into Minecraft):
+`9e93645f848f9b4780a6b156672b4a355f68e947d17d9a0873d86e0df34fa0db`.
+Compatibility DLL:
+`a59fb1803ff3d957b9691017f24dd7211a9b3f88b6a7b13988432210d67e02ec`.
+Enroller:
 `18f4157b524f142f2bac85efd6d95b5df69d161a1e1a0da6c10788c94868f384`.
-Official game image is pinned to
-`04164c1c64458a5d984dbc1687d0e8023d1808c44ee7be03519cdf8355233eaa`;
-image changes refuse before store access. These artifacts are not installers.
+Official game image:
+`04164c1c64458a5d984dbc1687d0e8023d1808c44ee7be03519cdf8355233eaa`.
+The image is checked before store access. No installer was built.
 
-### Current automatic storage and recovery checks
+### Existing automatic storage and helper evidence
 
-The existing two-profile/two-round configured control uses generated canaries,
-not actual world databases. It checks nested official directory shape, Unicode
-and temporary names, native relative rename, metadata parity, flush, 64 repeated
-replacement cycles, deletion, same-store reopen, distinct backing data and an
-unchanged host tree. Escape rename/link and root destruction remain refused.
+The configured C++ control uses generated canaries, not game databases. Its two
+profiles/two normal rounds cover nested official-directory shape, Unicode/temp
+names, metadata parity, flush, 64 atomic replacements, native relative rename,
+delete/delete-on-close, same-store reopen, distinct backing and unchanged host.
+Failed replacement preserves old/retry bytes; CREATE_NEW collision preserves
+old data. Escaping rename/link and profile-root destruction remain refused.
 
-New failure-path checks keep a committed file open without SHARE_DELETE:
-replacement fails with the same ERROR_ACCESS_DENIED as an independently executed
-unhooked Windows baseline; old and retry data remain exact. After releasing the
-reader, replacement and flush succeed and the retry source disappears.
-CREATE_NEW collision also preserves the old bytes. Both slots/rounds pass.
-This checks real Windows file semantics through mediation, not LevelDB crash
-recovery, disk-full/power-loss durability or every game workload.
+Two synchronized own-writer interruption phases cover flushed pending data
+before replacement (exit 91) and flushed mapped data after replacement (exit 92).
+The unhooked parent verifies exact backing bytes, released handles/byte locks,
+exclusive reopen, new-process same-store reopen, no retry names after commit,
+peer survival and unchanged prior CURRENT/host markers. Overlapping byte locks
+fail while a distinct range works. This does not prove mapped memory obeys
+byte locks, torn-write/disk-full/power-loss durability or game recovery.
 
-**Interrupted-writer batch:** after the two normal rounds, two own children
-flush distinct generated checkpoints and wait on controller events. The parent
-terminates only the original first self-child handle (known exit 91) before
-checkpoint close/replacement. It independently verifies exact old and retry
-bytes in the private backing tree and opens the retry file exclusively, proving
-release of the dead writer's handle. The other child remains live, resumes and
-completes its own replacement. A new enrolled first child reopens the SAME
-profile and pending data, completes replacement and exits 0; the peer also exits
-0. Parent checks both distinct final markers, removed retry names, preserved
-prior CURRENT files and unchanged host data. Generated registry canaries alone
-are reseeded to their existing startup baseline; no game store is read/reset.
+Fixed own helpers from the enrolled parents show private APPDATA/LOCALAPPDATA
+inheritance alone does not supply private Known Folders or HKCU: unbound helpers
+read only the generated host marker. Explicit low-level bootstrap makes both
+Known Folders and both HKCU access forms private. Four unbound/four explicit
+helpers are checked per configured run; the enlarged case passed eight repeated
+runs, all four C++ modes and then-current 15 Rust tests. This identifies a
+fixture gap, not the real Education helper/broker route.
 
-The new configured case passed eight repeated runs. The other three C++ modes
-and all 15 Rust bootstrap tests passed against the rebuilt own control. The
-compatibility DLL and manager source are unchanged from the baseline commit;
-this batch found no new production defect and adds regression evidence only.
-No game process was launched, activated or terminated. This covers interruption
-after an acknowledged flush and before replacement, not power loss, torn writes,
-disk-full or LevelDB/game crash recovery.
+The EnrollPreparedEducationV2 ABI refuses an already mediated caller even with
+correct child config. That caller's effective RegOpenCurrentUser key name is
+confirmed different from config.userKeyPath. Keep this manager-context check;
+the low-level own-fixture positive control is not a production fallback.
+`compat.cpp::observedProcess` merely forwards CreateProcessW arguments and
+records metadata; it does not enroll children. Broker activation is separate.
 
-**Post-replacement/mapped-file batch:** a second synchronized phase maps a
-16-byte generated file per slot, writes distinct bytes, flushes both mapped view
-and file, and replaces the old file while retaining the view and an exclusive
-byte lock at offset 8. The unhooked controller proves an overlapping lock fails
-with ERROR_LOCK_VIOLATION and a non-overlapping range at offset 9 succeeds in
-each profile. Only its original first self-child is terminated (exit 92).
-Exclusive backing-file reopen, reacquisition of the formerly locked range and
-exact new bytes prove release of the dead writer's handle/lock and retention
-of the flushed replacement. Retry names are absent. A new enrolled first child
-checks the same bytes through mapping and normal reads; peer survival, both
-normal exits, preserved previous CURRENT markers and unchanged host tree are
-also checked. Eight repeated enlarged configured runs, the other three C++
-modes, 15 Rust bootstrap tests and diff whitespace checks all pass. Production
-DLL/manager source is unchanged; no new production defect was found. This is
-not partial-write/disk-full/power-loss or real-game database acceptance, and
-it does not claim that memory-mapped access is restricted by byte locks.
+### Current implementation: fixed helper transaction through the Rust owner
 
-**Material source-audit blind spot:** `compat.cpp::observedProcess` simply
-forwards original CreateProcessW arguments and records bounded metadata; that
-hook is installed only with observation enabled. `enroll.cpp` binds the original
-explicitly supplied suspended process only. No descendant-enrollment mechanism
-exists in this route. Inherited APPDATA alone does not provide a helper's
-Known Folder/HKCU mediation. The actual Education helper/broker path and whether
-it requires mediation remain UNKNOWN; automatic direct-child enrollment would
-not itself cover broker-activated processes. This is not a proven cause of old
-crashes, nor authorization to inject into arbitrary helpers or change brokers.
+A cfg(test)-only OwnedHelperTransaction now borrows the original parent and
+pinned BootstrapLibrary in the same native owner. It creates only the fixed
+bootstrap-ordering.exe next to the pinned payload and requires the parent's
+pinned image identity. Parent PID/birth/session/slot/config, logical/private
+IDs and path, plus the exact retained/remote registry object must still match.
+A fallible duplicate of the SAME slot's existing capabilities supplies a fresh
+child config. Singleton caller RVA is cleared, observation is absent, and the
+manager calls the existing reviewed enroller ABI. Resume rechecks both live
+bindings, same-slot roots/image, then uses the existing single-attempt owner.
+Lifetime borrows retain parent/payload ownership; Drop preserves attempted
+children and cancels only original unstarted children.
 
-**Fixed-helper comparison:** the configured control now launches a fixed own
-helper from each enrolled parent in both normal rounds. It receives a fresh
-PID/birth-bound Baseline report and bounded handles, not the parent's mutable
-receipt or bootstrap capability. With only the inherited private APPDATA and
-LOCALAPPDATA, both effective Known Folder paths differ from the private paths;
-HKCU and RegOpenCurrentUser read only the freshly generated host canary marker.
-This is a measured descendant gap in our fixture, not identification of the
-actual Education helper or its authentication path.
+The new integration test keeps two own enrolled parents live and runs one
+manager-created helper per slot. Both helper enrollments, effective private
+Known Folder/HKCU checks, second private writes and host-canary checks pass.
+Unattempted parent, changed parent birth/image/registry/path and changed helper
+birth/slot refuse before resume. Repeat resume refuses. Abandoned prepared
+helpers exit 90 while both parents stay alive. Parent normal exit before helper
+resume causes refusal and original unstarted-helper cancellation with exit 90.
 
-A separate explicit bootstrap control on the same own image uses the same
-slot's pinned backing objects and a fresh child-bound read-only config, scoped
-to storage/registry with singleton caller RVA zero. Both Known Folders and both
-HKCU access forms then resolve to the private slot marker. Each configured run
-checks four unbound and four explicitly bootstrapped helpers. The enrolled
-parent remains private after each helper exits; earlier host/tree checks and
-storage/crash controls still pass. No account key, token, cache or game world
-is read/copied; only generated canaries and directory metadata are accessed.
-
-The existing EnrollPreparedEducationV2 API was also exercised from the mediated
-parent. A correct child configuration is refused with ERROR_INVALID_DATA; the
-caller's effective RegOpenCurrentUser key name is confirmed different from
-config.userKeyPath. The current API validates an unmediated manager's user
-context. Keep that refusal. The low-level own-fixture positive control proves
-only the DLL mechanism and is not a production fallback around enrollment.
-
-**Decision:** helper enrollment must be coordinated by the existing trusted
-manager/native owner using the original child handles, identity and same-slot
-capabilities. Do not transplant the manager enroller into an already mediated
-parent, inherit the parent's PID/config blindly, or install arbitrary-child
-hooks. A descendant route also does not cover independently broker-activated
-processes; actual Education helper/broker attribution remains UNKNOWN.
-
-Final executed checks: MSVC 19.44 /W4 /WX build, all four C++ modes, eight
-repeated enlarged configured runs, 15 Rust bootstrap tests and diff whitespace
-check PASS. No production DLL/enroller/manager code or schema changes in this
-batch, and no game launch/input/Computer Use. The result is a narrower proven
-integration requirement, not completed production helper propagation or a
-resolution of the old game access violation.
-
-The replay owner opens only one hash-pinned, local-only capability's existing
-root/MC01/MC02 directory identities and backing registry keys. Wrong capability,
-replaced directory, missing Local directory, overlapping roots and unreviewed
-payload are refused. There is no fresh-profile fallback or token copying.
-Raw capabilities, IDs, journals, player identities and account data stay local.
-
-Actually executed on the current code inputs:
-- MSVC 19.44 x64 Release /W4 /WX build PASS; all four C++ modes exit 0.
-- Rust 1.98.1: **15 bootstrap tests PASS**, including six explicitly enabled
-  own-executable integration cases, journal uniqueness/overwrite protection,
-  nonzero exits, partial resume and replay rejection.
-- Preview manager build PASS; git diff whitespace check PASS.
-- No Computer Use/game interaction during this source-only batch.
+**Executed on these inputs:** 16 Rust bootstrap tests PASS (including the new
+explicit own-executable case), preview manager build PASS, rustfmt and diff
+whitespace checks PASS. C++ source/DLLs are unchanged in this batch. This
+transaction exists only in tests and creates a manager-owned sibling process;
+it does not yet receive/adopt a game-created descendant. No real helper or game
+was launched, activated, closed or injected during this batch.
 
 Literal code-input blobs (documentation excluded):
 
 | Input | Git blob |
 | --- | --- |
-| `independent_bootstrap.rs` | `c9cb47840c04f0de1081e4fefa6d1300057b5b7d` |
+| `independent_bootstrap.rs` | `07a2c681947e2d3b71835e99e1dacaa97e315a56` |
 | `compat.cpp` | `400e4453a18b6b9bbefe9401ef798380c003d5d7` |
 | `probe.cpp` | `0971a9776a74284de166f03248b3c6991d66c9f5` |
 
-**Remaining blind spots:** real saved-world/marker reopen after process restart;
-long concurrent gameplay and recovery after a game crash; full helper/broker
-and HKCU/auth isolation; raw-syscall/alias/host-peer protection; disk-full,
-partial-write and power-loss behavior; FPS/frametime/GPU/CPU overhead and
-comparison with Sandboxie. Prior raw peer-access control showed that name
-translation is **not a security boundary**. Four clients, installer and
-comparative performance remain **NOT_EXECUTED**. No maturity percentage is
-awarded from fixture coverage.
+### Remaining proof and one next action
 
-**One next action:** implement a private fixed-own-helper transaction through
-the existing Rust native owner and reviewed enroller, preserving original
-process/thread/PID/birth, pinned image and same-slot backing checks. Prove
-wrong/replaced bindings refuse before resume. Keep real-game automatic helper
-propagation and public admission disabled; actual helper attribution and
-Minecraft restart/soak acceptance remain pending without game UI control.
+UNKNOWN/NOT_EXECUTED: real saved-world/marker reopen after restart, long
+concurrent gameplay and game crash recovery, actual Education helper/broker
+attribution and propagation, full HKCU/auth/host-peer containment, partial
+writes/disk-full/power loss and comparative FPS/frametime/GPU/CPU overhead.
+Prior raw peer-access control showed name translation is not a security
+boundary. Four clients and distribution remain NOT_EXECUTED. Fixture coverage
+does not establish full stability or a development percentage.
+
+**One next action:** exercise original suspended own-descendant handle handoff
+to this existing Rust manager transaction, with process/image/slot provenance
+checks and no PID reopening. The present transaction creates its helper itself;
+that is not captured-child enrollment. Keep game-helper propagation and public
+admission disabled; actual Minecraft restart/soak acceptance waits for an
+operator-selected window without unsolicited Computer Use.

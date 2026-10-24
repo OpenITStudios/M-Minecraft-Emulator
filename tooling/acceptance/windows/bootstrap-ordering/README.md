@@ -208,6 +208,36 @@ bootstrap tests pass. Production DLL/manager/enroller code and all private/publi
 schemas are unchanged. Real Education helper/broker attribution, propagation,
 authentication separation and game crash recovery remain UNKNOWN/NOT_EXECUTED.
 
+### Manager-owned fixed helper transaction
+
+`independent_bootstrap.rs` now has a cfg(test)-only `OwnedHelperTransaction` in
+the existing owner. It borrows the original parent and the reviewed/pinned
+bootstrap library for its lifetime. The manager creates only the fixed sibling
+`bootstrap-ordering.exe`; no descendant PID discovery or adoption is added.
+Its image must match the parent's pinned image. The parent must be live with a
+resume attempt, a matching published PID/birth/slot/session/config, retained
+logical/private directory identities and path, and the exact duplicated
+registry object. A fallible duplicate of the same slot's existing capabilities
+supplies a fresh helper config with storage/registry scope and no singleton RVA
+or startup observation. The manager calls its existing reviewed enroller.
+
+The transaction rechecks parent/helper identity, same-slot backing and image
+before the single resume attempt. It keeps the pending child on validation
+errors; existing Drop cancellation applies only before an attempt. The new
+integration test holds two enrolled own parents alive, runs a helper for each
+through the real manager-side enrollment ABI and checks distinct private writes,
+preserved host canaries and both live parents. It rejects unattempted parents,
+changed parent birth/image/registry/path and changed helper birth/slot before
+resume; repeated resume refuses. Dropping a prepared helper cancels only that
+original child with exit 90. A parent exiting normally before helper resume
+also causes refusal and safe unstarted-helper cancellation.
+
+All 16 Rust bootstrap tests and the preview build pass. Native C++ and
+production enrollment/launch behavior are unchanged. This fixed manager-created
+helper proves an owner-side transaction, not transfer of a descendant created
+inside the game, broker activation, production helper support or game acceptance.
+No public API/schema, provider admission, persistent state, driver or CI change.
+
 ### Numbered experimental windows
 
 The fixed same-manager experiment now names each unique visible unowned game
