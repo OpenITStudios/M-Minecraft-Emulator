@@ -1,5 +1,51 @@
 # Self-owned early-import ordering experiment
 
+## Measured FPS HUD — 25 October 2026
+
+The existing typed presentation owner now retains one lightweight HUD worker
+per process, reused across native chain lifetimes. It counts outer native
+Present/Present1 calls returning exactly S_OK, excluding TEST calls. Occluded
+statuses, pending nonblocking presents and failures do not count; successful
+nonblocking presents do. It samples accepted intervals over at least 500 ms,
+updates the label twice per second as samples arrive and shows `-- FPS`
+before a sample or after two seconds without an accepted present. Completion
+updates arriving out of order are serialized/clamped; the observer's clock
+sample occurs under the read lock. This is accepted render-present FPS,
+**not scanout/displayed FPS** and not the configured 144/10 ceiling.
+
+The HUD uses a small 128×32 DIP owned layered window, 12 DIP inside the game's
+client top-right, with 17 DIP white text on a dark panel. A dedicated PMv2
+thread observes only own-process owner-window location events and checks
+geometry at most every 250 ms when otherwise idle. Bind/unbind reuses that
+worker and retains no native renderer object. The unbound worker waits without
+a periodic timeout. Surface drawing happens only when displayed text/DPI
+changes; moving the panel reuses its pixels. The HUD's per-present addition is only a
+QPC/counter update; its GDI/window work stays on the worker.
+
+[Layered-window transparency](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features#layered-windows)
+and NOACTIVATE/TOOLWINDOW styles preserve input and owner z-order without a
+topmost flag. The worker uses
+[thread DPI contexts](https://learn.microsoft.com/en-us/windows/win32/hidpi/high-dpi-improvements-for-desktop-applications)
+and the owner's
+[logical-to-physical conversion](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-logicaltophysicalpointforpermonitordpi).
+This adds no game backbuffer draw calls, process-wide DPI/timer changes,
+public command, persistent preference or third-party dependency.
+
+Build the existing explicit test-only CMake project and run
+`fps-hud-control.exe --run-self-test`. It uses hidden own windows, writes only
+an ignored local bitmap preview, checks deterministic rates/invalid/stale
+samples, synthetic DPI geometry, actual resize/owner bounds, transparent
+hit-test/no-activation responses, same-worker rebinding and balanced GDI
+handles. Existing D3D11/D3D12 controls verify native-result sampling and TEST
+exclusion. A private sized BootstrapHudSnapshot export lets the Rust-owned
+C++ receivers check actual hidden HUD composition under the full compatibility
+DLL. No counter is opened on a live game by these commands.
+
+Actual visible input behavior, per-monitor DPI transitions, fullscreen and
+DWM/GPU/VRAM overhead in Minecraft remain NOT_EXECUTED. The reviewed game
+candidate/payload pins and admission remain unchanged. Canonical current
+evidence and next action stay in planning/development.md.
+
 ## Private creation-to-pacing capability — 25 October 2026
 
 The opt-in own-child command `--run-presentation-pacing-self-test` extends

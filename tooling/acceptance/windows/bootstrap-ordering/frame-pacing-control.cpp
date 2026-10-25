@@ -324,7 +324,10 @@ void adapterChecks(bool modern) {
     LARGE_INTEGER frequency{};
     check(QueryPerformanceFrequency(&frequency));
     check(focus(true));
-    check(SUCCEEDED(target->Present(0, 0)));
+    const auto measuredBefore = dxgi_pacing::hud_snapshot().reading.accepted;
+    const HRESULT measuredResult = target->Present(0, 0);
+    check(SUCCEEDED(measuredResult));
+    check(dxgi_pacing::hud_snapshot().reading.accepted == measuredBefore + (measuredResult == S_OK ? 1 : 0));
     auto before = dxgi_pacing::snapshot();
     check(before.pacedPresent == 1 && before.lastCeiling == 144);
     check(SUCCEEDED(target->Present1(0, 0, &parameters)));
@@ -355,8 +358,10 @@ void adapterChecks(bool modern) {
     before = after;
     check(SUCCEEDED(other->Present(0, 0)));
     check(SUCCEEDED(sameWindow->Present1(0, 0, &parameters)));
+    const auto beforeTestOnly = dxgi_pacing::hud_snapshot().reading.accepted;
     check(SUCCEEDED(target->Present(0, DXGI_PRESENT_TEST)));
     check(SUCCEEDED(target->Present1(0, DXGI_PRESENT_TEST, &parameters)));
+    check(dxgi_pacing::hud_snapshot().reading.accepted == beforeTestOnly);
     // Native DO_NOT_WAIT may legitimately report WAS_STILL_DRAWING; preserve it.
     const HRESULT nonblocking = target->Present(0, DXGI_PRESENT_DO_NOT_WAIT);
     check(SUCCEEDED(nonblocking) || nonblocking == DXGI_ERROR_WAS_STILL_DRAWING);

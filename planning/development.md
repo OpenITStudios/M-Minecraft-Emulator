@@ -16,7 +16,8 @@ small, clearly readable **FPS counter at the top right** (operator addition).
 It must show a measured per-window rate, remain correctly anchored across
 resize/DPI changes, preserve input and have measured low overhead. Metric
 semantics must be explicit; unavailable measurements show an unavailable state.
-This HUD is not implemented or accepted yet. Background rendering must preserve
+HUD source and own-control checks now exist; actual game acceptance remains
+NOT_EXECUTED. Background rendering must preserve
 host simulation, saves and networking; that separation remains UNKNOWN until
 measured in the actual game. Resolution, monitor refresh and free SSD capacity
 are not established.
@@ -1017,19 +1018,84 @@ through Minecraft is NOT_EXECUTED. Prior C++ synthetic transitions are supportin
 evidence, not evidence of real game FPS. Native query compatibility outside the
 tested Windows build remains UNKNOWN.
 
+### Measured top-right FPS HUD source — 25 October 2026
+
+Base reviewed: `aa6332a91ab2929f3dbd027219968fc0bed63b24` (Local).
+The existing typed presentation owner now samples outer native Present/Present1
+returns, counting exactly S_OK and excluding TEST/status/failure returns.
+A successful DO_NOT_WAIT presentation counts; pending nonblocking work does
+not. At least 500 ms of accepted intervals produce a measured rate. Initial
+and two-second-stale values show `-- FPS`; it never displays a 144/10 policy
+number as a measurement. Out-of-order concurrent completions clamp safely;
+current observer timestamps are obtained under the sampler's read lock.
+This measures accepted render presentations, not scanout/displayed frames.
+
+The same process-lifetime presentation policy owns one HUD worker, reused
+across chain recreation without retaining native renderer references. It
+creates an owned, non-topmost layered window, with TRANSPARENT/NOACTIVATE/
+TOOLWINDOW styles and transparent hit-test/no-activation responses. White
+17 DIP text sits in a dark 128×32 DIP panel, 12 DIP inside the client top-right.
+The worker alone performs GDI/Win32 drawing; render callbacks add only a
+QPC/short counter update after the native result and preserve HRESULT/LastError.
+Geometry follows own-process location events plus a 250 ms fallback while
+bound. DPI conversion restores temporary thread context; no process-wide
+DPI/timer change, input hook, game backbuffer drawing, account/world I/O or
+persistent preference is introduced. Unbound windows are destroyed and the
+worker waits indefinitely. The policy keeps its existing process lifetime;
+standalone controls stop/join the worker on destruction outside loader lock.
+
+### Executed evidence for the HUD change
+
+- MSVC x64 Release /W4 /WX build passes. The initial control-only auto-declarator
+  type mismatch was corrected before successful verification.
+- New hidden HUD control passes eight construction/teardown cycles and rebinds
+  each same worker, with balanced GDI handles. It checks actual own-window
+  resize/owner-relative bounds, styles and message responses; deterministic
+  sampler cases cover 144/10/actual-5 FPS, failures, occlusion, TEST, successful
+  nonblocking work, initial/stale/reset values and out-of-order completion.
+- Geometry vectors cover 96/144/192/288 DPI; raster generation also runs at
+  96/192 DPI. Own GDI bitmap examples of 144.0 FPS, 10.0 FPS and unavailable
+  values were rendered and visually inspected. No screen capture or Computer
+  Use occurred. Actual visible clicking and real monitor-DPI transitions
+  remain NOT_EXECUTED.
+- Final HUD control: 8 cycles/10 draws over 3.389 seconds, reported 0.0000 CPU
+  seconds (including 0.0000 over its 2.1-second idle portion). This accounting
+  result does not prove zero overhead. One-million-call microbenchmarks measured
+  10.43 ns/counter record and 23.63 ns including QPC/record in that own process;
+  these exclude game hook/DWM/GPU cost and are not a Minecraft comparison.
+- Existing D3D11 and external-policy D3D12 typed-wrapper controls pass, now
+  checking actual native-result sampling and TEST exclusion. Removing native
+  sampling makes the D3D12 control fail (exit 1); restoration passes.
+- The Rust-owned receiver now uses a larger hidden own client area and checks
+  actual HUD window/bounds/bitmap draws with zero HUD failures under the full
+  compatibility DLL; malformed snapshot size/null output refuse. All 23
+  exact-source isolated Rust tests pass; one visible caption test stays filtered.
+- Existing observe/storage and paced creation/storage regressions pass, retaining
+  19/34 invalid presentation-capability refusals, 40 creation lifetimes and
+  original two-slot persistence/recovery canaries. Five-own-renderer timing
+  control passes (550 releases/3.060 seconds, 0.031 CPU seconds, maximum
+  promotion 0.138 ms, stop 5.320 ms); these are not displayed game FPS.
+- Final exact-path own-process inventory is zero. No binaries, previews, raw
+  process metadata, accounts or worlds are committed.
+
+The private HUD snapshot is diagnostic only. Storage/creation capability
+layouts, public schemas/admission, existing reviewed live payload hashes,
+original account/world data and CI/distribution are unchanged. No game was
+launched, closed, focused or controlled in this work.
+
 ### Remaining proof and one next action
 
-The full goal remains ACTIVE: five licensed Education clients sharing one
-Education Host World, measured CPU/RAM/GPU/VRAM and soak/stability/persistence,
-game 144/10 behavior without slowing background host simulation, and the
-measured top-right per-window FPS HUD. Internal Rust lease delivery now reaches
-native creation/pacing in own receivers. Existing game routes and live
-candidate are unchanged; HUD source and all new real-game acceptance remain
-NOT_IMPLEMENTED / NOT_EXECUTED as applicable. Public admission stays closed,
-CI stays off, original accounts/worlds are preserved and no Computer Use or
-game launch/input/restart/closure occurred.
+The full goal remains ACTIVE: five licensed clients sharing one Education
+Host World, actual game 144/10 behavior without slowing background simulation,
+measured CPU/RAM/GPU/VRAM, persistence/soak/stability and the top-right FPS HUD.
+HUD source and hidden controls now exist; visible game behavior, fullscreen,
+real DPI transitions and composition cost remain NOT_EXECUTED. Neither own
+fixtures nor the HUD's accepted-present metric prove displayed FPS or host
+health. Existing registered game routes still opt out of the new policy/HUD,
+and public admission remains closed.
 
-**One next action:** implement the measured per-window FPS HUD in the existing
-presentation owner, validating its sampling, top-right anchoring, resize/DPI,
-input safety and overhead on own controls before reviewing a same-profile
-game candidate; retain five-client Host World/resource/stability acceptance.
+**One next action:** prepare a reviewed same-profile two-client candidate
+using the existing private presentation constructor with pacing/HUD, pin its
+payloads and prepare one integrated runtime check of counter/native frame
+rates, focus changes and Education Host World health before five-client
+expansion; launch only in an available operator session without Computer Use.

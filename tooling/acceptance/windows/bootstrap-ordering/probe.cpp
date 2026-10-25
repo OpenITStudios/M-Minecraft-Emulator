@@ -2599,16 +2599,16 @@ void presentationChecks(probe::Receipt& receipt) {
     require(observed.armed == 1 && observed.factories == 0 && observed.candidates == 0);
     struct Window {
         HWND value;
-        explicit Window(const wchar_t* name) {
+        explicit Window(const wchar_t* name, int size = 16) {
             WNDCLASSW type{}; type.lpfnWndProc = DefWindowProcW;
             type.hInstance = GetModuleHandleW(nullptr); type.lpszClassName = name;
             require(RegisterClassW(&type));
             value = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, name, L"", WS_POPUP,
-                0, 0, 16, 16, nullptr, nullptr, type.hInstance, nullptr);
+                0, 0, size, size, nullptr, nullptr, type.hInstance, nullptr);
             require(value && !IsWindowVisible(value));
         }
         ~Window() { DestroyWindow(value); }
-    } selected(L"OGLES"), unrelated(L"MivubiPresentationAux");
+    } selected(L"OGLES", policyControlRound == 8 ? 900 : 16), unrelated(L"MivubiPresentationAux");
     ComPtr<IDXGIFactory4> factory;
     require(SUCCEEDED(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory))));
     require(read(&observed) && observed.factories == 1 && observed.failures == 0);
@@ -2661,6 +2661,18 @@ void presentationChecks(probe::Receipt& receipt) {
         frames(10);
         if (policyControlRound == 8) {
             chain.Reset(); chain = create(selected.value); frames(10);
+            using HudRead = BOOL (*)(fps_hud::Snapshot*, DWORD);
+            const auto hudRead = reinterpret_cast<HudRead>(GetProcAddress(GetModuleHandleW(L"bootstrap-compat.dll"),
+                "BootstrapHudSnapshot"));
+            fps_hud::Snapshot hud{};
+            require(hudRead && !hudRead(nullptr, sizeof(hud)) && !hudRead(&hud, sizeof(hud) - 1));
+            const ULONGLONG started = GetTickCount64();
+            for (;;) {
+                require(hudRead(&hud, sizeof(hud)) && !hud.failures);
+                if (hud.window && hud.draws && hud.bounds.right > hud.bounds.left) break;
+                require(GetTickCount64() - started < 3000); Sleep(5);
+            }
+            require(!hud.visible && !IsWindowVisible(hud.window) && GetWindow(hud.window, GW_OWNER) == selected.value);
             require(receipt.ready && receipt.finish && SetEvent(receipt.ready)
                 && WaitForSingleObject(receipt.finish, 10000) == WAIT_OBJECT_0);
             const auto presents = timing.pacedPresent;

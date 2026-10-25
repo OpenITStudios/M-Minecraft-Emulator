@@ -937,6 +937,11 @@ bool install(const InstallConfig& config, bool mutex) {
 } // namespace
 
 extern "C" void BootstrapOrdinalOne() {}
+extern "C" BOOL BootstrapHudSnapshot(fps_hud::Snapshot* output, DWORD bytes) {
+    if (!output || bytes != sizeof(*output)) return FALSE;
+    *output = dxgi_pacing::hud_snapshot();
+    return TRUE;
+}
 extern "C" BOOL BootstrapPacingSnapshot(dxgi_pacing::Snapshot* output, DWORD bytes) {
     if (!output || bytes != sizeof(*output)) return FALSE;
     *output = dxgi_pacing::snapshot();

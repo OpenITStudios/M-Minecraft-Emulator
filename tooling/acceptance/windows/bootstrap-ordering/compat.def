@@ -4,3 +4,4 @@ EXPORTS
     BootstrapRegistry
     BootstrapPresentationSnapshot
     BootstrapPacingSnapshot
+    BootstrapHudSnapshot

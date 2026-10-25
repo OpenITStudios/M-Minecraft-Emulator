@@ -1,6 +1,7 @@
 #pragma once
 #include <dxgi1_2.h>
 #include "frame-pacing.h"
+#include "fps-hud.h"
 
 namespace dxgi_pacing {
 struct Snapshot {
@@ -17,4 +18,5 @@ bool wrap(IDXGISwapChain1** owned, HWND window) noexcept;
 bool foreground(bool active) noexcept;
 bool stop() noexcept;
 Snapshot snapshot() noexcept;
+fps_hud::Snapshot hud_snapshot() noexcept;
 }

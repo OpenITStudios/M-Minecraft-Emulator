@@ -9,6 +9,7 @@ namespace {
 using Microsoft::WRL::ComPtr;
 struct Policy {
     presentation_pacing::Pacer pacer;
+    fps_hud::Hud hud;
     explicit Policy(const presentation_pacing::Input& input = {}) : pacer(input) {}
     SRWLOCK rendering = SRWLOCK_INIT;
     std::atomic<unsigned long long> present{0}, present1{0}, bypassed{0}, faults{0};
@@ -17,7 +18,7 @@ struct Policy {
     std::atomic<LONGLONG> lastRelease{0};
     std::atomic<unsigned> lastCeiling{0};
 };
-// Process policy owns clocks/counters only. No COM object is retained here.
+// Process policy retains clocks, counters and one HUD worker; no COM objects.
 std::atomic<Policy*> policy{nullptr};
 SRWLOCK installation = SRWLOCK_INIT;
 thread_local bool insidePresent = false;
@@ -31,6 +32,7 @@ class Chain final : public IDXGISwapChain4, public IDXGISwapChainMedia {
     DWORD windowThread_;
     ~Chain() {
         // Drop every native interface before allowing a replacement binding.
+        policy_.hud.unbind();
         media_.Reset(); inner_.Reset();
         policy_.destroyed.fetch_add(1);
         policy_.live.store(0, std::memory_order_release);
@@ -38,12 +40,13 @@ class Chain final : public IDXGISwapChain4, public IDXGISwapChainMedia {
     template<class Native> HRESULT present(UINT sync, UINT flags, bool newer, Native native) {
         const DWORD before = GetLastError();
         const bool outer = !insidePresent;
+        DWORD observedProcess = 0;
+        const bool measured = outer && sync <= 4
+            && GetWindowThreadProcessId(window_, &observedProcess) == windowThread_
+            && observedProcess == GetCurrentProcessId();
         insidePresent = true;
         if (outer) {
-            DWORD process = 0;
-            if (sync > 4 || (flags & (DXGI_PRESENT_TEST | DXGI_PRESENT_DO_NOT_WAIT))
-                || GetWindowThreadProcessId(window_, &process) != windowThread_
-                || process != GetCurrentProcessId()) policy_.bypassed.fetch_add(1);
+            if (!measured || (flags & (DXGI_PRESENT_TEST | DXGI_PRESENT_DO_NOT_WAIT))) policy_.bypassed.fetch_add(1);
             else {
                 // Clock serialization ends BEFORE entering the native renderer.
                 AcquireSRWLockExclusive(&policy_.rendering);
@@ -64,6 +67,7 @@ class Chain final : public IDXGISwapChain4, public IDXGISwapChainMedia {
         SetLastError(before);
         const HRESULT result = native();
         const DWORD after = GetLastError();
+        if (measured) policy_.hud.present(result, flags);
         if (outer) insidePresent = false;
         SetLastError(after); return result;
     }
@@ -71,6 +75,7 @@ public:
     Chain(Policy& p, ComPtr<IDXGISwapChain4> inner, ComPtr<IDXGISwapChainMedia> media, HWND window, DWORD thread)
         : policy_(p), inner_(std::move(inner)), media_(std::move(media)), window_(window), windowThread_(thread) {
         policy_.created.fetch_add(1);
+        if (!policy_.hud.bind(window_, windowThread_)) policy_.faults.fetch_add(1);
     }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID id, void** result) override {
         if (!result) return E_POINTER;
@@ -205,6 +210,10 @@ bool foreground(bool active) noexcept {
 bool stop() noexcept {
     auto* p = policy.load(std::memory_order_acquire);
     return p && p->pacer.stop();
+}
+fps_hud::Snapshot hud_snapshot() noexcept {
+    auto* p = policy.load(std::memory_order_acquire);
+    return p ? p->hud.snapshot() : fps_hud::Snapshot{};
 }
 Snapshot snapshot() noexcept {
     auto* p = policy.load(std::memory_order_acquire);
