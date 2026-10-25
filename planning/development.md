@@ -204,6 +204,58 @@ Local-only evidence hashes: ETL
 menu VMMap CSV
 `4e37fce8c5d97a662e8980155769ecafbfe1b2bce4e2637f14ebd71c2ec99319`.
 
+
+**Concrete native warm-pool candidate (source baseline c59b89c):** the operator
+clarified that the target is Minecraft itself using less real RAM while playing,
+with a requested ceiling below 1 GiB per client; reducing only a Task Manager
+number by paging is not success. This target is NOT_ACHIEVED. Preserve the
+12-chunk minimum, simulation/resolution and original accounts/worlds. Resident
+private RAM and commit must be distinguished from GPU capacity and allocation
+traffic; shared memory cannot be double-counted as an additional saving.
+
+The on-disk PE has unbacked code/exception RVAs, and file-backed literal regions
+did not decode as the loaded image; ordinary file disassembly did not establish
+the allocator. A temporary read-only inspection instead pinned each original
+PID/birth and executable SHA-256, binary-searched loaded PE exception metadata,
+and read only selected executable MEM_IMAGE function intervals plus explicitly
+referenced read-only image literals. No account/token/world/heap contents, full
+dump, process writes or additional injection were used. Selected function bytes
+matched in both clients; raw fragments and local analysis stay outside Git.
+
+The identified literal names are DefaultBufferHeap, TextureBufferHeap,
+UploadBufferHeap, ReadBackBufferHeap and AccelerationStructureBufferHeap.
+The DefaultBufferHeap constructor receives sixteen 16-MiB heaps (256 MiB
+initial capacity). Its initialization loop creates that count; inspected native
+allocation paths create a new heap when no current heap fits, and a worker
+handles requested growth. This identifies a concrete capacity/growth seam,
+rather than assuming that all write-combined memory is an upload cache.
+
+Original source in graphics-warm-pools.{h,cpp} now provides an explicit,
+default-OFF build experiment. Existing pacing-authorized factory enrollment can
+install a version-bound detour for the observed private pool initializer.
+The exact DefaultBufferHeap tuple changes initial count 16 -> 4; heap size,
+alignment, flags, other pools, native growth, failure behavior and resource
+retirement remain native. No arbitrary page decommit, COM Release, memory cap,
+periodic cleanup, FPS/settings change or second governor is added.
+
+Installation checks image timestamp/size and four loaded-function digests
+matched across both clients; application also checks exact caller/literal/
+property pointers and parameters. Unknown versions preserve native behavior.
+The owning DLL is pinned; thread/Detours transaction failures abort installation.
+The new control checks tuple refusal cases and rejects its own image before
+private RVAs are read, retaining balanced handles. MSVC x64 Release /W4 /WX
+builds passed with the experiment ON and OFF; the control exited 0.
+
+This is an implemented **experimental startup policy**, not measured game
+savings or production readiness. Its 192-MiB initial-capacity reduction is
+neither a RAM-residency promise nor proof of the below-1-GiB target; native demand
+can grow the pool again. The enabled built DLL hash is
+`75e55f5716fd25cbe13e922583b160e7a4abd924d1873842b25644ccd19ea264`,
+but the existing manager does not admit it and neither running game was changed.
+Actual factory-install timing, private ABI behavior, native growth and integrated
+RAM/gameplay/host/focus benefit remain NOT_EXECUTED. Do not update the default
+payload digest or claim automatic background RAM reclamation from source checks.
+
 Retain independently authored code, Local only, CI disabled, no Sandboxie/VMware
 or game-file modifications. Five clients remain deferred until two-client
 stability and worthwhile savings are demonstrated. The existing research report
@@ -1775,9 +1827,8 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** statically inspect the captured game-origin D3D12 CreateHeap
-callers against the pinned installed executable to determine whether a concrete
-buffer-pool capacity/retirement owner is identifiable. Reuse the existing local
-trace and Microsoft symbols; do not add another capture, guess resource lifetime,
-repeat LFH cleanup or claim that creation-stack attribution is RAM reduction.
-Preserve A/C, original profiles/worlds, 12-chunk minimum and simulation/resolution.
+**One next action:** prepare one separate, hash-reviewed original-profile candidate
+for the default-OFF warm-pool experiment, then perform one integrated in-world
+comparison of actual private RAM/commit and game-owned growth with host/focus
+health. Preserve the current working candidate; no further aggregate trace,
+profile copy, arbitrary buffer release or production-default activation.

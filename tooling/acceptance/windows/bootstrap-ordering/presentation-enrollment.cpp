@@ -7,6 +7,7 @@
 #include <winternl.h>
 #include <wrl/client.h>
 #include "dxgi-pacing.h"
+#include "graphics-warm-pools.h"
 
 namespace presentation_enrollment {
 namespace {
@@ -128,21 +129,30 @@ HRESULT WINAPI createFactory(REFIID id, void** result) {
     FactoryCall call;
     const HRESULT status = originalFactory(id, result);
     const DWORD error = GetLastError();
-    if (call.outer && SUCCEEDED(status) && result && *result) factoryCount.fetch_add(1);
+    if (call.outer && SUCCEEDED(status) && result && *result) {
+        factoryCount.fetch_add(1);
+        if (pacing) graphics_warm_pools::consider();
+    }
     SetLastError(error); return status;
 }
 HRESULT WINAPI createFactory1(REFIID id, void** result) {
     FactoryCall call;
     const HRESULT status = originalFactory1(id, result);
     const DWORD error = GetLastError();
-    if (call.outer && SUCCEEDED(status) && result && *result) factoryCount.fetch_add(1);
+    if (call.outer && SUCCEEDED(status) && result && *result) {
+        factoryCount.fetch_add(1);
+        if (pacing) graphics_warm_pools::consider();
+    }
     SetLastError(error); return status;
 }
 HRESULT WINAPI createFactory2(UINT flags, REFIID id, void** result) {
     FactoryCall call;
     const HRESULT status = originalFactory2(flags, id, result);
     const DWORD error = GetLastError();
-    if (call.outer && SUCCEEDED(status) && result && *result) factoryCount.fetch_add(1);
+    if (call.outer && SUCCEEDED(status) && result && *result) {
+        factoryCount.fetch_add(1);
+        if (pacing) graphics_warm_pools::consider();
+    }
     SetLastError(error); return status;
 }
 }

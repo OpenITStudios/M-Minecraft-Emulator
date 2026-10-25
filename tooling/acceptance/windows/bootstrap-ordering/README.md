@@ -2006,3 +2006,44 @@ universal loader ordering, installed hooks, actual private file/HKCU/IPC views,
 Education singleton/broker compatibility, game injection or two/four-client
 acceptance. Those remain **NOT_EXECUTED / UNKNOWN**. Current continuation belongs
 only in `planning/development.md`.
+
+
+## Version-bound graphics warm-pool experiment
+
+This is an opt-in native Minecraft allocation intervention, separate from video
+settings, the FPS limiter and LFH cache reclamation. Build with
+`-DBOOTSTRAP_GRAPHICS_WARM_POOLS_EXPERIMENT=ON` only for an explicitly reviewed
+candidate. The default is OFF; no existing manager payload digest, public Launch
+admission, wire schema or original profile is changed by this source addition.
+
+Read-only inspection of the pinned installed game's loaded code identified
+`DefaultBufferHeap` initialization: sixteen 16-MiB heaps, with native synchronous
+and worker-driven growth when more capacity is needed. The experiment changes
+only that exact initialization tuple to four heaps. It preserves heap size,
+allocation alignment/flags, native growth/failure behavior and resource/GPU
+retirement. It never releases live resources, changes simulation/render distance,
+suspends a client, or trims its working set.
+
+The existing pacing-authorized factory enrollment calls the new private owner
+after native factory creation. Installation requires matching image timestamp/
+size and four observed loaded-function SHA-256 digests. The detour also requires
+the observed caller return address and literal/property pointers, exact heap
+type, name and arguments. Any mismatch preserves the original arguments; unknown
+code is not patched. The module is pinned, thread enrollment/transaction failures
+abort installation, and native HRESULT/LastError remain with their existing
+owners. This is a private, version-specific ABI: game updates require renewed
+inspection. Factory timing and real Minecraft compatibility are NOT_EXECUTED.
+
+`graphics-warm-pools-control` checks exact tuple selection, unchanged alternatives,
+and rejection of its own executable before private game RVAs are inspected,
+with balanced process handles. It does not prove Minecraft's internal ABI,
+allocator behavior, FPS or RAM savings. MSVC x64 Release /W4 /WX builds passed
+with the experiment both ON and OFF; the control exited 0.
+
+The theoretical initial-capacity difference is 192 MiB for this one pool,
+**not a measured RAM reduction**. Default-heap capacity is not synonymous with
+resident system RAM. Demand may refill it; the operator's requested below-1-GiB
+in-world RAM target remains unproved. Do not ship it as the default or replace a
+working candidate until a single integrated original-profile comparison confirms
+actual private residency/commit, native growth, gameplay, host/network and focus
+recovery. Keep raw executable fragments/maps and private captures outside Git.

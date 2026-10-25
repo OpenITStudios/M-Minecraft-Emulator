@@ -759,3 +759,51 @@ Local evidence SHA-256: ETL
 menu VMMap CSV
 `4e37fce8c5d97a662e8980155769ecafbfe1b2bce4e2637f14ebd71c2ec99319`.
 The sole next action remains in the canonical handoff; five clients stay deferred.
+
+
+## Identified native preallocation seam and original candidate
+
+Read-only inspection of selected loaded executable-image functions, validated
+against the original process births and installed executable SHA-256, identifies
+an internal pool initialization route. The on-disk image alone did not expose
+the relevant decoded code/exception table; no game file was modified. Only
+bounded MEM_IMAGE code and specifically referenced read-only literal data were
+read; heap/account/token/world contents were excluded. Raw fragments stay local.
+
+The loaded initializer names five pools: DefaultBufferHeap, TextureBufferHeap,
+UploadBufferHeap, ReadBackBufferHeap and AccelerationStructureBufferHeap.
+For DefaultBufferHeap the observed call passes a 16-MiB heap size, 64-KiB
+allocation alignment and initial count 16. The initialization loop creates that
+count. Separate inspected allocation paths grow by creating a heap when no
+current heap fits, and a worker services growth requests. Four relevant loaded
+functions match byte-for-byte across both original clients. These observations
+identify a real startup-capacity/growth seam; they do not prove spare capacity
+during a world or identify the purpose of every earlier graphics allocation.
+
+The independently authored [warm-pool owner](../../tooling/acceptance/windows/bootstrap-ordering/graphics-warm-pools.cpp)
+and its header implement a build-opt-in candidate: reduce only the exact
+DefaultBufferHeap initial tuple from sixteen heaps to four. It preserves native
+growth and resource retirement, avoiding any need to declare a live GPU buffer
+safe to free. Existing pacing-authorized factory enrollment is the only consumer;
+there is no additional resource governor, recurring cleanup or public route.
+
+Image metadata and four observed code hashes guard installation. The private
+initializer wrapper also checks the observed caller address, literal/property
+pointers, heap type and full parameter tuple. Mismatches preserve native
+arguments. The DLL is pinned and failed thread/Detours transactions abort
+installation. Unknown game versions remain unsupported; this is not a stable
+Education extension API. The existing manager payload digest is unchanged.
+
+Both enabled and disabled MSVC x64 Release /W4 /WX builds passed. The bounded
+own-process control passed tuple refusal cases, own-image rejection before
+private code reads, and handle balance. No game process loaded the new DLL.
+Actual factory timing, private-ABI execution, native growth behavior and savings
+are therefore NOT_EXECUTED, regardless of the successful compiler/control.
+
+The initial-capacity difference is 192 MiB. It is not equivalent to 192 MiB of
+resident system RAM and can disappear if native demand grows the pool. The
+operator's clarified target is below 1 GiB of real in-world game RAM per client,
+with no paging-based cosmetic reduction; that target remains NOT_ACHIEVED.
+A single integrated same-world comparison must distinguish private residency,
+commit and GPU memory while preserving 12 chunks, simulation/resolution,
+accounts, world persistence, Education hosting and 144/10 focus behavior.
