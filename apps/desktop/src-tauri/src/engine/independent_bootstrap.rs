@@ -4,6 +4,7 @@
 //! Tests keep the game policy empty; direct-start game compatibility remains UNKNOWN.
 #![allow(dead_code)]
 
+use crate::engine::instance_focus_events;
 use std::{
     ffi::OsStr,
     fs::{File, OpenOptions},
@@ -11,7 +12,7 @@ use std::{
     os::windows::{
         ffi::OsStrExt,
         fs::OpenOptionsExt,
-        io::{AsRawHandle, FromRawHandle, OwnedHandle},
+        io::{AsHandle, AsRawHandle, FromRawHandle, OwnedHandle},
     },
     path::Path,
     ptr,
@@ -105,6 +106,7 @@ pub(super) struct PendingEducationBootstrap {
     storage: Option<SlotStorage>,
     configuration: Option<OwnedHandle>,
     observation: Option<StartupObservation>,
+    policy: Option<instance_focus_events::PolicyChannel>,
     resume_attempted: bool,
 }
 
@@ -201,6 +203,30 @@ fn create_unstarted_impl(
     observe: bool,
     #[cfg(test)] proof: Option<&tests::FixtureReceipt>,
 ) -> io::Result<PendingEducationBootstrap> {
+    create_unstarted_configured(
+        path,
+        image,
+        storage,
+        observe,
+        None,
+        #[cfg(test)]
+        proof,
+    )
+}
+
+// A private caller supplies the already-pinned payload to opt into event pacing.
+// Existing registered routes call the legacy constructor and do not opt in.
+fn create_unstarted_configured(
+    path: &Path,
+    image: File,
+    storage: Option<SlotStorage>,
+    observe: bool,
+    presentation_library: Option<&BootstrapLibrary>,
+    #[cfg(test)] proof: Option<&tests::FixtureReceipt>,
+) -> io::Result<PendingEducationBootstrap> {
+    if presentation_library.is_some() && storage.is_none() {
+        return Err(invalid("Presentation policy requires configured storage"));
+    }
     if observe && storage.is_none() {
         return Err(invalid("Startup observation requires configured storage"));
     }
@@ -226,6 +252,9 @@ fn create_unstarted_impl(
         .as_ref()
         .map(|_| Configuration::create())
         .transpose()?;
+    let presentation = presentation_library
+        .map(|_| Configuration::create_sized(120))
+        .transpose()?;
     let observation = if observe {
         Some(StartupObservation::create()?)
     } else {
@@ -237,6 +266,9 @@ fn create_unstarted_impl(
         .unwrap_or_default();
     if let Some(observation) = &observation {
         inherited.push(observation.section.as_raw_handle() as HANDLE);
+    }
+    if let Some(config) = &presentation {
+        inherited.push(config.readonly.as_raw_handle() as HANDLE);
     }
     #[cfg(test)]
     let inherited = {
@@ -258,6 +290,9 @@ fn create_unstarted_impl(
             observation
                 .as_ref()
                 .map(|o| o.section.as_raw_handle() as HANDLE),
+            presentation
+                .as_ref()
+                .map(|c| c.readonly.as_raw_handle() as HANDLE),
         )?),
         _ => None,
     };
@@ -311,6 +346,7 @@ fn create_unstarted_impl(
         storage: None,
         configuration: None,
         observation,
+        policy: None,
         resume_attempted: false,
     };
     #[cfg(test)]
@@ -378,6 +414,24 @@ fn create_unstarted_impl(
     if let (Some(config), Some(store)) = (configuration, storage) {
         child.configuration = Some(config.publish(&child, &store)?);
         child.storage = Some(store);
+    }
+    if let (Some(config), Some(library)) = (&presentation, presentation_library) {
+        if unsafe {
+            SetHandleInformation(
+                config.readonly.as_raw_handle() as HANDLE,
+                HANDLE_FLAG_INHERIT,
+                0,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        child.policy = Some(instance_focus_events::register_policy(
+            child.process.as_handle(),
+            child.pid,
+            child.created,
+        )?);
+        library.prepare_presentation(&child, config)?;
     }
     child.identity()?;
     Ok(child)
@@ -681,6 +735,62 @@ impl BootstrapLibrary {
                 Err(error)
             }
         }
+    }
+
+    fn prepare_presentation(
+        &self,
+        child: &PendingEducationBootstrap,
+        section: &Configuration,
+    ) -> io::Result<()> {
+        if child.resume_attempted {
+            return Err(invalid("Presentation requires original unstarted child"));
+        }
+        let (pid, birth) = child.identity()?;
+        let storage = child
+            .configuration
+            .as_ref()
+            .ok_or_else(|| invalid("Presentation requires storage"))?;
+        let inputs = child
+            .policy
+            .as_ref()
+            .ok_or_else(|| invalid("Presentation lease missing"))?
+            .reader_handles()?;
+        let handles = inputs.each_ref().map(|h| h.as_raw_handle() as HANDLE);
+        type Entry = unsafe extern "system" fn(
+            HANDLE,
+            HANDLE,
+            u32,
+            u64,
+            HANDLE,
+            HANDLE,
+            HANDLE,
+            *const HANDLE,
+        ) -> u32;
+        let symbol = unsafe {
+            GetProcAddress(
+                self.module,
+                c"PrepareEducationPresentationV2".as_ptr().cast(),
+            )
+        }
+        .ok_or_else(|| invalid("Pinned payload lacks presentation capability preparation"))?;
+        let entry: Entry = unsafe { mem::transmute(symbol) };
+        let status = unsafe {
+            entry(
+                child.process.as_raw_handle() as HANDLE,
+                child._thread.as_raw_handle() as HANDLE,
+                pid,
+                birth,
+                storage.as_raw_handle() as HANDLE,
+                child._image.as_raw_handle() as HANDLE,
+                section.writable.as_raw_handle() as HANDLE,
+                handles.as_ptr(),
+            )
+        };
+        if status != 0 {
+            return Err(io::Error::from_raw_os_error(status as i32));
+        }
+        child.identity()?;
+        Ok(())
     }
 
     fn enroll(&self, child: &PendingEducationBootstrap) -> io::Result<()> {
@@ -1637,13 +1747,16 @@ struct Configuration {
 }
 impl Configuration {
     fn create() -> io::Result<Self> {
+        Self::create_sized(mem::size_of::<EducationConfig>() as u32)
+    }
+    fn create_sized(bytes: u32) -> io::Result<Self> {
         let raw = unsafe {
             CreateFileMappingW(
                 INVALID_HANDLE_VALUE,
                 ptr::null(),
                 PAGE_READWRITE,
                 0,
-                mem::size_of::<EducationConfig>() as u32,
+                bytes,
                 ptr::null(),
             )
         };
@@ -1829,6 +1942,7 @@ fn child_environment(
     storage: &SlotStorage,
     section: HANDLE,
     observation: Option<HANDLE>,
+    presentation: Option<HANDLE>,
 ) -> io::Result<Vec<u16>> {
     let raw = unsafe { GetEnvironmentStringsW() };
     if raw.is_null() {
@@ -1901,6 +2015,18 @@ fn child_environment(
     if let Some(section) = observation {
         rows.push(
             format!("{OBSERVATION_ENV}={}", section as usize)
+                .encode_utf16()
+                .collect(),
+        );
+    }
+    if let Some(section) = presentation {
+        rows.push(
+            "MIVUBI_EDUCATION_PRESENTATION=pace"
+                .encode_utf16()
+                .collect(),
+        );
+        rows.push(
+            format!("MIVUBI_EDUCATION_PRESENTATION_SECTION={}", section as usize)
                 .encode_utf16()
                 .collect(),
         );
@@ -3581,6 +3707,108 @@ mod tests {
                         .unwrap(),
                     format!("{}:{round}", store.slot)
                 );
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "Requires the explicitly built own C++ payload; never activates windows"]
+    fn focus_lease_reaches_cpp_creation_and_drop_stops_without_killing_children() {
+        use windows_sys::Win32::System::Threading::SetEvent;
+        let path = PathBuf::from(std::env::var_os("MIVUBI_BOOTSTRAP_CPP_READER").unwrap())
+            .canonicalize()
+            .unwrap();
+        assert_eq!(path.file_name(), Some(OsStr::new("bootstrap-ordering.exe")));
+        let root = path.parent().unwrap();
+        let library = BootstrapLibrary::load(root, fixture_digests(root)).unwrap();
+        // A policy request without storage refuses before process creation.
+        assert!(create_unstarted_configured(
+            &path,
+            pin_image(&path).unwrap(),
+            None,
+            false,
+            Some(&library),
+            None
+        )
+        .is_err());
+        let proofs = [FixtureReceipt::new(), FixtureReceipt::new()];
+        let mut children = Vec::new();
+        let mut barriers = Vec::new();
+        let mut lifetimes = Vec::new();
+        for (store, proof) in test_slots().into_iter().zip(&proofs) {
+            let mut child = create_unstarted_configured(
+                &path,
+                pin_image(&path).unwrap(),
+                Some(store),
+                false,
+                Some(&library),
+                Some(proof),
+            )
+            .unwrap();
+            assert!(child.policy.is_some());
+            assert_eq!(prepare_fixture(&library, &child, proof, true), 0);
+            barriers.push(fixture_barrier(&child, proof));
+            lifetimes.push(FixtureLifetime::new(&child));
+            library.enroll(&child).unwrap();
+            child.resume_once().unwrap();
+            children.push(child);
+        }
+        // Both hidden renderers must complete actual child-side cap validation,
+        // wrapping and background pacing before the producer lease is released.
+        for (child, (ready, _)) in children.iter().zip(&barriers) {
+            let waits = [
+                ready.as_raw_handle() as HANDLE,
+                child.process.as_raw_handle() as HANDLE,
+            ];
+            assert_eq!(
+                unsafe {
+                    windows_sys::Win32::System::Threading::WaitForMultipleObjects(
+                        2,
+                        waits.as_ptr(),
+                        0,
+                        10000,
+                    )
+                },
+                WAIT_OBJECT_0
+            );
+        }
+        for child in &mut children {
+            let lease = child.policy.take().unwrap();
+            let readers = lease.reader_handles().unwrap();
+            drop(lease);
+            assert_eq!(
+                unsafe { WaitForSingleObject(readers[2].as_raw_handle() as HANDLE, 0) },
+                WAIT_OBJECT_0
+            );
+            assert!(child.identity().is_ok());
+        }
+        for (_, finish) in &barriers {
+            assert_ne!(unsafe { SetEvent(finish.as_raw_handle() as HANDLE) }, 0);
+        }
+        for child in &children {
+            assert_eq!(
+                unsafe { WaitForSingleObject(child.process.as_raw_handle() as HANDLE, 10000) },
+                WAIT_OBJECT_0
+            );
+            assert_eq!(child.exit_code_after_exit().unwrap(), 0);
+        }
+        drop(children);
+        drop(lifetimes);
+        // Last private lease stops the sole worker. Join before other owner tests.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            match instance_focus_events::stop_observer() {
+                Ok(report) => {
+                    assert!(!report.enabled);
+                    break;
+                }
+                Err(error)
+                    if error.kind() == io::ErrorKind::WouldBlock
+                        && std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(5))
+                }
+                other => panic!("Focus worker cleanup failed: {other:?}"),
             }
         }
     }

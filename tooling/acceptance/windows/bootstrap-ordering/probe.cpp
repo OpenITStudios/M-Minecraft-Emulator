@@ -2640,7 +2640,7 @@ void presentationChecks(probe::Receipt& receipt) {
     require(read(&observed) && observed.candidates == 0 && observed.ignored == 1);
     auto chain = create(selected.value);
     require(read(&observed) && observed.candidates == 1 && observed.width == 16 && observed.height == 16);
-    if (policyControlRound == 6 || policyControlRound == 7) {
+    if (policyControlRound >= 6 && policyControlRound <= 8) {
         using PacingRead = BOOL (*)(dxgi_pacing::Snapshot*, DWORD);
         const auto pacingRead = reinterpret_cast<PacingRead>(GetProcAddress(GetModuleHandleW(L"bootstrap-compat.dll"),
             "BootstrapPacingSnapshot"));
@@ -2659,7 +2659,17 @@ void presentationChecks(probe::Receipt& receipt) {
             }
         };
         frames(10);
-        for (unsigned phase = 0; phase < 4; ++phase) {
+        if (policyControlRound == 8) {
+            chain.Reset(); chain = create(selected.value); frames(10);
+            require(receipt.ready && receipt.finish && SetEvent(receipt.ready)
+                && WaitForSingleObject(receipt.finish, 10000) == WAIT_OBJECT_0);
+            const auto presents = timing.pacedPresent;
+            require(SUCCEEDED(chain->Present(0, 0)) && pacingRead(&timing, sizeof(timing))
+                && timing.pacedPresent == presents && timing.bypassed == 1 && !timing.faults);
+            chain.Reset(); chain = create(selected.value);
+            require(SUCCEEDED(chain->Present(0, 0)) && pacingRead(&timing, sizeof(timing))
+                && timing.pacedPresent == presents && timing.bypassed == 2 && !timing.faults);
+        } else for (unsigned phase = 0; phase < 4; ++phase) {
             require(SetEvent(receipt.ready) && WaitForSingleObject(receipt.go, 10000) == WAIT_OBJECT_0);
             if (phase == 2) { chain.Reset(); chain = create(selected.value); }
             if (phase < 3) frames(phase == 1 ? 10 : 144);
@@ -3270,11 +3280,13 @@ bool sendOwnedDescendant(HANDLE section) {
 int readRustEnrollmentControl() {
     wchar_t presentationSetting[16]{};
     SetLastError(ERROR_SUCCESS);
-    require(GetEnvironmentVariableW(presentation_enrollment::Variable, presentationSetting, 16) == 0
-        && GetLastError() == ERROR_ENVVAR_NOT_FOUND);
+    const DWORD presentationSize = GetEnvironmentVariableW(presentation_enrollment::Variable, presentationSetting, 16);
+    const bool paced = presentationSize != 0;
+    require(paced ? presentationSize == 4 && wcscmp(presentationSetting, L"pace") == 0
+        : GetLastError() == ERROR_ENVVAR_NOT_FOUND);
     SetLastError(ERROR_SUCCESS);
-    require(GetEnvironmentVariableW(presentation_enrollment::SectionVariable, presentationSetting, 16) == 0
-        && GetLastError() == ERROR_ENVVAR_NOT_FOUND);
+    const DWORD sectionSize = GetEnvironmentVariableW(presentation_enrollment::SectionVariable, presentationSetting, 16);
+    require(paced ? sectionSize > 0 && sectionSize < 16 : sectionSize == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND);
     probe::View view;
     require(view.open() && view.value->mode == probe::ConfiguredStorage);
     probe::record(view.value, probe::Main);
@@ -3290,6 +3302,14 @@ int readRustEnrollmentControl() {
     for (LONG i = 0; i < receipt.count; ++i) {
         require(receipt.events[i].stage == (baseline ? unhooked[i] : hooked[i])
             && receipt.events[i].armed == (baseline || i == 0 ? 0 : 1));
+    }
+    if (paced) {
+        require(!baseline && receipt.earlyPrivate == 7);
+        policyControlRound = 8;
+        presentationChecks(receipt);
+        std::printf("{\"case\":\"rust-focus-bootstrap\",\"backgroundCeiling\":10,\"recreated\":true,"
+            "\"leaseDropStops\":true,\"minecraft\":\"NOT_EXECUTED\"}\n");
+        return 0;
     }
     if (baseline) {
         std::printf("{\"case\":\"rust-enrollment-baseline\",\"hostCanaries\":7,\"providerReady\":false}\n");

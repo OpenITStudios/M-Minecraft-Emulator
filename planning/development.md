@@ -957,18 +957,79 @@ No Computer Use or game launch/input/restart/closure occurred. Original
 accounts/worlds and old candidate remain unchanged; no binaries, credentials,
 raw process metadata or worlds are committed. CI and distribution remain off.
 
+### Rust focus lease through the existing bootstrap — 25 October 2026
+
+Base reviewed: `193af7fe2c8c8c7efb4f310b171c52403259a5d5` (Local).
+The existing Rust bootstrap owner now provides a private, payload-bound
+constructor alongside its existing default preparation. It reuses the storage
+configuration's section allocator for an opaque 120-byte presentation record,
+inherits only its read-only section, removes ambient presentation settings and
+adds the exact pace marker. After exact original process/image/session/storage
+validation, it registers that child on the existing single focus worker.
+
+The pinned parent enroller now exports PrepareEducationPresentationV2. Outside
+DllMain it revalidates the same original process/thread/birth/storage/image,
+resolves native System32 DXGI creation RVAs from a temporary native factory,
+and releases that factory normally. It requires the controller to be the
+calling parent, duplicates only query/wait event/controller rights into the
+unstarted child, refuses a nonempty destination record, rechecks identity and
+publishes once. Child-side validation remains authoritative for exact object
+access/reset modes and DXGI metadata. Partial transfer failures are owned by
+the existing original-unstarted-child cancellation guard.
+
+Parent presentation-section handles and temporary transfer readers close after
+construction; the existing worker retains its producer endpoints. PendingEducationBootstrap
+retains only the focus lease alongside existing process/storage handles; its
+Drop signals policy stop while preserving any resumed process. Existing
+registered game routes keep opting out, reviewed game payload pins and
+EnrollmentV2/storage/public schemas remain unchanged. The test-only descendant
+constructor explicitly carries no policy. No second focus/lifecycle owner,
+profile store, public command, game-data copy or third-party dependency is added.
+
+### Executed evidence for the Rust delivery change
+
+- MSVC x64 Release /W4 /WX build passes. An initial header declaration error
+  for CreateDXGIFactory2 was corrected by including the existing fixture's
+  DXGI 1.6 header before verification.
+- New exact-source Rust/C++ test passes with two original own children.
+  They validate actual Rust-issued sections/events, wrap native D3D12 WARP
+  creation, check 10 FPS release intervals and recreation, signal an existing
+  receipt barrier, then verify lease-drop sticky bypass through another
+  recreation and exit normally. Parent confirms each child remains live
+  after lease release. The last lease's single worker is stopped/joined.
+- The harness now mirrors the real engine/native_clients/bootstrap nesting;
+  canonical crate::engine::instance_focus_events resolves in both test and
+  non-test compilation. Isolated offline non-test cargo check and rustfmt
+  pass; all 23 harness tests pass, zero fail, one visible caption test remains
+  filtered. This is not a full Tauri/product build.
+- Negative control omitting parent capability publication fails the new
+  interoperability test (cargo exit 101); restoring publication passes.
+- Original C++ bootstrap ordering (including failed attach/owned timeout),
+  observe creation/storage control and paced creation/storage control pass.
+  The latter retains 34 invalid presentation-capability refusals, five
+  storage-invalid refusals, 10/144/10/144 own-parent updates, sticky stop,
+  distinct controller normal exit and 40 native creation lifetimes.
+- Final exact-path inventory found zero remaining own C++/Rust test processes.
+
+These checks do not change foreground focus or touch Minecraft. The new Rust
+receivers are hidden and remain background; actual OS foreground promotion
+through Minecraft is NOT_EXECUTED. Prior C++ synthetic transitions are supporting
+evidence, not evidence of real game FPS. Native query compatibility outside the
+tested Windows build remains UNKNOWN.
+
 ### Remaining proof and one next action
 
-The full goal remains ACTIVE: five licensed Education clients sharing an
-Education Host World, measured resource use/soak/stability/persistence,
-OS-focus-driven game 144/10 behavior without slowing host simulation, and
-the measured top-right per-window FPS HUD. This change proves own C++ parent
-event delivery through startup creation into pacing; it does not connect the
-Rust OS-focus lease producer or implement/display the HUD. Those paths and
-actual game acceptance remain NOT_EXECUTED / UNKNOWN. Public admission stays closed.
+The full goal remains ACTIVE: five licensed Education clients sharing one
+Education Host World, measured CPU/RAM/GPU/VRAM and soak/stability/persistence,
+game 144/10 behavior without slowing background host simulation, and the
+measured top-right per-window FPS HUD. Internal Rust lease delivery now reaches
+native creation/pacing in own receivers. Existing game routes and live
+candidate are unchanged; HUD source and all new real-game acceptance remain
+NOT_IMPLEMENTED / NOT_EXECUTED as applicable. Public admission stays closed,
+CI stays off, original accounts/worlds are preserved and no Computer Use or
+game launch/input/restart/closure occurred.
 
-**One next action:** connect the existing Rust bootstrap owner to this private
-capability, resolve reviewed DXGI creation metadata in the existing enroller
-outside loader lock and retain the single-worker focus lease for the exact
-child lifetime; prove Rust-to-child delivery before reviewing a same-profile
-game candidate and adding measured FPS HUD to that acceptance path.
+**One next action:** implement the measured per-window FPS HUD in the existing
+presentation owner, validating its sampling, top-right anchoring, resize/DPI,
+input safety and overhead on own controls before reviewing a same-profile
+game candidate; retain five-client Host World/resource/stability acceptance.

@@ -333,6 +333,7 @@ impl BootstrapLibrary {
             storage: None,
             configuration: None,
             observation: None,
+            policy: None,
             resume_attempted: false,
         };
         let mut storage = store.duplicate()?;

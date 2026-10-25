@@ -6,6 +6,9 @@
 #include "receipt.h"
 #include "education-config.h"
 #include "startup-observation.h"
+#include "presentation-enrollment.h"
+#include <dxgi1_6.h>
+#include <wrl/client.h>
 
 // Private development adapter. Caller owns the original suspended process and pinned image.
 // No target-path/PID reopening, resume, helper, discovery or product command.
@@ -181,6 +184,56 @@ extern "C" __declspec(dllexport) DWORD WINAPI EnrollPreparedEducationV2(
         const auto config = validate(process, thread, pid, birth, configuration, expectedImage);
         if (observation) require(startup_observation::initialize(observation, config));
         insert(process);
+        return ERROR_SUCCESS;
+    } catch (...) { return ERROR_INVALID_DATA; }
+}
+// Parent-side preparation only, outside DllMain; no injection or resume here.
+extern "C" __declspec(dllexport) DWORD WINAPI PrepareEducationPresentationV2(
+    HANDLE process, HANDLE thread, DWORD pid, ULONGLONG birth, HANDLE configuration,
+    HANDLE expectedImage, HANDLE writablePresentation, const HANDLE* inputs) {
+    try {
+        require(inputs != nullptr);
+        const auto storage = validate(process, thread, pid, birth, configuration, expectedImage);
+        presentation_enrollment::PolicyConfig policy{};
+        auto& creation = policy.creation;
+        HMODULE image = nullptr;
+        require(presentation_enrollment::imageMetadata(creation, image));
+        Microsoft::WRL::ComPtr<IDXGIFactory2> factory;
+        require(SUCCEEDED(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory))));
+        void** table = *reinterpret_cast<void***>(factory.Get());
+        const auto rva = [&](void* address) -> DWORD {
+            MEMORY_BASIC_INFORMATION memory{};
+            require(VirtualQuery(address, &memory, sizeof(memory)) && memory.AllocationBase == image
+                && memory.State == MEM_COMMIT && memory.Type == MEM_IMAGE && !(memory.Protect & PAGE_GUARD)
+                && (memory.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY)));
+            const auto offset = reinterpret_cast<ULONG_PTR>(address) - reinterpret_cast<ULONG_PTR>(image);
+            require(offset >= 4096 && offset < creation.imageBytes);
+            return static_cast<DWORD>(offset);
+        };
+        creation.oldRva = rva(table[10]); creation.hwndRva = rva(table[15]);
+        require(creation.oldRva != creation.hwndRva);
+        creation.magic = presentation_enrollment::CreationMagic; creation.version = 2;
+        creation.bytes = sizeof(policy); creation.pid = storage.pid;
+        creation.created = storage.created; creation.session = storage.session;
+        policy.controllerPid = GetProcessId(inputs[3]);
+        require(policy.controllerPid == GetCurrentProcessId());
+        FILETIME exit{}, kernel{}, user{};
+        require(GetProcessTimes(inputs[3], &policy.controllerCreated, &exit, &kernel, &user)
+            && WaitForSingleObject(inputs[3], 0) == WAIT_TIMEOUT);
+        View view;
+        view.value = MapViewOfFile(writablePresentation, FILE_MAP_WRITE, 0, 0, sizeof(policy));
+        require(view.value != nullptr);
+        const presentation_enrollment::PolicyConfig empty{};
+        require(memcmp(view.value, &empty, sizeof(empty)) == 0);
+        HANDLE* output[]{&policy.level, &policy.changed, &policy.stop, &policy.controller};
+        for (unsigned i = 0; i < 4; ++i) {
+            // Original unstarted child cancellation owns any partial-transfer cleanup.
+            require(DuplicateHandle(GetCurrentProcess(), inputs[i], process, output[i],
+                SYNCHRONIZE | (i == 3 ? PROCESS_QUERY_LIMITED_INFORMATION : 1UL), FALSE, 0));
+        }
+        // Recheck the exact retained child before a single full-record publication.
+        validate(process, thread, pid, birth, configuration, expectedImage);
+        memcpy(view.value, &policy, sizeof(policy));
         return ERROR_SUCCESS;
     } catch (...) { return ERROR_INVALID_DATA; }
 }

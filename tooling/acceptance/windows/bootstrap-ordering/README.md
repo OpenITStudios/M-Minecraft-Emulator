@@ -31,9 +31,26 @@ release/recreation, sticky stop and a distinct controller's normal exit.
 Thirty-four invalid presentation capabilities plus malformed mode and five
 invalid storage configurations refuse startup. Observe-only creation coverage
 and storage workflows remain regression controls. These are synthetic
-process-bound event updates; the Rust OS-focus producer is not yet connected
-through bootstrap, the HUD is not implemented and Minecraft is NOT_EXECUTED.
-Current continuation and exact evidence belong only to planning/development.md.
+process-bound event updates. The existing Rust bootstrap owner now also has
+a private constructor that registers the exact original child on the existing
+focus worker, inherits only the read-only presentation section, and calls
+the pinned enroller's PrepareEducationPresentationV2 before returning the
+unstarted child. The enroller resolves DXGI creation RVAs outside DllMain,
+duplicates the lease's read-only event/controller handles into that child
+and publishes the bounded record once. Parent presentation-section handles and temporary transfer readers close
+after preparation; the worker retains its producer endpoints. The child owner retains the lease; releasing it signals
+sticky stop without terminating a resumed process. Existing registered game
+routes do not opt in and reviewed game payload pins/admission remain unchanged.
+
+The opt-in Rust test
+`focus_lease_reaches_cpp_creation_and_drop_stops_without_killing_children`
+uses two fixed own C++ receivers with hidden WARP windows. Both validate
+the actual Rust-issued record, pace at 10 FPS, recreate, wait on existing
+fixture barriers, then verify lease-drop bypass and another recreation before
+normal exit. The test never selects or activates windows. OS-focus-driven
+foreground 144 FPS in Minecraft, the HUD and five-client acceptance remain
+NOT_EXECUTED. Current continuation and exact evidence belong only to
+planning/development.md.
 
 ## Opt-in rendering timer control
 
