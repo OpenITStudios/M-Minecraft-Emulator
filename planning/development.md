@@ -4,6 +4,8 @@
 
 ## Primary goal — A / B / C Minecraft efficiency
 
+**Efficiency implementation playbook (supporting reference):** [Native Efficiency Implementation Playbook](../docs/system/native-efficiency-implementation-playbook.md) contains exact code owners, Windows APIs, native algorithms and Sodium/FerriteCore/Lithium transfer limits for future Codex work. It is a **design-options catalog, not an additional active task list**, not proof of RAM/CPU/GPU savings, and does not supersede the single current Next at this document's end. No Minecraft/runtime/settings change was authorized by publishing this reference.
+
 **Resumed and explicitly established by the operator — 25 October 2026.**
 These three outcomes supersede earlier priorities. Source tests, diagnostics,
 fixture counts and minor launcher/HUD savings are not substitutes for them.

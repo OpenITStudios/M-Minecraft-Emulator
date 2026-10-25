@@ -521,3 +521,8 @@ Version-specific reverse engineering would have to establish those semantics
 before an original internal optimizer could be justified. No code, arbitrary
 resource release, memory cap, trim loop, collector extension or game-file change
 was introduced. B remains incomplete; A/C are not relabeled as satisfying it.
+
+
+## Native efficiency implementation mechanisms and specific tools (25 October 2026)
+
+The [implementation playbook](./native-efficiency-implementation-playbook.md) provides concrete Codex-ready mechanisms N01-N04 (registry/file hooks, expired startup tracing, event-led manager), R01-R03 (pacer timers, HUD, presentation), M01-M02 (owned immutable data), B01-B02 (Sodium/FerriteCore internal game feasibility) and W01 (conditional content tooling). Each has exact source owner, Windows/C++/Rust API, algorithm, safety/compatibility boundary and primary reference. This is **supporting technical design**, not new deployment authorization, an automatic optimization claim, or a second active TODO owner. The A/B/C current goal and **one next action** remain in [planning](../../planning/development.md).
