@@ -2,47 +2,63 @@
 
 **Authority:** `Local` is the only active development branch. This is the **single current goal, blocker and next action**, not a chronological TODO file. The previous 3,009-line ledger with 105 historical `Next:` entries is [preserved at commit `d239a299e04c`](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/d239a299e04c23d2324b52325714600c00c34498/planning/development.md). All its former next actions are superseded; Git history preserves implementation decisions.
 
-## Primary goal — Minecraft workload efficiency with distinct mechanism owners
+## Primary goal — A / B / C Minecraft efficiency
 
-**Latest operator correction — 25 October 2026:** prioritize efficiency of
-Minecraft itself. The small manager footprint and bounded HUD change do not
-answer the desired substantial game-memory reduction. Stop extending diagnostic
-sessions as the main activity. Supported game-setting changes and internal-game
-optimization must remain explicitly distinguished from engine savings. The
-operator permits reducing visual effects/graphics, with render distance at
-least 12 and simulation distance unchanged. Preserve resolution and 144/10.
-This explicitly supersedes the earlier fixed-graphics requirement; keep savings
-from game settings separate from engine changes. Retain independent accounts/worlds,
-Education Host World, 144/10 policy, modular ownership, Local only, no CI,
-Sandboxie/VMware or game-file modifications. Five clients remain deferred
-until the two-client tradeoff is established.
+**Resumed and explicitly established by the operator — 25 October 2026.**
+These three outcomes supersede earlier priorities. Source tests, diagnostics,
+fixture counts and minor launcher/HUD savings are not substitutes for them.
 
-The following earlier fixed-settings engine direction records the prior scope;
-it is no longer permission to prioritize minor wrapper work over the operator's
-Minecraft-level objective.
+| Track | Required outcome | Owner and boundaries | Current evidence |
+| --- | --- | --- | --- |
+| **A — saved Minecraft settings** | Keep the approved Simple preset independently per original profile and across normal restart. Render distance **at least 12**, simulation distance unchanged; preserve resolution, accounts/worlds and 144/10. | Minecraft's existing options file owns the settings; existing bootstrap owns persistent per-slot Roaming/Local routing and identity-capability replay. Do not introduce a duplicate preferences store or rewrite options while a game is live. | Both original per-slot options files retained graphics_mode=0, gfx_viewdistance=192, gfx_msaa=1 and the five approved effect switches=0 after both game exits. Disk persistence is observed for both; the restarted MC02 UI also reads Simple / 12 chunks. The fresh MC01 main menu shows its original account; its complete post-restart video UI has not been rechecked. |
+| **B — internal Minecraft efficiency** | Reduce unnecessary mesh/buffer/asset/cache or renderer work using a real Education-compatible integration, inspired by Java optimizers. | A new native internal optimization needs one demonstrated resource owner/lifetime seam. Existing Present mediation owns pacing/HUD, not game meshes/heaps. A generic allocator/hook fixture or wrapper micro-optimization does not satisfy B. | Existing exact-source Sodium/FerriteCore research identifies concrete algorithms; a compatible internal Education resource/mesh ownership seam remains UNKNOWN. Do not promise a Java mod port or a RAM percentage. |
+| **C — inactive clients first** | Prioritize lower RAM/CPU/GPU demand while a client is not controlled; keep foreground 144/background 10 ceilings, prompt focus recovery and continuing Education host/network/saves. | Focus/pacing retain their current owners. Host role is separate from focus. No whole-process suspension, arbitrary memory/CPU caps, periodic trimming, token/profile sharing, fabricated occlusion result or freeing game-owned resources. | The existing limiter is implemented and prior 10-FPS observations are historical. Further game-owned background work reduction, its resource benefit and host health require a concrete intervention; no new savings are claimed yet. |
 
+**Working method:** choose one real intervention in A/B/C, implement it or
+explicitly reject its concrete integration boundary, then use only checks that
+directly establish its benefit and failure risks. A before/after reading needs
+equivalent world/workload and metric semantics. Do not expand collector APIs,
+generic sandbox layers, synthetic milestone flags or ceremonial test loops.
+Use available source evidence without making repeated PC sessions prerequisites
+for source work. Current user permission allows full PC control, but avoid
+interfering with concurrent user input. Preserve all account/world data.
 
-**Operator confirmation — 25 October 2026:** prioritize lower RAM/CPU/GPU
-overhead of our original system at unchanged game settings, visual output,
-144/10 policy and Education host workload. Separate settings-only savings and
-internal-game research from system gains. First resolve composition and owned
-overhead for two clients; defer implementation of clients 03-05 until that
-tradeoff is understood. The eventual five-client goal below remains active.
+**Immediate findings on resume:** at first discovery both earlier game identities
+were still present; subsequent discovery found no game processes. The existing
+manager log records journal-saved/exitCode=0 for both, with no agent closure in
+this resumed turn. The approved eight options entries above remain on disk in
+each original private Roaming path. No account/token/world/cache content was
+read and no settings were rewritten. The absence of Code Builder while games
+are closed is not evidence of helper savings. The operator subsequently confirmed coding is unused and authorized disabling
+Code Builder. After both clients saved/exited the multiplayer world normally,
+the existing host world's offline Edit World → Coding & Scripting UI was used
+to switch only Code Builder off and Save changes. Education displayed its saved
+confirmation. This is world-scoped; other worlds/defaults were not changed.
+No helper was killed and no RAM reduction is inferred from the toggle.
 
-The existing [research report's mechanism boundaries](../docs/system/native-memory-efficiency-research.md#mechanism-boundaries-for-the-efficiency-work)
-define one responsibility per existing owner: lifecycle/identity, data isolation,
-focus observation, frame pacing, measured FPS display, metadata capture and
-offline interpretation. Reuse existing interfaces; do not create a parallel
-governor, launcher, settings store or readiness authority. Education host role
-is independent of foreground focus. This is an ownership contract, not a claim
-that refactoring or efficiency improvements have been implemented.
+**C minimization candidate — closed without automatic rollout:** the original
+guest joined the existing MC02 Education host world. A normal guest minimize
+was confirmed by the window API's minimized-state response; restore returned to
+the same multiplayer pause surface with two participants. The host continued
+through an observed night-to-day transition. This is a bounded recovery
+observation, not a long soak or tick/network performance guarantee.
 
-Acceptance requires a measured improvement beyond run variation under matched
-conditions, with accounts/worlds, host progression, connectivity and focus
-recovery preserved. A first two-client composition baseline is now available below; engine-owned
-allocations inside each game and repeatable savings remain UNKNOWN. No numerical
-saving or five-client capacity is promised. The later runtime section records
-the operator's expanded authorization separately from the original goal-setting commit.
+The confirmed-minimized 10.018-second reading used 1.406 CPU-seconds, working
+set 1412.87 MiB and private commit 2432.90 MiB. The earlier background 10.015-second
+reading used 1.547 CPU-seconds, working set 1411.00 MiB and commit 2433.99 MiB.
+The guest was in its pause UI for the valid minimize reading, unlike the earlier
+background reading; therefore CPU/GPU benefit cannot be attributed to
+minimization. Working set did not decrease. An intervening minimize request
+while mouse capture was active was not confirmed and is excluded. **No meaningful
+RAM saving is established; do not implement an automatic minimization policy
+from this result.** No GPU/frame trace or collector extension was introduced.
+Both world sessions were then saved/exited normally for the authorized Code
+Builder change; games remain open in menus. B internal ownership remains UNKNOWN.
+
+Retain independently authored code, Local only, CI disabled, no Sandboxie/VMware
+or game-file modifications. Five clients remain deferred until two-client
+stability and worthwhile savings are demonstrated. The existing research report
+remains technical evidence; this file is the sole current goal/handoff.
 
 ## Goal — five clients with foreground rendering policy
 
@@ -1610,10 +1626,10 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** verify the applied Simple/12-chunk candidate in the same
-saved Education Host World under the operator's normal workload, preserving
-simulation, resolution and 144/10. Use one bounded check to judge actual resource
-benefit and host/focus health; do not start another telemetry-development loop.
-Retain the native Sodium-style integration barrier as UNKNOWN until one real
-Education mesh/resource ownership seam is identified. Do not promise a RAM
-percentage or expand clients 03-05 from menu readings.
+**One next action:** investigate one concrete Education-native renderer resource
+ownership/lifetime seam for B using existing source and supported interfaces;
+either identify a named integration with safe allocation/retirement semantics
+or close that specific candidate as unsupported/UNKNOWN. Do not start another
+collector, generic allocator fixture, wrapper-only optimization or automatic
+minimization rollout. Code Builder is now saved off only in the existing host
+world; its resource benefit is unproved. A/B/C remain the active goal.

@@ -422,8 +422,9 @@ Fancy Bubbles, Render Clouds, Beautiful Skies and Smooth Lighting on → off;
 Anti-Aliasing 2 → 1. Render distance was already 12 chunks on each and remained
 12. Simulation/world settings, resolution, profiles and 144/10 policy were not
 changed. The UI confirmed each changed value and returned normally to the main
-menu. Restart persistence and an equivalent loaded-world resource benefit have
-not been demonstrated. Verify the actual installed settings rather than importing Java or
+menu. Disk retention has subsequently been observed in both original profiles after
+normal exit; the restarted MC02 UI also confirms Simple / 12 chunks. An equivalent
+loaded-world resource benefit has not been demonstrated. Verify the actual installed settings rather than importing Java or
 Bedrock-only keys. The official [Education performance guidance](https://edusupport.minecraft.net/hc/en-us/articles/4404976988052-Troubleshoot-Performance-Issues)
 supports lowering these visual workloads, but supplies no numerical RAM promise
 and its render-distance-6 recommendation is superseded by the operator's 12
@@ -436,3 +437,64 @@ allocator: first it needs **one real Education mesh/resource ownership and
 lifetime seam**. If none is verified, explicitly retain the unsupported/UNKNOWN
 decision and pursue supported content/settings improvements instead.
 
+
+## Current A/B/C goal and settings persistence on resume
+
+The operator explicitly resumed work and established A (durable game settings),
+B (real internal Minecraft optimization), and C (inactive-client efficiency,
+prioritized) as the current goal. See the [canonical handoff](../../planning/development.md#primary-goal--a--b--c-minecraft-efficiency)
+for ownership and one next action.
+
+After both game processes disappeared, their existing manager logs reported
+normal exit code 0 and saved startup journals. Read-only inspection of the
+original per-slot game options files confirmed the approved graphics entries
+still existed independently on disk: graphics_mode=0, gfx_viewdistance=192,
+gfx_msaa=1, gfx_transparentleaves=0, gfx_smoothlighting=0, gfx_fancyskies=0,
+gfx_toggleclouds=0 and gfx_bubble_particles=0. The value 192 corresponds to the
+12-chunk value observed in the installed UI earlier; it is not a new cross-version
+settings contract. No option file was rewritten and no account/world content
+was accessed. This establishes disk retention after normal exit. A subsequent restart of the
+same candidate/original profiles showed the original accounts in both main menus;
+MC02's video UI also confirmed Simple / 12 chunks. The complete MC01 video UI
+was not rechecked. No quantitative performance benefit is established.
+
+For C, real native minimization/occlusion of an inactive guest is a concrete
+candidate for avoiding game rendering work. Microsoft's [occlusion guidance](https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/waiting-when-occluded)
+explains the platform event/wait capability; it does not prove Minecraft's
+loop, host simulation or memory retirement. Keep any declared host running,
+use the existing presentation owner, and require normal recovery/connectivity.
+Do not synthesize an occlusion HRESULT or suspend the whole client. Automatic
+policy remains NOT_IMPLEMENTED. The bounded actual candidate below supersedes
+its earlier NOT_EXECUTED observation status without establishing savings. The B internal
+mesh/allocator integration boundary remains as documented above.
+
+
+### Bounded intervention result — inactive guest and unused Code Builder
+
+The guest joined the original Education host world. Normal minimization was
+confirmed by the Computer Use window API's minimized-state response, and a normal
+restore returned to its multiplayer pause surface showing two participants.
+The host was observed across a night-to-day transition. This establishes only
+short recovery/connection behavior, not a soak or host tick/network benchmark.
+
+| Observation | Elapsed seconds | Guest CPU-seconds | Working set MiB | Private commit MiB |
+| --- | ---: | ---: | ---: | ---: |
+| Earlier background world surface | 10.015 | 1.547 | 1411.00 | 2433.99 |
+| Confirmed minimized guest | 10.018 | 1.406 | 1412.87 | 2432.90 |
+
+Working set is the process total, not private resident or unique physical RAM.
+The guest was in its pause UI for the confirmed minimize interval, so this is
+not a matched CPU/GPU comparison. A prior minimize request while mouse capture
+was active was unconfirmed and excluded. **No meaningful RAM saving was
+demonstrated; automatic minimization is rejected for rollout on this evidence.**
+No new sampler, GPU trace or artificial occlusion result was added.
+
+The operator confirmed Code Builder/Agent is unused and authorized disabling it.
+After normal save/exit of guest and host, the existing host world's Edit World →
+Coding & Scripting setting was switched from on to off; Save changes returned
+the game's saved confirmation. Console commands, command blocks, simulation,
+resolution and world contents were not edited. This is an actual world-scoped
+feature setting, not a global per-profile/default promise or internal renderer
+optimization. Helper teardown and RAM/CPU/GPU savings remain **UNKNOWN /
+NOT_MEASURED**. The original games are left open in menus; other worlds are
+untouched. Native mesh/allocator integration remains UNKNOWN.
