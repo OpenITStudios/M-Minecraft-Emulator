@@ -52,6 +52,26 @@ void meter() {
     }
     check(fps_hud::placement({0, 0, 16, 16}, 96).right == 0);
 }
+void rasterLifetimes() {
+    const auto baseline = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
+    for (UINT dpi : {48U, 96U, 144U, 192U, 288U, 480U}) {
+        for (unsigned i = 0; i < 20; ++i) {
+            SIZE size{};
+            const auto pixels = fps_hud::raster({0, i % 2 ? 144000U : 10000U, i % 3 != 0}, dpi, size);
+            check(size.cx == MulDiv(128, static_cast<int>(dpi), 96)
+                && size.cy == MulDiv(32, static_cast<int>(dpi), 96));
+            check(pixels.size() == static_cast<size_t>(size.cx) * size.cy
+                && std::all_of(pixels.begin(), pixels.end(), [](DWORD p) { return (p >> 24) == 255; }));
+        }
+    }
+    for (UINT dpi : {0U, 47U, 481U}) {
+        bool refused = false; SIZE size{};
+        try { const auto pixels = fps_hud::raster({}, dpi, size); }
+        catch (const std::runtime_error&) { refused = true; }
+        check(refused);
+    }
+    check(GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS) == baseline);
+}
 void preview() {
     constexpr LONG width = 384, height = 96;
     std::vector<DWORD> page(width * height, 0xff0c1014UL);
@@ -76,7 +96,7 @@ void preview() {
     check(out.good());
 }
 int run() {
-    meter(); preview();
+    meter(); preview(); rasterLifetimes();
     const auto oldDpi = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2); check(oldDpi);
     WNDCLASSW type{}; type.lpfnWndProc = DefWindowProcW; type.hInstance = GetModuleHandleW(nullptr);
     type.lpszClassName = L"MivubiOwnHiddenHudControl"; check(RegisterClassW(&type));
@@ -152,3 +172,4 @@ int wmain(int argc, wchar_t** argv) {
     if (argc != 2 || wcscmp(argv[1], L"--run-self-test")) return 64;
     try { return run(); } catch (...) { return 1; }
 }
+

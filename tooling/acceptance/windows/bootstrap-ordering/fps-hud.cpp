@@ -89,11 +89,9 @@ LRESULT CALLBACK windowProcedure(HWND window, UINT message, WPARAM w, LPARAM l) 
 }
 void moduleAnchor() {}
 constexpr wchar_t ClassName[] = L"MivubiMeasuredFpsHud";
-}
-std::vector<DWORD> raster(Reading value, UINT dpi, SIZE& size) {
+void paint(Canvas& canvas, Reading value, UINT dpi, SIZE& size) {
     if (dpi < 48 || dpi > 480) throw std::runtime_error("HUD DPI unavailable");
     size = {MulDiv(128, static_cast<int>(dpi), 96), MulDiv(32, static_cast<int>(dpi), 96)};
-    Canvas canvas;
     if (!canvas.allocate(size)) throw std::runtime_error("HUD bitmap unavailable");
     std::fill_n(canvas.pixels, static_cast<size_t>(size.cx) * size.cy, 0xff182026UL);
     canvas.font = CreateFontW(-MulDiv(17, static_cast<int>(dpi), 96), 0, 0, 0, FW_BOLD, FALSE, FALSE,
@@ -110,6 +108,10 @@ std::vector<DWORD> raster(Reading value, UINT dpi, SIZE& size) {
     if (!DrawTextW(canvas.dc, text, -1, &bounds, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX)
         || !GdiFlush()) throw std::runtime_error("HUD text unavailable");
     for (LONG i = 0; i < size.cx * size.cy; ++i) canvas.pixels[i] |= 0xff000000UL;
+}
+}
+std::vector<DWORD> raster(Reading value, UINT dpi, SIZE& size) {
+    Canvas canvas; paint(canvas, value, dpi, size);
     return {canvas.pixels, canvas.pixels + static_cast<size_t>(size.cx) * size.cy};
 }
 struct Hud::State {
@@ -189,10 +191,8 @@ struct Hud::State {
                         const unsigned shownRate = (value.milliFps + 50) / 100;
                         const bool redraw = dpi != previousDpi || value.valid != previousValid || shownRate != previousRate;
                         if (redraw) {
-                            SIZE size{}; const auto pixels = raster(value, dpi, size);
-                            Canvas upload;
-                            if (!upload.allocate(size)) throw std::runtime_error("HUD upload unavailable");
-                            memcpy(upload.pixels, pixels.data(), pixels.size() * sizeof(DWORD));
+                            // Draw directly into the upload DIB; no copied pixel vector or second bitmap.
+                            SIZE size{}; Canvas upload; paint(upload, value, dpi, size);
                             POINT position{bounds.left, bounds.top}, origin{};
                             BLENDFUNCTION blend{AC_SRC_OVER, 0, 240, AC_SRC_ALPHA};
                             if (!UpdateLayeredWindow(hud, nullptr, &position, &size, upload.dc, &origin, 0, &blend, ULW_ALPHA))
@@ -260,3 +260,4 @@ Snapshot Hud::snapshot() noexcept {
     value.reading = s.meter.read(); return value;
 }
 }
+

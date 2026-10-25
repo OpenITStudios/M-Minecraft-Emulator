@@ -41,6 +41,30 @@ exclusion. A private sized BootstrapHudSnapshot export lets the Rust-owned
 C++ receivers check actual hidden HUD composition under the full compatibility
 DLL. No counter is opened on a live game by these commands.
 
+The HUD worker now paints directly into the DIB supplied to UpdateLayeredWindow.
+The preview raster helper shares the same painter, but the live worker no longer
+materializes its returned vector or creates a second upload bitmap. No drawing
+surface or font is retained between updates. This removes one bitmap creation,
+one vector allocation and two pixel copies per redraw; it is a bounded HUD
+optimization, not a claim about game-content memory. At 96 DPI the largest
+simultaneously owned pixel storage falls from two 16 KiB planes to one; at the
+supported maximum 480 DPI the corresponding arithmetic is 800 to 400 KiB.
+GDI/DWM, allocator and thread costs are additional and are not bounded by that
+pixel-plane calculation.
+
+The control also exercises 120 rasters across 48–480 DPI, invalid DPI rejection
+and GDI cleanup. On 25 October 2026, exact parent d9e8d60 source and the changed
+source both passed the existing hidden-window checks. A disposable same-process
+API-counting probe around the actual HUD upload path observed two DIB creations
+for each of 18 old uploads and one for each of 18 changed uploads; its
+one-DIB assertion failed on the old code and passed on the changed code.
+The preview BMP SHA-256 was identical:
+`f9f13416d19765a374ec7f7c3aca413a625aa80b573a995be9b45c646c9db3ee`.
+The probe and images remain local; they are not a runtime collector or product
+dependency. MSVC /W4 /WX Release built the compatibility DLL and both controls;
+HUD and D3D11/D3D12 WARP controls passed. These own-data results do not establish
+whole-game RAM/CPU/GPU savings, visible gameplay or five-client support.
+
 Actual visible input behavior, per-monitor DPI transitions, fullscreen and
 DWM/GPU/VRAM overhead in Minecraft remain NOT_EXECUTED. The existing manager's
 private `--education-startup-observation-once` route now opts the SAME reviewed

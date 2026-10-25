@@ -74,7 +74,7 @@ For future measurements define E0=current engine, E1=a concrete proposed engine
 change, Q0=current graphics, Q1=an agreed reduced graphics preset. Compare
 E0/Q0 versus E1/Q0 for the system effect; E0/Q0 versus E0/Q1 for settings;
 measure E1/Q1 separately for the combination. Do not assume the gains add.
-There is no E1 implementation yet. Keep foreground/background policy identical
+A first bounded E1 source change now removes duplicate HUD raster/upload storage; its whole-game benefit is not measured. Keep foreground/background policy identical
 when attributing a new engine change; the already-existing limiter is not a
 new optimization saving. Start with composition/overhead measurements at Q0,
 then investigate one source-owned bottleneck. Settings remain a separately
@@ -272,6 +272,25 @@ capture; regression and own-process Windows checks cover early failure and
 preservation of existing artifacts. This is diagnostic reliability work,
 not a game memory optimization. Current composition is partially measured;
 engine-owned allocation attribution and repeatable gains remain UNKNOWN.
+
+### First bounded engine-owned change
+
+The next audit at parent `d9e8d60d147d6d104d33255fa4a2b9e752a584f9`
+identified duplicate HUD pixel storage, rather than a large launcher cache.
+The existing HUD now paints into its upload DIB directly, sharing one painter
+with the unchanged preview helper. It removes one bitmap creation, one vector
+allocation and two copies per redraw without retaining new resources.
+Explicit transient pixel storage is one plane rather than two: 16 rather than
+32 KiB at 96 DPI (400 rather than 800 KiB at 480 DPI). This is small relative
+to the measured game processes and does not establish lower overall residency
+or commitment.
+
+The [current handoff](../../planning/development.md#first-owned-hud-allocation-reduction--25-october-2026)
+records actual MSVC DLL/control builds, DPI/lifetime checks, a red/green
+API-counting probe (18 uploads each), byte-identical preview output and
+D3D11/D3D12 WARP regression checks. The running Minecraft pair still uses its
+old payload. Matched real-game savings and host health on the changed payload
+remain NOT_EXECUTED; short own-control timings are not a CPU-speedup result.
 
 ## 10. A bounded comparison that can identify the best tradeoff
 

@@ -1438,6 +1438,54 @@ Windows PowerShell 5.1 produced six samples, retained identities, and passed
 single/paired Node review. These own-data checks are separate from the real-game
 baseline at 106117a. Raw captures, fixtures and PC inventory stay uncommitted.
 
+### First owned HUD allocation reduction — 25 October 2026
+
+Source parent: `d9e8d60d147d6d104d33255fa4a2b9e752a584f9`.
+The allocation-lifetime audit followed the existing compatibility hooks,
+configuration/journal mappings, process presentation policy, swap-chain wrapper,
+pacer and HUD. The reviewed routing hooks use bounded stack/static buffers;
+configuration/journal views unmap through their existing owners, and final
+chain release drops native COM interfaces. The process policy intentionally
+retains one pacer/HUD worker and synchronization handles. No unbounded
+game-content cache or GiB-scale owner was demonstrated. This is source review,
+not exhaustive heap attribution, absence-of-leak proof or a ceiling on all
+Detours/OS/game allocations.
+
+A concrete duplicate-work cause exists in fps-hud.cpp: the worker rasterized a
+DIB, copied its pixels into a vector, then allocated a second DIB and copied
+the vector back for UpdateLayeredWindow. It now paints directly into the upload
+DIB through one private shared painter. The preview raster function retains its
+existing interface and uses that painter too. No new cache, process, observer,
+governor, public API or persistent drawing resource was added. Pacing/focus,
+HUD format and visibility, game settings and isolation paths are unchanged.
+
+Per redraw, this eliminates one bitmap creation, one vector allocation and two
+pixel copies. Peak explicitly owned pixel storage drops from two planes to one:
+32 to 16 KiB at 96 DPI, or 800 to 400 KiB at the supported 480-DPI maximum.
+Those are source-derived transient-buffer sizes, not whole-process residency,
+commit savings or a bound on GDI/DWM/allocator overhead. The baseline game RAM
+is orders of magnitude larger; do not advertise this as a GiB-scale fix.
+
+Proof: exact-source MSVC Release /W4 /WX builds passed for bootstrap-compat,
+fps-hud-control and frame-pacing-control. The extended HUD control passed eight
+hidden-window bind/unbind cycles, 120 rasters across six DPI values (48–480),
+invalid-DPI rejection, opaque output and balanced GDI handles. A disposable
+API-counting probe drove the actual worker upload calls: old code failed the
+one-DIB assertion for all 18 uploads; changed code passed all 18.
+Old/new preview BMPs were byte-identical, SHA-256
+`f9f13416d19765a374ec7f7c3aca413a625aa80b573a995be9b45c646c9db3ee`.
+D3D11 and D3D12 WARP controls passed native-result/LastError preservation,
+TEST exclusions, concurrent calls, resize and balanced chain recreation.
+Five hidden fixture renderers are not five Minecraft clients. Probe artifacts,
+builds and previews remain local and uncommitted.
+
+No CPU speedup is claimed from short controls; changing coverage and host noise
+prevent such an inference. Existing live games retained their original identities
+and responded at the final read-only check. They were not reloaded with this DLL,
+closed, controlled or reconfigured. The new payload's Minecraft behavior and
+matched RAM/CPU/GPU benefit are **NOT_EXECUTED**. Previous game acceptance remains
+bound to the old be24595 payload; no launch gate or CI change occurred.
+
 ### Remaining proof and one next action
 
 The full five-client goal is incomplete. Two original accounts, basic same-world
@@ -1451,11 +1499,11 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** audit allocation lifetimes in the existing in-process
-compatibility/pacing/HUD owners against this baseline, identifying only
-engine-owned buffers, caches and retained handles. Select a change only if a
-concrete retention or duplicate-work cause is demonstrated; do not add a new
-memory governor or promise savings from total game RAM. Preserve settings,
-144/10 policy, host role, accounts and worlds. Any runtime benefit still needs
-a matched before/after comparison with observed gameplay. Keep clients 03-05
-unimplemented until that decision is supported.
+**One next action:** prepare a separately staged private candidate containing
+this exact HUD change through the existing manager payload/hash owner, preserving
+the current candidate and original profile capability. Do not overwrite loaded
+DLLs or copy accounts/worlds. Only after normal game closure, compare candidate
+and baseline under matched graphics, 144/10 policy and Education host workload,
+including observed host progression, connectivity and focus recovery. Treat a
+difference within measurement variation as no demonstrated whole-game benefit;
+retain clients 03-05 unimplemented.
