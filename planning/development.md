@@ -38,8 +38,12 @@ release build passed (104 existing warnings). New manager SHA256:
 The accepted login-fix DLL/enroller and five profile capability are unchanged.
 The standard private five-client launcher is prepared for this candidate.
 
-**Runtime application: NOT_EXECUTED while five games remain running.** The
-normal-save/close question is pending; do not force-close or edit live settings.
+**Runtime application: PAUSED by explicit operator request on25 October2026;
+NOT_EXECUTED.** The operator answered the normal-close question by deferring
+application until later, alongside other work. Source/build remain ready; do not
+independently launch/restart games, close them, edit live settings or request
+another acceptance session from the superseded pending question. Resume runtime
+application only when the operator schedules it with the next work.
 No Computer Use, login automation, global browser/system changes or CI.
 
 ## Five-client native pilot — DONE within this scope
@@ -133,7 +137,7 @@ entirely off; VMware/Sandboxie stay retired. Computer Use was stopped with Esc;
 no further screen/input control was used. Do not force-close games or automate
 authentication. Last accepted games are left open; do not close them incidentally.
 
-**Next:** once the operator confirms normal game closure, launch the prepared
-five-profile candidate and verify the eight approved settings in each profile.
-If restart is deferred, leave current games/settings untouched; the prepared
-launcher applies the preset on the next ordinary launch.
+**Next:** none for preset application while explicitly deferred. Await the
+operator's next work topic; carry the ready automatic preset forward so its
+application/verification can be combined with that later session. Earlier
+full-access permission is not a reason to start a separate session now.
