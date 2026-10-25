@@ -13,37 +13,34 @@ fixture counts and minor launcher/HUD savings are not substitutes for them.
 | Track | Required outcome | Owner and boundaries | Current evidence |
 | --- | --- | --- | --- |
 | **A — saved Minecraft settings** | Keep the approved Simple preset independently per original profile and across normal restart. Render distance **at least 12**, simulation distance unchanged; preserve resolution, accounts/worlds and 144/10. | Minecraft's existing options file owns the settings; existing bootstrap owns persistent per-slot Roaming/Local routing and identity-capability replay. Do not introduce a duplicate preferences store or rewrite options while a game is live. | Both original per-slot options files retained graphics_mode=0, gfx_viewdistance=192, gfx_msaa=1 and the five approved effect switches=0 after both game exits. Disk persistence is observed for both; the restarted MC02 UI also reads Simple / 12 chunks. The fresh MC01 main menu shows its original account; its complete post-restart video UI has not been rechecked. |
-| **B — internal Minecraft efficiency** | Reduce unnecessary mesh/buffer/asset/cache or renderer work using a real Education-compatible integration, inspired by Java optimizers. | A new native internal optimization needs one demonstrated resource owner/lifetime seam. Existing Present mediation owns pacing/HUD, not game meshes/heaps. A generic allocator/hook fixture or wrapper micro-optimization does not satisfy B. | A guarded native startup-count intervention is implemented and executed on two original clients. It lowered private commitment in a bounded comparison but established no meaningful resident-RAM saving; default remains OFF. Other CPU-visible pool ownership, occupancy and GPU-safe retirement/rebuild remain UNKNOWN. Do not promise a Java mod port or a RAM percentage. |
-| **C — inactive clients first** | Prioritize lower RAM/CPU/GPU demand while a client is not controlled; keep foreground 144/background 10 ceilings, prompt focus recovery and continuing Education host/network/saves. | Focus/pacing retain their current owners. Host role is separate from focus. No whole-process suspension, arbitrary memory/CPU caps, periodic trimming, token/profile sharing, fabricated occlusion result or freeing game-owned resources. | The existing limiter is implemented and prior 10-FPS observations are historical. Further game-owned background work reduction, its resource benefit and host health require a concrete intervention; no new savings are claimed yet. |
+| **B — internal Minecraft efficiency** | Reduce unnecessary mesh/buffer/asset/cache or renderer work using a real Education-compatible integration, inspired by Java optimizers. | A new native internal optimization needs one demonstrated resource owner/lifetime seam. Existing Present mediation owns pacing/HUD, not game meshes/heaps. A generic allocator/hook fixture or wrapper micro-optimization does not satisfy B. | A guarded native startup-count intervention is implemented and executed on two original clients. Sequential readings showed lower private commitment but do not establish causal savings or meaningful resident-RAM benefit; default remains OFF. Other CPU-visible pool ownership, occupancy and GPU-safe retirement/rebuild remain UNKNOWN. Do not promise a Java mod port or a RAM percentage. |
+| **C — inactive clients first** | Prioritize lower RAM/CPU/GPU demand while a client is not controlled; keep foreground 144/background 10 ceilings, prompt focus recovery and continuing Education host/network/saves. | Focus/pacing retain their current owners. Host role is separate from focus. No whole-process suspension, arbitrary memory/CPU caps, blind working-set trimming, token/profile sharing, fabricated occlusion result or freeing game-owned resources. | The existing limiter is implemented and prior 10-FPS observations are historical. Further game-owned background work reduction, its resource benefit and host health require a concrete intervention; no new savings are claimed yet. |
 
-**Current phase — RESEARCH ONLY, operator correction 25 October 2026.**
-Do not start another native candidate, game session, collector or settings change.
-The operator requests a defensible solution design before further experiments.
-Existing A/B/C outcomes remain the goal; below 1 GB is aspirational. The current
-research review is in [the existing report](../docs/system/native-memory-efficiency-research.md#research-first-decision-review--25-october-2026).
-Primary sources establish fence-safe used/pending/unused page lifetimes, not an
-Education integration or a memory saving. CPU-visible retention is a research
-lead; actual L0 properties, spare residency, queue/fence/reference ownership and
-native reacquisition remain UNKNOWN. Heap/object retention is separately
-unattributed. Preserve the working default and keep the L1 experiment OFF.
+**Current phase — CRITICAL COMPARATIVE RESEARCH ONLY, operator direction25 October2026.**
+No new candidate, hook, game/PC session, collector, settings change or runtime
+benchmark. The operator rejected the prior reasoning as shallow and requested
+a self-critical, cross-engine/source audit before continuing. See the
+[critical comparative audit](../docs/system/native-memory-efficiency-research.md#critical-comparative-audit--25-october-2026).
 
-**Source-only ownership design outcome — parent cc92fe84e0dad00084efc0edb047dd9b1462a7b9.**
-The [conditional staging design](../docs/system/native-memory-efficiency-research.md#conditional-design-release-only-native-certified-unused-staging-pages)
-is now specified: native whole-unused-page maintenance owns release/reuse,
-existing focus/pacing provides preference only, and settings persistence remains
-independent. Unknown lifetime/locking/queue edges prohibit implementation.
-Recorded-but-unsubmitted references, all actual source consumers and device-loss
-fence values are explicit exclusion/failure cases. No new manager or governor.
+**Corrected decision:** withdraw CPU-visible staging retention as the main/best
+RAM solution. It is one hypothesis beside CPU representation, allocator
+fragmentation/free retention, content demand/caches and GPU allocation/streaming.
+The earlier safe-retirement checklist is conditional, not an integrated
+Education optimizer. Fourteen comparator families now have inspected mechanisms
+and cited source snapshots; published numbers are labeled by metric/method and
+are not Education predictions. O3DE/Godot/Filament make different reuse/release
+tradeoffs; Sodium deliberately retains spare capacity; ModernFix changes loading,
+FerriteCore changes live data, production allocators legitimately purge owned
+free backing, and Mesh rebuts a universal whole-empty-page restriction.
 
-Archived code gives one concrete rejection without runtime: named UploadBufferHeap
-initializes with two 8-MiB heap requests, a nominal 16-MiB startup capacity.
-Reducing count 2 -> 1 directly changes only 8 MiB nominal initial capacity;
-actual backing properties/residency and later growth are not established.
-Reject another startup-count canary. Post-growth unused retention remains a
-research hypothesis; no material reclaimable resident bytes or native complete
-retirement/destruction seam is proven. Implementation is DEFERRED /
-SOURCE_INSUFFICIENT, while source research remains active. No game, code,
-settings, public API, payload admission, build, CI or runtime measurement changed.
+Retain only the narrow rejection of another2x8MiB initial-count canary; it does
+not bound post-growth retention or all native optimization. The sequential
+warm-pool commit/RAM deltas are observations, not causal savings or universal
+falsification. Keep its default OFF, current working payload and public admission
+unchanged. Existing pageable Private WS categories do not prove semantic owners,
+free capacity or complete system RAM. No candidate has demonstrated material
+reclaimable Education bytes with compatible lifetime/rebuild coverage; there
+is no justified winner or percentage. Below1GB is aspirational.
 
 **Working method:** choose one real intervention in A/B/C, implement it or
 explicitly reject its concrete integration boundary, then use only checks that
@@ -1868,8 +1865,9 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** trace the native allocation-to-retirement/destruction
-call graph using the already-saved code evidence only. Identify a complete
-whole-unused-page boundary or record precisely which required function/edge is
-outside the captured evidence and close that integration as source-insufficient.
-No new executable experiment, hook, collector or automatic PC session.
+**One next action:** reconcile the four competing waste classes against
+existing saved allocation/residency/code evidence in one candidate ledger:
+semantic owner, live/free/duplicate status, byte relevance, compatible intervention
+and missing fact. Do not rank staging first or implement another hook until
+that chain supports the selection; unavailable liveness/owner evidence remains
+UNKNOWN without an automatic new PC session.

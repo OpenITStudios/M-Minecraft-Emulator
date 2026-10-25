@@ -11,203 +11,155 @@ lifecycle: ACTIVE
 
 Status: RESEARCH WITH BOUNDED IMPLEMENTATION AND RUNTIME OBSERVATIONS. Initial research was pinned to `5eaa49ed41c5c455f1b783d3a7c659bbba40e2d5`; subsequent diagnostics, HUD work and the approved Education graphics intervention are identified below. A substantive Minecraft-internal optimization seam and repeatable whole-game gains remain UNKNOWN. Current operator intent is owned by planning/development.md.
 
-## Research-first decision review — 25 October 2026
+## Critical comparative audit — 25 October 2026
 
-**Operator correction:** suspend new executable experiments and establish the
-mechanism, applicability and expected failure modes before selecting another
-candidate. This review changes documentation/continuation only; no build, game
-launch, PC input, settings change or runtime measurement was performed.
+**Decision authority:** this section supersedes the earlier staging-first priority
+and conditional-design claims at 8095e337aef9a1277b0a6c5447c6752343afa0e8.
+The prior versions remain in Git history. The operator requested a deeper,
+self-critical comparison before further experiments. No game/process access,
+new trace, UI action, build, benchmark, hook or runtime change occurred in this
+audit. This is primary-source/code review, not new Minecraft acceptance.
 
-### Why the preceding intervention was premature
+### Audit of our own reasoning
 
-The code proved an initial-capacity seam before establishing whether its backing
-capacity was the resident system-RAM target. Actual CUSTOM / NOT_AVAILABLE / L1
-properties were checked only after the first canary failed to match the assumed
-type. Microsoft distinguishes [heap properties](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ne-d3d12-d3d12_heap_type)
-and [memory pools](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ne-d3d12-d3d12_memory_pool);
-a constructor count is not occupancy or resident-RAM evidence. The corrected
-canary's lower commitment but effectively unchanged private working set closes
-that proposed resident-RAM benefit. Preserve it OFF; do not repeat the run.
-
-Existing baseline snapshots already distinguish large resident categories:
-guest/host Heap Private WS ~601/754 MiB, Private Data ~439/440 MiB and
-Image Private WS ~293/293 MiB. These categories are accounting, not semantic
-owners or spare memory; neither all Heap nor all write-combined Private Data
-can be labeled a chunk/upload cache. No specific amount is proven reclaimable.
-[Windows working-set semantics](https://learn.microsoft.com/en-us/windows/win32/memory/working-set)
-also explain why paging a page out of one process's set need not eliminate its
-backing data or immediately free physical RAM system-wide.
-
-### Mechanisms with actual primary-source support
-
-| Mechanism | What the source establishes | Education applicability |
+| Prior statement or decision | Verdict | Correction and reason |
 | --- | --- | --- |
-| Fence-safe staging-page reuse/release | Microsoft's [LinearAllocator](https://github.com/microsoft/DirectXTK12/blob/f5b928460d91984b27029d064ee5a7dd4301513c/Src/LinearAllocator.cpp#L131) separates referenced, fence-pending and unused pages; Shrink frees only unused pages. | Strongest bounded native retention research lead; the game's equivalent lists, queues and spare capacity remain UNKNOWN. Education is not established to use this library. |
-| Lower CPU-visible spare capacity | Less retained backing can help only if it was allocated, resident and genuinely unnecessary; normal grow/failure paths must survive. | No exact L0 pool tuple, spare resident-byte total or safe floor is established. A name such as UploadBufferHeap is insufficient. |
-| Bound upload work in flight | Microsoft's [ring example](https://learn.microsoft.com/en-us/windows/win32/direct3d12/fence-based-resource-management) reuses completed ranges but can wait for room, trading memory against latency. | Research only: chunk producer, submission and peak live demand are unverified; avoid compromising active 144-FPS pacing. |
-| Compact representation / bounded caches | [Sodium's arena owner](https://github.com/CaffeineMC/sodium/blob/148151cf25c56f8b670986b348dcc589278c867e/common/src/main/java/net/caffeinemc/mods/sodium/client/gpu/arena/ArenaAggregator.java) manages capacity/relocation; its [chunk-copy cache](https://github.com/CaffeineMC/sodium/blob/148151cf25c56f8b670986b348dcc589278c867e/common/src/main/java/net/caffeinemc/mods/sodium/client/world/cloned/ClonedChunkSectionCache.java) bounds entries and expires them. [FerriteCore](https://github.com/malte0811/FerriteCore/blob/26.1/summary.md) changes Java storage and deduplicates representations. | Real algorithms, but their Education object layouts, consumers and invalidation boundaries remain UNKNOWN. Java-modpack savings do not transfer. |
-| Authored texture/model/audio efficiency | Official [Creator guidance](https://learn.microsoft.com/en-us/minecraft/creator/documents/practices/improvingperformanceandresourceusage?view=minecraft-bedrock-stable) identifies asset dimensions, model complexity, sounds and pack overhead as resource costs. | Conditional content track only, requiring applicable authored content and Education compatibility. No current pack inflation has been established; do not modify worlds/assets or count it as native allocator savings. |
+| Unused CPU-visible staging retention is the main/best RAM solution | **WITHDRAWN** | A known safe pattern in another engine establishes a possible algorithm, not the size/existence of Education waste or its priority over CPU objects, fragmentation, models and driver allocations. No comparative reclaimable-byte evidence selected a winner. |
+| The conditional lifecycle design is complete enough to suggest implementation progress | **OVERSTATED** | It describes safety requirements for one hypothesis. Education's producer, references, recorded commands, queue timelines, wholly unused state and native destruction path remain unproven. A checklist is not an integrated design. |
+| The warm-pool comparison lowered commitment by174/142MiB | **OBSERVATION ONLY** | Those are differences in sequential readings with different join timing/allocator activity; no matched repeated intervention establishes causality. The effectively unchanged private working set justifies withholding rollout, but does not disprove every pressure-dependent benefit of the mechanism. |
+| Named UploadBufferHeap has2x8MiB initial requests, so another startup-count canary is unjustified | **KEEP, NARROWLY** | The direct nominal count2->1 difference is8MiB. This neither caps later growth nor rejects all upload/graphics/allocator optimization. Actual properties and retained resident capacity at this site remain UNKNOWN. |
+| Whole-unused-page destruction is the only safe native route | **NOT A UNIVERSAL CLAIM** | It is a conservative condition for our currently unverified foreign-resource integration. Mesh demonstrates physical compaction without changing live object virtual addresses under its own allocator/OS contract. That does not authorize remapping Minecraft memory. |
+| Periodic/background cleanup should be rejected | **QUALIFY** | Owner-cooperative purge/decay is standard in production allocators. Reject blind working-set trim, raw decommit, foreign COM release and an unjustified new cleanup loop; do not conflate them with a proven allocator-owned reclaim mechanism. |
+| Low background FPS should mean low RAM | **UNPROVEN** | Presentation frequency, simulation/upload jobs, retained caches and residency are distinct. Frame-count cleanup can even take longer in wall-clock time at10FPS. Education-specific behavior is not established. |
+| An internal optimizer is possible because we can inject a DLL | **WITHDRAWN AS FEASIBILITY PROOF** | Loading/interception is a mechanism for integration, not proof of ownership, useful algorithm coverage, correctness or savings. Conversely closed source alone does not prove impossibility: mature translation layers can own an implemented API boundary. |
+| More documentation and passing controls advance the RAM goal | **METHOD ERROR** | They can preserve knowledge and verify contracts, but are not the requested savings. The preceding work over-invested in one lead and repeatedly restated UNKNOWN instead of comparing competing mechanisms and their evidence. |
 
-The [Education FAQ](https://edusupport.minecraft.net/hc/en-us/articles/360047117692-FAQ-Game-Features)
-does not support community Java mods. Its official [Add-Ons collection](https://education.minecraft.net/en-us/resources/minecraft_education_add_ons_collection)
-does support content packages; this does not document a native renderer/allocator
-extension. The absence of a supported SDK does not prove every original native
-optimization impossible, but makes the integration contract version-specific
-research rather than a ready Sodium installation.
+The main logical failure was promoting *algorithm plausibility* into *problem
+diagnosis and priority*. We should have required a demonstrated waste class and
+an applicable boundary before treating an implementation as the expected answer.
+Version hashes and a correct call ABI cannot substitute for that missing causal
+argument. Refusing unsafe frees was justified; suggesting that this left one
+obvious main solution was not.
 
-Persistent mapping is supported by Microsoft's [Map contract](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12resource-map);
-mapping alone is not a leak. Periodic Unmap is not a backing-resource reclamation
-policy. [D3D12MA defragmentation](https://gpuopen-librariesandsdks.github.io/D3D12MemoryAllocator/html/defragmentation.html)
-requires application cooperation to recreate/copy resources, wait for completion
-and update descriptors. Adding that allocator does not supply Education's missing
-ownership knowledge.
+### Comparator sample: actual mechanisms, rather than a list of project names
 
-### Preconditions for one justified implementation
+The sample covers14 project/system families below. It is purposeful rather than
+exhaustive, and does not benchmark any whole engine as globally superior.
+Immutable code pins identify inspected implementations; release/blog/issue claims
+are separately labeled empirical evidence. Their algorithms or published results
+do not imply matching Education gains.
 
-The chosen owner must have a source/evidence chain:
-
-`producer -> CPU-visible allocation -> command submission -> queue/fence -> completed unused pages -> reuse/release`
-
-For every edge, record established evidence or UNKNOWN. Before making another
-candidate, identify (1) actual RAM pool/backing and consumer, (2) allocated,
-in-use, in-flight and unused capacity, (3) completion/reference safety,
-(4) native growth/reacquisition and failure behavior, and (5) why material resident
-bytes would disappear rather than move to paging/VRAM or immediately refill.
-A public example proves an algorithm, not those game-specific facts. If an
-essential edge stays UNKNOWN, close/defer that implementation without another
-generic hook fixture or runtime attempt.
-
-For inactive clients, preserve the existing focus/pacing owner and distinguish
-host role from focus. A 10-FPS ceiling alone does not establish less resident
-asset data or fewer simulation/upload jobs. A future retention policy would
-operate only on proven unused pages after safe completion, retain a justified
-reuse floor and avoid release/reallocate churn on repeated focus changes.
-No background trim, suspension, synthetic occlusion or hard RAM cap is selected.
-
-**Research conclusion:** there is no proven drop-in solution or sourced
-below-1-GB guarantee for this Education workload. CPU-visible unused staging
-retention is the best current *research lead*, not a selected implementation or
-a predicted saving. CPU heap/object retention remains a separate material
-unattributed category; do not assume graphics alone explains the problem.
-A/B/C stay separate, settings/accounts/worlds remain preserved, and five-client
-expansion stays deferred. The next output is a source-only ownership/decision
-design to discuss with the operator; runtime implementation stays paused until
-that design is resolved.
-
-### Conditional design: release only native-certified unused staging pages
-
-This is a design decision, not an executable implementation. Source baseline:
-`cc92fe84e0dad00084efc0edb047dd9b1462a7b9`. Existing source consumers were
-traced through independent_bootstrap.rs -> instance_focus_events.rs and the
-C++ presentation enrollment/pacer. They own process identity and focus/pacing;
-none establishes ownership of game staging-page lifetimes.
-
-**New offline finding — reject another startup-count canary.** Reinspection of
-the already-saved device-initialization code identifies the named
-UploadBufferHeap call into the previously reviewed initializer: 8-MiB block size,
-64-KiB alignment, flags 0, initial count 2, and final argument 4. The initializer
-uses count 2 as the heap-creation loop bound; the final argument is stored
-separately and its retention semantics remain UNKNOWN. The property's actual
-five-field contents at this call were not captured. Do not infer L0 or upload
-purpose from the literal name.
-
-The initial requested capacity is therefore nominally 16 MiB. Changing 2 -> 1
-would directly change only 8 MiB of nominal startup capacity; that is neither
-measured resident RAM nor a bound on later growth, associated driver allocations
-or total pool memory. A second initial-count experiment has no demonstrated
-basis for the requested substantial resident-RAM improvement and is rejected
-without another game run. The new decision concerns later unused retention
-after growth, whose existence and size are still UNKNOWN.
-
-The inspected objects were saved during the earlier bounded executable-image
-inspection, not read from a new game process. Local SHA-256 provenance:
-device-initialization object
-`54841700c33a7e8ca1f517f10f213fbe7f16a2e7de33ae44a166fc1c3c1913b4`;
-initializer object
-`eb6730ed48a082a6f2668c3985ef5b3a1af78c26a3a3efe340fedb33f10117a8`.
-Only semantic findings are published; proprietary instruction fragments and raw
-objects remain local. This is static review of archived runtime evidence, not
-execution or proof that all requested heaps were successfully allocated.
-
-**One lifetime owner, separate settings and focus responsibilities.**
-
-| Responsibility | Existing/intended owner | Required limit |
+| Comparator and exact source | Mechanism in inspected code | What it teaches / integration boundary |
 | --- | --- | --- |
-| A: save approved graphics | Existing original per-profile options routing | No new settings store, live options rewriting, simulation/resolution change or cross-profile data sharing. |
-| C: foreground/background state and 144/10 | Existing instance_focus_events policy -> configured bootstrap -> presentation/pacer | Focus provides a retention preference only. A background Education host continues simulation, networking and saves. No second focus observer. |
-| B: classify and retire staging pages | The game's native allocator; precise maintenance entry point is UNKNOWN | Retain native locks, references, lists, queue dependencies, destruction/accounting and demand-driven growth. No external page registry, generic allocator replacement or raw Release/VirtualFree. |
+| [Sodium148151c, CompactChunkVertex](https://github.com/CaffeineMC/sodium/blob/148151cf25c56f8b670986b348dcc589278c867e/common/src/main/java/net/caffeinemc/mods/sodium/client/render/chunk/vertex/format/impl/CompactChunkVertex.java) and [ArenaAggregator](https://github.com/CaffeineMC/sodium/blob/148151cf25c56f8b670986b348dcc589278c867e/common/src/main/java/net/caffeinemc/mods/sodium/client/gpu/arena/ArenaAggregator.java) |20-byte terrain vertices; arena reuse/relocation; deliberate spare capacity, growth-sensitive deallocation pause. Some sizing branches overallocate substantially; one resize-compaction branch is disabled because of churn. | Smaller representation, fewer redundant allocations and retained spare capacity can coexist. Requires the mesh producer and GPU decoding/relocation contract; allocator interception supplies neither. |
+| [FerriteCore0cef1f2, FastMap](https://github.com/malte0811/FerriteCore/blob/0cef1f2add1f1329aa6e690e8e292acd625c5c6d/Common/src/main/java/malte0811/ferritecore/fastmap/FastMap.java), [BlockStateCacheImpl](https://github.com/malte0811/FerriteCore/blob/0cef1f2add1f1329aa6e690e8e292acd625c5c6d/Common/src/main/java/malte0811/ferritecore/impl/BlockStateCacheImpl.java) | Shared indexed state representation and canonical collision-shape/cache data replace repeated Java structures. | CPU live-data reduction, not generic heap purge. Needs actual duplicate immutable Education representations and all consumers. C++ Education may already avoid the Java overhead. |
+| [ModernFix441fe62, DynamicBakedModelProvider](https://github.com/embeddedt/ModernFix/blob/441fe62210157ae62e925eaa2ea95c43652836ad/src/main/java/org/embeddedt/modernfix/dynamicresources/DynamicBakedModelProvider.java), [ModelBakeryMixin](https://github.com/embeddedt/ModernFix/blob/441fe62210157ae62e925eaa2ea95c43652836ad/src/main/java/org/embeddedt/modernfix/common/mixin/perf/dynamic_resources/ModelBakeryMixin.java) | Eager model loading becomes on-demand baking with dependency handling, bounded/expiring caches and permanent overrides. | Avoid loading dispensable data; requires registry, reconstruction and invalidation. Compatibility risk is real; not a drop-in Education extension. |
+| [Godot c8256a8, RenderingDevice staging](https://github.com/godotengine/godot/blob/c8256a8ecec068340753869e423dd478c84ef167/servers/rendering/rendering_device.cpp#L963) | Persistently mapped CPU staging blocks, aligned suballocation, old-frame reuse, growth to a bound, then previous-frame/all-frame stall. | Deliberate retention trades footprint for upload latency. A mature implementation need not immediately shrink. Source establishes policy, not measured whole-process savings. |
+| [Filament34388e7, VulkanStagePool](https://github.com/google/filament/blob/34388e76bec43a0e031b9722c46bf94fcb580214/filament/backend/src/vulkan/VulkanStagePool.cpp#L266) and [command completion](https://github.com/google/filament/blob/34388e76bec43a0e031b9722c46bf94fcb580214/filament/backend/src/vulkan/VulkanCommands.cpp#L299) | CPU_ONLY staging segments have owned references; completed commands release them. Cleanup destroys excess safe empty stages and retains one; staging images expire separately. | Concrete release/reuse design with actual lifecycle ownership. Retaining one stage is not a byte cap; it can be oversized. Vulkan ownership does not become an Education D3D12 seam automatically. |
+| [O3DE2462b90, DX12 staging](https://github.com/o3de/o3de/blob/2462b90ee389939336931a14e234fc4e3b4cd534/Gems/Atom/RHI/DX12/Code/Source/RHI/StagingMemoryAllocator.cpp#L20) and [streaming images](https://github.com/o3de/o3de/blob/2462b90ee389939336931a14e234fc4e3b4cd534/Gems/Atom/RHI/DX12/Code/Source/RHI/StreamingImagePool.cpp#L405) | Ordinary medium/large staging pages set recycleOnCollect=true; oversized uploads have deferred release. Image streaming coordinates mip/tile trim with upload/frame dependencies. | Size classes can need different policies. Asset streaming is a separate lever, usually VRAM/quality related. GarbageCollect does not necessarily free all cached pages. |
+| [DirectXTK12 f5b9284, LinearAllocator](https://github.com/microsoft/DirectXTK12/blob/f5b928460d91984b27029d064ee5a7dd4301513c/Src/LinearAllocator.cpp#L132) | Own references -> pending fence -> reusable pages; Shrink frees unused pages. | Establishes one cooperative lifetime model. No evidence Education embeds it or has callable equivalent maintenance. Own page RefCount must not be confused with external COM probing. |
+| [mimalloc3.5.3/d4881d3, arena purge](https://github.com/microsoft/mimalloc/blob/d4881d338125e1cb7c47ba4cfb398d6f7c0c8d45/src/arena.c#L2277) | Local free-list sharding and delayed purge; eligible free slices are claimed before backing is purged, skipped if reused. | Allocation cost and owned-free retention can improve independently of live-data size. CRT/custom allocator/driver coverage and early compatible routing are unproven in Education. |
+| [jemalloc5.3.0/54eaed1, pac decay](https://github.com/jemalloc/jemalloc/blob/54eaed1d8b56b1aa528be3bdd1877e59c56fa90c/src/pac.c#L340) and [tuning](https://github.com/jemalloc/jemalloc/blob/54eaed1d8b56b1aa528be3bdd1877e59c56fa90c/TUNING.md) | Dirty/muzzy extent caches, decay/purge, thread-cache/arena tradeoffs. | More aggressive release costs CPU; more arenas may reduce contention but increase fragmentation. No universal best preset and no safe foreign-heap tuning inferred. |
+| [PartitionAlloc617efbf, MemoryReclaimer](https://github.com/chromium/chromium/blob/617efbff7213bad01531786b252a16e0e55a22ff/base/allocator/partition_allocator/src/partition_alloc/memory_reclaimer.cc#L63) | Owned span lifecycle, decommit and bounded reclaim, with aggressive thread-cache purge reserved for stronger pressure. | Cooperative periodic reclaim is legitimate. Chromium owns allocator metadata and embedding policy; the launcher cannot apply these lists to unknown pages. Current code is not the exact2021M89 payload. |
+| [Mesh fa1542b, meshLocked](https://github.com/plasma-umass/Mesh/blob/fa1542b26468236b6c5589ceb46a8323bc11a9d2/src/global_heap_impl.h#L296) | Occupancy metadata and virtual-memory aliasing combine compatible partially occupied spans without moving live object virtual addresses. | Counterexample to a universal whole-empty-page restriction. Requires its own allocator, synchronization and OS mapping support; current [platform scope](https://github.com/plasma-umass/Mesh/blob/fa1542b26468236b6c5589ceb46a8323bc11a9d2/README.md) is Linux/macOS with Windows work in progress. Not game/D3D12 remapping permission. |
+| [DXVK cbd2206, freeEmptyChunksInPool](https://github.com/doitsujin/dxvk/blob/cbd2206d72d3d9dd9941d5d868bb03a858e85f9b/src/dxvk/dxvk_memory.cpp#L1748) | Full graphics translation owner tracks allocated/used chunks, budgets, fragmentation and empty age. Mapped pools retain more spare capacity than device pools; cleanup is pressure/age dependent. | An external compatibility layer can optimize memory when it implements the relevant API/resource lifetime. This is substantially more ownership than our Present/creation wrapper and is not a ready D3D12 Education fix. |
+| [vkd3d-proton ef9a02e, vkd3d_free_memory](https://github.com/HansKristian-Work/vkd3d-proton/blob/ef9a02e873715c9e2da0d6db8a236aca8380b303/libs/vkd3d/memory.c#L2087) | D3D12-to-Vulkan implementation merges suballocation free ranges, removes wholly free chunks under allocator lock, and respects relevant transfer dependencies. | Closed game source does not rule out API-layer optimization. But implementing a translation/resource owner, shader/descriptor compatibility and game support is a major separate undertaking; adopting it is not authorized by this audit. |
+| [APEX Engine / Avalanche-AMD2022 case study](https://gpuopen.com/download/MemoryManagementInAPEX_v2.pdf) | Separates resource classes, controls allocation granularity/priorities, handles resize spikes and fragmentation with engine-owned resource references. | Production evidence concerns specific VRAM pathologies, not all game RAM. The lesson is diagnosis-specific policy, not one universally superior allocator. |
 
-The conditional mechanism is a narrow decision at the native allocator's own
-whole-unused-page maintenance boundary. It would allow selected excess pages to
-follow the owner's existing destroy path. It would not relocate active resources
-or reduce the current allocation to an arbitrary cap. If no complete native
-maintenance/destruction boundary is demonstrable, reject this integration.
+Pins are inspection snapshots, not assertions of latest versions or independent
+performance superiority. Numeric constants above describe their sources; none
+has been selected as an Education threshold.
 
-| Lifecycle transition | Evidence needed | Current Education evidence |
+### Published samples: distinguish data quality and metrics
+
+All figures below are externally reported, not reproduced in this audit.
+None uses our installed Education workload/hardware/settings.
+
+| Sample and primary evidence | What is actually reported | Quality, scope and limitation |
 | --- | --- | --- |
-| Producer -> allocated CPU-visible page | Exact backing properties and which data producer uses it | Named pool and initial creation loop only; properties/producer UNKNOWN. |
-| Allocated -> live/recorded | Native references, suballocations and unsubmitted/replayable command-list use | UNKNOWN. |
-| Submitted -> GPU-complete | All actual source consumers and queue/fence dependencies | UNKNOWN; graphics creation stacks and Present do not establish it. |
-| Complete -> wholly unused | No remaining CPU/recorded/GPU references, native list classification and lock | UNKNOWN. |
-| Unused -> reused or destroyed | Atomic select/unlink/destroy/accounting under native ownership; normal reacquisition/failure | Allocation/growth code exists in archived evidence; safe whole-page retirement/destruction remains UNKNOWN. |
+| [O3DE issue11446](https://github.com/o3de/o3de/issues/11446) and [inspected DX12 patch8650028](https://github.com/cyanide-studio/o3de/commit/8650028b183ff858a6917029d5ca8b5683460107) | Author reports scene VRAM roughly6300->5900MB DX12 and a2GB Vulkan reduction. Tiny unique allocations/alignment motivated changed suballocation/routing. | HWiNFO/patch author evidence, not independent replication/current RAM benchmark. Vulkan baselines are inconsistent:8700 total minus2300 pre-editor is6400, while the reported5900 subtracts2800 editor usage. Do not treat its2GB headline as a clean same-baseline delta. Driver crashes were also reported; no Education forecast. |
+| [DXVK2.5 release](https://github.com/doitsujin/dxvk/releases/tag/v2.5) | Authors report peak video-memory reduction up to1GiB in extreme God of War cases after memory-management rewrite. | Release claim with workload context, no full protocol/variance in the note. VRAM, not private RAM. Retains spare capacity and notes driver exceptions; copying the peak figure would be misleading. |
+| [ModernFix Dynamic Resources FAQ](https://github.com/embeddedt/ModernFix/wiki/Dynamic-Resources-FAQ) | BlanketCon23 example1.7GB->945MB, with FerriteCore already installed. | Historical author example; hardware/JVM/stage/repetition/metric not fully specified. Its stated55% reduction conflicts with endpoints: consistent decimal units imply about44% reduction/56% remaining. Feature is off by default for compatibility, including startup crashes/missing textures. |
+| [FerriteCore pinned summary](https://github.com/malte0811/FerriteCore/blob/0cef1f2add1f1329aa6e690e8e292acd625c5c6d/summary.md) | One old modpack's repeated neighbour maps around600MB versus roughly7MB replacement FastMaps. | A specific Java representation, not whole-process resident RAM. Historical2020/MC1.16.4 examples, some difficult to reproduce; do not sum overlapping entries or transfer the ratio to native data. |
+| [Chromium M89 official report](https://blog.chromium.org/2021/03/advanced-memory-management-and-more.html) | Windows savings up to22% browser,8% renderer,3% GPU process after allocator adoption; separate discardable-content change up to100MiB/tab. | Anonymous aggregate product field data; no full raw A/B dataset/variance provided. Per-process figures are not additive;2021 browser result does not establish a modern game allocator gain. |
+| [Mesh PLDI2019](https://people.cs.umass.edu/~mcgregor/papers/19-pldi.pdf) and [original artifact322e727](https://github.com/plasma-umass/mesh-testsuite/blob/322e727877d25c8fbdb30eee8fae960b48c2ffa1/README.md#evaluating-paper-claims) | Paper reports Firefox16% and Redis39%; artifact's Firefox values530MB sigma22.4 vs632MB sigma25.3. | Paper plus evaluation scripts/environment is stronger reproducibility evidence. Historical external trials; architecture-dependent results and Docker/macOS slowdown caveats exist. Windows/Education/D3D12 integration remains absent. |
+| [mimalloc benchmark documentation](https://github.com/microsoft/mimalloc/blob/d4881d338125e1cb7c47ba4cfb398d6f7c0c8d45/readme.md#performance) | Time/peak-RSS results with described Linux hardware/compiler/allocator versions and repeated timing runs. | Benchmark suite dates to2021; current README warns about age and speed-dependent RSS comparisons such as xmalloc-testN. Faster allocator does not imply less live data or lower game RAM. |
+| [O3DE allocator discussion19539](https://github.com/o3de/o3de/discussions/19539) | Author reports mimalloc high-water12.5GB versus malloc10.1GB, while one frame-time comparison is10.7ms versus12.6ms. | Workload/allocator-combination report, not precisely specified private-resident metric or controlled repeated trial; author notes drift and crashes in a combination. Valuable counterexample to automatic speed-plus-RAM improvement, not a universal winner. |
 
-Microsoft's [pinned LinearAllocator](https://github.com/microsoft/DirectXTK12/blob/f5b928460d91984b27029d064ee5a7dd4301513c/Src/LinearAllocator.cpp#L132)
-is the reference lifecycle: own page references, pending fences and unused pages
-are distinct. Its own RefCount is not COM-resource introspection. Microsoft's
-[Release contract](https://learn.microsoft.com/en-us/windows/win32/api/unknwn/nf-unknwn-iunknown-release)
-limits the returned count to testing; do not probe game COM references to
-declare ownership. A completed upload source can be released while its
-destination mesh/texture remains live, if the source has no other consumers.
+FerriteCore's owner explicitly distinguishes Java GC baseline from working set
+and warns that modern vanilla improvements and ModernFix overlap reduce or
+overlap gains: [issue242](https://github.com/malte0811/FerriteCore/issues/242).
+The ModernFix ultra-low-memory [demonstration](https://github.com/embeddedt/ModernFix/wiki/Ultra%E2%80%90Low-Memory-Footprint)
+uses a constrained Java heap and much lower render distance; it does not meet
+our12-chunk/native-process scope.
 
-**Safety and failure behavior.** A page with any live/recorded reference, pending
-consumer or concurrent allocator reuse is ineligible. Select/remove/destroy must
-use the native synchronization discipline, not an external snapshot of a free
-list. Multiple queues require every relevant last-use dependency, or a proven
-transitive native retirement point. Copy completion can suffice for a source
-used exclusively by that queue; waiting on unrelated destination rendering is
-unnecessary. CPU-signaled or rewound values and unrelated queue timelines cannot
-be treated as one universal frame counter.
-[Microsoft multi-engine synchronization](https://learn.microsoft.com/en-us/windows/win32/direct3d12/user-mode-heap-synchronization).
+### What these comparisons change for Education
 
-GetCompletedValue == UINT64_MAX means device removal, not universal completion.
-Stop optional retention work and leave device-loss/teardown handling native.
-Unknown version/lock/reference/queue semantics preserve native behavior.
-[Microsoft fence result](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12fence-getcompletedvalue).
-Do not add GPU waits solely to reach a RAM target, fake successful allocations,
-or interfere with peer clients. Normal native growth and failure handling stay
-intact. Future rollback is an ordinary restart with the original reviewed
-payload; live disabling must not detach an in-use function or eagerly recreate
-previously released capacity.
+There are at least four distinct potential causes of avoidable footprint:
+(1) unnecessarily large/duplicate live CPU data, (2) allocator fragmentation and
+retained free backing, (3) dispensable assets/models/decoded copies, and
+(4) graphics allocation granularity, upload lifetime and driver backing.
+A process-total or VMMap category does not choose between them. Examples show
+different solutions for each, not that Education actually has all these defects.
 
-**Inactive-client policy, conditional on that native seam.** At existing native
-maintenance, background preference may allow excess *whole unused* pages to
-expire after a justified stable interval, retaining a justified reusable floor.
-Foreground return cancels further optional release and retains demand-driven
-growth. Coalesce rapid focus changes, bound optional maintenance work, and skip
-release when reuse churn would cost more than retention. No numeric floor,
-timeout or work budget is selected without demand/lifetime evidence; no timer,
-cleanup worker or governor is added by this design. Background host demand can
-remain substantial independently of focus.
+Existing baseline category readings (~601/754MiB Heap Private WS for guest/host,
+~439/440MiB Private Data, ~293MiB Image Private WS each) are **not semantic
+owner/liveness measurements**. Private working set covers pageable private
+process residency; it is not a complete attribution of shared/system/driver RAM
+or VRAM. GPU-stack address correlation does not label all those bytes upload or
+unused. Live bytes, internal/external fragmentation, reusable spare capacity and
+driver commitments must remain distinct.
 
-For a verified pool only, classify whole pages exclusively as L (live/recorded),
-P (references retired but GPU use pending), or U (native-certified unused).
-Then A = L + P + U is valid only if these states are exhaustive and disjoint.
-Unused holes inside a partly occupied heap are not releasable U pages.
-Resident backing attributable to released U pages, not U capacity or a historic
-high-water mark, determines possible physical-RAM benefit. Neither U nor its
-resident backing is established now, so no savings percentage is defensible.
-A release/refill cycle is not a durable gain. Microsoft's
-[ring-buffer example](https://learn.microsoft.com/en-us/windows/win32/direct3d12/fence-based-resource-management)
-shows why restricting capacity can trade memory for waits and frame delay.
+| Candidate family | What must be true for it to help | Present Education evidence / decision |
+| --- | --- | --- |
+| CPU representation/dedup | Large repeated immutable structures exist; all readers/writers and identity rules are known | Heap is material, but representations/duplication are UNKNOWN. No selection or savings estimate. |
+| Allocator retention/fragmentation | Meaningful free capacity retains resident backing; owning allocator can purge/compact/reacquire compatibly | LFH one-shot observations are modest/transient. Custom ownership, waste and replacement coverage UNKNOWN. No global malloc switch. |
+| Demand loading/content cache | Reconstructible data is loaded/retained without current need; rebuild/invalidation is available at acceptable latency | No demonstrated Education redundant model/cache or valid eviction seam. Source analogy only. |
+| Staging/post-growth retention | CPU-visible resident backing is materially unused after all actual consumers complete | Named initializer and generic growth code are known; type, occupancy, native retirement and reclaimable bytes UNKNOWN. One hypothesis, not main solution. |
+| GPU granularity/streaming | Allocation alignment, duplication or mip demand wastes the relevant budget | L1 startup candidate showed no meaningful resident-RAM result. VRAM benefit, wider pathology and safe integration remain UNKNOWN. Quality effects must be attributed separately. |
 
-**Feasibility decision:** conditional lifetime design is complete; Education
-implementation is **DEFERRED / SOURCE_INSUFFICIENT**. Existing archives establish
-initialization/allocation routes, but no verified completed-unused destruction
-boundary or material retained resident capacity. Do not convert this design into
-a hook or request another game test merely to fill those gaps. The next bounded
-research task is a native allocation-to-retirement call graph from the existing
-saved evidence, with an explicit evidence limit if a required function was not
-captured. A/B/C and original data remain unchanged; no new runtime work occurred.
+No candidate currently combines demonstrated Education waste volume, compatible
+ownership and predictable benefit. Therefore no evidence-based winner or
+resident-RAM saving percentage is available. Below1GB remains aspirational,
+not a proof-backed engineering estimate. This is an evidence limit, not proof
+that an optimizer can never be developed.
+
+For background clients, separate **presentation**, **simulation/network**,
+**asset demand** and **retention maintenance**. A frame-age policy can take14.4x
+as long in wall time at10FPS versus144FPS for the same frame count; this is
+arithmetic about a hypothetical policy, not observed Education behavior.
+Browser content discarding requires reconstructible content; freezing/discarding
+an Education host would violate continuing gameplay/network requirements.
+Release of legitimately owned free pages can be useful, but repeated churn and
+recovery latency must be part of the objective. Do not optimize the RAM column
+while moving cost to faults, loading, VRAM or stalls.
+
+### Corrected decision and concrete research contract
+
+1. Preserve A graphics persistence, existing144/10 focus behavior, original
+   accounts/worlds, minimum12 chunks, unchanged simulation/resolution, Local only
+   and CI disabled. Keep the L1 experiment default OFF and five clients deferred.
+2. Withdraw staging-first priority. Keep the native retirement checklist as a
+   conditional safety model for that candidate; it is not a complete Education
+   design or a universal description of all valid memory optimizers.
+3. Future selection must connect **observed waste -> semantic owner -> applicable
+   mechanism -> supported lifetime/rebuild boundary -> relevant byte budget ->
+   latency/correctness tradeoff**. A literature example supplies the mechanism,
+   not the other links. Use existing captures/source first; do not start another
+   canary simply because a familiar algorithm exists.
+4. For each candidate distinguish code-derived capacity, author-reported results,
+   reproducible published artifacts and actually observed Education evidence.
+   No additive cross-project percentages, Java-heap/RSS conflation, nominal
+   capacity-as-RAM claim or blanket no-native-optimization assertion.
+5. No runtime/code experiment follows from this audit. Further source work should
+   compare the four waste classes using available evidence before narrowing to
+   one integration. If the necessary owner/live-free distinction is not in the
+   captured evidence, state that exact missing fact and stop that selection.
+
+The useful outcome of this audit is a corrected decision plus inspectable
+counterexamples and evidence, not a new promise that one more hook will solve
+the RAM goal. Raw private artifacts remain local; only this report and the
+canonical handoff change.
 
 
 ## Decision context
