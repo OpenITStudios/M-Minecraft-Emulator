@@ -670,6 +670,69 @@ and BOM-less reports accepted by the actual Node CLI. Six early invalid
 configuration controls refuse before creating output directories. These
 controls do not launch Minecraft or establish game performance.
 
+### Opt-in two-client memory composition
+
+Use `-MemoryComposition` with the existing two-client command when the
+operator session is available and identities have been independently verified.
+It does not start or control games. Without the switch, no extended memory API
+setup/queries run and schemas 1/2/3/4 retain their existing shapes.
+
+```powershell
+powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-native-performance.ps1 `
+  -NativePid <CLIENT01_PID> -IsolatedPid <CLIENT02_PID> `
+  -DurationSeconds 600 -SampleIntervalSeconds 5 -MemoryComposition
+npm run native-performance:review -- <CAPTURE_JSON>
+```
+
+Schema 5 wraps the existing two-client schema in `baseSchema` (1, or 2 with
+`-GpuSnapshot`) and adds separate `memoryComposition` samples. It refuses
+clients 03-05 before creating output. The extension uses query-only process
+handles, validates creation time before/after the native query, closes handles
+on every path, and never requests process-memory contents. It collects:
+
+- **Private commit MiB:** PSAPI PrivateUsage, committed private virtual memory;
+  this is not resident RAM or bytes currently stored in the pagefile.
+- **Private working-set MiB:** PROCESS_MEMORY_COUNTERS_EX2 when supported;
+  failed/unsupported extended queries remain UNKNOWN, while base private
+  commit can remain available. This differs from total WorkingSet64.
+- **Whole-system physical total/available and commit total/limit MiB:**
+  GetPerformanceInfo page counts multiplied by its page size. These include
+  other applications and cannot be attributed to Minecraft.
+- **Memory-query duration:** elapsed time for the two process queries and
+  system query in each row. This excludes setup and is not total collector
+  CPU/RAM overhead. Queries are sequential snapshots; their timestamp follows
+  that row's CPU/working-set reading, not an atomic joint snapshot.
+
+Unavailable values use null plus a bounded reason; zero remains a legitimate
+observation. A lost selected identity invalidates both private metrics for the
+remaining capture. Helpers/process trees and the manager are explicitly
+NOT_COLLECTED; engine overhead is not isolated by these process counters.
+Shared brokers are not guessed into a game total. No metric changes game
+graphics, FPS policy, working-set limits, scheduling or admission.
+
+The reviewer reports per-metric coverage, missing reasons, mean/median/peak,
+endpoints and endpoint difference. A pair of schema-5 reports supports
+descriptive candidate-minus-baseline memory differences only for complete
+metrics and matching existing capture conditions. Missing metrics do not
+become zero differences. Equivalent graphics, focus policy, host workload,
+physical machine and run variability still require separate evidence; no
+automatic savings or gameplay verdict is issued.
+
+Executed own-data evidence: 29 Node tests, including Windows PowerShell 5.1
+and PowerShell 7 native-reader checks, creation-identity rejection, unavailable
+API handling and bounded handle retention over 200 queries. Actual 30-second
+captures with two disposable Node processes passed in both shells, six samples
+each; the PowerShell 7 run includes normal exit of one target and permanent
+identity loss. Both real output files passed the actual Node reviewer and
+UTF-8-no-BOM check. This is collector evidence, not Minecraft performance or
+engine memory savings. Raw captures remain local.
+
+API semantics:
+[GetProcessMemoryInfo](https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-getprocessmemoryinfo),
+[EX2 and its OS prerequisites](https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-process_memory_counters_ex2),
+[GetPerformanceInfo](https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-getperformanceinfo).
+
+
 ### Optional GPU counter snapshot (diagnostic only)
 
 The default command above remains lightweight, uses **schema 1**, and does
@@ -755,7 +818,7 @@ the comparison is **descriptive only**: matching CPU counts do not establish
 the same physical PC or workload. It cannot infer FPS, GPU demand, full
 sandbox descendant-process cost or confirmed Minecraft optimization.
 
-`npm run test:native-performance` checks schema-1/2/3/4 and GPU hint handling,
+`npm run test:native-performance` checks schema-1/2/3/4/5, memory and GPU hint handling,
 privacy, missing-data, numeric comparison and false-PASS constraints.
 Authored tests do not prove that the Windows sampler has actually executed.
 
@@ -773,8 +836,8 @@ independently recorded PresentMon frametimes (if supported by the real renderer)
 GPU/VRAM telemetry, user-observed input responsiveness, independent licensed
 worlds and multiplayer evidence. Compare single versus two-client runs on the
 same PC, resolution and game settings. No performance sample alone promotes
-G0–G4 or proves account separation. Windows/PowerShell execution of the sampler
-is currently **NOT_EXECUTED**.
+G0–G4 or proves account separation. Minecraft performance acceptance is still **NOT_EXECUTED** for this change;
+the executed own-data Windows collector checks are scoped above.
 
 ## Historical VMware-only G0–G4 campaign (paused)
 
@@ -877,3 +940,4 @@ Performance acceptance must distinguish:
 - experience: whether Native and the running Virtual clients remain usable together.
 
 The benchmark harness does not automatically declare a performance PASS. Threshold calibration is a separate evidence review after representative target machines have been measured.
+

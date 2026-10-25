@@ -9,7 +9,7 @@ lifecycle: ACTIVE
 
 # Native client memory and rendering efficiency research
 
-Status: DISCUSSION / RESEARCH ONLY. Researched 2026-10-25 against product source authority `OpenITStudios/M-Minecraft-Emulator`, branch `Local`, exact HEAD `5eaa49ed41c5c455f1b783d3a7c659bbba40e2d5`. This note proposes no implementation or live setting change. No new Windows/game measurement or optimization experiment ran for this research. Gains from the proposed changes and five-client capacity remain **UNKNOWN / NOT_EXECUTED**; prior two-client observations retain their own evidence boundary below.
+Status: DISCUSSION / RESEARCH ONLY. Researched 2026-10-25 against product source authority `OpenITStudios/M-Minecraft-Emulator`, branch `Local`, exact HEAD `5eaa49ed41c5c455f1b783d3a7c659bbba40e2d5`. The performance proposals do not implement game changes or live setting changes; the later diagnostic-only increment is identified below. No new Windows/game measurement or optimization experiment ran for this research. Gains from the proposed changes and five-client capacity remain **UNKNOWN / NOT_EXECUTED**; prior two-client observations retain their own evidence boundary below.
 
 ## Decision context
 
@@ -225,6 +225,21 @@ health, host progression and focus recovery. A lower Task Manager reading alone
 is insufficient. Source-contract completion and runtime benefit are separate;
 the latter stays UNKNOWN / NOT_EXECUTED until actually observed.
 
+### Implemented diagnostic increment after the source audit
+
+The existing collector now offers opt-in two-client `-MemoryComposition`
+(schema 5 over base schema 1/2). It reads private commit, supported EX2 private
+working set, whole-system physical/commit counters and memory-query duration;
+the existing evaluator validates/reviews them. Default schemas 1-4 remain
+compatible. See the [collector usage and proof boundary](../../tooling/acceptance/windows/README.md#opt-in-two-client-memory-composition).
+
+This closes only the first composition gap: helper trees and manager
+attribution are still NOT_COLLECTED, and process totals do not identify
+engine-owned allocations. Own-data Node/Windows checks passed as recorded in
+the handoff, with no new Minecraft measurement or demonstrated savings.
+The earlier exact-source audit above retains its original pinned snapshot;
+it is not a claim that the collector still lacks these new opt-in fields.
+
 ## 10. A bounded comparison that can identify the best tradeoff
 
 This is a proposed later protocol, not an executed test or authorization to operate games now. Keep the host role separate from foreground state: a background host remains latency-sensitive. Declare roles explicitly; do not infer them from titles.
@@ -243,7 +258,7 @@ Do not run heap/memory dumps or retain account/token/world contents for this pla
 
 | Rank | Candidate | Expected impact, still unmeasured | Compatibility cost / next decision |
 | --- | --- | --- | --- |
-| 0 | Extend existing metadata measurement to private commit/residency and attributable helpers | Establishes what can actually be saved; no immediate resource reduction. | First bounded source proposal; measurement gains are not game-performance gains. |
+| 0 | Complete existing metadata measurement with manager and attributable helpers; private commit/residency and system counters are now opt-in | Establishes what can actually be saved; no immediate resource reduction. | First diagnostic increment implemented; measurement gains are not game-performance gains. |
 | Optional settings track | Education's documented conservative graphics preset and render distance | Best-supported opportunity to reduce render work; possible RAM/VRAM benefit. Select the least costly preset that still meets the operator's visual needs. | Visual tradeoff; agree a stable usable preset before any setting change. |
 | 2 | Validate existing 144/10 pacing and background host continuity | Potentially meaningful CPU/GPU work reduction; limited direct allocation effect. | Preserve host progression and fast focus return; avoid equating low FPS with low simulation rate. |
 | Optional settings track | Verify supported render resolution | Potential GPU/render-target reduction. | Confirm actual Education behavior; keep a usable stable size. |

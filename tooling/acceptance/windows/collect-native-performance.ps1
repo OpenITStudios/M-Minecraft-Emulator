@@ -11,6 +11,7 @@ param(
   [ValidateRange(1, 60)]
   [int]$SampleIntervalSeconds = 5,
   [switch]$GpuSnapshot,
+  [switch]$MemoryComposition,
   [string]$OutputDirectory = '',
   [ValidateRange(0, 2147483647)]
   [int]$Client03Pid = 0,
@@ -44,9 +45,13 @@ if ($fourClients) {
 if ($SampleIntervalSeconds -gt $DurationSeconds) {
   throw 'The sample interval cannot exceed the duration.'
 }
+if ($MemoryComposition -and $fourClients) {
+  throw 'Memory composition currently supports the two-client comparison only.'
+}
 
 function Read-Target {
   param([int]$ProcessId, [long]$ExpectedStartTicks = 0)
+  $process = $null
   try {
     $process = Get-Process -Id $ProcessId -ErrorAction Stop
     $started = [long]$process.StartTime.ToUniversalTime().Ticks
@@ -67,6 +72,8 @@ function Read-Target {
   } catch {
     # Missing/inaccessible/restarted process is UNKNOWN, not zero CPU/RAM.
     return $null
+  } finally {
+    if ($null -ne $process) { $process.Dispose() }
   }
 }
 
@@ -157,6 +164,140 @@ function Read-GpuSnapshot {
   return $result
 }
 
+# Loaded only for the explicit composition capture; no VM_READ or target mutation.
+$memoryApiAvailable = $false
+if ($MemoryComposition) {
+  try {
+    if (-not ('Mivubi.PerformanceMemory' -as [type])) {
+      Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+namespace Mivubi {
+  public static class PerformanceMemory {
+    [StructLayout(LayoutKind.Sequential)]
+    struct Counters {
+      public uint cb, PageFaultCount;
+      public UIntPtr PeakWorkingSetSize, WorkingSetSize, QuotaPeakPagedPoolUsage,
+        QuotaPagedPoolUsage, QuotaPeakNonPagedPoolUsage, QuotaNonPagedPoolUsage,
+        PagefileUsage, PeakPagefileUsage, PrivateUsage;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    struct Counters2 {
+      public Counters Base;
+      public UIntPtr PrivateWorkingSetSize;
+      public ulong SharedCommitUsage;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    struct PerformanceInfo {
+      public uint cb;
+      public UIntPtr CommitTotal, CommitLimit, CommitPeak, PhysicalTotal,
+        PhysicalAvailable, SystemCache, KernelTotal, KernelPaged, KernelNonpaged,
+        PageSize;
+      public uint HandleCount, ProcessCount, ThreadCount;
+    }
+    [DllImport("kernel32.dll", SetLastError=true)]
+    static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
+    [DllImport("kernel32.dll")]
+    static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll", SetLastError=true)]
+    static extern bool GetProcessTimes(IntPtr handle, out long creation,
+      out long exit, out long kernel, out long user);
+    [DllImport("psapi.dll", EntryPoint="GetProcessMemoryInfo", SetLastError=true)]
+    static extern bool GetMemory(IntPtr handle, ref Counters data, uint size);
+    [DllImport("psapi.dll", EntryPoint="GetProcessMemoryInfo", SetLastError=true)]
+    static extern bool GetMemory2(IntPtr handle, ref Counters2 data, uint size);
+    [DllImport("psapi.dll", SetLastError=true)]
+    static extern bool GetPerformanceInfo(ref PerformanceInfo data, uint size);
+    public sealed class ProcessValues {
+      public double? PrivateCommitMb, PrivateWorkingSetMb;
+    }
+    static bool SameProcess(IntPtr handle, long expectedTicks) {
+      long birth, exit, kernel, user;
+      return GetProcessTimes(handle, out birth, out exit, out kernel, out user)
+        && DateTime.FromFileTimeUtc(birth).Ticks == expectedTicks && exit == 0;
+    }
+    public static ProcessValues Read(int pid, long expectedTicks) {
+      IntPtr handle = OpenProcess(0x1000, false, pid);
+      if (handle == IntPtr.Zero) return null;
+      try {
+        if (!SameProcess(handle, expectedTicks)) return null;
+        var result = new ProcessValues();
+        var extended = new Counters2();
+        extended.Base.cb = (uint)Marshal.SizeOf(typeof(Counters2));
+        // An older implementation must not turn an untouched field into zero.
+        ulong sentinel = UIntPtr.Size == 8 ? ulong.MaxValue : uint.MaxValue;
+        extended.PrivateWorkingSetSize = new UIntPtr(sentinel);
+        if (GetMemory2(handle, ref extended, extended.Base.cb)) {
+          result.PrivateCommitMb = extended.Base.PrivateUsage.ToUInt64() / 1048576.0;
+          if (extended.PrivateWorkingSetSize.ToUInt64() != sentinel)
+            result.PrivateWorkingSetMb = extended.PrivateWorkingSetSize.ToUInt64() / 1048576.0;
+        } else {
+          var basic = new Counters();
+          basic.cb = (uint)Marshal.SizeOf(typeof(Counters));
+          if (GetMemory(handle, ref basic, basic.cb))
+            result.PrivateCommitMb = basic.PrivateUsage.ToUInt64() / 1048576.0;
+        }
+        return SameProcess(handle, expectedTicks) ? result : null;
+      } finally { CloseHandle(handle); }
+    }
+    public static double[] ReadSystem() {
+      var data = new PerformanceInfo();
+      data.cb = (uint)Marshal.SizeOf(typeof(PerformanceInfo));
+      if (!GetPerformanceInfo(ref data, data.cb)) return null;
+      double pageMb = data.PageSize.ToUInt64() / 1048576.0;
+      return new double[] { data.PhysicalTotal.ToUInt64() * pageMb,
+        data.PhysicalAvailable.ToUInt64() * pageMb,
+        data.CommitTotal.ToUInt64() * pageMb, data.CommitLimit.ToUInt64() * pageMb };
+    }
+  }
+}
+'@ -ErrorAction Stop
+    }
+    $memoryApiAvailable = $true
+  } catch {
+    # Extended metrics fail independently of the established CPU/working-set route.
+  }
+}
+
+function Memory-Metric {
+  param($Value, [string]$Reason)
+  if ($null -eq $Value -or [double]::IsNaN([double]$Value) -or
+      [double]::IsInfinity([double]$Value) -or [double]$Value -lt 0) {
+    return [ordered]@{ status='UNKNOWN'; valueMb=$null; reason=$Reason }
+  }
+  return [ordered]@{ status='OBSERVED'; valueMb=[math]::Round([double]$Value, 3); reason=$null }
+}
+function Read-ProcessMemory {
+  param([int]$ProcessId, [long]$ExpectedStartTicks, [bool]$IdentityLost)
+  $values = $null
+  $reason = 'API_UNAVAILABLE'
+  if ($IdentityLost) { $reason = 'IDENTITY_UNAVAILABLE' }
+  elseif ($memoryApiAvailable) {
+    $reason = 'QUERY_FAILED'
+    try { $values = [Mivubi.PerformanceMemory]::Read($ProcessId, $ExpectedStartTicks) } catch { }
+  }
+  return [ordered]@{
+    privateCommitMb = (Memory-Metric -Value $values.PrivateCommitMb -Reason $reason)
+    privateWorkingSetMb = (Memory-Metric -Value $values.PrivateWorkingSetMb -Reason $(if ($null -ne $values) { 'EXTENDED_COUNTER_UNAVAILABLE' } else { $reason }))
+  }
+}
+function Read-SystemMemory {
+  $values = $null
+  $reason = 'API_UNAVAILABLE'
+  if ($memoryApiAvailable) {
+    $reason = 'QUERY_FAILED'
+    try { $values = [Mivubi.PerformanceMemory]::ReadSystem() } catch { }
+  }
+  $result = [ordered]@{}
+  $names = @('totalPhysicalMb', 'availablePhysicalMb', 'commitTotalMb', 'commitLimitMb')
+  for ($i = 0; $i -lt $names.Count; $i++) {
+    $value = if ($null -ne $values) { $values[$i] } else { $null }
+    $result[$names[$i]] = Memory-Metric -Value $value -Reason $reason
+  }
+  return $result
+}
+
+
 $baselineNative = Read-Target -ProcessId $NativePid
 $baselineIsolated = Read-Target -ProcessId $IsolatedPid
 if ($null -eq $baselineNative -or $null -eq $baselineIsolated) {
@@ -189,6 +330,7 @@ $previousIsolated = $baselineIsolated
 $nativeLost = $false
 $isolatedLost = $false
 $samples = [System.Collections.Generic.List[object]]::new()
+$memorySamples = [System.Collections.Generic.List[object]]::new()
 
 while ($timer.Elapsed.TotalSeconds -lt $DurationSeconds) {
   $remainingMs = [math]::Max(1, [math]::Ceiling(1000 * ($DurationSeconds - $timer.Elapsed.TotalSeconds)))
@@ -222,6 +364,17 @@ while ($timer.Elapsed.TotalSeconds -lt $DurationSeconds) {
     $entry.previous = $current
   }
   $samples.Add($sample)
+  if ($MemoryComposition) {
+    $memoryStarted = $timer.Elapsed.TotalSeconds
+    $memoryRow = [ordered]@{
+      elapsedSeconds = [math]::Round($memoryStarted, 2)
+      native = (Read-ProcessMemory -ProcessId $NativePid -ExpectedStartTicks $baselineNative.startTicks -IdentityLost $nativeLost)
+      isolated = (Read-ProcessMemory -ProcessId $IsolatedPid -ExpectedStartTicks $baselineIsolated.startTicks -IdentityLost $isolatedLost)
+      system = (Read-SystemMemory)
+      queryDurationMs = [math]::Round(1000 * ($timer.Elapsed.TotalSeconds - $memoryStarted), 3)
+    }
+    $memorySamples.Add($memoryRow)
+  }
   $previousNative = $nativeCurrent
   $previousIsolated = $isolatedCurrent
   $previousSecond = $elapsed
@@ -285,13 +438,23 @@ if ($fiveClients) {
   $report['gpuDiagnostic'] = $gpuDiagnostic
 }
 $stamp = $beginUtc.ToString('yyyyMMddTHHmmssfffffffZ')
+if ($MemoryComposition) {
+  $report['baseSchema'] = $report.schema
+  $report['schema'] = 5
+  $report['memoryComposition'] = [ordered]@{
+    evidenceClass = 'SELECTED_PROCESS_AND_WHOLE_SYSTEM_MEMORY_NOT_ENGINE_OVERHEAD'
+    processTreeAttribution = 'NOT_COLLECTED'
+    managerAttribution = 'NOT_COLLECTED'
+    samples = @($memorySamples.ToArray())
+  }
+}
 $file = Join-Path $OutputDirectory ('native-process-performance-' + $stamp + '.json')
 # Windows PowerShell 5.1's Set-Content -Encoding UTF8 emits a BOM
 # that strict Node JSON.parse rejects. Commit only a COMPLETE UTF8-no-BOM
 # file: create an exclusive temporary file beside the final destination,
 # flush/close it, then move it into place WITHOUT replacing existing reports.
 # The same-directory move prevents an interrupted write leaving a fake final.
-$json = $report | ConvertTo-Json -Depth 7
+$json = $report | ConvertTo-Json -Depth 9
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 $bytes = $utf8NoBom.GetBytes($json + [Environment]::NewLine)
 $temporary = Join-Path $OutputDirectory ('.mivubi-native-performance-' +
@@ -321,3 +484,4 @@ try {
   automaticVerdict = 'NOT_PROVIDED'
   interpretation = 'PROCESS_TELEMETRY_ONLY'
 } | ConvertTo-Json -Depth 3
+

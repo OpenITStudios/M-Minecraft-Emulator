@@ -1273,6 +1273,44 @@ world/cache read, Computer Use, CI or game closure was performed. All proposed
 optimization gains and current memory composition remain UNKNOWN /
 NOT_EXECUTED. The earlier two-client runtime result remains unchanged.
 
+### First memory-composition increment — 25 October 2026
+
+Source authority for this change: exact Local parent
+`02bc701312e8ec641759fbafd95cfe6e76404c95`. The existing diagnostic collector
+now has an opt-in two-client `-MemoryComposition` mode, with schema 5 retaining
+base schema 1/2. It records private commit, supported EX2 private working set,
+whole-system physical/commit counters, explicit metric availability/reasons and
+memory-query duration. Schemas 1-4 and default extended-query behavior remain
+unchanged. This is a measurement implementation, not an optimization or
+public product API change.
+
+The native query opens only query-limited handles, checks creation identity
+before/after reading statistics, falls back to base commit when the extended
+query fails, and closes its handles. The existing Read-Target now also disposes
+its own System.Diagnostics.Process object after each reading rather than
+leaving handle release to collection. Lost selected identities remain sticky;
+unavailable private metrics never become zero. The existing offline evaluator
+strictly validates the extension and reports coverage, mean/median/peak and
+endpoint values. Paired differences require matching existing conditions and
+complete individual metrics, and remain descriptive, without a savings verdict.
+
+Proof: 29 Node tests passed, including native own-process/system reader checks
+under Windows PowerShell 5.1 and PowerShell 7, wrong-creation-time rejection,
+unavailable-API null handling and handle-retention checks across 200 reads per
+shell. Two actual 30-second collector runs with disposable Node targets passed,
+six samples each: PowerShell 5.1 retained both identities; PowerShell 7 included
+normal exit of the second target and permanent identity loss. Both BOM-less
+outputs passed the real Node reviewer. The older-OS EX2 fallback was reviewed
+in source, not executed on an older unsupported Windows build. These are own-data collector checks,
+not Minecraft runtime, host-world health or RAM savings. Raw captures and
+fixture runners remain local, outside Git.
+
+Boundaries: helpers/process trees and manager memory remain explicitly
+NOT_COLLECTED; per-process memory does not isolate the compatibility DLL's own
+allocations. Memory-query timing excludes setup and is not total telemetry
+CPU/RAM cost. No game observation/control, Computer Use, account/world reads,
+graphics/FPS/scheduling changes, production admission or CI changes occurred.
+
 ### Remaining proof and one next action
 
 The full five-client goal is incomplete. Two original accounts, basic same-world
@@ -1286,8 +1324,10 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** prepare a bounded extension of the existing diagnostic collector for private commit,
-private working set and verified helper/system totals. Keep clients 03-05
-unimplemented until the two-client efficiency tradeoff is understood. Do not
-operate games or change graphics/Windows settings as part of the research;
-later comparative runtime needs an available operator session.
+**One next action:** extend this same diagnostic owner with separately pinned
+manager measurement and conservative helper attribution, keeping shared or
+unverified brokers separate/UNKNOWN and preventing double-counting. This is
+needed before comparing total owned overhead at unchanged settings; do not
+infer an engine saving from the selected-game counters alone. Keep clients
+03-05 unimplemented. Later comparative Minecraft runtime still requires an
+available operator session; do not operate games or change settings now.

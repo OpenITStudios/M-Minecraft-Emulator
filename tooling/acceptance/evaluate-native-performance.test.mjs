@@ -32,6 +32,191 @@ const sample = () => ({
     "GPU_VRAM", "MULTIPLAYER", "INPUT_RESPONSIVENESS"],
 });
 
+const memoryMetric = (valueMb = 0, reason = null) => ({
+  status: reason === null ? 'OBSERVED' : 'UNKNOWN',
+  valueMb: reason === null ? valueMb : null, reason,
+});
+const memorySample = () => {
+  const report = sample();
+  report.baseSchema = report.schema;
+  report.schema = 5;
+  report.memoryComposition = {
+    evidenceClass: 'SELECTED_PROCESS_AND_WHOLE_SYSTEM_MEMORY_NOT_ENGINE_OVERHEAD',
+    processTreeAttribution: 'NOT_COLLECTED', managerAttribution: 'NOT_COLLECTED',
+    samples: report.samples.map((row, i) => ({
+      elapsedSeconds: row.elapsedSeconds, queryDurationMs: 1,
+      native: {privateCommitMb: memoryMetric(200 + i * 20), privateWorkingSetMb: memoryMetric(80 + i * 10)},
+      isolated: {privateCommitMb: memoryMetric(300 + i * 20), privateWorkingSetMb: memoryMetric(null, 'EXTENDED_COUNTER_UNAVAILABLE')},
+      system: {totalPhysicalMb: memoryMetric(32768), availablePhysicalMb: memoryMetric(20000 - i * 100),
+        commitTotalMb: memoryMetric(15000 + i * 100), commitLimitMb: memoryMetric(40000)},
+    })),
+  };
+  return report;
+};
+
+test('memory composition distinguishes commitment, private residency, system pressure and unknown coverage', () => {
+  const report = memorySample();
+  const result = evaluateNativePerformance(report);
+  assert.equal(result.native.meanWorkingSetMb, 110);
+  assert.deepEqual(result.memoryComposition.native.privateCommitMb, {
+    observedSamples: 2, missingSamples: 0, meanMb: 210, medianMb: 210, peakMb: 220,
+    firstMb: 200, lastMb: 220, endpointDifferenceMb: 20, unavailableReasons: [],
+  });
+  assert.equal(result.memoryComposition.native.privateWorkingSetMb.meanMb, 85);
+  assert.equal(result.memoryComposition.isolated.privateWorkingSetMb.meanMb, null);
+  assert.equal(result.memoryComposition.isolated.privateWorkingSetMb.missingSamples, 2);
+  assert.deepEqual(result.memoryComposition.isolated.privateWorkingSetMb.unavailableReasons, ['EXTENDED_COUNTER_UNAVAILABLE']);
+  assert.equal(result.memoryComposition.system.availablePhysicalMb.endpointDifferenceMb, -100);
+  assert.equal(result.memoryComposition.queryMeanDurationMs, 1);
+  assert.equal(result.memoryComposition.engineOverheadIsolated, false);
+  assert.equal(result.memoryComposition.processTreeMeasured, false);
+  assert.equal(result.memoryComposition.managerMeasured, false);
+  assert.equal(result.automaticGameplayProof, false);
+  assert.equal(result.automaticPerformanceVerdict, 'NOT_PROVIDED');
+  assert.equal(result.fourClientReady, false);
+});
+
+test('memory availability is independent per metric and identity loss invalidates both process metrics', () => {
+  const report = memorySample();
+  report.memoryComposition.samples[0].native.privateCommitMb = memoryMetric(null, 'QUERY_FAILED');
+  const partial = evaluateNativePerformance(report).memoryComposition.native.privateCommitMb;
+  assert.equal(partial.meanMb, 220);
+  assert.equal(partial.firstMb, null);
+  assert.equal(partial.endpointDifferenceMb, null);
+  report.nativeProcessIdentityLost = true;
+  report.samples[1].native = {status:'UNKNOWN', cpuPercentOfHost:null, workingSetMb:null};
+  for (const field of ['privateCommitMb', 'privateWorkingSetMb']) {
+    report.memoryComposition.samples[1].native[field] = memoryMetric(null, 'IDENTITY_UNAVAILABLE');
+  }
+  assert.equal(evaluateNativePerformance(report).memoryComposition.native.privateCommitMb.meanMb, null);
+  report.memoryComposition.samples[1].native.privateCommitMb = memoryMetric(0);
+  assert.throws(() => evaluateNativePerformance(report), /identity/);
+});
+
+test('memory comparison emits only fully observed matched-metric differences without engine claims', () => {
+  const baseline = memorySample(), candidate = memorySample();
+  candidate.memoryComposition.samples.forEach(row => row.native.privateCommitMb.valueMb -= 20);
+  const result = compareNativePerformance(baseline, candidate);
+  assert.equal(result.memoryDifferences.native.privateCommitMb.meanMbDifference, -20);
+  assert.equal(result.memoryDifferences.native.privateWorkingSetMb.meanMbDifference, 0);
+  assert.equal(result.memoryDifferences.isolated.privateWorkingSetMb, null);
+  assert.equal(result.engineOverheadIsolated, false);
+  assert.equal(result.improvementVerified, false);
+  candidate.memoryComposition.samples[0].native.privateCommitMb = memoryMetric(null, 'API_UNAVAILABLE');
+  assert.equal(compareNativePerformance(baseline, candidate).memoryDifferences.native.privateCommitMb, null);
+  candidate.sampleIntervalSeconds++;
+  const mismatched = compareNativePerformance(baseline, candidate);
+  assert.equal(mismatched.differences, null);
+  assert.ok(Object.values(mismatched.memoryDifferences).every(group => Object.values(group).every(value => value === null)));
+  assert.throws(() => compareNativePerformance(baseline, sample()), /two schema-5/);
+});
+
+test('memory schema refuses injected identity, invented availability, incomplete timing and overclaims', () => {
+  const invalid = [
+    r => r.baseSchema = 3,
+    r => r.baseSchema = 2,
+    r => r.memoryComposition.pid = 123,
+    r => r.memoryComposition.managerAttribution = 'VERIFIED',
+    r => r.memoryComposition.samples.pop(),
+    r => r.memoryComposition.samples[1].elapsedSeconds = 5,
+    r => r.memoryComposition.samples[0].elapsedSeconds = 4,
+    r => r.memoryComposition.samples[0].queryDurationMs = -1,
+    r => r.memoryComposition.samples[1].queryDurationMs = 60000,
+    r => r.memoryComposition.samples[0].native.privateCommitMb.valueMb = Infinity,
+    r => r.memoryComposition.samples[0].native.privateCommitMb.reason = 'QUERY_FAILED',
+    r => r.memoryComposition.samples[0].isolated.privateWorkingSetMb.valueMb = 0,
+    r => r.memoryComposition.samples[0].isolated.privateWorkingSetMb.reason = null,
+    r => r.memoryComposition.samples[0].native.privateCommitMb = memoryMetric(null, 'EXTENDED_COUNTER_UNAVAILABLE'),
+    r => r.memoryComposition.samples[0].native.privateCommitMb = memoryMetric(null, 'IDENTITY_UNAVAILABLE'),
+    r => r.memoryComposition.samples[0].system.commitTotalMb = memoryMetric(null, 'IDENTITY_UNAVAILABLE'),
+    r => r.memoryComposition.samples[0].native.privateCommitMb.pid = 42,
+    r => r.samples[0].native.pid = 42,
+    r => r.providerReady = true,
+  ];
+  for (const mutate of invalid) {
+    const report = memorySample(); mutate(report);
+    assert.throws(() => evaluateNativePerformance(report), TypeError);
+  }
+  const report = memorySample();
+  report.baseSchema = 2;
+  report.gpuDiagnostic = withGpu().gpuDiagnostic;
+  assert.equal(evaluateNativePerformance(report).gpuPerformanceVerified, false);
+});
+
+test('Windows memory reader uses pinned query-only handles and preserves unavailable metrics', {
+  skip: process.platform !== 'win32',
+}, () => {
+  const folder = mkdtempSync(join(tmpdir(), 'mivubi-memory-reader-'));
+  try {
+    const script = join(folder, 'verify.ps1');
+    writeFileSync(script, `param([string]$Collector)
+$ErrorActionPreference = 'Stop'
+$tokens = $null; $errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($Collector, [ref]$tokens, [ref]$errors)
+if ($errors.Count -ne 0) { throw 'Collector does not parse' }
+$MemoryComposition = $true
+$memoryApiAvailable = $false
+$setup = $ast.EndBlock.Statements | Where-Object {
+  $_ -is [System.Management.Automation.Language.IfStatementAst] -and
+  $_.Clauses[0].Item1.Extent.Text -eq '$MemoryComposition'
+} | Select-Object -First 1
+if ($null -eq $setup) { throw 'Missing opt-in setup' }
+Invoke-Expression $setup.Extent.Text
+if (-not $memoryApiAvailable) { throw 'Native memory API setup failed' }
+$names = @('Read-Target', 'Memory-Metric', 'Read-ProcessMemory', 'Read-SystemMemory')
+$ast.FindAll({ param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -in $names
+}, $false) | ForEach-Object { Invoke-Expression $_.Extent.Text }
+$self = Read-Target -ProcessId $PID
+if ($null -eq $self) { throw 'Own process unavailable' }
+$observed = Read-ProcessMemory -ProcessId $PID -ExpectedStartTicks $self.startTicks -IdentityLost $false
+if ($observed.privateCommitMb.status -ne 'OBSERVED' -or $observed.privateCommitMb.valueMb -le 0) {
+  throw 'Private commit was not observed'
+}
+if ($null -ne [Mivubi.PerformanceMemory]::Read($PID, ($self.startTicks + 1))) {
+  throw 'Mismatched creation identity accepted'
+}
+$lost = Read-ProcessMemory -ProcessId $PID -ExpectedStartTicks $self.startTicks -IdentityLost $true
+if ($lost.privateCommitMb.reason -ne 'IDENTITY_UNAVAILABLE' -or $null -ne $lost.privateCommitMb.valueMb) {
+  throw 'Lost identity produced a value'
+}
+$system = Read-SystemMemory
+if ($system.totalPhysicalMb.status -ne 'OBSERVED' -or
+    $system.availablePhysicalMb.valueMb -gt $system.totalPhysicalMb.valueMb -or
+    $system.commitTotalMb.valueMb -gt $system.commitLimitMb.valueMb) { throw 'Invalid system counters' }
+# No retained native or System.Diagnostics.Process handle per sample.
+$process = [System.Diagnostics.Process]::GetCurrentProcess()
+$before = $process.HandleCount
+foreach ($i in 1..200) {
+  $null = Read-Target -ProcessId $PID -ExpectedStartTicks $self.startTicks
+  $null = [Mivubi.PerformanceMemory]::Read($PID, $self.startTicks)
+}
+$process.Refresh()
+$growth = $process.HandleCount - $before
+$process.Dispose()
+if ($growth -gt 20) { throw 'Query handles retained per sample' }
+$memoryApiAvailable = $false
+$unavailable = Read-ProcessMemory -ProcessId $PID -ExpectedStartTicks $self.startTicks -IdentityLost $false
+if ($unavailable.privateCommitMb.reason -ne 'API_UNAVAILABLE' -or
+    $null -ne $unavailable.privateWorkingSetMb.valueMb) { throw 'Unavailable API fabricated zero' }
+if (@((Read-SystemMemory).Values | Where-Object { $_.reason -ne 'API_UNAVAILABLE' }).Count -ne 0) {
+  throw 'Unavailable system metrics fabricated values'
+}
+@{ readerPass=$true; privateWorkingSet=$observed.privateWorkingSetMb.status;
+  handleGrowth=$growth; minecraft='NOT_EXECUTED' } | ConvertTo-Json -Compress
+`, 'utf8');
+    const collector = fileURLToPath(new URL('./windows/collect-native-performance.ps1', import.meta.url));
+    for (const shell of ['powershell.exe', 'pwsh.exe']) {
+      const run = spawnSync(shell, ['-NoProfile', '-File', script, '-Collector', collector],
+        {encoding:'utf8', timeout:20000, maxBuffer:1024 * 1024, windowsHide:true});
+      assert.equal(run.status, 0, run.stderr || shell);
+      const result = JSON.parse(run.stdout.replace(/^\uFEFF/, ''));
+      assert.equal(result.readerPass, true);
+      assert.equal(result.minecraft, 'NOT_EXECUTED');
+    }
+  } finally { rmSync(folder, {recursive:true, force:true}); }
+});
+
 const fourSample = () => {
   const report = sample();
   report.schema = 3;
@@ -556,3 +741,4 @@ if ($script:counterCalls -ne 4) { throw 'Unexpected counter query count' }
       rmSync(folder, {recursive: true, force: true});
     }
   });
+

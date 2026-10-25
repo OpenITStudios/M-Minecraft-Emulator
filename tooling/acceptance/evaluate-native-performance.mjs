@@ -77,7 +77,106 @@ function metrics(samples, key) {
   };
 }
 
+const processMemoryFields = ["privateCommitMb", "privateWorkingSetMb"];
+const systemMemoryFields = ["totalPhysicalMb", "availablePhysicalMb", "commitTotalMb", "commitLimitMb"];
+const memoryReasons = ["API_UNAVAILABLE", "QUERY_FAILED", "IDENTITY_UNAVAILABLE", "EXTENDED_COUNTER_UNAVAILABLE"];
+
+function memoryMetric(value) {
+  if (!exactly(value, ["status", "valueMb", "reason"]) ||
+      !["OBSERVED", "UNKNOWN"].includes(value.status)) {
+    throw new TypeError("Invalid memory metric.");
+  }
+  if (value.status === "UNKNOWN") {
+    if (value.valueMb !== null || !memoryReasons.includes(value.reason)) {
+      throw new TypeError("Unavailable memory requires null and an explicit reason.");
+    }
+  } else if (!finite(value.valueMb) || value.valueMb < 0 || value.reason !== null) {
+    throw new TypeError("Observed memory requires finite nonnegative MiB and no error reason.");
+  }
+}
+
+function memorySummary(values) {
+  const observed = values.filter(value => value.status === "OBSERVED").map(value => value.valueMb);
+  const sorted = [...observed].sort((a, b) => a - b);
+  const round = value => Number(value.toFixed(3));
+  const middle = Math.floor(sorted.length / 2);
+  return {
+    observedSamples: observed.length,
+    missingSamples: values.length - observed.length,
+    meanMb: observed.length ? round(observed.reduce((a, b) => a + b, 0) / observed.length) : null,
+    medianMb: observed.length ? round(sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2) : null,
+    peakMb: observed.length ? sorted.at(-1) : null,
+    firstMb: values[0].valueMb,
+    lastMb: values.at(-1).valueMb,
+    // Never bridge unavailable endpoints to imply a continuous memory trend.
+    endpointDifferenceMb: values[0].status === "OBSERVED" && values.at(-1).status === "OBSERVED"
+      ? round(values.at(-1).valueMb - values[0].valueMb) : null,
+    unavailableReasons: [...new Set(values.filter(value => value.status === "UNKNOWN").map(value => value.reason))],
+  };
+}
+
+function baseMemoryReport(report) {
+  const {baseSchema, memoryComposition, ...base} = report;
+  if (![1, 2].includes(baseSchema)) throw new TypeError("Memory composition requires a two-client base schema.");
+  return {...base, schema: baseSchema};
+}
+
+function evaluateMemoryComposition(report) {
+  const result = evaluateNativePerformance(baseMemoryReport(report));
+  const data = report.memoryComposition;
+  if (!exactly(data, ["evidenceClass", "processTreeAttribution", "managerAttribution", "samples"]) ||
+      data.evidenceClass !== "SELECTED_PROCESS_AND_WHOLE_SYSTEM_MEMORY_NOT_ENGINE_OVERHEAD" ||
+      data.processTreeAttribution !== "NOT_COLLECTED" || data.managerAttribution !== "NOT_COLLECTED" ||
+      !Array.isArray(data.samples) || data.samples.length !== report.sampleCount) {
+    throw new TypeError("Invalid memory composition scope or coverage.");
+  }
+  let previous = -1;
+  for (const [index, row] of data.samples.entries()) {
+    if (!exactly(row, ["elapsedSeconds", "native", "isolated", "system", "queryDurationMs"]) ||
+        !finite(row.elapsedSeconds) || row.elapsedSeconds <= previous ||
+        row.elapsedSeconds < report.samples[index].elapsedSeconds ||
+        !finite(row.queryDurationMs) || row.queryDurationMs < 0 ||
+        row.elapsedSeconds + row.queryDurationMs / 1000 > report.durationObservedSeconds + 0.1) {
+      throw new TypeError("Invalid memory sample timing.");
+    }
+    previous = row.elapsedSeconds;
+    for (const key of ["native", "isolated", "system"]) {
+      const fields = key === "system" ? systemMemoryFields : processMemoryFields;
+      if (!exactly(row[key], fields)) throw new TypeError("Invalid memory sample fields.");
+      for (const field of fields) {
+        const metric = row[key][field];
+        memoryMetric(metric);
+        if (key !== "system") {
+          const lost = report.samples[index][key].status === "UNKNOWN";
+          if ((lost && (metric.status !== "UNKNOWN" || metric.reason !== "IDENTITY_UNAVAILABLE")) ||
+              (!lost && metric.reason === "IDENTITY_UNAVAILABLE")) {
+            throw new TypeError("Memory attribution contradicts selected process identity.");
+          }
+        } else if (["IDENTITY_UNAVAILABLE", "EXTENDED_COUNTER_UNAVAILABLE"].includes(metric.reason)) {
+          throw new TypeError("Process-only reason cannot describe whole-system memory.");
+        }
+        if (field === "privateCommitMb" && metric.reason === "EXTENDED_COUNTER_UNAVAILABLE") {
+          throw new TypeError("Extended counter availability cannot invalidate base private commit.");
+        }
+      }
+    }
+  }
+  const summarize = (key, fields) => Object.fromEntries(fields.map(field =>
+    [field, memorySummary(data.samples.map(row => row[key][field]))]));
+  return {...result, memoryComposition: {
+    interpretation: data.evidenceClass,
+    processTreeMeasured: false, managerMeasured: false, engineOverheadIsolated: false,
+    native: summarize("native", processMemoryFields),
+    isolated: summarize("isolated", processMemoryFields),
+    system: summarize("system", systemMemoryFields),
+    queryMeanDurationMs: Number((data.samples.reduce((sum, row) => sum + row.queryDurationMs, 0) / data.samples.length).toFixed(3)),
+    queryPeakDurationMs: Math.max(...data.samples.map(row => row.queryDurationMs)),
+    queryTimingIncludes: "MEMORY_QUERIES_ONLY_NOT_ALL_COLLECTOR_CPU_OR_MEMORY",
+  }};
+}
+
 export function evaluateNativePerformance(report) {
+  if (report?.schema === 5) return evaluateMemoryComposition(report);
   if ([3, 4].includes(report?.schema)) return evaluateMultiClientPerformance(report);
   const fields = ["schema", "scope", "evidenceOrigin", "attribution",
     "automaticVerdict", "capturedAtUtc", "durationRequestedSeconds",
@@ -235,6 +334,27 @@ function evaluateMultiClientPerformance(report) {
  * Results are withheld for mismatched captures or any lost process identity.
  */
 export function compareNativePerformance(baseline, candidate) {
+  if (baseline?.schema === 5 || candidate?.schema === 5) {
+    if (baseline?.schema !== 5 || candidate?.schema !== 5) {
+      throw new TypeError('Memory composition comparisons require two schema-5 captures.');
+    }
+    const before = evaluateNativePerformance(baseline);
+    const after = evaluateNativePerformance(candidate);
+    const compared = compareNativePerformance(baseMemoryReport(baseline), baseMemoryReport(candidate));
+    const groups = [['native', processMemoryFields], ['isolated', processMemoryFields], ['system', systemMemoryFields]];
+    const differences = Object.fromEntries(groups.map(([key, fields]) => [key,
+      Object.fromEntries(fields.map(field => {
+        const a = before.memoryComposition[key][field], b = after.memoryComposition[key][field];
+        const eligible = compared.comparableForNumericDifference && a.missingSamples === 0 && b.missingSamples === 0;
+        return [field, eligible ? {
+          meanMbDifference: Number((b.meanMb - a.meanMb).toFixed(3)),
+          medianMbDifference: Number((b.medianMb - a.medianMb).toFixed(3)),
+          peakMbDifference: Number((b.peakMb - a.peakMb).toFixed(3)),
+        } : null];
+      }))]));
+    return {...compared, baseline: before, candidate: after,
+      memoryDifferences: differences, engineOverheadIsolated: false};
+  }
   if ([3, 4].includes(baseline?.schema) || [3, 4].includes(candidate?.schema)) {
     throw new TypeError('Multi-client captures support individual review only; paired comparison requires the same two-client schema.');
   }
@@ -298,3 +418,4 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     process.exitCode = 1;
   }
 }
+
