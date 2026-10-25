@@ -11,9 +11,20 @@ lifecycle: ACTIVE
 
 This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build tooling in [Isolation Source Tooling](../../tooling/isolation-source/README.md) is retired product history, not the native engine. The only active goal, blocker and next action are in [planning/development.md](../../planning/development.md). Treat historical `Next` here as superseded; inspect owning source and consumers.
 
-## Current Codex route — 23 October 2026
+## Current Lazy Tester route — 26 October 2026
 
-**Single active P0:** establish one supported, game-compatible Windows MC02 isolation provider with effectively separate Roaming AppData, HKCU and Microsoft sign-in/broker alongside MC01. Go to `engine/runtime-core/src/independent_engine/` (domain/ports), `apps/desktop/src-tauri/src/engine/instance_identity.rs` and `native_clients.rs` (native Windows) and `instance_catalog.rs` (current fail-closed Launch admission). PSEC is a candidate OS capability, not a game provider. See the [sole current handoff](../../planning/development.md); all older research below is navigation, not today's backlog.
+The mounted desktop is `apps/desktop/src/LazyTesterApp.svelte`, consuming
+`app/bridge/lazyTester.ts`. Thin commands in `src-tauri/src/commands/native_clients.rs`
+route to `engine/native_clients_session.rs` and the existing bootstrap's
+`independent_bootstrap/session_controller.rs`. That owner reuses the reviewed
+five-profile capability, game/DLL verification, original process handles, FPS
+policy channels, and preset writer. It is not a second Windows isolation engine.
+
+Native composition and recovery remain owned by `workspace_surface.rs`.
+Compatibility DLL code still lives in `tooling/acceptance/windows/bootstrap-ordering/`;
+its product-source relocation is pending. UI copies and old provider/source paths
+below are historical navigation. Current evidence and next work belong only to
+[planning/development.md](../../planning/development.md).
 
 ## Historical native-first transition — 21 October 2026
 

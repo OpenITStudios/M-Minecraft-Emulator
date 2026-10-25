@@ -17,6 +17,25 @@ authority is engine/runtime-core/src/command.rs; desktop entry is
 apps/desktop/src/main.ts; Tauri command registration is
 apps/desktop/src-tauri/src/app_bootstrap.rs. Retired code is not removed.
 
+## Lazy Tester archive transition — 26 October 2026
+
+The pre-migration repository is preserved on
+`codex/archive-before-lazy-tester-20261026` at exact commit
+`d166b5c8b24e8435f2c84675cb00a61c753aeb6a`. Only `Local` receives product changes.
+
+`LazyTesterApp.svelte` now replaces `UnifiedManagerApp.svelte` at the mounted entry.
+Old Unified/Compact/VM screens are historical source, not alternate user launchers.
+Their remaining tests/imports and shared Rust consumers must be traced before a
+physical source move; this first integration does not claim that cleanup completed.
+Sandboxie/VMware startup and installer gates remain disabled. No account-bearing
+files, guest disks, installed services, worlds, or snapshots were moved or deleted.
+
+Current runtime source must not be archived merely because its directory is named
+`acceptance`: bootstrap-ordering contains the actually used independent DLL code.
+Likewise, `OwnedProcess` is still a shared process metadata type consumed by native
+presentation. Remove historical dependencies through their consumers before moving
+those owners. A whole-folder relocation would break the accepted native route.
+
 ## RETIRED: Sandboxie and the derived owned fork — 21 October 2026
 
 The operator superseded the earlier fork selection: the replacement must be our

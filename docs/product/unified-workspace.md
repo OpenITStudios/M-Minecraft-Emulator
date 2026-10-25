@@ -7,6 +7,45 @@ authority: WORKING
 lifecycle: ACTIVE
 ---
 
+# Lazy Tester workspace contract — 26 October 2026
+
+The approved product is one central application controlling five stable Minecraft
+profiles. Users explicitly open each desired profile; app startup launches no game.
+One large viewport contains the selected playable game. Four other sessions belong
+in a lower preview rail; next/previous navigation skips sessions without a usable
+window. The profile number is fixed by its storage identity, never enumeration
+order, a title, or a claim that an account is signed in.
+
+Session ownership belongs to the existing native bootstrap; the UI is a consumer.
+The bootstrap keeps the reviewed game/DLL hashes, original process handles, private
+Roaming/Local/TEMP/HKCU stores, scoped singleton compatibility, and 144/10 FPS policy.
+Presets are written only to the selected inactive profile before its launch, with
+existing backup/atomic-write behavior and simulation settings preserved.
+
+Closing the manager preserves games and restores presented windows. Helpers retain
+policy/storage handles after UI EOF until the games exit normally. Reopening the UI
+must eventually reconnect to those sessions; that transport is not implemented yet.
+The current implementation refuses a competing controller rather than adopting or
+closing unknown games.
+
+The user asks for a browser-like experience: one navigation surface and controlled
+taskbar presentation. Minecraft remains multiple OS processes. Task Manager grouping
+is Windows behavior requiring separate proof; process hiding or renaming the game
+binary is not part of the design. Native presentation retains independent top-level
+windows and recovery; destructive parent reassignment is not an accepted shortcut.
+
+Storage inspection is on demand and reads metadata only, with traversal/count/time
+bounds and no reparse traversal. Size estimates may be partial while playing. A cache
+cleanup action requires an identified disposable-file policy and must preserve auth,
+worlds, and settings. No blanket deletion of Local, Roaming, or TEMP is allowed.
+
+Live preview composition, full browser-shell acceptance, final installed branding,
+and cache cleanup remain unimplemented/unproven. Their state and the next bounded
+action are recorded in the sole handoff, not inferred from this design contract.
+
+## Historical workspace decisions below (superseded where inconsistent)
+
+
 > Current direction (21 October 2026): Sandboxie and its derived fork are retired
 > for new sessions. Isolated launch/provision is blocked; independent provider is
 > not implemented. Existing-session controls preserve recovery and data. Earlier

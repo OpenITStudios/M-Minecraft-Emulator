@@ -17,6 +17,41 @@ use std::{io, sync::Mutex};
 static MANAGER_RESOURCE_LOCK: Mutex<()> = Mutex::new(());
 
 #[tauri::command]
+pub async fn lazy_tester_session(
+    request: crate::engine::native_clients_session::SessionRequest,
+) -> Result<crate::engine::native_clients_session::SessionSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(move || run_manager_operation(|| {
+        crate::engine::native_clients_session::request(request)
+    })).await.map_err(|_| "Session task failed".to_string())?.map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn lazy_tester_present(
+    window: tauri::WebviewWindow,
+    slot: u32,
+    viewport: crate::engine::workspace_surface::Viewport,
+) -> Result<(), String> {
+    #[cfg(windows)]
+    let manager = window.hwnd().map_err(|error| error.to_string())?.0 as usize as u64;
+    #[cfg(not(windows))]
+    let manager = { let _ = window; 0 };
+    tauri::async_runtime::spawn_blocking(move || run_manager_operation(|| {
+        let snapshot = crate::engine::native_clients_session::request(
+            crate::engine::native_clients_session::SessionRequest::Inspect)?;
+        let target = snapshot.profiles.into_iter().find(|p| p.slot == slot)
+            .and_then(|p| p.process).filter(|p| p.responding)
+            .ok_or_else(|| io::Error::other("Minecraft has no verified responsive game window"))?;
+        // Slot attribution comes from retained original bootstrap handles, never UI PID/title.
+        let authority = "LAZY_TESTER_MANAGED_SESSION".to_string();
+        let client = format!("{slot:02}");
+        if crate::engine::workspace_surface::present_retained(manager, viewport, target.clone(), authority.clone(), client.clone())? {
+            return Ok(());
+        }
+        crate::engine::workspace_surface::present_verified(manager, viewport, target, authority, client)
+    })).await.map_err(|_| "Workspace task failed".to_string())?.map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub async fn desktop_inspect_native_workspace(
 ) -> Result<native_clients::NativeWorkspaceObservation, String> {
     tauri::async_runtime::spawn_blocking(|| {

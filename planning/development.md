@@ -1,143 +1,101 @@
-# Current Development Handoff — M-Minecraft-Emulator
+# Current Development Handoff — Lazy Tester
 
-`Local` is the only product branch. This is the single current handoff.
-The preceding efficiency state is preserved at
-[32b54d031056](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/32b54d0310566ac7716bae2dca48a4bc45f57809/planning/development.md).
+`Local` is the only active product branch. This is the sole current handoff.
+Goal: a modular five-profile native Minecraft control center named Lazy Tester,
+manual profile launches, one large viewport/four lower previews, storage/cache
+controls and safe legacy archiving. Renderer/RAM experiments remain PAUSED; CI OFF.
 
-## Current bounded work — automatic approved graphics preset
+## Current bounded outcome — desktop/controller integration
 
-The operator requested that Minecraft3–5 receive the same preset as1–2 without
-Computer Use. Read-only inspection confirmed the original pair already had
-Simple/12 chunks/MSAA1/effects off, while3–5 still had Fancy/45 chunks/MSAA2.
-This request resumes only approved-setting automation, not paused renderer/RAM
-experiments. No quantitative resource saving is claimed.
+Source parent: d166b5c8b24e8435f2c84675cb00a61c753aeb6a.
+Archive branch `codex/archive-before-lazy-tester-20261026` preserves that exact
+repository snapshot. Only Local receives product changes.
 
-The existing bootstrap now invokes its private
-`independent_bootstrap/game_preset.rs` helper after exact-image/profile validation
-and before creating any game processes, on both pair/five replay routes. It
-refuses a running Minecraft, prepares every profile before replacing any file,
-and enforces only the eight previously approved entries: Simple,12 chunks,
-MSAA1 and the five decorative effects off. `options.txt` remains the sole settings
-store; other bytes/settings, simulation, resolution, input and accounts are
-preserved. Duplicate owned keys are made consistent; existing line endings and
-UTF-8 BOM are retained. Unsupported encoding/NUL/oversize input fails closed.
+Mounted entry now uses LazyTesterApp.svelte and validated bridge lazyTester.ts:
+five fixed profiles, manual launch, selected-game viewport, next/previous usable
+game, status cards, on-demand metadata-only size inspection and Open Folder.
+Window/display title is Lazy Tester. Installed identifiers, packaging product/
+binary identity, existing profile paths and account/world data remain unchanged.
 
-Only changed files receive a unique `options.mivubi-*.bak` in their own private
-options directory. Replacement is staged, flushed and renamed in the same
-directory; files/ancestors are checked/pinned and reparse files are refused.
-Unchanged presets are a no-op. Absent profiles' fixed directories/options can be
-seeded; actual first-ever game consumption of a minimal options file is still
-NOT_EXECUTED. A multi-profile I/O failure stops startup; already completed
-per-file replacements are safe to retry, not a cross-profile transaction.
+native_clients_session.rs transports bounded fixed-action requests to one hidden
+same-executable helper inside the existing bootstrap owner:
+independent_bootstrap/session_controller.rs. It reuses exact game/DLL/profile
+checks, suspended-child enrollment, original handles, FPS channels and journals.
+It shares the original experiment gate; existing unknown games are refused.
+No arbitrary path/PID selection, title-order attribution, auto-launch, credentials
+store, token copying, Sandboxie or VMware runtime was added.
 
-Three targeted Windows Rust tests passed, covering preservation/BOM/duplicates/
-idempotence, invalid/oversize rejection, actual file replacement/backup/new-file
-seeding, writer exclusion and refusing a replaced source file. Preview-manager
-release build passed (104 existing warnings). New manager SHA256:
-`03c93d0ab6a09486881f7d5438565e56fadfab62c91bd1bc87fa6ebfb14862df`.
-The accepted login-fix DLL/enroller and five profile capability are unchanged.
-The standard private five-client launcher is prepared for this candidate.
+Opening/refreshing the UI starts no helper/game. Explicit launch/storage actions
+start the controller. Before launch, only the selected inactive owned profile
+receives the existing approved preset (with backup/atomic replacement and other
+settings preserved). No current profiles were actually modified in this session.
+The prior preset runtime deferral does not authorize operating running games.
 
-**Runtime application: PAUSED by explicit operator request on25 October2026;
-NOT_EXECUTED.** The operator answered the normal-close question by deferring
-application until later, alongside other work. Source/build remain ready; do not
-independently launch/restart games, close them, edit live settings or request
-another acceptance session from the superseded pending question. Resume runtime
-application only when the operator schedules it with the next work.
-No Computer Use, login automation, global browser/system changes or CI.
+GUI EOF preserves games; the helper retains FPS/storage handles until normal
+game exit. Uncertain/resumed children are never killed or automatically retried.
+Hidden workspace windows retain their original process birth/session/HWND.
+Responsive windows are not evidence of sign-in/world readiness.
 
-## Five-client native pilot — DONE within this scope
+Storage scanning is on demand, metadata-only, directory-pinned, reparse-skipping,
+and bounded by depth/count/time. Partial totals are identified. Open Folder uses
+the canonical retained profile directory. No cache deletion or account/world
+content reading was implemented.
 
-The operator requested five Minecraft Education clients on25 October2026.
-The registry-fix candidate ran Minecraft - 1 through Minecraft - 5; the operator
-confirmed all five distinct licensed accounts signed in together in the same
-**Education Host World**, not a separate LAN server. After a normal host-world
-save and five normal exits (each journal exitCode0), the same five profiles were
-replayed. The operator confirmed all five accounts returned without password
-entry, the saved world remained available, and FPS counters/active144-background10
-behavior remained correct while switching windows. No account/token/world
-content was inspected to infer this acceptance.
+## Executed evidence
 
-This closes the bounded five-client native pilot and blank-login repair.
-It does not certify indefinite crash freedom, long soak, resource benchmarks,
-installer/distribution or five-slot production-manager UI. The existing four-tab
-public observation contract and isolated Launch/Provision admission remain
-unchanged. Five-client startup currently uses the fixed private CLI candidate.
+- Svelte/TypeScript: zero errors/warnings; frontend production build PASS.
+- Desktop Vitest: 24 files / 212 tests PASS. Entry/title checks target Lazy Tester;
+  old function-extraction checks were corrected without changing their assertions
+  about restoration/nonblocking stop. Shared focus policy must observe manager focus.
+- Windows Rust check PASS; existing 104 desktop warnings remain, including old
+  conflicting extern declarations. No warning-free product claim.
+- New bounded protocol test PASS; new disposable metadata-scan fixture PASS.
+- Existing native-preview packaging source contract PASS, without inherited VMware
+  resources, Guest Agent binaries or legacy installer hooks.
+- Windows x64 release manager build with explicit preview overlay PASS.
+  SHA-256: c176bd1c13f844468708826c38aedfa548fddb8dcbe0ccfffc25f9b01d8071b4.
 
-## Source owner and preserved data
+New GUI/controller Minecraft acceptance: NOT_EXECUTED.
+No game launching/closing/input/sign-in, installer installation, PC UI control,
+profile migration, account/world deletion or GitHub Actions execution occurred.
+Prior five-client pilot acceptance does not prove the new integration.
 
-`apps/desktop/src-tauri/src/engine/independent_bootstrap.rs` remains the sole
-private preparation/launch/storage owner, reused for count-bound2/5 operation.
-New private fixed routes: `--education-prepare-five-profiles-once` and
-`--education-five-startup-observation-once`. The original pair route is retained;
-extra arguments refuse. No second account/lifecycle manager or public readiness.
+## Unfinished product work
 
-Explicit preparation reopens/pins the original216-byte pair capability and its
-identities, creates only three empty additional stores under the same profile
-root, and writes a separate288-byte/version2 five-slot capability. Completed
-reruns reopen the same stores. Interrupted partial creation refuses rather than
-adopting/deleting/resetting data. Config stays version2/1136bytes; slots1–5 have
-distinct A–E registry/singleton suffixes. Roaming/Local/TEMP/HKCU remain per-slot.
-Original accounts/worlds and approved render>=12/simulation/resolution settings
-are preserved. No account cache/token/world copying or game-file modifications.
+- No controller reconnection after UI restart yet. Games survive UI exit, but a
+  competing controller refuses while the retained helper remains. Not completed
+  browser-like session recovery.
+- Lower rail is status/selection cards, not live thumbnails. Native DWM preview
+  composition/hidden-window behavior remain unimplemented/unproven.
+- Task Manager grouping is unproven. Multiple game processes remain visible.
+  No process hiding or game-binary renaming.
+- New windows are adopted into native workspace/taskbar presentation on selection;
+  automatic all-session shell adoption is not implemented.
+- Cache classification/deletion, free-space reporting, installed Lazy Tester name/
+  identity migration and self-contained native payload packaging remain.
+- Payload/capabilities/singleton recipe remain bound to the reviewed local game
+  build/profiles. Developer candidate, not a portable/general installer.
+- Archive snapshot and inactive UI routing exist. Physical legacy source relocation
+  remains pending consumer retirement. Current compatibility DLL source still lives
+  in bootstrap-ordering acceptance tooling and must not be archived as old work.
+- Primary D: checkout remains older than the managed implementation worktree.
+  No reset or deletion of its untracked files occurred.
 
-## Blank login — cause and correction
+## Next — one action
 
-Fresh3–5 sign-in initially showed a white window. The loaded browser path was
-Windows MSHTML/WinINet; Chromium removal was not established as its cause.
-Public discovery HTTPS returned200 in both own-process private and unmediated
-controls, giving no basis for TLS/security downgrades or copying browser settings.
+Implement authenticated reconnection to the retained bootstrap controller so
+reopening Lazy Tester recovers its five exact sessions without duplicate launch
+or closing games. Sequence live previews/cache cleanup/physical legacy relocation
+after that ownership seam is correct.
 
-An initial folder-only candidate still failed the operator's login check. Its
-valid API corrections are retained: existing-directory root FILE_CREATE returns
-Windows NAME_COLLISION/183 rather than NOT_SUPPORTED/50; selected Known Folder
-CREATE creates/verifies private Roaming/Local children while preserving LastError,
-foreign-user rejection and reparse checks. These alone did not fix sign-in.
+## Previous accepted state
 
-The narrower offline HTMLDocument control reproduced E_UNEXPECTED with private
-HKCU, while unmediated Windows and file-only mediation succeeded. Scoped metadata
-in this synthetic process identified rejected opens of Internet Settings\Zones\
-and Lockdown_Zones\. The registry router reused filename validation and rejected
-a terminal separator that Windows accepts. It now validates the preceding
-components and forwards the original counted registry name. Filesystem rules,
-interior-empty/parent-component restrictions, peer-store rejection and no host
-fallback remain unchanged. No broad browser configuration seeding was needed.
+The private five-client pilot was operator-confirmed: distinct licensed accounts
+in one Education Host World; after normal save/close/restart, login/worlds and
+144 active / 10 background FPS counters persisted. Compatibility DLL unchanged:
+f65f263b6cbf76054a86d67e50ba4d02d3c5b15fc98a70e627ea19a73eab2edf.
+Enroller unchanged:
+73f9038364b2b853a50e6d058613049234568fccd054ce9a758f572531707368.
 
-The configured-storage self-test now creates a real offline MSHTML document and
-checks its body in both private slots/generations. It failed before this registry
-correction and passes afterward. Native/Win32 trailing-key opens also check
-private values and LastError. These controls perform no authentication/network/UI;
-actual Minecraft sign-in was separately confirmed by the operator afterward.
-
-## Evidence and provenance
-
-Source parent: `32b54d0310566ac7716bae2dca48a4bc45f57809`.
-C++ MSVC /W4 /WX builds, configured-storage/MSHTML and mutex regressions, and
-slot1–5/A–E/bounds control passed. Rust five-slot tests2 and original-pair replay
-regression1 passed during expansion. Final frontend Vite build passed. Preview
-release manager builds passed with104 existing warnings; these are source builds,
-not installer verification. Both heap experiments remain OFF.
-
-Actual accepted runtime payload SHA256:
-
-- Manager: `e860054ff9de4d040380716df497c9cf71f5cd446263e8552fad8f3e46556480`
-- Compatibility DLL: `f65f263b6cbf76054a86d67e50ba4d02d3c5b15fc98a70e627ea19a73eab2edf`
-- Enroller: `73f9038364b2b853a50e6d058613049234568fccd054ce9a758f572531707368`
-
-Five named responding windows loaded the pinned compatibility DLL. Runtime
-acceptance applies to these actual payloads and operator reports. During final
-consumer review an unused expansion of the public observer/parser was removed:
-the production tab consumer still supports four IDs, so returning five there
-would be incomplete. That GUI path was not exercised by the accepted fixed CLI;
-five-tab production UI and exact published full-GUI runtime are NOT_EXECUTED.
-The bootstrap/login DLL used for acceptance is unchanged by that source cleanup.
-
-RAM/renderer efficiency work stays **PAUSED** by operator request. CI remains
-entirely off; VMware/Sandboxie stay retired. Computer Use was stopped with Esc;
-no further screen/input control was used. Do not force-close games or automate
-authentication. Last accepted games are left open; do not close them incidentally.
-
-**Next:** none for preset application while explicitly deferred. Await the
-operator's next work topic; carry the ready automatic preset forward so its
-application/verification can be combined with that later session. Earlier
-full-access permission is not a reason to start a separate session now.
+Prior handoff/evidence and explicit preset deferral:
+https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/d166b5c8b24e8435f2c84675cb00a61c753aeb6a/planning/development.md

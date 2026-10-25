@@ -80,7 +80,7 @@ it('resumes the retained game after a new profile launch produces no window',asy
 
 it('only resumes a suspended workspace and preserves an already presented new game',async()=>{
   const source=readFileSync(new URL('../src/NativeWorkspace.svelte',import.meta.url),'utf8');
-  const start=source.indexOf('export async function resume()'),end=source.indexOf('export async function reconcile(',start);
+  const start=source.indexOf('export async function resume()'),end=source.indexOf('async function reconcileProcesses(',start);
   expect(start>=0&&end>start).toBe(true);
   const run=new Function('suspended','present',`let activeClient='01',target={pid:77};
     ${source.slice(start,end).replace('export ','')};return resume();`);

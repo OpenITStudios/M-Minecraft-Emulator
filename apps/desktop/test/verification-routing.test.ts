@@ -46,7 +46,7 @@ describe("Emulator source verification routing", () => {
     const entry = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
     const packageBuilder = readFileSync(new URL("../scripts/prepare-package-binaries.mjs", import.meta.url), "utf8");
     const policy = readFileSync(new URL("../../../engine/distribution/package-contract.json", import.meta.url), "utf8");
-    expect(entry).toContain("UnifiedManagerApp");
+    expect(entry).toContain("LazyTesterApp");
     expect(packageBuilder).toContain("PACKAGE_BLOCKED_NATIVE_FEASIBILITY");
     expect(packageBuilder).toContain("const LEGACY_PACKAGE_RELEASE_APPROVED = false;");
     expect(packageBuilder).toContain("if (!LEGACY_PACKAGE_RELEASE_APPROVED)");
@@ -90,7 +90,7 @@ describe("Native-only Windows preview package", () => {
     expect(actual.config.bundle.windows.nsis).not.toHaveProperty("installerHooks");
     expect(actual.config.bundle.windows.nsis.startMenuFolder).toBe("Minecraft Instance Manager Preview");
     expect(actual.config.app.security.csp).toContain("object-src 'none'");
-    expect(actual.config.app.windows[0].title).toBe("Minecraft Instance Manager Preview");
+    expect(actual.config.app.windows[0].title).toBe("Lazy Tester");
   });
   it("uses RFC 7396 deletions and preserves the original package hold", async () => {
     const {mergePatch} = await import("../scripts/check-native-preview-package.mjs");

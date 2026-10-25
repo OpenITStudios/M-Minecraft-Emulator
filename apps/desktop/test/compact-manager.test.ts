@@ -52,7 +52,9 @@ describe("Opt-in Windows event-driven focus counter", () => {
     const commands = readFileSync(new URL("../src-tauri/src/commands/native_clients.rs", import.meta.url), "utf8");
     const cargo = readFileSync(new URL("../src-tauri/Cargo.toml", import.meta.url), "utf8");
     expect(rust).toContain("SetWinEventHook(");
-    expect(rust).toContain("WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS");
+    // The shared FPS policy must also observe focus returning to the manager.
+    expect(rust).toContain("WINEVENT_OUTOFCONTEXT,");
+    expect(rust).not.toContain("WINEVENT_SKIPOWNPROCESS");
     expect(rust).toContain("GetMessageW(");
     expect(rust).toContain("UnhookWinEvent(hook)");
     // A failed unhook or a broken Win32 message queue must never
@@ -82,7 +84,7 @@ describe("Opt-in Windows event-driven focus counter", () => {
     expect(rust).toContain("worker.alive.load(Ordering::Acquire) && !worker.stop_requested");
     expect(rust).toContain('"Foreground observer shutdown requested; retry Stop to confirm cleanup"');
     const stopBlock = rust.split("pub fn stop() -> io::Result<ForegroundEventObserverStatus> {")[1]
-      ?.split("pub fn read_observer()")[0] ?? "";
+      ?.split("#[cfg(test)]")[0] ?? "";
     expect(stopBlock.indexOf("if !worker.join.is_finished()")).toBeLessThan(
       stopBlock.indexOf("if let Some(worker) = guard.take()"));
     expect(stopBlock).toContain("PostThreadMessageW(worker.thread_id, WM_QUIT, 0, 0)");
@@ -94,7 +96,7 @@ describe("Opt-in Windows event-driven focus counter", () => {
     const winImports = rust.split("WindowsAndMessaging::{")[1]?.split("},")[0] ?? "";
     const accessibilityImports = rust.split("Accessibility::{")[1]?.split("},")[0] ?? "";
     for (const constant of [
-      "EVENT_SYSTEM_FOREGROUND", "WINEVENT_OUTOFCONTEXT", "WINEVENT_SKIPOWNPROCESS",
+      "EVENT_SYSTEM_FOREGROUND", "WINEVENT_OUTOFCONTEXT",
     ]) {
       expect(winImports).toContain(constant);
       expect(accessibilityImports).not.toContain(constant);
@@ -755,7 +757,7 @@ describe("Compact Manager app source and command boundary", () => {
     const map = readFileSync(new URL("../../../docs/system/implementation-map.md", import.meta.url), "utf8");
     const acceptanceSteps = localGuide.split("## B. Two-client manual acceptance sequence")[1]
       ?.split("## C. Read-only collector")[0] ?? "";
-    expect(entry).toContain('mount(UnifiedManagerApp, { target });');
+    expect(entry).toContain('mount(LazyTesterApp, { target });');
     expect(app).toContain('{busy === "check" ? "Checking…" : "Check status · 02"}');
     expect(app).toContain('on:click={showClient02MoveDetails}>Move window</button>');
     expect(localGuide).toContain(".\\DEV.cmd preflight");
@@ -789,7 +791,7 @@ describe("Compact Manager app source and command boundary", () => {
     expect(app).toContain('on:click={(event) => choosePrimary("02", event.currentTarget)} aria-label=');
   });
   it("mounts exactly one compact UI with no new native providers", () => {
-    expect(entry).toContain('mount(UnifiedManagerApp, { target });');
+    expect(entry).toContain('mount(LazyTesterApp, { target });');
     expect(entry).not.toContain("NativeFeasibilityApp");
     expect(app).not.toContain("<aside");
     expect(app).toContain("Virtual Manager");

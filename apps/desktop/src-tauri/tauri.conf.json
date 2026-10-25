@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Minecraft Instance Manager",
+        "title": "Lazy Tester",
         "width": 1180,
         "height": 760,
         "minWidth": 920,
@@ -27,8 +27,13 @@
       "capabilities": [
         {
           "identifier": "workspace-events",
-          "windows": ["main"],
-          "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+          "windows": [
+            "main"
+          ],
+          "permissions": [
+            "core:event:allow-listen",
+            "core:event:allow-unlisten"
+          ]
         }
       ],
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"

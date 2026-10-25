@@ -167,6 +167,11 @@ pub fn maybe_run_helper() -> bool {
 }
 
 #[cfg(windows)]
+pub(crate) fn verify_same_executable_parent() -> io::Result<()> {
+    native::trusted_parent()
+}
+
+#[cfg(windows)]
 mod native {
     use super::*;
     use windows_sys::Win32::System::RemoteDesktop::ProcessIdToSessionId;

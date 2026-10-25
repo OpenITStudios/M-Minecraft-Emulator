@@ -202,6 +202,12 @@ pub(super) fn apply(stores: &[SlotStorage]) -> io::Result<usize> {
             "Close Minecraft normally before applying its preset",
         ));
     }
+    apply_inactive(stores)
+}
+
+// The retained session owner proves these particular profiles have no resumed child.
+// Other profiles may be running; never pass their stores here.
+pub(super) fn apply_inactive(stores: &[SlotStorage]) -> io::Result<usize> {
     let prepared: Vec<_> = stores
         .iter()
         .map(|store| Prepared::read(&store.private))

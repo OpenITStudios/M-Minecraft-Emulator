@@ -426,7 +426,7 @@ describe("Native candidate IPC evidence", () => {
     const settings=readFileSync(new URL("../src-tauri/src/engine/manager_settings.rs", import.meta.url),"utf8");
     expect(settings).toContain('const SETTINGS_VARIANT: &str = "NativePilot"');
     expect(settings).toContain('const SETTINGS_VARIANT: &str = "NativePreview"');
-    expect(desktopConfig.app.windows[0].title).toBe("Minecraft Instance Manager");
+    expect(desktopConfig.app.windows[0].title).toBe("Lazy Tester");
     expect(desktopConfig.productName).toBe("M-Bedrock Virtual Clients");
     expect(desktopConfig.identifier).toBe("com.mivubi.mbedrock.virtualclients");
   });

@@ -442,6 +442,9 @@ const MAX_EDUCATION_SLOTS: u32 = 5;
 #[path = "independent_bootstrap/game_preset.rs"]
 mod game_preset;
 
+#[path = "independent_bootstrap/session_controller.rs"]
+mod session_controller;
+
 /// Source-only two-slot preparation. No game/DLL code can be resumed here.
 /// The existing registered-image resolver remains the only target selector.
 pub(super) fn prepare_registered() -> io::Result<[PendingEducationBootstrap; 2]> {
@@ -459,25 +462,8 @@ fn prepare_registered_mode<const N: usize>(
             "Registered presentation requires reviewed profile replay",
         ));
     }
-    let selector = "Resolve-ManagerEducationTarget -RegisteredOnly";
-    let target = super::resolve_registered_education_target(selector)?;
+    let (target, image) = registered_image(observe)?;
     let path = Path::new(&target);
-    let image = pin_image(path)?;
-    if super::resolve_registered_education_target(selector)? != target {
-        return Err(invalid("Education registration changed during preparation"));
-    }
-    // The scoped experiment is bound to the actually observed official image bytes/callsite.
-    // An update refuses before allocating profiles; publisher identity alone cannot authorize an RVA.
-    let expected = [
-        0x04, 0x16, 0x4c, 0x1c, 0x64, 0x45, 0x8a, 0x5d, 0x98, 0x4d, 0xbc, 0x16, 0x87, 0xd0, 0xe8,
-        0x02, 0x3d, 0x18, 0x08, 0xc4, 0x4e, 0xe7, 0xbe, 0x03, 0x51, 0x9c, 0xdf, 0x83, 0x55, 0x23,
-        0x3e, 0xaa,
-    ];
-    if observe && file_digest(&image, 256 * 1024 * 1024)? != expected {
-        return Err(invalid(
-            "Education image changed; singleton recipe requires review",
-        ));
-    }
     let stores = registered_slots::<N>(observe)?;
     if observe {
         let changed = game_preset::apply(&stores)?;
@@ -499,9 +485,30 @@ fn prepare_registered_mode<const N: usize>(
             None,
         )?);
     }
-    children
-        .try_into()
-        .map_err(|_| invalid("Incomplete Education process set"))
+    children.try_into().map_err(|_| invalid("Incomplete Education process set"))
+}
+
+fn registered_image(observe: bool) -> io::Result<(String, File)> {
+    let selector = "Resolve-ManagerEducationTarget -RegisteredOnly";
+    let target = super::resolve_registered_education_target(selector)?;
+    let path = Path::new(&target);
+    let image = pin_image(path)?;
+    if super::resolve_registered_education_target(selector)? != target {
+        return Err(invalid("Education registration changed during preparation"));
+    }
+    // The scoped experiment is bound to the actually observed official image bytes/callsite.
+    // An update refuses before allocating profiles; publisher identity alone cannot authorize an RVA.
+    let expected = [
+        0x04, 0x16, 0x4c, 0x1c, 0x64, 0x45, 0x8a, 0x5d, 0x98, 0x4d, 0xbc, 0x16, 0x87, 0xd0, 0xe8,
+        0x02, 0x3d, 0x18, 0x08, 0xc4, 0x4e, 0xe7, 0xbe, 0x03, 0x51, 0x9c, 0xdf, 0x83, 0x55, 0x23,
+        0x3e, 0xaa,
+    ];
+    if observe && file_digest(&image, 256 * 1024 * 1024)? != expected {
+        return Err(invalid(
+            "Education image changed; singleton recipe requires review",
+        ));
+    }
+    Ok((target, image))
 }
 
 const OBSERVATION_ENV: &str = "MIVUBI_EDUCATION_OBSERVATION_SECTION";
@@ -1022,6 +1029,7 @@ fn prepare_registered_enrolled_for<const N: usize>() -> io::Result<PreparedEduca
 /// Fixed opt-in invocation in the existing manager, dispatched before creating its UI.
 /// No path/PID/options or hash override. Standard output is count/status metadata only.
 pub(super) fn maybe_run_startup_observation() -> bool {
+    if session_controller::maybe_run() { return true; }
     let mut args = std::env::args_os().skip(1);
     let mode = args.next();
     let count = match mode.as_deref() {
