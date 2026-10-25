@@ -2,6 +2,30 @@
 
 **Authority:** `Local` is the only active development branch. This is the **single current goal, blocker and next action**, not a chronological TODO file. The previous 3,009-line ledger with 105 historical `Next:` entries is [preserved at commit `d239a299e04c`](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/d239a299e04c23d2324b52325714600c00c34498/planning/development.md). All its former next actions are superseded; Git history preserves implementation decisions.
 
+## Primary goal — original-system efficiency with distinct mechanism owners
+
+**Operator confirmation — 25 October 2026:** prioritize lower RAM/CPU/GPU
+overhead of our original system at unchanged game settings, visual output,
+144/10 policy and Education host workload. Separate settings-only savings and
+internal-game research from system gains. First resolve composition and owned
+overhead for two clients; defer implementation of clients 03-05 until that
+tradeoff is understood. The eventual five-client goal below remains active.
+
+The existing [research report's mechanism boundaries](../docs/system/native-memory-efficiency-research.md#mechanism-boundaries-for-the-efficiency-work)
+define one responsibility per existing owner: lifecycle/identity, data isolation,
+focus observation, frame pacing, measured FPS display, metadata capture and
+offline interpretation. Reuse existing interfaces; do not create a parallel
+governor, launcher, settings store or readiness authority. Education host role
+is independent of foreground focus. This is an ownership contract, not a claim
+that refactoring or efficiency improvements have been implemented.
+
+Acceptance requires a measured improvement beyond run variation under matched
+conditions, with accounts/worlds, host progression, connectivity and focus
+recovery preserved. Metric composition, concrete engine bottlenecks and savings
+remain UNKNOWN / NOT_EXECUTED. No numerical saving or five-client capacity is
+promised; no live operation or graphics change is part of this goal-setting
+commit.
+
 ## Goal — five clients with foreground rendering policy
 
 **Operator direction — 25 October 2026:** five independent, legitimately licensed
@@ -1262,8 +1286,7 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** review the proposed two-client comparison and prepare a
-bounded extension of the existing diagnostic collector for private commit,
+**One next action:** prepare a bounded extension of the existing diagnostic collector for private commit,
 private working set and verified helper/system totals. Keep clients 03-05
 unimplemented until the two-client efficiency tradeoff is understood. Do not
 operate games or change graphics/Windows settings as part of the research;

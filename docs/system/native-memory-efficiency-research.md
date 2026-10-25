@@ -17,7 +17,7 @@ The operator reports two original Minecraft Education clients working on an i7-1
 
 The two screenshot readings, 1797.3 MB and 1724.2 MB, are observations at one moment. Their column semantics and process-group coverage are not established. They do not demonstrate a leak, private commitment, unique physical RAM, or a predictable per-client increment. Neither a savings estimate nor a capacity guarantee follows from them.
 
-The best initial direction is to reduce unnecessary rendering and the amount of game content retained, using settings Education actually documents. Keep independent accounts/profiles and original game behavior. Treat external memory trimming, suspension and hard caps as poor default candidates because they can move cost into faults, stalls or failed allocations. The expected ranking below is an engineering judgment; every resource effect remains a hypothesis until measured.
+The primary direction is now original-system efficiency at unchanged game settings and 144/10 policy, starting with memory composition and attributable engine overhead. Education's documented settings remain a separate optional tradeoff, not the primary engine optimization. Keep independent accounts/profiles and original game behavior. Treat external memory trimming, suspension and hard caps as poor default candidates because they can move cost into faults, stalls or failed allocations. Every resource effect remains a hypothesis until measured.
 
 ## Attribution rule: settings savings versus original-system efficiency
 
@@ -184,6 +184,47 @@ The existing [runtime handoff](https://github.com/OpenITStudios/M-Minecraft-Emul
 
 Potential engine improvements are narrower than rewriting game memory management: reduce demonstrated own allocation/handle churn, duplicated observation, or file/registry mediation cost. File walkers currently close temporary parents and enforce identity/reparse guards; shortcuts or indefinite caches could weaken those guarantees. The small owned buffers make game content/helper memory a plausible larger target, but its share is **UNKNOWN** until composition is measured. No fix or engine-wide leak diagnosis is claimed.
 
+## Mechanism boundaries for the efficiency work
+
+Operator direction on 2026-10-25: make original-system efficiency the primary
+goal and keep every mechanism's responsibility separate. The following is a
+design constraint over existing owners, not a new implementation, service,
+public API or runtime-readiness claim. Current development intent and the one
+next action remain solely in [the handoff](../../planning/development.md).
+
+| Mechanism | Existing owner and narrow responsibility | Boundary |
+| --- | --- | --- |
+| Lifecycle and identity | `independent_bootstrap.rs` composes the private startup/replay route and binds original process identities and owned resources. | Consumers use that binding; no second launcher, PID-only identity cache or readiness flag. Production admission stays with the existing catalog/runtime owners. |
+| Data isolation | Existing bootstrap configuration plus `bootstrap-ordering/compat.cpp` mediate instance-specific paths/registry/IPC. | Preserve separate writable profiles, private TEMP/TMP, account/world data and path/identity guards. No FPS, graphics-quality or memory-budget policy here. |
+| Foreground observation | `instance_focus_events.rs` publishes verified focus changes through existing process-bound leases. | One observer/control owner; no second polling governor. Foreground is not Education host role; it cannot authorize suspending or starving a host. |
+| Frame pacing | `frame-pacing.h` owns timing waits; `dxgi-pacing.cpp` adapts native Present and swap-chain lifetime to it. | Consume existing focus policy for 144/10 ceilings. No game-cache eviction, resource trimming, credential access or second FPS limiter. Preserve native return/lifetime semantics. |
+| FPS measurement and display | `fps-hud.cpp/.h` presents measured accepted Present calls through its existing window/worker. | Display actual measurement, not the policy ceiling. No independent pacing or launch authority; overlay failure must not become game termination. |
+| Resource capture | `collect-native-performance.ps1` collects metadata for verified identities. | Read-only observations; do not mutate settings, trim memory, change scheduling, kill helpers or steer games. Keep game, manager, verified helpers and unattributed/shared processes distinct; never double-count. |
+| Interpretation | `evaluate-native-performance.mjs` evaluates captured evidence offline. | It cannot manufacture unavailable metrics, change runtime policy or grant production/five-client readiness. Version private diagnostic artifacts through their existing owner, without changing public wire schemas. |
+| Graphics/settings experiments | Separate operator-approved comparison track; no supported automatic graphics adapter is established. | Do not invent a settings service, change visual quality silently or credit settings savings to the engine. Internal Education renderer optimization remains an unverified integration question. |
+
+These boundaries are by responsibility, not a demand for one new class,
+process, trait or configuration store per row. Retain existing small interfaces
+and resource ownership; split code only when an observed coupling requires it.
+Adapters translate existing platform calls; they must not duplicate domain
+policy. Resource/admission decisions remain with the canonical runtime/catalog
+owners, not the collector or a second RAM governor.
+
+For the next measurement change, unavailable extended metrics stay null with a
+specific reason. Lost process identity invalidates that process's attribution;
+shared brokers stay separate rather than being guessed into a client total.
+Collector capability failures must not launch, close or alter games. Measurement
+overhead itself must be reported, and telemetry/HUD allocations must not be
+mislabelled as game-content memory.
+
+Completion of an efficiency change requires one identified owner, traced
+consumers, an explained change to owned work or allocation lifetime, appropriate
+source checks, and a matched before/after comparison at unchanged settings,
+144/10 policy and host workload. Preserve sign-in, world persistence, connection
+health, host progression and focus recovery. A lower Task Manager reading alone
+is insufficient. Source-contract completion and runtime benefit are separate;
+the latter stays UNKNOWN / NOT_EXECUTED until actually observed.
+
 ## 10. A bounded comparison that can identify the best tradeoff
 
 This is a proposed later protocol, not an executed test or authorization to operate games now. Keep the host role separate from foreground state: a background host remains latency-sensitive. Declare roles explicitly; do not infer them from titles.
@@ -203,10 +244,10 @@ Do not run heap/memory dumps or retain account/token/world contents for this pla
 | Rank | Candidate | Expected impact, still unmeasured | Compatibility cost / next decision |
 | --- | --- | --- | --- |
 | 0 | Extend existing metadata measurement to private commit/residency and attributable helpers | Establishes what can actually be saved; no immediate resource reduction. | First bounded source proposal; measurement gains are not game-performance gains. |
-| 1 | Education's documented conservative graphics preset and render distance | Best-supported opportunity to reduce render work; possible RAM/VRAM benefit. Select the least costly preset that still meets the operator's visual needs. | Visual tradeoff; agree a stable usable preset before any setting change. |
+| Optional settings track | Education's documented conservative graphics preset and render distance | Best-supported opportunity to reduce render work; possible RAM/VRAM benefit. Select the least costly preset that still meets the operator's visual needs. | Visual tradeoff; agree a stable usable preset before any setting change. |
 | 2 | Validate existing 144/10 pacing and background host continuity | Potentially meaningful CPU/GPU work reduction; limited direct allocation effect. | Preserve host progression and fast focus return; avoid equating low FPS with low simulation rate. |
-| 3 | Verify supported render resolution | Potential GPU/render-target reduction. | Confirm actual Education behavior; keep a usable stable size. |
-| 4 | Review emulator-owned lifecycle/resources | Removes only demonstrated emulator overhead. | Small bounded source work after a concrete retention/duplication finding; do not assume helpers are disposable. |
+| Optional settings track | Verify supported render resolution | Potential GPU/render-target reduction. | Confirm actual Education behavior; keep a usable stable size. |
+| 1 | Review emulator-owned lifecycle/resources after composition measurement | Removes only demonstrated emulator overhead. | Small bounded source work after a concrete retention/duplication finding; do not assume helpers are disposable. |
 | 5 | Preserve common immutable mappings where compatible | Potential physical-page sharing; magnitude unknown and may already occur. | Isolation/launch risks can outweigh benefit; no profile/account sharing. |
 | 6 | Targeted EcoQoS or memory-priority trial | Possible energy/scheduling or residency tradeoff; no guaranteed RAM gain. | Defer until measured contention; protect host and restoration behavior. |
 | Reject as default | Periodic trim, hard caps, suspension, helper killing | Can lower a counter or stop work without reducing required game state. | Faults, starvation, allocation failures or broken sessions conflict with requirements. |
