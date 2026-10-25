@@ -16,6 +16,17 @@ fixture counts and minor launcher/HUD savings are not substitutes for them.
 | **B — internal Minecraft efficiency** | Reduce unnecessary mesh/buffer/asset/cache or renderer work using a real Education-compatible integration, inspired by Java optimizers. | A new native internal optimization needs one demonstrated resource owner/lifetime seam. Existing Present mediation owns pacing/HUD, not game meshes/heaps. A generic allocator/hook fixture or wrapper micro-optimization does not satisfy B. | A guarded native startup-count intervention is implemented and executed on two original clients. It lowered private commitment in a bounded comparison but established no meaningful resident-RAM saving; default remains OFF. Other CPU-visible pool ownership, occupancy and GPU-safe retirement/rebuild remain UNKNOWN. Do not promise a Java mod port or a RAM percentage. |
 | **C — inactive clients first** | Prioritize lower RAM/CPU/GPU demand while a client is not controlled; keep foreground 144/background 10 ceilings, prompt focus recovery and continuing Education host/network/saves. | Focus/pacing retain their current owners. Host role is separate from focus. No whole-process suspension, arbitrary memory/CPU caps, periodic trimming, token/profile sharing, fabricated occlusion result or freeing game-owned resources. | The existing limiter is implemented and prior 10-FPS observations are historical. Further game-owned background work reduction, its resource benefit and host health require a concrete intervention; no new savings are claimed yet. |
 
+**Current phase — RESEARCH ONLY, operator correction 25 October 2026.**
+Do not start another native candidate, game session, collector or settings change.
+The operator requests a defensible solution design before further experiments.
+Existing A/B/C outcomes remain the goal; below 1 GB is aspirational. The current
+research review is in [the existing report](../docs/system/native-memory-efficiency-research.md#research-first-decision-review--25-october-2026).
+Primary sources establish fence-safe used/pending/unused page lifetimes, not an
+Education integration or a memory saving. CPU-visible retention is a research
+lead; actual L0 properties, spare residency, queue/fence/reference ownership and
+native reacquisition remain UNKNOWN. Heap/object retention is separately
+unattributed. Preserve the working default and keep the L1 experiment OFF.
+
 **Working method:** choose one real intervention in A/B/C, implement it or
 explicitly reject its concrete integration boundary, then use only checks that
 directly establish its benefit and failure risks. A before/after reading needs
@@ -1839,8 +1850,8 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** inspect the already-identified UploadBufferHeap initializer
-and native capacity/retirement paths using the existing local code evidence, and
-implement or reject one CPU-visible retention reduction only when its ownership
-is established. Reuse existing traces; do not repeat warm-pool runs, add aggregate
-collectors, or promote the L1 experiment as resident-RAM savings.
+**One next action:** produce and discuss a source-only owner/lifetime design for
+one RAM-retention candidate using existing evidence and primary source code.
+Mark every unverified pool/occupancy/fence/reference/reacquisition edge UNKNOWN
+and select or reject the mechanism before any further implementation or runtime
+experiment. Do not substitute a new trace, generic hook or claimed savings.

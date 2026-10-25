@@ -11,6 +11,89 @@ lifecycle: ACTIVE
 
 Status: RESEARCH WITH BOUNDED IMPLEMENTATION AND RUNTIME OBSERVATIONS. Initial research was pinned to `5eaa49ed41c5c455f1b783d3a7c659bbba40e2d5`; subsequent diagnostics, HUD work and the approved Education graphics intervention are identified below. A substantive Minecraft-internal optimization seam and repeatable whole-game gains remain UNKNOWN. Current operator intent is owned by planning/development.md.
 
+## Research-first decision review — 25 October 2026
+
+**Operator correction:** suspend new executable experiments and establish the
+mechanism, applicability and expected failure modes before selecting another
+candidate. This review changes documentation/continuation only; no build, game
+launch, PC input, settings change or runtime measurement was performed.
+
+### Why the preceding intervention was premature
+
+The code proved an initial-capacity seam before establishing whether its backing
+capacity was the resident system-RAM target. Actual CUSTOM / NOT_AVAILABLE / L1
+properties were checked only after the first canary failed to match the assumed
+type. Microsoft distinguishes [heap properties](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ne-d3d12-d3d12_heap_type)
+and [memory pools](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ne-d3d12-d3d12_memory_pool);
+a constructor count is not occupancy or resident-RAM evidence. The corrected
+canary's lower commitment but effectively unchanged private working set closes
+that proposed resident-RAM benefit. Preserve it OFF; do not repeat the run.
+
+Existing baseline snapshots already distinguish large resident categories:
+guest/host Heap Private WS ~601/754 MiB, Private Data ~439/440 MiB and
+Image Private WS ~293/293 MiB. These categories are accounting, not semantic
+owners or spare memory; neither all Heap nor all write-combined Private Data
+can be labeled a chunk/upload cache. No specific amount is proven reclaimable.
+[Windows working-set semantics](https://learn.microsoft.com/en-us/windows/win32/memory/working-set)
+also explain why paging a page out of one process's set need not eliminate its
+backing data or immediately free physical RAM system-wide.
+
+### Mechanisms with actual primary-source support
+
+| Mechanism | What the source establishes | Education applicability |
+| --- | --- | --- |
+| Fence-safe staging-page reuse/release | Microsoft's [LinearAllocator](https://github.com/microsoft/DirectXTK12/blob/f5b928460d91984b27029d064ee5a7dd4301513c/Src/LinearAllocator.cpp#L131) separates referenced, fence-pending and unused pages; Shrink frees only unused pages. | Strongest bounded native retention research lead; the game's equivalent lists, queues and spare capacity remain UNKNOWN. Education is not established to use this library. |
+| Lower CPU-visible spare capacity | Less retained backing can help only if it was allocated, resident and genuinely unnecessary; normal grow/failure paths must survive. | No exact L0 pool tuple, spare resident-byte total or safe floor is established. A name such as UploadBufferHeap is insufficient. |
+| Bound upload work in flight | Microsoft's [ring example](https://learn.microsoft.com/en-us/windows/win32/direct3d12/fence-based-resource-management) reuses completed ranges but can wait for room, trading memory against latency. | Research only: chunk producer, submission and peak live demand are unverified; avoid compromising active 144-FPS pacing. |
+| Compact representation / bounded caches | [Sodium's arena owner](https://github.com/CaffeineMC/sodium/blob/148151cf25c56f8b670986b348dcc589278c867e/common/src/main/java/net/caffeinemc/mods/sodium/client/gpu/arena/ArenaAggregator.java) manages capacity/relocation; its [chunk-copy cache](https://github.com/CaffeineMC/sodium/blob/148151cf25c56f8b670986b348dcc589278c867e/common/src/main/java/net/caffeinemc/mods/sodium/client/world/cloned/ClonedChunkSectionCache.java) bounds entries and expires them. [FerriteCore](https://github.com/malte0811/FerriteCore/blob/26.1/summary.md) changes Java storage and deduplicates representations. | Real algorithms, but their Education object layouts, consumers and invalidation boundaries remain UNKNOWN. Java-modpack savings do not transfer. |
+| Authored texture/model/audio efficiency | Official [Creator guidance](https://learn.microsoft.com/en-us/minecraft/creator/documents/practices/improvingperformanceandresourceusage?view=minecraft-bedrock-stable) identifies asset dimensions, model complexity, sounds and pack overhead as resource costs. | Conditional content track only, requiring applicable authored content and Education compatibility. No current pack inflation has been established; do not modify worlds/assets or count it as native allocator savings. |
+
+The [Education FAQ](https://edusupport.minecraft.net/hc/en-us/articles/360047117692-FAQ-Game-Features)
+does not support community Java mods. Its official [Add-Ons collection](https://education.minecraft.net/en-us/resources/minecraft_education_add_ons_collection)
+does support content packages; this does not document a native renderer/allocator
+extension. The absence of a supported SDK does not prove every original native
+optimization impossible, but makes the integration contract version-specific
+research rather than a ready Sodium installation.
+
+Persistent mapping is supported by Microsoft's [Map contract](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12resource-map);
+mapping alone is not a leak. Periodic Unmap is not a backing-resource reclamation
+policy. [D3D12MA defragmentation](https://gpuopen-librariesandsdks.github.io/D3D12MemoryAllocator/html/defragmentation.html)
+requires application cooperation to recreate/copy resources, wait for completion
+and update descriptors. Adding that allocator does not supply Education's missing
+ownership knowledge.
+
+### Preconditions for one justified implementation
+
+The chosen owner must have a source/evidence chain:
+
+`producer -> CPU-visible allocation -> command submission -> queue/fence -> completed unused pages -> reuse/release`
+
+For every edge, record established evidence or UNKNOWN. Before making another
+candidate, identify (1) actual RAM pool/backing and consumer, (2) allocated,
+in-use, in-flight and unused capacity, (3) completion/reference safety,
+(4) native growth/reacquisition and failure behavior, and (5) why material resident
+bytes would disappear rather than move to paging/VRAM or immediately refill.
+A public example proves an algorithm, not those game-specific facts. If an
+essential edge stays UNKNOWN, close/defer that implementation without another
+generic hook fixture or runtime attempt.
+
+For inactive clients, preserve the existing focus/pacing owner and distinguish
+host role from focus. A 10-FPS ceiling alone does not establish less resident
+asset data or fewer simulation/upload jobs. A future retention policy would
+operate only on proven unused pages after safe completion, retain a justified
+reuse floor and avoid release/reallocate churn on repeated focus changes.
+No background trim, suspension, synthetic occlusion or hard RAM cap is selected.
+
+**Research conclusion:** there is no proven drop-in solution or sourced
+below-1-GB guarantee for this Education workload. CPU-visible unused staging
+retention is the best current *research lead*, not a selected implementation or
+a predicted saving. CPU heap/object retention remains a separate material
+unattributed category; do not assume graphics alone explains the problem.
+A/B/C stay separate, settings/accounts/worlds remain preserved, and five-client
+expansion stays deferred. The next output is a source-only ownership/decision
+design to discuss with the operator; runtime implementation stays paused until
+that design is resolved.
+
 ## Decision context
 
 The operator reports two original Minecraft Education clients working on an i7-14700, 32 GB RAM, RTX 3070 with 8 GB VRAM, and a 512 GB SSD, with no usable iGPU. The intended next stage is one Education client hosting a world and four guest clients joining that world. Foreground rendering should have a ceiling of 144 FPS; background rendering should have a ceiling of 10 FPS, while host simulation/networking continue and switching stays quick. These are requirements. Prior operator-confirmed two-client behavior is partial evidence, not five-client acceptance or a controlled efficiency benchmark.
