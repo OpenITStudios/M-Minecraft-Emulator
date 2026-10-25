@@ -1311,6 +1311,54 @@ allocations. Memory-query timing excludes setup and is not total telemetry
 CPU/RAM cost. No game observation/control, Computer Use, account/world reads,
 graphics/FPS/scheduling changes, production admission or CI changes occurred.
 
+### Manager and direct-child memory attribution — 25 October 2026
+
+Source authority: exact Local parent
+`9994b88c4a5278c02f1061073e096603b31a0703`. The same collector/evaluator now
+support opt-in schema 6: `-ManagerPid` adds a separately pinned selected manager,
+and `-DirectChildren` adds per-root direct-child relation counts and private
+memory sums. Both require MemoryComposition; invalid/overlapping selections
+refuse before creating output. Schemas 1-5 and existing positional parameters
+are preserved. No second measurement service, launcher or resource governor
+was added.
+
+The child adapter takes process-only Toolhelp snapshots, pins candidate births
+before a second relation snapshot, checks child/root identities and rejects
+children older than their alleged parent. Selected game/manager roots and the
+collector are excluded from child totals. Failed snapshots, late/unpinned
+children, unavailable roots or more than 64 candidates yield UNKNOWN rather
+than a partial sum or invented zero. A verified empty inventory is zero.
+Manager identity loss remains sticky. Query duration includes related queries,
+but is not total collector CPU/RAM overhead.
+
+These are observed direct parent relationships, not exclusive game/helper
+ownership, authentication attribution or a complete process tree. Shared
+brokers, background services and more distant descendants remain unassigned/
+UNKNOWN. Process memory still cannot isolate compatibility-DLL allocations
+inside the game's heap. Manager application role is operator-selected,
+not machine-attested. All savings claims remain unproved.
+
+Proof: 35 Node tests passed, including eight deterministic attribution cases in
+Windows PowerShell 5.1 and PowerShell 7, invalid-option early refusals,
+manager loss, coverage/null rules and conservative descriptive comparisons.
+Actual 30-second own-process-tree captures passed in both shells, six samples
+each; the PowerShell 7 case includes a normally exiting selected manager.
+Independent Win32_Process parent metadata matched the direct-child inventory
+and excluded grandchildren. The first fixture expectation incorrectly assumed
+one child; independent inspection identified a real conhost.exe plus node.exe,
+so fixture expectations were corrected against Windows metadata. Final-source
+PowerShell 7 capture passed actual Node single/paired review. These are
+collector tests, not Minecraft performance. Raw captures/fixture runners stay
+local and uncommitted.
+
+The operator then made a 15-minute metadata session available. Initial
+read-only discovery found only the session-0 Education updater and no running
+game pair/manager. No game was launched or controlled. A readiness question
+asks the operator to open the existing candidate/world pair and identify the
+Education host; a request to open the candidate can be handled through the
+already prepared exact payload. Current Minecraft collection has NOT_EXECUTED
+status until real identities and world readiness are established.
+
 ### Remaining proof and one next action
 
 The full five-client goal is incomplete. Two original accounts, basic same-world
@@ -1324,10 +1372,11 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** extend this same diagnostic owner with separately pinned
-manager measurement and conservative helper attribution, keeping shared or
-unverified brokers separate/UNKNOWN and preventing double-counting. This is
-needed before comparing total owned overhead at unchanged settings; do not
-infer an engine saving from the selected-game counters alone. Keep clients
-03-05 unimplemented. Later comparative Minecraft runtime still requires an
-available operator session; do not operate games or change settings now.
+**One next action:** once the operator's game/world readiness is established,
+pin the two live game identities and candidate manager, then collect one
+metadata-only 15-minute baseline at unchanged graphics/144-10 policy (first
+five minutes warmup, following ten minutes steady observation). Preserve the
+declared Education host role and account/world data; do not control windows,
+send input, close games or change settings. Analyze composition and measurement
+cost before choosing one demonstrated engine-owned optimization. A baseline
+alone cannot establish savings. Keep clients 03-05 unimplemented.

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -213,6 +213,226 @@ if (@((Read-SystemMemory).Values | Where-Object { $_.reason -ne 'API_UNAVAILABLE
       const result = JSON.parse(run.stdout.replace(/^\uFEFF/, ''));
       assert.equal(result.readerPass, true);
       assert.equal(result.minecraft, 'NOT_EXECUTED');
+    }
+  } finally { rmSync(folder, {recursive:true, force:true}); }
+});
+
+const childMetrics = (count = 1) => ({
+  status:'OBSERVED', reason:null, verifiedCount:count, unresolvedCount:0,
+  privateCommitMb:memoryMetric(count * 30), privateWorkingSetMb:memoryMetric(count * 10),
+});
+const relatedSample = () => {
+  const report = memorySample();
+  report.schema = 6;
+  Object.assign(report.memoryComposition, {managerAttribution:'OPERATOR_SELECTED_IDENTITY_PINNED',
+    managerProcessIdentityLost:false, directChildrenRequested:true});
+  for (const row of report.memoryComposition.samples) {
+    row.manager = {process:{status:'OBSERVED', cpuPercentOfHost:1, workingSetMb:50},
+      memory:{privateCommitMb:memoryMetric(60), privateWorkingSetMb:memoryMetric(30)}};
+    row.directChildren = {native:childMetrics(), isolated:childMetrics(0), manager:childMetrics(2)};
+  }
+  return report;
+};
+
+test('related-process memory keeps selected manager and direct relations separate without ownership claims', () => {
+  const result = evaluateNativePerformance(relatedSample());
+  const memory = result.memoryComposition;
+  assert.equal(memory.managerMeasured, true);
+  assert.equal(memory.managerRoleVerified, false);
+  assert.equal(memory.manager.process.meanHostCpuPercent, 1);
+  assert.equal(memory.manager.privateCommitMb.meanMb, 60);
+  assert.equal(memory.directChildren.native.privateCommitMb.meanMb, 30);
+  assert.equal(memory.directChildren.isolated.privateCommitMb.meanMb, 0);
+  assert.deepEqual(memory.directChildren.manager.verifiedCounts, [2, 2]);
+  assert.equal(memory.sharedBrokerAttribution, 'UNKNOWN');
+  assert.equal(memory.processTreeMeasured, false);
+  assert.equal(memory.engineOverheadIsolated, false);
+  assert.equal(result.automaticPerformanceVerdict, 'NOT_PROVIDED');
+  const report = relatedSample();
+  report.memoryComposition.managerAttribution = 'NOT_REQUESTED';
+  report.memoryComposition.managerProcessIdentityLost = null;
+  for (const row of report.memoryComposition.samples) { row.manager = null; delete row.directChildren.manager; }
+  assert.equal(evaluateNativePerformance(report).memoryComposition.manager, null);
+});
+
+test('related-process loss and partial child relationships retain null totals', () => {
+  const report = relatedSample(), row = report.memoryComposition.samples[1];
+  report.memoryComposition.managerProcessIdentityLost = true;
+  row.manager.process = {status:'UNKNOWN', cpuPercentOfHost:null, workingSetMb:null};
+  row.manager.memory = {privateCommitMb:memoryMetric(null, 'IDENTITY_UNAVAILABLE'),
+    privateWorkingSetMb:memoryMetric(null, 'IDENTITY_UNAVAILABLE')};
+  row.directChildren.manager = {status:'UNKNOWN', reason:'ROOT_IDENTITY_UNAVAILABLE',
+    verifiedCount:null, unresolvedCount:null, privateCommitMb:memoryMetric(null, 'QUERY_FAILED'),
+    privateWorkingSetMb:memoryMetric(null, 'QUERY_FAILED')};
+  row.directChildren.native = {...row.directChildren.manager, reason:'PARTIAL_RELATION',
+    verifiedCount:1, unresolvedCount:1};
+  const result = evaluateNativePerformance(report).memoryComposition;
+  assert.equal(result.manager.process.missingSamples, 1);
+  assert.equal(result.manager.privateCommitMb.lastMb, null);
+  assert.equal(result.directChildren.native.privateCommitMb.lastMb, null);
+  assert.equal(result.directChildren.native.observedInventorySamples, 1);
+  assert.equal(result.directChildren.manager.unresolvedInventorySamples, 1);
+  assert.equal(compareNativePerformance(report, report).comparableForNumericDifference, false);
+});
+
+test('schema-6 comparisons preserve descriptive component differences and reject mismatched collection modes', () => {
+  const before = relatedSample(), after = relatedSample();
+  for (const row of after.memoryComposition.samples) {
+    row.manager.memory.privateCommitMb.valueMb -= 5;
+    row.directChildren.native.privateCommitMb.valueMb -= 10;
+  }
+  const result = compareNativePerformance(before, after);
+  assert.equal(result.managerMemoryDifferences.privateCommitMb.meanMbDifference, -5);
+  assert.equal(result.directChildMemoryDifferences.native.privateCommitMb.meanMbDifference, -10);
+  assert.equal(result.directChildMemoryDifferences.isolated.privateCommitMb.meanMbDifference, 0);
+  assert.equal(result.exclusiveHelperOwnershipVerified, false);
+  assert.equal(result.improvementVerified, false);
+  after.memoryComposition.directChildrenRequested = false;
+  for (const row of after.memoryComposition.samples) row.directChildren = null;
+  const mismatch = compareNativePerformance(before, after);
+  assert.equal(mismatch.conditions.sameRelatedSelection, false);
+  assert.equal(mismatch.differences, null);
+  assert.equal(mismatch.directChildMemoryDifferences.native.privateCommitMb, null);
+  assert.throws(() => compareNativePerformance(before, memorySample()), /two schema-5 or two schema-6/);
+});
+
+test('related evidence rejects identity resurrection, unrequested metrics, partial totals and overclaimed scope', () => {
+  const invalid = [
+    r => r.memoryComposition.processTreeAttribution = 'COMPLETE',
+    r => r.memoryComposition.managerProcessIdentityLost = null,
+    r => r.memoryComposition.managerProcessIdentityLost = true,
+    r => r.memoryComposition.samples[0].manager.pid = 123,
+    r => r.memoryComposition.samples[0].manager.memory.privateCommitMb.pid = 123,
+    r => r.memoryComposition.samples[0].manager.process.status = 'UNKNOWN',
+    r => r.memoryComposition.samples[0].directChildren.native.reason = 'PARTIAL_RELATION',
+    r => r.memoryComposition.samples[0].directChildren.native.unresolvedCount = 1,
+    r => r.memoryComposition.samples[0].directChildren.native.verifiedCount = 65,
+    r => r.memoryComposition.samples[0].directChildren.native.pid = 123,
+    r => r.memoryComposition.samples[0].directChildren.isolated.privateCommitMb.valueMb = 1,
+    r => delete r.memoryComposition.samples[0].directChildren.manager,
+    r => r.memoryComposition.directChildrenRequested = false,
+    r => r.memoryComposition.managerAttribution = 'NOT_REQUESTED',
+  ];
+  for (const mutate of invalid) {
+    const report = relatedSample(); mutate(report);
+    assert.throws(() => evaluateNativePerformance(report), TypeError);
+  }
+});
+
+test('Windows child attribution rejects reuse, churn, ambiguous coverage and selected-root double counting', {
+  skip: process.platform !== 'win32',
+}, () => {
+  const folder = mkdtempSync(join(tmpdir(), 'mivubi-child-attribution-'));
+  try {
+    const script = join(folder, 'verify.ps1');
+    writeFileSync(script, `param([string]$Collector)
+$ErrorActionPreference = 'Stop'
+$tokens = $null; $errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($Collector, [ref]$tokens, [ref]$errors)
+if ($errors.Count -ne 0) { throw 'Collector parse failed' }
+$names = @('Memory-Metric', 'Unknown-Children', 'Read-DirectChildren')
+$ast.FindAll({ param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -in $names
+}, $false) | ForEach-Object { Invoke-Expression $_.Extent.Text }
+$roots = @(@{key='native'; processId=10; started=100; lost=$false},
+  @{key='isolated'; processId=20; started=200; lost=$false},
+  @{key='manager'; processId=30; started=50; lost=$false})
+function Reset-Case {
+  $script:births = @{10=100; 20=200; 30=50; 11=300; 21=400; 31=450; 41=500; 99=600}
+  $script:first = @(
+    [pscustomobject]@{ProcessId=11; ParentId=10}, [pscustomobject]@{ProcessId=21; ParentId=20},
+    [pscustomobject]@{ProcessId=31; ParentId=30}, [pscustomobject]@{ProcessId=10; ParentId=30},
+    [pscustomobject]@{ProcessId=20; ParentId=30}, [pscustomobject]@{ProcessId=41; ParentId=11},
+    [pscustomobject]@{ProcessId=99; ParentId=10})
+  $script:second = @($script:first)
+  $script:calls = 0; $script:missing = 0; $script:restart = 0; $script:failSnapshot = $false
+}
+function Read-Target {
+  param([int]$ProcessId, [long]$ExpectedStartTicks=0)
+  if ($ProcessId -eq $script:missing -or
+      ($ExpectedStartTicks -gt 0 -and $ProcessId -eq $script:restart)) { return $null }
+  if (-not $script:births.ContainsKey($ProcessId)) { return $null }
+  $birth = $script:births[$ProcessId]
+  if ($ExpectedStartTicks -gt 0 -and $ExpectedStartTicks -ne $birth) { return $null }
+  return [pscustomobject]@{startTicks=$birth}
+}
+function Read-ChildSnapshot {
+  param($Parents)
+  $script:calls++
+  if ($script:failSnapshot) { return $null }
+  return [pscustomobject]@{Entries=$(if ($script:calls % 2 -eq 1) { $script:first } else { $script:second })}
+}
+function Read-ProcessMemory {
+  param([int]$ProcessId, [long]$ExpectedStartTicks, [bool]$IdentityLost)
+  return [ordered]@{
+    privateCommitMb=(Memory-Metric -Value ($ProcessId * 10) -Reason 'QUERY_FAILED')
+    privateWorkingSetMb=$(if ($ProcessId -eq 21) { Memory-Metric -Value $null -Reason 'EXTENDED_COUNTER_UNAVAILABLE' }
+      else { Memory-Metric -Value $ProcessId -Reason 'QUERY_FAILED' })
+  }
+}
+function Run-Case { Read-DirectChildren -Roots $roots -Excluded @(10,20,30,99) }
+Reset-Case
+$result = Run-Case
+if ($result.native.verifiedCount -ne 1 -or $result.native.privateCommitMb.valueMb -ne 110 -or
+    $result.manager.verifiedCount -ne 1 -or $result.manager.privateCommitMb.valueMb -ne 310) {
+  throw 'Wrong root or selected root/collector/grandchild double counting'
+}
+if ($result.isolated.privateCommitMb.valueMb -ne 210 -or
+    $result.isolated.privateWorkingSetMb.status -ne 'UNKNOWN') { throw 'Per-metric availability lost' }
+Reset-Case; $script:births[11] = 90
+if ((Run-Case).native.reason -ne 'PARTIAL_RELATION') { throw 'Reused parent accepted an older child' }
+Reset-Case; $script:restart = 11
+if ((Run-Case).native.reason -ne 'PARTIAL_RELATION') { throw 'Reused child identity accepted' }
+Reset-Case
+$script:second += [pscustomobject]@{ProcessId=12; ParentId=10}
+$result = Run-Case
+if ($result.native.reason -ne 'PARTIAL_RELATION' -or
+    $result.native.unresolvedCount -ne 1 -or $null -ne $result.native.privateCommitMb.valueMb) {
+  throw 'New unpinned child hidden in an observed total'
+}
+Reset-Case; $script:missing = 10
+if ((Run-Case).native.reason -ne 'ROOT_IDENTITY_UNAVAILABLE') { throw 'Missing root accepted' }
+Reset-Case; $script:failSnapshot = $true
+if ((Run-Case).native.reason -ne 'SNAPSHOT_UNAVAILABLE') { throw 'Snapshot failure fabricated empty inventory' }
+Reset-Case; $script:first = @(); $script:second = @()
+$result = Run-Case
+if ($result.native.status -ne 'OBSERVED' -or $result.native.verifiedCount -ne 0 -or
+    $result.native.privateCommitMb.valueMb -ne 0) { throw 'Verified empty inventory unavailable' }
+Reset-Case
+$script:first = @(1000..1064 | ForEach-Object { [pscustomobject]@{ProcessId=$_; ParentId=10} })
+$script:second = $script:first
+if ((Run-Case).native.reason -ne 'CANDIDATE_LIMIT') { throw 'Unbounded helper pinning' }
+@{attributionPass=$true; cases=8; minecraft='NOT_EXECUTED'} | ConvertTo-Json -Compress
+`, 'utf8');
+    const collector = fileURLToPath(new URL('./windows/collect-native-performance.ps1', import.meta.url));
+    for (const shell of ['powershell.exe', 'pwsh.exe']) {
+      const run = spawnSync(shell, ['-NoProfile','-File',script,'-Collector',collector],
+        {encoding:'utf8', timeout:20000, maxBuffer:1024 * 1024, windowsHide:true});
+      assert.equal(run.status, 0, run.stderr || shell);
+      assert.equal(JSON.parse(run.stdout).attributionPass, true);
+    }
+  } finally { rmSync(folder, {recursive:true, force:true}); }
+});
+
+test('related-process options reject incomplete or overlapping selection before producing artifacts', {
+  skip: process.platform !== 'win32',
+}, () => {
+  const folder = mkdtempSync(join(tmpdir(), 'mivubi-related-options-'));
+  try {
+    const collector = fileURLToPath(new URL('./windows/collect-native-performance.ps1', import.meta.url));
+    const cases = [
+      [['-ManagerPid','30'], /require -MemoryComposition/],
+      [['-DirectChildren'], /require -MemoryComposition/],
+      [['-ManagerPid','10','-MemoryComposition'], /manager must be distinct/],
+    ];
+    for (const [i, [args, message]] of cases.entries()) {
+      const output = join(folder, 'unexpected-' + i);
+      const run = spawnSync('powershell.exe', ['-NoProfile','-File',collector,
+        '-NativePid','10','-IsolatedPid','20','-OutputDirectory',output,...args],
+        {encoding:'utf8', timeout:15000, maxBuffer:1024 * 1024, windowsHide:true});
+      assert.notEqual(run.status, 0);
+      assert.match(run.stderr, message);
+      assert.equal(existsSync(output), false);
     }
   } finally { rmSync(folder, {recursive:true, force:true}); }
 });
@@ -741,4 +961,5 @@ if ($script:counterCalls -ne 4) { throw 'Unexpected counter query count' }
       rmSync(folder, {recursive: true, force: true});
     }
   });
+
 

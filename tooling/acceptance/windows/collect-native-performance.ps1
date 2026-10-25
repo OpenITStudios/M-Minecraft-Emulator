@@ -18,7 +18,10 @@ param(
   [ValidateRange(0, 2147483647)]
   [int]$Client04Pid = 0,
   [ValidateRange(0, 2147483647)]
-  [int]$Client05Pid = 0
+  [int]$Client05Pid = 0,
+  [ValidateRange(0, 2147483647)]
+  [int]$ManagerPid = 0,
+  [switch]$DirectChildren
 )
 
 $ErrorActionPreference = 'Stop'
@@ -48,12 +51,19 @@ if ($SampleIntervalSeconds -gt $DurationSeconds) {
 if ($MemoryComposition -and $fourClients) {
   throw 'Memory composition currently supports the two-client comparison only.'
 }
+if (($ManagerPid -ne 0 -or $DirectChildren) -and -not $MemoryComposition) {
+  throw 'Manager/direct-child diagnostics require -MemoryComposition.'
+}
+if ($ManagerPid -ne 0 -and $ManagerPid -in @($NativePid, $IsolatedPid)) {
+  throw 'The selected manager must be distinct from both selected games.'
+}
 
 function Read-Target {
   param([int]$ProcessId, [long]$ExpectedStartTicks = 0)
   $process = $null
   try {
     $process = Get-Process -Id $ProcessId -ErrorAction Stop
+    if ($process.HasExited) { return $null }
     $started = [long]$process.StartTime.ToUniversalTime().Ticks
     if ($started -le 0 -or ($ExpectedStartTicks -ne 0 -and $started -ne $ExpectedStartTicks)) {
       return $null
@@ -171,9 +181,44 @@ if ($MemoryComposition) {
     if (-not ('Mivubi.PerformanceMemory' -as [type])) {
       Add-Type -TypeDefinition @'
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 namespace Mivubi {
   public static class PerformanceMemory {
+    [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+    struct ProcessEntry {
+      public uint Size, Usage, ProcessId;
+      public UIntPtr DefaultHeapId;
+      public uint ModuleId, Threads, ParentId;
+      public int Priority;
+      public uint Flags;
+      [MarshalAs(UnmanagedType.ByValTStr, SizeConst=260)] public string ImageName;
+    }
+    [DllImport("kernel32.dll", SetLastError=true)]
+    static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint pid);
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+    static extern bool Process32FirstW(IntPtr snapshot, ref ProcessEntry entry);
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+    static extern bool Process32NextW(IntPtr snapshot, ref ProcessEntry entry);
+    public sealed class ChildEntry { public int ProcessId, ParentId; }
+    public sealed class ChildSnapshot { public ChildEntry[] Entries; }
+    public static ChildSnapshot Children(int[] parents) {
+      IntPtr snapshot = CreateToolhelp32Snapshot(2, 0);
+      if (snapshot == new IntPtr(-1)) return null;
+      try {
+        var entry = new ProcessEntry();
+        entry.Size = (uint)Marshal.SizeOf(typeof(ProcessEntry));
+        var entries = new List<ChildEntry>();
+        bool more = Process32FirstW(snapshot, ref entry);
+        while (more) {
+          if (entry.ProcessId <= int.MaxValue && Array.IndexOf(parents, (int)entry.ParentId) >= 0)
+            entries.Add(new ChildEntry { ProcessId=(int)entry.ProcessId, ParentId=(int)entry.ParentId });
+          more = Process32NextW(snapshot, ref entry);
+        }
+        if (Marshal.GetLastWin32Error() != 18) return null;
+        return new ChildSnapshot { Entries=entries.ToArray() };
+      } finally { CloseHandle(snapshot); }
+    }
     [StructLayout(LayoutKind.Sequential)]
     struct Counters {
       public uint cb, PageFaultCount;
@@ -298,6 +343,99 @@ function Read-SystemMemory {
 }
 
 
+function Read-ChildSnapshot {
+  param([int[]]$Parents)
+  if ($memoryApiAvailable) {
+    try { return [Mivubi.PerformanceMemory]::Children($Parents) } catch { }
+  }
+  return $null
+}
+function Unknown-Children {
+  param([string]$Reason, $Verified = $null, $Unresolved = $null)
+  return [ordered]@{
+    status='UNKNOWN'; reason=$Reason; verifiedCount=$Verified; unresolvedCount=$Unresolved
+    privateCommitMb=(Memory-Metric -Value $null -Reason 'QUERY_FAILED')
+    privateWorkingSetMb=(Memory-Metric -Value $null -Reason 'QUERY_FAILED')
+  }
+}
+function Read-DirectChildren {
+  param([object[]]$Roots, [int[]]$Excluded)
+  $result = [ordered]@{}
+  $before = @{}
+  foreach ($root in $Roots) {
+    $before[$root.key] = if ($root.lost) { $null } else {
+      Read-Target -ProcessId $root.processId -ExpectedStartTicks $root.started
+    }
+  }
+  $parents = @($Roots | ForEach-Object { $_.processId })
+  $first = Read-ChildSnapshot -Parents $parents
+  $pins = @{}
+  if ($null -ne $first) {
+    $candidates = @($first.Entries | Where-Object { $_.ProcessId -notin $Excluded })
+    if ($candidates.Count -le 64) {
+      foreach ($entry in $candidates) {
+        $pins[[string]$entry.ProcessId] = Read-Target -ProcessId $entry.ProcessId
+      }
+    }
+  }
+  # Pin candidate birth BEFORE this relation snapshot, then recheck after stats.
+  $second = Read-ChildSnapshot -Parents $parents
+  foreach ($root in $Roots) {
+    if ($null -eq $before[$root.key]) {
+      $result[$root.key] = Unknown-Children -Reason 'ROOT_IDENTITY_UNAVAILABLE'
+      continue
+    }
+    if ($null -eq $first -or $null -eq $second) {
+      $result[$root.key] = Unknown-Children -Reason 'SNAPSHOT_UNAVAILABLE'
+      continue
+    }
+    $allIds = @(@($first.Entries) + @($second.Entries) |
+      Where-Object { $_.ParentId -eq $root.processId -and $_.ProcessId -notin $Excluded } |
+      ForEach-Object { $_.ProcessId } | Select-Object -Unique)
+    if ($candidates.Count -gt 64 -or $allIds.Count -gt 64) {
+      $result[$root.key] = Unknown-Children -Reason 'CANDIDATE_LIMIT'
+      continue
+    }
+    $verified = 0; $unresolved = 0
+    $memories = @()
+    foreach ($childId in $allIds) {
+      $pin = $pins[[string]$childId]
+      $relation = @($second.Entries | Where-Object {
+        $_.ProcessId -eq $childId -and $_.ParentId -eq $root.processId
+      })
+      if ($null -eq $pin -or $pin.startTicks -lt $root.started -or $relation.Count -ne 1) {
+        $unresolved++
+        continue
+      }
+      $memory = Read-ProcessMemory -ProcessId $childId -ExpectedStartTicks $pin.startTicks -IdentityLost $false
+      if ($null -eq (Read-Target -ProcessId $childId -ExpectedStartTicks $pin.startTicks)) {
+        $unresolved++
+        continue
+      }
+      $verified++
+      $memories += $memory
+    }
+    if ($null -eq (Read-Target -ProcessId $root.processId -ExpectedStartTicks $root.started)) {
+      $result[$root.key] = Unknown-Children -Reason 'ROOT_IDENTITY_UNAVAILABLE'
+    } elseif ($unresolved -ne 0) {
+      $result[$root.key] = Unknown-Children -Reason 'PARTIAL_RELATION' -Verified $verified -Unresolved $unresolved
+    } else {
+      $group = [ordered]@{ status='OBSERVED'; reason=$null; verifiedCount=$verified; unresolvedCount=0 }
+      foreach ($field in @('privateCommitMb', 'privateWorkingSetMb')) {
+        $sum = 0.0
+        $missing = @($memories | Where-Object { $_[$field].status -ne 'OBSERVED' }).Count -ne 0
+        if ($missing) { $group[$field] = Memory-Metric -Value $null -Reason 'QUERY_FAILED' }
+        else {
+          foreach ($memory in $memories) { $sum += $memory[$field].valueMb }
+          $group[$field] = Memory-Metric -Value $sum -Reason 'QUERY_FAILED'
+        }
+      }
+      $result[$root.key] = $group
+    }
+  }
+  return $result
+}
+
 $baselineNative = Read-Target -ProcessId $NativePid
 $baselineIsolated = Read-Target -ProcessId $IsolatedPid
 if ($null -eq $baselineNative -or $null -eq $baselineIsolated) {
@@ -316,6 +454,16 @@ if ($fourClients) {
   }
 }
 $logicalCpus = [Environment]::ProcessorCount
+$managerBaseline = $null
+$managerPrevious = $null
+$managerLost = $null
+$managerPreviousSecond = 0.0
+if ($ManagerPid -ne 0) {
+  $managerBaseline = Read-Target -ProcessId $ManagerPid
+  if ($null -eq $managerBaseline) { throw 'Selected manager is inaccessible. No report produced.' }
+  $managerPrevious = $managerBaseline
+  $managerLost = $false
+}
 if ($logicalCpus -lt 1) { throw 'Host logical CPU count is invalid.' }
 if (-not $OutputDirectory) {
   $OutputDirectory = Join-Path $env:TEMP 'MinecraftInstanceManager\Performance'
@@ -372,6 +520,36 @@ while ($timer.Elapsed.TotalSeconds -lt $DurationSeconds) {
       isolated = (Read-ProcessMemory -ProcessId $IsolatedPid -ExpectedStartTicks $baselineIsolated.startTicks -IdentityLost $isolatedLost)
       system = (Read-SystemMemory)
       queryDurationMs = [math]::Round(1000 * ($timer.Elapsed.TotalSeconds - $memoryStarted), 3)
+    }
+    if ($ManagerPid -ne 0 -or $DirectChildren) {
+      $memoryRow['manager'] = $null
+      if ($ManagerPid -ne 0) {
+        $managerCurrent = if ($managerLost) { $null } else {
+          Read-Target -ProcessId $ManagerPid -ExpectedStartTicks $managerBaseline.startTicks
+        }
+        if ($null -eq $managerCurrent) { $managerLost = $true }
+        $managerSecond = $timer.Elapsed.TotalSeconds
+        $memoryRow['manager'] = [ordered]@{
+          process=(Process-Sample -Previous $managerPrevious -Current $managerCurrent -ElapsedSeconds ($managerSecond - $managerPreviousSecond) -LogicalCpus $logicalCpus)
+          memory=(Read-ProcessMemory -ProcessId $ManagerPid -ExpectedStartTicks $managerBaseline.startTicks -IdentityLost $managerLost)
+        }
+        $managerPrevious = $managerCurrent
+        $managerPreviousSecond = $managerSecond
+      }
+      $memoryRow['directChildren'] = $null
+      if ($DirectChildren) {
+        $roots = @(
+          @{key='native'; processId=$NativePid; started=$baselineNative.startTicks; lost=$nativeLost},
+          @{key='isolated'; processId=$IsolatedPid; started=$baselineIsolated.startTicks; lost=$isolatedLost}
+        )
+        $excluded = @($NativePid, $IsolatedPid, $PID)
+        if ($ManagerPid -ne 0) {
+          $roots += @{key='manager'; processId=$ManagerPid; started=$managerBaseline.startTicks; lost=$managerLost}
+          $excluded += $ManagerPid
+        }
+        $memoryRow['directChildren'] = Read-DirectChildren -Roots $roots -Excluded $excluded
+      }
+      $memoryRow['queryDurationMs'] = [math]::Round(1000 * ($timer.Elapsed.TotalSeconds - $memoryStarted), 3)
     }
     $memorySamples.Add($memoryRow)
   }
@@ -447,6 +625,12 @@ if ($MemoryComposition) {
     managerAttribution = 'NOT_COLLECTED'
     samples = @($memorySamples.ToArray())
   }
+  if ($ManagerPid -ne 0 -or $DirectChildren) {
+    $report['schema'] = 6
+    $report.memoryComposition['managerAttribution'] = if ($ManagerPid -ne 0) { 'OPERATOR_SELECTED_IDENTITY_PINNED' } else { 'NOT_REQUESTED' }
+    $report.memoryComposition['managerProcessIdentityLost'] = $managerLost
+    $report.memoryComposition['directChildrenRequested'] = [bool]$DirectChildren
+  }
 }
 $file = Join-Path $OutputDirectory ('native-process-performance-' + $stamp + '.json')
 # Windows PowerShell 5.1's Set-Content -Encoding UTF8 emits a BOM
@@ -484,4 +668,5 @@ try {
   automaticVerdict = 'NOT_PROVIDED'
   interpretation = 'PROCESS_TELEMETRY_ONLY'
 } | ConvertTo-Json -Depth 3
+
 

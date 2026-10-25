@@ -121,18 +121,79 @@ function baseMemoryReport(report) {
   return {...base, schema: baseSchema};
 }
 
+function privateMetrics(value, lost) {
+  if (!exactly(value, processMemoryFields)) throw new TypeError("Invalid private memory fields.");
+  for (const field of processMemoryFields) {
+    const metric = value[field];
+    memoryMetric(metric);
+    if ((lost && (metric.status !== "UNKNOWN" || metric.reason !== "IDENTITY_UNAVAILABLE")) ||
+        (!lost && metric.reason === "IDENTITY_UNAVAILABLE")) {
+      throw new TypeError("Memory attribution contradicts selected process identity.");
+    }
+    if (field === "privateCommitMb" && metric.reason === "EXTENDED_COUNTER_UNAVAILABLE") {
+      throw new TypeError("Extended counter availability cannot invalidate base private commit.");
+    }
+  }
+}
+
+function childGroup(value, rootLost) {
+  if (!exactly(value, ["status", "reason", "verifiedCount", "unresolvedCount", ...processMemoryFields])) {
+    throw new TypeError("Invalid direct-child group.");
+  }
+  const count = n => integer(n) && n >= 0 && n <= 64;
+  if (value.status === "OBSERVED") {
+    if (rootLost || value.reason !== null || !count(value.verifiedCount) || value.unresolvedCount !== 0) {
+      throw new TypeError("Invalid observed child attribution.");
+    }
+  } else if (value.status === "UNKNOWN") {
+    if (!["ROOT_IDENTITY_UNAVAILABLE", "SNAPSHOT_UNAVAILABLE", "CANDIDATE_LIMIT", "PARTIAL_RELATION"].includes(value.reason) ||
+        (rootLost && value.reason !== "ROOT_IDENTITY_UNAVAILABLE") ||
+        (value.reason === "PARTIAL_RELATION"
+          ? !count(value.verifiedCount) || !count(value.unresolvedCount) || value.unresolvedCount < 1 ||
+              value.verifiedCount + value.unresolvedCount > 64
+          : value.verifiedCount !== null || value.unresolvedCount !== null)) {
+      throw new TypeError("Invalid unavailable child attribution.");
+    }
+  } else throw new TypeError("Invalid child attribution status.");
+  for (const field of processMemoryFields) {
+    memoryMetric(value[field]);
+    if (value.status === "UNKNOWN" && (value[field].status !== "UNKNOWN" || value[field].reason !== "QUERY_FAILED")) {
+      throw new TypeError("Unresolved child totals must be unavailable.");
+    }
+    if (value.status === "OBSERVED" && value.verifiedCount === 0 &&
+        (value[field].status !== "OBSERVED" || value[field].valueMb !== 0)) {
+      throw new TypeError("Verified empty direct-child inventory must report an observed zero.");
+    }
+    if (value[field].status === "UNKNOWN" && value[field].reason !== "QUERY_FAILED") {
+      throw new TypeError("Child aggregate availability must use its group reason.");
+    }
+  }
+}
+
 function evaluateMemoryComposition(report) {
+  const related = report.schema === 6;
   const result = evaluateNativePerformance(baseMemoryReport(report));
   const data = report.memoryComposition;
-  if (!exactly(data, ["evidenceClass", "processTreeAttribution", "managerAttribution", "samples"]) ||
+  if (!exactly(data, ["evidenceClass", "processTreeAttribution", "managerAttribution", "samples",
+      ...(related ? ["managerProcessIdentityLost", "directChildrenRequested"] : [])]) ||
       data.evidenceClass !== "SELECTED_PROCESS_AND_WHOLE_SYSTEM_MEMORY_NOT_ENGINE_OVERHEAD" ||
-      data.processTreeAttribution !== "NOT_COLLECTED" || data.managerAttribution !== "NOT_COLLECTED" ||
+      data.processTreeAttribution !== "NOT_COLLECTED" ||
+      (!related && data.managerAttribution !== "NOT_COLLECTED") ||
       !Array.isArray(data.samples) || data.samples.length !== report.sampleCount) {
     throw new TypeError("Invalid memory composition scope or coverage.");
   }
+  const manager = related && data.managerAttribution === "OPERATOR_SELECTED_IDENTITY_PINNED";
+  if (related && (!["OPERATOR_SELECTED_IDENTITY_PINNED", "NOT_REQUESTED"].includes(data.managerAttribution) ||
+      typeof data.directChildrenRequested !== 'boolean' ||
+      (manager ? typeof data.managerProcessIdentityLost !== 'boolean' : data.managerProcessIdentityLost !== null) ||
+      (!manager && !data.directChildrenRequested))) {
+    throw new TypeError('Invalid related-process capture selection.');
+  }
   let previous = -1;
+  let managerLost = false;
   for (const [index, row] of data.samples.entries()) {
-    if (!exactly(row, ["elapsedSeconds", "native", "isolated", "system", "queryDurationMs"]) ||
+    if (!exactly(row, ["elapsedSeconds", "native", "isolated", "system", "queryDurationMs",
+        ...(related ? ["manager", "directChildren"] : [])]) ||
         !finite(row.elapsedSeconds) || row.elapsedSeconds <= previous ||
         row.elapsedSeconds < report.samples[index].elapsedSeconds ||
         !finite(row.queryDurationMs) || row.queryDurationMs < 0 ||
@@ -140,43 +201,80 @@ function evaluateMemoryComposition(report) {
       throw new TypeError("Invalid memory sample timing.");
     }
     previous = row.elapsedSeconds;
+    if (related) {
+      if (manager) {
+        if (!exactly(row.manager, ['process', 'memory'])) throw new TypeError('Invalid selected manager sample.');
+        sampleMetrics(row.manager.process);
+        const lost = row.manager.process.status === 'UNKNOWN';
+        if (managerLost && !lost) throw new TypeError('Manager identity cannot resume after loss.');
+        managerLost ||= lost;
+        privateMetrics(row.manager.memory, lost);
+      } else if (row.manager !== null) throw new TypeError('Unrequested manager must be null.');
+      if (data.directChildrenRequested) {
+        const keys = ['native', 'isolated', ...(manager ? ['manager'] : [])];
+        if (!exactly(row.directChildren, keys)) throw new TypeError('Invalid direct-child roots.');
+        for (const key of keys) childGroup(row.directChildren[key], key === 'manager'
+          ? managerLost : report.samples[index][key].status === 'UNKNOWN');
+      } else if (row.directChildren !== null) throw new TypeError('Unrequested children must be null.');
+    }
     for (const key of ["native", "isolated", "system"]) {
       const fields = key === "system" ? systemMemoryFields : processMemoryFields;
       if (!exactly(row[key], fields)) throw new TypeError("Invalid memory sample fields.");
+      if (key !== 'system') {
+        privateMetrics(row[key], report.samples[index][key].status === 'UNKNOWN');
+        continue;
+      }
       for (const field of fields) {
         const metric = row[key][field];
         memoryMetric(metric);
-        if (key !== "system") {
-          const lost = report.samples[index][key].status === "UNKNOWN";
-          if ((lost && (metric.status !== "UNKNOWN" || metric.reason !== "IDENTITY_UNAVAILABLE")) ||
-              (!lost && metric.reason === "IDENTITY_UNAVAILABLE")) {
-            throw new TypeError("Memory attribution contradicts selected process identity.");
-          }
-        } else if (["IDENTITY_UNAVAILABLE", "EXTENDED_COUNTER_UNAVAILABLE"].includes(metric.reason)) {
+        if (["IDENTITY_UNAVAILABLE", "EXTENDED_COUNTER_UNAVAILABLE"].includes(metric.reason)) {
           throw new TypeError("Process-only reason cannot describe whole-system memory.");
-        }
-        if (field === "privateCommitMb" && metric.reason === "EXTENDED_COUNTER_UNAVAILABLE") {
-          throw new TypeError("Extended counter availability cannot invalidate base private commit.");
         }
       }
     }
+  }
+  if (manager && managerLost !== data.managerProcessIdentityLost) {
+    throw new TypeError('Manager identity flag contradicts samples.');
   }
   const summarize = (key, fields) => Object.fromEntries(fields.map(field =>
     [field, memorySummary(data.samples.map(row => row[key][field]))]));
   return {...result, memoryComposition: {
     interpretation: data.evidenceClass,
-    processTreeMeasured: false, managerMeasured: false, engineOverheadIsolated: false,
+    processTreeMeasured: false, managerMeasured: manager, engineOverheadIsolated: false,
     native: summarize("native", processMemoryFields),
     isolated: summarize("isolated", processMemoryFields),
     system: summarize("system", systemMemoryFields),
+    ...(related ? {
+      manager: manager ? {
+        process: metrics(data.samples.map(row => ({elapsedSeconds:row.elapsedSeconds, manager:row.manager.process})), 'manager'),
+        ...Object.fromEntries(processMemoryFields.map(field =>
+          [field, memorySummary(data.samples.map(row => row.manager.memory[field]))])),
+      } : null,
+      managerIdentityDiscontinuityObserved: data.managerProcessIdentityLost,
+      managerRoleVerified: false,
+      directChildren: data.directChildrenRequested ? Object.fromEntries(
+        ['native', 'isolated', ...(manager ? ['manager'] : [])].map(key => {
+          const groups = data.samples.map(row => row.directChildren[key]);
+          return [key, {
+            observedInventorySamples: groups.filter(group => group.status === 'OBSERVED').length,
+            unresolvedInventorySamples: groups.filter(group => group.status === 'UNKNOWN').length,
+            inventoryReasons: [...new Set(groups.filter(group => group.status === 'UNKNOWN').map(group => group.reason))],
+            verifiedCounts: groups.map(group => group.verifiedCount),
+            ...Object.fromEntries(processMemoryFields.map(field => [field, memorySummary(groups.map(group => group[field]))])),
+          }];
+        })) : null,
+      relationScope: 'DIRECT_CHILD_RELATION_ONLY_NOT_EXCLUSIVE_HELPER_OWNERSHIP',
+      sharedBrokerAttribution: 'UNKNOWN',
+    } : {}),
     queryMeanDurationMs: Number((data.samples.reduce((sum, row) => sum + row.queryDurationMs, 0) / data.samples.length).toFixed(3)),
     queryPeakDurationMs: Math.max(...data.samples.map(row => row.queryDurationMs)),
-    queryTimingIncludes: "MEMORY_QUERIES_ONLY_NOT_ALL_COLLECTOR_CPU_OR_MEMORY",
+    queryTimingIncludes: related ? 'MEMORY_AND_RELATED_PROCESS_QUERIES_NOT_TOTAL_COLLECTOR_COST'
+      : "MEMORY_QUERIES_ONLY_NOT_ALL_COLLECTOR_CPU_OR_MEMORY",
   }};
 }
 
 export function evaluateNativePerformance(report) {
-  if (report?.schema === 5) return evaluateMemoryComposition(report);
+  if ([5, 6].includes(report?.schema)) return evaluateMemoryComposition(report);
   if ([3, 4].includes(report?.schema)) return evaluateMultiClientPerformance(report);
   const fields = ["schema", "scope", "evidenceOrigin", "attribution",
     "automaticVerdict", "capturedAtUtc", "durationRequestedSeconds",
@@ -334,26 +432,45 @@ function evaluateMultiClientPerformance(report) {
  * Results are withheld for mismatched captures or any lost process identity.
  */
 export function compareNativePerformance(baseline, candidate) {
-  if (baseline?.schema === 5 || candidate?.schema === 5) {
-    if (baseline?.schema !== 5 || candidate?.schema !== 5) {
-      throw new TypeError('Memory composition comparisons require two schema-5 captures.');
+  if ([5, 6].includes(baseline?.schema) || [5, 6].includes(candidate?.schema)) {
+    if (![5, 6].includes(baseline?.schema) || baseline.schema !== candidate?.schema) {
+      throw new TypeError('Memory composition comparisons require two schema-5 or two schema-6 captures.');
     }
     const before = evaluateNativePerformance(baseline);
     const after = evaluateNativePerformance(candidate);
     const compared = compareNativePerformance(baseMemoryReport(baseline), baseMemoryReport(candidate));
+    const related = baseline.schema === 6;
+    if (related) {
+      compared.conditions.sameRelatedSelection = baseline.memoryComposition.managerAttribution === candidate.memoryComposition.managerAttribution &&
+        baseline.memoryComposition.directChildrenRequested === candidate.memoryComposition.directChildrenRequested;
+      compared.conditions.noManagerIdentityLoss = !before.memoryComposition.managerIdentityDiscontinuityObserved &&
+        !after.memoryComposition.managerIdentityDiscontinuityObserved;
+      compared.comparableForNumericDifference = Object.values(compared.conditions).every(Boolean);
+      if (!compared.comparableForNumericDifference) compared.differences = null;
+    }
+    const memoryDifference = (a, b) => compared.comparableForNumericDifference && a && b &&
+      a.missingSamples === 0 && b.missingSamples === 0 ? {
+        meanMbDifference: Number((b.meanMb - a.meanMb).toFixed(3)),
+        medianMbDifference: Number((b.medianMb - a.medianMb).toFixed(3)),
+        peakMbDifference: Number((b.peakMb - a.peakMb).toFixed(3)),
+      } : null;
     const groups = [['native', processMemoryFields], ['isolated', processMemoryFields], ['system', systemMemoryFields]];
     const differences = Object.fromEntries(groups.map(([key, fields]) => [key,
       Object.fromEntries(fields.map(field => {
         const a = before.memoryComposition[key][field], b = after.memoryComposition[key][field];
-        const eligible = compared.comparableForNumericDifference && a.missingSamples === 0 && b.missingSamples === 0;
-        return [field, eligible ? {
-          meanMbDifference: Number((b.meanMb - a.meanMb).toFixed(3)),
-          medianMbDifference: Number((b.medianMb - a.medianMb).toFixed(3)),
-          peakMbDifference: Number((b.peakMb - a.peakMb).toFixed(3)),
-        } : null];
+        return [field, memoryDifference(a, b)];
       }))]));
     return {...compared, baseline: before, candidate: after,
-      memoryDifferences: differences, engineOverheadIsolated: false};
+      memoryDifferences: differences, engineOverheadIsolated: false,
+      ...(related ? {
+        managerMemoryDifferences: Object.fromEntries(processMemoryFields.map(field =>
+          [field, memoryDifference(before.memoryComposition.manager?.[field], after.memoryComposition.manager?.[field])])),
+        directChildMemoryDifferences: Object.fromEntries(['native', 'isolated', 'manager'].map(key =>
+          [key, Object.fromEntries(processMemoryFields.map(field =>
+            [field, memoryDifference(before.memoryComposition.directChildren?.[key]?.[field],
+              after.memoryComposition.directChildren?.[key]?.[field])]))])),
+        exclusiveHelperOwnershipVerified: false,
+      } : {})};
   }
   if ([3, 4].includes(baseline?.schema) || [3, 4].includes(candidate?.schema)) {
     throw new TypeError('Multi-client captures support individual review only; paired comparison requires the same two-client schema.');
@@ -418,4 +535,5 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     process.exitCode = 1;
   }
 }
+
 

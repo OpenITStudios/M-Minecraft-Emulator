@@ -233,9 +233,15 @@ working set, whole-system physical/commit counters and memory-query duration;
 the existing evaluator validates/reviews them. Default schemas 1-4 remain
 compatible. See the [collector usage and proof boundary](../../tooling/acceptance/windows/README.md#opt-in-two-client-memory-composition).
 
-This closes only the first composition gap: helper trees and manager
-attribution are still NOT_COLLECTED, and process totals do not identify
-engine-owned allocations. Own-data Node/Windows checks passed as recorded in
+The first increment left manager/helper attribution NOT_COLLECTED. The
+follow-up schema 6 now adds separately pinned, operator-selected manager
+readings and opt-in direct-child relation counts/private-memory sums in the
+same owner. Candidate births are pinned before a second relation snapshot;
+root/child checks and selected-root exclusion prevent guessed or duplicated
+sums. Failed or partial relation coverage remains UNKNOWN. These observations
+are not exclusive helper ownership or a full tree census: shared brokers,
+services and deeper descendants remain unassigned. Process totals still do not
+identify engine-owned allocations. Own-data Node/Windows checks passed as recorded in
 the handoff, with no new Minecraft measurement or demonstrated savings.
 The earlier exact-source audit above retains its original pinned snapshot;
 it is not a claim that the collector still lacks these new opt-in fields.
@@ -258,7 +264,7 @@ Do not run heap/memory dumps or retain account/token/world contents for this pla
 
 | Rank | Candidate | Expected impact, still unmeasured | Compatibility cost / next decision |
 | --- | --- | --- | --- |
-| 0 | Complete existing metadata measurement with manager and attributable helpers; private commit/residency and system counters are now opt-in | Establishes what can actually be saved; no immediate resource reduction. | First diagnostic increment implemented; measurement gains are not game-performance gains. |
+| 0 | Collect the matched two-client composition baseline with the existing opt-in manager/direct-child extension | Establishes what can actually be saved; no immediate resource reduction. | Diagnostic source/own-data checks implemented; Minecraft composition and savings remain unmeasured. |
 | Optional settings track | Education's documented conservative graphics preset and render distance | Best-supported opportunity to reduce render work; possible RAM/VRAM benefit. Select the least costly preset that still meets the operator's visual needs. | Visual tradeoff; agree a stable usable preset before any setting change. |
 | 2 | Validate existing 144/10 pacing and background host continuity | Potentially meaningful CPU/GPU work reduction; limited direct allocation effect. | Preserve host progression and fast focus return; avoid equating low FPS with low simulation rate. |
 | Optional settings track | Verify supported render resolution | Potential GPU/render-target reduction. | Confirm actual Education behavior; keep a usable stable size. |

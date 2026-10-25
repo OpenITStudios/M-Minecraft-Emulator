@@ -733,6 +733,77 @@ API semantics:
 [GetPerformanceInfo](https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-getperformanceinfo).
 
 
+### Optional manager and direct-child attribution
+
+Add `-ManagerPid <MANAGER_PID>` and/or `-DirectChildren` to
+`-MemoryComposition` to produce **schema 6**. Both options are off by default.
+ManagerPid must be distinct from the two selected games and accessible at
+baseline. These are operator-selected identities, not verified application
+roles. The script never discovers a manager by executable name or starts one.
+
+```powershell
+powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-native-performance.ps1 `
+  -NativePid <CLIENT01_PID> -IsolatedPid <CLIENT02_PID> -ManagerPid <MANAGER_PID> `
+  -MemoryComposition -DirectChildren -DurationSeconds 600 -SampleIntervalSeconds 5
+```
+
+The manager has separate CPU/working-set and private-memory readings with
+sticky identity loss. An omitted manager is null/NOT_REQUESTED; its memory is
+never silently combined with a game. The CPU interval follows the manager's
+own sample endpoints. Schemas 1-5 remain supported with unchanged shapes.
+
+Direct-child attribution uses process-only Toolhelp snapshots, not heaps,
+module enumeration, command lines, account/profile reads or process memory
+contents. For each row it:
+
+1. Rechecks each root's pinned creation identity, takes a candidate snapshot,
+   and pins candidate creation times.
+2. Takes a second relation snapshot AFTER those pins, queries candidate
+   statistics and rechecks each child and root identity. Children older than
+   their alleged current parent or appearing too late to pin are unresolved.
+3. Excludes all selected roots and the collector from child totals, so a game
+   started by the selected manager is counted once as a selected game.
+4. Reports separate native/isolated/manager direct-child counts and private
+   memory sums. A failed snapshot, unavailable root, changing relation or
+   exceeded 64-candidate bound keeps the affected total UNKNOWN. A verified
+   empty inventory is an observed zero. Individual memory-query failures can
+   leave commitment available while private residency is unavailable.
+
+This establishes only an observed **direct parent relation**, never exclusive
+helper ownership or account isolation. Shared brokers, descendants beyond one
+edge, exited-between-samples processes and background services are not a full
+tree census. Helpers may serve multiple clients even with one observed parent.
+Do not add a shared broker to every client's total or sum working sets as
+unique physical RAM. The artifact contains counts/metrics, without PIDs,
+creation identities, process names, paths or credentials.
+
+Schema 6 adds per-row `manager` and `directChildren` fields and explicit
+selection/manager-loss fields to memoryComposition. The query-duration window
+now includes related-process enumeration and queries, still excluding setup
+and total collector CPU/RAM cost. The reviewer preserves component coverage
+and returns descriptive differences only for compatible modes, unbroken
+selected identities and complete individual metrics. Unknown/partial child
+totals remain null; no automatic engine-saving verdict is produced.
+
+Own-data proof: 35 Node tests passed, including eight deterministic child
+attribution cases in both Windows shells and early refusal before output for
+invalid selections. Actual 30-second process-tree captures passed in Windows
+PowerShell 5.1 and PowerShell 7, six samples each, including manager exit.
+Independent Win32_Process parent metadata matched the native direct-child
+counts and demonstrated that grandchildren were excluded. Node also creates
+console-host children on this machine; those are valid direct processes,
+not assumed extra Minecraft helpers. A first fixture check that assumed one
+child was corrected against that independent evidence, rather than weakening
+collector attribution. Final-code PowerShell 7 capture and actual Node CLI
+single/paired review passed. These checks do not operate Minecraft or prove
+resource savings. Raw captures and fixture runners remain local.
+
+Toolhelp contracts:
+[process snapshot](https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/nf-tlhelp32-createtoolhelp32snapshot),
+[parent identifier](https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/ns-tlhelp32-processentry32w),
+[enumeration completion/failure](https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/nf-tlhelp32-process32nextw).
+
+
 ### Optional GPU counter snapshot (diagnostic only)
 
 The default command above remains lightweight, uses **schema 1**, and does
@@ -818,7 +889,7 @@ the comparison is **descriptive only**: matching CPU counts do not establish
 the same physical PC or workload. It cannot infer FPS, GPU demand, full
 sandbox descendant-process cost or confirmed Minecraft optimization.
 
-`npm run test:native-performance` checks schema-1/2/3/4/5, memory and GPU hint handling,
+`npm run test:native-performance` checks schema-1/2/3/4/5/6, memory and GPU hint handling,
 privacy, missing-data, numeric comparison and false-PASS constraints.
 Authored tests do not prove that the Windows sampler has actually executed.
 
@@ -940,4 +1011,5 @@ Performance acceptance must distinguish:
 - experience: whether Native and the running Virtual clients remain usable together.
 
 The benchmark harness does not automatically declare a performance PASS. Threshold calibration is a separate evidence review after representative target machines have been measured.
+
 
