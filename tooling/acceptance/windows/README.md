@@ -589,17 +589,19 @@ and [upstream CSV field layout](https://github.com/GameTechDev/PresentMon/blob/m
 fixtures. The test runner does not validate live Windows/ETW capture,
 Minecraft rendering or account isolation.
 
-## Active two-client process performance sampling (manual, read-only)
+## Native client process performance sampling (manual, read-only)
 
 `collect-native-performance.ps1` is an **optional on-demand** Windows
-sampler for the current native + Sandboxie experiment. It does not launch games,
-inspect accounts/worlds, certify which process belongs to Minecraft, or test FPS.
-The operator must first identify two existing game PIDs via the approved
-Sandboxie inspection and verify them in the actual Windows session. Example:
+sampler for the original native pilot. It does not launch games, inspect
+accounts/worlds, certify Minecraft ownership or test FPS. Independently verify
+the selected existing process identities in an authorized Windows session.
+The historical NativePid/IsolatedPid parameter names and schema-1/2 scope label
+remain compatibility names for slots 01/02; they do not select Sandboxie or
+attest either provider. Example:
 
 ```powershell
 powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-native-performance.ps1 `
-  -NativePid <NATIVE_PID> -IsolatedPid <BOXED_PID> `
+  -NativePid <CLIENT01_PID> -IsolatedPid <CLIENT02_PID> `
   -DurationSeconds 3600 -SampleIntervalSeconds 5
 ```
 
@@ -629,6 +631,44 @@ process-tree totals, FPS, account isolation or multiplayer certification.
 Actual 30-second collector checks with disposable Node processes passed in
 PowerShell 7 and Windows PowerShell 5.1, including permanent identity loss after
 one process exited. Those checks are **not Minecraft or a 60-minute acceptance run**.
+
+### Five-client CPU/RAM capture and optional GPU hints
+
+Use the same collector after independently verifying all five existing client
+identities in an available operator session:
+
+```powershell
+powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-native-performance.ps1 `
+  -NativePid <CLIENT01_PID> -IsolatedPid <CLIENT02_PID> `
+  -Client03Pid <CLIENT03_PID> -Client04Pid <CLIENT04_PID> -Client05Pid <CLIENT05_PID> `
+  -DurationSeconds 3600 -SampleIntervalSeconds 5 -GpuSnapshot
+npm run native-performance:review -- <CAPTURE_JSON>
+```
+
+Client05Pid requires Client03Pid and Client04Pid; all five PIDs must be distinct.
+Schema 4 retains five separate CPU/RAM readings and identity-loss flags.
+An optional single GPU query at the end covers the same five identities.
+Without -GpuSnapshot, gpuDiagnostic is explicitly null and no counter query
+runs. If ANY selected process loses identity during CPU collection, all GPU
+hints remain UNKNOWN and the query is skipped. Creation times are checked
+again after an executed GPU query. Missing/localized counters remain UNKNOWN.
+
+The strict reviewer retains slot 01–05 attribution and refuses incomplete
+rows, unexpected fields, identity resurrection, contradictory flags or observed
+GPU hints after CPU identity loss. It never declares five-client readiness.
+GPU values retain the same maximum-instance semantics and stale-memory warning
+described below; actual physical VRAM, displayed FPS, process-tree totals and
+Education Host World health still require independent evidence. Schema 4
+supports individual review; multi-client paired comparisons remain refused.
+Schemas 1/2/3 and their result shapes are preserved.
+
+Executed own-data checks: 24 Node reviewer/CLI/source-reader tests pass.
+Thirty-second captures of five disposable Node processes pass under Windows
+PowerShell 5.1 and PowerShell 7; the latter includes the fifth process exiting
+normally and verifies zero GPU queries afterward. Both produce six samples
+and BOM-less reports accepted by the actual Node CLI. Six early invalid
+configuration controls refuse before creating output directories. These
+controls do not launch Minecraft or establish game performance.
 
 ### Optional GPU counter snapshot (diagnostic only)
 
@@ -671,9 +711,9 @@ and [Microsoft known incorrect GPU Process Memory values](https://learn.microsof
 
 ### Capture stability and report compatibility
 
-The optional GPU query is **skipped entirely** if either selected game
+The optional GPU query is **skipped entirely** if any selected game
 process became missing or inaccessible during the CPU/RAM capture. In that
-case both GPU hints stay `UNKNOWN`/null and no new GPU workload is added.
+case all selected GPU hints stay `UNKNOWN`/null and no new GPU workload is added.
 This does not mislabel a missing game PID as a crash or accidentally sample
 a replacement process.
 
@@ -715,7 +755,7 @@ the comparison is **descriptive only**: matching CPU counts do not establish
 the same physical PC or workload. It cannot infer FPS, GPU demand, full
 sandbox descendant-process cost or confirmed Minecraft optimization.
 
-`npm run test:native-performance` checks schema-1/schema-2 GPU hint handling,
+`npm run test:native-performance` checks schema-1/2/3/4 and GPU hint handling,
 privacy, missing-data, numeric comparison and false-PASS constraints.
 Authored tests do not prove that the Windows sampler has actually executed.
 

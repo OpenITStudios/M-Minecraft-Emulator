@@ -1124,12 +1124,48 @@ returns exit 2 / InvalidData before lookup or game creation. This is refusal
 proof, not game startup or pacing acceptance. No game was launched, closed,
 activated or controlled; CI and public schemas/admission remain unchanged.
 
+### Five-process resource collector — 25 October 2026
+
+Base reviewed: `be24595e61f753a2dfedbdd72b462af90d7df748` (Local).
+While the operator-session question remains unanswered, source work extends
+only the existing manual `collect-native-performance.ps1` and strict Node
+reviewer. The staged game's Rust/native payloads are unchanged.
+
+Client05Pid requires slots 03/04 and five distinct selected PIDs. Schema 4
+retains separate CPU/RAM metrics and pinned process-creation times for all five
+slots; missing/inaccessible/recycled identities stay UNKNOWN through capture.
+The optional one-shot GPU counter query covers those same five identities,
+is skipped if any timed CPU identity was lost, and rechecks births after the
+query. Unrequested GPU evidence is null. Counter values remain explicitly
+unverified maximum-instance hints, including the stale-memory caveat; they do
+not establish physical VRAM, displayed FPS, full process-tree cost or gameplay.
+Existing two-/four-process schema/result shapes are retained. No product
+command/admission, lifecycle owner, account/world I/O or CI change is made.
+
+Executed SOURCE_EXECUTION / own-process TARGET_WINDOWS checks:
+24 Node tests pass, including fifth-slot metrics, exact schemas, contradictory/
+missing/revived identities and strict GPU slot attribution. A PowerShell AST
+control executes the actual canonical GPU-reader functions with synthetic
+counters, checking five-slot and legacy two-slot shapes, per-instance maximums,
+recycled-identity refusal and unavailable counters. Two actual 30-second
+captures of disposable Node processes pass in Windows PowerShell 5.1 and
+PowerShell 7, producing six samples each and BOM-less reports consumed by the
+actual reviewer CLI. The PowerShell 7 fifth process exits normally after eight
+seconds: its final five samples stay UNKNOWN, other slots remain observed,
+and an instrumented counter verifies zero GPU queries after that loss.
+Both actual captures report all GPU hints UNKNOWN; positive GPU values were
+checked only with synthetic counters, not the RTX 3070 or physical VRAM.
+Six invalid configuration invocations across both shells refuse before output
+directory creation. Only owned disposable processes were started/closed;
+no Minecraft launch/input, account/world access or Computer Use occurred.
+
 ### Remaining proof and one next action
 
 The full goal remains ACTIVE: five licensed clients sharing one Education
 Host World, actual game 144/10 behavior without slowing background simulation,
 measured CPU/RAM/GPU/VRAM, persistence/soak/stability and the top-right FPS HUD.
-The private two-slot candidate is built and staged; its successful game startup,
+The private two-slot candidate is built and staged, and the five-process resource
+collector is ready; the candidate's successful game startup,
 visible HUD/input/fullscreen/DPI behavior, actual native frame rates, host
 health and composition cost remain NOT_EXECUTED. Five slots are not yet
 implemented in this private bootstrap. Own fixtures and accepted-present FPS

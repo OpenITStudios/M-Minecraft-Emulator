@@ -44,13 +44,12 @@ function validateGpuHint(value) {
     throw new TypeError("Invalid GPU counter hint value.");
   }
 }
-function validateGpuDiagnostic(value) {
-  if (!exactly(value, ["evidenceClass", "native", "isolated"]) ||
+function validateGpuDiagnostic(value, keys = ["native", "isolated"]) {
+  if (!exactly(value, ["evidenceClass", ...keys]) ||
       value.evidenceClass !== "WINDOWS_GPU_COUNTER_HINT_NOT_FRAME_PROOF") {
     throw new TypeError("Unrecognized optional GPU evidence.");
   }
-  validateGpuHint(value.native);
-  validateGpuHint(value.isolated);
+  for (const key of keys) validateGpuHint(value[key]);
 }
 
 function metrics(samples, key) {
@@ -79,7 +78,7 @@ function metrics(samples, key) {
 }
 
 export function evaluateNativePerformance(report) {
-  if (report?.schema === 3) return evaluateFourClientPerformance(report);
+  if ([3, 4].includes(report?.schema)) return evaluateMultiClientPerformance(report);
   const fields = ["schema", "scope", "evidenceOrigin", "attribution",
     "automaticVerdict", "capturedAtUtc", "durationRequestedSeconds",
     "durationObservedSeconds", "sampleIntervalSeconds", "hostLogicalCpus",
@@ -166,42 +165,66 @@ export function evaluateNativePerformance(report) {
   };
 }
 
-// Reuse the same strict two-process validator for both pairs, without merging
-// unrelated captures or interpreting manually selected PIDs as owned clients.
-function evaluateFourClientPerformance(report) {
-  const { client03ProcessIdentityLost, client04ProcessIdentityLost,
-    ...base } = report;
-  if (report.scope !== 'FOUR_CLIENT_PROCESS_PERFORMANCE' ||
-      typeof client03ProcessIdentityLost !== 'boolean' ||
-      typeof client04ProcessIdentityLost !== 'boolean' ||
+// Reuse the strict two-process validator; all rows belong to one capture.
+function evaluateMultiClientPerformance(report) {
+  const five = report.schema === 4;
+  const keys = ['native', 'isolated', 'client03', 'client04', ...(five ? ['client05'] : [])];
+  const extraFlags = ['client03ProcessIdentityLost', 'client04ProcessIdentityLost',
+    ...(five ? ['client05ProcessIdentityLost'] : [])];
+  if (report.scope !== (five ? 'FIVE_CLIENT_PROCESS_PERFORMANCE' : 'FOUR_CLIENT_PROCESS_PERFORMANCE') ||
+      extraFlags.some(key => typeof report[key] !== 'boolean') ||
       !Array.isArray(report.samples) || report.samples.length > 7200) {
-    throw new TypeError('Invalid four-client process capture.');
+    throw new TypeError('Invalid multi-client process capture.');
   }
   for (const row of report.samples) {
-    if (!exactly(row, ['elapsedSeconds', 'native', 'isolated', 'client03', 'client04'])) {
-      throw new TypeError('Four-client sample must contain exactly four process readings.');
+    if (!exactly(row, ['elapsedSeconds', ...keys])) {
+      throw new TypeError('Multi-client sample must contain exactly its selected process readings.');
     }
   }
-  const pair = (first, second, firstLost, secondLost) => evaluateNativePerformance({
+  const base = {...report};
+  for (const flag of extraFlags) delete base[flag];
+  if (five) {
+    if (!Object.hasOwn(report, 'gpuDiagnostic')) {
+      throw new TypeError('Five-client capture must record whether GPU hints were requested.');
+    }
+    if (report.gpuDiagnostic !== null) validateGpuDiagnostic(report.gpuDiagnostic, keys);
+    delete base.gpuDiagnostic;
+  }
+  const lost = key => report[key + 'ProcessIdentityLost'];
+  const pair = (first, second) => evaluateNativePerformance({
     ...base, schema: 1, scope: 'NATIVE_SANDBOXIE_PROCESS_PERFORMANCE',
-    nativeProcessIdentityLost: firstLost, isolatedProcessIdentityLost: secondLost,
+    nativeProcessIdentityLost: lost(first), isolatedProcessIdentityLost: lost(second),
     samples: report.samples.map(row => ({elapsedSeconds: row.elapsedSeconds,
       native: row[first], isolated: row[second]})),
   });
-  const first = pair('native', 'isolated', report.nativeProcessIdentityLost,
-    report.isolatedProcessIdentityLost);
-  const second = pair('client03', 'client04', client03ProcessIdentityLost,
-    client04ProcessIdentityLost);
+  const first = pair('native', 'isolated');
+  const second = pair('client03', 'client04');
+  const fifth = five ? pair('client05', 'native') : null;
+  if (five && keys.some(lost) && report.gpuDiagnostic !== null &&
+      keys.some(key => report.gpuDiagnostic[key].status !== 'UNKNOWN')) {
+    throw new TypeError('A capture with identity loss must skip all GPU hints.');
+  }
   return {
     interpretation: 'PROCESS_TELEMETRY_ONLY', automaticGameplayProof: false,
     automaticPerformanceVerdict: 'NOT_PROVIDED', fourClientReady: false,
+    ...(five ? {fiveClientReady: false} : {}),
     durationRequestedSeconds: first.durationRequestedSeconds,
     durationObservedSeconds: first.durationObservedSeconds, sampleCount: first.sampleCount,
     clients: { '01': first.native, '02': first.isolated,
-      '03': second.native, '04': second.isolated },
-    identityDiscontinuityObserved: first.identityDiscontinuityObserved || second.identityDiscontinuityObserved,
+      '03': second.native, '04': second.isolated, ...(five ? {'05': fifth.native} : {}) },
+    identityDiscontinuityObserved: first.identityDiscontinuityObserved ||
+      second.identityDiscontinuityObserved || (fifth?.identityDiscontinuityObserved ?? false),
     identityDiscontinuityInterpretation: first.identityDiscontinuityInterpretation,
-    metricScope: first.metricScope, missingEvidence: [...missing],
+    metricScope: first.metricScope,
+    ...(five ? {
+      gpuDiagnostic: report.gpuDiagnostic === null ? null : {
+        interpretation: 'ONE_TIME_WINDOWS_COUNTER_HINT_UNVERIFIED',
+        ...Object.fromEntries(keys.map((key, i) => [String(i + 1).padStart(2, '0'), {...report.gpuDiagnostic[key]}])),
+      },
+      gpuPerformanceVerified: false, gpuCounterMemoryMayBeStale: true,
+      frameTimingVerified: false,
+    } : {}),
+    missingEvidence: [...missing],
   };
 }
 
@@ -212,8 +235,8 @@ function evaluateFourClientPerformance(report) {
  * Results are withheld for mismatched captures or any lost process identity.
  */
 export function compareNativePerformance(baseline, candidate) {
-  if (baseline?.schema === 3 || candidate?.schema === 3) {
-    throw new TypeError('Four-client captures support individual review only; paired comparison requires the same two-client schema.');
+  if ([3, 4].includes(baseline?.schema) || [3, 4].includes(candidate?.schema)) {
+    throw new TypeError('Multi-client captures support individual review only; paired comparison requires the same two-client schema.');
   }
   const before = evaluateNativePerformance(baseline);
   const after = evaluateNativePerformance(candidate);

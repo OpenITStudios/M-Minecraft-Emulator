@@ -45,6 +45,42 @@ const fourSample = () => {
   return report;
 };
 
+const fiveSample = () => {
+  const report = fourSample();
+  report.schema = 4;
+  report.scope = 'FIVE_CLIENT_PROCESS_PERFORMANCE';
+  report.client05ProcessIdentityLost = false;
+  report.gpuDiagnostic = null;
+  report.samples.forEach((row, i) => {
+    row.client05 = {status: 'OBSERVED', cpuPercentOfHost: i + 1, workingSetMb: 500 + i * 100};
+  });
+  return report;
+};
+
+test('five-client capture retains separate fifth metrics, loss and unavailable GPU evidence', () => {
+  const report = fiveSample();
+  const result = evaluateNativePerformance(report);
+  assert.deepEqual(Object.keys(result.clients), ['01', '02', '03', '04', '05']);
+  assert.equal(result.clients['05'].meanHostCpuPercent, 1.5);
+  assert.equal(result.clients['05'].meanWorkingSetMb, 550);
+  assert.equal(result.clients['05'].maxWorkingSetMb, 600);
+  assert.equal(result.gpuDiagnostic, null);
+  assert.equal(result.fiveClientReady, false);
+  assert.equal(result.automaticGameplayProof, false);
+  assert.equal(result.gpuPerformanceVerified, false);
+  assert.equal(result.frameTimingVerified, false);
+  assert.equal(result.automaticPerformanceVerdict, 'NOT_PROVIDED');
+  report.client05ProcessIdentityLost = true;
+  report.samples[1].client05 = {status: 'UNKNOWN', cpuPercentOfHost: null, workingSetMb: null};
+  const lost = evaluateNativePerformance(report);
+  assert.equal(lost.clients['05'].observationCoveragePercent, 50);
+  assert.equal(lost.clients['05'].firstMissingAtSeconds, 10);
+  assert.equal(lost.clients['04'].observationCoveragePercent, 100);
+  assert.equal(lost.identityDiscontinuityObserved, true);
+  assert.throws(() => compareNativePerformance(report, report), /individual review only/);
+  assert.throws(() => compareNativePerformance(sample(), report), /individual review only/);
+});
+
 test('four-client review preserves separate metrics without account or FPS verdicts', () => {
   const result = evaluateNativePerformance(fourSample());
   assert.deepEqual(Object.keys(result.clients), ['01', '02', '03', '04']);
@@ -379,8 +415,8 @@ test("historical Windows PowerShell UTF8 BOM and no-BOM captures work through th
 
 test("Windows GPU diagnostics skip identity-loss captures and write BOM-less reports exclusively", () => {
   const collector = readFileSync(new URL("./windows/collect-native-performance.ps1", import.meta.url), "utf8");
-  assert.match(collector, /if \(\$nativeLost -or \$isolatedLost\)/);
-  assert.match(collector, /if \(\$GpuSnapshot\) \{[\s\S]*?if \(\$nativeLost -or \$isolatedLost\)/);
+  assert.match(collector, /if \(\$nativeLost -or \$isolatedLost -or \$extraIdentityLost\)/);
+  assert.match(collector, /if \(\$GpuSnapshot\) \{[\s\S]*?if \(\$nativeLost -or \$isolatedLost -or \$extraIdentityLost\)/);
   assert.match(collector, /\[System\.Text\.UTF8Encoding\]::new\(\$false\)/);
   assert.match(collector, /\[System\.IO\.FileMode\]::CreateNew/);
   assert.match(collector, /\[System\.IO\.FileShare\]::None/);
@@ -391,3 +427,132 @@ test("Windows GPU diagnostics skip identity-loss captures and write BOM-less rep
   assert.doesNotMatch(collector, /Set-Content -LiteralPath \$file/);
   assert.doesNotMatch(collector, /FileMode\]::Create\b/);
 });
+
+const fiveWithGpu = () => {
+  const report = fiveSample();
+  report.gpuDiagnostic = {evidenceClass: 'WINDOWS_GPU_COUNTER_HINT_NOT_FRAME_PROOF'};
+  ['native', 'isolated', 'client03', 'client04', 'client05'].forEach((key, i) => {
+    report.gpuDiagnostic[key] = gpuHint('OBSERVED', i + 1, (i + 1) * 100);
+  });
+  return report;
+};
+
+test('five-client GPU hints retain slot attribution and never certify VRAM or rendering', () => {
+  const report = fiveWithGpu();
+  const result = evaluateNativePerformance(report);
+  assert.equal(result.gpuDiagnostic['01'].threeDEngineMaximumInstancePercent, 1);
+  assert.equal(result.gpuDiagnostic['05'].dedicatedMemoryMaximumInstanceMb, 500);
+  assert.equal(result.gpuCounterMemoryMayBeStale, true);
+  assert.equal(result.gpuPerformanceVerified, false);
+  assert.equal(result.fiveClientReady, false);
+  assert.ok(result.missingEvidence.includes('GPU_VRAM'));
+  assert.ok(result.missingEvidence.includes('MULTIPLAYER'));
+  report.client05ProcessIdentityLost = true;
+  report.samples[1].client05 = {status: 'UNKNOWN', cpuPercentOfHost: null, workingSetMb: null};
+  for (const key of ['native', 'isolated', 'client03', 'client04', 'client05']) {
+    report.gpuDiagnostic[key] = gpuHint('UNKNOWN', null, null);
+  }
+  assert.equal(evaluateNativePerformance(report).gpuDiagnostic['05'].status, 'UNKNOWN');
+});
+
+test('five-client review rejects missing, revived, misattributed and contradictory evidence', () => {
+  for (const mutate of [
+    r => delete r.client05ProcessIdentityLost,
+    r => delete r.gpuDiagnostic,
+    r => delete r.samples[0].client05,
+    r => r.samples[0].client06 = {...r.samples[0].client05},
+    r => r.client05ProcessIdentityLost = true,
+    r => { r.client05ProcessIdentityLost = true;
+      r.samples[0].client05 = {status:'UNKNOWN', cpuPercentOfHost:null, workingSetMb:null}; },
+    r => r.samples[1].client05.cpuPercentOfHost = Infinity,
+    r => r.samples[0].client05.pid = 123,
+    r => r.scope = 'FOUR_CLIENT_PROCESS_PERFORMANCE',
+    r => r.schema = 3,
+    r => r.providerVerified = true,
+    r => delete r.gpuDiagnostic.client05,
+    r => r.gpuDiagnostic.client06 = gpuHint('OBSERVED', 1, 100),
+    r => r.gpuDiagnostic.client05.pid = 123,
+    r => r.gpuDiagnostic.client05.threeDEngineMaximumInstancePercent = 101,
+    r => r.gpuDiagnostic.client05.status = 'UNKNOWN',
+    r => { r.client05ProcessIdentityLost = true;
+      r.samples[1].client05 = {status:'UNKNOWN', cpuPercentOfHost:null, workingSetMb:null}; },
+  ]) {
+    const report = fiveWithGpu();
+    mutate(report);
+    assert.throws(() => evaluateNativePerformance(report), TypeError);
+  }
+});
+
+
+test('Windows GPU reader attributes all five synthetic slots and refuses recycled identities',
+  {skip: process.platform !== 'win32'}, () => {
+    const folder = mkdtempSync(join(tmpdir(), 'mivubi-five-gpu-reader-'));
+    try {
+      const script = join(folder, 'reader-control.ps1');
+      writeFileSync(script, String.raw`param([string]$Collector)
+$ErrorActionPreference = 'Stop'
+$tokens = $null; $errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($Collector, [ref]$tokens, [ref]$errors)
+if ($errors.Count -ne 0) { throw 'Collector parse failed' }
+$definitions = @($ast.FindAll({ param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+  $node.Name -in @('Unknown-GpuHint', 'Read-GpuSnapshot')
+}, $true))
+if ($definitions.Count -ne 2) { throw 'Missing canonical GPU reader functions' }
+foreach ($definition in $definitions) { . ([scriptblock]::Create($definition.Extent.Text)) }
+$script:counterCalls = 0
+$script:missing = 0
+$script:failCounters = $false
+function Read-Target {
+  param([int]$ProcessId, [long]$ExpectedStartTicks)
+  if ($ProcessId -eq $script:missing) { return $null }
+  return @{ startTicks = $ExpectedStartTicks }
+}
+function Get-Counter {
+  param($Counter, $SampleInterval, $MaxSamples, $ErrorAction)
+  $script:counterCalls++
+  if ($MaxSamples -ne 2 -or $SampleInterval -ne 1) { throw 'Unexpected query frequency' }
+  if ($script:failCounters) { throw 'Unavailable counter control' }
+  $samples = @()
+  foreach ($i in 0..4) {
+    $fakePid = 100 + $i
+    $samples += [pscustomobject]@{ Path=('\GPU Engine(pid_' + $fakePid + '_engtype_3D)\Utilization Percentage'); CookedValue=($i + 1) }
+    $samples += [pscustomobject]@{ Path=('\GPU Process Memory(pid_' + $fakePid + '_one)\Dedicated Usage'); CookedValue=((10 + $i) * 1MB) }
+    $samples += [pscustomobject]@{ Path=('\GPU Process Memory(pid_' + $fakePid + '_two)\Dedicated Usage'); CookedValue=((20 + $i) * 1MB) }
+  }
+  return @([pscustomobject]@{CounterSamples=$samples}, [pscustomobject]@{CounterSamples=$samples})
+}
+$keys = @('native', 'isolated', 'client03', 'client04', 'client05')
+$targets = @(foreach ($i in 0..4) { @{key=$keys[$i]; pid=(100 + $i); started=123} })
+$result = Read-GpuSnapshot -Targets $targets
+foreach ($i in 0..4) {
+  $hint = $result[$keys[$i]]
+  if ($hint.status -ne 'OBSERVED' -or $hint.threeDEngineMaximumInstancePercent -ne ($i + 1) -or
+      $hint.dedicatedMemoryMaximumInstanceMb -ne (20 + $i)) { throw 'Cross-slot counter attribution' }
+}
+$legacy = Read-GpuSnapshot -Targets $targets[0..1]
+if ($legacy.Count -ne 3 -or $legacy.native.status -ne 'OBSERVED' -or
+    $legacy.isolated.dedicatedMemoryMaximumInstanceMb -ne 21) { throw 'Legacy two-client shape changed' }
+$script:missing = 104
+$result = Read-GpuSnapshot -Targets $targets
+if ($result.client05.status -ne 'UNKNOWN' -or $null -ne $result.client05.dedicatedMemoryMaximumInstanceMb -or
+    $result.client04.status -ne 'OBSERVED') { throw 'Recycled identity accepted or wrong slot lost' }
+$script:failCounters = $true
+$result = Read-GpuSnapshot -Targets $targets
+if (@($keys | Where-Object { $result[$_].status -ne 'UNKNOWN' }).Count -ne 0) { throw 'Counter failure fabricated data' }
+if ($script:counterCalls -ne 4) { throw 'Unexpected counter query count' }
+@{ syntheticReaderPass=$true; slots=5; queryCalls=$script:counterCalls; minecraft='NOT_EXECUTED' } | ConvertTo-Json -Compress
+`, 'utf8');
+      const collector = fileURLToPath(new URL('./windows/collect-native-performance.ps1', import.meta.url));
+      const run = spawnSync('powershell.exe', ['-NoProfile', '-File', script, '-Collector', collector],
+        {encoding: 'utf8', timeout: 15000, maxBuffer: 1024 * 1024, windowsHide: true});
+      assert.equal(run.status, 0, run.stderr);
+      const result = JSON.parse(run.stdout.replace(/^\uFEFF/, ''));
+      assert.equal(result.syntheticReaderPass, true);
+      assert.equal(result.slots, 5);
+      assert.equal(result.queryCalls, 4);
+      assert.equal(result.minecraft, 'NOT_EXECUTED');
+    } finally {
+      rmSync(folder, {recursive: true, force: true});
+    }
+  });

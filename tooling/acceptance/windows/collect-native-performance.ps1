@@ -15,7 +15,9 @@ param(
   [ValidateRange(0, 2147483647)]
   [int]$Client03Pid = 0,
   [ValidateRange(0, 2147483647)]
-  [int]$Client04Pid = 0
+  [int]$Client04Pid = 0,
+  [ValidateRange(0, 2147483647)]
+  [int]$Client05Pid = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,16 +26,19 @@ $ErrorActionPreference = 'Stop'
 if ($NativePid -eq $IsolatedPid) {
   throw 'Native and isolated process IDs must be distinct.'
 }
-$fourClients = $Client03Pid -ne 0 -or $Client04Pid -ne 0
+$fiveClients = $Client05Pid -ne 0
+$fourClients = $Client03Pid -ne 0 -or $Client04Pid -ne 0 -or $fiveClients
 if ($fourClients) {
   if ($Client03Pid -eq 0 -or $Client04Pid -eq 0) {
-    throw 'Four-client sampling requires both Client03Pid and Client04Pid.'
+    throw 'Multi-client sampling requires both Client03Pid and Client04Pid.'
   }
-  if (@(@($NativePid, $IsolatedPid, $Client03Pid, $Client04Pid) | Select-Object -Unique).Count -ne 4) {
-    throw 'All four manually selected process IDs must be distinct.'
+  $selectedPids = @($NativePid, $IsolatedPid, $Client03Pid, $Client04Pid)
+  if ($fiveClients) { $selectedPids += $Client05Pid }
+  if (@($selectedPids | Select-Object -Unique).Count -ne $selectedPids.Count) {
+    throw 'All manually selected process IDs must be distinct.'
   }
-  if ($GpuSnapshot) {
-    throw 'Four-client CPU/RAM sampling does not support the two-client GPU snapshot. Collect GPU evidence separately.'
+  if ($GpuSnapshot -and -not $fiveClients) {
+    throw 'Four-client CPU/RAM sampling does not support the GPU snapshot. Use a two- or five-client capture.'
   }
 }
 if ($SampleIntervalSeconds -gt $DurationSeconds) {
@@ -90,13 +95,11 @@ function Unknown-GpuHint {
     dedicatedMemoryMaximumInstanceMb = $null }
 }
 function Read-GpuSnapshot {
-  param([int]$FirstPid, [int]$SecondPid,
-        [long]$FirstStartTicks, [long]$SecondStartTicks)
+  param([object[]]$Targets)
   $result = [ordered]@{
     evidenceClass = 'WINDOWS_GPU_COUNTER_HINT_NOT_FRAME_PROOF'
-    native = (Unknown-GpuHint)
-    isolated = (Unknown-GpuHint)
   }
+  foreach ($item in $Targets) { $result[$item.key] = Unknown-GpuHint }
   try {
     # Only one counter query for the entire manual run; two samples are
     # necessary for rate-based utilization values.
@@ -106,8 +109,8 @@ function Read-GpuSnapshot {
     ) -SampleInterval 1 -MaxSamples 2 -ErrorAction Stop)
     if ($sets.Count -ne 2) { return $result }
     $observed = @{}
-    foreach ($candidate in @($FirstPid, $SecondPid)) {
-      $observed[[string]$candidate] = [ordered]@{ engine = @(); dedicated = @() }
+    foreach ($item in $Targets) {
+      $observed[[string]$item.pid] = [ordered]@{ engine = @(); dedicated = @() }
     }
     foreach ($counter in @($sets[-1].CounterSamples)) {
       $path = [string]$counter.Path
@@ -128,10 +131,7 @@ function Read-GpuSnapshot {
         $observed[$key].dedicated += ($value / 1MB)
       }
     }
-    foreach ($item in @(
-      @{ role='native'; pid=$FirstPid; started=$FirstStartTicks },
-      @{ role='isolated'; pid=$SecondPid; started=$SecondStartTicks }
-    )) {
+    foreach ($item in $Targets) {
       # Refuse counter values if PID was recycled during the optional query.
       if ($null -eq (Read-Target -ProcessId $item.pid -ExpectedStartTicks $item.started)) {
         continue
@@ -140,7 +140,7 @@ function Read-GpuSnapshot {
       if ($counterData.engine.Count -eq 0 -or $counterData.dedicated.Count -eq 0) {
         continue
       }
-      $result[$item.role] = [ordered]@{
+      $result[$item.key] = [ordered]@{
         status = 'OBSERVED'
         # Not total GPU use: largest 3D engine instance in the last sample.
         threeDEngineMaximumInstancePercent = [math]::Round(
@@ -152,8 +152,7 @@ function Read-GpuSnapshot {
     }
   } catch {
     # Missing/localized PDH counters and GPU driver limitations are UNKNOWN.
-    $result.native = Unknown-GpuHint
-    $result.isolated = Unknown-GpuHint
+    foreach ($item in $Targets) { $result[$item.key] = Unknown-GpuHint }
   }
   return $result
 }
@@ -165,10 +164,12 @@ if ($null -eq $baselineNative -or $null -eq $baselineIsolated) {
 }
 $extraTargets = @()
 if ($fourClients) {
-  foreach ($entry in @(@{ key='client03'; processId=$Client03Pid },
-                       @{ key='client04'; processId=$Client04Pid })) {
+  $selectedExtras = @(@{ key='client03'; processId=$Client03Pid },
+                      @{ key='client04'; processId=$Client04Pid })
+  if ($fiveClients) { $selectedExtras += @{ key='client05'; processId=$Client05Pid } }
+  foreach ($entry in $selectedExtras) {
     $baseline = Read-Target -ProcessId $entry.processId
-    if ($null -eq $baseline) { throw 'All four manually selected processes must be accessible before measurement. No report produced.' }
+    if ($null -eq $baseline) { throw 'All manually selected processes must be accessible before measurement. No report produced.' }
     $extraTargets += @{ key=$entry.key; processId=$entry.processId;
       baseline=$baseline; previous=$baseline; lost=$false }
   }
@@ -230,16 +231,22 @@ while ($timer.Elapsed.TotalSeconds -lt $DurationSeconds) {
 $durationWithoutGpu = [math]::Round($timer.Elapsed.TotalSeconds, 2)
 $gpuDiagnostic = $null
 if ($GpuSnapshot) {
-  if ($nativeLost -or $isolatedLost) {
-    # Identity was lost during the timed CPU capture. Avoid the extra GPU
-    # counter query: a PID might now belong to an unrelated process.
+  $gpuTargets = @(
+    @{ key='native'; pid=$NativePid; started=$baselineNative.startTicks },
+    @{ key='isolated'; pid=$IsolatedPid; started=$baselineIsolated.startTicks }
+  )
+  foreach ($entry in $extraTargets) {
+    $gpuTargets += @{ key=$entry.key; pid=$entry.processId; started=$entry.baseline.startTicks }
+  }
+  $extraIdentityLost = @($extraTargets | Where-Object { $_.lost }).Count -gt 0
+  if ($nativeLost -or $isolatedLost -or $extraIdentityLost) {
+    # Never query recycled/inaccessible selected identities, including slot 05.
     $gpuDiagnostic = [ordered]@{
       evidenceClass = 'WINDOWS_GPU_COUNTER_HINT_NOT_FRAME_PROOF'
-      native = (Unknown-GpuHint)
-      isolated = (Unknown-GpuHint)
     }
+    foreach ($item in $gpuTargets) { $gpuDiagnostic[$item.key] = Unknown-GpuHint }
   } else {
-    $gpuDiagnostic = Read-GpuSnapshot -FirstPid $NativePid -SecondPid $IsolatedPid -FirstStartTicks $baselineNative.startTicks -SecondStartTicks $baselineIsolated.startTicks
+    $gpuDiagnostic = Read-GpuSnapshot -Targets $gpuTargets
   }
 }
 # Hints are not account, FPS, frametime or actual VRAM proof.
@@ -269,6 +276,13 @@ if ($fourClients) {
   $report['scope'] = 'FOUR_CLIENT_PROCESS_PERFORMANCE'
   $report['client03ProcessIdentityLost'] = [bool]$extraTargets[0].lost
   $report['client04ProcessIdentityLost'] = [bool]$extraTargets[1].lost
+}
+if ($fiveClients) {
+  $report['schema'] = 4
+  $report['scope'] = 'FIVE_CLIENT_PROCESS_PERFORMANCE'
+  $report['client05ProcessIdentityLost'] = [bool]$extraTargets[2].lost
+  # A null field explicitly records that the optional one-shot query was not requested.
+  $report['gpuDiagnostic'] = $gpuDiagnostic
 }
 $stamp = $beginUtc.ToString('yyyyMMddTHHmmssfffffffZ')
 $file = Join-Path $OutputDirectory ('native-process-performance-' + $stamp + '.json')
