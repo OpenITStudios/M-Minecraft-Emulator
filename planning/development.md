@@ -13,7 +13,7 @@ fixture counts and minor launcher/HUD savings are not substitutes for them.
 | Track | Required outcome | Owner and boundaries | Current evidence |
 | --- | --- | --- | --- |
 | **A — saved Minecraft settings** | Keep the approved Simple preset independently per original profile and across normal restart. Render distance **at least 12**, simulation distance unchanged; preserve resolution, accounts/worlds and 144/10. | Minecraft's existing options file owns the settings; existing bootstrap owns persistent per-slot Roaming/Local routing and identity-capability replay. Do not introduce a duplicate preferences store or rewrite options while a game is live. | Both original per-slot options files retained graphics_mode=0, gfx_viewdistance=192, gfx_msaa=1 and the five approved effect switches=0 after both game exits. Disk persistence is observed for both; the restarted MC02 UI also reads Simple / 12 chunks. The fresh MC01 main menu shows its original account; its complete post-restart video UI has not been rechecked. |
-| **B — internal Minecraft efficiency** | Reduce unnecessary mesh/buffer/asset/cache or renderer work using a real Education-compatible integration, inspired by Java optimizers. | A new native internal optimization needs one demonstrated resource owner/lifetime seam. Existing Present mediation owns pacing/HUD, not game meshes/heaps. A generic allocator/hook fixture or wrapper micro-optimization does not satisfy B. | Existing exact-source Sodium/FerriteCore research identifies concrete algorithms; a compatible internal Education resource/mesh ownership seam remains UNKNOWN. Do not promise a Java mod port or a RAM percentage. |
+| **B — internal Minecraft efficiency** | Reduce unnecessary mesh/buffer/asset/cache or renderer work using a real Education-compatible integration, inspired by Java optimizers. | A new native internal optimization needs one demonstrated resource owner/lifetime seam. Existing Present mediation owns pacing/HUD, not game meshes/heaps. A generic allocator/hook fixture or wrapper micro-optimization does not satisfy B. | The approved startup capture now identifies D3D12 heap/resource creation routes for the dominant write-combined category. Resource purpose, occupancy and GPU-safe retirement/rebuild ownership remain UNKNOWN; no new renderer RAM saving is established. Do not promise a Java mod port or a RAM percentage. |
 | **C — inactive clients first** | Prioritize lower RAM/CPU/GPU demand while a client is not controlled; keep foreground 144/background 10 ceilings, prompt focus recovery and continuing Education host/network/saves. | Focus/pacing retain their current owners. Host role is separate from focus. No whole-process suspension, arbitrary memory/CPU caps, periodic trimming, token/profile sharing, fabricated occlusion result or freeing game-owned resources. | The existing limiter is implemented and prior 10-FPS observations are historical. Further game-owned background work reduction, its resource benefit and host health require a concrete intervention; no new savings are claimed yet. |
 
 **Working method:** choose one real intervention in A/B/C, implement it or
@@ -155,20 +155,54 @@ GPUUploadHeapSupported=false. NVIDIA reports 8192 MiB framebuffer and only
 do not migrate buffers to GPU_UPLOAD, change BIOS/driver settings, or count a
 RAM-to-VRAM shift as reduced total memory. No new product probe/API was added.
 
-One existing WPR VirtualAllocation capture was prepared with a unique named
-session and a bounded local TraceEvent analysis path. Its UAC launch returned
-"operation was canceled by the user"; no elevated helper/status or new ETL
-was created, and both default/named WPR status report not recording. Thus
-allocation-stack attribution is NOT_EXECUTED. No prompt retry, access bypass,
-kernel/session change or optimizer action was performed. The guest was saved/
-exited normally during preparation, then restored to the same host world after
-cancellation. Both games remain responsive.
+**Approved cold-start attribution (source baseline 68dcf1f):** after the operator
+explicitly authorized one UAC retry, the elevated helper was confirmed live and
+awaiting the launch handshake. The guest's Save & Exit completed through the UI.
+Both old processes then disappeared and their existing manager recorded exitCode=0.
+The host's separate Save & Exit UI sequence was not observed; do not claim that
+sequence from exitCode alone. No force termination was issued. The existing
+hash-checked candidate/original profiles were launched only after WPR reported
+recording. Both original accounts appeared automatically after restart; the
+same saved Education host world was reopened and the guest rejoined it.
 
-A world rejoin capture can attribute newly committed buffers only; it cannot
-recover the allocation stacks of the already-existing 57 regions. To attribute
-that original footprint, prefer one bounded cold-start capture through the
-existing manager/original profiles after normal save/exit, with a recorder-ready
-handshake and automatic launch. Manual Windows UAC consent is still required.
+One named WPR VirtualAllocation file-mode session completed; its stop command
+reported success, the elevated helper exited, and named WPR status is now not
+recording. Recording was requested for 30 seconds; the final ETL session span
+includes stop/rundown, 10:38:49.516–10:39:47.975 UTC on 25 October 2026.
+TraceEvent reports zero events lost. This is allocation metadata, not a game
+memory dump, heap-content scan, credentials or world-file read. Raw ETL/maps and
+temporary local analysis stay outside Git; no new product collector was added.
+
+The menu-time guest VMMap snapshot at 10:40:52.629 UTC contains 50 indented
+write-combined Private Data leaves totaling **1040.824 MiB**. A 4-KiB interval
+match against the last captured commit/decommit/release events associates all
+of those addresses with graphics stacks through dxgmms2, dxgkrnl, NVIDIA's
+nvwgf2umx and D3D12. No zero-length frees were present for the selected process.
+Public Microsoft D3D12 symbols resolve candidate creation paths: 704.434 MiB
+via CreateHeap, 66.875 MiB via CreateCommittedResource and 269.516 MiB through
+other/truncated graphics paths. The largest matched group, 257.934 MiB, includes
+game RVA 0xBC224F7 and D3D12 CDevice::CreateHeap. These are correlated candidate
+owners, not a proved unused upload pool: the snapshot is about 65 seconds after
+the final trace timestamp, so post-trace reuse/mutation is not covered.
+
+The trace separately totals 1193.742 MiB of *commit requests* on graphics
+stacks during startup. That is allocation traffic, not retained memory, and
+must not be added to the snapshot. The earlier 1072.62 MiB snapshot and this
+1040.824 MiB menu observation are different sessions/states; their difference
+is not an optimization result. No additional RAM savings are claimed.
+
+Decision: ordinary LFH cleanup is not the mechanism for these graphics
+allocations. CreateHeap/committed-resource stacks establish a concrete native
+creation route; they do not expose heap type, placement occupancy, resource
+content, last-use fences or regeneration. Reject shrinking heap descriptors,
+releasing resource references or decommitting mapped driver pages by address.
+A safe reuse/retirement implementation still needs the owning game allocator's
+capacity and GPU-completion contract. A/C, public admission and CI are unchanged.
+
+Local-only evidence hashes: ETL
+`b9d7478705aab7eee8bb0febe3cabde0cf0129d38da02fe4f074201c6b2a2adb`;
+menu VMMap CSV
+`4e37fce8c5d97a662e8980155769ecafbfe1b2bce4e2637f14ebd71c2ec99319`.
 
 Retain independently authored code, Local only, CI disabled, no Sandboxie/VMware
 or game-file modifications. Five clients remain deferred until two-client
@@ -1741,10 +1775,9 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** after the operator manually approves the required Windows
-UAC prompt, attribute write-combined allocations with one named, bounded WPR
-VirtualAllocation cold-start capture using the existing candidate/original
-profiles and normal saves. Do not re-prompt after the cancellation automatically,
-infer ownership from PAGE_WRITECOMBINE alone, or repeat LFH cleanup. The optional
-capture has not run. Preserve A/C, 12-chunk minimum, simulation/resolution and
-accounts/worlds; actual buffer lifetime/reduction remains unproved.
+**One next action:** statically inspect the captured game-origin D3D12 CreateHeap
+callers against the pinned installed executable to determine whether a concrete
+buffer-pool capacity/retirement owner is identifiable. Reuse the existing local
+trace and Microsoft symbols; do not add another capture, guess resource lifetime,
+repeat LFH cleanup or claim that creation-stack attribution is RAM reduction.
+Preserve A/C, original profiles/worlds, 12-chunk minimum and simulation/resolution.

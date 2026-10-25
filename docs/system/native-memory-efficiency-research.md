@@ -692,3 +692,70 @@ existing candidate/original profiles is the appropriate next observation if the
 operator provides manual UAC consent; do not keep retrying the canceled request
 or substitute another aggregate RAM chart. Until then, actual owner/lifetime
 and safe buffer reduction remain UNKNOWN.
+
+
+## Approved cold-start allocation attribution
+
+Following explicit permission to retry UAC, one elevated existing WPR
+VirtualAllocation file-mode capture completed around startup of the same
+hash-checked candidate and original profiles. A ready handshake preceded launch;
+the old processes exited with code 0 and no force termination was issued. The
+guest's normal Save & Exit UI was observed; a separate host save UI sequence was
+not observed. Both original accounts reappeared automatically, the existing
+Education host world was reopened, and the guest rejoined it. This is bounded
+recovery evidence, not an optimization or stability soak.
+
+The capture requested 30 seconds before stop. The final ETL session metadata spans
+25 October 2026 10:38:49.516–10:39:47.975 UTC, including stop/rundown.
+TraceEvent 3.2.8 reports zero lost events; the named WPR session is no longer
+recording and its elevated helper exited. No product collector/API, recurring
+worker, game-file modification or additional heap action was added. Raw ETL,
+addresses, process identity, symbol cache and analysis are kept local, outside Git.
+
+A later menu-time VMMap snapshot (10:40:52.629 UTC) contains 50 write-combined
+Private Data leaves totaling 1040.824 MiB. Counting indented leaves avoids
+parent/child duplication. Offline matching uses each 4-KiB interval's last
+captured commit/decommit/release and preserves distinct module-relative stack
+frames; grouping only by module name would conceal different creation paths.
+No zero-length free event occurred for the selected process.
+
+All selected addresses match graphics allocation stacks through dxgmms2,
+dxgkrnl, nvwgf2umx and D3D12. Public D3D12 symbols downloaded from Microsoft's
+symbol server resolve the following candidate routes:
+
+| Last captured creation route for current snapshot addresses | Matched MiB |
+| --- | ---: |
+| CreateHeap | 704.434 |
+| CreateCommittedResource | 66.875 |
+| Other/truncated graphics paths | 269.516 |
+| Total | 1040.824 |
+
+The largest group is 257.934 MiB, with CDevice::CreateHeap and game RVA
+0xBC224F7 in its stack. These are **candidate owner correlations**: the snapshot
+is roughly 65 seconds after the final ETL timestamp, and post-trace reuse or
+resource changes are not recorded. Zero lost events does not eliminate that
+gap. Heap type, terrain/texture/upload purpose, unused capacity and last GPU
+use remain UNKNOWN. Do not label all write-combined allocations as upload heaps
+solely from protection or these creation methods.
+
+The trace's separate 1193.742 MiB sum is graphics-stack *commit requests during
+the interval*, not retained bytes. Earlier 1072.62 MiB and current 1040.824 MiB
+snapshots are different sessions/workloads; their difference is not a saving.
+No additional Minecraft RAM reduction is established by this capture.
+
+[CreateHeap's contract](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device-createheap)
+requires GPU reads/writes to have ended before the heap's final reference is
+released; placed-resource references and reserved mappings also matter.
+[Microsoft's fence-based reuse example](https://learn.microsoft.com/en-us/windows/win32/direct3d12/fence-based-resource-management)
+ties reuse to allocation offsets and GPU completion. A creation stack alone
+provides neither. Therefore ordinary LFH reclamation, arbitrary VirtualFree,
+descriptor shrinking or releasing game-owned references is not a justified
+optimization for this category. The concrete B integration target is now the
+game-side owner of these D3D12 allocations; its occupancy/retirement contract
+must be identified before implementing an original reuse/retirement change.
+
+Local evidence SHA-256: ETL
+`b9d7478705aab7eee8bb0febe3cabde0cf0129d38da02fe4f074201c6b2a2adb`;
+menu VMMap CSV
+`4e37fce8c5d97a662e8980155769ecafbfe1b2bce4e2637f14ebd71c2ec99319`.
+The sole next action remains in the canonical handoff; five clients stay deferred.
