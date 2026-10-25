@@ -4,6 +4,44 @@
 The preceding efficiency state is preserved at
 [32b54d031056](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/32b54d0310566ac7716bae2dca48a4bc45f57809/planning/development.md).
 
+## Current bounded work — automatic approved graphics preset
+
+The operator requested that Minecraft3–5 receive the same preset as1–2 without
+Computer Use. Read-only inspection confirmed the original pair already had
+Simple/12 chunks/MSAA1/effects off, while3–5 still had Fancy/45 chunks/MSAA2.
+This request resumes only approved-setting automation, not paused renderer/RAM
+experiments. No quantitative resource saving is claimed.
+
+The existing bootstrap now invokes its private
+`independent_bootstrap/game_preset.rs` helper after exact-image/profile validation
+and before creating any game processes, on both pair/five replay routes. It
+refuses a running Minecraft, prepares every profile before replacing any file,
+and enforces only the eight previously approved entries: Simple,12 chunks,
+MSAA1 and the five decorative effects off. `options.txt` remains the sole settings
+store; other bytes/settings, simulation, resolution, input and accounts are
+preserved. Duplicate owned keys are made consistent; existing line endings and
+UTF-8 BOM are retained. Unsupported encoding/NUL/oversize input fails closed.
+
+Only changed files receive a unique `options.mivubi-*.bak` in their own private
+options directory. Replacement is staged, flushed and renamed in the same
+directory; files/ancestors are checked/pinned and reparse files are refused.
+Unchanged presets are a no-op. Absent profiles' fixed directories/options can be
+seeded; actual first-ever game consumption of a minimal options file is still
+NOT_EXECUTED. A multi-profile I/O failure stops startup; already completed
+per-file replacements are safe to retry, not a cross-profile transaction.
+
+Three targeted Windows Rust tests passed, covering preservation/BOM/duplicates/
+idempotence, invalid/oversize rejection, actual file replacement/backup/new-file
+seeding, writer exclusion and refusing a replaced source file. Preview-manager
+release build passed (104 existing warnings). New manager SHA256:
+`03c93d0ab6a09486881f7d5438565e56fadfab62c91bd1bc87fa6ebfb14862df`.
+The accepted login-fix DLL/enroller and five profile capability are unchanged.
+The standard private five-client launcher is prepared for this candidate.
+
+**Runtime application: NOT_EXECUTED while five games remain running.** The
+normal-save/close question is pending; do not force-close or edit live settings.
+No Computer Use, login automation, global browser/system changes or CI.
+
 ## Five-client native pilot — DONE within this scope
 
 The operator requested five Minecraft Education clients on25 October2026.
@@ -95,6 +133,7 @@ entirely off; VMware/Sandboxie stay retired. Computer Use was stopped with Esc;
 no further screen/input control was used. Do not force-close games or automate
 authentication. Last accepted games are left open; do not close them incidentally.
 
-**Next action: none for this completed repair/pilot.** Any production-manager
-integration, distribution, soak or renewed optimization is a separately bounded
-follow-up, not automatic work from historical full-access permission.
+**Next:** once the operator confirms normal game closure, launch the prepared
+five-profile candidate and verify the eight approved settings in each profile.
+If restart is deferred, leave current games/settings untouched; the prepared
+launcher applies the preset on the next ordinary launch.

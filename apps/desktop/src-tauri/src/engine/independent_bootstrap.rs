@@ -439,6 +439,9 @@ fn create_unstarted_configured(
 
 const MAX_EDUCATION_SLOTS: u32 = 5;
 
+#[path = "independent_bootstrap/game_preset.rs"]
+mod game_preset;
+
 /// Source-only two-slot preparation. No game/DLL code can be resumed here.
 /// The existing registered-image resolver remains the only target selector.
 pub(super) fn prepare_registered() -> io::Result<[PendingEducationBootstrap; 2]> {
@@ -476,6 +479,11 @@ fn prepare_registered_mode<const N: usize>(
         ));
     }
     let stores = registered_slots::<N>(observe)?;
+    if observe {
+        let changed = game_preset::apply(&stores)?;
+        use std::io::Write;
+        writeln!(io::stdout(), "{{\"event\":\"graphics-preset\",\"preset\":\"Simple12\",\"changedProfiles\":{changed}}}")?;
+    }
     let mut children = Vec::with_capacity(N);
     for mut store in stores {
         if observe {

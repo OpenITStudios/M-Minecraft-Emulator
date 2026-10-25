@@ -1,5 +1,29 @@
 # Self-owned early-import ordering experiment
 
+## Automatic approved game preset — 25 October 2026
+
+The pair/five private startup route applies the existing approved Simple preset
+before creating game processes, after reviewed-image and private-profile checks.
+One helper, `apps/desktop/src-tauri/src/engine/independent_bootstrap/game_preset.rs`,
+owns this selective options.txt update. It enforces Simple/12 chunks/MSAA1 and
+five effects off, preserving simulation, resolution and every unowned option.
+It does not copy another profile's options, accounts, tokens or worlds.
+
+No live-game setting writes or UI automation. All files are prepared/validated
+first; malformed encoding/size or reparse paths refuse startup. Changed files
+get a unique local before-preset backup and a flushed same-directory replacement.
+Repeated launches of unchanged options do not write/back up again. A failed
+multi-file operation is retryable, not a cross-profile transaction. Missing
+options can be seeded with the eight approved entries; real first-ever game
+consumption remains untested. The known current five profiles already have full
+game-generated options files. A game-version change refuses before this update.
+
+Three Windows Rust tests exercise actual file preservation/replacement/backup,
+malformed input, BOM/newline/duplicate handling, no-op repetition and stale-source
+refusal. They do not count as live game acceptance. No new settings store,
+provider admission, service, public command or performance experiment is added.
+
+
 ## Five-client native candidate and login compatibility — 25 October 2026
 
 The active goal is five clients; RAM experiments remain paused/OFF. The existing
