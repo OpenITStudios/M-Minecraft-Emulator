@@ -1159,20 +1159,74 @@ Six invalid configuration invocations across both shells refuse before output
 directory creation. Only owned disposable processes were started/closed;
 no Minecraft launch/input, account/world access or Computer Use occurred.
 
+### Actual two-client pacing/HUD and Education world session — 25 October 2026
+
+Game candidate: `be24595e61f753a2dfedbdd72b462af90d7df748`; resource
+collector/reviewer source: `e2111e4a23bad4d1bccd131fe57e57f9d7cb56aa`.
+The operator explicitly made a session available and authorized opening the
+candidate. All four staged manager/DLL/replay capability hashes matched before
+launch and after the observations. The existing manager resumed exactly two
+original official children with the same reviewed profiles. Both loaded the
+exact staged compatibility DLL, remained responding, and received immutable
+Minecraft - 1 / Minecraft - 2 captions. Read-only window metadata found one
+visible 128x32 HUD window and one visible OGLES game window per process.
+No Computer Use, game input automation, token/world-content reads or game
+termination occurred.
+
+The operator then confirmed both existing accounts signed in, both games were
+in the SAME Education Host World through official host/join, and the visible
+FPS counters matched the intended policy. The response did not give numeric
+readings or a timed focus sequence. Treat foreground 144 and switching as
+operator-reported counter behavior, not independently measured displayed FPS.
+Host/join success proves basic multiplayer in this session; long background
+simulation/network/tick health remains UNKNOWN.
+
+An initial non-elevated PresentMon attempt refused with access denied (exit 6);
+no frame proof is credited to that attempt. The signed Intel PresentMon 2.3.1
+binary (SHA-256
+`364e5d98d4d134bd54dd25c22ed2ca2f4883f8bc3ed6502bee0c151e3436d30c`)
+then ran one UAC-approved 30-second capture, exit 0, restricted to the verified
+official game image name with input tracking disabled and a unique session.
+Raw CSV stays local (SHA-256
+`52a511ce2b8968c0c3f986bbe0d11272cda75662ad9b27a7359b80f4455e0001`).
+The existing analyzer accepts both selected processes: each has one chain,
+294 positive present intervals, no missing intervals and SyncInterval 1.
+Slot 1 mean/p50/p95/p99 intervals: 100.302/100.277/100.550/100.706 ms.
+Slot 2: 100.306/100.294/100.554/100.727 ms. These support approximately
+10 present calls/second in that recording. Foreground transitions were NOT
+time-aligned to this elevated capture, so it does not establish foreground
+144 FPS, display scanout timing or focus-switch latency.
+
+A separate initial 30-second CPU/RAM capture passed (six readings per process,
+no identity loss). It began before operator world-ready confirmation:
+slot 1 mean host CPU 21.45%, mean/max working set 1492.08/1776.68 MiB;
+slot 2 20.43%, 1999.21/2164.11 MiB. Do not label this an optimized steady-world
+benchmark. NVIDIA's available read-only device query reported whole-device
+VRAM 2498-2733 MiB and GPU utilization 4-11% during that initial phase,
+including other applications. Windows per-process GPU hints remained UNKNOWN.
+Per-client physical VRAM attribution and controlled baseline comparisons remain
+unproved. Raw process/counter/window artifacts remain local and uncommitted.
+
+At the operator's request to conclude, no further test or game operation was
+started. Both games were left responding/open. The local candidate manifest
+now records partial two-client runtime acceptance rather than NOT_EXECUTED;
+five-client readiness is not awarded.
+
 ### Remaining proof and one next action
 
-The full goal remains ACTIVE: five licensed clients sharing one Education
-Host World, actual game 144/10 behavior without slowing background simulation,
-measured CPU/RAM/GPU/VRAM, persistence/soak/stability and the top-right FPS HUD.
-The private two-slot candidate is built and staged, and the five-process resource
-collector is ready; the candidate's successful game startup,
-visible HUD/input/fullscreen/DPI behavior, actual native frame rates, host
-health and composition cost remain NOT_EXECUTED. Five slots are not yet
-implemented in this private bootstrap. Own fixtures and accepted-present FPS
-do not prove displayed FPS, host simulation health or full stability.
+The full five-client goal is incomplete. Two original accounts, basic same-world
+Education multiplayer, visible HUD and intended FPS counter behavior are now
+operator-confirmed for the new candidate. Native present intervals independently
+support approximately 10/second during the captured interval. Five slot
+bootstrap, independent active-144/transition timing, sustained host
+health at background rendering rates, five-client CPU/RAM/GPU/VRAM comparisons,
+restart persistence on this exact new candidate and soak/crash recovery remain
+NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
+two-account/world restart proof remains historical evidence for its own payload.
+Public production admission and CI stay disabled.
 
-**One next action:** in an available operator session, run the staged same-profile
-two-client candidate without Computer Use and perform one integrated Education
-Host World/join, focus-switch, HUD/native-FPS and resource/persistence check.
-Retain original games/data on refusal; five-client expansion follows actual
-two-client pacing/host-health evidence, not just the built artifact.
+**One next action:** extend the SAME private bootstrap to slots 03-05 with
+independent fresh storage/registry identities while replaying MC01/MC02 unchanged,
+then prepare a single five-client Education host/join acceptance with aligned
+focus/native-frame/resource measurements. Further runtime operations require an
+available operator session; preserve the currently open games and all old data.
