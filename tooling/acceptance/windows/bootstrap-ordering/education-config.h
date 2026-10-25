@@ -8,6 +8,8 @@
 namespace education_bootstrap {
 constexpr DWORD Magic = 0x45444231;
 constexpr DWORD Version = 2;
+constexpr DWORD MaxSlots = 5;
+constexpr bool validSlot(DWORD slot) { return slot >= 1 && slot <= MaxSlots; }
 constexpr DWORD StorageAndRegistryOnly = 1;
 constexpr DWORD StorageRegistrySelectedMutex = 2;
 constexpr wchar_t SectionVariable[] = L"MIVUBI_EDUCATION_BOOTSTRAP_SECTION";
@@ -61,7 +63,7 @@ inline bool read(Config& config) {
     FILETIME birth{}, exited{}, kernel{}, user{};
     DWORD session = 0;
     return config.magic == Magic && config.version == Version && config.bytes == sizeof(Config)
-        && config.slot >= 1 && config.slot <= 2 && validScope(config)
+        && validSlot(config.slot) && validScope(config)
         && config.pid == GetCurrentProcessId()
         && config.userKeyPath[511] == 0
         && GetProcessTimes(GetCurrentProcess(), &birth, &exited, &kernel, &user)

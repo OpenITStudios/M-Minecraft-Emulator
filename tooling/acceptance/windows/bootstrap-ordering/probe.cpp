@@ -17,6 +17,8 @@
 #include <winioctl.h>
 #include <shlobj.h>
 #include <knownfolders.h>
+#include <mshtml.h>
+#include <ocidl.h>
 #include "owned-helper-handoff.h"
 
 extern "C" __declspec(dllimport) int DependencyCanary();
@@ -483,6 +485,7 @@ void directoryChecks(probe::Receipt& receipt, LONG& checks) {
         GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtCreateFile"));
     require(open && create);
     const auto logicalPath = directoryPath(receipt.fileLogicalRoot);
+    require(!CreateDirectoryW(logicalPath.c_str(), nullptr) && GetLastError() == ERROR_ALREADY_EXISTS);
     Handle root(CreateFileW(logicalPath.c_str(), FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
         FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr));
     require(root.value != INVALID_HANDLE_VALUE);
@@ -762,7 +765,9 @@ void appDataChecks(probe::Receipt& receipt, LONG& checks) {
         const auto env = childEnvironment(roaming ? L"APPDATA" : L"LOCALAPPDATA");
         const auto known = knownPath(id);
         require(env == own + L"\\" + folder && known == env
-            && knownPath(id, KF_FLAG_DONT_VERIFY) == env);
+            && knownPath(id, KF_FLAG_DONT_VERIFY) == env
+            && knownPath(id, KF_FLAG_CREATE) == env
+            && knownPath(id, KF_FLAG_CREATE | KF_FLAG_DONT_VERIFY) == env);
         checks |= 65536;
         const auto filePath = env + L"\\appdata.bin";
         if (receipt.fileRound == 0) {
@@ -803,9 +808,7 @@ void appDataChecks(probe::Receipt& receipt, LONG& checks) {
         const HRESULT foreign = SHGetKnownFolderPath(id, 0, INVALID_HANDLE_VALUE, &rejected);
         const DWORD error = GetLastError();
         require(foreign == E_ACCESSDENIED && error == sentinel && rejected == nullptr);
-        for (const DWORD flag : {static_cast<DWORD>(KF_FLAG_DEFAULT_PATH), static_cast<DWORD>(KF_FLAG_CREATE)}) {
-            require(SHGetKnownFolderPath(id, flag, nullptr, &rejected) == E_NOTIMPL && rejected == nullptr);
-        }
+        require(SHGetKnownFolderPath(id, KF_FLAG_DEFAULT_PATH, nullptr, &rejected) == E_NOTIMPL && rejected == nullptr);
         require(SHGetKnownFolderPath(id, 0, nullptr, nullptr) == E_POINTER);
         checks |= 524288;
     }
@@ -1176,6 +1179,19 @@ struct RegistryChild {
         const DWORD error = GetLastError();
         require(status == 0 && error == sentinel
             && registryValue(opened.value, L"Marker") == registryMarker(receipt));
+        std::wstring trailing = absolute + L"\\";
+        auto trailingName = nativeName(trailing);
+        OBJECT_ATTRIBUTES trailingAttributes{sizeof(OBJECT_ATTRIBUTES), nullptr, &trailingName,
+            OBJ_CASE_INSENSITIVE, nullptr, nullptr};
+        Key trailingKey;
+        SetLastError(sentinel);
+        require(openEx(reinterpret_cast<PHANDLE>(&trailingKey.value), KEY_READ, &trailingAttributes, 0) == 0
+            && GetLastError() == sentinel
+            && trailingAttributes.ObjectName == &trailingName
+            && registryValue(trailingKey.value, L"Marker") == registryMarker(receipt));
+        Key trailingChild;
+        require(RegOpenKeyExW(branch.value, L"Settings\\", 0, KEY_READ, &trailingChild.value) == ERROR_SUCCESS
+            && registryValue(trailingChild.value, L"Slot") == receipt.slot);
         SetLastError(sentinel);
         const NTSTATUS exStatus = openEx(reinterpret_cast<PHANDLE>(&nativeHeld.value), KEY_READ, &attributes, 0);
         const DWORD exError = GetLastError();
@@ -2745,6 +2761,35 @@ void presentationChecks(probe::Receipt& receipt) {
     require(observed.failures == 0);
 }
 
+void privateHtmlDocumentChecks() {
+    // Offline Windows MSHTML creation failed with E_UNEXPECTED when registry
+    // routing rejected its Zones\ trailing separator. No login/network/UI.
+    ComApartment apartment;
+    Microsoft::WRL::ComPtr<IHTMLDocument2> document;
+    require(SUCCEEDED(CoCreateInstance(CLSID_HTMLDocument, nullptr, CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(document.GetAddressOf()))));
+    Microsoft::WRL::ComPtr<IPersistStreamInit> persist;
+    require(SUCCEEDED(document.As(&persist)) && SUCCEEDED(persist->InitNew()));
+    SAFEARRAY* values = SafeArrayCreateVector(VT_VARIANT, 0, 1);
+    require(values != nullptr);
+    VARIANT value{};
+    value.vt = VT_BSTR;
+    value.bstrVal = SysAllocString(L"<html><body>Mivubi offline HTML</body></html>");
+    LONG index = 0;
+    HRESULT result = value.bstrVal ? SafeArrayPutElement(values, &index, &value) : E_OUTOFMEMORY;
+    VariantClear(&value);
+    if (SUCCEEDED(result)) result = document->write(values);
+    SafeArrayDestroy(values);
+    require(SUCCEEDED(result) && SUCCEEDED(document->close()));
+    Microsoft::WRL::ComPtr<IHTMLElement> body;
+    require(SUCCEEDED(document->get_body(body.GetAddressOf())) && body);
+    BSTR text = nullptr;
+    result = body->get_innerText(&text);
+    const bool matches = SUCCEEDED(result) && text && wcscmp(text, L"Mivubi offline HTML") == 0;
+    SysFreeString(text);
+    require(matches);
+}
+
 int configuredStorageChild(probe::Receipt& receipt) {
     configuredDiagnosticChild = true;
     presentationChecks(receipt);
@@ -2781,6 +2826,7 @@ int configuredStorageChild(probe::Receipt& receipt) {
         CoTaskMemFree(known);
         require(matches);
     }
+    privateHtmlDocumentChecks();
     require(SetEvent(receipt.ready) != FALSE);
     require(WaitForSingleObject(receipt.go, 10000) == WAIT_OBJECT_0);
     registry.afterPeer(receipt);

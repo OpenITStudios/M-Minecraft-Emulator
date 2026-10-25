@@ -98,7 +98,7 @@ education_bootstrap::Config validate(HANDLE process, HANDLE thread, DWORD pid, U
     const auto config = *static_cast<const education_bootstrap::Config*>(configView.value);
     require(config.magic == education_bootstrap::Magic && config.version == education_bootstrap::Version
         && config.bytes == sizeof(config) && education_bootstrap::validScope(config)
-        && config.slot >= 1 && config.slot <= 2 && config.pid == pid
+        && education_bootstrap::validSlot(config.slot) && config.pid == pid
         && config.session == session && config.created.dwHighDateTime == created.dwHighDateTime
         && config.created.dwLowDateTime == created.dwLowDateTime && config.userKeyPath[511] == 0);
     Key backing;

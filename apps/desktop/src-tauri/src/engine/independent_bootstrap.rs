@@ -437,15 +437,20 @@ fn create_unstarted_configured(
     Ok(child)
 }
 
+const MAX_EDUCATION_SLOTS: u32 = 5;
+
 /// Source-only two-slot preparation. No game/DLL code can be resumed here.
 /// The existing registered-image resolver remains the only target selector.
 pub(super) fn prepare_registered() -> io::Result<[PendingEducationBootstrap; 2]> {
     prepare_registered_mode(false, None)
 }
-fn prepare_registered_mode(
+fn prepare_registered_mode<const N: usize>(
     observe: bool,
     presentation_library: Option<&BootstrapLibrary>,
-) -> io::Result<[PendingEducationBootstrap; 2]> {
+) -> io::Result<[PendingEducationBootstrap; N]> {
+    if N != 2 && N != 5 {
+        return Err(invalid("Unsupported Education slot count"));
+    }
     if presentation_library.is_some() && !observe {
         return Err(invalid(
             "Registered presentation requires reviewed profile replay",
@@ -470,30 +475,25 @@ fn prepare_registered_mode(
             "Education image changed; singleton recipe requires review",
         ));
     }
-    let [mut first, mut second] = registered_slots(observe)?;
-    if observe {
-        first.singleton_caller_rva = 0x2cdc30;
-        second.singleton_caller_rva = 0x2cdc30;
+    let stores = registered_slots::<N>(observe)?;
+    let mut children = Vec::with_capacity(N);
+    for mut store in stores {
+        if observe {
+            store.singleton_caller_rva = 0x2cdc30;
+        }
+        children.push(create_unstarted_configured(
+            path,
+            image.try_clone()?,
+            Some(store),
+            observe,
+            presentation_library,
+            #[cfg(test)]
+            None,
+        )?);
     }
-    let first = create_unstarted_configured(
-        path,
-        image.try_clone()?,
-        Some(first),
-        observe,
-        presentation_library,
-        #[cfg(test)]
-        None,
-    )?;
-    let second = create_unstarted_configured(
-        path,
-        image,
-        Some(second),
-        observe,
-        presentation_library,
-        #[cfg(test)]
-        None,
-    )?;
-    Ok([first, second])
+    children
+        .try_into()
+        .map_err(|_| invalid("Incomplete Education process set"))
 }
 
 const OBSERVATION_ENV: &str = "MIVUBI_EDUCATION_OBSERVATION_SECTION";
@@ -598,14 +598,14 @@ const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = None;
 #[cfg(not(test))]
 const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = Some(PayloadDigests {
     enroller: [
-        0x7b, 0x38, 0xa1, 0xc0, 0x2f, 0x0d, 0x51, 0x69, 0xf7, 0x4e, 0xbe, 0xbc, 0x83, 0x9d, 0x85,
-        0x4d, 0x49, 0xe9, 0xa7, 0xe7, 0x7b, 0x99, 0x33, 0x41, 0x5b, 0x1e, 0xc8, 0xd5, 0xd5, 0x39,
-        0x58, 0x8a,
+        0x73, 0xf9, 0x03, 0x83, 0x64, 0xb2, 0xb8, 0x53, 0xa5, 0x0e, 0x6d, 0x05, 0x86, 0x13, 0x04,
+        0x92, 0x34, 0x56, 0x8f, 0xcc, 0xd0, 0x54, 0xce, 0x9a, 0x75, 0x8f, 0x57, 0x25, 0x31, 0x70,
+        0x73, 0x68,
     ],
     compatibility: [
-        0x09, 0xd2, 0x14, 0xcc, 0x48, 0xdf, 0xb5, 0xfa, 0xc8, 0x0c, 0x7b, 0xa1, 0x55, 0x76, 0x58,
-        0x2d, 0xdd, 0xd4, 0x9e, 0x21, 0x96, 0xab, 0x69, 0x4b, 0x48, 0x20, 0xcf, 0xbe, 0x02, 0x87,
-        0x88, 0x13,
+        0xf6, 0x5f, 0x26, 0x3b, 0x6c, 0xbf, 0x76, 0x05, 0x4a, 0x86, 0xd6, 0x7e, 0x50, 0xba, 0x4d,
+        0x02, 0xd3, 0xc5, 0xb1, 0x5f, 0xc9, 0x8a, 0x70, 0xe6, 0x27, 0xea, 0x19, 0xa7, 0x3e, 0xab,
+        0x2e, 0xdf,
     ],
 });
 #[derive(Clone, Copy)]
@@ -840,8 +840,8 @@ impl Drop for BootstrapLibrary {
 
 /// Original children are cancelled before DLL/directory pins are released (field drop order).
 /// Only the explicit observation transaction below can attempt resume; no public admission.
-pub(super) struct PreparedEducationEnrollment {
-    _children: [PendingEducationBootstrap; 2],
+pub(super) struct PreparedEducationEnrollment<const N: usize = 2> {
+    _children: [PendingEducationBootstrap; N],
     _payload: BootstrapLibrary,
 }
 
@@ -856,9 +856,9 @@ pub(super) enum StartupAttempt {
 /// Retains the same process/config/storage/journal and payload pins while observed.
 /// Drop closes handles and cancels only children whose resume was never attempted.
 /// No job object, timeout termination, automatic helper enrollment or admission.
-pub(super) struct StartedEducationObservation {
-    children: [PendingEducationBootstrap; 2],
-    pub(super) attempts: [StartupAttempt; 2],
+pub(super) struct StartedEducationObservation<const N: usize = 2> {
+    children: [PendingEducationBootstrap; N],
+    pub(super) attempts: [StartupAttempt; N],
     _payload: BootstrapLibrary,
 }
 
@@ -909,13 +909,13 @@ impl PendingEducationBootstrap {
     }
 }
 
-impl PreparedEducationEnrollment {
+impl<const N: usize> PreparedEducationEnrollment<N> {
     /// Unmounted, separately authorized experiment only. Empty reviewed policy prevents
     /// constructing this pair for Education. Preflight errors cancel only unstarted children;
     /// after any attempt return the owner and outcomes even on partial failure.
     pub(super) fn resume_for_authorized_observation(
         self,
-    ) -> io::Result<StartedEducationObservation> {
+    ) -> io::Result<StartedEducationObservation<N>> {
         for child in &self._children {
             child.identity()?;
         }
@@ -923,7 +923,7 @@ impl PreparedEducationEnrollment {
             _children: mut children,
             _payload,
         } = self;
-        let mut attempts = [StartupAttempt::NotAttempted, StartupAttempt::NotAttempted];
+        let mut attempts = std::array::from_fn(|_| StartupAttempt::NotAttempted);
         for (child, attempt) in children.iter_mut().zip(&mut attempts) {
             match child.resume_once() {
                 Ok(()) => *attempt = StartupAttempt::Resumed,
@@ -945,7 +945,7 @@ pub(super) struct SavedStartupObservation {
     pub(super) path: PathBuf,
     pub(super) exit_code: u32,
 }
-impl StartedEducationObservation {
+impl<const N: usize> StartedEducationObservation<N> {
     /// Caller polls after the operator closes the game normally. Does not wait, kill,
     /// infer normal exit from a code, or collect account/world/command-line content.
     /// Close the manager early and the journal is lost, while attempted children survive.
@@ -954,7 +954,7 @@ impl StartedEducationObservation {
         let child = self
             .children
             .get(slot.checked_sub(1).unwrap_or(u32::MAX) as usize)
-            .ok_or_else(|| invalid("Only observation slots 1 and 2 exist"))?;
+            .ok_or_else(|| invalid("Slot is outside the prepared observation set"))?;
         if !child.resume_attempted {
             return Err(invalid("Observation startup was not attempted"));
         }
@@ -997,8 +997,11 @@ impl StartedEducationObservation {
 }
 
 pub(super) fn prepare_registered_enrolled() -> io::Result<PreparedEducationEnrollment> {
+    prepare_registered_enrolled_for::<2>()
+}
+fn prepare_registered_enrolled_for<const N: usize>() -> io::Result<PreparedEducationEnrollment<N>> {
     let payload = BootstrapLibrary::reviewed()?;
-    let children = prepare_registered_mode(true, Some(&payload))?;
+    let children = prepare_registered_mode::<N>(true, Some(&payload))?;
     for child in &children {
         payload.enroll(child)?;
     }
@@ -1012,15 +1015,23 @@ pub(super) fn prepare_registered_enrolled() -> io::Result<PreparedEducationEnrol
 /// No path/PID/options or hash override. Standard output is count/status metadata only.
 pub(super) fn maybe_run_startup_observation() -> bool {
     let mut args = std::env::args_os().skip(1);
-    if args.next().as_deref() != Some(OsStr::new("--education-startup-observation-once")) {
-        return false;
-    }
+    let mode = args.next();
+    let count = match mode.as_deref() {
+        Some(v) if v == OsStr::new("--education-startup-observation-once") => 2,
+        Some(v) if v == OsStr::new("--education-five-startup-observation-once") => 5,
+        Some(v) if v == OsStr::new("--education-prepare-five-profiles-once") => 0,
+        _ => return false,
+    };
     let result = if args.next().is_some() {
         Err(invalid(
             "Startup observation accepts no additional arguments",
         ))
     } else {
-        run_startup_observation()
+        if count == 0 {
+            prepare_five_profiles()
+        } else {
+            run_startup_observation(count)
+        }
     };
     let code = match result {
         Ok(code) => code,
@@ -1040,7 +1051,7 @@ pub(super) fn maybe_run_startup_observation() -> bool {
     std::process::exit(code);
 }
 
-fn run_startup_observation() -> io::Result<i32> {
+fn run_startup_observation(count: usize) -> io::Result<i32> {
     use windows_sys::Win32::{
         Foundation::{GetLastError, ERROR_ALREADY_EXISTS},
         System::Threading::CreateMutexW,
@@ -1067,13 +1078,22 @@ fn run_startup_observation() -> io::Result<i32> {
             "Close the existing game normally first",
         ));
     }
-    let started = prepare_registered_enrolled()?.resume_for_authorized_observation()?;
-    *launch_guard = Some(std::time::Instant::now());
-    observe_until_exit(&started)
+    if count == 5 {
+        let started =
+            prepare_registered_enrolled_for::<5>()?.resume_for_authorized_observation()?;
+        *launch_guard = Some(std::time::Instant::now());
+        observe_until_exit(&started)
+    } else if count == 2 {
+        let started = prepare_registered_enrolled()?.resume_for_authorized_observation()?;
+        *launch_guard = Some(std::time::Instant::now());
+        observe_until_exit(&started)
+    } else {
+        Err(invalid("Unsupported Education slot count"))
+    }
 }
 
 fn slot_caption(slot: u32) -> io::Result<Vec<u16>> {
-    if !(1..=4).contains(&slot) {
+    if !(1..=MAX_EDUCATION_SLOTS).contains(&slot) {
         return Err(invalid("Invalid Minecraft window slot"));
     }
     wide(OsStr::new(&format!("Minecraft - {slot}")))
@@ -1116,7 +1136,7 @@ fn label_slot_window(
     super::verify_live_client_02_window(hwnd, pid)
 }
 
-fn label_started_windows(started: &StartedEducationObservation) {
+fn label_started_windows<const N: usize>(started: &StartedEducationObservation<N>) {
     use windows_sys::Win32::{
         Foundation::HWND,
         UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId},
@@ -1163,9 +1183,9 @@ fn label_started_windows(started: &StartedEducationObservation) {
     }
 }
 
-fn observe_until_exit(started: &StartedEducationObservation) -> io::Result<i32> {
+fn observe_until_exit<const N: usize>(started: &StartedEducationObservation<N>) -> io::Result<i32> {
     use std::io::Write;
-    let mut completed = [false; 2];
+    let mut completed = [false; N];
     let mut failed = false;
     let mut caption_check = std::time::Instant::now();
     for (index, attempt) in started.attempts.iter().enumerate() {
@@ -1407,8 +1427,8 @@ fn fresh_root(parent: &Path) -> io::Result<PathBuf> {
 }
 
 fn registry_leaf(id: &FILE_ID_INFO, slot: u32) -> io::Result<String> {
-    if !(1..=2).contains(&slot) {
-        return Err(invalid("Only MC01 and MC02 are prepared"));
+    if !(1..=MAX_EDUCATION_SLOTS).contains(&slot) {
+        return Err(invalid("Invalid Education profile slot"));
     }
     let bytes: String = id
         .FileId
@@ -1419,7 +1439,7 @@ fn registry_leaf(id: &FILE_ID_INFO, slot: u32) -> io::Result<String> {
     Ok(format!(
         "{:016x}_{bytes}_{}",
         id.VolumeSerialNumber,
-        if slot == 1 { "A" } else { "B" }
+        char::from(b'A' + (slot - 1) as u8)
     ))
 }
 
@@ -1484,6 +1504,58 @@ fn private_temporary(private: &File) -> io::Result<[File; 2]> {
     Ok([local, temporary]) // Never follow a reparse, clear a cache or copy a profile.
 }
 
+fn create_private_slot(logical: &File, root: &Path, slot: u32) -> io::Result<SlotStorage> {
+    if !(1..=MAX_EDUCATION_SLOTS).contains(&slot) {
+        return Err(invalid("Invalid Education slot"));
+    }
+    let user_key_path = user_registry_path()?;
+    let private_path = root.join(format!("MC{slot:02}"));
+    std::fs::create_dir(&private_path)?;
+    let private = open_directory(&private_path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?;
+    // Match the DLL's canonical spelling, including expansion of Windows 8.3 aliases.
+    let private_path = directory_path(&private)?;
+    for leaf in ["Roaming", "Local"] {
+        std::fs::create_dir(private_path.join(leaf))?;
+    }
+    let id = directory_id(&private)?;
+    let path = wide(OsStr::new(&format!(
+        "Software\\MivubiEducationPilot\\{}",
+        registry_leaf(&id, slot)?
+    )))?;
+    let mut key = ptr::null_mut();
+    let mut disposition = 0;
+    let status = unsafe {
+        RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            path.as_ptr(),
+            0,
+            ptr::null(),
+            REG_OPTION_NON_VOLATILE,
+            KEY_ALL_ACCESS,
+            ptr::null(),
+            &mut key,
+            &mut disposition,
+        )
+    };
+    if status != 0 {
+        return Err(io::Error::from_raw_os_error(status as i32));
+    }
+    let registry = RegistryKey(key);
+    if disposition != REG_CREATED_NEW_KEY {
+        return Err(invalid("Refusing an existing pilot registry store"));
+    }
+    Ok(SlotStorage {
+        slot,
+        logical: logical.try_clone()?,
+        temporary: private_temporary(&private)?,
+        private,
+        registry,
+        user_key_path,
+        private_path,
+        singleton_caller_rva: 0,
+    })
+}
+
 fn fresh_slots(logical: File, parent: &Path) -> io::Result<[SlotStorage; 2]> {
     let logical_path = directory_path(&logical)?;
     let root = fresh_root(parent)?;
@@ -1496,54 +1568,9 @@ fn fresh_slots(logical: File, parent: &Path) -> io::Result<[SlotStorage; 2]> {
             "Private backing must be outside the logical AppData tree",
         ));
     }
-    let user_key_path = user_registry_path()?;
     let mut slots = Vec::with_capacity(2);
     for slot in 1..=2 {
-        let private_path = root.join(format!("MC{slot:02}"));
-        std::fs::create_dir(&private_path)?;
-        let private = open_directory(&private_path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?;
-        // Match the DLL's canonical spelling, including expansion of Windows 8.3 aliases.
-        let private_path = directory_path(&private)?;
-        for leaf in ["Roaming", "Local"] {
-            std::fs::create_dir(private_path.join(leaf))?;
-        }
-        let id = directory_id(&private)?;
-        let path = wide(OsStr::new(&format!(
-            "Software\\MivubiEducationPilot\\{}",
-            registry_leaf(&id, slot)?
-        )))?;
-        let mut key = ptr::null_mut();
-        let mut disposition = 0;
-        let status = unsafe {
-            RegCreateKeyExW(
-                HKEY_CURRENT_USER,
-                path.as_ptr(),
-                0,
-                ptr::null(),
-                REG_OPTION_NON_VOLATILE,
-                KEY_ALL_ACCESS,
-                ptr::null(),
-                &mut key,
-                &mut disposition,
-            )
-        };
-        if status != 0 {
-            return Err(io::Error::from_raw_os_error(status as i32));
-        }
-        let registry = RegistryKey(key);
-        if disposition != REG_CREATED_NEW_KEY {
-            return Err(invalid("Refusing an existing pilot registry store"));
-        }
-        slots.push(SlotStorage {
-            slot,
-            logical: logical.try_clone()?,
-            temporary: private_temporary(&private)?,
-            private,
-            registry,
-            user_key_path,
-            private_path,
-            singleton_caller_rva: 0,
-        });
+        slots.push(create_private_slot(&logical, &root, slot)?);
     }
     slots
         .try_into()
@@ -1578,6 +1605,14 @@ fn known_folder(id: &windows_sys::core::GUID) -> io::Result<PathBuf> {
     path
 }
 
+// Existing pair remains immutable. Five-slot replay requires its own reviewed identity capability.
+#[cfg(test)]
+const REVIEWED_FIVE_REPLAY: Option<[u8; 32]> = None;
+#[cfg(not(test))]
+const REVIEWED_FIVE_REPLAY: Option<[u8; 32]> = Some([
+    0xaa, 0x04, 0xa0, 0x71, 0x52, 0xfb, 0x1b, 0x5f, 0x43, 0xdd, 0xcc, 0xe4, 0x49, 0x8b, 0x3c, 0xa9,
+    0xb7, 0x84, 0x9d, 0x7e, 0x79, 0xb4, 0x0d, 0x7a, 0x42, 0x8c, 0x18, 0xbd, 0x1d, 0xd0, 0xfa, 0x0b,
+]);
 // One reviewed acceptance pair only; no profile discovery, migration or token/world copying.
 #[cfg(test)]
 const REVIEWED_REPLAY: Option<[u8; 32]> = None;
@@ -1593,12 +1628,28 @@ fn reopen_slots(
     bytes: &[u8],
     expected: [u8; 32],
 ) -> io::Result<[SlotStorage; 2]> {
+    reopen_slots_for::<2>(logical, parent, bytes, expected)
+}
+fn reopen_slots_for<const N: usize>(
+    logical: File,
+    parent: &Path,
+    bytes: &[u8],
+    expected: [u8; 32],
+) -> io::Result<[SlotStorage; N]> {
     use sha2::{Digest, Sha256};
-    if bytes.len() != 216 || <[u8; 32]>::from(Sha256::digest(bytes)) != expected {
+    if N != 2 && N != 5 {
+        return Err(invalid("Unsupported replay slot count"));
+    }
+    let size = 168 + N * 24;
+    if bytes.len() != size || <[u8; 32]>::from(Sha256::digest(bytes)) != expected {
         return Err(invalid("Unreviewed replay profile capability"));
     }
     let word = |at| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
-    if word(0) != 0x52504c31 || word(4) != 1 || word(8) != 216 || word(12) != 0 {
+    if word(0) != 0x52504c31
+        || word(4) != (if N == 2 { 1 } else { 2 })
+        || word(8) != size as u32
+        || word(12) != 0
+    {
         return Err(invalid("Invalid replay profile capability"));
     }
     let units: Vec<u16> = bytes[16..144]
@@ -1646,8 +1697,8 @@ fn reopen_slots(
         return Err(invalid("Overlapping replay AppData roots"));
     }
     let user_key_path = user_registry_path()?;
-    let mut slots = Vec::with_capacity(2);
-    for slot in 1..=2 {
+    let mut slots = Vec::with_capacity(N);
+    for slot in 1..=N as u32 {
         let private = open_directory(
             &root.join(format!("MC{slot:02}")),
             FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY,
@@ -1694,16 +1745,152 @@ fn reopen_slots(
     slots.try_into().map_err(|_| invalid("Missing replay slot"))
 }
 
-fn registered_slots(observe: bool) -> io::Result<[SlotStorage; 2]> {
+fn five_replay_bytes(pair: &[u8], stores: &[SlotStorage]) -> io::Result<Vec<u8>> {
+    if pair.len() != 216 || stores.len() != 5 {
+        return Err(invalid("Incomplete five-slot identity set"));
+    }
+    let mut bytes = vec![0u8; 288];
+    bytes[..216].copy_from_slice(pair);
+    bytes[4..8].copy_from_slice(&2u32.to_le_bytes());
+    bytes[8..12].copy_from_slice(&288u32.to_le_bytes());
+    for (index, store) in stores.iter().enumerate() {
+        if store.slot != index as u32 + 1 {
+            return Err(invalid("Unordered five-slot identity set"));
+        }
+        let id = directory_id(&store.private)?;
+        let at = 168 + index * 24;
+        if index < 2 {
+            if pair[at..at + 8] != id.VolumeSerialNumber.to_le_bytes()
+                || pair[at + 8..at + 24] != id.FileId.Identifier
+            {
+                return Err(invalid("Original pair identity changed"));
+            }
+        }
+        bytes[at..at + 8].copy_from_slice(&id.VolumeSerialNumber.to_le_bytes());
+        bytes[at + 8..at + 24].copy_from_slice(&id.FileId.Identifier);
+    }
+    Ok(bytes)
+}
+
+// Explicit one-shot preparation only. Never launch a game or read account/world contents.
+fn prepare_five_profiles() -> io::Result<i32> {
+    use sha2::{Digest, Sha256};
+    use std::io::{Read, Write};
+    use windows_sys::Win32::{
+        Foundation::{GetLastError, ERROR_ALREADY_EXISTS},
+        System::Threading::CreateMutexW,
+    };
+    let name = wide(OsStr::new("Local\\MivubiEducationFiveProfilePreparation"))?;
+    let raw = unsafe { CreateMutexW(ptr::null(), 0, name.as_ptr()) };
+    if raw.is_null() {
+        return Err(io::Error::last_os_error());
+    }
+    let existed = unsafe { GetLastError() } == ERROR_ALREADY_EXISTS;
+    let _gate = unsafe { OwnedHandle::from_raw_handle(raw as _) };
+    if existed {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "Five-profile preparation already active",
+        ));
+    }
+    // Existing pair replay is the trust anchor; no root path or profile override is accepted.
+    let pair = registered_slots::<2>(true)?;
+    let payload_root = std::env::current_exe()?
+        .parent()
+        .ok_or_else(|| invalid("Missing replay payload root"))?
+        .join("independent-bootstrap");
+    let _payload_pin = open_directory(&payload_root, FILE_READ_ATTRIBUTES)?;
+    let mut original = pin_image(&payload_root.join("replay-profile-pair.bin"))?;
+    let mut pair_bytes = [0u8; 216];
+    original.read_exact(&mut pair_bytes)?;
+    if Some(<[u8; 32]>::from(Sha256::digest(pair_bytes))) != REVIEWED_REPLAY {
+        return Err(invalid("Original replay changed"));
+    }
+    let output = payload_root.join("replay-profile-five.bin");
+    let parent = known_folder(&FOLDERID_Profile)?;
+    let bytes = if output.try_exists()? {
+        let mut file = pin_image(&output)?;
+        if file.metadata()?.len() != 288 {
+            return Err(invalid(
+                "Incomplete five-slot capability; preserve data and review",
+            ));
+        }
+        let mut bytes = vec![0u8; 288];
+        file.read_exact(&mut bytes)?;
+        if bytes[16..216] != pair_bytes[16..216] {
+            return Err(invalid("Five-slot capability changed the original pair"));
+        }
+        // Preparation revalidation is not launch authorization: launch still requires its reviewed digest.
+        let stores = reopen_slots_for::<5>(
+            pair[0].logical.try_clone()?,
+            &parent,
+            &bytes,
+            Sha256::digest(&bytes).into(),
+        )?;
+        if five_replay_bytes(&pair_bytes, &stores)? != bytes {
+            return Err(invalid("Five-slot capability mismatch"));
+        }
+        bytes
+    } else {
+        let root = pair[0]
+            .private_path
+            .parent()
+            .ok_or_else(|| invalid("Missing original profile root"))?
+            .to_path_buf();
+        let _root_pin = open_directory(&root, FILE_READ_ATTRIBUTES)?;
+        // Refuse existing extra directories before writing anything; never adopt/reset a partial profile.
+        for slot in 3..=5 {
+            if root.join(format!("MC{slot:02}")).try_exists()? {
+                return Err(invalid(
+                    "Extra slot already exists; preserve data and review partial preparation",
+                ));
+            }
+        }
+        let mut stores = Vec::from(pair);
+        let root = root.to_path_buf();
+        for slot in 3..=5 {
+            stores.push(create_private_slot(&stores[0].logical, &root, slot)?);
+        }
+        let bytes = five_replay_bytes(&pair_bytes, &stores)?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .share_mode(FILE_SHARE_READ)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(&output)?;
+        image_id(&file)?;
+        file.write_all(&bytes)?;
+        file.sync_all()?;
+        bytes
+    };
+    let digest: String = Sha256::digest(&bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    writeln!(io::stdout(), "{{\"event\":\"five-profiles-prepared\",\"slots\":5,\"capabilitySha256\":\"{digest}\",\"gameLaunched\":false}}")?;
+    Ok(0)
+}
+
+fn registered_slots<const N: usize>(observe: bool) -> io::Result<[SlotStorage; N]> {
+    if N != 2 && N != 5 {
+        return Err(invalid("Unsupported replay slot count"));
+    }
     // Authorized observation reuses an existing pair or refuses. An unset
     // review policy must never silently become fresh account/world storage.
     let replay = if observe {
-        Some(REVIEWED_REPLAY.ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::Unsupported,
-                "No reviewed existing Education profile pair",
-            )
-        })?)
+        Some(
+            (if N == 2 {
+                REVIEWED_REPLAY
+            } else {
+                REVIEWED_FIVE_REPLAY
+            })
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "No reviewed existing Education profile pair",
+                )
+            })?,
+        )
     } else {
         None
     };
@@ -1739,16 +1926,28 @@ fn registered_slots(observe: bool) -> io::Result<[SlotStorage; 2]> {
         let path = std::env::current_exe()?
             .parent()
             .ok_or_else(|| invalid("Missing replay payload root"))?
-            .join("independent-bootstrap/replay-profile-pair.bin");
+            .join(if N == 2 {
+                "independent-bootstrap/replay-profile-pair.bin"
+            } else {
+                "independent-bootstrap/replay-profile-five.bin"
+            });
         let mut file = pin_image(&path)?;
-        if file.metadata()?.len() != 216 {
+        let size = 168 + N * 24;
+        if file.metadata()?.len() != size as u64 {
             return Err(invalid("Invalid replay capability size"));
         }
-        let mut bytes = [0u8; 216];
+        let mut bytes = vec![0u8; size];
         file.read_exact(&mut bytes)?;
-        return reopen_slots(a, &parent, &bytes, expected);
+        return reopen_slots_for::<N>(a, &parent, &bytes, expected);
     }
-    fresh_slots(a, &parent)
+    if N != 2 {
+        return Err(invalid(
+            "Five-slot replay requires an explicit reviewed capability",
+        ));
+    }
+    Vec::from(fresh_slots(a, &parent)?)
+        .try_into()
+        .map_err(|_| invalid("Invalid fresh slot count"))
 }
 
 struct Configuration {
@@ -2107,7 +2306,7 @@ fn checked_slot_binding(child: &PendingEducationBootstrap) -> io::Result<&SlotSt
         || config.bytes != mem::size_of::<EducationConfig>() as u32
         || config.pid != pid
         || config.slot != store.slot
-        || !(1..=2).contains(&store.slot)
+        || !(1..=MAX_EDUCATION_SLOTS).contains(&store.slot)
         || config.created.dwLowDateTime != birth as u32
         || config.created.dwHighDateTime != (birth >> 32) as u32
         || config.session != interactive_session(pid)?
@@ -2371,10 +2570,40 @@ mod tests {
     }
 
     #[test]
+    fn five_slot_policy_rejects_unreviewed_or_out_of_range_sets() {
+        assert!(
+            matches!(registered_slots::<5>(true), Err(error) if error.kind() == io::ErrorKind::Unsupported)
+        );
+        assert!(registered_slots::<0>(true).is_err());
+        assert!(registered_slots::<6>(true).is_err());
+        let id = FILE_ID_INFO {
+            VolumeSerialNumber: 7,
+            FileId: windows_sys::Win32::Storage::FileSystem::FILE_ID_128 {
+                Identifier: [3; 16],
+            },
+        };
+        let leaves: Vec<_> = (1..=5)
+            .map(|slot| registry_leaf(&id, slot).unwrap())
+            .collect();
+        for (index, leaf) in leaves.iter().enumerate() {
+            assert!(leaf.ends_with(&format!("_{}", char::from(b'A' + index as u8))));
+        }
+        assert_eq!(
+            leaves
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            5
+        );
+        assert!(registry_leaf(&id, 0).is_err());
+        assert!(registry_leaf(&id, 6).is_err());
+    }
+
+    #[test]
     fn registered_observation_requires_replay_policy_before_storage_lookup() {
         // Test policy is deliberately absent. Refuse before Known Folders,
         // registry access or fresh profile allocation; never involve the game.
-        assert!(matches!(registered_slots(true), Err(error)
+        assert!(matches!(registered_slots::<2>(true), Err(error)
             if error.kind() == io::ErrorKind::Unsupported));
     }
 
@@ -3370,14 +3599,14 @@ mod tests {
         use windows_sys::Win32::UI::WindowsAndMessaging::{
             CreateWindowExW, DestroyWindow, GetWindowTextW, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
         };
-        for slot in 1..=4 {
+        for slot in 1..=MAX_EDUCATION_SLOTS {
             assert_eq!(
                 String::from_utf16_lossy(&slot_caption(slot).unwrap()),
                 format!("Minecraft - {slot}\0")
             );
         }
         assert!(slot_caption(0).is_err());
-        assert!(slot_caption(5).is_err());
+        assert!(slot_caption(6).is_err());
         let class = wide(OsStr::new("STATIC")).unwrap();
         let title = wide(OsStr::new("Owned caption control")).unwrap();
         let hwnd = unsafe {
@@ -3478,6 +3707,88 @@ mod tests {
                 OBSERVATION_BYTES as u64
             );
         }
+    }
+
+    #[test]
+    fn five_slot_replay_preserves_pair_and_rejects_replaced_extra_slot() {
+        use sha2::{Digest, Sha256};
+        let pair = test_slots();
+        let root = pair[0].private_path.parent().unwrap().to_path_buf();
+        let parent = root.parent().unwrap();
+        let mut pair_bytes = [0u8; 216];
+        for (at, value) in [(0, 0x52504c31u32), (4, 1), (8, 216)] {
+            pair_bytes[at..at + 4].copy_from_slice(&value.to_le_bytes());
+        }
+        for (i, unit) in root.file_name().unwrap().encode_wide().enumerate() {
+            pair_bytes[16 + i * 2..18 + i * 2].copy_from_slice(&unit.to_le_bytes());
+        }
+        let root_file = open_directory(&root, FILE_READ_ATTRIBUTES).unwrap();
+        for (i, file) in [&root_file, &pair[0].private, &pair[1].private]
+            .iter()
+            .enumerate()
+        {
+            let id = directory_id(file).unwrap();
+            let at = 144 + i * 24;
+            pair_bytes[at..at + 8].copy_from_slice(&id.VolumeSerialNumber.to_le_bytes());
+            pair_bytes[at + 8..at + 24].copy_from_slice(&id.FileId.Identifier);
+        }
+        let original_paths = pair.each_ref().map(|store| store.private_path.clone());
+        let mut stores = Vec::from(pair);
+        for slot in 3..=5 {
+            stores.push(create_private_slot(&stores[0].logical, &root, slot).unwrap());
+        }
+        for store in &stores {
+            std::fs::write(
+                store.private_path.join("Roaming/five-slot-sentinel.txt"),
+                format!("slot-{}", store.slot),
+            )
+            .unwrap();
+        }
+        let bytes = five_replay_bytes(&pair_bytes, &stores).unwrap();
+        assert_eq!(&bytes[16..216], &pair_bytes[16..216]);
+        let reopened = reopen_slots_for::<5>(
+            stores[0].logical.try_clone().unwrap(),
+            parent,
+            &bytes,
+            Sha256::digest(&bytes).into(),
+        )
+        .unwrap();
+        for (index, store) in reopened.iter().enumerate() {
+            assert_eq!(store.slot, index as u32 + 1);
+            assert_eq!(
+                std::fs::read(store.private_path.join("Roaming/five-slot-sentinel.txt")).unwrap(),
+                format!("slot-{}", index + 1).as_bytes()
+            );
+            if index < 2 {
+                assert_eq!(store.private_path, original_paths[index]);
+            }
+        }
+        assert!(create_private_slot(&stores[0].logical, &root, 3).is_err());
+        let legacy = reopen_slots(
+            stores[0].logical.try_clone().unwrap(),
+            parent,
+            &pair_bytes,
+            Sha256::digest(pair_bytes).into(),
+        )
+        .unwrap();
+        assert_eq!(legacy[0].private_path, original_paths[0]);
+        assert_eq!(legacy[1].private_path, original_paths[1]);
+        let mut replaced = bytes.clone();
+        replaced[216] ^= 1;
+        assert!(reopen_slots_for::<5>(
+            stores[0].logical.try_clone().unwrap(),
+            parent,
+            &replaced,
+            Sha256::digest(&replaced).into()
+        )
+        .is_err());
+        assert!(reopen_slots_for::<5>(
+            stores[0].logical.try_clone().unwrap(),
+            parent,
+            &pair_bytes,
+            Sha256::digest(pair_bytes).into()
+        )
+        .is_err());
     }
 
     #[test]
@@ -3733,7 +4044,7 @@ mod tests {
         let library = BootstrapLibrary::load(root, fixture_digests(root)).unwrap();
         // Registered pacing must not allocate fresh account-bearing slots.
         assert!(
-            matches!(prepare_registered_mode(false, Some(&library)), Err(error)
+            matches!(prepare_registered_mode::<2>(false, Some(&library)), Err(error)
             if error.kind() == io::ErrorKind::InvalidData)
         );
         // A policy request without storage refuses before process creation.

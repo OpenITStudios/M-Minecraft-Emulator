@@ -1,6 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <winternl.h>
+#include "education-config.h"
 #if !defined(_M_X64)
 #error This self-test supports native AMD64 only
 #endif
@@ -45,7 +46,7 @@ static_assert(sizeof(Receipt) == 2064);
 
 
 inline bool registryStoreLeaf(const FILE_ID_INFO& id, DWORD slot, wchar_t (&leaf)[64]) {
-    if (slot < 1 || slot > 2) return false;
+    if (!education_bootstrap::validSlot(slot)) return false;
     constexpr wchar_t hex[] = L"0123456789abcdef";
     unsigned n = 0;
     for (unsigned i = 0; i < 16; ++i)
@@ -56,7 +57,7 @@ inline bool registryStoreLeaf(const FILE_ID_INFO& id, DWORD slot, wchar_t (&leaf
         leaf[n++] = hex[byte & 15];
     }
     leaf[n++] = L'_';
-    leaf[n++] = slot == 1 ? L'A' : L'B';
+    leaf[n++] = static_cast<wchar_t>(L'A' + slot - 1);
     leaf[n] = 0;
     return true;
 }

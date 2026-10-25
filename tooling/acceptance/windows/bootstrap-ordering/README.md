@@ -1,5 +1,43 @@
 # Self-owned early-import ordering experiment
 
+## Five-client native candidate and login compatibility — 25 October 2026
+
+The active goal is five clients; RAM experiments remain paused/OFF. The existing
+Rust bootstrap owner now supports fixed private preparation and startup routes
+for five slots while preserving the original pair route/capability. Preparation
+opens the reviewed original pair, creates only three empty additional stores,
+and records a separate288-byte/version2 replay capability. Complete reruns reopen
+all five; partial creation fails closed without adopting/resetting data. No
+accounts/worlds/tokens are copied. Config stays version2/1136bytes; slots1–5 map
+to distinct A–E leaves/suffixes. Public provider admission remains blocked.
+
+Five responding game windows were observed, but new3–5 sign-in was white.
+The folder-contract correction alone did not fix it. The concrete offline
+failure was Windows MSHTML HTMLDocument creation returning E_UNEXPECTED under
+private HKCU: native opens of Internet Settings\Zones\ were being rejected by
+filesystem-style trailing-separator validation. Registry routing now accepts one
+terminal separator and forwards the original counted name, retaining component
+validation and private-store routing. There is no host-HKCU fallback.
+
+The existing `--run-configured-storage-self-test` now checks actual offline
+MSHTML document creation/body in both private slots and generations. It fails
+on the pre-correction router and passes with the correction; it performs no
+authentication, network or UI. Native/Win32 trailing-key tests check private
+values/LastError. Existing-directory root creation now retains Windows collision
+semantics, and the selected Known Folder CREATE flag creates/verifies only the
+private Roaming/Local children. This follows Microsoft's
+[Known Folder flag contract](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/ne-shlobj_core-known_folder_flag).
+No TLS/security downgrade, browser-cache/account copy or global browser change.
+The registry-fix candidate reopened five responding named windows; the operator
+confirmed the fresh login form appeared and sign-in succeeded, then explicitly
+confirmed all five accounts were signed in together in the same Education Host
+World. After normal save/close/replay, the operator also confirmed all five
+automatic logins, the saved host world and expected144/10 FPS/HUD behavior.
+This is bounded operator acceptance, not process count or indefinite soak proof.
+Five-client launch uses the private CLI; the four-tab public manager is unchanged. See the
+[single current handoff](../../../../planning/development.md).
+
+
 ## Measured FPS HUD — 25 October 2026
 
 The existing typed presentation owner now retains one lightweight HUD worker
@@ -1162,7 +1200,8 @@ non-delete-sharing handles and directory/reparse/case-sensitivity metadata check
 Every ancestor handle stays open through the final operation, then closes even
 on the protected exception path. No automatic parent-directory creation occurs;
 missing directories retain failure status. Callers can explicitly create private
-directories. Root itself allows FILE_OPEN only.
+directories. Root itself allows FILE_OPEN and an explicit directory FILE_CREATE
+collision; overwrite/delete dispositions remain refused.
 
 Final calls copy OBJECT_ATTRIBUTES, replace parent/name and add OBJ_DONT_REPARSE.
 Access/share/disposition, EA/allocation/options and IO_STATUS_BLOCK are forwarded.
@@ -1243,8 +1282,9 @@ lookup returns the private DOS path. Flags 0 verify existing private directories
 KF_FLAG_DONT_VERIFY skips that metadata check. The caller owns a CoTaskMemAlloc
 copy and frees it with CoTaskMemFree. Entry LastError is restored and failures
 clear the output. Non-null tokens (including the Default User pseudo-handle)
-return E_ACCESSDENIED; null output returns E_POINTER. Other flags, including
-CREATE and DEFAULT_PATH, return E_NOTIMPL rather than host/default-profile paths.
+return E_ACCESSDENIED; null output returns E_POINTER. KF_FLAG_CREATE creates or
+verifies the selected private directory, including with DONT_VERIFY. Other flags,
+including DEFAULT_PATH, return E_NOTIMPL rather than host/default-profile paths.
 Unselected IDs forward to the original API unchanged.
 
 The native file selector also recognizes canonical own DOS paths so environment/

@@ -275,7 +275,10 @@ NTSTATUS NTAPI translatedFileCreate(PHANDLE handle, ACCESS_MASK access, POBJECT_
                 fileAttributes, share, disposition, options, ea, eaLength);
         } else if (route == FileRoute::Private
             && !unsupportedFile(access, options, length == 0, disposition == 1)
-            && (length != 0 || disposition == 1)) {
+            // Creating an already-existing directory must report NAME_COLLISION,
+            // as Windows does for CreateDirectory(AppData). Never allow root overwrite.
+            && (length != 0 || disposition == 1
+                || (disposition == 2 && (options & FILE_DIRECTORY_FILE)))) {
             OBJECT_ATTRIBUTES copy = *attributes;
             UNICODE_STRING leaf{};
             status = privateParent(path, length, copy.RootDirectory, leaf, held, heldCount);
@@ -484,10 +487,17 @@ HRESULT WINAPI translatedKnownPath(REFKNOWNFOLDERID id, DWORD flags, HANDLE toke
     *output = nullptr;
     HRESULT result = S_OK;
     if (token) result = E_ACCESSDENIED;
-    // shortcut: default/DONT_VERIFY only; review other flag semantics before expanding coverage.
-    else if (flags & ~static_cast<DWORD>(KF_FLAG_DONT_VERIFY)) result = E_NOTIMPL;
+    // CREATE applies only to these two private children of the pinned profile root.
+    // Default-path, alias and foreign-user semantics remain unsupported.
+    else if (flags & ~static_cast<DWORD>(KF_FLAG_DONT_VERIFY | KF_FLAG_CREATE)) result = E_NOTIMPL;
     else {
-        if (!(flags & KF_FLAG_DONT_VERIFY)) {
+        if (flags & KF_FLAG_CREATE) {
+            if (!CreateDirectoryW(selected, nullptr)) {
+                const DWORD error = GetLastError();
+                if (error != ERROR_ALREADY_EXISTS) result = HRESULT_FROM_WIN32(error);
+            }
+        }
+        if (SUCCEEDED(result) && (!(flags & KF_FLAG_DONT_VERIFY) || (flags & KF_FLAG_CREATE))) {
             const DWORD attributes = GetFileAttributesW(selected);
             if (attributes == INVALID_FILE_ATTRIBUTES) result = HRESULT_FROM_WIN32(GetLastError());
             else if (!(attributes & FILE_ATTRIBUTE_DIRECTORY)
@@ -596,7 +606,7 @@ bool selectFixtureMutex(const probe::Receipt& config) {
             && (config.logical[i] < L'0' || config.logical[i] > L'9')
             && config.logical[i] != L'_') return false;
     }
-    slotSuffix = config.slot == 1 ? L'A' : L'B';
+    slotSuffix = static_cast<wchar_t>(L'A' + config.slot - 1);
     for (unsigned i = 0; i < length; ++i) if (config.own[i] != config.logical[i]) return false;
     if (config.own[length] != L'_' || config.own[length + 1] != slotSuffix
         || config.own[length + 2] != L'\0') return false;
@@ -866,7 +876,7 @@ BOOL WINAPI observedProcess(LPCWSTR application, LPWSTR command, LPSECURITY_ATTR
 }
 
 bool install(const InstallConfig& config, bool mutex) {
-    slotSuffix = config.slot == 1 ? L'A' : L'B';
+    slotSuffix = static_cast<wchar_t>(L'A' + config.slot - 1);
     const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
     if (!ntdll) return false;
     const bool observe = startup_observation::active != nullptr;
@@ -1096,7 +1106,13 @@ KeyRoute registryRoute(const OBJECT_ATTRIBUTES& attributes, wchar_t (&path)[1024
         return pathPrefix(absolute, storeOwn, leaf) ? KeyRoute::Other : KeyRoute::Unsupported;
     }
     if (!pathPrefix(absolute, userKeyPath, leaf)) return KeyRoute::Other;
-    if (!validRelative(path + leaf, total - leaf)) return KeyRoute::Unsupported;
+    // Registry APIs accept a terminal separator (MSHTML opens Internet Settings\Zones\).
+    // Validate the preceding components but forward the original counted name to Windows.
+    // This does not relax filesystem paths or allow interior empty/parent components.
+    const unsigned relativeLength = total - leaf;
+    const unsigned validationLength = relativeLength && path[total - 1] == L'\\'
+        ? relativeLength - 1 : relativeLength;
+    if (!validRelative(path + leaf, validationLength)) return KeyRoute::Unsupported;
     const auto suffix = static_cast<USHORT>((total - leaf) * sizeof(wchar_t));
     name = {suffix, suffix, path + leaf};
     return KeyRoute::Private;
