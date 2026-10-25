@@ -2010,40 +2010,50 @@ only in `planning/development.md`.
 
 ## Version-bound graphics warm-pool experiment
 
-This is an opt-in native Minecraft allocation intervention, separate from video
-settings, the FPS limiter and LFH cache reclamation. Build with
-`-DBOOTSTRAP_GRAPHICS_WARM_POOLS_EXPERIMENT=ON` only for an explicitly reviewed
-candidate. The default is OFF; no existing manager payload digest, public Launch
-admission, wire schema or original profile is changed by this source addition.
+This opt-in native startup-capacity intervention is separate from video settings,
+the FPS limiter and LFH reclamation. Build with
+`-DBOOTSTRAP_GRAPHICS_WARM_POOLS_EXPERIMENT=ON` only for a reviewed candidate;
+default OFF. Canonical manager payload digests, public admission, wire schemas
+and original profiles are unchanged.
 
-Read-only inspection of the pinned installed game's loaded code identified
-`DefaultBufferHeap` initialization: sixteen 16-MiB heaps, with native synchronous
-and worker-driven growth when more capacity is needed. The experiment changes
-only that exact initialization tuple to four heaps. It preserves heap size,
-allocation alignment/flags, native growth/failure behavior and resource/GPU
-retirement. It never releases live resources, changes simulation/render distance,
-suspends a client, or trims its working set.
+The pinned game's loaded code identifies DefaultBufferHeap initialization with
+sixteen 16-MiB heaps, plus native synchronous/worker growth when capacity is
+needed. Only the exact initial count changes to four. Size/alignment/flags,
+native allocation/failure/growth and GPU retirement stay game-owned. No live
+resource release, settings change, suspension or working-set trim is introduced.
 
-The existing pacing-authorized factory enrollment calls the new private owner
-after native factory creation. Installation requires matching image timestamp/
-size and four observed loaded-function SHA-256 digests. The detour also requires
-the observed caller return address and literal/property pointers, exact heap
-type, name and arguments. Any mismatch preserves the original arguments; unknown
-code is not patched. The module is pinned, thread enrollment/transaction failures
-abort installation, and native HRESULT/LastError remain with their existing
-owners. This is a private, version-specific ABI: game updates require renewed
-inspection. Factory timing and real Minecraft compatibility are NOT_EXECUTED.
+Factory enrollment is the existing pacing-authorized consumer. Installation
+checks PE timestamp/size and four observed loaded-code SHA-256 digests. The
+detour additionally requires the exact caller/literal/property pointers, name,
+arguments and every observed D3D12_HEAP_PROPERTIES field:
+[Type, CPUPageProperty, MemoryPoolPreference, CreationNodeMask, VisibleNodeMask]
+= [4,1,2,1,1] (CUSTOM, NOT_AVAILABLE, L1, node masks 1).
+The earlier type-1 candidate installed but correctly changed zero calls;
+this corrected match was observed in both original games. Mismatches preserve
+native arguments. The module is pinned; failed thread/Detours transactions
+abort installation. This private version-specific ABI needs renewed inspection
+after game updates.
 
-`graphics-warm-pools-control` checks exact tuple selection, unchanged alternatives,
-and rejection of its own executable before private game RVAs are inspected,
-with balanced process handles. It does not prove Minecraft's internal ABI,
-allocator behavior, FPS or RAM savings. MSVC x64 Release /W4 /WX builds passed
-with the experiment both ON and OFF; the control exited 0.
+A private non-exported atomic receipt increments only when a changed
+initialization returns native success. The ON-only linker map permits a bounded
+four-byte read tied to exact payload/process identity, without a new export,
+sampler or product command. Each original client recorded one successful
+changed call. This is not a direct retained-heap-count measurement.
 
-The theoretical initial-capacity difference is 192 MiB for this one pool,
-**not a measured RAM reduction**. Default-heap capacity is not synonymous with
-resident system RAM. Demand may refill it; the operator's requested below-1-GiB
-in-world RAM target remains unproved. Do not ship it as the default or replace a
-working candidate until a single integrated original-profile comparison confirms
-actual private residency/commit, native growth, gameplay, host/network and focus
-recovery. Keep raw executable fragments/maps and private captures outside Git.
+MSVC x64 Release /W4 /WX builds pass both ON and OFF; both control invocations
+exit 0. Controls cover all property-field mismatches, other parameter/name
+refusals, own-image rejection before private-RVA reads and handle balance.
+Actual two-client original-account restore, same-world Education host/join,
+bounded focus rendering and normal host save/application exits were observed.
+Native growth stress, long soak and post-canary restart remain NOT_EXECUTED.
+
+**Decision: keep OFF and unpromoted for the resident-RAM goal.** A bounded
+same-world comparison shows guest/host private commitment lower by approximately
+174/142 MiB, while private physical RAM is effectively unchanged in combination
+(1335.648/1490.965 MiB baseline versus 1330.410/1495.809 MiB canary).
+Different elapsed join/allocator activity prevents a causal savings percentage.
+The theoretical 192-MiB difference is startup capacity in an L1 pool, not freed
+system RAM; actual VRAM benefit is unmeasured. Below 1 GB per game is an
+aspirational target, not a cap or achieved result. Exact hashes, caveats and
+current continuation are in the research report and planning/development.md.
+Keep raw executable fragments, maps and private captures outside Git.

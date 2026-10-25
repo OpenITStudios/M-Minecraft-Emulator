@@ -13,7 +13,7 @@ fixture counts and minor launcher/HUD savings are not substitutes for them.
 | Track | Required outcome | Owner and boundaries | Current evidence |
 | --- | --- | --- | --- |
 | **A — saved Minecraft settings** | Keep the approved Simple preset independently per original profile and across normal restart. Render distance **at least 12**, simulation distance unchanged; preserve resolution, accounts/worlds and 144/10. | Minecraft's existing options file owns the settings; existing bootstrap owns persistent per-slot Roaming/Local routing and identity-capability replay. Do not introduce a duplicate preferences store or rewrite options while a game is live. | Both original per-slot options files retained graphics_mode=0, gfx_viewdistance=192, gfx_msaa=1 and the five approved effect switches=0 after both game exits. Disk persistence is observed for both; the restarted MC02 UI also reads Simple / 12 chunks. The fresh MC01 main menu shows its original account; its complete post-restart video UI has not been rechecked. |
-| **B — internal Minecraft efficiency** | Reduce unnecessary mesh/buffer/asset/cache or renderer work using a real Education-compatible integration, inspired by Java optimizers. | A new native internal optimization needs one demonstrated resource owner/lifetime seam. Existing Present mediation owns pacing/HUD, not game meshes/heaps. A generic allocator/hook fixture or wrapper micro-optimization does not satisfy B. | The approved startup capture now identifies D3D12 heap/resource creation routes for the dominant write-combined category. Resource purpose, occupancy and GPU-safe retirement/rebuild ownership remain UNKNOWN; no new renderer RAM saving is established. Do not promise a Java mod port or a RAM percentage. |
+| **B — internal Minecraft efficiency** | Reduce unnecessary mesh/buffer/asset/cache or renderer work using a real Education-compatible integration, inspired by Java optimizers. | A new native internal optimization needs one demonstrated resource owner/lifetime seam. Existing Present mediation owns pacing/HUD, not game meshes/heaps. A generic allocator/hook fixture or wrapper micro-optimization does not satisfy B. | A guarded native startup-count intervention is implemented and executed on two original clients. It lowered private commitment in a bounded comparison but established no meaningful resident-RAM saving; default remains OFF. Other CPU-visible pool ownership, occupancy and GPU-safe retirement/rebuild remain UNKNOWN. Do not promise a Java mod port or a RAM percentage. |
 | **C — inactive clients first** | Prioritize lower RAM/CPU/GPU demand while a client is not controlled; keep foreground 144/background 10 ceilings, prompt focus recovery and continuing Education host/network/saves. | Focus/pacing retain their current owners. Host role is separate from focus. No whole-process suspension, arbitrary memory/CPU caps, periodic trimming, token/profile sharing, fabricated occlusion result or freeing game-owned resources. | The existing limiter is implemented and prior 10-FPS observations are historical. Further game-owned background work reduction, its resource benefit and host health require a concrete intervention; no new savings are claimed yet. |
 
 **Working method:** choose one real intervention in A/B/C, implement it or
@@ -205,61 +205,73 @@ menu VMMap CSV
 `4e37fce8c5d97a662e8980155769ecafbfe1b2bce4e2637f14ebd71c2ec99319`.
 
 
-**Concrete native warm-pool candidate (source baseline c59b89c):** the operator
-clarified that the target is Minecraft itself using less real RAM while playing,
-with a requested ceiling below 1 GiB per client; reducing only a Task Manager
-number by paging is not success. This target is NOT_ACHIEVED. Preserve the
-12-chunk minimum, simulation/resolution and original accounts/worlds. Resident
-private RAM and commit must be distinguished from GPU capacity and allocation
-traffic; shared memory cannot be double-counted as an additional saving.
+**Native warm-pool decision (source parent 31e7527531c5d5d2ceb1952fbdbe8bed41435671):**
+the operator clarified that below 1 GB is an aspirational target; pursue the best
+real reduction while preserving stability rather than enforcing an arbitrary cap.
+A/B/C, minimum 12 chunks, simulation/resolution and original accounts/worlds remain
+the scope. Five clients remain deferred.
 
-The on-disk PE has unbacked code/exception RVAs, and file-backed literal regions
-did not decode as the loaded image; ordinary file disassembly did not establish
-the allocator. A temporary read-only inspection instead pinned each original
-PID/birth and executable SHA-256, binary-searched loaded PE exception metadata,
-and read only selected executable MEM_IMAGE function intervals plus explicitly
-referenced read-only image literals. No account/token/world/heap contents, full
-dump, process writes or additional injection were used. Selected function bytes
-matched in both clients; raw fragments and local analysis stay outside Git.
+The previous candidate assumed D3D12_HEAP_TYPE_DEFAULT (1). Actual read-only
+image-property observation in both original games found the exact tuple
+[Type, CPUPageProperty, MemoryPoolPreference, CreationNodeMask, VisibleNodeMask]
+= [4,1,2,1,1]: CUSTOM / NOT_AVAILABLE / L1. Its first private canary installed
+the initializer hook but recorded zero changed initializations, correctly
+refusing that mismatched type. It was closed normally before correction.
 
-The identified literal names are DefaultBufferHeap, TextureBufferHeap,
-UploadBufferHeap, ReadBackBufferHeap and AccelerationStructureBufferHeap.
-The DefaultBufferHeap constructor receives sixteen 16-MiB heaps (256 MiB
-initial capacity). Its initialization loop creates that count; inspected native
-allocation paths create a new heap when no current heap fits, and a worker
-handles requested growth. This identifies a concrete capacity/growth seam,
-rather than assuming that all write-combined memory is an upload cache.
+The corrected header matches all five properties as well as caller/literal/
+property pointers, name, flags, 16-MiB size, 64-KiB alignment, initial count 16
+and reserve 1. Only initial count becomes 4. Other pools and native growth,
+failure and GPU retirement remain game-owned. The existing factory consumer,
+image metadata and four loaded-code hashes remain the guard. A private,
+non-exported atomic receipt increments only after a changed call returns native
+success; an ON-only linker map permits a bounded four-byte read. No public API,
+new sampler/service, profile/settings mutation or default payload admission is added.
 
-Original source in graphics-warm-pools.{h,cpp} now provides an explicit,
-default-OFF build experiment. Existing pacing-authorized factory enrollment can
-install a version-bound detour for the observed private pool initializer.
-The exact DefaultBufferHeap tuple changes initial count 16 -> 4; heap size,
-alignment, flags, other pools, native growth, failure behavior and resource
-retirement remain native. No arbitrary page decommit, COM Release, memory cap,
-periodic cleanup, FPS/settings change or second governor is added.
+Separate original-profile baseline and corrected canary runs both automatically
+restored the old accounts, reopened the same MC02 Education host world and joined
+MC01 to it. Both corrected processes recorded one successful changed initializer.
+Loaded canary DLL SHA-256:
+`bf6f5c1d189c84fcc4a4b36082ce4b73ed95433da084cb03012f87808bfbbdbd`;
+separate manager:
+`9436c0e85eba80faf5346dd47d0d737a229a94f72efb346f22dfa63e014aa1dc`.
+Its private Rust delta is only the reviewed compatibility digest; canonical Rust
+still admits the working 09d214cc... payload. No account/world tree was copied.
 
-Installation checks image timestamp/size and four loaded-function digests
-matched across both clients; application also checks exact caller/literal/
-property pointers and parameters. Unknown versions preserve native behavior.
-The owning DLL is pinned; thread/Detours transaction failures abort installation.
-The new control checks tuple refusal cases and rejects its own image before
-private RVAs are read, retaining balanced handles. MSVC x64 Release /W4 /WX
-builds passed with the experiment ON and OFF; the control exited 0.
+One bounded same-world reading used the existing signed VMMap, MC01 foreground
+and MC02 background. MiB below are VMMap Total row Private WS and Private columns,
+not Task Manager group usage, total system RAM or GPU memory:
 
-This is an implemented **experimental startup policy**, not measured game
-savings or production readiness. Its 192-MiB initial-capacity reduction is
-neither a RAM-residency promise nor proof of the below-1-GiB target; native demand
-can grow the pool again. The enabled built DLL hash is
-`75e55f5716fd25cbe13e922583b160e7a4abd924d1873842b25644ccd19ea264`,
-but the existing manager does not admit it and neither running game was changed.
-Actual factory-install timing, private ABI behavior, native growth and integrated
-RAM/gameplay/host/focus benefit remain NOT_EXECUTED. Do not update the default
-payload digest or claim automatic background RAM reclamation from source checks.
+| Role | Private physical RAM, baseline -> canary | Private commitment, baseline -> canary |
+| --- | --- | --- |
+| MC01 guest | 1335.648 -> 1330.410 MiB | 2404.125 -> 2229.980 MiB |
+| MC02 host | 1490.965 -> 1495.809 MiB | 2555.324 -> 2413.668 MiB |
 
-Retain independently authored code, Local only, CI disabled, no Sandboxie/VMware
-or game-file modifications. Five clients remain deferred until two-client
-stability and worthwhile savings are demonstrated. The existing research report
-remains technical evidence; this file is the sole current goal/handoff.
+Commitment is lower by 174.145 / 141.656 MiB, while combined private physical
+RAM differs by only -0.395 MiB. This is **not meaningful demonstrated resident-RAM
+savings** or a causal exact savings estimate: runs are sequential, allocator/world
+activity differs, and elapsed time since confirmed join is about 46 seconds for
+baseline versus 13 seconds for the first canary snapshot. A later canary snapshot
+after host focus changed reads 1330.934 / 1496.453 MiB Private WS; it is a
+different focus condition, not an additional matched benchmark. No resident
+reduction is established by either reading; do not add their deltas.
+
+The L1 tuple concerns video-memory placement; the theoretical 192-MiB startup
+capacity difference is not 192 MiB of system RAM. VRAM was not measured.
+Decision: keep the experiment **OFF and unpromoted for the resident-RAM goal**.
+The accepted reduced initializer call, two-client world entry, host participation,
+HUD 10-background/~135-active return and normal host Save & Exit were observed;
+native pool growth under pressure, exact FPS/latency, long-soak stability,
+post-canary restart persistence and five-client acceptance remain NOT_EXECUTED.
+No periodic trim, cap, suspension or arbitrary live-resource release is justified.
+
+Corrected MSVC x64 Release /W4 /WX DLL builds passed with the experiment ON and
+OFF. Both bounded control invocations exited 0, including wrong-field refusal,
+own-image rejection before private-RVA reads and handle balance. Rust's separate
+locked/offline canary manager build passed with existing warnings; it is not
+production acceptance. Raw code, ETL, maps, identities and captures stay local.
+Canonical source retains Local-only development, CI disabled, no Sandboxie/VMware
+or on-disk game modification. Both experimental sessions are saved/closed
+normally; the original working candidate remains intact.
 
 ## Goal — five clients with foreground rendering policy
 
@@ -1827,8 +1839,8 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** prepare one separate, hash-reviewed original-profile candidate
-for the default-OFF warm-pool experiment, then perform one integrated in-world
-comparison of actual private RAM/commit and game-owned growth with host/focus
-health. Preserve the current working candidate; no further aggregate trace,
-profile copy, arbitrary buffer release or production-default activation.
+**One next action:** inspect the already-identified UploadBufferHeap initializer
+and native capacity/retirement paths using the existing local code evidence, and
+implement or reject one CPU-visible retention reduction only when its ownership
+is established. Reuse existing traces; do not repeat warm-pool runs, add aggregate
+collectors, or promote the L1 experiment as resident-RAM savings.

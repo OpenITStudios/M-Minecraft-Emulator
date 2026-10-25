@@ -794,16 +794,89 @@ arguments. The DLL is pinned and failed thread/Detours transactions abort
 installation. Unknown game versions remain unsupported; this is not a stable
 Education extension API. The existing manager payload digest is unchanged.
 
-Both enabled and disabled MSVC x64 Release /W4 /WX builds passed. The bounded
-own-process control passed tuple refusal cases, own-image rejection before
-private code reads, and handle balance. No game process loaded the new DLL.
-Actual factory timing, private-ABI execution, native growth behavior and savings
-are therefore NOT_EXECUTED, regardless of the successful compiler/control.
+The first source version's type-1 match did not apply in the actual game.
+Both clients instead expose the exact properties [4,1,2,1,1]: CUSTOM heap,
+CPU-page NOT_AVAILABLE, memory pool L1 and both node masks 1. The corrected
+private policy checks every field and preserves all mismatches. Microsoft's
+[L1 definition](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ne-d3d12-d3d12_memory_pool)
+describes the video-memory pool on discrete GPUs, while
+[NOT_AVAILABLE](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ne-d3d12-d3d12_cpu_page_property)
+denotes CPU-inaccessible heap memory. Those properties do not identify the
+driver's associated system-memory allocations as unused.
 
-The initial-capacity difference is 192 MiB. It is not equivalent to 192 MiB of
-resident system RAM and can disappear if native demand grows the pool. The
-operator's clarified target is below 1 GiB of real in-world game RAM per client,
-with no paging-based cosmetic reduction; that target remains NOT_ACHIEVED.
-A single integrated same-world comparison must distinguish private residency,
-commit and GPU memory while preserving 12 chunks, simulation/resolution,
-accounts, world persistence, Education hosting and 144/10 focus behavior.
+Both corrected enabled and disabled MSVC x64 Release /W4 /WX DLL builds passed.
+The own-process controls passed exact/mismatched property tuples, own-image
+rejection before private RVAs and handle balance. An enabled-only linker map
+locates a private atomic action receipt, with no export/schema extension.
+Each original client recorded one changed initialization returning native
+success. This establishes actual private-ABI execution, not just API availability
+or a loaded DLL; retained heap count and native growth under pressure were not
+directly measured.
+
+## Executed native startup-capacity comparison and decision
+
+Source parent: `31e7527531c5d5d2ceb1952fbdbe8bed41435671`, plus the corrected
+five-property policy/private receipt and ON-only map. Corrected DLL SHA-256
+`bf6f5c1d189c84fcc4a4b36082ce4b73ed95433da084cb03012f87808bfbbdbd`.
+Separate private manager SHA-256
+`9436c0e85eba80faf5346dd47d0d737a229a94f72efb346f22dfa63e014aa1dc`.
+Its only Rust source delta is the reviewed payload digest, not an override
+argument or new production route. Canonical admission retains the prior working
+payload. Original profile identity capability was reused; no account/world
+directory or token was copied.
+
+On 25 October 2026 both baseline and corrected canary automatically restored
+their original accounts, opened the same existing MC02 Education Host World and
+joined MC01. Existing Simple / 12-chunk settings and 144/10 ceilings were not
+changed. Existing signed VMMap snapshots were used, with guest foreground and
+host background; no WPR repetition, memory trim, extra action injection or
+periodic sampler was introduced for this comparison.
+
+| Metric, MiB | Guest baseline | Guest canary | Host baseline | Host canary |
+| --- | ---: | ---: | ---: | ---: |
+| VMMap Private WS | 1335.648 | 1330.410 | 1490.965 | 1495.809 |
+| VMMap Total WS | 1421.523 | 1416.063 | 1576.852 | 1581.711 |
+| VMMap Private commitment | 2404.125 | 2229.980 | 2555.324 | 2413.668 |
+
+These metric columns have distinct meanings; commitment is not resident physical
+RAM. Private commitment is lower by 174.145 / 141.656 MiB. Guest private physical
+RAM is lower by 5.238 MiB while host is higher by 4.844 MiB; the combined
+difference is only -0.395 MiB. **No meaningful resident-RAM reduction is
+established.** These are bounded sequential observations, not a causal percentage,
+a repeatability benchmark or a long-soak result. Elapsed time since confirmed
+join is approximately 46 seconds for baseline and 13 seconds for the first
+canary reading; natural allocation/chunk activity remains a confounder.
+A later reading after host foreground activation gives Private WS
+1330.934 / 1496.453 MiB; its changed focus condition excludes it from a matched
+delta. Do not combine those snapshots or credit a working-set shift as freed
+game resources.
+
+Both clients remained in the shared world without an observed crash. The host
+multiplayer panel showed two participants; after foreground resume its HUD
+returned to approximately 135 FPS, while 10 FPS was observed in background.
+Host Save & Exit completed through its UI, guest received the expected host-ended
+disconnect, and both apps exited normally. This is bounded rendering/network/
+save-path evidence, not pool-growth stress, measured frame latency, a persistent
+FPS guarantee, post-canary restart proof or five-client acceptance.
+
+Decision: preserve this original implementation as **default OFF, unpromoted for
+resident-RAM optimization**. It reduces startup capacity and showed lower
+commitment, but does not satisfy the requested physical-RAM outcome. The
+theoretical 192-MiB capacity reduction concerns this one L1 pool; actual VRAM
+benefit remains NOT_EXECUTED, and native demand may refill capacity. The operator
+clarifies below 1 GB per game is aspirational, not a hard cap; it remains
+NOT_ACHIEVED in this world. Preserve stability, accounts/worlds, minimum 12 chunks,
+simulation/resolution and independent A/B/C ownership.
+
+Local snapshot SHA-256 values:
+
+| Snapshot | SHA-256 |
+| --- | --- |
+| Baseline guest | `0c708b1dc519da0b8e7087604fb291f29671b1f2800957f56204aec66219f41a` |
+| Baseline host | `da87532ed164dc45fc0d4b42c0e79759ffef750e5b1fb17550d87abd165fc9b3` |
+| Canary guest | `446b7fe04c904ce6b82f3a35fcc2056f7ecb4656afbcc694a6b208c0dc40f669` |
+| Canary host | `c2abb828bc6103828b43bf5c41817d06cc635da9fd9e4b8eec6efdaca7aad5fb` |
+
+Raw mappings, code fragments, profiles and captures remain local. The single
+next intervention is owned by planning/development.md; the L1 result is not a
+reason to repeat the same experiment or promise a Sodium-equivalent RAM floor.

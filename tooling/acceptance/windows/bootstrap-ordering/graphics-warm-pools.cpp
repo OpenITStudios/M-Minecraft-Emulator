@@ -11,6 +11,8 @@
 #include <vector>
 
 namespace graphics_warm_pools {
+// Private action receipt, located through this candidate's linker map; no export or wire change.
+std::atomic<unsigned long> successfulInitialReductions{0};
 namespace {
 using Initialize = bool (*)(void*, const wchar_t*, ID3D12Device*,
     const D3D12_HEAP_PROPERTIES*, D3D12_HEAP_FLAGS, std::uint64_t,
@@ -64,13 +66,19 @@ bool initialize(void* owner, const wchar_t* name, ID3D12Device* device,
     const D3D12_HEAP_PROPERTIES* properties, D3D12_HEAP_FLAGS flags,
     std::uint64_t bytes, std::uint64_t alignment, unsigned initial, unsigned reserve) {
     const DWORD error = GetLastError();
+    const unsigned requested = initial;
     if (_ReturnAddress() == image + 0xb026c8c && name == reinterpret_cast<const wchar_t*>(image + 0xd0d5bb6)
         && properties == reinterpret_cast<const D3D12_HEAP_PROPERTIES*>(image + 0xf544910)) {
-        initial = initial_default_heaps(name, static_cast<unsigned>(properties->Type),
+        const HeapProperties observed{static_cast<unsigned>(properties->Type),
+            static_cast<unsigned>(properties->CPUPageProperty), static_cast<unsigned>(properties->MemoryPoolPreference),
+            properties->CreationNodeMask, properties->VisibleNodeMask};
+        initial = initial_default_heaps(name, observed,
             static_cast<unsigned>(flags), bytes, alignment, initial, reserve);
     }
     SetLastError(error);
-    return original(owner, name, device, properties, flags, bytes, alignment, initial, reserve);
+    const bool result = original(owner, name, device, properties, flags, bytes, alignment, initial, reserve);
+    if (result && initial != requested) successfulInitialReductions.fetch_add(1, std::memory_order_relaxed);
+    return result;
 }
 bool attach() {
     HMODULE pinned = nullptr;
