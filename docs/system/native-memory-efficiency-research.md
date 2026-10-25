@@ -11,6 +11,152 @@ lifecycle: ACTIVE
 
 Status: RESEARCH WITH BOUNDED IMPLEMENTATION AND RUNTIME OBSERVATIONS. Initial research was pinned to `5eaa49ed41c5c455f1b783d3a7c659bbba40e2d5`; subsequent diagnostics, HUD work and the approved Education graphics intervention are identified below. A substantive Minecraft-internal optimization seam and repeatable whole-game gains remain UNKNOWN. Current operator intent is owned by planning/development.md.
 
+## Active RAM goal: offline ownership and residency reconciliation — 25 October 2026
+
+The operator resumed A/B/C implementation work with **no PC control while they
+work**. This supersedes earlier full-access permissions for the current session:
+no UI/input, game launch/closure, live process or memory inspection, new trace,
+settings edit or runtime intervention. Work here used saved files only. The
+goal remains actual Minecraft RAM efficiency, especially inactive clients;
+144/10 pacing, Education host/network/save continuity, original profiles,
+render distance at least12 and unchanged simulation/resolution remain boundaries.
+Below1GB is aspirational, not a memory cap or acceptance prediction.
+
+### Historical sample and conservative join
+
+Source parent: `4b54a031eabf74c6881d1e2444b24e9bc531cf42`.
+Existing cold-start ETL/ETLX allocation stacks were reconciled with the saved
+menu VMMap CSV. Trace interval was 10:38:49.516–10:39:47.975 UTC; the VMMap
+snapshot was about10:40:52.629 UTC, approximately65seconds later.
+EventsLost=0 and zero-length-free count=0 in the offline reader do **not** cover
+post-trace changes. This is a historical menu correlation, not current gameplay,
+a synchronized liveness census or evidence that any page can be freed.
+
+The existing offline reader tracks each4KiB page's last captured commit/free
+stack. Its ignored local derivative changed only the final aggregation key to
+prefix the existing range index; event handling was unchanged. Cached ETLX
+reading and its in-memory analysis-helper compilation executed successfully.
+No product build, new recorder, collector API, test fixture, symbol download,
+new game-binary extraction or runtime experiment was introduced.
+
+Only two-space-indented VMMap leaf rows were counted, avoiding parent/child
+double-counting. A range must match one leaf by base and size; attributed page
+bytes must equal the entire range. A leaf's Private WS is assigned to a route
+only if **all** its captured page owners agree on that route. Mixed leaves
+retain their entire WS as MIXED; no proportional owner-to-residency estimate
+is used. A VMMap leaf is not asserted to equal one native D3D heap.
+
+Historical menu total Private WS was1030.3671875MiB. Heap leaves contributed
+296.7578125MiB, image private pages286.44140625MiB, WriteCombined private-data
+leaves381.48828125MiB and other private-data leaves56.98828125MiB.
+These are components, not a complete semantic ownership model; the remaining
+categories still exist. Do not compare these menu values as savings against
+earlier in-world samples.
+
+### Graphics growth: resident relevance without free-capacity proof
+
+All50 WriteCombined leaves reconcile to1040.82421875MiB committed and
+381.48828125MiB Private WS. Thus the earlier approximately1GiB committed category
+must not be advertised as1GiB of physical RAM available for reclamation.
+
+| Captured game creation / caller return RVAs | Saved-code interpretation | Leaf count | Committed MiB | Private WS MiB |
+| --- | --- | ---: | ---: | ---: |
+| BC224F7 / BC2223E | Initializer requests heap creation |27|360|8|
+| BC224F7 / BC23304 | Synchronous growth allocation route |5|208|144|
+| BC224F7 / BC2270F | Requested growth worker |5|57|9|
+| B03AFC7 / B032C2F | Separate game route; code unavailable in saved slice |1|64|0|
+| MIXED | No uniform creation/caller pair for the whole leaf |12|351.82421875|220.48828125|
+
+An independent review confirmed all50 joins, exact byte sums, the caller return
+offsets and the single aggregation-key change. It did not establish named-pool
+types, live/free occupancy or identity continuity over the65-second gap.
+The144MiB synchronous-growth correlation is a research lead, **not144MiB of
+spare/free memory or a savings forecast**. Initial capacity with360MiB commitment
+but8MiB Private WS also illustrates why nominal capacity alone cannot rank a
+RAM intervention.
+
+Saved native slices establish a real growth chain: initializer BC22120 stores
+size/alignment/count configuration, creates initial heaps via BC22490, appends
+metadata and accounts capacity. Allocation paths BC22840/BC23200 query fit
+through uncaptured BC23B20, and can synchronously create a heap sized for the
+configured amount or aligned request. Worker BC22660 responds to a growth
+request flag, creates a configured heap and appends it under synchronization.
+The captured worker has no shrink branch.
+
+The missing normal path is specific:
+caller release → all live/recorded references retired → all actual GPU consumers
+complete → wholly unused classification → native unlink/destruction/accounting.
+BC23C50 is reachable constructor-failure cleanup, not demonstrated normal
+retirement. BC23D80 and BC25CE0 initialize metadata/containers; short cleanup
+slices do not supply the missing lifecycle. A ninth initializer argument is
+stored at owner+15C but has no demonstrated consumer in these slices: its role
+must remain UNKNOWN, not be renamed a reserve threshold and tuned.
+BC23B20, BC23EB0, BC25960 and BC25FC0 are uncaptured boundaries. Re-reading the
+same growth code cannot fill them.
+
+### Competing CPU allocation lead
+
+To avoid preselecting graphics, the same method covered the32 largest resident
+fully committed heap leaves:324.6484375MiB committed and116.26171875MiB Private WS.
+The entire3493-leaf heap category was581.71484375MiB committed and
+296.7578125MiB Private WS; this32-leaf sample is **partial**.
+
+| Uniform closest game return RVA | Leaf count | Committed MiB | Private WS MiB |
+| --- | ---: | ---: | ---: |
+| B05B30E |1|67.4375|58.45703125|
+| 88900FA |1|198.84375|2.4375|
+| 73C1F |1|2.51953125|2.51953125|
+| MIXED |29|55.84765625|52.84765625|
+
+Already-saved B05B2C0 code requests0x436F090 bytes
+(70,709,392bytes;67.43373107910156MiB) through an allocator interface; its return
+offset matches B05B30E. The request is slightly smaller than the rounded committed
+range and is not an exact resident-byte count. It then calls uncaptured B024D10,
+assigns a vtable and initializes fields at large offsets within the allocated
+object. This supports a large initialized CPU object as a competing lead.
+It does **not** identify useless cache entries, duplicate assets, reconstructible
+contents, a free interval or a safe smaller layout. Reducing the allocation
+constant would invalidate object accesses; no such patch is justified.
+The198.84375MiB commitment at88900FA has only2.4375MiB Private WS in this sample;
+it is likewise not a198MiB RAM-saving opportunity.
+
+### Candidate decision ledger and current implementation boundary
+
+| Waste hypothesis | Education evidence now available | Missing fact / compatible intervention boundary | Decision |
+| --- | --- | --- | --- |
+| CPU representation or duplication, inspired by FerriteCore | Large B05B30E object correlates with58.457MiB resident; other heap leaves remain mixed/unsampled | Object layout, actual redundant/live data, all readers/writers, native owner and compatible compact/demand representation | Research lead; no size patch, foreign replacement or estimated saving |
+| Allocator free retention / fragmentation, inspired by production allocators and Mesh | CRT ancestry appears in saved heap commit stacks; commitment can greatly exceed residency | Actual free slots/pages, allocation/free ownership, aliases, allocator contract and Windows-compatible reclaim/compaction | No free-byte proof; do not apply a process-wide purge or working-set trim |
+| Content/model/cache demand, inspired by ModernFix | No content-level live/unused or duplicated-byte census in these captures | Asset identity, consumers, reference lifetime, reload capability and duplicated resident size | UNKNOWN; no cache deletion, resource sharing or unsupported mod |
+| Graphics growth/retention, compared with Filament/Godot/O3DE/DXVK | Concrete create/fit/grow chain and144MiB resident correlation for one captured synchronous route | Normal free/reference/GPU completion/unlink/rebuild chain and genuinely unused resident capacity | Keep candidate unselected; no retirement hook or startup-count rerun |
+
+A and C keep their existing owners; B does not get a second policy/governor,
+collector, generic sandbox or speculative release hook. No winner is established
+among these hypotheses. New game-side saving, inactive RAM benefit, workload
+tradeoffs and unchanged multiplayer/gameplay on a changed implementation are
+**NOT_EXECUTED**. Prior runtime evidence belongs to its old payload; this work
+does not promote it into acceptance for an optimizer that has not been built.
+
+### Local provenance and reproducibility boundary
+
+Raw code fragments, trace/range addresses and captures remain ignored locally.
+Only semantic conclusions, code RVAs, aggregate metrics and SHA-256 identifiers
+are recorded here. No credentials, account/world contents or capability values
+were accessed or published.
+
+| Saved input or derived local artifact | SHA-256 |
+| --- | --- |
+| cold-start allocation.etl | b9d7478705aab7eee8bb0febe3cabde0cf0129d38da02fe4f074201c6b2a2adb |
+| guest-menu.csv | 4e37fce8c5d97a662e8980155769ecafbfe1b2bce4e2637f14ebd71c2ec99319 |
+| wc-ranges.json | 7d532483eb447d1d44687569ccb4052d24a38f5c574d0608d7ccea069085ee9f |
+| offline per-range reader | 31e4cc71fac9fabb6f67118fccc98d05aab8199471e64c401c8c925439714c67 |
+| wc-owners-by-range.json | 8dc54e87675a18534e60e8f36461691484aeb4b391b00d83ed075a6a5d3cf935 |
+| wc-caller-ledger.json | 9edf8de1adda114bd5730528fb872db49b99c77e1fc672c131f4b5f6e3030a9d |
+| heap-top-resident-ranges.json | e0ec0c25ee7c3c76cdf67fa7de8cc7c0a99e74c09b05b0723b9c3985fb0eead0 |
+| heap-top-owners.json | 6e6b14dd1fca620e7ebb34e425d8f183ed388e812133f6093e6c50084591483b |
+| heap-resident-ledger.json | e9b23e75f404bbf67bbdf0537cfc70a58094733fd51cffabc3f6358cd1c2a261 |
+| B05B2C0 saved object | bc7af473e88d34afeaf6d805bdb7f16bc8845e2686005a5760c1795d73e83e5f |
+| independent allocator-ownership review | 2bbf1d231253a00dde65eb396555017feb890072210b8bc1dfabc58cc80a2a63 |
+
 ## Critical comparative audit — 25 October 2026
 
 **Decision authority:** this section supersedes the earlier staging-first priority

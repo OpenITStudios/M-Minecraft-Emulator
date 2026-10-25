@@ -16,31 +16,38 @@ fixture counts and minor launcher/HUD savings are not substitutes for them.
 | **B — internal Minecraft efficiency** | Reduce unnecessary mesh/buffer/asset/cache or renderer work using a real Education-compatible integration, inspired by Java optimizers. | A new native internal optimization needs one demonstrated resource owner/lifetime seam. Existing Present mediation owns pacing/HUD, not game meshes/heaps. A generic allocator/hook fixture or wrapper micro-optimization does not satisfy B. | A guarded native startup-count intervention is implemented and executed on two original clients. Sequential readings showed lower private commitment but do not establish causal savings or meaningful resident-RAM benefit; default remains OFF. Other CPU-visible pool ownership, occupancy and GPU-safe retirement/rebuild remain UNKNOWN. Do not promise a Java mod port or a RAM percentage. |
 | **C — inactive clients first** | Prioritize lower RAM/CPU/GPU demand while a client is not controlled; keep foreground 144/background 10 ceilings, prompt focus recovery and continuing Education host/network/saves. | Focus/pacing retain their current owners. Host role is separate from focus. No whole-process suspension, arbitrary memory/CPU caps, blind working-set trimming, token/profile sharing, fabricated occlusion result or freeing game-owned resources. | The existing limiter is implemented and prior 10-FPS observations are historical. Further game-owned background work reduction, its resource benefit and host health require a concrete intervention; no new savings are claimed yet. |
 
-**Current phase — CRITICAL COMPARATIVE RESEARCH ONLY, operator direction25 October2026.**
-No new candidate, hook, game/PC session, collector, settings change or runtime
-benchmark. The operator rejected the prior reasoning as shallow and requested
-a self-critical, cross-engine/source audit before continuing. See the
-[critical comparative audit](../docs/system/native-memory-efficiency-research.md#critical-comparative-audit--25-october-2026).
+**Current phase — ACTIVE RAM EFFICIENCY GOAL, source and saved evidence only.**
+The operator explicitly resumed the main goal on25October2026 and prohibits
+PC control while working. No UI/input, game launch/closure, live process/memory
+inspection, new capture, settings edit or runtime change is authorized by this
+continuation. Previous full-access permission is superseded for this session.
+The goal is registered as active; neither research nor a source commit completes
+actual Minecraft savings.
 
-**Corrected decision:** withdraw CPU-visible staging retention as the main/best
-RAM solution. It is one hypothesis beside CPU representation, allocator
-fragmentation/free retention, content demand/caches and GPU allocation/streaming.
-The earlier safe-retirement checklist is conditional, not an integrated
-Education optimizer. Fourteen comparator families now have inspected mechanisms
-and cited source snapshots; published numbers are labeled by metric/method and
-are not Education predictions. O3DE/Godot/Filament make different reuse/release
-tradeoffs; Sodium deliberately retains spare capacity; ModernFix changes loading,
-FerriteCore changes live data, production allocators legitimately purge owned
-free backing, and Mesh rebuts a universal whole-empty-page restriction.
+The [offline ownership/residency reconciliation](../docs/system/native-memory-efficiency-research.md#active-ram-goal-offline-ownership-and-residency-reconciliation--25-october-2026)
+adds concrete evidence using already-saved ETLX, VMMap and native code slices.
+All50 WriteCombined leaves reconcile to1040.824MiB commitment but381.488MiB
+Private WS. Five leaves with one synchronous growth caller correlate with144MiB
+Private WS; startup-creation leaves total360MiB commitment but8MiB Private WS.
+A competing CPU allocation requests70,709,392bytes and correlates with a
+58.457MiB-resident leaf. These are historical menu correlations with a65-second
+trace/snapshot gap, not freeable-byte proofs, current gameplay or savings.
+Mixed leaves stay mixed; no proportional residency attribution was used.
 
-Retain only the narrow rejection of another2x8MiB initial-count canary; it does
-not bound post-growth retention or all native optimization. The sequential
-warm-pool commit/RAM deltas are observations, not causal savings or universal
-falsification. Keep its default OFF, current working payload and public admission
-unchanged. Existing pageable Private WS categories do not prove semantic owners,
-free capacity or complete system RAM. No candidate has demonstrated material
-reclaimable Education bytes with compatible lifetime/rebuild coverage; there
-is no justified winner or percentage. Below1GB is aspirational.
+The captured native chain proves create/fit/grow, not normal retirement.
+Constructor-failure cleanup does not supply release/reference/GPU-completion/
+unused classification/unlink semantics. The large CPU object lacks layout,
+redundancy and consumer-lifetime proof; its size cannot safely be patched.
+The report's single candidate ledger keeps CPU representation, allocator
+retention/fragmentation, content demand and graphics growth separate.
+No staging-first winner or percentage is justified. Keep the previous startup
+count intervention OFF and retain the working payload/public admission.
+
+**Corrected decision retained:** withdraw CPU-visible staging retention as the
+main/best RAM solution. Fourteen comparator families provide algorithms and
+tradeoffs, not Education integration or predictions. Below1GB is aspirational;
+A settings persistence and C144/10 pacing keep their existing independent owners.
+No claimed B or inactive RAM saving has been implemented by this source work.
 
 **Working method:** choose one real intervention in A/B/C, implement it or
 explicitly reject its concrete integration boundary, then use only checks that
@@ -48,8 +55,8 @@ directly establish its benefit and failure risks. A before/after reading needs
 equivalent world/workload and metric semantics. Do not expand collector APIs,
 generic sandbox layers, synthetic milestone flags or ceremonial test loops.
 Use available source evidence without making repeated PC sessions prerequisites
-for source work. Current user permission allows full PC control, but avoid
-interfering with concurrent user input. Preserve all account/world data.
+for source work. The latest user instruction prohibits PC control and runtime access during
+this work; use source and already-saved artifacts only. Preserve all account/world data.
 
 **Immediate findings on resume:** at first discovery both earlier game identities
 were still present; subsequent discovery found no game processes. The existing
@@ -1865,9 +1872,11 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** reconcile the four competing waste classes against
-existing saved allocation/residency/code evidence in one candidate ledger:
-semantic owner, live/free/duplicate status, byte relevance, compatible intervention
-and missing fact. Do not rank staging first or implement another hook until
-that chain supports the selection; unavailable liveness/owner evidence remains
-UNKNOWN without an automatic new PC session.
+**One next action:** investigate the CPU representation/content-lifetime side
+of the existing candidate ledger using saved evidence and public source contracts,
+with B05B30E as the allocation-provenance anchor. Establish redundant/live data,
+native consumers and a compatible reduction before selecting an implementation.
+Do not repeat the completed graphics-growth review, shrink the object constant,
+rank nominal commitment as reclaimable RAM, or start a PC session. Missing
+object-layout/liveness proof remains UNKNOWN; actual new savings remain
+NOT_EXECUTED.
