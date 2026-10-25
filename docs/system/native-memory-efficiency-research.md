@@ -19,6 +19,67 @@ The two screenshot readings, 1797.3 MB and 1724.2 MB, are observations at one mo
 
 The best initial direction is to reduce unnecessary rendering and the amount of game content retained, using settings Education actually documents. Keep independent accounts/profiles and original game behavior. Treat external memory trimming, suspension and hard caps as poor default candidates because they can move cost into faults, stalls or failed allocations. The expected ranking below is an engineering judgment; every resource effect remains a hypothesis until measured.
 
+## Attribution rule: settings savings versus original-system efficiency
+
+Operator clarification on 2026-10-25: distinguish changes to game settings
+from improvements in the system we build. The primary engineering objective
+is lower overhead and unnecessary work at the SAME game settings, visual
+output, 144/10 ceilings and host role. A lower render distance/resolution is
+a separate quality/workload tradeoff and must never be reported as an
+engine-code optimization.
+
+| Layer | Example | How to credit it |
+| --- | --- | --- |
+| Education settings | Render distance, visual effects, supported resolution | Settings-only result, with the visual/workload change named. |
+| Our original system | Owned buffer lifetime/reuse, event scheduling, duplicated observation, mediation overhead and existing pacing | System result only with equivalent settings/policy/workload and measured before/after evidence. |
+| Education's internal renderer/data representations | Chunk meshing/batching, game object deduplication, replacing world/model structures | A separate compatibility research question; our current isolation/presentation wrapper does not expose these internals. No proven implementation seam or savings exists here. |
+
+Sodium is a rendering-engine optimization mod, rather than merely a graphics
+preset. Its official project emphasizes rendering performance and reduced
+micro-stutter, and uses Java mod-loader integration. It can inform the
+principle of doing less redundant work and managing renderer resources well;
+it does not establish an Education-compatible plugin or an achievable RAM
+percentage for our wrapper. [Official Sodium project](https://github.com/CaffeineMC/sodium/blob/148151cf25c56f8b670986b348dcc589278c867e/README.md).
+
+Concrete Sodium examples reviewed at
+`148151cf25c56f8b670986b348dcc589278c867e` show that memory engineering is
+part of that inspiration:
+
+| Mechanism in Sodium | Transferable principle | Boundary in our project |
+| --- | --- | --- |
+| [20-byte compact chunk vertex representation](https://github.com/CaffeineMC/sodium/blob/148151cf25c56f8b670986b348dcc589278c867e/common/src/main/java/net/caffeinemc/mods/sodium/client/render/chunk/vertex/format/impl/CompactChunkVertex.java) | Store required data in a smaller representation. | Applies directly only to data we own; we do not own Education's mesh format. |
+| [Mesh-builder reset and destruction](https://github.com/CaffeineMC/sodium/blob/148151cf25c56f8b670986b348dcc589278c867e/common/src/main/java/net/caffeinemc/mods/sodium/client/render/chunk/vertex/builder/ChunkMeshBufferBuilder.java) | Bound temporary capacity and release resources at the correct lifetime. | Audit our HUD/config/diagnostic lifetimes; do not free game-owned buffers. |
+| [NativeBuffer allocation accounting and explicit free](https://github.com/CaffeineMC/sodium/blob/148151cf25c56f8b670986b348dcc589278c867e/common/src/main/java/net/caffeinemc/mods/sodium/client/util/NativeBuffer.java) | Measure owned allocations and make retention visible. | Prefer aggregate own-resource counters; do not inspect game heaps or transplant Java GC behavior. |
+
+These source mechanisms are examples, not a claim about a particular Java
+modpack's savings or a native Education RAM floor. No Sodium implementation
+is copied or ported into this repository.
+
+For a specifically memory-focused Java comparison, FerriteCore documents
+compact block-state maps and deduplication of model/cache data. Those changes
+act on internal Java game representations, not on an external launcher's
+working-set counter. Its historical modpack-specific numbers do not transfer
+to native Education. This distinction does not imply Sodium has no memory
+optimizations. [FerriteCore's own technical summary](https://github.com/malte0811/FerriteCore/blob/26.1/summary.md).
+
+Transfer principles only to state our system demonstrably owns: bounded
+allocation, avoiding repeated work/copies, reusable drawing resources,
+event-driven observation and exact resource lifetimes. Common immutable image
+mapping remains separate from private profile/account/world state. Replacing
+Education's internal renderer or deduplicating its game heaps requires a
+separately verified mechanism and compatibility scope; do not infer it from
+the existence of our DLL.
+
+For future measurements define E0=current engine, E1=a concrete proposed engine
+change, Q0=current graphics, Q1=an agreed reduced graphics preset. Compare
+E0/Q0 versus E1/Q0 for the system effect; E0/Q0 versus E0/Q1 for settings;
+measure E1/Q1 separately for the combination. Do not assume the gains add.
+There is no E1 implementation yet. Keep foreground/background policy identical
+when attributing a new engine change; the already-existing limiter is not a
+new optimization saving. Start with composition/overhead measurements at Q0,
+then investigate one source-owned bottleneck. Settings remain a separately
+reported optional track.
+
 ## 1. Settings supported by Education
 
 Minecraft Education's official performance article recommends turning off Fancy Leaves, Render Clouds, Beautiful Skies, Smooth Lighting and Fancy Graphics, and decreasing Render Distance to 6. These are the strongest documented starting controls for this edition. The article supplies no measured RAM, VRAM or CPU savings. [Minecraft Education performance guidance](https://edusupport.minecraft.net/hc/en-us/articles/4404976988052-Troubleshoot-Performance-Issues).

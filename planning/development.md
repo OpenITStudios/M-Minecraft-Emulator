@@ -1217,6 +1217,11 @@ five-client readiness is not awarded.
 The operator now prioritizes RAM/performance research and discussion BEFORE
 implementing clients 03-05. This supersedes the previous expansion next action;
 the full five-client 144/10 goal and preservation boundaries remain intact.
+The operator further distinguishes game-setting tradeoffs from efficiency of
+our original system, using Sodium as inspiration. Credit system gains only
+under equivalent graphics, policy and workload; report settings gains
+separately. Java renderer/data optimizations are architectural references,
+not a proven native Education integration or permission to port a mod.
 
 [Research findings](../docs/system/native-memory-efficiency-research.md) pin
 this review to `5eaa49ed41c5c455f1b783d3a7c659bbba40e2d5` and cite primary
@@ -1227,9 +1232,10 @@ private working set, host commitment or attributable helper totals. Source
 inspection finds bounded own HUD/journal buffers and a CLI route before
 Tauri UI bootstrap; no GiB-scale source cause or game leak is established.
 
-The supported first candidate is a fixed Education graphics/render-distance
-preset, measured against current settings with matched world/workload and
-host role. Live focus-driven Education graphics changes remain unverified.
+The first engineering task is composition/overhead measurement at unchanged
+settings. The report separates engine-only, settings-only and combined
+comparisons. A fixed Education graphics/render-distance preset is an optional
+parallel candidate, with its visual/workload tradeoff reported explicitly. Live focus-driven Education graphics changes remain unverified.
 Periodic trimming, arbitrary memory/CPU caps, whole-client suspension, helper
 killing or global memory tweaks are rejected as default optimization paths.
 The report defines a bounded metadata-only comparison with time-aligned focus,
