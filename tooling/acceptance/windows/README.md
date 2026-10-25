@@ -1036,3 +1036,50 @@ Performance acceptance must distinguish:
 The benchmark harness does not automatically declare a performance PASS. Threshold calibration is a separate evidence review after representative target machines have been measured.
 
 
+
+
+## Explicit one-shot LFH reclamation experiment
+
+`heap-reclaim.cpp` builds a standalone x64 action DLL and host. It requests
+`HeapSetInformation(NULL, HeapOptimizeResources, ...)` once in the selected
+Minecraft process, outside DllMain/Present. It does not hook game APIs, inspect
+game allocations, trim working sets, change profiles/settings, install anything,
+or register an automatic policy. This is an experimental allocator action,
+not a Sodium-style renderer optimizer or a production RAM feature.
+
+Build from an MSVC x64 developer environment, in a separate output directory
+with a copy of this one source file:
+
+~~~bat
+cl /nologo /std:c++17 /W4 /WX /permissive- /EHsc /MT /O2 /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /DNOMINMAX /D_WIN32_WINNT=0x0A00 /DHEAP_RECLAIM_DLL /LD heap-reclaim.cpp /Fe:heap-reclaim.dll /Fo:heap-reclaim-dll.obj /link psapi.lib
+cl /nologo /std:c++17 /W4 /WX /permissive- /EHsc /MT /O2 /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /DNOMINMAX /D_WIN32_WINNT=0x0A00 heap-reclaim.cpp /Fe:heap-reclaim.exe /Fo:heap-reclaim-host.obj /link psapi.lib
+heap-reclaim.exe --self-test C:\compiled\heap-reclaim.dll
+~~~
+
+The self-check exercises the actual DLL action on the caller's heap, rejects an
+invalid request and replay, and verifies a live allocation remains intact.
+It never treats successful API return or a synthetic byte count as Minecraft
+memory savings.
+
+Only after explicit runtime authorization and fresh PID/creation verification:
+
+~~~text
+heap-reclaim.exe --process <PID> <creation-FILETIME-decimal> C:\compiled\heap-reclaim.dll
+~~~
+
+Pin the newly built source/DLL/host hashes before invoking. The host refuses
+a mismatched process birth, a 32-bit process, an unexpected Education executable
+path, a reparse-point DLL leaf, or an already-loaded action DLL. It holds the
+action file against write/delete, resolves remote system functions by their
+actual module/RVA, and writes/reads only its own request allocation. It unloads
+the action after completion. If a remote thread times out, it leaves its arguments
+and module alive rather than terminating a game/thread or freeing live arguments;
+exit 10 is UNKNOWN and must not trigger a blind retry.
+
+Output contains API status, main process-heap compatibility (not all heap coverage),
+private commit immediately around the call and elapsed time. Check post-action
+unload and actual game state. Private commit during concurrent game activity can
+change independently; working-set drops are not attributed automatically.
+No scheduled repetition or automatic focus trigger is justified by this tool.
+The source currently targets the observed official Program Files Education path;
+do not broaden target admission incidentally.

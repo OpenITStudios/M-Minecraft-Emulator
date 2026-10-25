@@ -619,3 +619,37 @@ matching mechanism and verify reclaimed private commit/physical memory plus
 focus/host health once. Five-client extrapolation and numerical savings remain
 unproved. Render distance minimum 12, simulation, resolution, original profiles
 and 144/10 policy remain unchanged.
+
+
+## Executed LFH action, not an automatic RAM policy
+
+A one-shot original action now exists in [heap-reclaim.cpp](../../tooling/acceptance/windows/heap-reclaim.cpp);
+its opt-in build, identity guards, uncertain-thread handling and limitations are
+documented in the [Windows tooling guide](../../tooling/acceptance/windows/README.md#explicit-one-shot-lfh-reclamation-experiment).
+It requests documented heap-manager cache optimization, not arbitrary VirtualFree
+or resource eviction. It is separate from native mesh optimization.
+
+The original MC01 guest's menu-time private commit fell 38.754 MiB during an
+8.903 ms API interval. The original MC02 Education host, running the saved world
+with MC01 joined and foreground, fell 21.707 MiB during a 3.011 ms interval.
+These are two different workload states, not a simultaneous durable total.
+Both action DLLs unloaded and both games remained responsive; the guest's world
+surface remained connected after the host action. No frame-latency, long-soak,
+post-action save/restart or persistent in-world savings claim is made.
+
+The initial guest VMMap category snapshot showed ~712.38 MiB heap commit and
+~1229.58 MiB Private Data commit. Heap coverage/free space was not inferred from
+that classification. Main process heap compatibility was LFH; the separate
+snapshot's heap commit decreased ~36.51 MiB. Working-set reductions are excluded
+from causal claims, especially because the untouched peer also lost residency.
+
+This is the first bounded observation of an allocator-level private-commit
+reduction in the current resumed effort. Its size is modest, not evidence for
+a production cleanup loop, a Java optimizer port, or five-client readiness.
+Canonical numbers, hashes, exact source baseline (8250ebf) and remaining proof
+are in the current handoff. Next work should target the larger unattributed
+Private Data allocation owner, not repeat LFH calls or add another collector.
+
+A later running-host reading was 2864721920 private bytes, about 12.03 MiB above
+its immediate post-action value. Ongoing game allocations confound attribution;
+this reinforces that the instantaneous drop is not a durable RAM guarantee.

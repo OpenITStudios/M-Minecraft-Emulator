@@ -75,12 +75,63 @@ memory saving. These are rejected integration candidates, not executed runtime
 failures or proof that every possible native optimization is impossible.
 
 The operator confirms no native Education source/SDK/integration documentation
-is available. **The current B blocker is an absent verified internal
+is available. **The mesh-specific B blocker is an absent verified internal
 ownership/rebuild seam.** Existing Java algorithms and DLL-loading ability do
 not resolve it. Version-specific reverse engineering would first need to
 establish those semantics; no guessed addresses, generic hook fixtures or
 automatic memory reclamation are introduced. A/C evidence remains intact.
 See the existing research report for primary API references.
+
+**Resumed allocator intervention — 25 October 2026:** full PC access was renewed
+for actual RAM reduction. A single signed Microsoft VMMap 3.4 guest snapshot
+classified 729480 KiB heap commit (~712.38 MiB) and 1259088 KiB Private Data
+commit (~1229.58 MiB). These are categories, not all reclaimable memory.
+The original game processes/profiles and production candidate remain unchanged.
+
+The standalone opt-in `tooling/acceptance/windows/heap-reclaim.cpp` now performs
+one documented HeapOptimizeResources request through a transient original DLL,
+outside loader callbacks/Present. It has no hooks, recurring worker, public API,
+profile mutations or production admission. PID/creation, architecture, game path,
+DLL file lock and module/RVA checks precede execution; uncertain threads are
+never killed/unloaded. Its own-process live-allocation/invalid-request/replay
+checks pass; a wrong-birth game invocation exits 4 before loading the action.
+
+| Actual call | Immediate private commit before → after | Observed decrease | API interval |
+| --- | --- | --- | --- |
+| Original MC01, menu | 2392158208 → 2351521792 bytes | 38.754 MiB | 8.903 ms |
+| Original MC02 Education host, guest joined same saved world, host in background | 2874871808 → 2852110336 bytes | 21.707 MiB | 3.011 ms |
+
+Both requests succeeded and each action DLL was confirmed unloaded. Both games
+remained responsive; guest rejoined the existing host world after its menu action,
+and its gameplay surface was still connected after the host action. Main heap
+compatibility returned 2 (LFH); other heaps/custom arenas remain unattributed.
+The separate before/after VMMap snapshots show heap commit down ~36.51 MiB,
+but are not the same instant as the API measurements. A larger working-set drop
+also occurred in the untouched peer and is NOT claimed as action savings.
+These two different states/calls must not be added as a concurrent durable saving.
+
+MSVC x64 Release-style /O2 /MT /W4 /WX compilation produced both action binaries;
+the own-process self-check explicitly exited 0. The initial build supervisor
+waited after compilation/self-check completion and was stopped without touching
+game/compiler processes; it is not a successful wrapper-command exit claim.
+No game/frame-latency benchmark, long soak, world save/restart after action,
+durable in-world reclaim, or five-client acceptance was performed.
+The host later read 2864721920 private bytes (~12.03 MiB above its immediate
+post-action value, ~9.68 MiB below its pre-action value) during continuing world
+activity. This is not a stable matched workload or an exact refill attribution.
+The modest, partly transient observed reclaim does not justify automatic or
+periodic reclamation.
+The missing mesh ownership seam still applies to renderer optimization, but
+does not rule out this separate allocator-level mechanism.
+
+Local evidence only: VMMap signed executable SHA256
+`0b3731c524e6ba716f15087d85eae7e6225b6b51d4ae2fa6c142ff1523f57046`;
+action DLL `7e24c04eb3996b7f40e7cd56fa9be98e1a7bcee2fe4d30f53779f75c92ab1b7b`;
+host `421e2d3a3be515a67c8ee7b5af1597cb13038ecbadab014a5ea99acd8de5e417`.
+Snapshot hashes: before `b027c27a342dcd5bf1f341d981babdfe0a6087a4395439a36b701b7d0665396d`,
+after `fee7f5daeb5a7547bef8e192a3c18c1a32d93e6a06b8849271344c5f387c8da9`.
+Raw mappings/account paths/identities are not published. Full A/B/C goal stays
+incomplete; games are left open in the shared world.
 
 Retain independently authored code, Local only, CI disabled, no Sandboxie/VMware
 or game-file modifications. Five clients remain deferred until two-client
@@ -1653,9 +1704,9 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** obtain a concrete Education-native mesh/resource
-allocation-and-rebuild integration reference before implementing B. Source/SDK
-access is unavailable, and the current Present adapter cannot establish this
-contract. Do not repeat runtime sampling or apply speculative buffer reclamation
-while the ownership blocker remains. Preserve A/C and keep the full goal
-incomplete; this decision does not replace B with settings or wrapper savings.
+**One next action:** attribute the dominant committed Private Data category
+to a native allocator/rendering owner using existing targeted tools, then choose
+one matching cache/arena retirement mechanism. Do not repeat aggregate sampling
+or LFH cleanup loops: the observed heap reclamation is modest and does not
+explain the larger private-data category. Preserve A/C, profiles, 12-chunk minimum,
+simulation and resolution; internal mesh optimization remains unproved.
