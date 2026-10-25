@@ -16,8 +16,15 @@ fixture counts and minor launcher/HUD savings are not substitutes for them.
 | **B — internal Minecraft efficiency** | Reduce unnecessary mesh/buffer/asset/cache or renderer work using a real Education-compatible integration, inspired by Java optimizers. | A new native internal optimization needs one demonstrated resource owner/lifetime seam. Existing Present mediation owns pacing/HUD, not game meshes/heaps. A generic allocator/hook fixture or wrapper micro-optimization does not satisfy B. | A guarded native startup-count intervention is implemented and executed on two original clients. Sequential readings showed lower private commitment but do not establish causal savings or meaningful resident-RAM benefit; default remains OFF. New bounded normal-retirement/completion evidence and an independent Upload canary are recorded below; a short same-world comparison now shows lower private WS/commitment, with sustained benefit still UNKNOWN. Do not promise a Java mod port or general RAM percentage. |
 | **C — inactive clients first** | Prioritize lower RAM/CPU/GPU demand while a client is not controlled; keep foreground 144/background 10 ceilings, prompt focus recovery and continuing Education host/network/saves. | Focus/pacing retain their current owners. Host role is separate from focus. No whole-process suspension, arbitrary memory/CPU caps, blind working-set trimming, token/profile sharing, fabricated occlusion result or freeing game-owned resources. | The existing limiter is implemented and prior 10-FPS observations are historical. Further game-owned background work reduction, its resource benefit and host health require a concrete intervention; no new savings are claimed yet. |
 
-**Current phase — ACTIVE: live native Upload capacity reduction observed; opt-in only.**
-The user's full PC/runtime authorization remains in effect. Source
+**Current phase — PAUSED by explicit operator request; efficiency development stops here.**
+The operator chose to end efficiency development for now. Do not automatically
+resume experiments, builds, measurements, game/UI actions or optimization work
+from earlier full-access permission or historical next actions. Resume requires
+a new explicit instruction. This pause does not mark the RAM goal complete or
+claim a maximum achievable saving. Preserve the current nonexperimental runtime
+and all accounts/worlds; Upload retention remains default OFF.
+
+**Latest completed evidence (historical, at commit70824472):** Source
 `050c4fc9ff2d2371bd947b6188f89f6038ee204d` was used to build complete
 compatibility DLLs with Upload retention ON and both heap experiments OFF.
 Both candidates reopened the original profiles without password entry.
@@ -37,7 +44,8 @@ The candidate loaded/saved the original world and both candidate processes
 exited normally with journal exitCode0. Sustained gameplay, chunk-travel churn,
 Education host/join, frame-time regression and multiplayer background-host
 health on this policy are still NOT_EXECUTED. The nonexperimental same-source
-baseline is now running: MC01 in the persisted test world and MC02 at menu.
+baseline was left running at the previous handoff: MC01 in the persisted test
+world and MC02 at menu. Runtime was not re-inspected for this pause.
 No experimental policy remains active. All public admission/payload policy,
 saved graphics,144/10, accounts/worlds and CI remain unchanged.
 
@@ -1869,10 +1877,9 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action — validate the Upload candidate under actual refill and host demand:**
-run one integrated two-client Education Host World workload with chunk travel,
-foreground/background changes and normal save/reopen; assess frame stalls,
-continuing host/network and resident RAM before deciding promotion or rollback.
-The stationary capacity/comparison question is answered; do not repeat generic
-capture or fixture work. Full PC permission is already granted. Preserve all
-profiles/worlds; public rollout and five-client expansion remain deferred.
+**Next action — none while PAUSED.**
+If explicitly resumed, the remaining candidate decision would require the
+integrated Education host/chunk-travel/save-reopen workload described in the
+research report. It is deferred, not authorized to run automatically.
+The observed59.953MiB (~4.30%) lower private working set is a short-run result;
+the maximum feasible or sustained saving remains UNKNOWN.
