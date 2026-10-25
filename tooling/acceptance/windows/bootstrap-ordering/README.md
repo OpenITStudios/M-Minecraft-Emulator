@@ -42,9 +42,22 @@ C++ receivers check actual hidden HUD composition under the full compatibility
 DLL. No counter is opened on a live game by these commands.
 
 Actual visible input behavior, per-monitor DPI transitions, fullscreen and
-DWM/GPU/VRAM overhead in Minecraft remain NOT_EXECUTED. The reviewed game
-candidate/payload pins and admission remain unchanged. Canonical current
-evidence and next action stay in planning/development.md.
+DWM/GPU/VRAM overhead in Minecraft remain NOT_EXECUTED. The existing manager's
+private `--education-startup-observation-once` route now opts the SAME reviewed
+two-profile replay into pacing/HUD through its configured constructor. It pins
+the rebuilt enroller/compatibility pair before creating children; plain
+source-only preparation stays unpaced. No fresh-profile pacing route, extra
+argument/hash override, public command or production admission is introduced.
+
+The separately staged preview candidate preserves the old candidate and uses
+only its unchanged 216-byte identity capability, never a copied account/world
+directory. Its local manifest binds exact manager/DLL/capability hashes.
+The manager's invalid-extra-argument smoke returns exit 2 before game lookup;
+that does not execute Minecraft. Running the valid private flag would open
+two games and therefore requires an available operator session. Test builds
+retain empty reviewed game/replay policies even with ignored tests included.
+Canonical exact hashes, executed evidence and the integrated Education
+Host World/focus/resource acceptance next action stay in planning/development.md.
 
 ## Private creation-to-pacing capability — 25 October 2026
 

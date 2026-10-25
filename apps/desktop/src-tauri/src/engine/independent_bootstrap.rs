@@ -215,7 +215,7 @@ fn create_unstarted_impl(
 }
 
 // A private caller supplies the already-pinned payload to opt into event pacing.
-// Existing registered routes call the legacy constructor and do not opt in.
+// Only the reviewed registered replay opts in; plain preparation stays unpaced.
 fn create_unstarted_configured(
     path: &Path,
     image: File,
@@ -440,9 +440,17 @@ fn create_unstarted_configured(
 /// Source-only two-slot preparation. No game/DLL code can be resumed here.
 /// The existing registered-image resolver remains the only target selector.
 pub(super) fn prepare_registered() -> io::Result<[PendingEducationBootstrap; 2]> {
-    prepare_registered_mode(false)
+    prepare_registered_mode(false, None)
 }
-fn prepare_registered_mode(observe: bool) -> io::Result<[PendingEducationBootstrap; 2]> {
+fn prepare_registered_mode(
+    observe: bool,
+    presentation_library: Option<&BootstrapLibrary>,
+) -> io::Result<[PendingEducationBootstrap; 2]> {
+    if presentation_library.is_some() && !observe {
+        return Err(invalid(
+            "Registered presentation requires reviewed profile replay",
+        ));
+    }
     let selector = "Resolve-ManagerEducationTarget -RegisteredOnly";
     let target = super::resolve_registered_education_target(selector)?;
     let path = Path::new(&target);
@@ -467,19 +475,21 @@ fn prepare_registered_mode(observe: bool) -> io::Result<[PendingEducationBootstr
         first.singleton_caller_rva = 0x2cdc30;
         second.singleton_caller_rva = 0x2cdc30;
     }
-    let first = create_unstarted_impl(
+    let first = create_unstarted_configured(
         path,
         image.try_clone()?,
         Some(first),
         observe,
+        presentation_library,
         #[cfg(test)]
         None,
     )?;
-    let second = create_unstarted_impl(
+    let second = create_unstarted_configured(
         path,
         image,
         Some(second),
         observe,
+        presentation_library,
         #[cfg(test)]
         None,
     )?;
@@ -588,14 +598,14 @@ const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = None;
 #[cfg(not(test))]
 const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = Some(PayloadDigests {
     enroller: [
-        0x20, 0x91, 0xe9, 0xd2, 0x5e, 0x63, 0xe9, 0x0a, 0x42, 0x41, 0xc4, 0x3f, 0x84, 0xfa, 0x9f,
-        0x25, 0x88, 0xe7, 0xab, 0x62, 0x73, 0x61, 0x22, 0x86, 0xe5, 0x65, 0xd0, 0xe9, 0x6f, 0xf9,
-        0x32, 0xed,
+        0x7b, 0x38, 0xa1, 0xc0, 0x2f, 0x0d, 0x51, 0x69, 0xf7, 0x4e, 0xbe, 0xbc, 0x83, 0x9d, 0x85,
+        0x4d, 0x49, 0xe9, 0xa7, 0xe7, 0x7b, 0x99, 0x33, 0x41, 0x5b, 0x1e, 0xc8, 0xd5, 0xd5, 0x39,
+        0x58, 0x8a,
     ],
     compatibility: [
-        0x4c, 0xc1, 0xa1, 0x21, 0x46, 0xb3, 0x8a, 0xad, 0x58, 0xe1, 0xb0, 0xad, 0x43, 0x92, 0x6f,
-        0xbf, 0xfd, 0xbd, 0xfe, 0x5d, 0x2b, 0x1c, 0x11, 0x1e, 0x45, 0x6e, 0x62, 0xf7, 0x88, 0x01,
-        0xcb, 0x17,
+        0x76, 0xa9, 0x38, 0xf1, 0x8e, 0xc6, 0xe1, 0xd0, 0x3a, 0xd2, 0xe0, 0x0f, 0x0f, 0xf3, 0x7f,
+        0xeb, 0xa4, 0x18, 0x34, 0xb2, 0xd4, 0x53, 0xc1, 0xb6, 0x12, 0xce, 0x99, 0x04, 0x51, 0x9c,
+        0x83, 0x89,
     ],
 });
 #[derive(Clone, Copy)]
@@ -988,7 +998,7 @@ impl StartedEducationObservation {
 
 pub(super) fn prepare_registered_enrolled() -> io::Result<PreparedEducationEnrollment> {
     let payload = BootstrapLibrary::reviewed()?;
-    let children = prepare_registered_mode(true)?;
+    let children = prepare_registered_mode(true, Some(&payload))?;
     for child in &children {
         payload.enroll(child)?;
     }
@@ -3721,6 +3731,11 @@ mod tests {
         assert_eq!(path.file_name(), Some(OsStr::new("bootstrap-ordering.exe")));
         let root = path.parent().unwrap();
         let library = BootstrapLibrary::load(root, fixture_digests(root)).unwrap();
+        // Registered pacing must not allocate fresh account-bearing slots.
+        assert!(
+            matches!(prepare_registered_mode(false, Some(&library)), Err(error)
+            if error.kind() == io::ErrorKind::InvalidData)
+        );
         // A policy request without storage refuses before process creation.
         assert!(create_unstarted_configured(
             &path,

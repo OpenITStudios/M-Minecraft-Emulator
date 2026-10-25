@@ -1083,19 +1083,60 @@ layouts, public schemas/admission, existing reviewed live payload hashes,
 original account/world data and CI/distribution are unchanged. No game was
 launched, closed, focused or controlled in this work.
 
+### Reviewed same-profile pacing/HUD candidate — 25 October 2026
+
+Base reviewed: `75f515c8f28e054eb1e47f877061d8ee1af0e0d1` (Local).
+The existing private registered-enrollment route now supplies its pinned
+BootstrapLibrary to the existing configured constructor for both replayed
+slots. That constructor already owns the read-only presentation capability,
+single focus-worker lease and pre-resume delivery. Plain source-only registered
+preparation remains unpaced. A presentation request outside reviewed replay
+refuses before registered-game or storage lookup; the own-payload regression
+asserts that refusal. No new command, provider/store or public admission is added.
+
+The fixed development pins now select the rebuilt pacing/HUD payload pair:
+enroller SHA-256
+`7b38a1c02f0d5169f74ebebc839d854d49e9a7e77b9933415b1ec8d5d539588a`;
+compatibility SHA-256
+`76a938f18ec6e1d03ad2e00f0ff37feba41834b2d453c1b612ce9904519c8389`.
+Test builds still have no reviewed game/replay policy. Existing registered
+image/callsite and 216-byte profile-identity capability pins remain unchanged;
+missing/replaced roots refuse without allocating replacement accounts.
+
+Executed: MSVC x64 Release /W4 /WX build, all 23 isolated exact-source Rust
+tests (one visible caption test filtered), non-test isolated cargo check and
+rustfmt check pass. The preview frontend and complete manager Release build
+also pass with the existing distinct preview configuration and no installer.
+The complete build reports existing unused/dead-code warnings and a pre-existing
+GetSecurityInfo signedness declaration warning; these were not suppressed.
+Compiled C++ and Rust/frontend inputs match the pinned source semantically
+apart from this bounded Rust change (line-ending differences retained locally).
+
+A separate ignored `acceptance-candidate-20261025-pacing-hud` directory contains
+the complete preview manager (SHA-256
+`d10334fd4fc74f232f19e02a15f7309ef44546c6957818106327107081acec4d`),
+the exact DLL pair and the unchanged replay capability. Its local manifest
+binds all bytes and the source blob. Only capability metadata was copied;
+account/token/world directories were not copied or read. Every file hash of
+the older exercised private-temp candidate was rechecked unchanged.
+Executing the new manager with the private flag plus an invalid extra argument
+returns exit 2 / InvalidData before lookup or game creation. This is refusal
+proof, not game startup or pacing acceptance. No game was launched, closed,
+activated or controlled; CI and public schemas/admission remain unchanged.
+
 ### Remaining proof and one next action
 
 The full goal remains ACTIVE: five licensed clients sharing one Education
 Host World, actual game 144/10 behavior without slowing background simulation,
 measured CPU/RAM/GPU/VRAM, persistence/soak/stability and the top-right FPS HUD.
-HUD source and hidden controls now exist; visible game behavior, fullscreen,
-real DPI transitions and composition cost remain NOT_EXECUTED. Neither own
-fixtures nor the HUD's accepted-present metric prove displayed FPS or host
-health. Existing registered game routes still opt out of the new policy/HUD,
-and public admission remains closed.
+The private two-slot candidate is built and staged; its successful game startup,
+visible HUD/input/fullscreen/DPI behavior, actual native frame rates, host
+health and composition cost remain NOT_EXECUTED. Five slots are not yet
+implemented in this private bootstrap. Own fixtures and accepted-present FPS
+do not prove displayed FPS, host simulation health or full stability.
 
-**One next action:** prepare a reviewed same-profile two-client candidate
-using the existing private presentation constructor with pacing/HUD, pin its
-payloads and prepare one integrated runtime check of counter/native frame
-rates, focus changes and Education Host World health before five-client
-expansion; launch only in an available operator session without Computer Use.
+**One next action:** in an available operator session, run the staged same-profile
+two-client candidate without Computer Use and perform one integrated Education
+Host World/join, focus-switch, HUD/native-FPS and resource/persistence check.
+Retain original games/data on refusal; five-client expansion follows actual
+two-client pacing/host-health evidence, not just the built artifact.
