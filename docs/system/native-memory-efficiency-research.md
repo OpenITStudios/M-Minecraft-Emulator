@@ -653,3 +653,42 @@ Private Data allocation owner, not repeat LFH calls or add another collector.
 A later running-host reading was 2864721920 private bytes, about 12.03 MiB above
 its immediate post-action value. Ongoing game allocations confound attribution;
 this reinforces that the instantaneous drop is not a durable RAM guarantee.
+
+
+## Dominant private allocation class and GPU-upload eligibility
+
+The already-local VMMap CSVs have parent allocations plus two-space-indented
+leaf regions. Counting only 728 private-data leaves gives 1259088 KiB committed,
+exactly equal to the summary. There are 57 write-combined leaves totaling
+1098364 KiB (1072.62 MiB, 87.2%); that total is identical after the one-shot heap
+action. These correct binary units replace earlier rough conversational GiB
+figures. Parent+child summation would double-count the allocation.
+
+The observed game modules include D3D12/D3D12Core and NVIDIA user-mode drivers.
+[Microsoft's GPU-upload specification](https://microsoft.github.io/DirectX-Specs/d3d/D3D12GPUUploadHeaps.html)
+maps ordinary discrete-GPU upload memory to write-combined L0 and GPU_UPLOAD to
+write-combined L1. Therefore graphics upload memory is a plausible hypothesis,
+not a proven attribution from page protection. CPU-visible mapped buffers are
+not automatically unused memory that the LFH manager can release.
+
+A temporary own-process D3D12 OPTIONS16 query returned S_OK and
+GPUUploadHeapSupported=false. NVIDIA reported 8192 MiB framebuffer and 256 MiB
+BAR1. [NVIDIA's documented GPU-upload requirements](https://developer.nvidia.com/blog/optimizing-dx12-resource-uploads-to-the-gpu-using-gpu-upload-heaps/)
+require full CPU-visible VRAM on discrete GPUs. No game-device heap conversion,
+BIOS/driver change or extra VRAM consumption was attempted. This closes automatic
+GPU_UPLOAD substitution on the observed configuration, not every graphics-memory
+optimization. It is a capability result rather than Minecraft RAM savings.
+
+The planned [WPR VirtualAllocation](https://learn.microsoft.com/en-us/windows/apps/develop/performance/disk-memory)
+capture needs administrator rights. Its UAC launch was canceled; no new ETL or
+active default/named recording exists. A local Microsoft TraceEvent parser was
+prepared and its API/ETL-read preflight succeeded, but the intended allocation
+attribution remains NOT_EXECUTED. No new product collector or recurring service
+was introduced. Guest restored to its existing host world after normal save/exit.
+
+New-allocation traces cannot retrospectively identify stacks for an unchanged
+pool allocated before recording. A single recorder-ready cold start of the
+existing candidate/original profiles is the appropriate next observation if the
+operator provides manual UAC consent; do not keep retrying the canceled request
+or substitute another aggregate RAM chart. Until then, actual owner/lifetime
+and safe buffer reduction remain UNKNOWN.

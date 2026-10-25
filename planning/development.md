@@ -133,6 +133,43 @@ after `fee7f5daeb5a7547bef8e192a3c18c1a32d93e6a06b8849271344c5f387c8da9`.
 Raw mappings/account paths/identities are not published. Full A/B/C goal stays
 incomplete; games are left open in the shared world.
 
+**Dominant Private Data follow-up (source baseline 9eed30e):** analysis reused
+the existing before/after VMMap CSVs, rather than recording another aggregate
+RAM series. CSV top-level allocations and indented leaf regions are hierarchical;
+only the 728 leaf rows are counted, and their 1259088 KiB commit sum exactly
+matches the Private Data summary. Of those, 57 write-combined leaf regions sum
+to 1098364 KiB (1072.62 MiB, about 87.2%). The same 1098364 KiB remains after LFH
+reclamation. Earlier conversational GiB approximations were imprecise; these
+KiB/MiB totals are authoritative. Do not double-count parent and child rows.
+
+The game has D3D12/D3D12Core and NVIDIA user-mode modules loaded. Write-combined
+memory is consistent with D3D12 CPU-visible upload resources, but protection flags
+do not establish the owner, resource purpose, live contents or reclaimability.
+No common allocator-name strings were found in installed executable metadata;
+that does not prove the absence of a static/custom allocator.
+
+A temporary own-process D3D12 hardware capability query compiled with MSVC x64
+/W4 /WX and exited 0: OPTIONS16 CheckFeatureSupport returned S_OK with
+GPUUploadHeapSupported=false. NVIDIA reports 8192 MiB framebuffer and only
+256 MiB BAR1. This is an eligibility decision, not a Minecraft optimization:
+do not migrate buffers to GPU_UPLOAD, change BIOS/driver settings, or count a
+RAM-to-VRAM shift as reduced total memory. No new product probe/API was added.
+
+One existing WPR VirtualAllocation capture was prepared with a unique named
+session and a bounded local TraceEvent analysis path. Its UAC launch returned
+"operation was canceled by the user"; no elevated helper/status or new ETL
+was created, and both default/named WPR status report not recording. Thus
+allocation-stack attribution is NOT_EXECUTED. No prompt retry, access bypass,
+kernel/session change or optimizer action was performed. The guest was saved/
+exited normally during preparation, then restored to the same host world after
+cancellation. Both games remain responsive.
+
+A world rejoin capture can attribute newly committed buffers only; it cannot
+recover the allocation stacks of the already-existing 57 regions. To attribute
+that original footprint, prefer one bounded cold-start capture through the
+existing manager/original profiles after normal save/exit, with a recorder-ready
+handshake and automatic launch. Manual Windows UAC consent is still required.
+
 Retain independently authored code, Local only, CI disabled, no Sandboxie/VMware
 or game-file modifications. Five clients remain deferred until two-client
 stability and worthwhile savings are demonstrated. The existing research report
@@ -1704,9 +1741,10 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** attribute the dominant committed Private Data category
-to a native allocator/rendering owner using existing targeted tools, then choose
-one matching cache/arena retirement mechanism. Do not repeat aggregate sampling
-or LFH cleanup loops: the observed heap reclamation is modest and does not
-explain the larger private-data category. Preserve A/C, profiles, 12-chunk minimum,
-simulation and resolution; internal mesh optimization remains unproved.
+**One next action:** after the operator manually approves the required Windows
+UAC prompt, attribute write-combined allocations with one named, bounded WPR
+VirtualAllocation cold-start capture using the existing candidate/original
+profiles and normal saves. Do not re-prompt after the cancellation automatically,
+infer ownership from PAGE_WRITECOMBINE alone, or repeat LFH cleanup. The optional
+capture has not run. Preserve A/C, 12-chunk minimum, simulation/resolution and
+accounts/worlds; actual buffer lifetime/reduction remains unproved.
