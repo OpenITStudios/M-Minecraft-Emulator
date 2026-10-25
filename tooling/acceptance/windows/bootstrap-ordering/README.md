@@ -1,5 +1,40 @@
 # Self-owned early-import ordering experiment
 
+## Private creation-to-pacing capability — 25 October 2026
+
+The opt-in own-child command `--run-presentation-pacing-self-test` extends
+the existing configured-storage runner. Exact mode `pace` requires a read-only
+120-byte v2 presentation section, retaining the 72-byte creation record prefix.
+Mode `observe` still accepts its original v1 record. Storage v2 stays 1,136 bytes.
+
+The child validates process birth/session, System32 DXGI metadata and executable
+creation RVAs, plus distinct event objects with manual/auto/manual reset modes.
+Event handles must have exactly SYNCHRONIZE + EVENT_QUERY_STATE; controller
+access is exactly SYNCHRONIZE + PROCESS_QUERY_LIMITED_INFORMATION and must
+match a live same-session PID/birth. Inheritance is removed before retaining
+them. The pacer duplicates wait-only copies and source handles close after
+one-time initialization on the first eligible creation, outside loader lock.
+CreateSwapChain and CreateSwapChainForHwnd now transfer the caller reference
+into the existing typed wrapper in pace mode. Failure preserves native success
+and records an explicit failure; diagnostics never authorize admission.
+
+Object access uses Microsoft's dynamically resolved
+[NtQueryObject](https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntqueryobject).
+Reset-mode queries use the native NtQueryEvent layout described by the
+[primary System Informer header](https://github.com/winsiderss/phnt/blob/master/ntexapi.h).
+This is **not a supported Win32 compatibility guarantee**. Missing exports,
+unexpected lengths/access/type/reset mode refuse the candidate; compatibility
+with other Windows builds remains UNKNOWN. No third-party implementation is copied.
+
+Own hidden D3D12 WARP controls exercise parent-to-child 10/144/10/144 policy,
+release/recreation, sticky stop and a distinct controller's normal exit.
+Thirty-four invalid presentation capabilities plus malformed mode and five
+invalid storage configurations refuse startup. Observe-only creation coverage
+and storage workflows remain regression controls. These are synthetic
+process-bound event updates; the Rust OS-focus producer is not yet connected
+through bootstrap, the HUD is not implemented and Minecraft is NOT_EXECUTED.
+Current continuation and exact evidence belong only to planning/development.md.
+
 ## Opt-in rendering timer control
 
 The explicit test-only CMake configuration also builds

@@ -15,6 +15,14 @@ struct CreationConfig {
 };
 constexpr DWORD CreationMagic = 0x50524431;
 static_assert(sizeof(CreationConfig) == 72);
+// Private v2 extension; observe v1 and the storage configuration stay unchanged.
+struct PolicyConfig {
+    CreationConfig creation;
+    HANDLE level, changed, stop, controller;
+    DWORD controllerPid, reserved;
+    FILETIME controllerCreated;
+};
+static_assert(sizeof(PolicyConfig) == 120);
 // Metadata only: never create a factory/device while the loader lock is held.
 inline bool imageMetadata(CreationConfig& result, HMODULE& module) noexcept {
     module = GetModuleHandleW(L"dxgi.dll");

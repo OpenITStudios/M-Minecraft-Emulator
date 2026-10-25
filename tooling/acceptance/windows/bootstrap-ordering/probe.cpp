@@ -2,6 +2,7 @@
 #include "education-config.h"
 #include "startup-observation.h"
 #include "presentation-enrollment.h"
+#include "dxgi-pacing.h"
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <wrl/client.h>
@@ -38,6 +39,7 @@ bool cleanupFailed = false;
 unsigned lastFailureLine = 0;
 bool configuredDiagnosticChild = false;
 const wchar_t* presentationControl = nullptr;
+DWORD policyControlRound = 0;
 void requireAt(bool condition, unsigned line) {
     if (!condition) {
         lastFailureLine = line;
@@ -1841,8 +1843,8 @@ struct ConfigView {
 };
 
 struct PresentationConfigView {
-    presentation_enrollment::CreationConfig* value;
-    explicit PresentationConfigView(HANDLE section) : value(static_cast<presentation_enrollment::CreationConfig*>(
+    presentation_enrollment::PolicyConfig* value;
+    explicit PresentationConfigView(HANDLE section) : value(static_cast<presentation_enrollment::PolicyConfig*>(
         MapViewOfFile(section, FILE_MAP_WRITE, 0, 0, sizeof(*value)))) {
         require(value != nullptr); ZeroMemory(value, sizeof(*value));
     }
@@ -1855,9 +1857,14 @@ struct ConfiguredChild {
         0, sizeof(education_bootstrap::Config), nullptr)};
     ConfigView config{configSection.value};
     Handle presentationSection{CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
-        0, sizeof(presentation_enrollment::CreationConfig), nullptr)};
+        0, sizeof(presentation_enrollment::PolicyConfig), nullptr)};
     PresentationConfigView presentation{presentationSection.value};
     Handle presentationRead;
+    Handle policyLevel{CreateEventW(nullptr, TRUE, FALSE, nullptr)};
+    Handle policyChanged{CreateEventW(nullptr, FALSE, FALSE, nullptr)};
+    Handle policyStop{CreateEventW(nullptr, TRUE, FALSE, nullptr)};
+    Handle policyReaders[4];
+    Child controller;
     Handle readonly;
     Handle ready{sharedEvent()}, done{sharedEvent()};
     Child child;
@@ -1870,7 +1877,7 @@ struct ConfiguredChild {
         auto& status = *receipt.value;
         ZeroMemory(&status, sizeof(status));
         status.magic = probe::Magic; status.version = probe::Version;
-        status.mode = probe::ConfiguredStorage; status.slot = slot; status.fileRound = round;
+        status.mode = probe::ConfiguredStorage; status.slot = slot; status.fileRound = round >= 6 ? 0 : round;
         status.registryBacking = 1; status.inheritedRegistry = backing;
         status.cachedHostKey = registry.branch.value;
         status.fileLogicalRoot = roots.logical.value;
@@ -1895,7 +1902,7 @@ struct ConfiguredChild {
         if (presentationControl) {
             require(DuplicateHandle(current, presentationSection.value, current, &presentationRead.value,
                 invalid == 11 ? FILE_MAP_READ | FILE_MAP_WRITE : FILE_MAP_READ, TRUE, 0));
-            auto& creation = *presentation.value;
+            auto& creation = presentation.value->creation;
             HMODULE image = nullptr;
             require(presentation_enrollment::imageMetadata(creation, image));
             Microsoft::WRL::ComPtr<IDXGIFactory2> factory;
@@ -1913,9 +1920,51 @@ struct ConfiguredChild {
             creation.magic = presentation_enrollment::CreationMagic; creation.version = 1;
             creation.bytes = sizeof(creation); creation.session = target.session;
         }
-        HANDLE inherited[]{section.value, readonly.value, ready.value, done.value, go, finish,
-            target.logicalRoot, target.privateRoot, backing, status.cachedHostKey, presentationRead.value};
-        Attributes attributes(inherited, presentationControl ? 11 : 10);
+        const bool paced = presentationControl && wcscmp(presentationControl, L"pace") == 0;
+        std::vector<HANDLE> inherited{section.value, readonly.value, ready.value, done.value, go, finish,
+            target.logicalRoot, target.privateRoot, backing, status.cachedHostKey};
+        if (presentationControl) inherited.push_back(presentationRead.value);
+        if (paced) {
+            auto& policy = *presentation.value;
+            policy.creation.version = 2; policy.creation.bytes = sizeof(policy);
+            HANDLE controllerSource = current;
+            if (round == 7) {
+                STARTUPINFOW startup{sizeof(startup)};
+                auto command = L"\"" + self + L"\" --bootstrap-observation-child";
+                require(CreateProcessW(self.c_str(), command.data(), nullptr, nullptr, FALSE,
+                    CREATE_SUSPENDED | CREATE_NO_WINDOW, nullptr, nullptr, &startup, &controller.info));
+                controllerSource = controller.info.hProcess;
+            }
+            policy.controllerPid = GetProcessId(controllerSource);
+            FILETIME exit{}, kernel{}, user{};
+            require(GetProcessTimes(controllerSource, &policy.controllerCreated, &exit, &kernel, &user));
+            Handle wrongLevel(CreateEventW(nullptr, FALSE, FALSE, nullptr));
+            Handle wrongChanged(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+            Handle wrongStop(CreateEventW(nullptr, FALSE, FALSE, nullptr));
+            const HANDLE source[]{invalid == 26 ? wrongLevel.value : policyLevel.value,
+                invalid == 27 ? wrongChanged.value : policyChanged.value,
+                invalid == 28 ? wrongStop.value : policyStop.value, controllerSource};
+            HANDLE* output[]{&policy.level, &policy.changed, &policy.stop, &policy.controller};
+            for (unsigned i = 0; i < 4; ++i) {
+                DWORD access = SYNCHRONIZE | (i == 3 ? PROCESS_QUERY_LIMITED_INFORMATION : 1UL);
+                if (i == 0 && invalid == 29) access |= EVENT_MODIFY_STATE;
+                if (i == 0 && invalid == 37) access = SYNCHRONIZE;
+                if (i == 3 && invalid == 38) access |= PROCESS_VM_READ;
+                require(DuplicateHandle(current, source[i], current, &policyReaders[i].value, access, TRUE, 0));
+                *output[i] = policyReaders[i].value;
+                inherited.push_back(*output[i]);
+            }
+            if (invalid == 25) policy.level = nullptr;
+            if (invalid == 30) policy.changed = policy.level;
+            if (invalid == 31) ++policy.controllerCreated.dwLowDateTime;
+            if (invalid == 32) ++policy.controllerPid;
+            if (invalid == 33) policy.controller = GetCurrentProcess();
+            if (invalid == 34) policy.reserved = 1;
+            if (invalid == 35) policy.level = policy.controller;
+            if (invalid == 36) require(SetEvent(policyStop.value));
+            if (invalid == 39) policy.creation.version = 1;
+        }
+        Attributes attributes(inherited.data(), inherited.size());
         auto env = environment(section.value, target.privateRoot);
         env.pop_back();
         if (presentationControl) {
@@ -1935,7 +1984,8 @@ struct ConfiguredChild {
         env.push_back(0); env.push_back(0);
         STARTUPINFOEXW startup{};
         startup.StartupInfo.cb = sizeof(startup); startup.lpAttributeList = attributes.value;
-        std::wstring command = L"\"" + self + L"\" --bootstrap-test-child";
+        std::wstring command = L"\"" + self + L"\" " + (round == 6 ? L"--bootstrap-policy-stop-child"
+            : round == 7 ? L"--bootstrap-policy-death-child" : L"--bootstrap-test-child");
         require(CreateProcessW(self.c_str(), command.data(), nullptr, nullptr, TRUE,
             CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW,
             env.data(), nullptr, &startup.StartupInfo, &child.info) != FALSE);
@@ -1944,7 +1994,7 @@ struct ConfiguredChild {
         require(GetProcessTimes(child.info.hProcess, &target.created, &exit, &kernel, &user) != FALSE);
         status.created = target.created;
         if (presentationControl) {
-            auto& creation = *presentation.value;
+            auto& creation = presentation.value->creation;
             creation.pid = target.pid; creation.created = target.created;
             if (invalid == 6) ++creation.pid;
             if (invalid == 7) ++creation.created.dwLowDateTime;
@@ -2534,7 +2584,7 @@ void helperBindingCheck(probe::Receipt& receipt, bool bound) {
         && registryValue(parent.value, L"Marker") != 0x484f5354);
 }
 
-void presentationChecks() {
+void presentationChecks(probe::Receipt& receipt) {
     using namespace Microsoft::WRL;
     using Read = BOOL (*)(presentation_enrollment::Snapshot*);
     const auto read = reinterpret_cast<Read>(GetProcAddress(GetModuleHandleW(L"bootstrap-compat.dll"),
@@ -2590,6 +2640,43 @@ void presentationChecks() {
     require(read(&observed) && observed.candidates == 0 && observed.ignored == 1);
     auto chain = create(selected.value);
     require(read(&observed) && observed.candidates == 1 && observed.width == 16 && observed.height == 16);
+    if (policyControlRound == 6 || policyControlRound == 7) {
+        using PacingRead = BOOL (*)(dxgi_pacing::Snapshot*, DWORD);
+        const auto pacingRead = reinterpret_cast<PacingRead>(GetProcAddress(GetModuleHandleW(L"bootstrap-compat.dll"),
+            "BootstrapPacingSnapshot"));
+        require(pacingRead && !pacingRead(nullptr, sizeof(dxgi_pacing::Snapshot)));
+        dxgi_pacing::Snapshot invalidSnapshot{};
+        require(!pacingRead(&invalidSnapshot, sizeof(invalidSnapshot) - 1));
+        LARGE_INTEGER frequency{}; require(QueryPerformanceFrequency(&frequency));
+        dxgi_pacing::Snapshot timing{};
+        const auto frames = [&](unsigned ceiling) {
+            LONGLONG previous = 0;
+            for (unsigned frame = 0; frame < 4; ++frame) {
+                require(SUCCEEDED(chain->Present(0, 0)) && pacingRead(&timing, sizeof(timing))
+                    && timing.lastCeiling == ceiling && !timing.faults && timing.liveBindings == 1);
+                if (previous) require(timing.lastRelease - previous >= (frequency.QuadPart + ceiling - 1) / ceiling);
+                previous = timing.lastRelease;
+            }
+        };
+        frames(10);
+        for (unsigned phase = 0; phase < 4; ++phase) {
+            require(SetEvent(receipt.ready) && WaitForSingleObject(receipt.go, 10000) == WAIT_OBJECT_0);
+            if (phase == 2) { chain.Reset(); chain = create(selected.value); }
+            if (phase < 3) frames(phase == 1 ? 10 : 144);
+            else {
+                const auto presents = timing.pacedPresent;
+                require(SUCCEEDED(chain->Present(0, 0)) && pacingRead(&timing, sizeof(timing))
+                    && timing.pacedPresent == presents && timing.bypassed == 1 && !timing.faults);
+                chain.Reset(); chain = create(selected.value);
+                require(SUCCEEDED(chain->Present(0, 0)) && pacingRead(&timing, sizeof(timing))
+                    && timing.pacedPresent == presents && timing.bypassed == 2 && !timing.faults);
+            }
+        }
+        chain.Reset();
+        require(pacingRead(&timing, sizeof(timing)) && !timing.liveBindings
+            && timing.createdBindings == 3 && timing.destroyedBindings == 3 && !timing.unsupportedInterfaces);
+        return;
+    }
     chain.Reset(); // The observer must not pin an obsolete flip chain on this HWND.
     chain = create(selected.value);
     require(read(&observed) && observed.candidates == 2 && observed.failures == 0);
@@ -2638,7 +2725,11 @@ void presentationChecks() {
 
 int configuredStorageChild(probe::Receipt& receipt) {
     configuredDiagnosticChild = true;
-    presentationChecks();
+    presentationChecks(receipt);
+    if (policyControlRound == 6 || policyControlRound == 7) {
+        InterlockedExchange(&receipt.nativeChecks, 1);
+        return 0;
+    }
     // Candidate storage configuration must not guess or rewrite a singleton.
     Handle shared(CreateMutexW(nullptr, FALSE, receipt.logical));
     require(shared.value && GetLastError() == ERROR_ALREADY_EXISTS);
@@ -2707,18 +2798,51 @@ bool configuredStoragePair(const std::wstring& self, const std::string& compatib
         setRegistryValue(branch.value, L"Marker", slot * 100);
     }
     if (presentationControl) {
+        const auto selectedMode = presentationControl;
         presentationControl = L"invalid";
         Handle go(sharedEvent()), finish(sharedEvent());
         ConfiguredChild rejected(1, 0, roots, stores[0].value, registry, name, go.value, finish.value,
             self, compatibility);
         rejected.exited(false);
-        presentationControl = L"observe";
+        presentationControl = selectedMode;
     }
-    for (DWORD invalid = 1; invalid <= (presentationControl ? 24UL : 5UL); ++invalid) {
+    const bool paced = presentationControl && wcscmp(presentationControl, L"pace") == 0;
+    for (DWORD invalid = 1; invalid <= (paced ? 39UL : presentationControl ? 24UL : 5UL); ++invalid) {
         Handle go(sharedEvent()), finish(sharedEvent());
         ConfiguredChild rejected(1, 0, roots, stores[0].value, registry, name, go.value, finish.value,
             self, compatibility, invalid);
         rejected.exited(false);
+        registry.unchanged();
+    }
+    if (paced) for (DWORD round : {6UL, 7UL}) {
+        Key canary;
+        require(RegOpenKeyExW(stores[0].value, registry.path.c_str(), 0, KEY_SET_VALUE, &canary.value) == ERROR_SUCCESS);
+        setRegistryValue(canary.value, L"Marker", 100);
+        Handle go(CreateEventW(nullptr, FALSE, FALSE, nullptr)), finish(sharedEvent());
+        require(go.value && SetHandleInformation(go.value, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT));
+        ConfiguredChild policyChild(1, round, roots, stores[0].value, registry, name, go.value, finish.value,
+            self, compatibility);
+        for (unsigned phase = 0; phase < 4; ++phase) {
+            policyChild.phase(policyChild.ready.value);
+            require(ResetEvent(policyChild.ready.value));
+            if (phase == 3) {
+                if (round == 6) require(SetEvent(policyChild.policyStop.value));
+                else {
+                    require(ResumeThread(policyChild.controller.info.hThread) == 1
+                        && WaitForSingleObject(policyChild.controller.info.hProcess, 10000) == WAIT_OBJECT_0);
+                    DWORD code = 1;
+                    require(GetExitCodeProcess(policyChild.controller.info.hProcess, &code) && code == 0);
+                }
+            } else {
+                require(phase == 1 ? ResetEvent(policyChild.policyLevel.value) : SetEvent(policyChild.policyLevel.value));
+                require(SetEvent(policyChild.policyChanged.value));
+            }
+            require(SetEvent(go.value));
+        }
+        policyChild.recoveryExited(0);
+        std::printf("{\"case\":\"bootstrap-creation-policy\",\"ceilings\":[10,144,10,144],\"recreated\":true,"
+            "\"stickyStop\":true,\"controllerExit\":%s,\"minecraft\":\"NOT_EXECUTED\"}\n", round == 7 ? "true" : "false");
+        setRegistryValue(canary.value, L"Marker", 100);
         registry.unchanged();
     }
     for (DWORD round = 0; round < 2; ++round) {
@@ -2888,7 +3012,7 @@ bool configuredStoragePair(const std::wstring& self, const std::string& compatib
         "\"presentationEnrollmentChecked\":%s,"
         "\"presentationInvalidCapabilitiesRejected\":%u,\"presentationCreationCoverage\":\"%s\","
         "\"singleton\":\"UNKNOWN\",\"singletonRemap\":false,\"helpers\":\"UNKNOWN\",\"securityBoundary\":false,"
-        "\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n", presentationControl ? "true" : "false", presentationControl ? 19U : 0U,
+        "\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n", presentationControl ? "true" : "false", paced ? 34U : presentationControl ? 19U : 0U,
         presentationControl ? "STARTUP_RVA_40_CREATIONS" : "OFF");
     return true;
 }
@@ -3303,7 +3427,9 @@ int wmain(int argc, wchar_t** argv) {
     if (argc == 2 && wcscmp(argv[1], L"--bootstrap-helper-view") == 0) {
         try { return helperViewMain(); } catch (...) { return 87; }
     }
-    if (argc == 2 && wcscmp(argv[1], L"--bootstrap-test-child") == 0) {
+    if (argc == 2 && wcscmp(argv[1], L"--bootstrap-policy-stop-child") == 0) policyControlRound = 6;
+    if (argc == 2 && wcscmp(argv[1], L"--bootstrap-policy-death-child") == 0) policyControlRound = 7;
+    if (policyControlRound || (argc == 2 && wcscmp(argv[1], L"--bootstrap-test-child") == 0)) {
         try { return childMain(); } catch (...) { return configuredDiagnosticChild && lastFailureLine
             ? 60000 + static_cast<int>(lastFailureLine) : 85; }
     }
@@ -3314,9 +3440,10 @@ int wmain(int argc, wchar_t** argv) {
             return view.open() ? readRustEnrollmentControl() : readRustBootstrap();
         } catch (...) { return 86; }
     }
+    const bool pacingTest = argc == 2 && wcscmp(argv[1], L"--run-presentation-pacing-self-test") == 0;
     const bool presentationTest = argc == 2 && wcscmp(argv[1], L"--run-presentation-enrollment-self-test") == 0;
-    presentationControl = presentationTest ? L"observe" : nullptr;
-    const bool configuredTest = presentationTest || (argc == 2 && wcscmp(argv[1], L"--run-configured-storage-self-test") == 0);
+    presentationControl = pacingTest ? L"pace" : presentationTest ? L"observe" : nullptr;
+    const bool configuredTest = pacingTest || presentationTest || (argc == 2 && wcscmp(argv[1], L"--run-configured-storage-self-test") == 0);
     const bool mutexTest = argc == 2 && wcscmp(argv[1], L"--run-mutex-self-test") == 0;
     const bool ordinaryTest = argc == 2 && wcscmp(argv[1], L"--run-inherited-registry-self-test") == 0;
     if (!configuredTest && !mutexTest && !ordinaryTest && (argc != 2 || wcscmp(argv[1], L"--run-self-test") != 0)) return 64;

@@ -2,6 +2,7 @@
 #include "education-config.h"
 #include "startup-observation.h"
 #include "presentation-enrollment.h"
+#include "dxgi-pacing.h"
 #include <detours.h>
 #include <cstdio>
 #include <cwchar>
@@ -936,6 +937,11 @@ bool install(const InstallConfig& config, bool mutex) {
 } // namespace
 
 extern "C" void BootstrapOrdinalOne() {}
+extern "C" BOOL BootstrapPacingSnapshot(dxgi_pacing::Snapshot* output, DWORD bytes) {
+    if (!output || bytes != sizeof(*output)) return FALSE;
+    *output = dxgi_pacing::snapshot();
+    return TRUE;
+}
 extern "C" BOOL BootstrapPresentationSnapshot(presentation_enrollment::Snapshot* output) {
     if (!output || output->bytes != sizeof(*output)) return FALSE;
     *output = presentation_enrollment::snapshot();

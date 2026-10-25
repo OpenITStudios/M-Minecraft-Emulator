@@ -38,7 +38,7 @@ target_compile_definitions(probe-detours PRIVATE DETOUR_DEBUG=0 WIN32_LEAN_AND_M
 target_compile_options(probe-detours PRIVATE /W4 /WX)
 
 add_library(bootstrap-dependency SHARED dependency.cpp)
-add_library(bootstrap-compat SHARED compat.cpp compat.def presentation-enrollment.cpp)
+add_library(bootstrap-compat SHARED compat.cpp compat.def presentation-enrollment.cpp dxgi-pacing.cpp)
 target_link_libraries(bootstrap-compat PRIVATE probe-detours shell32 ole32 uuid advapi32 dxgi user32)
 add_library(bootstrap-enroll SHARED enroll.cpp)
 target_link_libraries(bootstrap-enroll PRIVATE probe-detours advapi32)

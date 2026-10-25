@@ -3,3 +3,4 @@ EXPORTS
     BootstrapOrdinalOne @1
     BootstrapRegistry
     BootstrapPresentationSnapshot
+    BootstrapPacingSnapshot

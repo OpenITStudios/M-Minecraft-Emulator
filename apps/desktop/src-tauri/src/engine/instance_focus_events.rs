@@ -204,11 +204,13 @@ mod windows {
             Ok(())
         }
         fn readers(&self) -> io::Result<[OwnedHandle; 4]> {
+            // Read-only native decoder queries reset modes before retaining wait-only copies.
+            const EVENT_QUERY_STATE: u32 = 1;
             let process = unsafe { BorrowedHandle::borrow_raw(GetCurrentProcess() as _) };
             Ok([
-                duplicate(self.level.as_handle(), SYNCHRONIZE)?,
-                duplicate(self.changed.as_handle(), SYNCHRONIZE)?,
-                duplicate(self.stop.as_handle(), SYNCHRONIZE)?,
+                duplicate(self.level.as_handle(), SYNCHRONIZE | EVENT_QUERY_STATE)?,
+                duplicate(self.changed.as_handle(), SYNCHRONIZE | EVENT_QUERY_STATE)?,
+                duplicate(self.stop.as_handle(), SYNCHRONIZE | EVENT_QUERY_STATE)?,
                 duplicate(process, SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION)?,
             ])
         }

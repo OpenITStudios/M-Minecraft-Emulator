@@ -894,17 +894,81 @@ define the observed metric. HUD source, actual on-screen behavior and overhead
 remain NOT_IMPLEMENTED / NOT_EXECUTED; this addition does not replace the
 five-client, 144/10, persistence, Host World or stability requirements.
 
+### Creation-to-pacing capability integration — 25 October 2026
+
+Base reviewed: `8b6e731f85d8ff2c94f08732df3b3834e273c214` (Local).
+The existing presentation enrollment owner now accepts a separate private
+120-byte v2 policy capability in exact `pace` mode. Observe v1 (72 bytes),
+storage v2 (1,136 bytes), public admission and reviewed game payload pins
+stay unchanged. The opt-in C++ runner is its only capability producer so far.
+
+The child checks exact target PID/birth/session, DXGI file/PE metadata and
+executable RVAs, four distinct objects, exact read-only access, event
+manual/auto/manual reset modes, and a live same-session controller PID/birth.
+It removes inheritance. NtQueryObject/NtQueryEvent are resolved dynamically;
+unexpected/missing native queries fail closed. NtQueryEvent reset-mode layout
+is supported by primary System Informer declarations, not a Microsoft Win32
+guarantee. Other Windows-build support remains UNKNOWN. README links sources.
+
+On the first eligible creation, outside loader lock, InitOnce initializes the
+existing process pacer, which duplicates wait-only event/controller copies.
+The inherited source copies close after initialization. Both creation paths
+transfer one caller reference into the typed wrapper; native chain/factory
+objects and vtables remain unchanged. Initialization/wrapping failures preserve
+native API results and record failure. A replacement chain inherits policy and
+sticky stop. No factory/device/timer/thread is created by this integration
+under loader lock. Rust reader event rights add EVENT_QUERY_STATE for this
+decoder, without EVENT_MODIFY_STATE; bootstrap delivery is still unwired.
+
+### Executed evidence for this source change
+
+MSVC x64 Release /W4 /WX build passes. Ten unchanged compiled C++ inputs were
+compared literally (after line-ending normalization) with the exact base.
+
+- `--run-presentation-pacing-self-test`: own parent/hidden child/D3D12 WARP
+  checks release intervals at 10/144/10/144, recreation during active policy,
+  stop-event and distinct controller normal-exit cases, and sticky bypass on
+  another recreation. Three wrappers per case balance to zero live bindings.
+  Invalid snapshot sizes/null output refuse. All return native exit 0.
+- Thirty-four invalid presentation capabilities refuse, including missing,
+  aliased/pseudo/wrong-type handles, wrong reset modes, writable/query-missing
+  rights, changed controller PID/birth, signaled stop, reserved bytes and v1
+  downgrade. Five storage-invalid cases and malformed mode also refuse.
+- The existing observe command passes 19 invalid presentation capabilities,
+  40 creation lifetimes, both native creation methods and native factory
+  recovery. The paced runner also retains those recreation/storage controls.
+- The first policy-only receipt check exposed the storage fixture's round
+  semantics: canaries expected a prior saved round. Dedicated fixed child
+  arguments now select presentation controls while retaining first-round
+  storage canaries; each case resets only its generated marker. No game data
+  or acceptance assertion was weakened.
+- Negative control removing HWND wrapping builds but the paced test fails
+  (exit 2; child fails its pacing assertion). Restoring wrapping builds and
+  passes. Final exact-path inventory finds zero remaining own test processes.
+- Existing D3D12 typed-wrapper control passes; normal frame control passes
+  event promotion (0.011 ms), D3D11 wrapper and five hidden own renderers
+  (550 samples/3.056 seconds, 0.062 CPU seconds, max promotion 0.174 ms).
+  These clock-release/software-renderer observations are not displayed FPS
+  or Minecraft performance.
+- Exact-source isolated Rust harness: 22 passed, one caption test filtered,
+  zero failed; rustfmt passes. Full Tauri/product build is not claimed.
+
+No Computer Use or game launch/input/restart/closure occurred. Original
+accounts/worlds and old candidate remain unchanged; no binaries, credentials,
+raw process metadata or worlds are committed. CI and distribution remain off.
+
 ### Remaining proof and one next action
 
-The full goal is ACTIVE, including the FPS HUD. Private focus leases and the
-native event consumer now exist with own-data checks. Process-bound cross-
-language transport/creation integration, HUD, actual 144/10 game pacing without
-slowing background Host World, five licensed clients, resources/soak/crash and
-helper/auth containment remain UNKNOWN/NOT_EXECUTED. Public admission stays closed.
+The full goal remains ACTIVE: five licensed Education clients sharing an
+Education Host World, measured resource use/soak/stability/persistence,
+OS-focus-driven game 144/10 behavior without slowing host simulation, and
+the measured top-right per-window FPS HUD. This change proves own C++ parent
+event delivery through startup creation into pacing; it does not connect the
+Rust OS-focus lease producer or implement/display the HUD. Those paths and
+actual game acceptance remain NOT_EXECUTED / UNKNOWN. Public admission stays closed.
 
-**One next action:** carry the focus lease's read-only events/controller identity
-through the existing private bootstrap capability, validate child-side object/
-reset-mode provenance, and invoke native initialization plus typed wrapping at
-eligible creation outside loader lock. Prove producer-to-child transitions,
-stop/death and recreation together with own children before reviewing a
-same-profile game candidate; add the measured HUD to that acceptance path.
+**One next action:** connect the existing Rust bootstrap owner to this private
+capability, resolve reviewed DXGI creation metadata in the existing enroller
+outside loader lock and retain the single-worker focus lease for the exact
+child lifetime; prove Rust-to-child delivery before reviewing a same-profile
+game candidate and adding measured FPS HUD to that acceptance path.
