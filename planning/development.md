@@ -13,33 +13,39 @@ fixture counts and minor launcher/HUD savings are not substitutes for them.
 | Track | Required outcome | Owner and boundaries | Current evidence |
 | --- | --- | --- | --- |
 | **A — saved Minecraft settings** | Keep the approved Simple preset independently per original profile and across normal restart. Render distance **at least 12**, simulation distance unchanged; preserve resolution, accounts/worlds and 144/10. | Minecraft's existing options file owns the settings; existing bootstrap owns persistent per-slot Roaming/Local routing and identity-capability replay. Do not introduce a duplicate preferences store or rewrite options while a game is live. | Both original per-slot options files retained graphics_mode=0, gfx_viewdistance=192, gfx_msaa=1 and the five approved effect switches=0 after both game exits. Disk persistence is observed for both; the restarted MC02 UI also reads Simple / 12 chunks. The fresh MC01 main menu shows its original account; its complete post-restart video UI has not been rechecked. |
-| **B — internal Minecraft efficiency** | Reduce unnecessary mesh/buffer/asset/cache or renderer work using a real Education-compatible integration, inspired by Java optimizers. | A new native internal optimization needs one demonstrated resource owner/lifetime seam. Existing Present mediation owns pacing/HUD, not game meshes/heaps. A generic allocator/hook fixture or wrapper micro-optimization does not satisfy B. | A guarded native startup-count intervention is implemented and executed on two original clients. Sequential readings showed lower private commitment but do not establish causal savings or meaningful resident-RAM benefit; default remains OFF. New bounded normal-retirement/completion evidence and an independent Upload canary are recorded below; physical savings remain UNKNOWN. Do not promise a Java mod port or a RAM percentage. |
+| **B — internal Minecraft efficiency** | Reduce unnecessary mesh/buffer/asset/cache or renderer work using a real Education-compatible integration, inspired by Java optimizers. | A new native internal optimization needs one demonstrated resource owner/lifetime seam. Existing Present mediation owns pacing/HUD, not game meshes/heaps. A generic allocator/hook fixture or wrapper micro-optimization does not satisfy B. | A guarded native startup-count intervention is implemented and executed on two original clients. Sequential readings showed lower private commitment but do not establish causal savings or meaningful resident-RAM benefit; default remains OFF. New bounded normal-retirement/completion evidence and an independent Upload canary are recorded below; a short same-world comparison now shows lower private WS/commitment, with sustained benefit still UNKNOWN. Do not promise a Java mod port or general RAM percentage. |
 | **C — inactive clients first** | Prioritize lower RAM/CPU/GPU demand while a client is not controlled; keep foreground 144/background 10 ceilings, prompt focus recovery and continuing Education host/network/saves. | Focus/pacing retain their current owners. Host role is separate from focus. No whole-process suspension, arbitrary memory/CPU caps, blind working-set trimming, token/profile sharing, fabricated occlusion result or freeing game-owned resources. | The existing limiter is implemented and prior 10-FPS observations are historical. Further game-owned background work reduction, its resource benefit and host health require a concrete intervention; no new savings are claimed yet. |
 
-**Current phase — ACTIVE: independent native Upload retention canary; goal incomplete.**
-The operator's latest full PC/runtime authorization supersedes the preceding
-no-PC restriction and resumes this goal. The former source-only integration
-impasse is resolved for one concrete normal-retirement route, not all native
-memory or BGFX replacement. See the [new owner/completion evidence and bounded
-implementation](../docs/system/native-memory-efficiency-research.md#native-upload-empty-retention-seam--authorized-resume-25-october-2026).
+**Current phase — ACTIVE: live native Upload capacity reduction observed; opt-in only.**
+The user's full PC/runtime authorization remains in effect. Source
+`050c4fc9ff2d2371bd947b6188f89f6038ee204d` was used to build complete
+compatibility DLLs with Upload retention ON and both heap experiments OFF.
+Both candidates reopened the original profiles without password entry.
+In both candidate clients the private action counter was1, initial reductions0,
+and the native owner retained initial floor2 / empty threshold1.
 
-At pinned parent `0bee391afcd2ce46f6c5c3e9434417290d6ccd1a`, the working
-two-profile HUD candidate was reopened with original profiles. Bounded code
-inspection and eight actual native callbacks identify the normal pool release
-path and its completed-fence-like value provenance. The observer changed no
-allocator argument and remains pinned in one client until normal exit.
-Upload showed168MiB capacity, floor2, empty threshold4 and four zero-counter
-candidates totaling88MiB capacity. Capacity is not resident RAM or freeable bytes.
+The same-source baseline retained5 Upload heaps/168MiB; candidate retained
+2 heaps/88MiB, including after loading the original MC01 test world.
+Three samples from one short candidate-then-baseline same-world comparison
+showed median private working set1333.777 versus1393.730MiB (59.953MiB lower,
+~4.30%) and private commitment2477.906 versus2556.914MiB (79.008MiB lower).
+This is an observed short-run difference, not a durable or per-client guarantee.
+Other pool activity, world time/entities and process age were not frozen;
+no CPU/GPU or frame-time benefit is claimed.
 
-The existing graphics-warm-pools owner now offers an independent startup-only
-Upload argument9 retention4→1 canary, default OFF. Initial/total floor2,
-native locks, pending records, completion values, growth and release remain
-native-owned. It cannot be combined with the old Default16→4 experiment.
-MSVC /W4 /WX control builds/runs passed with new, old and disabled variants;
-combined CMake options were rejected. The new policy has NOT_EXECUTED game
-acceptance or measured RAM savings. No production payload/admission, public
-API, account/world data, saved preset,144/10 policy or CI was changed.
-Below1GB remains aspirational; five clients stay deferred.
+The candidate loaded/saved the original world and both candidate processes
+exited normally with journal exitCode0. Sustained gameplay, chunk-travel churn,
+Education host/join, frame-time regression and multiplayer background-host
+health on this policy are still NOT_EXECUTED. The nonexperimental same-source
+baseline is now running: MC01 in the persisted test world and MC02 at menu.
+No experimental policy remains active. All public admission/payload policy,
+saved graphics,144/10, accounts/worlds and CI remain unchanged.
+
+Full [build provenance, private receipt hashes, measurements and limits](../docs/system/native-memory-efficiency-research.md#upload-retention-live-comparison--25-october-2026)
+are in the existing research owner. The cached preview-manager builds have
+current independent_bootstrap.rs plus private DLL hashes; do not mislabel them
+as whole-repository exact-HEAD manager builds. Below1GB remains aspirational;
+five clients are deferred. Goal incomplete; canary stays default OFF.
 
 **Working method:** choose one real intervention in A/B/C, implement it or
 explicitly reject its concrete integration boundary, then use only checks that
@@ -1863,12 +1869,10 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action — execute the independent startup Upload retention candidate:**
-build the compatibility payload with only BOOTSTRAP_UPLOAD_RETENTION_EXPERIMENT,
-then use normal saved-profile restart and one comparable world workload to
-decide whether native retirement produces durable resident-RAM savings without
-refill stalls or Education host/save regressions. Stop/revert this candidate
-if benefit is absent or stability worsens. No more generic capture or allocator
-fixtures are required to decide this specific intervention. Full PC permission
-remains available; do not request it again. Goal B/C RAM benefit is still
-UNKNOWN / NOT_EXECUTED; this implementation is not goal completion.
+**One next action — validate the Upload candidate under actual refill and host demand:**
+run one integrated two-client Education Host World workload with chunk travel,
+foreground/background changes and normal save/reopen; assess frame stalls,
+continuing host/network and resident RAM before deciding promotion or rollback.
+The stationary capacity/comparison question is answered; do not repeat generic
+capture or fixture work. Full PC permission is already granted. Preserve all
+profiles/worlds; public rollout and five-client expansion remain deferred.

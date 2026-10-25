@@ -1399,3 +1399,107 @@ forced fence value, arbitrary decommit or working-set trim to make it appear
 effective. Promotion requires comparable workload showing actual native
 capacity reduction and durable resident-RAM improvement without frame/host/
 save regressions. No B RAM saving is established yet.
+
+## Upload retention live comparison — 25 October 2026
+
+**Decision:** the independent4→1 Upload retention canary has now run on
+official Education, and its intended native capacity reduction is observed.
+A short same-world comparison also shows lower private working set and
+commitment. Retain it as an opt-in candidate; this is not sustained RAM,
+frame-time, multiplayer-host or production acceptance.
+
+### Build and execution provenance
+
+Compatibility sources were fetched at exact Local
+`050c4fc9ff2d2371bd947b6188f89f6038ee204d`. Both complete compatibility DLLs
+were built through the existing CMake/MSVC owner with /W4 /WX:
+- Upload experiment ON, legacy Default experiment OFF:
+  `72d004de09c64feded867f221a77465104826d9aef040a224c000b241761f1aa`;
+- both experiments OFF, same source:
+  `0473fc0b402d566318710caa0bf45b4e3047919eabac862cc57a372a0f4149c9`.
+
+The configured Upload control actually built and ran. The unchanged reviewed
+enroller SHA remains
+`7b38a1c02f0d5169f74ebebc839d854d49e9a7e77b9933415b1ec8d5d539588a`.
+Private preview managers were built from the existing cached manager base
+506aef24b002204b6670d37280da0cadc24da6e9, with the exact current
+independent_bootstrap.rs and only the matching private compatibility digest
+substituted. These are not whole-repository exact-HEAD manager builds.
+Candidate manager SHA:
+`d6ae4e31de5807503216ddf209ae422114ebb194e41127efdf4ba4767cf0de59`;
+baseline manager SHA:
+`fa61102569112ca3805c8f80f8b8c8a81a693bcf28eead83b70a15bc80934e9b`.
+Both offline locked release builds succeeded with104 existing compiler warnings;
+do not report a warning-free Rust build. No canonical payload allowlist,
+production admission, public API or CI setting changed.
+
+Both original profiles were reopened through the unchanged216-byte identity
+capability. No account/token/world content was copied. Automatic account
+continuity and the HUD were visually observed in both candidate menus.
+The prior observer DLL ended with the earlier normal process exit and was
+not injected into either new candidate or comparison client.
+
+### Observed effect and comparable-workload limit
+
+The candidate's private counter reports one successful retention reduction
+and zero initial-count reductions in each client. Metadata confirms initial
+floor2 and empty threshold1. Both candidate clients had two Upload heaps
+totaling88MiB after startup. The later MC01 world sample retained that same
+2/88MiB state. The same-source baseline restored threshold4 and showed five
+heaps/168MiB at startup and in the same world. The native allocator therefore
+retained80MiB less Upload capacity on this candidate path. This is resource
+capacity, not automatically80MiB less physical RAM.
+
+The same original MC01 persisted Creative test world and gold marker were
+opened normally. No movement, world edits, simulation/resolution/render-distance
+change or new effects change was requested during the comparison. The world
+was saved/exited normally between runs. Candidate ran first, baseline second;
+time of day/entities/camera pitch and other allocator activity were not frozen.
+The earlier long-lived old-payload sample is excluded from the numeric
+comparison because process age/residency differed.
+
+Three private-working-set/private-byte samples per variant were read through
+Windows process performance metadata, about10.6–10.7seconds apart:
+
+| Metric | Same-source baseline OFF | Upload candidate ON | Observed lower value |
+| --- | ---: | ---: | ---: |
+| Private working set, MiB, samples |1409.043 /1393.730 /1393.680|1364.770 /1333.770 /1333.777|—|
+| Private working set median, MiB |1393.730|1333.777|59.953MiB (~4.30%)|
+| Private commitment median, MiB |2556.914|2477.906|79.008MiB|
+| Upload capacity, MiB |168|88|80MiB|
+| Upload heap count / initial floor / threshold |5 /2 /4|2 /2 /1|native retention only|
+
+This is one short sequential comparison, not randomized, repeated or durable
+residency proof; warm-up durations were not identical. Other pools varied (e.g. Accel capacity); do not attribute
+every total-process byte solely to Upload or extrapolate60MiB to all clients.
+No CPU/GPU saving or frame-time improvement is established. HUD snapshots
+around135–138FPS were observed on both foreground builds; they neither prove
+144 sustained FPS nor absence of transient stalls. Background menu10FPS was
+observed during a modal transition, not multiplayer-host-health acceptance.
+
+The candidate opened the test world, continued rendering, saved/exited it,
+and both candidate processes subsequently exited normally with journal
+exitCode0. This is a bounded load/save/close result, not sustained gameplay,
+world travel, allocation-churn or Education-host compatibility proof.
+At the end of the comparison the nonexperimental same-source baseline remains
+running: MC01 in its test world and MC02 at the menu. No experimental payload
+is left active; accounts, worlds, working release candidate and private
+rollback payloads are retained.
+
+Private evidence SHA-256:
+- candidate world pools:
+  `d109352fca8cd742253c472834342e271cb1d3c0d6e8265f371b738f0a38b976`;
+- candidate world memory:
+  `ed0d04add9166212b8ecb12928d2e144444d782e417d59de02d0390a58da6c92`;
+- baseline world pools:
+  `6d30e9226243272e82df5d902e6615658da980d4b99441d3903156bd5030e55d`;
+- baseline world memory:
+  `65945b525197439a9976d2b8816291667aefeb33cf681604f6acf7b59eb30ce2`;
+- derived comparison:
+  `17256c8141c852fdae741c5346bdda793abd1733594b3ffd562103ec2cc7b524`.
+
+**Next boundary:** one integrated candidate workload with Education host/join,
+new-chunk demand, foreground/background changes and normal save/reopen must
+decide refill-stall and host risk before any rollout. Do not rerun generic
+traces or repeat this stationary comparison as a substitute. Below1GB and
+additional background-specific RAM savings remain unproved.
