@@ -2,11 +2,12 @@
 use super::*;
 use crate::engine::{
     native_clients_session::{
-        read_message, ProfileSession, ProfileStorage, SessionRequest, SessionSnapshot,
+        pipe::{Endpoint, Peer, Server},
+        ProfileSession, ProfileStorage, SessionRequest, SessionSnapshot,
     },
     owned_provider::OwnedProcess,
 };
-use std::{io::Write, sync::mpsc, time::Duration};
+use std::{io::Write, time::Duration};
 
 struct Sessions {
     stores: Vec<Option<SlotStorage>>,
@@ -341,71 +342,62 @@ fn run() -> io::Result<()> {
         ));
     }
     let mut sessions = Sessions::prepare()?;
-    let (sender, receiver) = mpsc::sync_channel(1);
-    std::thread::spawn(move || {
-        let mut input = io::stdin().lock();
-        loop {
-            match read_message(&mut input) {
-                Ok(Some(message)) => {
-                    if sender
-                        .send(
-                            serde_json::from_str::<SessionRequest>(&message)
-                                .map_err(|e| e.to_string()),
-                        )
-                        .is_err()
-                    {
-                        break;
-                    }
-                }
-                _ => break,
-            }
-        }
-    });
-    let mut attached = true;
+    let server = Server::start(Endpoint::current()?)?;
+    let mut manager: Option<Peer> = None;
+    let startup = std::time::Instant::now();
+    {
+        let mut output = io::stdout().lock();
+        serde_json::to_writer(&mut output, &Result::<(), String>::Ok(()))?;
+        output.write_all(b"\n")?;
+        output.flush()?;
+    }
     loop {
         sessions.reap();
-        if !attached && sessions.running.iter().all(Option::is_none) {
+        let detached = manager.as_ref().map_or_else(
+            || startup.elapsed() > Duration::from_secs(45),
+            |peer| !peer.alive(),
+        );
+        if detached && sessions.running.iter().all(Option::is_none) {
             return Ok(());
         }
-        if !attached {
-            std::thread::sleep(Duration::from_millis(250));
-            continue;
-        }
-        let message = match receiver.recv_timeout(Duration::from_millis(250)) {
-            Ok(request) => request,
-            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+        let envelope = match server.requests.recv_timeout(Duration::from_millis(250)) {
+            Ok(envelope) => envelope,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
             Err(_) => {
-                attached = false;
+                // Even a failed transport must retain game/storage/FPS ownership until normal exit.
+                if sessions.running.iter().all(Option::is_none) {
+                    return Err(invalid("Session transport stopped"));
+                }
+                std::thread::sleep(Duration::from_millis(250));
                 continue;
             }
         };
-        let reply = message.and_then(|request| {
+        if !envelope.peer.alive() {
+            let _ = envelope
+                .reply
+                .send(Err("Manager exited before request admission".into()));
+            continue;
+        }
+        manager = Some(envelope.peer);
+        let reply = (|| {
             let mut storage = None;
-            match request {
+            match envelope.request {
                 SessionRequest::Inspect => {}
                 SessionRequest::Launch { slot } => {
-                    sessions.launch(slot).map_err(|e| e.to_string())?
+                    sessions.launch(slot).map_err(|error| error.to_string())?
                 }
                 SessionRequest::InspectStorage => {
-                    storage = Some(sessions.storage().map_err(|e| e.to_string())?)
+                    storage = Some(sessions.storage().map_err(|error| error.to_string())?)
                 }
-                SessionRequest::OpenProfileFolder { slot } => {
-                    sessions.open_folder(slot).map_err(|e| e.to_string())?
-                }
+                SessionRequest::OpenProfileFolder { slot } => sessions
+                    .open_folder(slot)
+                    .map_err(|error| error.to_string())?,
             }
             let mut snapshot = sessions.snapshot();
             snapshot.storage = storage;
             Ok(snapshot)
-        });
-        let mut output = io::stdout().lock();
-        if serde_json::to_writer(&mut output, &reply).is_err()
-            || output
-                .write_all(b"\n")
-                .and_then(|_| output.flush())
-                .is_err()
-        {
-            attached = false;
-        }
+        })();
+        let _ = envelope.reply.send(reply); // A disconnected UI never cancels an admitted launch.
     }
 }
 

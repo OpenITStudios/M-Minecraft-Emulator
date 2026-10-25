@@ -15,7 +15,8 @@ This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build
 
 The mounted desktop is `apps/desktop/src/LazyTesterApp.svelte`, consuming
 `app/bridge/lazyTester.ts`. Thin commands in `src-tauri/src/commands/native_clients.rs`
-route to `engine/native_clients_session.rs` and the existing bootstrap's
+route to `engine/native_clients_session.rs` (reconnecting transport via its
+`native_clients_session/pipe.rs` Windows adapter) and the existing bootstrap's
 `independent_bootstrap/session_controller.rs`. That owner reuses the reviewed
 five-profile capability, game/DLL verification, original process handles, FPS
 policy channels, and preset writer. It is not a second Windows isolation engine.

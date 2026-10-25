@@ -23,10 +23,17 @@ Presets are written only to the selected inactive profile before its launch, wit
 existing backup/atomic-write behavior and simulation settings preserved.
 
 Closing the manager preserves games and restores presented windows. Helpers retain
-policy/storage handles after UI EOF until the games exit normally. Reopening the UI
-must eventually reconnect to those sessions; that transport is not implemented yet.
-The current implementation refuses a competing controller rather than adopting or
-closing unknown games.
+policy/storage handles after UI exit until the games exit normally. Reopening
+the same application binary reconnects through its local named pipe,
+scoped by executable file identity and Windows logon/session. Both peers verify
+user, logon, integrity, executable and a retained live process identity before any
+command. No persistent readiness file or account store is introduced. A missing
+endpoint is not authorization to adopt unknown games. Busy/denied/changed peers
+never trigger a replacement controller. A timed-out request retains its original
+worker; an inspection must resolve uncertainty before further mutations.
+This is an application channel for the same Windows user, without elevation; it
+is not a security boundary against malicious code already controlling that user.
+Cross-version recovery and actual GUI/gameplay reconnection remain unproven.
 
 The user asks for a browser-like experience: one navigation surface and controlled
 taskbar presentation. Minecraft remains multiple OS processes. Task Manager grouping

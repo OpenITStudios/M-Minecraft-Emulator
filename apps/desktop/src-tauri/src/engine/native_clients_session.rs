@@ -57,24 +57,28 @@ pub enum SessionRequest {
     Launch { slot: u32 },
 }
 
-type SessionReply = Result<SessionSnapshot, String>;
+pub(crate) type SessionReply = Result<SessionSnapshot, String>;
+#[cfg(windows)]
+pub(crate) mod pipe;
+
+#[cfg(windows)]
+struct PendingRequest {
+    replies: std::sync::mpsc::Receiver<io::Result<SessionReply>>,
+    worker: std::thread::JoinHandle<()>,
+}
 #[cfg(windows)]
 struct Controller {
-    child: std::process::Child,
-    input: std::process::ChildStdin,
-    replies: std::sync::mpsc::Receiver<io::Result<SessionReply>>,
+    pending: Option<PendingRequest>,
     uncertain: bool,
 }
 #[cfg(windows)]
-static CONTROLLER: Mutex<Option<Controller>> = Mutex::new(None);
+static CONTROLLER: Mutex<Controller> = Mutex::new(Controller {
+    pending: None,
+    uncertain: false,
+});
 
 #[cfg(windows)]
 pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
-    use std::{
-        io::Write,
-        os::windows::process::CommandExt,
-        process::{Command, Stdio},
-    };
     if matches!(request, SessionRequest::Launch { slot } | SessionRequest::OpenProfileFolder { slot } if !(1..=5).contains(&slot))
     {
         return Err(io::Error::new(
@@ -82,82 +86,131 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
             "Unknown Minecraft profile",
         ));
     }
+    let inspecting = matches!(request, SessionRequest::Inspect);
     let mut owner = CONTROLLER
         .lock()
-        .map_err(|_| io::Error::other("Session controller unavailable"))?;
-    if owner.is_none() {
-        // Opening the app and reading its state never starts a game or a controller.
-        if matches!(request, SessionRequest::Inspect) {
-            return Ok(SessionSnapshot::stopped());
-        }
-        let mut child = Command::new(std::env::current_exe()?)
-            .arg("--lazy-tester-controller")
-            .creation_flags(0x08000000)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()?;
-        let input = child
-            .stdin
-            .take()
-            .ok_or_else(|| io::Error::other("Missing controller input"))?;
-        let output = child
-            .stdout
-            .take()
-            .ok_or_else(|| io::Error::other("Missing controller output"))?;
-        let (sender, replies) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let mut reader = io::BufReader::new(output);
-            loop {
-                let result = read_message(&mut reader)
-                    .and_then(|text| {
-                        text.ok_or_else(|| io::Error::other("Session controller disconnected"))
-                    })
-                    .and_then(|text| serde_json::from_str(&text).map_err(io::Error::other));
-                let failed = result.is_err();
-                if sender.send(result).is_err() || failed {
-                    break;
-                }
+        .map_err(|_| io::Error::other("Session transport unavailable"))?;
+    if let Some(pending) = &owner.pending {
+        match pending.replies.try_recv() {
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "The previous session request is still running; games are preserved",
+                ))
             }
-        });
-        *owner = Some(Controller {
-            child,
-            input,
-            replies,
-            uncertain: false,
-        });
+            _ => {
+                let pending = owner.pending.take().unwrap();
+                let _ = pending.worker.join();
+            }
+        }
     }
-    let controller = owner.as_mut().unwrap();
-    if controller.uncertain {
+    if owner.uncertain && !inspecting {
         return Err(io::Error::other(
-            "Controller outcome is uncertain; existing games are preserved. Do not retry launch.",
+            "Previous request outcome is uncertain. Refresh session status before another action.",
         ));
     }
-    if let Some(status) = controller.child.try_wait()? {
-        return Err(io::Error::other(format!(
-            "Session controller stopped ({status}); existing games were preserved"
-        )));
-    }
-    let result = (|| {
-        serde_json::to_writer(&mut controller.input, &request)?;
-        controller.input.write_all(b"\n")?;
-        controller.input.flush()?;
-        controller
-            .replies
-            .recv_timeout(std::time::Duration::from_secs(45))
-            .map_err(|_| {
-                io::Error::new(
-                    io::ErrorKind::TimedOut,
-                    "Session request outcome is uncertain",
-                )
-            })?
-    })();
-    match result {
-        Ok(reply) => reply.map_err(io::Error::other),
-        Err(error) => {
-            controller.uncertain = true;
-            Err(error)
+    let (sender, replies) = std::sync::mpsc::sync_channel(1);
+    let worker = std::thread::spawn(move || {
+        let _ = sender.send(transact(request));
+    });
+    owner.pending = Some(PendingRequest { replies, worker });
+    let outcome = owner
+        .pending
+        .as_ref()
+        .unwrap()
+        .replies
+        .recv_timeout(std::time::Duration::from_secs(45));
+    match outcome {
+        Ok(result) => {
+            let pending = owner.pending.take().unwrap();
+            let _ = pending.worker.join();
+            match result {
+                Ok(reply) => {
+                    if inspecting && reply.is_ok() {
+                        owner.uncertain = false;
+                    }
+                    reply.map_err(io::Error::other)
+                }
+                Err(error) => {
+                    owner.uncertain = true;
+                    Err(error)
+                }
+            }
         }
+        Err(_) => {
+            // Keep this exact worker/buffers/connection alive. Never start a replacement on timeout.
+            owner.uncertain = true;
+            Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "Session request is still pending; refresh to observe its eventual outcome",
+            ))
+        }
+    }
+}
+
+#[cfg(windows)]
+fn transact(request: SessionRequest) -> io::Result<SessionReply> {
+    use std::{
+        io::BufReader,
+        os::windows::process::CommandExt,
+        process::{Command, Stdio},
+    };
+    let endpoint = pipe::Endpoint::current()?;
+    match endpoint.connect() {
+        Ok(connection) => return pipe::exchange(&endpoint, connection, &request),
+        Err(error) if error.raw_os_error() == Some(2) => {}
+        Err(error) => return Err(error), // Busy/denied/forged is never permission to spawn.
+    }
+    // Another build or the historical private runner may retain the same profiles.
+    // An absent compatible endpoint must not be presented as five stopped profiles.
+    if existing_controller_gate("Local\\MivubiEducationStartupObservation")? {
+        return Err(io::Error::new(io::ErrorKind::WouldBlock,
+            "An existing Minecraft controller uses another build or is still starting. Its games are preserved; no replacement was started."));
+    }
+    if matches!(request, SessionRequest::Inspect) {
+        return Ok(Ok(SessionSnapshot::stopped()));
+    }
+    // Explicit user action only. A fresh UI first tries the existing authenticated endpoint.
+    let mut child = Command::new(std::env::current_exe()?)
+        .arg("--lazy-tester-controller")
+        .creation_flags(0x08000000)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()?;
+    let output = child
+        .stdout
+        .take()
+        .ok_or_else(|| io::Error::other("Missing controller startup output"))?;
+    let mut reader = BufReader::new(output);
+    let startup = read_message(&mut reader)?
+        .ok_or_else(|| io::Error::other("Controller exited before startup"))?;
+    let ready: Result<(), String> = serde_json::from_str(&startup).map_err(io::Error::other)?;
+    if let Err(error) = ready {
+        return Ok(Err(error));
+    }
+    // Dropping Child never kills the controller. It owns game lifetime independently of this UI.
+    pipe::exchange(&endpoint, endpoint.connect()?, &request)
+}
+
+#[cfg(windows)]
+fn existing_controller_gate(name: &str) -> io::Result<bool> {
+    use std::os::windows::io::{FromRawHandle, OwnedHandle};
+    use windows_sys::Win32::{
+        Foundation::GetLastError,
+        System::Threading::{OpenMutexW, SYNCHRONIZATION_SYNCHRONIZE},
+    };
+    let name: Vec<u16> = name.encode_utf16().chain(Some(0)).collect();
+    let handle = unsafe { OpenMutexW(SYNCHRONIZATION_SYNCHRONIZE, 0, name.as_ptr()) };
+    if !handle.is_null() {
+        let _gate = unsafe { OwnedHandle::from_raw_handle(handle as _) };
+        return Ok(true);
+    }
+    let error = unsafe { GetLastError() };
+    if error == 2 {
+        Ok(false)
+    } else {
+        Err(io::Error::from_raw_os_error(error as i32))
     }
 }
 
@@ -187,6 +240,29 @@ pub(super) fn read_message(input: &mut impl io::BufRead) -> io::Result<Option<St
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn existing_incompatible_controller_gate_is_distinguished_from_absence() {
+        use std::os::windows::io::{FromRawHandle, OwnedHandle};
+        let name = format!(
+            "Local\\LazyTester-disposable-gate-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        assert!(!existing_controller_gate(&name).unwrap());
+        let wide: Vec<u16> = name.encode_utf16().chain(Some(0)).collect();
+        let raw = unsafe {
+            windows_sys::Win32::System::Threading::CreateMutexW(std::ptr::null(), 0, wide.as_ptr())
+        };
+        assert!(!raw.is_null());
+        let handle = unsafe { OwnedHandle::from_raw_handle(raw as _) };
+        assert!(existing_controller_gate(&name).unwrap());
+        drop(handle);
+        assert!(!existing_controller_gate(&name).unwrap());
+    }
     #[test]
     fn protocol_rejects_paths_unknown_operations_and_unbounded_input() {
         for input in [

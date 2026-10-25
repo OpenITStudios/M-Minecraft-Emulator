@@ -1273,8 +1273,8 @@ mod controller {
             }
         }
         let parked = state.parked.iter().position(|lease| same(lease, &target));
-        if parked.is_none() && state.parked.len() + usize::from(state.active.is_some()) >= 4 {
-            return Err(io::Error::other("Workspace already manages four clients"));
+        if parked.is_none() && state.parked.len() + usize::from(state.active.is_some()) >= 5 {
+            return Err(io::Error::other("Workspace already manages five clients"));
         }
         // A retained lease owns the original checkpoint, never recapture a hidden tab.
         let mut replacement = if let Some(index) = parked {
@@ -1895,14 +1895,15 @@ mod controller {
                 second_original.extended_style
             );
             assert_eq!(second_restored.rect, second_original.rect);
-            // Browser-like round trips retain all four process identities and checkpoints.
+            // Browser-like round trips retain all five process identities and checkpoints.
             let (_third_fixture, third) = fixture();
             let (_fourth_fixture, fourth) = fixture();
-            let tabs = [target.clone(), second.clone(), third, fourth];
+            let (_fifth_fixture, fifth) = fixture();
+            let tabs = [target.clone(), second.clone(), third, fourth, fifth];
             for tab in &tabs {
                 present(manager as usize as u64, viewport, tab.clone()).unwrap();
             }
-            for turn in 0..12 {
+            for turn in 0..15 {
                 let selected = turn % tabs.len();
                 present(manager as usize as u64, viewport, tabs[selected].clone()).unwrap();
                 for (index, tab) in tabs.iter().enumerate() {
@@ -1938,9 +1939,12 @@ mod controller {
                 "02".into()
             )
             .unwrap());
+            let (_sixth_fixture, sixth) = fixture();
+            assert!(present(manager as usize as u64, viewport, sixth).is_err(),
+                "A sixth surface must not replace an existing five-profile lease");
             let mut timings = Vec::new();
             for turn in 0..40 {
-                let selected = turn % 4;
+                let selected = turn % tabs.len();
                 let start = Instant::now();
                 assert!(present_retained(
                     manager as usize as u64,

@@ -10,7 +10,7 @@ Sandboxie or VMware.
 
 - `apps/desktop/src/LazyTesterApp.svelte`: the mounted Svelte interface.
 - `apps/desktop/src/app/bridge/lazyTester.ts`: validated five-profile desktop contract.
-- `apps/desktop/src-tauri/src/engine/native_clients_session.rs`: bounded same-executable controller transport.
+- `apps/desktop/src-tauri/src/engine/native_clients_session.rs`: bounded reconnecting controller transport; `native_clients_session/pipe.rs` checks both Windows peers.
 - `apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs`: manual per-profile session ownership, retained handles, and metadata-only storage inspection.
 - `apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`: reviewed game/payload/profile checks and startup enrollment, shared with the accepted five-client pilot.
 - `apps/desktop/src-tauri/src/engine/workspace_surface.rs`: recoverable native window presentation.
@@ -28,9 +28,11 @@ the same Education Host World, persistent sign-in/world data, and the 144 active
 Lazy Tester UI/controller integration.
 
 Manual profile launch, workspace selection, next/previous selection, and on-demand
-profile-size inspection are integrated in source. Live preview thumbnails, safe
-cache cleanup, controller reconnection after UI restart, final installed branding,
-and a portable product payload remain unfinished. No Task Manager grouping or
+profile-size inspection are integrated in source. Same-binary controller
+reconnection after UI restart is implemented and covered by native Windows pipe
+fixtures, including two successive client processes. Live
+preview thumbnails, safe cache cleanup, final installed branding, and a portable
+product payload remain unfinished. No Task Manager grouping or
 new GUI/gameplay acceptance is claimed.
 
 See [workspace contract](docs/product/unified-workspace.md) for product behavior,

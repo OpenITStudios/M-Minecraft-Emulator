@@ -1,101 +1,116 @@
 # Current Development Handoff — Lazy Tester
 
-`Local` is the only active product branch. This is the sole current handoff.
-Goal: a modular five-profile native Minecraft control center named Lazy Tester,
-manual profile launches, one large viewport/four lower previews, storage/cache
-controls and safe legacy archiving. Renderer/RAM experiments remain PAUSED; CI OFF.
+`Local` is the only active product branch. Sole current handoff.
+Full goal: modular five-profile native control center, manual launches, one active
+viewport/four previews, storage/cache management, archival and safe packaging.
+Renderer/RAM experiments remain PAUSED; GitHub Actions remains entirely OFF.
 
-## Current bounded outcome — desktop/controller integration
+## Current bounded outcome — reconnect to the retained session controller
 
-Source parent: d166b5c8b24e8435f2c84675cb00a61c753aeb6a.
-Archive branch `codex/archive-before-lazy-tester-20261026` preserves that exact
-repository snapshot. Only Local receives product changes.
+Source parent: 89b9ad0195e824fa4fd3b0b40bb6b7d89ae5e597.
+The previous desktop integration and evidence are preserved at that exact commit.
 
-Mounted entry now uses LazyTesterApp.svelte and validated bridge lazyTester.ts:
-five fixed profiles, manual launch, selected-game viewport, next/previous usable
-game, status cards, on-demand metadata-only size inspection and Open Folder.
-Window/display title is Lazy Tester. Installed identifiers, packaging product/
-binary identity, existing profile paths and account/world data remain unchanged.
+The existing bootstrap still exclusively owns the five original game/config/
+storage/FPS handles. Its actor now receives fixed-action requests through
+native_clients_session/pipe.rs instead of a GUI-lifetime stdin connection.
+Reopening the same application binary connects to the existing endpoint first.
+Startup/refresh inspection never launches a controller or game.
 
-native_clients_session.rs transports bounded fixed-action requests to one hidden
-same-executable helper inside the existing bootstrap owner:
-independent_bootstrap/session_controller.rs. It reuses exact game/DLL/profile
-checks, suspended-child enrollment, original handles, FPS channels and journals.
-It shares the original experiment gate; existing unknown games are refused.
-No arbitrary path/PID selection, title-order attribution, auto-launch, credentials
-store, token copying, Sandboxie or VMware runtime was added.
+The endpoint is scoped to the current executable file identity and Windows
+logon/session, with a protected logon-SID DACL, local-only pipe, noninheritable
+handles, one retained first instance, and no persistent readiness/capability file.
+Both ends verify actual OS peer PID, retained creation time/liveness, user, logon,
+authentication ID, session, integrity and pinned executable file identity before
+the application request. Client SQOS allows identification, not delegation.
+This is not an elevated/general broker or a security boundary against malicious
+code already controlling the same Windows user.
 
-Opening/refreshing the UI starts no helper/game. Explicit launch/storage actions
-start the controller. Before launch, only the selected inactive owned profile
-receives the existing approved preset (with backup/atomic replacement and other
-settings preserved). No current profiles were actually modified in this session.
-The prior preset runtime deferral does not authorize operating running games.
+Fresh explicitly requested launch/storage operations spawn a controller only if
+the endpoint is absent. Busy, access-denied or changed peers never authorize a
+replacement. If an incompatible/initializing controller still holds the shared
+session gate, an absent endpoint is reported as unavailable, not five stopped
+profiles. Controller startup has a bounded ready/error handshake. A timeout
+retains the original worker, buffers and connection; it does not retry or spawn.
+Further mutation requires successful inspection after that pending call settles.
+An admitted launch is not canceled when the UI disconnects.
 
-GUI EOF preserves games; the helper retains FPS/storage handles until normal
-game exit. Uncertain/resumed children are never killed or automatically retried.
-Hidden workspace windows retain their original process birth/session/HWND.
-Responsive windows are not evidence of sign-in/world readiness.
+A detached controller retains games and policy until normal game exit. It can
+accept the next GUI process and return its original slot attribution. A failed
+transport also retains live game/storage/FPS ownership rather than dropping it.
+Closing the UI still releases native presentation back to Windows.
 
-Storage scanning is on demand, metadata-only, directory-pinned, reparse-skipping,
-and bounded by depth/count/time. Partial totals are identified. Open Folder uses
-the canonical retained profile directory. No cache deletion or account/world
-content reading was implemented.
+## Concrete defect found and fixed
 
-## Executed evidence
+The workspace still had the historical four-lease guard. It now retains five
+leases and refuses a sixth without replacing an existing game. The existing
+interactive native-window regression was extended to five identities/round trips
+and sixth rejection. It was compiled but NOT_EXECUTED because it manipulates
+fixture windows/focus and the operator's working desktop must not be disturbed.
 
-- Svelte/TypeScript: zero errors/warnings; frontend production build PASS.
-- Desktop Vitest: 24 files / 212 tests PASS. Entry/title checks target Lazy Tester;
-  old function-extraction checks were corrected without changing their assertions
-  about restoration/nonblocking stop. Shared focus policy must observe manager focus.
-- Windows Rust check PASS; existing 104 desktop warnings remain, including old
-  conflicting extern declarations. No warning-free product claim.
-- New bounded protocol test PASS; new disposable metadata-scan fixture PASS.
-- Existing native-preview packaging source contract PASS, without inherited VMware
-  resources, Guest Agent binaries or legacy installer hooks.
+The first pipe fixture failed with access denied even though AccessCheck granted
+the initial data-only access mask. The final client uses documented GENERIC_READ
+plus FILE_WRITE_DATA, with a DACL granting only FILE_GENERIC_READ | FILE_WRITE_DATA.
+Native connect/query/round-trip now succeeds. AccessCheck independently confirms
+that FILE_CREATE_PIPE_INSTANCE (FILE_APPEND_DATA) is NOT granted. No Everyone,
+Administrators, NULL DACL, generic-write grant or elevation fallback was added.
+
+Primary API references:
+- https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-security-and-access-rights
+- https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-client
+- https://learn.microsoft.com/en-us/windows/win32/ipc/impersonating-a-named-pipe-client
+
+## Executed evidence for this change
+
+- Windows Rust check PASS; existing 104 desktop warnings remain.
+- Nine targeted Rust tests PASS: bounded request protocol; native logon membership;
+  positive/negative native pipe AccessCheck; first-instance collision and oversized
+  message rejection; same-process reconnect/contract round trips; mismatched image/
+  session rejection with recovery; two successive distinct self-test client
+  processes against the same retained server; incompatible-controller gate lifetime;
+  the test-only client entry.
+- Transport cancellation settled and joined in the disposable fixtures.
+- All tests used only disposable pipe endpoints and our own test executables.
+  No Minecraft, account/world files, UI control, trace/UAC or installer operation.
 - Windows x64 release manager build with explicit preview overlay PASS.
-  SHA-256: c176bd1c13f844468708826c38aedfa548fddb8dcbe0ccfffc25f9b01d8071b4.
+  SHA-256: 9a77f6e2cbcc23782fd481ccea7a7925e7d7215111d8b3f0b3ee77f8d51ca32e.
+- No dependency versions changed. Only existing windows-sys Win32 namespace
+  features were enabled; the lock file is unchanged.
+- Frontend code/contract are unchanged; previous 212-test/Svelte/frontend build
+  evidence remains historical at 89b9ad0, not a newly executed frontend suite.
 
-New GUI/controller Minecraft acceptance: NOT_EXECUTED.
-No game launching/closing/input/sign-in, installer installation, PC UI control,
-profile migration, account/world deletion or GitHub Actions execution occurred.
-Prior five-client pilot acceptance does not prove the new integration.
+Actual GUI restart with five Minecraft games: NOT_EXECUTED.
+Cross-version/cross-binary controller handoff: unsupported/unproven; image mismatch
+refuses instead of adopting an old controller. Do not replace installed binaries
+while retained game sessions remain active.
 
-## Unfinished product work
+## Remaining full-goal work
 
-- No controller reconnection after UI restart yet. Games survive UI exit, but a
-  competing controller refuses while the retained helper remains. Not completed
-  browser-like session recovery.
-- Lower rail is status/selection cards, not live thumbnails. Native DWM preview
-  composition/hidden-window behavior remain unimplemented/unproven.
-- Task Manager grouping is unproven. Multiple game processes remain visible.
-  No process hiding or game-binary renaming.
-- New windows are adopted into native workspace/taskbar presentation on selection;
-  automatic all-session shell adoption is not implemented.
-- Cache classification/deletion, free-space reporting, installed Lazy Tester name/
-  identity migration and self-contained native payload packaging remain.
-- Payload/capabilities/singleton recipe remain bound to the reviewed local game
-  build/profiles. Developer candidate, not a portable/general installer.
-- Archive snapshot and inactive UI routing exist. Physical legacy source relocation
-  remains pending consumer retirement. Current compatibility DLL source still lives
-  in bootstrap-ordering acceptance tooling and must not be archived as old work.
-- Primary D: checkout remains older than the managed implementation worktree.
-  No reset or deletion of its untracked files occurred.
+- Four lower live previews; currently status/selection cards only.
+- Automatic all-session adoption into the browser-like taskbar/workspace.
+  Task Manager grouping remains unproven; game processes remain visible.
+- Cache classification/safe deletion, free-space reporting and storage UX.
+- Installed Lazy Tester branding/identity migration and native payload packaging.
+  Current recipe/capabilities still bind to the reviewed local game/profiles.
+- Physical legacy source relocation after shared consumers are retired.
+  Native DLL source in bootstrap-ordering is active and must not be archived.
+- Integrated UI/gameplay/restart/preview acceptance remains unexecuted.
+- Primary D: checkout is still older; it was not reset or overwritten.
 
 ## Next — one action
 
-Implement authenticated reconnection to the retained bootstrap controller so
-reopening Lazy Tester recovers its five exact sessions without duplicate launch
-or closing games. Sequence live previews/cache cleanup/physical legacy relocation
-after that ownership seam is correct.
+Implement the four lower native live previews through the existing workspace
+owner, preserving selected-game input, background 10-FPS policy and recovery.
+Use native composition with bounded geometry/identity validation; do not introduce
+a continuous screenshot/encoding pipeline or claim Minecraft preview acceptance
+from API registration alone.
 
-## Previous accepted state
+## Preserved baseline
 
-The private five-client pilot was operator-confirmed: distinct licensed accounts
-in one Education Host World; after normal save/close/restart, login/worlds and
-144 active / 10 background FPS counters persisted. Compatibility DLL unchanged:
-f65f263b6cbf76054a86d67e50ba4d02d3c5b15fc98a70e627ea19a73eab2edf.
-Enroller unchanged:
-73f9038364b2b853a50e6d058613049234568fccd054ce9a758f572531707368.
-
-Prior handoff/evidence and explicit preset deferral:
-https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/d166b5c8b24e8435f2c84675cb00a61c753aeb6a/planning/development.md
+Archive branch codex/archive-before-lazy-tester-20261026 still pins
+d166b5c8b24e8435f2c84675cb00a61c753aeb6a. Only Local receives product work.
+The previously accepted private five-client pilot had five licensed accounts in
+one Education Host World and persistent login/world/FPS after normal restart.
+New UI/controller acceptance is separate. Compatibility C++ DLL bytes, original
+profile capabilities, accounts/worlds and the 144/10 FPS implementation were not
+changed or operated by this increment. Approved automatic graphics presets stay
+integrated, but no current options.txt was written during this work.
