@@ -36,8 +36,15 @@ Mixed leaves stay mixed; no proportional residency attribution was used.
 
 The captured native chain proves create/fit/grow, not normal retirement.
 Constructor-failure cleanup does not supply release/reference/GPU-completion/
-unused classification/unlink semantics. The large CPU object lacks layout,
-redundancy and consumer-lifetime proof; its size cannot safely be patched.
+unused classification/unlink semantics. The large CPU object's captured initialization accesses high offsets and
+does not expose an independently lifetimed demand table. Public BGFX changes
+now supply a concrete native comparator: demand frame storage,64-slot resource
+arenas and peak-window release, with allocation/access/destruction changed
+together. Mojang's architecture presentation and saved bgfx-family caller
+support the comparison; neither establishes Education's dependency version,
+layout or compatible ABI. Close the smaller-allocation, assumed config-toggle
+and drop-in BGFX replacement routes. Retain owner-side demand representation
+as an unintegrated algorithm, without a saving prediction.
 The report's single candidate ledger keeps CPU representation, allocator
 retention/fragmentation, content demand and graphics growth separate.
 No staging-first winner or percentage is justified. Keep the previous startup
@@ -1872,11 +1879,10 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** investigate the CPU representation/content-lifetime side
-of the existing candidate ledger using saved evidence and public source contracts,
-with B05B30E as the allocation-provenance anchor. Establish redundant/live data,
-native consumers and a compatible reduction before selecting an implementation.
-Do not repeat the completed graphics-growth review, shrink the object constant,
-rank nominal commitment as reclaimable RAM, or start a PC session. Missing
-object-layout/liveness proof remains UNKNOWN; actual new savings remain
-NOT_EXECUTED.
+**One next action:** review the remaining supported content/allocator interfaces
+against the existing saved evidence, once, for a concrete owner-cooperative
+intervention that does not depend on the closed BGFX size/config/replacement
+routes. Reuse already-recorded LFH and cache findings rather than repeating
+their experiments. If no compatible interface can be established, record the
+specific integration impasse; do not manufacture a fixture, more telemetry or
+a PC session. New RAM savings remain NOT_EXECUTED.

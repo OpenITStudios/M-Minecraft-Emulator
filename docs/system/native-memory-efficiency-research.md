@@ -112,19 +112,99 @@ Already-saved B05B2C0 code requests0x436F090 bytes
 (70,709,392bytes;67.43373107910156MiB) through an allocator interface; its return
 offset matches B05B30E. The request is slightly smaller than the rounded committed
 range and is not an exact resident-byte count. It then calls uncaptured B024D10,
-assigns a vtable and initializes fields at large offsets within the allocated
-object. This supports a large initialized CPU object as a competing lead.
-It does **not** identify useless cache entries, duplicate assets, reconstructible
-contents, a free interval or a safe smaller layout. Reducing the allocation
-constant would invalidate object accesses; no such patch is justified.
-The198.84375MiB commitment at88900FA has only2.4375MiB Private WS in this sample;
-it is likewise not a198MiB RAM-saving opportunity.
+assigns a vtable and initializes fields at large offsets within the object.
+
+**Follow-up source-only decision at parent f913d1cded8e166393b39f4314c10b5f29a83587:**
+close the allocation-size patch / drop-in BGFX replacement / assumed configuration
+toggle routes. Keep owner-side demand allocation as a concrete algorithmic
+candidate, with Education integration UNKNOWN. This is a newly resolved
+integration boundary, not implementation or Minecraft savings.
+
+#### What the saved constructor actually covers
+
+The captured function creates one object, calls an uncaptured initializer and
+continues member initialization. Its first direct post-call store is at
+object+0x3C56408. A later loop advances by0x168 between0x418E8B8 and0x436EF48,
+performing direct object-relative stores. A following call receives
+object+0x436EDF0, zero and length0x298, ending eight bytes before the requested
+allocation end if interpreted as a zero-fill operation. That helper's body is
+not captured: the argument shape alone is not independent proof of its behavior.
+The preceding direct stores already establish use of high object offsets.
+There is no demonstrated unused tail that can be removed by lowering malloc's
+requested size. The uncaptured initializer prevents attribution of most earlier
+object fields; do not label them textures, terrain, cache or duplication.
+
+On initialization failure the saved factory invokes a virtual cleanup-like
+method and returns the allocation through the same allocator interface with
+size0, then clears its context pointers. That is a failure path; it does not
+establish normal resource retirement or reconstruction. The caller slice
+8881B20 includes the literal0x78666762 (ASCII bgfx) in its renderer selection
+path. Combined with the stack route this supports a BGFX-family comparison,
+**not** a dependency revision, matching upstream class layout or plugin ABI.
+
+The separate saved symbol-stack aggregation has3804rows,3504containing game
+RVA frames and zero matching named game frames in the reader's
+`minecraft.windows.exe!symbol` format. This is a coverage result for that
+artifact, not proof that no symbols exist anywhere. It supplies no content
+identity/live-object census for declaring the large object or other heap
+ranges redundant. The58.457MiB historical Private WS correlation remains
+subject to the known trace/snapshot gap.
+
+#### A closer native comparator: demand storage in BGFX
+
+Mojang's A.J. Fairfield describes RenderDragon above BGFX, with gameplay
+submissions copied into a per-frame registry and opaque resource handles whose
+lifetimes/barriers belong to the rendering layer. The platform inventory
+includes Education, but does not specify its binary layout or extension ABI.
+This is relevant architectural authority; it does not identify the saved
+object's members or unused capacity.
+[Primary Mojang GDC2026 presentation, PDF pages7/10](https://media.gdcvault.com/gdc2026/Slides/Fairfield_AJ_ModernizingTheRenderingOfMinecraft.pdf#page=10).
+
+Upstream BGFX has actual memory-demand changes, independently pinned rather
+than inferred from the Education executable:
+
+| Immutable upstream change | UTC author date | Source mechanism |
+| --- | --- | --- |
+| [86ad82c / #3790](https://github.com/bkaradzic/bgfx/commit/86ad82cfe2f5c2b8f56db2391a5ba5859251dad9) |2026-06-28|Dynamic draw/frame and matrix capacity; changes initialization, definitions/bindings and consumers. |
+| [35a98dd / #3900](https://github.com/bkaradzic/bgfx/commit/35a98dd6453cf25dc75c68e233abb400836d5920) |2026-08-17|Per-frame storage grows on demand instead of reserving maximum representation. |
+| [01e69a6 / #4024](https://github.com/bkaradzic/bgfx/commit/01e69a63074d4c103573ef8bc684ceec7e00b22e) |2026-10-04|HandleArenaT resource tables; alloc/access/release changes in core and six backends. |
+| [e13b87c / #4025](https://github.com/bkaradzic/bgfx/commit/e13b87cdd9f169565fb2fefd0413890bcbafbb7d) |2026-10-05|Handle allocators, query rings and free queues scale with use. |
+
+Inspected source pin:
+`0c595f8e12c1f0db0653922c8c838ad74976af0f`. This is the upstream comparison
+revision, **not the Education dependency version**. Commit metadata/patches
+were read; neither upstream merge status nor a PR description is counted as a
+passed test, measured benefit or Education rollout. No numerical saving is
+extrapolated.
+
+| Owner | Actual public mechanism | Integration implication |
+| --- | --- | --- |
+| [HandleArenaT](https://github.com/bkaradzic/bgfx/blob/0c595f8e12c1f0db0653922c8c838ad74976af0f/src/bgfx_p.h#L3319) | Allocates64-entry blocks on demand, tracks live entries/touched state, and releases eligible empty blocks through its own lifetime operations. | The consumers must index through the arena; a foreign allocator cannot redirect existing fixed-offset fields or manufacture live counts. |
+| [Frame capacity owner](https://github.com/bkaradzic/bgfx/blob/0c595f8e12c1f0db0653922c8c838ad74976af0f/src/bgfx_p.h#L4283) | Observes peaks and adjusts capacity before frame counters reset; unused encoder uniform buffers are created lazily. | Requires native frame/use boundaries, not just Present pacing. Allocation/growth overhead and contiguous matrix growth can affect smoothness. |
+| [D3D12 resource owner](https://github.com/bkaradzic/bgfx/blob/0c595f8e12c1f0db0653922c8c838ad74976af0f/src/renderer_d3d12.cpp#L9771) | Resource destroy/release bookkeeping precedes reclaim of unused CPU arena blocks. Context creation/deletion owns the whole renderer. | Empty CPU metadata blocks are distinguished from GPU resources; the existing game contract must be preserved. |
+| [Compile-time configuration](https://github.com/bkaradzic/bgfx/blob/0c595f8e12c1f0db0653922c8c838ad74976af0f/src/config.h#L297) and [Init::Limits](https://github.com/bkaradzic/bgfx/blob/0c595f8e12c1f0db0653922c8c838ad74976af0f/include/bgfx/bgfx.h#L752) | Dynamic mode changes representation/accessors. Initialization controls reservations and peak windows; static-mode draw count becomes a hard cap that drops excess submissions. | A prebuilt Education binary cannot acquire this representation from an environment define. No compatible Education Init bridge or live trim setter is established. |
+
+The native optimizer idea is now concrete: replace eagerly resident maximum
+tables with demand representation **at their actual owner**, while maintaining
+all access, resource release and reset paths. It is not a Sodium binary port,
+a copied BGFX backend, a global purge or a smaller allocation constant. A valid
+original implementation still needs the corresponding Education consumers and
+lifetimes. The saved constructor and factory do not provide an independently
+lifetimed table/accessor seam; the specific shortcut is closed rather than
+converted into another generic fixture.
+
+For this decision the delegated primary-source note has SHA-256
+`a0d08d76fa3fdb0e9fbf41e58ab958d297e808731ff997fcfb6559eb0703c339`.
+The additionally reviewed8881B20 saved object has SHA-256
+`7df1dc83998bba855f5d2c43cdd2338ac9fcbbf335ac1f7f7c8e97ca923d75b1`.
+Raw code remains ignored locally. No new PC/game access, capture, product build,
+test fixture, ABI change or runtime intervention was performed.
 
 ### Candidate decision ledger and current implementation boundary
 
 | Waste hypothesis | Education evidence now available | Missing fact / compatible intervention boundary | Decision |
 | --- | --- | --- | --- |
-| CPU representation or duplication, inspired by FerriteCore | Large B05B30E object correlates with58.457MiB resident; other heap leaves remain mixed/unsampled | Object layout, actual redundant/live data, all readers/writers, native owner and compatible compact/demand representation | Research lead; no size patch, foreign replacement or estimated saving |
+| CPU representation or duplication, compared with FerriteCore and BGFX demand storage | Large B05B30E object correlates with58.457MiB resident; high-offset constructor accesses and a BGFX-family caller are saved | Object layout, actual redundant/live data, all readers/writers and compatible native owner remain missing; upstream demands representation/access/release changes | Direct size/config/drop-in replacement routes CLOSED; owner-side demand allocation remains unintegrated, no saving estimate |
 | Allocator free retention / fragmentation, inspired by production allocators and Mesh | CRT ancestry appears in saved heap commit stacks; commitment can greatly exceed residency | Actual free slots/pages, allocation/free ownership, aliases, allocator contract and Windows-compatible reclaim/compaction | No free-byte proof; do not apply a process-wide purge or working-set trim |
 | Content/model/cache demand, inspired by ModernFix | No content-level live/unused or duplicated-byte census in these captures | Asset identity, consumers, reference lifetime, reload capability and duplicated resident size | UNKNOWN; no cache deletion, resource sharing or unsupported mod |
 | Graphics growth/retention, compared with Filament/Godot/O3DE/DXVK | Concrete create/fit/grow chain and144MiB resident correlation for one captured synchronous route | Normal free/reference/GPU completion/unlink/rebuild chain and genuinely unused resident capacity | Keep candidate unselected; no retirement hook or startup-count rerun |
