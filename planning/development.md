@@ -1212,6 +1212,37 @@ started. Both games were left responding/open. The local candidate manifest
 now records partial two-client runtime acceptance rather than NOT_EXECUTED;
 five-client readiness is not awarded.
 
+### Two-client memory-efficiency research — 25 October 2026
+
+The operator now prioritizes RAM/performance research and discussion BEFORE
+implementing clients 03-05. This supersedes the previous expansion next action;
+the full five-client 144/10 goal and preservation boundaries remain intact.
+
+[Research findings](../docs/system/native-memory-efficiency-research.md) pin
+this review to `5eaa49ed41c5c455f1b783d3a7c659bbba40e2d5` and cite primary
+Minecraft Education, Microsoft, NVIDIA and CEF sources. The current pacer
+changes present frequency without releasing game content. The existing
+collector measures selected-process CPU/working set but not private commit,
+private working set, host commitment or attributable helper totals. Source
+inspection finds bounded own HUD/journal buffers and a CLI route before
+Tauri UI bootstrap; no GiB-scale source cause or game leak is established.
+
+The supported first candidate is a fixed Education graphics/render-distance
+preset, measured against current settings with matched world/workload and
+host role. Live focus-driven Education graphics changes remain unverified.
+Periodic trimming, arbitrary memory/CPU caps, whole-client suspension, helper
+killing or global memory tweaks are rejected as default optimization paths.
+The report defines a bounded metadata-only comparison with time-aligned focus,
+frame tails and host health; no numeric savings or five-client capacity is
+promised.
+
+Proof: exact-source owner/consumer review plus primary documentation research
+and Markdown/source-link/scope checks only. No new game/process observation,
+benchmark, source-code implementation, setting change, memory dump, account/
+world/cache read, Computer Use, CI or game closure was performed. All proposed
+optimization gains and current memory composition remain UNKNOWN /
+NOT_EXECUTED. The earlier two-client runtime result remains unchanged.
+
 ### Remaining proof and one next action
 
 The full five-client goal is incomplete. Two original accounts, basic same-world
@@ -1225,8 +1256,9 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** extend the SAME private bootstrap to slots 03-05 with
-independent fresh storage/registry identities while replaying MC01/MC02 unchanged,
-then prepare a single five-client Education host/join acceptance with aligned
-focus/native-frame/resource measurements. Further runtime operations require an
-available operator session; preserve the currently open games and all old data.
+**One next action:** review the proposed two-client comparison and prepare a
+bounded extension of the existing diagnostic collector for private commit,
+private working set and verified helper/system totals. Keep clients 03-05
+unimplemented until the two-client efficiency tradeoff is understood. Do not
+operate games or change graphics/Windows settings as part of the research;
+later comparative runtime needs an available operator session.
