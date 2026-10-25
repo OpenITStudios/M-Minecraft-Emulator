@@ -16,13 +16,20 @@ fixture counts and minor launcher/HUD savings are not substitutes for them.
 | **B — internal Minecraft efficiency** | Reduce unnecessary mesh/buffer/asset/cache or renderer work using a real Education-compatible integration, inspired by Java optimizers. | A new native internal optimization needs one demonstrated resource owner/lifetime seam. Existing Present mediation owns pacing/HUD, not game meshes/heaps. A generic allocator/hook fixture or wrapper micro-optimization does not satisfy B. | A guarded native startup-count intervention is implemented and executed on two original clients. Sequential readings showed lower private commitment but do not establish causal savings or meaningful resident-RAM benefit; default remains OFF. Other CPU-visible pool ownership, occupancy and GPU-safe retirement/rebuild remain UNKNOWN. Do not promise a Java mod port or a RAM percentage. |
 | **C — inactive clients first** | Prioritize lower RAM/CPU/GPU demand while a client is not controlled; keep foreground 144/background 10 ceilings, prompt focus recovery and continuing Education host/network/saves. | Focus/pacing retain their current owners. Host role is separate from focus. No whole-process suspension, arbitrary memory/CPU caps, blind working-set trimming, token/profile sharing, fabricated occlusion result or freeing game-owned resources. | The existing limiter is implemented and prior 10-FPS observations are historical. Further game-owned background work reduction, its resource benefit and host health require a concrete intervention; no new savings are claimed yet. |
 
-**Current phase — ACTIVE RAM EFFICIENCY GOAL, source and saved evidence only.**
+**Current phase — BLOCKED ON EDUCATION INTEGRATION EVIDENCE; goal incomplete.**
 The operator explicitly resumed the main goal on25October2026 and prohibits
 PC control while working. No UI/input, game launch/closure, live process/memory
 inspection, new capture, settings edit or runtime change is authorized by this
 continuation. Previous full-access permission is superseded for this session.
-The goal is registered as active; neither research nor a source commit completes
-actual Minecraft savings.
+The goal remains the same and is blocked on a concrete integration contract.
+Source/saved-artifact work on the identified routes is complete to its available
+proof boundary; neither research nor this decision completes actual savings.
+The [residual interface review](../docs/system/native-memory-efficiency-research.md#residual-contentallocator-review-integration-impasse)
+rechecked current LFH source and official content contracts. Existing one-shot
+LFH commitment reductions are not durable resident savings, content packages
+do not expose renderer ownership, and the reviewed captures do not identify
+a removable expensive/duplicate asset. No additional justified implementation
+or useful repeat experiment is available from these inputs.
 
 The [offline ownership/residency reconciliation](../docs/system/native-memory-efficiency-research.md#active-ram-goal-offline-ownership-and-residency-reconciliation--25-october-2026)
 adds concrete evidence using already-saved ETLX, VMMap and native code slices.
@@ -1879,10 +1886,11 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** review the remaining supported content/allocator interfaces
-against the existing saved evidence, once, for a concrete owner-cooperative
-intervention that does not depend on the closed BGFX size/config/replacement
-routes. Reuse already-recorded LFH and cache findings rather than repeating
-their experiments. If no compatible interface can be established, record the
-specific integration impasse; do not manufacture a fixture, more telemetry or
-a PC session. New RAM savings remain NOT_EXECUTED.
+**One next action — external evidence prerequisite:** re-evaluate a bounded
+implementation only when new Education-compatible owner/access/release evidence
+and relevant waste bytes are available. Do not repeat the completed range,
+BGFX, LFH or generic content reviews, produce another allocator fixture, assume
+a new trace resolves ownership, or open/control Minecraft automatically.
+Current no-PC instruction remains in force. B and additional inactive RAM
+benefits are UNKNOWN / NOT_EXECUTED, not complete. Existing accounts/worlds
+and working runtime remain untouched; this is not permission to alter them.

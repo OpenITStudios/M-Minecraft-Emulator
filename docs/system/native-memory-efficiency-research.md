@@ -22,6 +22,49 @@ goal remains actual Minecraft RAM efficiency, especially inactive clients;
 render distance at least12 and unchanged simulation/resolution remain boundaries.
 Below1GB is aspirational, not a memory cap or acceptance prediction.
 
+### Residual content/allocator review: integration impasse
+
+Reviewed source parent `fe9dc1dfea8d541527e824b37473dedb30efc0c5`.
+The final remaining content/allocator review found no additional intervention
+whose Education waste owner, relevant bytes and compatible lifecycle are all
+established. This is a boundary of the evidence and access currently available,
+not proof that Education can never be optimized. The main goal is **BLOCKED,
+not complete**; do not generate further research checkpoints, synthetic
+allocators or repeated recordings for these same missing facts.
+
+| Route reviewed | What the actual contract supports | What prevents a justified current implementation |
+| --- | --- | --- |
+| Windows LFH cache decommit | [HeapOptimizeResources](https://learn.microsoft.com/en-us/windows/win32/api/heapapi/nf-heapapi-heapsetinformation) lets the heap manager optimize eligible LFH caches and decommit where possible. Existing heap-reclaim.cpp already makes that one-shot request. | Historical38.754/21.707MiB drops were private commitment at different workloads, not durable resident savings. Later growth and incomplete refill/latency/host evidence do not justify automatic scheduling. The saved direct graphics allocations did not decrease from that action. Reuse the recorded result; do not rerun it. |
+| Allocator replacement/compaction | Production allocators can reclaim backing whose free/live state they own; Mesh has a different platform/aliasing contract. | The game allocation/free families, ownership transfer, free spans and Windows-compatible remapping are not established. Changing our manager's allocator would target the wrong process. |
+| Supported content reduction | Microsoft's [resource guidance](https://learn.microsoft.com/en-us/minecraft/creator/documents/practices/improvingperformanceandresourceusage?view=minecraft-bedrock-stable) identifies model complexity, texture dimensions/counts, sound caches and entity work as relevant. | Reviewed allocation artifacts do not identify the active expensive/duplicate asset, its native copies or removable resident bytes. Compressed PNG/pack bytes are not a CPU-RAM allocation budget; formats, copies and mip/atlas overhead matter. No speculative replacement pack, world edits or asset deletion. |
+| Resource-pack extension surface | The [Education collection](https://education.minecraft.net/en-us/resources/minecraft_education_add_ons_collection) offers content packages; [resource-pack stacking](https://learn.microsoft.com/en-us/minecraft/creator/documents/resourcepack?view=minecraft-bedrock-stable) changes selected content definitions. | Content overrides do not expose the game renderer's tables/mesh/cache lifetime. Bedrock documentation does not establish an Education native optimizer ABI; the [Education FAQ](https://edusupport.minecraft.net/hc/en-us/articles/360047117692-FAQ-Game-Features) separately excludes community mods. Official collection support must not be inflated into support for arbitrary native plugins. |
+| Inactive-client reclamation | Existing focus/presentation owner provides144/10 pacing; host role remains independent. | Focus loss is not an unused-resource predicate. Render distance12, unchanged simulation and continuing host/network/save work rule out arbitrary world-state discard or suspension. A resource-owner retirement/rebuild contract is still missing. |
+
+The LFH result is a legitimate owned-heap action, so a blanket claim that no
+native memory mechanism exists would be wrong. What is missing is a justified,
+durable RAM optimization policy for this workload. Likewise content reduction
+is a valid option when its actual assets/compatibility/cost are known; adding
+an unselected content pack now would not establish the requested engine result.
+
+**Completion audit:** A has historical per-profile disk retention and partial
+restart/UI evidence; no present-session profile inspection was made. B lacks
+an integrated owner-compatible intervention and demonstrated durable
+whole-Minecraft resident reduction. C retains historical pacing evidence but
+has no new inactive RAM benefit or changed-optimizer host/gameplay proof.
+Below1GB is unproven and aspirational. Accounts/worlds, simulation/resolution,
+minimum distance and original-code boundaries remain preserved because no
+runtime change was made. No product build or game acceptance executed here;
+new savings remain NOT_EXECUTED.
+
+The same missing integration/liveness evidence remained at the saved-range
+reconciliation (f913d1c), BGFX comparison (fe9dc1d) and this residual review.
+The remaining safe action needs **new compatible Education owner/access/release
+evidence**, such as a documented integration or independently verified native
+contract with relevant waste bytes. A new generic trace, broader PC permission,
+or a lower Task Manager reading alone would not satisfy that requirement.
+Keep the working payload unchanged and the prior count experiment OFF. Do not automatically
+start a PC session, mutate settings or schedule a follow-up.
+
 ### Historical sample and conservative join
 
 Source parent: `4b54a031eabf74c6881d1e2444b24e9bc531cf42`.
@@ -205,7 +248,7 @@ test fixture, ABI change or runtime intervention was performed.
 | Waste hypothesis | Education evidence now available | Missing fact / compatible intervention boundary | Decision |
 | --- | --- | --- | --- |
 | CPU representation or duplication, compared with FerriteCore and BGFX demand storage | Large B05B30E object correlates with58.457MiB resident; high-offset constructor accesses and a BGFX-family caller are saved | Object layout, actual redundant/live data, all readers/writers and compatible native owner remain missing; upstream demands representation/access/release changes | Direct size/config/drop-in replacement routes CLOSED; owner-side demand allocation remains unintegrated, no saving estimate |
-| Allocator free retention / fragmentation, inspired by production allocators and Mesh | CRT ancestry appears in saved heap commit stacks; commitment can greatly exceed residency | Actual free slots/pages, allocation/free ownership, aliases, allocator contract and Windows-compatible reclaim/compaction | No free-byte proof; do not apply a process-wide purge or working-set trim |
+| Allocator free retention / fragmentation, inspired by production allocators and Mesh | CRT ancestry appears in saved heap commit stacks; commitment can greatly exceed residency | Actual free slots/pages, allocation/free ownership, aliases, allocator contract and Windows-compatible reclaim/compaction | Prior one-shot LFH result is not durable resident saving; no additional free-byte proof or justified automatic purge/working-set trim |
 | Content/model/cache demand, inspired by ModernFix | No content-level live/unused or duplicated-byte census in these captures | Asset identity, consumers, reference lifetime, reload capability and duplicated resident size | UNKNOWN; no cache deletion, resource sharing or unsupported mod |
 | Graphics growth/retention, compared with Filament/Godot/O3DE/DXVK | Concrete create/fit/grow chain and144MiB resident correlation for one captured synchronous route | Normal free/reference/GPU completion/unlink/rebuild chain and genuinely unused resident capacity | Keep candidate unselected; no retirement hook or startup-count rerun |
 
