@@ -526,3 +526,96 @@ was introduced. B remains incomplete; A/C are not relabeled as satisfying it.
 ## Native efficiency implementation mechanisms and specific tools (25 October 2026)
 
 The [implementation playbook](./native-efficiency-implementation-playbook.md) provides concrete Codex-ready mechanisms N01-N04 (registry/file hooks, expired startup tracing, event-led manager), R01-R03 (pacer timers, HUD, presentation), M01-M02 (owned immutable data), B01-B02 (Sodium/FerriteCore internal game feasibility) and W01 (conditional content tooling). Each has exact source owner, Windows/C++/Rust API, algorithm, safety/compatibility boundary and primary reference. This is **supporting technical design**, not new deployment authorization, an automatic optimization claim, or a second active TODO owner. The A/B/C current goal and **one next action** remain in [planning](../../planning/development.md).
+
+
+## Deeper RAM-efficiency research — 25 October 2026 discussion
+
+This is a research update, not authorization to change running games or enable
+telemetry. The earlier absence of a native mesh SDK blocks that specific
+integration, not every possible allocator or built-in-feature investigation.
+No Minecraft RAM reduction has been measured by this research.
+
+### Separate live data, allocator retention, residency and GPU memory
+
+A process can retain live world/model/mesh data, unused allocator capacity, mapped
+images/files and driver allocations. Their remedies differ. Working-set
+reduction alone does not establish fewer live allocations or less private commit.
+[VMMap](https://learn.microsoft.com/en-us/sysinternals/downloads/vmmap) can separate
+committed-memory types and resident pages without proprietary game symbols.
+[Microsoft's allocation-analysis guidance](https://learn.microsoft.com/en-us/troubleshoot/windows-server/performance/troubleshoot-application-service-memory-leaks)
+also notes that stacks without third-party function names can still identify
+modules. Thus missing PDBs are a limitation, not a universal diagnostic dead end.
+No dump, heap trace or game memory contents were collected here.
+
+### New allocator-level candidate: LFH cache decommit
+
+[HeapSetInformation / HeapOptimizeResources](https://learn.microsoft.com/en-us/windows/win32/api/heapapi/nf-heapapi-heapsetinformation)
+can optimize LFH caches and decommit memory where possible; NULL selects the
+calling process's LFH heaps. This differs from removing resident pages. Its
+reach into Minecraft is UNKNOWN: live objects, custom arenas, direct VirtualAlloc
+allocations and GPU resources are not automatically reclaimed. API success
+does not prove reclaimed bytes. Heap coverage, private-commit change, refill
+cost and focus/frame latency need evidence before any deployment. No periodic
+loop, DllMain/Present maintenance, guessed page freeing or runtime call is proposed.
+
+[Segment Heap manifest opt-in](https://learn.microsoft.com/en-us/windows/win32/sbscs/application-manifests#heaptype)
+and [mimalloc Windows redirection](https://microsoft.github.io/mimalloc/overrides.html)
+are different mechanisms. Neither establishes a safe late allocator replacement.
+Changing our manager's heap does not optimize Minecraft's. Do not modify the
+signed game manifest/imports or redirect allocation/free families without a
+complete compatibility contract. This candidate is allocator footprint work,
+not an implemented Sodium mesh optimizer.
+
+### Real renderer structures, not just Present
+
+Mojang's [GDC 2026 RenderDragon presentation](https://media.gdcvault.com/gdc2026/Slides/Fairfield_AJ_ModernizingTheRenderingOfMinecraft.pdf)
+describes per-frame draw-data registries and opaque resource lifetime handles
+(page 10), paged vertex pools with chunk/layer buffer ranges (page 15), and a
+terrain atlas (page 21). Inference: reduced frame submission does not itself
+release persistent mesh pools. Pool occupancy, retirement and rebuild ownership
+are the relevant internal questions; this architecture description is not an
+Education extension ABI.
+
+### Built-in native mechanisms and version compatibility
+
+The [Bedrock 26.30 changelog](https://www.minecraft.net/en-us/article/minecraft-26-30-bedrock-changelog)
+documents PC/mobile texture streaming, matching voxel-shape deduplication at
+world load, and texture-cache/streaming bug fixes. These are actual native
+mechanisms worth checking before duplicating them. The [Education changelog](https://edusupport.minecraft.net/hc/en-us/articles/360047556451-Minecraft-Education-Change-Log/)
+lists Chaos Cubed and performance fixes in 26.32; it does not enumerate equivalent
+renderer capabilities. The installed options key or shared version ancestry
+alone does not prove an active streaming implementation or its savings.
+[Creator voxel-shape documentation](https://learn.microsoft.com/en-us/minecraft/creator/documents/voxelshapes?view=minecraft-bedrock-stable)
+is a content contract, not access to all native block-state memory.
+
+### Existing category diagnostics may help without proprietary symbols
+
+Mojang's [memory-category documentation](https://mojang.github.io/bedrock-protocol-docs/1.26.60-preview.25/types/memory-memory-category/)
+names terrain vertex/index buffers, tessellator, render registry, textures and
+subchunk data. The [official debugger](https://github.com/Mojang/minecraft-debugger/blob/main/README.md)
+also documents client diagnostics. This is a possible target-selection lane,
+not an optimizer. Education compatibility, telemetry behavior and exact version
+support remain UNKNOWN. Do not enable telemetry/privacy settings, attach a
+network proxy or create another collector from this research.
+
+### Historical Education-specific leak lead
+
+A [2025 Education support discussion](https://edusupport.minecraft.net/hc/en-us/community/posts/38696872814484-Memory-Leaks?page=1)
+contains first-hand reports that disabling Improved Input Response and restarting
+resolved growth on affected builds, with a support-agent acknowledgement.
+This is a historical regression lead, not an official current-build diagnosis
+or evidence that our stable baseline is leaking. Establish feature availability
+and version applicability before changing settings.
+
+### Discussion recommendation
+
+Keep A (durable settings), B (internal/allocator mechanisms) and C (inactive-client
+behavior) explicit. First choose the largest actionable memory category rather
+than collecting another time series of aggregate RAM. A focused existing-tool
+snapshot or supported built-in diagnostic should answer a named decision:
+unused LFH capacity, live/custom-arena state, textures, or terrain mesh. Close
+the chosen candidate if its target category is absent. Implement only the
+matching mechanism and verify reclaimed private commit/physical memory plus
+focus/host health once. Five-client extrapolation and numerical savings remain
+unproved. Render distance minimum 12, simulation, resolution, original profiles
+and 144/10 policy remain unchanged.
