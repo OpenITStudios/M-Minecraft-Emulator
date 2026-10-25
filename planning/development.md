@@ -55,6 +55,31 @@ from this result.** No GPU/frame trace or collector extension was introduced.
 Both world sessions were then saved/exited normally for the authorized Code
 Builder change; games remain open in menus. B internal ownership remains UNKNOWN.
 
+**Native resource-reclamation decision — source review at d9af812:**
+the current Chain forwards GetDevice/GetBuffer and mediates Present; it does not
+own Education's mesh construction, texture regeneration, command recording or
+resource-idle boundary. Microsoft documents Trim for periods of rendering idle,
+with reallocation cost at the next rendering operations. A background client
+that must continue at 10 FPS is not an established idle transition. Do not add
+periodic/focus-triggered Trim, ClearState or Flush calls to the game device.
+
+OfferResources can unbind and discard resource contents; ReclaimResources
+requires the owner to repopulate discarded data before use. The current adapter
+has no terrain/texture regeneration contract. Reject offering arbitrary
+Minecraft resources, releasing their COM references, or adding a buffer pool
+that cannot prove contents/lifetime compatibility. D3D11 already deduplicates
+identical rasterizer-state creation; adding a parallel cache is not a demonstrated
+memory saving. These are rejected integration candidates, not executed runtime
+failures or proof that every possible native optimization is impossible.
+
+The operator confirms no native Education source/SDK/integration documentation
+is available. **The current B blocker is an absent verified internal
+ownership/rebuild seam.** Existing Java algorithms and DLL-loading ability do
+not resolve it. Version-specific reverse engineering would first need to
+establish those semantics; no guessed addresses, generic hook fixtures or
+automatic memory reclamation are introduced. A/C evidence remains intact.
+See the existing research report for primary API references.
+
 Retain independently authored code, Local only, CI disabled, no Sandboxie/VMware
 or game-file modifications. Five clients remain deferred until two-client
 stability and worthwhile savings are demonstrated. The existing research report
@@ -1626,10 +1651,9 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** investigate one concrete Education-native renderer resource
-ownership/lifetime seam for B using existing source and supported interfaces;
-either identify a named integration with safe allocation/retirement semantics
-or close that specific candidate as unsupported/UNKNOWN. Do not start another
-collector, generic allocator fixture, wrapper-only optimization or automatic
-minimization rollout. Code Builder is now saved off only in the existing host
-world; its resource benefit is unproved. A/B/C remain the active goal.
+**One next action:** obtain a concrete Education-native mesh/resource
+allocation-and-rebuild integration reference before implementing B. Source/SDK
+access is unavailable, and the current Present adapter cannot establish this
+contract. Do not repeat runtime sampling or apply speculative buffer reclamation
+while the ownership blocker remains. Preserve A/C and keep the full goal
+incomplete; this decision does not replace B with settings or wrapper savings.

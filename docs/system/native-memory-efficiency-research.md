@@ -498,3 +498,26 @@ feature setting, not a global per-profile/default promise or internal renderer
 optimization. Helper teardown and RAM/CPU/GPU savings remain **UNKNOWN /
 NOT_MEASURED**. The original games are left open in menus; other worlds are
 untouched. Native mesh/allocator integration remains UNKNOWN.
+
+
+### Driver-memory candidates: concrete ownership decision
+
+Reviewed current [DXGI owner at d9af812](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/d9af812232f52fe299812b51a6ce4071c6e60b20/tooling/acceptance/windows/bootstrap-ordering/dxgi-pacing.cpp).
+GetDevice/GetBuffer are forwarded; the adapter owns presentation pacing and HUD
+lifetime, not terrain/texture generation, command recording, or the game's idle
+boundary. Successful QueryInterface would establish API availability only.
+
+| Candidate | Primary contract | Decision for the current integration |
+| --- | --- | --- |
+| [IDXGIDevice3::Trim](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_3/nf-dxgi1_3-idxgidevice3-trim) | Discards driver-internal buffers; intended before an extended render-idle period and incurs reallocation cost on rendering again. | Reject periodic/focus-triggered calls. Background 10-FPS rendering is not a verified idle transition. Do not ClearState/Flush a game-owned device to imitate suspension. Runtime NOT_EXECUTED. |
+| [OfferResources](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_2/nf-dxgi1_2-idxgidevice2-offerresources) / [ReclaimResources](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_2/nf-dxgi1_2-idxgidevice2-reclaimresources) | Offering can unbind resources and discard contents. Reclaim must precede reuse; discarded contents must be written again. | Reject arbitrary game-resource offering: no Education mesh/texture regeneration contract exists in this adapter. Runtime NOT_EXECUTED. |
+| [D3D11 rasterizer-state deduplication](https://learn.microsoft.com/en-us/windows/win32/api/d3d11/nf-d3d11-id3d11device-createrasterizerstate) | Equivalent state requests already return the same interface. | No evidence for another cache or reduced allocations here. Actual Education graphics device/version/use remains unmeasured; no game benefit is claimed. |
+
+These decisions close specific proposals rather than claiming native optimization
+is universally impossible. The operator confirms no native Education source/SDK
+or integration reference is available. The B prerequisite is a verified internal
+allocation, ownership and rebuild seam; the current seam is insufficient.
+Version-specific reverse engineering would have to establish those semantics
+before an original internal optimizer could be justified. No code, arbitrary
+resource release, memory cap, trim loop, collector extension or game-file change
+was introduced. B remains incomplete; A/C are not relabeled as satisfying it.
