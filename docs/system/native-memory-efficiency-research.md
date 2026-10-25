@@ -1300,3 +1300,102 @@ Local snapshot SHA-256 values:
 Raw mappings, code fragments, profiles and captures remain local. The single
 next intervention is owned by planning/development.md; the L1 result is not a
 reason to repeat the same experiment or promise a Sodium-equivalent RAM floor.
+
+## Native Upload empty-retention seam — authorized resume, 25 October 2026
+
+This section supersedes the earlier no-live-access integration impasse for this
+specific allocator route. The operator explicitly resumed the RAM goal with
+full PC/runtime authorization. A/B/C remain separate; the latest working
+144/10/HUD payload and original account/world profiles remain the baseline.
+This is not a BGFX replacement or a predicted below-1GB result.
+
+### Actual owner, retirement and completion evidence
+
+The official Education executable SHA-256 remains
+`04164c1c64458a5d984dbc1687d0e8023d1808c44ee7be03519cdf8355233eaa`,
+timestamp `0x6a63e832`, image size `0x1255c000`. Selected bounded
+loaded-code reads were necessary: relevant native ranges are not directly
+file-backed in the installed executable. Raw instructions remain private.
+
+Native initializer RVA BC22120 stores argument8 at owner+158 (initial count,
+also the total-heap floor) and argument9 at +15C. Newly inspected normal
+retirement BC24D10 resolves the latter as an empty-candidate count threshold:
+after eligible deferred records retire, it collects heaps with metadata+E8=0,
+requires candidate count above +15C and total count above +158, removes a
+candidate, updates capacity/vector bookkeeping and invokes BC24570. That
+release routine uses native locking and interface release calls. The sweep
+requires newly processed pending records; an empty sample alone need not
+cause immediate shrink. This corrects the earlier unresolved-argument finding.
+
+A bounded observer actually ran on one original client: eight callback
+invocations all returned to RVA B039C36. The callback caller B039BB0 queries
+an interface at coordinator+18 via vtable+40, caches the returned value at
++30, treats UINT64_MAX specially, and dispatches registered native callbacks
+with that value. The wait path B036C20 uses the same interface's vtable+48,
+a requested value and event, waits, then queries again. The submit path
+B02E8E0 passes that interface and the next value to a queue vtable+70 before
+calling the dispatcher. These signatures/slots and the device-removed
+sentinel match [ID3D12Fence::GetCompletedValue](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12fence-getcompletedvalue),
+[SetEventOnCompletion](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12fence-seteventoncompletion)
+and the installed Windows SDK vtable. Interface IID creation was not separately
+verified. No completion value, pending record, resource counter or native
+release argument was changed by the observer.
+
+Private evidence:
+- bounded native callback receipt SHA-256
+  `8d9484ea1f6dd947e1fc5755da60e546e47835830b8788a685f9d32c5be3c818`;
+- metadata sample SHA-256
+  `0f5effd04e4cf5b13228d0db13c04da472283b0abb6b0aa827f8c773a9a2a95c`;
+- observer source SHA-256
+  `289ace1c9d4351a1e0bf0e90f78f67b10eefa60371c3ed1d6c80f96c73f82869`;
+- observer DLL SHA-256
+  `359be8345a272642909c0fce803697b058929ba237a5058703f5d168e2861a35`.
+
+The observer preserves arguments and LastError, records at most eight calls,
+and then passes through. Its hook/DLL is pinned until normal game exit; it
+was not hot-unloaded. This is real native-callback evidence, not a savings
+measurement or a generic allocator fixture.
+
+The unsynchronized post-startup Upload sample showed five heaps, total
+capacity168MiB, floor2, threshold4, with four zero-counter candidates totaling
+88MiB capacity. Scalar/vector consistency was checked, but the sample does
+not prove all candidates GPU-idle, physically resident or reclaimable.
+The observed callbacks left this pool unchanged. No 88MiB saving is claimed.
+
+### One independent implementation, default OFF
+
+The existing graphics-warm-pools owner now has a separate
+`BOOTSTRAP_UPLOAD_RETENTION_EXPERIMENT` build option. Exact native call return
+B026D72, name pointer D0D5C64, properties pointer F544940 and the observed
+UploadBufferHeap tuple (8MiB, alignment65536, flags0, initial2, reserve4) select
+only initializer argument9, changed4→1. Initial2 remains untouched.
+Existing image/code guards are extended with native retirement/release hashes:
+BC24D10/2905bytes
+`72b1c1c6202f7b39feab77f45b0114d38bf32a28f36a83e259782efa99d5091e`;
+BC24570/172bytes
+`4a004000f3dd483a8b7f7cce91eefe7241933703d2e8e4cfeda751aecfccca30`.
+
+Startup initialization avoids a remote scalar write racing renderer teardown
+or depending on a private mutex ABI. The native allocator still owns growth,
+locks, deferred retirement and release. The old Default initial-count experiment
+and new Upload retention experiment are mutually exclusive at CMake and C++
+levels. Both default OFF. A private successful-initialization counter records
+policy application only; it cannot certify native retirement or RAM benefit.
+No public API, production admission, profile route, signed game file or CI
+change is included.
+
+MSVC19.44 /W4 /WX compiled and executed the exact policy/control sources in
+Upload-enabled, legacy-enabled and both-disabled configurations. Controls
+check selection/rejection and reject attachment to their non-game executable
+without leaking handles. CMake with both experiments enabled was actually
+rejected as intended. These are SOURCE_EXECUTION results; full compatibility
+DLL/package construction and gameplay on the new policy are NOT_EXECUTED.
+
+Risks remain allocation churn, refill stalls, no native sweep until pending
+work retires, and a count threshold that is not a byte budget. Restoring the
+baseline at normal restart restores future retention policy; already released
+heaps are not instantly resurrected. Do not add a manual sweep, foreign free,
+forced fence value, arbitrary decommit or working-set trim to make it appear
+effective. Promotion requires comparable workload showing actual native
+capacity reduction and durable resident-RAM improvement without frame/host/
+save regressions. No B RAM saving is established yet.

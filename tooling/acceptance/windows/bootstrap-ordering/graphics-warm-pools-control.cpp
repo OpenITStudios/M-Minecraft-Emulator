@@ -27,6 +27,17 @@ int main() {
         if (initial_default_heaps(L"DefaultBufferHeap", {values[0], values[1], values[2], values[3], values[4]},
             0, block, 65536, 16, 1) != 16) return 1;
     }
-    std::puts("Only the exact observed DefaultBufferHeap tuple changes; native growth is outside this policy.");
+    using graphics_warm_pools::upload_empty_retention;
+    constexpr auto upload = L"UploadBufferHeap";
+    constexpr std::uint64_t uploadBytes = 8ULL * 1024 * 1024;
+    if (upload_empty_retention(upload, 0, uploadBytes, 65536, 2, 4) != 1
+        || upload_empty_retention(nullptr, 0, uploadBytes, 65536, 2, 4) != 4
+        || upload_empty_retention(L"DefaultBufferHeap", 0, uploadBytes, 65536, 2, 4) != 4
+        || upload_empty_retention(upload, 1, uploadBytes, 65536, 2, 4) != 4
+        || upload_empty_retention(upload, 0, uploadBytes * 2, 65536, 2, 4) != 4
+        || upload_empty_retention(upload, 0, uploadBytes, 256, 2, 4) != 4
+        || upload_empty_retention(upload, 0, uploadBytes, 65536, 1, 4) != 4
+        || upload_empty_retention(upload, 0, uploadBytes, 65536, 2, 3) != 3) return 1;
+    std::puts("Exact Default and Upload policies remain separate; non-game images reject attachment.");
     return 0;
 }

@@ -1,5 +1,8 @@
 #include "graphics-warm-pools.h"
-#if defined(BOOTSTRAP_GRAPHICS_WARM_POOLS_EXPERIMENT)
+#if defined(BOOTSTRAP_GRAPHICS_WARM_POOLS_EXPERIMENT) || defined(BOOTSTRAP_UPLOAD_RETENTION_EXPERIMENT)
+#if defined(BOOTSTRAP_GRAPHICS_WARM_POOLS_EXPERIMENT) && defined(BOOTSTRAP_UPLOAD_RETENTION_EXPERIMENT)
+#error Independent heap experiments must not be combined
+#endif
 #include <windows.h>
 #include <tlhelp32.h>
 #include <d3d12.h>
@@ -12,7 +15,7 @@
 
 namespace graphics_warm_pools {
 // Private action receipt, located through this candidate's linker map; no export or wire change.
-std::atomic<unsigned long> successfulInitialReductions{0};
+std::atomic<unsigned long> successfulInitialReductions{0}, successfulRetentionReductions{0};
 namespace {
 using Initialize = bool (*)(void*, const wchar_t*, ID3D12Device*,
     const D3D12_HEAP_PROPERTIES*, D3D12_HEAP_FLAGS, std::uint64_t,
@@ -55,10 +58,15 @@ bool knownCode() noexcept {
     BCRYPT_ALG_HANDLE algorithm = nullptr;
     if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0) != 0) return false;
     // Observed loaded-code hashes match in both original clients. No proprietary code bytes are embedded.
-    const bool valid = digest(algorithm, 0xbc22120, 691, "86794e185e14e77601ebb39505b9d275941d30d48fb2efeb182adec918f715c9")
+    bool valid = digest(algorithm, 0xbc22120, 691, "86794e185e14e77601ebb39505b9d275941d30d48fb2efeb182adec918f715c9")
         && digest(algorithm, 0xbc22490, 402, "a2b9f04086e7c1e4a1d5153d694a161a031293cfdb535cc8a3f6887de2a3a2eb")
         && digest(algorithm, 0xbc22660, 402, "fe604388ba591130bc89c816353d9553c397333fdd2f5704a9f8cf960e09a182")
         && digest(algorithm, 0xbc22840, 2363, "75f850894d2902d7a5d61902c8e22c13f01eb68b43032f5e3dd4680b4c76285a");
+#if defined(BOOTSTRAP_UPLOAD_RETENTION_EXPERIMENT)
+    valid = valid
+        && digest(algorithm, 0xbc24d10, 2905, "72b1c1c6202f7b39feab77f45b0114d38bf32a28f36a83e259782efa99d5091e")
+        && digest(algorithm, 0xbc24570, 172, "4a004000f3dd483a8b7f7cce91eefe7241933703d2e8e4cfeda751aecfccca30");
+#endif
     BCryptCloseAlgorithmProvider(algorithm, 0);
     return valid;
 }
@@ -66,7 +74,8 @@ bool initialize(void* owner, const wchar_t* name, ID3D12Device* device,
     const D3D12_HEAP_PROPERTIES* properties, D3D12_HEAP_FLAGS flags,
     std::uint64_t bytes, std::uint64_t alignment, unsigned initial, unsigned reserve) {
     const DWORD error = GetLastError();
-    const unsigned requested = initial;
+    const unsigned requested = initial, requestedReserve = reserve;
+#if defined(BOOTSTRAP_GRAPHICS_WARM_POOLS_EXPERIMENT)
     if (_ReturnAddress() == image + 0xb026c8c && name == reinterpret_cast<const wchar_t*>(image + 0xd0d5bb6)
         && properties == reinterpret_cast<const D3D12_HEAP_PROPERTIES*>(image + 0xf544910)) {
         const HeapProperties observed{static_cast<unsigned>(properties->Type),
@@ -75,9 +84,16 @@ bool initialize(void* owner, const wchar_t* name, ID3D12Device* device,
         initial = initial_default_heaps(name, observed,
             static_cast<unsigned>(flags), bytes, alignment, initial, reserve);
     }
+#elif defined(BOOTSTRAP_UPLOAD_RETENTION_EXPERIMENT)
+    if (_ReturnAddress() == image + 0xb026d72 && name == reinterpret_cast<const wchar_t*>(image + 0xd0d5c64)
+        && properties == reinterpret_cast<const D3D12_HEAP_PROPERTIES*>(image + 0xf544940)) {
+        reserve = upload_empty_retention(name, static_cast<unsigned>(flags), bytes, alignment, initial, reserve);
+    }
+#endif
     SetLastError(error);
     const bool result = original(owner, name, device, properties, flags, bytes, alignment, initial, reserve);
     if (result && initial != requested) successfulInitialReductions.fetch_add(1, std::memory_order_relaxed);
+    if (result && reserve != requestedReserve) successfulRetentionReductions.fetch_add(1, std::memory_order_relaxed);
     return result;
 }
 bool attach() {
