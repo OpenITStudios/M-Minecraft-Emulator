@@ -2,7 +2,25 @@
 
 **Authority:** `Local` is the only active development branch. This is the **single current goal, blocker and next action**, not a chronological TODO file. The previous 3,009-line ledger with 105 historical `Next:` entries is [preserved at commit `d239a299e04c`](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/d239a299e04c23d2324b52325714600c00c34498/planning/development.md). All its former next actions are superseded; Git history preserves implementation decisions.
 
-## Primary goal — original-system efficiency with distinct mechanism owners
+## Primary goal — Minecraft workload efficiency with distinct mechanism owners
+
+**Latest operator correction — 25 October 2026:** prioritize efficiency of
+Minecraft itself. The small manager footprint and bounded HUD change do not
+answer the desired substantial game-memory reduction. Stop extending diagnostic
+sessions as the main activity. Supported game-setting changes and internal-game
+optimization must remain explicitly distinguished from engine savings. The
+operator permits reducing visual effects/graphics, with render distance at
+least 12 and simulation distance unchanged. Preserve resolution and 144/10.
+This explicitly supersedes the earlier fixed-graphics requirement; keep savings
+from game settings separate from engine changes. Retain independent accounts/worlds,
+Education Host World, 144/10 policy, modular ownership, Local only, no CI,
+Sandboxie/VMware or game-file modifications. Five clients remain deferred
+until the two-client tradeoff is established.
+
+The following earlier fixed-settings engine direction records the prior scope;
+it is no longer permission to prioritize minor wrapper work over the operator's
+Minecraft-level objective.
+
 
 **Operator confirmation — 25 October 2026:** prioritize lower RAM/CPU/GPU
 overhead of our original system at unchanged game settings, visual output,
@@ -1486,6 +1504,99 @@ closed, controlled or reconfigured. The new payload's Minecraft behavior and
 matched RAM/CPU/GPU benefit are **NOT_EXECUTED**. Previous game acceptance remains
 bound to the old be24595 payload; no launch gate or CI change occurred.
 
+### Updated HUD candidate integration and operator correction — 25 October 2026
+
+Source parent `506aef24b002204b6670d37280da0cadc24da6e9`.
+The existing independent_bootstrap.rs reviewed compatibility digest now pins
+the built HUD DLL at SHA-256
+`09d214cc48dfb5fac80c7ba15576582dddd49e2196ab694b4820cfbe02878813`.
+Enroller and 216-byte profile-identity capability digests remain unchanged.
+No hash override, new public launch route, copied account/world tree or provider
+admission was added.
+
+A separate candidate was built from the pinned source plus this digest update,
+using Rust 1.99.1, locked offline dependencies and the existing distinct preview
+configuration. Vite frontend and release executable builds passed. Rust's
+registered_ filter passed four tests; one actual-installed-game discovery test
+was ignored. Test compilation retains empty reviewed game/replay policies.
+The touched Rust file passes rustfmt with edition 2021/skip_children. Whole-crate
+format checking reports pre-existing differences in untouched files and is
+not reported as passing. Initial sparse checkout lacked embedded script inputs;
+adding those unchanged source directories resolved the build errors. Existing
+compiler warnings were not silently treated as a clean warning-free build.
+
+Staged manager SHA-256:
+`1957dfabfaba5a61d3c1339f4e7c537416db6f7e7fad9f8647da54ac079ee4ed`.
+The invalid-extra-argument smoke returned exit 2/InvalidData with no games
+running. After the operator confirmed both games normally saved/closed, one
+authorized startup opened Minecraft - 1 and Minecraft - 2. Loaded module
+metadata matched the new DLL in both games and the unchanged enroller in the
+manager. The operator confirmed both previous accounts automatically signed in,
+FPS counters appeared, and both clients joined the same Education Host World
+with Minecraft - 2 hosting. This confirms setup/replay on the new candidate,
+not measured active 144 FPS, sustained host health or five-client capacity.
+
+A follow-up RAM sampler was started, then explicitly stopped when the operator
+corrected the work's focus. It published no final capture; its numeric
+comparison is NOT_EXECUTED / NOT_PERSISTED. Do not use transient readings as
+savings evidence. The separate PresentMon attempt failed with access denied
+and produced no valid frame trace; no UAC, security/group change or input
+automation was used. The collector stop left both original game processes
+responding. All private logs/capability/builds stay local, outside Git.
+
+The operator correctly identified that further recording and tiny wrapper
+changes had displaced the intended Minecraft efficiency outcome. No further
+hook micro-optimization was implemented. The existing 15-minute baseline is
+sufficient to distinguish the small manager from game allocations. Official
+Education performance guidance supports reducing render distance and decorative
+effects, with visual/workload costs reported separately; it supplies no
+guaranteed RAM reduction. An Education-compatible Sodium-style internal
+optimizer has not been established. The operator subsequently allowed reduced effects/graphics while requiring
+render distance at least 12 and simulation distance unchanged. The concrete
+Minecraft-level intervention and integration findings follow below.
+
+### Approved Minecraft graphics intervention and native-mod feasibility
+
+The user explicitly redirected the goal toward Minecraft's own resource demand,
+rather than continued engine telemetry or tiny wrapper changes. Render distance
+must be at least 12, simulation distance unchanged; graphics/effects may be
+reduced. Prior fixed-graphics constraints are superseded for this separate
+settings track. This does not authorize treating visual reductions as engine
+code savings or changing world simulation.
+
+Using the operator's later full PC-control authorization, the installed Education
+26.30.2 settings UI was inspected and changed in both current clients:
+
+| Setting | Observed before, both clients | Applied, both clients |
+| --- | --- | --- |
+| Graphics Mode | Fancy | Simple |
+| Render Distance | 12 chunks | 12 chunks, untouched |
+| Fancy Leaves / Fancy Bubbles | On | Off |
+| Render Clouds / Beautiful Skies / Smooth Lighting | On | Off |
+| Anti-Aliasing | 2 | 1 |
+
+Each value was confirmed in the live UI, then settings were exited normally.
+Resolution, simulation/world settings, Code Builder, profiles, accounts and
+144/10 code/policy were not modified. No option-file guesses, package installs,
+registry tweaks, global memory trims or game-resource deletion were used.
+No further recorded performance session was started. Both clients were observed
+at the main menu during settings work; earlier operator-reported same-world
+readiness does not establish continued world residency. Menu RAM therefore must
+not be compared to the old world baseline. Current gameplay benefit and
+restart-persisted graphics remain NOT_EXECUTED.
+
+The [extended existing research report](../docs/system/native-memory-efficiency-research.md#minecraft-internal-efficiency-feasibility-sodium-principles-versus-education-integration)
+now pins actual Sodium/FerriteCore source and official Education support.
+Sodium's compact vertices, terrain arena reuse/compaction, culling and bounded
+chunk-copy caches are real mechanisms. Their Education-native ownership and
+lifetime integration seam remains UNKNOWN. The current Present adapter does
+not own meshes or game heaps. Education officially does not support community
+Java-style mods; official content Add-Ons do not prove a renderer SDK.
+Pooling alone can retain more memory; do not construct another generic
+allocator/hook fixture as a substitute for a real integration seam.
+Code Builder has an official feature toggle, but helper teardown/RAM release
+is not documented and no such feature change was applied.
+
 ### Remaining proof and one next action
 
 The full five-client goal is incomplete. Two original accounts, basic same-world
@@ -1499,11 +1610,10 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** prepare a separately staged private candidate containing
-this exact HUD change through the existing manager payload/hash owner, preserving
-the current candidate and original profile capability. Do not overwrite loaded
-DLLs or copy accounts/worlds. Only after normal game closure, compare candidate
-and baseline under matched graphics, 144/10 policy and Education host workload,
-including observed host progression, connectivity and focus recovery. Treat a
-difference within measurement variation as no demonstrated whole-game benefit;
-retain clients 03-05 unimplemented.
+**One next action:** verify the applied Simple/12-chunk candidate in the same
+saved Education Host World under the operator's normal workload, preserving
+simulation, resolution and 144/10. Use one bounded check to judge actual resource
+benefit and host/focus health; do not start another telemetry-development loop.
+Retain the native Sodium-style integration barrier as UNKNOWN until one real
+Education mesh/resource ownership seam is identified. Do not promise a RAM
+percentage or expand clients 03-05 from menu readings.

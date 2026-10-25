@@ -9,7 +9,7 @@ lifecycle: ACTIVE
 
 # Native client memory and rendering efficiency research
 
-Status: DISCUSSION / RESEARCH ONLY. Researched 2026-10-25 against product source authority `OpenITStudios/M-Minecraft-Emulator`, branch `Local`, exact HEAD `5eaa49ed41c5c455f1b783d3a7c659bbba40e2d5`. The performance proposals do not implement game changes or live setting changes; the later diagnostic-only increment is identified below. No new Windows/game measurement or optimization experiment ran for this research. Gains from the proposed changes and five-client capacity remain **UNKNOWN / NOT_EXECUTED**; prior two-client observations retain their own evidence boundary below.
+Status: RESEARCH WITH BOUNDED IMPLEMENTATION AND RUNTIME OBSERVATIONS. Initial research was pinned to `5eaa49ed41c5c455f1b783d3a7c659bbba40e2d5`; subsequent diagnostics, HUD work and the approved Education graphics intervention are identified below. A substantive Minecraft-internal optimization seam and repeatable whole-game gains remain UNKNOWN. Current operator intent is owned by planning/development.md.
 
 ## Decision context
 
@@ -17,14 +17,14 @@ The operator reports two original Minecraft Education clients working on an i7-1
 
 The two screenshot readings, 1797.3 MB and 1724.2 MB, are observations at one moment. Their column semantics and process-group coverage are not established. They do not demonstrate a leak, private commitment, unique physical RAM, or a predictable per-client increment. Neither a savings estimate nor a capacity guarantee follows from them.
 
-The primary direction is now original-system efficiency at unchanged game settings and 144/10 policy, starting with memory composition and attributable engine overhead. Education's documented settings remain a separate optional tradeoff, not the primary engine optimization. Keep independent accounts/profiles and original game behavior. Treat external memory trimming, suspension and hard caps as poor default candidates because they can move cost into faults, stalls or failed allocations. Every resource effect remains a hypothesis until measured.
+The earlier primary direction was original-system efficiency at unchanged game settings. The latest operator correction prioritizes Minecraft itself and permits reduced graphics/effects, with render distance at least 12, simulation distance unchanged, and resolution/144-10 policy preserved. Education's documented settings remain a separate optional tradeoff, not the primary engine optimization. Keep independent accounts/profiles and original game behavior. Treat external memory trimming, suspension and hard caps as poor default candidates because they can move cost into faults, stalls or failed allocations. Every resource effect remains a hypothesis until measured.
 
 ## Attribution rule: settings savings versus original-system efficiency
 
 Operator clarification on 2026-10-25: distinguish changes to game settings
-from improvements in the system we build. The primary engineering objective
-is lower overhead and unnecessary work at the SAME game settings, visual
-output, 144/10 ceilings and host role. A lower render distance/resolution is
+from improvements in the system we build. Engine-code gains still require equal game settings, visual output, 144/10
+ceilings and host role. The later operator-approved graphics track is a separate
+Minecraft workload intervention; its gains must not be credited to engine code. A lower render distance/resolution is
 a separate quality/workload tradeoff and must never be reported as an
 engine-code optimization.
 
@@ -320,3 +320,119 @@ Do not run heap/memory dumps or retain account/token/world contents for this pla
 | Reject as default | Periodic trim, hard caps, suspension, helper killing | Can lower a counter or stop work without reducing required game state. | Faults, starvation, allocation failures or broken sessions conflict with requirements. |
 
 No numerical savings are claimed. The next useful evidence is a bounded, explicitly authorized comparison of the existing two-client workload, followed only later by additional clients. One baseline now supplies partial memory composition. Five-client capacity, in-process engine allocation ownership, Education's graphics-reload behavior and repeatable RAM/CPU/GPU gains remain **UNKNOWN / NOT_EXECUTED**. This note authorizes no game operations, settings changes, credentials/cache reads, CI or product implementation.
+
+## Minecraft-internal efficiency feasibility: Sodium principles versus Education integration
+
+Research date: 25 October 2026. This section extends the existing report;
+current development intent remains in planning/development.md.
+Project source reviewed at `506aef24b002204b6670d37280da0cadc24da6e9`.
+The literature review accessed primary sources only; the subsequent authorized
+UI intervention is identified separately below. Quantitative whole-game benefits
+and a native internal-optimizer integration remain NOT_EXECUTED / UNKNOWN.
+
+The operator now prioritizes Minecraft's own resource demand, permits reduced
+visual effects/graphics, requires **render distance at least 12**, and requires
+**simulation distance unchanged**. Keep resolution, independent profiles,
+Education Host World and the existing 144/10 rendering policy. These preferences
+supersede the earlier optional suggestion of render distance 6; do not apply 6.
+
+### Decision
+
+**Apply supported visual settings now; do not represent an Education Sodium port
+as available.** There are real, transferable algorithms, but the current native
+bootstrap/presentation wrapper has no identified ownership seam for Education's
+terrain meshes, allocator or model graph. Direct installation of the Java mod
+is unsupported; implementing equivalent native algorithms remains UNKNOWN until
+that seam exists. This is an integration barrier, not proof that an independently
+authored optimizer is mathematically impossible.
+
+Education's [current official game-feature FAQ](https://edusupport.minecraft.net/hc/en-us/articles/360047117692-FAQ-Game-Features)
+explicitly says community-created mods are not supported in Education. Its
+[official Add-Ons collection](https://education.minecraft.net/en-us/resources/minecraft_education_add_ons_collection)
+separately establishes support for packages that change world appearance, sound
+and behavior. Both can be true: content-package support does not establish a
+native renderer replacement interface. The FAQ also explains that Education
+normally trails Bedrock's production version, so Bedrock API availability is not
+an Education compatibility guarantee.
+
+### Concrete source findings
+
+Sodium source is pinned at
+[`148151cf25c56f8b670986b348dcc589278c867e`](https://github.com/CaffeineMC/sodium/tree/148151cf25c56f8b670986b348dcc589278c867e).
+For release context, its 0.9.2 Minecraft-26.1.2 tag resolves to
+[`eb81e48d2646f76e7dbd1337d0f6ecb6a6dc5413`](https://github.com/CaffeineMC/sodium/releases/tag/mc26.1.2-0.9.2);
+the release describes reducing terrain-buffer allocation/resizing. These are
+two distinct source snapshots; the algorithm details below refer to 148151c.
+No upstream code is copied.
+
+| Mechanism | What the primary source actually owns/does | Education applicability |
+| --- | --- | --- |
+| Compact mesh representation | [CompactChunkVertex](https://github.com/CaffeineMC/sodium/blob/148151cf25c56f8b670986b348dcc589278c867e/common/src/main/java/net/caffeinemc/mods/sodium/client/render/chunk/vertex/format/impl/CompactChunkVertex.java) defines a 20-byte vertex stride and encodes positions/other attributes. | **UNKNOWN native integration.** Requires compatible mesh producers, consumers and shaders. Reducing an arbitrary D3D buffer size externally cannot preserve those contracts. The 20-byte figure is not evidence of Education's current format or a RAM saving. |
+| Reuse and arena compaction | [ArenaAggregator](https://github.com/CaffeineMC/sodium/blob/148151cf25c56f8b670986b348dcc589278c867e/common/src/main/java/net/caffeinemc/mods/sodium/client/gpu/arena/ArenaAggregator.java) owns GpuBuffer allocation/reuse/closure; [DefragmentingBufferArena](https://github.com/CaffeineMC/sodium/blob/148151cf25c56f8b670986b348dcc589278c867e/common/src/main/java/net/caffeinemc/mods/sodium/client/gpu/arena/DefragmentingBufferArena.java) relocates segments under a defragmentation budget. | **UNKNOWN native integration.** Requires allocation ownership, segment references, command synchronization and destruction points. Primarily a terrain GPU-buffer mechanism; lower allocation churn does not itself prove lower private system RAM. |
+| Culling and batching | [OcclusionCuller](https://github.com/CaffeineMC/sodium/blob/148151cf25c56f8b670986b348dcc589278c867e/common/src/main/java/net/caffeinemc/mods/sodium/client/render/chunk/occlusion/OcclusionCuller.java) traverses Java RenderSection/SectionStorage state with viewport and visibility information. | **UNKNOWN native integration.** A Present wrapper lacks the section graph and terrain draw semantics. Skipping a whole present is not equivalent to avoiding hidden geometry construction/drawing. No reason to assume Education currently lacks its own culling. |
+| Bounded temporary world cache | [ClonedChunkSectionCache](https://github.com/CaffeineMC/sodium/blob/148151cf25c56f8b670986b348dcc589278c867e/common/src/main/java/net/caffeinemc/mods/sodium/client/world/cloned/ClonedChunkSectionCache.java) caps entries at 512 and expires old entries after five seconds. | **UNKNOWN native integration.** Useful ownership principle, but no Education chunk-copy cache or safe eviction seam is identified. Never free game-owned chunks or authentication caches from the wrapper. |
+| Compact/deduplicated game state | FerriteCore [technical summary at `0cef1f2add1f1329aa6e690e8e292acd625c5c6d`](https://github.com/malte0811/FerriteCore/blob/0cef1f2add1f1329aa6e690e8e292acd625c5c6d/summary.md) changes Java block-state maps, model instances, predicates and shape/quad sharing. | **UNKNOWN native integration.** Requires replacing internal object representations and proving immutability. Historical Java modpack-specific memory numbers are not estimates for Education or permission to merge per-account private state. |
+
+A useful caution beyond “reuse buffers”: Sodium's reviewed arena implementation
+retains up to eight free GPU buffers, selects a reusable buffer within a bounded
+oversize factor, and explicitly closes evicted/deleted resources. It also
+overallocates some arenas to avoid growth churn. Therefore copying only the
+word “pooling” can increase retained memory; full allocation/retirement and
+performance semantics matter. Its Java [Fabric manifest](https://github.com/CaffeineMC/sodium/blob/148151cf25c56f8b670986b348dcc589278c867e/fabric/src/main/resources/fabric.mod.json)
+declares loader dependencies, entrypoints and mixins. Those integration
+contracts do not exist merely because our own DLL can load.
+
+The project's [current DXGI owner](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/506aef24b002204b6670d37280da0cadc24da6e9/tooling/acceptance/windows/bootstrap-ordering/dxgi-pacing.cpp)
+waits before forwarding Present/Present1 and records successful native
+completions. It owns a pacer, HUD, wrapper references and chain lifetime, not
+Education meshes or game allocations. **Inference from that source:** changing
+this seam alone cannot supply Sodium's allocator, vertex layout or scene culler.
+Generic hooking capability is not the missing semantic ownership contract.
+
+### Supported content and optional features
+
+- **Supported Education content lane:** resource/behavior Add-Ons are officially
+  available. A lightweight *resource-only* content candidate is plausible when
+  expensive custom textures/models/animations are present and the operator
+  accepts the visual change. Its actual contents and version compatibility
+  remain UNKNOWN here. The [Bedrock resource-pack documentation](https://learn.microsoft.com/en-us/minecraft/creator/documents/resourcepack?view=minecraft-bedrock-stable)
+  describes content/manifest/stacking semantics, not a native heap/terrain
+  allocator SDK. Do not infer Education support for every Bedrock pack key or
+  claim that adding an override necessarily releases an original resource.
+- **Not established:** an officially supported Education native-renderer plugin,
+  model-cache ownership API, or mesh allocator replacement SDK. The reviewed
+  [Bedrock server Script API](https://learn.microsoft.com/en-us/minecraft/creator/scriptapi/minecraft/server/minecraft-server?view=minecraft-bedrock-stable)
+  manipulates world entities/blocks/dimensions; it is not proof of Education
+  support or client GPU-buffer ownership. Native replacement feasibility stays
+  UNKNOWN; direct Java-mod loading is unsupported.
+- **Code Builder option:** [Education Classroom Settings](https://edusupport.minecraft.net/hc/en-us/articles/360061369132-Classroom-Settings)
+  officially documents a Code Builder toggle, enabled by default, controlling
+  access through C/the Agent icon. That establishes an allowed feature setting,
+  **not** helper teardown, lazy initialization or memory release. Disabling it
+  changes coding availability and is outside a graphics-only change. Do not
+  toggle it without agreeing that tradeoff, or kill/merge its helper processes.
+  Possible helper savings remain UNKNOWN until the game's own lifecycle proves
+  them. Repeated helper names alone do not establish redundant work.
+
+### Applied settings and remaining integration question
+
+The operator-approved video candidate was applied through the actual Education
+26.30.2 UI on both current clients: Graphics Mode Fancy → Simple; Fancy Leaves,
+Fancy Bubbles, Render Clouds, Beautiful Skies and Smooth Lighting on → off;
+Anti-Aliasing 2 → 1. Render distance was already 12 chunks on each and remained
+12. Simulation/world settings, resolution, profiles and 144/10 policy were not
+changed. The UI confirmed each changed value and returned normally to the main
+menu. Restart persistence and an equivalent loaded-world resource benefit have
+not been demonstrated. Verify the actual installed settings rather than importing Java or
+Bedrock-only keys. The official [Education performance guidance](https://edusupport.minecraft.net/hc/en-us/articles/4404976988052-Troubleshoot-Performance-Issues)
+supports lowering these visual workloads, but supplies no numerical RAM promise
+and its render-distance-6 recommendation is superseded by the operator's 12
+minimum. This is a settings result, clearly distinct from engine code savings.
+
+After that concrete change, one bounded before/after check can establish whether
+it helps; do not let further telemetry replace implementation. A native
+Sodium-style branch should not start with generic detours or a demonstration
+allocator: first it needs **one real Education mesh/resource ownership and
+lifetime seam**. If none is verified, explicitly retain the unsupported/UNKNOWN
+decision and pursue supported content/settings improvements instead.
+
