@@ -94,6 +94,122 @@ expansion stays deferred. The next output is a source-only ownership/decision
 design to discuss with the operator; runtime implementation stays paused until
 that design is resolved.
 
+### Conditional design: release only native-certified unused staging pages
+
+This is a design decision, not an executable implementation. Source baseline:
+`cc92fe84e0dad00084efc0edb047dd9b1462a7b9`. Existing source consumers were
+traced through independent_bootstrap.rs -> instance_focus_events.rs and the
+C++ presentation enrollment/pacer. They own process identity and focus/pacing;
+none establishes ownership of game staging-page lifetimes.
+
+**New offline finding — reject another startup-count canary.** Reinspection of
+the already-saved device-initialization code identifies the named
+UploadBufferHeap call into the previously reviewed initializer: 8-MiB block size,
+64-KiB alignment, flags 0, initial count 2, and final argument 4. The initializer
+uses count 2 as the heap-creation loop bound; the final argument is stored
+separately and its retention semantics remain UNKNOWN. The property's actual
+five-field contents at this call were not captured. Do not infer L0 or upload
+purpose from the literal name.
+
+The initial requested capacity is therefore nominally 16 MiB. Changing 2 -> 1
+would directly change only 8 MiB of nominal startup capacity; that is neither
+measured resident RAM nor a bound on later growth, associated driver allocations
+or total pool memory. A second initial-count experiment has no demonstrated
+basis for the requested substantial resident-RAM improvement and is rejected
+without another game run. The new decision concerns later unused retention
+after growth, whose existence and size are still UNKNOWN.
+
+The inspected objects were saved during the earlier bounded executable-image
+inspection, not read from a new game process. Local SHA-256 provenance:
+device-initialization object
+`54841700c33a7e8ca1f517f10f213fbe7f16a2e7de33ae44a166fc1c3c1913b4`;
+initializer object
+`eb6730ed48a082a6f2668c3985ef5b3a1af78c26a3a3efe340fedb33f10117a8`.
+Only semantic findings are published; proprietary instruction fragments and raw
+objects remain local. This is static review of archived runtime evidence, not
+execution or proof that all requested heaps were successfully allocated.
+
+**One lifetime owner, separate settings and focus responsibilities.**
+
+| Responsibility | Existing/intended owner | Required limit |
+| --- | --- | --- |
+| A: save approved graphics | Existing original per-profile options routing | No new settings store, live options rewriting, simulation/resolution change or cross-profile data sharing. |
+| C: foreground/background state and 144/10 | Existing instance_focus_events policy -> configured bootstrap -> presentation/pacer | Focus provides a retention preference only. A background Education host continues simulation, networking and saves. No second focus observer. |
+| B: classify and retire staging pages | The game's native allocator; precise maintenance entry point is UNKNOWN | Retain native locks, references, lists, queue dependencies, destruction/accounting and demand-driven growth. No external page registry, generic allocator replacement or raw Release/VirtualFree. |
+
+The conditional mechanism is a narrow decision at the native allocator's own
+whole-unused-page maintenance boundary. It would allow selected excess pages to
+follow the owner's existing destroy path. It would not relocate active resources
+or reduce the current allocation to an arbitrary cap. If no complete native
+maintenance/destruction boundary is demonstrable, reject this integration.
+
+| Lifecycle transition | Evidence needed | Current Education evidence |
+| --- | --- | --- |
+| Producer -> allocated CPU-visible page | Exact backing properties and which data producer uses it | Named pool and initial creation loop only; properties/producer UNKNOWN. |
+| Allocated -> live/recorded | Native references, suballocations and unsubmitted/replayable command-list use | UNKNOWN. |
+| Submitted -> GPU-complete | All actual source consumers and queue/fence dependencies | UNKNOWN; graphics creation stacks and Present do not establish it. |
+| Complete -> wholly unused | No remaining CPU/recorded/GPU references, native list classification and lock | UNKNOWN. |
+| Unused -> reused or destroyed | Atomic select/unlink/destroy/accounting under native ownership; normal reacquisition/failure | Allocation/growth code exists in archived evidence; safe whole-page retirement/destruction remains UNKNOWN. |
+
+Microsoft's [pinned LinearAllocator](https://github.com/microsoft/DirectXTK12/blob/f5b928460d91984b27029d064ee5a7dd4301513c/Src/LinearAllocator.cpp#L132)
+is the reference lifecycle: own page references, pending fences and unused pages
+are distinct. Its own RefCount is not COM-resource introspection. Microsoft's
+[Release contract](https://learn.microsoft.com/en-us/windows/win32/api/unknwn/nf-unknwn-iunknown-release)
+limits the returned count to testing; do not probe game COM references to
+declare ownership. A completed upload source can be released while its
+destination mesh/texture remains live, if the source has no other consumers.
+
+**Safety and failure behavior.** A page with any live/recorded reference, pending
+consumer or concurrent allocator reuse is ineligible. Select/remove/destroy must
+use the native synchronization discipline, not an external snapshot of a free
+list. Multiple queues require every relevant last-use dependency, or a proven
+transitive native retirement point. Copy completion can suffice for a source
+used exclusively by that queue; waiting on unrelated destination rendering is
+unnecessary. CPU-signaled or rewound values and unrelated queue timelines cannot
+be treated as one universal frame counter.
+[Microsoft multi-engine synchronization](https://learn.microsoft.com/en-us/windows/win32/direct3d12/user-mode-heap-synchronization).
+
+GetCompletedValue == UINT64_MAX means device removal, not universal completion.
+Stop optional retention work and leave device-loss/teardown handling native.
+Unknown version/lock/reference/queue semantics preserve native behavior.
+[Microsoft fence result](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12fence-getcompletedvalue).
+Do not add GPU waits solely to reach a RAM target, fake successful allocations,
+or interfere with peer clients. Normal native growth and failure handling stay
+intact. Future rollback is an ordinary restart with the original reviewed
+payload; live disabling must not detach an in-use function or eagerly recreate
+previously released capacity.
+
+**Inactive-client policy, conditional on that native seam.** At existing native
+maintenance, background preference may allow excess *whole unused* pages to
+expire after a justified stable interval, retaining a justified reusable floor.
+Foreground return cancels further optional release and retains demand-driven
+growth. Coalesce rapid focus changes, bound optional maintenance work, and skip
+release when reuse churn would cost more than retention. No numeric floor,
+timeout or work budget is selected without demand/lifetime evidence; no timer,
+cleanup worker or governor is added by this design. Background host demand can
+remain substantial independently of focus.
+
+For a verified pool only, classify whole pages exclusively as L (live/recorded),
+P (references retired but GPU use pending), or U (native-certified unused).
+Then A = L + P + U is valid only if these states are exhaustive and disjoint.
+Unused holes inside a partly occupied heap are not releasable U pages.
+Resident backing attributable to released U pages, not U capacity or a historic
+high-water mark, determines possible physical-RAM benefit. Neither U nor its
+resident backing is established now, so no savings percentage is defensible.
+A release/refill cycle is not a durable gain. Microsoft's
+[ring-buffer example](https://learn.microsoft.com/en-us/windows/win32/direct3d12/fence-based-resource-management)
+shows why restricting capacity can trade memory for waits and frame delay.
+
+**Feasibility decision:** conditional lifetime design is complete; Education
+implementation is **DEFERRED / SOURCE_INSUFFICIENT**. Existing archives establish
+initialization/allocation routes, but no verified completed-unused destruction
+boundary or material retained resident capacity. Do not convert this design into
+a hook or request another game test merely to fill those gaps. The next bounded
+research task is a native allocation-to-retirement call graph from the existing
+saved evidence, with an explicit evidence limit if a required function was not
+captured. A/B/C and original data remain unchanged; no new runtime work occurred.
+
+
 ## Decision context
 
 The operator reports two original Minecraft Education clients working on an i7-14700, 32 GB RAM, RTX 3070 with 8 GB VRAM, and a 512 GB SSD, with no usable iGPU. The intended next stage is one Education client hosting a world and four guest clients joining that world. Foreground rendering should have a ceiling of 144 FPS; background rendering should have a ceiling of 10 FPS, while host simulation/networking continue and switching stays quick. These are requirements. Prior operator-confirmed two-client behavior is partial evidence, not five-client acceptance or a controlled efficiency benchmark.

@@ -27,6 +27,24 @@ lead; actual L0 properties, spare residency, queue/fence/reference ownership and
 native reacquisition remain UNKNOWN. Heap/object retention is separately
 unattributed. Preserve the working default and keep the L1 experiment OFF.
 
+**Source-only ownership design outcome — parent cc92fe84e0dad00084efc0edb047dd9b1462a7b9.**
+The [conditional staging design](../docs/system/native-memory-efficiency-research.md#conditional-design-release-only-native-certified-unused-staging-pages)
+is now specified: native whole-unused-page maintenance owns release/reuse,
+existing focus/pacing provides preference only, and settings persistence remains
+independent. Unknown lifetime/locking/queue edges prohibit implementation.
+Recorded-but-unsubmitted references, all actual source consumers and device-loss
+fence values are explicit exclusion/failure cases. No new manager or governor.
+
+Archived code gives one concrete rejection without runtime: named UploadBufferHeap
+initializes with two 8-MiB heap requests, a nominal 16-MiB startup capacity.
+Reducing count 2 -> 1 directly changes only 8 MiB nominal initial capacity;
+actual backing properties/residency and later growth are not established.
+Reject another startup-count canary. Post-growth unused retention remains a
+research hypothesis; no material reclaimable resident bytes or native complete
+retirement/destruction seam is proven. Implementation is DEFERRED /
+SOURCE_INSUFFICIENT, while source research remains active. No game, code,
+settings, public API, payload admission, build, CI or runtime measurement changed.
+
 **Working method:** choose one real intervention in A/B/C, implement it or
 explicitly reject its concrete integration boundary, then use only checks that
 directly establish its benefit and failure risks. A before/after reading needs
@@ -1850,8 +1868,8 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** produce and discuss a source-only owner/lifetime design for
-one RAM-retention candidate using existing evidence and primary source code.
-Mark every unverified pool/occupancy/fence/reference/reacquisition edge UNKNOWN
-and select or reject the mechanism before any further implementation or runtime
-experiment. Do not substitute a new trace, generic hook or claimed savings.
+**One next action:** trace the native allocation-to-retirement/destruction
+call graph using the already-saved code evidence only. Identify a complete
+whole-unused-page boundary or record precisely which required function/edge is
+outside the captured evidence and close that integration as source-insufficient.
+No new executable experiment, hook, collector or automatic PC session.
