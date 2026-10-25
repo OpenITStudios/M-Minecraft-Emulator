@@ -11,7 +11,8 @@ installs a service/driver or starts an overlay.
 
 `frame-pacing.h` owns the monotonic deadline, interruptible high-resolution
 timer and stop state. One rendering thread calls `wait_for_frame`; a policy
-producer calls `foreground(bool)` or `stop()`. Stop/join the consumer before
+producer calls `foreground(bool)` or `stop()`. A private event source is an
+alternative to the direct foreground setter, as described below. Stop/join the consumer before
 destruction; construct outside loader lock. Fixed ceilings are 144/10.
 Deadlines follow the last release, without catch-up bursts. A policy event
 interrupts a background wait without polling or global timer-resolution changes.
@@ -31,6 +32,59 @@ Actual presentation binding, foreground tracking, host simulation/network
 independence, five real clients and resource savings need separate runtime proof.
 Current evidence and continuation remain solely in `planning/development.md`.
 
+### Private focus producer and native event consumer
+
+The existing desktop `instance_focus_events` owner now offers internal policy
+leases for up to five explicitly supplied live process HANDLE/PID/creation-time
+identities in the same interactive session. All leases share its existing one
+WinEvent worker. The public count-only schema is unchanged; count-only mode
+does not read window/PID metadata. A private lease makes public count-only
+status unavailable rather than mislabelling policy activity as observation.
+
+The worker samples the actual foreground HWND/owner twice, demotes other leases
+before promotion and handles manager/unrelated/unstable focus as background.
+Manager-generated events are included so focusing the manager demotes clients.
+Only registered identities are retained; no titles or account data are read.
+See Microsoft's [out-of-context event contract](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwineventhook).
+
+Each lease owns a manual-reset foreground-level event, an auto-reset change
+notification and a manual-reset sticky stop event. Reader handles carry only
+SYNCHRONIZE; the fourth handle pins/watches the manager process. Lease Drop,
+explicit worker Stop, process loss and worker-loop teardown stop policy use.
+The last private lease ends its worker; a pre-existing public observer retains
+its ownership. Cleanup notification failure is diagnostic, not claimed success.
+
+`Pacer(Input)` duplicates those reader capabilities into its own lifetime.
+It waits for notifications/stop/controller exit together with its timer, without
+a child policy thread, spinning or a periodic foreground sampler. A level read
+occurs only on render demand or wait wakeup. A direct foreground setter refuses
+while an external source owns the clock. Source handle closure does not close
+the consumer's duplicates. Partial/pseudo/aliased inputs refuse and failed
+construction releases temporary handles. Stop/controller exit is sticky and
+allows the existing DXGI wrapper to forward native Present without waiting.
+The caller must join before destroying the pacer.
+
+This is a **trusted-producer input contract**, not an arbitrary-handle decoder:
+event object types and reset-mode provenance still require verification when
+the private bootstrap capability transports them into a child. See Microsoft's
+[event semantics](https://learn.microsoft.com/en-us/windows/win32/sync/event-objects)
+and [multiple-wait lifetime rules](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitformultipleobjects).
+
+The explicit D3D12 WARP adapter control now initializes the typed timing wrapper
+from native event inputs once, retaining recreation, identity, native-error,
+concurrency and external-stop checks. The five-renderer mode additionally tests
+external promotion/demotion, read-only handles, caller closure, constructor
+cleanup and a real own controller-process exit. Removing notification from the
+wait set must fail the strengthened timing control.
+
+Rust tests exercise five synthetic focus selections on own suspended processes,
+identity refusal, read-only receivers, sticky stop, duplicate/sixth-slot refusal,
+one-worker ownership, public Stop, last-lease cleanup and preservation of an
+existing public observer. They do not move the user's focus or control a game.
+**The Rust producer and C++ consumer are not yet transported through the
+bootstrap capability or wired to game creation.** Cross-process end-to-end and
+actual OS-driven game 144/10 acceptance remain NOT_EXECUTED.
+
 ### Typed timing wrapper and bootstrap creation controls
 
 The timing adapter transfers one caller-owned IDXGISwapChain1 reference into
@@ -39,7 +93,7 @@ ancestry through IDXGISwapChain4 and optional IDXGISwapChainMedia. All aliases
 share one canonical IUnknown; the wrapper owns its own reference count.
 The native object and its vtable remain unchanged. The final wrapper release
 drops all native references before allowing another chain to bind. Process
-policy retains only clocks/counters, so replacement chains inherit the ceiling
+policy retains clocks/counters and optional synchronization handles, so replacement chains inherit the ceiling
 and sticky stop state without retaining old graphics resources.
 
 This replaces the retained-native-reference/table experiment whose negative

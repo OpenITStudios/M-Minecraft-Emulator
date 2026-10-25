@@ -1,5 +1,6 @@
 #pragma once
 #include <dxgi1_2.h>
+#include "frame-pacing.h"
 
 namespace dxgi_pacing {
 struct Snapshot {
@@ -10,6 +11,8 @@ struct Snapshot {
 };
 // Outside loader lock, before publication. Success replaces the caller's one
 // owned reference; failure preserves it. Native objects/vtables are unchanged.
+// Optional external policy, once, outside loader lock and before wrap.
+bool initialize(const presentation_pacing::Input& input) noexcept;
 bool wrap(IDXGISwapChain1** owned, HWND window) noexcept;
 bool foreground(bool active) noexcept;
 bool stop() noexcept;

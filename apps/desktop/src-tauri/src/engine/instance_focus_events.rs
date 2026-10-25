@@ -1,7 +1,6 @@
-//! Opt-in observer of Windows foreground-change EVENT COUNTS, not Minecraft.
-//! There is exactly one hook thread per desktop manager, no polling/daemon,
-//! and no process, window title, PID, credentials or FPS are retained.
-//! The hook cannot authorize a game launch, window attribution or frame cap.
+//! One foreground-event worker. Public observation remains count-only.
+//! Private policy leases pin explicitly supplied processes and publish kernel
+//! events; they never launch, authenticate or attribute Minecraft themselves.
 use serde::Serialize;
 use std::io;
 
@@ -28,7 +27,9 @@ fn status(enabled: bool, events: u64) -> ForegroundEventObserverStatus {
 mod windows {
     use super::{status, ForegroundEventObserverStatus};
     use std::{
-        io, ptr,
+        io,
+        os::windows::io::{AsHandle, AsRawHandle, BorrowedHandle, FromRawHandle, OwnedHandle},
+        ptr,
         sync::{
             atomic::{AtomicBool, AtomicU64, Ordering},
             mpsc, Arc, Mutex,
@@ -36,15 +37,23 @@ mod windows {
         thread::{self, JoinHandle},
         time::Duration,
     };
+    use windows_sys::Win32::System::Threading::SYNCHRONIZATION_SYNCHRONIZE as SYNCHRONIZE;
     use windows_sys::Win32::{
-        Foundation::HWND,
-        System::Threading::GetCurrentThreadId,
+        Foundation::{DuplicateHandle, FILETIME, HANDLE, HWND, WAIT_TIMEOUT},
+        System::{
+            RemoteDesktop::ProcessIdToSessionId,
+            Threading::{
+                CreateEventW, GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId,
+                GetProcessId, GetProcessTimes, ResetEvent, SetEvent, WaitForSingleObject,
+                PROCESS_QUERY_LIMITED_INFORMATION,
+            },
+        },
         UI::{
             Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK},
             WindowsAndMessaging::{
-                DispatchMessageW, GetMessageW, PeekMessageW, PostThreadMessageW, TranslateMessage,
-                EVENT_SYSTEM_FOREGROUND, MSG, PM_NOREMOVE, WINEVENT_OUTOFCONTEXT,
-                WINEVENT_SKIPOWNPROCESS, WM_QUIT,
+                DispatchMessageW, GetForegroundWindow, GetMessageW, GetWindowThreadProcessId,
+                PeekMessageW, PostThreadMessageW, TranslateMessage, EVENT_SYSTEM_FOREGROUND, MSG,
+                PM_NOREMOVE, WINEVENT_OUTOFCONTEXT, WM_APP, WM_QUIT,
             },
         },
     };
@@ -60,9 +69,309 @@ mod windows {
 
     static WORKER: Mutex<Option<Worker>> = Mutex::new(None);
     static EVENTS: AtomicU64 = AtomicU64::new(0);
+    const REFRESH_POLICY: u32 = WM_APP + 0x324;
+    static POLICIES: Mutex<Vec<Arc<Binding>>> = Mutex::new(Vec::new());
+    static PRIVATE_START: AtomicBool = AtomicBool::new(false);
+
+    fn owned(raw: HANDLE) -> io::Result<OwnedHandle> {
+        if raw.is_null() {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(unsafe { OwnedHandle::from_raw_handle(raw as _) })
+        }
+    }
+    fn duplicate(source: BorrowedHandle<'_>, access: u32) -> io::Result<OwnedHandle> {
+        let mut raw = ptr::null_mut();
+        if unsafe {
+            DuplicateHandle(
+                GetCurrentProcess(),
+                source.as_raw_handle() as _,
+                GetCurrentProcess(),
+                &mut raw,
+                access,
+                0,
+                0,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        owned(raw)
+    }
+    fn event(manual: bool) -> io::Result<OwnedHandle> {
+        owned(unsafe { CreateEventW(ptr::null(), manual as i32, 0, ptr::null()) })
+    }
+    fn birth(process: &OwnedHandle) -> io::Result<u64> {
+        let (mut created, mut exited, mut kernel, mut user): (
+            FILETIME,
+            FILETIME,
+            FILETIME,
+            FILETIME,
+        ) = unsafe { std::mem::zeroed() };
+        if unsafe {
+            GetProcessTimes(
+                process.as_raw_handle() as _,
+                &mut created,
+                &mut exited,
+                &mut kernel,
+                &mut user,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        Ok((u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime))
+    }
+    struct Binding {
+        process: OwnedHandle,
+        pid: u32,
+        created: u64,
+        level: OwnedHandle,
+        changed: OwnedHandle,
+        stop: OwnedHandle,
+        active: AtomicBool,
+        stopped: AtomicBool,
+    }
+    impl Binding {
+        fn new(process: BorrowedHandle<'_>, pid: u32, created: u64) -> io::Result<Self> {
+            let process = duplicate(process, SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION)?;
+            let mut session = 0;
+            let mut current_session = 0;
+            if pid == 0
+                || created == 0
+                || pid == unsafe { GetCurrentProcessId() }
+                || unsafe { GetProcessId(process.as_raw_handle() as _) } != pid
+                || birth(&process)? != created
+                || unsafe { WaitForSingleObject(process.as_raw_handle() as _, 0) } != WAIT_TIMEOUT
+                || unsafe { ProcessIdToSessionId(pid, &mut session) } == 0
+                || unsafe { ProcessIdToSessionId(GetCurrentProcessId(), &mut current_session) } == 0
+                || session == 0
+                || session != current_session
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Policy process identity changed",
+                ));
+            }
+            Ok(Self {
+                process,
+                pid,
+                created,
+                level: event(true)?,
+                changed: event(false)?,
+                stop: event(true)?,
+                active: AtomicBool::new(false),
+                stopped: AtomicBool::new(false),
+            })
+        }
+        fn live(&self) -> bool {
+            (unsafe { WaitForSingleObject(self.process.as_raw_handle() as _, 0) }) == WAIT_TIMEOUT
+                && birth(&self.process).ok() == Some(self.created)
+        }
+        fn finish(&self) {
+            self.stopped.store(true, Ordering::Release);
+            unsafe {
+                ResetEvent(self.level.as_raw_handle() as _);
+                SetEvent(self.stop.as_raw_handle() as _);
+                SetEvent(self.changed.as_raw_handle() as _);
+            }
+            self.active.store(false, Ordering::Release);
+        }
+        fn publish(&self, active: bool) -> io::Result<()> {
+            if self.stopped.load(Ordering::Acquire) {
+                return Ok(());
+            }
+            if !self.live() {
+                self.finish();
+                return Ok(());
+            }
+            if self.active.load(Ordering::Acquire) == active {
+                return Ok(());
+            }
+            let changed = unsafe {
+                if active {
+                    SetEvent(self.level.as_raw_handle() as _)
+                } else {
+                    ResetEvent(self.level.as_raw_handle() as _)
+                }
+            };
+            if changed == 0 || unsafe { SetEvent(self.changed.as_raw_handle() as _) } == 0 {
+                let error = io::Error::last_os_error();
+                self.finish();
+                return Err(error);
+            }
+            self.active.store(active, Ordering::Release);
+            Ok(())
+        }
+        fn readers(&self) -> io::Result<[OwnedHandle; 4]> {
+            let process = unsafe { BorrowedHandle::borrow_raw(GetCurrentProcess() as _) };
+            Ok([
+                duplicate(self.level.as_handle(), SYNCHRONIZE)?,
+                duplicate(self.changed.as_handle(), SYNCHRONIZE)?,
+                duplicate(self.stop.as_handle(), SYNCHRONIZE)?,
+                duplicate(process, SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION)?,
+            ])
+        }
+    }
+    impl Drop for Binding {
+        fn drop(&mut self) {
+            self.finish();
+        }
+    }
+    fn publish(bindings: &[Arc<Binding>], selected: Option<u32>) {
+        // Demote before promoting; never transiently advertise two active clients.
+        for binding in bindings.iter().filter(|p| Some(p.pid) != selected) {
+            if binding.publish(false).is_err() {
+                for p in bindings {
+                    p.finish();
+                }
+                return;
+            }
+        }
+        for binding in bindings.iter().filter(|p| Some(p.pid) == selected) {
+            if binding.publish(true).is_err() {
+                for p in bindings {
+                    p.finish();
+                }
+                return;
+            }
+        }
+    }
+    fn refresh() {
+        let bindings = match POLICIES.lock() {
+            Ok(list) => list,
+            Err(poisoned) => {
+                for p in poisoned.into_inner().iter() {
+                    p.finish();
+                }
+                return;
+            }
+        };
+        if bindings.is_empty() {
+            return;
+        }
+        let window = unsafe { GetForegroundWindow() };
+        let mut pid = 0;
+        let mut confirmed_pid = 0;
+        let stable = !window.is_null()
+            && unsafe { GetWindowThreadProcessId(window, &mut pid) } != 0
+            && unsafe { GetForegroundWindow() } == window
+            && unsafe { GetWindowThreadProcessId(window, &mut confirmed_pid) } != 0
+            && pid == confirmed_pid
+            && unsafe { GetForegroundWindow() } == window;
+        publish(&bindings, if stable { Some(pid) } else { None });
+    }
+    fn finish_policies() {
+        let list = POLICIES
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        for p in list.iter() {
+            p.finish();
+        }
+    }
+    /// Internal lease only. No public command or game activation is added.
+    pub(crate) struct PolicyChannel {
+        binding: Arc<Binding>,
+        thread_id: u32,
+        alive: Arc<AtomicBool>,
+    }
+    impl PolicyChannel {
+        // Order: foreground level, change notification, sticky stop, manager process.
+        pub(crate) fn reader_handles(&self) -> io::Result<[OwnedHandle; 4]> {
+            if self.binding.stopped.load(Ordering::Acquire) || !self.binding.live() {
+                return Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "Policy lease ended",
+                ));
+            }
+            self.binding.readers()
+        }
+    }
+    impl Drop for PolicyChannel {
+        fn drop(&mut self) {
+            self.binding.finish();
+            {
+                let mut list = POLICIES.lock().unwrap_or_else(|p| p.into_inner());
+                list.retain(|p| !Arc::ptr_eq(p, &self.binding));
+            }
+            // The worker decides whether the last private lease also ends its loop.
+            if self.alive.load(Ordering::Acquire)
+                && unsafe { PostThreadMessageW(self.thread_id, REFRESH_POLICY, 0, 0) } == 0
+            {
+                eprintln!(
+                    "Private focus worker cleanup notification unverified: {}",
+                    io::Error::last_os_error()
+                );
+            }
+        }
+    }
+    pub(crate) fn register_policy(
+        process: BorrowedHandle<'_>,
+        pid: u32,
+        created: u64,
+    ) -> io::Result<PolicyChannel> {
+        let binding = Arc::new(Binding::new(process, pid, created)?);
+        let mut guard = lock()?;
+        let active = guard.as_ref().is_some_and(|w| {
+            w.alive.load(Ordering::Acquire) && !w.stop_requested && !w.join.is_finished()
+        });
+        let started = if active {
+            false
+        } else {
+            start_locked(&mut guard)?;
+            PRIVATE_START.store(true, Ordering::Release);
+            true
+        };
+        let worker = guard
+            .as_ref()
+            .ok_or_else(|| io::Error::other("Focus worker unavailable"))?;
+        let result = (|| {
+            let mut list = POLICIES
+                .lock()
+                .map_err(|_| io::Error::other("Focus policy lock poisoned"))?;
+            if worker.stop_requested
+                || !worker.alive.load(Ordering::Acquire)
+                || worker.join.is_finished()
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "Focus worker is stopping",
+                ));
+            }
+            if list.len() >= 5
+                || list
+                    .iter()
+                    .any(|p| p.pid == pid || p.stopped.load(Ordering::Acquire))
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    "Policy slots occupied or previous leases require cleanup",
+                ));
+            }
+            list.push(Arc::clone(&binding));
+            if unsafe { PostThreadMessageW(worker.thread_id, REFRESH_POLICY, 0, 0) } == 0 {
+                list.pop();
+                return Err(io::Error::last_os_error());
+            }
+            Ok(PolicyChannel {
+                binding,
+                thread_id: worker.thread_id,
+                alive: Arc::clone(&worker.alive),
+            })
+        })();
+        if result.is_err() && started {
+            // WORKER remains locked: another registration cannot be stopped here.
+            if let Some(worker) = guard.as_mut() {
+                if unsafe { PostThreadMessageW(worker.thread_id, WM_QUIT, 0, 0) } != 0 {
+                    worker.stop_requested = true;
+                }
+            }
+        }
+        result
+    }
 
     // Out-of-context callback runs on the installing worker's message thread.
-    // Never inspect or retain HWND/PID/title here; no per-event helper calls.
+    // Public mode only counts. Private mode samples transient HWND/PID, never titles.
     unsafe extern "system" fn foreground_event(
         _hook: HWINEVENTHOOK,
         event: u32,
@@ -77,6 +386,7 @@ mod windows {
             let _ = EVENTS.try_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
                 Some(n.saturating_add(1))
             });
+            refresh();
         }
     }
 
@@ -96,7 +406,7 @@ mod windows {
                 Some(foreground_event),
                 0,
                 0,
-                WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
+                WINEVENT_OUTOFCONTEXT,
             )
         };
         if hook.is_null() {
@@ -119,12 +429,24 @@ mod windows {
                     dispatch_error = Some(io::Error::last_os_error());
                     break;
                 }
+                if msg.message == REFRESH_POLICY {
+                    let list = POLICIES.lock().unwrap_or_else(|p| p.into_inner());
+                    if list.is_empty() && PRIVATE_START.swap(false, Ordering::AcqRel) {
+                        alive.store(false, Ordering::Release);
+                        break;
+                    }
+                    drop(list);
+                    refresh();
+                    continue;
+                }
                 unsafe {
                     TranslateMessage(&msg);
                     DispatchMessageW(&msg);
                 }
             }
         }
+        finish_policies();
+        PRIVATE_START.store(false, Ordering::Release);
         // The installing message-loop thread is the sole unhook owner.
         // Do not report a successful Stop if Windows refused UnhookWinEvent.
         let unhook_result = if unsafe { UnhookWinEvent(hook) } == 0 {
@@ -153,6 +475,16 @@ mod windows {
         // A poisoned/busy lock or a worker awaiting reap is UNKNOWN, not
         // evidence that the hook has stopped. Caller can retry Stop.
         let guard = lock()?;
+        if !POLICIES
+            .lock()
+            .map_err(|_| io::Error::other("Focus policy lock poisoned"))?
+            .is_empty()
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "Private policy owns the foreground worker",
+            ));
+        }
         let active = match guard.as_ref() {
             None => false,
             Some(worker)
@@ -174,6 +506,9 @@ mod windows {
 
     pub fn start() -> io::Result<ForegroundEventObserverStatus> {
         let mut guard = lock()?;
+        start_locked(&mut guard)
+    }
+    fn start_locked(guard: &mut Option<Worker>) -> io::Result<ForegroundEventObserverStatus> {
         if let Some(worker) = guard.as_ref() {
             if worker.thread_id != 0 && worker.alive.load(Ordering::Acquire) {
                 return Err(io::Error::new(
@@ -234,6 +569,7 @@ mod windows {
 
     pub fn stop() -> io::Result<ForegroundEventObserverStatus> {
         let mut guard = lock()?;
+        finish_policies();
         if let Some(worker) = guard.as_mut() {
             // A successful PostThreadMessageW only queues WM_QUIT; it does
             // NOT prove GetMessageW has processed it. Never join a worker
@@ -271,7 +607,218 @@ mod windows {
         }
         Ok(status(false, EVENTS.load(Ordering::Relaxed)))
     }
+
+    #[cfg(test)]
+    mod policy_tests {
+        use super::*;
+        use windows_sys::Win32::{
+            Foundation::{GetLastError, ERROR_ACCESS_DENIED, WAIT_OBJECT_0},
+            System::{
+                LibraryLoader::GetModuleFileNameW,
+                Threading::{
+                    CreateProcessW, TerminateProcess, CREATE_NO_WINDOW, CREATE_SUSPENDED,
+                    PROCESS_INFORMATION, STARTUPINFOW,
+                },
+            },
+        };
+        struct Child {
+            process: OwnedHandle,
+            _thread: OwnedHandle,
+            pid: u32,
+            created: u64,
+        }
+        impl Child {
+            fn new() -> Self {
+                let mut path = [0u16; 32768];
+                let size = unsafe {
+                    GetModuleFileNameW(ptr::null_mut(), path.as_mut_ptr(), path.len() as u32)
+                };
+                assert!(size > 0 && size < path.len() as u32);
+                let mut command: Vec<u16> = format!(
+                    "\"{}\" --list\0",
+                    String::from_utf16_lossy(&path[..size as usize])
+                )
+                .encode_utf16()
+                .collect();
+                let mut startup: STARTUPINFOW = unsafe { std::mem::zeroed() };
+                startup.cb = std::mem::size_of_val(&startup) as u32;
+                let mut process: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
+                assert_ne!(
+                    unsafe {
+                        CreateProcessW(
+                            path.as_ptr(),
+                            command.as_mut_ptr(),
+                            ptr::null(),
+                            ptr::null(),
+                            0,
+                            CREATE_SUSPENDED | CREATE_NO_WINDOW,
+                            ptr::null(),
+                            ptr::null(),
+                            &startup,
+                            &mut process,
+                        )
+                    },
+                    0
+                );
+                let handle = owned(process.hProcess).unwrap();
+                Self {
+                    created: birth(&handle).unwrap(),
+                    process: handle,
+                    _thread: owned(process.hThread).unwrap(),
+                    pid: process.dwProcessId,
+                }
+            }
+        }
+        impl Drop for Child {
+            fn drop(&mut self) {
+                // Only this original unresumed copy of our test executable.
+                unsafe {
+                    TerminateProcess(self.process.as_raw_handle() as _, 93);
+                    WaitForSingleObject(self.process.as_raw_handle() as _, 10000);
+                }
+            }
+        }
+        fn state(handle: &OwnedHandle) -> bool {
+            let result = unsafe { WaitForSingleObject(handle.as_raw_handle() as _, 0) };
+            assert!(result == WAIT_OBJECT_0 || result == WAIT_TIMEOUT);
+            result == WAIT_OBJECT_0
+        }
+        #[test]
+        fn five_policy_events_preserve_identity_read_only_receivers_and_stop() {
+            let children: Vec<_> = (0..5).map(|_| Child::new()).collect();
+            let bindings: Vec<_> = children
+                .iter()
+                .map(|c| Arc::new(Binding::new(c.process.as_handle(), c.pid, c.created).unwrap()))
+                .collect();
+            assert!(Binding::new(
+                children[0].process.as_handle(),
+                children[0].pid.wrapping_add(1),
+                children[0].created
+            )
+            .is_err());
+            assert!(Binding::new(
+                children[0].process.as_handle(),
+                children[0].pid,
+                children[0].created.wrapping_add(1)
+            )
+            .is_err());
+            let readers: Vec<_> = bindings.iter().map(|p| p.readers().unwrap()).collect();
+            for endpoint in &readers {
+                for handle in &endpoint[..3] {
+                    assert_eq!(unsafe { SetEvent(handle.as_raw_handle() as _) }, 0);
+                    assert_eq!(unsafe { GetLastError() }, ERROR_ACCESS_DENIED);
+                }
+            }
+            for selected in 0..5 {
+                publish(&bindings, Some(children[selected].pid));
+                for (slot, endpoint) in readers.iter().enumerate() {
+                    assert_eq!(state(&endpoint[0]), slot == selected);
+                    assert!(!state(&endpoint[2]));
+                }
+            }
+            publish(&bindings, None); // Includes focus on the manager or an unrelated application.
+            assert!(readers.iter().all(|r| !state(&r[0])));
+            bindings[0].finish();
+            publish(&bindings, Some(children[0].pid));
+            assert!(!state(&readers[0][0]) && state(&readers[0][2]));
+            drop(bindings);
+            assert!(readers.iter().all(|r| state(&r[2])));
+        }
+        #[test]
+        fn registered_policies_share_one_worker_and_leave_no_active_lease() {
+            let children: Vec<_> = (0..6).map(|_| Child::new()).collect();
+            let mut channels = Vec::new();
+            for c in &children[..5] {
+                channels.push(register_policy(c.process.as_handle(), c.pid, c.created).unwrap());
+            }
+            assert!(channels
+                .iter()
+                .all(|c| c.thread_id == channels[0].thread_id));
+            let c = &children[0];
+            assert!(register_policy(c.process.as_handle(), c.pid, c.created).is_err());
+            let sixth = &children[5];
+            assert!(register_policy(sixth.process.as_handle(), sixth.pid, sixth.created).is_err());
+            assert!(read().is_err()); // Public observation cannot mislabel policy mode.
+            let readers: Vec<_> = channels
+                .iter()
+                .map(|c| c.reader_handles().unwrap())
+                .collect();
+            let stop_result = stop();
+            assert!(
+                stop_result.is_ok()
+                    || stop_result
+                        .as_ref()
+                        .is_err_and(|e| e.kind() == io::ErrorKind::WouldBlock)
+            );
+            assert!(channels.iter().all(|c| c.reader_handles().is_err()));
+            drop(channels);
+            assert!(readers.iter().all(|r| state(&r[2])));
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            loop {
+                match stop() {
+                    Ok(report) => {
+                        assert!(!report.enabled);
+                        break;
+                    }
+                    Err(e)
+                        if e.kind() == io::ErrorKind::WouldBlock
+                            && std::time::Instant::now() < deadline =>
+                    {
+                        thread::sleep(Duration::from_millis(5));
+                    }
+                    other => panic!("Policy worker cleanup not confirmed: {other:?}"),
+                }
+            }
+            assert!(!read().unwrap().enabled);
+            let c = &children[0];
+            let fresh = register_policy(c.process.as_handle(), c.pid, c.created).unwrap();
+            let endpoint = fresh.reader_handles().unwrap();
+            drop(fresh);
+            assert!(state(&endpoint[2]));
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            loop {
+                let finished = {
+                    let guard = lock().unwrap();
+                    guard.as_ref().is_none_or(|w| w.join.is_finished())
+                };
+                if finished {
+                    break;
+                }
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "Last private lease did not end its worker"
+                );
+                thread::sleep(Duration::from_millis(5));
+            }
+            assert!(!stop().unwrap().enabled); // Reap only after confirmed thread completion.
+            assert!(start().unwrap().enabled); // An explicit public observer keeps its ownership.
+            let lease = register_policy(c.process.as_handle(), c.pid, c.created).unwrap();
+            drop(lease);
+            thread::sleep(Duration::from_millis(5));
+            assert!(read().unwrap().enabled);
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            loop {
+                match stop() {
+                    Ok(report) => {
+                        assert!(!report.enabled);
+                        break;
+                    }
+                    Err(e)
+                        if e.kind() == io::ErrorKind::WouldBlock
+                            && std::time::Instant::now() < deadline =>
+                    {
+                        thread::sleep(Duration::from_millis(5))
+                    }
+                    other => panic!("Public observer cleanup not confirmed: {other:?}"),
+                }
+            }
+        }
+    }
 }
+
+#[cfg(windows)]
+#[allow(unused_imports)]
+pub(crate) use windows::{register_policy, PolicyChannel};
 
 pub fn read_observer() -> io::Result<ForegroundEventObserverStatus> {
     #[cfg(windows)]

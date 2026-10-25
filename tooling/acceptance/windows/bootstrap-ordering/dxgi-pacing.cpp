@@ -9,6 +9,7 @@ namespace {
 using Microsoft::WRL::ComPtr;
 struct Policy {
     presentation_pacing::Pacer pacer;
+    explicit Policy(const presentation_pacing::Input& input = {}) : pacer(input) {}
     SRWLOCK rendering = SRWLOCK_INIT;
     std::atomic<unsigned long long> present{0}, present1{0}, bypassed{0}, faults{0};
     std::atomic<unsigned long long> created{0}, destroyed{0}, unsupported{0};
@@ -152,6 +153,19 @@ public:
         return media_->CheckPresentDurationSupport(desired, smaller, larger);
     }
 };
+}
+bool initialize(const presentation_pacing::Input& input) noexcept {
+    AcquireSRWLockExclusive(&installation);
+    bool initialized = false;
+    try {
+        if (!policy.load(std::memory_order_acquire)) {
+            auto* configured = new Policy(input);
+            policy.store(configured, std::memory_order_release);
+            initialized = true;
+        }
+    } catch (...) {}
+    ReleaseSRWLockExclusive(&installation);
+    return initialized;
 }
 bool wrap(IDXGISwapChain1** owned, HWND window) noexcept {
     if (!owned || !*owned || !window) return false;

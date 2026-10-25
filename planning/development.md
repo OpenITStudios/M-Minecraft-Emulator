@@ -11,7 +11,12 @@ Education **Host World**; four join that same world through Education multiplaye
 This supersedes the four-client target. Host role stays with its account when
 foreground focus changes. The controlled client has a **144 FPS ceiling**;
 all other clients, including a background host, have a **10 FPS ceiling**.
-Neither number is a guaranteed achieved rate. Background rendering must preserve
+Neither number is a guaranteed achieved rate. Each game's client area also needs a
+small, clearly readable **FPS counter at the top right** (operator addition).
+It must show a measured per-window rate, remain correctly anchored across
+resize/DPI changes, preserve input and have measured low overhead. Metric
+semantics must be explicit; unavailable measurements show an unavailable state.
+This HUD is not implemented or accepted yet. Background rendering must preserve
 host simulation, saves and networking; that separation remains UNKNOWN until
 measured in the actual game. Resolution, monitor refresh and free SSD capacity
 are not established.
@@ -814,17 +819,92 @@ artifacts; reviewed live payload pins, original profiles/accounts/worlds, public
 admission, CI and distribution are unchanged. No Computer Use or game
 launch/input/restart/closure occurred.
 
+### Single-worker focus leases and event-driven native policy
+
+Source baseline: `bb00253a45f3118ec2e1cc19467fdc75fa58e3f1`. The existing
+instance_focus_events owner now has an internal, non-command registration for
+up to five live process HANDLE/PID/FILETIME identities in the same session.
+One existing WinEvent worker serves all leases. Private mode reads transient
+foreground HWND/PID with stability rechecks; count-only mode returns before
+those reads. Manager focus events are included, and unregistered/unstable focus
+demotes clients. Other leases are demoted before a selected lease is promoted.
+No titles, account data or persisted policy/readiness store is added.
+
+A policy lease owns level/change/stop events and publishes SYNCHRONIZE-only
+reader handles plus a query/synchronize manager-process handle. Drop, explicit
+worker Stop and loop teardown signal sticky stop; dead/stale identities cannot
+promote. Duplicate and sixth registrations refuse. Public count-only status
+cannot label private activity OBSERVE_ONLY: it returns an explicit unavailable
+error while leases exist, preserving the four-field schema. Last-private-lease
+cleanup ends that worker, while a previously started public observer remains.
+Worker ownership/cleanup still uses the same lock, handshake and join owner.
+
+The native Pacer(Input) duplicates reader capabilities, serializes one rendering
+consumer and waits on policy change/stop/controller exit with its existing
+timer. There is no child policy thread or periodic focus sampler. Render demand
+reads the level event; the direct foreground setter refuses for an external
+source. Stop/controller exit stays sticky and disables waiting while the DXGI
+wrapper continues native forwarding. Partial/pseudo/aliased inputs refuse;
+failed constructors and caller handle closure do not leak/invalidate owned waits.
+Event type/reset-mode provenance is still a trusted-producer precondition:
+a complete untrusted child capability decoder is not implemented.
+
+The typed DXGI owner has one optional initialize(Input), outside loader lock and
+before wrapping; a second initializer refuses. D3D12 WARP controls now actually
+use native event input, including inherited background policy after recreation,
+concurrent calls, external stop and original native error/identity forwarding.
+D3D11 retains its direct policy control. The compatibility DLL/creation observer
+and storage config ABI are unchanged; timing remains linked only into the
+explicit control executable.
+
+Executed: final MSVC x64 Release /W4 /WX build and both timing modes pass.
+External-policy promotion measured 0.169 ms on the final native run; own
+controller exit interrupts and permanently stops the wait. Thirty-two repeated
+invalid/aliased constructor attempts retain the same process handle count.
+A negative check discovered INVALID_HANDLE_VALUE is a process pseudo-handle
+when duplicated; input now explicitly refuses pseudo-handles.
+
+The initial 80 ms notification check falsely tolerated a missing wake. The
+strengthened control checks both notification latency and time since the
+previous frame. Removing notification from the consumer wait set then fails
+(exit 1); restoring it passes. The five-own-renderer run yields 551 samples
+over 3.051 seconds, 0.062 process CPU seconds, 4.442 ms maximum synthetic
+promotion and 4.159 ms joined stop. These are permit/own-process measurements,
+not displayed/game FPS or resource savings.
+
+Four focus-owner tests pass: five own suspended-process selections, identity/
+read-only/stop checks, single-worker registrations, duplicate/sixth refusal,
+public Stop, last-lease self-cleanup, and preservation of an existing public
+observer. Combined with prior bootstrap tests, the isolated exact-source Rust
+harness passes 22 tests with the unrelated caption test filtered as previously
+documented. Rustfmt passes; isolated-harness dead-code warnings remain. Full
+Tauri/native suite and actual user-focus-driven game acceptance are NOT_EXECUTED.
+
+**Integration boundary:** the Rust producer and native consumer are separately
+exercised. Reader handles are not yet delivered through the process-bound
+bootstrap capability, and game creation does not initialize/wrap timing.
+Do not report an end-to-end Rust-to-game limiter. Reviewed payload pins,
+original profiles/accounts/worlds, public admission, CI and distribution remain
+unchanged. No Computer Use or game launch/input/restart/closure occurred.
+
+**Additional operator requirement:** add a measured FPS HUD at the top right
+inside each Minecraft client area, lightweight and input-safe, anchored through
+resize/DPI changes. Its sampling must reuse the presentation owner and clearly
+define the observed metric. HUD source, actual on-screen behavior and overhead
+remain NOT_IMPLEMENTED / NOT_EXECUTED; this addition does not replace the
+five-client, 144/10, persistence, Host World or stability requirements.
+
 ### Remaining proof and one next action
 
-The full five-client goal is ACTIVE. The timing wrapper lifetime and creation
-observer factory-pin prerequisites are repaired in own controls. Unknown game
-interfaces/creation implementations, process-bound FPS policy transport and
-automatic focus switching, real 144/10 pacing without slowing background Host
-World, five licensed clients, resources/soak/crash and helper/auth containment
-remain UNKNOWN/NOT_EXECUTED. This observer is not Minecraft or FPS acceptance.
+The full goal is ACTIVE, including the FPS HUD. Private focus leases and the
+native event consumer now exist with own-data checks. Process-bound cross-
+language transport/creation integration, HUD, actual 144/10 game pacing without
+slowing background Host World, five licensed clients, resources/soak/crash and
+helper/auth containment remain UNKNOWN/NOT_EXECUTED. Public admission stays closed.
 
-**One next action:** extend the existing manager focus-event owner and private
-bootstrap capability with process-bound foreground/background/stop transport,
-then connect creation-time typed wrapping outside loader lock and prove those
-paths together with own children. Keep the old candidate unchanged until the
-integrated control passes and a same-profile candidate is reviewed.
+**One next action:** carry the focus lease's read-only events/controller identity
+through the existing private bootstrap capability, validate child-side object/
+reset-mode provenance, and invoke native initialization plus typed wrapping at
+eligible creation outside loader lock. Prove producer-to-child transitions,
+stop/death and recreation together with own children before reviewing a
+same-profile game candidate; add the measured HUD to that acceptance path.

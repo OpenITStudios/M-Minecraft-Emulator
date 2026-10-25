@@ -11,6 +11,7 @@
 #include <thread>
 #include <vector>
 #include <exception>
+#include <string>
 
 namespace {
 using Microsoft::WRL::ComPtr;
@@ -30,8 +31,8 @@ LONGLONG clockNow() {
     return value.QuadPart;
 }
 struct Event {
-    HANDLE value = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    Event() { check(value != nullptr); }
+    HANDLE value;
+    explicit Event(bool manual = true) : value(CreateEventW(nullptr, manual, FALSE, nullptr)) { check(value != nullptr); }
     ~Event() { CloseHandle(value); }
 };
 struct HiddenWindow {
@@ -123,8 +124,130 @@ void cancellationAndLateFrame() {
     check(second.outcome == Outcome::Frame && third.outcome == Outcome::Frame
         && third.released - second.released >= (frequency.QuadPart + 143) / 144);
 }
+struct OwnController {
+    PROCESS_INFORMATION process{};
+    OwnController() {
+        wchar_t path[32768]{};
+        const DWORD bytes = GetModuleFileNameW(nullptr, path, 32768);
+        check(bytes && bytes < 32768);
+        std::wstring command = L"\"" + std::wstring(path) + L"\" --policy-controller-exit";
+        STARTUPINFOW startup{}; startup.cb = sizeof(startup);
+        check(CreateProcessW(path, command.data(), nullptr, nullptr, FALSE, CREATE_SUSPENDED | CREATE_NO_WINDOW,
+            nullptr, nullptr, &startup, &process));
+    }
+    void finish() {
+        check(ResumeThread(process.hThread) == 1);
+        check(WaitForSingleObject(process.hProcess, 10000) == WAIT_OBJECT_0);
+        DWORD code = STILL_ACTIVE;
+        check(GetExitCodeProcess(process.hProcess, &code) && code == 0);
+    }
+    ~OwnController() {
+        if (process.hProcess && WaitForSingleObject(process.hProcess, 0) == WAIT_TIMEOUT) {
+            TerminateProcess(process.hProcess, 91); // Only this original suspended own fixture.
+            WaitForSingleObject(process.hProcess, 10000);
+        }
+        if (process.hThread) CloseHandle(process.hThread);
+        if (process.hProcess) CloseHandle(process.hProcess);
+    }
+};
+void externalPolicyChecks() {
+    Event level, changed(false), stop;
+    OwnController controller;
+    HANDLE readers[4]{};
+    const HANDLE sources[]{level.value, changed.value, stop.value, controller.process.hProcess};
+    for (unsigned i = 0; i < 4; ++i) {
+        check(DuplicateHandle(GetCurrentProcess(), sources[i], GetCurrentProcess(), &readers[i],
+            SYNCHRONIZE | (i == 3 ? PROCESS_QUERY_LIMITED_INFORMATION : 0), FALSE, 0));
+        if (i != 3) {
+            SetLastError(ERROR_SUCCESS);
+            check(!SetEvent(readers[i]) && GetLastError() == ERROR_ACCESS_DENIED);
+        }
+    }
+    const HANDLE invalid = reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(0x7ffffffc));
+    DWORD flags = 0;
+    check(!GetHandleInformation(invalid, &flags));
+    bool pseudoRefused = false;
+    try { presentation_pacing::Pacer pseudo({readers[0], INVALID_HANDLE_VALUE, readers[2], readers[3]}); }
+    catch (...) { pseudoRefused = true; }
+    check(pseudoRefused);
+    DWORD handlesBefore = 0, handlesAfter = 0;
+    check(GetProcessHandleCount(GetCurrentProcess(), &handlesBefore));
+    for (unsigned attempt = 0; attempt < 32; ++attempt) {
+        bool failed = false;
+        try { presentation_pacing::Pacer unavailable({readers[0], invalid, readers[2], readers[3]}); }
+        catch (...) { failed = true; }
+        check(failed);
+        failed = false;
+        try { presentation_pacing::Pacer aliased({level.value, readers[0], stop.value, readers[3]}); }
+        catch (...) { failed = true; }
+        check(failed);
+    }
+    check(GetProcessHandleCount(GetCurrentProcess(), &handlesAfter) && handlesBefore == handlesAfter);
+    presentation_pacing::Pacer pacer({readers[0], readers[1], readers[2], readers[3]});
+    for (HANDLE reader : readers) check(CloseHandle(reader)); // Consumer owns safe duplicates.
+    bool rejected = false;
+    try { presentation_pacing::Pacer incomplete({level.value}); }
+    catch (...) { rejected = true; }
+    check(rejected && !pacer.foreground(true));
+    const auto first = pacer.wait_for_frame();
+    check(first.outcome == Outcome::Frame && first.ceiling == 10);
+    Permit promoted{};
+    Event entered;
+    std::thread waiting([&] { SetEvent(entered.value); promoted = pacer.wait_for_frame(); });
+    check(WaitForSingleObject(entered.value, 1000) == WAIT_OBJECT_0);
+    Sleep(10);
+    const auto started = clockNow();
+    check(SetEvent(level.value) && SetEvent(changed.value));
+    waiting.join();
+    LARGE_INTEGER frequency{}; check(QueryPerformanceFrequency(&frequency));
+    const double promotionMs = 1000.0 * static_cast<double>(promoted.released - started)
+        / static_cast<double>(frequency.QuadPart);
+    check(promoted.outcome == Outcome::Frame && promoted.ceiling == 144 && promotionMs < 40
+        && promoted.released - first.released < frequency.QuadPart * 60 / 1000);
+    check(ResetEvent(level.value) && SetEvent(changed.value));
+    const auto background = pacer.wait_for_frame();
+    check(background.outcome == Outcome::Frame && background.ceiling == 10
+        && background.released - promoted.released >= (frequency.QuadPart + 9) / 10);
+    Permit stopped{};
+    check(ResetEvent(entered.value));
+    std::thread stopping([&] { SetEvent(entered.value); stopped = pacer.wait_for_frame(); });
+    check(WaitForSingleObject(entered.value, 1000) == WAIT_OBJECT_0);
+    Sleep(5); check(SetEvent(stop.value));
+    stopping.join();
+    check(stopped.outcome == Outcome::Stopped && pacer.wait_for_frame().outcome == Outcome::Stopped);
+    controller.finish();
+
+    OwnController exiting;
+    Event secondLevel, secondChange(false), secondStop, waitingForExit;
+    presentation_pacing::Pacer orphan({secondLevel.value, secondChange.value, secondStop.value, exiting.process.hProcess});
+    check(orphan.wait_for_frame().outcome == Outcome::Frame);
+    Permit disconnected{};
+    std::thread abandoned([&] { SetEvent(waitingForExit.value); disconnected = orphan.wait_for_frame(); });
+    check(WaitForSingleObject(waitingForExit.value, 1000) == WAIT_OBJECT_0);
+    exiting.finish();
+    abandoned.join();
+    check(disconnected.outcome == Outcome::Stopped && orphan.wait_for_frame().outcome == Outcome::Stopped);
+    std::printf("{\"scope\":\"OWN_EVENT_POLICY_CONSUMER\",\"selfCheck\":true,"
+        "\"promotionMs\":%.3f,\"backgroundCeiling\":10,\"readersCannotWrite\":true,"
+        "\"callerHandleCloseSafe\":true,\"failedConstructionLeaksHandles\":false,\"aliasedObjectsRefused\":true,\"stopInterrupts\":true,\"realControllerExitStops\":true,"
+        "\"osFocusDriven\":false,\"minecraft\":\"NOT_EXECUTED\"}\n", promotionMs);
+}
 void adapterChecks(bool modern) {
     HiddenWindow selectedWindow, foreignWindow;
+    Event policyLevel, policyChanged(false), policyStop;
+    std::unique_ptr<OwnController> controller;
+    if (modern) {
+        controller = std::make_unique<OwnController>();
+        check(!dxgi_pacing::initialize({policyLevel.value}));
+        check(dxgi_pacing::initialize({policyLevel.value, policyChanged.value, policyStop.value, controller->process.hProcess}));
+        check(!dxgi_pacing::initialize({})); // A second producer cannot replace live policy.
+        check(!dxgi_pacing::foreground(true));
+    }
+    const auto focus = [&](bool active) {
+        if (!modern) return dxgi_pacing::foreground(active);
+        return (active ? SetEvent(policyLevel.value) : ResetEvent(policyLevel.value))
+            && SetEvent(policyChanged.value);
+    };
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> context;
     check(SUCCEEDED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, 0,
@@ -200,7 +323,7 @@ void adapterChecks(bool modern) {
     }
     LARGE_INTEGER frequency{};
     check(QueryPerformanceFrequency(&frequency));
-    check(dxgi_pacing::foreground(true));
+    check(focus(true));
     check(SUCCEEDED(target->Present(0, 0)));
     auto before = dxgi_pacing::snapshot();
     check(before.pacedPresent == 1 && before.lastCeiling == 144);
@@ -209,7 +332,7 @@ void adapterChecks(bool modern) {
     check(after.pacedPresent == 1 && after.pacedPresent1 == 1
         && after.lastRelease - before.lastRelease >= (frequency.QuadPart + 143) / 144
         && memcmp(&parameters, &unchanged, sizeof(parameters)) == 0);
-    check(dxgi_pacing::foreground(false));
+    check(focus(false));
     before = after;
     check(SUCCEEDED(target->Present1(0, 0, &parameters)));
     after = dxgi_pacing::snapshot();
@@ -290,7 +413,7 @@ void adapterChecks(bool modern) {
     // Separate callers share the clock without holding our lock in native DXGI.
     // Keep the HWND owner pumping: DXGI may send messages to this thread.
     before = after;
-    check(dxgi_pacing::foreground(true));
+    check(focus(true));
     Event begin;
     std::atomic<unsigned> completed{0}, failed{0};
     std::array<std::thread, 2> callers;
@@ -323,7 +446,7 @@ void adapterChecks(bool modern) {
     check(failed.load() == 0 && after.faults == 0
         && after.pacedPresent == before.pacedPresent + 4
         && after.pacedPresent1 == before.pacedPresent1 + 4 && after.lastCeiling == 144);
-    check(dxgi_pacing::stop() && !dxgi_pacing::foreground(true));
+    check((modern ? SetEvent(policyStop.value) != FALSE : dxgi_pacing::stop()) && !dxgi_pacing::foreground(true));
     before = dxgi_pacing::snapshot();
     check(SUCCEEDED(target->Present(0, 0)));
     after = dxgi_pacing::snapshot();
@@ -331,18 +454,20 @@ void adapterChecks(bool modern) {
     target.Reset();
     after = dxgi_pacing::snapshot();
     check(after.liveBindings == 0 && after.createdBindings == after.destroyedBindings);
+    if (controller) controller->finish();
     std::printf("{\"scope\":\"OWN_DXGI_TYPED_WRAPPER\",\"selfCheck\":true,\"backend\":\"%s\","
-        "\"present\":%llu,\"present1\":%llu,\"bypassed\":%llu,\"recreatedChains\":4,"
+        "\"externalPolicy\":%s,\"present\":%llu,\"present1\":%llu,\"bypassed\":%llu,\"recreatedChains\":4,"
         "\"liveBindings\":%u,\"createdBindings\":%llu,\"destroyedBindings\":%llu,"
         "\"unsupportedNativeInterfaces\":%llu,\"nativeFailureAndLastErrorPreserved\":true,"
         "\"identityAndAliasesChecked\":true,\"resourceForwardingChecked\":true,\"concurrentCalls\":8,\"resizeRetainsBinding\":true,\"gameHook\":false,"
         "\"minecraft\":\"NOT_EXECUTED\"}\n", modern ? "D3D12_WARP" : "D3D11_WARP",
-        after.pacedPresent, after.pacedPresent1, after.bypassed, after.liveBindings,
+        modern ? "true" : "false", after.pacedPresent, after.pacedPresent1, after.bypassed, after.liveBindings,
         after.createdBindings, after.destroyedBindings, after.unsupportedInterfaces);
 
 }
 int run() {
     cancellationAndLateFrame();
+    externalPolicyChecks();
     WNDCLASSW type{};
     type.lpfnWndProc = DefWindowProcW;
     type.hInstance = GetModuleHandleW(nullptr);
@@ -414,6 +539,7 @@ int run() {
 }
 } // namespace
 int wmain(int argc, wchar_t** argv) {
+    if (argc == 2 && wcscmp(argv[1], L"--policy-controller-exit") == 0) return 0;
     if (argc != 2) return 64;
     const bool modern = wcscmp(argv[1], L"--run-d3d12-adapter-self-test") == 0;
     if (!modern && wcscmp(argv[1], L"--run-self-test") != 0) return 64;
