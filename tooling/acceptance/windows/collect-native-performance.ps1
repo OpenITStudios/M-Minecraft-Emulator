@@ -436,6 +436,37 @@ function Read-DirectChildren {
   return $result
 }
 
+function Write-ReportArtifact {
+  param([string]$Directory, [string]$Name, [byte[]]$bytes)
+  $file = Join-Path $Directory $Name
+  $temporary = Join-Path $Directory ('.mivubi-native-performance-' +
+    [Guid]::NewGuid().ToString('N') + '.tmp')
+  $stream = $null
+  $temporaryOwned = $false
+  try {
+    $stream = [System.IO.File]::Open($temporary, [System.IO.FileMode]::CreateNew,
+      [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+    $temporaryOwned = $true
+    $stream.Write($bytes, 0, $bytes.Length)
+    $stream.Flush()
+    $stream.Dispose()
+    $stream = $null
+    # File.Move (two arguments) refuses an existing destination; do not use
+    # Move-Item -Force or File.Copy here. The original report is never replaced.
+    [System.IO.File]::Move($temporary, $file)
+    $temporaryOwned = $false
+  } finally {
+    if ($null -ne $stream) { $stream.Dispose() }
+    # This invocation owns ONLY the GUID-named staging file. A failed move
+    # never removes or mutates an existing final report.
+    if ($temporaryOwned -and [System.IO.File]::Exists($temporary)) {
+      try { [System.IO.File]::Delete($temporary) } catch { }
+    }
+  }
+  
+  return $file
+}
+
 $baselineNative = Read-Target -ProcessId $NativePid
 $baselineIsolated = Read-Target -ProcessId $IsolatedPid
 if ($null -eq $baselineNative -or $null -eq $baselineIsolated) {
@@ -469,6 +500,21 @@ if (-not $OutputDirectory) {
   $OutputDirectory = Join-Path $env:TEMP 'MinecraftInstanceManager\Performance'
 }
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
+
+# Exercise the SAME atomic writer before a long capture, including legacy path limits.
+$OutputDirectory = (Get-Item -LiteralPath $OutputDirectory -ErrorAction Stop).FullName
+$probe = $null
+try {
+  $probe = Write-ReportArtifact -Directory $OutputDirectory -Name (
+    '.mivubi-native-performance-' + [Guid]::NewGuid().ToString('N') + '.probe') -Bytes ([byte[]]@(0))
+} catch {
+  throw [System.IO.IOException]::new(
+    'Cannot create and move a report in the output directory. Choose a writable, shorter filesystem path.',
+    $_.Exception)
+} finally {
+  # The writer returns this name only after it owns the completed probe.
+  if ($null -ne $probe) { [System.IO.File]::Delete($probe) }
+}
 
 $beginUtc = [DateTime]::UtcNow
 $timer = [System.Diagnostics.Stopwatch]::StartNew()
@@ -632,7 +678,6 @@ if ($MemoryComposition) {
     $report.memoryComposition['directChildrenRequested'] = [bool]$DirectChildren
   }
 }
-$file = Join-Path $OutputDirectory ('native-process-performance-' + $stamp + '.json')
 # Windows PowerShell 5.1's Set-Content -Encoding UTF8 emits a BOM
 # that strict Node JSON.parse rejects. Commit only a COMPLETE UTF8-no-BOM
 # file: create an exclusive temporary file beside the final destination,
@@ -641,27 +686,7 @@ $file = Join-Path $OutputDirectory ('native-process-performance-' + $stamp + '.j
 $json = $report | ConvertTo-Json -Depth 9
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 $bytes = $utf8NoBom.GetBytes($json + [Environment]::NewLine)
-$temporary = Join-Path $OutputDirectory ('.mivubi-native-performance-' +
-  [Guid]::NewGuid().ToString('N') + '.tmp')
-$stream = $null
-try {
-  $stream = [System.IO.File]::Open($temporary, [System.IO.FileMode]::CreateNew,
-    [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
-  $stream.Write($bytes, 0, $bytes.Length)
-  $stream.Flush()
-  $stream.Dispose()
-  $stream = $null
-  # File.Move (two arguments) refuses an existing destination; do not use
-  # Move-Item -Force or File.Copy here. The original report is never replaced.
-  [System.IO.File]::Move($temporary, $file)
-} finally {
-  if ($null -ne $stream) { $stream.Dispose() }
-  # This invocation owns ONLY the GUID-named staging file. A failed move
-  # never removes or mutates an existing final report.
-  if ([System.IO.File]::Exists($temporary)) {
-    try { [System.IO.File]::Delete($temporary) } catch { }
-  }
-}
+$file = Write-ReportArtifact -Directory $OutputDirectory -Name ('native-process-performance-' + $stamp + '.json') -Bytes $bytes
 [ordered]@{
   report = $file
   sampleCount = $samples.Count

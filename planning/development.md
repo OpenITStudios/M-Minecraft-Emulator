@@ -21,10 +21,10 @@ that refactoring or efficiency improvements have been implemented.
 
 Acceptance requires a measured improvement beyond run variation under matched
 conditions, with accounts/worlds, host progression, connectivity and focus
-recovery preserved. Metric composition, concrete engine bottlenecks and savings
-remain UNKNOWN / NOT_EXECUTED. No numerical saving or five-client capacity is
-promised; no live operation or graphics change is part of this goal-setting
-commit.
+recovery preserved. A first two-client composition baseline is now available below; engine-owned
+allocations inside each game and repeatable savings remain UNKNOWN. No numerical
+saving or five-client capacity is promised. The later runtime section records
+the operator's expanded authorization separately from the original goal-setting commit.
 
 ## Goal — five clients with foreground rendering policy
 
@@ -47,8 +47,10 @@ measured in the actual game. Resolution, monitor refresh and free SSD capacity
 are not established.
 
 Retain the original provider and existing accounts/worlds, normal licensed login,
-no token copying, no Sandboxie/VMware, Local only and CI disabled. No Computer Use
-or game launch/input/restart during the operator's work. Use the existing
+no token copying, no Sandboxie/VMware, Local only and CI disabled. The operator subsequently authorized full PC control and normal closure of
+optional applications, retaining Minecraft, Codex and their dependencies. This
+supersedes the earlier no-Computer-Use restriction for this efficiency session;
+it does not require disruptive game restarts or account/world changes. Use the existing
 native/bootstrap owners and resource admission; no second manager or readiness
 store. Preserve the proved MC01/MC02 restart result while developing MC03–MC05.
 Public admission stays closed until the relevant runtime acceptance.
@@ -1351,13 +1353,90 @@ PowerShell 7 capture passed actual Node single/paired review. These are
 collector tests, not Minecraft performance. Raw captures/fixture runners stay
 local and uncommitted.
 
-The operator then made a 15-minute metadata session available. Initial
-read-only discovery found only the session-0 Education updater and no running
-game pair/manager. No game was launched or controlled. A readiness question
-asks the operator to open the existing candidate/world pair and identify the
-Education host; a request to open the candidate can be handled through the
-already prepared exact payload. Current Minecraft collection has NOT_EXECUTED
-status until real identities and world readiness are established.
+### First live memory baseline and output-path repair — 25 October 2026
+
+**Exact sources:** sampler/evaluator at
+`106117aa6b5851968fd3e7f69f5f5d585a61709a`; unchanged private game payload at
+`be24595e61f753a2dfedbdd72b462af90d7df748`. Payload hashes and pinned live
+identities were checked locally. At the operator's request the existing private
+candidate was opened once through its observation CLI, without enabling public
+Launch. The operator then reported both clients in the same Education Host World,
+with **Minecraft - 2 as host**. Roles are operator-reported, not inferred from
+foreground focus. No settings, pacing policy, account data or world content were
+read or changed by collection.
+
+The first 900-second attempt failed to publish its report under Windows
+PowerShell 5.1: the nested staging pathname was 273 characters and File.Open
+reported DirectoryNotFound although the directory existed. That attempt is
+**NOT_PERSISTED**, with no performance metrics credited. A repeat to a short
+workspace path completed without reopening games: 900.01 seconds, 170 samples,
+no selected game/manager identity loss. Raw report SHA-256:
+`42708180a5e9be26d2ebdcfdb7d91acc558df8f9107d66c98980ae5212e05e50`.
+Raw process metadata stays local, outside Git.
+
+The first five minutes are warmup. Steady review includes 113 complete intervals
+inside 303.55–900.01 seconds; the interval crossing the boundary is excluded.
+The original full report passed the existing evaluator before phase selection,
+and phase statistics reuse that evaluator. The query cost extends requested
+five-second spacing, so sample count is not an assumed 180.
+
+| Steady metric (MiB except CPU) | Minecraft - 1, guest | Minecraft - 2, host | Candidate manager |
+| --- | ---: | ---: | ---: |
+| Mean private resident | 1291.53 | 1467.48 | 1.46 |
+| Peak private resident | 1291.77 | 1469.99 | 1.46 |
+| Resident endpoint change | -0.13 | +6.23 | 0.00 |
+| Mean private commitment | 2488.80 | 2684.48 | 2.32 |
+| Peak private commitment | 2490.70 | 2686.95 | 2.32 |
+| Commitment endpoint change | -0.16 | +4.76 | 0.00 |
+| Mean CPU, percent of whole host | 0.97 | 1.55 | 0.00 rounded |
+
+Direct-child private resident means were 114.59 and 113.61 MiB; corresponding
+commit means 151.31 and 150.81 MiB. Guest coverage was 113/113; host coverage
+112/113 with one PARTIAL_RELATION kept UNKNOWN. Manager's verified direct-child
+inventory was empty. These are direct relations only, not exclusive ownership,
+all descendants or shared-broker attribution. In-process compatibility-DLL
+allocations remain inseparable from game totals in this capture.
+
+Mean/peak memory-query duration was 275.85/1072.25 ms. This is measurable
+diagnostic cost, not total collector CPU/RAM or game overhead. System available
+RAM rose about 4517 MiB within steady observation while system commit fell
+about 8069 MiB; uncontrolled other-PC activity prevents crediting either change
+to the engine. No graphics or matched candidate was changed, so this is a
+composition baseline, **not an optimization A/B result**.
+
+Inference: the current CLI manager is not a GiB-scale resident-memory target.
+The host's roughly 6 MiB resident increase over ten minutes alone establishes
+neither a leak nor long-term stability. Private commitment is materially larger
+than private residency; reducing the latter by paging would not demonstrate
+less game allocation. No observed gameplay was supplied: the operator explicitly
+did not watch it during recording. Background host progression, connection
+health, frame tails, focus recovery, GPU/VRAM and sustained active 144 FPS remain
+UNKNOWN / NOT_EXECUTED for this session. Process survival is not gameplay proof.
+
+**Whole-PC scope:** the operator permits normal closure of optional applications,
+with Minecraft and Codex retained. Discovery must preserve Codex even though its
+executable/display name is ChatGPT, plus game/authentication/tool dependencies.
+A later metadata snapshot found optional high-memory applications already absent
+before an agent exit action. No normal-closure saving is claimed. Available RAM
+was about 16204 MiB of 32524 MiB at 07:33 UTC; game private commitment remained
+about 5184 MiB combined despite lower instantaneous residency. This uncontrolled
+snapshot is PC context, not matched engine savings. No process was force-killed,
+cache deleted, account reset, world changed, service disabled or memory trimmed.
+
+**Bounded repair:** the existing collector now tests its actual exclusive
+write/flush/non-replacing-move path with one owned disposable probe before
+starting timed sampling. The final writer uses that same function; owned
+staging is cleaned on failure and existing reports are preserved. Output
+capability failure asks for a writable shorter filesystem path immediately.
+This does not enable Windows long paths or guarantee later disk capacity.
+Report schema, public APIs, launch admission and game behavior are unchanged.
+
+Proof for this repair: 36 Node tests passed, including collision preservation
+and capability-dependent long-path early refusal in Windows PowerShell 5.1 and
+PowerShell 7. An actual 30-second final-source own-process-tree capture under
+Windows PowerShell 5.1 produced six samples, retained identities, and passed
+single/paired Node review. These own-data checks are separate from the real-game
+baseline at 106117a. Raw captures, fixtures and PC inventory stay uncommitted.
 
 ### Remaining proof and one next action
 
@@ -1372,11 +1451,11 @@ NOT_IMPLEMENTED / NOT_EXECUTED / UNKNOWN as applicable. The earlier private-temp
 two-account/world restart proof remains historical evidence for its own payload.
 Public production admission and CI stay disabled.
 
-**One next action:** once the operator's game/world readiness is established,
-pin the two live game identities and candidate manager, then collect one
-metadata-only 15-minute baseline at unchanged graphics/144-10 policy (first
-five minutes warmup, following ten minutes steady observation). Preserve the
-declared Education host role and account/world data; do not control windows,
-send input, close games or change settings. Analyze composition and measurement
-cost before choosing one demonstrated engine-owned optimization. A baseline
-alone cannot establish savings. Keep clients 03-05 unimplemented.
+**One next action:** audit allocation lifetimes in the existing in-process
+compatibility/pacing/HUD owners against this baseline, identifying only
+engine-owned buffers, caches and retained handles. Select a change only if a
+concrete retention or duplicate-work cause is demonstrated; do not add a new
+memory governor or promise savings from total game RAM. Preserve settings,
+144/10 policy, host role, accounts and worlds. Any runtime benefit still needs
+a matched before/after comparison with observed gameplay. Keep clients 03-05
+unimplemented until that decision is supported.

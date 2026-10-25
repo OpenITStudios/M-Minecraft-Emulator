@@ -242,9 +242,36 @@ sums. Failed or partial relation coverage remains UNKNOWN. These observations
 are not exclusive helper ownership or a full tree census: shared brokers,
 services and deeper descendants remain unassigned. Process totals still do not
 identify engine-owned allocations. Own-data Node/Windows checks passed as recorded in
-the handoff, with no new Minecraft measurement or demonstrated savings.
+the handoff. A subsequent real two-client baseline is summarized below;
+no matched optimization benefit has been demonstrated.
 The earlier exact-source audit above retains its original pinned snapshot;
 it is not a claim that the collector still lacks these new opt-in fields.
+
+### First live composition result — 25 October 2026
+
+The [canonical handoff](../../planning/development.md#first-live-memory-baseline-and-output-path-repair--25-october-2026)
+records the exact source/payload hashes, local report digest, coverage and limits.
+The sampler at `106117aa6b5851968fd3e7f69f5f5d585a61709a` completed a 15-minute
+unchanged-settings observation; the operator reported Minecraft - 2 as Education
+host. In 113 steady intervals, game private residency averaged approximately
+1292/1467 MiB, private commitment 2489/2684 MiB, and the CLI candidate manager
+1.46/2.32 MiB resident/commit. Direct-child residency averaged approximately
+115/114 MiB; one host relation sample remained UNKNOWN. Shared brokers and
+compatibility-DLL allocations inside game heaps remain unassigned.
+
+This rules out treating the current CLI manager as the obvious GiB-scale target.
+It does not establish a leak, optimal game memory, full helper ownership or
+a benefit from any engine change. The operator did not observe gameplay during
+recording, so background host health remains UNKNOWN. Whole-PC workload also
+changed: system available/commit deltas cannot be credited to the engine.
+No matching optimized run, graphics comparison or five-client acceptance exists.
+
+An initial long-path output failure lost its report. The existing collector's
+shared atomic writer now performs an owned write/move probe before the timed
+capture; regression and own-process Windows checks cover early failure and
+preservation of existing artifacts. This is diagnostic reliability work,
+not a game memory optimization. Current composition is partially measured;
+engine-owned allocation attribution and repeatable gains remain UNKNOWN.
 
 ## 10. A bounded comparison that can identify the best tradeoff
 
@@ -264,7 +291,7 @@ Do not run heap/memory dumps or retain account/token/world contents for this pla
 
 | Rank | Candidate | Expected impact, still unmeasured | Compatibility cost / next decision |
 | --- | --- | --- | --- |
-| 0 | Collect the matched two-client composition baseline with the existing opt-in manager/direct-child extension | Establishes what can actually be saved; no immediate resource reduction. | Diagnostic source/own-data checks implemented; Minecraft composition and savings remain unmeasured. |
+| 0 | Collect the matched two-client composition baseline with the existing opt-in manager/direct-child extension | Establishes what can actually be saved; no immediate resource reduction. | Diagnostic checks and one real baseline available; matched savings and in-process engine allocations remain unmeasured. |
 | Optional settings track | Education's documented conservative graphics preset and render distance | Best-supported opportunity to reduce render work; possible RAM/VRAM benefit. Select the least costly preset that still meets the operator's visual needs. | Visual tradeoff; agree a stable usable preset before any setting change. |
 | 2 | Validate existing 144/10 pacing and background host continuity | Potentially meaningful CPU/GPU work reduction; limited direct allocation effect. | Preserve host progression and fast focus return; avoid equating low FPS with low simulation rate. |
 | Optional settings track | Verify supported render resolution | Potential GPU/render-target reduction. | Confirm actual Education behavior; keep a usable stable size. |
@@ -273,4 +300,4 @@ Do not run heap/memory dumps or retain account/token/world contents for this pla
 | 6 | Targeted EcoQoS or memory-priority trial | Possible energy/scheduling or residency tradeoff; no guaranteed RAM gain. | Defer until measured contention; protect host and restoration behavior. |
 | Reject as default | Periodic trim, hard caps, suspension, helper killing | Can lower a counter or stop work without reducing required game state. | Faults, starvation, allocation failures or broken sessions conflict with requirements. |
 
-No numerical savings are claimed. The next useful evidence is a bounded, explicitly authorized comparison of the existing two-client workload, followed only later by additional clients. Until then, five-client capacity, current memory composition, Education's graphics-reload behavior and the practical RAM/CPU/GPU gains remain **UNKNOWN / NOT_EXECUTED**. This note authorizes no game operations, settings changes, credentials/cache reads, CI or product implementation.
+No numerical savings are claimed. The next useful evidence is a bounded, explicitly authorized comparison of the existing two-client workload, followed only later by additional clients. One baseline now supplies partial memory composition. Five-client capacity, in-process engine allocation ownership, Education's graphics-reload behavior and repeatable RAM/CPU/GPU gains remain **UNKNOWN / NOT_EXECUTED**. This note authorizes no game operations, settings changes, credentials/cache reads, CI or product implementation.

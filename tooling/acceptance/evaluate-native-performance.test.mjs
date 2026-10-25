@@ -437,6 +437,70 @@ test('related-process options reject incomplete or overlapping selection before 
   } finally { rmSync(folder, {recursive:true, force:true}); }
 });
 
+test('atomic writer preserves existing artifacts and refuses unusable output before timed sampling', {
+  skip: process.platform !== 'win32',
+}, () => {
+  const folder = mkdtempSync(join(tmpdir(), 'mivubi-output-preflight-'));
+  try {
+    const script = join(folder, 'verify.ps1');
+    writeFileSync(script, `param([string]$Collector, [string]$Folder, [int]$OtherPid)
+$ErrorActionPreference = 'Stop'
+$tokens=$null; $errors=$null
+$ast=[System.Management.Automation.Language.Parser]::ParseFile($Collector,[ref]$tokens,[ref]$errors)
+if ($errors.Count -ne 0) { throw 'Collector parse failed' }
+$function=$ast.Find({param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+  $node.Name -eq 'Write-ReportArtifact'}, $false)
+Invoke-Expression $function.Extent.Text
+$bytes=[System.Text.UTF8Encoding]::new($false).GetBytes("{}\n")
+$normal=Write-ReportArtifact -Directory $Folder -Name 'existing.json' -Bytes $bytes
+$original=[System.IO.File]::ReadAllText($normal)
+$collisionRefused=$false
+try { $null=Write-ReportArtifact -Directory $Folder -Name 'existing.json' -Bytes ([byte[]]@(1)) }
+catch { $collisionRefused=$true }
+if (-not $collisionRefused -or [System.IO.File]::ReadAllText($normal) -ne $original) {
+  throw 'An existing report was overwritten'
+}
+if (@(Get-ChildItem -LiteralPath $Folder -Filter '*.tmp' -Force).Count -ne 0) { throw 'Owned staging leaked after failed move' }
+$longRoot=Join-Path $Folder ('x' * (215 - $Folder.Length - 1))
+New-Item -ItemType Directory -Path $longRoot | Out-Null
+$longWritable=$false
+$owned=$null
+try {
+  $owned=Write-ReportArtifact -Directory $longRoot -Name 'probe.json' -Bytes $bytes
+  $longWritable=$true
+} catch { }
+finally { if ($null -ne $owned) { [System.IO.File]::Delete($owned) } }
+$earlyRefusal=$false
+if (-not $longWritable) {
+  $timer=[System.Diagnostics.Stopwatch]::StartNew()
+  try {
+    & $Collector -NativePid $OtherPid -IsolatedPid $PID -DurationSeconds 30 -SampleIntervalSeconds 5 -OutputDirectory $longRoot | Out-Null
+  } catch {
+    if ($_.Exception.Message -notmatch 'Cannot create and move a report') { throw }
+    $earlyRefusal=$true
+  }
+  if (-not $earlyRefusal -or $timer.Elapsed.TotalSeconds -gt 10) { throw 'Output failure was not detected before timed capture' }
+  if (@(Get-ChildItem -LiteralPath $longRoot -File -Force).Count -ne 0) { throw 'Early refusal left a partial report' }
+}
+@{writerPass=$true; longWritable=$longWritable; earlyRefusal=$earlyRefusal; minecraft='NOT_EXECUTED'} | ConvertTo-Json -Compress
+`, 'utf8');
+    const collector = fileURLToPath(new URL('./windows/collect-native-performance.ps1', import.meta.url));
+    for (const shell of ['powershell.exe', 'pwsh.exe']) {
+      const run = spawnSync(shell, ['-NoProfile','-File',script,'-Collector',collector,
+        '-Folder',folder,'-OtherPid',String(process.pid)],
+        {encoding:'utf8',timeout:20000,maxBuffer:1024 * 1024,windowsHide:true});
+      assert.equal(run.status, 0, run.stderr || shell);
+      const result = JSON.parse(run.stdout);
+      assert.equal(result.writerPass, true);
+      assert.equal(result.earlyRefusal, !result.longWritable);
+      // Only the test owns these deliberately created files.
+      rmSync(join(folder, 'existing.json'));
+      const longRoot = join(folder, 'x'.repeat(215 - folder.length - 1));
+      rmSync(longRoot, {recursive:true,force:true});
+    }
+  } finally { rmSync(folder, {recursive:true,force:true}); }
+});
+
 const fourSample = () => {
   const report = sample();
   report.schema = 3;
@@ -961,5 +1025,6 @@ if ($script:counterCalls -ne 4) { throw 'Unexpected counter query count' }
       rmSync(folder, {recursive: true, force: true});
     }
   });
+
 
 

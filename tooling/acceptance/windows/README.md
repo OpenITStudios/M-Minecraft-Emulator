@@ -860,6 +860,29 @@ captures from appearing as completed reports after ordinary write failures.
 A sudden process/OS termination can leave a temporary file; it must never
 be treated as a valid final report.
 
+Before the timed capture, the collector now resolves the output directory to
+an absolute filesystem path and exercises the SAME atomic writer with one
+GUID-named probe. It creates, closes and moves that owned file, then removes
+only the successful probe. An unusable directory, legacy path-length limit or
+move failure refuses before the capture timer starts. Existing files remain
+protected by CreateNew and non-replacing File.Move; cleanup tracks staging
+ownership so a failed CreateNew cannot delete a pre-existing path.
+
+This follows an observed 900-second session whose final staging pathname was
+273 characters: Windows PowerShell 5.1/.NET refused File.Open even though the
+output directory existed. That attempt has no persisted measurement and must
+not be credited as telemetry proof. Prefer a short output directory; the
+preflight does not enable OS-wide long-path settings, guarantee future free
+space or recover data from a later process/filesystem failure. PowerShell 7
+may support a path that legacy .NET refuses.
+
+The regression exercises the shared writer in both shells, preserves an
+existing artifact on collision, checks owned staging cleanup and, when the
+runtime rejects the long path, verifies the actual collector refuses before
+timed sampling without leaving a partial report. All 36 reviewer/Windows
+own-data tests pass. This is a diagnostic-output fix; game settings, profiles,
+pacing, admission and public schemas are unchanged.
+
 The Node reviewer also accepts legacy PowerShell 5.1 captures containing a
 single UTF-8 BOM, while applying the same exact JSON schema validation.
 The compatibility fix is for evidence files **only**; it cannot change
