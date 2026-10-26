@@ -1082,6 +1082,19 @@ fn prepare_registered_enrolled_for<const N: usize>() -> io::Result<PreparedEduca
 /// Fixed opt-in invocation in the existing manager, dispatched before creating its UI.
 /// No path/PID/options or hash override. Standard output is count/status metadata only.
 pub(super) fn maybe_run_startup_observation() -> bool {
+    #[cfg(feature = "lazy-tester-package")]
+    if std::env::args_os().skip(1).eq([OsString::from("--lazy-tester-initialize")]) {
+        use std::io::Write;
+        let report = std::thread::spawn(|| super::profile_binding(false)).join()
+            .unwrap_or_else(|_| Err(io::Error::other("Launcher initialization task failed")));
+        let ready = matches!(&report, Ok(binding) if binding.configured);
+        let value = match report {
+            Ok(binding) => serde_json::to_value(binding).unwrap(),
+            Err(error) => serde_json::json!({"error": error.to_string()}),
+        };
+        let _ = writeln!(io::stdout(), "{value}");
+        std::process::exit(if ready { 0 } else { 2 });
+    }
     if std::env::args_os().skip(1).eq([OsString::from("--lazy-tester-inspect-setup")]) {
         use std::io::Write;
         // Read only existing binding/directory/registry metadata; never provision or launch.

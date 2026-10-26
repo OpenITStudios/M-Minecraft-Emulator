@@ -237,6 +237,22 @@
     try { await checkBinding(importProfiles); }
     finally { busy = false; }
   }
+  async function initializeLaunchers() {
+    initializing=true;
+    try {
+      // Retry the canonical initializer before offering recovery; never replace saved data.
+      for(let attempt=0;attempt<3&&!disposed;attempt++){
+        if(attempt)await new Promise(resolve=>setTimeout(resolve,attempt*1000));
+        if(disposed)return;
+        await loadBinding();
+        if(binding?.configured){
+          await loadLocation();
+          if(binding?.configured){await refresh();return;}
+        }
+      }
+      if(!disposed)await refresh();
+    }finally{if(!disposed)initializing=false;}
+  }
   async function checkBinding(importProfiles = false) {
     try { binding = await lazyTester.binding(importProfiles); bindingIssue = ''; }
     catch (error) { binding = null; bindingIssue = String(error); }
@@ -277,10 +293,7 @@
     } finally { busy = false; }
   }
   onMount(() => {
-    mounted = true; void (async () => {
-      try { await loadBinding(); await loadLocation(); await refresh(); }
-      finally { initializing = false; }
-    })();
+    mounted = true; void initializeLaunchers();
     const interval = setInterval(() => { if (!document.hidden && binding?.configured) void refresh(); }, 2000);
     observer = new ResizeObserver(() => { dirty = true; }); observer.observe(viewport, {box: 'device-pixel-content-box'});
     observer.observe(stageSpace);
@@ -305,21 +318,21 @@
   <header class="lt-topbar">
     <a class="lt-brand" href="#play" on:click|preventDefault={() => navigate('workspace')}><span>LT</span>Lazy Tester</a>
     <nav aria-label="Main navigation"><button class:chosen={page==='workspace'} aria-current={page==='workspace'?'page':undefined} on:click={()=>navigate('workspace')}>Play</button><button class:chosen={page!=='workspace'} aria-current={page!=='workspace'?'page':undefined} on:click={()=>navigate('settings')}>Settings</button></nav>
-    <span class="lt-connection" role="status"><span class="lt-dot" class:waiting={!available||!binding?.configured}></span>{initializing?'Checking setup…':!binding?.configured?'Setup required':available?'Connected':'Unavailable'}</span>
+    <span class="lt-connection" role="status"><span class="lt-dot" class:waiting={!available||!binding?.configured}></span>{initializing?'Preparing launchers…':!binding?.configured?'Connection unavailable':available?'Connected':'Unavailable'}</span>
   </header>
   <div class="lt-layout" class:lt-settings-layout={page!=='workspace'}>
     {#if page!=='workspace'}<aside class="lt-sidebar"><h2>Settings</h2><nav aria-label="Settings navigation"><button class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}
     <main>
       <header class="lt-page-header" class:lt-play-header={page==='workspace'}>
-        <div><h1>{page==='workspace'?(detached?'Separate windows':active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':'Complete setup to start Minecraft'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p>{detached?'Your games keep running on the desktop.':active?'Click the game to play.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
+        <div><h1>{page==='workspace'?(detached?'Separate windows':active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p>{detached?'Your games keep running on the desktop.':active?'Click the game to play.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
         <div class="lt-header-actions"><button class="lt-secondary" disabled={busy||manualRefreshing||manualRefreshRequested} on:click={()=>manualRefreshRequested=true}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'}{#if detached}<button class="lt-secondary" disabled={busy||!available} on:click={returnToWorkspace}>Back to Play</button>{:else if runningCount}<button class="lt-secondary" disabled={busy} on:click={release}>Open in separate windows</button>{/if}{/if}</div>
       </header>
       {#if issue||connectionIssue}<div class="lt-alert" role="alert">{#if issue}<p>{issue}</p>{/if}{#if connectionIssue}<p>{connectionIssue}</p>{/if}</div>{/if}
-      {#if !binding?.configured}<section class="lt-binding" aria-label="Launcher setup"><div><strong>{initializing?'Checking profiles…':'Launcher setup required'}</strong><p>{bindingIssue||binding?.issue||'Choose a data folder for new launchers, or reconnect existing data.'}</p></div>{#if !initializing}<div class="lt-actions"><button disabled={busy||runningCount>0} on:click={()=>loadLocation('Choose')}>Set up launchers</button><button class="lt-secondary" disabled={busy||runningCount>0} on:click={()=>loadBinding(true)}>Use previous launcher</button><button class="lt-secondary" on:click={()=>navigate('storage')}>Locate existing data</button></div>{/if}</section>{/if}
+      {#if !binding?.configured&&!initializing}<section class="lt-binding" aria-label="Launcher recovery"><div><strong>Existing launcher connection could not be verified</strong><p>{bindingIssue||binding?.issue||'Automatic preparation could not finish. Existing data is preserved.'}</p></div><div class="lt-actions"><button disabled={busy||manualRefreshing||manualRefreshRequested} on:click={()=>manualRefreshRequested=true}>Retry connection</button><button class="lt-secondary" on:click={()=>navigate('storage')}>Data Storage</button></div></section>{/if}
       <section class="lt-workspace" hidden={page!=='workspace'} aria-label="Minecraft play area">
         <div class="lt-stage-space" bind:this={stageSpace}>
         <div class="lt-viewport" class:lt-desktop={detached} bind:this={viewport}>
-          {#if detached}<div class="lt-empty"><h2>Games are in separate windows</h2><p>Use the Windows taskbar, or choose a game below to open it in Play.</p><p>{runningCount} of 5 running</p></div>{:else if !active}<div class="lt-empty"><span>LT</span><h2>{initializing?'Checking setup…':!binding?.configured?'Set up your launchers':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{!binding?.configured?'Use the setup options above. Launch is unavailable until the data connection is verified.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
+          {#if detached}<div class="lt-empty"><h2>Games are in separate windows</h2><p>Use the Windows taskbar, or choose a game below to open it in Play.</p><p>{runningCount} of 5 running</p></div>{:else if !active}<div class="lt-empty"><span>LT</span><h2>{initializing?'Preparing launchers…':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Reconnecting saved data automatically. No setup is needed.':!binding?.configured?'Retry the connection. Your existing accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
         </div>
         </div>
         <div class="lt-games-heading"><span>Your games</span><span>{runningCount} of 5 running</span></div>
@@ -333,7 +346,7 @@
             </button>
           {/each}
         </div>
-        <p class="lt-help">{!binding?.configured?'Complete launcher setup before starting Minecraft.':detached?'Select a running game to bring it into Play.':'Click a game to switch. Other games keep running.'}</p>
+        <p class="lt-help">{!binding?.configured?'Saved launcher data is checked automatically.':detached?'Select a running game to bring it into Play.':'Click a game to switch. Other games keep running.'}</p>
         {#if previewIssue}<details class="lt-preview-details"><summary>Preview unavailable</summary><p>{previewIssue}</p></details>{/if}
       </section>
       {#if page==='settings'}

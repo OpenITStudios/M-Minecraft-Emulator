@@ -118,6 +118,12 @@ export function stageLocalApp(cwd, release, sha) {
   return {app,data,backup};
 }
 
+export function verifyInitializedBinding(output) {
+  const report=JSON.parse(output);
+  if(report.schema!==1||report.configured!==true||report.issue!==null)throw new Error('Launcher initialization was not confirmed; existing data was preserved');
+  return report;
+}
+
 function main() {
   if (process.argv.slice(2).some(arg => arg !== '--export-only') || process.argv.slice(2).length > 1) throw new Error('Only --export-only is supported');
   if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Windows x64 packaging is required');
@@ -146,6 +152,9 @@ function main() {
   const result = assembleCandidate(root,installer,sha,version,stamp);
   if (!process.argv.includes('--export-only')) {
     const local = stageLocalApp(root,resolve(target,'x86_64-pc-windows-msvc/release'),sha);
+    const initialized=execFileSync(resolve(local.app,'lazy-tester.exe'),['--lazy-tester-initialize'],{cwd:local.app,encoding:'utf8',windowsHide:true,timeout:60000,maxBuffer:32768});
+    verifyInitializedBinding(initialized);
+    console.log('Launcher initialization verified before delivery; no game was launched.');
     const shortcuts=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-File',resolve(developmentRoot,'tooling/windows-toolchain/create-app-shortcuts.ps1'),'-Root',root],{encoding:'utf8',windowsHide:true});
     console.log(`Local app: ${local.app}\nOpen Lazy Tester from Desktop or Start Menu. Existing data is preserved.\n${shortcuts.trim()}`);
   }

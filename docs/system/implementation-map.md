@@ -13,6 +13,13 @@ This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build
 
 ## Current Lazy Tester route — 26 October 2026
 
+The Svelte startup retries canonical launcher initialization/location reads before
+offering recovery; it does not turn a first missing report into a permanent setup
+screen. Product-only --lazy-tester-initialize uses the same profile_binding owner
+without launching games. Local package delivery executes and verifies that fixed
+mode after guarded App staging before announcing readiness. It adds no ready flag,
+profile store or installer mutation route; export-only builds do not run it.
+
 The Play viewport is a centered largest-fit 16:9 element inside a size-observed
 stage. That same rectangle feeds existing native placement/aperture and preview
 IPC; there is no independent aspect-ratio calculation in the Rust surface owner.

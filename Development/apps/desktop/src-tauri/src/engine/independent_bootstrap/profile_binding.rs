@@ -239,7 +239,7 @@ fn binding_status(metadata: io::Result<Vec<u8>>, validate: impl FnOnce(&[u8])->i
             Err(error) => (false,Some(format!("Saved launcher data could not be reopened: {error}. Existing data was preserved. Use Locate existing data or reconnect the previous launcher."))),
         },
         Err(error) if error.kind() == io::ErrorKind::NotFound =>
-            (false, Some("No saved launcher connection was found. Set up a data folder or connect existing launcher data.".into())),
+            (false, Some("No saved launcher connection was found after automatic reconnection. Existing data has not been replaced.".into())),
         Err(error) => (false, Some(format!("The saved launcher connection could not be read: {error}. Your data has been preserved."))),
     };
     ProfileBinding {

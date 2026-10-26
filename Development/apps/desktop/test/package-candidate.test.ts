@@ -3,9 +3,14 @@ import {execFileSync} from 'node:child_process';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,linkSync,lstatSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname,join,resolve} from 'node:path';
-import {assembleCandidate,sourceRevision,stageLocalApp} from '../scripts/package-lazy-tester.mjs';
+import {assembleCandidate,sourceRevision,stageLocalApp,verifyInitializedBinding} from '../scripts/package-lazy-tester.mjs';
 
 describe('Development source and distribution candidates',()=>{
+  it('requires confirmed launcher initialization before announcing a staged app is ready',()=>{
+    expect(verifyInitializedBinding(JSON.stringify({schema:1,required:true,configured:true,issue:null})).configured).toBe(true);
+    for(const report of [{schema:1,configured:false,issue:'missing'},{schema:2,configured:true,issue:null},{schema:1,configured:true,issue:'unverified'},{error:'preserved'}])expect(()=>verifyInitializedBinding(JSON.stringify(report))).toThrow();
+    expect(()=>verifyInitializedBinding('')).toThrow();
+  });
   it('stages only app payloads, preserves the location and old app, and never touches Data',()=>{
     const root=mkdtempSync(join(tmpdir(),'lazy-local-app-'));
     try {

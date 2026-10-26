@@ -42,11 +42,16 @@ try {
         if (command === 'plugin:event|listen') return callback;
         if (command === 'plugin:event|unlisten') return null;
         if (command === 'lazy_tester_profile_binding') {
+          if(new URL(location.href).searchParams.has('startup-retry')&&!window.__bindingCheckedOnce){
+            window.__bindingCheckedOnce=true;window.__finishBinding=()=>{};
+            return {schema:1,required:true,configured:false,issue:'No saved launcher connection was found. Set up a data folder or connect existing launcher data.'};
+          }
           if (window.__bindingFailure) throw window.__bindingFailure;
           if (!window.__finishBinding) await new Promise(resolve => { window.__finishBinding = resolve; });
           return {schema: 1, required: false, configured: true, issue: null};
         }
         if (command === 'lazy_tester_data_location') {
+          if(new URL(location.href).searchParams.has('startup-location-retry')&&!window.__locationCheckedOnce){window.__locationCheckedOnce=true;throw 'Saved data is temporarily unavailable.';}
           if (args.action === 'Locate') {
             if (window.__locateOutcome === 'invalid') throw 'The selected folder does not match the saved profile identities.';
             if (window.__locateOutcome === 'valid') {
@@ -84,6 +89,16 @@ try {
   const heading = name => page.getByRole('heading', {name, exact:true});
   const nav = name => page.getByRole('navigation', {name:'Main navigation'}).getByRole('button',{name,exact:true});
   const section = name => page.getByRole('navigation',{name:'Settings navigation'}).getByRole('button',{name,exact:true});
+  for(const query of ['startup-retry','startup-retry','startup-location-retry']){
+    await page.goto('http://lazy-tester.test/?'+query+'=1');
+    if(query==='startup-location-retry'){
+      await page.waitForFunction(()=>!!window.__finishBinding);await page.evaluate(()=>window.__finishBinding());
+    }
+    await heading('Ready when you are').waitFor({timeout:7000});
+    assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 1',exact:true}).isEnabled(),true,'startup must recover an available existing connection without setup clicks');
+    assert.equal(await page.getByRole('button',{name:'Set up launchers',exact:true}).count(),0);
+    assert.equal(await page.evaluate(()=>window.__calls.some(c=>c.args?.import===true||['Choose','Locate'].includes(c.args?.action)||c.args?.request?.operation==='Launch')),false);
+  }
   await page.goto('http://lazy-tester.test/');
   await page.waitForFunction(()=>!!window.__finishBinding);await page.evaluate(()=>window.__finishBinding());
   await heading('Ready when you are').waitFor();
@@ -192,7 +207,7 @@ try {
   // Existing-data recovery is still available without launching or deleting profiles.
   await page.goto('http://lazy-tester.test/?broken=1');await page.getByText('Saved profiles could not be verified.',{exact:true}).waitFor();
   assert.equal(await heading('Ready when you are').count(),0);
-  await heading('Set up your launchers').waitFor();
+  await heading('Connection needs attention').waitFor();
   assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 1',exact:true}).isDisabled(),true);
   // A transient first check must recover through a deliberate Refresh, without import/reset.
   await page.evaluate(()=>{window.__bindingFailure='';window.__locationFailure='';window.__finishBinding=()=>{};});
@@ -200,13 +215,13 @@ try {
   await heading('Ready when you are').waitFor();
   assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 1',exact:true}).isEnabled(),true);
   assert.equal(await page.evaluate(()=>window.__calls.some(c=>c.args?.import||c.args?.action==='Choose'||c.args?.request?.operation==='Launch')),false);
-  await page.goto('http://lazy-tester.test/?broken=1');await heading('Set up your launchers').waitFor();
-  await page.getByRole('region',{name:'Launcher setup'}).getByRole('button',{name:'Locate existing data',exact:true}).click();await heading('Data Storage').waitFor();
+  await page.goto('http://lazy-tester.test/?broken=1');await heading('Connection needs attention').waitFor();
+  await page.getByRole('region',{name:'Launcher recovery'}).getByRole('button',{name:'Data Storage',exact:true}).click();await heading('Data Storage').waitFor();
   await page.getByText('Connect or locate launcher data',{exact:true}).click();
   const locate=page.locator('.lt-location-options').getByRole('button',{name:'Locate existing data',exact:true});await locate.click();
   await page.evaluate(()=>{window.__locateOutcome='invalid';});await locate.click();await page.getByText('The selected folder does not match the saved profile identities.',{exact:true}).waitFor();
   await page.evaluate(()=>{window.__locateOutcome='valid';});await locate.click();await page.getByText('D:\\Recovered Data',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>window.__calls.some(c=>c.args?.action==='Choose'||['Launch','ClearProfileCache'].includes(c.args?.request?.operation))),false);
   assert.deepEqual(errors,[]);
-  console.log('PASS: compiled Svelte; largest-fit centered 16:9 at seven window sizes, bounded launcher dock, 16:9 previews and matching native IPC rectangles at 100/125/150% browser DPI; 30 seconds stable polling; queued launch/navigation; truthful setup; High/Low/FPS; desktop return; offline/data recovery. Mocked Tauri, no real game/data mutations.');
+  console.log('PASS: automatic startup reconnect across reloads and transient binding/location failures without setup/import/launch; largest-fit 16:9 at seven window sizes; matching native IPC at 100/125/150% browser DPI; 30 seconds stable polling; queued launch/navigation; High/Low/FPS; desktop return; offline/data recovery. Mocked Tauri, no real game/data mutations.');
 } finally { await browser.close(); }
