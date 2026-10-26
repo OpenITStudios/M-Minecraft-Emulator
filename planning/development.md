@@ -90,6 +90,15 @@ root-cleanup-receipt.json. Initialized submodule and second worktree untouched.
 
 ## Remaining work and evidence ceiling
 
+Clean c89d428 Windows/NSIS construction and guarded local App/root-starter staging
+completed. No source game/installer execution. The explicit original-data migration
+then correctly stopped before creating Launchers: MC03/04/05 each contain the
+Windows WinINet Content.IE5 external junction. Originals remained intact. Source
+now handles only that exact cache mount-point path by creating an empty ordinary
+destination cache folder without following the external target. Unknown links
+remain refused. A real disposable junction regression and all six store tests PASS.
+New clean build/staging/migration/actual Desktop checks are still pending.
+
 Next: commit clean source, construct Windows/NSIS candidate, guard/stage App and
 root starter, run the fixed approved project-Data migration, then repeatedly verify
 actual Explorer/Desktop startup and identical source/native-Desktop data opening.

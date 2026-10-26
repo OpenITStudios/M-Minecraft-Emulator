@@ -552,18 +552,56 @@ fn publish_catalog(root: &Path, stores: &[SlotStorage]) -> io::Result<()> {
 
 // CopyFileW/SHCopyKeyW copy the same launcher's existing storage opaquely;
 // account values and world contents never enter diagnostics or a second profile.
+fn portable_cache_junction(base: &Path, path: &Path) -> io::Result<bool> {
+    if !base
+        .file_name()
+        .is_some_and(|name| name.eq_ignore_ascii_case("Local"))
+        || !path.strip_prefix(base).ok().is_some_and(|relative| {
+            relative
+                .to_string_lossy()
+                .replace('\\', "/")
+                .eq_ignore_ascii_case("Microsoft/Windows/INetCache/Content.IE5")
+        })
+    {
+        return Ok(false);
+    }
+    let file = OpenOptions::new()
+        .access_mode(FILE_READ_ATTRIBUTES)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS)
+        .open(path)?;
+    let mut tag: FILE_ATTRIBUTE_TAG_INFO = unsafe { mem::zeroed() };
+    if unsafe {
+        GetFileInformationByHandleEx(
+            file.as_raw_handle() as _,
+            FileAttributeTagInfo,
+            &mut tag as *mut _ as _,
+            mem::size_of_val(&tag) as u32,
+        )
+    } == 0
+    {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(tag.ReparseTag == 0xa0000003 && tag.FileAttributes & FILE_ATTRIBUTE_DIRECTORY != 0)
+}
 fn check_copy_tree(path: &Path) -> io::Result<()> {
+    check_copy_tree_at(path, path)
+}
+fn check_copy_tree_at(base: &Path, path: &Path) -> io::Result<()> {
     use std::os::windows::fs::MetadataExt;
     for entry in std::fs::read_dir(path)? {
         let entry = entry?;
         let metadata = std::fs::symlink_metadata(entry.path())?;
         if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            if portable_cache_junction(base, &entry.path())? {
+                continue;
+            }
             return Err(invalid(
                 "Existing launcher data contains a link; migration was not started",
             ));
         }
         if metadata.is_dir() {
-            check_copy_tree(&entry.path())?;
+            check_copy_tree_at(base, &entry.path())?;
         } else if !metadata.is_file() {
             return Err(invalid("Unsupported launcher data entry"));
         }
@@ -571,6 +609,9 @@ fn check_copy_tree(path: &Path) -> io::Result<()> {
     Ok(())
 }
 fn copy_tree(source: &Path, destination: &Path) -> io::Result<()> {
+    copy_tree_at(source, source, destination)
+}
+fn copy_tree_at(base: &Path, source: &Path, destination: &Path) -> io::Result<()> {
     use windows_sys::Win32::Storage::FileSystem::CopyFileW;
     let _source = pin_chain(source)?;
     let _destination = pin_chain(destination)?;
@@ -582,6 +623,11 @@ fn copy_tree(source: &Path, destination: &Path) -> io::Result<()> {
             & FILE_ATTRIBUTE_REPARSE_POINT
             != 0
         {
+            if portable_cache_junction(base, &entry.path())? {
+                // Do not follow/copy Windows' external WinINet cache target.
+                std::fs::create_dir(&target)?;
+                continue;
+            }
             return Err(invalid("Launcher data changed during migration"));
         }
         if metadata.is_dir() {
@@ -592,7 +638,7 @@ fn copy_tree(source: &Path, destination: &Path) -> io::Result<()> {
                 }
                 Err(e) => return Err(e),
             }
-            copy_tree(&entry.path(), &target)?;
+            copy_tree_at(base, &entry.path(), &target)?;
         } else if metadata.is_file() {
             let source = pin_hive(&entry.path())?;
             if unsafe {
@@ -930,6 +976,42 @@ mod tests {
                 std::fs::read(new.private_path.join("Roaming/world-fixture")).unwrap()
             );
         }
+    }
+    #[test]
+    fn migration_replaces_only_the_known_wininet_junction_without_following_it() {
+        let fixture = Fixture::new();
+        let local = fixture.root.join("Local");
+        let external = fixture.root.join("external");
+        std::fs::create_dir(&external).unwrap();
+        std::fs::write(external.join("outside-fixture"), b"must stay outside").unwrap();
+        let link = local.join("Microsoft/Windows/INetCache/Content.IE5");
+        std::fs::create_dir_all(link.parent().unwrap()).unwrap();
+        let status = std::process::Command::new("cmd.exe")
+            .args(["/d", "/c", "mklink", "/J"])
+            .arg(&link)
+            .arg(&external)
+            .output()
+            .unwrap();
+        assert!(status.status.success());
+        check_copy_tree(&local).unwrap();
+        let destination = fixture.root.join("Copied");
+        std::fs::create_dir(&destination).unwrap();
+        copy_tree(&local, &destination).unwrap();
+        let copied = destination.join("Microsoft/Windows/INetCache/Content.IE5");
+        assert!(std::fs::read_dir(&copied).unwrap().next().is_none());
+        assert_eq!(
+            std::fs::read(external.join("outside-fixture")).unwrap(),
+            b"must stay outside"
+        );
+        assert!(!portable_cache_junction(&local, &local.join("Unknown")).unwrap());
+        let unknown = std::process::Command::new("cmd.exe")
+            .args(["/d", "/c", "mklink", "/J"])
+            .arg(local.join("Unknown"))
+            .arg(&external)
+            .output()
+            .unwrap();
+        assert!(unknown.status.success());
+        assert!(check_copy_tree(&local).is_err());
     }
     struct Fixture {
         root: PathBuf,
