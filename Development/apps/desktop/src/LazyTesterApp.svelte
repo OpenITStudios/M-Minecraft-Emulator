@@ -28,7 +28,7 @@
   let queuedPage: Page | null = null;
   let initializing = true, checkingStorage = false, storageCheckedAt = '';
   let active: ProfileSlot | null = null, requested: ProfileSlot | null = null, queued: ProfileSlot | null = null;
-  let viewport: HTMLDivElement, observer: ResizeObserver | undefined;
+  let viewport: HTMLDivElement, stageSpace: HTMLDivElement, observer: ResizeObserver | undefined;
   let busy = false, refreshing = false, resizing = false, available = false;
   let manualRefreshRequested=false, manualRefreshing=false;
   let queuedLaunch:ProfileSlot|null=null;
@@ -283,6 +283,7 @@
     })();
     const interval = setInterval(() => { if (!document.hidden && binding?.configured) void refresh(); }, 2000);
     observer = new ResizeObserver(() => { dirty = true; }); observer.observe(viewport, {box: 'device-pixel-content-box'});
+    observer.observe(stageSpace);
     for (const node of images.values()) observer.observe(node);
     const changed = () => { dirty = true; };
     window.addEventListener('resize', changed); document.addEventListener('visibilitychange', changed);
@@ -309,13 +310,17 @@
   <div class="lt-layout" class:lt-settings-layout={page!=='workspace'}>
     {#if page!=='workspace'}<aside class="lt-sidebar"><h2>Settings</h2><nav aria-label="Settings navigation"><button class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}
     <main>
-      <header class="lt-page-header"><h1>{page==='workspace'?'Play':page==='storage'?'Data Storage':'General'}</h1><button class="lt-secondary" disabled={busy||manualRefreshing||manualRefreshRequested} on:click={()=>manualRefreshRequested=true}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button></header>
+      <header class="lt-page-header" class:lt-play-header={page==='workspace'}>
+        <div><h1>{page==='workspace'?(detached?'Separate windows':active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':'Complete setup to start Minecraft'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p>{detached?'Your games keep running on the desktop.':active?'Click the game to play.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
+        <div class="lt-header-actions"><button class="lt-secondary" disabled={busy||manualRefreshing||manualRefreshRequested} on:click={()=>manualRefreshRequested=true}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'}{#if detached}<button class="lt-secondary" disabled={busy||!available} on:click={returnToWorkspace}>Back to Play</button>{:else if runningCount}<button class="lt-secondary" disabled={busy} on:click={release}>Open in separate windows</button>{/if}{/if}</div>
+      </header>
       {#if issue||connectionIssue}<div class="lt-alert" role="alert">{#if issue}<p>{issue}</p>{/if}{#if connectionIssue}<p>{connectionIssue}</p>{/if}</div>{/if}
       {#if !binding?.configured}<section class="lt-binding" aria-label="Launcher setup"><div><strong>{initializing?'Checking profiles…':'Launcher setup required'}</strong><p>{bindingIssue||binding?.issue||'Choose a data folder for new launchers, or reconnect existing data.'}</p></div>{#if !initializing}<div class="lt-actions"><button disabled={busy||runningCount>0} on:click={()=>loadLocation('Choose')}>Set up launchers</button><button class="lt-secondary" disabled={busy||runningCount>0} on:click={()=>loadBinding(true)}>Use previous launcher</button><button class="lt-secondary" on:click={()=>navigate('storage')}>Locate existing data</button></div>{/if}</section>{/if}
       <section class="lt-workspace" hidden={page!=='workspace'} aria-label="Minecraft play area">
-        <header class="lt-stage-header"><div><h2>{detached?'Separate windows':active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':'Complete setup to start Minecraft'}</h2><p>{detached?'Your games keep running on the desktop.':active?'Click the game to play.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p></div>{#if detached}<button class="lt-secondary" disabled={busy||!available} on:click={returnToWorkspace}>Back to Play</button>{:else if runningCount}<button class="lt-secondary" disabled={busy} on:click={release}>Open in separate windows</button>{/if}</header>
+        <div class="lt-stage-space" bind:this={stageSpace}>
         <div class="lt-viewport" class:lt-desktop={detached} bind:this={viewport}>
           {#if detached}<div class="lt-empty"><h2>Games are in separate windows</h2><p>Use the Windows taskbar, or choose a game below to open it in Play.</p><p>{runningCount} of 5 running</p></div>{:else if !active}<div class="lt-empty"><span>LT</span><h2>{initializing?'Checking setup…':!binding?.configured?'Set up your launchers':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{!binding?.configured?'Use the setup options above. Launch is unavailable until the data connection is verified.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
+        </div>
         </div>
         <div class="lt-games-heading"><span>Your games</span><span>{runningCount} of 5 running</span></div>
         <div class="lt-filmstrip" aria-label="Minecraft launchers">
@@ -323,7 +328,7 @@
             <button class="lt-card" class:selected={active===profile.slot&&!detached} aria-pressed={active===profile.slot&&!detached} aria-label={(profile.state==='RUNNING'?'Open ':'Launch ')+'Minecraft - '+profile.slot} disabled={busy||!available||!binding?.configured||['STARTING','NOT_RESPONDING'].includes(profile.state)} on:click={()=>profile.state==='RUNNING'?select(profile.slot):launch(profile.slot)}>
               <strong>Minecraft - {profile.slot}{active===profile.slot&&!detached?' ✓':''}</strong>
               <span class="lt-card-picture" use:image={profile.slot} aria-hidden="true">{profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':'▷ Launch'}</span>
-              <small>{active===profile.slot&&!detached?'Selected':labels[profile.state]}</small>
+              <small>{active===profile.slot&&!detached?'Playing':profile.state==='RUNNING'&&!detached?'Running in background':labels[profile.state]}</small>
               {#if profile.issue}<small class="lt-error">{profile.issue}</small>{/if}
             </button>
           {/each}

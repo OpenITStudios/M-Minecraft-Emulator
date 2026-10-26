@@ -3,7 +3,43 @@
 Local only; main/release publication untouched; GitHub Actions entirely OFF.
 VMware, Sandboxie and RAM/renderer experiments remain PAUSED.
 
-## Current bounded outcome — quiet polling, honest setup and normal shortcuts
+## Current bounded outcome — comfortable game proportions
+
+Parent efce0be722ed6251a1c0803c1d74b15c9ad13845. The user reports the staged
+application now runs normally and approved a comfortable largest-fit 16:9 layout.
+This is user-reported operation, not independent gameplay/license acceptance.
+
+LazyTesterApp.svelte now centers the existing native viewport inside a measured
+stage. The viewport fits both available dimensions at 16:9; the same DOM rectangle
+still supplies native placement, aperture, input and preview IPC. Observing the
+outer stage also catches center-position changes when the game is width-limited.
+No second geometry authority, bitmap stretching or game-renderer change is added.
+The duplicate Play/stage headings are combined, leaving more height for the game.
+The bottom five-session dock stays visible, caps its width at 1320 logical pixels,
+and uses 16:9 preview destinations with clearer Playing/background status.
+Body and card text are larger; existing Windows DPI conversion is retained.
+
+The initial normal window targets 1280x900 logical pixels, without auto-maximizing.
+app_bootstrap.rs bounds its physical client size and minimum against the current
+monitor work area, decorations, taskbar and DPI, and centers the outer window.
+Normal Windows maximize remains available. Window history and a separate UI-scale
+preference are not implemented in this bounded change; Minecraft's own UI scale
+and all graphics/FPS/runtime data settings are preserved.
+
+Typecheck, 33 frontend tests and production frontend build PASS. Structure/G0 and
+Lazy Tester installer source contract PASS. The targeted Rust startup-size test
+PASS for large/small work areas and 150% DPI; no live game is touched by that test.
+Compiled-frontend regression checks largest-fit 16:9, centering, no cropping,
+bounded dock and proportional previews across seven window sizes, including
+3440x1440 and a tall window. Native IPC uses the visible rectangle; browser DPI
+emulation verifies 125/150% conversion inputs. These are mocked native checks,
+not real Windows mouse/game acceptance. Existing 30-second quiet-polling and
+settings/setup/session-switch regressions remain required.
+
+Package/staging result and exact product source will be recorded after the clean
+source build. No running user process is terminated or game controlled.
+
+## Previous outcome — quiet polling, honest setup and normal shortcuts
 
 Parent607294376a96a603e8dfe5181729c335d6c63b03. User reported the staged UI was
 blocked at setup, directed them to RUN.cmd and flickered during automatic checks.
@@ -87,6 +123,7 @@ game shutdown and data migration remain unavailable. Preserve all prior data and
 preferences, native payload pins, initialized submodule and second worktree.
 NSIS construction is not installer acceptance. No public release or CI operation.
 
-Next: after guarded staging, verify startup through the normal shortcut and then
-observe real two-session use. Microsoft sign-in remains manual; gameplay/license,
-native flicker and multiplayer acceptance are NOT_EXECUTED for this revision.
+Next: verify the new 16:9 layout through the normal shortcut on the user's display,
+including maximize/restore and mouse alignment during normal session switching.
+Real game/DPI interaction, gameplay/license and multiplayer acceptance remain
+NOT_EXECUTED for the new layout revision.

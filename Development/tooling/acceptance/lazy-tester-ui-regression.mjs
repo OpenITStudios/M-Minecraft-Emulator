@@ -125,14 +125,27 @@ try {
   assert.equal(await page.getByRole('button',{name:'Clear all data…',exact:true}).isDisabled(),true);
   assert.equal(await page.getByRole('button',{name:'Restore…',exact:true}).isDisabled(),true);
   assert.match(await advanced.getAttribute('open')??'',/^$/);
-  for(const size of [{width:920,height:620},{width:1366,height:900}]){
+  for(const size of [{width:920,height:620},{width:1280,height:900},{width:1366,height:728},{width:1920,height:1080},{width:2560,height:1378},{width:3440,height:1440},{width:1000,height:1200}]){
     await page.setViewportSize(size);
     await nav('Play').click();await heading('Ready when you are').waitFor();
     assert.equal(await page.locator('.lt-card').count(),5);
     assert.equal(await page.evaluate(()=>document.querySelector('.lt-filmstrip').getBoundingClientRect().bottom>innerHeight),false);
+    const geometry=await page.evaluate(()=>{
+      const rect=selector=>{const r=document.querySelector(selector).getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,bottom:r.bottom,right:r.right};};
+      return {stage:rect('.lt-stage-space'),game:rect('.lt-viewport'),dock:rect('.lt-filmstrip'),previews:[...document.querySelectorAll('.lt-card-picture')].map(e=>({width:e.clientWidth,height:e.clientHeight}))};
+    });
+    const {stage,game,dock,previews}=geometry;
+    assert.ok(Math.abs(game.width-game.height*16/9)<1,'game area must stay 16:9');
+    assert.ok(Math.abs(game.width-Math.min(stage.width,stage.height*16/9))<1,'game area must use the largest fit');
+    assert.ok(Math.abs(game.x+game.width/2-stage.x-stage.width/2)<1,'game must be centered horizontally');
+    assert.ok(Math.abs(game.y+game.height/2-stage.y-stage.height/2)<1,'game must be centered vertically');
+    assert.ok(game.x>=stage.x&&game.y>=stage.y&&game.right<=stage.right+1&&game.bottom<=stage.bottom+1,'game must fit without cropping');
+    assert.ok(dock.width<=1320,'launcher cards must not stretch across ultrawide screens');
+    assert.ok(previews.every(p=>Math.abs(p.width-p.height*16/9)<2),'previews must stay 16:9');
     await nav('Settings').click();await section('Data Storage').click();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   }
+  await page.setViewportSize({width:1280,height:900});
   // Preserve navigation clicks while an inspect is in flight.
   await page.evaluate(()=>{window.__holdInspect=true;});await page.waitForFunction(()=>!!window.__finishInspect);
   await nav('Settings').click();await section('General').click();
@@ -149,6 +162,26 @@ try {
   await nav('Play').click();await page.getByRole('button',{name:'Open in separate windows',exact:true}).click();
   await heading('Games are in separate windows').waitFor();assert.equal(await page.locator('.lt-card').count(),5);
   await page.getByRole('button',{name:'Back to Play',exact:true}).click();await page.getByRole('button',{name:'Open in separate windows',exact:true}).waitFor();
+  await page.waitForTimeout(200);
+  const placement=await page.evaluate(()=>{
+    const rect=document.querySelector('.lt-viewport').getBoundingClientRect();
+    const call=window.__calls.filter(c=>c.command==='lazy_tester_present').at(-1);
+    return {rect:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},viewport:call.args.viewport};
+  });
+  for(const key of ['x','y','width','height'])assert.equal(placement.viewport[key],placement.rect[key],'native placement must use the visible game rectangle');
+  assert.equal(placement.viewport.pixelRatio,1);
+  const cdp=await page.context().newCDPSession(page);
+  for(const scale of [1.25,1.5]){
+    await cdp.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:scale,mobile:false});
+    await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
+    await page.waitForFunction(scale=>window.__calls.filter(c=>c.command==='desktop_update_workspace').at(-1)?.args.viewport.pixelRatio===scale,scale);
+    const scaled=await page.evaluate(()=>{
+      const r=document.querySelector('.lt-viewport').getBoundingClientRect();
+      return {rect:{x:r.x,y:r.y,width:r.width,height:r.height},viewport:window.__calls.filter(c=>c.command==='desktop_update_workspace').at(-1).args.viewport};
+    });
+    for(const key of ['x','y','width','height'])assert.equal(scaled.viewport[key],scaled.rect[key],'DPI updates must preserve the exact input/placement rectangle');
+  }
+  await cdp.send('Emulation.clearDeviceMetricsOverride');await cdp.detach();
   const captures=fileURLToPath(new URL('../../../workspace/runs/lazy-tester-ui-regression/',import.meta.url));await mkdir(captures,{recursive:true});
   await page.screenshot({path:path.join(captures,'play.png')});
   await nav('Settings').click();await section('Data Storage').click();await page.locator('.lt-advanced summary').click();
@@ -175,5 +208,5 @@ try {
   await page.evaluate(()=>{window.__locateOutcome='valid';});await locate.click();await page.getByText('D:\\Recovered Data',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>window.__calls.some(c=>c.args?.action==='Choose'||['Launch','ClearProfileCache'].includes(c.args?.request?.operation))),false);
   assert.deepEqual(errors,[]);
-  console.log('PASS: compiled Svelte; 30 seconds stable polling with no control/label/geometry churn; queued launch/navigation; truthful setup state; High/Low/FPS; desktop return; offline/data recovery. Mocked Tauri, no real game/data mutations.');
+  console.log('PASS: compiled Svelte; largest-fit centered 16:9 at seven window sizes, bounded launcher dock, 16:9 previews and matching native IPC rectangles at 100/125/150% browser DPI; 30 seconds stable polling; queued launch/navigation; truthful setup; High/Low/FPS; desktop return; offline/data recovery. Mocked Tauri, no real game/data mutations.');
 } finally { await browser.close(); }

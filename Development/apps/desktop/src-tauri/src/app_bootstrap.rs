@@ -21,6 +21,7 @@ pub fn run() {
             #[cfg(windows)] {
                 use tauri::Manager;
                 let window=app.get_webview_window("main").ok_or_else(||std::io::Error::other("Main workspace window missing"))?;
+                fit_initial_window(&window)?;
                 workspace_foreground::start(window.as_ref().window())?;
             }
             Ok(())
@@ -102,6 +103,54 @@ pub fn run() {
     // Unhook from the worker's installation thread before exit.
     crate::engine::instance_focus_events::shutdown();
     result.expect("failed to run Minecraft Instance Manager desktop runtime");
+}
+
+#[cfg(windows)]
+fn fit_initial_window(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    if let Some(monitor) = window.current_monitor()? {
+        let work = monitor.work_area();
+        let outer = window.outer_size()?;
+        let inner = window.inner_size()?;
+        let frame = (outer.width.saturating_sub(inner.width), outer.height.saturating_sub(inner.height));
+        let (width, height) = initial_window_size(
+            (work.size.width, work.size.height), frame, monitor.scale_factor(),
+        );
+        let scale = monitor.scale_factor();
+        window.set_min_size(Some(tauri::PhysicalSize::new(
+            width.min((920.0 * scale).round() as u32),
+            height.min((620.0 * scale).round() as u32),
+        )))?;
+        window.set_size(tauri::PhysicalSize::new(width, height))?;
+        let outer = window.outer_size()?;
+        window.set_position(tauri::PhysicalPosition::new(
+            work.position.x + work.size.width.saturating_sub(outer.width) as i32 / 2,
+            work.position.y + work.size.height.saturating_sub(outer.height) as i32 / 2,
+        ))?;
+    }
+    Ok(())
+}
+
+#[cfg(any(windows, test))]
+fn initial_window_size(work: (u32, u32), frame: (u32, u32), scale: f64) -> (u32, u32) {
+    // Leave a small work-area margin; include decorations and taskbar at every DPI.
+    let margin = (24.0 * scale).round() as u32;
+    (
+        ((1280.0 * scale).round() as u32).min(work.0.saturating_sub(frame.0 + margin)).max(1),
+        ((900.0 * scale).round() as u32).min(work.1.saturating_sub(frame.1 + margin)).max(1),
+    )
+}
+
+#[cfg(test)]
+mod initial_window_tests {
+    use super::initial_window_size;
+
+    #[test]
+    fn initial_window_fits_work_area_and_dpi() {
+        assert_eq!(initial_window_size((2560, 1400), (16, 39), 1.0), (1280, 900));
+        assert_eq!(initial_window_size((1366, 728), (16, 39), 1.0), (1280, 665));
+        assert_eq!(initial_window_size((1920, 1040), (24, 58), 1.5), (1860, 946));
+        assert_eq!(initial_window_size((800, 560), (16, 39), 1.0), (760, 497));
+    }
 }
 
 #[cfg(windows)]

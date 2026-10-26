@@ -1,6 +1,6 @@
 :root{
   font-family:"Segoe UI",sans-serif;
-  font-size:14px;
+  font-size:15px;
   color:#edf0f7;
   background:#14171e;
   font-synthesis:none}
@@ -56,7 +56,7 @@
                           align-items:center;
                           gap:38px;
                           padding:0 24px;
-                          height:64px;
+                          height:56px;
                           flex-shrink:0;
                           background:var(--lt-panel);
                           border-bottom:1px solid var(--lt-line)}
@@ -144,14 +144,20 @@
                                                               justify-content:space-between;
                                                               align-items:center;
                                                               gap:16px;
-                                                              margin-bottom:20px;
+                                                              margin-bottom:12px;
                                                               flex-shrink:0}
                                                               .lt-page-header h1{
                                                                 margin:0;
                                                                 font-size:24px;
                                                                 font-weight:600;
                                                                 letter-spacing:-.4px}
-                                                                .lt-page-header>button{
+                                                                .lt-header-actions{
+                                                                  display:flex;
+                                                                  align-items:center;
+                                                                  gap:8px}
+                                                                .lt-play-header h1{
+                                                                  font-size:20px}
+                                                                .lt-page-header button{
                                                                   font-size:12px;
                                                                   padding:7px 11px}
                                                                   .lt-app h2{
@@ -163,12 +169,12 @@
                                                                       font-weight:600;
                                                                       margin:0}
                                                                       .lt-app p{
-                                                                        font-size:13px;
+                                                                        font-size:14px;
                                                                         line-height:1.55;
                                                                         color:var(--lt-muted);
                                                                         margin:6px 0}
                                                                         .lt-app small{
-                                                                          font-size:12px;
+                                                                          font-size:13px;
                                                                           color:var(--lt-muted);
                                                                           font-weight:400}
                                                                           .lt-group>h2 small{
@@ -280,19 +286,19 @@
                                                                                                                                     min-height:0;
                                                                                                                                     display:flex;
                                                                                                                                     flex-direction:column}
-                                                                                                                                    .lt-stage-header{
-                                                                                                                                      display:flex;
-                                                                                                                                      justify-content:space-between;
-                                                                                                                                      align-items:center;
-                                                                                                                                      gap:16px;
-                                                                                                                                      margin-bottom:13px}
-                                                                                                                                      .lt-stage-header h2{
-                                                                                                                                        margin:0}
-                                                                                                                                        .lt-stage-header button{
-                                                                                                                                          font-size:12px}
-                                                                                                                                          .lt-viewport{
+                                                                                                                                          .lt-stage-space{
                                                                                                                                             flex:1;
                                                                                                                                             min-height:140px;
+                                                                                                                                            container-type:size;
+                                                                                                                                            display:grid;
+                                                                                                                                            place-items:center;
+                                                                                                                                            background:#101319;
+                                                                                                                                            border-radius:9px}
+                                                                                                                                          .lt-viewport{
+                                                                                                                                            /* This exact element also supplies native placement and input bounds. */
+                                                                                                                                            width:min(100cqw,calc(100cqh * 16 / 9));
+                                                                                                                                            aspect-ratio:16/9;
+                                                                                                                                            flex:none;
                                                                                                                                             border:1px solid var(--lt-line);
                                                                                                                                             border-radius:9px;
                                                                                                                                             background:#101319;
@@ -316,10 +322,14 @@
                                                                                                                                                     .lt-games-heading{
                                                                                                                                                       display:flex;
                                                                                                                                                       justify-content:space-between;
-                                                                                                                                                      margin:15px 0 9px;
-                                                                                                                                                      font-size:12px;
+                                                                                                                                                        margin:12px auto 8px;
+                                                                                                                                                        width:min(100%,1320px);
+                                                                                                                                                        flex-shrink:0;
+                                                                                                                                                        font-size:13px;
                                                                                                                                                       color:var(--lt-muted)}
                                                                                                                                                       .lt-filmstrip{
+                                                                                                                                                          width:min(100%,1320px);
+                                                                                                                                                          margin-inline:auto;
                                                                                                                                                         display:grid;
                                                                                                                                                         grid-template-columns:repeat(5,minmax(0,1fr));
                                                                                                                                                         gap:9px;
@@ -334,22 +344,24 @@
                                                                                                                                                           padding:10px;
                                                                                                                                                           text-align:left;
                                                                                                                                                           min-width:0;
-                                                                                                                                                          font-size:13px}
+                                                                                                                                                          font-size:14px}
                                                                                                                                                           .lt-filmstrip .lt-card.selected{
                                                                                                                                                             border-color:var(--lt-accent);
                                                                                                                                                             background:#303a5c}
                                                                                                                                                             .lt-card-picture{
                                                                                                                                                               display:grid;
                                                                                                                                                               place-items:center;
-                                                                                                                                                              height:clamp(48px,9vh,85px);
-                                                                                                                                                              width:100%;
+                                                                                                                                                              aspect-ratio:16/9;
+                                                                                                                                                              height:auto;
+                                                                                                                                                              width:min(100%,calc(clamp(48px,9vh,100px) * 16 / 9));
+                                                                                                                                                              margin-inline:auto;
                                                                                                                                                               border-radius:5px;
                                                                                                                                                               background:#252c3a;
                                                                                                                                                               color:var(--lt-muted);
                                                                                                                                                               font-size:16px;
                                                                                                                                                               font-weight:400}
                                                                                                                                                               .lt-card small{
-                                                                                                                                                                font-size:12px;
+                                                                                                                                                                font-size:13px;
                                                                                                                                                                 overflow-wrap:anywhere}
                                                                                                                                                                 .lt-preview-details{
                                                                                                                                                                   font-size:12px;
@@ -393,9 +405,7 @@
                                                                                                                                                                                       .lt-topbar{
                                                                                                                                                                                         gap:25px}
                                                                                                                                                                                         .lt-card-picture{
-                                                                                                                                                                                          height:55px}
-                                                                                                                                                                                          .lt-stage-header p{
-                                                                                                                                                                                            font-size:12px}
+                                                                                                                                                                                          width:min(100%,98px)}
                                                                                                                                                                                           }
                                                                                                                                                                                           @media(max-height:700px){
                                                                                                                                                                                             .lt-topbar{
@@ -405,10 +415,8 @@
                                                                                                                                                                                                 padding-bottom:14px}
                                                                                                                                                                                                 .lt-page-header{
                                                                                                                                                                                                   margin-bottom:12px}
-                                                                                                                                                                                                  .lt-stage-header{
-                                                                                                                                                                                                    margin-bottom:10px}
                                                                                                                                                                                                     .lt-card-picture{
-                                                                                                                                                                                                      height:42px}
+                                                                                                                                                                                                      width:min(100%,75px)}
                                                                                                                                                                                                       .lt-empty>span{
                                                                                                                                                                                                         display:none}
                                                                                                                                                                                                       }

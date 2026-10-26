@@ -13,6 +13,13 @@ This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build
 
 ## Current Lazy Tester route — 26 October 2026
 
+The Play viewport is a centered largest-fit 16:9 element inside a size-observed
+stage. That same rectangle feeds existing native placement/aperture and preview
+IPC; there is no independent aspect-ratio calculation in the Rust surface owner.
+The five-session dock is width-bounded and preview destinations also use 16:9.
+app_bootstrap.rs bounds the initial 1280x900 normal window to monitor work area,
+frame and DPI; maximize remains an ordinary Windows action.
+
 Automatic UI inspection is separate from manual Refresh feedback. Unchanged
 snapshots do not mark native geometry dirty or disable launcher cards; navigation
 and launch clicks during inspection are queued. Blocked setup never displays Ready.
