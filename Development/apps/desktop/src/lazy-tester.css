@@ -442,3 +442,5 @@
 .lt-delete-ack {display:flex;gap:10px;align-items:flex-start;line-height:1.5}
 .lt-delete-ack input[type="checkbox"] {flex:0 0 auto;width:18px;height:18px;padding:0;margin:2px 0 0;accent-color:var(--lt-accent)}
 .lt-delete-confirm button.lt-danger {background:#943641;color:#fff;border-color:#b34a56}
+.lt-audio-toggle { display:flex; align-items:center; gap:8px; white-space:nowrap; cursor:pointer; }
+.lt-audio-toggle input { width:18px; height:18px; accent-color:#bfc3ff; }
