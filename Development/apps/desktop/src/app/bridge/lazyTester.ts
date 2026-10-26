@@ -14,6 +14,7 @@ export interface ProfileStorage {
   slot: ProfileSlot; bytes: number; files: number; partial: boolean;
   disk: {availableBytes: number; totalBytes: number} | null;
   cache: {bytes: number; files: number; partial: boolean; canClear: boolean; issue: string | null};
+  gameSettings?: {hasSettings:boolean; backupAvailable:boolean; canReset:boolean; canRestore:boolean; issue:string|null};
 }
 export type GraphicsPreset = 'High' | 'Low';
 export interface SettingsReport {graphicsPresets?:GraphicsPreset[]; activeFps:number; backgroundFps:number; renderDistanceChunks:number; canApplyPreset:boolean; changedProfiles:number|null}
@@ -70,7 +71,7 @@ export function parseSession(value: unknown): SessionSnapshot {
   if (value.storage !== null) {
     if (!Array.isArray(value.storage) || value.storage.length !== 5) throw new TypeError('Invalid storage response');
     value.storage.forEach((storage: unknown, index: number) => {
-      if (!record(storage) || !exact(storage, ['slot', 'bytes', 'files', 'partial', 'disk', 'cache']) || storage.slot !== index + 1 ||
+      if (!record(storage) || !exact(storage, Object.hasOwn(storage,'gameSettings') ? ['slot', 'bytes', 'files', 'partial', 'disk', 'cache','gameSettings'] : ['slot', 'bytes', 'files', 'partial', 'disk', 'cache']) || storage.slot !== index + 1 ||
           !Number.isSafeInteger(storage.bytes) || Number(storage.bytes) < 0 || !Number.isInteger(storage.files) ||
           Number(storage.files) < 0 || Number(storage.files) > 100000 || typeof storage.partial !== 'boolean') throw new TypeError('Invalid storage metadata');
       const {disk, cache} = storage;
@@ -84,6 +85,15 @@ export function parseSession(value: unknown): SessionSnapshot {
           typeof cache.canClear !== 'boolean' || !(cache.issue === null || typeof cache.issue === 'string' && cache.issue.length <= 8192) ||
           cache.canClear && (cache.partial || cache.files === 0 || cache.issue !== null ||
             (value.profiles as ProfileSession[]).some(profile => profile.slot === storage.slot && ['STARTING', 'RUNNING', 'NOT_RESPONDING'].includes(profile.state)))) throw new TypeError('Invalid cache metadata');
+      if(Object.hasOwn(storage,'gameSettings')) {
+        const game=storage.gameSettings;
+        const active=(value.profiles as ProfileSession[]).some(profile=>profile.slot===storage.slot&&['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state));
+        if(!record(game)||!exact(game,['hasSettings','backupAvailable','canReset','canRestore','issue'])||
+          ['hasSettings','backupAvailable','canReset','canRestore'].some(key=>typeof game[key]!=='boolean')||
+          !(game.issue===null||typeof game.issue==='string'&&game.issue.length<=8192)||
+          game.canReset&&(!game.hasSettings||game.issue!==null||active)||
+          game.canRestore&&(!game.backupAvailable||game.issue!==null||active))throw new TypeError('Invalid settings recovery metadata');
+      }
     });
   }
   if(Object.hasOwn(value,'settings')) {
@@ -148,6 +158,10 @@ export const lazyTester = {
   storage: async () => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'InspectStorage'}})),
   openFolder: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'OpenProfileFolder', slot}})),
   clearCache: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'ClearProfileCache', slot}})),
+  recoverSettings: async (slot: ProfileSlot, action:'Reset'|'Restore') => {
+    if(!profileSlots.includes(slot)||!['Reset','Restore'].includes(action))throw new TypeError('Invalid settings recovery request');
+    return parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request:{operation:action==='Reset'?'ResetGameSettings':'RestoreGameSettings',slot}}));
+  },
   present: (slot: ProfileSlot, rect: WorkspaceRectangle) => invokeRuntime<void>('lazy_tester_present', {
     slot, viewport: workspaceViewport(rect, window.devicePixelRatio),
   }),

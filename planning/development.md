@@ -57,12 +57,9 @@ NSIS2651492 bytes SHA256:
 8b8e71ac97ef3c4f043878c8d584cac875ccf806f4c13e9dea7fd6b0ba9da37e.
 Signing NOT_VERIFIED; installer execution/publication NOT_EXECUTED/DISABLED.
 
-Actual Explorer startup after staging: source35ed4be, manager20252/root38940,
-Explorer ancestry true, Connected, five enabled Launch cards, no issue, WebView
-cache inside Data. Verifier closed only its own idle manager normally; subsequent
-process inventory showed zero manager/starter/games. Recheck before next staging;
-never terminate by name. Data and five profiles retained, no repeated setup.
-
+Actual Explorer startup source35ed4be: Connected/five enabled/no issue/project-local
+WebView cache. Owned idle verifier closed normally; zero remaining app/game processes.
+Recheck before staging; never kill by name. Data retained; no repeated setup.
 ## Implemented corrections and executed evidence
 
 Presentation: workspace_surface.rs keeps host opaque; existing previews.rs worker
@@ -90,7 +87,12 @@ G0/structure PASS. NSIS built, export hash checked, App/root startup receipts ve
 Existing Rust warnings remain.
 ## Remaining work and owners
 
-Full clear/reset/backup/restore/audio controls remain incomplete. Use the existing
+Reset/restore source added: game_preset.rs backs up options.txt, flushes/readbacks,
+publishes SHA256 receipt before atomic replacement; restore backs up current state.
+Selected stopped-profile admission, confirmation/cancel and verified availability
+are wired through existing actor/bridge/UI. Eight preset/recovery fixtures, invalid
+slot admission,36 frontend tests/typecheck PASS. No real settings mutation executed.
+Full clear/audio remain incomplete. Use the existing
 session_controller.rs actor, game_preset.rs options writer, profile_storage.rs/
 product_profiles.rs pinned stores, manager_settings.rs and current UI/bridge.
 Launch performance and actual Task Manager roles/grouping remain unproven.
@@ -112,6 +114,6 @@ Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4; second worktree detached47a45
 Four licensed playable clients, gameplay/network/migration/installer acceptance
 are separate obligations, NOT_EXECUTED here. Compiler caches remain ignored.
 
-Next: implement settings reset/backup/restore through the existing options writer,
-with synthetic path/link/interruption tests, then full clear/audio and remaining
-actual presentation/performance/process acceptance. Overall goal stays ACTIVE.
+Next: build/stage reset/restore and verify its non-mutating confirmation flow;
+then full clear/audio and remaining presentation/performance/process acceptance.
+Overall goal stays ACTIVE.

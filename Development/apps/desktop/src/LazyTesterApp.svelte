@@ -18,12 +18,13 @@
   $: selectedProfile=profiles.find(item=>item.slot===selectedSlot);
   $: selectedPath=dataLocation?.profiles.find(item=>item.slot===selectedSlot)?.path;
   $: graphicsDirty=!!settings?.graphicsPresets&&graphicsPreset!==settings.graphicsPresets[selectedSlot-1];
-  function chooseSlot(slot:ProfileSlot){selectedSlot=slot;clearSlot=null;settingsNotice='';graphicsPreset=settings?.graphicsPresets?.[slot-1]??'Low';}
+  function chooseSlot(slot:ProfileSlot){selectedSlot=slot;clearSlot=null;recovery=null;settingsNotice='';graphicsPreset=settings?.graphicsPresets?.[slot-1]??'Low';}
   let savingPerformance=false;
   let activeFps:number|undefined=120,backgroundFps:number|undefined=5,performanceNotice='';
   $: performanceDirty=settings!==null&&(activeFps!==settings.activeFps||backgroundFps!==settings.backgroundFps);
   $: performanceValid=validFpsLimits(activeFps,backgroundFps);
   let clearSlot: ProfileSlot | null = null, storageNotice = '';
+  let recovery:{slot:ProfileSlot;action:'Reset'|'Restore'}|null=null;
   type Page = 'workspace' | 'launchers' | 'storage' | 'settings';
   let page: Page = 'workspace';
   let queuedPage: Page | null = null;
@@ -116,6 +117,7 @@
     finally { busy = false; }
   }
   function navigate(next: typeof page) {
+    recovery=null;clearSlot=null;
     if(next==='launchers')next='workspace';
     queuedPage = next; queued = null;queuedLaunch=null;
   }
@@ -231,7 +233,7 @@
   }
   async function inspectStorage() {
     if (busy || refreshing || resizing) return;
-    busy = true; checkingStorage = true; issue = ''; clearSlot = null; storageNotice = '';
+    busy = true; checkingStorage = true; issue = ''; clearSlot = null; recovery=null; storageNotice = '';
     try {
       const snapshot = await lazyTester.storage(); profiles = snapshot.profiles; storage = snapshot.storage;
       available = true; connectionIssue = '';
@@ -311,6 +313,20 @@
       issue = String(error); storage = null;
     } finally { busy = false; }
   }
+  async function recoverSettings() {
+    const pending=recovery;
+    if(!pending||busy||refreshing||resizing||pending.slot!==selectedSlot)return;
+    const status=selectedStorage?.gameSettings;
+    if(!(pending.action==='Reset'?status?.canReset:status?.canRestore))return;
+    busy=true;issue='';storageNotice='';recovery=null;
+    try {
+      const snapshot=await lazyTester.recoverSettings(pending.slot,pending.action);
+      profiles=snapshot.profiles;storage=snapshot.storage;
+      storageCheckedAt=new Date().toLocaleTimeString('en-US');
+      storageNotice=`Minecraft - ${pending.slot}: settings ${pending.action==='Reset'?'reset':'restored'}. Changes apply at the next launch; your saved graphics preset is reapplied. Previous settings are available through Restore settings.`;
+    } catch(error) {issue=String(error);storage=null;}
+    finally {busy=false;}
+  }
   onMount(() => {
     mounted = true; void initializeLaunchers();
     const interval = setInterval(() => { if (!document.hidden && binding?.configured) void refresh(); }, 2000);
@@ -387,13 +403,23 @@
         </div>
       {:else if page==='storage'}
         <div class="lt-settings-content">
-          <p>Worlds, cache and settings for each launcher.</p><div class="lt-launcher-heading"><select value={selectedSlot} aria-label="Choose Minecraft launcher" on:change={event=>chooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft - {p.slot}</option>{/each}</select><span>{selectedProfile?labels[selectedProfile.state]:'Unavailable'}</span></div>
+          <p>Worlds, cache and settings for each launcher.</p><div class="lt-launcher-heading"><select value={selectedSlot} disabled={busy} aria-label="Choose Minecraft launcher" on:change={event=>chooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft - {p.slot}</option>{/each}</select><span>{selectedProfile?labels[selectedProfile.state]:'Unavailable'}</span></div>
           {#if storageNotice}<p role="status">{storageNotice}</p>{/if}
           <section class="lt-group"><div class="lt-setting"><h3>Profile data</h3><strong>{selectedStorage?(selectedStorage.partial?'At least ':'')+(selectedStorage.bytes/1048576).toFixed(1)+' MB':'Not measured'}</strong></div><div class="lt-setting"><h3>Web cache</h3><span>{selectedStorage&&!selectedStorage.cache.partial?(selectedStorage.cache.bytes/1048576).toFixed(1)+' MB':'Unavailable'}</span></div><div class="lt-setting"><h3>Available disk space</h3><span>{selectedStorage?.disk?(selectedStorage.disk.availableBytes/1073741824).toFixed(1)+' GB':'Unavailable'}</span></div><p class="lt-help">{storage?'Last measured at '+storageCheckedAt+'. Web cache is included in profile data.':'Use Refresh to measure storage. World sizes are not separately classified.'}</p></section>
           <section class="lt-setting"><div><h3>Clear cache</h3><p>Remove recognized web cache. Accounts, worlds and game settings are kept.</p>{#if selectedStorage?.cache.issue}<p>{selectedStorage.cache.issue}</p>{/if}</div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.cache.canClear} on:click={()=>clearSlot=selectedSlot}>Clear cache…</button></section>
           {#if clearSlot===selectedSlot}<section class="lt-cache-confirm" aria-label="Confirm cache cleanup"><h3>Clear web cache for Minecraft - {selectedSlot}?</h3><p>Worlds, accounts and settings are kept. Other launchers are unchanged.</p><div class="lt-actions"><button disabled={busy||!selectedStorage?.cache.canClear} on:click={()=>clearCache(selectedSlot)}>Clear web cache</button><button class="lt-secondary" on:click={()=>clearSlot=null}>Cancel</button></div></section>{/if}
           <section class="lt-setting"><div><h3>Data folder</h3><p class="lt-data-path">{selectedPath??'Location unavailable.'}</p></div><button class="lt-secondary" disabled={busy||!available||!binding?.configured} on:click={()=>openFolder(selectedSlot)}>Open folder</button></section>
-          <details class="lt-advanced" bind:open={advanced}><summary><span><strong>Advanced options</strong><small>Reset and recovery for this launcher</small></span><span aria-hidden="true">{advanced?'−':'+'}</span></summary><div class="lt-advanced-body"><div class="lt-setting"><div><h3>Reset game settings</h3><p>Requires a verified settings backup and restore path. Existing settings are preserved.</p></div><button class="lt-secondary" disabled>Not available</button></div><div class="lt-setting"><div><h3>Restore settings</h3><p>No verified restore operation is available in this version.</p></div><button class="lt-secondary" disabled>Restore…</button></div></div></details>
+          <details class="lt-advanced" bind:open={advanced}>
+            <summary><span><strong>Advanced options</strong><small>Reset and recovery for this launcher</small></span><span aria-hidden="true">{advanced?'−':'+'}</span></summary>
+            <div class="lt-advanced-body">
+              <div class="lt-setting"><div><h3>Reset game settings</h3><p>Back up this launcher's settings, then reset them for the next start. Accounts, worlds and cache are kept.</p><p class="lt-help">The saved High/Low graphics preset is reapplied at launch.</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.gameSettings?.canReset} on:click={()=>recovery={slot:selectedSlot,action:'Reset'}}>Reset settings…</button></div>
+              <div class="lt-setting"><div><h3>Restore settings</h3><p>{selectedStorage?.gameSettings?.backupAvailable?'Restore the latest verified settings backup for this launcher. Current settings are backed up first.':'No verified settings backup yet. Reset creates one.'}</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.gameSettings?.canRestore} on:click={()=>recovery={slot:selectedSlot,action:'Restore'}}>Restore settings…</button></div>
+              {#if selectedStorage?.gameSettings?.issue}<p class="lt-help">{selectedStorage.gameSettings.issue}</p>{:else if !selectedStorage?.gameSettings}<p class="lt-help">Refresh storage to check settings recovery availability.</p>{/if}
+              {#if recovery?.slot===selectedSlot}
+                <section class="lt-cache-confirm" aria-label="Confirm game settings change"><h3>{recovery.action} settings for Minecraft - {recovery.slot}?</h3><p>Only this launcher's game settings change. Accounts, worlds, cache and other launchers are kept. A backup is saved first.</p><div class="lt-actions"><button disabled={busy} on:click={recoverSettings}>{recovery.action} settings</button><button class="lt-secondary" disabled={busy} on:click={()=>recovery=null}>Cancel</button></div></section>
+              {/if}
+            </div>
+          </details>
           <section class="lt-danger-zone"><div><h3>Clear all data</h3><p>Intended to remove accounts, worlds, cache, settings and launcher backups, leaving the Minecraft installation.</p><p>Unavailable until isolated account cleanup and world export are verified. No data will be deleted.</p></div><button class="lt-secondary lt-danger" disabled>Clear all data…</button></section>
           <details class="lt-location-options"><summary>Connect or locate launcher data</summary><p class="lt-data-path">{dataLocation?.path??'No data folder connected.'}</p>{#if locationIssue}<p class="lt-error">{locationIssue}</p>{/if}<div class="lt-actions"><button class="lt-secondary" disabled={busy||runningCount>0||dataLocation?.canLocate===false} on:click={()=>loadLocation('Locate')}>Locate existing data</button>{#if dataLocation&&!dataLocation.path}<button disabled={busy} on:click={()=>loadLocation('Choose')}>Choose new data folder</button>{/if}</div><p>Connecting data does not migrate or delete existing accounts and worlds.</p></details>
         </div>

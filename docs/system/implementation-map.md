@@ -92,8 +92,12 @@ ApplyGraphicsPreset is serialized by the same session actor; launch reapplies th
 saved selection. All games must be stopped before manual preset writes. Cache cleanup requires
 the selected launcher to be stopped; other verified managed games may continue.
 Unknown external game identities still block cleanup through the session actor. The package stager preserves graphics.json with existing preferences.
-Full account clear, world export, settings reset/restore and audio control remain
-unavailable. Full product exit closes only its managed games normally through the
+game_preset.rs also owns reset/restore of only options.txt. A create-new backup is
+flushed/read back and its fixed-name receipt atomically published before settings
+replacement. Restore verifies bounded content/hash and backs up current settings.
+The session actor admits only the stopped selected profile; UI reviews/cancels
+before a request. Inspection creates no settings directories. Full account clear,
+world export and background audio control remain unavailable. Full product exit closes only its managed games normally through the
 existing session owner; it never terminates unrelated games or reads their data.
 
 Functional Settings uses the same lazy_tester_session adapter and retained

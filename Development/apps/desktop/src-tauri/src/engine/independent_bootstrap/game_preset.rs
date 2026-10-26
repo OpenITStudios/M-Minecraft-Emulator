@@ -10,6 +10,106 @@ use windows_sys::Win32::Storage::FileSystem::{
     FILE_FLAG_OPEN_REPARSE_POINT, FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE,
     FILE_SHARE_READ,
 };
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SettingsBackup {
+    schema: u32,
+    file: String,
+    sha256: String,
+}
+const BACKUP_INDEX: &str = "options.lazy-tester-backup.json";
+fn settings_hash(bytes: &[u8]) -> String {
+    Sha256::digest(bytes).iter().map(|byte|format!("{byte:02x}")).collect()
+}
+
+fn read_bounded(path: &std::path::Path, limit: usize) -> io::Result<Vec<u8>> {
+    let file = options_file(path)?;
+    let mut bytes = Vec::new();
+    file.take((limit + 1) as u64).read_to_end(&mut bytes)?;
+    if bytes.len() > limit { return Err(invalid("Settings file exceeds its size limit")); }
+    Ok(bytes)
+}
+
+fn backup_bytes(path: &std::path::Path) -> io::Result<Option<Vec<u8>>> {
+    let bytes = match read_bounded(&path.with_file_name(BACKUP_INDEX), 1024) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    let backup: SettingsBackup = serde_json::from_slice(&bytes).map_err(|_| invalid("Settings backup receipt is invalid"))?;
+    let id = backup.file.strip_prefix("options.mivubi-").and_then(|name|name.strip_suffix(".bak"));
+    if backup.schema != 1 || id.is_none_or(|id|id.len()!=32 || !id.bytes().all(|b|b.is_ascii_hexdigit())) {
+        return Err(invalid("Settings backup receipt contains an unsupported name"));
+    }
+    let bytes = read_bounded(&path.with_file_name(&backup.file), LIMIT)?;
+    if settings_hash(&bytes) != backup.sha256 {
+        return Err(invalid("Settings backup verification failed; no settings changed"));
+    }
+    render_preset(&bytes, crate::engine::manager_settings::GraphicsPreset::Low)?;
+    Ok(Some(bytes))
+}
+
+fn options_path(private: &File, create: bool) -> io::Result<(PathBuf, Vec<File>)> {
+    let mut path = directory_path(private)?;
+    let mut directories = vec![private.try_clone()?];
+    for part in ["Roaming", "Minecraft Education Edition", "games", "com.mojang", "minecraftpe"] {
+        path.push(part);
+        if create {
+            match fs::create_dir(&path) {
+                Ok(()) => {},
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {},
+                Err(error) => return Err(error),
+            }
+        }
+        directories.push(open_directory(&path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?);
+    }
+    path.push("options.txt");
+    Ok((path,directories))
+}
+
+pub(super) fn inspect_settings(private: &File, admission: io::Result<()>) -> crate::engine::native_clients_session::GameSettingsStorage {
+    use crate::engine::native_clients_session::GameSettingsStorage;
+    let mut status = GameSettingsStorage {has_settings:false, backup_available:false, can_reset:false, can_restore:false, issue:None};
+    let mut resettable=false;
+    let inspected = (|| -> io::Result<()> {
+        let (path,_directories) = match options_path(private,false) {
+            Ok(value) => value,
+            Err(error) if error.kind()==io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error),
+        };
+        match read_bounded(&path,LIMIT) {
+            Ok(bytes) => {
+                render_preset(&bytes, crate::engine::manager_settings::GraphicsPreset::Low)?;
+                status.has_settings = true;
+                resettable=!bytes.is_empty();
+            }
+            Err(error) if error.kind()==io::ErrorKind::NotFound => {},
+            Err(error) => return Err(error),
+        }
+        status.backup_available = backup_bytes(&path)?.is_some();
+        Ok(())
+    })();
+    match inspected.and(admission) {
+        Ok(()) => {status.can_reset=resettable;status.can_restore=status.backup_available;}
+        Err(error) => status.issue=Some(error.to_string()),
+    }
+    status
+}
+
+pub(super) fn reset_settings(private: &File) -> io::Result<bool> {
+    let mut prepared=Prepared::read_preset(private, crate::engine::manager_settings::GraphicsPreset::Low)?;
+    prepared.after=Vec::new();
+    prepared.commit_with_backup(true)
+}
+
+pub(super) fn restore_settings(private: &File) -> io::Result<bool> {
+    let mut prepared=Prepared::read_preset(private, crate::engine::manager_settings::GraphicsPreset::Low)?;
+    prepared.after=backup_bytes(&prepared.path)?.ok_or_else(||invalid("No verified settings backup is available"))?;
+    prepared.commit_with_backup(true)
+}
 
 const LIMIT: usize = 1024 * 1024;
 // Observed Education version: Simple, 12 chunks, MSAA1, five decorative effects off.
@@ -118,27 +218,7 @@ impl Prepared {
     }
 
     fn read_preset(private: &File, preset: crate::engine::manager_settings::GraphicsPreset) -> io::Result<Self> {
-        let mut path = directory_path(private)?;
-        let mut directories = Vec::new();
-        for part in [
-            "Roaming",
-            "Minecraft Education Edition",
-            "games",
-            "com.mojang",
-            "minecraftpe",
-        ] {
-            path.push(part);
-            match fs::create_dir(&path) {
-                Ok(()) => {}
-                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-                Err(error) => return Err(error),
-            }
-            directories.push(open_directory(
-                &path,
-                FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY,
-            )?);
-        }
-        path.push("options.txt");
+        let (path, directories) = options_path(private,true)?;
         let mut original = match options_file(&path) {
             Ok(file) => Some(file),
             Err(error) if error.kind() == io::ErrorKind::NotFound => None,
@@ -159,6 +239,10 @@ impl Prepared {
     }
 
     fn commit(self) -> io::Result<bool> {
+        self.commit_with_backup(false)
+    }
+
+    fn commit_with_backup(self, publish_backup: bool) -> io::Result<bool> {
         if self.before == self.after {
             return Ok(false);
         }
@@ -180,6 +264,10 @@ impl Prepared {
                     "Minecraft options changed during preset preparation",
                 ));
             }
+        } else if self.path.try_exists()? {
+            return Err(invalid("Minecraft options appeared during preparation"));
+        }
+        if self.original.is_some() || publish_backup {
             let mut file = OpenOptions::new()
                 .write(true)
                 .create_new(true)
@@ -187,10 +275,21 @@ impl Prepared {
                 .open(&backup)?;
             file.write_all(&self.before)?;
             file.sync_all()?;
-        } else if self.path.try_exists()? {
-            return Err(invalid(
-                "Minecraft options appeared during preset preparation",
-            ));
+        }
+        if publish_backup {
+            if read_bounded(&backup,LIMIT)? != self.before {
+                return Err(invalid("Settings backup verification failed; original settings were preserved"));
+            }
+            // Publish the verified recovery point before replacing settings. A failed update
+            // leaves the original or a usable backup; interrupted temporary files are ignored.
+            let receipt = SettingsBackup {schema:1,file:format!("{name}.bak"),sha256:settings_hash(&self.before)};
+            let receipt_temp=self.path.with_file_name(format!("{name}.json.tmp"));
+            let mut file=OpenOptions::new().write(true).create_new(true).share_mode(0).open(&receipt_temp)?;
+            let result=(||{file.write_all(&serde_json::to_vec(&receipt).map_err(io::Error::other)?)?;file.sync_all()}) ();
+            drop(file);
+            let result=result.and_then(|()|fs::rename(&receipt_temp,self.path.with_file_name(BACKUP_INDEX)));
+            if result.is_err(){let _=fs::remove_file(&receipt_temp);}
+            result?;
         }
         let mut file = OpenOptions::new()
             .write(true)
@@ -252,6 +351,94 @@ fn apply_directories<'a>(directories: impl Iterator<Item = &'a File>) -> io::Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_reset_restore_roundtrip_and_undo_preserve_other_profile_data() {
+        let root=super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let other=super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let private=open_directory(&root,FILE_READ_ATTRIBUTES|FILE_LIST_DIRECTORY).unwrap();
+        let other_pin=open_directory(&other,FILE_READ_ATTRIBUTES|FILE_LIST_DIRECTORY).unwrap();
+        let other_path=Prepared::read(&other_pin).unwrap().path;
+        fs::write(&other_path,b"other_launcher:unchanged\n").unwrap();
+        let fresh=inspect_settings(&private,Ok(()));
+        assert!(!fresh.has_settings && !fresh.can_reset && !fresh.backup_available);
+        assert!(!root.join("Roaming").exists(),"Inspection created settings directories");
+        let path=Prepared::read(&private).unwrap().path;
+        let original=b"\xef\xbb\xbfgraphics_mode:1\r\nkey_jump:32\r\nvolume:0.75\r\n";
+        fs::write(&path,original).unwrap();
+        fs::write(root.join("synthetic-world"),b"world unchanged").unwrap();
+        fs::write(root.join("synthetic-account"),b"account unchanged").unwrap();
+        assert!(!inspect_settings(&private,Err(invalid("Profile is running"))).can_reset);
+        assert!(reset_settings(&private).unwrap());
+        assert_eq!(fs::read(&path).unwrap(),b"");
+        assert_eq!(backup_bytes(&path).unwrap().unwrap(),original);
+        assert!(inspect_settings(&private,Ok(())).can_restore);
+        assert!(restore_settings(&private).unwrap());
+        assert_eq!(fs::read(&path).unwrap(),original);
+        assert_eq!(backup_bytes(&path).unwrap().unwrap(),b"", "Restore did not back up the current settings");
+        assert!(restore_settings(&private).unwrap());
+        assert_eq!(fs::read(&path).unwrap(),b"");
+        assert_eq!(fs::read(root.join("synthetic-world")).unwrap(),b"world unchanged");
+        assert_eq!(fs::read(root.join("synthetic-account")).unwrap(),b"account unchanged");
+        assert_eq!(fs::read(other_path).unwrap(),b"other_launcher:unchanged\n");
+        drop(private);
+        drop(other_pin);
+        for path in [root,other] {
+            assert_eq!(path.parent(),Some(std::env::temp_dir().as_path()));
+            fs::remove_dir_all(path).unwrap();
+        }
+    }
+
+    #[test]
+    fn settings_restore_rejects_corruption_traversal_and_interrupted_publication() {
+        let root=super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let private=open_directory(&root,FILE_READ_ATTRIBUTES|FILE_LIST_DIRECTORY).unwrap();
+        let path=Prepared::read(&private).unwrap().path;
+        fs::write(&path,b"key_jump:32\n").unwrap();
+        assert!(restore_settings(&private).is_err());
+        let index=path.with_file_name(BACKUP_INDEX);
+        fs::create_dir(&index).unwrap();
+        assert!(reset_settings(&private).is_err(),"Reset proceeded without publishing its backup");
+        assert_eq!(fs::read(&path).unwrap(),b"key_jump:32\n");
+        fs::remove_dir(&index).unwrap();
+        reset_settings(&private).unwrap();
+        let receipt=fs::read(&index).unwrap();
+        let record:SettingsBackup=serde_json::from_slice(&receipt).unwrap();
+        let backup=path.with_file_name(&record.file);
+        fs::write(&backup,b"corrupted:backup\n").unwrap();
+        assert!(restore_settings(&private).is_err());
+        assert_eq!(fs::read(&path).unwrap(),b"");
+        assert!(!inspect_settings(&private,Ok(())).can_restore);
+        let forged=SettingsBackup {schema:1,file:"../outside.bak".into(),sha256:record.sha256};
+        fs::write(&index,serde_json::to_vec(&forged).unwrap()).unwrap();
+        assert!(restore_settings(&private).is_err());
+        assert_eq!(fs::read(&path).unwrap(),b"");
+        fs::write(&index,b"invalid receipt").unwrap();
+        assert!(restore_settings(&private).is_err());
+        drop(private);
+        assert_eq!(root.parent(),Some(std::env::temp_dir().as_path()));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn settings_reset_refuses_a_junction_ancestor_without_touching_its_target() {
+        let root=super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let outside=super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        fs::write(outside.join("keep"),b"untouched").unwrap();
+        let output=std::process::Command::new("cmd.exe").args(["/c","mklink","/J"])
+            .arg(root.join("Roaming")).arg(&outside).output().unwrap();
+        assert!(output.status.success());
+        let private=open_directory(&root,FILE_READ_ATTRIBUTES|FILE_LIST_DIRECTORY).unwrap();
+        assert!(reset_settings(&private).is_err());
+        assert!(!inspect_settings(&private,Ok(())).can_reset);
+        assert_eq!(fs::read(outside.join("keep")).unwrap(),b"untouched");
+        drop(private);
+        fs::remove_dir(root.join("Roaming")).unwrap();
+        for path in [root,outside] {
+            assert_eq!(path.parent(),Some(std::env::temp_dir().as_path()));
+            fs::remove_dir_all(path).unwrap();
+        }
+    }
 
     #[test]
     fn high_low_preserve_world_settings_and_switch_idempotently() {

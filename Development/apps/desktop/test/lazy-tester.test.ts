@@ -7,6 +7,22 @@ const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process
   pid: slot + 100, createdFileTime: String(slot + 200), sessionId: 1, windowHandle: `0x${slot}`, responding: true,
 }});
 describe('Lazy Tester profile contract', () => {
+  it('admits settings recovery only for its stopped launcher with consistent backup metadata',()=>{
+    const gameSettings={hasSettings:true,backupAvailable:true,canReset:true,canRestore:true,issue:null};
+    const storage=[1,2,3,4,5].map(slot=>({slot,bytes:100,files:2,partial:false,disk:null,
+      cache:{bytes:0,files:0,partial:false,canClear:false,issue:null},gameSettings}));
+    const snapshot={...stopped(),storage};
+    expect(parseSession(snapshot).storage![3]!.gameSettings?.canRestore).toBe(true);
+    for(const invalid of [{...gameSettings,hasSettings:false},{...gameSettings,backupAvailable:false},
+      {...gameSettings,issue:'Locked'},{...gameSettings,canReset:'yes'},{...gameSettings,path:'../outside'},null]) {
+      expect(()=>parseSession({...snapshot,storage:[{...storage[0]!,gameSettings:invalid},...storage.slice(1)]})).toThrow();
+    }
+    const active={...snapshot,profiles:[running(1),...snapshot.profiles.slice(1)]};
+    expect(()=>parseSession(active)).toThrow();
+    const gated={...active,storage:storage.map(item=>item.slot===1?{...item,gameSettings:{...gameSettings,canReset:false,canRestore:false,issue:'Close this Minecraft'}}:item)};
+    expect(parseSession(gated).storage![3]!.gameSettings?.canReset).toBe(true);
+    expect(parseSession(gated).storage![0]!.gameSettings?.canRestore).toBe(false);
+  });
   it('leaves separately opened games alone while another game remains playable here',()=>{
     const snapshot=stopped();
     for(const slot of [1,2])Object.assign(snapshot.profiles[slot-1]!,running(slot));

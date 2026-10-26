@@ -247,13 +247,14 @@ impl Sessions {
                     partial: false,
                     disk: profile_storage::disk(&store.private).ok(),
                     cache: {
-                        let admission = self.cache_admission(slot, &observed);
+                        let admission = self.data_admission(slot, &observed);
                         let mut cache = profile_storage::inspect(&store.private, admission.is_ok());
                         if !cache.partial {
                             if let Err(error) = admission { cache.issue = Some(error.to_string()); }
                         }
                         cache
                     },
+                    game_settings: Some(game_preset::inspect_settings(&store.private, self.data_admission(slot, &observed))),
                 };
                 scan(&path, &mut result, std::time::Instant::now(), 0);
                 Ok(result)
@@ -291,20 +292,20 @@ impl Sessions {
     fn clear_cache(&mut self, slot: u32) -> io::Result<()> {
         self.reap();
         let observed = super::super::inspect_native_workspace()?.processes;
-        self.cache_admission(slot, &observed)?;
+        self.data_admission(slot, &observed)?;
         // The sole session actor serializes admission, exact-directory deletion and launch.
         profile_storage::clear(&self.store(slot)?.private, true)
     }
 
-    fn cache_admission(&self, slot: u32, observed: &[OwnedProcess]) -> io::Result<()> {
+    fn data_admission(&self, slot: u32, observed: &[OwnedProcess]) -> io::Result<()> {
         self.store(slot)?;
-        if self.exiting { return Err(invalid("Minecraft sessions are closing; wait before cleanup")); }
+        if self.exiting { return Err(invalid("Minecraft sessions are closing; wait before changing launcher data")); }
         let owned = self.running.iter().flatten().map(|started| {
             let child = &started.children[0];
             child.identity()?;
             Ok((child.pid, child.created))
         }).collect::<io::Result<Vec<_>>>()?;
-        require_cache_idle(self.running[slot as usize - 1].is_none(), &owned, observed)
+        require_data_idle(self.running[slot as usize - 1].is_none(), &owned, observed)
     }
 
     fn settings(&mut self, apply: bool) -> io::Result<SettingsReport> {
@@ -325,11 +326,11 @@ impl Sessions {
     }
 }
 
-fn require_cache_idle(selected_idle: bool, owned: &[(u32,u64)], observed: &[OwnedProcess]) -> io::Result<()> {
-    if !selected_idle { return Err(invalid("Close this Minecraft session normally before clearing its cache.")); }
+fn require_data_idle(selected_idle: bool, owned: &[(u32,u64)], observed: &[OwnedProcess]) -> io::Result<()> {
+    if !selected_idle { return Err(invalid("Close this Minecraft session normally before changing its launcher data.")); }
     if observed.iter().any(|process| !owned.iter().any(|(pid,birth)|
         process.pid == *pid && process.created_file_time.parse::<u64>().ok() == Some(*birth))) {
-        return Err(invalid("An unmanaged Minecraft session is open. Close it normally before cleanup; managed sessions in other launchers may stay open."));
+        return Err(invalid("An unmanaged Minecraft session is open. Close it normally before changing launcher data; managed sessions in other launchers may stay open."));
     }
     Ok(())
 }
@@ -556,6 +557,18 @@ fn run() -> io::Result<()> {
                         .map_err(|error| error.to_string())?;
                     storage = Some(sessions.storage().map_err(|error| error.to_string())?);
                 }
+                SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } => {
+                    sessions.reap();
+                    let observed=super::super::inspect_native_workspace().map_err(|error|error.to_string())?.processes;
+                    sessions.data_admission(slot,&observed).map_err(|error|error.to_string())?;
+                    let store=sessions.store(slot).map_err(|error|error.to_string())?;
+                    if matches!(envelope.request,SessionRequest::ResetGameSettings {..}) {
+                        game_preset::reset_settings(&store.private)
+                    } else {
+                        game_preset::restore_settings(&store.private)
+                    }.map_err(|error|error.to_string())?;
+                    storage=Some(sessions.storage().map_err(|error|error.to_string())?);
+                }
                 SessionRequest::OpenProfileFolder { slot } => sessions
                     .open_folder(slot)
                     .map_err(|error| error.to_string())?,
@@ -595,12 +608,12 @@ mod tests {
     fn stopped_profile_cache_allows_other_owned_games_but_rejects_unknown_or_reused_processes() {
         let other = OwnedProcess { pid:42, created_file_time:"123456".into(), session_id:1,
             window_handle:"0x1234".into(), responding:true };
-        assert!(require_cache_idle(true, &[(42,123456)], std::slice::from_ref(&other)).is_ok());
-        assert!(require_cache_idle(false, &[(42,123456)], std::slice::from_ref(&other)).is_err());
-        assert!(require_cache_idle(true, &[], std::slice::from_ref(&other)).is_err());
-        assert!(require_cache_idle(true, &[(42,123455)], std::slice::from_ref(&other)).is_err());
-        assert!(require_cache_idle(true, &[(43,123456)], std::slice::from_ref(&other)).is_err());
-        assert!(require_cache_idle(true, &[], &[]).is_ok());
+        assert!(require_data_idle(true, &[(42,123456)], std::slice::from_ref(&other)).is_ok());
+        assert!(require_data_idle(false, &[(42,123456)], std::slice::from_ref(&other)).is_err());
+        assert!(require_data_idle(true, &[], std::slice::from_ref(&other)).is_err());
+        assert!(require_data_idle(true, &[(42,123455)], std::slice::from_ref(&other)).is_err());
+        assert!(require_data_idle(true, &[(43,123456)], std::slice::from_ref(&other)).is_err());
+        assert!(require_data_idle(true, &[], &[]).is_ok());
     }
 
     #[test]
@@ -672,6 +685,7 @@ mod tests {
             partial: false,
             disk: None,
             cache: Default::default(),
+            game_settings: None,
         };
         scan(&directory, &mut result, std::time::Instant::now(), 0);
         assert_eq!((result.bytes, result.files, result.partial), (40, 2, false));

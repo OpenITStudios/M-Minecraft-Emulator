@@ -55,6 +55,17 @@ pub struct ProfileStorage {
     pub partial: bool,
     pub disk: Option<DiskSpace>,
     pub cache: CacheStorage,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game_settings: Option<GameSettingsStorage>,
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GameSettingsStorage {
+    pub has_settings: bool,
+    pub backup_available: bool,
+    pub can_reset: bool,
+    pub can_restore: bool,
+    pub issue: Option<String>,
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -100,6 +111,8 @@ pub enum SessionRequest {
     InspectStorage,
     OpenProfileFolder { slot: u32 },
     ClearProfileCache { slot: u32 },
+    ResetGameSettings { slot: u32 },
+    RestoreGameSettings { slot: u32 },
     Launch { slot: u32 },
     CloseAll,
 }
@@ -129,7 +142,7 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     if let SessionRequest::SavePerformance {active_fps,background_fps}=request {
         super::manager_settings::PerformanceSettings {active_fps,background_fps}.validate()?;
     }
-    if matches!(request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } if !(1..=5).contains(&slot))
+    if matches!(request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } | SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } if !(1..=5).contains(&slot))
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -300,6 +313,16 @@ pub(super) fn read_message(input: &mut impl io::BufRead) -> io::Result<Option<St
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn recovery_rejects_out_of_range_slots_before_controller_or_storage_access() {
+        for slot in [0,6,u32::MAX] {
+            for operation in [SessionRequest::ResetGameSettings {slot},SessionRequest::RestoreGameSettings {slot}] {
+                assert_eq!(request(operation).unwrap_err().kind(),io::ErrorKind::InvalidInput);
+            }
+        }
+        assert!(serde_json::from_str::<SessionRequest>(r#"{"operation":"RestoreGameSettings","slot":1,"path":"outside"}"#).is_err());
+    }
     #[test]
     fn settings_report_describes_the_reviewed_policy_without_starting_a_controller() {
         let policy = SettingsReport::policy(false, None).unwrap();
