@@ -7,6 +7,7 @@
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
   let binding: ProfileBinding | null = null;
+  let bindingIssue = '', locationIssue = '';
   let dataLocation:DataLocation|null=null;
   let settings:SettingsReport|null=null, settingsNotice='';
   let applyingPreset=false;
@@ -117,8 +118,9 @@
     if (busy || refreshing || resizing) return;
     issue = '';
     if (page === 'storage') {
+      if (!binding?.configured) await loadBinding();
       await loadLocation();
-      if (!issue && binding?.configured) await inspectStorage();
+      if (!locationIssue && binding?.configured) await inspectStorage();
     } else {
       if (!binding?.configured) await loadBinding();
       await refresh();
@@ -192,19 +194,28 @@
   async function loadBinding(importProfiles = false) {
     if (busy || refreshing || resizing || disposed) return;
     busy = true; issue = '';
-    try { binding = await lazyTester.binding(importProfiles); }
-    catch (error) { issue = String(error); }
+    try { await checkBinding(importProfiles); }
     finally { busy = false; }
+  }
+  async function checkBinding(importProfiles = false) {
+    try { binding = await lazyTester.binding(importProfiles); bindingIssue = ''; }
+    catch (error) { binding = null; bindingIssue = String(error); }
   }
   async function loadLocation(action:'Inspect'|'Open'|'Locate'|'Choose'='Inspect') {
     if(busy||refreshing||resizing||disposed)return;
-    busy=true;issue='';
+    busy=true;issue='';locationIssue='';
     try {
       const previousPath = dataLocation?.path;
       dataLocation=await lazyTester.dataLocation(action);
       if (dataLocation.path !== previousPath) { storage = null; clearSlot = null; storageNotice = ''; }
-      if((action==='Locate'||action==='Choose')&&dataLocation.path!==null)binding=await lazyTester.binding();
-    } catch(error){issue=String(error);}finally{busy=false;}
+      if((action==='Locate'||action==='Choose')&&dataLocation.path!==null)await checkBinding();
+    } catch(error){
+      locationIssue=String(error);
+      if(action==='Inspect'){
+        dataLocation=null;storage=null;clearSlot=null;storageNotice='';
+        binding=null;if(!bindingIssue)bindingIssue=locationIssue;
+      }
+    }finally{busy=false;}
   }
   async function openFolder(slot: ProfileSlot) {
     if (busy || refreshing || resizing) return;
@@ -266,8 +277,8 @@
     {#if issue || connectionIssue}<div class="lt-alert" role="alert"><strong>Something needs your attention</strong>{#if issue}<p>{issue}</p>{/if}{#if connectionIssue}<p>{connectionIssue}</p>{/if}</div>{/if}
     {#if !binding?.configured}
       <section class="lt-binding" aria-label="Profile setup">
-        <div><strong>{initializing ? 'Checking profiles…' : binding ? 'Profile setup required' : 'Profile setup unavailable'}</strong><p>{binding?.issue ?? (initializing ? 'Please wait while your profiles are checked.' : 'Use Try again to check your profiles.')}</p></div>
-        {#if !initializing}<div class="lt-actions"><button disabled={busy || refreshing || resizing || runningCount > 0} on:click={() => loadBinding(true)}>Locate previous launcher</button><button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={() => loadBinding()}>Try again</button></div>{/if}
+        <div><strong>{initializing ? 'Checking profiles…' : binding ? 'Profile setup required' : 'Profile setup unavailable'}</strong><p role={bindingIssue ? 'alert' : undefined}>{bindingIssue || binding?.issue || (initializing ? 'Please wait while your profiles are checked.' : 'Use Try again to check your profiles.')}</p></div>
+        {#if !initializing}<div class="lt-actions"><button on:click={() => navigate('storage')}>Manage data</button><button class="lt-secondary" disabled={busy || refreshing || resizing || runningCount > 0} on:click={() => loadBinding(true)}>Locate previous launcher</button><button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={() => loadBinding()}>Try again</button></div>{/if}
       </section>
     {/if}
     <section class="lt-workspace" hidden={page !== 'workspace'} aria-label="Minecraft workspace">
@@ -293,10 +304,11 @@
     {:else if page === 'storage'}
       <section class="lt-panel">
         <h2>Data location</h2>
-        <p class="lt-data-path">{dataLocation ? dataLocation.path ?? 'No data folder is connected.' : initializing ? 'Checking data location…' : 'Data location unavailable. Use Refresh location to try again.'}</p>
+        <p class="lt-data-path">{dataLocation ? dataLocation.path ?? 'No data folder is connected.' : initializing ? 'Checking data location…' : 'Data location unavailable. Use Locate data to reconnect an existing folder, or Refresh location to check again.'}</p>
+        {#if locationIssue}<p class="lt-error" role="alert">{locationIssue}</p>{/if}
         <div class="lt-actions">
           <button class="lt-secondary" disabled={busy||refreshing||resizing||!dataLocation?.path} on:click={()=>loadLocation('Open')}>Open folder</button>
-          <button class="lt-secondary" disabled={busy||refreshing||resizing||!dataLocation?.canLocate} on:click={()=>loadLocation('Locate')}>Locate data</button>
+          <button class="lt-secondary" disabled={busy||refreshing||resizing||runningCount>0||dataLocation?.canLocate===false} on:click={()=>loadLocation('Locate')}>Locate data</button>
           {#if dataLocation && !dataLocation.path}<button disabled={busy||refreshing||resizing} on:click={()=>loadLocation('Choose')}>Choose data folder</button>{/if}
           <button class="lt-secondary" disabled={busy||refreshing||resizing} on:click={()=>loadLocation()}>Refresh location</button>
         </div>

@@ -23,6 +23,11 @@ try {
     window.__calls = [];
     window.__offline = false;
     window.__holdInspect = false;
+    const brokenSetup = new URL(location.href).searchParams.has('broken');
+    window.__bindingFailure = brokenSetup ? 'Saved profiles could not be verified.' : '';
+    window.__locationFailure = brokenSetup ? 'The saved data folder is unavailable.' : '';
+    window.__dataPath = null;
+    window.__locateOutcome = 'cancel';
     const profiles = [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}));
     const settings = {activeFps: 144, backgroundFps: 10, renderDistanceChunks: 12, canApplyPreset: true, changedProfiles: null};
     const snapshot = () => ({schema: 1, storage: null, profiles: profiles.map(profile => window.__runningSlot === profile.slot ? {
@@ -37,10 +42,23 @@ try {
         if (command === 'plugin:event|listen') return callback;
         if (command === 'plugin:event|unlisten') return null;
         if (command === 'lazy_tester_profile_binding') {
+          if (window.__bindingFailure) throw window.__bindingFailure;
           if (!window.__finishBinding) await new Promise(resolve => { window.__finishBinding = resolve; });
           return {schema: 1, required: false, configured: true, issue: null};
         }
-        if (command === 'lazy_tester_data_location') return {schema: 1, defaultPath: 'D:\\Lazy Tester\\Data', path: null, profiles: [], canLocate: true};
+        if (command === 'lazy_tester_data_location') {
+          if (args.action === 'Locate') {
+            if (window.__locateOutcome === 'invalid') throw 'The selected folder does not match the saved profile identities.';
+            if (window.__locateOutcome === 'valid') {
+              window.__bindingFailure = ''; window.__locationFailure = '';
+              window.__dataPath = 'D:\\Recovered Data';
+              window.__finishBinding = () => {};
+            }
+          }
+          if (window.__locationFailure) throw window.__locationFailure;
+          return {schema: 1, defaultPath: 'D:\\Lazy Tester\\Data', path: window.__dataPath,
+            profiles: window.__dataPath ? profiles.map(profile => ({slot: profile.slot, path: window.__dataPath + '\\Profiles\\Minecraft-' + profile.slot})) : [], canLocate: true};
+        }
         if (command === 'lazy_tester_clear_previews' || command.startsWith('desktop_')) return null;
         if (command === 'lazy_tester_previews') return {schema: 1, tiles: args.tiles.map(tile => ({slot: tile.slot, registered: false, reason: null}))};
         if (command !== 'lazy_tester_session') throw new Error('Unexpected command: ' + command);
@@ -100,7 +118,7 @@ try {
       await nav(name).click();
       await page.waitForFunction(name => document.querySelector('nav [aria-current="page"]')?.textContent === name, name);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, name + ' overflows horizontally');
-      assert.equal(await page.evaluate(() => [...document.querySelectorAll('.lt-panel, .lt-profile-list, .lt-viewport')].filter(node => node.getClientRects().length).some(node => node.getBoundingClientRect().bottom > innerHeight)), false, name + ' leaves the window');
+      assert.equal(await page.evaluate(() => [...document.querySelectorAll('.lt-panel, .lt-profile-list, .lt-viewport, .lt-filmstrip')].filter(node => node.getClientRects().length).some(node => node.getBoundingClientRect().bottom > innerHeight)), false, name + ' leaves the window');
     }
   }
   // A game becoming ready must not pull the player away from another page.
@@ -122,7 +140,42 @@ try {
   assert.deepEqual(errors, []);
   assert.equal(await page.evaluate(() => window.__calls.filter(call => call.args?.request?.operation === 'Launch').length), 1);
   assert.equal(await page.evaluate(() => window.__calls.some(call => ['ClearProfileCache', 'ApplyPreset'].includes(call.args?.request?.operation))), false);
-  console.log('PASS: startup, queued navigation, storage refresh, Settings draft/save, four-page layout, disconnect/reconnect (mocked Tauri only).');
+
+  // Broken/missing saved data must retain an available, non-destructive recovery route.
+  await page.setViewportSize({width: 920, height: 620});
+  await page.goto('http://lazy-tester.test/?broken=1');
+  await page.getByText('Profile setup unavailable', {exact: true}).waitFor();
+  await page.getByText('Saved profiles could not be verified.', {exact: true}).waitFor();
+  assert.equal(await page.evaluate(() => [...document.querySelectorAll('.lt-viewport, .lt-filmstrip')].some(node => node.getBoundingClientRect().bottom > innerHeight)), false, 'Failed setup leaves the window');
+  await page.getByRole('button', {name: 'Manage data', exact: true}).click();
+  await heading('Data location').waitFor();
+  await page.getByText('The saved data folder is unavailable.', {exact: true}).waitFor();
+  const locate = page.getByRole('button', {name: 'Locate data', exact: true});
+  assert.equal(await locate.isEnabled(), true);
+  assert.equal(await page.getByRole('button', {name: 'Choose data folder', exact: true}).count(), 0);
+  assert.equal(await page.getByRole('button', {name: 'Open folder', exact: true}).isDisabled(), true);
+  await locate.click(); // Cancel leaves the broken saved pointer and the recovery action intact.
+  await page.waitForFunction(() => window.__calls.some(call => call.args?.action === 'Locate'));
+  assert.equal(await page.evaluate(() => window.__dataPath), null);
+  await page.evaluate(() => { window.__locateOutcome = 'invalid'; });
+  await locate.click();
+  await page.getByText('The selected folder does not match the saved profile identities.', {exact: true}).waitFor();
+  assert.equal(await page.evaluate(() => window.__dataPath), null);
+  await page.evaluate(() => { window.__locateOutcome = 'valid'; });
+  await locate.click();
+  await page.getByText('D:\\Recovered Data', {exact: true}).waitFor();
+  await page.waitForFunction(() => !document.querySelector('[aria-label="Profile setup"]'));
+  await nav('Launchers').click(); await heading('Minecraft launchers').waitFor();
+  assert.equal(await page.getByRole('button', {name: 'Launch', exact: true}).first().isEnabled(), true);
+  await nav('Storage').click(); await heading('Data location').waitFor();
+  await page.evaluate(() => { window.__locationFailure = 'The saved data folder is unavailable.'; });
+  await page.getByRole('button', {name: 'Refresh location', exact: true}).click();
+  await page.getByText('Profile setup unavailable', {exact: true}).waitFor();
+  await nav('Launchers').click(); await heading('Minecraft launchers').waitFor();
+  assert.equal(await page.getByRole('button', {name: 'Launch', exact: true}).first().isDisabled(), true);
+  assert.equal(await page.evaluate(() => window.__calls.some(call => call.args?.action === 'Choose' || ['Launch', 'ClearProfileCache'].includes(call.args?.request?.operation))), false);
+  assert.deepEqual(errors, []);
+  console.log('PASS: app flows and missing-data recovery, cancel, invalid selection, verified reconnection, stale setup refusal (mocked Tauri only).');
 } finally {
   await browser.close();
 }

@@ -108,6 +108,14 @@ Same-volume moves by the same Windows user can retain the directory identities a
 registry stores. Location changes refuse while Minecraft or its controller is active.
 Dialog cancel changes no pointer; Choose cannot replace existing profile data.
 
+If inspection of a saved location fails, Storage retains the error and still
+offers Locate data. The backend rechecks idle state and the selected catalog,
+Windows user and directory identities before publishing a new pointer. Unknown
+location never exposes Choose data folder as a replacement/reset shortcut.
+The setup banner links to Manage data and keeps setup errors separate from
+session refreshes. Failed setup/location rechecks invalidate frontend readiness
+and stale storage measurements; successful reattachment rechecks profile binding.
+
 This is location persistence and verified reattachment, not a Move data copy engine.
 Cross-volume copies change identities and are rejected. Moving old pilot profiles
 into the new layout, per-slot moves, backup/restore and destructive reset remain

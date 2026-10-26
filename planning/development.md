@@ -3,7 +3,38 @@
 Local only; main is release-reserved and GitHub Actions remains OFF. RAM/renderer,
 Sandboxie and VMware work remain PAUSED. Development/Archive layout is retained.
 
-## Current bounded outcome
+## Current bounded outcome — setup/data recovery
+
+Operator resumed setup and location validation from Local
+943af543fb388b5b9f707357fa6ea1a237188e05. Source inspection found a UI dead end:
+failed location inspection disabled Locate data, even though the backend already
+supports verifying and reconnecting an existing folder without resolving the old
+pointer first. The existing mounted Svelte owner now retains this recovery action.
+
+Setup and location errors remain visible independently of session refresh. Failed
+binding checks clear cached configured state; failed location inspection also
+invalidates binding, sizes and cleanup confirmation. The setup banner's Manage
+data opens Storage. Unknown location never exposes Choose as an empty replacement;
+Locate remains subject to backend idle/controller/catalog/identity checks.
+No native storage schema, identity, registry owner or migration policy changed.
+
+Executed for this change: 32 frontend tests, Svelte zero errors/warnings, production
+frontend build, structure/G0 and expanded headless mocked-Tauri regression PASS.
+New cases: missing/invalid saved data, retained setup error, picker cancel, invalid
+selection refusal, verified reattachment and stale setup disabling Launch; recovery
+layout also fits 920x620. No real picker/game/profile is opened by the UI fixture.
+Two Windows product_profiles backend fixtures PASS with lazy-tester-package feature
+and its actual Tauri overlay: create/reopen/preserve, same-volume relocation,
+replaced-profile refusal, relative default, missing custom location refusal and
+corrupt locator preservation. Only disposable synthetic stores/HKCU fixture keys
+were used and cleaned by their original fixture owner.
+
+Fresh clean-revision package follows this source commit; the previous App candidate
+below remains valid only for its own SHA until refreshed. Partial setup repair,
+cross-volume/account migration and actual installed setup remain unimplemented or
+NOT_EXECUTED. No actual user profile contents were read or reset.
+
+## Previous usability implementation
 
 The operator approved continuing APP usability after configurable Settings.
 Parent: e19db96fddd9def41b7609fd6022e93d23ce7f03. The first owner remains
@@ -95,7 +126,6 @@ upstream submodule must remain intact.
 
 ## Next — one action
 
-At the next authorized interactive session, validate the exact candidate's setup,
-navigation, custom/default FPS after normal profile restart, licensed login/world
-persistence and Host World. This is separate runtime acceptance, not a prerequisite
-for useful source work. STOP for this completed bounded APP usability scope.
+Finish a clean-revision Windows candidate for the setup recovery fix, record its
+hashes and exact source, then STOP. Real picker/setup, FPS, licensed login/world
+persistence and Host World remain separate interactive acceptance.
