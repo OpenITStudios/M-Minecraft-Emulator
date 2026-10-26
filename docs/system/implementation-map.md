@@ -45,6 +45,14 @@ last. It never starts games or runs from packaging/installer hooks. See data-lay
 manager_settings.rs and app_instance.rs use Data/Settings; root resolution also
 recognizes source execution within this checkout. New data locations stay in Data.
 
+Launch validation stays in independent_bootstrap.rs. Initial admission resolves and
+pins the official image, then rechecks its full Windows registration/signature.
+The retained controller calls validate_registered_image against that original file
+on each launch: one fresh full resolver, current named-file identity comparison and
+exact reviewed digest. No current signature/registration/content check is skipped.
+The ignored launch_preflight_measurement release test never opens profiles or
+starts Minecraft.
+
 Legacy native registry stores reopen through explicit current-user handles
 in independent_bootstrap.rs. Missing stores
 are never recreated as recovery. Product-only --lazy-tester-check-webview exercises

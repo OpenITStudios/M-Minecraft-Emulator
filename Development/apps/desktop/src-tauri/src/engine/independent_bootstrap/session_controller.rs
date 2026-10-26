@@ -87,11 +87,9 @@ impl Sessions {
         }
         let payload = BootstrapLibrary::reviewed()?;
         crate::engine::manager_settings::load_performance()?;
-        // Revalidate registration and exact game bytes before every launch.
-        let (path, image) = registered_image(true)?;
-        if path != self.path || !same_image(&image_id(&image)?, &image_id(&self.image)?) {
-            return Err(invalid("Registered game changed during this session"));
-        }
+        // Recheck current registration/signature/path identity and exact bytes
+        // against the original retained image without a redundant initial resolve.
+        validate_registered_image(&self.path,&self.image,true)?;
         let store = self.stores[index]
             .as_mut()
             .ok_or_else(|| invalid("Profile is unavailable after unconfirmed startup cleanup; existing processes are preserved"))?;

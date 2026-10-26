@@ -54,13 +54,11 @@ Earlier03a7d49 Clear review/name+ack gating/Cancel preserved catalog/options and
 created no deletion journal;7eb8ca1 Reset review/Cancel PASS. Data retained; no setup.
 ## Implemented corrections and executed evidence
 
-Presentation: workspace_surface.rs opaque host and previews.rs primary DWM image;
-native activation removes image first. Original pins/checkpoints/recovery retained.
-Existing coalesced foreground/move worker reconciles; no input relay. RED->GREEN
-stalled opacity, nine surface tests, translation/minimize/owner, focus, isolated
-stall/recovery, release/pipe-loss/helper-crash PASS.40 synthetic swaps p95/max2ms,
-not Minecraft latency. Logs workspace/runs/opaque-*. Actual game drag/focus/frame/
-switch/DPI NOT_EXECUTED.
+Presentation: opaque workspace_surface.rs host and previews.rs primary DWM image,
+removed before native activation. Original pins/recovery and coalesced foreground/
+move worker retained. Nine surface/opacity/translation/focus/stall/recovery fixtures
+PASS.40 synthetic swaps p95/max2ms. Logs workspace/runs/opaque-*. Actual Minecraft
+drag/focus/frame/switch/DPI NOT_EXECUTED.
 
 FPS:120/5 defaults, saves5..1000, background<=active across UI/bridge/backend.
 Historical explicit1..4 and144/10 readable without rewriting. V3 pacer gets saved
@@ -73,29 +71,27 @@ PID/birth admission fixtures PASS (locks/links/incomplete plans/peer preservatio
 No real cache/account/world deleted. Existing Rust warnings remain.
 ## Remaining work and owners
 
-Reset/restore source added: game_preset.rs backs up options.txt, flushes/readbacks,
-publishes SHA256 receipt before atomic replacement; restore backs up current state.
-Stopped-profile admission and review wired through existing actor/bridge/UI. Eight
-preset/recovery fixtures PASS. No real settings mutation; review/Cancel proof above.
-Full clear: product_profiles/clear.rs, same actor/bridge/UI, fresh hive/directory,
-generation-bound name+ack confirmation, same-volume cutover, catalog update and
-pinned-handle purge. Precommit rollback; committed purge needs explicit resume.
-Read-only inspection never mutates.13 profile tests (7 clear fixtures),5 controller
-and invalid admission PASS: locks/hardlinks/junctions/corrupt metadata/cutover faults/
-partial purge/stale token/readonly/peers. No real clear; candidate staged above.
-Audio source: session_audio.rs through existing controller, typed bridge and General.
-Data/Settings/audio.json defaults Keep; Mute scopes exact live PID/birth and excludes
-cross-process/system sessions, preserves user mute/volume, restores own changes.
-Existing250ms wakeups; endpoint/session discovery1second or ownership change.
-Real silent Windows sessions PASS: inactive mute, active restore, preexisting/later
-user mute, lease removal and another subprocess unchanged.6 settings tests and38
-frontend tests/typecheck PASS. Logs workspace/runs/audio-*. Candidate staged above.
-Real UI exposed polling closing the audio dropdown (Expanded->Collapsed/disabled).
-Final UI uses a direct two-state checkbox, stays enabled during polling and queues
-save until the request ends. Actual toggle/persistence and stable polling proof above.
+Reset/restore: game_preset.rs verified/flushed backup+SHA256 receipt before atomic
+options.txt replacement; restore backs up current settings.8 fixtures PASS.
+Full clear: product_profiles/clear.rs via same actor/bridge/UI; fresh hive/directory,
+generation-bound name+ack, same-volume cutover/catalog/pinned purge. Precommit rollback,
+explicit committed purge recovery; read-only inspection never mutates.13 profile
+tests (7 clear),5 controller/invalid admission PASS: locks/links/corrupt paths/faults/
+partial purge/stale token/readonly/peers. No real reset/clear; review/Cancel proof above.
+Audio: session_audio.rs, existing controller/bridge/General; Data/Settings/audio.json
+defaults Keep. Exact live PID/birth, no cross-process/system sessions, preserves
+mute/volume.250ms wakeups, discovery1second/ownership change. Silent Windows sessions
+PASS (mute/restore/user mute/foreign process/lease removal);6 settings and38 frontend
+tests/typecheck PASS. Logs workspace/runs/audio-*. UI checkbox stays enabled through
+polling and queues saves; real toggle/persistence proof above.
 Abrupt controller-crash mixer recovery, long-launch audio response and actual
 Minecraft audio remain unverified. Continue in these owners, no second lifecycle.
-Launch performance and actual Task Manager roles/grouping remain unproven.
+Launch preflight: original EXE pin, one fresh full Windows resolver instead of two,
+named-file ID check and reviewed hash per launch. Initial admission stays two-pass.
+Release3sample median2280->1176ms for validation only; read-only benchmark never
+opens profiles/starts Minecraft. Identity/path/hash/write-sharing test and5 controller
+regressions PASS. Logs workspace/runs/launch-preflight-release-*.log. Delivery pending;
+actual launch/window-ready timing and Task Manager roles/grouping remain unproven.
 WebView2 grouping matches OPEN upstream reports; AppUserModelID/metadata alone
 insufficient. Investigate actual parent/logon/integrity and supported APIs:
 https://github.com/MicrosoftEdge/WebView2Feedback/issues/5628

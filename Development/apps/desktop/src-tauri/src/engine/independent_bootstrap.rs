@@ -549,8 +549,21 @@ fn registered_image(observe: bool) -> io::Result<(String, File)> {
     let target = super::resolve_registered_education_target(selector)?;
     let path = Path::new(&target);
     let image = pin_image(path)?;
-    if super::resolve_registered_education_target(selector)? != target {
+    validate_registered_image(&target,&image,observe)?;
+    Ok((target,image))
+}
+
+fn validate_registered_image(target:&str,image:&File,observe:bool)->io::Result<()> {
+    validate_registered_image_with(target,image,observe,||super::resolve_registered_education_target("Resolve-ManagerEducationTarget -RegisteredOnly"))
+}
+fn validate_registered_image_with(target:&str,image:&File,observe:bool,resolve:impl FnOnce()->io::Result<String>)->io::Result<()> {
+    // The original pin predates this full signature/registration check. Reopen the
+    // current name only to prove it still denotes those same retained bytes.
+    if resolve()? != target {
         return Err(invalid("Education registration changed during preparation"));
+    }
+    if !same_image(&image_id(image)?,&image_id(&pin_image(Path::new(target))?)?) {
+        return Err(invalid("Registered Education image identity changed"));
     }
     // The scoped experiment is bound to the actually observed official image bytes/callsite.
     // An update refuses before allocating profiles; publisher identity alone cannot authorize an RVA.
@@ -559,12 +572,48 @@ fn registered_image(observe: bool) -> io::Result<(String, File)> {
         0x02, 0x3d, 0x18, 0x08, 0xc4, 0x4e, 0xe7, 0xbe, 0x03, 0x51, 0x9c, 0xdf, 0x83, 0x55, 0x23,
         0x3e, 0xaa,
     ];
-    if observe && file_digest(&image, 256 * 1024 * 1024)? != expected {
+    if observe && file_digest(image, 256 * 1024 * 1024)? != expected {
         return Err(invalid(
             "Education image changed; singleton recipe requires review",
         ));
     }
-    Ok((target, image))
+    Ok(())
+}
+
+#[cfg(test)]
+mod launch_preflight_measurement {
+    use super::*;
+    #[test]
+    fn retained_launch_validation_checks_fresh_registration_identity_and_bytes() {
+        let root=std::env::temp_dir().join(format!("lazy-preflight-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir(&root).unwrap();let path=root.join("fixture.exe");let other=root.join("other.exe");
+        std::fs::write(&path,[7u8;128]).unwrap();std::fs::write(&other,[9u8;128]).unwrap();
+        let target=path.to_str().unwrap();let image=pin_image(&path).unwrap();
+        let mut calls=0;
+        validate_registered_image_with(target,&image,false,||{calls+=1;Ok(target.into())}).unwrap();assert_eq!(calls,1);
+        assert!(OpenOptions::new().write(true).open(&path).is_err(),"Original pin must deny concurrent writers");
+        assert!(validate_registered_image_with(target,&image,false,||Ok(other.to_str().unwrap().into())).is_err());
+        let wrong=pin_image(&other).unwrap();
+        assert!(validate_registered_image_with(target,&wrong,false,||Ok(target.into())).is_err());
+        assert!(validate_registered_image_with(target,&image,true,||Ok(target.into())).is_err(),"Unreviewed bytes must still be refused");
+        assert_eq!(validate_registered_image_with(target,&image,false,||Err(io::Error::from(io::ErrorKind::PermissionDenied))).unwrap_err().kind(),io::ErrorKind::PermissionDenied);
+        drop(wrong);drop(image);assert!(root.starts_with(std::env::temp_dir()));std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    #[ignore="read-only timing of the official registered installation; never opens profiles or starts Minecraft"]
+    fn registered_launch_validation_cost() {
+        for sample in 0..3 {
+            let start=std::time::Instant::now();
+            let target=super::super::resolve_registered_education_target("Resolve-ManagerEducationTarget -RegisteredOnly").unwrap();
+            let registration_ms=start.elapsed().as_millis();
+            let start=std::time::Instant::now();let image=pin_image(Path::new(&target)).unwrap();
+            let _=file_digest(&image,256*1024*1024).unwrap();
+            let image_ms=start.elapsed().as_millis();
+            let start=std::time::Instant::now();drop(registered_image(true).unwrap());let full_ms=start.elapsed().as_millis();
+            let start=std::time::Instant::now();validate_registered_image(&target,&image,true).unwrap();let retained_ms=start.elapsed().as_millis();
+            eprintln!("LAZY_PREFLIGHT sample={sample} registration_signature_ms={registration_ms} image_pin_digest_ms={image_ms} full_validation_ms={full_ms} retained_validation_ms={retained_ms}");
+        }
+    }
 }
 
 const OBSERVATION_ENV: &str = "MIVUBI_EDUCATION_OBSERVATION_SECTION";
