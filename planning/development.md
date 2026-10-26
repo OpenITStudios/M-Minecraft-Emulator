@@ -40,18 +40,18 @@ requires selected-launcher review/confirmation.
 
 ## Current exact source and delivery
 
-Installed App/root source03a7d49036c6053480d1e77cc415dfc1a3cff0ea, clean Local build.
-App SHA256:5ea1751f08555fa1bd0133844c8bf444dbc0eb23d5dfa418f4162d19dc08a25c.
+Installed App/root source7b7b0e17d0926a1b810c0cb7676a8e5ab152fcb0, clean Local build.
+App SHA256:8afe4384dc38438b3ec99e07f8d59f39e5722e3d83ff364dd1bda20a4387b5ed.
 Root starter/DLL hashes: App/build-info.json, verified during Explorer startup.
-Candidate workspace/packages/lazy-tester/0.1.0-03a7d49036c6-20261026T191043879Z;
-NSIS SHA256:8b241fbab0843f25a1173f4bb1d555fe707301281abf66b2cacb245078a84c28.
+Candidate workspace/packages/lazy-tester/0.1.0-7b7b0e17d092-20261026T193113378Z;
+NSIS SHA256:798d84a09f53aae3228433d5944c31452a2b070970afe44a00e3b76428be8756.
 Signing NOT_VERIFIED; installer execution/publication NOT_EXECUTED/DISABLED.
 Actual Explorer startup: Connected/five enabled/no issue/project-local WebView cache.
-Real UI PID35760: Clear all data review starts disabled; wrong typed launcher+ack
-stays disabled; exact name+ack enables. Cancel closes review, catalog hash/options
-metadata unchanged, no clear journal, no real deletion. Log workspace/runs/
-full-clear-ui-smoke.log and .ps1. Owned idle UI closes normally; zero remaining app/
-game processes. Earlier7eb8ca1 Reset review/Cancel PASS. Data retained; no setup.
+Real UI PID37644: audio checkbox stayed enabled across2refreshes; Mute and Keep
+saved through UI into Data/Settings/audio.json. Log workspace/runs/audio-ui-smoke.log
+and .ps1. Owned idle UI closed normally; zero remaining app/game processes.
+Earlier03a7d49 Clear review/name+ack gating/Cancel preserved catalog/options and
+created no deletion journal;7eb8ca1 Reset review/Cancel PASS. Data retained; no setup.
 ## Implemented corrections and executed evidence
 
 Presentation: workspace_surface.rs opaque host and previews.rs primary DWM image;
@@ -89,11 +89,10 @@ cross-process/system sessions, preserves user mute/volume, restores own changes.
 Existing250ms wakeups; endpoint/session discovery1second or ownership change.
 Real silent Windows sessions PASS: inactive mute, active restore, preexisting/later
 user mute, lease removal and another subprocess unchanged.6 settings tests and38
-frontend tests/typecheck PASS. Logs workspace/runs/audio-*. Candidate not yet staged.
-Real UI exposed polling closing the audio dropdown: native probe observed Expanded
-become Collapsed/disabled during2second refresh. Audio selection now remains enabled
-during background polling and queues its save until that request finishes. UI proof
-of the correction and exact candidate delivery are pending.
+frontend tests/typecheck PASS. Logs workspace/runs/audio-*. Candidate staged above.
+Real UI exposed polling closing the audio dropdown (Expanded->Collapsed/disabled).
+Final UI uses a direct two-state checkbox, stays enabled during polling and queues
+save until the request ends. Actual toggle/persistence and stable polling proof above.
 Abrupt controller-crash mixer recovery, long-launch audio response and actual
 Minecraft audio remain unverified. Continue in these owners, no second lifecycle.
 Launch performance and actual Task Manager roles/grouping remain unproven.
@@ -112,6 +111,6 @@ Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4; second worktree detached47a45
 Four licensed playable clients, gameplay/network/migration/installer acceptance
 are separate obligations, NOT_EXECUTED here. Compiler caches remain ignored.
 
-Next: deliver scoped audio, then address crash recovery/launch response and
-remaining presentation/performance/process acceptance.
+Next: measure the retained launch/validation path before optimizing it. Audio crash
+recovery/long-launch response and presentation/process acceptance remain open.
 Overall goal stays ACTIVE.
