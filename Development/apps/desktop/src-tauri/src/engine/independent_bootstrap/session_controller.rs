@@ -501,6 +501,18 @@ fn window(child: &PendingEducationBootstrap) -> Option<OwnedProcess> {
     })
 }
 
+fn sync_audio(sessions:&Sessions,audio:&mut Option<super::session_audio::Audio>,mode:crate::engine::manager_settings::BackgroundAudio)->io::Result<()> {
+    use crate::engine::manager_settings::BackgroundAudio;
+    if mode==BackgroundAudio::Keep {
+        if let Some(current)=audio.as_mut(){current.restore()?;}
+        *audio=None;return Ok(());
+    }
+    let targets=sessions.running.iter().flatten().filter_map(|s|s.children[0].identity().ok()).collect::<Vec<_>>();
+    if targets.is_empty(){if let Some(current)=audio.as_mut(){current.restore()?;}*audio=None;return Ok(());}
+    if audio.is_none(){*audio=Some(super::session_audio::Audio::new()?);}
+    audio.as_mut().unwrap().sync(&targets,super::session_audio::foreground(),|pid,born|sessions.running.iter().flatten().any(|s|s.children[0].identity().ok()==Some((pid,born))))
+}
+
 fn run() -> io::Result<()> {
     use windows_sys::Win32::{
         Foundation::{GetLastError, ERROR_ALREADY_EXISTS},
@@ -522,6 +534,9 @@ fn run() -> io::Result<()> {
         ));
     }
     let mut sessions = Sessions::prepare()?;
+    let mut audio=None;
+    let mut audio_mode=crate::engine::manager_settings::load_audio()?;
+    let mut audio_issue;
     let server = Server::start(Endpoint::current()?)?;
     let mut manager: Option<Peer> = None;
     let startup = std::time::Instant::now();
@@ -533,6 +548,7 @@ fn run() -> io::Result<()> {
     }
     loop {
         sessions.reap();
+        audio_issue=sync_audio(&sessions,&mut audio,audio_mode).err().map(|e|e.to_string());
         let detached = manager.as_ref().map_or_else(
             || startup.elapsed() > Duration::from_secs(45),
             |peer| !peer.alive(),
@@ -586,6 +602,13 @@ fn run() -> io::Result<()> {
                         .map_err(|error|error.to_string())?;
                     settings=Some(sessions.settings(false).map_err(|error|error.to_string())?);
                 }
+                SessionRequest::SaveAudio {mode}=>{
+                    // Apply before committing the preference; failed restore stays retryable.
+                    sync_audio(&sessions,&mut audio,mode).map_err(|e|e.to_string())?;
+                    crate::engine::manager_settings::save_audio(mode).map_err(|e|e.to_string())?;
+                    audio_mode=mode;audio_issue=None;
+                    settings=Some(sessions.settings(false).map_err(|e|e.to_string())?);
+                }
                 SessionRequest::Launch { slot } => {
                     sessions.launch(slot).map_err(|error| error.to_string())?
                 }
@@ -621,6 +644,7 @@ fn run() -> io::Result<()> {
                     .map_err(|error| error.to_string())?,
             }
             let mut snapshot = sessions.snapshot();
+            if let Some(report)=settings.as_mut(){report.audio_issue=audio_issue.clone();}
             snapshot.storage = storage;
             snapshot.settings = settings;
             Ok(snapshot)

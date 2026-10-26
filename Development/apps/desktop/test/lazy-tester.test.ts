@@ -7,6 +7,13 @@ const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process
   pid: slot + 100, createdFileTime: String(slot + 200), sessionId: 1, windowHandle: `0x${slot}`, responding: true,
 }});
 describe('Lazy Tester profile contract', () => {
+  it('validates optional background audio support and reports native failures',()=>{
+    const settings={activeFps:120,backgroundFps:5,renderDistanceChunks:12,canApplyPreset:true,changedProfiles:null};
+    expect(parseSession({...stopped(),settings}).settings?.backgroundAudio).toBeUndefined();
+    for(const backgroundAudio of ['Keep','Mute'])expect(parseSession({...stopped(),settings:{...settings,backgroundAudio}}).settings?.backgroundAudio).toBe(backgroundAudio);
+    expect(parseSession({...stopped(),settings:{...settings,backgroundAudio:'Mute',audioIssue:'Device disconnected'}}).settings?.audioIssue).toBe('Device disconnected');
+    for(const invalid of [{backgroundAudio:'Other'},{backgroundAudio:null},{audioIssue:'unsupported'},{backgroundAudio:'Mute',audioIssue:7}])expect(()=>parseSession({...stopped(),settings:{...settings,...invalid}})).toThrow();
+  });
   it('validates full-clear identity confirmation and refuses active or inconsistent targets',()=>{
     const fullClear={canClear:true,pending:false,confirmationToken:'a'.repeat(64),issue:null};
     const storage=[1,2,3,4,5].map(slot=>({slot,bytes:100,files:2,partial:false,disk:null,

@@ -28,6 +28,10 @@ pub struct SessionSnapshot {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SettingsReport {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background_audio: Option<super::manager_settings::BackgroundAudio>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio_issue: Option<String>,
     #[serde(default = "default_graphics")]
     pub graphics_presets: [super::manager_settings::GraphicsPreset; 5],
     pub active_fps: u32,
@@ -41,7 +45,7 @@ impl SettingsReport {
     pub fn policy(can_apply_preset: bool, changed_profiles: Option<u32>) -> io::Result<Self> {
         // Configured ceilings of the reviewed payload, never measured frame rates.
         let limits=super::manager_settings::load_performance()?;
-        Ok(Self { graphics_presets: super::manager_settings::load_graphics()?, active_fps: limits.active_fps, background_fps: limits.background_fps, render_distance_chunks: 12,
+        Ok(Self { background_audio:Some(super::manager_settings::load_audio()?), audio_issue:None, graphics_presets: super::manager_settings::load_graphics()?, active_fps: limits.active_fps, background_fps: limits.background_fps, render_distance_chunks: 12,
             can_apply_preset, changed_profiles })
     }
 }
@@ -118,6 +122,7 @@ pub enum SessionRequest {
     ApplyPreset,
     ApplyGraphicsPreset { slot: u32, preset: super::manager_settings::GraphicsPreset },
     SavePerformance { #[serde(rename="activeFps")] active_fps:u32, #[serde(rename="backgroundFps")] background_fps:u32 },
+    SaveAudio {mode:super::manager_settings::BackgroundAudio},
     InspectStorage,
     OpenProfileFolder { slot: u32 },
     ClearProfileCache { slot: u32 },
@@ -248,8 +253,9 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
     }
     // Closing an idle manager must never provision/start a new controller or game.
     if matches!(request,SessionRequest::CloseAll) {return Ok(Ok(SessionSnapshot::stopped()));}
-    if matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings | SessionRequest::SavePerformance { .. }) {
+    if matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings | SessionRequest::SavePerformance { .. } | SessionRequest::SaveAudio {..}) {
         let mut snapshot = SessionSnapshot::stopped();
+        if let SessionRequest::SaveAudio {mode}=request {super::manager_settings::save_audio(mode)?;}
         if let SessionRequest::SavePerformance { active_fps, background_fps } = request {
             super::manager_settings::save_performance(super::manager_settings::PerformanceSettings {active_fps,background_fps})?;
         }

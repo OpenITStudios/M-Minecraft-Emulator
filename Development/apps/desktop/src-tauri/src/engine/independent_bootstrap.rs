@@ -492,6 +492,8 @@ mod game_preset;
 
 #[path = "independent_bootstrap/session_controller.rs"]
 mod session_controller;
+#[path = "independent_bootstrap/session_audio.rs"]
+mod session_audio;
 #[path = "independent_bootstrap/profile_storage.rs"]
 mod profile_storage;
 #[path = "independent_bootstrap/profile_binding.rs"]

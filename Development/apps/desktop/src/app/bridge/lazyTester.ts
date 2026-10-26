@@ -18,7 +18,8 @@ export interface ProfileStorage {
   fullClear?: {canClear:boolean; pending:boolean; confirmationToken:string|null; issue:string|null};
 }
 export type GraphicsPreset = 'High' | 'Low';
-export interface SettingsReport {graphicsPresets?:GraphicsPreset[]; activeFps:number; backgroundFps:number; renderDistanceChunks:number; canApplyPreset:boolean; changedProfiles:number|null}
+export type BackgroundAudio = 'Keep'|'Mute';
+export interface SettingsReport {backgroundAudio?:BackgroundAudio; audioIssue?:string; graphicsPresets?:GraphicsPreset[]; activeFps:number; backgroundFps:number; renderDistanceChunks:number; canApplyPreset:boolean; changedProfiles:number|null}
 export interface SessionSnapshot {schema: 1; profiles: ProfileSession[]; storage: ProfileStorage[] | null; settings?:SettingsReport}
 export interface PreviewPlacement {slot: ProfileSlot; viewport: WorkspaceViewport}
 export interface PreviewStatus {slot: ProfileSlot; registered: boolean; reason: string | null}
@@ -107,7 +108,9 @@ export function parseSession(value: unknown): SessionSnapshot {
   }
   if(Object.hasOwn(value,'settings')) {
     const settings=value.settings;
-    if(!record(settings)||!exact(settings,Object.hasOwn(settings,'graphicsPresets')?['graphicsPresets','activeFps','backgroundFps','renderDistanceChunks','canApplyPreset','changedProfiles']:['activeFps','backgroundFps','renderDistanceChunks','canApplyPreset','changedProfiles'])||
+    if(!record(settings)||!exact(settings,['activeFps','backgroundFps','renderDistanceChunks','canApplyPreset','changedProfiles',...['graphicsPresets','backgroundAudio','audioIssue'].filter(key=>Object.hasOwn(settings,key))])||
+      Object.hasOwn(settings,'backgroundAudio')&&!['Keep','Mute'].includes(String(settings.backgroundAudio))||
+      Object.hasOwn(settings,'audioIssue')&&(!Object.hasOwn(settings,'backgroundAudio')||typeof settings.audioIssue!=='string'||settings.audioIssue.length>8192)||
       Object.hasOwn(settings,'graphicsPresets')&&(!Array.isArray(settings.graphicsPresets)||settings.graphicsPresets.length!==5||settings.graphicsPresets.some(p=>p!=='High'&&p!=='Low'))||
       !Number.isInteger(settings.activeFps)||Number(settings.activeFps)<1||Number(settings.activeFps)>1000||
       !Number.isInteger(settings.backgroundFps)||Number(settings.backgroundFps)<1||Number(settings.backgroundFps)>Number(settings.activeFps)||
@@ -149,6 +152,10 @@ export function parsePreviewReport(value:unknown,slots:readonly ProfileSlot[]):P
 }
 
 export const lazyTester = {
+  saveAudio:async(mode:BackgroundAudio)=>{
+    if(!['Keep','Mute'].includes(mode))throw new TypeError('Invalid background audio preference');
+    return settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'SaveAudio',mode}}));
+  },
   reportStartup:(report:{connection:string;issue:string;cards:number;enabled:number})=>invokeRuntime<void>('startup_diagnostic_result',report),
   applyGraphics:async(slot:ProfileSlot,preset:GraphicsPreset)=>{
     if(!profileSlots.includes(slot)||!['High','Low'].includes(preset))throw new TypeError('Invalid graphics preset');

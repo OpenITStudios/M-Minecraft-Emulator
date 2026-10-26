@@ -5,6 +5,30 @@ pub const TARGETS: &str =
     include_str!("../../../../../engine/isolation-native/owned-runtime/minecraft-targets.json");
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+pub enum BackgroundAudio { #[default] Keep, Mute }
+pub fn load_audio()->io::Result<BackgroundAudio> {read_audio(&product_settings()?.join("audio.json"))}
+fn read_audio(path:&std::path::Path)->io::Result<BackgroundAudio> {
+    match fs::symlink_metadata(path) {
+        Err(e) if e.kind()==io::ErrorKind::NotFound=>return Ok(BackgroundAudio::Keep),
+        Err(e)=>return Err(e),
+        Ok(m) if !m.is_file()||m.file_type().is_symlink()=>return Err(io::Error::other("Audio settings must be an ordinary file")),
+        Ok(_)=>{}
+    }
+    let mut bytes=Vec::new();fs::File::open(path)?.take(65).read_to_end(&mut bytes)?;
+    if bytes.len()>64{return Err(io::Error::other("Audio settings are too large"));}
+    serde_json::from_slice(&bytes).map_err(io::Error::other)
+}
+pub fn save_audio(value:BackgroundAudio)->io::Result<()> {write_audio(&product_settings()?.join("audio.json"),value)}
+fn write_audio(path:&std::path::Path,value:BackgroundAudio)->io::Result<()> {
+    use std::io::Write;
+    read_audio(path)?;
+    fs::create_dir_all(path.parent().ok_or_else(||io::Error::other("Audio settings parent unavailable"))?)?;
+    let temp=path.with_extension(format!("{}-{}.tmp",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(io::Error::other)?.as_nanos()));
+    let result=(||{let mut f=fs::OpenOptions::new().write(true).create_new(true).open(&temp)?;f.write_all(&serde_json::to_vec(&value).map_err(io::Error::other)?)?;f.sync_all()?;drop(f);fs::rename(&temp,path)})();
+    if result.is_err(){let _=fs::remove_file(temp);}result
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 pub enum GraphicsPreset {
     High,
     #[default]
@@ -243,6 +267,18 @@ fn write(path: &std::path::Path, value: &ManagerSettings) -> io::Result<()> {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn audio_roundtrip_rejects_unknown_and_preserves_bad_preferences() {
+        use super::*;
+        let root=std::env::temp_dir().join(format!("lazy-audio-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir(&root).unwrap();let path=root.join("audio.json");
+        assert_eq!(read_audio(&path).unwrap(),BackgroundAudio::Keep);
+        write_audio(&path,BackgroundAudio::Mute).unwrap();assert_eq!(read_audio(&path).unwrap(),BackgroundAudio::Mute);
+        write_audio(&path,BackgroundAudio::Keep).unwrap();assert_eq!(read_audio(&path).unwrap(),BackgroundAudio::Keep);
+        fs::write(&path,b"\"Other\"").unwrap();assert!(write_audio(&path,BackgroundAudio::Keep).is_err());
+        assert_eq!(fs::read(&path).unwrap(),b"\"Other\"");
+        assert!(root.starts_with(std::env::temp_dir()));fs::remove_dir_all(root).unwrap();
+    }
     use super::*;
     #[test]
     fn graphics_preferences_are_bounded_atomic_and_preserve_bad_inputs() {

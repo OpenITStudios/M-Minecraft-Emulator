@@ -103,7 +103,15 @@ updates its catalog identities and purges old data through verified handles. The
 identity-bound transaction supports rollback before catalog commit and explicit
 cleanup recovery afterward; read-only inspection never resumes deletion. UI review
 requires the exact launcher name and an irreversible-deletion acknowledgement.
-Windows sign-in is unchanged; world export and background audio remain unavailable.
+Windows sign-in is unchanged; world export remains unavailable.
+Background audio uses session_audio.rs on the retained controller thread and
+manager_settings.rs Data/Settings/audio.json. Default Keep makes no mixer changes.
+Mute targets only exact live owned PID/birth identities and single-process render
+sessions, excludes system sounds, preserves prior mute/volume and restores its own
+changes on Keep/normal teardown. Existing controller wakeups sample foreground;
+session/device discovery is limited to once per second and ownership changes.
+Native errors are reported in General. Abrupt controller-crash recovery of mixer
+changes and real Minecraft audio acceptance remain unverified.
 Full product exit closes only its managed games normally through the
 existing session owner; it never terminates unrelated games or reads their data.
 
