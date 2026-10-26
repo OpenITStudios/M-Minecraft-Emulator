@@ -43,6 +43,17 @@ describe("Emulator source verification routing", () => {
     expect(app.scripts["build:lazy-tester"]).toContain(" -- --locked");
   });
 
+  it("uses the product route for normal development and keeps private preview explicit", () => {
+    expect(root.scripts.dev).toBe("npm --prefix apps/desktop run dev:app");
+    expect(app.scripts["dev:app"]).toBe("npm run dev:lazy-tester");
+    expect(app.scripts["dev:lazy-tester"]).toBe(app.scripts["build:lazy-tester"].replace(
+      "tauri build --target x86_64-pc-windows-msvc --bundles nsis",
+      "tauri dev --target x86_64-pc-windows-msvc",
+    ));
+    expect(app.scripts["dev:preview"]).toContain("--config src-tauri/tauri.native-preview.conf.json --features native-workspace-preview -- --locked");
+    expect(app.scripts["dev:preview"]).not.toContain("--features lazy-tester-package");
+  });
+
   it("prevents shipping the native pilot inside the existing VMware NSIS bundle", () => {
     const entry = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
     const packageBuilder = readFileSync(new URL("../scripts/prepare-package-binaries.mjs", import.meta.url), "utf8");

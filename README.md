@@ -66,3 +66,12 @@ The GUI continues to use Tauri 2, Rust, Svelte, and TypeScript with locked exist
 dependencies. The [native packaging decision](engine/distribution/README.md)
 creates a separate Lazy Tester product while retaining old installations/settings
 and private game profile paths. Legacy installer generation remains blocked.
+
+`npm run dev` (also `DEV.cmd dev`) now uses the same Lazy Tester identity,
+native feature and reviewed DLL staging as `npm run package:windows`. Set
+`LAZY_TESTER_NATIVE_PAYLOAD_DIR` to the directory containing the two reviewed
+bootstrap DLLs before either command; missing or different DLLs are refused.
+Staging copies only those DLLs, never adjacent profile bindings. First-run profile
+selection uses the product's private binding; opening the app does not launch games.
+The old developer-only adjacent-binding route remains explicit through
+`npm --prefix apps/desktop run dev:preview`; it is not the default product route.
