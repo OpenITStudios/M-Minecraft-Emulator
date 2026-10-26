@@ -57,11 +57,15 @@ functional location UI, not acceptance of the earlier visual design.
 - Actual Windows x64 Tauri release and NSIS construction PASS with the native
   package feature and --locked. Existing 104 native warnings remain.
 - Build output: workspace/builds/lazy-tester-layout-20261026/target.
-  manager SHA256 839ee86bed96363d50e35ca897863a0014c6b79d37bb9d5f0582e5cf746c4e0a;
-  installer SHA256 5c9e891fab503227e74a816d3f4d1a68c7b105a56a8524f25d93c567add36bba.
-  Unsigned. Built source precedes the documentation-only handoff update.
-- The clean-source packaging wrapper's post-commit export is not claimed yet;
-  any later export receipt must name its actual source commit and artifact hashes.
+  final manager SHA256 55f86b74a6fcb0f7dd4020ad3597cae0a812754f6f544e2814503fd83a76ab16;
+  final installer SHA256 7f26ba1932c62d29229b6cf1ec0d74e277edd895cf7491b4d1f44e051ac155c9.
+  Authenticode status NotSigned, inspected rather than inferred.
+- Actual clean-source npm run package:windows PASS at
+  6760526c730a4c2161ae09e386fe79036b395873, including the existing desktop builder
+  and immutable export. Receipt is under ignored workspace/packages/lazy-tester/
+  0.1.0-6760526c730a-20261026T071623990Z. Exactly three files were verified; the
+  exported installer checksum matches its manifest and the source SHA is exact.
+  This follow-up changes only the handoff; no newer binary acceptance is implied.
 - No candidate GUI, installer, Minecraft, Computer Use, UAC, driver or service
   execution. No real account/token/world contents were read or copied. The old
   Lazy Tester PID 20904 was observed by metadata only and left running unchanged.
