@@ -365,6 +365,16 @@ pub(super) fn prepare() -> io::Result<()> {
     )
 }
 
+fn verify_selected_location(logical: File, root: &Path) -> io::Result<()> {
+    open_at(logical, root).map(drop).map_err(|error| {
+        if error.kind() == io::ErrorKind::NotFound {
+            io::Error::new(error.kind(), "Select an existing Lazy Tester Data folder containing profiles.json and all five profiles. Empty folders and older pilot folders cannot be reconnected here. Your current data location has not changed.")
+        } else {
+            error
+        }
+    })
+}
+
 pub(crate) fn location(action: DataLocationAction) -> io::Result<DataLocation> {
     let home = home()?;
     let locator = locator_path()?;
@@ -393,7 +403,7 @@ pub(crate) fn location(action: DataLocationAction) -> io::Result<DataLocation> {
                 initialize_at(&logical, &selected)?;
             }
             let (logical, _) = replay_roots()?;
-            drop(open_at(logical, &selected)?);
+            verify_selected_location(logical, &selected)?;
             require_idle()?;
             let relative = selected == home.join("Data");
             write_json(
@@ -528,6 +538,7 @@ mod tests {
         let data = fixture.root.join("Data");
         initialize_at(&logical, &data).unwrap();
         fixture.remember(&data);
+        verify_selected_location(logical.try_clone().unwrap(), &data).unwrap();
         let first = open_at(logical.try_clone().unwrap(), &data).unwrap();
         assert_eq!(
             first.iter().map(|store| store.slot).collect::<Vec<_>>(),
@@ -564,6 +575,23 @@ mod tests {
         .unwrap();
         std::fs::create_dir(data.join("Profiles/Minecraft-5")).unwrap();
         assert!(open_at(logical, &data).is_err());
+    }
+    #[test]
+    fn selected_incomplete_folders_explain_recovery_without_creating_metadata() {
+        let fixture = Fixture::new();
+        let logical = fixture.logical();
+        let data = fixture.root.join("Data");
+        std::fs::create_dir(&data).unwrap();
+        let error = verify_selected_location(logical.try_clone().unwrap(), &data).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
+        assert!(error.to_string().contains("profiles.json and all five profiles"));
+        assert!(empty_default(&data).unwrap());
+        let marker = data.join("partial-profile-marker");
+        std::fs::write(&marker, b"keep").unwrap();
+        assert!(verify_selected_location(logical, &data).is_err());
+        assert_eq!(std::fs::read(&marker).unwrap(), b"keep");
+        assert!(!data.join(CATALOG).exists());
+        assert!(!data.join(LOCATOR).exists());
     }
     #[test]
     fn relative_default_follows_home_and_custom_missing_paths_never_fall_back() {

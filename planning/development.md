@@ -3,7 +3,30 @@
 Local only; main is release-reserved and GitHub Actions remains OFF. RAM/renderer,
 Sandboxie and VMware work remain PAUSED. Development/Archive layout is retained.
 
-## Current bounded outcome — setup/data recovery
+## Current bounded outcome — actual setup/picker validation
+
+Operator explicitly continued the proposed interactive setup/picker test after
+9b6429ea14bcd30557ca7604c46fd08d560e8079. Computer Use was used only on the
+locally built Lazy Tester GUI and its native folder dialog; no game/auth/security
+UI. Exact App source 88aa73f1fcb11d7193e0ccd574018e8d176bd0a0 opened, showed
+Connected/zero games and verified the retained five-profile pilot binding. Storage
+showed the original pilot location, not product Data; root Data stayed empty.
+Actual Locate dialog cancel restored usable controls and retained the location.
+Selecting the empty checkout Data was refused; no pointer or catalog was created.
+The resulting raw os-error-2 message was unhelpful. The existing product_profiles
+owner now contextualizes missing files only during selected-folder verification:
+select a complete existing Data folder with profiles.json and all five profiles;
+empty/old-pilot folders are not product reattachment targets. Error kind and all
+identity/idle/open/publish gates remain intact. Default empty setup resolution is
+unchanged. Three targeted Windows fixtures PASS, including empty/partial folder
+preservation and valid selection. A fresh clean package and real rejection retest
+follow this commit. No registry/data migration or automatic replacement added.
+
+Successful real product-data reattachment is NOT_EXECUTED: this observed machine
+uses retained pilot stores and has no verified product Data catalog. No user data
+will be converted or fabricated merely to manufacture that acceptance result.
+
+## Preserved setup/data recovery implementation
 
 Operator resumed setup and location validation from Local
 943af543fb388b5b9f707357fa6ea1a237188e05. Implementation:
@@ -87,6 +110,6 @@ remain unfinished/deferred. Previous pilot gameplay is historical proof only.
 
 ## Next — one action
 
-At the next authorized interactive session, validate this exact candidate's setup
-and Locate data recovery with an existing valid folder, without resetting profiles.
-FPS/gameplay acceptance follows separately. STOP for completed source recovery scope.
+Build and retest the selected-folder message in the real native picker, then
+record exact candidate/evidence and stop. Complete-product-data reattachment,
+fresh installed setup and Minecraft/FPS acceptance remain separate and unfinished.
