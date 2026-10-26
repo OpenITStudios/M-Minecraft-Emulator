@@ -72,9 +72,17 @@ builds and configurable Pacer self-test (60/5 deadlines/focus/stop/v2/v3 validat
 
 ## Package and remaining proof
 
-Previous App/export: clean Local 19860393; a fresh Windows/NSIS candidate for the
-current frontend change is the immediate completion step. Preserve locator,
-performance.json and previous App through the existing stager.
+Clean Local 300d5911c80a9caed5966d3e74052c12bf1734d3 built Windows/NSIS
+successfully. App was refreshed by the existing stager; previous App was preserved.
+All four App payload hashes match build-info.json and the exact source revision.
+Data remains empty; no actual performance.json was created (144/10 defaults).
+Export: workspace/packages/lazy-tester/0.1.0-300d5911c80a-20261026T093516020Z.
+Installer SHA256: 4766958f7a4825a8b165e39443aef8e1df0cb60eca85a6cdd11a764d7a018881.
+App and installer are NotSigned. Metadata-only verification receipt:
+workspace/runs/app-usability-20261026/completion.json. The follow-up handoff commit
+changes documentation only; the binary is the exact implementation SHA above.
+The initialized Sandboxie gitlink and detached second worktree are unchanged;
+App/Data/workspace private/build outputs remain ignored by Git.
 
 No Computer Use, product GUI, installer execution, Minecraft, UAC, service/driver,
 account/world-content reading or real cache deletion performed. Headless browser
@@ -87,6 +95,7 @@ upstream submodule must remain intact.
 
 ## Next — one action
 
-Finish clean-revision Windows package/hash verification for this bounded usability
-scope, then record the exact build revision and stop. Interactive acceptance is
-separate and not a prerequisite for further useful source work.
+At the next authorized interactive session, validate the exact candidate's setup,
+navigation, custom/default FPS after normal profile restart, licensed login/world
+persistence and Host World. This is separate runtime acceptance, not a prerequisite
+for useful source work. STOP for this completed bounded APP usability scope.
