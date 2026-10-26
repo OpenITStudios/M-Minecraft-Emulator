@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {nextProfile, parseSession, parsePreviewReport, parseProfileBinding, parseDataLocation, validFpsLimits, type ProfileSession} from '../src/app/bridge/lazyTester.js';
+import {firstEmbeddedProfile, nextProfile, parseSession, parsePreviewReport, parseProfileBinding, parseDataLocation, validFpsLimits, type ProfileSession} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
@@ -7,6 +7,15 @@ const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process
   pid: slot + 100, createdFileTime: String(slot + 200), sessionId: 1, windowHandle: `0x${slot}`, responding: true,
 }});
 describe('Lazy Tester profile contract', () => {
+  it('leaves separately opened games alone while another game remains playable here',()=>{
+    const snapshot=stopped();
+    for(const slot of [1,2])Object.assign(snapshot.profiles[slot-1]!,running(slot));
+    const profiles=parseSession(snapshot).profiles;
+    expect(firstEmbeddedProfile(profiles,new Set([1]))).toBe(2);
+    expect(firstEmbeddedProfile(profiles,new Set([1,2]))).toBeNull();
+    expect(firstEmbeddedProfile(profiles,new Set([2]))).toBe(1);
+    expect(profiles.filter(profile=>profile.state==='RUNNING')).toHaveLength(2);
+  });
   it('accepts exactly five High/Low selections and rejects invented graphics states',()=>{
     const settings={activeFps:144,backgroundFps:10,renderDistanceChunks:12,canApplyPreset:true,changedProfiles:null,graphicsPresets:['High','Low','High','Low','Low']};
     expect(parseSession({...stopped(),settings}).settings!.graphicsPresets).toEqual(settings.graphicsPresets);

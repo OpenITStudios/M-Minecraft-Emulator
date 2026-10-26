@@ -106,6 +106,9 @@ function settingsSession(value:unknown):SessionSnapshot & {settings:SettingsRepo
   return snapshot as SessionSnapshot & {settings:SettingsReport};
 }
 
+export function firstEmbeddedProfile(profiles:ProfileSession[],separate:ReadonlySet<ProfileSlot>):ProfileSlot|null {
+  return profiles.find(profile=>profile.state==='RUNNING'&&!separate.has(profile.slot))?.slot??null;
+}
 export function nextProfile(profiles: ProfileSession[], active: ProfileSlot | null, direction: 1 | -1): ProfileSlot | null {
   const playable = profiles.filter(profile => profile.state === 'RUNNING' && profile.process?.responding);
   if (!playable.length) return null;

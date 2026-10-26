@@ -13,6 +13,16 @@ This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build
 
 ## Current Lazy Tester route — 26 October 2026
 
+WindowTitlebar.svelte owns the shared product frame controls; main-window-only
+Tauri permissions allow drag/minimize/maximize/close. A native game aperture disables
+DWM frame rendering, so product chrome is drawn consistently in the UI. Moved events
+use workspace_surface::follow_manager for nonblocking identity-checked translation;
+resize/recovery retain the original helper. release_for_close rejects reacquisition
+while restoring games. Frontend separate-slot state releases only the selected
+process; preview adoption receives only requested monitoring tiles. DWM destinations
+follow manager visibility rather than foreground input; they retain ordinary owned
+window stacking. These paths do not control Minecraft lifecycle or sign-in.
+
 Project-local delivery has an icon-bearing native Lazy Tester.exe at checkout root.
 It forwards only to App/lazy-tester.exe and owns no configuration/session state.
 product_profiles.rs owns schema2 Data/Launchers/Minecraft-1..5, each with private

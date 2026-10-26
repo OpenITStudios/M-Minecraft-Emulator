@@ -1,108 +1,106 @@
 # Current Development Handoff — Lazy Tester
 
 Local only; main/publication untouched; CI OFF. Legacy VM, Sandboxie and
-RAM/renderer experiments remain PAUSED.
+RAM/renderer experiments PAUSED. User explicitly chose to RETAIN compiler caches;
+the previous deletion blocker is no longer an active task. Delete nothing.
 
-## User outcome and exact state
+## Current request — 27 October 2026
 
-User requests reliable Desktop startup, project-local Data, root native EXE and
-removal of unused development output. Installed App/root starter source is
-04b5c52498393492fed6b734a49f00f36004d0a7. Startup/data repair verified on that EXE.
-Cleanup NOT complete: automatic approval rejected recursive compiler-cache deletion
-again despite renewed explicit user authorization. ZERO bytes deleted/reclaimed.
-Do not bypass denial, call archival reclaimed space, or mark the whole job DONE.
+Repair classic-looking border in Play, game drag latency, per-launcher separate
+window behavior, Close while games run, disappearing previews, preview size and
+ambiguous Task Manager names. Base source36bbf2e7e621e0edc728c54113d7939d699e798a.
+Installed App still04b5c52498393492fed6b734a49f00f36004d0a7. Live old manager17848,
+controller36188, games19336/42248 and recovery helpers were observed; never terminate
+user games. Their exact current presence must be rechecked before staging.
 
-## Final actual Desktop evidence
+## Current source changes
 
-Explorer -> root Lazy Tester.exe -> App/lazy-tester.exe exercised three times on
-04b5c52: Connected, five cards/five enabled Launch controls, no connection error,
-cacheInsideData=true. Final PID17848/root starter5596 deliberately left open.
-No Minecraft game or installer launched. Actual enabled controls are not proof of
-independently licensed/playable Minecraft sessions.
+Canonical window presentation owner remains workspace_surface.rs. A native own
+window probe proves SetWindowRgn changes DWM nonclient rendering from1 to0;
+forcing DWM policy enabled still returns0. Preserve independent top-level games,
+no parenting/ownership/input injection. Product/base config now decorations=false;
+WindowTitlebar.svelte provides a consistent draggable dark frame and accessible
+minimize/maximize/close controls in Play and Settings. Minimal window permissions
+are restricted to main. Native region composition remains unchanged.
 
-Ignored receipts: workspace/runs/project-desktop-cache-final-1.json,
+Pure WindowEvent::Moved calls identity-checked SetWindowPos ASYNCWINDOWPOS/NOSIZE
+through a nonblocking SURFACE try_lock. No helper-pipe roundtrip or game-thread
+acknowledgement in the normal drag path. If contended/temporarily invalid, existing
+latest-event worker receives fallback so final movement is not discarded. Resize,
+activation, checkpoint restoration and original process identity checks remain.
+
+Close no longer waits for an unparented Yes/No dialog. It releases original windows
+then destroys the manager, leaving Minecraft running. The same surface owner marks
+closing before recovery so frontend reflows cannot reacquire a session during exit.
+Recovery failure keeps manager alive and shows a parented error dialog; no game kill.
+
+Separate-window action now names and releases only the selected exact process.
+Frontend tracks separate slots for the current manager session and does not auto
+recapture them. Other running sessions remain selectable here; explicitly choosing
+a separate session returns it to Play. Preview adoption uses only requested tiles,
+so excluded desktop sessions cannot be parked incidentally. No persistent setup flag.
+
+DWM preview visibility now follows manager visibility/minimization, not input focus.
+Destinations remain owned, non-topmost, nonactivating windows. Focus elsewhere must
+not blank a visible monitoring panel. Hide no longer requires valid minimized
+viewport geometry. Transient WouldBlock while moving preserves previous preview.
+Preview width cap grows from100px-high to a responsive16vh/up-to180px-high16:9 fit,
+within five cards and1600px dock. Compact heights retain a smaller dock. Main viewport
+remains largest-fit16:9. No capture/encoding loop or extra polling.
+
+Root starter now has FileDescription Lazy Tester - App Launcher. IMPORTANT: helper
+Task Manager display names are NOT yet individually renamed. They intentionally
+execute the same image; the controller pipe authenticates exact executable file
+identity. Generic per-image descriptions must not be presented as fixed per-role
+labels. Preserve that security contract when addressing the remaining naming work.
+
+## Executed evidence / limitations
+
+Typecheck0errors/0warnings;35 frontend tests PASS including separate-slot selection.
+Rust all-target check PASS before the final test-only helper assertion (which then
+compiled and passed in the isolated test). Nine workspace surface tests PASS,
+including actual offscreen DWM registration, visibility without foreground and
+minimize/hide. Actual own synthetic Windows fixtures separately PASS:
+- stalled_window_reports...: async follow under100ms while synthetic game stalls4s;
+  timeout recovery preserves game and original styles/geometry.
+- actual_surface_helper_restores...: release/pipe loss/helper crash, normal/maximized,
+  targeted release preserves another window, final close preserves game and denies
+  reacquisition; retained switching p95=2ms/max3ms in this run.
+Combined fixture run earlier failed timing/recovery and contaminated following
+shared-state test; do not erase that limitation. Fresh isolated runs passed without
+weakening deadlines. Rebuild current helper before rerunning synthetic cases.
+Logs: workspace/runs/interaction-surface-tests.log, interaction-stall-isolated.log,
+interaction-recovery-isolated.log, interaction-rust-check.log and frame-probe.cs.
+No game was launched, signed into or controlled by these tests. They are not proof
+of actual Minecraft drag smoothness or final release UI acceptance.
+
+Package/build/staging for this source remains pending. Never claim user App updated
+until exact-source receipt and real Explorer verification. The running old game
+controller must stop normally before replacing its executable. Preserve all Data.
+
+## Retained project-local startup/data repair
+
+Installed04b5c52 was verified across three real Explorer -> root starter -> App
+starts: Connected, five enabled Launch controls, cacheInsideData=true. Five App/root
+hashes match receipt, five private HKCU.dat files, zero Data links, protected ACL.
+Receipts: workspace/runs/project-desktop-cache-final-1.json,
 project-desktop-cache-final-2.json and project-local-final-integrity.json.
-All five App/root hashes verified; five HKCU.dat files; zero Data links; protected
-Data ACL;183 actual browser-cache files. Desktop/Start Menu shortcuts target root
-Lazy Tester.exe with checkout CWD. Starter owns no settings/session state and only
-forwards to App. Embedded icon/fixed target/CWD/exit propagation tested previously.
+Five original profiles migrated opaquely to Data/Launchers/Minecraft-1..5; original
+outside-project copies preserved as recovery, not active dependencies. No repeated
+setup/migration. Data/Settings owns preferences/location/lease; Data/Cache owns
+Temp and actual WebView path through explicit WebviewWindowBuilder.data_directory.
+Windows identity/DPAPI, licensed game and OS prerequisites remain external.
+Native payloads unchanged under workspace/builds/central-data-20261026/Release:
+compat0f45c07b370ff6c1bf150ccc20879ff6406c208f2b8c3ccdc596b82f2552381e;
+enroller51517528886483ba89f1b93b448c1ddd349f26f0e48e5322db434cbfe9c4de99.
 
-Default package build exported/staged04b5c52, then failed updating shortcuts because
-inherited PowerShell module discovery hid Get-FileHash. Shortcut/startup scripts
-now explicitly import PSHOME Utility (and CimCmdlets for startup). Actual shortcut
-creation and normal Explorer verification passed afterwards; PlanOnly also passed
-under the same local build environment. Full default build not rerun for these
-script-only imports; installed backend source remains04b5c52.
+Compiler caches36,354,177,582 bytes retained by latest user decision under
+workspace/archive/compiler-cache-20261026/{desktop-target,runtime-target} and
+workspace/builds/lazy-tester-layout-20261026/target. No bytes reclaimed. Submodule
+abd4c240031cfb46666daa74ca47ed4e48b561e4 and second worktree47a45f9 unchanged.
+Keep High/Low and144/10. Full account clear/export/restore absent. Signing NOT_VERIFIED;
+installer execution/gameplay/license/multiplayer NOT_EXECUTED. Publication DISABLED.
 
-Candidate: workspace/packages/lazy-tester/0.1.0-04b5c5249839-20261026T164826275Z.
-NSIS SHA256 1fe175807b0079aa6eb543347c6564eb8005277985e31eaf5d5b4fbd4f1b8d0a.
-App SHA256 1787bf71391224a3bb60aa3c4e48eecf2686ac4c3ce6c5634efe17ab719dbb32.
-Starter SHA256 992366e8dacc32d2f4e8692b44378d8222ca7f4cda5bbe70ca77595d21a02791.
-Signing NOT_VERIFIED; installation/gameplay/license/multiplayer NOT_EXECUTED;
-publication DISABLED.
-
-## Root cause and canonical storage owner
-
-Actual Explorer failed opening legacy HKCU stores with Windows error2. Same user
-and logical registry root hashes, neither elevated, but development saw1264 pilot
-keys and Explorer zero; old pointer was also development-package AppData redirected.
-Builder CLI/hidden WebView success did not establish Desktop readiness.
-User authorized project-local Data instead of the proposed native-HKCU transfer.
-
-product_profiles.rs owns schema2 Data/Launchers/Minecraft-1..5 with Roaming,
-Local/Temp and Registry/HKCU.dat. Catalog binds Windows user, directory and hive
-identities. Missing hives cannot become empty replacements. Data ACL protects
-user/System/Administrators. Enroller/DLL verify inherited application hives using
-nonsecret directory/slot markers, retaining ordinary-HKCU/access checks/private ABI.
-Data/Settings holds preferences, location pointer and original instance lease.
-
-Operator-only --lazy-tester-migrate-data copied all five reviewed originals opaquely
-using CopyFileW/SHCopyKeyW, preserving sources and publishing catalog last.
-workspace/runs/central-project-migration-final.json: exit0, migratedProfiles5,
-configured=true, sourcePreserved=true, gameLaunched=false. No account/world contents
-inspected/logged; no installer/package migration hook or bidirectional sync.
-Exact Local/Microsoft/Windows/INetCache/Content.IE5 mount-point junctions became
-empty destination folders; external targets untouched; every other link refused.
-
-Tauri2.12 ignores absolute config dataDirectory. Real browser inspection ran RED on
-f66a662 even with Connected/five enabled. app_bootstrap.rs now disables automatic
-main creation and uses WebviewWindowBuilder.data_directory(Data/Cache/WebView).
-TEMP/TMP are process-local Data/Cache/Temp. Actual browser command line proves final
-cache location; no parallel readiness owner. Windows identity/DPAPI, licensed game
-installation and OS prerequisites remain external. Original outside-project data
-is recovery material, not active app data; do not delete it as compiler junk.
-
-## Executed supporting checks
-
-34 frontend tests, eight prior repository fixtures, Rust check, typecheck and source
-structure PASS. Targeted Rust: six migration/store, five binding, five settings,
-six instance-lock tests PASS. Native own C++ fixture: file-hive enrollment before
-dependency/TLS/main, two slots/two relaunches and foreign-hive rejection PASS;
-ordinary-HKCU control PASS. Full Rust suite not rerun (prior unrelated DACL/pipe
-fixture issues). After script imports: three structure fixtures and structure PASS.
-
-Native outputs retained workspace/builds/central-data-20261026/Release.
-Compat SHA256 0f45c07b370ff6c1bf150ccc20879ff6406c208f2b8c3ccdc596b82f2552381e.
-Enroller SHA256 51517528886483ba89f1b93b448c1ddd349f26f0e48e5322db434cbfe9c4de99.
-
-## Compiler cleanup blocked — all three folders still exist
-
-Reviewed: Cargo CACHEDIR.TAG signatures, no tracked files, no reparse points and
-no consuming project/compiler process. App runs from its own payload copies.
-- workspace/archive/compiler-cache-20261026/desktop-target:22,912,765,268 bytes.
-- workspace/archive/compiler-cache-20261026/runtime-target:3,522,646,095 bytes.
-- workspace/builds/lazy-tester-layout-20261026/target:9,918,766,219 bytes.
-Total36,354,177,582 bytes (33.86GiB), NOT reclaimed. Two source targets previously
-moved physically into archive, preserving contents and freeing ZERO space.
-Receipts: workspace/runs/compiler-cache-cleanup-blocked.json,
-root-cleanup-receipt.json and root-inventory-before.json. Unknown/private/tmp
-history, original profiles, active toolchains and source dependencies retained.
-No blanket tmp deletion. Root source target paths remain absent.
-
-Submodule retained abd4c240031cfb46666daa74ca47ed4e48b561e4; second worktree
-47a45f9c7d4a8ce6799d56997fd38e4b4df49ce7 unchanged. Updater/unrelated processes
-untouched. Keep16:9, High/Low and144/10. Full account clear/export/restore absent.
-
-Next: resolve execution-policy blocker for these exact reviewed compiler caches;
-verify actual deletion/free space before claiming cleanup complete. Do not repeat
-profile setup/migration, rebuild unnecessarily or expand into gameplay experiments.
+Next: finish source checks/build an exact clean candidate, then arrange normal
+closure for staging and actual release UI verification; helper-role naming remains
+explicitly unresolved. Overall user request ACTIVE, not DONE.

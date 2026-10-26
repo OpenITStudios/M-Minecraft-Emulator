@@ -420,3 +420,18 @@
                                                                                                                                                                                                       .lt-empty>span{
                                                                                                                                                                                                         display:none}
                                                                                                                                                                                                       }
+
+/* One application frame in Play and Settings, including native aperture mode. */
+.lt-app .lt-window-bar{display:flex;align-items:stretch;height:32px;flex:none;background:#1c2029;border-bottom:1px solid #343b48;user-select:none}
+.lt-app .lt-window-drag{display:flex;align-items:center;gap:8px;flex:1;min-width:0;text-align:left;border:0;border-radius:0;background:transparent;color:#edf0f7;padding:0 12px;font-size:12px;font-weight:400}
+.lt-window-drag>span:first-child{display:grid;place-items:center;background:#bac2ff;color:#18203a;border-radius:4px;width:18px;height:18px;font-size:10px;font-weight:700}
+.lt-app .lt-window-control{display:grid;place-items:center;width:46px;padding:0;border:0;border-radius:0;background:transparent;color:#edf0f7}
+.lt-app .lt-window-control:hover{background:#343b48}
+.lt-app .lt-window-close:hover{background:#c42b1c;color:#fff}
+.lt-window-control svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1}
+.lt-app button:focus-visible{outline:2px solid #bac2ff;outline-offset:-3px}
+.lt-app{color-scheme:dark;border:1px solid #343b48}
+/* Use each card's width instead of capping live previews at 100px high. */
+.lt-filmstrip{width:min(100%,1600px);gap:12px}
+.lt-card-picture{width:min(100%,calc(clamp(80px,16vh,180px) * 16 / 9));max-height:none}
+@media(max-height:700px){.lt-card-picture{width:min(100%,calc(82px * 16 / 9))}.lt-filmstrip .lt-card{padding:8px;gap:5px}}

@@ -1,9 +1,10 @@
 <script lang="ts">
   import {onMount, tick} from 'svelte';
   import {listen} from '@tauri-apps/api/event';
-  import {lazyTester, nextProfile, validFpsLimits, type GraphicsPreset, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, type ProfileBinding, type DataLocation, type SettingsReport} from './app/bridge/lazyTester.js';
+  import {lazyTester, firstEmbeddedProfile, nextProfile, validFpsLimits, type GraphicsPreset, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, type ProfileBinding, type DataLocation, type SettingsReport} from './app/bridge/lazyTester.js';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazy-tester.css';
+  import WindowTitlebar from './WindowTitlebar.svelte';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
   let binding: ProfileBinding | null = null;
@@ -33,6 +34,7 @@
   let manualRefreshRequested=false, manualRefreshing=false;
   let queuedLaunch:ProfileSlot|null=null;
   let mounted = false, disposed = false, dirty = false, detached = false;
+  let separateSlots = new Set<ProfileSlot>();
   let issue = '', connectionIssue = '', previewIssue = '', selectedIdentity = '';
   let previewStatuses: PreviewStatus[] = [];
   const images = new Map<ProfileSlot, HTMLElement>();
@@ -63,6 +65,7 @@
       await lazyTester.present(slot, viewport.getBoundingClientRect());
       active = slot; selectedIdentity = identity(profiles.find(profile => profile.slot === slot));
       detached = false; requested = null; dirty = true;
+      separateSlots = new Set([...separateSlots].filter(value=>value!==slot));
     } catch (error) { issue = String(error); }
     finally { busy = false; }
   }
@@ -91,7 +94,7 @@
           issue = profile.issue ?? ('Minecraft - ' + requested + ' stopped before its window became available.'); requested = null;
         }
       } else if (active === null && !detached && page === 'workspace' && queued === null) {
-        queued = profiles.find(profile => profile.state === 'RUNNING')?.slot ?? null;
+        queued = firstEmbeddedProfile(profiles,separateSlots);
       }
       if(layoutChanged)dirty=true;
     } catch (error) { if (!disposed) { if(available)dirty=true;available = false; connectionIssue = String(error); } }
@@ -185,10 +188,16 @@
   }
   async function release() {
     if (busy || refreshing || resizing) return;
+    const slot=active;
+    const target=profiles.find(profile=>profile.slot===slot)?.process;
+    if(slot===null||!target)return;
     busy = true;
     try {
-      await workspaceSurface.release(); active = null; selectedIdentity = ''; requested = null; queued = null;
-      detached = true; previewStatuses = []; dirty = true;
+      await lazyTester.clearPreviews();
+      await workspaceSurface.releaseTarget(target); active = null; selectedIdentity = ''; requested = null; queued = null;
+      separateSlots=new Set([...separateSlots,slot]);
+      queued=firstEmbeddedProfile(profiles,separateSlots);
+      detached = queued===null; previewStatuses = []; dirty = true;
     } catch (error) { issue = String(error); }
     finally { busy = false; }
   }
@@ -201,7 +210,7 @@
       }
       await tick();
       if (active !== null) await workspaceSurface.update(viewport.getBoundingClientRect());
-      const tiles = others.flatMap(profile => {
+      const tiles = others.filter(profile=>!separateSlots.has(profile.slot)).flatMap(profile => {
         const element = images.get(profile.slot); if (!element) return [];
         const rect = element.getBoundingClientRect();
         return rect.x >= 0 && rect.y >= 0 && rect.width >= 32 && rect.height >= 24 &&
@@ -325,6 +334,7 @@
 </script>
 <svelte:head><title>Lazy Tester</title></svelte:head>
 <div class="lt-app">
+  <WindowTitlebar />
   <header class="lt-topbar">
     <a class="lt-brand" href="#play" on:click|preventDefault={() => navigate('workspace')}><span>LT</span>Lazy Tester</a>
     <nav aria-label="Main navigation"><button class:chosen={page==='workspace'} aria-current={page==='workspace'?'page':undefined} on:click={()=>navigate('workspace')}>Play</button><button class:chosen={page!=='workspace'} aria-current={page!=='workspace'?'page':undefined} on:click={()=>navigate('settings')}>Settings</button></nav>
@@ -335,7 +345,7 @@
     <main>
       <header class="lt-page-header" class:lt-play-header={page==='workspace'}>
         <div><h1>{page==='workspace'?(detached?'Separate windows':active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p>{detached?'Your games keep running on the desktop.':active?'Click the game to play.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
-        <div class="lt-header-actions"><button class="lt-secondary" disabled={busy||manualRefreshing||manualRefreshRequested} on:click={()=>manualRefreshRequested=true}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'}{#if detached}<button class="lt-secondary" disabled={busy||!available} on:click={returnToWorkspace}>Back to Play</button>{:else if runningCount}<button class="lt-secondary" disabled={busy} on:click={release}>Open in separate windows</button>{/if}{/if}</div>
+        <div class="lt-header-actions"><button class="lt-secondary" disabled={busy||manualRefreshing||manualRefreshRequested} on:click={()=>manualRefreshRequested=true}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'&&active!==null}<button class="lt-secondary" disabled={busy||refreshing||resizing} title={'Open only Minecraft - '+active+' in its own window'} on:click={release}>Open Minecraft - {active} in a window</button>{/if}</div>
       </header>
       {#if issue||connectionIssue}<div class="lt-alert" role="alert">{#if issue}<p>{issue}</p>{/if}{#if connectionIssue}<p>{connectionIssue}</p>{/if}</div>{/if}
       {#if !binding?.configured&&!initializing}<section class="lt-binding" aria-label="Launcher recovery"><div><strong>Existing launcher connection could not be verified</strong><p>{bindingIssue||binding?.issue||'Automatic preparation could not finish. Existing data is preserved.'}</p></div><div class="lt-actions"><button disabled={busy||manualRefreshing||manualRefreshRequested} on:click={()=>manualRefreshRequested=true}>Retry connection</button><button class="lt-secondary" on:click={()=>navigate('storage')}>Data Storage</button></div></section>{/if}
@@ -351,7 +361,7 @@
             <button class="lt-card" class:selected={active===profile.slot&&!detached} aria-pressed={active===profile.slot&&!detached} aria-label={(profile.state==='RUNNING'?'Open ':'Launch ')+'Minecraft - '+profile.slot} disabled={busy||!available||!binding?.configured||['STARTING','NOT_RESPONDING'].includes(profile.state)} on:click={()=>profile.state==='RUNNING'?select(profile.slot):launch(profile.slot)}>
               <strong>Minecraft - {profile.slot}{active===profile.slot&&!detached?' ✓':''}</strong>
               <span class="lt-card-picture" use:image={profile.slot} aria-hidden="true">{profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':'▷ Launch'}</span>
-              <small>{active===profile.slot&&!detached?'Playing':profile.state==='RUNNING'&&!detached?'Running in background':labels[profile.state]}</small>
+              <small>{active===profile.slot&&!detached?'Playing here':profile.state==='RUNNING'&&separateSlots.has(profile.slot)?'Separate window':profile.state==='RUNNING'?'Running in background':labels[profile.state]}</small>
               {#if profile.issue}<small class="lt-error">{profile.issue}</small>{/if}
             </button>
           {/each}

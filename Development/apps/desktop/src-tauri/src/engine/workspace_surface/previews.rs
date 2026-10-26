@@ -68,7 +68,8 @@ pub(super) fn configure(
                 ));
             }
         }
-        let unavailable = controller::adopt_preview_sources(manager, viewport, &profiles)?;
+        let monitored=profiles.iter().filter(|(slot,_)|tiles.iter().any(|tile|tile.slot==*slot)).cloned().collect::<Vec<_>>();
+        let unavailable = controller::adopt_preview_sources(manager, viewport, &monitored)?;
         windows::apply(window, tiles, profiles, unavailable)
     }
     #[cfg(not(windows))]
@@ -231,6 +232,12 @@ mod windows {
                 && unsafe { IsWindow(self.window) != 0 }
         }
         fn update(&mut self, visible: bool) -> io::Result<()> {
+            if !visible {
+                self.hide();
+                let props=DWM_THUMBNAIL_PROPERTIES{dwFlags:DWM_TNP_VISIBLE,fVisible:0,..unsafe{mem::zeroed()}};
+                let result=unsafe{DwmUpdateThumbnailProperties(self.thumbnail,&props)};
+                return if result<0 {Err(io::Error::other("Native preview hide failed"))}else{Ok(())};
+            }
             let (_pin, source) = native::hwnd(&self.target)?;
             let rect = native::rectangle(self.manager, self.viewport)?;
             let mut client: RECT = unsafe { mem::zeroed() };
@@ -319,20 +326,15 @@ mod windows {
                 {
                     return false;
                 }
-                let foreground = GetForegroundWindow();
-                foreground == manager
-                    || self.profiles.iter().any(|(_, p)| {
-                        usize::from_str_radix(&p.window_handle[2..], 16)
-                            .ok()
-                            .is_some_and(|hwnd| hwnd as HWND == foreground)
-                            && !native::retired(p)
-                    })
+                // Owned, non-topmost destinations follow the manager's stacking.
+                // Losing input focus must not blank a still-visible monitoring panel.
+                true
             }
         }
         fn refresh(&mut self) {
             let visible = self.visibility();
             for thumbnail in &mut self.thumbnails {
-                if thumbnail.update(visible).is_err() {
+                if thumbnail.update(visible).is_err_and(|error|error.kind()!=io::ErrorKind::WouldBlock) {
                     thumbnail.hide();
                 }
             }
@@ -582,7 +584,7 @@ mod windows {
         use super::*;
         #[test]
         fn hidden_own_windows_register_update_and_release_dwm_without_desktop_capture() {
-            // Neither fixture is shown or focused. This proves DWM interop/ownership only,
+            // Fixtures remain offscreen and are never focused. This proves DWM interop only,
             // not live pixels, Minecraft rendering, gameplay or background-host behavior.
             unsafe {
                 let class = WNDCLASSW {
@@ -662,6 +664,16 @@ mod windows {
                 assert!(DwmQueryThumbnailSourceSize(thumbnail.thumbnail, &mut size) >= 0);
                 assert!(size.cx > 0 && size.cy > 0);
                 assert_eq!(IsWindowVisible(thumbnail.window), 0);
+                ShowWindow(manager, SW_SHOWNOACTIVATE);
+                let scene=Scene{window:None,manager:manager as usize as u64,profiles:Vec::new(),thumbnails:Vec::new()};
+                assert_ne!(GetForegroundWindow(),manager);
+                assert!(scene.visibility(),"Visible monitoring must survive focus moving elsewhere");
+                thumbnail.update(scene.visibility()).unwrap();
+                assert_ne!(IsWindowVisible(thumbnail.window),0);
+                ShowWindow(manager,SW_MINIMIZE);
+                assert!(!scene.visibility());
+                thumbnail.update(scene.visibility()).unwrap();
+                assert_eq!(IsWindowVisible(thumbnail.window),0);
                 drop(thumbnail);
                 DestroyWindow(source);
                 DestroyWindow(manager);

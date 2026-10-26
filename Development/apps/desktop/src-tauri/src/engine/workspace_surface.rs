@@ -487,6 +487,16 @@ mod native {
         }
         Ok(())
     }
+    pub(super) fn follow(saved: &Saved, rect: Rectangle) -> io::Result<()> {
+        let (_process, window) = hwnd(&saved.target)?;
+        unsafe {
+            if SetWindowPos(window, std::ptr::null_mut(), rect.x, rect.y, 0, 0,
+                SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS) == 0 {
+                return Err(io::Error::last_os_error());
+            }
+        }
+        Ok(())
+    }
     pub(super) fn aperture(manager: u64, rect: Option<Rectangle>) -> io::Result<()> {
         use windows_sys::Win32::Graphics::Gdi::*;
         let manager = manager as usize as HWND;
@@ -1059,12 +1069,14 @@ mod controller {
         parked: Vec<Lease>,
         suspended: bool,
         live_previews: bool,
+        closing: bool,
     }
     static SURFACE: Mutex<Surfaces> = Mutex::new(Surfaces {
         active: None,
         parked: Vec::new(),
         suspended: false,
         live_previews: false,
+        closing: false,
     });
     fn same(lease: &Lease, target: &OwnedProcess) -> bool {
         lease.saved.as_ref().is_some_and(|s| {
@@ -1079,6 +1091,14 @@ mod controller {
             .try_lock()
             .map(|s| s.active.is_some() || !s.parked.is_empty())
             .unwrap_or(true)
+    }
+    pub fn release_for_close() -> io::Result<()> {
+        SURFACE.lock().map_err(|_|io::Error::other("Workspace state unavailable"))?.closing=true;
+        let result=release();
+        if result.is_err() {
+            if let Ok(mut state)=SURFACE.lock(){state.closing=false;}
+        }
+        result
     }
     pub fn release() -> io::Result<()> {
         let preview_error = previews::clear().err();
@@ -1284,6 +1304,7 @@ mod controller {
         sources: &[(u32, OwnedProcess)]) -> io::Result<Vec<(u32, String)>> {
         let rect = native::rectangle(manager, viewport.validate()?)?;
         let mut state = SURFACE.lock().map_err(|_| io::Error::other("Workspace state unavailable"))?;
+        if state.closing { return Err(io::Error::other("Lazy Tester is closing")); }
         state.live_previews = true;
         let mut unavailable = Vec::new();
         for index in (0..state.parked.len()).rev() {
@@ -1340,6 +1361,7 @@ mod controller {
             .lock()
             .map_err(|_| io::Error::other("Workspace state unavailable"))?;
         // Only a previously provider-verified lease may skip expensive engine admission.
+        if state.closing { return Err(io::Error::other("Lazy Tester is closing")); }
         if retained_only
             && !state.active.iter().chain(state.parked.iter()).any(|lease| {
                 lease.manager == manager
@@ -1455,13 +1477,24 @@ mod controller {
         state.suspended = false;
         Ok(true)
     }
+    #[cfg(windows)]
+    pub fn follow_manager(manager: u64) -> io::Result<bool> {
+        // Never queue behind lifecycle, recovery or a slow game's resize acknowledgement.
+        let Ok(state) = SURFACE.try_lock() else { return Ok(false); };
+        if state.suspended || state.closing { return Ok(true); }
+        let Some(lease) = &state.active else { return Ok(true); };
+        if lease.manager != manager || native::minimized(manager)? { return Ok(true); }
+        let Some(saved) = &lease.saved else { return Ok(true); };
+        native::follow(saved, native::rectangle(manager, lease.viewport)?)?;
+        Ok(true)
+    }
     pub fn update(manager: u64, viewport: Option<Viewport>) -> io::Result<()> {
         let mut state = SURFACE
             .lock()
             .map_err(|_| io::Error::other("Workspace state unavailable"))?;
         // Settings and failed presentation have already hidden the active lease.
         // Native focus/resize notifications cannot retry it behind the UI's back.
-        if state.suspended {
+        if state.suspended || state.closing {
             return Ok(());
         }
         let live = state.live_previews;
@@ -1686,6 +1719,9 @@ mod controller {
             }
             std::thread::sleep(Duration::from_millis(100));
             SURFACE.lock().unwrap().active = Some(lease);
+            let translation=Instant::now();
+            follow_manager(manager as usize as u64).unwrap();
+            assert!(translation.elapsed()<Duration::from_millis(100),"Dragging waited for the stalled game thread");
             let started = Instant::now();
             let error = update(manager as usize as u64, Some(viewport))
                 .err()
@@ -2110,8 +2146,11 @@ mod controller {
                     WAIT_OBJECT_0
                 );
             }
-            present(manager as usize as u64, viewport, second).unwrap();
-            release().unwrap();
+            present(manager as usize as u64, viewport, second.clone()).unwrap();
+            release_for_close().unwrap();
+            assert_eq!(unsafe{WaitForSingleObject(_second_fixture.process.as_raw_handle(),0)},WAIT_TIMEOUT,"Closing the manager terminated its game");
+            assert!(present(manager as usize as u64,viewport,second).unwrap_err().to_string().contains("closing"));
+            SURFACE.lock().unwrap().closing=false;
             unsafe {
                 DestroyWindow(manager);
             }
@@ -2119,8 +2158,10 @@ mod controller {
     }
 }
 pub use controller::{
-    is_active, present_retained, present_verified, release, release_target, suspend, update,
+    is_active, present_retained, present_verified, release, release_for_close, release_target, suspend, update,
 };
+#[cfg(windows)]
+pub use controller::follow_manager;
 
 pub fn configure_previews(window: tauri::Window, viewport: Viewport, tiles: Vec<PreviewTile>,
     profiles: Vec<(u32,OwnedProcess)>) -> io::Result<PreviewReport> {

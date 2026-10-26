@@ -1,4 +1,5 @@
 import {invokeRuntime} from './invokeRuntime.js';
+import type {OwnedProcess} from './observedProcess.js';
 export interface WorkspaceRectangle {x:number;y:number;width:number;height:number}
 export interface WorkspaceViewport extends WorkspaceRectangle {pixelRatio:number}
 export function workspaceViewport(rect:WorkspaceRectangle,pixelRatio=1):WorkspaceViewport {
@@ -15,5 +16,6 @@ function validatedViewport(rect:WorkspaceRectangle,pixelRatio:number,minimumWidt
 export const workspaceSurface={
   update:(rect:WorkspaceRectangle)=>invokeRuntime<void>('desktop_update_workspace',{viewport:workspaceViewport(rect,window.devicePixelRatio)}),
   release:()=>invokeRuntime<void>('desktop_release_workspace',{target:null}),
+  releaseTarget:(target:OwnedProcess)=>invokeRuntime<void>('desktop_release_workspace',{target}),
   suspend:()=>invokeRuntime<boolean>('desktop_suspend_workspace'),
 };

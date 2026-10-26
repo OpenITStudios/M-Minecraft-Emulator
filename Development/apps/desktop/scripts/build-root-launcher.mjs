@@ -11,7 +11,28 @@ export function buildRootLauncher(root, release) {
   mkdirSync(output,{recursive:true});
   const icon = resolve(root,'Development/apps/desktop/src-tauri/icons/icon.ico');
   const resource = resolve(output,'launcher.rc'), object = resolve(output,'launcher.res');
-  writeFileSync(resource,`1 ICON "${icon.replaceAll('\\','\\\\')}"\n`);
+  writeFileSync(resource,`1 ICON "${icon.replaceAll('\\','\\\\')}"
+1 VERSIONINFO
+FILEVERSION 0,1,0,0
+PRODUCTVERSION 0,1,0,0
+FILETYPE 1
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "FileDescription", "Lazy Tester - App Launcher"
+      VALUE "ProductName", "Lazy Tester"
+      VALUE "FileVersion", "0.1.0"
+      VALUE "OriginalFilename", "Lazy Tester.exe"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x0409, 1200
+  END
+END
+`);
   execFileSync(compiler,['/nologo','/fo',object,resource],{stdio:'inherit',windowsHide:true});
   const executable = resolve(release,'Lazy Tester.exe');
   execFileSync('rustc',['--edition=2021','--target','x86_64-pc-windows-msvc',

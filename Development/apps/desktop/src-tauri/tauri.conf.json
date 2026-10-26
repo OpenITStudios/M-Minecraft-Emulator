@@ -19,6 +19,7 @@
         "minWidth": 920,
         "minHeight": 620,
         "resizable": true,
+        "decorations": false,
         "fullscreen": false,
         "maximized": false,
         "center": true
@@ -33,7 +34,12 @@
           ],
           "permissions": [
             "core:event:allow-listen",
-            "core:event:allow-unlisten"
+            "core:event:allow-unlisten",
+            "core:window:allow-start-dragging",
+            "core:window:allow-is-maximized",
+            "core:window:allow-minimize",
+            "core:window:allow-toggle-maximize",
+            "core:window:allow-close"
           ]
         }
       ],

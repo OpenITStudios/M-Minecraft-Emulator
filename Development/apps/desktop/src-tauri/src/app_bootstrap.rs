@@ -108,9 +108,9 @@ pub fn run() {
                     if !CONFIRMING.swap(true,Ordering::SeqCst) {
                         let window=window.clone();
                         tauri::async_runtime::spawn_blocking(move || {
-                            let choice=MessageDialog::new().set_title("Close manager?").set_description("Minecraft will stay open in its normal window. Your game will not be closed.").set_buttons(MessageButtons::YesNo).show();
-                            if choice==rfd::MessageDialogResult::Yes {
-                                match crate::engine::workspace_surface::release(){Ok(())=>{let _=window.destroy();},Err(error)=>show_startup_error(&format!("Window recovery needs attention: {error}"))}
+                            match crate::engine::workspace_surface::release_for_close(){
+                                Ok(())=>{let _=window.destroy();},
+                                Err(error)=>{let _=MessageDialog::new().set_parent(&window).set_title("Window recovery needs attention").set_description(format!("Minecraft is still running. {error}")).set_level(MessageLevel::Error).show();}
                             }
                             CONFIRMING.store(false,Ordering::SeqCst);
                         });
@@ -118,10 +118,19 @@ pub fn run() {
                 }
             }
             #[cfg(windows)]
+            if matches!(event, tauri::WindowEvent::Moved(_)) {
+                // Pure translation must not wait for the game's message loop/helper pipe.
+                if let Ok(handle)=window.hwnd() {
+                    if !matches!(crate::engine::workspace_surface::follow_manager(handle.0 as usize as u64),Ok(true)) {
+                        queue_workspace_update(window.clone());
+                    }
+                }
+                crate::engine::workspace_surface::refresh_previews();
+            }
+            #[cfg(windows)]
             if matches!(
                 event,
-                tauri::WindowEvent::Moved(_)
-                    | tauri::WindowEvent::Resized(_)
+                tauri::WindowEvent::Resized(_)
                     | tauri::WindowEvent::Focused(true)
             ) {
                 crate::engine::workspace_surface::refresh_previews();
