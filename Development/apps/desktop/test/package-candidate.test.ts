@@ -7,8 +7,9 @@ import {assembleCandidate,sourceRevision,stageLocalApp,verifyDesktopStartup} fro
 
 describe('Development source and distribution candidates',()=>{
   it('requires Explorer-parented Desktop UI evidence and rejects build-tool-only success',()=>{
-    const ready={event:'desktop-startup-observation',sourceCommit:'a'.repeat(40),processId:42,parentProcessId:7,explorerParent:true,connected:true,issue:'',cards:5,enabled:5};
+    const ready={event:'desktop-startup-observation',sourceCommit:'a'.repeat(40),processId:42,parentProcessId:7,explorerParent:true,connected:true,issue:'',cards:5,enabled:5,cacheInsideData:true};
     expect(verifyDesktopStartup(JSON.stringify(ready),ready.sourceCommit)).toEqual(ready);
+    expect(()=>verifyDesktopStartup(JSON.stringify({...ready,cacheInsideData:false}),ready.sourceCommit)).toThrow(/cache/);
     for(const change of [{connected:false},{issue:'Windows error 2'},{enabled:0},{cards:0},{processId:0},{parentProcessId:0},{explorerParent:false},{sourceCommit:''},{sourceCommit:'b'.repeat(40)}])expect(()=>verifyDesktopStartup(JSON.stringify({...ready,...change}),ready.sourceCommit)).toThrow();
     for(const old of [{schema:1,configured:true,issue:null},{event:'startup-observation',processId:42,connection:'Connected',issue:'',cards:5,enabled:5,diagnosticOnly:true}])expect(()=>verifyDesktopStartup(JSON.stringify(old),ready.sourceCommit)).toThrow();
   });

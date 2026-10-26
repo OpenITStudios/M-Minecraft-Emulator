@@ -3,111 +3,110 @@
 Local only; main/publication untouched; GitHub Actions entirely OFF.
 VMware, Sandboxie and RAM/renderer experiments remain PAUSED.
 
-## Active goal — root-local application and reliable Desktop startup
+## Active goal and exact current state
 
-The user explicitly requested all app-owned data beneath the project, an ordinary
-root EXE and cleanup of scattered developer material, alongside the unresolved
-Desktop connection failure. The earlier proposal to copy five stores into native
-HKCU was NOT approved and remains unused. The chosen, subsequently authorized
-migration destination is project Data, with original data retained.
+User requests reliable startup without repeated setup, all app-owned runtime data
+inside project Data, a native EXE at project root and tidy developer material.
+Current installed App/root-starter source is f66a6620ca0a2356582b0f604c7d6588de801019.
+Five original profiles HAVE migrated into Data successfully; originals remain
+intact. Actual Explorer startup has Connected/five enabled across three restarts
+and30seconds/55 stable Refresh samples. No Minecraft/game or installer was launched.
 
-Source parent b7c5bf36150362e47d24bf7003a8619516bcf14c. Existing App still contains
-09eaca9eb7c2a7593e316848be833d8179f3cb84 until the new clean build/staging step.
-No original account/world data has been migrated or deleted at this checkpoint.
+One remaining observed defect: WebView still uses AppData. Tauri2.12 ignores
+absolute config dataDirectory. The strengthened real Desktop check ran RED on
+f66a662 with Connected/five enabled but cacheInsideData=false. Pending source
+creates the main WebView explicitly with WebviewWindowBuilder.data_directory,
+disables automatic product-window creation, and requires the real browser child
+user-data directory inside Data/Cache/WebView. Rust check and34 frontend tests
+PASS. Rebuild/staging/actual browser verification are still required. Do not call
+all runtime data centralized before that strengthened acceptance passes.
 
-## Confirmed cause and repaired source
+## Root cause and storage owner
 
-Actual Explorer startup reproduced the exact error: PID38812, Explorer4764,
-five launcher cards, zero enabled, saved registry store Windows error2.
-Same user SID/logical HKCU-root hashes, neither elevated, but the development
-context sees1264 pilot subkeys and Explorer sees zero in32/64 views. Development
-CLI configured=true; Explorer CLI has no binding. The old binding is also under
-the development package's redirected LocalCache/Local. Build-tool/hidden WebView
-success therefore did not establish Desktop startup. The former completion claim
-was wrong. Root starter -> App verification must use Explorer and real UI.
+Earlier actual Explorer PID38812 reproduced saved registry store Windows error2,
+five cards/zero enabled. Same user and logical-HKCU-root hashes, neither elevated,
+but development sees1264 pilot subkeys and Explorer zero in32/64 views. The old
+binding is also under the development package's redirected LocalCache/Local.
+Builder CLI/hidden WebView success was insufficient and prior completion claims
+were wrong. The proposed transfer into native HKCU was NOT approved and remains
+unused; the user subsequently authorized project-local Data as the destination.
 
-product_profiles.rs now owns schema2 Data/Launchers/Minecraft-1..5, each with
-Roaming, Local/Temp and Registry/HKCU.dat. Windows user, profile-directory and
-hive-file identities are validated. Missing hives fail before RegLoadAppKey and
-are never recreated as recovery. Data gets a protected user/System/Admin ACL.
-Legacy schema1 ordinary-HKCU reopening remains. The native enroller and DLL accept
-application hives only with correct directory/slot identity metadata, preserving
-user/access checks and the existing private/public wire versions.
+product_profiles.rs owns schema2 Data/Launchers/Minecraft-1..5 with Roaming,
+Local/Temp and Registry/HKCU.dat. Catalog validates Windows user, directory and
+hive-file identities. Missing hives fail before RegLoadAppKey and cannot become
+empty stores. Data receives a protected user/System/Administrators ACL. Legacy
+schema1 ordinary-HKCU reopening remains. Enroller/DLL validate inherited file
+hives using nonsecret directory/slot markers, preserving user/access checks and
+the private/public wire versions. No parallel lifecycle/readiness/credential owner.
 
-Fixed operator-only --lazy-tester-migrate-data validates the original reviewed
-five stores, game/image/payload and idle state, takes the original app lease,
-preflights links, then copies each same slot opaquely using CopyFileW/SHCopyKeyW.
-The latter preserves the uniform destination hive descriptor. Original registry,
-accounts and worlds remain intact; no raw values or world contents enter logs.
-Preferences are retained and the catalog is published last. Existing/partial
-Data launchers are never overwritten, cleared or treated as fresh setup.
+Fixed operator-only --lazy-tester-migrate-data validates the reviewed original
+five stores, image/payload, idle state and the original app lease. CopyFileW and
+SHCopyKeyW transfer the same slot opaquely, retaining uniform destination hive
+security. Old App preferences are retained; complete catalog publishes last.
+No account values/world contents enter diagnostics. Existing/partial destinations
+are never overwritten or cleared; no installer/package hook runs migration.
 
-manager_settings.rs owns shared project-root resolution and Data/Settings FPS/
-graphics/location state; app_instance.rs uses its product marker there. WebView
-and process-local temporary storage now use Data/Cache. Existing outside-project
-location pointers fail for review rather than being ignored/reseeded. New
-selections stay in Data. No session/readiness owner or account automation added.
+The first real migration safely refused MC03/04/05 Windows WinINet Content.IE5
+external junctions before creating Launchers. The exact Local/Microsoft/Windows/
+INetCache/Content.IE5 mount-point case now becomes an empty ordinary cache folder;
+its external target is never followed/copied/changed. Every other link is refused.
+A real disposable-junction regression covers both accepted and unknown cases.
+Rebuilt f66a662 then migrated all five originals (explicit process exit0,
+configured=true, sourcePreserved=true). Data has five hives, zero reparse points,
+protected ACL, valid catalog/location pointer. App/root payload hashes verified.
 
-The root icon-bearing native Lazy Tester.exe forwards to fixed App/lazy-tester.exe,
-uses App working directory and waits/propagates exit. It writes no parallel state.
-Packaging builds/stages both with source/hash receipts and rollback preservation;
-Desktop/Start Menu shortcuts target the root starter. RUN.cmd is only a wrapper.
-Actual UI acceptance verifies Explorer -> root starter -> App, Connected and five
-enabled launchers at the expected revision. Native CLI success cannot replace it.
+manager_settings.rs owns shared project root and Data/Settings preferences;
+app_instance.rs uses its product lock there. Data/Cache is for interface/temporary
+files. Old outside-project pointers fail for migration review rather than being
+ignored/reseeded; new data selection stays in Data. See docs/system/data-layout.md.
 
-## Source/native evidence actually executed
+Root Lazy Tester.exe is a small icon-bearing native starter for fixed
+App/lazy-tester.exe, App working directory, wait/exit propagation; no extra state.
+Desktop/Start Menu shortcuts point to it; RUN.cmd is a compatibility wrapper.
+Packaging builds/stages both with exact receipts and rollback preservation.
+Desktop verifier checks Explorer -> root starter -> App, source/hash, actual
+Connected/five enabled controls and now the real browser's project-cache path.
 
-34 frontend tests PASS; eight repository fixtures PASS; structure and G0 PASS.
-Targeted Rust: five product-store/migration tests, five binding tests, five settings
-tests (one separate test remains ignored), six app-instance tests PASS.
-Own C++ fixture with file hives exercised enrollment before dependency/TLS/main,
-two slots/two relaunch rounds and foreign-hive rejection PASS. No game launched.
-Root starter target/CWD/exit propagation passed with a disposable own executable;
-embedded icon count1 confirmed. Full Rust suite was not rerun (prior unrelated
-DACL/pipe fixture issues); no broad performance claim. Final source/native checks
-must be repeated only where later source/payload changes require them.
+## Actually executed supporting evidence
 
-New reviewed native directory: workspace/builds/central-data-20261026/Release.
+34 frontend tests; eight repository fixtures; source structure/typecheck PASS.
+Targeted Rust: six stores/migration tests, five binding tests, five settings tests
+(one separate ignored test), six lock tests PASS. Own C++ file-hive enrollment
+before dependency/TLS/main, two slots/two relaunch rounds, foreign-hive rejection
+and original ordinary-HKCU enrollment control PASS. No game launched. Root starter
+fixture proves fixed target/CWD/exit propagation; embedded icon count1 confirmed.
+Full Rust suite not rerun (prior unrelated DACL/pipe fixture issues).
+
+Native binaries: workspace/builds/central-data-20261026/Release.
 Compatibility SHA256 0f45c07b370ff6c1bf150ccc20879ff6406c208f2b8c3ccdc596b82f2552381e.
 Enroller SHA256 51517528886483ba89f1b93b448c1ddd349f26f0e48e5322db434cbfe9c4de99.
-Old generated payload staging was preserved under workspace/archive before refresh.
-Logs/receipts remain ignored in workspace/runs/; never publish raw machine data.
+Clean Windows/NSIS candidate built for f66a662:
+workspace/packages/lazy-tester/0.1.0-f66a6620ca0a-20261026T163101372Z.
+Ignored receipts: workspace/runs/central-project-migration-final.json,
+central-project-staged-final.json, central-desktop-startup-1..3.json,
+central-desktop-stability.json and project-webview-cache-red.log.
+The previous stability kept manager PID26272 open; it was closed normally for
+cache diagnosis after confirming no games. Cache-RED verifier closed only its own
+manager normally; updater/unrelated TranslateIT processes untouched.
 
-## Physical organization actually performed
+## Physical cleanup and preservation
 
-Metadata inventory: Development/apps21.49GiB; workspace/builds14.33GiB;
-workspace/tmp11.78GiB. Large size alone is not evidence material is disposable.
-Both obsolete source Cargo targets had valid CACHEDIR.TAG, no tracked files and
-no affected active process. Recursive deletion was rejected by automatic approval
-review. Reversible same-volume archival retained all contents:
+Inventory: Development/apps21.49GiB, builds14.33GiB, tmp11.78GiB. Size alone is
+not disposable-data proof. Two obsolete source Cargo targets had CACHEDIR.TAG,
+no tracked files and no affected process. Automatic approval review rejected
+recursive deletion. Same-volume archival preserved all contents and freed NO space:
 - Development/apps/desktop/src-tauri/target -> workspace/archive/compiler-cache-20261026/desktop-target
 - Development/engine/runtime-core/target -> workspace/archive/compiler-cache-20261026/runtime-target
-No space was reclaimed. Source directories no longer contain those compiler trees.
-Active toolchains/builds, tmp/private/profile/capability material, legacy working
-copies and unrelated TranslateIT processes were retained. No guessed junk deletion.
-Inventory/operation receipts: workspace/runs/root-inventory-before.json and
-root-cleanup-receipt.json. Initialized submodule and second worktree untouched.
+Active builds/toolchains, private/tmp/profile/capability material, legacy copies,
+initialized submodule and second worktree retained. Old generated native payloads
+also archived before staging replacements. Root source cache paths remain absent.
+Receipts: workspace/runs/root-inventory-before.json and root-cleanup-receipt.json.
 
-## Remaining work and evidence ceiling
-
-Clean c89d428 Windows/NSIS construction and guarded local App/root-starter staging
-completed. No source game/installer execution. The explicit original-data migration
-then correctly stopped before creating Launchers: MC03/04/05 each contain the
-Windows WinINet Content.IE5 external junction. Originals remained intact. Source
-now handles only that exact cache mount-point path by creating an empty ordinary
-destination cache folder without following the external target. Unknown links
-remain refused. A real disposable junction regression and all six store tests PASS.
-New clean build/staging/migration/actual Desktop checks are still pending.
-
-Next: commit clean source, construct Windows/NSIS candidate, guard/stage App and
-root starter, run the fixed approved project-Data migration, then repeatedly verify
-actual Explorer/Desktop startup and identical source/native-Desktop data opening.
-Do not announce completion before those real process observations succeed.
-
-Original source backups outside the project are preserved for recovery until
-explicit retirement; no unrelated Windows profile/account cleanup is authorized.
-Full clear, world export, settings reset/restore, audio control and automatic game
-shutdown remain unavailable. Keep existing16:9 layout, High/Low and144/10 defaults.
-No Minecraft/game/installer GUI or sign-in is automated. Signing NOT_VERIFIED;
-installer execution/gameplay/license/multiplayer acceptance NOT_EXECUTED.
-Publication DISABLED. The overall repair remains ACTIVE at this checkpoint.
+Next: commit cache source, rebuild and stage exact source preserving migrated Data;
+repeat strengthened Explorer verification and leave that verified App open.
+Original outside-project source data remains recovery material, not an active
+app dependency; no deletion/retirement authorized. Windows identity/DPAPI, official
+Minecraft and OS tool prerequisites remain external. Full clear/export/restore,
+audio and automatic game shutdown remain unavailable. Keep16:9, High/Low,144/10.
+Signing NOT_VERIFIED; installer execution/gameplay/license/multiplayer NOT_EXECUTED.
+Publication DISABLED. Overall root/cache repair remains ACTIVE until final proof.

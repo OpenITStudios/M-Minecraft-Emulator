@@ -25,12 +25,14 @@ pub fn run() {
                 }
                 std::fs::create_dir_all(path)?;
             }
-            Ok((temporary,webview))
+            Ok(temporary)
         })();
-        let (temporary,webview)=match storage {Ok(paths)=>paths,Err(error)=>{show_startup_error(&format!("Application cache is unavailable: {error}"));return;}};
+        let temporary=match storage {Ok(path)=>path,Err(error)=>{show_startup_error(&format!("Application cache is unavailable: {error}"));return;}};
         // Process-local only, before the WebView and our worker threads start.
         std::env::set_var("TEMP",&temporary);std::env::set_var("TMP",&temporary);
-        for window in &mut context.config_mut().app.windows {window.data_directory=Some(webview.clone());}
+        // Config dataDirectory accepts relative paths only; create the product
+        // WebView explicitly so its absolute project path is honored.
+        for window in &mut context.config_mut().app.windows {window.create=false;window.data_directory=None;}
     }
     #[cfg(all(windows, target_arch = "x86_64", feature = "lazy-tester-package"))]
     if std::env::args_os().skip(1).eq([std::ffi::OsString::from("--lazy-tester-check-webview")]) {
@@ -49,8 +51,7 @@ pub fn run() {
     let result = tauri::Builder::default()
         .setup(|app|{
             #[cfg(windows)] {
-                use tauri::Manager;
-                let window=app.get_webview_window("main").ok_or_else(||std::io::Error::other("Main workspace window missing"))?;
+                let window=create_main_window(app)?;
                 fit_initial_window(&window)?;
                 workspace_foreground::start(window.as_ref().window())?;
             }
@@ -145,8 +146,7 @@ fn check_webview_binding(mut context: tauri::Context<tauri::Wry>) {
     // Exercise the real compiled UI and IPC, with no presentation or launch handlers.
     tauri::Builder::default()
         .setup(|app| {
-            use tauri::Manager;
-            let window = app.get_webview_window("main").ok_or_else(||std::io::Error::other("Main window missing"))?;
+            let window = create_main_window(app)?;
             fit_initial_window(&window)?;
             workspace_foreground::start(window.as_ref().window())?;
             Ok(())
@@ -159,6 +159,20 @@ fn check_webview_binding(mut context: tauri::Context<tauri::Wry>) {
         ])
         .run(context).expect("WebView startup diagnostic failed");
     workspace_foreground::shutdown();
+}
+
+#[cfg(windows)]
+fn create_main_window(app:&tauri::App)->Result<tauri::WebviewWindow,Box<dyn std::error::Error>> {
+    use tauri::Manager;
+    #[cfg(feature="lazy-tester-package")]
+    {
+        let config=app.config().app.windows.iter().find(|window|window.label=="main")
+            .ok_or_else(||std::io::Error::other("Main window configuration missing"))?;
+        Ok(tauri::WebviewWindowBuilder::from_config(app,config)?
+            .data_directory(crate::engine::manager_settings::product_cache()?.join("WebView")).build()?)
+    }
+    #[cfg(not(feature="lazy-tester-package"))]
+    {app.get_webview_window("main").ok_or_else(||std::io::Error::other("Main window missing").into())}
 }
 
 pub(crate) fn startup_diagnostic_mode() -> bool {

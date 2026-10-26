@@ -60,13 +60,12 @@ loads a hive file; it checks metadata on the already inherited handle.
 The fixed product-only --lazy-tester-migrate-data route requires the original
 reviewed five-profile capability, supported image, reviewed payload, idle
 controller and no games. It does not run from an installer hook or launch games.
-Source trees are checked for links before creating target launchers. CopyFileW
+Source trees are checked for links before creating target launchers.
 Exception: an observed Local/Microsoft/Windows/INetCache/Content.IE5 directory
 junction becomes an empty ordinary cache directory at the destination. Its
 external target is never followed, copied or changed. Every other link is refused.
 This preserves source account/world data and avoids importing global Windows cache.
-CopyFileW
-copies the same slot's Roaming/Local files opaquely; SHCopyKeyW copies that slot's
+CopyFileW copies the same slot's Roaming/Local files opaquely; SHCopyKeyW copies that slot's
 registry values/subkeys while retaining the uniform destination hive descriptor.
 No account values or world contents are printed, parsed or exported to logs.
 

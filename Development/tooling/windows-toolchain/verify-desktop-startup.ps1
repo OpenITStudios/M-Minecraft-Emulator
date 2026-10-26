@@ -48,12 +48,22 @@ try {
             $cards = @($elements | Where-Object { $_.Current.Name -match '^Launch Minecraft - [1-5]$' -and $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button })
             $enabled = @($cards | Where-Object { $_.Current.IsEnabled }).Count
             $issue = @($names | Where-Object { $_ -match 'saved registry store cannot be opened|connection could not be|launcher connection was found' })
-            $observation = [PSCustomObject]@{event='desktop-startup-observation';sourceCommit=$receipt.sourceCommit;processId=$manager.Id;parentProcessId=$process.ParentProcessId;explorerParent=$true;connected=('Connected' -in $names);cards=$cards.Count;enabled=$enabled;issue=($issue -join ' ')}
-            if ($observation.connected -and $cards.Count -eq 5 -and $enabled -eq 5 -and -not $observation.issue) { break }
+            $cacheInsideData = $false
+            $cache = [IO.Path]::GetFullPath((Join-Path $checkout 'Data/Cache/WebView'))
+            foreach ($browser in @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($manager.Id) AND Name='msedgewebview2.exe'")) {
+                if ($browser.CommandLine -match '--user-data-dir=(?:"([^"]+)"|([^\s]+))') {
+                    $folder = if ($Matches[1]) { $Matches[1] } else { $Matches[2] }
+                    $folder = [IO.Path]::GetFullPath($folder)
+                    $cacheInsideData = $folder -ieq $cache -or $folder.StartsWith(($cache+'\'),[StringComparison]::OrdinalIgnoreCase)
+                    if ($cacheInsideData) { break }
+                }
+            }
+            $observation = [PSCustomObject]@{event='desktop-startup-observation';sourceCommit=$receipt.sourceCommit;processId=$manager.Id;parentProcessId=$process.ParentProcessId;explorerParent=$true;connected=('Connected' -in $names);cards=$cards.Count;enabled=$enabled;issue=($issue -join ' ');cacheInsideData=$cacheInsideData}
+            if ($observation.connected -and $cards.Count -eq 5 -and $enabled -eq 5 -and -not $observation.issue -and $cacheInsideData) { break }
         }
         Start-Sleep -Milliseconds 250
     }
-    if (-not $observation -or -not $observation.connected -or $observation.cards -ne 5 -or $observation.enabled -ne 5 -or $observation.issue) {
+    if (-not $observation -or -not $observation.connected -or $observation.cards -ne 5 -or $observation.enabled -ne 5 -or $observation.issue -or -not $observation.cacheInsideData) {
         if ($observation) { $observation | ConvertTo-Json -Compress | Write-Output }
         throw 'Actual Desktop startup failed. Build-tool or hidden WebView success cannot replace this check.'
     }

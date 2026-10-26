@@ -179,6 +179,7 @@ function main() {
 
 export function verifyDesktopStartup(output,expectedSource) {
   const report=JSON.parse(output);
+  if(report.cacheInsideData!==true)throw new Error('The real WebView cache is outside project Data');
   if(report.event!=='desktop-startup-observation'||report.explorerParent!==true||report.connected!==true||report.issue!==''||report.cards!==5||report.enabled!==5||!Number.isInteger(report.processId)||report.processId<1||!Number.isInteger(report.parentProcessId)||report.parentProcessId<1||!/^[a-f0-9]{40}$/.test(report.sourceCommit))throw new Error('Actual Desktop startup was not confirmed');
   if(report.sourceCommit!==expectedSource)throw new Error('Desktop startup belongs to a different source revision');
   return report;
