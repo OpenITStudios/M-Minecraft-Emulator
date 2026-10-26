@@ -101,7 +101,7 @@ export function stageLocalApp(cwd, release, sha) {
     writeFileSync(target,bytes,{flag:'wx'});
     if (digest(readFileSync(target)) !== sha256) throw new Error('Local app copy failed verification');
   }
-  for (const name of ['data-location.json','performance.json']) {
+  for (const name of ['data-location.json','performance.json','graphics.json']) {
     const locator = resolve(app,name);
     if (!existsSync(locator)) continue;
     const info = lstatSync(locator);

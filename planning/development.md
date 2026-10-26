@@ -1,88 +1,70 @@
 # Current Development Handoff — Lazy Tester
 
-Local product branch only; main release-reserved; GitHub Actions entirely OFF.
-RAM/renderer, Sandboxie and VMware routes remain PAUSED. Physical layout retained.
+Local only; main release-reserved; GitHub Actions entirely OFF. VMware,
+Sandboxie and RAM/renderer experiments remain PAUSED. No account/world migration.
 
-## Current bounded outcome — Desktop mode and stable window names
+## Current bounded implementation — Play and familiar Settings
 
-Parent77323a76217f152186824b4662277e10b07199ce. Operator interrupted the two-game
-acceptance run to fix desktop-window naming and the transparent empty Workspace.
-User requested familiar English naming and useful mode information. Gameplay
-validation is deferred while this bounded source fix is completed.
+Parent c097363b215ab1d66ef409352500900980dd2d87. The user explicitly approved
+moving the reviewed design into the actual application, requested a prominent
+Advanced disclosure, consistent controls, and High/Low graphics only.
 
-The existing Svelte owner calls the modes Workspace mode and Desktop mode.
-Use desktop windows replaces Restore windows. Desktop mode replaces the empty
-viewport/filmstrip with numbered active-session cards, actual status, Open in
-Workspace and Back to Workspace. It never tells the player to launch again merely
-because games are outside the app. It retains the existing native release/select
-bridge, clears pending presentation on release, and adds no session-state owner.
+The mounted Svelte owner now combines launchers and session switching in Play.
+All five numbered launchers remain visible, including separate-window mode.
+Settings has General and Data Storage with a shared selected launcher. Graphics
+lives in General. Data Storage exposes actual bounded metadata, selected profile
+folder, guarded web-cache cleanup and emphasized Advanced options. No illustrative
+world sizes, fabricated installation paths or simulated successful actions ship.
 
-The session controller originally labeled a window only on first discovery. Its
-retained-window branch now reuses the same identity-checked, bounded label helper
-on existing inspection. A game-reset caption is corrected to Minecraft - n; an
-already-correct title incurs no WM_SETTEXT. Identity never comes from title text.
-No injected hook, title-watcher thread or new timer. The original native aperture
-owner now invalidates/repaints manager children/frame on clear, including an
-already-clear region, to address stale WebView transparency after native release.
-No API/wire, installer, storage or FPS-policy changes.
+The existing preset writer supports High and Low, both at 12 chunks and unchanged
+simulation distance. High enables the reviewed effect keys; Low retains the
+previous reduced preset. manager_settings.rs owns graphics.json (five choices).
+The sole session actor serializes ApplyGraphicsPreset with launches and rejects
+manual writes while games are active. Existing options backups/identity checks
+are preserved. Launch reapplies the saved selection. App staging preserves the
+new preferences alongside performance.json and data-location.json.
 
-## Executed evidence
+Native executable icon now uses the same LT identity as the interface. Windows
+frame appearance and actual game composition still need interactive acceptance.
 
-32 frontend tests, Svelte zero errors/warnings and production frontend build PASS.
-Expanded optional headless mocked-Tauri regression PASS, including Desktop mode
-with two numbered sessions, no old empty-stage/filmstrip,920x620 bounds and return
-to Workspace. Synthetic preview screenshot (no user data):
-workspace/runs/lazy-tester-ui-regression/desktop-mode.png.
+## Evidence executed for this source change
 
-Two targeted Windows Rust tests PASS: caption reset/reapply plus wrong-PID/retired
-window refusal, and child repaint when aperture is already clear while manager
-region remains removed. These own synthetic windows only. Repository structure,
-G0 and diff whitespace checks PASS. Real WebView repaint/caption persistence with
-Minecraft after this change still requires a new-controller restart and retest.
-Existing unrelated DACL disposable fixture, oversized-pipe hang and rustfmt drift
-remain unresolved; no globally-green suite claim.
+Svelte check: zero errors/warnings. 33 frontend tests PASS. Production frontend
+build PASS. Windows Rust cargo check --all-targets with lazy-tester-package PASS
+(existing warnings retained). Targeted High/Low rendering and graphics preferences
+tests PASS. Compiled Svelte mocked-Tauri browser regression PASS: five launchers,
+High/Low/FPS save, navigation during inspection, partial storage metadata, disabled
+destructive actions, separate-window return, offline/recovery, existing-data
+reconnection and no unintended launch/delete. 920x620 and1366x900 bounds checked.
+Synthetic screenshots: workspace/runs/lazy-tester-ui-regression/.
+Repository structure and G0 contracts PASS. Full unrelated Rust suite not rerun;
+previous DACL/pipe/rustfmt issues remain outside this change.
 
-## Actual runtime before the interruption — older candidate only
+## Explicitly unavailable functionality
 
-Exact running App source b0ecca914a11c7e5ad23c73d946f37c925d83450; all four payload
-hashes verified before launch. Starting with zero game processes, profiles1 and2
-were explicitly launched through the manager. Both reached Education v26.32 main
-menus concurrently, with different visible player labels. Workspace displayed the
-selected game and the other game's live preview. Restore windows returned both
-to independent top-level desktop windows. Observed menu counter around133..137FPS
-foreground and10.0FPS background is a spot observation, not full FPS acceptance.
-No authentication UI was automated; labels alone prove neither license nor auth
-isolation. Gameplay/world/join/Host World not accepted.
+Full account clear, world export, game-settings reset/restore, background audio
+control, automatic game shutdown and data migration have no accepted backend.
+Their UI is disabled/explanatory. No real account/world contents were read,
+deleted or copied. Clear All Data must not be enabled until exclusive profile
+ownership, sign-in cleanup and isolation from Windows/other launchers are proven.
+The intended full-clear scope includes worlds and launcher-local backups; external
+exports and the Minecraft installation are preserved. This differs intentionally
+from cache/settings-only cleanup. No real destructive operation was executed.
 
-Profile1 opened Play/Create New and the draft name LT Acceptance MC01 2026-10-26
-was entered. Creation/loading was not confirmed before user interruption. Existing
-worlds were not opened/deleted or read from disk. Do not assume this draft created
-an accepted world. Two real Minecraft processes and their old controller remain
-running; preserve them. The manager/controller may need normal closure to stage
-or activate a new candidate. Do not kill them or overwrite their executable.
+Existing close behavior is preserved: the manager releases game windows and
+keeps Minecraft running, with its existing native confirmation while embedded.
+High graphics visual acceptance and all gameplay/license/multiplayer acceptance
+for this revision are NOT_EXECUTED. Source/UI checks are not runtime proof.
 
-## Packaging and preservation
+## Packaging / continuation
 
-Build a clean-revision Windows/NSIS candidate with --export-only while old games
-remain active. This creates reviewable output without replacing the running App.
-Actual App remains b0ecca9 until a safe normal restart/staging step is authorized.
-Native DLL pins remain:
-compatibility9d1cf60673c1ebbc0d94c30c1e28e226aa4429653901e5abd6e95400457ef8cb
-enroller6e7c000bee2dcf043d372317c77a04078ca12451c7273a18bd54e8f89e62af2a
-Previous package receipt/history: workspace/runs/setup-recovery-20261026.
-Previous source scopes: Settings19860393, usability300d591, setup UI88aa73f,
-selected-folder message b0ecca9. New source acceptance must not inherit their proof.
+No Lazy Tester or Minecraft processes were observed before packaging preparation.
+Build and stage a clean-revision candidate only after rechecking that App is idle;
+preserve preference files, data folders, submodule and second worktree. Actual
+package/staging outcome must be recorded after completion, without GUI/installer
+execution or automatically starting games.
 
-Existing retained pilot stores remain in place; root Data is empty and has no
-verified product catalog. No migration, token/account copy, reset, cache clear,
-installer run, service/driver change, UAC, main/release or CI operation. Metadata
-proof only in workspace; user screenshots/player identifiers never committed.
-Submodule, second worktree and unknown local material retained.
-
-## Remaining proof / Next — one action
-
-After a safe normal exit of the existing games/controller, stage the reviewed
-candidate and retest Desktop mode with two games: persistent numbered titles,
-opaque manager status area and return to Workspace. Until observed, actual fix
-acceptance is NOT_EXECUTED. Resume gameplay/license/FPS checks afterward; no forced
-shutdown or real data migration is implied. STOP for the bounded implementation.
+Next: implement and test bounded game-settings backup/reset/restore in the
+existing options owner before enabling those controls. Account-clear isolation
+remains an independent unresolved P0 prerequisite; current UI is not an account
+readiness authority. STOP after the current source/package handoff.

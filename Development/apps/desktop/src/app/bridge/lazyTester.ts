@@ -15,7 +15,8 @@ export interface ProfileStorage {
   disk: {availableBytes: number; totalBytes: number} | null;
   cache: {bytes: number; files: number; partial: boolean; canClear: boolean; issue: string | null};
 }
-export interface SettingsReport {activeFps:number; backgroundFps:number; renderDistanceChunks:number; canApplyPreset:boolean; changedProfiles:number|null}
+export type GraphicsPreset = 'High' | 'Low';
+export interface SettingsReport {graphicsPresets?:GraphicsPreset[]; activeFps:number; backgroundFps:number; renderDistanceChunks:number; canApplyPreset:boolean; changedProfiles:number|null}
 export interface SessionSnapshot {schema: 1; profiles: ProfileSession[]; storage: ProfileStorage[] | null; settings?:SettingsReport}
 export interface PreviewPlacement {slot: ProfileSlot; viewport: WorkspaceViewport}
 export interface PreviewStatus {slot: ProfileSlot; registered: boolean; reason: string | null}
@@ -87,7 +88,8 @@ export function parseSession(value: unknown): SessionSnapshot {
   }
   if(Object.hasOwn(value,'settings')) {
     const settings=value.settings;
-    if(!record(settings)||!exact(settings,['activeFps','backgroundFps','renderDistanceChunks','canApplyPreset','changedProfiles'])||
+    if(!record(settings)||!exact(settings,Object.hasOwn(settings,'graphicsPresets')?['graphicsPresets','activeFps','backgroundFps','renderDistanceChunks','canApplyPreset','changedProfiles']:['activeFps','backgroundFps','renderDistanceChunks','canApplyPreset','changedProfiles'])||
+      Object.hasOwn(settings,'graphicsPresets')&&(!Array.isArray(settings.graphicsPresets)||settings.graphicsPresets.length!==5||settings.graphicsPresets.some(p=>p!=='High'&&p!=='Low'))||
       !Number.isInteger(settings.activeFps)||Number(settings.activeFps)<1||Number(settings.activeFps)>1000||
       !Number.isInteger(settings.backgroundFps)||Number(settings.backgroundFps)<1||Number(settings.backgroundFps)>Number(settings.activeFps)||
       settings.renderDistanceChunks!==12||typeof settings.canApplyPreset!=='boolean'||
@@ -125,6 +127,10 @@ export function parsePreviewReport(value:unknown,slots:readonly ProfileSlot[]):P
 }
 
 export const lazyTester = {
+  applyGraphics:async(slot:ProfileSlot,preset:GraphicsPreset)=>{
+    if(!profileSlots.includes(slot)||!['High','Low'].includes(preset))throw new TypeError('Invalid graphics preset');
+    return settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ApplyGraphicsPreset',slot,preset}}));
+  },
   settings:async()=>settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'InspectSettings'}})),
   savePerformance:async(activeFps:number,backgroundFps:number)=>{
     if(!validFpsLimits(activeFps,backgroundFps))throw new TypeError('Use whole FPS limits from 1 to 1000. Background FPS must not exceed active FPS.');

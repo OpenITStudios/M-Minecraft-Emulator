@@ -4,6 +4,42 @@ use std::{fs, io, io::Read, path::PathBuf};
 pub const TARGETS: &str =
     include_str!("../../../../../engine/isolation-native/owned-runtime/minecraft-targets.json");
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+pub enum GraphicsPreset {
+    High,
+    #[default]
+    Low,
+}
+
+pub fn load_graphics() -> io::Result<[GraphicsPreset; 5]> {
+    read_graphics(&performance_path()?.with_file_name("graphics.json"))
+}
+fn read_graphics(path: &std::path::Path) -> io::Result<[GraphicsPreset; 5]> {
+    match fs::symlink_metadata(&path) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok([GraphicsPreset::Low; 5]),
+        Err(error) => return Err(error),
+        Ok(metadata) if !metadata.is_file() || metadata.file_type().is_symlink() => return Err(io::Error::other("Graphics settings must be an ordinary file")),
+        Ok(_) => {}
+    }
+    let mut bytes = Vec::new();
+    fs::File::open(path)?.take(4097).read_to_end(&mut bytes)?;
+    if bytes.len() > 4096 { return Err(io::Error::other("Graphics settings file is too large")); }
+    serde_json::from_slice(&bytes).map_err(io::Error::other)
+}
+
+pub fn save_graphics(values: [GraphicsPreset; 5]) -> io::Result<()> {
+    write_graphics(&performance_path()?.with_file_name("graphics.json"), values)
+}
+fn write_graphics(path: &std::path::Path, values: [GraphicsPreset; 5]) -> io::Result<()> {
+    use std::io::Write;
+    read_graphics(path)?;
+    let temp = path.with_extension(format!("{}-{}.tmp", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(io::Error::other)?.as_nanos()));
+    let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&temp)?;
+    let result = (|| { file.write_all(&serde_json::to_vec(&values).map_err(io::Error::other)?)?; file.sync_all()?; drop(file); fs::rename(&temp, &path) })();
+    if result.is_err() { let _ = fs::remove_file(temp); }
+    result
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PerformanceSettings {
@@ -176,6 +212,18 @@ fn write(path: &std::path::Path, value: &ManagerSettings) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn graphics_preferences_are_bounded_atomic_and_preserve_bad_inputs() {
+        let root=std::env::temp_dir().join(format!("lazy-graphics-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir(&root).unwrap();let path=root.join("graphics.json");
+        assert_eq!(read_graphics(&path).unwrap(),[GraphicsPreset::Low;5]);
+        let values=[GraphicsPreset::High,GraphicsPreset::Low,GraphicsPreset::High,GraphicsPreset::Low,GraphicsPreset::Low];
+        write_graphics(&path,values).unwrap();assert_eq!(read_graphics(&path).unwrap(),values);
+        for bytes in [b"[]".as_slice(),b"[\"Auto\",\"Low\",\"Low\",\"Low\",\"Low\"]",b"invalid"] {
+            fs::write(&path,bytes).unwrap();assert!(write_graphics(&path,values).is_err());assert_eq!(fs::read(&path).unwrap(),bytes);
+        }
+        fs::remove_file(&path).unwrap();fs::remove_dir(&root).unwrap();
+    }
     #[test]
     fn performance_defaults_persist_validate_and_preserve_invalid_files() {
         let root=std::env::temp_dir().join(format!("lazy-performance-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));

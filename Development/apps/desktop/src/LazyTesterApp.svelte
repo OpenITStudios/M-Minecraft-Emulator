@@ -1,7 +1,7 @@
 <script lang="ts">
   import {onMount, tick} from 'svelte';
   import {listen} from '@tauri-apps/api/event';
-  import {lazyTester, nextProfile, validFpsLimits, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, type ProfileBinding, type DataLocation, type SettingsReport} from './app/bridge/lazyTester.js';
+  import {lazyTester, nextProfile, validFpsLimits, type GraphicsPreset, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, type ProfileBinding, type DataLocation, type SettingsReport} from './app/bridge/lazyTester.js';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazy-tester.css';
 
@@ -11,6 +11,13 @@
   let dataLocation:DataLocation|null=null;
   let settings:SettingsReport|null=null, settingsNotice='';
   let applyingPreset=false;
+  let selectedSlot:ProfileSlot=1, graphicsPreset:GraphicsPreset='Low';
+  let advanced=false;
+  $: selectedStorage=storage?.find(item=>item.slot===selectedSlot);
+  $: selectedProfile=profiles.find(item=>item.slot===selectedSlot);
+  $: selectedPath=dataLocation?.profiles.find(item=>item.slot===selectedSlot)?.path;
+  $: graphicsDirty=!!settings?.graphicsPresets&&graphicsPreset!==settings.graphicsPresets[selectedSlot-1];
+  function chooseSlot(slot:ProfileSlot){selectedSlot=slot;clearSlot=null;settingsNotice='';graphicsPreset=settings?.graphicsPresets?.[slot-1]??'Low';}
   let savingPerformance=false;
   let activeFps:number|undefined=144,backgroundFps:number|undefined=10,performanceNotice='';
   $: performanceDirty=settings!==null&&(activeFps!==settings.activeFps||backgroundFps!==settings.backgroundFps);
@@ -99,6 +106,7 @@
     finally { busy = false; }
   }
   function navigate(next: typeof page) {
+    if(next==='launchers')next='workspace';
     queuedPage = next; queued = null;
   }
   async function consumeNavigation() {
@@ -109,18 +117,35 @@
       if (next !== 'workspace') await workspaceSurface.suspend();
       page = next; await tick();
       if (next === 'workspace' && active !== null) await lazyTester.present(active, viewport.getBoundingClientRect());
+      if(next==='settings') {
+        const snapshot=await lazyTester.settings();profiles=snapshot.profiles;settings=snapshot.settings;available=true;
+        if(!performanceDirty){activeFps=settings.activeFps;backgroundFps=settings.backgroundFps;}
+        graphicsPreset=settings.graphicsPresets?.[selectedSlot-1]??'Low';
+      }
+      if(next==='storage'||next==='settings') {
+        try {dataLocation=await lazyTester.dataLocation();locationIssue='';}
+        catch(error){locationIssue=String(error);dataLocation=null;storage=null;binding=null;}
+      }
+      if(next==='storage'&&binding?.configured) {
+        const snapshot=await lazyTester.storage();profiles=snapshot.profiles;storage=snapshot.storage;
+        storageCheckedAt=new Date().toLocaleTimeString('en-US');
+      }
       dirty = true;
     } catch (error) { issue = String(error); }
     finally { busy = false; }
-    if(page==='settings')void refresh();
   }
   async function refreshPage() {
     if (busy || refreshing || resizing) return;
     issue = '';
     if (page === 'storage') {
-      if (!binding?.configured) await loadBinding();
-      await loadLocation();
-      if (!locationIssue && binding?.configured) await inspectStorage();
+      busy=true;checkingStorage=true;
+      try {
+        if(!binding?.configured)await checkBinding();
+        try{dataLocation=await lazyTester.dataLocation();locationIssue='';}
+        catch(error){locationIssue=String(error);dataLocation=null;storage=null;binding=null;throw error;}
+        if(binding?.configured){const snapshot=await lazyTester.storage();profiles=snapshot.profiles;storage=snapshot.storage;storageCheckedAt=new Date().toLocaleTimeString('en-US');available=true;connectionIssue='';}
+      }catch(error){issue=String(error);storage=null;}
+      finally{checkingStorage=false;busy=false;}
     } else {
       if (!binding?.configured) await loadBinding();
       await refresh();
@@ -130,10 +155,10 @@
     if(busy||refreshing||resizing||!available||!binding?.configured||!settings?.canApplyPreset||runningCount>0)return;
     busy=true;applyingPreset=true;issue='';settingsNotice='';
     try {
-      const snapshot=await lazyTester.applyPreset();
+      const snapshot=await lazyTester.applyGraphics(selectedSlot,graphicsPreset);
       profiles=snapshot.profiles;settings=snapshot.settings;
       if(settings.changedProfiles===null)throw new Error('The preset update was not confirmed. Refresh settings before trying again.');
-      settingsNotice=settings.changedProfiles===0?'All five profiles already use this preset.':'Graphics preset saved for all five profiles.';
+      settingsNotice='Minecraft - '+selectedSlot+': '+graphicsPreset+' saved and applied. This preset is reapplied at launch.';
     }catch(error){issue=String(error);settings=null;}
     finally{applyingPreset=false;busy=false;}
   }
@@ -264,131 +289,67 @@
     };
   });
 </script>
-
 <svelte:head><title>Lazy Tester</title></svelte:head>
 <div class="lt-app">
-  <aside class="lt-sidebar">
-    <a class="lt-brand" href="#workspace" on:click|preventDefault={() => navigate('workspace')}><span>LT</span> Lazy Tester</a>
-    <p class="lt-caption">MINECRAFT EDUCATION</p>
-    <nav aria-label="Main navigation">
-      {#each [['workspace','Workspace'],['launchers','Launchers'],['storage','Storage'],['settings','Settings']] as [id,label]}
-        <button class:chosen={page === id} aria-current={page === id ? 'page' : undefined} on:click={() => navigate(id as typeof page)}>{label}</button>
-      {/each}
-    </nav>
-    <div class="lt-sidebar-bottom" role="status"><span class="lt-dot" class:waiting={!available}></span>{available ? 'Connected' : initializing ? 'Connecting' : 'Unavailable'}<p>{available ? runningCount + ' of 5 running' : 'Session status unavailable'}</p></div>
-  </aside>
-  <main>
-    <header class="lt-page-header"><div><p class="lt-caption">MINECRAFT EDUCATION</p><h1>{page === 'workspace' ? 'Workspace' : page === 'launchers' ? 'Minecraft launchers' : page === 'storage' ? 'Storage' : 'Settings'}</h1></div><button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={refreshPage}>{refreshing || checkingStorage ? 'Refreshing…' : 'Refresh'}</button></header>
-    {#if issue || connectionIssue}<div class="lt-alert" role="alert"><strong>Something needs your attention</strong>{#if issue}<p>{issue}</p>{/if}{#if connectionIssue}<p>{connectionIssue}</p>{/if}</div>{/if}
-    {#if !binding?.configured}
-      <section class="lt-binding" aria-label="Profile setup">
-        <div><strong>{initializing ? 'Checking profiles…' : binding ? 'Profile setup required' : 'Profile setup unavailable'}</strong><p role={bindingIssue ? 'alert' : undefined}>{bindingIssue || binding?.issue || (initializing ? 'Please wait while your profiles are checked.' : 'Use Try again to check your profiles.')}</p></div>
-        {#if !initializing}<div class="lt-actions"><button on:click={() => navigate('storage')}>Manage data</button><button class="lt-secondary" disabled={busy || refreshing || resizing || runningCount > 0} on:click={() => loadBinding(true)}>Locate previous launcher</button><button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={() => loadBinding()}>Try again</button></div>{/if}
-      </section>
-    {/if}
-    <section class="lt-workspace" hidden={page !== 'workspace'} aria-label="Minecraft workspace">
-      <header class="lt-stage-header"><div><h2>{detached ? 'Desktop mode' : active ? 'Minecraft - ' + active : requested ? 'Starting Minecraft - ' + requested : 'Workspace mode'}</h2><p>{detached ? 'Control each Minecraft in its own window.' : active ? 'Workspace mode · click the game to play' : 'Open a profile from Launchers.'}</p></div>
-        <div class="lt-actions">{#if detached}<button disabled={busy || refreshing || resizing || !available} on:click={returnToWorkspace}>Back to Workspace</button>{:else}<button class="lt-secondary" disabled={busy || !available || !playableCount} on:click={() => step(-1)} aria-label="Previous Minecraft">←</button><button class="lt-secondary" disabled={busy || !available || !playableCount} on:click={() => step(1)}>Next →</button>{#if runningCount}<button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={release}>Use desktop windows</button>{/if}{/if}</div>
-      </header>
-      <div class="lt-viewport" class:lt-desktop={detached} bind:this={viewport}>
-        {#if detached}
-          <div class="lt-desktop-intro"><h2>Games are in separate windows</h2><p>Your Minecraft sessions keep running. Use the taskbar to switch windows, or open a session in Workspace.</p></div>
-          {#if !available}<p class="lt-error" role="status">Session status unavailable. Use Refresh to reconnect.</p>{/if}
-          <div class="lt-desktop-sessions" aria-label="Desktop sessions">
-            {#each profiles.filter(profile => ['RUNNING','STARTING','NOT_RESPONDING'].includes(profile.state)) as profile (profile.slot)}
-              <article><h3>Minecraft - {profile.slot}</h3><p>{labels[profile.state]}</p><button class="lt-secondary" disabled={busy || !available || profile.state !== 'RUNNING'} on:click={() => select(profile.slot)}>Open in Workspace</button></article>
-            {/each}
-          </div>
-          {#if available && runningCount === 0}<p>No Minecraft sessions are running. Open Launchers to start one.</p><button on:click={() => navigate('launchers')}>Open launchers</button>{/if}
-        {:else if !active}<div class="lt-empty"><span>LT</span><h2>{initializing ? 'Getting ready…' : !available ? 'Session status unavailable' : requested ? 'Starting Minecraft - ' + requested : 'Choose a Minecraft'}</h2><p>{initializing ? 'Checking your profiles and session status.' : !available ? 'Use Refresh to reconnect.' : requested ? 'Waiting for the game window…' : 'Launch a profile to begin.'}</p>{#if !requested && !initializing}<button on:click={() => navigate('launchers')}>Open launchers</button>{/if}</div>{/if}
-      </div>
-      {#if !detached}
-      <div class="lt-filmstrip" aria-label="Other Minecraft sessions">
-        {#each others as profile (profile.slot)}
-          <button class="lt-card" aria-label={'Play Minecraft - ' + profile.slot} disabled={busy || !available || profile.state !== 'RUNNING'} on:click={() => select(profile.slot)}>
-            <span class="lt-card-picture" use:image={profile.slot} aria-hidden="true">{profile.slot}</span><strong>Minecraft - {profile.slot}</strong><small>{labels[profile.state]}</small>
-            {#if profile.state === 'RUNNING' && previewStatuses.find(tile => tile.slot === profile.slot)?.reason}<small class="lt-preview-fallback" title={previewStatuses.find(tile => tile.slot === profile.slot)?.reason ?? ''}>Preview unavailable · click to play</small>{/if}
-          </button>
-        {/each}
-      </div>
-      <p class="lt-help">{resizing ? 'Updating layout…' : 'Select a preview to switch games.'}</p>
-      {#if previewIssue}<details class="lt-preview-details"><summary>Preview details</summary><p>{previewIssue}</p></details>{/if}
-      {/if}
-    </section>
-    {#if page === 'launchers'}
-      <p class="lt-description">{!available && profiles.length ? 'Showing the last known status. Use Refresh to reconnect before launching.' : 'Choose which profiles to launch.'}</p>
-      {#if profiles.length === 0}<div class="lt-list-empty" role="status"><h2>{initializing ? 'Checking profiles…' : 'Profiles unavailable'}</h2><p>{initializing ? 'Your profiles will appear here when the check finishes.' : 'Use Refresh to check the connection and load your profiles.'}</p></div>{/if}
-      <div class="lt-profile-list">{#each profiles as profile (profile.slot)}<article><span class="lt-profile-number">{profile.slot}</span><div><h2>Minecraft - {profile.slot}</h2><p>{labels[profile.state]}</p>{#if profile.issue}<p class="lt-error">{profile.issue}</p>{/if}</div>{#if profile.state === 'RUNNING'}<button disabled={busy || !available} on:click={() => select(profile.slot)}>Show</button>{:else}<button disabled={busy || refreshing || resizing || !available || !binding?.configured || ['STARTING','NOT_RESPONDING'].includes(profile.state)} on:click={() => launch(profile.slot)}>{profile.state === 'STARTING' ? 'Starting…' : profile.state === 'NOT_RESPONDING' ? 'Not responding' : 'Launch'}</button>{/if}</article>{/each}</div>
-    {:else if page === 'storage'}
-      <section class="lt-panel">
-        <h2>Data location</h2>
-        <p class="lt-data-path">{dataLocation ? dataLocation.path ?? 'No data folder is connected.' : initializing ? 'Checking data location…' : 'Data location unavailable. Use Locate data to reconnect an existing folder, or Refresh location to check again.'}</p>
-        {#if locationIssue}<p class="lt-error" role="alert">{locationIssue}</p>{/if}
-        <div class="lt-actions">
-          <button class="lt-secondary" disabled={busy||refreshing||resizing||!dataLocation?.path} on:click={()=>loadLocation('Open')}>Open folder</button>
-          <button class="lt-secondary" disabled={busy||refreshing||resizing||runningCount>0||dataLocation?.canLocate===false} on:click={()=>loadLocation('Locate')}>Locate data</button>
-          {#if dataLocation && !dataLocation.path}<button disabled={busy||refreshing||resizing} on:click={()=>loadLocation('Choose')}>Choose data folder</button>{/if}
-          <button class="lt-secondary" disabled={busy||refreshing||resizing} on:click={()=>loadLocation()}>Refresh location</button>
+  <header class="lt-topbar">
+    <a class="lt-brand" href="#play" on:click|preventDefault={() => navigate('workspace')}><span>LT</span>Lazy Tester</a>
+    <nav aria-label="Main navigation"><button class:chosen={page==='workspace'} aria-current={page==='workspace'?'page':undefined} on:click={()=>navigate('workspace')}>Play</button><button class:chosen={page!=='workspace'} aria-current={page!=='workspace'?'page':undefined} on:click={()=>navigate('settings')}>Settings</button></nav>
+    <span class="lt-connection" role="status"><span class="lt-dot" class:waiting={!available}></span>{available?'Connected':initializing?'Connecting…':'Unavailable'}</span>
+  </header>
+  <div class="lt-layout" class:lt-settings-layout={page!=='workspace'}>
+    {#if page!=='workspace'}<aside class="lt-sidebar"><h2>Settings</h2><nav aria-label="Settings navigation"><button class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}
+    <main>
+      <header class="lt-page-header"><h1>{page==='workspace'?'Play':page==='storage'?'Data Storage':'General'}</h1><button class="lt-secondary" disabled={busy||refreshing||resizing} on:click={refreshPage}>{refreshing||checkingStorage?'Refreshing…':'Refresh'}</button></header>
+      {#if issue||connectionIssue}<div class="lt-alert" role="alert">{#if issue}<p>{issue}</p>{/if}{#if connectionIssue}<p>{connectionIssue}</p>{/if}</div>{/if}
+      {#if !binding?.configured}<section class="lt-binding"><div><strong>{initializing?'Checking profiles…':'Profile setup required'}</strong><p>{bindingIssue||binding?.issue||'Connect your existing launcher data to continue.'}</p></div>{#if !initializing}<div class="lt-actions"><button on:click={()=>navigate('storage')}>Manage data</button><button class="lt-secondary" disabled={busy||runningCount>0} on:click={()=>loadBinding(true)}>Locate previous launcher</button></div>{/if}</section>{/if}
+      <section class="lt-workspace" hidden={page!=='workspace'} aria-label="Minecraft play area">
+        <header class="lt-stage-header"><div><h2>{detached?'Separate windows':active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:'Choose a Minecraft below'}</h2><p>{detached?'Your games keep running on the desktop.':active?'Click the game to play.':'Each launcher keeps its own data.'}</p></div>{#if detached}<button class="lt-secondary" disabled={busy||refreshing||resizing||!available} on:click={returnToWorkspace}>Back to Play</button>{:else if runningCount}<button class="lt-secondary" disabled={busy||refreshing||resizing} on:click={release}>Open in separate windows</button>{/if}</header>
+        <div class="lt-viewport" class:lt-desktop={detached} bind:this={viewport}>
+          {#if detached}<div class="lt-empty"><h2>Games are in separate windows</h2><p>Use the Windows taskbar, or choose a game below to open it in Play.</p><p>{runningCount} of 5 running</p></div>{:else if !active}<div class="lt-empty"><span>LT</span><h2>{initializing?'Getting ready…':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
         </div>
-        {#if dataLocation}<details><summary>Profile locations</summary>{#each dataLocation.profiles as profile}<p class="lt-data-path">Minecraft {profile.slot}: {profile.path}</p>{/each}<p class="lt-data-path">Default: {dataLocation.defaultPath}</p></details>{/if}
-        <h2>Minecraft storage</h2>
-        <p>View storage use for each profile. Counts update when you check storage.</p>
-        <p><button disabled={busy || refreshing || resizing || !binding?.configured} on:click={inspectStorage}>{checkingStorage ? 'Checking…' : 'Check storage'}</button></p>
-        {#if storage}<p class="lt-setting-help" role="status">Last checked at {storageCheckedAt}.</p>{:else if !checkingStorage}<p class="lt-setting-help">{binding?.configured ? 'Select Check storage to measure profile sizes.' : 'Complete profile setup to check storage.'}</p>{/if}
-        {#if storageNotice}<p role="status">{storageNotice}</p>{/if}
-        {#if storage}
-          {#each storage as item}
-            <article class="lt-storage-profile">
-              <h3>Minecraft - {item.slot}</h3>
-              <div class="lt-storage-metrics">
-                <div><span>Profile data</span><strong>{item.partial ? 'At least ' : ''}{(item.bytes / 1048576).toFixed(1)} MB</strong><small>{item.files.toLocaleString('en-US')} {item.files === 1 ? 'file' : 'files'}{item.partial ? ' · partial count' : ''}</small></div>
-                <div><span>Available disk space</span><strong>{item.disk ? (item.disk.availableBytes / 1073741824).toFixed(1) + ' GB' : 'Unavailable'}</strong><small>{item.disk ? 'of ' + (item.disk.totalBytes / 1073741824).toFixed(1) + ' GB · shared drive' : 'Disk information unavailable'}</small></div>
-                <div><span>Web cache</span><strong>{item.cache.partial ? 'Unavailable' : (item.cache.bytes / 1048576).toFixed(1) + ' MB'}</strong><small>Included in profile size</small></div>
-              </div>
-              {#if item.cache.issue}<p>{item.cache.issue}</p>{/if}
-              <div class="lt-actions">
-                <button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={() => openFolder(item.slot)}>Open folder</button>
-                <button class="lt-secondary" disabled={busy || refreshing || resizing || runningCount > 0 || !item.cache.canClear} on:click={() => clearSlot = item.slot}>Clear cache</button>
-              </div>
-              {#if clearSlot === item.slot && item.cache.canClear && runningCount === 0}
-                <div class="lt-cache-confirm" role="group" aria-label={'Confirm cache cleanup for Minecraft - ' + item.slot}>
-                  <p>Clear {(item.cache.bytes / 1048576).toFixed(1)} MB of web cache for Minecraft - {item.slot}? Accounts, worlds and settings will be kept. Web content may load more slowly next time.</p>
-                  <div class="lt-actions"><button disabled={busy || refreshing || resizing} on:click={() => clearCache(item.slot)}>Clear web cache</button><button class="lt-secondary" disabled={busy} on:click={() => clearSlot = null}>Cancel</button></div>
-                </div>
-              {/if}
-            </article>
+        <div class="lt-games-heading"><span>Your games</span><span>{runningCount} of 5 running</span></div>
+        <div class="lt-filmstrip" aria-label="Minecraft launchers">
+          {#each profiles as profile (profile.slot)}
+            <button class="lt-card" class:selected={active===profile.slot&&!detached} aria-pressed={active===profile.slot&&!detached} aria-label={(profile.state==='RUNNING'?'Open ':'Launch ')+'Minecraft - '+profile.slot} disabled={busy||refreshing||resizing||!available||!binding?.configured||['STARTING','NOT_RESPONDING'].includes(profile.state)} on:click={()=>profile.state==='RUNNING'?select(profile.slot):launch(profile.slot)}>
+              <strong>Minecraft - {profile.slot}{active===profile.slot&&!detached?' ✓':''}</strong>
+              <span class="lt-card-picture" use:image={profile.slot} aria-hidden="true">{profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':'▷ Launch'}</span>
+              <small>{active===profile.slot&&!detached?'Selected':labels[profile.state]}</small>
+              {#if profile.issue}<small class="lt-error">{profile.issue}</small>{/if}
+            </button>
           {/each}
-        {/if}
-        <p>Close all Minecraft sessions before clearing web cache.</p>
+        </div>
+        <p class="lt-help">{resizing?'Updating display…':detached?'Select a running game to bring it into Play.':'Click a game to switch. Other games keep running.'}</p>
+        {#if previewIssue}<details class="lt-preview-details"><summary>Preview unavailable</summary><p>{previewIssue}</p></details>{/if}
       </section>
-    {:else if page === 'settings'}
-      <section class="lt-panel" aria-label="Settings" aria-busy={applyingPreset||savingPerformance}>
-        <h2>Performance</h2>
-        {#if settings}
-          <form on:submit|preventDefault={savePerformance}>
-            <label class="lt-setting"><span>Active FPS limit</span><input type="number" min="1" max="1000" step="1" required bind:value={activeFps} on:input={()=>performanceNotice=''} disabled={busy} aria-describedby="fps-help" /></label>
-            <label class="lt-setting"><span>Background FPS limit</span><input type="number" min="1" max={activeFps??1000} step="1" required bind:value={backgroundFps} on:input={()=>performanceNotice=''} disabled={busy} aria-describedby="fps-help" /></label>
-            <p id="fps-help" class="lt-setting-help">Shared by all five profiles. Saved limits apply at the next launch; running games keep their current limits.</p>
-            {#if !performanceValid}<p class="lt-error" role="alert">Enter whole numbers from 1 to 1000. Background FPS must not exceed active FPS.</p>{/if}
-            <div class="lt-actions lt-setting-actions"><button type="submit" disabled={busy||refreshing||resizing||!available||!performanceDirty||!performanceValid}>{savingPerformance?'Saving…':'Save'}</button><button type="button" class="lt-secondary" disabled={busy} on:click={()=>{activeFps=144;backgroundFps=10;performanceNotice='';}}>Restore defaults</button></div>
-            {#if performanceDirty}<p class="lt-setting-help">Unsaved changes</p>{/if}
-            {#if performanceNotice}<p class="lt-setting-help" role="status">{performanceNotice}</p>{/if}
-          </form>
-          <p class="lt-setting-help">The in-game counter shows the actual frame rate.</p>
-        {:else}<p>{refreshing?'Loading settings…':'Settings unavailable. Use Refresh to try again.'}</p>{/if}
-        <h2>Graphics preset</h2>
-        <div class="lt-setting"><span>Graphics mode</span><strong>Simple</strong></div>
-        <div class="lt-setting"><span>Render distance</span><strong>{settings?settings.renderDistanceChunks+' chunks':'Unavailable'}</strong></div>
-        <div class="lt-setting"><span>Visual effects</span><strong>Reduced</strong></div>
-        <div class="lt-setting"><span>Simulation distance</span><strong>Unchanged</strong></div>
-        <p class="lt-setting-help">Saved in each profile and applied again at launch. Close all Minecraft sessions to apply it now.</p>
-        <div class="lt-actions lt-setting-actions"><button disabled={busy||refreshing||resizing||!available||!binding?.configured||!settings?.canApplyPreset||runningCount>0} on:click={applyPreset}>{applyingPreset?'Applying…':'Apply to all profiles'}</button></div>
-        {#if settingsNotice}<p class="lt-setting-help" role="status">{settingsNotice}</p>{/if}
-        {#if !binding?.configured}<p class="lt-setting-help">Complete profile setup before applying the preset.</p>{:else if settings&&!settings.canApplyPreset}<p class="lt-setting-help">Close all Minecraft sessions normally, then refresh settings.</p>{/if}
-        <h2>Profile data</h2><p>View profile locations, storage use and cache controls in Storage.</p>
-        <div class="lt-actions lt-setting-actions"><button class="lt-secondary" disabled={busy||refreshing||resizing} on:click={()=>navigate('storage')}>Manage storage</button></div>
-        <h2>When Lazy Tester closes</h2><p>Minecraft keeps running and its windows return to the desktop.</p>
-      </section>
-    {/if}
-  </main>
+      {#if page==='settings'}
+        <div class="lt-settings-content">
+          <section class="lt-group"><h2>Graphics</h2><label class="lt-target">Applies to <select value={selectedSlot} on:change={event=>chooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft - {p.slot}</option>{/each}</select></label>
+            <div class="lt-setting"><div><h3><label for="graphics-preset">Graphics preset</label></h3><p>High enables visual effects. Low reduces them. Both use 12 chunks; simulation distance is unchanged.</p></div><select id="graphics-preset" bind:value={graphicsPreset} disabled={busy||!settings?.graphicsPresets}><option>High</option><option>Low</option></select></div>
+            <div class="lt-actions"><button disabled={busy||refreshing||resizing||!available||!binding?.configured||!settings?.canApplyPreset||!graphicsDirty||runningCount>0} on:click={applyPreset}>{applyingPreset?'Applying…':'Apply preset'}</button></div>
+            <p class="lt-help">Close all Minecraft sessions before applying. The saved preset is reapplied when this launcher starts.</p>{#if settings&&!settings.graphicsPresets}<p class="lt-error">The running controller needs an update before High/Low can be selected. Existing games are preserved.</p>{/if}{#if settingsNotice}<p role="status">{settingsNotice}</p>{/if}
+          </section>
+          <section class="lt-group"><h2>Frame Limits <small>All launchers</small></h2>{#if settings}<form on:submit|preventDefault={savePerformance}>
+            <div class="lt-setting"><div><h3><label for="active-fps">While playing</label></h3><p>The game receiving keyboard and mouse input.</p></div><div class="lt-fps"><input id="active-fps" type="number" min="1" max="1000" required bind:value={activeFps} disabled={busy}/> FPS</div></div>
+            <div class="lt-setting"><div><h3><label for="background-fps">In the background</label></h3><p>Other games keep running at this limit.</p></div><div class="lt-fps"><input id="background-fps" type="number" min="1" max={activeFps??1000} required bind:value={backgroundFps} disabled={busy}/> FPS</div></div>
+            <p class="lt-help">Saved limits apply at the next launch. Running games keep their current limits.</p>{#if !performanceValid}<p class="lt-error" role="alert">Use whole numbers from 1 to 1000. Background FPS cannot exceed active FPS.</p>{/if}
+            <div class="lt-actions"><button type="submit" disabled={busy||refreshing||resizing||!available||!performanceDirty||!performanceValid}>{savingPerformance?'Saving…':'Save changes'}</button>{#if performanceDirty}<button type="button" class="lt-secondary" disabled={busy} on:click={()=>{activeFps=settings!.activeFps;backgroundFps=settings!.backgroundFps;}}>Discard</button>{/if}<button type="button" class="lt-secondary" disabled={busy} on:click={()=>{activeFps=144;backgroundFps=10;}}>Use 144 / 10</button></div>{#if performanceNotice}<p role="status">{performanceNotice}</p>{/if}
+          </form>{:else}<p>Settings unavailable. Refresh to try again.</p>{/if}</section>
+          <section class="lt-group"><h2>App behavior</h2><div class="lt-setting"><div><h3>When Lazy Tester closes</h3><p>Minecraft stays open and returns to its own desktop window. Closing the manager never force-closes your games.</p></div></div><p class="lt-help">Automatic game shutdown is not available yet.</p><div class="lt-setting"><div><h3>Background game audio</h3><p>Mute control requires verified per-game audio support.</p></div><select disabled aria-label="Background game audio"><option>Keep audio</option></select></div></section>
+          <section class="lt-group"><h2>Installation & data</h2><h3>Minecraft Education</h3><p>The controller verifies the registered game executable before launch. Moving data does not move Minecraft.</p><h3>Launcher data location</h3><p class="lt-data-path">{dataLocation?.path??'No data folder connected.'}</p>{#if locationIssue}<p class="lt-error">{locationIssue}</p>{/if}<div class="lt-actions"><button class="lt-secondary" disabled={busy||!dataLocation?.path} on:click={()=>loadLocation('Open')}>Open data folder</button><button class="lt-secondary" on:click={()=>navigate('storage')}>Data Storage →</button></div></section>
+        </div>
+      {:else if page==='storage'}
+        <div class="lt-settings-content">
+          <p>Worlds, cache and settings for each launcher.</p><div class="lt-launcher-heading"><select value={selectedSlot} aria-label="Choose Minecraft launcher" on:change={event=>chooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft - {p.slot}</option>{/each}</select><span>{selectedProfile?labels[selectedProfile.state]:'Unavailable'}</span></div>
+          {#if storageNotice}<p role="status">{storageNotice}</p>{/if}
+          <section class="lt-group"><div class="lt-setting"><h3>Profile data</h3><strong>{selectedStorage?(selectedStorage.partial?'At least ':'')+(selectedStorage.bytes/1048576).toFixed(1)+' MB':'Not measured'}</strong></div><div class="lt-setting"><h3>Web cache</h3><span>{selectedStorage&&!selectedStorage.cache.partial?(selectedStorage.cache.bytes/1048576).toFixed(1)+' MB':'Unavailable'}</span></div><div class="lt-setting"><h3>Available disk space</h3><span>{selectedStorage?.disk?(selectedStorage.disk.availableBytes/1073741824).toFixed(1)+' GB':'Unavailable'}</span></div><p class="lt-help">{storage?'Last measured at '+storageCheckedAt+'. Web cache is included in profile data.':'Use Refresh to measure storage. World sizes are not separately classified.'}</p></section>
+          <section class="lt-setting"><div><h3>Clear cache</h3><p>Remove recognized web cache. Accounts, worlds and game settings are kept.</p>{#if runningCount>0}<p>Close all Minecraft sessions before cleanup.</p>{/if}{#if selectedStorage?.cache.issue}<p>{selectedStorage.cache.issue}</p>{/if}</div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||runningCount>0||!selectedStorage?.cache.canClear} on:click={()=>clearSlot=selectedSlot}>Clear cache…</button></section>
+          {#if clearSlot===selectedSlot}<section class="lt-cache-confirm" aria-label="Confirm cache cleanup"><h3>Clear web cache for Minecraft - {selectedSlot}?</h3><p>Worlds, accounts and settings are kept. Other launchers are unchanged.</p><div class="lt-actions"><button disabled={busy||runningCount>0||!selectedStorage?.cache.canClear} on:click={()=>clearCache(selectedSlot)}>Clear web cache</button><button class="lt-secondary" on:click={()=>clearSlot=null}>Cancel</button></div></section>{/if}
+          <section class="lt-setting"><div><h3>Data folder</h3><p class="lt-data-path">{selectedPath??'Location unavailable.'}</p></div><button class="lt-secondary" disabled={busy||!available||!binding?.configured} on:click={()=>openFolder(selectedSlot)}>Open folder</button></section>
+          <details class="lt-advanced" bind:open={advanced}><summary><span><strong>Advanced options</strong><small>Reset and recovery for this launcher</small></span><span aria-hidden="true">{advanced?'−':'+'}</span></summary><div class="lt-advanced-body"><div class="lt-setting"><div><h3>Reset game settings</h3><p>Requires a verified settings backup and restore path. Existing settings are preserved.</p></div><button class="lt-secondary" disabled>Not available</button></div><div class="lt-setting"><div><h3>Restore settings</h3><p>No verified restore operation is available in this version.</p></div><button class="lt-secondary" disabled>Restore…</button></div></div></details>
+          <section class="lt-danger-zone"><div><h3>Clear all data</h3><p>Intended to remove accounts, worlds, cache, settings and launcher backups, leaving the Minecraft installation.</p><p>Unavailable until isolated account cleanup and world export are verified. No data will be deleted.</p></div><button class="lt-secondary lt-danger" disabled>Clear all data…</button></section>
+          <details class="lt-location-options"><summary>Connect or locate launcher data</summary><p class="lt-data-path">{dataLocation?.path??'No data folder connected.'}</p>{#if locationIssue}<p class="lt-error">{locationIssue}</p>{/if}<div class="lt-actions"><button class="lt-secondary" disabled={busy||runningCount>0||dataLocation?.canLocate===false} on:click={()=>loadLocation('Locate')}>Locate existing data</button>{#if dataLocation&&!dataLocation.path}<button disabled={busy} on:click={()=>loadLocation('Choose')}>Choose new data folder</button>{/if}</div><p>Connecting data does not migrate or delete existing accounts and worlds.</p></details>
+        </div>
+      {/if}
+    </main>
+  </div>
 </div>

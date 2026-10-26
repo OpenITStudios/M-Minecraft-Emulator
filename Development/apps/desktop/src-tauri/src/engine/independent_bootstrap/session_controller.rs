@@ -460,6 +460,17 @@ fn run() -> io::Result<()> {
                 SessionRequest::ApplyPreset => {
                     settings = Some(sessions.settings(true).map_err(|error| error.to_string())?);
                 }
+                SessionRequest::ApplyGraphicsPreset { slot, preset } => {
+                    let report = sessions.settings(false).map_err(|error| error.to_string())?;
+                    require_preset_idle(report.can_apply_preset).map_err(|error| error.to_string())?;
+                    let mut values = crate::engine::manager_settings::load_graphics().map_err(|error| error.to_string())?;
+                    let changed = game_preset::apply_selected(sessions.store(slot).map_err(|error| error.to_string())?, preset).map_err(|error| error.to_string())?;
+                    values[slot as usize - 1] = preset;
+                    crate::engine::manager_settings::save_graphics(values).map_err(|error| error.to_string())?;
+                    let mut report = sessions.settings(false).map_err(|error| error.to_string())?;
+                    report.changed_profiles = Some(changed as u32);
+                    settings = Some(report);
+                }
                 SessionRequest::SavePerformance {active_fps,background_fps} => {
                     crate::engine::manager_settings::save_performance(crate::engine::manager_settings::PerformanceSettings {active_fps,background_fps})
                         .map_err(|error|error.to_string())?;

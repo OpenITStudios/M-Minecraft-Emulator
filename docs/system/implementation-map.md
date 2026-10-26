@@ -13,6 +13,16 @@ This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build
 
 ## Current Lazy Tester route — 26 October 2026
 
+Play now owns launch and session selection together. Settings contains General
+and Data Storage; Advanced options is an emphasized disclosure inside the selected
+launcher's storage page. High/Low graphics selections are owned by the original
+game_preset.rs writer and manager_settings.rs graphics.json (five selections).
+ApplyGraphicsPreset is serialized by the same session actor; launch reapplies the
+saved selection. All games must be stopped before manual preset writes or cache
+cleanup. The package stager preserves graphics.json with existing preferences.
+Full account clear, world export, settings reset/restore, audio control and automatic
+game shutdown remain unavailable; UI explanations do not authorize those actions.
+
 Functional Settings uses the same lazy_tester_session adapter and retained
 session actor: InspectSettings, SavePerformance and ApplyPreset. Existing
 manager_settings.rs owns the executable-adjacent performance.json; the original

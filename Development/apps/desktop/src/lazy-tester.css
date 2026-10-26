@@ -1,108 +1,414 @@
-:root { font-family: Inter, "Segoe UI", sans-serif; font-size: 14px; color: #f0f1f7; background: #14151b; font-synthesis: none; }
-* { box-sizing: border-box; }
-html, body, #app { margin: 0; height: 100%; }
-body { overflow: hidden; }
-.lt-app {
-  --lt-bg: #14151b; --lt-panel: #1d1f28; --lt-line: #323541;
-  --lt-muted: #a6aabb; --lt-accent: #abb5ff;
-  display: flex; height: 100vh; background: var(--lt-bg); color: #f0f1f7;
-}
-.lt-app button {
-  font: inherit; cursor: pointer; border: 1px solid transparent; border-radius: 8px;
-  background: #bac2ff; color: #171a32; padding: 10px 15px; font-weight: 600;
-}
-.lt-app button:disabled { cursor: default; opacity: .48; }
-.lt-app button:focus-visible, .lt-brand:focus-visible { outline: 3px solid #a4b4ff; outline-offset: 3px; }
-.lt-app button.lt-secondary { background: #282b36; border-color: var(--lt-line); color: #e0e3f2; }
-.lt-sidebar { width: 210px; flex-shrink: 0; padding: 26px 18px; border-right: 1px solid var(--lt-line); display: flex; flex-direction: column; gap: 20px; }
-.lt-brand { display: flex; align-items: center; gap: 11px; color: inherit; text-decoration: none; font-size: 20px; font-weight: 700; }
-.lt-brand > span { background: #aab5ff; color: #202239; padding: 9px; border-radius: 11px; font-size: 16px; }
-.lt-caption { font-size: 10px; font-weight: 700; letter-spacing: .13em; color: var(--lt-muted); }
-.lt-sidebar nav { display: grid; gap: 7px; }
-.lt-sidebar nav button { text-align: left; background: transparent; color: var(--lt-muted); }
-.lt-sidebar nav button.chosen { background: #303546; color: #dce2ff; }
-.lt-sidebar-bottom { margin-top: auto; padding-top: 40px; font-size: 12px; }
-.lt-sidebar-bottom p { color: var(--lt-muted); font-size: 11px; }
-.lt-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #8bd6b3; margin-right: 7px; }
-.lt-dot.waiting { background: #d3b480; }
-.lt-app main { flex: 1; min-width: 0; height: 100vh; padding: 27px 30px; display: flex; flex-direction: column; overflow: hidden; }
-.lt-page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-shrink: 0; }
-.lt-page-header h1 { margin: 5px 0; font-size: 26px; }
-.lt-workspace { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.lt-workspace[hidden] { display: none; }
-.lt-stage-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-bottom: 15px; flex-shrink: 0; }
-.lt-stage-header h2 { font-size: 17px; margin: 0 0 5px; }
-.lt-stage-header p, .lt-help, .lt-description, .lt-panel p, .lt-profile-list p { color: var(--lt-muted); line-height: 1.6; margin: 0; }
-.lt-stage-header p { font-size: 12px; }
-.lt-actions { display: flex; flex-wrap: wrap; gap: 7px; }
-.lt-viewport { flex: 1; min-height: 120px; border: 1px solid var(--lt-line); border-radius: 12px; background: #0d0f14; overflow: hidden; }
-.lt-viewport.lt-desktop { padding: 24px; background: var(--lt-panel); overflow: auto; }
-.lt-desktop-intro h2 { margin: 0 0 10px; font-size: 20px; }
-.lt-desktop-intro p, .lt-desktop-sessions p { color: var(--lt-muted); line-height: 1.6; }
-.lt-desktop-sessions { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-top: 24px; }
-.lt-desktop-sessions article { padding: 18px; border: 1px solid var(--lt-line); border-radius: 10px; }
-.lt-desktop-sessions h3 { margin: 0; font-size: 16px; }
-.lt-empty { height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 10px; padding: 15px; text-align: center; }
-.lt-empty > span { font-size: 36px; font-weight: 800; color: #677199; }
-.lt-empty h2 { font-size: 20px; margin: 0; }
-.lt-empty p { color: var(--lt-muted); margin: 0 0 7px; }
-.lt-filmstrip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 15px; flex-shrink: 0; }
-.lt-filmstrip .lt-card { display: flex; flex-direction: column; gap: 6px; background: var(--lt-panel); border: 1px solid var(--lt-line); color: inherit; text-align: left; padding: 10px; min-width: 0; }
-.lt-card-picture { display: grid; place-items: center; height: clamp(56px, 11vh, 110px); width: 100%; background: #272b3b; color: #aeb8ee; border-radius: 5px; font-size: 29px; font-weight: 700; }
-.lt-card small { color: var(--lt-muted); font-size: 11px; }
-.lt-preview-fallback { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; width: 100%; }
-.lt-help { font-size: 11px; margin-top: 10px; flex-shrink: 0; }
-.lt-preview-details { color: #d8baa8; font-size: 11px; max-height: 65px; overflow: auto; margin-top: 4px; flex-shrink: 0; }
-.lt-preview-details p { overflow-wrap: anywhere; }
-.lt-profile-list { display: grid; gap: 12px; margin-top: 24px; min-height: 0; overflow: auto; }
-.lt-profile-list article { display: flex; align-items: center; gap: 18px; padding: 19px; background: var(--lt-panel); border: 1px solid var(--lt-line); border-radius: 12px; }
-.lt-profile-list article > div { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.lt-list-empty { margin-top: 24px; padding: 24px; border: 1px solid var(--lt-line); border-radius: 12px; color: var(--lt-muted); }
-.lt-list-empty h2 { font-size: 17px; color: #f0f1f7; }
-.lt-profile-list h2 { font-size: 16px; margin: 0 0 4px; }
-.lt-profile-number { display: grid; place-items: center; background: #30364b; border-radius: 11px; color: #bdc8ff; width: 45px; height: 45px; font-size: 20px; flex-shrink: 0; }
-.lt-panel { max-width: 820px; min-height: 0; overflow: auto; padding: 25px; background: var(--lt-panel); border: 1px solid var(--lt-line); border-radius: 12px; }
-.lt-panel h2 { font-size: 17px; margin: 24px 0 12px; }
-.lt-panel h2:first-child { margin-top: 0; }
-.lt-panel p + p { margin-top: 12px; }
-.lt-binding { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 14px; border: 1px solid var(--lt-line); border-radius: 10px; margin-bottom: 14px; max-height: 150px; overflow: auto; flex-shrink: 0; }
-.lt-binding > div:first-child { flex: 1; min-width: 180px; overflow-wrap: anywhere; }
-.lt-binding p { margin: 5px 0; }
-.lt-binding small { color: var(--lt-muted); }
-.lt-storage-profile { padding: 20px 0; border-bottom: 1px solid var(--lt-line); }
-.lt-storage-profile h3 { margin: 0 0 14px; font-size: 16px; }
-.lt-storage-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 14px; }
-.lt-storage-metrics span, .lt-storage-metrics strong, .lt-storage-metrics small { display: block; }
-.lt-storage-metrics strong { font-size: 20px; margin: 5px 0; }
-.lt-storage-metrics small { color: var(--lt-muted); }
-.lt-cache-confirm { padding: 14px; margin-top: 14px; border: 1px solid var(--lt-line); border-radius: 8px; }
-.lt-cache-confirm .lt-actions { margin-top: 12px; }
-.lt-setting { display: flex; justify-content: space-between; gap: 15px; padding: 13px 0; border-bottom: 1px solid var(--lt-line); }
-.lt-panel .lt-setting-help { margin-top: 14px; }
-.lt-setting-actions { margin-top: 14px; flex-wrap: wrap; }
-.lt-setting input { width: 110px; border: 1px solid var(--lt-line); border-radius: 6px; padding: 8px; background: var(--lt-bg); color: inherit; font: inherit; }
-.lt-setting input:focus-visible { outline: 2px solid var(--lt-accent); outline-offset: 2px; }
-.lt-alert { padding: 12px 16px; border: 1px solid #aa785a; background: #392a24; border-radius: 10px; margin-bottom: 14px; overflow: auto; overflow-wrap: anywhere; max-height: 90px; flex-shrink: 0; }
-.lt-alert p { white-space: pre-wrap; margin: 8px 0; }
-.lt-alert span { font-size: 12px; color: #d8baa8; }
-.lt-error { color: #ffc3b0 !important; }
-.lt-data-path { overflow-wrap: anywhere; user-select: text; margin-bottom: 12px !important; }
-@media (max-width: 1050px) {
-  .lt-sidebar { width: 175px; padding: 24px 13px; }
-  .lt-app main { padding: 24px 20px; }
-  .lt-stage-header { align-items: flex-start; }
-  .lt-stage-header p { max-width: 230px; }
-  .lt-actions { gap: 5px; }
-  .lt-actions button { padding: 9px 11px; }
-}
-@media (max-height: 700px) {
-  .lt-page-header { margin-bottom: 14px; }
-  .lt-page-header h1 { font-size: 23px; }
-  .lt-card-picture { height: 56px; }
-  .lt-empty > span { display: none; }
-  .lt-stage-header { padding-bottom: 10px; }
-}
-@media (prefers-reduced-motion: no-preference) {
-  .lt-card { transition: border-color .12s; }
-  .lt-card:not(:disabled):hover { border-color: #aab5ff; }
-}
+:root{
+  font-family:"Segoe UI",sans-serif;
+  font-size:14px;
+  color:#edf0f7;
+  background:#14171e;
+  font-synthesis:none}
+  *{
+    box-sizing:border-box}
+    html,body,#app{
+      margin:0;
+      height:100%}
+      body{
+        overflow:hidden}
+        .lt-app{
+          --lt-bg:#14171e;
+          --lt-panel:#1c2029;
+          --lt-line:#343b48;
+          --lt-muted:#b5bfd0;
+          --lt-accent:#bac2ff;
+          display:flex;
+          flex-direction:column;
+          height:100vh;
+          background:var(--lt-bg);
+          color:#edf0f7}
+          .lt-app button,.lt-app input,.lt-app select{
+            font:inherit}
+            .lt-app button{
+              cursor:pointer;
+              border:1px solid transparent;
+              border-radius:6px;
+              background:var(--lt-accent);
+              color:#18203a;
+              padding:9px 13px;
+              font-weight:600;
+              flex-shrink:0}
+              .lt-app button:disabled{
+                cursor:default;
+                opacity:.5}
+                .lt-app button.lt-secondary{
+                  background:#242a36;
+                  color:inherit;
+                  border-color:var(--lt-line)}
+                  .lt-app :is(button,a,input,select,summary):focus-visible{
+                    outline:2px solid var(--lt-accent);
+                    outline-offset:3px}
+                    .lt-app input,.lt-app select{
+                      border:1px solid var(--lt-line);
+                      border-radius:6px;
+                      padding:8px 10px;
+                      background:var(--lt-bg);
+                      color:inherit}
+                      .lt-app [hidden]{
+                        display:none!important}
+                        .lt-topbar{
+                          display:flex;
+                          align-items:center;
+                          gap:38px;
+                          padding:0 24px;
+                          height:64px;
+                          flex-shrink:0;
+                          background:var(--lt-panel);
+                          border-bottom:1px solid var(--lt-line)}
+                          .lt-brand{
+                            display:flex;
+                            align-items:center;
+                            gap:10px;
+                            color:inherit;
+                            font-size:15px;
+                            font-weight:600;
+                            text-decoration:none}
+                            .lt-brand>span{
+                              display:grid;
+                              place-items:center;
+                              width:29px;
+                              height:29px;
+                              border-radius:7px;
+                              background:#303a5c;
+                              color:var(--lt-accent);
+                              font-size:12px}
+                              .lt-topbar nav{
+                                display:flex;
+                                align-self:stretch;
+                                gap:26px}
+                                .lt-topbar nav button{
+                                  background:transparent;
+                                  color:var(--lt-muted);
+                                  padding:0;
+                                  border:0;
+                                  border-bottom:3px solid transparent;
+                                  border-radius:0}
+                                  .lt-topbar nav button.chosen{
+                                    color:inherit;
+                                    border-bottom-color:var(--lt-accent)}
+                                    .lt-connection{
+                                      margin-left:auto;
+                                      font-size:12px;
+                                      color:var(--lt-muted)}
+                                      .lt-dot{
+                                        display:inline-block;
+                                        width:7px;
+                                        height:7px;
+                                        margin-right:6px;
+                                        background:#95dfbd;
+                                        border-radius:50%}
+                                        .lt-dot.waiting{
+                                          background:#d3b480}
+                                          .lt-layout{
+                                            flex:1;
+                                            min-height:0;
+                                            display:flex}
+                                            .lt-settings-layout{
+                                              display:grid;
+                                              grid-template-columns:180px minmax(0,1fr)}
+                                              .lt-sidebar{
+                                                background:var(--lt-panel);
+                                                border-right:1px solid var(--lt-line);
+                                                padding:25px 12px}
+                                                .lt-sidebar h2{
+                                                  font-size:14px;
+                                                  margin:0 12px 18px}
+                                                  .lt-sidebar nav{
+                                                    display:grid;
+                                                    gap:5px}
+                                                    .lt-sidebar button{
+                                                      text-align:left;
+                                                      background:transparent;
+                                                      color:var(--lt-muted);
+                                                      font-weight:400}
+                                                      .lt-sidebar button.chosen{
+                                                        background:#303a5c;
+                                                        color:inherit}
+                                                        .lt-app main{
+                                                          flex:1;
+                                                          min-width:0;
+                                                          min-height:0;
+                                                          padding:24px;
+                                                          display:flex;
+                                                          flex-direction:column;
+                                                          overflow:auto}
+                                                          .lt-settings-layout main{
+                                                            padding:28px 32px}
+                                                            .lt-page-header{
+                                                              display:flex;
+                                                              justify-content:space-between;
+                                                              align-items:center;
+                                                              gap:16px;
+                                                              margin-bottom:20px;
+                                                              flex-shrink:0}
+                                                              .lt-page-header h1{
+                                                                margin:0;
+                                                                font-size:24px;
+                                                                font-weight:600;
+                                                                letter-spacing:-.4px}
+                                                                .lt-page-header>button{
+                                                                  font-size:12px;
+                                                                  padding:7px 11px}
+                                                                  .lt-app h2{
+                                                                    font-size:16px;
+                                                                    font-weight:600;
+                                                                    margin:0 0 10px}
+                                                                    .lt-app h3{
+                                                                      font-size:14px;
+                                                                      font-weight:600;
+                                                                      margin:0}
+                                                                      .lt-app p{
+                                                                        font-size:13px;
+                                                                        line-height:1.55;
+                                                                        color:var(--lt-muted);
+                                                                        margin:6px 0}
+                                                                        .lt-app small{
+                                                                          font-size:12px;
+                                                                          color:var(--lt-muted);
+                                                                          font-weight:400}
+                                                                          .lt-group>h2 small{
+                                                                            margin-left:10px}
+                                                                            .lt-actions{
+                                                                              display:flex;
+                                                                              gap:8px;
+                                                                              flex-wrap:wrap;
+                                                                              margin-top:14px}
+                                                                              .lt-help{
+                                                                                font-size:12px!important}
+                                                                                .lt-settings-content{
+                                                                                  max-width:880px;
+                                                                                  width:100%}
+                                                                                  .lt-group{
+                                                                                    margin:14px 0 26px}
+                                                                                    .lt-group+.lt-group{
+                                                                                      padding-top:22px;
+                                                                                      border-top:1px solid var(--lt-line)}
+                                                                                      .lt-setting{
+                                                                                        display:flex;
+                                                                                        align-items:center;
+                                                                                        justify-content:space-between;
+                                                                                        gap:22px;
+                                                                                        padding:16px 0;
+                                                                                        border-bottom:1px solid var(--lt-line)}
+                                                                                        .lt-setting>div:first-child{
+                                                                                          min-width:0;
+                                                                                          flex:1}
+                                                                                          .lt-setting p{
+                                                                                            max-width:570px}
+                                                                                            .lt-target{
+                                                                                              display:flex;
+                                                                                              align-items:center;
+                                                                                              gap:10px;
+                                                                                              margin:16px 0;
+                                                                                              font-size:13px}
+                                                                                              .lt-fps{
+                                                                                                display:flex;
+                                                                                                align-items:center;
+                                                                                                gap:8px;
+                                                                                                color:var(--lt-muted);
+                                                                                                font-size:13px}
+                                                                                                .lt-fps input{
+                                                                                                  width:85px}
+                                                                                                  .lt-data-path{
+                                                                                                    overflow-wrap:anywhere;
+                                                                                                    user-select:text;
+                                                                                                    font-family:Consolas,monospace;
+                                                                                                    font-size:12px!important}
+                                                                                                    .lt-launcher-heading{
+                                                                                                      display:flex;
+                                                                                                      gap:12px;
+                                                                                                      align-items:center;
+                                                                                                      margin:22px 0}
+                                                                                                      .lt-launcher-heading select{
+                                                                                                        font-size:18px;
+                                                                                                        font-weight:600}
+                                                                                                        .lt-launcher-heading>span{
+                                                                                                          font-size:12px;
+                                                                                                          color:var(--lt-muted)}
+                                                                                                          .lt-advanced{
+                                                                                                            border:1px solid #53618c;
+                                                                                                            border-radius:9px;
+                                                                                                            background:var(--lt-panel);
+                                                                                                            margin:25px 0 0}
+                                                                                                            .lt-advanced summary{
+                                                                                                              display:flex;
+                                                                                                              justify-content:space-between;
+                                                                                                              align-items:center;
+                                                                                                              padding:16px 18px;
+                                                                                                              cursor:pointer;
+                                                                                                              color:var(--lt-accent);
+                                                                                                              list-style:none}
+                                                                                                              .lt-advanced summary::-webkit-details-marker{
+                                                                                                                display:none}
+                                                                                                                .lt-advanced summary small{
+                                                                                                                  display:block;
+                                                                                                                  margin-top:4px}
+                                                                                                                  .lt-advanced summary>span:last-child{
+                                                                                                                    font-size:23px}
+                                                                                                                    .lt-advanced[open] summary{
+                                                                                                                      border-bottom:1px solid var(--lt-line);
+                                                                                                                      background:#252d43;
+                                                                                                                      border-radius:9px 9px 0 0}
+                                                                                                                      .lt-advanced-body{
+                                                                                                                        padding:0 18px}
+                                                                                                                        .lt-danger-zone{
+                                                                                                                          margin-top:26px;
+                                                                                                                          padding-top:22px;
+                                                                                                                          border-top:1px solid var(--lt-line);
+                                                                                                                          display:flex;
+                                                                                                                          align-items:center;
+                                                                                                                          gap:20px}
+                                                                                                                          .lt-danger-zone>div{
+                                                                                                                            flex:1;
+                                                                                                                            min-width:0}
+                                                                                                                            .lt-danger-zone h3,.lt-app button.lt-danger{
+                                                                                                                              color:#efacb6}
+                                                                                                                              .lt-location-options{
+                                                                                                                                margin:26px 0 14px;
+                                                                                                                                padding-top:20px;
+                                                                                                                                border-top:1px solid var(--lt-line)}
+                                                                                                                                .lt-location-options summary{
+                                                                                                                                  cursor:pointer;
+                                                                                                                                  color:var(--lt-accent)}
+                                                                                                                                  .lt-workspace{
+                                                                                                                                    flex:1;
+                                                                                                                                    min-height:0;
+                                                                                                                                    display:flex;
+                                                                                                                                    flex-direction:column}
+                                                                                                                                    .lt-stage-header{
+                                                                                                                                      display:flex;
+                                                                                                                                      justify-content:space-between;
+                                                                                                                                      align-items:center;
+                                                                                                                                      gap:16px;
+                                                                                                                                      margin-bottom:13px}
+                                                                                                                                      .lt-stage-header h2{
+                                                                                                                                        margin:0}
+                                                                                                                                        .lt-stage-header button{
+                                                                                                                                          font-size:12px}
+                                                                                                                                          .lt-viewport{
+                                                                                                                                            flex:1;
+                                                                                                                                            min-height:140px;
+                                                                                                                                            border:1px solid var(--lt-line);
+                                                                                                                                            border-radius:9px;
+                                                                                                                                            background:#101319;
+                                                                                                                                            overflow:hidden}
+                                                                                                                                            .lt-viewport.lt-desktop{
+                                                                                                                                              background:var(--lt-panel)}
+                                                                                                                                              .lt-empty{
+                                                                                                                                                height:100%;
+                                                                                                                                                display:flex;
+                                                                                                                                                flex-direction:column;
+                                                                                                                                                align-items:center;
+                                                                                                                                                justify-content:center;
+                                                                                                                                                padding:20px;
+                                                                                                                                                text-align:center}
+                                                                                                                                                .lt-empty>span{
+                                                                                                                                                  font-size:32px;
+                                                                                                                                                  color:var(--lt-accent);
+                                                                                                                                                  margin-bottom:12px}
+                                                                                                                                                  .lt-empty h2{
+                                                                                                                                                    font-size:20px}
+                                                                                                                                                    .lt-games-heading{
+                                                                                                                                                      display:flex;
+                                                                                                                                                      justify-content:space-between;
+                                                                                                                                                      margin:15px 0 9px;
+                                                                                                                                                      font-size:12px;
+                                                                                                                                                      color:var(--lt-muted)}
+                                                                                                                                                      .lt-filmstrip{
+                                                                                                                                                        display:grid;
+                                                                                                                                                        grid-template-columns:repeat(5,minmax(0,1fr));
+                                                                                                                                                        gap:9px;
+                                                                                                                                                        flex-shrink:0}
+                                                                                                                                                        .lt-filmstrip .lt-card{
+                                                                                                                                                          display:flex;
+                                                                                                                                                          flex-direction:column;
+                                                                                                                                                          gap:7px;
+                                                                                                                                                          background:var(--lt-panel);
+                                                                                                                                                          border:1px solid var(--lt-line);
+                                                                                                                                                          color:inherit;
+                                                                                                                                                          padding:10px;
+                                                                                                                                                          text-align:left;
+                                                                                                                                                          min-width:0;
+                                                                                                                                                          font-size:13px}
+                                                                                                                                                          .lt-filmstrip .lt-card.selected{
+                                                                                                                                                            border-color:var(--lt-accent);
+                                                                                                                                                            background:#303a5c}
+                                                                                                                                                            .lt-card-picture{
+                                                                                                                                                              display:grid;
+                                                                                                                                                              place-items:center;
+                                                                                                                                                              height:clamp(48px,9vh,85px);
+                                                                                                                                                              width:100%;
+                                                                                                                                                              border-radius:5px;
+                                                                                                                                                              background:#252c3a;
+                                                                                                                                                              color:var(--lt-muted);
+                                                                                                                                                              font-size:16px;
+                                                                                                                                                              font-weight:400}
+                                                                                                                                                              .lt-card small{
+                                                                                                                                                                font-size:12px;
+                                                                                                                                                                overflow-wrap:anywhere}
+                                                                                                                                                                .lt-preview-details{
+                                                                                                                                                                  font-size:12px;
+                                                                                                                                                                  color:var(--lt-muted);
+                                                                                                                                                                  max-height:50px;
+                                                                                                                                                                  overflow:auto}
+                                                                                                                                                                  .lt-alert,.lt-binding,.lt-cache-confirm{
+                                                                                                                                                                    padding:14px 16px;
+                                                                                                                                                                    border:1px solid var(--lt-line);
+                                                                                                                                                                    border-radius:8px;
+                                                                                                                                                                    margin-bottom:15px;
+                                                                                                                                                                    flex-shrink:0}
+                                                                                                                                                                    .lt-alert{
+                                                                                                                                                                      border-color:#aa785a;
+                                                                                                                                                                      background:#342721;
+                                                                                                                                                                      max-height:100px;
+                                                                                                                                                                      overflow:auto;
+                                                                                                                                                                      overflow-wrap:anywhere}
+                                                                                                                                                                      .lt-alert p{
+                                                                                                                                                                        color:#ffd0b8}
+                                                                                                                                                                        .lt-binding{
+                                                                                                                                                                          display:flex;
+                                                                                                                                                                          align-items:center;
+                                                                                                                                                                          gap:18px;
+                                                                                                                                                                          flex-wrap:wrap;
+                                                                                                                                                                          max-height:160px;
+                                                                                                                                                                          overflow:auto}
+                                                                                                                                                                          .lt-binding>div:first-child{
+                                                                                                                                                                            flex:1;
+                                                                                                                                                                            min-width:180px}
+                                                                                                                                                                            .lt-error{
+                                                                                                                                                                              color:#ffc3b0!important}
+                                                                                                                                                                              .lt-cache-confirm{
+                                                                                                                                                                                margin-top:14px;
+                                                                                                                                                                                background:var(--lt-panel)}
+                                                                                                                                                                                @media(max-width:1000px){
+                                                                                                                                                                                  .lt-settings-layout{
+                                                                                                                                                                                    grid-template-columns:155px minmax(0,1fr)}
+                                                                                                                                                                                    .lt-settings-layout main{
+                                                                                                                                                                                      padding:23px 22px}
+                                                                                                                                                                                      .lt-topbar{
+                                                                                                                                                                                        gap:25px}
+                                                                                                                                                                                        .lt-card-picture{
+                                                                                                                                                                                          height:55px}
+                                                                                                                                                                                          .lt-stage-header p{
+                                                                                                                                                                                            font-size:12px}
+                                                                                                                                                                                          }
+                                                                                                                                                                                          @media(max-height:700px){
+                                                                                                                                                                                            .lt-topbar{
+                                                                                                                                                                                              height:54px}
+                                                                                                                                                                                              .lt-app main{
+                                                                                                                                                                                                padding-top:17px;
+                                                                                                                                                                                                padding-bottom:14px}
+                                                                                                                                                                                                .lt-page-header{
+                                                                                                                                                                                                  margin-bottom:12px}
+                                                                                                                                                                                                  .lt-stage-header{
+                                                                                                                                                                                                    margin-bottom:10px}
+                                                                                                                                                                                                    .lt-card-picture{
+                                                                                                                                                                                                      height:42px}
+                                                                                                                                                                                                      .lt-empty>span{
+                                                                                                                                                                                                        display:none}
+                                                                                                                                                                                                      }

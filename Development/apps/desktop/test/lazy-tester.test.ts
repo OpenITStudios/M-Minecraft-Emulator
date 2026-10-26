@@ -7,6 +7,11 @@ const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process
   pid: slot + 100, createdFileTime: String(slot + 200), sessionId: 1, windowHandle: `0x${slot}`, responding: true,
 }});
 describe('Lazy Tester profile contract', () => {
+  it('accepts exactly five High/Low selections and rejects invented graphics states',()=>{
+    const settings={activeFps:144,backgroundFps:10,renderDistanceChunks:12,canApplyPreset:true,changedProfiles:null,graphicsPresets:['High','Low','High','Low','Low']};
+    expect(parseSession({...stopped(),settings}).settings!.graphicsPresets).toEqual(settings.graphicsPresets);
+    for(const graphicsPresets of [['High'],['High','Low','Low','Low','Auto'],null])expect(()=>parseSession({...stopped(),settings:{...settings,graphicsPresets}})).toThrow();
+  });
   it('validates configured Settings policy and refuses a successful preset update while games are active',()=>{
     const settings={activeFps:144,backgroundFps:10,renderDistanceChunks:12,canApplyPreset:true,changedProfiles:null};
     expect(parseSession({...stopped(),settings}).settings).toEqual(settings);

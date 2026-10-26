@@ -28,17 +28,20 @@ pub struct SessionSnapshot {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SettingsReport {
+    #[serde(default = "default_graphics")]
+    pub graphics_presets: [super::manager_settings::GraphicsPreset; 5],
     pub active_fps: u32,
     pub background_fps: u32,
     pub render_distance_chunks: u32,
     pub can_apply_preset: bool,
     pub changed_profiles: Option<u32>,
 }
+fn default_graphics() -> [super::manager_settings::GraphicsPreset; 5] { [super::manager_settings::GraphicsPreset::Low; 5] }
 impl SettingsReport {
     pub fn policy(can_apply_preset: bool, changed_profiles: Option<u32>) -> io::Result<Self> {
         // Configured ceilings of the reviewed payload, never measured frame rates.
         let limits=super::manager_settings::load_performance()?;
-        Ok(Self { active_fps: limits.active_fps, background_fps: limits.background_fps, render_distance_chunks: 12,
+        Ok(Self { graphics_presets: super::manager_settings::load_graphics()?, active_fps: limits.active_fps, background_fps: limits.background_fps, render_distance_chunks: 12,
             can_apply_preset, changed_profiles })
     }
 }
@@ -92,6 +95,7 @@ pub enum SessionRequest {
     Inspect,
     InspectSettings,
     ApplyPreset,
+    ApplyGraphicsPreset { slot: u32, preset: super::manager_settings::GraphicsPreset },
     SavePerformance { #[serde(rename="activeFps")] active_fps:u32, #[serde(rename="backgroundFps")] background_fps:u32 },
     InspectStorage,
     OpenProfileFolder { slot: u32 },
@@ -124,7 +128,7 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     if let SessionRequest::SavePerformance {active_fps,background_fps}=request {
         super::manager_settings::PerformanceSettings {active_fps,background_fps}.validate()?;
     }
-    if matches!(request, SessionRequest::Launch { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } if !(1..=5).contains(&slot))
+    if matches!(request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } if !(1..=5).contains(&slot))
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,

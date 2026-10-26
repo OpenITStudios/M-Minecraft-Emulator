@@ -22,11 +22,13 @@ describe('Development source and distribution candidates',()=>{
       expect(readdirSync(first.app).sort()).toEqual(['build-info.json','distribution','independent-bootstrap','lazy-tester.exe']);
       writeFileSync(join(first.app,'data-location.json'),'{"schema":1,"path":"D:/My Data"}');
       writeFileSync(join(first.app,'performance.json'),'{"activeFps":60,"backgroundFps":5}');
+      writeFileSync(join(first.app,'graphics.json'),'["High","Low","Low","Low","Low"]');
       writeFileSync(join(first.data,'world-fixture'),'preserve');
       writeFileSync(join(release,'lazy-tester.exe'),'MZupdated');
       const next=stageLocalApp(root,release,'b'.repeat(40));
       expect(readFileSync(join(next.app,'data-location.json'),'utf8')).toContain('D:/My Data');
       expect(readFileSync(join(next.app,'performance.json'),'utf8')).toContain('"activeFps":60');
+      expect(readFileSync(join(next.app,'graphics.json'),'utf8')).toContain('"High"');
       expect(readFileSync(join(next.data,'world-fixture'),'utf8')).toBe('preserve');
       expect(readFileSync(join(next.backup!,'lazy-tester.exe'),'utf8')).toBe('MZfixture');
       writeFileSync(join(release,'lazy-tester.exe'),'invalid');

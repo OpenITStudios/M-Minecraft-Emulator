@@ -25,7 +25,19 @@ const PRESET: [(&str, &str); 8] = [
     ("gfx_bubble_particles", "0"),
 ];
 
+#[cfg(test)]
 fn render(original: &[u8]) -> io::Result<Vec<u8>> {
+    render_preset(original, crate::engine::manager_settings::GraphicsPreset::Low)
+}
+
+fn render_preset(original: &[u8], preset: crate::engine::manager_settings::GraphicsPreset) -> io::Result<Vec<u8>> {
+    let mut entries = PRESET;
+    if preset == crate::engine::manager_settings::GraphicsPreset::High {
+        // Keep the reviewed distance/MSAA units; enable the known visual-effect options.
+        for (key, value) in &mut entries {
+            if *key != "gfx_viewdistance" && *key != "gfx_msaa" { *value = "1"; }
+        }
+    }
     if original.len() > LIMIT || original.contains(&0) {
         return Err(invalid("Unsupported Minecraft options file"));
     }
@@ -58,13 +70,13 @@ fn render(original: &[u8]) -> io::Result<Vec<u8>> {
             seen[index] = true;
             output.push_str(PRESET[index].0);
             output.push(':');
-            output.push_str(PRESET[index].1);
+            output.push_str(entries[index].1);
             output.push_str(ending);
         } else {
             output.push_str(line); // Preserve all other settings byte-for-byte, including duplicates.
         }
     }
-    for (index, (key, value)) in PRESET.iter().enumerate() {
+    for (index, (key, value)) in entries.iter().enumerate() {
         if !seen[index] {
             if !output.is_empty() && output != "\u{feff}" && !output.ends_with('\n') {
                 output.push_str(newline);
@@ -100,7 +112,12 @@ fn options_file(path: &std::path::Path) -> io::Result<File> {
 }
 
 impl Prepared {
+    #[cfg(test)]
     fn read(private: &File) -> io::Result<Self> {
+        Self::read_preset(private, crate::engine::manager_settings::GraphicsPreset::Low)
+    }
+
+    fn read_preset(private: &File, preset: crate::engine::manager_settings::GraphicsPreset) -> io::Result<Self> {
         let mut path = directory_path(private)?;
         let mut directories = Vec::new();
         for part in [
@@ -131,7 +148,7 @@ impl Prepared {
         if let Some(file) = original.as_mut() {
             file.take((LIMIT + 1) as u64).read_to_end(&mut before)?;
         }
-        let after = render(&before)?;
+        let after = render_preset(&before, preset)?;
         Ok(Self {
             path,
             _directories: directories,
@@ -208,9 +225,18 @@ pub(super) fn apply(stores: &[SlotStorage]) -> io::Result<usize> {
 // The retained session owner proves these particular profiles have no resumed child.
 // Other profiles may be running; never pass their stores here.
 pub(super) fn apply_inactive(stores: &[SlotStorage]) -> io::Result<usize> {
-    apply_directories(stores.iter().map(|store| &store.private))
+    let values = crate::engine::manager_settings::load_graphics()?;
+    let prepared = stores.iter().map(|store| Prepared::read_preset(&store.private, values[store.slot as usize - 1])).collect::<io::Result<Vec<_>>>()?;
+    let mut changed = 0;
+    for preset in prepared { changed += usize::from(preset.commit()?); }
+    Ok(changed)
 }
 
+pub(super) fn apply_selected(store: &SlotStorage, preset: crate::engine::manager_settings::GraphicsPreset) -> io::Result<usize> {
+    Ok(usize::from(Prepared::read_preset(&store.private, preset)?.commit()?))
+}
+
+#[cfg(test)]
 fn apply_directories<'a>(directories: impl Iterator<Item = &'a File>) -> io::Result<usize> {
     let prepared: Vec<_> = directories
         .map(Prepared::read)
@@ -226,6 +252,18 @@ fn apply_directories<'a>(directories: impl Iterator<Item = &'a File>) -> io::Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn high_low_preserve_world_settings_and_switch_idempotently() {
+        use crate::engine::manager_settings::GraphicsPreset::{High, Low};
+        let original = b"gfx_simulationdistance:8\naccount:kept\ngfx_viewdistance:720\n";
+        let high = render_preset(original, High).unwrap();
+        assert!(String::from_utf8_lossy(&high).contains("graphics_mode:1\n"));
+        assert!(String::from_utf8_lossy(&high).contains("gfx_toggleclouds:1\n"));
+        assert!(String::from_utf8_lossy(&high).contains("account:kept\n"));
+        assert_eq!(render_preset(&high, High).unwrap(), high);
+        assert_eq!(render_preset(&high, Low).unwrap(), render(original).unwrap());
+    }
 
     #[test]
     fn five_profile_preset_validates_all_inputs_before_writing_and_retries_idempotently() {
