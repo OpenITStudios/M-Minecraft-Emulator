@@ -1,88 +1,92 @@
 # Current Development Handoff — Lazy Tester
 
-Local only; main is release-reserved and GitHub Actions remains OFF. Renderer/RAM
-experiments remain PAUSED. Physical Development/Archive organization is retained.
-Current bounded outcome: functional Settings and configurable active/background FPS.
+Local only; main is release-reserved and GitHub Actions remains OFF. RAM/renderer,
+Sandboxie and VMware work remain PAUSED. Development/Archive layout is retained.
 
-## Implementation
+## Current bounded outcome
 
-Source parent: aac34f49c12f7faf569e20d8d227b5652c8ad96b.
-The operator selected Settings/usability, then explicitly requested player-defined
-FPS limits with 144/10 defaults and an efficient design.
+The operator approved continuing APP usability after configurable Settings.
+Parent: e19db96fddd9def41b7609fd6022e93d23ce7f03. The first owner remains
+Development/apps/desktop/src/LazyTesterApp.svelte and its existing CSS/bridges.
 
-Mounted English Settings now provides two numeric inputs, Save, Restore defaults,
-unsaved/loading/success/error feedback, the existing graphics preset action and
-a Storage shortcut. The existing typed session bridge handles InspectSettings,
-SavePerformance and ApplyPreset. Settings metadata is an optional additive private
-snapshot field; old ordinary snapshots remain accepted. Backend validation is
-independent of UI validation. Background may not exceed active; both are integers
-1..1000. No unlimited mode or per-profile overrides were introduced.
+Workspace, Launchers, Storage and Settings now retain the latest navigation click
+while an inspection/layout/operation completes. Navigation waits for initial
+profile/location checks; no second session owner or overlapping native operation.
+A pending game becoming RUNNING does not force another page back to Workspace.
+Existing native suspend/presentation/recovery gates remain in place.
 
-The existing manager_settings owner atomically saves only two numbers beside the
-executable in performance.json. Missing settings mean 144/10 without a file write;
-invalid existing files are preserved and reported. Root App refresh retains this
-file and the data locator. No account/token/world/catalog contents are copied.
+Startup distinguishes checking profiles from required/unavailable setup. Empty
+Launchers and disconnected Workspace explain recovery; stale launcher status is
+explicitly labeled. Connection failures show Unavailable rather than Connecting
+forever. The generic error banner no longer asserts preservation for unknown
+operation outcomes. Backend error evidence remains visible.
 
-Save uses the retained session actor when connected; without a controller, it
-writes preferences without preparing profiles or spawning a controller. Existing
-incompatible-controller and uncertain-operation gates remain fail closed. Each
-profile gets the saved pair at its next explicit launch. Running games retain
-old limits; no force-close, live-update worker, settings watcher or extra limiter.
+Storage page Refresh actually checks location and storage, without background
+scans. Counts include a last-check time, singular/plural files and an explicit
+lower bound for partial measurements. Location changes or failed measurements
+invalidate stale sizes/cleanup confirmations. Unknown location differs from a
+confirmed missing folder. Existing cache/account/world protection and native
+picker admission are unchanged.
 
-Native presentation V3 encodes the pair in the previously reserved DWORD of the
-existing 120-byte private capability. V2 still means 144/10; malformed limits and
-unknown versions are rejected. Storage/account ABI and process/event identity
-validation are unchanged. The existing Pacer reads immutable integers, with no
-new per-frame I/O/IPC/polling. Default-OFF RAM/heap experiments were kept OFF.
-Newly built DLL SHA256 pins:
+Buttons wrap at smaller widths; long profile issues wrap; setup banners have a
+bounded scroll area. Navigation exposes aria-current; loading/status feedback is
+available to assistive technology. The UI remains English. Existing FPS inputs,
+draft preservation, Save, Restore defaults and graphics preset remain intact.
+
+## Executed source evidence
+
+32 frontend tests PASS; Svelte zero errors/warnings; production frontend build
+PASS. Repository structure and G0 contracts PASS. No Rust/native logic changed;
+known unrelated DACL-fixture refusal, oversized-pipe hang and rustfmt drift from
+prior work remain unresolved, with no globally-green suite claim.
+
+Development/tooling/acceptance/lazy-tester-ui-regression.mjs is an optional source
+regression using headless Edge, built frontend and mocked Tauri only. PASS:
+startup, navigation queued during a pending inspection, Storage refresh/partial
+counts, FPS draft across pages and Save, four-page bounds at 920x620 and 1366x900,
+game-ready navigation behavior, disconnect/reconnect. One simulated Launch is in
+memory; no actual profile/game/native session opens. Run after frontend build
+with MIVUBI_PLAYWRIGHT_MODULE pointing to an available Playwright module. No
+application dependency added.
+
+## Preserved Settings/native implementation
+
+Settings implementation: 19860393bb54a8d573ff8b16e4d597f10e8753a3.
+Shared active/background limits default 144/10; integer 1..1000 and background
+not above active. Existing manager_settings.rs atomically persists performance.json
+beside the executable. Missing file means defaults without writing; invalid files
+are preserved/refused. Saving applies at next explicit launch; running games keep
+their limits. No watcher, additional limiter or per-frame config I/O. The original
+preset writer retains Simple/12 chunks/reduced effects and unowned options.
+Apply all requires all games idle and stores verified; retry is safe, but a failed
+multi-profile update is not an atomic cross-profile transaction.
+
+Private presentation V3 reuses the reserved DWORD of the 120-byte capability;
+V2 retains 144/10. Identity/event/handle checks and storage/account ABI unchanged.
+Pinned native hashes remain:
 compatibility 9d1cf60673c1ebbc0d94c30c1e28e226aa4429653901e5abd6e95400457ef8cb
 enroller 6e7c000bee2dcf043d372317c77a04078ca12451c7273a18bd54e8f89e62af2a
+Prior native evidence, not rerun for this frontend-only change: MSVC Release
+builds and configurable Pacer self-test (60/5 deadlines/focus/stop/v2/v3 validation),
+12 targeted Rust tests. Logs: workspace/runs/settings-20261026.
 
-Apply to all profiles reuses the original game_preset writer and exact pinned
-stores, under the sole session actor. Live/unattributed games or uncertain stores
-refuse the action. All five inputs are prepared before writes; updates/backups
-remain idempotent. Failures can leave some profiles updated; retry is safe, not a
-cross-profile transaction. Simulation distance/unowned options remain untouched.
+## Package and remaining proof
 
-## Executed evidence so far
+Previous App/export: clean Local 19860393; a fresh Windows/NSIS candidate for the
+current frontend change is the immediate completion step. Preserve locator,
+performance.json and previous App through the existing stager.
 
-Logs and native build inputs/output: workspace/runs/settings-20261026 and
-workspace/builds/settings-fps-20261026. MSVC Release /W4 /WX /permissive- builds
-bootstrap-compat, bootstrap-enroll and frame-pacing-control successfully using the
-existing clean pinned Detours source. Configurable-Pacer-only self-test PASS:
-actual 60/5 deadlines, foreground promotion/stop, invalid limits, v2 defaults,
-v3 decoding and unknown-version rejection. No Minecraft or window was used.
-
-32 frontend tests PASS; Svelte zero errors/warnings; frontend build PASS.
-Targeted Windows Rust tests PASS: performance persistence/validation (including
-corrupt-file preservation), settings protocol/admission, five-profile graphics
-updates/invalid-last-profile preservation/idempotent retry and existing writer
-regressions. Exact clean Local source 19860393bb54a8d573ff8b16e4d597f10e8753a3 built and
-exported successfully with npm --prefix Development run package:windows. Root App
-was safely refreshed, with its previous candidate preserved by the existing
-stager. All four App hashes match build-info.json. Data remains empty; no actual
-performance.json was created (144/10 defaults until the user chooses Save).
-Export: workspace/packages/lazy-tester/0.1.0-19860393bb54-20261026T091732253Z.
-Installer SHA256:d68898472747eb62411bc6cb37bc9ac5b0f0cea2c8988a822695ddc18ca1eda6
-App and installer are NotSigned. Export has exactly installer, package-manifest.json
-and SHA256SUMS.txt. The subsequent handoff commit changes documentation only;
-no newer binary acceptance is implied. Metadata proof is in completion.json.
-
-Do not claim a globally green source suite: the preceding work recorded a broad
-DACL disposable-fixture refusal, oversized-pipe fixture hang and existing rustfmt
-drift. Those unrelated failures were not changed or hidden by this work.
-
-No product GUI, installer, Minecraft, UAC, service/driver or Computer Use launched.
-No live preset/configuration was applied to real profiles. New default/custom FPS,
-login/world persistence and gameplay on these DLL bytes remain NOT_EXECUTED.
-Prior five-client pilot acceptance is historical, not acceptance of this revision.
-Cache deletion and unclassified workspace cleanup remain deferred. Data migration,
-partial-setup recovery and installed lifecycle acceptance remain unfinished.
+No Computer Use, product GUI, installer execution, Minecraft, UAC, service/driver,
+account/world-content reading or real cache deletion performed. Headless browser
+checks use synthetic paths/process metadata only. Actual default/custom FPS,
+licensed login/world persistence, Host World behavior, data migration, partial
+setup recovery and installed lifecycle acceptance remain NOT_EXECUTED/unfinished.
+Source/package success does not establish gameplay proof. Unknown workspace
+material/cache deletion remains deferred; second worktree and initialized
+upstream submodule must remain intact.
 
 ## Next — one action
 
-At the next appropriate interactive session, validate saving custom/default FPS,
-normal profile restart and actual 144/10/custom FPS, login/world persistence and
-Education Host World behavior using this exact candidate. This remains runtime
-acceptance, not a prerequisite imposed on further independently useful source work.
-STOP for the completed Settings scope; do not resume paused RAM experiments.
+Finish clean-revision Windows package/hash verification for this bounded usability
+scope, then record the exact build revision and stop. Interactive acceptance is
+separate and not a prerequisite for further useful source work.

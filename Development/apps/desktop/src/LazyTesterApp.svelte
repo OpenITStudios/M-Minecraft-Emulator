@@ -15,7 +15,10 @@
   $: performanceDirty=settings!==null&&(activeFps!==settings.activeFps||backgroundFps!==settings.backgroundFps);
   $: performanceValid=validFpsLimits(activeFps,backgroundFps);
   let clearSlot: ProfileSlot | null = null, storageNotice = '';
-  let page: 'workspace' | 'launchers' | 'storage' | 'settings' = 'workspace';
+  type Page = 'workspace' | 'launchers' | 'storage' | 'settings';
+  let page: Page = 'workspace';
+  let queuedPage: Page | null = null;
+  let initializing = true, checkingStorage = false, storageCheckedAt = '';
   let active: ProfileSlot | null = null, requested: ProfileSlot | null = null, queued: ProfileSlot | null = null;
   let viewport: HTMLDivElement, observer: ResizeObserver | undefined;
   let busy = false, refreshing = false, resizing = false, available = false;
@@ -29,8 +32,9 @@
   $: others = profiles.filter(profile => profile.slot !== primary);
   $: runningCount = profiles.filter(profile => ['STARTING', 'RUNNING', 'NOT_RESPONDING'].includes(profile.state)).length;
   $: playableCount = profiles.filter(profile => profile.state === 'RUNNING').length;
-  $: if (mounted && !busy && !refreshing && !resizing && queued !== null) void consumeSelection();
-  $: if (mounted && !busy && !refreshing && !resizing && queued === null && dirty) void syncLayout();
+  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedPage !== null) void consumeNavigation();
+  $: if (mounted && !busy && !refreshing && !resizing && queuedPage === null && queued !== null) void consumeSelection();
+  $: if (mounted && !busy && !refreshing && !resizing && queuedPage === null && queued === null && dirty) void syncLayout();
 
   function image(node: HTMLElement, slot: ProfileSlot) {
     images.set(slot, node); observer?.observe(node); dirty = true;
@@ -65,7 +69,10 @@
       }
       if (requested !== null) {
         const profile = profiles.find(profile => profile.slot === requested);
-        if (profile?.state === 'RUNNING') queued = requested;
+        if (profile?.state === 'RUNNING') {
+          if (page === 'workspace' && queuedPage === null) queued = requested;
+          requested = null;
+        }
         else if (profile?.state === 'ATTENTION' || profile?.state === 'STOPPED') {
           issue = profile.issue ?? ('Minecraft - ' + requested + ' stopped before its window became available.'); requested = null;
         }
@@ -90,8 +97,12 @@
     } catch (error) { issue = String(error); requested = null; }
     finally { busy = false; }
   }
-  async function navigate(next: typeof page) {
-    if (busy || refreshing || resizing || page === next) return;
+  function navigate(next: typeof page) {
+    queuedPage = next; queued = null;
+  }
+  async function consumeNavigation() {
+    const next = queuedPage; queuedPage = null;
+    if (next === null || page === next) return;
     busy = true; issue = '';
     try {
       if (next !== 'workspace') await workspaceSurface.suspend();
@@ -101,6 +112,17 @@
     } catch (error) { issue = String(error); }
     finally { busy = false; }
     if(page==='settings')void refresh();
+  }
+  async function refreshPage() {
+    if (busy || refreshing || resizing) return;
+    issue = '';
+    if (page === 'storage') {
+      await loadLocation();
+      if (!issue && binding?.configured) await inspectStorage();
+    } else {
+      if (!binding?.configured) await loadBinding();
+      await refresh();
+    }
   }
   async function applyPreset() {
     if(busy||refreshing||resizing||!available||!binding?.configured||!settings?.canApplyPreset||runningCount>0)return;
@@ -158,10 +180,14 @@
   }
   async function inspectStorage() {
     if (busy || refreshing || resizing) return;
-    busy = true; issue = ''; clearSlot = null; storageNotice = '';
-    try { const snapshot = await lazyTester.storage(); profiles = snapshot.profiles; storage = snapshot.storage; }
-    catch (error) { issue = String(error); }
-    finally { busy = false; }
+    busy = true; checkingStorage = true; issue = ''; clearSlot = null; storageNotice = '';
+    try {
+      const snapshot = await lazyTester.storage(); profiles = snapshot.profiles; storage = snapshot.storage;
+      available = true; connectionIssue = '';
+      storageCheckedAt = new Date().toLocaleTimeString('en-US');
+    }
+    catch (error) { issue = String(error); storage = null; }
+    finally { checkingStorage = false; busy = false; }
   }
   async function loadBinding(importProfiles = false) {
     if (busy || refreshing || resizing || disposed) return;
@@ -174,7 +200,9 @@
     if(busy||refreshing||resizing||disposed)return;
     busy=true;issue='';
     try {
+      const previousPath = dataLocation?.path;
       dataLocation=await lazyTester.dataLocation(action);
+      if (dataLocation.path !== previousPath) { storage = null; clearSlot = null; storageNotice = ''; }
       if((action==='Locate'||action==='Choose')&&dataLocation.path!==null)binding=await lazyTester.binding();
     } catch(error){issue=String(error);}finally{busy=false;}
   }
@@ -191,13 +219,17 @@
     try {
       const snapshot = await lazyTester.clearCache(slot);
       profiles = snapshot.profiles; storage = snapshot.storage;
+      storageCheckedAt = new Date().toLocaleTimeString('en-US');
       storageNotice = 'Web cache for Minecraft - ' + slot + ' cleared.';
     } catch (error) {
       issue = String(error); storage = null;
     } finally { busy = false; }
   }
   onMount(() => {
-    mounted = true; void (async () => { await loadBinding(); await loadLocation(); await refresh(); })();
+    mounted = true; void (async () => {
+      try { await loadBinding(); await loadLocation(); await refresh(); }
+      finally { initializing = false; }
+    })();
     const interval = setInterval(() => { if (!document.hidden) void refresh(); }, 2000);
     observer = new ResizeObserver(() => { dirty = true; }); observer.observe(viewport, {box: 'device-pixel-content-box'});
     for (const node of images.values()) observer.observe(node);
@@ -224,25 +256,25 @@
     <p class="lt-caption">MINECRAFT EDUCATION</p>
     <nav aria-label="Main navigation">
       {#each [['workspace','Workspace'],['launchers','Launchers'],['storage','Storage'],['settings','Settings']] as [id,label]}
-        <button class:chosen={page === id} disabled={busy || resizing} on:click={() => navigate(id as typeof page)}>{label}</button>
+        <button class:chosen={page === id} aria-current={page === id ? 'page' : undefined} on:click={() => navigate(id as typeof page)}>{label}</button>
       {/each}
     </nav>
-    <div class="lt-sidebar-bottom"><span class="lt-dot" class:waiting={!available}></span>{available ? 'Connected' : 'Connecting'}<p>{available ? runningCount + ' of 5 running' : 'Session status unavailable'}</p></div>
+    <div class="lt-sidebar-bottom" role="status"><span class="lt-dot" class:waiting={!available}></span>{available ? 'Connected' : initializing ? 'Connecting' : 'Unavailable'}<p>{available ? runningCount + ' of 5 running' : 'Session status unavailable'}</p></div>
   </aside>
   <main>
-    <header class="lt-page-header"><div><p class="lt-caption">MINECRAFT EDUCATION</p><h1>{page === 'workspace' ? 'Workspace' : page === 'launchers' ? 'Minecraft launchers' : page === 'storage' ? 'Storage' : 'Settings'}</h1></div><button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={refresh}>Refresh</button></header>
-    {#if issue || connectionIssue}<div class="lt-alert" role="alert"><strong>Something needs your attention</strong>{#if issue}<p>{issue}</p>{/if}{#if connectionIssue}<p>{connectionIssue}</p>{/if}<span>Your games and data have been preserved.</span></div>{/if}
+    <header class="lt-page-header"><div><p class="lt-caption">MINECRAFT EDUCATION</p><h1>{page === 'workspace' ? 'Workspace' : page === 'launchers' ? 'Minecraft launchers' : page === 'storage' ? 'Storage' : 'Settings'}</h1></div><button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={refreshPage}>{refreshing || checkingStorage ? 'Refreshing…' : 'Refresh'}</button></header>
+    {#if issue || connectionIssue}<div class="lt-alert" role="alert"><strong>Something needs your attention</strong>{#if issue}<p>{issue}</p>{/if}{#if connectionIssue}<p>{connectionIssue}</p>{/if}</div>{/if}
     {#if !binding?.configured}
       <section class="lt-binding" aria-label="Profile setup">
-        <div><strong>Profile setup required</strong><p>{binding?.issue ?? 'Checking profiles…'}</p></div>
-        <div class="lt-actions"><button disabled={busy || refreshing || resizing || runningCount > 0} on:click={() => loadBinding(true)}>Locate previous launcher</button><button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={() => loadBinding()}>Try again</button></div>
+        <div><strong>{initializing ? 'Checking profiles…' : binding ? 'Profile setup required' : 'Profile setup unavailable'}</strong><p>{binding?.issue ?? (initializing ? 'Please wait while your profiles are checked.' : 'Use Try again to check your profiles.')}</p></div>
+        {#if !initializing}<div class="lt-actions"><button disabled={busy || refreshing || resizing || runningCount > 0} on:click={() => loadBinding(true)}>Locate previous launcher</button><button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={() => loadBinding()}>Try again</button></div>{/if}
       </section>
     {/if}
     <section class="lt-workspace" hidden={page !== 'workspace'} aria-label="Minecraft workspace">
       <header class="lt-stage-header"><div><h2>{active ? 'Minecraft - ' + active : requested ? 'Starting Minecraft - ' + requested : 'Choose a Minecraft to start'}</h2><p>{active ? 'Click the game to play' : detached ? 'Game windows restored to the desktop.' : 'Open a profile from Launchers.'}</p></div>
         <div class="lt-actions"><button class="lt-secondary" disabled={busy || !available || !playableCount} on:click={() => step(-1)} aria-label="Previous Minecraft">←</button><button class="lt-secondary" disabled={busy || !available || !playableCount} on:click={() => step(1)}>Next →</button>{#if runningCount}<button class="lt-secondary" disabled={busy || resizing} on:click={release}>Restore windows</button>{/if}</div>
       </header>
-      <div class="lt-viewport" bind:this={viewport}>{#if !active}<div class="lt-empty"><span>LT</span><h2>{requested ? 'Starting Minecraft - ' + requested : 'Choose a Minecraft'}</h2><p>{requested ? 'Waiting for the game window…' : 'Launch a profile to begin.'}</p>{#if !requested}<button on:click={() => navigate('launchers')}>Open launchers</button>{/if}</div>{/if}</div>
+      <div class="lt-viewport" bind:this={viewport}>{#if !active}<div class="lt-empty"><span>LT</span><h2>{initializing ? 'Getting ready…' : !available ? 'Session status unavailable' : requested ? 'Starting Minecraft - ' + requested : 'Choose a Minecraft'}</h2><p>{initializing ? 'Checking your profiles and session status.' : !available ? 'Use Refresh to reconnect.' : requested ? 'Waiting for the game window…' : 'Launch a profile to begin.'}</p>{#if !requested && !initializing}<button on:click={() => navigate('launchers')}>Open launchers</button>{/if}</div>{/if}</div>
       <div class="lt-filmstrip" aria-label="Other Minecraft sessions">
         {#each others as profile (profile.slot)}
           <button class="lt-card" aria-label={'Play Minecraft - ' + profile.slot} disabled={busy || !available || profile.state !== 'RUNNING'} on:click={() => select(profile.slot)}>
@@ -255,29 +287,31 @@
       {#if previewIssue}<details class="lt-preview-details"><summary>Preview details</summary><p>{previewIssue}</p></details>{/if}
     </section>
     {#if page === 'launchers'}
-      <p class="lt-description">Choose which profiles to launch.</p>
+      <p class="lt-description">{!available && profiles.length ? 'Showing the last known status. Use Refresh to reconnect before launching.' : 'Choose which profiles to launch.'}</p>
+      {#if profiles.length === 0}<div class="lt-list-empty" role="status"><h2>{initializing ? 'Checking profiles…' : 'Profiles unavailable'}</h2><p>{initializing ? 'Your profiles will appear here when the check finishes.' : 'Use Refresh to check the connection and load your profiles.'}</p></div>{/if}
       <div class="lt-profile-list">{#each profiles as profile (profile.slot)}<article><span class="lt-profile-number">{profile.slot}</span><div><h2>Minecraft - {profile.slot}</h2><p>{labels[profile.state]}</p>{#if profile.issue}<p class="lt-error">{profile.issue}</p>{/if}</div>{#if profile.state === 'RUNNING'}<button disabled={busy || !available} on:click={() => select(profile.slot)}>Show</button>{:else}<button disabled={busy || refreshing || resizing || !available || !binding?.configured || ['STARTING','NOT_RESPONDING'].includes(profile.state)} on:click={() => launch(profile.slot)}>{profile.state === 'STARTING' ? 'Starting…' : profile.state === 'NOT_RESPONDING' ? 'Not responding' : 'Launch'}</button>{/if}</article>{/each}</div>
     {:else if page === 'storage'}
       <section class="lt-panel">
         <h2>Data location</h2>
-        <p class="lt-data-path">{dataLocation?.path ?? 'No data folder is connected.'}</p>
+        <p class="lt-data-path">{dataLocation ? dataLocation.path ?? 'No data folder is connected.' : initializing ? 'Checking data location…' : 'Data location unavailable. Use Refresh location to try again.'}</p>
         <div class="lt-actions">
           <button class="lt-secondary" disabled={busy||refreshing||resizing||!dataLocation?.path} on:click={()=>loadLocation('Open')}>Open folder</button>
-          <button class="lt-secondary" disabled={busy||refreshing||resizing||dataLocation?.canLocate===false} on:click={()=>loadLocation('Locate')}>Locate data</button>
-          {#if !dataLocation?.path}<button disabled={busy||refreshing||resizing} on:click={()=>loadLocation('Choose')}>Choose data folder</button>{/if}
+          <button class="lt-secondary" disabled={busy||refreshing||resizing||!dataLocation?.canLocate} on:click={()=>loadLocation('Locate')}>Locate data</button>
+          {#if dataLocation && !dataLocation.path}<button disabled={busy||refreshing||resizing} on:click={()=>loadLocation('Choose')}>Choose data folder</button>{/if}
           <button class="lt-secondary" disabled={busy||refreshing||resizing} on:click={()=>loadLocation()}>Refresh location</button>
         </div>
         {#if dataLocation}<details><summary>Profile locations</summary>{#each dataLocation.profiles as profile}<p class="lt-data-path">Minecraft {profile.slot}: {profile.path}</p>{/each}<p class="lt-data-path">Default: {dataLocation.defaultPath}</p></details>{/if}
         <h2>Minecraft storage</h2>
-        <p>View storage use for each profile.</p>
-        <p><button disabled={busy || refreshing || resizing || !binding?.configured} on:click={inspectStorage}>{busy ? 'Working…' : 'Check storage'}</button></p>
+        <p>View storage use for each profile. Counts update when you check storage.</p>
+        <p><button disabled={busy || refreshing || resizing || !binding?.configured} on:click={inspectStorage}>{checkingStorage ? 'Checking…' : 'Check storage'}</button></p>
+        {#if storage}<p class="lt-setting-help" role="status">Last checked at {storageCheckedAt}.</p>{:else if !checkingStorage}<p class="lt-setting-help">{binding?.configured ? 'Select Check storage to measure profile sizes.' : 'Complete profile setup to check storage.'}</p>{/if}
         {#if storageNotice}<p role="status">{storageNotice}</p>{/if}
         {#if storage}
           {#each storage as item}
             <article class="lt-storage-profile">
               <h3>Minecraft - {item.slot}</h3>
               <div class="lt-storage-metrics">
-                <div><span>Profile data</span><strong>{(item.bytes / 1048576).toFixed(1)} MB</strong><small>{item.files.toLocaleString('en-US')} file{item.partial ? ' · partial count' : ''}</small></div>
+                <div><span>Profile data</span><strong>{item.partial ? 'At least ' : ''}{(item.bytes / 1048576).toFixed(1)} MB</strong><small>{item.files.toLocaleString('en-US')} {item.files === 1 ? 'file' : 'files'}{item.partial ? ' · partial count' : ''}</small></div>
                 <div><span>Available disk space</span><strong>{item.disk ? (item.disk.availableBytes / 1073741824).toFixed(1) + ' GB' : 'Unavailable'}</strong><small>{item.disk ? 'of ' + (item.disk.totalBytes / 1073741824).toFixed(1) + ' GB · shared drive' : 'Disk information unavailable'}</small></div>
                 <div><span>Web cache</span><strong>{item.cache.partial ? 'Unavailable' : (item.cache.bytes / 1048576).toFixed(1) + ' MB'}</strong><small>Included in profile size</small></div>
               </div>
