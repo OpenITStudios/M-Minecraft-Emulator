@@ -1,4 +1,4 @@
-//! One retained bootstrap owner. Closing the UI detaches; games and FPS policy survive.
+//! One retained bootstrap owner. Full exit requests normal closure of its own games.
 use super::*;
 use crate::engine::{
     native_clients_session::{
@@ -16,6 +16,7 @@ struct Sessions {
     windows: Vec<Option<OwnedProcess>>,
     path: String,
     image: File,
+    exiting: bool,
 }
 impl Sessions {
     fn prepare() -> io::Result<Self> {
@@ -38,6 +39,7 @@ impl Sessions {
             windows: vec![None; 5],
             path,
             image,
+            exiting: false,
         })
     }
 
@@ -68,6 +70,7 @@ impl Sessions {
     }
 
     fn launch(&mut self, slot: u32) -> io::Result<()> {
+        if self.exiting {return Err(invalid("Minecraft sessions are closing. Finish closing them before starting another game."));}
         if !(1..=5).contains(&slot) {
             return Err(invalid("Unknown Minecraft profile"));
         }
@@ -187,6 +190,35 @@ impl Sessions {
         }
     }
 
+    fn close_all(&mut self) -> io::Result<()> {
+        self.exiting=true;
+        self.reap();
+        let snapshot=self.snapshot();
+        let mut issues=Vec::new();
+        for profile in snapshot.profiles {
+            let index=profile.slot as usize-1;
+            let Some(started)=&self.running[index] else {continue;};
+            let child=&started.children[0];
+            let outcome=(||{
+                child.identity()?;
+                let target=profile.process.ok_or_else(||invalid("Game window is not ready; wait for it to finish starting"))?;
+                if target.pid!=child.pid || target.created_file_time!=child.created.to_string(){return Err(invalid("Game identity changed"));}
+                close_verified_window(&target)
+            })();
+            if let Err(error)=outcome {issues.push(format!("Minecraft - {}: {error}",profile.slot));}
+        }
+        let deadline=std::time::Instant::now()+Duration::from_secs(20);
+        loop {
+            self.reap();
+            if self.running.iter().all(Option::is_none){return Ok(());}
+            if !issues.is_empty(){self.exiting=false;return Err(io::Error::other(issues.join("; ")));}
+            if std::time::Instant::now()>=deadline {
+                self.exiting=false;
+                return Err(io::Error::new(io::ErrorKind::TimedOut,"Minecraft is still closing or waiting for a dialog. Finish in its game window, then close Lazy Tester again. No game was force-terminated."));
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
     fn store(&self, slot: u32) -> io::Result<&SlotStorage> {
         let index = slot
             .checked_sub(1)
@@ -347,6 +379,25 @@ fn valid_retained_window(target: &OwnedProcess) -> bool {
             && GetWindow(hwnd, GW_OWNER).is_null()
     }
 }
+fn close_verified_window(target:&OwnedProcess)->io::Result<()> {
+    use windows_sys::Win32::{Foundation::FILETIME,System::Threading::*,UI::WindowsAndMessaging::*};
+    let handle=unsafe{OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZATION_SYNCHRONIZE,0,target.pid)};
+    if handle.is_null(){return Err(io::Error::last_os_error());}
+    let handle=unsafe{OwnedHandle::from_raw_handle(handle as _)};
+    let mut birth:FILETIME=unsafe{std::mem::zeroed()};
+    let mut exited=birth;let mut kernel=birth;let mut user=birth;
+    if unsafe{GetProcessTimes(handle.as_raw_handle() as _,&mut birth,&mut exited,&mut kernel,&mut user)}==0 {
+        return Err(io::Error::last_os_error());
+    }
+    let created=(((birth.dwHighDateTime as u64)<<32)|birth.dwLowDateTime as u64).to_string();
+    if created!=target.created_file_time || interactive_session(target.pid)?!=target.session_id || !valid_retained_window(target) {
+        return Err(invalid("Game window identity changed; close it normally"));
+    }
+    let window=usize::from_str_radix(&target.window_handle[2..],16).map_err(|_|invalid("Invalid game window"))? as windows_sys::Win32::Foundation::HWND;
+    if unsafe{GetWindowLongPtrW(window,GWL_STYLE)} & WS_DISABLED as isize != 0 {return Err(invalid("Finish the open Minecraft dialog, then try exiting again"));}
+    if unsafe{PostMessageW(window,WM_CLOSE,0,0)}==0 {return Err(io::Error::last_os_error());}
+    Ok(())
+}
 
 fn window(child: &PendingEducationBootstrap) -> Option<OwnedProcess> {
     use windows_sys::Win32::{
@@ -479,6 +530,7 @@ fn run() -> io::Result<()> {
                 SessionRequest::Launch { slot } => {
                     sessions.launch(slot).map_err(|error| error.to_string())?
                 }
+                SessionRequest::CloseAll => sessions.close_all().map_err(|error|error.to_string())?,
                 SessionRequest::InspectStorage => {
                     storage = Some(sessions.storage().map_err(|error| error.to_string())?)
                 }
@@ -525,11 +577,47 @@ mod tests {
     use super::*;
 
     #[test]
+    fn full_exit_of_idle_sessions_does_not_prepare_profiles_and_denies_new_launches() {
+        let mut sessions=Sessions{stores:(0..5).map(|_|None).collect(),running:(0..5).map(|_|None).collect(),issues:vec![None;5],windows:vec![None;5],path:String::new(),image:File::open(std::env::current_exe().unwrap()).unwrap(),exiting:false};
+        sessions.close_all().unwrap();
+        assert!(sessions.exiting);
+        assert!(sessions.stores.iter().all(Option::is_none));
+        assert!(sessions.launch(1).unwrap_err().to_string().contains("closing"));
+    }
+
+    #[test]
+    fn normal_close_checks_exact_window_identity_and_leaves_another_window_alone() {
+        use windows_sys::Win32::{Foundation::FILETIME,System::Threading::*,UI::WindowsAndMessaging::*};
+        let class=windows_sys::w!("STATIC");
+        unsafe {
+            let make=||CreateWindowExW(0,class,class,WS_OVERLAPPEDWINDOW,0,0,200,150,ptr::null_mut(),ptr::null_mut(),ptr::null_mut(),ptr::null());
+            let own=make();let other=make();assert!(!own.is_null()&&!other.is_null());
+            let result=std::panic::catch_unwind(||{
+                let mut birth:FILETIME=std::mem::zeroed();let mut exited=birth;let mut kernel=birth;let mut user=birth;
+                assert_ne!(GetProcessTimes(GetCurrentProcess(),&mut birth,&mut exited,&mut kernel,&mut user),0);
+                let target=OwnedProcess{pid:std::process::id(),created_file_time:(((birth.dwHighDateTime as u64)<<32)|birth.dwLowDateTime as u64).to_string(),session_id:interactive_session(std::process::id()).unwrap(),window_handle:format!("0x{:x}",own as usize),responding:true};
+                let mut forged=target.clone();forged.created_file_time="1".into();assert!(close_verified_window(&forged).is_err());
+                assert_ne!(IsWindow(own),0);
+                let style=GetWindowLongPtrW(own,GWL_STYLE);SetWindowLongPtrW(own,GWL_STYLE,style|WS_DISABLED as isize);
+                assert!(close_verified_window(&target).is_err());SetWindowLongPtrW(own,GWL_STYLE,style);
+                close_verified_window(&target).unwrap();
+                let mut message:MSG=std::mem::zeroed();
+                assert_ne!(PeekMessageW(&mut message,own,WM_CLOSE,WM_CLOSE,PM_REMOVE),0);
+                DispatchMessageW(&message);
+                assert_eq!(IsWindow(own),0);
+                assert_ne!(IsWindow(other),0);
+            });
+            if IsWindow(own)!=0{DestroyWindow(own);}DestroyWindow(other);
+            if let Err(error)=result{std::panic::resume_unwind(error);}
+        }
+    }
+
+    #[test]
     fn preset_request_refuses_uncertain_storage_before_writing_or_starting_any_game() {
         let mut sessions=Sessions {
             stores:(0..5).map(|_|None).collect(), running:(0..5).map(|_|None).collect(),
             issues:vec![None;5], windows:vec![None;5], path:String::new(),
-            image:File::open(std::env::current_exe().unwrap()).unwrap(),
+            image:File::open(std::env::current_exe().unwrap()).unwrap(), exiting:false,
         };
         assert!(sessions.settings(true).unwrap_err().to_string().contains("Close all Minecraft"));
         assert!(sessions.running.iter().all(Option::is_none));

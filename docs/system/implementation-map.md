@@ -18,7 +18,12 @@ Tauri permissions allow drag/minimize/maximize/close. A native game aperture dis
 DWM frame rendering, so product chrome is drawn consistently in the UI. Moved events
 use workspace_surface::follow_manager for nonblocking identity-checked translation;
 resize/recovery retain the original helper. release_for_close rejects reacquisition
-while restoring games. Frontend separate-slot state releases only the selected
+while restoring games. Product CloseRequested then sends CloseAll to the retained
+session controller: identity-checked WM_CLOSE to its own original game windows,
+normal process-exit/reap wait, no force termination. Absent controller never starts
+one for exit. Failure keeps the manager open, restores controls and reports the
+pending game/dialog. Idle controller exits after the manager peer disappears.
+Frontend separate-slot state releases only the selected
 process; preview adoption receives only requested monitoring tiles. DWM destinations
 follow manager visibility rather than foreground input; they retain ordinary owned
 window stacking. These paths do not control Minecraft lifecycle or sign-in.
@@ -82,8 +87,9 @@ game_preset.rs writer and manager_settings.rs graphics.json (five selections).
 ApplyGraphicsPreset is serialized by the same session actor; launch reapplies the
 saved selection. All games must be stopped before manual preset writes or cache
 cleanup. The package stager preserves graphics.json with existing preferences.
-Full account clear, world export, settings reset/restore, audio control and automatic
-game shutdown remain unavailable; UI explanations do not authorize those actions.
+Full account clear, world export, settings reset/restore and audio control remain
+unavailable. Full product exit closes only its managed games normally through the
+existing session owner; it never terminates unrelated games or reads their data.
 
 Functional Settings uses the same lazy_tester_session adapter and retained
 session actor: InspectSettings, SavePerformance and ApplyPreset. Existing

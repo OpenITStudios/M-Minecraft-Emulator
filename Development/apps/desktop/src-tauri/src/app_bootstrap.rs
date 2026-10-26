@@ -101,16 +101,29 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested{api,..}=event {
-                if crate::engine::workspace_surface::is_active() {
+                if cfg!(feature="lazy-tester-package") || crate::engine::workspace_surface::is_active() {
                     use std::sync::atomic::{AtomicBool,Ordering};
                     static CONFIRMING:AtomicBool=AtomicBool::new(false);
                     api.prevent_close();
                     if !CONFIRMING.swap(true,Ordering::SeqCst) {
+                        use tauri::Emitter;
+                        let _=window.emit("lazy-tester-closing",true);
                         let window=window.clone();
                         tauri::async_runtime::spawn_blocking(move || {
-                            match crate::engine::workspace_surface::release_for_close(){
+                            let result=crate::engine::workspace_surface::release_for_close().and_then(|_|{
+                                #[cfg(feature="lazy-tester-package")]
+                                {crate::engine::native_clients_session::request(crate::engine::native_clients_session::SessionRequest::CloseAll).map(|_|())}
+                                #[cfg(not(feature="lazy-tester-package"))]
+                                {Ok(())}
+                            });
+                            match result{
                                 Ok(())=>{let _=window.destroy();},
-                                Err(error)=>{let _=MessageDialog::new().set_parent(&window).set_title("Window recovery needs attention").set_description(format!("Minecraft is still running. {error}")).set_level(MessageLevel::Error).show();}
+                                Err(error)=>{
+                                    crate::engine::workspace_surface::cancel_close();
+                                    use tauri::Emitter;
+                                    let _=window.emit("lazy-tester-close-error",format!("Exit was not completed. {error}"));
+                                    let _=MessageDialog::new().set_parent(&window).set_title("Minecraft is still closing").set_description(format!("Lazy Tester will stay open. {error}")).set_level(MessageLevel::Info).show();
+                                }
                             }
                             CONFIRMING.store(false,Ordering::SeqCst);
                         });

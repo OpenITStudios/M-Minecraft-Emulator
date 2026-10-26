@@ -101,6 +101,7 @@ pub enum SessionRequest {
     OpenProfileFolder { slot: u32 },
     ClearProfileCache { slot: u32 },
     Launch { slot: u32 },
+    CloseAll,
 }
 
 pub(crate) type SessionReply = Result<SessionSnapshot, String>;
@@ -216,6 +217,8 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
         return Err(io::Error::new(io::ErrorKind::WouldBlock,
             "An existing Minecraft controller uses another build or is still starting. Its games are preserved; no replacement was started."));
     }
+    // Closing an idle manager must never provision/start a new controller or game.
+    if matches!(request,SessionRequest::CloseAll) {return Ok(Ok(SessionSnapshot::stopped()));}
     if matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings | SessionRequest::SavePerformance { .. }) {
         let mut snapshot = SessionSnapshot::stopped();
         if let SessionRequest::SavePerformance { active_fps, background_fps } = request {

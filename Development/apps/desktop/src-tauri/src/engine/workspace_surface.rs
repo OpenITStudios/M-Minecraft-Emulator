@@ -1100,6 +1100,7 @@ mod controller {
         }
         result
     }
+    pub fn cancel_close() {if let Ok(mut state)=SURFACE.lock(){state.closing=false;}}
     pub fn release() -> io::Result<()> {
         let preview_error = previews::clear().err();
         let mut state = SURFACE
@@ -2158,7 +2159,7 @@ mod controller {
     }
 }
 pub use controller::{
-    is_active, present_retained, present_verified, release, release_for_close, release_target, suspend, update,
+    is_active, present_retained, present_verified, release, release_for_close, cancel_close, release_target, suspend, update,
 };
 #[cfg(windows)]
 pub use controller::follow_manager;
