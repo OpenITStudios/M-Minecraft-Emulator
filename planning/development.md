@@ -2,10 +2,9 @@
 
 ## Single active goal — user revised27October2026
 
-Deliver a dependable Lazy Tester: same Play/Settings frame; no stuck/misaligned game
-or exposed desktop during drag; measured faster switching/Launch; clear process
-ownership; functional Settings/Data Storage. Defaults120FPS active/5 background,
-minimum newly configurable5FPS, background<=active. Goal ACTIVE, not complete.
+Dependable Lazy Tester: stable Play/Settings/game windows, faster switch/Launch,
+clear process roles, functional Settings/Data Storage. Defaults120/5, minimum5FPS,
+background<=active. Goal ACTIVE, not complete.
 
 Local only; main/publication untouched; CI OFF. VM/Sandboxie and RAM/renderer work
 PAUSED. Compiler caches explicitly RETAINED. No incidental cleanup or actual profile
@@ -47,19 +46,18 @@ requires selected-launcher review/confirmation.
 
 ## Current exact source and delivery
 
-Installed App/root source35ed4be6d9ae189cc3ec6dd0d6bb90b0533e4358 (Local clean at
-build). Product source changes:2c9e284 opaque presentation;1262efb FPS defaults;
-35ed4be selected-launcher cache admission. App/lazy-tester.exe SHA256:
-ae4e8677d4f4065812863ebe0396f697df0cb5ce861fa7c1125465436043e8b6.
-Root starter hash is recorded and verified in App/build-info.json.
-Candidate workspace/packages/lazy-tester/0.1.0-35ed4be6d9ae-20261026T181321305Z;
-NSIS2651492 bytes SHA256:
-8b8e71ac97ef3c4f043878c8d584cac875ccf806f4c13e9dea7fd6b0ba9da37e.
+Installed App/root source7eb8ca1d490d32a70a54bd6d1ed2302086a269bd, clean Local build.
+App SHA256:2658f0e8a031902f2dbcd9e91a48c73ee10845c7af23246fff0feb0ee06e219a.
+Root starter/DLL hashes: App/build-info.json, verified during Explorer startup.
+Candidate workspace/packages/lazy-tester/0.1.0-7eb8ca1d490d-20261026T182535133Z;
+NSIS2663915bytes SHA256:
+88b1d893ea9001ba559370bcba210c46f6f8ea6eff457189c6d90ba6f93883bc.
 Signing NOT_VERIFIED; installer execution/publication NOT_EXECUTED/DISABLED.
-
-Actual Explorer startup source35ed4be: Connected/five enabled/no issue/project-local
-WebView cache. Owned idle verifier closed normally; zero remaining app/game processes.
-Recheck before staging; never kill by name. Data retained; no repeated setup.
+Actual Explorer startup: Connected/five enabled/no issue/project-local WebView cache.
+Real UI PID37400: Settings->Data Storage->Advanced->Reset review->Cancel PASS;
+review closed, options metadata unchanged, no real reset. Owned idle UI closed
+normally; zero remaining app/game processes. Log workspace/runs/settings-recovery-
+ui-smoke.log and .ps1. Data retained; no repeated setup. Recheck before staging.
 ## Implemented corrections and executed evidence
 
 Presentation: workspace_surface.rs keeps host opaque; existing previews.rs worker
@@ -91,7 +89,7 @@ Reset/restore source added: game_preset.rs backs up options.txt, flushes/readbac
 publishes SHA256 receipt before atomic replacement; restore backs up current state.
 Selected stopped-profile admission, confirmation/cancel and verified availability
 are wired through existing actor/bridge/UI. Eight preset/recovery fixtures, invalid
-slot admission,36 frontend tests/typecheck PASS. No real settings mutation executed.
+slot admission,36 frontend tests/typecheck PASS. No real settings mutation executed; actual review/Cancel proof above.
 Full clear/audio remain incomplete. Use the existing
 session_controller.rs actor, game_preset.rs options writer, profile_storage.rs/
 product_profiles.rs pinned stores, manager_settings.rs and current UI/bridge.
@@ -106,14 +104,13 @@ No one-group Task Manager success claim. Full-exit source from6eba183 closes onl
 managed games normally and keeps manager open on pending dialog/timeout; actual
 Minecraft save/full-exit acceptance remains NOT_EXECUTED.
 
-Five profiles already migrated opaquely into Data/Launchers/Minecraft-1..5; original
-external stores remain recovery only, never new active dependencies. Data/Settings
-owns preferences/location/lease, Data/Cache owns Temp/WebView. Private hives, ACLs,
-reviewed DLL pins unchanged (App/build-info.json). Do not read account/world data.
+Preserve migrated Data/Launchers/Minecraft-1..5, Data/Settings and Data/Cache; external
+originals remain recovery only. Keep file-backed hives/ACLs/DLL pins; no account/world
+content reads. App/build-info.json records reviewed payloads; no repeat migration.
 Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4; second worktree detached47a45f9c7d4a8ce6799d56997fd38e4b4df49ce7 unchanged.
 Four licensed playable clients, gameplay/network/migration/installer acceptance
 are separate obligations, NOT_EXECUTED here. Compiler caches remain ignored.
 
-Next: build/stage reset/restore and verify its non-mutating confirmation flow;
-then full clear/audio and remaining presentation/performance/process acceptance.
+Next: implement full selected-launcher clear with transactional identity/recovery
+proof, then audio and remaining presentation/performance/process acceptance.
 Overall goal stays ACTIVE.
