@@ -10,7 +10,7 @@ lifecycle: HISTORICAL
 # Owned Isolation — pinned upstream component, license and build inventory
 
 > **HISTORICAL v1.18.5 design/inventory snapshot.** The only current
-> owned v1.18.6 source/build route is [Isolation Source Tooling](../../tooling/isolation-source/README.md).
+> owned v1.18.6 source/build route is [Isolation Source Tooling](../../Development/tooling/isolation-source/README.md).
 > External checkout paths, old fork procedures and pending tests below are
 > not current `Local` commands.
 
@@ -76,11 +76,11 @@ The current record covers source/license inventory only. Not a legal opinion; di
 
 ## Existing product integration owners
 
-- Runtime launch, signed Education candidate, launch admission, focus/place: `apps/desktop/src-tauri/src/engine/native_clients.rs`.
-- Canonical read-only collector: `tooling/acceptance/windows/collect-sandboxie-feasibility.ps1`.
-- Thin Tauri IPC adapter and typed UI: `apps/desktop/src-tauri/src/commands/native_clients.rs`, `apps/desktop/src/app/bridge/nativeFeasibilityApi.ts`.
-- Compact Manager presentation: `apps/desktop/src/CompactManagerApp.svelte`.
-- Legacy VMware `engine/runtime-core/src/provider/` is PAUSED, not a reusable active isolation provider.
+- Runtime launch, signed Education candidate, launch admission, focus/place: `Development/apps/desktop/src-tauri/src/engine/native_clients.rs`.
+- Canonical read-only collector: `Development/tooling/acceptance/windows/collect-sandboxie-feasibility.ps1`.
+- Thin Tauri IPC adapter and typed UI: `Development/apps/desktop/src-tauri/src/commands/native_clients.rs`, `Development/apps/desktop/src/app/bridge/nativeFeasibilityApi.ts`.
+- Compact Manager presentation: `Development/apps/desktop/src/CompactManagerApp.svelte`.
+- Legacy VMware `Development/engine/runtime-core/src/provider/` is PAUSED, not a reusable active isolation provider.
 
 The currently active collector searches signed `Start.exe`/`SbieIni.exe`, examines `SbieSvc`, obtains sandbox process membership by a bounded CLI or trusted `SbieDll` query, and separately authenticates the targeted signed Education process for window actions. A new engine adapter must preserve at least equivalent provenance and fail-closed semantics.
 
@@ -100,6 +100,6 @@ The currently active collector searches signed `Start.exe`/`SbieIni.exe`, examin
 - [Pinned AGENTS component guide](https://github.com/sandboxie-plus/Sandboxie/blob/abd4c240031cfb46666daa74ca47ed4e48b561e4/AGENTS.md)
 - [Pinned upstream core build guide](https://github.com/sandboxie-plus/Sandboxie/blob/abd4c240031cfb46666daa74ca47ed4e48b561e4/Sandboxie/ReadMe.md)
 - [Pinned CI sequence](https://github.com/sandboxie-plus/Sandboxie/blob/abd4c240031cfb46666daa74ca47ed4e48b561e4/.github/workflows/main.yml)
-- [First gameplay success and crash report](./two-client-first-success-2026-10-14.md)
+- [First gameplay success and crash report](two-client-first-success-2026-10-14.md)
 
 **Evidence:** exact referenced public GitHub source and current product source review. **NOT_EXECUTED:** compiled fork, dependency trimming, driver load, driver signing, QA crash attribution, Minecraft regression, account migration, release bundle.

@@ -14,10 +14,10 @@ Mandatory for repository/system development, adapted from the owner-first, minim
 ## Operating standard
 
 1. **Normalize user intent:** define the concrete goal, constraints, success checks and non-goals. Product requests are not automatic authorizations for destructive VM state changes or releases.
-2. **Pin authority:** read exact `Local` HEAD, use `AGENTS.md`, `GITHUB_RULES.md` and [Implementation Map](./implementation-map.md), then inspect one owning implementation and its consumers.
+2. **Pin authority:** read exact `Local` HEAD, use `AGENTS.md`, `GITHUB_RULES.md` and [Implementation Map](implementation-map.md), then inspect one owning implementation and its consumers.
 3. **Ground every claim:** distinguish current source fact, inferred risk, executed test, and real VMware/Minecraft runtime observation. Historical notes and test definitions cannot substitute for a passing run.
 4. **Choose the smallest complete solution:** evaluate no change → fix existing owner → remove dead code → reuse → minimal extension → new component only if proven necessary. Do not add a new manager, alias, registry or helper merely to make the folder tree seem symmetrical.
-5. **Maintain one name per function:** follow [Canonical Naming](./canonical-naming.md). Preserve installed app, guest data, persisted schemas and release compatibility unless their change is explicitly approved and proven.
+5. **Maintain one name per function:** follow [Canonical Naming](canonical-naming.md). Preserve installed app, guest data, persisted schemas and release compatibility unless their change is explicitly approved and proven.
 6. **Work in coherent batches:** update the owner, imports, consumers, tests, docs and verification routes in one logically reviewable commit. Do not leave half-migrated paths or add compatibility mirrors for retired source names.
 7. **Verify proportionally:** use exact-tree/consumer checks and positive/negative regression cases first. Executed Node/Rust/Tauri tests require actual execution evidence. Package/VM/game claims require corresponding environments. GitHub Actions are manual-only.
 8. **Stop with truth:** record the commit, changed owner, verified claim, proof ceiling and next necessary task in `planning/development.md` at a meaningful handoff. Do not continue cosmetic or speculative work after the requirement is met.

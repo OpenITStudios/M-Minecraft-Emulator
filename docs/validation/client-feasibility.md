@@ -13,7 +13,7 @@ lifecycle: ACTIVE
 > guest-VM implementation and its G0–G4 evidence campaign, **not** the active
 > Minecraft Instance Manager + Sandboxie Plus Client 02 workflow. Do not
 > provision, start, delete or reset a VM as part of the current pilot.
-> Active procedure: [Sandboxie two-client feasibility](./sandboxie-two-client-feasibility.md).
+> Active procedure: [Sandboxie two-client feasibility](sandboxie-two-client-feasibility.md).
 > Its signed-in gameplay and resource measurements are still unverified.
 
 ## One selected Windows desktop architecture
@@ -69,8 +69,8 @@ Run inside the single scratch Windows guest, not automatically as part of GitHub
 Run the pure-Node reviewer on the captured (privacy-reviewed) JSON from an authorized development environment:
 
 ```bash
-node tooling/acceptance/evaluate-client-feasibility.mjs path/to/client-feasibility-interactive.json
-node --test tooling/acceptance/evaluate-client-feasibility.test.mjs
+node Development/tooling/acceptance/evaluate-client-feasibility.mjs path/to/client-feasibility-interactive.json
+node --test Development/tooling/acceptance/evaluate-client-feasibility.test.mjs
 ```
 
 The output defaults to a timestamped temporary directory *outside the repository*. The probe reads only OS name/version/architecture, physical memory total, VMware Tools service status, video adapter display names and driver versions, guest OpenGL version/vendor/renderer when measurable, Minecraft install versions, and candidate Minecraft-related process count. It does **not** inspect usernames, tokens, account identities, world files, machine GUIDs, process command lines or PIDs.
@@ -83,7 +83,7 @@ The existing schema-1 report is backward-compatible: historical records without 
 
 For GPU-PV only, `OPERATOR_REPORTED_PLAYABLE` requires measured hardware D3D11 FL11_0, NVIDIA OpenGL vendor/renderer at version 4.4+, and all the original operator-reported gameplay conditions. An OpenGL value reported by Microsoft GDI Generic, software/llvmpipe/WARP or an unverified graphics backend cannot satisfy this requirement. These readings are **necessary evidence**, not a promise that Minecraft Education uses the same device or is officially supported in a VM. One pilot never proves concurrency, account recovery or G2–G4.
 
-For the intentionally bounded, manually prepared App Sandbox pilot, see [GPU-PV Disposable Pilot](./gpu-pv-disposable-pilot.md). **Do not treat VMware G2–G4 operations, QA_READY or VMware Tools as interchangeable with HCS VM lifecycle semantics.**
+For the intentionally bounded, manually prepared App Sandbox pilot, see [GPU-PV Disposable Pilot](gpu-pv-disposable-pilot.md). **Do not treat VMware G2–G4 operations, QA_READY or VMware Tools as interchangeable with HCS VM lifecycle semantics.**
 
 ## Outcome interpretation
 

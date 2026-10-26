@@ -10,7 +10,7 @@ lifecycle: HISTORICAL
 # App-owned isolation design — decision and incremental implementation
 
 > **HISTORICAL v1.18.5 design/inventory snapshot.** The only current
-> owned v1.18.6 source/build route is [Isolation Source Tooling](../../tooling/isolation-source/README.md).
+> owned v1.18.6 source/build route is [Isolation Source Tooling](../../Development/tooling/isolation-source/README.md).
 > External checkout paths, old fork procedures and pending tests below are
 > not current `Local` commands.
 
@@ -19,7 +19,7 @@ lifecycle: HISTORICAL
 
 ## Source acquisition now pinned in Git (2026-10-14)
 
-The application repository now contains a Git **submodule pointer** to the authentic upstream Sandboxie v1.18.5 commit at `engine/isolation-upstream/Sandboxie`. The `.gitmodules` URL targets the public upstream repository, and a tested `bootstrap-fork.mjs --local-seed` path creates a **separate full-history checkout** for engine development after initializing the submodule. This removes the need to copy kernel source files into this app repository. The pointer is a real Git tree entry, not an installed runtime; the actual submodule bytes have not been downloaded into the current execution environment.
+The application repository now contains a Git **submodule pointer** to the authentic upstream Sandboxie v1.18.5 commit at `Development/engine/isolation-upstream/Sandboxie`. The `.gitmodules` URL targets the public upstream repository, and a tested `bootstrap-fork.mjs --local-seed` path creates a **separate full-history checkout** for engine development after initializing the submodule. This removes the need to copy kernel source files into this app repository. The pointer is a real Git tree entry, not an installed runtime; the actual submodule bytes have not been downloaded into the current execution environment.
 
 **Non-claims:** a Git submodule is not a published MIVUBI fork; an independent checkout is not a custom signed driver; a compiled driver is not the same as a working, independently authenticated Minecraft Education session. The active official Sandboxie launch behavior and account-bearing profile remain unchanged.
 
@@ -74,7 +74,7 @@ source review context.
 
 ## Source-first owned candidate inspection (2026-10-14)
 
-The desktop now includes `apps/desktop/src-tauri/src/engine/owned_isolation.rs`, a private, read-only Rust module validating the staged engine payload's complete required x64/Win32 driver, service, DLL, COM helpers, manifests and license files against SHA-256. It exposes `desktop_inspect_owned_engine_candidate` through an isolated Tauri command, strict TypeScript parser, and an explicit read-only candidate-selection control in Settings. The result **always** declares `providerSelected=false`, `driverLoadVerified=false`, `gameplayVerified=false`, and `installPermitted=false`. The official Sandboxie backend remains selected. The candidate inspection prepares the application's native source while Windows compilation/signing and actual activation are validated only later.
+The desktop now includes `Development/apps/desktop/src-tauri/src/engine/owned_isolation.rs`, a private, read-only Rust module validating the staged engine payload's complete required x64/Win32 driver, service, DLL, COM helpers, manifests and license files against SHA-256. It exposes `desktop_inspect_owned_engine_candidate` through an isolated Tauri command, strict TypeScript parser, and an explicit read-only candidate-selection control in Settings. The result **always** declares `providerSelected=false`, `driverLoadVerified=false`, `gameplayVerified=false`, and `installPermitted=false`. The official Sandboxie backend remains selected. The candidate inspection prepares the application's native source while Windows compilation/signing and actual activation are validated only later.
 
 Source-first policy: continue implementing provider management and disposable-environment lifecycle source regardless of absent WDK, but retain actual compilation, signing, driver loading, login, concurrency and rollback as separate evidence gates. No work in this source batch is an installed or live custom engine.
 
@@ -84,13 +84,13 @@ The pinned upstream kernel/service source still defines `SbieDrv`/`SbieSvc` serv
 
 ## Disposable Windows deployment transaction — source-first (2026-10-14)
 
-The standalone `tooling/isolation-source/provision-disposable.mjs` source now models a bounded provisioning transaction using the **actual upstream KmdUtil** service/driver semantics, including minifilter altitude `86900`. It requires a staged pinned v1.18.5 payload, the read-only host assessment showing both `SbieSvc` and `SbieDrv` absent, and a target declaration excluding account-bearing boxes and the official Sandboxie installation. It emits explicit operations for kernel/service installation, signature checks, readback/ABI acceptance and reverse-order rollback with receipt/path ownership requirements.
+The standalone `Development/tooling/isolation-source/provision-disposable.mjs` source now models a bounded provisioning transaction using the **actual upstream KmdUtil** service/driver semantics, including minifilter altitude `86900`. It requires a staged pinned v1.18.5 payload, the read-only host assessment showing both `SbieSvc` and `SbieDrv` absent, and a target declaration excluding account-bearing boxes and the official Sandboxie installation. It emits explicit operations for kernel/service installation, signature checks, readback/ABI acceptance and reverse-order rollback with receipt/path ownership requirements.
 
 **No Windows mutation is possible from this module:** it only constructs a noninstallable transaction plan with `installationPermitted=false`; a self-reported target type is not proof of a disposable VM. No Tauri or UI command invokes it. Partial/ambiguous receipts stop for manual reconciliation rather than automatically stopping/deleting any service. An independently reviewed executor, Windows signing and actual ownership checks remain required before this plan can ever become actionable.
 
 ## Disposable Windows execution contract and audit journal (source-first)
 
-`tooling/isolation-source/execute-disposable.mjs` now implements the **transaction sequencer and write-ahead ledger** that a future Windows driver/service transport will use. It records each intent as `UNKNOWN` before calling the supplied simulation adapter; crashes, timeouts, unexpected responses, retries and changed plan fingerprints fail closed. A new exclusive journal directory is created, receipts are committed through file fsync/atomic replacement, and recorded transactions are never automatically deleted. The current transport accepts only an in-memory simulation and cannot invoke KmdUtil, modify the host, or claim successful installation.
+`Development/tooling/isolation-source/execute-disposable.mjs` now implements the **transaction sequencer and write-ahead ledger** that a future Windows driver/service transport will use. It records each intent as `UNKNOWN` before calling the supplied simulation adapter; crashes, timeouts, unexpected responses, retries and changed plan fingerprints fail closed. A new exclusive journal directory is created, receipts are committed through file fsync/atomic replacement, and recorded transactions are never automatically deleted. The current transport accepts only an in-memory simulation and cannot invoke KmdUtil, modify the host, or claim successful installation.
 
 The companion `windows/probe-disposable-readiness.ps1` is a **read-only Windows adapter** for service-name observations and Authenticode status of the staged kernel/service/helper files. A detected virtualized model is explicitly a heuristic, not proof of disposal: `disposableEnvironmentVerified=false`, `installationPermitted=false`, and `windowsKernelDriverLoadVerified=false` are always returned. Host trust, identity, binary signing and kernel acceptance need a dedicated privileged executor and independent Windows tests before any actual system mutation. The existing Minecraft 02 provider remains official Sandboxie.
 
@@ -102,7 +102,7 @@ The command transport currently **cannot install, start, stop or delete** a serv
 
 ## Signed lab evidence and SCM ownership review (source-first)
 
-`tooling/isolation-source/windows/attestation-gate.mjs` validates Ed25519-signed, short-lived lab evidence bound to the exact upstream SHA, transaction ID, nonce digest, host fingerprint, snapshot UUID, plan hash and journal hash. It does not trust public keys supplied inside the signed JSON, and the *production trust key remains blank*: only test fixtures can exercise positive verification using generated ephemeral keys.
+`Development/tooling/isolation-source/windows/attestation-gate.mjs` validates Ed25519-signed, short-lived lab evidence bound to the exact upstream SHA, transaction ID, nonce digest, host fingerprint, snapshot UUID, plan hash and journal hash. It does not trust public keys supplied inside the signed JSON, and the *production trust key remains blank*: only test fixtures can exercise positive verification using generated ephemeral keys.
 
 `service-ownership.mjs` correlates that signed evidence with the matching Windows SCM service image/path, observed executable hash and a journal receipt that claims prior absence and a matching creation step. `probe-owned-service-image.ps1` performs read-only Windows queries without leaking the raw machine UUID. A positive correlation explicitly still returns `rollbackPermitted=false`, `installationPermitted=false`, and `windowsServiceOwnershipIndependentlyAttested=false`, because JSON/SCM correlation cannot establish safe ownership by itself.
 
@@ -116,7 +116,7 @@ The event hash chain is **not a MAC or digital signature**: an attacker with wri
 
 ## Reconciliation of persisted journal and live SCM observations (source-first)
 
-`tooling/isolation-source/windows/reconcile-ownership.mjs` now reads the **existing** single transaction journal file, hashes its actual bytes (not user-supplied JSON metadata), verifies the ledger's existing hash chain, and independently compares both `SbieDrv` and `SbieSvc` live read-only SCM observations with the payload paths, expected binary SHA-256 and recorded signatures. It enforces a matching hashed machine fingerprint across both observations; only the correct pinned v1.18.5 plan and simulation journal may be evaluated. Missing/duplicated service observations, altered journal contents, outside-payload image paths and mismatched signed images fail closed.
+`Development/tooling/isolation-source/windows/reconcile-ownership.mjs` now reads the **existing** single transaction journal file, hashes its actual bytes (not user-supplied JSON metadata), verifies the ledger's existing hash chain, and independently compares both `SbieDrv` and `SbieSvc` live read-only SCM observations with the payload paths, expected binary SHA-256 and recorded signatures. It enforces a matching hashed machine fingerprint across both observations; only the correct pinned v1.18.5 plan and simulation journal may be evaluated. Missing/duplicated service observations, altered journal contents, outside-payload image paths and mismatched signed images fail closed.
 
 The production-signed variant binds the transaction ID, actual plan SHA-256, current journal-byte SHA-256, host fingerprint, nonce digest and snapshot ID to `verifyProductionLabAttestation`. Its source-pinned public trust key is still EMPTY: no caller-supplied key can enable it. Even future signature verification would only correlate evidence; `installationPermitted`, `canStopService`, `canDeleteService` and `rollbackPermitted` remain **false**. The read-only CLI does not accept any signer override and does not connect to Tauri, an installer or the official Client 02 launcher.
 
@@ -130,7 +130,7 @@ The same CLI accepts `--rollback-report`; it is entirely read-only, preserves th
 
 ## Native C++ driver/service/DLL ABI handshake source — 2026-10-14
 
-A first **native Win32 executable** now exists under `engine/isolation-native/`. Unlike the earlier JS planning and diagnostic layers, this is C++ source compiled against the actual pinned upstream header `Sandboxie/common/my_version.h` with ABI `MY_ABI_VERSION=0x57230`. Its CMake build refuses an unpinned Git source checkout and builds a standalone x64 Windows diagnostic.
+A first **native Win32 executable** now exists under `Development/engine/isolation-native/`. Unlike the earlier JS planning and diagnostic layers, this is C++ source compiled against the actual pinned upstream header `Sandboxie/common/my_version.h` with ABI `MY_ABI_VERSION=0x57230`. Its CMake build refuses an unpinned Git source checkout and builds a standalone x64 Windows diagnostic.
 
 `--offline` inspects the candidate bundle's core file layout with **no** Windows SCM access or upstream DLL load. An explicitly requested, isolated-lab `--abi` checks exact `SbieDrv`/`SbieSvc` service image paths and Authenticode for the three core binaries **before** loading `SbieDll.dll` by full path and invoking `SbieApi_GetVersionEx` to compare the live driver version/ABI. The binary performs no service mutations and is not registered in Tauri. It always reports driver signing policy, installer readiness, backend selection and Minecraft gameplay as unproven.
 
@@ -138,7 +138,7 @@ This is core-runtime integration source, **not** a fork of the upstream driver. 
 
 ## First private-exclusive fork core source (2026-10-14)
 
-`engine/isolation-native/fork-overlay/apply-private-source.mjs` produces a real
+`Development/engine/isolation-native/fork-overlay/apply-private-source.mjs` produces a real
 seven-file source patch for a separately checked-out Sandboxie fork, covering
 the common ABI header and direct translation-unit guards in driver API, DLL
 API, service driver assist, launcher, SbieIni and KmdUtil. The patch uses
@@ -161,7 +161,7 @@ namespace migration, not a partial header rename.
 ## Private core binaries -> owned desktop inspection (2026-10-14)
 
 The native private-core builder's distinct output report is now consumable
-through `tooling/isolation-source/assemble-private-engine.mjs`, which
+through `Development/tooling/isolation-source/assemble-private-engine.mjs`, which
 reuses the **single existing** binary staging owner. Its contract checks the
 pinned upstream ancestor and seven source files, validates the private
 Win32/x64/kernel build report and rehashes binary file contents.
@@ -169,7 +169,7 @@ The resulting payload is labeled `PRIVATE_CORE_STAGED_NOT_INSTALLABLE`;
 the manifest retains original upstream attribution and includes the private
 fork revision, source marker and `canCoexistWithOfficialSandboxie=false`.
 
-`apps/desktop/src-tauri/src/engine/owned_isolation.rs` now recognizes
+`Development/apps/desktop/src-tauri/src/engine/owned_isolation.rs` now recognizes
 this private identity as a **candidate inspection only**, with the full
 required runtime closure and checksum checks. Its existing Tauri and typed
 frontend return states and official Sandboxie launch remain unchanged:
@@ -209,7 +209,7 @@ This is an internal implementation boundary, not a new Tauri public schema, netw
 
 ### Implemented source checkpoint: Inspection Adapter v0.1
 
-The first **source-only** Rust boundary is implemented in the active desktop owner `apps/desktop/src-tauri/src/engine/native_clients.rs`. It privately defines `IsolationBackend::inspect` and `OfficialSandboxieBackend` as the **sole** active implementation. Existing UI status inspection, fast launch preflight and signed-PID window inspection now route through that interface. The actual sandboxed launch remains the **unchanged** official Sandboxie request path and still performs a fresh backend-admitted inspection before requesting `Start.exe`.
+The first **source-only** Rust boundary is implemented in the active desktop owner `Development/apps/desktop/src-tauri/src/engine/native_clients.rs`. It privately defines `IsolationBackend::inspect` and `OfficialSandboxieBackend` as the **sole** active implementation. Existing UI status inspection, fast launch preflight and signed-PID window inspection now route through that interface. The actual sandboxed launch remains the **unchanged** official Sandboxie request path and still performs a fresh backend-admitted inspection before requesting `Start.exe`.
 
 The public Tauri/schema-6 `SandboxieClientObservation` is intentionally preserved. This is still an upstream-specific observation; vendor-neutral models, launch abstraction and the separate owned runtime remain future tasks. No new daemon, driver, user setting, account migration or box mutation is added. A fake inspection adapter exercises timeout/incomplete evidence and a zero-PID refusal; authored tests are **NOT_EXECUTED** until Rust/Windows tooling becomes available. This checkpoint does not establish crash recovery, independent deployment, or new gameplay acceptance.
 

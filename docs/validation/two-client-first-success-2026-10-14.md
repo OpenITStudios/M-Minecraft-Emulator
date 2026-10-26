@@ -162,7 +162,7 @@ Ranked falsifiable hypotheses, not diagnosed causes:
 2. Sandboxie hooks or a compatibility interaction adds overhead or causes
    the idle exit. Run the same manual idle scenario separately native/boxed;
    correlate the first failing module/stack and generic Sandboxie messages.
-3. The graphics driver/render path fails. Capture actual GPU engine/adapter
+3. The graphics driver/render path fails. Capture actual GPU Development/engine/adapter
    and frame-time evidence; a low aggregate GPU percentage alone is insufficient.
 4. An idle/background transition triggers a Minecraft failure independently
    of peak load. Compare both-foreground, background and minimized states

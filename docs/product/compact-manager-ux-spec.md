@@ -8,7 +8,7 @@ lifecycle: DRAFT
 ---
 
 
-> **STATUS: SUPERSEDED DESIGN DRAFT.** Historical reference only; do not implement this document. The sole active design specification is [Compact Manager Implementation Specification](./compact-manager-implementation.md). It supersedes older navigation, language, sidebar, setup, layout and action-label decisions. Runtime safety contracts are unchanged.
+> **STATUS: SUPERSEDED DESIGN DRAFT.** Historical reference only; do not implement this document. The sole active design specification is [Compact Manager Implementation Specification](compact-manager-implementation.md). It supersedes older navigation, language, sidebar, setup, layout and action-label decisions. Runtime safety contracts are unchanged.
 
 # Minecraft Instance Manager — Compact Manager UX Specification
 
@@ -73,9 +73,9 @@ No sort, search, folder, tag or batch toolbar for two to four instances in V1. N
 
 ## 4. Active backend capabilities — exact design boundary
 
-Current active UI owner: `apps/desktop/src/NativeFeasibilityApp.svelte`.
-Current typed IPC bridge: `apps/desktop/src/app/bridge/nativeFeasibilityApi.ts`.
-Current owner: `apps/desktop/src-tauri/src/engine/native_clients.rs`.
+Current active UI owner: `Development/apps/desktop/src/NativeFeasibilityApp.svelte`.
+Current typed IPC bridge: `Development/apps/desktop/src/app/bridge/nativeFeasibilityApi.ts`.
+Current owner: `Development/apps/desktop/src-tauri/src/engine/native_clients.rs`.
 Current inspector: canonical on-demand Sandboxie collector; no automatic background polling or persistent daemon.
 
 | Capability | Client 01 native | Client 02 isolated |

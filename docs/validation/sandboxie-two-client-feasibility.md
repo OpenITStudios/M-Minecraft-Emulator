@@ -119,7 +119,7 @@ never clone saved Microsoft login data into the new box.
 ## Performance without process-count shortcuts
 
 The active source includes a read-only, opt-in process sampler at
-[`tooling/acceptance/windows/collect-native-performance.ps1`](../../tooling/acceptance/windows/collect-native-performance.ps1).
+[`tooling/acceptance/windows/collect-native-performance.ps1`](../../Development/tooling/acceptance/windows/collect-native-performance.ps1).
 It accepts two **manually verified** existing PIDs and records bounded
 CPU/working-set observations for up to two hours. Missing/reused PIDs stay
 UNKNOWN, not zero; the report includes no credentials, process IDs or world
@@ -355,7 +355,7 @@ broker restrictions or Sandboxie driver protections.
 
 ## Read-only inspection (runs from repo root)
 
-    powershell.exe -NoProfile -File tooling/acceptance/windows/collect-sandboxie-feasibility.ps1 -Stage INSPECT -BoxName MinecraftClient02
+    powershell.exe -NoProfile -File Development/tooling/acceptance/windows/collect-sandboxie-feasibility.ps1 -Stage INSPECT -BoxName MinecraftClient02
 
 The collector checks signed installed Start.exe / SbieIni.exe,
 Sandboxie service state, enabled-box/AutoDelete/AutoRemove settings,
@@ -417,7 +417,7 @@ is NOT automatically invoked; it requires separate review.
 
 Optional manually selected install directory:
 
-    powershell.exe -NoProfile -File tooling/acceptance/windows/collect-sandboxie-feasibility.ps1 -InstallDirectory "D:\Tools\Sandboxie-Plus"
+    powershell.exe -NoProfile -File Development/tooling/acceptance/windows/collect-sandboxie-feasibility.ps1 -InstallDirectory "D:\Tools\Sandboxie-Plus"
 
 The -InstallDirectory option is only used for read-only inspection
 of tools already installed. It never downloads or installs binaries.
@@ -426,16 +426,16 @@ After actually observing **both** login/gameplay sessions and completing
 the close/reopen/reboot persistence check, record operator statements.
 Replace each YES/NO with UNKNOWN unless personally observed:
 
-    powershell.exe -NoProfile -File tooling/acceptance/windows/collect-sandboxie-feasibility.ps1 -Stage TWO_CLIENT -BoxName MinecraftClient02 -LicensedForUse YES -NativeWorldPlayable YES -SandboxWorldPlayable YES -DistinctAccounts YES -IndependentInput YES -AccountCrossingObserved NO -ReopenAndRebootPersistent YES -MultiplayerJoined UNKNOWN -ObservedMinutes 10 -EvidenceReference isolated-local-001
+    powershell.exe -NoProfile -File Development/tooling/acceptance/windows/collect-sandboxie-feasibility.ps1 -Stage TWO_CLIENT -BoxName MinecraftClient02 -LicensedForUse YES -NativeWorldPlayable YES -SandboxWorldPlayable YES -DistinctAccounts YES -IndependentInput YES -AccountCrossingObserved NO -ReopenAndRebootPersistent YES -MultiplayerJoined UNKNOWN -ObservedMinutes 10 -EvidenceReference isolated-local-001
 
 The JSON is written under %TEMP%\MinecraftInstanceManager\SandboxieFeasibility. Previous reports remain at their prior paths; nothing is migrated or deleted.
 Record no screenshots/account identifiers in Git. Evaluate the specific file:
 
-    node tooling/acceptance/evaluate-sandboxie-feasibility.mjs "<report.json>"
+    node Development/tooling/acceptance/evaluate-sandboxie-feasibility.mjs "<report.json>"
 
 Pure Node fixture tests only:
 
-    npm run test:sandboxie-feasibility
+    npm --prefix Development run test:sandboxie-feasibility
 
 ### Process changes between Check status and Switch/Move
 

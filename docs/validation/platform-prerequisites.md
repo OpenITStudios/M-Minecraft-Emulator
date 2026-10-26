@@ -32,7 +32,7 @@ Authoritative references:
 - VMware Workstation/Fusion graphics capabilities: https://www.vmware.com/products/desktop-hypervisor/workstation-and-fusion
 - Dedicated Server is VM-supported **unlike the client**: https://edusupport.minecraft.net/hc/en-us/articles/46913335157140-Dedicated-Server-System-Requirements
 
-**Proof-first action:** Use [Client Feasibility Gate](./client-feasibility.md) on **one disposable interactive Windows VMware guest** before creating the account-bearing immutable Base or three clones. Directly querying a guest OpenGL context is diagnostic; live Minecraft menu, input and a rendered world are the critical observations. Lack of guest-graphics evidence stays `UNKNOWN`, not PASS.
+**Proof-first action:** Use [Client Feasibility Gate](client-feasibility.md) on **one disposable interactive Windows VMware guest** before creating the account-bearing immutable Base or three clones. Directly querying a guest OpenGL context is diagnostic; live Minecraft menu, input and a rendered world are the critical observations. Lack of guest-graphics evidence stays `UNKNOWN`, not PASS.
 
 ## Account identity, tenant and network
 
@@ -56,4 +56,4 @@ The first acceptance target should be a real Windows host using VMware Workstati
 
 ## Evidence rule
 
-Do not infer four interactive Minecraft Education sessions from configured 3D acceleration, four running VM processes, memory availability, or official minimum specifications. Use the canonical exact-machine acceptance and failure matrix under [Validation](./README.md), especially the [Acceptance](./acceptance.md) and [Failure Matrix](./four-client-failure-matrix.md).
+Do not infer four interactive Minecraft Education sessions from configured 3D acceleration, four running VM processes, memory availability, or official minimum specifications. Use the canonical exact-machine acceptance and failure matrix under [Validation](README.md), especially the [Acceptance](acceptance.md) and [Failure Matrix](four-client-failure-matrix.md).

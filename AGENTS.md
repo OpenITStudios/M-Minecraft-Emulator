@@ -23,7 +23,7 @@ For material writes read `GITHUB_RULES.md`, pin exact `Local` HEAD, and consult 
 
 ## Current product mode
 
-The native-first pilot is the only active desktop route. Legacy VMware, App Sandbox pilot power operations, Base/Guest Agent preparation and VM window arrangement are intentionally disabled, not removed. Do not revive or delete legacy account-bearing data as incidental cleanup. Use docs/system/legacy-retirement.md for one inventory and removal criteria; the actual VM command gate is engine/runtime-core/src/command.rs.
+The native-first pilot is the only active desktop route. Legacy VMware, App Sandbox pilot power operations, Base/Guest Agent preparation and VM window arrangement are intentionally disabled, not removed. Do not revive or delete legacy account-bearing data as incidental cleanup. Use docs/system/legacy-retirement.md for one inventory and removal criteria; the actual VM command gate is Development/engine/runtime-core/src/command.rs.
 
 ## Execution and evidence
 
@@ -56,18 +56,18 @@ Development uses ChatGPT + GitHub only. Do not assume or propose another executi
 | --- | --- | --- |
 | Improve or repair product, UI, source, packaging code, repo organization | `SYSTEM DEVELOPMENT` → `.agents/skills/emulator-development/SKILL.md` | `docs/system/implementation-map.md`, existing code |
 | Review environment, VM provisioning or guest issues | `DIAGNOSE` | Rust runtime/VMware source + observed evidence |
-| Measure or validate Windows/Minecraft runtime | `RUNTIME ACCEPTANCE` | `docs/validation/acceptance.md`, `tooling/acceptance/windows/` |
-| Windows package / signing / release | `PACKAGE VERIFICATION` | `engine/distribution/`, Tauri package config; manual gate |
+| Measure or validate Windows/Minecraft runtime | `RUNTIME ACCEPTANCE` | `docs/validation/acceptance.md`, `Development/tooling/acceptance/windows/` |
+| Windows package / signing / release | `PACKAGE VERIFICATION` | `Development/engine/distribution/`, Tauri package config; manual gate |
 
 A diagnosis does not automatically authorize code changes or a destructive VM action. No operator mode automatically publishes to `main`.
 
 ## Canonical owners
 
-- Backend lifecycle, doctor, version parity, providers, resource policy, Guest Agent protocol: `engine/runtime-core/`.
-- Guest Windows preparation/agent install: `engine/guest/windows/`.
-- Machine-readable release and installer policy: `engine/distribution/`.
-- User-facing UI/typed Tauri bridge/window arrangement: `apps/desktop/`.
-- Source verification, optional developer commands and acceptance collectors: `tooling/`.
+- Backend lifecycle, doctor, version parity, providers, resource policy, Guest Agent protocol: `Development/engine/runtime-core/`.
+- Guest Windows preparation/agent install: `Development/engine/guest/windows/`.
+- Machine-readable release and installer policy: `Development/engine/distribution/`.
+- User-facing UI/typed Tauri bridge/window arrangement: `Development/apps/desktop/`.
+- Source verification, optional developer commands and acceptance collectors: `Development/tooling/`.
 - Stable architecture and how-to: `docs/`.
 - Current work and actual evidence handoff: `planning/`.
 

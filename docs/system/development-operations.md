@@ -27,25 +27,25 @@ A user-PC checkout, npm installation, `DEV.cmd`, VMware or Minecraft execution i
 
 ## Toolchain authority
 
-Read [toolchain.json](../../toolchain.json) for canonical Node/npm/Rust/PowerShell pins. Desktop owns `apps/desktop/package-lock.json`; desktop Tauri and runtime-core own independent Cargo locks. The root intentionally has **no separate Node dependency graph**.
+Read [toolchain.json](../../Development/toolchain.json) for canonical Node/npm/Rust/PowerShell pins. Desktop owns `Development/apps/desktop/package-lock.json`; desktop Tauri and runtime-core own independent Cargo locks. The root intentionally has **no separate Node dependency graph**.
 
 ## Optional source execution
 
 ```bash
-npm run setup
-npm run verify:repository
-npm run test
-npm run check:desktop
-npm run check:runtime
-npm run test:runtime
-npm run format:runtime
-npm run verify:source
-npm run dev
+npm --prefix Development run setup
+npm --prefix Development run verify:repository
+npm --prefix Development run test
+npm --prefix Development run check:desktop
+npm --prefix Development run check:runtime
+npm --prefix Development run test:runtime
+npm --prefix Development run format:runtime
+npm --prefix Development run verify:source
+npm --prefix Development run dev
 ```
 
 `verify:repository` is a structural policy/consumer check. Desktop `verify:source` runs Svelte typecheck, Vitest source tests, frontend build, Tauri Rust check and Rust desktop tests; `verify:source` at **root** also checks canonical runtime Rust and formatting. Neither automatically starts VMware or Minecraft.
 
-`DEV.cmd bootstrap` is the single opt-in Windows x64 setup entrypoint: it downloads verified portable Node/PowerShell and checksum-verified official Rustup only to `workspace/`. Other `DEV.cmd` commands run the local PowerShell runtime, source `tooling/windows-toolchain/local-env.ps1`, refuse global Node/npm/Rust fallbacks, and use process-scoped caches, Cargo/Rustup homes and temp within `workspace/`. Git, Visual Studio C++/MSVC and WDK still require a system installation; game/driver/service locations are not rewritten. `DEV.cmd` delegates to `tooling/windows-toolchain/dev.ps1` for optional Windows developer tasks. The selected native pilot uses one fail-fast preflight before manual gameplay; the old `g0` packaging route remains separate:
+`DEV.cmd bootstrap` is the single opt-in Windows x64 setup entrypoint: it downloads verified portable Node/PowerShell and checksum-verified official Rustup only to `workspace/`. Other `DEV.cmd` commands run the local PowerShell runtime, source `Development/tooling/windows-toolchain/local-env.ps1`, refuse global Node/npm/Rust fallbacks, and use process-scoped caches, Cargo/Rustup homes and temp within `workspace/`. Git, Visual Studio C++/MSVC and WDK still require a system installation; game/driver/service locations are not rewritten. `DEV.cmd` delegates to `Development/tooling/windows-toolchain/dev.ps1` for optional Windows developer tasks. The selected native pilot uses one fail-fast preflight before manual gameplay; the old `g0` packaging route remains separate:
 
 ```text
 DEV.cmd bootstrap
@@ -58,11 +58,11 @@ DEV.cmd dev
 DEV.cmd package
 ```
 
-`doctor` checks developer toolchain only. `preflight` checks a clean committed `Local` SHA, installed tool versions and committed lockfiles, performs `npm run setup` and `npm run verify:source`, then confirms the checkout remains unchanged. It does **not** test Microsoft licensing, Sandboxie, Windows gameplay, VM state or installer preservation.
+`doctor` checks developer toolchain only. `preflight` checks a clean committed `Local` SHA, installed tool versions and committed lockfiles, performs `npm --prefix Development run setup` and `npm --prefix Development run verify:source`, then confirms the checkout remains unchanged. It does **not** test Microsoft licensing, Sandboxie, Windows gameplay, VM state or installer preservation.
 
 ## Package and release boundary
 
-`npm run package:windows` is **intentionally blocked** in the active native feasibility pilot: the old NSIS configuration still carries VMware resources and installed identity. Its retained source describes historical packaging only, not an installable native prototype. Do not bypass this release hold to obtain a local-test installer. A future approved native package needs separate identity, contents and preservation review. Packaging resources come from `engine/guest/windows/`, `tooling/acceptance/windows/` and `engine/distribution/`. Resource destination paths inside the installed application remain stable.
+`npm --prefix Development run package:windows` is **intentionally blocked** in the active native feasibility pilot: the old NSIS configuration still carries VMware resources and installed identity. Its retained source describes historical packaging only, not an installable native prototype. Do not bypass this release hold to obtain a local-test installer. A future approved native package needs separate identity, contents and preservation review. Packaging resources come from `Development/engine/guest/windows/`, `Development/tooling/acceptance/windows/` and `Development/engine/distribution/`. Resource destination paths inside the installed application remain stable.
 
 GitHub Actions on `Local` now operate in **full CI** mode by explicit user authorization. The `verify.yml` source accepts `push` events scoped to branch `Local` and still supports three manual `workflow_dispatch` scopes. Every `Local` commit automatically runs all **12 canonical source verification stages on a Windows runner**, including Svelte/Vitest/frontend/Rust tests. The final aggregate gate fails the run if any source stage fails or is skipped. When all twelve stages succeed, the same Windows job also performs `cargo build --locked --target x86_64-pc-windows-msvc` (compile only, no installer). If any source stage fails, automatic compilation does not run. Superseded push runs may be cancelled; manual operator runs are not cancelled by this policy.
 
@@ -78,7 +78,7 @@ Read the exact SHA, event, source-stage summary, and final job conclusion. A gre
 
 ## Single guest renderer compatibility pilot
 
-Before registering/finalizing a production Base, read [Client Feasibility](../validation/client-feasibility.md). The Windows guest collector is in `../../tooling/acceptance/windows/collect-client-feasibility.ps1`; it inspects a real interactive guest's video adapter/OpenGL context and captures separately attributed manual Minecraft menu, scene and input observations. The pure reviewer (`npm run feasibility:review -- <path-to-report.json>`) and its `npm run test:feasibility` regression tests do **not** launch Minecraft or assert official VM-client support.
+Before registering/finalizing a production Base, read [Client Feasibility](../validation/client-feasibility.md). The Windows guest collector is in `../../tooling/acceptance/windows/collect-client-feasibility.ps1`; it inspects a real interactive guest's video adapter/OpenGL context and captures separately attributed manual Minecraft menu, scene and input observations. The pure reviewer (`npm --prefix Development run feasibility:review -- <path-to-report.json>`) and its `npm --prefix Development run test:feasibility` regression tests do **not** launch Minecraft or assert official VM-client support.
 
 Source-only changes may be completed on GitHub `Local`, but guest graphics and gameplay remain `NOT_EXECUTED` without real machine evidence. Avoid asking for local PC access to close GitHub-only work. No changes to `main`.
 

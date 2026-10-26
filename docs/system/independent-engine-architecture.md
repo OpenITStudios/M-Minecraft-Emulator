@@ -267,9 +267,9 @@ CI remains disabled.
 
 ### Windows HANDLE-relative file I/O consumes canonical Rust storage plans (23 October 2026)
 
-The original Windows-only `apps/desktop/src-tauri/src/engine/independent_private_files.rs`
+The original Windows-only `Development/apps/desktop/src-tauri/src/engine/independent_private_files.rs`
 fixture now calls the canonical
-`engine/runtime-core/src/independent_engine/storage.rs::plan_private_file_access`
+`Development/engine/runtime-core/src/independent_engine/storage.rs::plan_private_file_access`
 instead of relying only on its native single-component parser. An actual
 disposable job-owned OS PID/full creation FILETIME, the fixed MC02–MC04
 slot, `LocalFiles` domain and read/create action determine the route
@@ -325,7 +325,7 @@ effective cross-token peer denial and actual game-path enforcement.
 
 ### Host-bound full writes and file-leaf hierarchy invariants (23 October 2026)
 
-The pure synthetic COW owner `engine/runtime-core/src/independent_engine/overlay.rs`
+The pure synthetic COW owner `Development/engine/runtime-core/src/independent_engine/overlay.rs`
 now requires the immutable `SyntheticBaseView` when performing a full
 `SyntheticSlotOverlay::write`. Previously full writes had NO baseline input,
 so they could silently create a file named like an existing visible
@@ -428,7 +428,7 @@ Minecraft credentials/worlds or Launch/Provision permission.
 
 ### Atomic visible-subtree COW rename (23 October 2026)
 
-The existing original `engine/runtime-core/src/independent_engine/overlay.rs`
+The existing original `Development/engine/runtime-core/src/independent_engine/overlay.rs`
 now supports `SyntheticSlotOverlay::rename_tree` for **bounded synthetic
 file-directory and registry-key prefixes**. It validates exact slot/PID/
 creation FILETIME, matching resource surface, disjoint source/destination,
@@ -586,7 +586,7 @@ rather than enable fallback on unsupported Windows versions.
 ### Service-owned native desktop-image Authenticode preflight (22 October 2026)
 
 The standalone, source-only Windows SCM service now includes an
-original [peer_image.rs](../../engine/isolation-native/independent-service/src/peer_image.rs)
+original [peer_image.rs](../../Development/engine/isolation-native/independent-service/src/peer_image.rs)
 native observer only when `readonly-ipc-pilot` is explicitly enabled
 (default feature list remains empty). It is NOT a Tauri bridge
 or a second executable launcher. After the service's existing
@@ -763,7 +763,7 @@ The native Windows service IPC had a second TokenUser reader that
 called IsValidSid on the returned SID pointer without first proving
 that the entire SID lay within the live GetTokenInformation allocation.
 This is now corrected in the existing
-[service_identity.rs](../../engine/isolation-native/independent-service/src/service_identity.rs):
+[service_identity.rs](../../Development/engine/isolation-native/independent-service/src/service_identity.rs):
 a single bounded SID copier is used by both TokenGroups and TokenUser.
 It checks the returned byte count, header location, SID revision,
 subauthority count, complete SID body and native IsValidSid/length
@@ -947,7 +947,7 @@ profile operations or filesystem/registry enforcement.
 
 The independent standalone service now has a Windows-only
 `readonly-ipc-pilot` Cargo feature, **OFF by default**. The feature
-adds a service-owned [ipc_worker.rs](../../engine/isolation-native/independent-service/src/ipc_worker.rs)
+adds a service-owned [ipc_worker.rs](../../Development/engine/isolation-native/independent-service/src/ipc_worker.rs)
 and imports the ONE canonical, fixed 32-byte read-only broker parser
 from runtime-core instead of duplicating the schema. The default SCM
 host remains inert. An explicitly compiled pilot creates a single
@@ -987,7 +987,7 @@ not enabling Launch/Provision.
 ### Original standalone Windows SCM service host — 22 October 2026
 
 A separate original Rust crate now lives at
-`engine/isolation-native/independent-service/`. It uses the
+`Development/engine/isolation-native/independent-service/`. It uses the
 maintained `windows-service` 0.8.1 SCM API wrapper (no Sandboxie
 runtime), with the unique service name `MIVUBIIndependentHost`.
 The host registers with Windows SCM, reports ordered StartPending,
@@ -1019,7 +1019,7 @@ fixture DACL or elevate the existing untrusted PID wire protocol.
 ### Bounded overlapped named-pipe fixture lifecycle — 22 October 2026
 
 The original one-client named-pipe fixture in
-[independent_pipe_server.rs](../../apps/desktop/src-tauri/src/engine/independent_pipe_server.rs)
+[independent_pipe_server.rs](../../Development/apps/desktop/src-tauri/src/engine/independent_pipe_server.rs)
 now uses FILE_FLAG_OVERLAPPED for both ConnectNamedPipe and ReadFile,
 with separate manual-reset events and native OVERLAPPED structures.
 Connect and exact-message read deadlines are 1500 ms each. A timeout
@@ -1047,7 +1047,7 @@ or isolation acceptance.
 ### Explicit-DACL native named-pipe server fixture (22 October 2026)
 
 The original, unmounted Windows backend
-[apps/desktop/src-tauri/src/engine/independent_pipe_server.rs](../../apps/desktop/src-tauri/src/engine/independent_pipe_server.rs)
+[apps/desktop/src-tauri/src/engine/independent_pipe_server.rs](../../Development/apps/desktop/src-tauri/src/engine/independent_pipe_server.rs)
 implements a disposable, **one-client inbound-only** named-pipe server.
 Unlike the unsafe Windows pipe default, it builds a protected SDDL DACL
 using the actual current-user token SID plus SYSTEM/Administrators,
@@ -1088,7 +1088,7 @@ sandbox readiness or license/account separation.
 
 ### Versioned independent broker diagnostic protocol (22 October 2026)
 
-`engine/runtime-core/src/independent_engine/broker_wire.rs`
+`Development/engine/runtime-core/src/independent_engine/broker_wire.rs`
 now owns one canonical, independently authored **32-byte little-endian
 request wire contract** (magic MIVB, schema 1, read-only probe kind,
 MC02–MC04 slot, claimed PID, full creation FILETIME, correlation ID,
@@ -1099,7 +1099,7 @@ file/registry mutation, credential, token, or readiness opcodes.
 A correlation ID is not an authentication nonce or an anti-replay proof.
 
 The Windows-only, unmounted diagnostic adapter at
-`apps/desktop/src-tauri/src/engine/independent_pipe_peer.rs`
+`Development/apps/desktop/src-tauri/src/engine/independent_pipe_peer.rs`
 accepts an **already connected server-side named-pipe HANDLE**, checks
 the real client PID using GetNamedPipeClientProcessId, opens that
 process with query/synchronize-only rights, checks complete creation
@@ -1128,7 +1128,7 @@ storage admission.
 ### Native Windows effective root-access evidence (22 October 2026)
 
 The original Win32 read-only inspector in
-[apps/desktop/src-tauri/src/engine/independent_root_access.rs](../../apps/desktop/src-tauri/src/engine/independent_root_access.rs)
+[apps/desktop/src-tauri/src/engine/independent_root_access.rs](../../Development/apps/desktop/src-tauri/src/engine/independent_root_access.rs)
 uses GetSecurityInfo (OWNER, GROUP, DACL), OpenProcessToken,
 DuplicateTokenEx (SecurityImpersonation) and AccessCheck to evaluate
 FILE_LIST_DIRECTORY and FILE_ADD_FILE against the same opened directory
@@ -1192,7 +1192,7 @@ unmodified Minecraft until these can actually be enforced.
 ### Native Windows handle-relative private file storage (22 October 2026)
 
 The original Win32/NT adapter at
-[apps/desktop/src-tauri/src/engine/independent_private_files.rs](../../apps/desktop/src-tauri/src/engine/independent_private_files.rs)
+[apps/desktop/src-tauri/src/engine/independent_private_files.rs](../../Development/apps/desktop/src-tauri/src/engine/independent_private_files.rs)
 performs actual filesystem I/O via NtCreateFile with a held parent
 directory HANDLE and a single validated relative component. It uses
 FILE_CREATE or FILE_OPEN instead of overwrite, FILE_OPEN_REPARSE_POINT
@@ -1227,7 +1227,7 @@ must still be proven before any production launch.
 ### Native Windows private registry application hive (22 October 2026)
 
 The unmounted, independently authored Rust module
-[apps/desktop/src-tauri/src/engine/independent_private_hive.rs](../../apps/desktop/src-tauri/src/engine/independent_private_hive.rs)
+[apps/desktop/src-tauri/src/engine/independent_private_hive.rs](../../Development/apps/desktop/src-tauri/src/engine/independent_private_hive.rs)
 implements real Windows application-hive I/O using RegLoadAppKeyW,
 RegSetValueExW, RegQueryValueExW, RegFlushKey and RegCloseKey.
 The registry namespace is reached ONLY through an owned HKEY, never
@@ -1261,7 +1261,7 @@ without real interception/enforcement proof.
 ### Independent Win32 process lifecycle (22 October 2026)
 
 The original Windows-only code in
-[apps/desktop/src-tauri/src/engine/independent_job.rs](../../apps/desktop/src-tauri/src/engine/independent_job.rs)
+[apps/desktop/src-tauri/src/engine/independent_job.rs](../../Development/apps/desktop/src-tauri/src/engine/independent_job.rs)
 creates an unnamed Job Object, sets fixture-only KILL_ON_JOB_CLOSE,
 launches our own Rust test executable SUSPENDED, assigns the exact retained
 child HANDLE to the job, verifies PID/creation FILETIME, then resumes it.
@@ -1451,8 +1451,8 @@ binary and Microsoft sign-in are not modified. Selecting another tab never
 closes, stops, signs out or reprovisions another running session.
 
 This is inspired by the **capabilities** of Sandboxie, not a derived Sandboxie
-distribution. Historical upstream/fork files under `engine/isolation-owned/`,
-`engine/isolation-candidates/`, and `tooling/isolation-source/` remain for
+distribution. Historical upstream/fork files under `Development/engine/isolation-owned/`,
+`Development/engine/isolation-candidates/`, and `Development/tooling/isolation-source/` remain for
 provenance and are **NOT** dependencies of this engine. Do not port, translate,
 copy, link or bundle Sandboxie driver/DLL/service code into this implementation.
 Source ownership, third-party dependency licenses and contributor assignments
@@ -1469,8 +1469,8 @@ layers.
 
 | Boundary | Standard | Condition |
 | --- | --- | --- |
-| Pure domain, lifecycle/admission, isolation policy, persistence rules and recovery | **Rust** in existing `engine/runtime-core/` | No new lifecycle manager or alternate ready database |
-| Windows process identity, AppContainer inspection, path/registry observation, HWND and bounded native calls | **Rust** under existing `apps/desktop/` | Keep `unsafe` behind small audited Windows API wrappers; pin PID/creation FILETIME and return sanitized facts |
+| Pure domain, lifecycle/admission, isolation policy, persistence rules and recovery | **Rust** in existing `Development/engine/runtime-core/` | No new lifecycle manager or alternate ready database |
+| Windows process identity, AppContainer inspection, path/registry observation, HWND and bounded native calls | **Rust** under existing `Development/apps/desktop/` | Keep `unsafe` behind small audited Windows API wrappers; pin PID/creation FILETIME and return sanitized facts |
 | Privileged user-mode service/broker, if it becomes necessary | **Rust preferred** | Add only after a supported requirement, threat model, bounded IPC and installation/rollback design |
 | Filesystem minifilter/kernel helper, if Windows user-mode is insufficient | **Minimal independent C/C++ permitted** | First document why it is necessary and sufficient; WDK compatibility, signing, threat model, rollback and target-Windows proof required |
 | Synthetic Windows experiments | **Existing standalone C++ may remain** | Fixture code is test-only and cannot be packaged or represented as the production engine |
@@ -1501,21 +1501,21 @@ third-party components on its own terms.
 
 | Responsibility | Canonical owner | Boundary |
 | --- | --- | --- |
-| Domain contract, lifecycle/admission policy | `engine/runtime-core/` | Pure rules; no Windows handles or tokens |
-| Session identity and source model | `engine/runtime-core/src/independent_engine/identity.rs` | Fixed 01–04 labels and full-width PID/creation time; value objects are not runtime proof |
+| Domain contract, lifecycle/admission policy | `Development/engine/runtime-core/` | Pure rules; no Windows handles or tokens |
+| Session identity and source model | `Development/engine/runtime-core/src/independent_engine/identity.rs` | Fixed 01–04 labels and full-width PID/creation time; value objects are not runtime proof |
 | Operation effect classification | `independent_engine/operations.rs` | Inspect, present, launch, close and provision are distinct; not another admission system |
 | Storage and authentication surface matrix | `independent_engine/storage.rs` | Local, roaming, registry, named objects, peer/host access, restart persistence, broker; no credential values |
 | Native provider and adapter interface | `independent_engine/ports.rs` | Abstract ports only; DisabledIndependentProvider rejects everything |
-| Evidence tier policy | `engine/runtime-core/src/independent_isolation.rs` | Synthetic, native Windows, Minecraft runtime are separate; not an acceptance registry |
-| Windows process identity and future adapter | `apps/desktop/src-tauri/src/engine/instance_identity.rs` | Pin handles, validate PID/FILETIME, query tokens; return sanitized observations |
-| Native window presentation/recovery | Existing `apps/desktop/src-tauri/src/engine/workspace_surface.rs` and Svelte workspace | Reversible presentation, no implicit lifecycle changes |
+| Evidence tier policy | `Development/engine/runtime-core/src/independent_isolation.rs` | Synthetic, native Windows, Minecraft runtime are separate; not an acceptance registry |
+| Windows process identity and future adapter | `Development/apps/desktop/src-tauri/src/engine/instance_identity.rs` | Pin handles, validate PID/FILETIME, query tokens; return sanitized observations |
+| Native window presentation/recovery | Existing `Development/apps/desktop/src-tauri/src/engine/workspace_surface.rs` and Svelte workspace | Reversible presentation, no implicit lifecycle changes |
 | Authoritative route admission | Existing desktop `instance_catalog.rs` and canonical runtime policy | Isolated Launch/Provision remains blocked until an independent provider is genuinely accepted |
-| Synthetic tooling and offline review | `tooling/acceptance/windows/`, `tooling/acceptance/evaluate-appcontainer-isolation.mjs` | No game/account access; observations never authorize launch |
+| Synthetic tooling and offline review | `Development/tooling/acceptance/windows/`, `Development/tooling/acceptance/evaluate-appcontainer-isolation.mjs` | No game/account access; observations never authorize launch |
 | Current continuation | `planning/development.md` | Decisions/next work only, not a runtime data database |
 
 ### Bound storage evidence contract — source-only
 
-`engine/runtime-core/src/independent_engine/evidence.rs` validates diagnostic
+`Development/engine/runtime-core/src/independent_engine/evidence.rs` validates diagnostic
 storage facts against one exact `SessionSlot` and one full PID/FILETIME
 `ProcessIdentity`. Its typed method/source matrix separates:
 
@@ -1666,7 +1666,7 @@ The existing native fixture already writes one packed-by-layout, **8-byte**
 `Observation` record per cooperating child (two little-endian Windows DWORDs:
 `version=1` and `flags`), under the *fixture-owned* AppContainer profile.
 Rather than introducing another daemon, IPC endpoint or binary protocol,
-`engine/runtime-core/src/independent_engine/fixture_wire.rs` decodes this
+`Development/engine/runtime-core/src/independent_engine/fixture_wire.rs` decodes this
 existing record in pure Rust. The C++ fixture now asserts the exact record
 size at compile time. The decoder accepts **exactly eight bytes**, validates
 the version, known bits, mutually exclusive phases and the consistency of
@@ -1779,7 +1779,7 @@ never process-bound launch evidence.
 
 ## Opt-in fixture-only inherited HANDLE handoff to Rust
 
-A new test-only binary, `engine/runtime-core/src/bin/synthetic_fixture_handoff.rs`,
+A new test-only binary, `Development/engine/runtime-core/src/bin/synthetic_fixture_handoff.rs`,
 is **gated by the `synthetic-fixture-handoff` Cargo feature** and never
 registered as a desktop command, runtime provider, service or driver.
 The independent C++ fixture parent can optionally spawn it while each
@@ -1992,7 +1992,7 @@ acceptance are separate milestones.
 ## Per-slot isolation proof ceiling and registry/broker boundary — 22 October 2026
 
 The canonical non-authorizing proof owner at
-`engine/runtime-core/src/independent_isolation.rs` now explicitly
+`Development/engine/runtime-core/src/independent_isolation.rs` now explicitly
 tracks **PrivateRoamingKnownFolder** and **PrivateRegistryView** at the
 Windows-mechanism evidence context, plus
 **DistinctBrokerAccountContexts** at the actual Minecraft-runtime
@@ -2097,7 +2097,7 @@ non-Windows behavior; native execution is not yet available.
 
 ## Stateless, privacy-minimal actual-game acceptance contract — 22 October 2026
 
-The existing domain owner `engine/runtime-core/src/independent_engine/`
+The existing domain owner `Development/engine/runtime-core/src/independent_engine/`
 now includes `acceptance.rs::review_game_acceptance` as a pure,
 **non-authorizing** checklist validator. For two-client trials, exactly
 MC01/MC02 are expected; for four-client trials, MC01–MC04 are expected.

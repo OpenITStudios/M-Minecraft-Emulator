@@ -14,9 +14,9 @@ lifecycle: ACTIVE
 Keep the source tree reproducible and readable while retaining meaningful
 local-test provenance. This document governs **storage**, not installer behavior,
 runtime state, or additional product acceptance gates. Source owners remain
-`apps/`, `engine/`, and `tooling/`; implementation authority remains in
-[Development Operations](./development-operations.md) and
-[Distribution](../../engine/distribution/README.md).
+`Development/apps/`, `Development/engine/`, and `Development/tooling/`; implementation authority remains in
+[Development Operations](development-operations.md) and
+[Distribution](../../Development/engine/distribution/README.md).
 
 REA is a methodological reference for origin, immutable evidence, and explicit
 unknowns. We have not run REA against a built emulator or Windows installer
@@ -26,9 +26,9 @@ in this change. Do not describe source inspection as REA runtime proof.
 
 | Classification | Canonical path | Tracked? | Rule |
 | --- | --- | --- | --- |
-| Product code and runtime contracts | `apps/`, `engine/`, `tooling/` | Yes | Keep source and deterministic tests under their actual owners |
-| Toolchain declarations and lockfiles | `toolchain.json`, `apps/desktop/package-lock.json` and Rust `Cargo.lock` | Yes | These are immutable inputs, not generated binary caches |
-| Node, Vite, Rust, Tauri output | `apps/desktop/node_modules/`, `apps/desktop/dist/`, Rust/Tauri `target/`, Tauri staging | No | Already contained by the one checkout; preserve tool-native paths |
+| Product code and runtime contracts | `Development/apps/`, `Development/engine/`, `Development/tooling/` | Yes | Keep source and deterministic tests under their actual owners |
+| Toolchain declarations and lockfiles | `Development/toolchain.json`, `Development/apps/desktop/package-lock.json` and Rust `Cargo.lock` | Yes | These are immutable inputs, not generated binary caches |
+| Node, Vite, Rust, Tauri output | `Development/apps/desktop/node_modules/`, `Development/apps/desktop/dist/`, Rust/Tauri `target/`, Tauri staging | No | Already contained by the one checkout; preserve tool-native paths |
 | Portable developer tool installations | `workspace/toolchains/` | No | Opt-in `DEV.cmd bootstrap`: pinned and checksum-verified Node/PowerShell ZIPs, Rustup checksum sidecar and local Rustup home |
 | Developer caches and temporary files | `workspace/cache/`, `workspace/tmp/` | No | `DEV.cmd` applies process-scoped npm/NuGet caches and temporary directories; direct shells are not managed |
 | External installer and prerequisite downloads | `workspace/downloads/` | No | Record original URL, vendor, version and SHA-256 |
@@ -48,8 +48,8 @@ There is one source tree. `Local` owns product development; `main` is reserved f
 separately authorized release work. Neither branch stores built installers or
 private runtime data. Do not create root developing/release copies of source.
 
-Root `npm run package:windows` is owned by
-`apps/desktop/scripts/package-lazy-tester.mjs`. It requires clean committed Local
+Root `npm --prefix Development run package:windows` is owned by
+`Development/apps/desktop/scripts/package-lazy-tester.mjs`. It requires clean committed Local
 source (a detached worktree must match Local exactly), declared Node/npm versions,
 and the reviewed native payload. It runs the existing desktop build:app, then
 rechecks the source revision/cleanliness before exporting. A build failure or
@@ -65,7 +65,8 @@ not executed. It is a build receipt, not a second runtime-readiness store.
 Existing exports are never overwritten or recursively copied into newer ones.
 This command does not sign, upload, install or run the application.
 
-After exporting, the same command stages only the four required runtime payload
+With `--export-only`, export stops before changing App or Data. Otherwise,
+after exporting, the same command stages only the four required runtime payload
 files into the ignored root `App/`, with a source/hash receipt. Root `RUN.cmd`
 opens this app without a folder picker. It creates an empty `Data/` only when
 absent, preserves an existing data locator, and archives the previous `App/`
@@ -75,7 +76,7 @@ An empty unconfigured default Data folder can be initialized; nonempty partial
 data or an unavailable saved location still blocks fresh replacement.
 
 The installer payload remains governed by
-`engine/distribution/lazy-tester-package.json` and the Tauri native configuration;
+`Development/engine/distribution/lazy-tester-package.json` and the Tauri native configuration;
 the export does not add source, tools, profile bindings, accounts or worlds.
 Installed copies are independent of this optional checkout-local candidate.
 Reorganizing development output never relocates their user data. Product data
@@ -89,7 +90,7 @@ project-generated report. The current owned v1.18.6 builder must accept
 `workspace/packages/<new-name>/` as the optional payload directory;
 the assembler enforces those same boundaries. Both require preexisting,
 non-junction parent directories and refuse reuse. Tool-owned compiler
-outputs inside `engine/isolation-owned/` are ignored and independently
+outputs inside `Development/engine/isolation-owned/` are ignored and independently
 checked for preexisting binaries. The opt-in `DEV.cmd bootstrap` installs pinned portable developer tools
 under `workspace/toolchains/` from checksum-verified downloads saved in
 `workspace/downloads/`. `DEV.cmd` refuses global runtime fallback and
@@ -172,9 +173,9 @@ only reviewed sanitized excerpts.
 
 ## Enforcement and proof ceiling
 
-The existing `npm run verify:repository` checks effective ignore behavior
+The existing `npm --prefix Development run verify:repository` checks effective ignore behavior
 and rejects unexpected Git-tracked paths under machine-output roots.
-The `npm run test:localtest` suite exercises manifest lifecycle using
+The `npm --prefix Development run test:localtest` suite exercises manifest lifecycle using
 disposable directories. Windows/PowerShell integration still requires
 actual execution. These are **source-layout and unit guards**, not proof
 of actual installer behavior,

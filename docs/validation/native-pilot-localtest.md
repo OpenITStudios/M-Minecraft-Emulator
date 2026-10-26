@@ -190,7 +190,7 @@ Mismatched slot A/private B is rejected before Armed/main. Four ordering/failure
 timeout controls pass; independent CIM lookup finds no remaining test image.
 Private receipt v4 only; no public schema or production provider change.
 
-[Exact inputs, hashes, semantics and exclusions](../../tooling/acceptance/windows/bootstrap-ordering/README.md#coherent-synthetic-file-backing--24-october-2026-wib)
+[Exact inputs, hashes, semantics and exclusions](../../Development/tooling/acceptance/windows/bootstrap-ordering/README.md#coherent-synthetic-file-backing--24-october-2026-wib)
 bound this evidence. Unsupported operations under recognized logical roots are
 rejected; unknown roots/aliases pass through. This remains cooperative routing,
 **not a security boundary**. Reparse/hardlink/handle containment, general file
@@ -210,7 +210,7 @@ unselected/different-parent/unsupported calls pass through. NTSTATUS is preserve
 entry LastError restored, caller attributes are copied rather than rewritten.
 This is not a generic namespace/security implementation.
 
-[Exact source inputs, API contracts and control matrix](../../tooling/acceptance/windows/bootstrap-ordering/README.md#executed-native-ipc-slice--24-october-2026-wib)
+[Exact source inputs, API contracts and control matrix](../../Development/tooling/acceptance/windows/bootstrap-ordering/README.md#executed-native-ipc-slice--24-october-2026-wib)
 bind this run to three changed source blobs; CMake/build configuration and external
 Detours pin remain unchanged. The fixed private receipt advances to version 3;
 no public product schema changes. No Sandboxie source/runtime was imported.
@@ -504,7 +504,7 @@ Source baseline: `c20ce5c7f7ef6ab04b761e12e918dac1f6db06ef` (`Local`).
 The operator continued the bounded registered-image/import investigation after
 the self-child mutex experiment. This run used the canonical
 `Resolve-ManagerEducationTarget -RegisteredOnly` from
-`tooling/isolation-source/windows/education-target.ps1` (blob
+`Development/tooling/isolation-source/windows/education-target.ps1` (blob
 `90e09ca075555551a4bb6d50c8b7f7fea087ed50`, verified after materialization).
 The registered game retained a Valid Microsoft signature, file version
 `1.26.32.0` and the previously observed SHA-256. No legacy settings or
@@ -604,7 +604,7 @@ Profile SHA-256: `548070c68c684df2899357f40066cb45fcd712ee09e7087e8e0bde611fb71e
 
 **Bounded conclusion:** the user saw reactivation of MC01 and no second game image/process was observed. This is consistent with reuse through Windows application activation; the precise shell/game/window/IPC mechanism is **UNKNOWN**. It is **not** evidence that a second game process reached a named-mutex check and was rejected, nor proof that Windows or Minecraft forbids another contained process.
 
-Source cross-check: [`open_native_minecraft`](../../apps/desktop/src-tauri/src/engine/native_clients.rs) intentionally refuses an existing registered process and requests `shell:AppsFolder` for MC01. That route is not an independent process-creation implementation. [`IndependentProviderPort`](../../engine/runtime-core/src/independent_engine/ports.rs) still has only a disabled implementation. A future independent provider needs supported, isolation-bound process creation; do not reuse this activation experiment as launch authority.
+Source cross-check: [`open_native_minecraft`](../../Development/apps/desktop/src-tauri/src/engine/native_clients.rs) intentionally refuses an existing registered process and requests `shell:AppsFolder` for MC01. That route is not an independent process-creation implementation. [`IndependentProviderPort`](../../Development/engine/runtime-core/src/independent_engine/ports.rs) still has only a disabled implementation. A future independent provider needs supported, isolation-bound process creation; do not reuse this activation experiment as launch authority.
 
 No fresh authentication handshake, private Roaming/HKCU/auth mediation, MC02, multiplayer, performance comparison or two/four-client acceptance was exercised. Production desktop/WDK builds and those runtime outcomes remain **NOT_EXECUTED**. Current next action is recorded only in [planning/development.md](../../planning/development.md).
 
@@ -658,7 +658,7 @@ acceptance. See the [retirement register](../system/legacy-retirement.md).
 ## Fast tab switching, composition recovery and five-minute limit — 21 October 2026
 
 Continuation from `1be9269e7c253043faca33017c71a23c967941a9` found two full
-PowerShell engine/profile inspections per running-tab click. Admission now binds
+PowerShell Development/engine/profile inspections per running-tab click. Admission now binds
 the existing presentation lease to its verified session directory and client.
 Retained selection validates live PID/creation/session/HWND identity natively;
 unadmitted or replaced processes still require the full provider inspection.
@@ -901,7 +901,7 @@ after a timeout, and `NativeWorkspace.resume` does nothing when the new client
 is already presented. Resume errors remain visible. This is source-level proof
 of the recovery branch, not observed live input/playability acceptance.
 
-`npm run verify:source`: **722 passed** (Node 290, frontend 179, desktop Rust 76,
+`npm --prefix Development run verify:source`: **722 passed** (Node 290, frontend 179, desktop Rust 76,
 runtime Rust 177), four existing file-symlink skips and eight opt-in Rust tests
 ignored. Typecheck, frontend bundle, Windows Rust checks and formatting pass.
 Exact committed native-source reconstruction passes at this SHA; native C/C++
@@ -951,7 +951,7 @@ status, identity errors, non-destructive retry, seek/truncation/stream failures,
 blocked path rules and all five host service operations plus an unknown request.
 It never reads real account values. This is not a live filesystem-isolation test.
 
-`npm run verify:source` passes **718** checks: Node 288, frontend 177,
+`npm --prefix Development run verify:source` passes **718** checks: Node 288, frontend 177,
 desktop Rust 76 and runtime Rust 177; four existing file-symlink skips and
 eight opt-in Rust tests remain. Exact committed-source reconstruction passes:
 1,627 files, **15 native + 4 build-path changes**, pristine tree unchanged.
@@ -1006,7 +1006,7 @@ native changes; build/assembly contracts require **13 native + 4 build changes**
   reads/domain reads/enumeration, zero host calls, unsupported ANSI reads and
   hooks retained despite synthetic open/compartment settings. It reads no real
   Windows credential or account value and does not prove live box isolation.
-- `npm run verify:source`: **715 passed** (Node 285, frontend 177, desktop Rust
+- `npm --prefix Development run verify:source`: **715 passed** (Node 285, frontend 177, desktop Rust
   76, runtime Rust 177); four existing file-symlink skips, eight opt-in desktop
   tests ignored. After final newline normalization, the eight focused native/
   reconstruction tests pass. Exact committed `isolation-source:verify` passes.
@@ -1023,7 +1023,7 @@ native changes; build/assembly contracts require **13 native + 4 build changes**
   and the corresponding `workspace/packages/credential-policy-68ded21/` in that
   clean clone. These ignored reports/payloads are not committed or installed.
 
-The running engine/profile configuration was not replaced. No game was launched,
+The running Development/engine/profile configuration was not replaced. No game was launched,
 closed or signed out in this implementation batch. WAM/SSO broker behavior,
 game-local inherited cache, actual virtual-store read/write noninterference,
 login compatibility and four distinct licensed playable clients remain unproven.
@@ -1116,7 +1116,7 @@ provider's canonical PowerShell window/launch owner:
    shell execution, which separates the launched application from those pipes.
    This matches the documented [ProcessStartInfo standard-stream inheritance](https://learn.microsoft.com/en-us/dotnet/api/System.Diagnostics.ProcessStartInfo).
 
-Both regressions failed before correction. Final `npm run verify:source` passes
+Both regressions failed before correction. Final `npm --prefix Development run verify:source` passes
 **712 checks** (Node 282, frontend 177, desktop Rust 76, runtime Rust 177), with
 four existing file-symlink skips and eight opt-in desktop tests ignored. The
 focused ten-test Windows provider suite and rebuilt Windows debug executable pass.
@@ -1177,7 +1177,7 @@ error, not reported as success. General hung-window restoration is still unprove
   recovery**. After the fix it verifies the held state, a harmless follow-up
   update, original style/geometry recovery, first native-stage error and a live
   synthetic client. The complete two-test actual-helper suite passes.
-- Final `npm run verify:source`: **711 passed**, four existing file-symlink
+- Final `npm --prefix Development run verify:source`: **711 passed**, four existing file-symlink
   skips, eight opt-in desktop tests ignored by default. Windows debug build and
   formatting pass. No frontend code changed in this continuation.
 - Final-build actual native menu → manager Tab reproduced the original coverage
@@ -1241,7 +1241,7 @@ No game was force-closed, no world opened and no authentication automated.
 
 | Check | Result | Boundary |
 | --- | --- | --- |
-| Final `npm run verify:source` | PASS | 711: Node 281, frontend 177, desktop Rust 76, runtime Rust 177; four existing file-symlink skips; eight opt-in desktop tests ignored by default. Typecheck zero errors/warnings, frontend build, Rust checks and formatting pass. |
+| Final `npm --prefix Development run verify:source` | PASS | 711: Node 281, frontend 177, desktop Rust 76, runtime Rust 177; four existing file-symlink skips; eight opt-in desktop tests ignored by default. Typecheck zero errors/warnings, frontend build, Rust checks and formatting pass. |
 | Windows debug executable | PASS | Rebuilt from retained implementation after final frontend build. Abandoned experiments are absent; no installer constructed. |
 | Actual-helper synthetic suite | PASS | Two opt-in Windows tests run separately: normal/maximized release, pipe loss, helper crash, retained tabs/minimize/modal/stale identity cases; a four-second synthetic position stall reports `place/position`, restores original state and leaves the synthetic client alive. Diagnostic regression failed on the original generic timeout, then passed. |
 | Mounted UI | PASS | Startup/initial/active retry, first-error preservation, failed suspend/release, retired target reconciliation, tab/card parity and disabled-tab keyboard navigation; 1366×900, 1180×760, 920×620 without page overflow. Mocked bridge, no game rendering proof. |
@@ -1319,7 +1319,7 @@ Each targeted regression failed before its correction and passed afterwards.
 
 | Check | Result | Scope / limitation |
 | --- | --- | --- |
-| Final `npm run verify:source` after removing experiment | PASS | 709 tests: Node 281, frontend 175, desktop Rust 76, runtime Rust 177; four existing symlink skips, seven opt-in desktop tests ignored by default. Log `workspace/full-check-confirmed-source.log`; source committed as cd382b4. |
+| Final `npm --prefix Development run verify:source` after removing experiment | PASS | 709 tests: Node 281, frontend 175, desktop Rust 76, runtime Rust 177; four existing symlink skips, seven opt-in desktop tests ignored by default. Log `workspace/full-check-confirmed-source.log`; source committed as cd382b4. |
 | Svelte/TypeScript and Windows debug build | PASS | Zero checking errors/warnings; debug build before foreground experiment passed. Current on-disk executable may still be the experimental build; rebuild before next UI test. No installer constructed. |
 | Mounted workspace UI regression | PASS | Three viewport sizes, setup Escape, fresh exited-target reconciliation and failed-release recovery. Mocked UI is not Minecraft rendering proof. |
 | Real-helper Windows synthetic regression | PASS | Stale geometry red/green plus normal/maximized release, pipe-loss and helper-crash recovery. Synthetic fixture is not game compatibility proof. |
@@ -1343,7 +1343,7 @@ Local raw logs are under ignored `workspace/full-check-*.log` and may not travel
 with a new checkout. This sanitized report and Git source/tests are the portable
 handoff. First continuation: reproduce the native helper timeout and identify the
 first blocking native call using bounded diagnostics in
-`apps/desktop/src-tauri/src/engine/workspace_surface.rs`; its UI consumers are
+`Development/apps/desktop/src-tauri/src/engine/workspace_surface.rs`; its UI consumers are
 `NativeWorkspace.svelte`, `OwnedManagerPanel.svelte`, and `UnifiedManagerApp.svelte`.
 Do not ask the user to validate tiny speculative patches. Rebuild the retained
 source and run meaningful manager navigation/recovery checks before requesting
@@ -1441,7 +1441,7 @@ also rejects a covered viewport center instead of accepting geometry alone.
 
 | Check | Result | Actual boundary |
 | --- | --- | --- |
-| Full `npm run verify:source` | PASS | 707 passed: Node 280, frontend 175, desktop Rust 75, runtime Rust 177; 4 existing symlink skips, 7 opt-in desktop tests ignored. Typecheck, frontend build, checks and formatting pass. |
+| Full `npm --prefix Development run verify:source` | PASS | 707 passed: Node 280, frontend 175, desktop Rust 75, runtime Rust 177; 4 existing symlink skips, 7 opt-in desktop tests ignored. Typecheck, frontend build, checks and formatting pass. |
 | Intervening full source attempt | FAIL | Windows EPERM renaming a temporary payload in the existing owned assembler fixture; complete rerun PASS without changing that owner. Transient cause UNKNOWN. |
 | Windows debug executable build | PASS | Actual MSVC build, including final foreground occlusion check; existing dead-code warnings retained. No installer/signing change. |
 | Actual recovery helper with synthetic windows | PASS | Six normal/maximized release/pipe-loss/helper-crash cases, two retained tabs, shell restoration, minimize, Settings, modal flags, stale identity and closed-client replacement. Synthetic windows are not Minecraft. |
@@ -1525,7 +1525,7 @@ preserve any new crash evidence and stop on the first hang. No test may be
 declared successful solely because the process/HWND exists.
 
 Correction revision: `f406e7718685ce7582664993414927841a597073`.
-Final executed checks: full `npm run verify:source` **PASS**, 705 tests
+Final executed checks: full `npm --prefix Development run verify:source` **PASS**, 705 tests
 (Node 279, frontend 175, desktop Rust 74, runtime Rust 177; four existing symlink
 skips, seven opt-in Rust tests ignored), Windows debug build **PASS**, opt-in
 synthetic helper/minimize/restore regression **PASS**, and persisted mock browser
@@ -1544,7 +1544,7 @@ These results are not actual Minecraft app-switching or crash-recovery acceptanc
 | Direct reparenting / owner reassignment | Not enabled; prior destructive HWND recovery failure remains a rejection. Removing the taskbar icon would not establish safe containment |
 
 The optional persisted browser harness is
-`tooling/acceptance/workspace-ui-regression.mjs` (mock bridge, no game control).
+`Development/tooling/acceptance/workspace-ui-regression.mjs` (mock bridge, no game control).
 It covers selection, settings release, failed replacement, three viewport sizes,
 resize failure with retained recovery controls, and native error delivery.
 The native regression additionally checks minimize→webview update→restore.
@@ -1605,7 +1605,7 @@ the Sandboxie service namespace; standalone installation is not complete.
 
 | Check | Result | Evidence / limit |
 | --- | --- | --- |
-| Full `npm run verify:source` on the integrated source | PASS | 702 passed: Node 278, frontend 173, desktop Rust 74, runtime Rust 177; four existing Node symlink skips and seven opt-in Rust tests ignored |
+| Full `npm --prefix Development run verify:source` on the integrated source | PASS | 702 passed: Node 278, frontend 173, desktop Rust 74, runtime Rust 177; four existing Node symlink skips and seven opt-in Rust tests ignored |
 | Windows debug executable | PASS | `cargo build --locked`; not a production installer or signing acceptance |
 | Actual helper with synthetic normal/maximized windows | PASS | Six scenarios: normal release, manager pipe loss and helper crash for each initial window state; original geometry/style restored, identity preserved; invalid replacement rejected |
 | Maximized-window regression during implementation | FAIL then PASS | Strict geometry checking exposed retained old dimensions; restoring from maximized state before applying presentation style fixed the six-case regression |
@@ -1786,7 +1786,7 @@ The sole mounted `UnifiedManagerApp.svelte` shows 01 native and owned 02–04.
 Legacy Compact Manager/pilot source and all existing profile/account/world data
 remain preserved and unmounted. The active UI never falls back to official Sandboxie.
 Canonical slot/provider/profile definitions live in
-[`minecraft-targets.json`](../../engine/isolation-native/owned-runtime/minecraft-targets.json).
+[`minecraft-targets.json`](../../Development/engine/isolation-native/owned-runtime/minecraft-targets.json).
 The existing legacy diagnostic catalog projects those identities onto its historical
 pilot metadata; that projection is not the unified dashboard's provider selection.
 
@@ -1935,7 +1935,7 @@ upstream helpers perform bounded stop/start; original image paths/hashes/signers
 are journaled before redirection. This replaces the earlier proposed
 delete/reinstall approach with a smaller reversible operation. No legacy Apply
 gate or desktop provider is enabled. Commands are in
-[Isolation Source Tooling](../../tooling/isolation-source/README.md).
+[Isolation Source Tooling](../../Development/tooling/isolation-source/README.md).
 
 | Check | Result | Actual evidence |
 | --- | --- | --- |
@@ -1962,7 +1962,7 @@ ABI pass. Manual login and playable-world acceptance remain outstanding.
 
 **ACTIVE, not gameplay-ready.** Source revision
 `d99f2a47392bc976de717349a5289a6b30f6e7e7` adds the explicit v1.18.6 developer
-preparation procedure described in [Isolation Source Tooling](../../tooling/isolation-source/README.md).
+preparation procedure described in [Isolation Source Tooling](../../Development/tooling/isolation-source/README.md).
 The operator now authorizes local developer test signing on this Windows host,
 manual reboot checkpoints and a later controlled, reversible replacement of the
 official service namespace. This supersedes the **local testing** production-only
@@ -1977,7 +1977,7 @@ WAM/SSO or account separation. Login remains manual with a licensed account.
 | Check / operation | Result | Evidence / remaining work |
 | --- | --- | --- |
 | Branch and starting remote | PASS | Local and origin/Local both `01e21e110defb940dc7c755dad15289b0f043821` before changes |
-| Source verification | PASS | `npm run verify:source`: 666 passed (265 Node, 161 Vitest, 240 Rust), zero failed; four existing Node symlink skips and one default-ignored actual-payload test |
+| Source verification | PASS | `npm --prefix Development run verify:source`: 666 passed (265 Node, 161 Vitest, 240 Rust), zero failed; four existing Node symlink skips and one default-ignored actual-payload test |
 | Preparation regressions | PASS | Three tests: complete PowerShell parsing, preparation/activation boundaries, real bounded native execution including spaced arguments, exit 7 and quote refusal |
 | Tracked structure | PASS | 3,558 tracked files after implementation commit; no workflow or generated payload added |
 | Existing services | PASS observation only | SCM reports official-location SbieSvc and SbieDrv running; this does not prove all sandbox processes idle |
@@ -2101,7 +2101,7 @@ The existing sampler accepts four distinct explicit targets, pins creation times
 keeps lost identities UNKNOWN, and publishes sanitized schema-3 CPU/RAM reports.
 Schemas 1/2 remain compatible. It neither authenticates owned Minecraft targets
 nor measures FPS. Usage belongs to the
-[Windows tooling guide](../../tooling/acceptance/windows/README.md).
+[Windows tooling guide](../../Development/tooling/acceptance/windows/README.md).
 
 Successful build logs and sixteen hashes are ignored under
 `workspace/builds/owned-20261020-150022/`; the matching 25-file artifact manifest is
@@ -2138,7 +2138,7 @@ It reads the path explicitly selected with MIVUBI_TEST_OWNED_PAYLOAD, checks the
 actual payload and current service namespace, and never loads its DLL/driver,
 starts/stops services or changes account state. The selected path is cleared from
 the test process environment afterward. Command usage belongs to the
-[native source guide](../../tooling/isolation-source/README.md).
+[native source guide](../../Development/tooling/isolation-source/README.md).
 
 **Signing requirements checked against current Microsoft documentation:** new
 kernel drivers use the Hardware Developer Program signing path; an EV certificate
@@ -2153,7 +2153,7 @@ and [SignTool verification policy](https://learn.microsoft.com/en-us/windows/win
 
 The 25-file runtime staging manifest is **not a signing submission CAB**. It does
 not ship an INF, CAT or debug PDB. The upstream source reference
-`engine/isolation-owned/Sandboxie/core/drv/SbieDrv.inf` is not referenced by the
+`Development/engine/isolation-owned/Sandboxie/core/drv/SbieDrv.inf` is not referenced by the
 current driver project/install helper. Its stale DriverVer=5.23.5, absent decorated
 primitive-install sections/PnpLockdown, DIRID requirements and placeholder
 ServiceBinary=examplefilesystem.sys prevent using it as a current submission INF.
@@ -2216,7 +2216,7 @@ prerequisites remain. GitHub Actions stays OFF, main untouched and VMware paused
 a current download/build route. Use the existing manual toolchain for source work;
 never restore an Actions workflow to obtain a binary.
 
-A successful automatic Windows Full CI run for `Local` can upload a `localtest-debug-<SHA>` **unsigned debug executable** after all twelve source stages and compile-only pass. This is the **shortest first localtest**: no portable developer toolchain or MSVC/WDK build is needed to *attempt* UI startup. Use [CI Debug Candidate](./ci-debug-candidate.md) to download the exact-SHA artifact into `workspace/downloads/`, extract only the expected three files into a new `workspace/packages/debug-<SHA>/`, verify the manifest SHA-256, and try opening/closing the manager on Windows 10/11 x64 with WebView2. It is not an installer, signed release, Sandboxie distribution or Minecraft gameplay proof. Do **not** bypass OS security warnings. The normal full developer localtest route remains `DEV.cmd bootstrap` → `DEV.cmd doctor` → `DEV.cmd preflight` → `DEV.cmd dev`.
+A successful automatic Windows Full CI run for `Local` can upload a `localtest-debug-<SHA>` **unsigned debug executable** after all twelve source stages and compile-only pass. This is the **shortest first localtest**: no portable developer toolchain or MSVC/WDK build is needed to *attempt* UI startup. Use [CI Debug Candidate](ci-debug-candidate.md) to download the exact-SHA artifact into `workspace/downloads/`, extract only the expected three files into a new `workspace/packages/debug-<SHA>/`, verify the manifest SHA-256, and try opening/closing the manager on Windows 10/11 x64 with WebView2. It is not an installer, signed release, Sandboxie distribution or Minecraft gameplay proof. Do **not** bypass OS security warnings. The normal full developer localtest route remains `DEV.cmd bootstrap` → `DEV.cmd doctor` → `DEV.cmd preflight` → `DEV.cmd dev`.
 
 ## Quick start — first Windows session
 
@@ -2261,7 +2261,7 @@ This developer mode does not install/replace the old VMware manager.
 ## A. Before starting (stop on failures)
 
 1. Use **branch `Local`** at a known commit (prefer latest reviewed `Local`). Confirm the checkout is clean with `git status --short` and record `git rev-parse HEAD`. Source changes or untracked edits can invalidate exact-head verification.
-2. Run `DEV.cmd bootstrap` and `DEV.cmd doctor` from the checkout root. The portable setup uses the Node/npm/Rust/PowerShell versions in [toolchain.json](../../toolchain.json), including rustfmt and `x86_64-pc-windows-msvc`, under the checkout's `workspace/toolchains/`. Do **not** install these globally just for this project. Git, [MSVC Desktop development with C++ and WebView2](https://v2.tauri.app/start/prerequisites/) remain external Windows prerequisites for the developer-mode build. The `doctor` check proves tool versions/paths, not linker compatibility or that a Windows desktop opened successfully.
+2. Run `DEV.cmd bootstrap` and `DEV.cmd doctor` from the checkout root. The portable setup uses the Node/npm/Rust/PowerShell versions in [toolchain.json](../../Development/toolchain.json), including rustfmt and `x86_64-pc-windows-msvc`, under the checkout's `workspace/toolchains/`. Do **not** install these globally just for this project. Git, [MSVC Desktop development with C++ and WebView2](https://v2.tauri.app/start/prerequisites/) remain external Windows prerequisites for the developer-mode build. The `doctor` check proves tool versions/paths, not linker compatibility or that a Windows desktop opened successfully.
 3. Use an [official Minecraft Education Windows Desktop installation](https://edusupport.minecraft.net/hc/en-us/articles/13106858087956-Windows-Installation-Guide), not copied binaries or mixed Microsoft Store + Desktop editions. Have **two distinct properly entitled Education accounts** ready for manual sign-in. Do not place usernames, tokens, passwords, world files or screenshots exposing identities in Git.
 4. Use a legitimately licensed [Sandboxie Plus installation](https://sandboxie-plus.com/downloads/) in the applicable environment. Check the vendor's business/educational certificate requirements where applicable. Create **one clean, persistent, enabled** box named exactly `MinecraftClient02` in Sandboxie Plus. Keep **AutoDelete**, **AutoRemove** and credential-bypass/protected-storage settings disabled; do not clone existing account data. The manager does **not** provision the box or its license. Check effective settings in Sandboxie Plus, including templates.
 
@@ -2282,9 +2282,9 @@ Earlier Windows/Git/toolchain failures may not create a report. An interrupted
 `RUNNING` report is not a PASS. Keep reports local and share only redacted
 details; see [Artifact Storage Policy](../system/artifact-storage.md).
 
-**Stop if this command fails.** `DEV.cmd preflight` prints four numbered stages, rejects unsupported Windows hosts, and confirms a clean committed `Local` SHA, checks pinned developer tools and the tracked Cargo lockfile, installs locked desktop npm dependencies, runs root `npm run verify:source`, and rechecks that tracked source/HEAD did not change. It does not open the desktop or package the application. If a stage fails, keep the first error and SHA; do not retry by disabling checks. The source verifier runs repository rules, evidence evaluator tests, frontend Svelte/TypeScript/Vitest/build checks, Rust checks/tests/format. A Git commit or an authored test is *not* evidence of a passing command. A clean verification result does not prove Minecraft playability.
+**Stop if this command fails.** `DEV.cmd preflight` prints four numbered stages, rejects unsupported Windows hosts, and confirms a clean committed `Local` SHA, checks pinned developer tools and the tracked Cargo lockfile, installs locked desktop npm dependencies, runs root `npm --prefix Development run verify:source`, and rechecks that tracked source/HEAD did not change. It does not open the desktop or package the application. If a stage fails, keep the first error and SHA; do not retry by disabling checks. The source verifier runs repository rules, evidence evaluator tests, frontend Svelte/TypeScript/Vitest/build checks, Rust checks/tests/format. A Git commit or an authored test is *not* evidence of a passing command. A clean verification result does not prove Minecraft playability.
 
-**Do not use** `npm run package:windows`, `npm run build:app`, `DEV.cmd package` or `DEV.cmd g0` to obtain an installer: those legacy VMware packaging paths are deliberately blocked while this native pilot is active.
+**Do not use** `npm --prefix Development run package:windows`, `npm --prefix Development run build:app`, `DEV.cmd package` or `DEV.cmd g0` to obtain an installer: those legacy VMware packaging paths are deliberately blocked while this native pilot is active.
 
 ### Start the developer-mode application
 
@@ -2323,12 +2323,12 @@ A successful **Move window** request leaves a non-launch `Move requested` notice
 ## C. Read-only collector (optional diagnostics)
 
 ```powershell
-powershell.exe -NoProfile -File tooling/acceptance/windows/collect-sandboxie-feasibility.ps1 -Stage INSPECT -BoxName MinecraftClient02
+powershell.exe -NoProfile -File Development/tooling/acceptance/windows/collect-sandboxie-feasibility.ps1 -Stage INSPECT -BoxName MinecraftClient02
 ```
 
 The collector emits candidate/process and box-setting information, **not** verified account or game status. Some snapshots may correctly return `UNKNOWN` if Sandboxie processes exit mid-inspection or Windows blocks discovery. Source changes now reconcile every reported box PID against a complete Windows process snapshot; inaccessible or missing IDs do not authorize Client 02 launch.
 
-For a manually confirmed two-game report, follow the existing commands in [Sandboxie two-client feasibility](./sandboxie-two-client-feasibility.md). **Only enter YES/NO for outcomes actually observed.** An operator-reported compatible outcome is still not automated login evidence or four-client acceptance.
+For a manually confirmed two-game report, follow the existing commands in [Sandboxie two-client feasibility](sandboxie-two-client-feasibility.md). **Only enter YES/NO for outcomes actually observed.** An operator-reported compatible outcome is still not automated login evidence or four-client acceptance.
 
 ## D. Failure classification and next action
 
@@ -2379,4 +2379,4 @@ Do not share usernames, access tokens, IP addresses, full filesystem paths conta
 
 Record the exact SHA, Windows version, official Minecraft version, Sandboxie version, app/toolchain versions, elapsed time for Check status and Open requests, observed window count, world responsiveness, distinct-account outcome as **YES/NO/UNKNOWN** (no identities), multiplayer result, persistence result, approximate CPU/RAM/GPU measurements, reproducible error message, and whether the observation is **machine-observed** or **operator-reported**.
 
-**Proof ceiling:** Source checks at a different commit do not verify this revision. Until the exact-SHA preflight and Windows two-client tests actually execute, `SOURCE_EXECUTION`, `TARGET_WINDOWS`, `MINECRAFT_RUNTIME` and four-client acceptance remain **NOT_EXECUTED** for that revision. Review [REA-aligned audit](./rea-source-audit-2026-10-13.md) for still-open source risks. This document does not add a second state machine, test gate or service.
+**Proof ceiling:** Source checks at a different commit do not verify this revision. Until the exact-SHA preflight and Windows two-client tests actually execute, `SOURCE_EXECUTION`, `TARGET_WINDOWS`, `MINECRAFT_RUNTIME` and four-client acceptance remain **NOT_EXECUTED** for that revision. Review [REA-aligned audit](rea-source-audit-2026-10-13.md) for still-open source risks. This document does not add a second state machine, test gate or service.

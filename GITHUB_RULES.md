@@ -33,7 +33,7 @@ A static test **authored** is not a test **executed**. A VM process is not game-
 
 ## Paused legacy VM routes
 
-The old VMware App, App Sandbox power controls and Guest Agent operations are preserved as source but paused by engine/runtime-core/src/command.rs and not registered in Tauri. Consult docs/system/legacy-retirement.md before any future changes; do not resume VMware onboarding, remove saved guest data or re-enable guest mutations without explicit authorization and real Windows/gameplay evidence. Read-only diagnostics are not permission to mutate VM state.
+The old VMware App, App Sandbox power controls and Guest Agent operations are preserved as source but paused by Development/engine/runtime-core/src/command.rs and not registered in Tauri. Consult docs/system/legacy-retirement.md before any future changes; do not resume VMware onboarding, remove saved guest data or re-enable guest mutations without explicit authorization and real Windows/gameplay evidence. Read-only diagnostics are not permission to mutate VM state.
 
 ## 3. Read minimum
 
@@ -42,10 +42,10 @@ Default work starts with `AGENTS.md` → [Implementation Map](docs/system/implem
 ## 4. Diagnose the first wrong owner
 
 ```text
-VM lifecycle / version / identity wrong    → engine/runtime-core
-Guest agent/Windows setup wrong            → engine/guest or engine/runtime-core guest protocol
-Desktop flow/window wrong                  → apps/desktop
-Installer/update trust wrong               → engine/distribution + Tauri package consumer
+VM lifecycle / version / identity wrong    → Development/engine/runtime-core
+Guest agent/Windows setup wrong            → Development/engine/guest or Development/engine/runtime-core guest protocol
+Desktop flow/window wrong                  → Development/apps/desktop
+Installer/update trust wrong               → Development/engine/distribution + Tauri package consumer
 Source verifier or optional CLI wrong      → tooling
 Docs navigation/wording wrong              → docs or root router
 Missing provider/Windows/Minecraft proof   → actual acceptance evidence, not imaginary source code

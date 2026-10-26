@@ -19,12 +19,12 @@ Applies to system development, refactoring, bug fixes and documentation that cha
 
 ## Canonical owners
 
-- VM policy, lifecycle, provider, identity and updates: engine/runtime-core/.
-- Windows guest preparation: engine/guest/windows/.
-- Machine-readable installer/release contracts: engine/distribution/.
-- UI/typed Tauri bridge/windows: apps/desktop/.
-- Runtime test collection: tooling/acceptance/windows/ plus docs/validation/.
-- Build and source checks: tooling/repository/, .github/workflows/.
+- VM policy, lifecycle, provider, identity and updates: Development/engine/runtime-core/.
+- Windows guest preparation: Development/engine/guest/windows/.
+- Machine-readable installer/release contracts: Development/engine/distribution/.
+- UI/typed Tauri bridge/windows: Development/apps/desktop/.
+- Runtime test collection: Development/tooling/acceptance/windows/ plus docs/validation/.
+- Build and source checks: Development/tooling/repository/, .github/workflows/.
 - Stable policies: docs/system/; current progress: planning/development.md.
 
 An automatic workflow, new release, destructive reprovision or promotion to main is never implied by this procedure.

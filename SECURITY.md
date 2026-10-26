@@ -4,11 +4,11 @@ The product controls host virtualization, per-guest Windows services and Microso
 
 ## Canonical owners
 
-- Guest authenticated status/launch transport and per-VM tokens: `engine/runtime-core/src/guest.rs` and `engine/runtime-core/src/bin/virtual-guest-agent.rs`.
-- VM provider state, clone/recovery safeguards and disk paths: `engine/runtime-core/`.
-- Windows guest agent installation, Scheduled Task and firewall scopes: `engine/guest/windows/`.
-- Update trust and installer data-preservation policy: `engine/distribution/` and desktop Tauri package config.
-- Bounded collection of Windows acceptance evidence: `tooling/acceptance/windows/`.
+- Guest authenticated status/launch transport and per-VM tokens: `Development/engine/runtime-core/src/guest.rs` and `Development/engine/runtime-core/src/bin/virtual-guest-agent.rs`.
+- VM provider state, clone/recovery safeguards and disk paths: `Development/engine/runtime-core/`.
+- Windows guest agent installation, Scheduled Task and firewall scopes: `Development/engine/guest/windows/`.
+- Update trust and installer data-preservation policy: `Development/engine/distribution/` and desktop Tauri package config.
+- Bounded collection of Windows acceptance evidence: `Development/tooling/acceptance/windows/`.
 
 ## Hard boundaries
 

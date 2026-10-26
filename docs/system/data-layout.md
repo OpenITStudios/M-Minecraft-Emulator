@@ -40,7 +40,7 @@ governed by [artifact storage](artifact-storage.md).
 
 ## One product owner
 
-`apps/desktop/src-tauri/src/engine/independent_bootstrap/product_profiles.rs` owns
+`Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/product_profiles.rs` owns
 location resolution, catalog validation, fresh store preparation and reopening.
 The existing session controller alone owns live games, handles and launch policy.
 The new catalog reuses the bootstrap's filesystem/HKCU constructor. The DLL ABI,

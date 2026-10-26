@@ -11,7 +11,7 @@ lifecycle: ACTIVE
 
 **Status (2026-10-25):** REVIEW / DESIGN ONLY. Concrete optimization approaches, not instructions to deploy or change running Minecraft. This playbook is a supporting engineering reference; `planning/development.md` alone determines the current active goal, blocker, and next action. Inspect a fresh `Local` HEAD and owner before implementing anything.
 
-**Reviewed source baseline:** `Local` at `99fee8e4ebe859958cf0517f7dfb65a89a4db6d6`. Later commits override source descriptions here. Original live two-client measurements and their limits are in `planning/development.md` and [the research report](./native-memory-efficiency-research.md); neither proves any proposed optimization.
+**Reviewed source baseline:** `Local` at `99fee8e4ebe859958cf0517f7dfb65a89a4db6d6`. Later commits override source descriptions here. Original live two-client measurements and their limits are in `planning/development.md` and [the research report](native-memory-efficiency-research.md); neither proves any proposed optimization.
 
 ## 1. Product target and what "saving resources" actually means
 
@@ -37,7 +37,7 @@ lifecycle: ACTIVE
 
 | Task class | Preferred existing tool or API | Why / what not to add |
 | --- | --- | --- |
-| Native interception already required for isolation | Existing Microsoft Detours integration; C++20/MSVC in `tooling/acceptance/windows/bootstrap-ordering/compat.cpp` | Modify one actual owning hook, not a second injected DLL or global file-system filter |
+| Native interception already required for isolation | Existing Microsoft Detours integration; C++20/MSVC in `Development/tooling/acceptance/windows/bootstrap-ordering/compat.cpp` | Modify one actual owning hook, not a second injected DLL or global file-system filter |
 | Native file identity and safe traversal | `GetFileInformationByHandleEx(FileIdInfo, FileAttributeTagInfo, FileCaseSensitiveInfo)`, retained directory `HANDLE`, `NtOpenFile` relative `RootDirectory` and `OBJ_DONT_REPARSE` | avoid name-only or stale-HANDLE caches; do not bypass reparse/access checks |
 | Native registry | `NtQueryKey(KeyNameInformation)`, `NtQueryObject(ObjectBasicInformation)`, `NtOpenKey`, `RegOpenCurrentUser` within existing `compat.cpp` | keep caller access rights, impersonation detection, backing-hive protection and close semantics |
 | Focus | Existing Rust `SetWinEventHook(EVENT_SYSTEM_FOREGROUND)` + PID/birth-bound policy leases | no second polling governor or process priority auto-tuner |
@@ -76,7 +76,7 @@ lifecycle: ACTIVE
 
 ## 4. N01 — Registry fast path: exact currently redundant work and a safe shape
 
-**Code:** `tooling/acceptance/windows/bootstrap-ordering/compat.cpp`, `keyName`, `registryRoute`, `openPrivateValue`, `translatedQueryValue`, `translatedSetValue` and `enumeratePrivate`.
+**Code:** `Development/tooling/acceptance/windows/bootstrap-ordering/compat.cpp`, `keyName`, `registryRoute`, `openPrivateValue`, `translatedQueryValue`, `translatedSetValue` and `enumeratePrivate`.
 
 The current path for each value read/write/enumeration may:
 1. Query original key name via `NtQueryKey(KeyNameInformation)`.
@@ -142,7 +142,7 @@ The model must account for (a) end-of-trace record finalization that began befor
 
 ## 7. N04 — Avoid repeated manager wait/poll scheduling
 
-**Code:** `apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`, `observe_until_exit`. The current manager updates window captions about once per second and polls per-slot `save_after_exit` with 250-ms sleeps.
+**Code:** `Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`, `observe_until_exit`. The current manager updates window captions about once per second and polls per-slot `save_after_exit` with 250-ms sleeps.
 
 Candidate: use the already-owned child PROCESS handles with Win32 `WaitForMultipleObjects` or a narrow existing Rust wait helper, with a bounded timeout only for caption refresh. The same thread must process both signaled exits, save each journal once, preserve normal exit codes and keep profile capability alive. If the existing exit/save helper cannot safely expose those handles, do **not** build a second process keeper to force the rewrite.
 
@@ -291,9 +291,9 @@ This document **is not a request to run PC tests or a second project plan**. Onc
 
 ### Existing source tooling only
 
-- `tooling/acceptance/windows/bootstrap-ordering/CMakeLists.txt` and its current MSVC controls: compilation and semantically relevant WARP/GDI/source behavior.
-- `apps/desktop/src-tauri`, `engine/runtime-core`: existing Rust/Cargo source/tests where already owned.
-- `tooling/acceptance/windows/collect-native-performance.ps1` and `tooling/acceptance/evaluate-native-performance.mjs`: **verification only if needed**, not new feature scope.
+- `Development/tooling/acceptance/windows/bootstrap-ordering/CMakeLists.txt` and its current MSVC controls: compilation and semantically relevant WARP/GDI/source behavior.
+- `Development/apps/desktop/src-tauri`, `Development/engine/runtime-core`: existing Rust/Cargo source/tests where already owned.
+- `Development/tooling/acceptance/windows/collect-native-performance.ps1` and `Development/tooling/acceptance/evaluate-native-performance.mjs`: **verification only if needed**, not new feature scope.
 - Intel PresentMon and Microsoft VMMap/WPR/WPA: optional one-off diagnostics for a specific supported regression or unknown allocation owner; NOT a justification to build another tracking product.
 - No GitHub Actions CI; not even a manual workflow. Do not operate a remote PC or game merely because this playbook was committed.
 
@@ -337,4 +337,4 @@ Do not alter planning's single active Next unless operator authorizes that work.
 - [Creator performance in scripting](https://learn.microsoft.com/en-us/minecraft/creator/documents/scripting/script-performance?view=minecraft-bedrock-stable): filtered entity lookup, tick/event usage, bounded work.
 - [Creator pack structure](https://learn.microsoft.com/en-us/minecraft/creator/documents/comprehensivepackcontents?view=minecraft-bedrock-stable): resource/behavior pack formats; no assumption they all work on Education.
 
-**Repository evidence:** [Canonical research and current comparison](./native-memory-efficiency-research.md), [Current single handoff](../../planning/development.md), [Implementation Map](./implementation-map.md). All paths above are bounded source-reading recommendations, not a mandate to execute or deploy.
+**Repository evidence:** [Canonical research and current comparison](native-memory-efficiency-research.md), [Current single handoff](../../planning/development.md), [Implementation Map](implementation-map.md). All paths above are bounded source-reading recommendations, not a mandate to execute or deploy.

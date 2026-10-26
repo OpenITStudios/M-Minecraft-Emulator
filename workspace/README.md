@@ -17,9 +17,10 @@ versioned. See the canonical [Artifact and Local-Test Storage Policy](../docs/sy
 | `evidence/`, `captures/`, `images/`, `runtime/`, `diagnostics/` | Historical local paths: preserve until producers and consumers are reviewed |
 
 All project-owned data belongs beneath this single checkout root. Tool-native
-`apps/desktop/node_modules/`, `apps/desktop/dist/`, Rust/Tauri `target/`
-and Tauri staging are already **within** that checkout; do not move them
-purely for cosmetic consistency. The pinned native-engine builder and
+`Development/apps/desktop/node_modules/`, `Development/apps/desktop/dist/`, Rust/Tauri `target/`
+and Tauri staging are already **within** that checkout. Existing compiler
+caches were retained during source relocation; new Cargo commands through DEV.cmd
+use workspace/builds/desktop/target. Compiler-cache cleanup remains deferred. The pinned native-engine builder and
 assembler accept only fresh `workspace/builds/<run>/` and
 `workspace/packages/<run>/` output directories. Create their parent folders
 locally before running them, keep them ignored, and never reuse a run path.
@@ -30,7 +31,7 @@ Sandboxie Plus, Windows application profiles or protected account data.
 No tool may silently move/install/activate any of those components.
 
 The active Lazy Tester has an unsigned installer candidate, not an approved public
-release. Root `npm run package:windows` builds from clean committed Local source
+release. Root `npm --prefix Development run package:windows` builds from clean committed Local source
 and exports only the installer, SHA256SUMS.txt and package-manifest.json. A partial
 folder without its completion manifest is not a completed candidate. Use the
 separately authorized `DEV.cmd preflight` and `DEV.cmd dev` routes for development;
@@ -42,7 +43,7 @@ worlds, signing keys, or unredacted logs. Git ignore is not encryption.
 
 Run `DEV.cmd bootstrap` **once** from this checkout root. The existing
 Windows PowerShell bootstrap downloads the Node and PowerShell ZIPs pinned in
-[toolchain.json](../toolchain.json), verifies release SHA-256, provisions the
+[toolchain.json](../Development/toolchain.json), verifies release SHA-256, provisions the
 pinned npm into the portable Node directory, and runs Rustup with a separate
 `CARGO_HOME` / `RUSTUP_HOME` under `workspace/toolchains/`. All downloaded
 archives and the Rustup checksum/installer remain in `workspace/downloads/`.
@@ -67,3 +68,11 @@ components remain external prerequisites and are never relocated by `DEV.cmd`.
 
 GitHub Actions remains disabled. Historical debug downloads belong in
 `workspace/downloads/`; they are not inputs to the active Lazy Tester installer.
+
+## Preserved local history
+
+workspace/archive contains explicitly reviewed local archives. The stale generated
+Svelte checker tree is under archive/layout-20261026. Existing loose logs, scripts,
+screenshots and opaque probe directories remain preserved at their original paths:
+they have not been certified free of account/machine data or live references.
+No archive or cleanup command may infer that those entries are disposable.

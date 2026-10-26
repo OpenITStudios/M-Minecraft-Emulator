@@ -16,16 +16,17 @@ copies of the code.
 RUN.cmd               Start the prepared local app (does not build or search folders)
 App/                  Ignored runnable app, reviewed DLLs and build receipt
 Data/                 Ignored default product data location
-apps/desktop/         Desktop source, native integration and desktop build scripts
-engine/               Runtime source and distribution contracts
-tooling/              Developer tools, source checks and acceptance collectors
+Development/apps/desktop/         Desktop source, native integration and desktop build scripts
+Development/engine/               Runtime source and distribution contracts
+Development/tooling/              Developer tools, source checks and acceptance collectors
 docs/                 Architecture and user/developer documentation
 planning/             Current handoff and historical work
-experiments/          Historical research
+Archive/experiments/          Historical research
 workspace/            Ignored local tools, builds, candidates and private material
 ```
 
-`npm run dev` opens the development app. `npm run package:windows` builds the
+`DEV.cmd dev` opens the development app. `DEV.cmd package` (or
+`npm --prefix Development run package:windows`) builds the
 native installer from a clean, committed `Local` revision, refreshes the local
 `App/` payload, and exports a new folder:
 
@@ -35,6 +36,13 @@ workspace/packages/lazy-tester/<version>-<commit>-<UTC>/
   SHA256SUMS.txt
   package-manifest.json
 ```
+
+Use `npm --prefix Development run package:windows -- --export-only` to export a
+candidate while preserving the current App. Developer configuration is inside
+[Development](Development/README.md), and retained research is in
+[Archive](Archive/README.md). The old root apps/engine/tooling directories are gone.
+Portable toolchains stay in workspace/toolchains; new Cargo output defaults to
+workspace/builds/desktop/target. Existing compiler caches are retained.
 
 Only these three files are exported. Do not distribute this repository, a raw
 compiler output directory, `workspace`, or developer profile folders. The manifest
@@ -50,13 +58,13 @@ and worlds remain in their original profiles. An empty folder is not a migration
 
 ## Active architecture
 
-- `apps/desktop/src/LazyTesterApp.svelte`: the mounted Svelte interface.
-- `apps/desktop/src/app/bridge/lazyTester.ts`: validated five-profile desktop contract.
-- `apps/desktop/src-tauri/src/engine/native_clients_session.rs`: bounded reconnecting controller transport; `native_clients_session/pipe.rs` checks both Windows peers.
-- `apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs`: manual per-profile session ownership, retained handles, and metadata-only storage inspection.
-- `apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`: reviewed game/payload/profile checks and startup enrollment, shared with the accepted five-client pilot.
-- `apps/desktop/src-tauri/src/engine/workspace_surface.rs`: recoverable five-window presentation/parking; its `workspace_surface/previews.rs` renders the four native DWM tiles and `recovery_gate.rs` serializes checkpoint handoff.
-- `tooling/acceptance/windows/bootstrap-ordering/`: current compatibility DLL source; relocating this runtime out of acceptance tooling remains unfinished.
+- `Development/apps/desktop/src/LazyTesterApp.svelte`: the mounted Svelte interface.
+- `Development/apps/desktop/src/app/bridge/lazyTester.ts`: validated five-profile desktop contract.
+- `Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs`: bounded reconnecting controller transport; `native_clients_session/pipe.rs` checks both Windows peers.
+- `Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs`: manual per-profile session ownership, retained handles, and metadata-only storage inspection.
+- `Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`: reviewed game/payload/profile checks and startup enrollment, shared with the accepted five-client pilot.
+- `Development/apps/desktop/src-tauri/src/engine/workspace_surface.rs`: recoverable five-window presentation/parking; its `workspace_surface/previews.rs` renders the four native DWM tiles and `recovery_gate.rs` serializes checkpoint handoff.
+- `Development/tooling/acceptance/windows/bootstrap-ordering/`: current compatibility DLL source; relocating this runtime out of acceptance tooling remains unfinished.
 
 Minecraft still owns authentication, worlds, rendering, and Education Host World
 multiplayer. Lazy Tester does not store passwords or copy tokens. The native
@@ -110,15 +118,15 @@ The sole mounted frontend is Lazy Tester, with seven reachable source files.
 Legacy disks, worlds, accounts, and installed data are retained.
 
 The GUI continues to use Tauri 2, Rust, Svelte, and TypeScript with locked existing
-dependencies. The [native packaging decision](engine/distribution/README.md)
+dependencies. The [native packaging decision](Development/engine/distribution/README.md)
 creates a separate Lazy Tester product while retaining old installations/settings
 and private game profile paths. Legacy installer generation remains blocked.
 
-`npm run dev` (also `DEV.cmd dev`) now uses the same Lazy Tester identity,
-native feature and reviewed DLL staging as `npm run package:windows`. Set
+`npm --prefix Development run dev` (also `DEV.cmd dev`) now uses the same Lazy Tester identity,
+native feature and reviewed DLL staging as `npm --prefix Development run package:windows`. Set
 `LAZY_TESTER_NATIVE_PAYLOAD_DIR` to the directory containing the two reviewed
 bootstrap DLLs before either command; missing or different DLLs are refused.
 Staging copies only those DLLs, never adjacent profile bindings. First-run profile
 selection uses the product's private binding; opening the app does not launch games.
 The old developer-only adjacent-binding route remains explicit through
-`npm --prefix apps/desktop run dev:preview`; it is not the default product route.
+`npm --prefix Development/apps/desktop run dev:preview`; it is not the default product route.

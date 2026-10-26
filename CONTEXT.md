@@ -46,15 +46,15 @@ ChatGPT + GitHub work does not require a user PC. A committed test or written ac
 ## Canonical repository ownership
 
 ```text
-apps/desktop/           UI, Tauri bridges, desktop-native window behavior
-engine/runtime-core/    Rust lifecycle, provider, identity, version, readiness, recovery
-engine/guest/windows/   Windows Base/Guest Agent setup
-engine/distribution/    release, package and installer policy
+Development/apps/desktop/           UI, Tauri bridges, desktop-native window behavior
+Development/engine/runtime-core/    Rust lifecycle, provider, identity, version, readiness, recovery
+Development/engine/guest/windows/   Windows Base/Guest Agent setup
+Development/engine/distribution/    release, package and installer policy
 docs/                   durable product, system and validation explanation
 planning/               current development and operations intent
-tooling/                developer checks, optional Windows entrypoint, acceptance collectors
+Development/tooling/                developer checks, optional Windows entrypoint, acceptance collectors
 workspace/              project-scoped working handoff; sensitive captures ignored
-experiments/            non-authoritative bounded research
+Archive/experiments/            non-authoritative bounded research
 .agents/                bounded agent procedure
 ```
 

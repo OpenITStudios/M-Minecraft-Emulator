@@ -34,8 +34,8 @@ one; establish a concrete requirement and prove compatibility first.
 
 | Responsibility | Owner and required behavior |
 | --- | --- |
-| Lifecycle and admission | Existing `engine/runtime-core/` owns eventual independent session policy. Extend it when a viable adapter exists; do not reuse VM readiness/snapshot semantics for native games or create another ready flag. The desktop slot admission table keeps both retired launch routes blocked. |
-| Native process adapter | `apps/desktop/` owns Windows calls. Verify the official image, exact PID/creation identity and actual execution context. Never infer independent accounts from launch success, a title, or four PIDs. The old fork provider is recovery-only, not the new implementation. |
+| Lifecycle and admission | Existing `Development/engine/runtime-core/` owns eventual independent session policy. Extend it when a viable adapter exists; do not reuse VM readiness/snapshot semantics for native games or create another ready flag. The desktop slot admission table keeps both retired launch routes blocked. |
+| Native process adapter | `Development/apps/desktop/` owns Windows calls. Verify the official image, exact PID/creation identity and actual execution context. Never infer independent accounts from launch success, a title, or four PIDs. The old fork provider is recovery-only, not the new implementation. |
 | Persistent identity/data | A session must have a proven persistent storage/authentication context. Four folders or four aliases for the same Windows token are insufficient evidence. Do not clone tokens, implement Microsoft sign-in, or silently move account-bearing profiles/worlds. |
 | Presentation | Existing workspace shows the selected verified process, preserves every other process, rolls back a failed switch and restores windows on exit/failure. Selection must never call launch, stop or profile setup for an already admitted session. Retain fast handle-based checks; expensive signature/profile discovery belongs to admission. |
 | Recovery and health | Process alive, responsive window, actual rendering, signed-in account and playable world are separate observations. Unknown or denied observations remain unknown. No automatic repeated relaunch, whole-group termination, unbounded helper wait or successful-state cache may conceal failure. |
@@ -45,18 +45,18 @@ one; establish a concrete requirement and prove compatibility first.
 ## Modular engine source-first design — 21 October 2026
 
 The independent domain contract is in
-`engine/runtime-core/src/independent_engine/` and its current design
+`Development/engine/runtime-core/src/independent_engine/` and its current design
 document is [Independent Engine Architecture](independent-engine-architecture.md).
 It provides typed slot/process references, a nine-surface storage evidence
 matrix, action effect classification, and explicit adapter ports. The default
 provider rejects inspect/launch/normal-close. This code neither owns a new
 lifecycle state store nor registers a game-launch Tauri command.
-The Windows adapter, if justified, remains a separate `apps/desktop/`
+The Windows adapter, if justified, remains a separate `Development/apps/desktop/`
 implementation; existing window recovery and native identity code are reused,
 not reimplemented. Platform acceptance remains unexecuted.
 
 The first new independent-policy implementation is
-`engine/runtime-core/src/independent_isolation.rs`: a stateless diagnostic
+`Development/engine/runtime-core/src/independent_isolation.rs`: a stateless diagnostic
 classification of synthetic, OS-native, and actual Minecraft evidence. A
 synthetic PASS cannot satisfy Windows roaming or two/four-game acceptance.
 This module makes no launch decision, writes no profiles or credentials, and
@@ -81,7 +81,7 @@ Windows-user RunAs wrapper. Two synthetic native processes have demonstrated
 namespace/storage separation and independent lifetimes. This does not select a
 production game provider: roaming paths remained outside the container, and
 Education's MSAL broker/cache compatibility is unproven. The explicit fixture
-lives under `tooling/acceptance/windows/`; it cannot launch Minecraft. See the
+lives under `Development/tooling/acceptance/windows/`; it cannot launch Minecraft. See the
 [actual findings and next proof](independent-isolation.md#native-appcontainer-candidate---21-october-2026).
 
 ## Historical implementation - superseded
@@ -108,7 +108,7 @@ controller, copied EXE or cloned login profile is part of the selected path.
 
 ## One four-slot identity catalog, two currently mounted launch routes
 
-The read-only Rust owner `apps/desktop/src-tauri/src/engine/instance_catalog.rs`
+The read-only Rust owner `Development/apps/desktop/src-tauri/src/engine/instance_catalog.rs`
 defines exactly `01` (native), `02` (official Sandboxie), and `03`/`04`
 (future owned v1.18.6). A single typed Tauri command returns this catalog
 once when the UI mounts; it performs no process inspection, creation,
@@ -253,15 +253,15 @@ Windows host
   └─ Windows GPU, keyboard, mouse, sound, networking (game owns rendering)
 ```
 
-**One operational owner:** `apps/desktop/src-tauri/src/engine/native_clients.rs`
+**One operational owner:** `Development/apps/desktop/src-tauri/src/engine/native_clients.rs`
 handles the currently selected Windows launch and inspection decisions;
 `src-tauri/src/commands/native_clients.rs` is a thin Tauri adapter,
 `src/app/bridge/nativeFeasibilityApi.ts` validates its data and
 `src/CompactManagerApp.svelte` only presents user actions and transient
-status. Existing `tooling/acceptance/windows/collect-sandboxie-feasibility.ps1`
+status. Existing `Development/tooling/acceptance/windows/collect-sandboxie-feasibility.ps1`
 is the canonical, read-only **evidence collector**, not another lifecycle
 manager. It is embedded in the current proof-of-concept backend, so it is
-**not** an extra daemon. `engine/runtime-core/src/resources.rs` describes
+**not** an extra daemon. `Development/engine/runtime-core/src/resources.rs` describes
 the **paused VM** policy and must not be silently reused as a Minecraft
 native-instance CPU/RAM governor.
 
@@ -543,11 +543,11 @@ Desktop now mounts NativeFeasibilityApp only and does not register old VMware/gu
 ## One runtime owner per responsibility
 
 ```text
-Svelte desktop UI (apps/desktop/src)
-    ↓ typed bridge (apps/desktop/src/app/bridge)
-Thin Tauri command adapters (apps/desktop/src-tauri/src/commands)
+Svelte desktop UI (Development/apps/desktop/src)
+    ↓ typed bridge (Development/apps/desktop/src/app/bridge)
+Thin Tauri command adapters (Development/apps/desktop/src-tauri/src/commands)
     ↓ public Rust contract
-Rust canonical runtime-core (engine/runtime-core)
+Rust canonical runtime-core (Development/engine/runtime-core)
     ├── doctor / one first-run setup decision
     ├── lifecycle admission, provenance, identity, version parity
     ├── provider reconciliation and resource pressure
@@ -557,10 +557,10 @@ Rust canonical runtime-core (engine/runtime-core)
         ├── Workstation (Windows)
         └── Fusion (macOS)
     ↓
-Windows guest and bounded Agent scripts (engine/guest/windows)
+Windows guest and bounded Agent scripts (Development/engine/guest/windows)
 ```
 
-Desktop window arrangement/overlay is a desktop-native operation in `apps/desktop/src-tauri/src/engine/`; it never determines VM readiness. `engine/distribution/` owns machine-readable installer and trusted-release policy.
+Desktop window arrangement/overlay is a desktop-native operation in `Development/apps/desktop/src-tauri/src/engine/`; it never determines VM readiness. `Development/engine/distribution/` owns machine-readable installer and trusted-release policy.
 
 ## Critical invariants
 
@@ -575,7 +575,7 @@ Desktop window arrangement/overlay is a desktop-native operation in `apps/deskto
 
 ## Proof boundary
 
-Use [Validation](../validation/README.md) for source, package, VM and game proof. Review the [Implementation Map](./implementation-map.md) before changing a consumer. Windows NSIS is the declared desktop packaging route; Fusion source exists but a macOS desktop release is not yet accepted.
+Use [Validation](../validation/README.md) for source, package, VM and game proof. Review the [Implementation Map](implementation-map.md) before changing a consumer. Windows NSIS is the declared desktop packaging route; Fusion source exists but a macOS desktop release is not yet accepted.
 
 ## Provenance
 
@@ -583,7 +583,7 @@ Product source was separated from `MIVUBI-STD/M-Lazy-Developer` `Experimental` a
 
 ## Maintenance boundaries for the active desktop
 
-The active entry is `apps/desktop/src/main.ts`, which mounts
+The active entry is `Development/apps/desktop/src/main.ts`, which mounts
 `CompactManagerApp.svelte`. Svelte owns transient interaction state and
 presentation, **not** Windows process identity, sandbox membership or licensed
 account status. `app/bridge/nativeFeasibilityApi.ts` owns strict IPC input
@@ -591,7 +591,7 @@ validation; `src-tauri/src/commands/native_clients.rs` owns thin Tauri
 adapters; `src-tauri/src/engine/native_clients.rs` owns Windows launch,
 process identity rechecks, focus/placement and Sandboxie operations. The
 canonical read-only membership collector remains
-`tooling/acceptance/windows/collect-sandboxie-feasibility.ps1`.
+`Development/tooling/acceptance/windows/collect-sandboxie-feasibility.ps1`.
 
 The active Rust implementation is relatively large. Future refactoring must
 first isolate bounded units along **proven** responsibilities (e.g., launch
@@ -602,6 +602,6 @@ changes to launch security. Unmounted VMware UI, Rust commands and runtime
 providers are **retained for compatibility analysis**, not presumed safe
 to delete. The four-client provider architecture remains undecided.
 
-Development-only preflight data is owned by `tooling/local-test/`, and stored
+Development-only preflight data is owned by `Development/tooling/local-test/`, and stored
 under ignored `workspace/runs/`. It neither installs an app nor adds a
 runtime manager, telemetry daemon, installer, or product acceptance gate.

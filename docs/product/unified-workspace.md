@@ -151,7 +151,7 @@ also require acceptance. The native installer candidate now has an explicit
 separate Lazy Tester identity and only the two reviewed engine DLLs; existing
 settings/profile paths are retained. It excludes private profile bindings, whose
 first-run import is implemented for the reviewed existing profiles. Packaging ownership and migration decisions
-are in engine/distribution/README.md. Their state and the next bounded action
+are in Development/engine/distribution/README.md. Their state and the next bounded action
 are recorded in the sole handoff, not inferred from this design contract.
 
 ## Historical workspace decisions below (superseded where inconsistent)
@@ -196,7 +196,7 @@ Startup adopts uniquely attributed responsive sessions without launching duplica
 These are developer mechanics; the operator's blank/unresponsive-game report
 still prevents product acceptance. Tabs alone do not prove usable gameplay.
 
-The 21 October recovery increment validates engine/profile ownership on admission
+The 21 October recovery increment validates Development/engine/profile ownership on admission
 and binds that authority to each retained lease. A running-tab swap validates the
 live process/window identity without repeating package hashing or full profile
 inventory. The manager's own region excludes the validated viewport while a game
@@ -289,7 +289,7 @@ continue running. Target active displayed FPS remains 60 with separate evidence.
 
 ## Implementation seam and decision gate
 
-The first owner is `apps/desktop/`: one presentation module for surface hosting,
+The first owner is `Development/apps/desktop/`: one presentation module for surface hosting,
 layout, capture and recovery. It consumes freshly verified process/window
 identity from the existing typed bridge and owned/native provider. It does not
 create a second lifecycle manager, readiness database or profile catalog.
@@ -358,7 +358,7 @@ The failed SetParent route remains rejected. Do not call a capture image an
 interactive session or substitute synthesized input for the native game.
 
 Evidence belongs in the [canonical Windows test report](../validation/native-pilot-localtest.md).
-The [synthetic probe](../../tooling/acceptance/windows/test-workspace-host.ps1)
+The [synthetic probe](../../Development/tooling/acceptance/windows/test-workspace-host.ps1)
 does not accept game PIDs or external windows and is not a product host module.
 
 Platform references:

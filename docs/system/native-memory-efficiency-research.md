@@ -651,7 +651,7 @@ The existing collector now offers opt-in two-client `-MemoryComposition`
 (schema 5 over base schema 1/2). It reads private commit, supported EX2 private
 working set, whole-system physical/commit counters and memory-query duration;
 the existing evaluator validates/reviews them. Default schemas 1-4 remain
-compatible. See the [collector usage and proof boundary](../../tooling/acceptance/windows/README.md#opt-in-two-client-memory-composition).
+compatible. See the [collector usage and proof boundary](../../Development/tooling/acceptance/windows/README.md#opt-in-two-client-memory-composition).
 
 The first increment left manager/helper attribution NOT_COLLECTED. The
 follow-up schema 6 now adds separately pinned, operator-selected manager
@@ -945,7 +945,7 @@ was introduced. B remains incomplete; A/C are not relabeled as satisfying it.
 
 ## Native efficiency implementation mechanisms and specific tools (25 October 2026)
 
-The [implementation playbook](./native-efficiency-implementation-playbook.md) provides concrete Codex-ready mechanisms N01-N04 (registry/file hooks, expired startup tracing, event-led manager), R01-R03 (pacer timers, HUD, presentation), M01-M02 (owned immutable data), B01-B02 (Sodium/FerriteCore internal game feasibility) and W01 (conditional content tooling). Each has exact source owner, Windows/C++/Rust API, algorithm, safety/compatibility boundary and primary reference. This is **supporting technical design**, not new deployment authorization, an automatic optimization claim, or a second active TODO owner. The A/B/C current goal and **one next action** remain in [planning](../../planning/development.md).
+The [implementation playbook](native-efficiency-implementation-playbook.md) provides concrete Codex-ready mechanisms N01-N04 (registry/file hooks, expired startup tracing, event-led manager), R01-R03 (pacer timers, HUD, presentation), M01-M02 (owned immutable data), B01-B02 (Sodium/FerriteCore internal game feasibility) and W01 (conditional content tooling). Each has exact source owner, Windows/C++/Rust API, algorithm, safety/compatibility boundary and primary reference. This is **supporting technical design**, not new deployment authorization, an automatic optimization claim, or a second active TODO owner. The A/B/C current goal and **one next action** remain in [planning](../../planning/development.md).
 
 
 ## Deeper RAM-efficiency research — 25 October 2026 discussion
@@ -1043,9 +1043,9 @@ and 144/10 policy remain unchanged.
 
 ## Executed LFH action, not an automatic RAM policy
 
-A one-shot original action now exists in [heap-reclaim.cpp](../../tooling/acceptance/windows/heap-reclaim.cpp);
+A one-shot original action now exists in [heap-reclaim.cpp](../../Development/tooling/acceptance/windows/heap-reclaim.cpp);
 its opt-in build, identity guards, uncertain-thread handling and limitations are
-documented in the [Windows tooling guide](../../tooling/acceptance/windows/README.md#explicit-one-shot-lfh-reclamation-experiment).
+documented in the [Windows tooling guide](../../Development/tooling/acceptance/windows/README.md#explicit-one-shot-lfh-reclamation-experiment).
 It requests documented heap-manager cache optimization, not arbitrary VirtualFree
 or resource eviction. It is separate from native mesh optimization.
 
@@ -1200,7 +1200,7 @@ functions match byte-for-byte across both original clients. These observations
 identify a real startup-capacity/growth seam; they do not prove spare capacity
 during a world or identify the purpose of every earlier graphics allocation.
 
-The independently authored [warm-pool owner](../../tooling/acceptance/windows/bootstrap-ordering/graphics-warm-pools.cpp)
+The independently authored [warm-pool owner](../../Development/tooling/acceptance/windows/bootstrap-ordering/graphics-warm-pools.cpp)
 and its header implement a build-opt-in candidate: reduce only the exact
 DefaultBufferHeap initial tuple from sixteen heaps to four. It preserves native
 growth and resource retirement, avoiding any need to declare a live GPU buffer

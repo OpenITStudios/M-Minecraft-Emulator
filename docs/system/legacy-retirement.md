@@ -13,9 +13,9 @@ lifecycle: ACTIVE
 **UNPROVEN**. The current desktop pilot does not claim four working clients.
 
 This document is the **single deprecation register**. Executable command
-authority is engine/runtime-core/src/command.rs; desktop entry is
-apps/desktop/src/main.ts; Tauri command registration is
-apps/desktop/src-tauri/src/app_bootstrap.rs. Retired runtime/VM code remains gated;
+authority is Development/engine/runtime-core/src/command.rs; desktop entry is
+Development/apps/desktop/src/main.ts; Tauri command registration is
+Development/apps/desktop/src-tauri/src/app_bootstrap.rs. Retired runtime/VM code remains gated;
 the old desktop UI is preserved in immutable Git archives rather than active copies.
 
 ## Lazy Tester archive transition — 26 October 2026
@@ -66,8 +66,8 @@ fork does not satisfy this requirement. **The replacement is not implemented.**
 
 | Dependency / owner | Retirement boundary |
 | --- | --- |
-| `engine/isolation-owned/`, `engine/isolation-candidates/` | Historical fork/reference source; no further product development or activation |
-| `engine/isolation-native/owned-runtime/`, `tooling/isolation-source/` | Historical build/test/transaction tools; standalone developer scripts remain, not a replacement provider |
+| `Development/engine/isolation-owned/`, `Development/engine/isolation-candidates/` | Historical fork/reference source; no further product development or activation |
+| `Development/engine/isolation-native/owned-runtime/`, `Development/tooling/isolation-source/` | Historical build/test/transaction tools; standalone developer scripts remain, not a replacement provider |
 | Desktop `owned_provider.rs`, embedded `owned-manager.ps1` / `probe-v1186-runtime.ps1` | Still depend on Sbie DLL queries, service identity and box settings; retained for existing-session inspection/recovery/close |
 | Desktop `instance_catalog.rs` | Rejects isolated Launch/Provision on official-pilot and owned-fork paths before provider execution, including direct IPC/helper requests |
 | Desktop `workspace_surface.rs` and Svelte workspace | Reusable presentation mechanics; retained session authority still comes from the old provider and must be replaced |
@@ -125,18 +125,18 @@ survival remain NOT_EXECUTED for the replacement.
 
 | Root | State / reason |
 | --- | --- |
-| apps/desktop/src/NativeFeasibilityApp.svelte | UNMOUNTED historical native feasibility screen; retained for source regression and review only |
-| apps/desktop/src/App.svelte and legacy app/surfaces, dialogs | UNMOUNTED; VMware wizard and VM controls not available to user |
+| Development/apps/desktop/src/NativeFeasibilityApp.svelte | UNMOUNTED historical native feasibility screen; retained for source regression and review only |
+| Development/apps/desktop/src/App.svelte and legacy app/surfaces, dialogs | UNMOUNTED; VMware wizard and VM controls not available to user |
 | Tauri commands/virtual_clients.rs, setup_tools.rs, window_arrangement.rs | NOT REGISTERED and NOT DECLARED in the native desktop's Rust module tree; old source retained for reversible legacy support |
-| engine/runtime-core/src/runtime.rs and provider/workstation.rs, fusion.rs, vmx.rs, storage.rs | VM MUTATIONS PAUSED at public command boundary |
-| engine/runtime-core/src/provider/app_sandbox_pilot.rs | POWER/DISPLAY ACTIONS PAUSED; explicit inspect remains read-only |
-| engine/guest/windows/, Base preparation and Guest Agent | LEGACY BUILD-ONLY; installed guest binaries not modified |
-| tooling/acceptance/windows/collect-client-feasibility.ps1 and old VM G0–G4 scripts | HISTORICAL EVIDENCE ROUTE; not an active campaign |
-| experiments/gpu-pv-migration-design.md | RESEARCH ARCHIVE, no production provider migration |
-| engine/distribution/ and existing NSIS resources | COMPATIBILITY PRESERVED; old release assets still embed VM Guest Agent and scripts |
-| apps/desktop/scripts/prepare-package-binaries.mjs | PACKAGE BLOCKED while the native-first pilot remains the active desktop; fails before building/staging old guest binaries |
+| Development/engine/runtime-core/src/runtime.rs and provider/workstation.rs, fusion.rs, vmx.rs, storage.rs | VM MUTATIONS PAUSED at public command boundary |
+| Development/engine/runtime-core/src/provider/app_sandbox_pilot.rs | POWER/DISPLAY ACTIONS PAUSED; explicit inspect remains read-only |
+| Development/engine/guest/windows/, Base preparation and Guest Agent | LEGACY BUILD-ONLY; installed guest binaries not modified |
+| Development/tooling/acceptance/windows/collect-client-feasibility.ps1 and old VM G0–G4 scripts | HISTORICAL EVIDENCE ROUTE; not an active campaign |
+| Archive/experiments/gpu-pv-migration-design.md | RESEARCH ARCHIVE, no production provider migration |
+| Development/engine/distribution/ and existing NSIS resources | COMPATIBILITY PRESERVED; old release assets still embed VM Guest Agent and scripts |
+| Development/apps/desktop/scripts/prepare-package-binaries.mjs | PACKAGE BLOCKED while the native-first pilot remains the active desktop; fails before building/staging old guest binaries |
 
-The active desktop `commands/mod.rs` declares only `native_clients`. Its `engine/mod.rs` declares only `app_instance`, `dpi`, and `native_clients`. The legacy screen-overlay module was also unmounted: no active command could start it, so its shutdown hook was inert. These changes exclude unused modules from the active native desktop compile graph without deleting their files, tests, historical data or the legacy runtime-core dependency. Desktop-only legacy Rust tests will not be compiled while those modules are excluded; this is not proof that the old VMware implementation remains buildable.
+The active desktop `commands/mod.rs` declares only `native_clients`. Its `Development/engine/mod.rs` declares only `app_instance`, `dpi`, and `native_clients`. The legacy screen-overlay module was also unmounted: no active command could start it, so its shutdown hook was inert. These changes exclude unused modules from the active native desktop compile graph without deleting their files, tests, historical data or the legacy runtime-core dependency. Desktop-only legacy Rust tests will not be compiled while those modules are excluded; this is not proof that the old VMware implementation remains buildable.
 
 The pause list at command.rs blocks actions, stage-update, register-base,
 open-base-finalization, provision, reprovision, verify-identities, start,

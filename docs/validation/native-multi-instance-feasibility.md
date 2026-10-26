@@ -11,7 +11,7 @@ lifecycle: ACTIVE
 
 > **Historical native-only experiment, not the current active launch route.**
 > This procedure is retained for source provenance and comparison. The
-> currently selected design is [Client 01 native + Client 02 Sandboxie Plus](./sandboxie-two-client-feasibility.md).
+> currently selected design is [Client 01 native + Client 02 Sandboxie Plus](sandboxie-two-client-feasibility.md).
 > Do not interpret old native process candidate observations as successful
 > two-account Minecraft Education gameplay.
 
@@ -51,8 +51,8 @@ helper; sandboxing file paths alone does not establish separate accounts.
 
 The active native pilot is a developer-mode experiment, **not** the legacy
 NSIS installer. On a clean pinned `Local` checkout, source verification
-is `npm run setup` followed by `npm run verify:source`; the experimental
-desktop may then be exercised via `npm run dev`. Never use `DEV.cmd g0`,
+is `npm --prefix Development run setup` followed by `npm --prefix Development run verify:source`; the experimental
+desktop may then be exercised via `npm --prefix Development run dev`. Never use `DEV.cmd g0`,
 `DEV.cmd package` or the existing NSIS bundle to install the native pilot:
 the old VMware distribution contract is explicitly blocked. A successful
 source check is not a Windows/Minecraft acceptance result.
@@ -107,12 +107,12 @@ credentials, Microsoft tokens, process command lines or world files.
 
 The default command is read-only:
 
-    powershell.exe -NoProfile -File tooling/acceptance/windows/collect-native-feasibility.ps1
+    powershell.exe -NoProfile -File Development/tooling/acceptance/windows/collect-native-feasibility.ps1
 
 Optionally request two ordinary launches through the registered official
 Windows Start app (not through a copied executable):
 
-    powershell.exe -NoProfile -File tooling/acceptance/windows/collect-native-feasibility.ps1 -LaunchRequests 2 -ConfirmLaunch
+    powershell.exe -NoProfile -File Development/tooling/acceptance/windows/collect-native-feasibility.ps1 -LaunchRequests 2 -ConfirmLaunch
 
 **A launch request does not prove a second Minecraft process was created.**
 The game may focus the first window instead. Do not attempt to bypass any
@@ -127,7 +127,7 @@ Do not record identifiable account names or world titles.
 Then run the observation separately, only with flags that were actually
 observed (replace YES/NO with UNKNOWN wherever not verified):
 
-    powershell.exe -NoProfile -File tooling/acceptance/windows/collect-native-feasibility.ps1 -Stage TWO_CLIENT -DistinctAccounts YES -BothWorldsPlayable YES -IndependentInput YES -AccountCrossingObserved NO -MultiplayerJoined YES -ReopenAndRebootPersistent YES -ObservedMinutes 10 -EvidenceReference two-client-local-001
+    powershell.exe -NoProfile -File Development/tooling/acceptance/windows/collect-native-feasibility.ps1 -Stage TWO_CLIENT -DistinctAccounts YES -BothWorldsPlayable YES -IndependentInput YES -AccountCrossingObserved NO -MultiplayerJoined YES -ReopenAndRebootPersistent YES -ObservedMinutes 10 -EvidenceReference two-client-local-001
 
 By default the report is saved as a fresh JSON under
 %TEMP%\MinecraftInstanceManager\NativeFeasibility. This file is machine-observed process
@@ -135,11 +135,11 @@ candidate data **plus** operator statements, not verified accounts.
 
 Review that specific JSON using Node:
 
-    node tooling/acceptance/evaluate-native-feasibility.mjs "<report.json>"
+    node Development/tooling/acceptance/evaluate-native-feasibility.mjs "<report.json>"
 
 To execute evaluator unit tests (which do not run Minecraft):
 
-    npm run test:native-feasibility
+    npm --prefix Development run test:native-feasibility
 
 ## Evidence interpretation: three levels, one evaluator
 
@@ -183,7 +183,7 @@ must review the true game/window evidence and any sign-in or multiplayer
 behavior before approving an architectural shift.
 
 If one usable game remains the limit, mark native NO-GO and consult
-the separate [Sandboxie Plus application-isolation pilot](./sandboxie-two-client-feasibility.md),
+the separate [Sandboxie Plus application-isolation pilot](sandboxie-two-client-feasibility.md),
 which inspects licensed persistent box configuration and isolates observed
 process membership without claiming Microsoft authentication compatibility. Do not patch, copy or inject
 the game to circumvent its restrictions. Do not change the production

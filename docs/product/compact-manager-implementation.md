@@ -124,7 +124,7 @@ Keep **last observation** and **action eligibility** distinct: a last-observed w
 Only Client 02 can obtain boxed-process attribution. An outside-box PID is a **candidate** and MUST NOT become a verified Client 01 window or signed-in user. Process/window detection is not Minecraft authentication or playability proof.
 
 ### Exact current admission boundary
-The active typed bridge `apps/desktop/src/app/bridge/nativeFeasibilityApi.ts` provides:
+The active typed bridge `Development/apps/desktop/src/app/bridge/nativeFeasibilityApi.ts` provides:
 - `openOfficialMinecraft()`
 - `selectEducationExe()`
 - `requestSandboxClient02(executable, licensed)`
@@ -214,10 +214,10 @@ Only ONE mounted Svelte application shell. Avoid Redux/event bus, duplicate stor
 
 | Owner | Decision |
 | --- | --- |
-| `apps/desktop/src/main.ts` | Eventually mount **one** Compact Manager App Shell |
-| `apps/desktop/src/NativeFeasibilityApp.svelte` | Refactor/retire from entry only after replacement and tests; no parallel live apps |
-| `apps/desktop/src/App.svelte` legacy | Leave unmounted, do not re-enable |
-| `apps/desktop/src/app.css` | Replace pilot-specific styling with a single semantic token layer |
+| `Development/apps/desktop/src/main.ts` | Eventually mount **one** Compact Manager App Shell |
+| `Development/apps/desktop/src/NativeFeasibilityApp.svelte` | Refactor/retire from entry only after replacement and tests; no parallel live apps |
+| `Development/apps/desktop/src/App.svelte` legacy | Leave unmounted, do not re-enable |
+| `Development/apps/desktop/src/app.css` | Replace pilot-specific styling with a single semantic token layer |
 | presentation helpers | Pure state/status/action projections, unit-testable |
 | Svelte components | toolbar, flat instance list, row, inline issue/setup, window placement, Settings |
 | `nativeFeasibilityApi.ts` | Preserve strict typed IPC parser and existing admission projections |
@@ -381,10 +381,10 @@ Future work, with separate backend decisions and proof: 03/04 providers, persist
 
 ## 16. Existing source references
 
-- `apps/desktop/src/main.ts` and `NativeFeasibilityApp.svelte` — mounted pilot.
-- `apps/desktop/src/app/bridge/nativeFeasibilityApi.ts` — on-demand typed bridge.
-- `apps/desktop/src-tauri/src/engine/native_clients.rs` — Windows native/boxed launch, Focus and placement.
-- `apps/desktop/src-tauri/src/engine/app_instance.rs` — exclusive desktop lock, not auto-refocus.
-- `apps/desktop/src-tauri/tauri.conf.json` — real current window sizes and legacy package contract.
+- `Development/apps/desktop/src/main.ts` and `NativeFeasibilityApp.svelte` — mounted pilot.
+- `Development/apps/desktop/src/app/bridge/nativeFeasibilityApi.ts` — on-demand typed bridge.
+- `Development/apps/desktop/src-tauri/src/engine/native_clients.rs` — Windows native/boxed launch, Focus and placement.
+- `Development/apps/desktop/src-tauri/src/engine/app_instance.rs` — exclusive desktop lock, not auto-refocus.
+- `Development/apps/desktop/src-tauri/tauri.conf.json` — real current window sizes and legacy package contract.
 - `docs/system/legacy-retirement.md` — authoritative inactive VM/package boundary.
 - `planning/development.md` — localtest pause/evidence handoff; documentation/design commits do not transfer execution PASS to new HEAD.

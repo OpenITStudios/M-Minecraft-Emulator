@@ -10,12 +10,12 @@ lifecycle: ACTIVE
 # Virtual Clients Runtime Core — paused VMware implementation
 
 > **Historical implementation authority only.** This file describes the
-> preserved VMware/Guest Agent runtime in `engine/runtime-core/`.
+> preserved VMware/Guest Agent runtime in `Development/engine/runtime-core/`.
 > Its VM lifecycle mutation entrypoints are paused while the selected
-> [Minecraft Instance Manager architecture](./architecture.md) uses
+> [Minecraft Instance Manager architecture](architecture.md) uses
 > native Client 01 plus Sandboxie Plus Client 02. Do not reuse old VM
 > resource limits as native Minecraft performance policy.
-> See [Legacy Retirement](./legacy-retirement.md).
+> See [Legacy Retirement](legacy-retirement.md).
 
 ## Product boundary
 
@@ -204,7 +204,7 @@ Not exposed today:
 
 ## Frontend boundary
 
-The user-facing desktop lives at `apps/desktop/`; this runtime core is owned by `engine/runtime-core/` and is consumed through typed Tauri commands. It must not duplicate provider, lifecycle, parity, update, resource, identity, or recovery policy.
+The user-facing desktop lives at `Development/apps/desktop/`; this runtime core is owned by `Development/engine/runtime-core/` and is consumed through typed Tauri commands. It must not duplicate provider, lifecycle, parity, update, resource, identity, or recovery policy.
 
 `DoctorReport.nextSetupAction` is the sole first-run decision owner. Desktop presentation may classify that action as app-owned, user-guided, client-manager, or blocked for UX purposes, but it must refresh backend truth after every step and must never persist its own setup-completion state.
 

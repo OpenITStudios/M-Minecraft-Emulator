@@ -193,7 +193,7 @@ The new candidate is an original in-process compatibility layer behind the
 existing provider, combined with whatever enforcement is independently shown
 necessary. DLL execution is not a security boundary by itself. Domain/lifecycle
 authority stays in runtime-core; native bootstrap/compatibility belongs to the
-existing `engine/isolation-native/` area and desktop Windows adapter. No public
+existing `Development/engine/isolation-native/` area and desktop Windows adapter. No public
 API or secondary manager/store is added by this decision.
 
 Before native implementation, specify one minimal bootstrap transaction:
@@ -434,8 +434,8 @@ cache MSAL, broker WAM atau akun Microsoft terisolasi.
 4. Bila kandidat lolos, bagaimana urutan dua game hidup bersamaan, recovery/tab,
    dua login manual, lalu empat akun dan packaging/migrasi yang reversibel?
 
-Pemilik sumber: lifecycle/policy `engine/runtime-core/`; Windows identity dan
-presentation `apps/desktop/`; fixture pembuktian `tooling/acceptance/windows/`;
+Pemilik sumber: lifecycle/policy `Development/engine/runtime-core/`; Windows identity dan
+presentation `Development/apps/desktop/`; fixture pembuktian `Development/tooling/acceptance/windows/`;
 [arsitektur](architecture.md) untuk tanggung jawab sistem dan
 [retirement register](legacy-retirement.md) untuk batas pensiun/data.
 Log, hasil kompilasi, JSON runtime dan receipt mentah tetap di ignored `workspace/`;
@@ -537,7 +537,7 @@ isolated fixture markers for transparent unmodified Minecraft registry
 redirection. Likewise, MSIX package file/registry virtualization rules
 cannot simply be ascribed to the existing unpackaged AppContainer process.
 See the single source owner at
-`tooling/acceptance/evaluate-appcontainer-isolation.mjs`.
+`Development/tooling/acceptance/evaluate-appcontainer-isolation.mjs`.
 
 
 Build the smallest independent, Minecraft-specific Windows session engine. Do not
@@ -546,8 +546,8 @@ certificate or scripts part of the replacement. Shared architectural ideas such
 as identity-bound lifecycle operations and persistent per-instance data are
 compatible with this direction. A rebranded fork is not the replacement.
 
-Keep lifecycle/admission policy in `engine/runtime-core/`; keep Windows-native
-calls and interactive windows in `apps/desktop/`. The existing workspace consumes
+Keep lifecycle/admission policy in `Development/engine/runtime-core/`; keep Windows-native
+calls and interactive windows in `Development/apps/desktop/`. The existing workspace consumes
 verified process identities. It must not become a second lifecycle manager, infer
 ownership from a title, treat a PID as an account, or keep a separate ready flag.
 Preserve PID/start-time/HWND checks and restore-on-manager-exit behavior. Existing
@@ -625,7 +625,7 @@ Microsoft broker.
 ### Executed native fixture evidence
 
 Source base: `cea5c365753efddafbba8ef8ccabf2b8f40b70fa`. The independent source
-owner for this proof is `tooling/acceptance/windows/appcontainer-probe.cpp`, with
+owner for this proof is `Development/tooling/acceptance/windows/appcontainer-probe.cpp`, with
 explicit runner `test-appcontainer-isolation.ps1`. The runner compiled the real
 native code using installed x64 MSVC with warnings treated as errors and ran
 both the positive proof and a deliberately broken identity control.
@@ -659,7 +659,7 @@ be reported as successful cleanup. Source and no account material are committed.
 
 ### Synthetic private roaming persistence source — 21 October 2026
 
-A bounded extension to `tooling/acceptance/windows/appcontainer-probe.cpp`
+A bounded extension to `Development/tooling/acceptance/windows/appcontainer-probe.cpp`
 now tests real file creation and isolation in two temporary profile-owned
 `synthetic-roaming` directories and verifies canaries survive the normal exit
 and relaunch of **both synthetic child processes**. The optional PowerShell
@@ -675,7 +675,7 @@ unmodified Education regardless of successful synthetic private-directory tests.
 
 ### Strict offline AppContainer report review — 21 October 2026
 
-`tooling/acceptance/evaluate-appcontainer-isolation.mjs` provides a pure
+`Development/tooling/acceptance/evaluate-appcontainer-isolation.mjs` provides a pure
 offline evaluation of the opt-in synthetic JSON report. A positive fixture
 requires exact schema, all expected boolean fields, synthetic proof flags
 and the explicit `NOT_EXECUTED` Minecraft fields. The reviewer can report
@@ -763,7 +763,7 @@ G0–G4 and four-client acceptance retain their authority.
 
 ## Executed foundation evidence
 
-At this source change based on `79b93ae`, `npm run check:desktop` passed:
+At this source change based on `79b93ae`, `npm --prefix Development run check:desktop` passed:
 188 frontend tests, 80 Rust tests, 8 existing opt-in Rust tests ignored;
 Svelte typecheck (zero errors/warnings), frontend build, Cargo check and format.
 Repository contract, structure and dependency metadata checks passed separately.

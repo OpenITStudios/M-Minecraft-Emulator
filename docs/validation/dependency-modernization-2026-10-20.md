@@ -15,12 +15,12 @@ Continuation baseline: `b8d7f7d1efe7c62c3be8d76eb4fa29995fcdd871`.
 Executed source revision: `bb588902f472ba6413325c12ab522e0a9908a339`.
 This report supersedes the earlier partial-verification batches in this same file;
 their original text remains in Git history. It is the one outcome report;
-[dependency tooling](../../tooling/dependencies/README.md) owns command usage.
+[dependency tooling](../../Development/tooling/dependencies/README.md) owns command usage.
 
 ## Outcome and evidence ceiling
 
 **Supported Windows dependency/source maintenance is complete with documented
-upstream and execution exceptions.** The full `npm run verify:source` pipeline
+upstream and execution exceptions.** The full `npm --prefix Development run verify:source` pipeline
 PASSES at the exact source revision above: **657 passed, 0 failed, 4 skipped**.
 The four existing skipped cases require file-symlink creation, which this Windows
 token cannot perform. They remain NOT_EXECUTED, not security PASS. Real Windows
@@ -228,20 +228,20 @@ and maintenance tooling added; no package or Cargo workspace was merged.
 ```text
 (root policies/config/command entrypoint)
 .agents/        repository agent routing
-apps/desktop/   frontend, Tauri package, package-scoped manifests/locks/tests
-engine/         runtime-core, distribution, guest, native owned/reference/candidate sources
-tooling/        repository/dependency checks, acceptance and native build tooling
+Development/apps/desktop/   frontend, Tauri package, package-scoped manifests/locks/tests
+Development/engine/         runtime-core, distribution, guest, native owned/reference/candidate sources
+Development/tooling/        repository/dependency checks, acceptance and native build tooling
 docs/           stable navigation and validation evidence
 planning/       current handoff plus historical evidence
-experiments/    scoped prototypes
+Archive/experiments/    scoped prototypes
 workspace/      README only tracked; tools/caches/reports remain ignored
 ```
 
 | Requested deliverable | Actual change / finding |
 | --- | --- |
-| Files/directories moved | tooling/dependencies/RUST-UPGRADE.md -> README.md; no application/native folder moves |
+| Files/directories moved | Development/tooling/dependencies/RUST-UPGRADE.md -> README.md; no application/native folder moves |
 | Duplicates consolidated | Svelte ambient declaration removed in favor of upstream types; dependency workflow guide and report have distinct usage/evidence roles |
-| Unnecessary files removed | apps/desktop/src/svelte.d.ts; no legacy, account-bearing or vendor files removed |
+| Unnecessary files removed | Development/apps/desktop/src/svelte.d.ts; no legacy, account-bearing or vendor files removed |
 | Configuration standardized | npm exact pins/alias, toolchain metadata/archive hashes, Vite client types, Rust dependency features/MSRV |
 | Scripts consolidated | Existing upgrade helper now uses live stable metadata; new audit command orchestrates existing package managers, no framework |
 | Documentation reorganized | One dependency guide; routers link to it and this report; report frontmatter repaired; stale toolchain prose replaced by canonical links |
@@ -264,7 +264,7 @@ The final report/handoff delivery is a separate documentation-only commit.
 
 | Check | Result | Evidence / limitation |
 | --- | --- | --- |
-| Full npm run verify:source | PASS | 657 passed, 0 failed, 4 existing file-link cases skipped |
+| Full npm --prefix Development run verify:source | PASS | 657 passed, 0 failed, 4 existing file-link cases skipped |
 | Portable bootstrap | PASS | Previously executed verified bootstrap; pins unchanged during continuation |
 | Strict npm ci and npm ls --all | PASS | npm 12.2.0; both compiler routes installed |
 | Unsupported Node install probe | PASS | Node 24.14.1 dry run rejected with EBADENGINE |
@@ -341,68 +341,68 @@ Changed paths through the executed source revision:
 ```text
 M	.gitignore
 M	.node-version
-M	apps/desktop/package-lock.json
-M	apps/desktop/package.json
-M	apps/desktop/src-tauri/Cargo.lock
-M	apps/desktop/src-tauri/Cargo.toml
-M	apps/desktop/src-tauri/build.rs
-M	apps/desktop/src-tauri/src/commands/native_clients.rs
-M	apps/desktop/src-tauri/src/engine/app_instance.rs
-M	apps/desktop/src-tauri/src/engine/instance_catalog.rs
-M	apps/desktop/src-tauri/src/engine/instance_discovery.rs
-M	apps/desktop/src-tauri/src/engine/instance_focus.rs
-M	apps/desktop/src-tauri/src/engine/instance_focus_events.rs
-M	apps/desktop/src-tauri/src/engine/instance_identity.rs
-M	apps/desktop/src-tauri/src/engine/native_clients.rs
-M	apps/desktop/src-tauri/src/engine/owned_isolation.rs
-M	apps/desktop/src-tauri/src/engine/virtual_inventory.rs
-M	apps/desktop/src/NativeFeasibilityApp.svelte
-M	apps/desktop/src/app/components/WindowLayoutDialog.svelte
-D	apps/desktop/src/svelte.d.ts
-M	apps/desktop/test/compact-manager.test.ts
-M	apps/desktop/test/native-feasibility.test.ts
-M	apps/desktop/test/verification-routing.test.ts
-M	apps/desktop/tsconfig.json
+M	Development/apps/desktop/package-lock.json
+M	Development/apps/desktop/package.json
+M	Development/apps/desktop/src-tauri/Cargo.lock
+M	Development/apps/desktop/src-tauri/Cargo.toml
+M	Development/apps/desktop/src-tauri/build.rs
+M	Development/apps/desktop/src-tauri/src/commands/native_clients.rs
+M	Development/apps/desktop/src-tauri/src/engine/app_instance.rs
+M	Development/apps/desktop/src-tauri/src/engine/instance_catalog.rs
+M	Development/apps/desktop/src-tauri/src/engine/instance_discovery.rs
+M	Development/apps/desktop/src-tauri/src/engine/instance_focus.rs
+M	Development/apps/desktop/src-tauri/src/engine/instance_focus_events.rs
+M	Development/apps/desktop/src-tauri/src/engine/instance_identity.rs
+M	Development/apps/desktop/src-tauri/src/engine/native_clients.rs
+M	Development/apps/desktop/src-tauri/src/engine/owned_isolation.rs
+M	Development/apps/desktop/src-tauri/src/engine/virtual_inventory.rs
+M	Development/apps/desktop/src/NativeFeasibilityApp.svelte
+M	Development/apps/desktop/src/app/components/WindowLayoutDialog.svelte
+D	Development/apps/desktop/src/svelte.d.ts
+M	Development/apps/desktop/test/compact-manager.test.ts
+M	Development/apps/desktop/test/native-feasibility.test.ts
+M	Development/apps/desktop/test/verification-routing.test.ts
+M	Development/apps/desktop/tsconfig.json
 M	docs/README.md
 M	docs/system/development-operations.md
 M	docs/validation/dependency-modernization-2026-10-20.md
 M	docs/validation/native-pilot-localtest.md
-M	engine/runtime-core/Cargo.lock
-M	engine/runtime-core/Cargo.toml
-M	engine/runtime-core/src/bin/virtual-guest-agent.rs
-M	engine/runtime-core/src/capacity.rs
-M	engine/runtime-core/src/doctor.rs
-M	engine/runtime-core/src/guest.rs
-M	engine/runtime-core/src/journal.rs
-M	engine/runtime-core/src/operation_lock.rs
-M	engine/runtime-core/src/profile.rs
-M	engine/runtime-core/src/provider/app_sandbox.rs
-M	engine/runtime-core/src/provider/app_sandbox_pilot.rs
-M	engine/runtime-core/src/provider/mod.rs
-M	engine/runtime-core/src/provider/process.rs
-M	engine/runtime-core/src/provider/vmx.rs
-M	engine/runtime-core/src/resources.rs
-M	engine/runtime-core/src/update.rs
+M	Development/engine/runtime-core/Cargo.lock
+M	Development/engine/runtime-core/Cargo.toml
+M	Development/engine/runtime-core/src/bin/virtual-guest-agent.rs
+M	Development/engine/runtime-core/src/capacity.rs
+M	Development/engine/runtime-core/src/doctor.rs
+M	Development/engine/runtime-core/src/guest.rs
+M	Development/engine/runtime-core/src/journal.rs
+M	Development/engine/runtime-core/src/operation_lock.rs
+M	Development/engine/runtime-core/src/profile.rs
+M	Development/engine/runtime-core/src/provider/app_sandbox.rs
+M	Development/engine/runtime-core/src/provider/app_sandbox_pilot.rs
+M	Development/engine/runtime-core/src/provider/mod.rs
+M	Development/engine/runtime-core/src/provider/process.rs
+M	Development/engine/runtime-core/src/provider/vmx.rs
+M	Development/engine/runtime-core/src/resources.rs
+M	Development/engine/runtime-core/src/update.rs
 M	package.json
 M	planning/development.md
 M	toolchain.json
-M	tooling/README.md
-M	tooling/acceptance/analyze-presentmon.test.mjs
-A	tooling/dependencies/README.md
-D	tooling/dependencies/RUST-UPGRADE.md
-A	tooling/dependencies/audit.mjs
-A	tooling/dependencies/maintenance.test.mjs
-M	tooling/dependencies/upgrade-frontend.mjs
-M	tooling/isolation-source/bootstrap-fork.test.mjs
-M	tooling/isolation-source/verify-checkout.test.mjs
-M	tooling/local-test/session.test.mjs
-M	tooling/repository/check-dependency-lock.mjs
-A	tooling/repository/check-dependency-lock.test.mjs
-A	tooling/repository/check-structure.mjs
-A	tooling/repository/check-structure.test.mjs
-M	tooling/repository/verify.mjs
-M	tooling/windows-toolchain/bootstrap.ps1
-M	tooling/windows-toolchain/portable.test.mjs
+M	Development/tooling/README.md
+M	Development/tooling/acceptance/analyze-presentmon.test.mjs
+A	Development/tooling/dependencies/README.md
+D	Development/tooling/dependencies/RUST-UPGRADE.md
+A	Development/tooling/dependencies/audit.mjs
+A	Development/tooling/dependencies/maintenance.test.mjs
+M	Development/tooling/dependencies/upgrade-frontend.mjs
+M	Development/tooling/isolation-source/bootstrap-fork.test.mjs
+M	Development/tooling/isolation-source/verify-checkout.test.mjs
+M	Development/tooling/local-test/session.test.mjs
+M	Development/tooling/repository/check-dependency-lock.mjs
+A	Development/tooling/repository/check-dependency-lock.test.mjs
+A	Development/tooling/repository/check-structure.mjs
+A	Development/tooling/repository/check-structure.test.mjs
+M	Development/tooling/repository/verify.mjs
+M	Development/tooling/windows-toolchain/bootstrap.ps1
+M	Development/tooling/windows-toolchain/portable.test.mjs
 M	workspace/README.md
 ```
 

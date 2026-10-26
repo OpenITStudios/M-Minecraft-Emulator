@@ -13,14 +13,14 @@ lifecycle: ACTIVE
 > setup below is retained to preserve compatibility and engineering context,
 > **not** authorized as the current product path. The active experiment is
 > one native plus one Sandboxie Plus Minecraft Education Windows client:
-> [selected product contract](./four-concurrent-accounts.md).
+> [selected product contract](four-concurrent-accounts.md).
 > Do not change existing guest disks, snapshots, worlds or Microsoft sessions.
 
 Base is the immutable parent for Virtual-01, Virtual-02, and Virtual-03.
 
 ## Approved Windows desktop implementation
 
-This Base is the one approved VMware Workstation Windows desktop implementation for the [four-account objective](./four-concurrent-accounts.md). Before creating an account-clean Base or linked clones, prove the guest game can boot, install, sign in and play responsively through [One Guest Feasibility](../validation/client-feasibility.md).
+This Base is the one approved VMware Workstation Windows desktop implementation for the [four-account objective](four-concurrent-accounts.md). Before creating an account-clean Base or linked clones, prove the guest game can boot, install, sign in and play responsively through [One Guest Feasibility](../validation/client-feasibility.md).
 
 ## Prerequisite: prove one Minecraft Education guest
 

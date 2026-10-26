@@ -12,12 +12,12 @@ lifecycle: ACTIVE
 > **Historical source-review snapshot.** The VM lifecycle, Base, Guest
 > Agent, recovery, resource policy and distribution assertions below apply
 > to the paused VMware implementation. They do not certify the active
-> [native + Sandboxie Plus Client 02](./sandboxie-two-client-feasibility.md)
+> [native + Sandboxie Plus Client 02](sandboxie-two-client-feasibility.md)
 > system. See [Architecture](../system/architecture.md) for the currently
 > selected implementation and [Legacy Retirement](../system/legacy-retirement.md)
 > for the preserved inactive source inventory.
 
-Status: REMOTE_GITHUB source boundary. This document is not target-machine proof. Source review supports **G0**, not a product-test PASS; only the [five campaign gates G0–G4](./acceptance.md) track testing progress. Individual unit and regression tests remain diagnostic supporting evidence.
+Status: REMOTE_GITHUB source boundary. This document is not target-machine proof. Source review supports **G0**, not a product-test PASS; only the [five campaign gates G0–G4](acceptance.md) track testing progress. Individual unit and regression tests remain diagnostic supporting evidence.
 
 ## Static-covered
 
@@ -75,7 +75,7 @@ The following remain intentionally unproven by source inspection:
 
 ## Acceptance entrypoint
 
-Use `tooling/acceptance/windows/collect-acceptance.ps1` for machine evidence. A collected field is evidence only for what it directly observes. In particular:
+Use `Development/tooling/acceptance/windows/collect-acceptance.ps1` for machine evidence. A collected field is evidence only for what it directly observes. In particular:
 
 - `connectionHealth=MINECRAFT_RUNNING` means a Minecraft process was observed;
 - `networkMode` records a provider network configuration only when one was observed;
@@ -86,7 +86,7 @@ Do not promote LOCAL proof from documentation, source tests, package smoke, or h
 
 ## Pre-local-test separation
 
-Use [G0 Source & Package Integrity](./pre-local-test-readiness.md): a single real exact-SHA source execution, Windows NSIS construction, installed payload inspection and disposable install-lifecycle safety observation are required before G1 game acceptance. Static repository inspection can identify defects but cannot mark G0 as PASS.
+Use [G0 Source & Package Integrity](pre-local-test-readiness.md): a single real exact-SHA source execution, Windows NSIS construction, installed payload inspection and disposable install-lifecycle safety observation are required before G1 game acceptance. Static repository inspection can identify defects but cannot mark G0 as PASS.
 
 ## Build gate status
 

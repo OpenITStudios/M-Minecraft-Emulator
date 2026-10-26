@@ -8,12 +8,12 @@ lifecycle: DRAFT
 ---
 
 
-> **STATUS: SUPERSEDED DESIGN DRAFT.** Historical reference only; do not implement this document. The sole active design specification is [Compact Manager Implementation Specification](./compact-manager-implementation.md). It supersedes older navigation, language, sidebar, setup, layout and action-label decisions. Runtime safety contracts are unchanged.
+> **STATUS: SUPERSEDED DESIGN DRAFT.** Historical reference only; do not implement this document. The sole active design specification is [Compact Manager Implementation Specification](compact-manager-implementation.md). It supersedes older navigation, language, sidebar, setup, layout and action-label decisions. Runtime safety contracts are unchanged.
 
 # Minecraft Instance Manager — Clean Compact Screen Design
 
 **Status:** DRAFT / DESIGN ONLY, 2026-10-13. Not implemented in Tauri, no local Minecraft testing resumed.
-**Parent:** [Compact Manager UX Specification](./compact-manager-ux-spec.md).
+**Parent:** [Compact Manager UX Specification](compact-manager-ux-spec.md).
 **Reviewed runtime source:** `Local` at `580b4e386538aa4aa906bfe4c555e43a77135e1c`.
 **Visual references:** M-TranslateIT for dark neutral tokens and labeled navigation, M-LazyBuilder for operational error recovery, Prism Launcher and BlueStacks for instance-first workflows, Windows/Fluent guidelines for desktop accessibility and content density.
 **Prototype:** A standalone, offline interactive HTML/CSS/JS design prototype was produced for review in the ChatGPT conversation. It is NOT a GitHub production application or a backend-connected build.
@@ -90,7 +90,7 @@ Current code supports **Client 01: official Windows Start-app launch request**; 
 
 Use **one** token source in the future implementation rather than copying token definitions into multiple Svelte components. Recommended base radius 8–12 px; control height 36–40 px; instance row target 88–100 px; sidebar approximately 184–196 px; page padding 24–40 px depending on viewport. These are visual baselines to validate, not a guarantee of accessibility until tested.
 
-**Current Tauri reality:** `apps/desktop/src-tauri/tauri.conf.json` declares 1180×760 default, 920×620 minimum. UI review must validate at 1180×760 and 920×620; any proposed 680-wide adaptive mode requires a separately reviewed Tauri window constraint change, not only CSS.
+**Current Tauri reality:** `Development/apps/desktop/src-tauri/tauri.conf.json` declares 1180×760 default, 920×620 minimum. UI review must validate at 1180×760 and 920×620; any proposed 680-wide adaptive mode requires a separately reviewed Tauri window constraint change, not only CSS.
 
 ## 3. Screen A — Instances (home)
 
@@ -234,7 +234,7 @@ Existing authority (unchanged)
 └── src-tauri/src/engine/native_clients.rs
 ```
 
-Start with **one** live application shell; `apps/desktop/src/App.svelte` is legacy and must not be blindly re-mounted. Do not create a duplicate Rust runtime, duplicate persisted client state, separate Sandboxie collector, new periodic polling, account automation, or package-release path.
+Start with **one** live application shell; `Development/apps/desktop/src/App.svelte` is legacy and must not be blindly re-mounted. Do not create a duplicate Rust runtime, duplicate persisted client state, separate Sandboxie collector, new periodic polling, account automation, or package-release path.
 
 ## 10. Design review and implementation sequence
 

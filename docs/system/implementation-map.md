@@ -9,13 +9,13 @@ lifecycle: ACTIVE
 
 # Implementation Ownership Map
 
-This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build tooling in [Isolation Source Tooling](../../tooling/isolation-source/README.md) is retired product history, not the native engine. The only active goal, blocker and next action are in [planning/development.md](../../planning/development.md). Treat historical `Next` here as superseded; inspect owning source and consumers.
+This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build tooling in [Isolation Source Tooling](../../Development/tooling/isolation-source/README.md) is retired product history, not the native engine. The only active goal, blocker and next action are in [planning/development.md](../../planning/development.md). Treat historical `Next` here as superseded; inspect owning source and consumers.
 
 ## Current Lazy Tester route — 26 October 2026
 
-The mounted desktop is `apps/desktop/src/LazyTesterApp.svelte`, consuming
+The mounted desktop is `Development/apps/desktop/src/LazyTesterApp.svelte`, consuming
 `app/bridge/lazyTester.ts`. Thin commands in `src-tauri/src/commands/native_clients.rs`
-route to `engine/native_clients_session.rs` (reconnecting transport via its
+route to `Development/engine/native_clients_session.rs` (reconnecting transport via its
 `native_clients_session/pipe.rs` Windows adapter) and the existing bootstrap's
 `independent_bootstrap/session_controller.rs`. That owner reuses the reviewed
 five-profile capability, game/DLL verification, original process handles, FPS
@@ -40,7 +40,7 @@ does not import any retired provider API. All active frontend files are reachabl
 from main.ts. Old screens/VM schemas and exclusive tests are preserved in Git at
 5601c354fb91db78a2697ceb6ec710590d7d17be; consult legacy-retirement.md.
 
-Native packaging policy is engine/distribution/lazy-tester-package.json; the
+Native packaging policy is Development/engine/distribution/lazy-tester-package.json; the
 consumer is tauri.lazy-tester.conf.json with the lazy-tester-package feature and
 windows/lazy-tester-hooks.nsh. scripts/prepare-native-payload.mjs derives reviewed
 DLL hashes from the bootstrap and stages only those two files. The old preview
@@ -52,7 +52,7 @@ Native composition, five-window parking and recovery remain owned by
 preview destinations, geometry checks, click notifications and visibility;
 `workspace_surface/recovery_gate.rs` serializes original-checkpoint handoff across
 GUI/recovery-helper exits. Neither module owns game lifecycle or profile storage.
-Compatibility DLL code still lives in `tooling/acceptance/windows/bootstrap-ordering/`;
+Compatibility DLL code still lives in `Development/tooling/acceptance/windows/bootstrap-ordering/`;
 its product-source relocation is pending. Archived UI and old provider/source paths
 below are historical navigation. Current evidence and next work belong only to
 [planning/development.md](../../planning/development.md).
@@ -71,10 +71,10 @@ inferred from observing four processes or switching tabs.
 Sandboxie and the derived fork are retired for new product sessions. The old
 inventory below is historical dependency navigation, not authorization to activate
 the fork or enable certificates. See [retirement register](legacy-retirement.md).
-`apps/desktop/src-tauri/src/engine/instance_catalog.rs` blocks isolated Launch and
+`Development/apps/desktop/src-tauri/src/engine/instance_catalog.rs` blocks isolated Launch and
 Provision in both old routes; existing-session recovery remains available.
 **No independent replacement provider exists.** Its first read-only foundation is
-`apps/desktop/src-tauri/src/engine/instance_identity.rs` →
+`Development/apps/desktop/src-tauri/src/engine/instance_identity.rs` →
 `desktop_compare_process_contexts` → `app/bridge/processContext.ts` → optional
 Settings diagnostics. It compares pinned process contexts without the retired
 provider, secrets, profile-file reads or launch authority. See
@@ -141,7 +141,7 @@ world or official executable isolation.
 
 Proof readiness observations are now **scoped separately per
 isolated slot (MC02–MC04) and exact PID/creation FILETIME** at
-\`engine/runtime-core/src/independent_isolation.rs\`.
+\`Development/engine/runtime-core/src/independent_isolation.rs\`.
 The pure diagnostic matrix requires native evidence for the actual
 Roaming Known Folder and registry view, and game-runtime evidence
 for Microsoft broker account continuity. No synthetic
@@ -160,7 +160,7 @@ HKCU/Minecraft separation as NOT_EXECUTED**. No host registry keys,
 accounts or game worlds are accessed.
 
 An opt-in synthetic application-hive phase has been added to
-`tooling/acceptance/windows/appcontainer-probe.cpp`, reachable
+`Development/tooling/acceptance/windows/appcontainer-probe.cpp`, reachable
 through `-VerifyRegistryAppHive` in its existing PowerShell runner.
 It creates two new registry hive files under a disposable workspace
 and uses only returned `RegLoadAppKeyW` handles to seed/read canaries
@@ -209,7 +209,7 @@ implemented and desktop Launch/Provision remains blocked.
 
 An opt-in, **test-only Windows HANDLE handoff** is implemented by
 the existing C++ AppContainer fixture plus
-`engine/runtime-core/src/bin/synthetic_fixture_handoff.rs`. The
+`Development/engine/runtime-core/src/bin/synthetic_fixture_handoff.rs`. The
 owner duplicates only child-process QUERY/SYNCHRONIZE and fixed
 record-read handles into an explicitly allowlisted Rust helper.
 The helper verifies exact PID/FILETIME, live token, file identity and
@@ -242,7 +242,7 @@ fixture-side hardening, not a trusted Rust file-to-child transport.
 
 A bounded *unbound* fixture record reader is now implemented under the
 existing desktop process-identity owner:
-`apps/desktop/src-tauri/src/engine/instance_identity.rs`.
+`Development/apps/desktop/src-tauri/src/engine/instance_identity.rs`.
 It takes an already-opened file handle, checks PID/FILETIME and a
 Windows AppContainer token before/after one eight-byte read, and returns
 `UnboundFixturePaths`. The reader does **not** prove that the file was
@@ -251,7 +251,7 @@ profile manager, new Tauri route or game authentication evidence.
 
 The existing C++ test fixture's **eight-byte Observation record** now has
 a strict pure-Rust decoder at
-`engine/runtime-core/src/independent_engine/fixture_wire.rs`.
+`Development/engine/runtime-core/src/independent_engine/fixture_wire.rs`.
 It rejects malformed version/length/flags, decodes independent path states,
 and requires A/B records to come from the same fixture run phase. The
 result is explicitly `UnboundFixturePaths`, **not** a verified
@@ -267,7 +267,7 @@ fixture label can independently establish process ownership. No native
 collector or desktop launch route is registered.
 
 The agreed production language split is **Rust-first hybrid**:
-`engine/runtime-core/` and `apps/desktop/` own independent Rust logic and
+`Development/engine/runtime-core/` and `Development/apps/desktop/` own independent Rust logic and
 user-mode Windows APIs; C++ remains for synthetic fixtures, with any
 separately authored kernel C/C++ component strictly conditional on
 demonstrated need. See [Implementation language and ownership policy](independent-engine-architecture.md#implementation-language-and-ownership-policy---21-october-2026).
@@ -285,7 +285,7 @@ without calling host filesystem APIs or treating path strings as
 successful isolation. No production Windows collector is wired to it yet.
 
 Bound native storage evidence mapping is owned by
-`engine/runtime-core/src/independent_engine/evidence.rs`. It binds
+`Development/engine/runtime-core/src/independent_engine/evidence.rs`. It binds
 each fact to exact slot/PID/FILETIME, probe method, and evidence source
 before an observation can be recorded. Synthetic positive flags and
 path-only data cannot assert actual Minecraft storage or broker separation.
@@ -298,7 +298,7 @@ AppContainer token without emitting raw SID. Storage remains all-Unknown
 and the verified token category grants no launch or game readiness.
 
 The existing desktop identity owner
-`apps/desktop/src-tauri/src/engine/instance_identity.rs` now supplies
+`Development/apps/desktop/src-tauri/src/engine/instance_identity.rs` now supplies
 a read-only `WindowsProcessObserver` and `inspect_independent_source`.
 They reuse the pinned PID/FILETIME Windows handle check and leave image,
 window and all storage/broker evidence explicitly unknown. These are
@@ -311,7 +311,7 @@ command, provider admission or persisted status has been created.
 
 The modular, independently authored source architecture is
 [Independent Engine Architecture](independent-engine-architecture.md).
-The domain contracts live in `engine/runtime-core/src/independent_engine/`
+The domain contracts live in `Development/engine/runtime-core/src/independent_engine/`
 (`identity.rs`, `storage.rs`, `operations.rs`, `ports.rs`). They describe
 the four fixed slots, full-width PID/start-time identity, the storage-surface
 evidence matrix, effect classification, and abstract Windows adapter ports.
@@ -320,7 +320,7 @@ a new desktop launch route, state store, service or driver; old admission
 remains fail-closed.
 
 The independently written proof-classification policy lives in
-`engine/runtime-core/src/independent_isolation.rs`: pure in-memory findings and
+`Development/engine/runtime-core/src/independent_isolation.rs`: pure in-memory findings and
 tier-separated evidence gaps for synthetic, native Windows, two-game, and four-game
 claims. It is NOT provider readiness, lifecycle persistence, or launch admission.
 The existing desktop launch block remains authoritative.
@@ -339,13 +339,13 @@ The Windows runner `test-appcontainer-isolation.ps1` validates the
 synthetic-only output fields and an explicit negative token-control path.
 
 Offline diagnostics for the synthetic native fixture are owned by
-`tooling/acceptance/evaluate-appcontainer-isolation.mjs` and its Node tests.
+`Development/tooling/acceptance/evaluate-appcontainer-isolation.mjs` and its Node tests.
 The reviewer reports only path observations, rejects unexpected private
 fields, and cannot authorize a new game launch even if synthetic data passes.
 It is not a second lifecycle state store or runtime provider.
 
 The current isolation experiment is a native AppContainer fixture in
-`tooling/acceptance/windows/appcontainer-probe.cpp`, explicitly compiled/run by
+`Development/tooling/acceptance/windows/appcontainer-probe.cpp`, explicitly compiled/run by
 `test-appcontainer-isolation.ps1`. It launches only itself, validates two native
 token namespaces and storage canaries, and leaves game acceptance unexecuted.
 Roaming-path redirection remains a material unresolved compatibility question.
@@ -353,12 +353,12 @@ Roaming-path redirection remains a material unresolved compatibility question.
 ## Locate work by problem
 
 **Historical fork source (before retirement on 21 October 2026):** the editable Sandboxie-derived
-v1.18.6 implementation is **complete as source** in `engine/isolation-owned/`
+v1.18.6 implementation is **complete as source** in `Development/engine/isolation-owned/`
 (1,627 files, 15 directly modified C/C++ files plus four reviewed project-path
 quoting fixes). The unmodified reference is
-`engine/isolation-candidates/sandboxie-v1.18.6/`. The active exact-source
-verifier is `tooling/isolation-source/verify-owned-v1186.mjs` and the
-**build-only** Windows entrypoint is `tooling/isolation-source/build-owned-v1186.ps1`.
+`Development/engine/isolation-candidates/sandboxie-v1.18.6/`. The active exact-source
+verifier is `Development/tooling/isolation-source/verify-owned-v1186.mjs` and the
+**build-only** Windows entrypoint is `Development/tooling/isolation-source/build-owned-v1186.ps1`.
 The full native build and staging pass on 21 October 2026 at `e2c80ad`:
 three Windows stages, 16 unsigned-build binaries, five resources and four licenses.
 The resulting 25-file owned package remains NOT_INSTALLABLE. A separate locally
@@ -376,63 +376,63 @@ they must never be chosen automatically as current build or activation code.
 
 | Question / fault | Primary implementation owner | Consumer / companion |
 | --- | --- | --- |
-| Classic credential fallback, Protected Storage host fallback and compartment bypass | `engine/isolation-owned/Sandboxie/core/dll/cred.c`, `pst.cpp`, `ipstore_impl.cpp` and `core/svc/pstoreserver.cpp` | Exact current delta in `tooling/isolation-source/owned-credential-policy.mjs`, reconstructed by the v1.18.6 verifier; compiled synthetic routine regression and build-only evidence in [native pilot report](../validation/native-pilot-localtest.md). WAM/SSO, game cache and account acceptance remain unproven. |
-| Four-tab native composition, shell eligibility and window recovery | `apps/desktop/src/NativeWorkspace.svelte` → `app/bridge/workspaceSurface.ts` → `src-tauri/src/engine/workspace_surface.rs`, gated by existing owned provider | [Workspace contract](../product/unified-workspace.md); retained checkpoints, same-executable recovery helpers, coalesced manager foreground updates in `app_bootstrap.rs`; playable rendering/input and single-taskbar acceptance pending |
+| Classic credential fallback, Protected Storage host fallback and compartment bypass | `Development/engine/isolation-owned/Sandboxie/core/dll/cred.c`, `pst.cpp`, `ipstore_impl.cpp` and `core/svc/pstoreserver.cpp` | Exact current delta in `Development/tooling/isolation-source/owned-credential-policy.mjs`, reconstructed by the v1.18.6 verifier; compiled synthetic routine regression and build-only evidence in [native pilot report](../validation/native-pilot-localtest.md). WAM/SSO, game cache and account acceptance remain unproven. |
+| Four-tab native composition, shell eligibility and window recovery | `Development/apps/desktop/src/NativeWorkspace.svelte` → `app/bridge/workspaceSurface.ts` → `src-tauri/src/engine/workspace_surface.rs`, gated by existing owned provider | [Workspace contract](../product/unified-workspace.md); retained checkpoints, same-executable recovery helpers, coalesced manager foreground updates in `app_bootstrap.rs`; playable rendering/input and single-taskbar acceptance pending |
 | Archived Unified dashboard | Git snapshot `5601c354` → old `UnifiedManagerApp.svelte` | Historical location/provider UX; the current Lazy Tester binding/session owners are listed above |
-| Explicit debug-manager owned engine selection and four-slot operations | `apps/desktop/src-tauri/src/engine/owned_provider.rs` → embedded `tooling/isolation-source/windows/owned-manager.ps1` | Existing catalog/resource lock, typed `ownedProviderApi.ts`, mounted `OwnedManagerPanel.svelte`; one-shot Create-only helper in the same executable; no production activation or service installation |
-| Diagnose Minecraft present-interval stutter without adding a game hook or daemon | `tooling/acceptance/analyze-presentmon.mjs` + `tooling/acceptance/analyze-presentmon.test.mjs` | Offline operator-supplied PresentMon CSV, one selected Minecraft PID and swap chain, p50/p95/p99 `MsBetweenPresents` only; output excludes PID/account data, never claims FPS/VRAM/gameplay PASS. See `tooling/acceptance/windows/README.md` |
-| On-demand GPU counter hint plus stable CPU/RAM report writing | `tooling/acceptance/windows/collect-native-performance.ps1` (`-GpuSnapshot`) → `tooling/acceptance/evaluate-native-performance.mjs` | Default schema-1 remains; optional schema-2 is skipped after PID identity loss; complete UTF8-no-BOM JSON published through exclusive temporary-file move, historical PowerShell 5.1 BOM read; no FPS/VRAM or gameplay claim, see `tooling/acceptance/windows/README.md` |
-| Opt-in Windows foreground event counter (zero Minecraft changes) | `apps/desktop/src-tauri/src/engine/instance_focus_events.rs` → existing `commands/native_clients.rs` | One out-of-context WinEvent hook on a dedicated blocking message thread, manual Start/Read/Stop in Settings Diagnostics, same-thread unhook on exit; count-only, no PID/title storage, no client attribution or FPS cap |
-| Avoid overlapping high-cost manager PowerShell, dialog, game launch and package hashing | `apps/desktop/src-tauri/src/commands/native_clients.rs` (`MANAGER_RESOURCE_LOCK`) | Existing Svelte `isResourceOperationBusy` in `app/presentation/compactManager.ts` and `CompactManagerApp.svelte`, on-demand only; game CPU/GPU/FPS quotas not implemented |
-| Select a single owned Minecraft virtual slot (plan-only, 02/03/04) | `engine/isolation-native/owned-runtime/minecraft-profiles.mjs` (`planOwnedMinecraftVirtual`) | Same persistent Sandboxie setting sequence, with no driver activation; UI readiness explanation belongs to `app/presentation/compactManager.ts` and existing Rust host probe |
-| Inspect candidate Sandboxie section names, including disabled boxes (read-only; no ownership proof) | `tooling/acceptance/windows/collect-virtual-boxes.ps1` → `apps/desktop/src-tauri/src/engine/virtual_inventory.rs` → existing Tauri `desktop_discover_existing_virtuals` | `nativeFeasibilityApi.ts` and mounted `CompactManagerApp.svelte`; inspection UI lives in Settings → Diagnostics, official-pilot section candidates only, no Create/Configure/driver activation or account proof |
-| User-facing Virtual Manager and internal isolation readiness | `apps/desktop/src/CompactManagerApp.svelte` + `apps/desktop/src/app/bridge/nativeFeasibilityApi.ts` | One mounted UI: Minecraft 01–04 overview first, technical Sandboxie/owned-engine checks collapsed under Settings → Diagnostics; existing Rust inspector (`apps/desktop/src-tauri/src/engine/owned_isolation.rs`); v1.18.6/25 and v1.18.5/24 metadata agree, Create Virtual remains blocked until a signed owned provider exists |
-| Compile actual **v1.18.6 MIVUBI-owned** native core without installation | `engine/isolation-owned/` + `tooling/isolation-source/build-owned-v1186.ps1` | `engine/isolation-native/owned-runtime/build-profile-v1186.json`, `verify-owned-v1186.mjs` and `build-owned-v1186.test.mjs`; three-stage real Windows build passes at `e2c80ad`; not installed |
-| Native PID/HWND candidates without accounts, tokens or VM | `apps/desktop/src-tauri/src/engine/native_clients.rs`, `apps/desktop/src/app/bridge/nativeFeasibilityApi.ts` | [Native feasibility](../validation/native-multi-instance-feasibility.md); candidate-only |
-| Active desktop and blocked legacy VM routing | `apps/desktop/src/main.ts`, `apps/desktop/src/CompactManagerApp.svelte`, `engine/runtime-core/src/command.rs` | [Legacy Retirement](./legacy-retirement.md); old Tauri handlers not registered |
-| Prove two Minecraft Education Desktop sessions can run natively without VMs | `tooling/acceptance/windows/collect-native-feasibility.ps1`, `tooling/acceptance/evaluate-native-feasibility.mjs` | [Native feasibility](../validation/native-multi-instance-feasibility.md); historical alternative, not selected launch architecture |
-| Build/package the current owned v1.18.6 engine (unsigned, not installable) | `engine/isolation-native/owned-runtime/build-profile-v1186.json` → `tooling/isolation-source/build-owned-v1186.ps1` → `tooling/isolation-source/assemble-owned-v1186.mjs` | One exact profile, actual compiler exit/16 binary hashes/5 resources/4 licenses; package remains NOT_INSTALLABLE; Windows build passes at `e2c80ad` |
-| Inspect the owned v1.18.6 payload in the desktop (read-only) | `apps/desktop/src-tauri/src/engine/owned_isolation.rs` | Existing Settings → Diagnostics candidate inspection accepts owned schema-2 package but never selects or installs the engine |
-| Historical private v1.18.5 assembler (superseded) | `tooling/isolation-source/assemble-private-engine.mjs` → `assemble-engine.mjs` | Retained only for regression/reference; not an active source build or package route |
-| Apply a coherent private-source build marker and ABI compiler guards across seven pinned upstream owners in a separate Git fork checkout | `engine/isolation-native/fork-overlay/apply-private-source.mjs`, `build-private.ps1` | Private exclusive fork build route, keeps upstream namespace/ABI intact, private build report distinct from unmodified baseline; no install |
-| Compile a native Windows executable that can compare an isolated candidate driver/service/DLL ABI to pinned Sandboxie source | `engine/isolation-native/src/abi_probe.cpp`, `engine/isolation-native/CMakeLists.txt` | Pinned upstream `my_version.h`, read-only offline mode, explicit lab-only `SbieApi_GetVersionEx` runtime handshake; never installed or wired into Tauri |
-| Diagnose simulated creation steps against partial/unknown current SCM registrations for manual rollback review | `tooling/isolation-source/windows/reconcile-ownership.mjs` via `reconcile-ownership-cli.mjs --rollback-report` | Per-service state, drift and provenance, never grants stop/delete or driver install |
-| Reconcile the canonical on-disk journal hash with current driver/service SCM evidence and production Ed25519 bindings | `tooling/isolation-source/windows/reconcile-ownership.mjs` and `reconcile-ownership-cli.mjs` | Read-only cross-check of both pinned image hashes, actual persisted journal bytes and same-host fingerprint; production signed gate sealed and all action flags false |
-| Record operator review intent and append read-only SCM observations in the canonical transaction journal | `tooling/isolation-source/execute-disposable.mjs`, `windows/ownership-ledger.mjs`, `windows/review-ownership.mjs` | One canonical journal, no automatic resume or service deletion; chained events aid reconciliation but do not prove ownership |
-| Cryptographically correlate short-lived disposable-lab claims and read-only SCM service image evidence without enabling rollback | `tooling/isolation-source/windows/attestation-gate.mjs`, `service-ownership.mjs`, `probe-owned-service-image.ps1` | Ed25519 envelope verification with production key intentionally unconfigured, journal+host+snapshot binding, verified path/hash review; ALWAYS nonauthorizing |
-| Compile pinned Windows KmdUtil operation arguments and inspect driver/service signatures without enabling installation | `tooling/isolation-source/windows/transport-commands.mjs` and `kmdutil-transport.ps1` | Validated v1.18.5 install/stop/delete transport descriptors; Apply sealed pending signer/host/ownership acceptance |
-| Journal disposable engine provisioning attempts before any future privileged side effect | `tooling/isolation-source/execute-disposable.mjs`, `simulate-disposable.mjs` | Exclusive write-ahead simulation ledger; source hook for future Windows transport, no Tauri integration |
-| Read-only signing and service-registration diagnostics for a candidate owned Windows runtime | `tooling/isolation-source/windows/probe-disposable-readiness.ps1` | File signature and collision evidence; virtual-machine detection heuristic NOT host attestation, install always blocked |
-| Design a disposable-only driver/service provisioning and rollback transaction before any Windows mutation | `tooling/isolation-source/provision-disposable.mjs`, `plan-disposable.mjs` | Deterministic upstream KmdUtil install/rollback sequence; always `SOURCE_PLAN_ONLY_DRIVER_INSTALL_BLOCKED`; not an active Tauri runtime |
-| Check Windows `SbieSvc`/`SbieDrv` registration without PowerShell/WMI startup | `apps/desktop/src-tauri/src/engine/owned_isolation.rs` (native SCM `OpenSCManagerW`/`OpenServiceW`) | Same Tauri/UI host-inspection contract; no service mutation, denies unknown/occupied names; `tooling/isolation-source/windows/probe-host-service-names.ps1` is retained as historical read-only reference only |
-| Inspect a staged owned Sandboxie-derived engine candidate without installing or selecting it | `apps/desktop/src-tauri/src/engine/owned_isolation.rs` via `native_clients.rs` | Read-only Tauri command `desktop_inspect_owned_engine_candidate`, typed desktop bridge; staged payload is NOT_INSTALLABLE |
-| Request Client 02 launch in one persistent MinecraftClient02 Windows Sandboxie box | `apps/desktop/src-tauri/src/engine/native_clients.rs` → Tauri native command | [Sandboxie Client 02 experiment](../validation/sandboxie-two-client-feasibility.md); explicit, non-destructive launch request only |
-| Attribute signed Education image candidates without claiming login or native ownership | `tooling/acceptance/windows/collect-sandboxie-feasibility.ps1` → `apps/desktop/src-tauri/src/engine/native_clients.rs` | Explicit **Check status** (`-ImageProof`) alone invokes the per-PID `SbieApi_QueryProcess` attribution; a failed CLI enumeration can load a trusted vendor DLL in any on-demand inspection. Focus/Place use only a targeted boxed PID Authenticode check, not `QueryProcess`. Launch remains a fast signed-EXE preflight |
-| Inspect current Client 02 box membership, credentials and persistent settings, without touching accounts | `tooling/acceptance/windows/collect-sandboxie-feasibility.ps1`, `tooling/acceptance/evaluate-sandboxie-feasibility.mjs` | [Sandboxie feasibility](../validation/sandboxie-two-client-feasibility.md); active collector/evaluator, candidate observations are not proof of login |
-| Focus or place Client 02 window using fresh PID/FILETIME/HWND, Sandboxie membership and selected signed Education file evidence | `apps/desktop/src-tauri/src/engine/native_clients.rs` → canonical PowerShell collector with `-BoxedImageProofPid` | Only one requested boxed PID gets Authenticode proof at action time; name-only UI cannot authorize a move, and Win32 may refuse foreground; no legacy VM route |
-| Embedded collector execution without oversized Windows command lines | `engine/runtime-core/src/provider/process.rs` bounded stdin runner → `apps/desktop/src-tauri/src/engine/native_clients.rs` | Source is streamed as UTF-8 from the embedded collector into a short-lived PowerShell child. No temporary script, daemon, or schema change; Windows execution still unproven |
-| Resource-efficient native/isolated management, no VM or new daemon | `apps/desktop/src-tauri/src/engine/native_clients.rs` and [Architecture](./architecture.md) | `apps/desktop/src/CompactManagerApp.svelte`; one on-demand read-only Sandboxie candidate observation, not independent Client 01 authentication, no governor |
-| Prove one disposable Windows guest can boot, sign in and render Minecraft Education on VMware or App Sandbox GPU-PV, with provider-specific graphics evidence | `tooling/acceptance/windows/collect-client-feasibility.ps1`, `tooling/acceptance/evaluate-client-feasibility.mjs` | [Client Feasibility](../validation/client-feasibility.md); no production VM mutation |
-| VM status, start/stop/suspend/restart/reprovision and rollback | `engine/runtime-core/src/runtime.rs` | `lifecycle_admission.rs`, provider implementation |
-| Lifecycle eligibility / guard decisions | `engine/runtime-core/src/lifecycle_admission.rs` | `runtime.rs`, `client.rs` |
-| Legacy VMware client-owned setup wizard (inactive) | `apps/desktop/src/app/setupFlow.ts` and `apps/desktop/src/App.svelte` | Historical `shouldShowClientControls` regression; not mounted in native pilot |
-| Legacy VMware first-run setup decisions (inactive) | `engine/runtime-core/src/doctor.rs` | Unmounted `src/app/setupFlow.ts`, `src/app/surfaces/SetupSurface.svelte` |
-| Base provenance, immutable finalized image and parity | `engine/runtime-core/src/profile.rs`, `base_preparation.rs` | `engine/guest/windows/prepare-base.ps1`, `finalize-base.ps1` |
-| VMware Workstation/Fusion operations and VMX | `engine/runtime-core/src/provider/` | `runtime.rs`, `diagnostics.rs` |
-| Explicit disposable App Sandbox pilot (`inspect/start/graceful shutdown/display`) | `engine/runtime-core/src/provider/app_sandbox_pilot.rs` | [GPU-PV Disposable Pilot](../validation/gpu-pv-disposable-pilot.md), CLI only; no production VM controls |
-| Identity and guest disk isolation | `engine/runtime-core/src/identity.rs`, `provider/vmx.rs` | `profile.rs`, `engine/guest/windows/` |
-| Guest Agent authenticated status/launch | `engine/runtime-core/src/guest.rs`, `src/bin/virtual-guest-agent.rs` | `engine/guest/windows/install-guest-agent.ps1` |
-| Native Minecraft detection and executable constraints | `engine/runtime-core/src/minecraft_runtime.rs`, `profile.rs` | `guest.rs`, `doctor.rs` |
-| RAM/CPU resource pressure and start admission | `engine/runtime-core/src/resources.rs`, `policy.rs` | `runtime.rs`, `capacity.rs` |
-| State schema, durable profile and recovery | `engine/runtime-core/src/schema.rs`, `persistence.rs` | `journal.rs`, `runtime.rs` |
-| Update policy, signed-asset manifest, installer integrity | `engine/runtime-core/src/update.rs`, `engine/distribution/` | Tauri package configurations, package smoke |
-| Open host-native Windows Minecraft / inspect candidate HWNDs without claiming account or gameplay proof | `apps/desktop/src-tauri/src/engine/native_clients.rs`, native Tauri adapter | Active `apps/desktop/src/app/bridge/nativeFeasibilityApi.ts`; legacy `virtualClientsApi.ts` unmounted |
-| Active desktop navigation / transient visual state | `apps/desktop/src/LazyTesterApp.svelte` | `apps/desktop/src/main.ts` mounts Lazy Tester; old App/Unified/Compact/feasibility components are archived in Git, absent from active source |
-| Typed frontend/backend IPC and contract validation | `apps/desktop/src/app/bridge/` | `apps/desktop/src-tauri/src/commands/` |
-| Display DPI bootstrap (active); legacy VMware layout/overlay (inactive) | `apps/desktop/src-tauri/src/engine/dpi.rs`; unmounted `window_arrangement.rs` and `screen_overlay.rs` | Active Client 02 **Move window** is in `native_clients.rs`; legacy layout Tauri commands are unregistered |
-| Windows package contents/install lifecycle | `engine/distribution/package-contract.json`, `install-lifecycle-policy.json` | `apps/desktop/src-tauri/tauri*.json`, `scripts/prepare-package-binaries.mjs` |
-| Target Windows machine acceptance collector | `tooling/acceptance/windows/` | [Validation](../validation/README.md) |
-| Root scripts, tooling pin/metadata and source checks | `package.json`, `toolchain.json`, `tooling/repository/verify.mjs` | `tooling/windows-toolchain/dev.ps1`, `.github/workflows/` |
+| Explicit debug-manager owned engine selection and four-slot operations | `Development/apps/desktop/src-tauri/src/engine/owned_provider.rs` → embedded `Development/tooling/isolation-source/windows/owned-manager.ps1` | Existing catalog/resource lock, typed `ownedProviderApi.ts`, mounted `OwnedManagerPanel.svelte`; one-shot Create-only helper in the same executable; no production activation or service installation |
+| Diagnose Minecraft present-interval stutter without adding a game hook or daemon | `Development/tooling/acceptance/analyze-presentmon.mjs` + `Development/tooling/acceptance/analyze-presentmon.test.mjs` | Offline operator-supplied PresentMon CSV, one selected Minecraft PID and swap chain, p50/p95/p99 `MsBetweenPresents` only; output excludes PID/account data, never claims FPS/VRAM/gameplay PASS. See `Development/tooling/acceptance/windows/README.md` |
+| On-demand GPU counter hint plus stable CPU/RAM report writing | `Development/tooling/acceptance/windows/collect-native-performance.ps1` (`-GpuSnapshot`) → `Development/tooling/acceptance/evaluate-native-performance.mjs` | Default schema-1 remains; optional schema-2 is skipped after PID identity loss; complete UTF8-no-BOM JSON published through exclusive temporary-file move, historical PowerShell 5.1 BOM read; no FPS/VRAM or gameplay claim, see `Development/tooling/acceptance/windows/README.md` |
+| Opt-in Windows foreground event counter (zero Minecraft changes) | `Development/apps/desktop/src-tauri/src/engine/instance_focus_events.rs` → existing `commands/native_clients.rs` | One out-of-context WinEvent hook on a dedicated blocking message thread, manual Start/Read/Stop in Settings Diagnostics, same-thread unhook on exit; count-only, no PID/title storage, no client attribution or FPS cap |
+| Avoid overlapping high-cost manager PowerShell, dialog, game launch and package hashing | `Development/apps/desktop/src-tauri/src/commands/native_clients.rs` (`MANAGER_RESOURCE_LOCK`) | Existing Svelte `isResourceOperationBusy` in `app/presentation/compactManager.ts` and `CompactManagerApp.svelte`, on-demand only; game CPU/GPU/FPS quotas not implemented |
+| Select a single owned Minecraft virtual slot (plan-only, 02/03/04) | `Development/engine/isolation-native/owned-runtime/minecraft-profiles.mjs` (`planOwnedMinecraftVirtual`) | Same persistent Sandboxie setting sequence, with no driver activation; UI readiness explanation belongs to `app/presentation/compactManager.ts` and existing Rust host probe |
+| Inspect candidate Sandboxie section names, including disabled boxes (read-only; no ownership proof) | `Development/tooling/acceptance/windows/collect-virtual-boxes.ps1` → `Development/apps/desktop/src-tauri/src/engine/virtual_inventory.rs` → existing Tauri `desktop_discover_existing_virtuals` | `nativeFeasibilityApi.ts` and mounted `CompactManagerApp.svelte`; inspection UI lives in Settings → Diagnostics, official-pilot section candidates only, no Create/Configure/driver activation or account proof |
+| User-facing Virtual Manager and internal isolation readiness | `Development/apps/desktop/src/CompactManagerApp.svelte` + `Development/apps/desktop/src/app/bridge/nativeFeasibilityApi.ts` | One mounted UI: Minecraft 01–04 overview first, technical Sandboxie/owned-engine checks collapsed under Settings → Diagnostics; existing Rust inspector (`Development/apps/desktop/src-tauri/src/engine/owned_isolation.rs`); v1.18.6/25 and v1.18.5/24 metadata agree, Create Virtual remains blocked until a signed owned provider exists |
+| Compile actual **v1.18.6 MIVUBI-owned** native core without installation | `Development/engine/isolation-owned/` + `Development/tooling/isolation-source/build-owned-v1186.ps1` | `Development/engine/isolation-native/owned-runtime/build-profile-v1186.json`, `verify-owned-v1186.mjs` and `build-owned-v1186.test.mjs`; three-stage real Windows build passes at `e2c80ad`; not installed |
+| Native PID/HWND candidates without accounts, tokens or VM | `Development/apps/desktop/src-tauri/src/engine/native_clients.rs`, `Development/apps/desktop/src/app/bridge/nativeFeasibilityApi.ts` | [Native feasibility](../validation/native-multi-instance-feasibility.md); candidate-only |
+| Active desktop and blocked legacy VM routing | `Development/apps/desktop/src/main.ts`, `Development/apps/desktop/src/CompactManagerApp.svelte`, `Development/engine/runtime-core/src/command.rs` | [Legacy Retirement](legacy-retirement.md); old Tauri handlers not registered |
+| Prove two Minecraft Education Desktop sessions can run natively without VMs | `Development/tooling/acceptance/windows/collect-native-feasibility.ps1`, `Development/tooling/acceptance/evaluate-native-feasibility.mjs` | [Native feasibility](../validation/native-multi-instance-feasibility.md); historical alternative, not selected launch architecture |
+| Build/package the current owned v1.18.6 engine (unsigned, not installable) | `Development/engine/isolation-native/owned-runtime/build-profile-v1186.json` → `Development/tooling/isolation-source/build-owned-v1186.ps1` → `Development/tooling/isolation-source/assemble-owned-v1186.mjs` | One exact profile, actual compiler exit/16 binary hashes/5 resources/4 licenses; package remains NOT_INSTALLABLE; Windows build passes at `e2c80ad` |
+| Inspect the owned v1.18.6 payload in the desktop (read-only) | `Development/apps/desktop/src-tauri/src/engine/owned_isolation.rs` | Existing Settings → Diagnostics candidate inspection accepts owned schema-2 package but never selects or installs the engine |
+| Historical private v1.18.5 assembler (superseded) | `Development/tooling/isolation-source/assemble-private-engine.mjs` → `assemble-engine.mjs` | Retained only for regression/reference; not an active source build or package route |
+| Apply a coherent private-source build marker and ABI compiler guards across seven pinned upstream owners in a separate Git fork checkout | `Development/engine/isolation-native/fork-overlay/apply-private-source.mjs`, `build-private.ps1` | Private exclusive fork build route, keeps upstream namespace/ABI intact, private build report distinct from unmodified baseline; no install |
+| Compile a native Windows executable that can compare an isolated candidate driver/service/DLL ABI to pinned Sandboxie source | `Development/engine/isolation-native/src/abi_probe.cpp`, `Development/engine/isolation-native/CMakeLists.txt` | Pinned upstream `my_version.h`, read-only offline mode, explicit lab-only `SbieApi_GetVersionEx` runtime handshake; never installed or wired into Tauri |
+| Diagnose simulated creation steps against partial/unknown current SCM registrations for manual rollback review | `Development/tooling/isolation-source/windows/reconcile-ownership.mjs` via `reconcile-ownership-cli.mjs --rollback-report` | Per-service state, drift and provenance, never grants stop/delete or driver install |
+| Reconcile the canonical on-disk journal hash with current driver/service SCM evidence and production Ed25519 bindings | `Development/tooling/isolation-source/windows/reconcile-ownership.mjs` and `reconcile-ownership-cli.mjs` | Read-only cross-check of both pinned image hashes, actual persisted journal bytes and same-host fingerprint; production signed gate sealed and all action flags false |
+| Record operator review intent and append read-only SCM observations in the canonical transaction journal | `Development/tooling/isolation-source/execute-disposable.mjs`, `windows/ownership-ledger.mjs`, `windows/review-ownership.mjs` | One canonical journal, no automatic resume or service deletion; chained events aid reconciliation but do not prove ownership |
+| Cryptographically correlate short-lived disposable-lab claims and read-only SCM service image evidence without enabling rollback | `Development/tooling/isolation-source/windows/attestation-gate.mjs`, `service-ownership.mjs`, `probe-owned-service-image.ps1` | Ed25519 envelope verification with production key intentionally unconfigured, journal+host+snapshot binding, verified path/hash review; ALWAYS nonauthorizing |
+| Compile pinned Windows KmdUtil operation arguments and inspect driver/service signatures without enabling installation | `Development/tooling/isolation-source/windows/transport-commands.mjs` and `kmdutil-transport.ps1` | Validated v1.18.5 install/stop/delete transport descriptors; Apply sealed pending signer/host/ownership acceptance |
+| Journal disposable engine provisioning attempts before any future privileged side effect | `Development/tooling/isolation-source/execute-disposable.mjs`, `simulate-disposable.mjs` | Exclusive write-ahead simulation ledger; source hook for future Windows transport, no Tauri integration |
+| Read-only signing and service-registration diagnostics for a candidate owned Windows runtime | `Development/tooling/isolation-source/windows/probe-disposable-readiness.ps1` | File signature and collision evidence; virtual-machine detection heuristic NOT host attestation, install always blocked |
+| Design a disposable-only driver/service provisioning and rollback transaction before any Windows mutation | `Development/tooling/isolation-source/provision-disposable.mjs`, `plan-disposable.mjs` | Deterministic upstream KmdUtil install/rollback sequence; always `SOURCE_PLAN_ONLY_DRIVER_INSTALL_BLOCKED`; not an active Tauri runtime |
+| Check Windows `SbieSvc`/`SbieDrv` registration without PowerShell/WMI startup | `Development/apps/desktop/src-tauri/src/engine/owned_isolation.rs` (native SCM `OpenSCManagerW`/`OpenServiceW`) | Same Tauri/UI host-inspection contract; no service mutation, denies unknown/occupied names; `Development/tooling/isolation-source/windows/probe-host-service-names.ps1` is retained as historical read-only reference only |
+| Inspect a staged owned Sandboxie-derived engine candidate without installing or selecting it | `Development/apps/desktop/src-tauri/src/engine/owned_isolation.rs` via `native_clients.rs` | Read-only Tauri command `desktop_inspect_owned_engine_candidate`, typed desktop bridge; staged payload is NOT_INSTALLABLE |
+| Request Client 02 launch in one persistent MinecraftClient02 Windows Sandboxie box | `Development/apps/desktop/src-tauri/src/engine/native_clients.rs` → Tauri native command | [Sandboxie Client 02 experiment](../validation/sandboxie-two-client-feasibility.md); explicit, non-destructive launch request only |
+| Attribute signed Education image candidates without claiming login or native ownership | `Development/tooling/acceptance/windows/collect-sandboxie-feasibility.ps1` → `Development/apps/desktop/src-tauri/src/engine/native_clients.rs` | Explicit **Check status** (`-ImageProof`) alone invokes the per-PID `SbieApi_QueryProcess` attribution; a failed CLI enumeration can load a trusted vendor DLL in any on-demand inspection. Focus/Place use only a targeted boxed PID Authenticode check, not `QueryProcess`. Launch remains a fast signed-EXE preflight |
+| Inspect current Client 02 box membership, credentials and persistent settings, without touching accounts | `Development/tooling/acceptance/windows/collect-sandboxie-feasibility.ps1`, `Development/tooling/acceptance/evaluate-sandboxie-feasibility.mjs` | [Sandboxie feasibility](../validation/sandboxie-two-client-feasibility.md); active collector/evaluator, candidate observations are not proof of login |
+| Focus or place Client 02 window using fresh PID/FILETIME/HWND, Sandboxie membership and selected signed Education file evidence | `Development/apps/desktop/src-tauri/src/engine/native_clients.rs` → canonical PowerShell collector with `-BoxedImageProofPid` | Only one requested boxed PID gets Authenticode proof at action time; name-only UI cannot authorize a move, and Win32 may refuse foreground; no legacy VM route |
+| Embedded collector execution without oversized Windows command lines | `Development/engine/runtime-core/src/provider/process.rs` bounded stdin runner → `Development/apps/desktop/src-tauri/src/engine/native_clients.rs` | Source is streamed as UTF-8 from the embedded collector into a short-lived PowerShell child. No temporary script, daemon, or schema change; Windows execution still unproven |
+| Resource-efficient native/isolated management, no VM or new daemon | `Development/apps/desktop/src-tauri/src/engine/native_clients.rs` and [Architecture](architecture.md) | `Development/apps/desktop/src/CompactManagerApp.svelte`; one on-demand read-only Sandboxie candidate observation, not independent Client 01 authentication, no governor |
+| Prove one disposable Windows guest can boot, sign in and render Minecraft Education on VMware or App Sandbox GPU-PV, with provider-specific graphics evidence | `Development/tooling/acceptance/windows/collect-client-feasibility.ps1`, `Development/tooling/acceptance/evaluate-client-feasibility.mjs` | [Client Feasibility](../validation/client-feasibility.md); no production VM mutation |
+| VM status, start/stop/suspend/restart/reprovision and rollback | `Development/engine/runtime-core/src/runtime.rs` | `lifecycle_admission.rs`, provider implementation |
+| Lifecycle eligibility / guard decisions | `Development/engine/runtime-core/src/lifecycle_admission.rs` | `runtime.rs`, `client.rs` |
+| Legacy VMware client-owned setup wizard (inactive) | `Development/apps/desktop/src/app/setupFlow.ts` and `Development/apps/desktop/src/App.svelte` | Historical `shouldShowClientControls` regression; not mounted in native pilot |
+| Legacy VMware first-run setup decisions (inactive) | `Development/engine/runtime-core/src/doctor.rs` | Unmounted `src/app/setupFlow.ts`, `src/app/surfaces/SetupSurface.svelte` |
+| Base provenance, immutable finalized image and parity | `Development/engine/runtime-core/src/profile.rs`, `base_preparation.rs` | `Development/engine/guest/windows/prepare-base.ps1`, `finalize-base.ps1` |
+| VMware Workstation/Fusion operations and VMX | `Development/engine/runtime-core/src/provider/` | `runtime.rs`, `diagnostics.rs` |
+| Explicit disposable App Sandbox pilot (`inspect/start/graceful shutdown/display`) | `Development/engine/runtime-core/src/provider/app_sandbox_pilot.rs` | [GPU-PV Disposable Pilot](../validation/gpu-pv-disposable-pilot.md), CLI only; no production VM controls |
+| Identity and guest disk isolation | `Development/engine/runtime-core/src/identity.rs`, `provider/vmx.rs` | `profile.rs`, `Development/engine/guest/windows/` |
+| Guest Agent authenticated status/launch | `Development/engine/runtime-core/src/guest.rs`, `src/bin/virtual-guest-agent.rs` | `Development/engine/guest/windows/install-guest-agent.ps1` |
+| Native Minecraft detection and executable constraints | `Development/engine/runtime-core/src/minecraft_runtime.rs`, `profile.rs` | `guest.rs`, `doctor.rs` |
+| RAM/CPU resource pressure and start admission | `Development/engine/runtime-core/src/resources.rs`, `policy.rs` | `runtime.rs`, `capacity.rs` |
+| State schema, durable profile and recovery | `Development/engine/runtime-core/src/schema.rs`, `persistence.rs` | `journal.rs`, `runtime.rs` |
+| Update policy, signed-asset manifest, installer integrity | `Development/engine/runtime-core/src/update.rs`, `Development/engine/distribution/` | Tauri package configurations, package smoke |
+| Open host-native Windows Minecraft / inspect candidate HWNDs without claiming account or gameplay proof | `Development/apps/desktop/src-tauri/src/engine/native_clients.rs`, native Tauri adapter | Active `Development/apps/desktop/src/app/bridge/nativeFeasibilityApi.ts`; legacy `virtualClientsApi.ts` unmounted |
+| Active desktop navigation / transient visual state | `Development/apps/desktop/src/LazyTesterApp.svelte` | `Development/apps/desktop/src/main.ts` mounts Lazy Tester; old App/Unified/Compact/feasibility components are archived in Git, absent from active source |
+| Typed frontend/backend IPC and contract validation | `Development/apps/desktop/src/app/bridge/` | `Development/apps/desktop/src-tauri/src/commands/` |
+| Display DPI bootstrap (active); legacy VMware layout/overlay (inactive) | `Development/apps/desktop/src-tauri/src/engine/dpi.rs`; unmounted `window_arrangement.rs` and `screen_overlay.rs` | Active Client 02 **Move window** is in `native_clients.rs`; legacy layout Tauri commands are unregistered |
+| Windows package contents/install lifecycle | `Development/engine/distribution/package-contract.json`, `install-lifecycle-policy.json` | `Development/apps/desktop/src-tauri/tauri*.json`, `scripts/prepare-package-binaries.mjs` |
+| Target Windows machine acceptance collector | `Development/tooling/acceptance/windows/` | [Validation](../validation/README.md) |
+| Root scripts, tooling pin/metadata and source checks | `Development/package.json`, `Development/toolchain.json`, `Development/tooling/repository/verify.mjs` | `Development/tooling/windows-toolchain/dev.ps1`, `.github/workflows/` |
 
 ## Domain boundaries
 
@@ -451,10 +451,10 @@ UI never decides or stores whether the Base, guest or signed-in session is ready
 
 | Work | First navigation |
 | --- | --- |
-| Change engine behavior | [Runtime Core](./runtime-core.md) → listed Rust owner → source tests |
-| Improve desktop | `apps/desktop/README.md` → affected Svelte/Tauri owner |
-| Base image or guest Windows concern | [Base Image](../product/base-image.md) → `engine/guest/windows/` |
-| Package/release safety | `engine/distribution/README.md` → contract JSON → Tauri consumer |
+| Change engine behavior | [Runtime Core](runtime-core.md) → listed Rust owner → source tests |
+| Improve desktop | `Development/apps/desktop/README.md` → affected Svelte/Tauri owner |
+| Base image or guest Windows concern | [Base Image](../product/base-image.md) → `Development/engine/guest/windows/` |
+| Package/release safety | `Development/engine/distribution/README.md` → contract JSON → Tauri consumer |
 | Investigate VM/game acceptance | [Acceptance](../validation/acceptance.md) → [Failure Matrix](../validation/four-client-failure-matrix.md) |
 | Continue unfinished repo work | `planning/development.md` + current GitHub `Local` HEAD |
 

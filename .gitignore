@@ -26,10 +26,10 @@ node_modules/
 dist/
 target/
 coverage/
-apps/desktop/src-tauri/icons/
-apps/desktop/src-tauri/gen/
-apps/desktop/src-tauri/binaries/
-apps/desktop/src-tauri/package-resources/
+Development/apps/desktop/src-tauri/icons/
+Development/apps/desktop/src-tauri/gen/
+Development/apps/desktop/src-tauri/binaries/
+Development/apps/desktop/src-tauri/package-resources/
 *.log
 *.tmp
 .DS_Store
@@ -47,8 +47,8 @@ workspace/private/
 workspace/images/
 workspace/runtime/
 workspace/diagnostics/
-engine/runtime-core/runtime/
-engine/runtime-core/images/
+Development/engine/runtime-core/runtime/
+Development/engine/runtime-core/images/
 # Machine-local execution materials: never source-control.
 # The workspace README is the only intentionally tracked entry.
 /workspace/*
@@ -74,4 +74,4 @@ engine/runtime-core/images/
 /*.dmp
 
 # Native Svelte/TypeScript checker intermediates
-/apps/desktop/.svelte-check/
+/Development/apps/desktop/.svelte-check/

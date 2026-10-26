@@ -13,7 +13,7 @@ lifecycle: ACTIVE
 > guest-VM implementation and its G0–G4 evidence campaign, **not** the active
 > Minecraft Instance Manager + Sandboxie Plus Client 02 workflow. Do not
 > provision, start, delete or reset a VM as part of the current pilot.
-> Active procedure: [Sandboxie two-client feasibility](./sandboxie-two-client-feasibility.md).
+> Active procedure: [Sandboxie two-client feasibility](sandboxie-two-client-feasibility.md).
 > Its signed-in gameplay and resource measurements are still unverified.
 
 ## Historical VMware G0–G4 — five gates of the retired campaign
@@ -22,13 +22,13 @@ These five **sequential, outcome-based gates** are the sole indicators of progre
 
 | Gate | Product question / exit criteria | Evidence boundary | Stop / decision |
 | --- | --- | --- | --- |
-| **G0 — Source & Package Integrity** | One exact `Local` SHA passes source checks, Windows NSIS build, mandatory installed-payload inspection, and disposable install/repair/uninstall data-preservation checks | Executed source/package checks; details in [G0 Preparation](./pre-local-test-readiness.md) | No runnable/preserved installer → do not promote candidate to game acceptance |
-| **G1 — One Guest Feasibility** | One disposable Windows guest on the candidate provider boots, an independently licensed Minecraft Education client signs in, and an actual world renders with responsive input; GPU-PV also requires guest-measured hardware D3D11 FL11_0 and OpenGL 4.4+ | `CLIENT_FEASIBILITY` and host baseline; [single-guest procedure](./client-feasibility.md) | Rendering, login, or input fails → stop before building account-bearing clones |
+| **G0 — Source & Package Integrity** | One exact `Local` SHA passes source checks, Windows NSIS build, mandatory installed-payload inspection, and disposable install/repair/uninstall data-preservation checks | Executed source/package checks; details in [G0 Preparation](pre-local-test-readiness.md) | No runnable/preserved installer → do not promote candidate to game acceptance |
+| **G1 — One Guest Feasibility** | One disposable Windows guest on the candidate provider boots, an independently licensed Minecraft Education client signs in, and an actual world renders with responsive input; GPU-PV also requires guest-measured hardware D3D11 FL11_0 and OpenGL 4.4+ | `CLIENT_FEASIBILITY` and host baseline; [single-guest procedure](client-feasibility.md) | Rendering, login, or input fails → stop before building account-bearing clones |
 | **G2 — Provisioning & Identity** | A finalized, account-clean Base produces three isolated guests; VM/Windows identities, lineage, Guest Agent and per-VM tokens are unique; first-boot/account recovery points can be established without contaminating Base | `SINGLE_VM`, `GUEST`, `MINECRAFT`, `ACCOUNT`, `THREE_VMS`; detailed assertions below | Incomplete clone, identity collision, unsafe recovery or Base contamination → stop before four-client launch |
 | **G3 — Four-Client End-to-End** | Native plus three guest Minecraft Education windows are simultaneously signed in with four distinct licensed accounts, responsive and independently controllable | `FOUR_MINECRAFT`, `FOUR_ACCOUNTS`; real visual/account observations | Any client unusable, account crossing, or four-client contention failure → do not claim product acceptance |
 | **G4 — Recovery & Multiplayer** | Stop/start, suspend/resume, QA_READY reset and host reboot preserve independent account state; required Native↔Virtual and Virtual↔Virtual multiplayer paths work. Sustained-use observations support reliability, not a synthetic PASS | `RECOVERY`, `MULTIPLAYER`; `SOAK` supports performance/stability assessment | State loss, cross-client mutation, required multiplayer failure → release readiness fails |
 
-**Stage mapping is canonical in [Windows Acceptance Campaign](../../tooling/acceptance/windows/README.md).** `HOST` is a G1 baseline, not a separate product gate. An `SOAK` report supplements G4; it does not replace either recovery or multiplayer proof. Earlier documents' four source/package checks belong **inside G0**, not to independent G1–G4 gates.
+**Stage mapping is canonical in [Windows Acceptance Campaign](../../Development/tooling/acceptance/windows/README.md).** `HOST` is a G1 baseline, not a separate product gate. An `SOAK` report supplements G4; it does not replace either recovery or multiplayer proof. Earlier documents' four source/package checks belong **inside G0**, not to independent G1–G4 gates.
 
 ### Gate evidence and decision rules
 
@@ -40,13 +40,13 @@ These five **sequential, outcome-based gates** are the sole indicators of progre
 
 ## G1 detailed feasibility procedure — Minecraft Education inside a VM
 
-Before production Base registration, cloning or a four-client promise, follow [Single Guest Client Feasibility](./client-feasibility.md) with one **disposable** Windows guest on the candidate virtualization provider. Collect its measured OpenGL context, VMware video adapter/driver, and real Minecraft menu/world rendering and keyboard/mouse interaction. Stop multi-instance escalation if real rendering fails.
+Before production Base registration, cloning or a four-client promise, follow [Single Guest Client Feasibility](client-feasibility.md) with one **disposable** Windows guest on the candidate virtualization provider. Collect its measured OpenGL context, VMware video adapter/driver, and real Minecraft menu/world rendering and keyboard/mouse interaction. Stop multi-instance escalation if real rendering fails.
 
 This pilot does not need the manager's Base, Guest Agent or three-clone lifecycle and must not mutate production runtime state. Operator observations are not automatic game/VM support claims. Source-only development may continue independently even while target-machine pilot is `NOT_EXECUTED`.
 
 ### Three required observations within G1
 
-Before cloning three account-bearing Windows guests, use [One Guest Feasibility](./client-feasibility.md) and preserve actual machine evidence on the selected provider that:
+Before cloning three account-bearing Windows guests, use [One Guest Feasibility](client-feasibility.md) and preserve actual machine evidence on the selected provider that:
 
 1. One disposable Windows guest **boots into an interactive desktop** with graphics and input available; VMware requires VMware Tools, while GPU-PV additionally requires measured guest D3D11 hardware FL11_0 and NVIDIA-backed OpenGL 4.4+.
 2. Minecraft Education **Windows desktop or Microsoft Store edition** is installed **inside that Windows guest** (never both), and an independent licensed organization account signs in to the actual game menu.
