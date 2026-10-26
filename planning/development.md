@@ -43,18 +43,18 @@ requires selected-launcher review/confirmation.
 
 ## Current exact source and delivery
 
-Installed App/root source7eb8ca1d490d32a70a54bd6d1ed2302086a269bd, clean Local build.
-App SHA256:2658f0e8a031902f2dbcd9e91a48c73ee10845c7af23246fff0feb0ee06e219a.
+Installed App/root source03a7d49036c6053480d1e77cc415dfc1a3cff0ea, clean Local build.
+App SHA256:5ea1751f08555fa1bd0133844c8bf444dbc0eb23d5dfa418f4162d19dc08a25c.
 Root starter/DLL hashes: App/build-info.json, verified during Explorer startup.
-Candidate workspace/packages/lazy-tester/0.1.0-7eb8ca1d490d-20261026T182535133Z;
-NSIS2663915bytes SHA256:
-88b1d893ea9001ba559370bcba210c46f6f8ea6eff457189c6d90ba6f93883bc.
+Candidate workspace/packages/lazy-tester/0.1.0-03a7d49036c6-20261026T191043879Z;
+NSIS SHA256:8b241fbab0843f25a1173f4bb1d555fe707301281abf66b2cacb245078a84c28.
 Signing NOT_VERIFIED; installer execution/publication NOT_EXECUTED/DISABLED.
 Actual Explorer startup: Connected/five enabled/no issue/project-local WebView cache.
-Real UI PID37400: Settings->Data Storage->Advanced->Reset review->Cancel PASS;
-review closed, options metadata unchanged, no real reset. Owned idle UI closed
-normally; zero remaining app/game processes. Log workspace/runs/settings-recovery-
-ui-smoke.log and .ps1. Data retained; no repeated setup. Recheck before staging.
+Real UI PID35760: Clear all data review starts disabled; wrong typed launcher+ack
+stays disabled; exact name+ack enables. Cancel closes review, catalog hash/options
+metadata unchanged, no clear journal, no real deletion. Log workspace/runs/
+full-clear-ui-smoke.log and .ps1. Owned idle UI closes normally; zero remaining app/
+game processes. Earlier7eb8ca1 Reset review/Cancel PASS. Data retained; no setup.
 ## Implemented corrections and executed evidence
 
 Presentation: workspace_surface.rs keeps host opaque; existing previews.rs worker
@@ -92,7 +92,7 @@ a large committed purge. Name+ack confirmation; one review panel at a time.
 13 profile tests (7 transactional clear fixtures),5 controller tests, invalid request
 admission,37 frontend tests/typecheck PASS. Locked/hardlinked/junction/malformed paths,
 cutover failures, partial purge, stale token, readonly files and peer preservation
-covered with synthetic data. No real full clear executed. Candidate not yet staged.
+covered with synthetic data. No real full clear executed; candidate staged above.
 Audio remains incomplete. Use the existing
 session_controller.rs actor, game_preset.rs options writer, profile_storage.rs/
 product_profiles.rs pinned stores, manager_settings.rs and current UI/bridge.
@@ -112,6 +112,6 @@ Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4; second worktree detached47a45
 Four licensed playable clients, gameplay/network/migration/installer acceptance
 are separate obligations, NOT_EXECUTED here. Compiler caches remain ignored.
 
-Next: build/stage full-clear candidate and verify real UI review/Cancel only;
-then audio and remaining presentation/performance/process acceptance.
+Next: implement scoped background audio via existing session owner; remaining
+presentation/performance/process acceptance stays open.
 Overall goal stays ACTIVE.
