@@ -36,8 +36,21 @@ emulation verifies 125/150% conversion inputs. These are mocked native checks,
 not real Windows mouse/game acceptance. Existing 30-second quiet-polling and
 settings/setup/session-switch regressions remain required.
 
-Package/staging result and exact product source will be recorded after the clean
-source build. No running user process is terminated or game controlled.
+Clean product source: 835f40d25a6017a6c5012d37defa15779a42ef43 on Local.
+Windows release/NSIS construction and guarded App staging completed with exit0.
+No Lazy Tester process was running when inspected; no user process was terminated.
+All four staged payload hashes and the exported installer hash were verified.
+Desktop/Start Menu shortcuts were created and verified by the existing helper.
+App now contains this source revision; prior App and preferences are preserved
+by the guarded stager. The existing screenshot-era sessions were not controlled.
+
+Candidate: workspace/packages/lazy-tester/0.1.0-835f40d25a60-20261026T134529139Z.
+Installer SHA256: e822d5b32a6587527b11d2a6ce027853cda952f60e49413c7b8d40ba36c7e532.
+Build log: workspace/runs/play-settings-implementation/comfortable-layout-package.log.
+Signing NOT_VERIFIED; installer execution and new-layout live game interaction
+NOT_EXECUTED; publication DISABLED. The existing submodule and second worktree
+were checked and remain unchanged. This handoff-only update follows the product
+commit; no source changes were made after that clean package build.
 
 ## Previous outcome — quiet polling, honest setup and normal shortcuts
 
@@ -90,7 +103,7 @@ versus missing-store classifier test. Actual Windows debug binary built and its
 read-only setup inspection succeeded. Shortcut PlanOnly preflight succeeded.
 Logs and synthetic screenshots remain ignored under workspace/runs/.
 
-## App/package state and remaining work
+## Previous App/package state and remaining work (superseded above)
 
 App now contains clean product sourcef7f42fb067ec13a5d92f92b190c0988c1ea618a5.
 Windows/NSIS construction, guarded staging and Desktop/Start Menu shortcut creation
