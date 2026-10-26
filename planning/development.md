@@ -1,8 +1,8 @@
 # Current Development Handoff — Lazy Tester
 
 Local is the only product branch. CI remains OFF; main is release-reserved.
-Renderer/RAM experiments remain PAUSED. Current bounded work is physical checkout
-organization, before any new product feature or data migration.
+Renderer/RAM experiments remain PAUSED. Physical checkout root/source organization is implemented. No new product
+feature or data migration was included.
 
 ## Physical checkout organization
 
@@ -36,17 +36,44 @@ The stale generated Svelte checker tree was archived under
 workspace/archive/layout-20261026/svelte-check-before-relocation; regenerated
 typechecking reports zero errors/warnings. This is not compiler-cache cleanup.
 
-## Verification in progress
+## Executed verification and limits
 
-Metadata-only before/after inventory and execution logs belong to ignored
-workspace/runs/layout-20261026. Initial relocated checks: structure PASS,
-15 repository/local-test/toolchain tests PASS, 30 frontend tests PASS,
-Svelte typecheck zero errors/warnings, DEV.cmd doctor PASS. Remaining source and
-package construction checks must be recorded against the committed revision.
+Implementation/source verification SHA: 9a3d8c160e4a92ce61690b2492050b83b962911e.
+The subsequent handoff commit changes documentation only; no newer binary proof
+is implied. Before/after metadata, receipts and logs are preserved in ignored
+workspace/runs/layout-20261026/before.json and after.json.
 
-No GUI, installer, Minecraft, UAC, driver/service or Computer Use was launched.
-Installed behavior and Minecraft runtime acceptance remain NOT_EXECUTED.
-Build results never imply account persistence, migration or gameplay acceptance.
+PASS: physical and tracked structure/link checks, source-relative URL path audit,
+DEV.cmd doctor, repository/local-test/toolchain and all Node suites (four declared
+platform skips), 30 frontend tests, Svelte zero errors/warnings, frontend build,
+Rust desktop all-targets compilation, two product-profile fixtures within the
+larger desktop run, and all 316 runtime-core tests.
+
+The complete verify:source command is NOT PASS. Desktop Rust execution completed
+180 passing tests and 18 declared ignores, with one DACL failure in
+owned_disposable_directory_handle_has_stable_file_identity (broad group access
+inherited by its disposable temporary directory). An isolated rerun reproduced
+the same refusal. malformed_oversized_message_cannot_be_processed_as_valid_probe
+stalled beyond 60 seconds; only our test executable PID 8364 was terminated.
+Both source owners are byte-identical to the pre-move revision; baseline runtime
+reproduction before the move was NOT_EXECUTED. No ACL/security checks were weakened.
+Desktop/runtime rustfmt --check also reports existing formatting differences,
+including unchanged build.rs/runtime sources; no broad formatter rewrite was made.
+
+Actual Windows release/Tauri/NSIS construction and export-only packaging PASS
+at the implementation SHA, with 104 existing release compiler warnings.
+Export: workspace/packages/lazy-tester/0.1.0-9a3d8c160e4a-20261026T084317679Z.
+Exactly three exported files; installer is 2,588,939 bytes, Authenticode NotSigned,
+SHA256 0843bda228f1cf5d82e3e302c16f4b19894c7dd3ca918eb320ca3e95beae0fa8.
+App payload hashes still match the before inventory; Data still has zero entries.
+Retained owned/candidate/upstream Git trees and the second worktree are unchanged.
+
+No product GUI, installer, Minecraft, UAC, driver/service or Computer Use was
+launched. Only noninteractive/disposable source fixtures ran. Installed behavior
+and Minecraft runtime acceptance remain NOT_EXECUTED. Root/source organization is
+complete; unclassified loose workspace logs/scripts/screenshots/probe folders
+remain deliberately preserved, not certified sanitized or safely disposable.
+Cache deletion and profile migration remain deferred, with no space-reclaimed claim.
 
 ## Product limits retained
 
@@ -58,6 +85,7 @@ No new lifecycle/storage owner, wire schema or installer identity is introduced.
 
 ## Next — one action
 
-Finish consumer/path verification and Windows candidate export for this layout,
-then record exact source SHA and physical before/after evidence. Do not resume
-features, cache deletion or Minecraft/RAM experiments as incidental work.
+Resolve the recorded source-suite DACL/pipe and formatting failures as a separate
+bounded diagnosis before claiming a fully green source suite. Do not resume
+features, cache deletion or Minecraft/RAM experiments incidentally. STOP here
+for the completed checkout-layout scope.
