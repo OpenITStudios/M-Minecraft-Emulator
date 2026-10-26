@@ -1,115 +1,106 @@
 # Current Development Handoff — Lazy Tester
 
-Local only; main is release-reserved and GitHub Actions remains OFF. RAM/renderer,
-Sandboxie and VMware work remain PAUSED. Development/Archive layout is retained.
+Local only; main release-reserved; GitHub Actions entirely OFF. RAM/renderer,
+Sandboxie and VMware routes PAUSED. Development/Archive organization retained.
 
-## Current bounded outcome — actual setup/picker validation
+## Current bounded outcome — real setup/picker validation
 
-Operator explicitly continued the proposed interactive setup/picker test after
-9b6429ea14bcd30557ca7604c46fd08d560e8079. Computer Use was used only on the
-locally built Lazy Tester GUI and its native folder dialog; no game/auth/security
-UI. Exact App source 88aa73f1fcb11d7193e0ccd574018e8d176bd0a0 opened, showed
-Connected/zero games and verified the retained five-profile pilot binding. Storage
-showed the original pilot location, not product Data; root Data stayed empty.
-Actual Locate dialog cancel restored usable controls and retained the location.
-Selecting the empty checkout Data was refused; no pointer or catalog was created.
-The resulting raw os-error-2 message was unhelpful. The existing product_profiles
-owner now contextualizes missing files only during selected-folder verification:
-select a complete existing Data folder with profiles.json and all five profiles;
-empty/old-pilot folders are not product reattachment targets. Error kind and all
-identity/idle/open/publish gates remain intact. Default empty setup resolution is
-unchanged. Three targeted Windows fixtures PASS, including empty/partial folder
-preservation and valid selection. A fresh clean package and real rejection retest
-follow this commit. No registry/data migration or automatic replacement added.
+Operator continued the proposed interactive setup/picker validation after
+9b6429ea14bcd30557ca7604c46fd08d560e8079. This authorized opening the locally
+built Lazy Tester GUI/native folder dialog for that scope. Computer Use used
+only those windows; no game/auth/security UI, installer or account/world reading.
 
-Successful real product-data reattachment is NOT_EXECUTED: this observed machine
-uses retained pilot stores and has no verified product Data catalog. No user data
-will be converted or fabricated merely to manufacture that acceptance result.
+Baseline App 88aa73f1fcb11d7193e0ccd574018e8d176bd0a0 opened and showed
+Connected, zero games and the retained five-profile pilot binding. Storage showed
+its original pilot root, not the new product Data layout. Actual Locate cancel
+restored usable controls and retained the location. Selecting empty checkout Data
+was refused with raw os-error-2. No data pointer/catalog was created.
 
-## Preserved setup/data recovery implementation
+The existing product_profiles.rs owner now contextualizes missing files during
+selected-folder verification. The message requests an existing Data folder with
+profiles.json and all five profiles, explains empty/old-pilot folders are not
+reattachment targets, and states the current location did not change. Error kind,
+identity/user/idle/open/publish gates remain intact. Default empty-directory setup
+resolution is unchanged; no registry/data migration or reset added.
 
-Operator resumed setup and location validation from Local
-943af543fb388b5b9f707357fa6ea1a237188e05. Implementation:
-88aa73f1fcb11d7193e0ccd574018e8d176bd0a0. Owner remains the mounted
-Development/apps/desktop/src/LazyTesterApp.svelte; no native storage/schema changes.
-
-Inspection found failed saved-location checks disabled Locate data, blocking the
-existing backend recovery path. Storage now retains Locate for unknown locations;
-its backend still rechecks idle/controller/catalog/Windows-user/directory identity
-before changing the pointer. Unknown location does not expose Choose as a reset.
-Setup's Manage data links to Storage. Setup/location errors survive unrelated
-session refresh. Failed binding checks clear configured state; failed location
-inspection also invalidates binding, sizes and cleanup confirmation. Verified
-reattachment rechecks binding before enabling Launch. Picker cancel or invalid
-selection does not authorize replacing data. No account/world migration or partial
-setup reseeding was added. See docs/system/data-layout.md.
-
-## Executed evidence for this change
-
-32 frontend tests PASS; Svelte zero errors/warnings; production frontend build,
-repository structure and G0 PASS. Expanded optional headless Edge regression:
-Development/tooling/acceptance/lazy-tester-ui-regression.mjs. PASS with mocked Tauri:
-startup, queued navigation, Storage refresh/partial counts, FPS draft/save,
-four-page bounds at 920x620 and 1366x900, game-ready navigation, disconnect/reconnect;
-also missing/invalid data, retained setup error, cancel, invalid folder refusal,
-verified reconnect and stale setup disabling Launch. Failed-setup layout fits
-920x620. Run after frontend build with MIVUBI_PLAYWRIGHT_MODULE pointing to an
-available Playwright module. No application dependency added.
-
-Two Windows product_profiles fixtures PASS with --features lazy-tester-package and
-TAURI_CONFIG from src-tauri/tauri.lazy-tester.conf.json. Filter:
+Implementation and exact new candidate source:
+b0ecca914a11c7e5ad23c73d946f37c925d83450.
+Three targeted Windows product_profiles fixtures PASS: create/reopen/preserve,
+valid selected-folder verification, same-volume relocation, replaced-profile
+refusal, empty/partial selection preservation, relative defaults, custom missing
+location refusal and corrupt-locator preservation. Only original disposable
+filesystem/HKCU fixture stores were used. Feature lazy-tester-package plus
+TAURI_CONFIG from its real overlay; filter:
 engine::native_clients::independent_bootstrap::product_profiles::tests.
-They cover create/reopen/preserve, same-volume relocation, replaced-profile refusal,
-relative default, missing custom location refusal and corrupt locator preservation.
-Only disposable synthetic filesystem/HKCU stores were used and cleaned by their
-original fixture owner. A default-feature invocation selected zero tests; that was
-not counted. No product backend change or account-bearing profile inspection.
+Repository structure and G0 PASS. No frontend/native DLL logic changed in this fix.
 
-Known unrelated DACL-fixture refusal, oversized-pipe hang and rustfmt drift from
-prior work remain unresolved; no globally-green suite claim.
+Fresh candidate was opened and actual empty-folder selection repeated. The exact
+new English message appeared, original pilot location remained displayed, controls
+recovered, root Data stayed empty and App/data-location.json was absent. Both test
+GUI instances closed normally; final process counts: zero Lazy Tester/Minecraft.
+Cancellation PASS belongs to baseline88aa73f; improved-message/refusal PASS belongs
+to b0ecca9. Do not merge those into a full exact-revision acceptance claim.
 
-## Exact Windows candidate
+## Exact package
 
-Clean Local 88aa73f1fcb11d7193e0ccd574018e8d176bd0a0 built Windows/NSIS via
-npm --prefix Development run package:windows. App refreshed by the existing stager,
-with previous App retained. All four payload hashes match build-info.json; export
-installer hash matches its receipt. Data remains empty; no actual performance.json
-was created. Export:
-workspace/packages/lazy-tester/0.1.0-88aa73f1fcb1-20261026T101013679Z.
-Installer SHA256: c5feeae822f429788440f81f84bee7625f8e968f17d0838a0819848ee492647f.
-App and installer are NotSigned. Metadata-only receipt:
-workspace/runs/setup-recovery-20261026/completion.json. A subsequent handoff commit
-changes documentation only; binary acceptance belongs to the implementation SHA.
-Submodule and detached second worktree unchanged; output/private paths stay ignored.
+Clean Local b0ecca914a11c7e5ad23c73d946f37c925d83450 built Windows/NSIS via
+npm --prefix Development run package:windows. App refreshed with previous App
+preserved; four payload hashes match build-info.json. Export:
+workspace/packages/lazy-tester/0.1.0-b0ecca914a11-20261026T102645960Z.
+Installer SHA256: 8cb8d5ec4c65807726228b669e8ecfeb13e4659d5a9411b4230604b236965f4b.
+Installer NotSigned; no installation executed. Metadata-only receipt:
+workspace/runs/setup-recovery-20261026/interactive-picker-completion.json.
+Build log: picker-message-build.log in the same directory. No raw user/registry
+identity, profile catalog, account/world content or GUI screenshot copied to Git.
+A follow-up handoff commit changes documentation only; App uses b0ecca9 source.
 
-## Preserved behavior and proof limits
+## Preserved implementations
 
-Usability implementation: 300d5911c80a9caed5966d3e74052c12bf1734d3.
-Settings/native implementation: 19860393bb54a8d573ff8b16e4d597f10e8753a3.
-Shared FPS defaults144/10, integer1..1000, background<=active. Existing
-manager_settings.rs owns atomic executable-adjacent performance.json. Missing means
-defaults without writing; invalid files are preserved/refused. Saved limits apply
-at next explicit launch; running games retain old limits. No watcher/new limiter
-or per-frame configuration I/O. Original preset writer retains Simple/12 chunks/
-reduced effects and unowned options. Apply all requires idle verified stores; retry
-is safe, but multi-profile failures are not a cross-profile atomic transaction.
-Private presentation V3 reuses the reserved DWORD of the 120-byte capability;
-V2 retains144/10. Identity/event/handle checks and account/storage ABI unchanged.
-Native pins remain:
-compatibility 9d1cf60673c1ebbc0d94c30c1e28e226aa4429653901e5abd6e95400457ef8cb
-enroller 6e7c000bee2dcf043d372317c77a04078ca12451c7273a18bd54e8f89e62af2a
-Prior native build/Pacer/targeted-Rust evidence is in workspace/runs/settings-20261026;
-it was not rerun as native logic was unchanged.
+Setup UI recovery: 88aa73f1fcb11d7193e0ccd574018e8d176bd0a0. Failed saved-location
+inspection retains Locate; backend verifies selected identity before publishing.
+Unknown location never exposes Choose as a reset. Manage data opens Storage;
+setup/location errors survive session refresh. Failed verification invalidates
+configured state and stale sizes/cleanup confirmations; reattachment rechecks
+binding. Expanded headless mocked-Tauri cases and 32 frontend tests passed at
+that implementation, not rerun as new frontend evidence for the message-only fix.
 
-No Computer Use, product GUI, actual picker, installer execution, Minecraft, UAC,
-service/driver, real cache deletion or account/world-content reading performed.
-Actual installed setup, FPS, licensed login/world persistence and Host World remain
-NOT_EXECUTED. Source/package success does not establish gameplay proof. Partial
-setup repair, cross-volume migration, backup/restore and unknown workspace cleanup
-remain unfinished/deferred. Previous pilot gameplay is historical proof only.
+Usability: 300d5911c80a9caed5966d3e74052c12bf1734d3. Latest navigation survives
+in-flight operations; game-ready events do not pull users away from Settings.
+Storage refresh checks location/usage explicitly; partial sizes are lower bounds;
+four-page layout checked at920x620/1366x900. Existing native recovery remains owner.
+
+Settings/native: 19860393bb54a8d573ff8b16e4d597f10e8753a3. Shared FPS defaults144/10,
+integers1..1000, background<=active. manager_settings.rs atomically persists only
+FPS settings beside executable. Missing file uses defaults without writing;
+invalid file preserved/refused. Save applies at next explicit launch; running
+games retain limits. No watcher/new limiter/per-frame config I/O. Original graphics
+preset writer retains Simple/12chunks/reduced effects and unowned options. Apply
+all requires idle verified stores; multi-profile failure is not atomic.
+Private presentation V3 uses the reserved DWORD of the120-byte capability; V2
+retains144/10. Identity/event/handle/storage/account ABI checks unchanged. Native pins:
+compatibility9d1cf60673c1ebbc0d94c30c1e28e226aa4429653901e5abd6e95400457ef8cb
+enroller6e7c000bee2dcf043d372317c77a04078ca12451c7273a18bd54e8f89e62af2a
+Prior native build/Pacer/Rust logs: workspace/runs/settings-20261026.
+
+## Remaining proof and preservation
+
+Successful real product-Data reattachment NOT_EXECUTED: observed active data uses
+retained pilot stores and no verified product catalog is available. Do not convert,
+copy or fabricate user data merely to manufacture acceptance. Partial setup repair,
+pilot-to-product/cross-volume migration and backup/restore remain unimplemented.
+Actual installed fresh setup, FPS144/10/custom, licensed login/world persistence
+and Host World/gameplay remain NOT_EXECUTED. Zero processes and GUI success do
+not establish game readiness or licensing. Prior pilot acceptance is historical.
+
+Root Data remains empty; performance.json and data-location.json absent. No real
+cache clear, account/world read, UAC, service/driver, installer or Minecraft launch.
+Known unrelated DACL-fixture refusal, oversized-pipe hang and rustfmt drift remain;
+no globally-green suite claim. Submodule, second worktree and unknown workspace
+material preserved. No main/release changes or CI. Higher proof ceiling here is
+TARGET_WINDOWS for the specifically observed GUI behaviors only.
 
 ## Next — one action
 
-Build and retest the selected-folder message in the real native picker, then
-record exact candidate/evidence and stop. Complete-product-data reattachment,
-fresh installed setup and Minecraft/FPS acceptance remain separate and unfinished.
+Define a non-destructive migration/reattachment design for the retained pilot data
+before attempting product-Data acceptance. No live account/world move/reset is
+implied. STOP for completed bounded picker validation and message correction.
