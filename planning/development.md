@@ -58,11 +58,24 @@ for this revision are NOT_EXECUTED. Source/UI checks are not runtime proof.
 
 ## Packaging / continuation
 
-No Lazy Tester or Minecraft processes were observed before packaging preparation.
-Build and stage a clean-revision candidate only after rechecking that App is idle;
-preserve preference files, data folders, submodule and second worktree. Actual
-package/staging outcome must be recorded after completion, without GUI/installer
-execution or automatically starting games.
+Built Windows/NSIS from clean Local source
+1c8a3cd129cebf41472facb25021ed6011bc70a9. Package command completed successfully
+and staged the actual root App using its guarded backup/swap path. App build-info
+matches this source and all four payload hashes were independently verified.
+Installer SHA256485144c526013e95928832d05e4fd1319a56aa8a74752a407f6b353382eeacc7.
+Candidate: workspace/packages/lazy-tester/0.1.0-1c8a3cd129ce-20261026T122616256Z.
+Build log: workspace/runs/play-settings-implementation/package.log.
+The package manifest retains signing NOT_VERIFIED, installedAcceptance and
+minecraftAcceptance NOT_EXECUTED, publication DISABLED. No installer or GUI was
+executed and no game was started. RUN.cmd now resolves to the refreshed App.
+
+No Lazy Tester or Minecraft processes were observed before/after packaging.
+Existing data and preference pointers were preserved; no controller was killed.
+Submodule remains abd4c240031cfb46666daa74ca47ed4e48b561e4;
+second worktree remains detached at47a45f9c7d4a8ce6799d56997fd38e4b4df49ce7.
+Repository structure and G0 contracts passed again after staging. The following
+handoff commit changes documentation only; the packaged product SHA above is
+the precise source of the current App, not an inferred gameplay acceptance.
 
 Next: implement and test bounded game-settings backup/reset/restore in the
 existing options owner before enabling those controls. Account-clear isolation
