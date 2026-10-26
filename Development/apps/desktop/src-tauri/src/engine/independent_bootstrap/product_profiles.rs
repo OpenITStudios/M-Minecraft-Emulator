@@ -13,6 +13,9 @@ const CATALOG: &str = "profiles.json";
 const LOCATOR: &str = "data-location.json";
 const LIMIT: u64 = 16 * 1024;
 
+#[path = "product_profiles/clear.rs"]
+pub(super) mod clear;
+
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Identity {
@@ -420,6 +423,11 @@ pub(super) fn open() -> io::Result<Option<[SlotStorage; 5]>> {
 pub(super) fn inspect_existing() -> io::Result<Option<[SlotStorage; 5]>> {
     open_mode(false)
 }
+fn recover_confirmed(root:&Path) {
+    // Startup restores unfinished cutovers; large committed purges require Finish clear.
+    // Inspection/Locate stay read-only and unrelated catalog-valid peers remain available.
+    for slot in 1..=5 {let _=clear::rollback_uncommitted(root,slot);}
+}
 fn open_mode(persist_location: bool) -> io::Result<Option<[SlotStorage; 5]>> {
     let home = home()?;
     let locator = locator_path()?;
@@ -427,6 +435,7 @@ fn open_mode(persist_location: bool) -> io::Result<Option<[SlotStorage; 5]>> {
     let legacy_locator = !locator.try_exists()? && legacy.try_exists()?;
     let (root, default) = resolve_location(&home, if legacy_locator { &legacy } else { &locator })?;
     let (logical, _) = replay_roots()?;
+    if persist_location {recover_confirmed(&root);}
     match open_at(logical, &root) {
         Ok(stores) => {
             // A successful setup may have stopped between catalog and locator

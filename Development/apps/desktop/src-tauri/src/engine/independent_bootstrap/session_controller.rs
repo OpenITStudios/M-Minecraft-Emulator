@@ -81,6 +81,10 @@ impl Sessions {
                 "Minecraft profile is already running or its outcome is uncertain",
             ));
         }
+        #[cfg(feature="lazy-tester-package")]
+        if product_profiles::clear::pending(self.store(slot)?)? {
+            return Err(invalid("Finish clearing this launcher's old data in Data Storage before starting it"));
+        }
         let payload = BootstrapLibrary::reviewed()?;
         crate::engine::manager_settings::load_performance()?;
         // Revalidate registration and exact game bytes before every launch.
@@ -163,13 +167,24 @@ impl Sessions {
                     window(child)
                 });
                 self.windows[index] = process.clone();
+                let mut issue=self.issues[index].clone();
+                #[cfg(feature="lazy-tester-package")]
+                if self.running[index].is_none() {
+                    if let Some(store)=&self.stores[index] {
+                        match product_profiles::clear::pending(store) {
+                            Ok(false)=>{},
+                            Ok(true)=>issue=Some("Full data clear is pending. Open Data Storage to finish this launcher; other launchers are unchanged.".into()),
+                            Err(error)=>issue=Some(format!("Launcher cleanup needs attention: {error}")),
+                        }
+                    }
+                }
                 let state = if self.running[index].is_some() {
                     match process.as_ref() {
                         Some(p) if p.responding => "RUNNING",
                         Some(_) => "NOT_RESPONDING",
                         None => "STARTING",
                     }
-                } else if self.issues[index].is_some() || self.stores[index].is_none() {
+                } else if issue.is_some() || self.stores[index].is_none() {
                     "ATTENTION"
                 } else {
                     "STOPPED"
@@ -178,7 +193,7 @@ impl Sessions {
                     slot: index as u32 + 1,
                     state: state.into(),
                     process,
-                    issue: self.issues[index].clone(),
+                    issue,
                 }
             })
             .collect();
@@ -255,6 +270,7 @@ impl Sessions {
                         cache
                     },
                     game_settings: Some(game_preset::inspect_settings(&store.private, self.data_admission(slot, &observed))),
+                    full_clear: Some(product_profiles::clear::inspect(store,self.data_admission(slot,&observed))),
                 };
                 scan(&path, &mut result, std::time::Instant::now(), 0);
                 Ok(result)
@@ -306,6 +322,32 @@ impl Sessions {
             Ok((child.pid, child.created))
         }).collect::<io::Result<Vec<_>>>()?;
         require_data_idle(self.running[slot as usize - 1].is_none(), &owned, observed)
+    }
+
+    fn clear_data(&mut self,slot:u32,token:&str)->io::Result<()> {
+        self.reap();
+        let observed=super::super::inspect_native_workspace()?.processes;
+        self.data_admission(slot,&observed)?;
+        let index=slot as usize-1;
+        let store=self.store(slot)?;
+        if product_profiles::clear::confirmation(store)?!=token {
+            return Err(invalid("Launcher data changed after confirmation; review it again"));
+        }
+        let logical=store.logical.try_clone()?;
+        let root=product_profiles::clear::location(store)?;
+        let store=self.stores[index].take().ok_or_else(||invalid("Inactive profile storage is unavailable"))?;
+        let result=product_profiles::clear::run(store,token);
+        match product_profiles::clear::reopen(logical,&root,slot) {
+            Ok(store)=>self.stores[index]=Some(store),
+            Err(error)=>{self.issues[index]=Some(format!("Full clear needs recovery: {error}"));return Err(error);}
+        }
+        let store=self.stores[index].as_ref().unwrap();
+        let pending=product_profiles::clear::pending(store)?;
+        if !pending && (result.is_ok() || product_profiles::clear::confirmation(store)?!=token) {
+            self.issues[index]=None;self.windows[index]=None;
+            return Ok(());
+        }
+        result.map_err(|error|io::Error::new(error.kind(),format!("Full clear did not finish. Refresh Data Storage to review its recovery status. {error}")))
     }
 
     fn settings(&mut self, apply: bool) -> io::Result<SettingsReport> {
@@ -569,6 +611,11 @@ fn run() -> io::Result<()> {
                     }.map_err(|error|error.to_string())?;
                     storage=Some(sessions.storage().map_err(|error|error.to_string())?);
                 }
+                SessionRequest::ClearProfileData {slot,confirmation_token,confirmation_name}=>{
+                    if confirmation_name!=format!("Minecraft - {slot}") {return Err("Launcher confirmation does not match".into());}
+                    sessions.clear_data(slot,&confirmation_token).map_err(|error|error.to_string())?;
+                    storage=Some(sessions.storage().map_err(|error|error.to_string())?);
+                }
                 SessionRequest::OpenProfileFolder { slot } => sessions
                     .open_folder(slot)
                     .map_err(|error| error.to_string())?,
@@ -686,6 +733,7 @@ mod tests {
             disk: None,
             cache: Default::default(),
             game_settings: None,
+            full_clear: None,
         };
         scan(&directory, &mut result, std::time::Instant::now(), 0);
         assert_eq!((result.bytes, result.files, result.partial), (40, 2, false));

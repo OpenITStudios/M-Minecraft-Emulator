@@ -122,7 +122,7 @@ pub fn run() {
                                     crate::engine::workspace_surface::cancel_close();
                                     use tauri::Emitter;
                                     let _=window.emit("lazy-tester-close-error",format!("Exit was not completed. {error}"));
-                                    let _=MessageDialog::new().set_parent(&window).set_title("Minecraft is still closing").set_description(format!("Lazy Tester will stay open. {error}")).set_level(MessageLevel::Info).show();
+                                    let _=MessageDialog::new().set_parent(&window).set_title("Lazy Tester is still closing").set_description(format!("Lazy Tester will stay open. {error}")).set_level(MessageLevel::Info).show();
                                 }
                             }
                             CONFIRMING.store(false,Ordering::SeqCst);

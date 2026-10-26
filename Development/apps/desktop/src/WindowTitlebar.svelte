@@ -27,5 +27,5 @@
   <button class="lt-window-control" aria-label={maximized?'Restore down':'Maximize'} title={maximized?'Restore down':'Maximize'} on:click={()=>action('toggleMaximize')}><svg viewBox="0 0 16 16" aria-hidden="true">{#if maximized}<path d="M5 5V3h8v8h-2M3 5h8v8H3Z"/>{:else}<path d="M3 3h10v10H3Z"/>{/if}</svg></button>
   <button class="lt-window-control lt-window-close" disabled={closing} aria-label="Close Lazy Tester" title="Exit Lazy Tester and all managed Minecraft sessions" on:click={()=>action('close')}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"/></svg></button>
 </div>
-{#if closing}<div class="lt-alert" role="status">Closing Minecraft… Lazy Tester will exit when all managed games have finished closing.</div>{/if}
+{#if closing}<div class="lt-alert" role="status">Closing Lazy Tester… Waiting for managed games and pending work to finish.</div>{/if}
 {#if error}<p class="lt-alert" role="alert">{error}</p>{/if}

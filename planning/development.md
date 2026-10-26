@@ -17,16 +17,14 @@ requires selected-launcher review/confirmation.
    snag and desktop/Explorer exposure. Same Play/Settings frame through drag end/
    cancel, resize, maximize/restore, focus and DPI/monitor changes. Main game16:9.
    No game parenting, binary patching, destructive owner relationship or input relay.
-2. Fast switch/Launch: measure request -> actual focus/bounds and launch phases
-   (controller, validation, enrollment, window ready). Reuse verified original leases
-   and immutable image pins; remove duplicate work without weakening game/DLL/
-   process identity or inventing readiness. No busy polling or unsupported claims.
+2. Fast switch/Launch: measure focus/bounds and controller/validation/enrollment/
+   window-ready phases. Reuse original leases/image pins without weakening identity,
+   inventing readiness or busy polling.
 3. Process clarity: main UI, root starter, session controller, recovery per game,
    official Minecraft, WebView renderer/GPU/services. Investigate supported Task
    Manager naming/grouping and prove actual results. Do not hide processes, rename
    official binaries, disable browser sandbox or weaken same-image pipe checks.
-   An app role/PID page is not proof of actual Task Manager grouping. Explain any
-   proven upstream limitation; do not attribute LazyDesigner without PID evidence.
+   Role/PID pages do not prove grouping; explain proven upstream limitations.
 4. General: High/Low only; truthful valid whole5..1000 FPS saves with120/5 defaults.
    Preserve explicit older preferences; new defaults do not overwrite user choices.
    Keep/Mute background audio must actually scope original game audio sessions,
@@ -36,9 +34,8 @@ requires selected-launcher review/confirmation.
    Complete settings reset plus verified backup/restore via existing writer. Clear
    all data removes only selected owned local accounts/world/cache/settings/backups,
    leaves empty launcher ready for a new account, retains installation/others, states
-   Windows identity limits. Define confirmation, recovery/catalog identity updates
-   and interruption handling. Test active profile, malformed paths, links, cancel,
-   partial failure and cross-profile isolation before real destructive use.
+   Windows identity limits. Verify confirmation, recovery/catalog identities,
+   interruption, active profiles, malformed paths, links, cancel and peer isolation.
 6. Delivery: clean exact Local Windows candidate, frontend/Rust/fixtures/package
    checks; stage App/root EXE/shortcuts preserving Data. Verify actual Explorer
    startup, common frame, drag/switch/previews/full exit/settings/storage/process
@@ -80,17 +77,23 @@ Other exact managed games may continue; unknown external game blocks. Actor stil
 serializes launch/deletion; pinned paths/exclusive HTTP-cache plans unchanged.
 UI/parser/classifier agree. Four synthetic deletion tests and scoped PID/birth spoof
 admission PASS, including locks/links/incomplete plan/cross-profile preservation.
-No real cache/account/world deleted.35 frontend tests, typecheck0errors/warnings,
-G0/structure PASS. NSIS built, export hash checked, App/root startup receipts verified.
-Existing Rust warnings remain.
+No real cache/account/world deleted. Existing Rust warnings remain.
 ## Remaining work and owners
 
 Reset/restore source added: game_preset.rs backs up options.txt, flushes/readbacks,
 publishes SHA256 receipt before atomic replacement; restore backs up current state.
-Selected stopped-profile admission, confirmation/cancel and verified availability
-are wired through existing actor/bridge/UI. Eight preset/recovery fixtures, invalid
-slot admission,36 frontend tests/typecheck PASS. No real settings mutation executed; actual review/Cancel proof above.
-Full clear/audio remain incomplete. Use the existing
+Stopped-profile admission and review wired through existing actor/bridge/UI. Eight
+preset/recovery fixtures PASS. No real settings mutation; review/Cancel proof above.
+Full clear implemented in product_profiles/clear.rs through the same actor/bridge/UI:
+fresh selected hive/directory, generation-bound confirmation, same-volume cutover,
+catalog identity update, pinned-handle purge. Precommit rollback; postcommit cleanup
+requires explicit resume. Read-only inspection never mutates; startup never performs
+a large committed purge. Name+ack confirmation; one review panel at a time.
+13 profile tests (7 transactional clear fixtures),5 controller tests, invalid request
+admission,37 frontend tests/typecheck PASS. Locked/hardlinked/junction/malformed paths,
+cutover failures, partial purge, stale token, readonly files and peer preservation
+covered with synthetic data. No real full clear executed. Candidate not yet staged.
+Audio remains incomplete. Use the existing
 session_controller.rs actor, game_preset.rs options writer, profile_storage.rs/
 product_profiles.rs pinned stores, manager_settings.rs and current UI/bridge.
 Launch performance and actual Task Manager roles/grouping remain unproven.
@@ -98,8 +101,6 @@ WebView2 grouping matches OPEN upstream reports; AppUserModelID/metadata alone
 insufficient. Investigate actual parent/logon/integrity and supported APIs:
 https://github.com/MicrosoftEdge/WebView2Feedback/issues/5628
 https://github.com/tauri-apps/tauri/issues/15567
-DWM destination must be caller-owned top-level, not child:
-https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/nf-dwmapi-dwmregisterthumbnail
 No one-group Task Manager success claim. Full-exit source from6eba183 closes only
 managed games normally and keeps manager open on pending dialog/timeout; actual
 Minecraft save/full-exit acceptance remains NOT_EXECUTED.
@@ -111,6 +112,6 @@ Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4; second worktree detached47a45
 Four licensed playable clients, gameplay/network/migration/installer acceptance
 are separate obligations, NOT_EXECUTED here. Compiler caches remain ignored.
 
-Next: implement full selected-launcher clear with transactional identity/recovery
-proof, then audio and remaining presentation/performance/process acceptance.
+Next: build/stage full-clear candidate and verify real UI review/Cancel only;
+then audio and remaining presentation/performance/process acceptance.
 Overall goal stays ACTIVE.

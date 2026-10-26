@@ -435,3 +435,10 @@
 .lt-filmstrip{width:min(100%,1600px);gap:12px}
 .lt-card-picture{width:min(100%,calc(clamp(80px,16vh,180px) * 16 / 9));max-height:none}
 @media(max-height:700px){.lt-card-picture{width:min(100%,calc(82px * 16 / 9))}.lt-filmstrip .lt-card{padding:8px;gap:5px}}
+
+.lt-delete-confirm {display:grid;gap:12px;justify-items:start}
+.lt-delete-confirm h3,.lt-delete-confirm p {margin:0}
+.lt-delete-confirm input[type="text"] {width:100%;max-width:320px}
+.lt-delete-ack {display:flex;gap:10px;align-items:flex-start;line-height:1.5}
+.lt-delete-ack input[type="checkbox"] {flex:0 0 auto;width:18px;height:18px;padding:0;margin:2px 0 0;accent-color:var(--lt-accent)}
+.lt-delete-confirm button.lt-danger {background:#943641;color:#fff;border-color:#b34a56}

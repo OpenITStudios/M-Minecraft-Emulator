@@ -96,8 +96,15 @@ game_preset.rs also owns reset/restore of only options.txt. A create-new backup 
 flushed/read back and its fixed-name receipt atomically published before settings
 replacement. Restore verifies bounded content/hash and backs up current settings.
 The session actor admits only the stopped selected profile; UI reviews/cancels
-before a request. Inspection creates no settings directories. Full account clear,
-world export and background audio control remain unavailable. Full product exit closes only its managed games normally through the
+before a request. Inspection creates no settings directories. Full selected-profile
+clear belongs to product_profiles/clear.rs under the existing session actor. It
+replaces only the pinned stopped profile with a fresh file-backed hive/directory,
+updates its catalog identities and purges old data through verified handles. The
+identity-bound transaction supports rollback before catalog commit and explicit
+cleanup recovery afterward; read-only inspection never resumes deletion. UI review
+requires the exact launcher name and an irreversible-deletion acknowledgement.
+Windows sign-in is unchanged; world export and background audio remain unavailable.
+Full product exit closes only its managed games normally through the
 existing session owner; it never terminates unrelated games or reads their data.
 
 Functional Settings uses the same lazy_tester_session adapter and retained

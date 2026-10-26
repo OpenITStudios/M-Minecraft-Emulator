@@ -15,6 +15,7 @@ export interface ProfileStorage {
   disk: {availableBytes: number; totalBytes: number} | null;
   cache: {bytes: number; files: number; partial: boolean; canClear: boolean; issue: string | null};
   gameSettings?: {hasSettings:boolean; backupAvailable:boolean; canReset:boolean; canRestore:boolean; issue:string|null};
+  fullClear?: {canClear:boolean; pending:boolean; confirmationToken:string|null; issue:string|null};
 }
 export type GraphicsPreset = 'High' | 'Low';
 export interface SettingsReport {graphicsPresets?:GraphicsPreset[]; activeFps:number; backgroundFps:number; renderDistanceChunks:number; canApplyPreset:boolean; changedProfiles:number|null}
@@ -71,7 +72,7 @@ export function parseSession(value: unknown): SessionSnapshot {
   if (value.storage !== null) {
     if (!Array.isArray(value.storage) || value.storage.length !== 5) throw new TypeError('Invalid storage response');
     value.storage.forEach((storage: unknown, index: number) => {
-      if (!record(storage) || !exact(storage, Object.hasOwn(storage,'gameSettings') ? ['slot', 'bytes', 'files', 'partial', 'disk', 'cache','gameSettings'] : ['slot', 'bytes', 'files', 'partial', 'disk', 'cache']) || storage.slot !== index + 1 ||
+      if (!record(storage) || !exact(storage, ['slot','bytes','files','partial','disk','cache',...(Object.hasOwn(storage,'gameSettings')?['gameSettings']:[]),...(Object.hasOwn(storage,'fullClear')?['fullClear']:[])]) || storage.slot !== index + 1 ||
           !Number.isSafeInteger(storage.bytes) || Number(storage.bytes) < 0 || !Number.isInteger(storage.files) ||
           Number(storage.files) < 0 || Number(storage.files) > 100000 || typeof storage.partial !== 'boolean') throw new TypeError('Invalid storage metadata');
       const {disk, cache} = storage;
@@ -93,6 +94,14 @@ export function parseSession(value: unknown): SessionSnapshot {
           !(game.issue===null||typeof game.issue==='string'&&game.issue.length<=8192)||
           game.canReset&&(!game.hasSettings||game.issue!==null||active)||
           game.canRestore&&(!game.backupAvailable||game.issue!==null||active))throw new TypeError('Invalid settings recovery metadata');
+      }
+      if(Object.hasOwn(storage,'fullClear')) {
+        const full=storage.fullClear;
+        const active=(value.profiles as ProfileSession[]).some(profile=>profile.slot===storage.slot&&['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state));
+        if(!record(full)||!exact(full,['canClear','pending','confirmationToken','issue'])||typeof full.canClear!=='boolean'||typeof full.pending!=='boolean'||
+          !(full.confirmationToken===null||typeof full.confirmationToken==='string'&&/^[0-9a-f]{64}$/.test(full.confirmationToken))||
+          !(full.issue===null||typeof full.issue==='string'&&full.issue.length<=8192)||
+          full.canClear&&(full.confirmationToken===null||full.issue!==null||active))throw new TypeError('Invalid full-clear metadata');
       }
     });
   }
@@ -161,6 +170,10 @@ export const lazyTester = {
   recoverSettings: async (slot: ProfileSlot, action:'Reset'|'Restore') => {
     if(!profileSlots.includes(slot)||!['Reset','Restore'].includes(action))throw new TypeError('Invalid settings recovery request');
     return parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request:{operation:action==='Reset'?'ResetGameSettings':'RestoreGameSettings',slot}}));
+  },
+  clearData: async (slot:ProfileSlot,confirmationToken:string,confirmationName:string) => {
+    if(!profileSlots.includes(slot)||!/^[0-9a-f]{64}$/.test(confirmationToken)||confirmationName!==`Minecraft - ${slot}`)throw new TypeError('Confirm the exact launcher name before clearing all data');
+    return parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ClearProfileData',slot,confirmationToken,confirmationName}}));
   },
   present: (slot: ProfileSlot, rect: WorkspaceRectangle) => invokeRuntime<void>('lazy_tester_present', {
     slot, viewport: workspaceViewport(rect, window.devicePixelRatio),

@@ -57,6 +57,16 @@ pub struct ProfileStorage {
     pub cache: CacheStorage,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub game_settings: Option<GameSettingsStorage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub full_clear: Option<FullClearStorage>,
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FullClearStorage {
+    pub can_clear: bool,
+    pub pending: bool,
+    pub confirmation_token: Option<String>,
+    pub issue: Option<String>,
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -113,6 +123,7 @@ pub enum SessionRequest {
     ClearProfileCache { slot: u32 },
     ResetGameSettings { slot: u32 },
     RestoreGameSettings { slot: u32 },
+    ClearProfileData {slot:u32, #[serde(rename="confirmationToken")] confirmation_token:String, #[serde(rename="confirmationName")] confirmation_name:String},
     Launch { slot: u32 },
     CloseAll,
 }
@@ -139,6 +150,11 @@ static CONTROLLER: Mutex<Controller> = Mutex::new(Controller {
 
 #[cfg(windows)]
 pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
+    if let SessionRequest::ClearProfileData {slot,ref confirmation_token,ref confirmation_name}=request {
+        if !(1..=5).contains(&slot) || confirmation_token.len()!=64 || !confirmation_token.bytes().all(|byte|byte.is_ascii_hexdigit()) || *confirmation_name!=format!("Minecraft - {slot}") {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,"Confirm the exact launcher name before clearing all data"));
+        }
+    }
     if let SessionRequest::SavePerformance {active_fps,background_fps}=request {
         super::manager_settings::PerformanceSettings {active_fps,background_fps}.validate()?;
     }
@@ -322,6 +338,9 @@ mod tests {
             }
         }
         assert!(serde_json::from_str::<SessionRequest>(r#"{"operation":"RestoreGameSettings","slot":1,"path":"outside"}"#).is_err());
+        for (slot,token,name) in [(0,"a".repeat(64),"Minecraft - 0"),(1,"bad".into(),"Minecraft - 1"),(1,"a".repeat(64),"Minecraft - 2")] {
+            assert_eq!(request(SessionRequest::ClearProfileData {slot,confirmation_token:token,confirmation_name:name.into()}).unwrap_err().kind(),io::ErrorKind::InvalidInput);
+        }
     }
     #[test]
     fn settings_report_describes_the_reviewed_policy_without_starting_a_controller() {

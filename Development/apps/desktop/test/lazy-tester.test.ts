@@ -7,6 +7,22 @@ const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process
   pid: slot + 100, createdFileTime: String(slot + 200), sessionId: 1, windowHandle: `0x${slot}`, responding: true,
 }});
 describe('Lazy Tester profile contract', () => {
+  it('validates full-clear identity confirmation and refuses active or inconsistent targets',()=>{
+    const fullClear={canClear:true,pending:false,confirmationToken:'a'.repeat(64),issue:null};
+    const storage=[1,2,3,4,5].map(slot=>({slot,bytes:100,files:2,partial:false,disk:null,
+      cache:{bytes:0,files:0,partial:false,canClear:false,issue:null},fullClear}));
+    const snapshot={...stopped(),storage};
+    expect(parseSession(snapshot).storage![3]!.fullClear?.canClear).toBe(true);
+    for(const invalid of [{...fullClear,confirmationToken:null},{...fullClear,confirmationToken:'../outside'},
+      {...fullClear,issue:'Locked'},{...fullClear,pending:'yes'},{...fullClear,path:'outside'},null]) {
+      expect(()=>parseSession({...snapshot,storage:[{...storage[0]!,fullClear:invalid},...storage.slice(1)]})).toThrow();
+    }
+    const active={...snapshot,profiles:[running(1),...snapshot.profiles.slice(1)]};
+    expect(()=>parseSession(active)).toThrow();
+    const gated={...active,storage:storage.map(item=>item.slot===1?{...item,fullClear:{...fullClear,canClear:false,issue:'Close this Minecraft'}}:item)};
+    expect(parseSession(gated).storage![3]!.fullClear?.canClear).toBe(true);
+    expect(parseSession({...snapshot,storage:storage.map(item=>({...item,fullClear:{...fullClear,pending:true}}))}).storage![0]!.fullClear?.pending).toBe(true);
+  });
   it('admits settings recovery only for its stopped launcher with consistent backup metadata',()=>{
     const gameSettings={hasSettings:true,backupAvailable:true,canReset:true,canRestore:true,issue:null};
     const storage=[1,2,3,4,5].map(slot=>({slot,bytes:100,files:2,partial:false,disk:null,
