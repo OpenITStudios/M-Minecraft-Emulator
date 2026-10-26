@@ -20,10 +20,22 @@ export interface PreviewPlacement {slot: ProfileSlot; viewport: WorkspaceViewpor
 export interface PreviewStatus {slot: ProfileSlot; registered: boolean; reason: string | null}
 export interface PreviewReport {schema: 1; tiles: PreviewStatus[]}
 export interface ProfileBinding {schema: 1; required: boolean; configured: boolean; issue: string | null}
+export interface DataLocation {schema:1; defaultPath:string; path:string|null; profiles:{slot:ProfileSlot;path:string}[]; canLocate:boolean}
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const exact = (value: Record<string, unknown>, names: string[]) =>
   Object.keys(value).length === names.length && names.every(name => Object.hasOwn(value, name));
+
+export function parseDataLocation(value:unknown):DataLocation {
+  const path=(value:unknown):value is string=>typeof value==='string'&&value.length>0&&value.length<=4096&&!/[\x00-\x1f]/.test(value);
+  if(!record(value)||!exact(value,['schema','defaultPath','path','profiles','canLocate'])||value.schema!==1||!path(value.defaultPath)||
+      !(value.path===null||path(value.path))||typeof value.canLocate!=='boolean'||!Array.isArray(value.profiles)||
+      value.profiles.length!==(value.path===null?0:5))throw new TypeError('Invalid data location');
+  value.profiles.forEach((profile,index)=>{
+    if(!record(profile)||!exact(profile,['slot','path'])||profile.slot!==index+1||!path(profile.path))throw new TypeError('Invalid profile location');
+  });
+  return value as unknown as DataLocation;
+}
 
 export function parseProfileBinding(value: unknown): ProfileBinding {
   if (!record(value) || !exact(value, ['schema','required','configured','issue']) || value.schema !== 1 ||
@@ -91,6 +103,7 @@ export function parsePreviewReport(value:unknown,slots:readonly ProfileSlot[]):P
 }
 
 export const lazyTester = {
+  dataLocation:async(action:'Inspect'|'Open'|'Locate'|'Choose'='Inspect')=>parseDataLocation(await invokeRuntime<unknown>('lazy_tester_data_location',{action})),
   binding: async (importProfiles = false) => parseProfileBinding(await invokeRuntime<unknown>('lazy_tester_profile_binding', {import: importProfiles})),
   inspect: async () => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'Inspect'}})),
   launch: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'Launch', slot}})),

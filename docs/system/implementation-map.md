@@ -28,6 +28,12 @@ independent_bootstrap/profile_binding.rs owns the installed product's explicit
 existing-profile import and private capability publication. It reuses the original
 replay identity validator, stores no login/world contents and never starts games.
 The UI consumes a separate typed binding report, not a game-ready/account flag.
+Its sibling product_profiles.rs owns the App/Data location pointer, private
+five-profile catalog, fresh store preparation and verified reopening/reattachment.
+It reuses the same storage constructor and session owner. The new
+lazy_tester_data_location command reports actual paths and gates native selection;
+it does not copy accounts/worlds or introduce another lifecycle manager. See
+[data layout](data-layout.md) for preservation and migration limits.
 The frontend's only other runtime bridges are invokeRuntime, workspaceSurface and
 observedProcess. The latter retains the shared validated OS metadata parser; it
 does not import any retired provider API. All active frontend files are reachable

@@ -14,6 +14,13 @@ describe('Lazy Tester native package',()=>{
     expect(config.bundle.externalBin).toEqual([]);
     expect(Object.values(config.bundle.resources).sort()).toEqual(policy.requiredFiles.filter(name=>name!=='lazy-tester.exe').sort());
     expect(policy.migration.installerMayDeleteData).toBe(false);
+    expect(policy.runtime.defaultDataRelativePath).toBe('Data');
+    expect(policy.runtime.dataLocatorRelativePath).toBe('App/data-location.json');
+    const hooks=readFileSync(new URL('../src-tauri/windows/lazy-tester-hooks.nsh',import.meta.url),'utf8');
+    expect(hooks).toContain('MUI_CUSTOMFUNCTION_GUIINIT');
+    expect(hooks).toContain('$PROFILE\\Lazy Tester\\App');
+    expect(hooks).toContain('IfFileExists "$INSTDIR\\lazy-tester.exe" lazy_tester_layout_done 0');
+    expect(hooks).toContain('IfFileExists "$INSTDIR\\data-location.json" lazy_tester_layout_done 0');
     const extra=structuredClone(JSON.parse(readFileSync(new URL('../src-tauri/tauri.lazy-tester.conf.json',import.meta.url),'utf8')));
     extra.bundle.resources['private/replay-profile-five.bin']='independent-bootstrap/replay-profile-five.bin';
     expect(()=>verifyLazyTesterPackage(extra)).toThrow(/Unexpected/);

@@ -17,6 +17,12 @@ use std::{io, sync::Mutex};
 static MANAGER_RESOURCE_LOCK: Mutex<()> = Mutex::new(());
 
 #[tauri::command]
+pub async fn lazy_tester_data_location(action:native_clients::DataLocationAction) -> Result<native_clients::DataLocation,String> {
+    tauri::async_runtime::spawn_blocking(move||run_manager_operation(||native_clients::data_location(action)))
+        .await.map_err(|_|"Data location task failed".to_string())?.map_err(|error|error.to_string())
+}
+
+#[tauri::command]
 pub async fn lazy_tester_profile_binding(import: bool) -> Result<native_clients::ProfileBinding, String> {
     tauri::async_runtime::spawn_blocking(move || run_manager_operation(|| native_clients::profile_binding(import)))
         .await.map_err(|_| "Profile binding task failed".to_string())?.map_err(|error| error.to_string())

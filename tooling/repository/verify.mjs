@@ -79,7 +79,8 @@ export function verifyRepository(root,g0=false) {
   const tracked=execFileSync('git',['ls-files','-z'],{cwd:root,encoding:'utf8'}).split('\0').filter(Boolean);
   assert.deepEqual(checkTracked(tracked),[]);
   assert.ok(!tracked.some(path=>/(?:replay-profile-(?:pair|five)|profile-binding-five)\.bin$/.test(path)),'Private bindings must never be tracked');
-  for(const path of ['workspace/private/profile.json','workspace/packages/installer.exe','workspace/runtime/replay-profile-five.bin']) {
+  for(const path of ['workspace/private/profile.json','workspace/packages/installer.exe','workspace/runtime/replay-profile-five.bin',
+    'Data/profiles.json','App/data-location.json','Logs/session.log']) {
     execFileSync('git',['check-ignore','--no-index','-q','--',path],{cwd:root});
   }
   if(g0)assert.equal(execFileSync('git',['ls-tree','-r','--name-only','HEAD','--','apps/desktop/src-tauri/Cargo.lock'],{cwd:root,encoding:'utf8'}).trim(),'apps/desktop/src-tauri/Cargo.lock');

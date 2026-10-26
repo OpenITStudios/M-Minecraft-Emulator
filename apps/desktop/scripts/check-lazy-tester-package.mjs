@@ -25,6 +25,7 @@ export function verifyLazyTesterPackage(patch=JSON.parse(read('src-tauri/tauri.l
   fail(JSON.stringify(config.app.security)===JSON.stringify(base.app.security)&&!Object.hasOwn(config,'plugins'),'Desktop security must remain unchanged');
   const hooks=read('src-tauri/windows/lazy-tester-hooks.nsh');
   fail(hooks.includes('OpenMutexW')&&hooks.includes('Local\\MivubiEducationStartupObservation')&&hooks.includes('NSIS_HOOK_PREINSTALL')&&hooks.includes('NSIS_HOOK_PREUNINSTALL')&&hooks.includes('StrCpy $DeleteAppDataCheckboxState 0'),'Idle/data preservation hooks missing');
+  fail(hooks.includes('MUI_CUSTOMFUNCTION_GUIINIT')&&hooks.includes('$PROFILE\\Lazy Tester\\App')&&hooks.includes('!insertmacro LAZY_TESTER_APP_LAYOUT')&&policy.runtime.defaultDataRelativePath==='Data'&&policy.runtime.applicationSubdirectory==='App','Visible App/Data installation layout required');
   fail(!/^\s*(Exec|ExecWait|RMDir|Delete|DeleteRegKey|DeleteRegValue)\b/im.test(hooks),'Installer may not run tools or delete data');
   const scripts=JSON.parse(read('package.json')).scripts;
   fail(scripts['build:app']==='npm run build:lazy-tester'&&scripts['build:lazy-tester'].includes('prepare:lazy-payload')&&scripts['build:lazy-tester'].includes('check:lazy-package')&&scripts['build:lazy-tester'].includes('--features lazy-tester-package')&&scripts['build:lazy-tester'].includes('--config src-tauri/tauri.lazy-tester.conf.json')&&scripts['build:lazy-tester'].includes('-- --locked'),'Native build route required');

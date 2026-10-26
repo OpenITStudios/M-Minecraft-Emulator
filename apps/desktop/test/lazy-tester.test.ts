@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {nextProfile, parseSession, parsePreviewReport, parseProfileBinding, type ProfileSession} from '../src/app/bridge/lazyTester.js';
+import {nextProfile, parseSession, parsePreviewReport, parseProfileBinding, parseDataLocation, type ProfileSession} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
@@ -7,6 +7,14 @@ const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process
   pid: slot + 100, createdFileTime: String(slot + 200), sessionId: 1, windowHandle: `0x${slot}`, responding: true,
 }});
 describe('Lazy Tester profile contract', () => {
+  it('validates persisted data locations without inferring account readiness',()=>{
+    const value={schema:1,defaultPath:'D:\\Lazy Tester\\Data',path:'D:\\Lazy Tester\\Data',canLocate:true,
+      profiles:[1,2,3,4,5].map(slot=>({slot,path:`D:\\Lazy Tester\\Data\\Profiles\\Minecraft-${slot}`}))};
+    expect(parseDataLocation(value).profiles).toHaveLength(5);
+    expect(parseDataLocation({...value,path:null,profiles:[]}).path).toBeNull();
+    for(const invalid of [{...value,path:null},{...value,profiles:value.profiles.slice(1)},
+      {...value,defaultPath:''},{...value,authenticated:true},{...value,path:'bad\npath'}])expect(()=>parseDataLocation(invalid)).toThrow();
+  });
   it('keeps missing or invalid binding separate from launch/game/account readiness', () => {
     expect(parseProfileBinding({schema:1,required:true,configured:false,issue:'Select existing binding'}).configured).toBe(false);
     expect(parseProfileBinding({schema:1,required:true,configured:true,issue:null}).configured).toBe(true);

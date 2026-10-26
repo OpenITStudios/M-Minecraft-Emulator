@@ -36,21 +36,25 @@ It rejects links, changed files and stale outputs; it never copies neighboring
 profile bindings. The installer contains the desktop, two DLLs and this native
 contract, with no VM/Guest Agent/acceptance payload or account/world material.
 
-Profile capabilities are machine-local and excluded. On first run, the UI can
-explicitly select the old launcher folder; the backend reads its existing
-independent-bootstrap/replay-profile-five.bin. The sole bootstrap owner
-checks its reviewed hash, original folder IDs and existing per-profile HKCU keys, then stores
-only its 288 metadata bytes at the contract's private profileBindingRelativePath.
-That directory is outside the installer; existing preferences and game data stay
-in place. A different existing binding is preserved/refused. Native package
-launches read only this private binding, with no fallback to installer-adjacent
-capabilities and no automatic game launch.
+Runtime profile metadata is machine-local and excluded. New installs default to
+the visible user-profile Lazy Tester/App location, with Data as a sibling. The
+directory page allows another destination; old registered flat installations are
+not relocated. Native hooks normalize only new installation roots, retain the
+controller-idle gate and preserve data on uninstall. Actual install/uninstall and
+silent/custom-path behavior still require acceptance.
 
-The workflow is implemented for the reviewed existing five-profile set, not
-generic portable provisioning. First-run dialog/import, installed startup and
-gameplay acceptance remain unexecuted. The installer is a development candidate;
-no installed data has been changed by building it. Signing/publication is not
-implied.
+The bootstrap's product_profiles owner prepares five fresh private stores and a
+current-user/directory-identity catalog under Data. Its relative pointer follows
+the application home; selected external data uses a persistent absolute pointer.
+Existing reviewed pilot identities are discovered using directory metadata and
+adopted in place before fresh setup, retaining original HKCU/data identities.
+The previous-launcher dialog remains an advanced compatibility fallback. Neither
+catalogs nor pointers, bindings, accounts or worlds are installer resources.
+
+See [data layout](../../docs/system/data-layout.md) for exact ownership and limits.
+Fresh-PC login/gameplay, installed setup and cross-volume migration remain
+unproven/unimplemented as specified there. The package is a development candidate;
+building it does not install, sign or publish it.
 
 ## Historical VMware distribution contract (disabled)
 

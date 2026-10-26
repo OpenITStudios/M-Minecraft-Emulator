@@ -163,7 +163,7 @@ pub(super) fn inspect(private: &File, inactive: bool) -> CacheStorage {
             issue: if inactive {
                 None
             } else {
-                Some("Tutup semua Minecraft secara normal sebelum membersihkan cache.".into())
+                Some("Close all Minecraft sessions before clearing cache.".into())
             },
         },
         Err(_) => CacheStorage {
@@ -172,7 +172,7 @@ pub(super) fn inspect(private: &File, inactive: bool) -> CacheStorage {
             partial: true,
             can_clear: false,
             issue: Some(
-                "Cache tidak dapat diperiksa sepenuhnya; pembersihan dinonaktifkan.".into(),
+                "Cache inspection was incomplete; cleanup is unavailable.".into(),
             ),
         },
     }

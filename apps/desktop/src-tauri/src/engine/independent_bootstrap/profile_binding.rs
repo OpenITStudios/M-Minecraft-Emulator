@@ -55,6 +55,107 @@ fn validate(bytes: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
+// Recover the reviewed pilot from directory identities, never account/world files
+// or a developer's launcher path. This is not provisioning for a different PC.
+fn identity_bytes(parent: &Path, name: &str) -> io::Result<Vec<u8>> {
+    let suffix = name
+        .strip_prefix("MivubiEducationPilot_")
+        .ok_or_else(|| invalid("Invalid profile root name"))?;
+    if suffix.len() != 32 || !suffix.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(invalid("Invalid profile root name"));
+    }
+    let root = parent.join(name);
+    let mut pins = Vec::new();
+    for ancestor in root.ancestors().collect::<Vec<_>>().into_iter().rev() {
+        pins.push(open_directory(ancestor, FILE_READ_ATTRIBUTES)?);
+    }
+    let mut bytes = vec![0u8; SIZE];
+    bytes[..4].copy_from_slice(&0x52504c31u32.to_le_bytes());
+    bytes[4..8].copy_from_slice(&2u32.to_le_bytes());
+    bytes[8..12].copy_from_slice(&(SIZE as u32).to_le_bytes());
+    for (index, unit) in name.encode_utf16().enumerate() {
+        bytes[16 + index * 2..18 + index * 2].copy_from_slice(&unit.to_le_bytes());
+    }
+    let mut put = |file: &File, at: usize| -> io::Result<()> {
+        let id = directory_id(file)?;
+        bytes[at..at + 8].copy_from_slice(&id.VolumeSerialNumber.to_le_bytes());
+        bytes[at + 8..at + 24].copy_from_slice(&id.FileId.Identifier);
+        Ok(())
+    };
+    put(
+        pins.last().ok_or_else(|| invalid("Missing profile root"))?,
+        144,
+    )?;
+    for slot in 1..=5 {
+        let private = open_directory(&root.join(format!("MC{slot:02}")), FILE_READ_ATTRIBUTES)?;
+        put(&private, 168 + (slot - 1) * 24)?;
+        pins.push(private);
+    }
+    Ok(bytes)
+}
+
+fn discover_reviewed(parent: &Path, expected: [u8; 32]) -> io::Result<Option<Vec<u8>>> {
+    use sha2::{Digest, Sha256};
+    let _parent = open_directory(parent, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?;
+    for (index, entry) in std::fs::read_dir(parent)?.enumerate() {
+        if index >= 1024 {
+            return Err(invalid("Profile discovery exceeded its directory limit"));
+        }
+        let entry = entry?;
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        if !name.starts_with("MivubiEducationPilot_") {
+            continue;
+        }
+        // Unrelated, partial, replaced and linked roots can never satisfy the
+        // original reviewed digest. Do not repair them or inspect their contents.
+        let Ok(bytes) = identity_bytes(parent, name) else {
+            continue;
+        };
+        if <[u8; 32]>::from(Sha256::digest(&bytes)) == expected {
+            return Ok(Some(bytes));
+        }
+    }
+    Ok(None)
+}
+
+fn connect_reviewed_existing() -> io::Result<ProfileBinding> {
+    let existing = binding_path(false).and_then(|(path, _pins)| read_binding(&path));
+    match existing {
+        Ok(_) => return Ok(status()), // Invalid existing bindings are preserved.
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    if existing_controller_gate("Local\\MivubiEducationStartupObservation")? {
+        return Ok(status());
+    }
+    let expected =
+        REVIEWED_FIVE_REPLAY.ok_or_else(|| invalid("No reviewed five-profile policy"))?;
+    let (_, parent) = replay_roots()?;
+    let Some(bytes) = discover_reviewed(&parent, expected)? else {
+        return Ok(status());
+    };
+    validate(&bytes)?; // Includes existing Roaming/Local/TEMP and HKCU validation.
+    if existing_controller_gate("Local\\MivubiEducationStartupObservation")? {
+        return Ok(status());
+    }
+    let (_, pins) = binding_path(true)?;
+    publish(
+        pins.last()
+            .ok_or_else(|| invalid("Missing binding directory"))?,
+        &bytes,
+    )?;
+    Ok(status())
+}
+
+pub(super) fn has_legacy_binding() -> io::Result<bool> {
+    match binding_path(false) {
+        Ok((path, _pins)) => path.try_exists(),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
 // Create-once, same-byte idempotent publication. Never replace an existing binding.
 fn publish(directory: &File, bytes: &[u8]) -> io::Result<()> {
     if bytes.len() != SIZE {
@@ -125,8 +226,8 @@ fn status() -> ProfileBinding {
     let (configured, issue) = match result {
         Ok(()) => (true, None),
         Err(error) if error.kind() == io::ErrorKind::NotFound =>
-            (false, Some("Pilih folder launcher lama yang memuat lima profil Minecraft. Akun dan dunia tidak dipindahkan.".into())),
-        Err(_) => (false, Some("Pengikat profil tidak cocok atau profil asli tidak tersedia. Data lama tetap dipertahankan.".into())),
+            (false, Some("Minecraft profiles are not configured. Setup for a new PC is not available in this candidate.".into())),
+        Err(_) => (false, Some("Existing profiles could not be verified. Your data has been preserved.".into())),
     };
     ProfileBinding {
         schema: 1,
@@ -137,15 +238,38 @@ fn status() -> ProfileBinding {
 }
 pub(crate) fn run(import: bool) -> io::Result<ProfileBinding> {
     if !import {
-        return Ok(status());
+        if super::product_profiles::open()?.is_some() {
+            return Ok(ProfileBinding {
+                schema: 1,
+                required: true,
+                configured: true,
+                issue: None,
+            });
+        }
+        let legacy = connect_reviewed_existing()?;
+        if legacy.configured || has_legacy_binding()? {
+            return Ok(legacy);
+        }
+        super::product_profiles::prepare()?;
+        return Ok(ProfileBinding {
+            schema: 1,
+            required: true,
+            configured: true,
+            issue: None,
+        });
+    }
+    if super::product_profiles::open()?.is_some() {
+        return Err(invalid(
+            "Product profiles already exist; previous-launcher import cannot replace them",
+        ));
     }
     if existing_controller_gate("Local\\MivubiEducationStartupObservation")? {
         return Err(invalid(
-            "Tutup semua Minecraft dan pengendali lama secara normal sebelum menghubungkan profil",
+            "Close all Minecraft sessions and the previous controller normally before connecting profiles",
         ));
     }
     let Some(folder) = rfd::FileDialog::new()
-        .set_title("Pilih folder launcher Minecraft lama")
+        .set_title("Select the previous Minecraft launcher folder")
         .pick_folder()
     else {
         return Ok(status());
@@ -155,7 +279,7 @@ pub(crate) fn run(import: bool) -> io::Result<ProfileBinding> {
     validate(&bytes)?; // Existing reviewed IDs and existing HKCU stores; no fresh data.
     if existing_controller_gate("Local\\MivubiEducationStartupObservation")? {
         return Err(invalid(
-            "Pengendali mulai berjalan; pengaitan dibatalkan tanpa mengubah profil",
+            "The controller started; profile connection was cancelled without changing your data",
         ));
     }
     let (_, pins) = binding_path(true)?;
@@ -185,6 +309,33 @@ mod tests {
             assert_eq!(self.0.parent(), Some(std::env::temp_dir().as_path()));
             std::fs::remove_dir_all(&self.0).unwrap();
         }
+    }
+    #[test]
+    fn discovery_uses_only_the_reviewed_directory_identities_and_preserves_files() {
+        use sha2::{Digest, Sha256};
+        let fixture = Fixture::new();
+        let root = fresh_root(&fixture.0).unwrap();
+        for slot in 1..=5 {
+            std::fs::create_dir(root.join(format!("MC{slot:02}"))).unwrap();
+        }
+        let name = root.file_name().unwrap().to_str().unwrap();
+        let bytes = identity_bytes(&fixture.0, name).unwrap();
+        let expected = Sha256::digest(&bytes).into();
+        let sentinel = root.join("MC01/account-world-fixture");
+        std::fs::write(&sentinel, b"untouched").unwrap();
+        assert_eq!(
+            discover_reviewed(&fixture.0, expected).unwrap(),
+            Some(bytes)
+        );
+        assert!(discover_reviewed(&fixture.0, [0; 32]).unwrap().is_none());
+        assert!(identity_bytes(&fixture.0, "../outside").is_err());
+        // Hold the old directory under a different name so its file ID cannot
+        // be recycled for the replacement. Never operate on host profile data.
+        std::fs::rename(root.join("MC05"), root.join("saved-MC05")).unwrap();
+        std::fs::create_dir(root.join("MC05")).unwrap();
+        assert!(discover_reviewed(&fixture.0, expected).unwrap().is_none());
+        assert_eq!(std::fs::read(sentinel).unwrap(), b"untouched");
+        assert!(std::fs::read_dir(&fixture.0).unwrap().count() == 1);
     }
     #[test]
     fn publication_is_complete_idempotent_and_never_replaces_other_metadata() {

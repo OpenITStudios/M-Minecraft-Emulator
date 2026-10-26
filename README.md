@@ -70,13 +70,18 @@ unverified. Per-profile disk usage/free-space reporting and explicit classified
 HTTP-cache cleanup are implemented with inactive-game admission and handle-based
 filesystem checks, verified only on disposable fixtures. A separate Lazy Tester
 installer candidate now includes the native DLLs and branding. Explicit private
-binding of the reviewed five existing profiles is implemented; installed startup,
-integrated acceptance and generic portable provisioning remain unfinished.
+binding of reviewed existing profiles is implemented. New product data uses a
+five-profile catalog beneath the application home's Data folder; Storage exposes
+its current location and verified reattachment. Fresh-profile gameplay, installed
+startup, cross-volume migration and integrated acceptance remain unfinished.
 Task Manager grouping is not claimed.
 
 See [workspace contract](docs/product/unified-workspace.md) for product behavior,
 [implementation map](docs/system/implementation-map.md) for ownership, and
 [current handoff](planning/development.md) for actual evidence and the next action.
+The [application/data layout](docs/system/data-layout.md) defines visible App/Data
+folders, automatic existing-profile adoption, persistent locations and remaining
+relocation limits. Old accounts/worlds are preserved in place, never silently moved.
 
 ## Development and archive
 

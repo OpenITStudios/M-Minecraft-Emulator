@@ -59,6 +59,9 @@ engine/runtime-core/images/
 /downloads/
 /installers/
 /test-results/
+/App/
+/Data/
+/Logs/
 
 # Common accidentally copied root-level binary outputs.
 /*.exe

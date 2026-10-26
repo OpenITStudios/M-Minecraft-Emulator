@@ -494,6 +494,8 @@ mod session_controller;
 mod profile_storage;
 #[path = "independent_bootstrap/profile_binding.rs"]
 pub(super) mod profile_binding;
+#[path = "independent_bootstrap/product_profiles.rs"]
+pub(super) mod product_profiles;
 
 /// Source-only two-slot preparation. No game/DLL code can be resumed here.
 /// The existing registered-image resolver remains the only target selector.
@@ -1578,11 +1580,14 @@ fn existing_private_temporary(private: &File) -> io::Result<[File; 2]> {
 }
 
 fn create_private_slot(logical: &File, root: &Path, slot: u32) -> io::Result<SlotStorage> {
+    create_private_slot_at(logical, &root.join(format!("MC{slot:02}")), slot)
+}
+
+fn create_private_slot_at(logical: &File, private_path: &Path, slot: u32) -> io::Result<SlotStorage> {
     if !(1..=MAX_EDUCATION_SLOTS).contains(&slot) {
         return Err(invalid("Invalid Education slot"));
     }
     let user_key_path = user_registry_path()?;
-    let private_path = root.join(format!("MC{slot:02}"));
     std::fs::create_dir(&private_path)?;
     let private = open_directory(&private_path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?;
     // Match the DLL's canonical spelling, including expansion of Windows 8.3 aliases.
@@ -1978,6 +1983,11 @@ fn replay_roots() -> io::Result<(File, PathBuf)> {
 fn registered_slots<const N: usize>(observe: bool) -> io::Result<[SlotStorage; N]> {
     if N != 2 && N != 5 {
         return Err(invalid("Unsupported replay slot count"));
+    }
+    if N == 5 && observe && cfg!(feature = "lazy-tester-package") {
+        if let Some(stores) = product_profiles::open()? {
+            return Vec::from(stores).try_into().map_err(|_| invalid("Invalid product profile count"));
+        }
     }
     // Authorized observation reuses an existing pair or refuses. An unset
     // review policy must never silently become fresh account/world storage.

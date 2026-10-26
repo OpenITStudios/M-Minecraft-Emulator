@@ -22,11 +22,19 @@
   "runtime": {
     "settingsRelativePath": "MinecraftInstanceManager/NativePreview/manager-settings.json",
     "instanceLeaseVariant": "NativePilot",
-    "profiles": "retained-existing-private-file-identities",
+    "profiles": "product-owned-five-or-reviewed-existing-private-file-identities",
     "profileBindingIncluded": false,
     "profileBindingRelativePath": "MinecraftInstanceManager/NativePreview/profile-binding-five.bin",
     "profileBindingImport": "reviewed-existing-five-only",
-    "portableProfileProvisioning": "NOT_IMPLEMENTED",
+    "portableProfileProvisioning": "FIVE_FRESH_STORES_SOURCE_IMPLEMENTED_RUNTIME_NOT_EXECUTED",
+    "applicationSubdirectory": "App",
+    "defaultDataRelativePath": "Data",
+    "dataLocatorRelativePath": "App/data-location.json",
+    "profileCatalogRelativePath": "Data/profiles.json",
+    "newProfileDirectories": "Data/Profiles/Minecraft-1..5",
+    "existingDataMigration": "PRESERVE_IN_PLACE",
+    "manualRelocation": "SAME_VOLUME_AND_WINDOWS_USER_IDENTITIES_REQUIRED",
+    "crossVolumeRelocation": "NOT_IMPLEMENTED",
     "crossBinaryControllerHandoff": "UNSUPPORTED"
   },
   "excludedPayloads": [

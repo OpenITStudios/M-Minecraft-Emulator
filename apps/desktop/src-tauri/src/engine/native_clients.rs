@@ -11,6 +11,24 @@ pub struct ProfileBinding {
     pub configured: bool,
     pub issue: Option<String>,
 }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub enum DataLocationAction { Inspect, Open, Locate, Choose }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all="camelCase",deny_unknown_fields)]
+pub struct ProfilePath { pub slot:u32, pub path:String }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all="camelCase",deny_unknown_fields)]
+pub struct DataLocation {
+    pub schema:u32, pub default_path:String, pub path:Option<String>,
+    pub profiles:Vec<ProfilePath>, pub can_locate:bool,
+}
+pub fn data_location(action:DataLocationAction) -> io::Result<DataLocation> {
+    #[cfg(all(windows,target_arch="x86_64",feature="lazy-tester-package"))]
+    { independent_bootstrap::product_profiles::location(action) }
+    #[cfg(not(all(windows,target_arch="x86_64",feature="lazy-tester-package")))]
+    { let _=action; Err(io::Error::new(io::ErrorKind::Unsupported,"Data locations require the Lazy Tester product build")) }
+}
 pub fn profile_binding(import: bool) -> io::Result<ProfileBinding> {
     #[cfg(all(windows, target_arch = "x86_64", feature = "lazy-tester-package"))]
     { independent_bootstrap::profile_binding::run(import) }

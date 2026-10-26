@@ -12,7 +12,8 @@ test('reject outputs and competing root owners while preserving native provenanc
     'engine/runtime-core/target/debug/core.exe', '.github/workflows/verify.yml',
     'apps/desktop/src-tauri/package-resources/lazy-tester/bootstrap-compat.dll',
     'apps/desktop/src-tauri/icons/icon.ico', 'apps/desktop/src-tauri/gen/schema.json',
-    'apps/desktop/src-tauri/binaries/old.exe', 'release/setup.exe', 'develop/copy.ts']) {
+    'apps/desktop/src-tauri/binaries/old.exe', 'release/setup.exe', 'develop/copy.ts',
+    'Data/profiles.json', 'App/data-location.json', 'Logs/session.log']) {
     assert.ok(checkTracked([path]).length > 0, path);
   }
 });

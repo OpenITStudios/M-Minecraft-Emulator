@@ -1,12 +1,13 @@
 <script lang="ts">
   import {onMount, tick} from 'svelte';
   import {listen} from '@tauri-apps/api/event';
-  import {lazyTester, nextProfile, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, type ProfileBinding} from './app/bridge/lazyTester.js';
+  import {lazyTester, nextProfile, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, type ProfileBinding, type DataLocation} from './app/bridge/lazyTester.js';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazy-tester.css';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
   let binding: ProfileBinding | null = null;
+  let dataLocation:DataLocation|null=null;
   let clearSlot: ProfileSlot | null = null, storageNotice = '';
   let page: 'workspace' | 'launchers' | 'storage' | 'settings' = 'workspace';
   let active: ProfileSlot | null = null, requested: ProfileSlot | null = null, queued: ProfileSlot | null = null;
@@ -16,7 +17,7 @@
   let issue = '', connectionIssue = '', previewIssue = '', selectedIdentity = '';
   let previewStatuses: PreviewStatus[] = [];
   const images = new Map<ProfileSlot, HTMLElement>();
-  const labels = {STOPPED: 'Belum dibuka', STARTING: 'Sedang membuka', RUNNING: 'Berjalan', NOT_RESPONDING: 'Tidak merespons', ATTENTION: 'Perlu perhatian'};
+  const labels = {STOPPED: 'Not running', STARTING: 'Starting', RUNNING: 'Running', NOT_RESPONDING: 'Not responding', ATTENTION: 'Needs attention'};
   const identity = (profile?: ProfileSession) => profile?.process ? [profile.process.pid, profile.process.createdFileTime, profile.process.sessionId, profile.process.windowHandle].join('/') : '';
   $: primary = active ?? requested ?? profiles.find(profile => profile.state === 'RUNNING')?.slot ?? 1;
   $: others = profiles.filter(profile => profile.slot !== primary);
@@ -56,7 +57,7 @@
         const profile = profiles.find(profile => profile.slot === requested);
         if (profile?.state === 'RUNNING') queued = requested;
         else if (profile?.state === 'ATTENTION' || profile?.state === 'STOPPED') {
-          issue = profile.issue ?? ('Minecraft - ' + requested + ' berhenti sebelum ditampilkan.'); requested = null;
+          issue = profile.issue ?? ('Minecraft - ' + requested + ' stopped before its window became available.'); requested = null;
         }
       } else if (active === null && !detached && page === 'workspace' && queued === null) {
         queued = profiles.find(profile => profile.state === 'RUNNING')?.slot ?? null;
@@ -136,6 +137,14 @@
     catch (error) { issue = String(error); }
     finally { busy = false; }
   }
+  async function loadLocation(action:'Inspect'|'Open'|'Locate'|'Choose'='Inspect') {
+    if(busy||refreshing||resizing||disposed)return;
+    busy=true;issue='';
+    try {
+      dataLocation=await lazyTester.dataLocation(action);
+      if((action==='Locate'||action==='Choose')&&dataLocation.path!==null)binding=await lazyTester.binding();
+    } catch(error){issue=String(error);}finally{busy=false;}
+  }
   async function openFolder(slot: ProfileSlot) {
     if (busy || refreshing || resizing) return;
     busy = true; issue = '';
@@ -149,13 +158,13 @@
     try {
       const snapshot = await lazyTester.clearCache(slot);
       profiles = snapshot.profiles; storage = snapshot.storage;
-      storageNotice = 'Cache web Minecraft - ' + slot + ' telah dibersihkan. Cache dapat dibuat kembali saat dibutuhkan.';
+      storageNotice = 'Web cache for Minecraft - ' + slot + ' cleared.';
     } catch (error) {
       issue = String(error); storage = null;
     } finally { busy = false; }
   }
   onMount(() => {
-    mounted = true; void (async () => { await loadBinding(); await refresh(); })();
+    mounted = true; void (async () => { await loadBinding(); await loadLocation(); await refresh(); })();
     const interval = setInterval(() => { if (!document.hidden) void refresh(); }, 2000);
     observer = new ResizeObserver(() => { dirty = true; }); observer.observe(viewport, {box: 'device-pixel-content-box'});
     for (const node of images.values()) observer.observe(node);
@@ -180,74 +189,83 @@
   <aside class="lt-sidebar">
     <a class="lt-brand" href="#workspace" on:click|preventDefault={() => navigate('workspace')}><span>LT</span> Lazy Tester</a>
     <p class="lt-caption">MINECRAFT EDUCATION</p>
-    <nav aria-label="Navigasi utama">
-      {#each [['workspace','Workspace'],['launchers','Launcher'],['storage','Penyimpanan'],['settings','Pengaturan']] as [id,label]}
+    <nav aria-label="Main navigation">
+      {#each [['workspace','Workspace'],['launchers','Launchers'],['storage','Storage'],['settings','Settings']] as [id,label]}
         <button class:chosen={page === id} disabled={busy || resizing} on:click={() => navigate(id as typeof page)}>{label}</button>
       {/each}
     </nav>
-    <div class="lt-sidebar-bottom"><span class="lt-dot" class:waiting={!available}></span>{available ? 'Runtime terhubung' : 'Memeriksa koneksi'}<p>{available ? runningCount + ' dari 5 Minecraft berjalan' : 'Status sesi belum tersedia'}</p></div>
+    <div class="lt-sidebar-bottom"><span class="lt-dot" class:waiting={!available}></span>{available ? 'Connected' : 'Connecting'}<p>{available ? runningCount + ' of 5 running' : 'Session status unavailable'}</p></div>
   </aside>
   <main>
-    <header class="lt-page-header"><div><p class="lt-caption">RUANG BERMAIN ANDA</p><h1>{page === 'workspace' ? 'Workspace' : page === 'launchers' ? 'Launcher Minecraft' : page === 'storage' ? 'Penyimpanan' : 'Pengaturan'}</h1></div><button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={refresh}>Perbarui status</button></header>
-    {#if issue || connectionIssue}<div class="lt-alert" role="alert"><strong>Operasi membutuhkan perhatian</strong>{#if issue}<p>{issue}</p>{/if}{#if connectionIssue}<p>{connectionIssue}</p>{/if}<span>Game dan data yang sudah ada tetap dipertahankan.</span></div>{/if}
+    <header class="lt-page-header"><div><p class="lt-caption">MINECRAFT EDUCATION</p><h1>{page === 'workspace' ? 'Workspace' : page === 'launchers' ? 'Minecraft launchers' : page === 'storage' ? 'Storage' : 'Settings'}</h1></div><button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={refresh}>Refresh</button></header>
+    {#if issue || connectionIssue}<div class="lt-alert" role="alert"><strong>Something needs your attention</strong>{#if issue}<p>{issue}</p>{/if}{#if connectionIssue}<p>{connectionIssue}</p>{/if}<span>Your games and data have been preserved.</span></div>{/if}
     {#if !binding?.configured}
-      <section class="lt-binding" aria-label="Pengaitan profil lama">
-        <div><strong>Hubungkan lima profil Minecraft lama</strong><p>{binding?.issue ?? 'Pengaitan profil belum dapat dipastikan.'}</p><small>Hanya metadata pengikat yang disimpan. Login, dunia, dan pengaturan tetap di lokasi aslinya.</small></div>
-        <div class="lt-actions"><button disabled={busy || refreshing || resizing || runningCount > 0} on:click={() => loadBinding(true)}>Pilih folder launcher lama</button><button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={() => loadBinding()}>Periksa lagi</button></div>
+      <section class="lt-binding" aria-label="Profile setup">
+        <div><strong>Profile setup required</strong><p>{binding?.issue ?? 'Checking profiles…'}</p></div>
+        <div class="lt-actions"><button disabled={busy || refreshing || resizing || runningCount > 0} on:click={() => loadBinding(true)}>Locate previous launcher</button><button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={() => loadBinding()}>Try again</button></div>
       </section>
     {/if}
-    <section class="lt-workspace" hidden={page !== 'workspace'} aria-label="Workspace Minecraft">
-      <header class="lt-stage-header"><div><h2>{active ? 'Minecraft - ' + active : requested ? 'Membuka Minecraft - ' + requested : 'Pilih Minecraft untuk mulai'}</h2><p>{active ? 'Sedang ditampilkan · klik di dalam game untuk mengontrol' : detached ? 'Jendela telah dikembalikan ke Windows.' : 'Buka profil pilihan Anda melalui halaman Launcher.'}</p></div>
-        <div class="lt-actions"><button class="lt-secondary" disabled={busy || !available || !playableCount} on:click={() => step(-1)} aria-label="Minecraft sebelumnya">←</button><button class="lt-secondary" disabled={busy || !available || !playableCount} on:click={() => step(1)}>Berikutnya →</button>{#if runningCount}<button class="lt-secondary" disabled={busy || resizing} on:click={release}>Lepas jendela</button>{/if}</div>
+    <section class="lt-workspace" hidden={page !== 'workspace'} aria-label="Minecraft workspace">
+      <header class="lt-stage-header"><div><h2>{active ? 'Minecraft - ' + active : requested ? 'Starting Minecraft - ' + requested : 'Choose a Minecraft to start'}</h2><p>{active ? 'Click the game to play' : detached ? 'Game windows restored to the desktop.' : 'Open a profile from Launchers.'}</p></div>
+        <div class="lt-actions"><button class="lt-secondary" disabled={busy || !available || !playableCount} on:click={() => step(-1)} aria-label="Previous Minecraft">←</button><button class="lt-secondary" disabled={busy || !available || !playableCount} on:click={() => step(1)}>Next →</button>{#if runningCount}<button class="lt-secondary" disabled={busy || resizing} on:click={release}>Restore windows</button>{/if}</div>
       </header>
-      <div class="lt-viewport" bind:this={viewport}>{#if !active}<div class="lt-empty"><span>LT</span><h2>{requested ? 'Menyiapkan Minecraft - ' + requested : 'Semua Minecraft, satu tempat'}</h2><p>{requested ? 'Sesi akan tampil setelah jendelanya tersedia.' : 'Setiap profil memiliki login dan penyimpanan sendiri.'}</p>{#if !requested}<button on:click={() => navigate('launchers')}>Pilih launcher</button>{/if}</div>{/if}</div>
-      <div class="lt-filmstrip" aria-label="Minecraft lainnya">
+      <div class="lt-viewport" bind:this={viewport}>{#if !active}<div class="lt-empty"><span>LT</span><h2>{requested ? 'Starting Minecraft - ' + requested : 'Choose a Minecraft'}</h2><p>{requested ? 'Waiting for the game window…' : 'Launch a profile to begin.'}</p>{#if !requested}<button on:click={() => navigate('launchers')}>Open launchers</button>{/if}</div>{/if}</div>
+      <div class="lt-filmstrip" aria-label="Other Minecraft sessions">
         {#each others as profile (profile.slot)}
-          <button class="lt-card" aria-label={'Kontrol Minecraft - ' + profile.slot} disabled={busy || !available || profile.state !== 'RUNNING'} on:click={() => select(profile.slot)}>
+          <button class="lt-card" aria-label={'Play Minecraft - ' + profile.slot} disabled={busy || !available || profile.state !== 'RUNNING'} on:click={() => select(profile.slot)}>
             <span class="lt-card-picture" use:image={profile.slot} aria-hidden="true">{profile.slot}</span><strong>Minecraft - {profile.slot}</strong><small>{labels[profile.state]}</small>
-            {#if profile.state === 'RUNNING' && previewStatuses.find(tile => tile.slot === profile.slot)?.reason}<small class="lt-preview-fallback" title={previewStatuses.find(tile => tile.slot === profile.slot)?.reason ?? ''}>Preview belum tersedia · klik untuk kontrol</small>{/if}
+            {#if profile.state === 'RUNNING' && previewStatuses.find(tile => tile.slot === profile.slot)?.reason}<small class="lt-preview-fallback" title={previewStatuses.find(tile => tile.slot === profile.slot)?.reason ?? ''}>Preview unavailable · click to play</small>{/if}
           </button>
         {/each}
       </div>
-      <p class="lt-help">{resizing ? 'Menyesuaikan workspace…' : 'Klik preview untuk mengganti Minecraft yang dikontrol. Sesi lain memakai batas 10 FPS di latar.'}</p>
-      {#if previewIssue}<details class="lt-preview-details"><summary>Preview membutuhkan perhatian</summary><p>{previewIssue}</p></details>{/if}
+      <p class="lt-help">{resizing ? 'Updating layout…' : 'Select a preview to switch games.'}</p>
+      {#if previewIssue}<details class="lt-preview-details"><summary>Preview details</summary><p>{previewIssue}</p></details>{/if}
     </section>
     {#if page === 'launchers'}
-      <p class="lt-description">Buka hanya Minecraft yang ingin Anda gunakan. Tidak ada game yang dibuka otomatis.</p>
-      <div class="lt-profile-list">{#each profiles as profile (profile.slot)}<article><span class="lt-profile-number">{profile.slot}</span><div><h2>Minecraft - {profile.slot}</h2><p>{labels[profile.state]}</p>{#if profile.issue}<p class="lt-error">{profile.issue}</p>{/if}</div>{#if profile.state === 'RUNNING'}<button disabled={busy || !available} on:click={() => select(profile.slot)}>Tampilkan</button>{:else}<button disabled={busy || refreshing || resizing || !available || !binding?.configured || ['STARTING','NOT_RESPONDING'].includes(profile.state)} on:click={() => launch(profile.slot)}>{profile.state === 'STARTING' ? 'Membuka…' : profile.state === 'NOT_RESPONDING' ? 'Tidak merespons' : 'Buka Minecraft'}</button>{/if}</article>{/each}</div>
+      <p class="lt-description">Choose which profiles to launch.</p>
+      <div class="lt-profile-list">{#each profiles as profile (profile.slot)}<article><span class="lt-profile-number">{profile.slot}</span><div><h2>Minecraft - {profile.slot}</h2><p>{labels[profile.state]}</p>{#if profile.issue}<p class="lt-error">{profile.issue}</p>{/if}</div>{#if profile.state === 'RUNNING'}<button disabled={busy || !available} on:click={() => select(profile.slot)}>Show</button>{:else}<button disabled={busy || refreshing || resizing || !available || !binding?.configured || ['STARTING','NOT_RESPONDING'].includes(profile.state)} on:click={() => launch(profile.slot)}>{profile.state === 'STARTING' ? 'Starting…' : profile.state === 'NOT_RESPONDING' ? 'Not responding' : 'Launch'}</button>{/if}</article>{/each}</div>
     {:else if page === 'storage'}
       <section class="lt-panel">
-        <h2>Penyimpanan Minecraft</h2>
-        <p>Akun, dunia, dan pengaturan tetap berada di profil masing-masing. Ukuran dihitung saat diminta dan dapat berubah selama bermain.</p>
-        <p><button disabled={busy || refreshing || resizing || !binding?.configured} on:click={inspectStorage}>{busy ? 'Memproses…' : 'Hitung penggunaan ruang'}</button></p>
+        <h2>Data location</h2>
+        <p class="lt-data-path">{dataLocation?.path ?? 'No data folder is connected.'}</p>
+        <div class="lt-actions">
+          <button class="lt-secondary" disabled={busy||refreshing||resizing||!dataLocation?.path} on:click={()=>loadLocation('Open')}>Open folder</button>
+          <button class="lt-secondary" disabled={busy||refreshing||resizing||dataLocation?.canLocate===false} on:click={()=>loadLocation('Locate')}>Locate data</button>
+          {#if !dataLocation?.path}<button disabled={busy||refreshing||resizing} on:click={()=>loadLocation('Choose')}>Choose data folder</button>{/if}
+          <button class="lt-secondary" disabled={busy||refreshing||resizing} on:click={()=>loadLocation()}>Refresh location</button>
+        </div>
+        {#if dataLocation}<details><summary>Profile locations</summary>{#each dataLocation.profiles as profile}<p class="lt-data-path">Minecraft {profile.slot}: {profile.path}</p>{/each}<p class="lt-data-path">Default: {dataLocation.defaultPath}</p></details>{/if}
+        <h2>Minecraft storage</h2>
+        <p>View storage use for each profile.</p>
+        <p><button disabled={busy || refreshing || resizing || !binding?.configured} on:click={inspectStorage}>{busy ? 'Working…' : 'Check storage'}</button></p>
         {#if storageNotice}<p role="status">{storageNotice}</p>{/if}
         {#if storage}
           {#each storage as item}
             <article class="lt-storage-profile">
               <h3>Minecraft - {item.slot}</h3>
               <div class="lt-storage-metrics">
-                <div><span>Data profil</span><strong>{(item.bytes / 1048576).toFixed(1)} MB</strong><small>{item.files.toLocaleString('id-ID')} file{item.partial ? ' · perhitungan sebagian' : ''}</small></div>
-                <div><span>Ruang disk tersedia</span><strong>{item.disk ? (item.disk.availableBytes / 1073741824).toFixed(1) + ' GB' : 'Tidak tersedia'}</strong><small>{item.disk ? 'dari ' + (item.disk.totalBytes / 1073741824).toFixed(1) + ' GB · dipakai bersama' : 'Windows belum memberikan informasi disk'}</small></div>
-                <div><span>Cache web yang dikenali</span><strong>{item.cache.partial ? 'Belum dapat dihitung' : (item.cache.bytes / 1048576).toFixed(1) + ' MB'}</strong><small>Termasuk dalam ukuran profil</small></div>
+                <div><span>Profile data</span><strong>{(item.bytes / 1048576).toFixed(1)} MB</strong><small>{item.files.toLocaleString('en-US')} file{item.partial ? ' · partial count' : ''}</small></div>
+                <div><span>Available disk space</span><strong>{item.disk ? (item.disk.availableBytes / 1073741824).toFixed(1) + ' GB' : 'Unavailable'}</strong><small>{item.disk ? 'of ' + (item.disk.totalBytes / 1073741824).toFixed(1) + ' GB · shared drive' : 'Disk information unavailable'}</small></div>
+                <div><span>Web cache</span><strong>{item.cache.partial ? 'Unavailable' : (item.cache.bytes / 1048576).toFixed(1) + ' MB'}</strong><small>Included in profile size</small></div>
               </div>
               {#if item.cache.issue}<p>{item.cache.issue}</p>{/if}
               <div class="lt-actions">
-                <button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={() => openFolder(item.slot)}>Buka folder</button>
-                <button class="lt-secondary" disabled={busy || refreshing || resizing || runningCount > 0 || !item.cache.canClear} on:click={() => clearSlot = item.slot}>Bersihkan cache</button>
+                <button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={() => openFolder(item.slot)}>Open folder</button>
+                <button class="lt-secondary" disabled={busy || refreshing || resizing || runningCount > 0 || !item.cache.canClear} on:click={() => clearSlot = item.slot}>Clear cache</button>
               </div>
               {#if clearSlot === item.slot && item.cache.canClear && runningCount === 0}
-                <div class="lt-cache-confirm" role="group" aria-label={'Konfirmasi pembersihan cache Minecraft - ' + item.slot}>
-                  <p>Hapus {(item.cache.bytes / 1048576).toFixed(1)} MB cache web Minecraft - {item.slot}? Login, dunia, pengaturan, dan cache lain tetap dipertahankan. Pembukaan konten web berikutnya mungkin lebih lambat.</p>
-                  <div class="lt-actions"><button disabled={busy || refreshing || resizing} on:click={() => clearCache(item.slot)}>Hapus cache terpilih</button><button class="lt-secondary" disabled={busy} on:click={() => clearSlot = null}>Batal</button></div>
+                <div class="lt-cache-confirm" role="group" aria-label={'Confirm cache cleanup for Minecraft - ' + item.slot}>
+                  <p>Clear {(item.cache.bytes / 1048576).toFixed(1)} MB of web cache for Minecraft - {item.slot}? Accounts, worlds and settings will be kept. Web content may load more slowly next time.</p>
+                  <div class="lt-actions"><button disabled={busy || refreshing || resizing} on:click={() => clearCache(item.slot)}>Clear web cache</button><button class="lt-secondary" disabled={busy} on:click={() => clearSlot = null}>Cancel</button></div>
                 </div>
               {/if}
             </article>
           {/each}
         {/if}
-        <p>Pembersihan hanya mencakup cache HTTP Code Builder yang dikenali. Semua Minecraft harus ditutup normal; berkas terkunci, tautan, dan data yang belum dikenali tidak dibersihkan.</p>
+        <p>Close all Minecraft sessions before clearing web cache.</p>
       </section>
     {:else if page === 'settings'}
-      <section class="lt-panel"><h2>Performa</h2><div class="lt-setting"><span>FPS saat game aktif</span><strong>144</strong></div><div class="lt-setting"><span>FPS saat game di latar</span><strong>10</strong></div><p>Angka di atas adalah batas FPS. Counter di dalam game menunjukkan hasil aktual.</p><h2>Preset grafis</h2><p>Simple · jarak render 12 chunk · efek visual hemat. Diterapkan sebelum profil dibuka; jarak simulasi dipertahankan.</p><h2>Saat aplikasi ditutup</h2><p>Minecraft tetap berjalan. Jendela yang ditampilkan dikembalikan ke Windows.</p></section>
+      <section class="lt-panel"><h2>Performance</h2><div class="lt-setting"><span>Active FPS limit</span><strong>144</strong></div><div class="lt-setting"><span>Background FPS limit</span><strong>10</strong></div><p>The in-game counter shows the actual frame rate.</p><h2>Graphics preset</h2><p>Simple · 12-chunk render distance · reduced effects. Applied at launch. Simulation distance stays unchanged.</p><h2>When Lazy Tester closes</h2><p>Minecraft keeps running and its windows return to the desktop.</p></section>
     {/if}
   </main>
 </div>

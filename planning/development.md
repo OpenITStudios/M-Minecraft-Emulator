@@ -1,79 +1,96 @@
 # Current Development Handoff — Lazy Tester
 
 Local is the only active product branch. Sole current handoff.
-Full goal: a modular five-profile native desktop app suitable for distribution,
-with automatic setup, clear data ownership, English UI, editable settings and
-per-profile storage management. Renderer/RAM experiments remain PAUSED; CI is OFF.
+Current goal: a modular five-profile native app with visible application/data
+folders, persistent locations, English UI and safe distribution. CI remains OFF.
+Renderer/RAM experiments remain PAUSED. Main is release-reserved.
 
-## Current bounded outcome — separate source, developer output and distribution
+## Current bounded outcome — App/Data layout and persistent product profiles
 
-Source parent: e09fd620e6fc1a0a4f9b13856819d0ba5370aed7.
-The operator requested a professional project root with development and release
-materials kept separate. There is one source tree, not developing/release copies.
-Existing apps/engine/tooling/docs/planning/experiments owners stay in place.
-Generated local material stays ignored under workspace or tool-native output paths.
-Installed game/account/world locations are not moved by this repository change.
+Source parent: d216830bd0e5e4923399db34235e0ac84bc22885.
+The operator approved a visible Lazy Tester root with App and Data, an automatic
+relative default, user-selected locations and verified reattachment after moves.
+product_profiles.rs is the single owner of location/catalog logic; the existing
+session controller still owns live games and storage handles. It reuses the
+bootstrap constructor through create_private_slot_at; DLL ABI/bytes, identity
+checks and singleton/FPS policy remain unchanged.
 
-Root package:windows now invokes apps/desktop/scripts/package-lazy-tester.mjs.
-The wrapper admits clean committed Local source, or a detached worktree at the
-exact Local revision; rejects tracked/untracked drafts; checks declared Node/npm,
-product configuration and disabled publication; then runs the existing desktop
-build:app. It rechecks source identity/cleanliness before exporting. Compiler
-output overrides must be absolute and inside this checkout, with ordinary parents.
-Desktop build:app remains the single native installer construction route.
+New installer roots use <chosen-root>/App, with a visible per-user default at
+%USERPROFILE%/Lazy Tester/App. Existing flat installs are preserved using either
+the executable or a retained data-location.json pointer, including upgrades whose
+old executable was removed before the preinstall hook. SetOutPath is refreshed
+before file extraction. Installer identity, idle admission and data preservation
+remain intact; no hook moves/deletes account or world data.
 
-Only a fresh workspace/packages/lazy-tester/<version>-<shortSHA>-<UTC>/ is exported:
-Lazy-Tester-<version>-windows-x86_64-setup.exe, SHA256SUMS.txt and
-package-manifest.json. There is no directory-recursive copy. Existing candidates
-are not merged or overwritten; receipt is written last. It records the full source
-SHA and installer checksum and always labels a DEVELOPMENT_CANDIDATE, not a
-release: signing NOT_VERIFIED, installed/Minecraft acceptance NOT_EXECUTED and
-publication DISABLED. This receipt is not another runtime readiness flag.
+Runtime creates Data/Profiles/Minecraft-1..5 only after supported game/DLL/host
+validation and idle admission. A create-once Data/profiles.json binds five stores
+to current-user and directory identities. App/data-location.json stores relative
+Data by default, or an explicitly selected absolute location. A saved unavailable
+location never falls back to fresh profiles. Complete catalogs repair an absent
+pointer before launch; partial/corrupt/replaced data is preserved and refused.
+Root App/Data/Logs are ignored and refused by source structure checks.
 
-Structure checks now also reject tracked Tauri icons/gen/binaries/package-resources
-outputs. Existing top-level allowlists refuse develop/release source copies.
-README, workspace README and the existing artifact-storage/distribution documents
-explain the actual source/build/candidate/installed-data split. Stale workspace
-instructions about CI debug downloads/Sandboxie packaging were corrected.
+Existing reviewed pilot profiles are discovered from bounded directory metadata
+and adopted in place before fresh setup, without finding developer launcher folders.
+Their original reviewed digest and existing HKCU stores remain mandatory. Invalid
+old bindings block fresh replacement. The earlier automatic-adoption/English drafts
+are now incorporated under the operator's current implementation authorization.
+No old accounts, worlds, profile directories or installed programs were moved.
+
+Storage exposes actual root/five paths through a strict typed DataLocation command,
+Open folder, Locate data and initial Choose data folder. Locate validates an
+existing product catalog before atomically changing the pointer. Choose refuses
+replacement of an existing product/legacy profile set. Dialogs and heavy operations
+share the manager lock; the controller/game idle gate is rechecked around selection.
+All mounted UI copy and the touched storage/binding errors are English. This is
+functional location UI, not acceptance of the earlier visual design.
 
 ## Actual evidence
 
-- 13 targeted package/export/routing tests across three frontend test files PASS.
-- Two repository structure/link fixtures PASS; G0 and structure checks PASS.
-- Export fixtures verify exactly three output files, installer checksum/bytes,
-  no adjacent private/source copies, no reuse, invalid identity/executable refusal.
-- Disposable Git fixture verifies clean Local/detached admission and tracked,
-  untracked and other-branch refusals. No product branch was changed by fixtures.
-- Actual wrapper entry on the dirty primary checkout refused before build invocation.
-- End-to-end invocation through a fresh native build remains NOT_EXECUTED for
-  this wrapper. Existing NSIS construction evidence is from 3a925a3, not this change.
-- No installer/GUI/game execution, Computer Use, driver, service or installed-data
-  action. No account/token/world contents were inspected or copied.
+- Six targeted Windows Rust fixtures PASS: two product-store/location tests and
+  four original-binding tests. Five temporary filesystem/HKCU stores reopen with
+  the same identities; same-volume directory relocation preserves identity;
+  existing/partial/replaced data and corrupt/missing custom locations are refused.
+  Only own disposable fixture registry keys/files were removed.
+- Svelte check: zero errors/warnings. 29 frontend tests in seven files PASS.
+- Two repository structure/link fixtures, root G0 and structure PASS.
+- Actual Windows x64 Tauri release and NSIS construction PASS with the native
+  package feature and --locked. Existing 104 native warnings remain.
+- Build output: workspace/builds/lazy-tester-layout-20261026/target.
+  manager SHA256 839ee86bed96363d50e35ca897863a0014c6b79d37bb9d5f0582e5cf746c4e0a;
+  installer SHA256 5c9e891fab503227e74a816d3f4d1a68c7b105a56a8524f25d93c567add36bba.
+  Unsigned. Built source precedes the documentation-only handoff update.
+- The clean-source packaging wrapper's post-commit export is not claimed yet;
+  any later export receipt must name its actual source commit and artifact hashes.
+- No candidate GUI, installer, Minecraft, Computer Use, UAC, driver or service
+  execution. No real account/token/world contents were read or copied. The old
+  Lazy Tester PID 20904 was observed by metadata only and left running unchanged.
 
-## Preserved drafts and product limitations
+## Limits and remaining work
 
-The earlier automatic old-profile connection and English-text changes in
-independent_bootstrap/profile_binding.rs, profile_storage.rs and LazyTesterApp.svelte
-remain uncommitted drafts on the primary checkout. The operator stopped that work
-for design discussion; they are not part of this packaging/layout commit.
-Their bytes were preserved. This commit does not claim automatic setup is shipped.
+New-store construction is not fresh-PC Minecraft login/gameplay proof. Runtime
+acceptance of installed default/custom/silent paths, same-volume Locate dialog,
+restart, upgrade/uninstall and five-client gameplay remains NOT_EXECUTED.
+The prior five-account pilot acceptance does not validate this catalog or UI.
 
-The current engine still uses reviewed machine-specific pilot identities and an
-exact reviewed Minecraft executable hash. Fresh-PC five-profile provisioning,
-custom data location/migration, Unicode paths and redirected/split AppData need
-implementation/review. Do not present the app as compatible with every PC yet.
-Active compatibility DLL source still resides in acceptance/bootstrap-ordering;
-source-owner promotion must trace all build/probe consumers before relocation.
+Same-volume reattachment is implemented, not a Move data copy engine. Cross-volume
+moves, individual-slot moves, migration of old pilot data into Data, backup/restore
+and destructive reset are unfinished. Copies with changed identities are refused;
+no token export or account cloning exists. Partial setup is preserved; an interactive
+repair flow is unfinished. Manually moving App does not repair Windows shortcuts.
+Current DLL limits remain: bounded ASCII paths, ordinary local storage, supported
+unsplit AppData and the exact reviewed Minecraft executable. Existing preferences
+still use their previous private path; they were not silently migrated.
 
-The prior pilot had operator-confirmed five licensed accounts in one Education
-Host World, persisted login/worlds and 144/10 FPS. New UI/controller integration,
-preview/input/offscreen host behavior and install/import/update/uninstall remain
-NOT_EXECUTED. User requested further product design before interactive acceptance.
-No earlier runtime result is promoted to new-app or cross-PC acceptance.
+The active native DLL source remains under acceptance/bootstrap-ordering. Settings
+editing, final Play UI design, source-owner promotion and signing/public release
+are separate remaining work, not solved by folder changes. See the canonical
+application/data policy in docs/system/data-layout.md.
 
 ## Next — one action
 
-Agree the fresh-PC setup and storage contract with the operator: supported Windows/
-Minecraft builds, permanent default data location, five stable profile identities,
-old-profile adoption and safe user-selected relocation. Implement that owner only
-after the design discussion; keep the paused local drafts out of unrelated work.
+Complete safe data relocation and partial-setup recovery in the same product
+profile owner, preserving existing identities/HKCU/account data, before offering
+Move data in the UI. Retain explicit unsupported cases rather than silently
+creating replacement profiles. Do not launch/control the desktop while the
+operator is working; integrated acceptance needs an available session.
