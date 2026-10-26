@@ -1,83 +1,71 @@
 # Current Development Handoff — Lazy Tester
 
-Local only; main release-reserved; GitHub Actions entirely OFF. VMware,
-Sandboxie and RAM/renderer experiments remain PAUSED. No account/world migration.
+Local only; main/release publication untouched; GitHub Actions entirely OFF.
+VMware, Sandboxie and RAM/renderer experiments remain PAUSED.
 
-## Current bounded implementation — Play and familiar Settings
+## Current bounded outcome — quiet polling, honest setup and normal shortcuts
 
-Parent c097363b215ab1d66ef409352500900980dd2d87. The user explicitly approved
-moving the reviewed design into the actual application, requested a prominent
-Advanced disclosure, consistent controls, and High/Low graphics only.
+Parent607294376a96a603e8dfe5181729c335d6c63b03. User reported the staged UI was
+blocked at setup, directed them to RUN.cmd and flickered during automatic checks.
+They approved diagnosis followed by repair; no account/world replacement implied.
 
-The mounted Svelte owner now combines launchers and session switching in Play.
-All five numbered launchers remain visible, including separate-window mode.
-Settings has General and Data Storage with a shared selected launcher. Graphics
-lives in General. Data Storage exposes actual bounded metadata, selected profile
-folder, guarded web-cache cleanup and emphasized Advanced options. No illustrative
-world sizes, fabricated installation paths or simulated successful actions ship.
+The compiled frontend reproduced the exact issue before edits: unconfigured setup
+displayed Ready when you are; over6.5seconds the probe saw recurring Refresh/help
+messages and launcher disabled transitions. The original loop used the same busy
+feedback for two-second background inspection and manual Refresh, marked geometry
+dirty after unchanged snapshots, and exposed resizing status as a changing footer.
 
-The existing preset writer supports High and Low, both at 12 chunks and unchanged
-simulation distance. High enables the reviewed effect keys; Low retains the
-previous reduced preset. manager_settings.rs owns graphics.json (five choices).
-The sole session actor serializes ApplyGraphicsPreset with launches and rejects
-manual writes while games are active. Existing options backups/identity checks
-are preserved. Launch reapplies the saved selection. App staging preserves the
-new preferences alongside performance.json and data-location.json.
+The existing Svelte owner now separates manual feedback from internal inspection.
+Automatic polling starts only after binding is configured. Unchanged process/state
+snapshots do not update native geometry. Cards are not disabled by background
+inspection; launch/navigation/manual-refresh requests queue behind it. Setup state
+never claims Ready and exposes explicit setup/reconnect actions. The stable help
+text no longer flashes Updating display. Existing actor/identity/launch guards stay.
 
-Native executable icon now uses the same LT identity as the interface. Windows
-frame appearance and actual game composition still need interactive acceptance.
+Profile binding status now distinguishes missing connection metadata from a saved
+store that cannot reopen. Reopen errors identify the stage/slot without raw
+identities or account contents. The fixed --lazy-tester-inspect-setup mode only
+checks existing product/legacy metadata. Its product lookup does not create
+profiles or persist a locator. It exits before UI/controller startup.
 
-## Evidence executed for this source change
+Actual metadata checks found the reviewed existing connection, all five launcher
+directories and registry stores intact. The new read-only backend inspection
+returned configured=true, issue=null. Default Data remained empty and no App
+locator was created by diagnostics. This is binding evidence, not sign-in/license
+or independent gameplay acceptance. No profiles were deleted, reset or migrated.
+The original screenshot's complete machine-specific transient failure was not
+recreated; the stale/blocked readiness presentation and its recovery were reproduced.
 
-Svelte check: zero errors/warnings. 33 frontend tests PASS. Production frontend
-build PASS. Windows Rust cargo check --all-targets with lazy-tester-package PASS
-(existing warnings retained). Targeted High/Low rendering and graphics preferences
-tests PASS. Compiled Svelte mocked-Tauri browser regression PASS: five launchers,
-High/Low/FPS save, navigation during inspection, partial storage metadata, disabled
-destructive actions, separate-window return, offline/recovery, existing-data
-reconnection and no unintended launch/delete. 920x620 and1366x900 bounds checked.
-Synthetic screenshots: workspace/runs/lazy-tester-ui-regression/.
-Repository structure and G0 contracts PASS. Full unrelated Rust suite not rerun;
-previous DACL/pipe/rustfmt issues remain outside this change.
+Local packaging now invokes create-app-shortcuts.ps1 after guarded App staging.
+It verifies the executable against build-info, preflights both destinations,
+preserves unrelated shortcuts, and creates Desktop and Start Menu Lazy Tester.lnk
+with the direct executable, App working directory and embedded LT icon. It verifies
+all fields after Save; it never launches a GUI/game or installs a service.
 
-## Explicitly unavailable functionality
+## Executed checks
 
-Full account clear, world export, game-settings reset/restore, background audio
-control, automatic game shutdown and data migration have no accepted backend.
-Their UI is disabled/explanatory. No real account/world contents were read,
-deleted or copied. Clear All Data must not be enabled until exclusive profile
-ownership, sign-in cleanup and isolation from Windows/other launchers are proven.
-The intended full-clear scope includes worlds and launcher-local backups; external
-exports and the Minecraft installation are preserved. This differs intentionally
-from cache/settings-only cleanup. No real destructive operation was executed.
+Svelte: zero errors/warnings;33 frontend tests PASS; production frontend build
+PASS. New compiled-Svelte regression observes30seconds of stable background
+polling with zero control/label/native-geometry churn, plus queued launch and
+navigation, truthful setup, deliberate Refresh recovery, existing-data reconnect,
+offline recovery, High/Low/FPS and separate-window return (mocked Tauri only).
+Five targeted profile-binding Rust tests PASS, including the new missing-metadata
+versus missing-store classifier test. Actual Windows debug binary built and its
+read-only setup inspection succeeded. Shortcut PlanOnly preflight succeeded.
+Logs and synthetic screenshots remain ignored under workspace/runs/.
 
-Existing close behavior is preserved: the manager releases game windows and
-keeps Minecraft running, with its existing native confirmation while embedded.
-High graphics visual acceptance and all gameplay/license/multiplayer acceptance
-for this revision are NOT_EXECUTED. Source/UI checks are not runtime proof.
+## App/package state and remaining work
 
-## Packaging / continuation
+Before this bounded update, App remained clean source
+1c8a3cd129cebf41472facb25021ed6011bc70a9. Build/stage a clean new source revision,
+recheck all relevant processes and record exact new payload/installer/shortcut
+verification after completion. Do not terminate a game/controller to force staging.
 
-Built Windows/NSIS from clean Local source
-1c8a3cd129cebf41472facb25021ed6011bc70a9. Package command completed successfully
-and staged the actual root App using its guarded backup/swap path. App build-info
-matches this source and all four payload hashes were independently verified.
-Installer SHA256485144c526013e95928832d05e4fd1319a56aa8a74752a407f6b353382eeacc7.
-Candidate: workspace/packages/lazy-tester/0.1.0-1c8a3cd129ce-20261026T122616256Z.
-Build log: workspace/runs/play-settings-implementation/package.log.
-The package manifest retains signing NOT_VERIFIED, installedAcceptance and
-minecraftAcceptance NOT_EXECUTED, publication DISABLED. No installer or GUI was
-executed and no game was started. RUN.cmd now resolves to the refreshed App.
+Clear All Data, world export, settings reset/restore, background audio, automatic
+game shutdown and data migration remain unavailable. Preserve all prior data and
+preferences, native payload pins, initialized submodule and second worktree.
+NSIS construction is not installer acceptance. No public release or CI operation.
 
-No Lazy Tester or Minecraft processes were observed before/after packaging.
-Existing data and preference pointers were preserved; no controller was killed.
-Submodule remains abd4c240031cfb46666daa74ca47ed4e48b561e4;
-second worktree remains detached at47a45f9c7d4a8ce6799d56997fd38e4b4df49ce7.
-Repository structure and G0 contracts passed again after staging. The following
-handoff commit changes documentation only; the packaged product SHA above is
-the precise source of the current App, not an inferred gameplay acceptance.
-
-Next: implement and test bounded game-settings backup/reset/restore in the
-existing options owner before enabling those controls. Account-clear isolation
-remains an independent unresolved P0 prerequisite; current UI is not an account
-readiness authority. STOP after the current source/package handoff.
+Next: after guarded staging, verify startup through the normal shortcut and then
+observe real two-session use. Microsoft sign-in remains manual; gameplay/license,
+native flicker and multiplayer acceptance are NOT_EXECUTED for this revision.

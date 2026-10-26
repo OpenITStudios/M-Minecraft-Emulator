@@ -218,16 +218,29 @@ fn publish(directory: &File, bytes: &[u8]) -> io::Result<()> {
     }
     result
 }
+pub(super) fn inspect_existing() -> ProfileBinding {
+    match super::product_profiles::inspect_existing() {
+        Ok(Some(_)) => ProfileBinding { schema:1,required:true,configured:true,issue:None },
+        Ok(None) => status(),
+        Err(error) => ProfileBinding {schema:1,required:true,configured:false,issue:Some(format!("The saved data folder could not be verified: {error}. Existing data was preserved."))},
+    }
+}
 fn status() -> ProfileBinding {
-    let result = (|| {
+    let metadata = (|| {
         let (path, _pins) = binding_path(false)?;
-        validate(&read_binding(&path)?)
+        read_binding(&path)
     })();
-    let (configured, issue) = match result {
-        Ok(()) => (true, None),
+    binding_status(metadata, validate)
+}
+fn binding_status(metadata: io::Result<Vec<u8>>, validate: impl FnOnce(&[u8])->io::Result<()>) -> ProfileBinding {
+    let (configured, issue) = match metadata {
+        Ok(bytes) => match validate(&bytes) {
+            Ok(()) => (true,None),
+            Err(error) => (false,Some(format!("Saved launcher data could not be reopened: {error}. Existing data was preserved. Use Locate existing data or reconnect the previous launcher."))),
+        },
         Err(error) if error.kind() == io::ErrorKind::NotFound =>
-            (false, Some("Minecraft profiles are not configured. Setup for a new PC is not available in this candidate.".into())),
-        Err(_) => (false, Some("Existing profiles could not be verified. Your data has been preserved.".into())),
+            (false, Some("No saved launcher connection was found. Set up a data folder or connect existing launcher data.".into())),
+        Err(error) => (false, Some(format!("The saved launcher connection could not be read: {error}. Your data has been preserved."))),
     };
     ProfileBinding {
         schema: 1,
@@ -294,6 +307,14 @@ pub(crate) fn run(import: bool) -> io::Result<ProfileBinding> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn missing_connection_and_missing_saved_data_have_distinct_recovery_messages() {
+        let missing=binding_status(Err(io::Error::from(io::ErrorKind::NotFound)),|_|panic!("missing metadata cannot validate"));
+        assert!(!missing.configured);assert!(missing.issue.unwrap().contains("No saved launcher connection"));
+        let stale=binding_status(Ok(vec![0;SIZE]),|_|Err(io::Error::new(io::ErrorKind::NotFound,"Minecraft - 2: temporary folder is unavailable")));
+        let issue=stale.issue.unwrap();assert!(!stale.configured);assert!(issue.contains("Minecraft - 2"));assert!(issue.contains("Existing data was preserved"));assert!(!issue.contains("new PC"));
+        let valid=binding_status(Ok(vec![0;SIZE]),|_|Ok(()));assert!(valid.configured);assert!(valid.issue.is_none());
+    }
     struct Fixture(PathBuf);
     impl Fixture {
         fn new() -> Self {

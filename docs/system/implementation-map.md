@@ -13,6 +13,16 @@ This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build
 
 ## Current Lazy Tester route — 26 October 2026
 
+Automatic UI inspection is separate from manual Refresh feedback. Unchanged
+snapshots do not mark native geometry dirty or disable launcher cards; navigation
+and launch clicks during inspection are queued. Blocked setup never displays Ready.
+Profile binding errors distinguish absent connection metadata from an existing
+store that cannot be reopened. The fixed --lazy-tester-inspect-setup mode checks
+existing product/legacy metadata only, without profile creation or locator writes.
+Local App staging now creates verified Desktop/Start Menu shortcuts through
+Development/tooling/windows-toolchain/create-app-shortcuts.ps1. They target the
+executable directly, preserving existing unrelated shortcuts and all runtime data.
+
 Play now owns launch and session selection together. Settings contains General
 and Data Storage; Advanced options is an emphasized disclosure inside the selected
 launcher's storage page. High/Low graphics selections are owned by the original

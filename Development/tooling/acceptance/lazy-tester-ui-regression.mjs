@@ -76,7 +76,7 @@ try {
           slot: profile.slot, bytes: 1048576, files: 1, partial: true, disk: null,
           cache: {bytes: 0, files: 0, partial: false, canClear: false, issue: null},
         }))};
-        if (operation === 'Inspect') return snapshot();
+        if (operation === 'Inspect') { await new Promise(resolve=>setTimeout(resolve,window.__inspectDelay||0));return snapshot(); }
         throw new Error('Unexpected operation: ' + operation);
       },
     };
@@ -89,6 +89,25 @@ try {
   await heading('Ready when you are').waitFor();
   assert.equal(await page.locator('.lt-card').count(),5);
   assert.equal(await nav('Play').getAttribute('aria-current'),'page');
+  // Unchanged background checks must not flash controls, lock cards or move native surfaces.
+  await page.waitForTimeout(200);
+  await page.evaluate(()=>{
+    window.__inspectDelay=150;window.__visualChanges=[];
+    window.__previewBaseline=window.__calls.filter(c=>c.command==='lazy_tester_previews').length;
+    const refresh=document.querySelector('.lt-page-header button'),help=document.querySelector('.lt-help');
+    const cards=[...document.querySelectorAll('.lt-card')];
+    window.__stableObserver=new MutationObserver(records=>{
+      for(const record of records){const node=record.target.nodeType===3?record.target.parentElement:record.target;
+        if(refresh.contains(node)||refresh===node)window.__visualChanges.push('refresh');
+        if(help.contains(node)||help===node)window.__visualChanges.push('help');
+        if(cards.includes(node))window.__visualChanges.push('card');
+      }
+    });window.__stableObserver.observe(document.querySelector('.lt-app'),{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['disabled']});
+  });
+  await page.waitForTimeout(30500);
+  assert.deepEqual(await page.evaluate(()=>window.__visualChanges),[],'unchanged polling must leave controls stable');
+  assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.command==='lazy_tester_previews').length===window.__previewBaseline),true,'unchanged polling must not reapply native geometry');
+  await page.evaluate(()=>window.__stableObserver.disconnect());
   await nav('Settings').click();await heading('General').waitFor();
   await page.getByLabel('While playing',{exact:true}).fill('60');await page.getByLabel('In the background',{exact:true}).fill('5');
   await section('Data Storage').click();await heading('Data Storage').waitFor();
@@ -118,7 +137,12 @@ try {
   await page.evaluate(()=>{window.__holdInspect=true;});await page.waitForFunction(()=>!!window.__finishInspect);
   await nav('Settings').click();await section('General').click();
   await page.evaluate(()=>{window.__holdInspect=false;window.__finishInspect();});await heading('General').waitFor();
-  await nav('Play').click();await page.getByRole('button',{name:'Launch Minecraft - 1',exact:true}).click();
+  await nav('Play').click();
+  await page.evaluate(()=>{window.__holdInspect=true;window.__finishInspect=null;});
+  await page.waitForFunction(()=>!!window.__finishInspect);
+  await page.getByRole('button',{name:'Launch Minecraft - 1',exact:true}).click();
+  assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.args?.request?.operation==='Launch').length),0,'launch must wait for the in-flight inspection');
+  await page.evaluate(()=>{window.__holdInspect=false;window.__finishInspect();});
   await heading('Starting Minecraft - 1').first().waitFor();await nav('Settings').click();
   await page.evaluate(()=>{window.__runningSlots=[1,2];});await page.getByRole('button',{name:'Refresh',exact:true}).click();
   assert.equal(await page.getByRole('button',{name:'Apply preset',exact:true}).isDisabled(),true);
@@ -134,12 +158,22 @@ try {
   await page.waitForFunction(()=>document.querySelector('.lt-connection').textContent==='Connected');
   // Existing-data recovery is still available without launching or deleting profiles.
   await page.goto('http://lazy-tester.test/?broken=1');await page.getByText('Saved profiles could not be verified.',{exact:true}).waitFor();
-  await page.getByRole('button',{name:'Manage data',exact:true}).click();await heading('Data Storage').waitFor();
+  assert.equal(await heading('Ready when you are').count(),0);
+  await heading('Set up your launchers').waitFor();
+  assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 1',exact:true}).isDisabled(),true);
+  // A transient first check must recover through a deliberate Refresh, without import/reset.
+  await page.evaluate(()=>{window.__bindingFailure='';window.__locationFailure='';window.__finishBinding=()=>{};});
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await heading('Ready when you are').waitFor();
+  assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 1',exact:true}).isEnabled(),true);
+  assert.equal(await page.evaluate(()=>window.__calls.some(c=>c.args?.import||c.args?.action==='Choose'||c.args?.request?.operation==='Launch')),false);
+  await page.goto('http://lazy-tester.test/?broken=1');await heading('Set up your launchers').waitFor();
+  await page.getByRole('region',{name:'Launcher setup'}).getByRole('button',{name:'Locate existing data',exact:true}).click();await heading('Data Storage').waitFor();
   await page.getByText('Connect or locate launcher data',{exact:true}).click();
-  const locate=page.getByRole('button',{name:'Locate existing data',exact:true});await locate.click();
+  const locate=page.locator('.lt-location-options').getByRole('button',{name:'Locate existing data',exact:true});await locate.click();
   await page.evaluate(()=>{window.__locateOutcome='invalid';});await locate.click();await page.getByText('The selected folder does not match the saved profile identities.',{exact:true}).waitFor();
   await page.evaluate(()=>{window.__locateOutcome='valid';});await locate.click();await page.getByText('D:\\Recovered Data',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>window.__calls.some(c=>c.args?.action==='Choose'||['Launch','ClearProfileCache'].includes(c.args?.request?.operation))),false);
   assert.deepEqual(errors,[]);
-  console.log('PASS: compiled Svelte Play/Settings, five launchers, High/Low/FPS, navigation queue, partial storage, Advanced, destructive gates, two-session desktop return, offline and data recovery; mocked Tauri, no game/data mutations.');
+  console.log('PASS: compiled Svelte; 30 seconds stable polling with no control/label/geometry churn; queued launch/navigation; truthful setup state; High/Low/FPS; desktop return; offline/data recovery. Mocked Tauri, no real game/data mutations.');
 } finally { await browser.close(); }

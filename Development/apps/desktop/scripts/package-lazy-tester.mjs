@@ -146,7 +146,8 @@ function main() {
   const result = assembleCandidate(root,installer,sha,version,stamp);
   if (!process.argv.includes('--export-only')) {
     const local = stageLocalApp(root,resolve(target,'x86_64-pc-windows-msvc/release'),sha);
-    console.log(`Local app: ${local.app}\nStart with RUN.cmd. Existing data is preserved.`);
+    const shortcuts=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-File',resolve(developmentRoot,'tooling/windows-toolchain/create-app-shortcuts.ps1'),'-Root',root],{encoding:'utf8',windowsHide:true});
+    console.log(`Local app: ${local.app}\nOpen Lazy Tester from Desktop or Start Menu. Existing data is preserved.\n${shortcuts.trim()}`);
   }
   console.log(`Development candidate: ${result.output}\nSigning is not verified; installation and gameplay are not executed; publication is disabled.`);
 }

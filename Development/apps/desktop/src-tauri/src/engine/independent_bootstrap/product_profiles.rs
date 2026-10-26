@@ -253,13 +253,19 @@ fn open_at(logical: File, root: &Path) -> io::Result<[SlotStorage; 5]> {
         .map_err(|_| invalid("Missing product profile"))
 }
 pub(super) fn open() -> io::Result<Option<[SlotStorage; 5]>> {
+    open_mode(true)
+}
+pub(super) fn inspect_existing() -> io::Result<Option<[SlotStorage; 5]>> {
+    open_mode(false)
+}
+fn open_mode(persist_location: bool) -> io::Result<Option<[SlotStorage; 5]>> {
     let (root, default) = resolve_location(&home()?, &locator_path()?)?;
     let (logical, _) = replay_roots()?;
     match open_at(logical, &root) {
         Ok(stores) => {
             // A successful setup may have stopped between catalog and locator
             // publication. Persist the pointer before admitting any game launch.
-            if default {
+            if default && persist_location {
                 write_json(
                     &locator_path()?,
                     &Locator {

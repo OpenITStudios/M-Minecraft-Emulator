@@ -1082,6 +1082,13 @@ fn prepare_registered_enrolled_for<const N: usize>() -> io::Result<PreparedEduca
 /// Fixed opt-in invocation in the existing manager, dispatched before creating its UI.
 /// No path/PID/options or hash override. Standard output is count/status metadata only.
 pub(super) fn maybe_run_startup_observation() -> bool {
+    if std::env::args_os().skip(1).eq([OsString::from("--lazy-tester-inspect-setup")]) {
+        use std::io::Write;
+        // Read only existing binding/directory/registry metadata; never provision or launch.
+        let report=profile_binding::inspect_existing();
+        let _=writeln!(io::stdout(),"{}",serde_json::to_string(&report).unwrap());
+        std::process::exit(if report.configured {0}else{2});
+    }
     if session_controller::maybe_run() { return true; }
     let mut args = std::env::args_os().skip(1);
     let mode = args.next();
@@ -1752,7 +1759,7 @@ fn reopen_slots_for<const N: usize>(
     let root = parent.join(name);
     let mut pins = Vec::new();
     for path in root.ancestors().collect::<Vec<_>>().into_iter().rev() {
-        pins.push(open_directory(path, FILE_READ_ATTRIBUTES)?);
+        pins.push(open_directory(path, FILE_READ_ATTRIBUTES).map_err(|error|io::Error::new(error.kind(),format!("Saved launcher root is unavailable: {error}")))?);
     }
     let matches = |file: &File, at: usize| -> io::Result<bool> {
         let id = directory_id(file)?;
@@ -1781,7 +1788,7 @@ fn reopen_slots_for<const N: usize>(
         let private = open_directory(
             &root.join(format!("MC{slot:02}")),
             FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY,
-        )?;
+        ).map_err(|error|io::Error::new(error.kind(),format!("Minecraft - {slot}: profile folder is unavailable: {error}")))?;
         if !matches(&private, 168 + (slot as usize - 1) * 24)? {
             return Err(invalid("Replay slot was replaced"));
         }
@@ -1808,12 +1815,12 @@ fn reopen_slots_for<const N: usize>(
             )
         };
         if status != 0 {
-            return Err(io::Error::from_raw_os_error(status as i32));
+            return Err(io::Error::new(io::Error::from_raw_os_error(status as i32).kind(),format!("Minecraft - {slot}: saved registry store cannot be opened (Windows error {status})")));
         }
         slots.push(SlotStorage {
             slot,
             logical: logical.try_clone()?,
-            temporary: existing_private_temporary(&private)?,
+            temporary: existing_private_temporary(&private).map_err(|error|io::Error::new(error.kind(),format!("Minecraft - {slot}: temporary folder is unavailable: {error}")))?,
             private,
             registry: RegistryKey(key),
             user_key_path,
