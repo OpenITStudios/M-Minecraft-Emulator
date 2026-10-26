@@ -19,10 +19,8 @@ requires selected-launcher review/confirmation.
 2. Fast switch/Launch: measure focus/bounds and controller/validation/enrollment/
    window-ready phases. Reuse original leases/image pins without weakening identity,
    inventing readiness or busy polling.
-3. Process clarity: main UI, root starter, session controller, recovery per game,
-   official Minecraft, WebView renderer/GPU/services. Investigate supported Task
-   Manager naming/grouping and prove actual results. Do not hide processes, rename
-   official binaries, disable browser sandbox or weaken same-image pipe checks.
+3. Actual Task Manager roles/grouping: UI/starter/controller/recovery/Minecraft/
+   WebView. No hiding, official binary renames, sandbox disable or weaker peer gates.
    Role/PID pages do not prove grouping; explain proven upstream limitations.
 4. General: High/Low only; truthful valid whole5..1000 FPS saves with120/5 defaults.
    Preserve explicit older preferences; new defaults do not overwrite user choices.
@@ -33,23 +31,23 @@ requires selected-launcher review/confirmation.
    Preserve installation/peers; allow unrelated verified managed games. Explain
    Windows identity limits. Verify confirmation, recovery/catalog identities,
    interruption, active profiles, malformed paths, links, cancel and peer isolation.
-6. Delivery: clean exact Local Windows candidate, frontend/Rust/fixtures/package
-   checks; stage App/root EXE/shortcuts preserving Data. Verify actual Explorer
-   startup, common frame, drag/switch/previews/full exit/settings/storage/process
-   roles to available proof. Compilation never substitutes for usability acceptance.
+6. Clean exact Local Windows candidate/checks/receipts, App/root EXE/shortcuts,
+   Data preserved. Verify Explorer startup and all requested UX/runtime flows;
+   compilation never substitutes for usability acceptance.
 
 ## Current exact source and delivery
 
-Installed App/root source7b7b0e17d0926a1b810c0cb7676a8e5ab152fcb0, clean Local build.
-App SHA256:8afe4384dc38438b3ec99e07f8d59f39e5722e3d83ff364dd1bda20a4387b5ed.
+Installed App/root sourcea0b88440a526fea4499a1715ff1dd05fde862b53, clean Local build.
+App SHA256:24717334c6c93f8b04f0832bb5c0697edd5e4c37c524e762b0d4456b071e371a.
 Root starter/DLL hashes: App/build-info.json, verified during Explorer startup.
-Candidate workspace/packages/lazy-tester/0.1.0-7b7b0e17d092-20261026T193113378Z;
-NSIS SHA256:798d84a09f53aae3228433d5944c31452a2b070970afe44a00e3b76428be8756.
+Candidate workspace/packages/lazy-tester/0.1.0-a0b88440a526-20261026T194457432Z;
+NSIS SHA256:d7cc20867ab82f31b44ec10e0c9162a08558fa2623327c50ef61d3f7a4a4d193.
 Signing NOT_VERIFIED; installer execution/publication NOT_EXECUTED/DISABLED.
-Actual Explorer startup: Connected/five enabled/no issue/project-local WebView cache.
-Real UI PID37644: audio checkbox stayed enabled across2refreshes; Mute and Keep
-saved through UI into Data/Settings/audio.json. Log workspace/runs/audio-ui-smoke.log
-and .ps1. Owned idle UI closed normally; zero remaining app/game processes.
+Actual Explorer startup PID18724: Connected/five enabled/no issue/local WebView cache,
+log workspace/runs/launch-desktop-startup.log. Data Storage UI opened controller
+without games; own idle UI/controller closed normally, no remaining app/game process.
+Earlier7b7b0e1 PID37644 audio checkbox stable across2refreshes, Mute/Keep saved viaUI;
+workspace/runs/audio-ui-smoke.log/.ps1. No real game audio tested.
 Earlier03a7d49 Clear review/name+ack gating/Cancel preserved catalog/options and
 created no deletion journal;7eb8ca1 Reset review/Cancel PASS. Data retained; no setup.
 ## Implemented corrections and executed evidence
@@ -60,10 +58,8 @@ move worker retained. Nine surface/opacity/translation/focus/stall/recovery fixt
 PASS.40 synthetic swaps p95/max2ms. Logs workspace/runs/opaque-*. Actual Minecraft
 drag/focus/frame/switch/DPI NOT_EXECUTED.
 
-FPS:120/5 defaults, saves5..1000, background<=active across UI/bridge/backend.
-Historical explicit1..4 and144/10 readable without rewriting. V3 pacer gets saved
-values next launch; historical V2 defaults unchanged. Rust default/roundtrip/legacy/
-boundaries PASS; actual120/5 game pacing NOT_EXECUTED.
+FPS120/5, saves5..1000/background<=active, explicit legacy1..4/144/10 preserved.
+V3 applies next launch, V2 unchanged. Rust policy fixtures PASS; game pacing untested.
 
 Cache: selected profile stopped; other exact managed games may continue, unknown
 external games block. Actor serializes pinned/exclusive cleanup. Four deletion and
@@ -90,10 +86,14 @@ Launch preflight: original EXE pin, one fresh full Windows resolver instead of t
 named-file ID check and reviewed hash per launch. Initial admission stays two-pass.
 Release3sample median2280->1176ms for validation only; read-only benchmark never
 opens profiles/starts Minecraft. Identity/path/hash/write-sharing test and5 controller
-regressions PASS. Logs workspace/runs/launch-preflight-release-*.log. Delivery pending;
+regressions PASS. Logs workspace/runs/launch-preflight-release-*.log. Candidate staged;
 actual launch/window-ready timing and Task Manager roles/grouping remain unproven.
 WebView2 grouping matches OPEN upstream reports; AppUserModelID/metadata alone
-insufficient. Investigate actual parent/logon/integrity and supported APIs:
+insufficient. Actual process graph at installed source: WebView2 manager24624 and
+controller28932 both parented toUI39612; browser owns renderer/GPU/network/storage/
+crash children. UI/controller both FileDescription Lazy Tester. No LazyDesigner
+attribution. Log workspace/runs/process-role-observation.log/.ps1; Task Manager GUI
+grouping NOT_OBSERVED. Investigate role labels without weakening same-image gates:
 https://github.com/MicrosoftEdge/WebView2Feedback/issues/5628
 https://github.com/tauri-apps/tauri/issues/15567
 No one-group Task Manager success claim. Full-exit source from6eba183 closes only
@@ -107,6 +107,8 @@ Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4; second worktree detached47a45
 Four licensed playable clients, gameplay/network/migration/installer acceptance
 are separate obligations, NOT_EXECUTED here. Compiler caches remain ignored.
 
-Next: measure the retained launch/validation path before optimizing it. Audio crash
-recovery/long-launch response and presentation/process acceptance remain open.
+Next: investigate supported per-role labels preserving binary/peer identity.
+User question pending: permission for2managed-game Launch/switch/drag/preview/full-exit
+tests, no world/login/account-content access; earlier no-game restriction still holds.
+Audio crash/long-launch response and presentation/process acceptance remain open.
 Overall goal stays ACTIVE.
