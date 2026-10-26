@@ -13,7 +13,11 @@ foreach ($itemPath in @($checkout,$appFolder,$executable)) {
 $receipt = Get-Content -LiteralPath (Join-Path $appFolder 'build-info.json') -Raw | ConvertFrom-Json
 if ($receipt.sourceCommit -notmatch '^[a-f0-9]{40}$') { throw 'App build receipt is invalid.' }
 $entry = @($receipt.files | Where-Object { $_.name -eq 'lazy-tester.exe' })
-if ($entry.Count -ne 1 -or (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash -ine $entry[0].sha256) { throw 'App executable does not match its build receipt.' }
+$algorithm = [Security.Cryptography.SHA256]::Create()
+$stream = [IO.File]::OpenRead($executable)
+try { $executableHash = [BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-','') }
+finally { $stream.Dispose(); $algorithm.Dispose() }
+if ($entry.Count -ne 1 -or $executableHash -ine $entry[0].sha256) { throw 'App executable does not match its build receipt.' }
 $desktop = [Environment]::GetFolderPath('DesktopDirectory')
 $programs = [Environment]::GetFolderPath('Programs')
 if (-not $desktop -or -not $programs) { throw 'Windows Desktop or Start Menu location is unavailable.' }
