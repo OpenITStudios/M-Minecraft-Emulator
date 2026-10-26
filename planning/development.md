@@ -23,8 +23,18 @@ Executed: 30 frontend tests PASS, Svelte check zero errors/warnings, two targete
 product-profile Rust fixtures PASS, two structure fixtures PASS, structure/G0
 checks PASS, and Windows release/NSIS build PASS (existing compiler warnings).
 No UI, game, installer or Computer Use was launched. Runtime acceptance remains
-NOT_EXECUTED for this change. The clean-revision package command is the next
-physical staging step, with hashes recorded in App/build-info.json.
+NOT_EXECUTED for this change.
+
+Physical staging completed from clean Local source
+5b578653bd7d576ac92a90e56eb06137e97efb05. The actual checkout root now contains
+RUN.cmd, App and empty Data. All four App payload SHA-256 values match the
+receipt App/build-info.json, and each copied payload has one filesystem link.
+The candidate export is
+workspace/packages/lazy-tester/0.1.0-5b578653bd7d-20261026T075700753Z.
+The initial staging attempt correctly refused Cargo's two-link source executable;
+the corrected reader copies its bytes to an independent file, now covered by
+the staging fixture. Existing accounts/worlds were neither read nor moved.
+Authenticode remains NotSigned; this is a development candidate, not a release.
 
 Cleanup inventory: apps/desktop/src-tauri/target contains 22,912,765,268 bytes
 (21.34 GiB), is Git-ignored/untracked, has a Cargo CACHEDIR.TAG, no reparse points
@@ -34,8 +44,10 @@ was deleted; do not report reclaimed space. Toolchains, old profile/capability
 folders, worlds and historical evidence remain preserved. The separate current
 build cache under workspace/builds/lazy-tester-layout-20261026 is retained.
 
-Next: stage the clean committed candidate into App, verify exact payload hashes
-without running it, and record the actual local outcome.
+The physical staging scope is complete. Cleanup remains blocked by execution
+policy; no repeated deletion attempts or alternate deletion mechanism is authorized
+by that rejection. Next: resolve the blocked old compiler-cache removal before
+claiming disk-space cleanup. Do not resume Minecraft/RAM experiments incidentally.
 
 ## Previous bounded outcome — App/Data layout and persistent product profiles
 
