@@ -144,6 +144,9 @@ impl Sessions {
                     child.identity().ok()?;
                     if let Some(previous) = &self.windows[index] {
                         if valid_retained_window(previous) {
+                            // The game can reset its caption after a desktop/workspace transition.
+                            let hwnd = usize::from_str_radix(&previous.window_handle[2..], 16).ok()?;
+                            let _ = label_slot_window(hwnd as _, child.pid, index as u32 + 1);
                             let mut process = previous.clone();
                             process.responding = unsafe {
                                 windows_sys::Win32::UI::WindowsAndMessaging::IsHungAppWindow(

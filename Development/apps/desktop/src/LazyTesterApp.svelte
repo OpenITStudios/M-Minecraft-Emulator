@@ -152,7 +152,7 @@
     if (busy || refreshing || resizing) return;
     busy = true;
     try {
-      await workspaceSurface.release(); active = null; selectedIdentity = ''; requested = null;
+      await workspaceSurface.release(); active = null; selectedIdentity = ''; requested = null; queued = null;
       detached = true; previewStatuses = []; dirty = true;
     } catch (error) { issue = String(error); }
     finally { busy = false; }
@@ -179,6 +179,11 @@
   }
   function step(direction: 1 | -1) {
     const next = nextProfile(profiles, active, direction); if (next !== null) select(next);
+  }
+  function returnToWorkspace() {
+    const slot = profiles.find(profile => profile.state === 'RUNNING')?.slot;
+    if (slot) select(slot);
+    else { detached = false; dirty = true; }
   }
   async function inspectStorage() {
     if (busy || refreshing || resizing) return;
@@ -282,10 +287,22 @@
       </section>
     {/if}
     <section class="lt-workspace" hidden={page !== 'workspace'} aria-label="Minecraft workspace">
-      <header class="lt-stage-header"><div><h2>{active ? 'Minecraft - ' + active : requested ? 'Starting Minecraft - ' + requested : 'Choose a Minecraft to start'}</h2><p>{active ? 'Click the game to play' : detached ? 'Game windows restored to the desktop.' : 'Open a profile from Launchers.'}</p></div>
-        <div class="lt-actions"><button class="lt-secondary" disabled={busy || !available || !playableCount} on:click={() => step(-1)} aria-label="Previous Minecraft">←</button><button class="lt-secondary" disabled={busy || !available || !playableCount} on:click={() => step(1)}>Next →</button>{#if runningCount}<button class="lt-secondary" disabled={busy || resizing} on:click={release}>Restore windows</button>{/if}</div>
+      <header class="lt-stage-header"><div><h2>{detached ? 'Desktop mode' : active ? 'Minecraft - ' + active : requested ? 'Starting Minecraft - ' + requested : 'Workspace mode'}</h2><p>{detached ? 'Control each Minecraft in its own window.' : active ? 'Workspace mode · click the game to play' : 'Open a profile from Launchers.'}</p></div>
+        <div class="lt-actions">{#if detached}<button disabled={busy || refreshing || resizing || !available} on:click={returnToWorkspace}>Back to Workspace</button>{:else}<button class="lt-secondary" disabled={busy || !available || !playableCount} on:click={() => step(-1)} aria-label="Previous Minecraft">←</button><button class="lt-secondary" disabled={busy || !available || !playableCount} on:click={() => step(1)}>Next →</button>{#if runningCount}<button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={release}>Use desktop windows</button>{/if}{/if}</div>
       </header>
-      <div class="lt-viewport" bind:this={viewport}>{#if !active}<div class="lt-empty"><span>LT</span><h2>{initializing ? 'Getting ready…' : !available ? 'Session status unavailable' : requested ? 'Starting Minecraft - ' + requested : 'Choose a Minecraft'}</h2><p>{initializing ? 'Checking your profiles and session status.' : !available ? 'Use Refresh to reconnect.' : requested ? 'Waiting for the game window…' : 'Launch a profile to begin.'}</p>{#if !requested && !initializing}<button on:click={() => navigate('launchers')}>Open launchers</button>{/if}</div>{/if}</div>
+      <div class="lt-viewport" class:lt-desktop={detached} bind:this={viewport}>
+        {#if detached}
+          <div class="lt-desktop-intro"><h2>Games are in separate windows</h2><p>Your Minecraft sessions keep running. Use the taskbar to switch windows, or open a session in Workspace.</p></div>
+          {#if !available}<p class="lt-error" role="status">Session status unavailable. Use Refresh to reconnect.</p>{/if}
+          <div class="lt-desktop-sessions" aria-label="Desktop sessions">
+            {#each profiles.filter(profile => ['RUNNING','STARTING','NOT_RESPONDING'].includes(profile.state)) as profile (profile.slot)}
+              <article><h3>Minecraft - {profile.slot}</h3><p>{labels[profile.state]}</p><button class="lt-secondary" disabled={busy || !available || profile.state !== 'RUNNING'} on:click={() => select(profile.slot)}>Open in Workspace</button></article>
+            {/each}
+          </div>
+          {#if available && runningCount === 0}<p>No Minecraft sessions are running. Open Launchers to start one.</p><button on:click={() => navigate('launchers')}>Open launchers</button>{/if}
+        {:else if !active}<div class="lt-empty"><span>LT</span><h2>{initializing ? 'Getting ready…' : !available ? 'Session status unavailable' : requested ? 'Starting Minecraft - ' + requested : 'Choose a Minecraft'}</h2><p>{initializing ? 'Checking your profiles and session status.' : !available ? 'Use Refresh to reconnect.' : requested ? 'Waiting for the game window…' : 'Launch a profile to begin.'}</p>{#if !requested && !initializing}<button on:click={() => navigate('launchers')}>Open launchers</button>{/if}</div>{/if}
+      </div>
+      {#if !detached}
       <div class="lt-filmstrip" aria-label="Other Minecraft sessions">
         {#each others as profile (profile.slot)}
           <button class="lt-card" aria-label={'Play Minecraft - ' + profile.slot} disabled={busy || !available || profile.state !== 'RUNNING'} on:click={() => select(profile.slot)}>
@@ -296,6 +313,7 @@
       </div>
       <p class="lt-help">{resizing ? 'Updating layout…' : 'Select a preview to switch games.'}</p>
       {#if previewIssue}<details class="lt-preview-details"><summary>Preview details</summary><p>{previewIssue}</p></details>{/if}
+      {/if}
     </section>
     {#if page === 'launchers'}
       <p class="lt-description">{!available && profiles.length ? 'Showing the last known status. Use Refresh to reconnect before launching.' : 'Choose which profiles to launch.'}</p>

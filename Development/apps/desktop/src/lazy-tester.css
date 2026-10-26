@@ -36,6 +36,12 @@ body { overflow: hidden; }
 .lt-stage-header p { font-size: 12px; }
 .lt-actions { display: flex; flex-wrap: wrap; gap: 7px; }
 .lt-viewport { flex: 1; min-height: 120px; border: 1px solid var(--lt-line); border-radius: 12px; background: #0d0f14; overflow: hidden; }
+.lt-viewport.lt-desktop { padding: 24px; background: var(--lt-panel); overflow: auto; }
+.lt-desktop-intro h2 { margin: 0 0 10px; font-size: 20px; }
+.lt-desktop-intro p, .lt-desktop-sessions p { color: var(--lt-muted); line-height: 1.6; }
+.lt-desktop-sessions { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-top: 24px; }
+.lt-desktop-sessions article { padding: 18px; border: 1px solid var(--lt-line); border-radius: 10px; }
+.lt-desktop-sessions h3 { margin: 0; font-size: 16px; }
 .lt-empty { height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 10px; padding: 15px; text-align: center; }
 .lt-empty > span { font-size: 36px; font-weight: 800; color: #677199; }
 .lt-empty h2 { font-size: 20px; margin: 0; }

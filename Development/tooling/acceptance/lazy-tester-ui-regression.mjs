@@ -2,7 +2,7 @@
 // Uses a headless browser and an in-memory Tauri adapter; never opens profiles or games.
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
-import {readFile} from 'node:fs/promises';
+import {readFile, mkdir} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 const require = createRequire(import.meta.url);
@@ -30,8 +30,8 @@ try {
     window.__locateOutcome = 'cancel';
     const profiles = [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}));
     const settings = {activeFps: 144, backgroundFps: 10, renderDistanceChunks: 12, canApplyPreset: true, changedProfiles: null};
-    const snapshot = () => ({schema: 1, storage: null, profiles: profiles.map(profile => window.__runningSlot === profile.slot ? {
-      ...profile, state: 'RUNNING', process: {pid: 101, createdFileTime: '134000000000000001', sessionId: 1, windowHandle: '0x123', responding: true},
+    const snapshot = () => ({schema: 1, storage: null, profiles: profiles.map(profile => window.__runningSlot === profile.slot || window.__runningSlots?.includes(profile.slot) ? {
+      ...profile, state: 'RUNNING', process: {pid: 100 + profile.slot, createdFileTime: '134000000000000001', sessionId: 1, windowHandle: '0x' + (0x123 + profile.slot).toString(16), responding: true},
     } : profile)});
     let callback = 0;
     window.__TAURI_EVENT_PLUGIN_INTERNALS__ = {unregisterListener() {}};
@@ -59,7 +59,7 @@ try {
           return {schema: 1, defaultPath: 'D:\\Lazy Tester\\Data', path: window.__dataPath,
             profiles: window.__dataPath ? profiles.map(profile => ({slot: profile.slot, path: window.__dataPath + '\\Profiles\\Minecraft-' + profile.slot})) : [], canLocate: true};
         }
-        if (command === 'lazy_tester_clear_previews' || command.startsWith('desktop_')) return null;
+        if (command === 'lazy_tester_present' || command === 'lazy_tester_clear_previews' || command.startsWith('desktop_')) return null;
         if (command === 'lazy_tester_previews') return {schema: 1, tiles: args.tiles.map(tile => ({slot: tile.slot, registered: false, reason: null}))};
         if (command !== 'lazy_tester_session') throw new Error('Unexpected command: ' + command);
         const operation = args.request.operation;
@@ -140,6 +140,25 @@ try {
   assert.deepEqual(errors, []);
   assert.equal(await page.evaluate(() => window.__calls.filter(call => call.args?.request?.operation === 'Launch').length), 1);
   assert.equal(await page.evaluate(() => window.__calls.some(call => ['ClearProfileCache', 'ApplyPreset'].includes(call.args?.request?.operation))), false);
+
+  await page.evaluate(() => { window.__runningSlots = [1,2]; });
+  await nav('Workspace').click();
+  await page.getByRole('button', {name: 'Use desktop windows', exact: true}).click();
+  await heading('Desktop mode').waitFor();
+  await heading('Games are in separate windows').waitFor();
+  assert.equal(await page.getByText('Choose a Minecraft to start', {exact:true}).count(), 0);
+  assert.equal(await page.locator('.lt-filmstrip:visible').count(), 0);
+  assert.equal(await page.locator('[aria-label="Desktop sessions"]').count(), 1);
+  await page.waitForFunction(()=>document.querySelectorAll('.lt-desktop-sessions article').length===2);
+  assert.equal(await page.locator('.lt-desktop-sessions article').count(), 2);
+  await page.setViewportSize({width:920,height:620});
+  assert.equal(await page.evaluate(()=>document.querySelector('.lt-desktop').getBoundingClientRect().bottom>innerHeight),false);
+  const captures = fileURLToPath(new URL('../../../workspace/runs/lazy-tester-ui-regression/', import.meta.url));
+  await mkdir(captures,{recursive:true});
+  await page.screenshot({path:path.join(captures,'desktop-mode.png')});
+  await page.getByRole('button', {name:'Back to Workspace',exact:true}).click();
+  await page.getByRole('button', {name:'Use desktop windows',exact:true}).waitFor();
+  assert.equal(await page.locator('.lt-desktop:visible').count(), 0);
 
   // Broken/missing saved data must retain an available, non-destructive recovery route.
   await page.setViewportSize({width: 920, height: 620});

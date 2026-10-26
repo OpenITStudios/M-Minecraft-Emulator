@@ -503,10 +503,12 @@ mod native {
                 }
                 let absent = GetWindowRgn(manager, current) == ERROR;
                 DeleteObject(current);
-                if absent {
-                    return Ok(());
+                if !absent && SetWindowRgn(manager, std::ptr::null_mut(), 1) == 0 {
+                    return Err(io::Error::last_os_error());
                 }
-                if SetWindowRgn(manager, std::ptr::null_mut(), 1) == 0 {
+                // Repaint WebView children too; removing the region alone can leave stale transparency.
+                if RedrawWindow(manager, std::ptr::null(), std::ptr::null_mut(),
+                    RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN) == 0 {
                     return Err(io::Error::last_os_error());
                 }
                 return Ok(());
@@ -2130,6 +2132,32 @@ pub fn refresh_previews() { previews::refresh(); }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn clearing_aperture_repaints_children_even_when_region_is_already_clear() {
+        use windows_sys::Win32::{Graphics::Gdi::*, UI::WindowsAndMessaging::*};
+        let class: Vec<u16> = "STATIC\0".encode_utf16().collect();
+        unsafe {
+            let manager = CreateWindowExW(0, class.as_ptr(), class.as_ptr(), WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+                0, 0, 300, 200, std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null());
+            assert!(!manager.is_null());
+            let child = CreateWindowExW(0, class.as_ptr(), class.as_ptr(), WS_CHILD | WS_VISIBLE,
+                0, 0, 200, 100, manager, std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null());
+            let outcome = std::panic::catch_unwind(|| {
+                assert!(!child.is_null());
+                ValidateRect(manager, std::ptr::null());
+                ValidateRect(child, std::ptr::null());
+                assert_eq!(GetUpdateRect(child, std::ptr::null_mut(), 0), 0);
+                native::aperture(manager as usize as u64, None).unwrap();
+                assert_ne!(GetUpdateRect(child, std::ptr::null_mut(), 0), 0, "WebView child was not invalidated");
+                let region = CreateRectRgn(0, 0, 0, 0);
+                assert_eq!(GetWindowRgn(manager, region), ERROR);
+                DeleteObject(region);
+            });
+            DestroyWindow(manager);
+            if let Err(error) = outcome { std::panic::resume_unwind(error); }
+        }
+    }
     #[test]
     fn app_switch_during_placement_is_not_a_failed_foreground_surface() {
         let game = 11;

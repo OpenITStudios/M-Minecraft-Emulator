@@ -3778,7 +3778,7 @@ mod tests {
     #[test]
     fn slot_captions_use_stable_numbers_and_reject_foreign_windows() {
         use windows_sys::Win32::UI::WindowsAndMessaging::{
-            CreateWindowExW, DestroyWindow, GetWindowTextW, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
+            CreateWindowExW, DestroyWindow, GetWindowTextW, SetWindowTextW, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
         };
         for slot in 1..=MAX_EDUCATION_SLOTS {
             assert_eq!(
@@ -3814,6 +3814,9 @@ mod tests {
             );
             label_slot_window(hwnd, unsafe { GetCurrentProcessId() }, 2).unwrap();
             let mut current = [0u16; 32];
+            let reset = wide(OsStr::new("Minecraft Education")).unwrap();
+            assert_ne!(unsafe { SetWindowTextW(hwnd, reset.as_ptr()) }, 0);
+            label_slot_window(hwnd, unsafe { GetCurrentProcessId() }, 2).unwrap();
             let length = unsafe { GetWindowTextW(hwnd, current.as_mut_ptr(), 32) };
             assert_eq!(
                 String::from_utf16_lossy(&current[..length as usize]),
