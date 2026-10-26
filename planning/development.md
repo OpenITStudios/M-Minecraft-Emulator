@@ -1,120 +1,116 @@
 # Current Development Handoff — Lazy Tester
 
-Local only; main/publication untouched; CI OFF. Legacy VM/Sandboxie and RAM/renderer
-experiments PAUSED. User chose to RETAIN compiler caches; delete nothing.
+## Single active goal — revised by user27October2026
 
-## Current scope and installed revision
+Deliver a dependable Lazy Tester: same Play/Settings frame; no stuck/misaligned game
+or exposed desktop during drag; measured faster switching/Launch; clear process
+ownership; real scoped Settings/Data Storage actions. New defaults120FPS active /
+5FPS background, minimum configurable5FPS, background<=active. Supersedes144/10 for
+new defaults; do not silently replace arbitrary saved user preferences. Goals tool
+remains ACTIVE; this file is the sole detailed scope/evidence/next-action handoff.
 
-User requested consistent frame, smooth movement, per-launcher separate windows,
-persistent/larger previews, usable Close and understandable Task Manager entries.
-Installed App/root starter:6eba183ff437c4da410acd5e308a0b28864d2d90, replacing1cddf59.
-Actual Explorer startup Connected/five enabled/cacheInsideData=true PASS.
-Root/desktop shortcuts point to project Lazy Tester.exe. Old idle manager13660 was
-closed using its own X after checking no games; root29568/controller40924 exited
-normally. New source staged with rollback backup, all App/root receipt hashes PASS.
-Final Explorer-open manager43284/root20804 deliberately left open. Never kill games.
+Local only; main/publication untouched; CI OFF. VM/Sandboxie and RAM/renderer work
+PAUSED. Compiler caches explicitly RETAINED; delete nothing as cleanup. Clear all
+data is a product feature to implement/test on synthetic data, not permission to
+wipe actual user profiles during development. Actual destructive use needs review
+and confirmation for the selected launcher in the app.
 
-Latest user correction SUPERSEDES leave-games-open behavior: X must FULL EXIT,
-closing all managed Minecraft sessions normally, then the manager/controller.
-Full-exit source is built and installed. Actual UI smoke with no game: Settings,
-maximize/restore and X PASS; zero remaining App/root processes after exit (85ms).
-Receipts:workspace/runs/full-exit-actual-ui.json, full-exit-desktop-startup.json,
-full-exit-final-open.json. Real Minecraft exit/save remains NOT_EXECUTED.
-NSIS candidate:workspace/packages/lazy-tester/0.1.0-6eba183ff437-20261026T173510560Z;
-SHA256607cee7d50839a5186cd72c4475e98493df478751e884f84c78f501d43533b51.
+## Ordered outcomes and acceptance
 
-## Current full-exit change
+1. Stable presentation. Reproduce drag snag: game rectangle lags manager, aperture
+   exposes desktop/Explorer. Correct composition/coordination, not just CSS or event
+   frequency. Same frame in Play/Settings through drag end/cancel, resize, maximize,
+   restore, focus and DPI/monitor changes. Main game stays16:9. No destructive game
+   reparenting, game-binary modification or input injection.
+2. Fast switch/Launch. Measure UI request -> actual focus/bounds; separate launch
+   phases (controller, validation, enrollment, window ready). Reuse original verified
+   leases/immutable pinned image safely; remove duplicate work/inspection queues.
+   Preserve game/DLL verification and original process identity. No fake readiness,
+   unsupported timing claims, extra busy polling or weakening isolation for speed.
+3. Process clarity. Identify main UI, starter, session controller, recovery per game,
+   official Minecraft and WebView renderer/GPU/services. Investigate supported
+   Task Manager grouping and prove local result before claiming one group. Do not
+   hide/rename official binaries, disable browser sandbox, merge unrelated apps or
+   weaken same-image pipe authentication. A role/PID explanation is not proof of
+   actual Task Manager naming/grouping. Explain any proven upstream limitation.
+4. Functional General. High/Low only. Save/apply valid whole5..1000 FPS (default120/5)
+   with truthful application timing. Background audio must really support Keep audio
+   and Mute background, scoped to original games/audio sessions, never other apps.
+   No ignored dropdown values or placeholder actions presented as features.
+5. Functional Data Storage per launcher. Actual sizes/path and cache cleanup for
+   eligible selected launcher with specific blocked reason. Verify whether stopped
+   launcher4 can safely clean while other games run; avoid unnecessary blanket gate.
+   Implement settings reset plus verified settings backup/restore through existing
+   writer. Clear all data leaves a fresh empty launcher, removes only its owned local
+   account/world/cache/settings/backup data, preserves installed game/other launchers,
+   explains external Windows identity limits. Define confirmation, optional recovery,
+   catalog/identity updates and interruption behavior. Test running profile, malformed
+   paths, junctions, cancellation, partial failure and cross-profile isolation before
+   enabling real destructive use. A permanently disabled button is not completion.
+6. Delivery. Build clean exact Local candidate, check frontend/Rust/fixtures/package,
+   stage App/root EXE/shortcuts preserving Data. Verify real Explorer startup, common
+   frame, drag, switching, previews, full exit, functional settings/storage and process
+   ownership to available proof. Static/synthetic/Windows/Minecraft evidence remain
+   separate; successful compilation is not usability acceptance.
 
-app_bootstrap.rs intercepts all product close requests (even no active workspace),
-marks surface closing, restores original game windows, then invokes CloseAll on the
-original authenticated native_clients_session/session_controller owner. The actor
-uses original child handles plus current PID/birth/session/HWND checks, sends only
-WM_CLOSE to its own enabled top-level game windows, reaps/saves via existing owner,
-and waits up to20s. No Taskkill/TerminateProcess/game injection/profile changes.
+## Exact source/installed state and user evidence
 
-A missing compatible controller with no legacy gate returns stopped without
-provisioning or spawning anything. Another-build controller is refused, not hidden.
-Games still starting, disabled by a dialog, identity mismatch or timeout keep the
-manager alive with parented explanation and retryable Close controls. Exit error
-resets the actor's exiting flag; successful exit prevents a late queued launch.
-Close progress is visible; Alt+F4 uses the same path. Controller naturally exits
-when the manager peer exits and no owned game remains. Unrelated games untouched.
+Source HEAD at revised-goal start91e82526a0bd161b9869cb3bd85ee501356d6984, Local clean.
+Installed App/root source6eba183ff437c4da410acd5e308a0b28864d2d90. Last observed
+manager43284/root20804, controller18816, games3564/42036, helpers34184/8128. Recheck IDs;
+never kill by name. User confirms unclear Task Manager ownership WHILE UI OPEN.
+Screenshots show Lazy Tester four identical names, two separate Minecraft Education
+rows, WebView2 Manager six entries (Lazy Tester renderer/GPU/services). No evidence
+this is LazyDesigner; attribute exact PIDs/parents/paths. User still sees different
+Play/Settings border and slow switching/launch. Drag screenshot proves a displaced
+game exposing Explorer/desktop. Prior synthetic PASS is insufficient. Disabled
+cache/clear/reset/restore/audio controls are now explicitly in scope to complete.
 
-Full-exit tests:4 actor tests PASS, including own hidden Windows close fixture:
-forged birth rejected, disabled window refused, exact own WM_CLOSE destroys only
-the chosen fixture; second window survives. Idle close never prepares stores and
-rejects a new launch.35 frontend tests/typecheck0errors0warnings/G0 PASS.
-Real Minecraft closure/gameplay NOT_EXECUTED. Do not claim synthetic WM_CLOSE
-proves actual game's save/exit behavior. Log:workspace/runs/full-exit-tests.log.
+## Canonical owners and investigation
 
-## Installed1cddf59 window improvements and proof
+Presentation: workspace_surface.rs and workspace_surface/previews.rs; main events/
+full exit: app_bootstrap.rs; UI: LazyTesterApp.svelte/WindowTitlebar.svelte; transport:
+native_clients_session.rs/pipe.rs; lifecycle: independent_bootstrap/session_controller.rs;
+settings/storage: manager_settings.rs, game_preset.rs, profile_storage.rs. No second
+lifecycle/readiness/credentials owner.
 
-Native own-window probe: SetWindowRgn changes DWM nonclient rendering1->0;
-forcing policy enabled still returns0. Product/base now decorations=false;
-WindowTitlebar.svelte owns consistent dark draggable frame, accessible minimize,
-maximize, close. Main-only Tauri window permissions. Independent top-level games,
-no owner/parent/input injection. Winit may retain WS_CAPTION style bits while
-handling nonclient layout: those bits alone are NOT a valid frame assertion.
-Actual installed client top inset1px and all three custom controls present,
-Connected/five enabled in user-reopened PID13660, read-only observation.
-Receipts:workspace/runs/interaction-desktop-startup.json and
-interaction-frame-readonly.json. Final6eba183 UI smoke supersedes earlier attempts.
+Current independent top-level game + manager aperture can diverge during movement.
+Own probe proved SetWindowRgn disables DWM nonclient rendering1->0; forcing enabled
+policy still0. decorations=false/custom frame did not fix geometry divergence.
+ASYNCWINDOWPOS returns before actual game movement, so the last fast-path change
+was insufficient. Need coherent visual/input handoff and final catch-up with no
+exposed region on failure. DWM thumbnail destination must be a caller-owned top-level
+window; child destinations unsupported. Prove alternatives on own synthetic windows
+before changing live games; do not assume parenting fixes composition/grouping.
 
-Pure Moved events use identity-checked ASYNCWINDOWPOS/NOSIZE and SURFACE try_lock,
-without helper roundtrip/game-thread acknowledgement. Contended/invalid geometry
-falls back to existing latest-event worker. Resize/activation/checkpoint recovery
-retain original helper. Own stalled4s window test proves async follow<100ms.
+WebView2 grouping matches OPEN upstream reports: AppUserModelID/EXE metadata alone
+was insufficient. Investigate actual parent/logon/integrity; do not call locally fixed:
+https://github.com/MicrosoftEdge/WebView2Feedback/issues/5628
+https://github.com/tauri-apps/tauri/issues/15567
+https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/nf-dwmapi-dwmregisterthumbnail
 
-Separate action names/releases only active exact process. Current-manager separate
-slot set prevents automatic recapture; choosing that card explicitly returns it.
-Other running sessions stay playable in Play. Preview adoption receives only tile
-sources so a desktop session is not parked by another session's preview.
-DWM visibility now follows manager visibility/minimization, not foreground focus.
-Owned non-topmost/nonactivating destinations stay visible in a visible monitor
-panel; transient WouldBlock preserves last preview. Hidden/minimized updates skip
-invalid viewport geometry. Preview cap grows from100px high to responsive16vh,
-up to180px16:9 fit, dock1600px; compact heights stay smaller. Main16:9 unchanged.
+## Previous evidence — revision6eba183 only
 
-Executed before full-exit extension:35 frontend tests, typecheck, G0, Rust check,
-nine surface tests PASS (includes actual offscreen DWM focus/minimize behavior).
-Own synthetic Windows cases separately PASS: normal/maximized release, pipe loss,
-helper crash, selected release preserving another window, surface close refusing
-reacquisition without terminating fixture, retained swap p95=2ms/max3ms.
-Combined fixture run once failed recovery timing and contaminated next shared-state
-case; fresh isolated tests passed without loosening deadlines. Keep limitation.
-Logs:interaction-stall-isolated.log, interaction-recovery-isolated.log,
-interaction-surface-tests.log, interaction-rust-check.log under workspace/runs.
-None establishes actual Minecraft drag smoothness or multi-account acceptance.
+Explorer Connected/five enabled/project cache; Settings/maximize/restore; idle X
+exits with zero remaining App processes85ms; payload hashes PASS.35 frontend tests,
+typecheck/G0, nine surface tests, four scoped synthetic close tests PASS. Isolated
+recovery/stall tests passed; one combined run failed recovery timing. Logs remain
+in workspace/runs. These do not prove actual-game drag/exit/save/audio/storage.
+Source still implements144/10, minimum1 until changed/tested.
 
-Root starter FileDescription verified Lazy Tester - App Launcher. Helper-specific
-Task Manager labels still unresolved: exact same executable file identity is used
-for pipe authentication. Do not weaken identity checks for cosmetic naming.
-Task Manager Apps may omit a closed UI while controller/game remains under
-background processes; full exit addresses leftover managed-game lifetime.
+## Preservation and delivery boundary
 
-## Preserved data and boundaries
+Five profiles already migrated opaquely into Data/Launchers/Minecraft-1..5; outside
+originals remain recovery only. No repeated setup/migration. Data/Settings owns
+preferences/location/lease; Data/Cache owns Temp/actual WebView. Five private hives,
+protected ACL, zero Data links verified previously. Licensed game/Windows identity
+remain external. Keep private/account/world material out of Git and diagnostics.
+Reviewed DLLs unchanged in workspace/builds/central-data-20261026/Release;
+pins remain in independent_bootstrap.rs and App/build-info.json.
+Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4 and second worktree47a45f9 preserved.
+Signing NOT_VERIFIED; installer execution, real Minecraft full-exit/save, audio and
+multi-client acceptance NOT_EXECUTED. Publication DISABLED.
 
-Five original profiles migrated opaquely into Data/Launchers/Minecraft-1..5;
-original outside-project copies remain recovery material. No repeated setup/migration.
-Data/Settings owns preferences/location/lease; Data/Cache owns Temp and actual
-WebView through explicit builder data_directory. Five private hives, protected ACL,
-zero Data links verified previously. Windows identity/DPAPI, licensed game and OS
-prerequisites remain external. Native payloads unchanged:
-workspace/builds/central-data-20261026/Release;
-compat0f45c07b370ff6c1bf150ccc20879ff6406c208f2b8c3ccdc596b82f2552381e;
-enroller51517528886483ba89f1b93b448c1ddd349f26f0e48e5322db434cbfe9c4de99.
-Compiler caches36,354,177,582 bytes retained, zero reclaimed. Submoduleabd4c2400...
-(actual full SHAabd4c240031cfb46666daa74ca47ed4e48b561e4) and other worktree47a45f9
-unchanged. Keep High/Low,144/10 and16:9. Full account clear/export/restore absent.
-Signing NOT_VERIFIED; installer execution/gameplay/license/multiplayer NOT_EXECUTED;
-publication DISABLED.
-
-Task Manager image metadata/main window title is Lazy Tester; starter metadata is
-Lazy Tester - App Launcher. Read-only Task Manager UI inspection exposed17 elements,
-no Processes navigation or matching row; this does NOT prove a missing process.
-Receipt:workspace/runs/task-manager-name-observation.json. Asked whether missing name
-occurs while UI is open or only after X leaves games behind; answer pending.
-
-Next: resolve that concrete Task Manager report and actual Minecraft full-exit/save
-proof. Helper-specific labels and actual-game movement/monitoring remain unaccepted.
-Overall request ACTIVE; no further rebuild or migration without a new finding.
+Next: build a red-capable synthetic drag-end geometry/composition reproduction,
+select the smallest safe correction and verify before updating installed App.
+Continue through ordered outcomes; overall goal ACTIVE, not complete.
