@@ -46,8 +46,20 @@ These mock-native tests do not prove actual game mouse/DPI/license acceptance.
 
 A real Windows debug build ran canonical initialization successfully against the
 existing reviewed connection. This validates connection metadata, not game login.
-Clean candidate/staging evidence is recorded after the source commit. The current
-running App must not be force-closed or overwritten for replacement.
+Clean Windows/NSIS candidate built from d2399c0acf7053a71b238a7136a95e3376925ce1:
+workspace/packages/lazy-tester/0.1.0-d2399c0acf70-20261026T140100188Z.
+Installer SHA256: 7fb7127065f05accdb605fd1676cfa2af1b22f3ef93453dfeecc0d99b27e72dd.
+Log: workspace/runs/play-settings-implementation/automatic-reconnect-package.log.
+The release initializer succeeded twice against the reviewed existing connection;
+binding bytes remained identical and no game was launched. This is metadata proof.
+
+App staging is PENDING: PID18644 still runs App/lazy-tester.exe. The user was asked
+to close that window normally; no reply/closure has been observed. Never kill it
+or overwrite its executable. The prepared ignored staging script is
+workspace/runs/play-settings-implementation/stage-automatic-reconnect.mjs; it uses
+the canonical stager, checks source/candidate hashes, executes initialization,
+verifies four staged payload hashes, then creates verified normal shortcuts.
+Do not report the fix as installed while App still contains the prior revision.
 
 ## Preserved App and prior accepted layout
 
