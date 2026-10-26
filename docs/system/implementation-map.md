@@ -21,7 +21,11 @@ route to `engine/native_clients_session.rs` (reconnecting transport via its
 five-profile capability, game/DLL verification, original process handles, FPS
 policy channels, and preset writer. It is not a second Windows isolation engine.
 
-Native composition and recovery remain owned by `workspace_surface.rs`.
+Native composition, five-window parking and recovery remain owned by
+`workspace_surface.rs`. Its `workspace_surface/previews.rs` owns the four DWM
+preview destinations, geometry checks, click notifications and visibility;
+`workspace_surface/recovery_gate.rs` serializes original-checkpoint handoff across
+GUI/recovery-helper exits. Neither module owns game lifecycle or profile storage.
 Compatibility DLL code still lives in `tooling/acceptance/windows/bootstrap-ordering/`;
 its product-source relocation is pending. UI copies and old provider/source paths
 below are historical navigation. Current evidence and next work belong only to

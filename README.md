@@ -13,7 +13,7 @@ Sandboxie or VMware.
 - `apps/desktop/src-tauri/src/engine/native_clients_session.rs`: bounded reconnecting controller transport; `native_clients_session/pipe.rs` checks both Windows peers.
 - `apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs`: manual per-profile session ownership, retained handles, and metadata-only storage inspection.
 - `apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`: reviewed game/payload/profile checks and startup enrollment, shared with the accepted five-client pilot.
-- `apps/desktop/src-tauri/src/engine/workspace_surface.rs`: recoverable native window presentation.
+- `apps/desktop/src-tauri/src/engine/workspace_surface.rs`: recoverable five-window presentation/parking; its `workspace_surface/previews.rs` renders the four native DWM tiles and `recovery_gate.rs` serializes checkpoint handoff.
 - `tooling/acceptance/windows/bootstrap-ordering/`: current compatibility DLL source; relocating this runtime out of acceptance tooling remains unfinished.
 
 Minecraft still owns authentication, worlds, rendering, and Education Host World
@@ -30,10 +30,12 @@ Lazy Tester UI/controller integration.
 Manual profile launch, workspace selection, next/previous selection, and on-demand
 profile-size inspection are integrated in source. Same-binary controller
 reconnection after UI restart is implemented and covered by native Windows pipe
-fixtures, including two successive client processes. Live
-preview thumbnails, safe cache cleanup, final installed branding, and a portable
-product payload remain unfinished. No Task Manager grouping or
-new GUI/gameplay acceptance is claimed.
+fixtures, including two successive client processes. Four native DWM preview tiles
+are now wired into the workspace, with background adoption and retained recovery
+checkpoints. Native DWM registration/update/release passed on hidden test windows;
+live Minecraft pixels, offscreen host-world behavior and the complete UI remain
+unverified. Safe cache cleanup, final installed branding and a portable product
+payload remain unfinished. Task Manager grouping is not claimed.
 
 See [workspace contract](docs/product/unified-workspace.md) for product behavior,
 [implementation map](docs/system/implementation-map.md) for ownership, and

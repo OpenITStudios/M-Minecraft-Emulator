@@ -46,8 +46,36 @@ bounds and no reparse traversal. Size estimates may be partial while playing. A 
 cleanup action requires an identified disposable-file policy and must preserve auth,
 worlds, and settings. No blanket deletion of Local, Roaming, or TEMP is allowed.
 
-Live preview composition, full browser-shell acceptance, final installed branding,
-and cache cleanup remain unimplemented/unproven. Their state and the next bounded
+Four native DWM preview destinations are implemented as nonactivating top-level
+windows owned by Lazy Tester. They render only controller-attributed game surfaces;
+clicks enter the existing selection path, and input goes directly to the selected
+game. No screenshot/video encoder or game input forwarding is introduced.
+
+Background presentation uses the existing checkpoint/helper owner. Live-preview
+mode parks ordinary game windows beyond the virtual desktop, keeping them visible
+to Windows and retaining the main viewport size across role swaps. Stable parked
+geometry is checked before sending another placement command. This avoids forced
+SW_HIDE in that mode but does not prove how Minecraft handles offscreen occlusion.
+Dialog-blocked/unresponsive windows are not newly parked; affected tiles report
+unavailability and retain normal game access/recovery.
+
+A native recovery gate is jointly retained by the GUI and its recovery helper
+until the original checkpoint has been restored. A reopened GUI refuses capture
+while that old handoff is still in progress. No new persistent readiness flag or
+account state is created. Preview requests/events are coalesced/bounded; the
+worker stays idle without redraw/capture loops. Thumbnails hide when the manager
+is minimized or another application is foreground. DPI/client bounds and tile
+non-overlap are checked before moving/adopting windows.
+
+The mounted interface now has the large selected view/four lower cards, manual
+launch with pending-window state, and queued explicit selection. A new session
+opens only through a user launch action. The old app.css is no longer bundled.
+
+Native DWM registration on hidden fixtures is not live Minecraft proof. Pixel
+freshness, preview click/input, foreground/background FPS, offscreen Education host
+simulation, DPI/minimize/dialog recovery and taskbar/Task Manager behavior still
+need integrated runtime acceptance. Final installed branding and cache cleanup
+also remain unfinished. Their state and the next bounded
 action are recorded in the sole handoff, not inferred from this design contract.
 
 ## Historical workspace decisions below (superseded where inconsistent)

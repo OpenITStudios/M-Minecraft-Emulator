@@ -3,6 +3,12 @@ use super::owned_provider::OwnedProcess;
 use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, Write};
 
+#[path = "workspace_surface/previews.rs"]
+mod previews;
+#[path = "workspace_surface/recovery_gate.rs"]
+mod recovery_gate;
+pub use previews::{PreviewTile, PreviewReport};
+
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Viewport {
@@ -14,13 +20,19 @@ pub struct Viewport {
 }
 impl Viewport {
     pub fn validate(self) -> io::Result<Self> {
+        self.validate_size(160.0, 120.0)
+    }
+    fn validate_preview(self) -> io::Result<Self> {
+        self.validate_size(32.0, 24.0)
+    }
+    fn validate_size(self, minimum_width: f64, minimum_height: f64) -> io::Result<Self> {
         if [self.x, self.y, self.width, self.height, self.pixel_ratio]
             .iter()
             .any(|v| !v.is_finite())
             || self.x < 0.0
             || self.y < 0.0
-            || self.width < 160.0
-            || self.height < 120.0
+            || self.width < minimum_width
+            || self.height < minimum_height
             || self.x + self.width > 20000.0
             || self.y + self.height > 20000.0
             || self.pixel_ratio < 0.5
@@ -54,6 +66,7 @@ struct Saved {
 enum Command {
     Start(OwnedProcess),
     Place { rect: Rectangle, manager_pid: u32 },
+    Park { rect: Rectangle, manager_pid: u32 },
     Hide,
     Restore,
 }
@@ -62,6 +75,7 @@ enum Reply {
     Progress(String),
     Ready(Saved),
     Placed,
+    Parked,
     Hidden,
     Restored,
     Error(String),
@@ -109,14 +123,17 @@ pub fn maybe_run_helper() -> bool {
     let output = io::stdout();
     let mut output = output.lock();
     let mut saved: Option<Saved> = None;
+    let mut _recovery: Option<recovery_gate::RecoveryGate> = None;
     let result = (|| -> io::Result<()> {
         while let Some(text) = read_line(&mut input)? {
             let command: Command = serde_json::from_str(&text)?;
             let reply = match command {
                 Command::Start(target) if saved.is_none() => {
                     line(&Reply::Progress("start/capture".into()), &mut output)?;
+                    let gate = recovery_gate::open(&target)?;
                     let state = native::capture(target)?;
                     saved = Some(state.clone());
+                    _recovery = Some(gate);
                     Reply::Ready(state)
                 }
                 Command::Place { rect, manager_pid } => {
@@ -138,6 +155,12 @@ pub fn maybe_run_helper() -> bool {
                     )?;
                     Reply::Hidden
                 }
+                Command::Park { rect, manager_pid } => {
+                    let state = saved.as_mut().ok_or_else(|| io::Error::other("Surface not prepared"))?;
+                    state.manager_pid = manager_pid;
+                    native::park(state, rect, &mut |stage| line(&Reply::Progress(stage.into()), &mut output))?;
+                    Reply::Parked
+                }
                 Command::Restore => {
                     if let Some(state) = &saved {
                         native::restore_traced(state, &mut |stage| {
@@ -145,6 +168,7 @@ pub fn maybe_run_helper() -> bool {
                         })?;
                     }
                     saved = None;
+                    _recovery = None;
                     line(&Reply::Restored, &mut output)?;
                     break;
                 }
@@ -176,7 +200,7 @@ mod native {
     use super::*;
     use windows_sys::Win32::System::RemoteDesktop::ProcessIdToSessionId;
     use windows_sys::Win32::{Foundation::*, System::Threading::*, UI::WindowsAndMessaging::*};
-    struct ProcessHandle(HANDLE);
+    pub(super) struct ProcessHandle(HANDLE);
     impl Drop for ProcessHandle {
         fn drop(&mut self) {
             unsafe {
@@ -263,7 +287,7 @@ mod native {
             current
         ));
     }
-    fn hwnd(target: &OwnedProcess) -> io::Result<(ProcessHandle, HWND)> {
+    pub(super) fn hwnd(target: &OwnedProcess) -> io::Result<(ProcessHandle, HWND)> {
         let key = super::super::instance_identity::parse_window_identity(
             target.pid,
             Some(&target.created_file_time),
@@ -611,6 +635,40 @@ mod native {
         }
         Ok(())
     }
+    pub(super) fn park(saved: &Saved, mut rect: Rectangle,
+        progress: &mut dyn FnMut(&str) -> io::Result<()>) -> io::Result<()> {
+        let (_pin, window) = hwnd(&saved.target)?;
+        unsafe {
+            if GetWindowLongPtrW(window, GWL_STYLE) & WS_DISABLED as isize != 0 {
+                return Err(io::Error::new(io::ErrorKind::WouldBlock, "A Minecraft dialog is open"));
+            }
+        }
+        rect = parking_rectangle(rect)?;
+        // Keep the current viewport size across switches: no thumbnail-size game rendering
+        // or repeated framebuffer allocation. DWM scales its source into the small tile.
+        place(saved, rect, progress)
+    }
+    fn parking_rectangle(mut rect: Rectangle) -> io::Result<Rectangle> {
+        unsafe {
+            rect.x = GetSystemMetrics(SM_XVIRTUALSCREEN).checked_add(GetSystemMetrics(SM_CXVIRTUALSCREEN))
+                .and_then(|right| right.checked_add(32)).ok_or_else(|| io::Error::other("Unsupported desktop bounds"))?;
+            rect.y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        }
+        Ok(rect)
+    }
+    pub(super) fn parked_at(target: &OwnedProcess, rect: Rectangle) -> bool {
+        let Ok((_pin, window)) = hwnd(target) else { return false; };
+        let Ok(expected) = parking_rectangle(rect) else { return false; };
+        let mut actual: RECT = unsafe { std::mem::zeroed() };
+        unsafe { GetWindowRect(window,&mut actual)!=0 && IsWindowVisible(window)!=0 &&
+            GetWindowLongPtrW(window,GWL_EXSTYLE) & WS_EX_TOOLWINDOW as isize != 0 &&
+            actual.left==expected.x && actual.top==expected.y &&
+            actual.right-actual.left==expected.width && actual.bottom-actual.top==expected.height }
+    }
+    pub(super) fn can_park(target: &OwnedProcess) -> io::Result<bool> {
+        let (_pin, window) = hwnd(target)?;
+        Ok(unsafe { GetWindowLongPtrW(window, GWL_STYLE) & WS_DISABLED as isize == 0 })
+    }
     pub(super) fn minimized(manager: u64) -> io::Result<bool> {
         unsafe {
             let window = manager as usize as HWND;
@@ -804,6 +862,11 @@ mod native {
     pub(super) fn hide(_: &Saved) -> io::Result<()> {
         unavailable()
     }
+    pub(super) fn park(_: &Saved, _: Rectangle, _: &mut dyn FnMut(&str) -> io::Result<()>) -> io::Result<()> {
+        unavailable()
+    }
+    pub(super) fn can_park(_: &OwnedProcess) -> io::Result<bool> { unavailable() }
+    pub(super) fn parked_at(_: &OwnedProcess, _: Rectangle) -> bool { false }
     pub(super) fn aperture(_: u64, _: Option<Rectangle>) -> io::Result<()> {
         unavailable()
     }
@@ -871,8 +934,21 @@ mod controller {
         authority: Option<(String, String)>,
         ended: Option<Result<(), String>>,
         saved: Option<Saved>,
+        _recovery_gate: recovery_gate::RecoveryGate,
     }
     impl Lease {
+        fn background(&mut self, rect: Rectangle, live: bool) -> io::Result<()> {
+            if live {
+                if self.saved.as_ref().is_some_and(|saved|native::parked_at(&saved.target,rect)) { return Ok(()); }
+                match self.send(Command::Park { rect, manager_pid: std::process::id() })? {
+                    Reply::Parked => Ok(()), _ => Err(io::Error::other("Live preview parking failed")),
+                }
+            } else {
+                match self.send(Command::Hide)? {
+                    Reply::Hidden => Ok(()), _ => Err(io::Error::other("Surface hide failed")),
+                }
+            }
+        }
         fn place(&mut self, rect: Rectangle, activate: bool) -> io::Result<()> {
             if !matches!(
                 self.send(Command::Place {
@@ -980,11 +1056,13 @@ mod controller {
         active: Option<Lease>,
         parked: Vec<Lease>,
         suspended: bool,
+        live_previews: bool,
     }
     static SURFACE: Mutex<Surfaces> = Mutex::new(Surfaces {
         active: None,
         parked: Vec::new(),
         suspended: false,
+        live_previews: false,
     });
     fn same(lease: &Lease, target: &OwnedProcess) -> bool {
         lease.saved.as_ref().is_some_and(|s| {
@@ -1001,10 +1079,11 @@ mod controller {
             .unwrap_or(true)
     }
     pub fn release() -> io::Result<()> {
+        let preview_error = previews::clear().err();
         let mut state = SURFACE
             .lock()
             .map_err(|_| io::Error::other("Workspace state unavailable"))?;
-        let mut error = None;
+        let mut error = preview_error;
         if let Some(lease) = state.active.iter().chain(state.parked.iter()).next() {
             native::aperture(lease.manager, None)?;
         }
@@ -1027,9 +1106,11 @@ mod controller {
             return Err(error);
         }
         state.suspended = false;
+        state.live_previews = false;
         Ok(())
     }
     pub fn suspend() -> io::Result<bool> {
+        previews::clear()?;
         let mut state = SURFACE
             .lock()
             .map_err(|_| io::Error::other("Workspace state unavailable"))?;
@@ -1047,10 +1128,10 @@ mod controller {
                 state.active = None;
             }
         }
+        let live = state.live_previews;
         if let Some(lease) = state.active.as_mut() {
-            if !matches!(lease.send(Command::Hide)?, Reply::Hidden) {
-                return Err(io::Error::other("Surface suspend failed"));
-            }
+            let rect = native::rectangle(lease.manager, lease.viewport)?;
+            lease.background(rect, live)?;
         }
         state.suspended = true;
         Ok(state.active.is_some())
@@ -1084,6 +1165,7 @@ mod controller {
         }
         let viewport = viewport.validate()?;
         native::rectangle(manager, viewport)?;
+        let recovery_gate = recovery_gate::create(&target)?;
         #[cfg(not(test))]
         let executable = std::env::current_exe()?;
         #[cfg(test)]
@@ -1161,6 +1243,7 @@ mod controller {
             authority: None,
             ended: None,
             saved: None,
+            _recovery_gate: recovery_gate,
         };
         match lease.send(Command::Start(target)) {
             Ok(Reply::Ready(saved)) => lease.saved = Some(saved),
@@ -1181,6 +1264,53 @@ mod controller {
         client: String,
     ) -> io::Result<()> {
         present_bound(manager, viewport, target, Some((session, client)), false).map(|_| ())
+    }
+    pub(super) fn active_preview_slot(manager: u64) -> io::Result<Option<u32>> {
+        let state = SURFACE.lock().map_err(|_| io::Error::other("Workspace state unavailable"))?;
+        if state.active.iter().chain(state.parked.iter()).any(|lease|
+            lease.manager != manager || lease.authority.as_ref().is_none_or(|(authority,_)| authority != "LAZY_TESTER_MANAGED_SESSION")) {
+            return Err(io::Error::other("Release the existing workspace first"));
+        }
+        let Some(active) = &state.active else { return Ok(None); };
+        let Some((authority, client)) = &active.authority else { return Err(io::Error::other("Release the existing workspace first")); };
+        if active.manager != manager || authority != "LAZY_TESTER_MANAGED_SESSION" {
+            return Err(io::Error::other("Release the existing workspace first"));
+        }
+        client.parse::<u32>().map(Some).map_err(io::Error::other)
+    }
+    pub(super) fn adopt_preview_sources(manager: u64, viewport: Viewport,
+        sources: &[(u32, OwnedProcess)]) -> io::Result<Vec<(u32, String)>> {
+        let rect = native::rectangle(manager, viewport.validate()?)?;
+        let mut state = SURFACE.lock().map_err(|_| io::Error::other("Workspace state unavailable"))?;
+        state.live_previews = true;
+        let mut unavailable = Vec::new();
+        for index in (0..state.parked.len()).rev() {
+            if state.parked[index].saved.as_ref().is_some_and(|s| native::retired(&s.target)) {
+                state.parked[index].stop()?; state.parked.remove(index);
+            }
+        }
+        for (slot, target) in sources {
+            if state.active.as_ref().is_some_and(|active| same(active, target)) { continue; }
+            if !target.responding || !native::can_park(target).unwrap_or(false) {
+                unavailable.push((*slot, "Jendela belum tersedia atau dialog Minecraft sedang terbuka".into())); continue;
+            }
+            let existing = state.parked.iter().position(|lease| same(lease, target));
+            if existing.is_none() && state.parked.len() + usize::from(state.active.is_some()) >= 5 {
+                return Err(io::Error::other("Workspace already manages five clients"));
+            }
+            let mut lease = match existing {
+                Some(index) => state.parked.remove(index),
+                None => match prepare(manager, viewport, target.clone()) {
+                    Ok(lease) => lease,
+                    Err(error) => { unavailable.push((*slot,error.to_string())); continue; }
+                },
+            };
+            lease.authority = Some(("LAZY_TESTER_MANAGED_SESSION".into(), format!("{slot:02}")));
+            lease.viewport = viewport;
+            if let Err(error) = lease.background(rect, true) { unavailable.push((*slot,error.to_string())); }
+            state.parked.push(lease);
+        }
+        Ok(unavailable)
     }
     pub fn present_retained(
         manager: u64,
@@ -1288,13 +1418,14 @@ mod controller {
             return Err(io::Error::other("Wrong workspace window"));
         }
         replacement.viewport = viewport;
+        let live_previews = state.live_previews;
         let outcome = replacement.place(rect, true);
         if outcome.is_err() {
             let detail = outcome
                 .err()
                 .map(|e| e.to_string())
                 .unwrap_or_else(|| "Invalid surface acknowledgement".into());
-            let _ = replacement.send(Command::Hide);
+            let _ = replacement.background(rect, live_previews);
             state.parked.push(replacement);
             if let Some(old) = state.active.as_mut() {
                 old.place(rect, false)?;
@@ -1307,8 +1438,8 @@ mod controller {
             )));
         }
         if let Some(old) = state.active.as_mut() {
-            if !matches!(old.send(Command::Hide), Ok(Reply::Hidden)) {
-                let _ = replacement.send(Command::Hide);
+            if old.background(rect, live_previews).is_err() {
+                let _ = replacement.background(rect, live_previews);
                 state.parked.push(replacement);
                 return Err(io::Error::other(
                     "Previous surface could not suspend; restore windows before continuing",
@@ -1331,6 +1462,7 @@ mod controller {
         if state.suspended {
             return Ok(());
         }
+        let live = state.live_previews;
         let Some(lease) = state.active.as_mut() else {
             return Ok(());
         };
@@ -1343,10 +1475,9 @@ mod controller {
         };
         if native::minimized(manager)? {
             native::aperture(manager, None)?;
-            return match lease.send(Command::Hide)? {
-                Reply::Hidden => Ok(()),
-                _ => Err(io::Error::other("Surface hide failed")),
-            };
+            return lease.background(Rectangle { x:0,y:0,
+                width:(lease.viewport.width*lease.viewport.pixel_ratio).round() as i32,
+                height:(lease.viewport.height*lease.viewport.pixel_ratio).round() as i32 }, live);
         }
         let rect = match native::rectangle(manager, next_viewport) {
             Ok(rect) => rect,
@@ -1988,6 +2119,13 @@ mod controller {
 pub use controller::{
     is_active, present_retained, present_verified, release, release_target, suspend, update,
 };
+
+pub fn configure_previews(window: tauri::Window, viewport: Viewport, tiles: Vec<PreviewTile>,
+    profiles: Vec<(u32,OwnedProcess)>) -> io::Result<PreviewReport> {
+    previews::configure(window,viewport,tiles,profiles)
+}
+pub fn clear_previews() -> io::Result<()> { previews::clear() }
+pub fn refresh_previews() { previews::refresh(); }
 
 #[cfg(test)]
 mod tests {

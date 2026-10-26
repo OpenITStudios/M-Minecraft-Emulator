@@ -25,6 +25,8 @@ The pre-migration repository is preserved on
 
 `LazyTesterApp.svelte` now replaces `UnifiedManagerApp.svelte` at the mounted entry.
 Old Unified/Compact/VM screens are historical source, not alternate user launchers.
+The old app.css is now also excluded from the active entry/bundle; Lazy Tester
+consumes its own stylesheet. Physical legacy source relocation is still pending.
 Their remaining tests/imports and shared Rust consumers must be traced before a
 physical source move; this first integration does not claim that cleanup completed.
 Sandboxie/VMware startup and installer gates remain disabled. No account-bearing

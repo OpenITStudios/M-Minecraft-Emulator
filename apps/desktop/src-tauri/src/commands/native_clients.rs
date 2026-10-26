@@ -52,6 +52,29 @@ pub async fn lazy_tester_present(
 }
 
 #[tauri::command]
+pub async fn lazy_tester_previews(
+    window: tauri::WebviewWindow,
+    viewport: crate::engine::workspace_surface::Viewport,
+    tiles: Vec<crate::engine::workspace_surface::PreviewTile>,
+) -> Result<crate::engine::workspace_surface::PreviewReport, String> {
+    let window = window.as_ref().window();
+    tauri::async_runtime::spawn_blocking(move || run_manager_operation(|| {
+        let snapshot = crate::engine::native_clients_session::request(
+            crate::engine::native_clients_session::SessionRequest::Inspect)?;
+        let profiles = snapshot.profiles.into_iter().filter_map(|profile|
+            profile.process.map(|process|(profile.slot,process))).collect();
+        crate::engine::workspace_surface::configure_previews(window,viewport,tiles,profiles)
+    })).await.map_err(|_| "Preview task failed".to_string())?.map_err(|error|error.to_string())
+}
+
+#[tauri::command]
+pub async fn lazy_tester_clear_previews() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(|| run_manager_operation(
+        crate::engine::workspace_surface::clear_previews))
+        .await.map_err(|_|"Preview cleanup failed".to_string())?.map_err(|error|error.to_string())
+}
+
+#[tauri::command]
 pub async fn desktop_inspect_native_workspace(
 ) -> Result<native_clients::NativeWorkspaceObservation, String> {
     tauri::async_runtime::spawn_blocking(|| {

@@ -31,6 +31,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::native_clients::lazy_tester_session,
             commands::native_clients::lazy_tester_present,
+            commands::native_clients::lazy_tester_previews,
+            commands::native_clients::lazy_tester_clear_previews,
             commands::native_clients::desktop_compare_process_contexts,
             commands::native_clients::desktop_present_workspace,
             commands::native_clients::desktop_update_workspace,
@@ -87,6 +89,7 @@ pub fn run() {
                     | tauri::WindowEvent::Resized(_)
                     | tauri::WindowEvent::Focused(true)
             ) {
+                crate::engine::workspace_surface::refresh_previews();
                 queue_workspace_update(window.clone());
             }
         })
@@ -137,7 +140,10 @@ mod workspace_foreground {
         _: u32,
         _: u32,
     ) {
-        // Observe only the manager's own foreground window; never inspect external titles/PIDs.
+        // Foreground changes only refresh our own preview visibility. No external titles/PIDs.
+        if event == EVENT_SYSTEM_FOREGROUND && object == 0 && child == 0 {
+            crate::engine::workspace_surface::refresh_previews();
+        }
         if accepts(
             event,
             window as usize as u64,
@@ -165,7 +171,7 @@ mod workspace_foreground {
                 EVENT_SYSTEM_FOREGROUND,
                 ptr::null_mut(),
                 Some(changed),
-                std::process::id(),
+                0,
                 0,
                 WINEVENT_OUTOFCONTEXT,
             );

@@ -1,4 +1,3 @@
-import "./app.css";
 import { mount } from "svelte";
 import LazyTesterApp from "./LazyTesterApp.svelte";
 

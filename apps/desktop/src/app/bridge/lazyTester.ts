@@ -1,6 +1,6 @@
 import {invokeRuntime} from './invokeRuntime.js';
 import {parseObservedProcess, type OwnedProcess} from './ownedProviderApi.js';
-import {workspaceViewport, type WorkspaceRectangle} from './workspaceSurface.js';
+import {previewViewport, workspaceViewport, type WorkspaceRectangle, type WorkspaceViewport} from './workspaceSurface.js';
 
 export const profileSlots = [1, 2, 3, 4, 5] as const;
 export type ProfileSlot = typeof profileSlots[number];
@@ -12,6 +12,9 @@ export interface ProfileSession {
 }
 export interface ProfileStorage {slot: ProfileSlot; bytes: number; files: number; partial: boolean}
 export interface SessionSnapshot {schema: 1; profiles: ProfileSession[]; storage: ProfileStorage[] | null}
+export interface PreviewPlacement {slot: ProfileSlot; viewport: WorkspaceViewport}
+export interface PreviewStatus {slot: ProfileSlot; registered: boolean; reason: string | null}
+export interface PreviewReport {schema: 1; tiles: PreviewStatus[]}
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const exact = (value: Record<string, unknown>, names: string[]) =>
@@ -51,6 +54,18 @@ export function nextProfile(profiles: ProfileSession[], active: ProfileSlot | nu
     (index + direction + playable.length) % playable.length]!.slot;
 }
 
+export function parsePreviewReport(value:unknown,slots:readonly ProfileSlot[]):PreviewReport {
+  if(!record(value)||!exact(value,['schema','tiles'])||value.schema!==1||!Array.isArray(value.tiles)||value.tiles.length!==slots.length||slots.length>4)throw new TypeError('Invalid preview response');
+  const seen=new Set<number>();
+  for(const tile of value.tiles){
+    if(!record(tile)||!exact(tile,['slot','registered','reason'])||!slots.includes(tile.slot as ProfileSlot)||seen.has(Number(tile.slot))||
+      typeof tile.registered!=='boolean'||!(tile.reason===null||typeof tile.reason==='string'&&tile.reason.length<=8192))throw new TypeError('Invalid preview status');
+    if(tile.registered&&tile.reason!==null)throw new TypeError('Registered preview has a conflicting failure');
+    seen.add(Number(tile.slot));
+  }
+  return value as unknown as PreviewReport;
+}
+
 export const lazyTester = {
   inspect: async () => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'Inspect'}})),
   launch: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'Launch', slot}})),
@@ -59,4 +74,11 @@ export const lazyTester = {
   present: (slot: ProfileSlot, rect: WorkspaceRectangle) => invokeRuntime<void>('lazy_tester_present', {
     slot, viewport: workspaceViewport(rect, window.devicePixelRatio),
   }),
+  previews: async(rect:WorkspaceRectangle,tiles:{slot:ProfileSlot;rect:WorkspaceRectangle}[])=>{
+    const placements:PreviewPlacement[]=tiles.map(tile=>({slot:tile.slot,viewport:previewViewport(tile.rect,window.devicePixelRatio)}));
+    return parsePreviewReport(await invokeRuntime<unknown>('lazy_tester_previews',{
+      viewport:workspaceViewport(rect,window.devicePixelRatio),tiles:placements,
+    }),tiles.map(tile=>tile.slot));
+  },
+  clearPreviews:()=>invokeRuntime<void>('lazy_tester_clear_previews'),
 };

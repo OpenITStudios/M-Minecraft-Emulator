@@ -1,11 +1,24 @@
 import {describe, expect, it} from 'vitest';
-import {nextProfile, parseSession, type ProfileSession} from '../src/app/bridge/lazyTester.js';
+import {nextProfile, parseSession, parsePreviewReport, type ProfileSession} from '../src/app/bridge/lazyTester.js';
+import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
 const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process: {
   pid: slot + 100, createdFileTime: String(slot + 200), sessionId: 1, windowHandle: `0x${slot}`, responding: true,
 }});
 describe('Lazy Tester profile contract', () => {
+  it('validates exactly the requested preview slots and keeps unavailable previews explicit',()=>{
+    const report={schema:1,tiles:[{slot:2,registered:true,reason:null},{slot:5,registered:false,reason:'Window not available'}]};
+    expect(parsePreviewReport(report,[2,5])).toEqual(report);
+    expect(()=>parsePreviewReport(report,[2,3])).toThrow();
+    expect(()=>parsePreviewReport({...report,tiles:[report.tiles[0],report.tiles[0]]},[2,5])).toThrow();
+    expect(()=>parsePreviewReport({schema:1,tiles:[{slot:2,registered:true,reason:'failed'}]},[2])).toThrow();
+    expect(()=>parsePreviewReport({schema:1,tiles:[{slot:2,registered:true,reason:null,path:'other'}]},[2])).toThrow();
+  });
+  it('allows small preview viewports but refuses offscreen and invalid coordinate payloads',()=>{
+    expect(previewViewport({x:10,y:450,width:145,height:80},1.5)).toEqual({x:10,y:450,width:145,height:80,pixelRatio:1.5});
+    for(const rect of [{x:-1,y:450,width:145,height:80},{x:10,y:450,width:31,height:80},{x:10,y:450,width:145,height:NaN}])expect(()=>previewViewport(rect)).toThrow();
+  });
   it('keeps all five stopped profiles without deriving login or starting a game', () => {
     const snapshot = parseSession(stopped());
     expect(snapshot.profiles.map(profile => profile.slot)).toEqual([1,2,3,4,5]);
