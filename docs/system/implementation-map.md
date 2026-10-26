@@ -25,6 +25,13 @@ classification, disk-space metadata and handle-based HTTP-cache deletion; the
 session actor alone admits cleanup against game lifetime. No other storage owner
 or periodic cleaner exists.
 
+Native packaging policy is engine/distribution/lazy-tester-package.json; the
+consumer is tauri.lazy-tester.conf.json with the lazy-tester-package feature and
+windows/lazy-tester-hooks.nsh. scripts/prepare-native-payload.mjs derives reviewed
+DLL hashes from the bootstrap and stages only those two files. The old preview
+overlay remains for private source candidates; the default package command now
+uses the Lazy Tester route. Neither installer owns game profile provisioning.
+
 Native composition, five-window parking and recovery remain owned by
 `workspace_surface.rs`. Its `workspace_surface/previews.rs` owns the four DWM
 preview destinations, geometry checks, click notifications and visibility;

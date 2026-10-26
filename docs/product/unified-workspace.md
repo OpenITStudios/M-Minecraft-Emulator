@@ -121,8 +121,12 @@ Native DWM registration on hidden fixtures is not live Minecraft proof. Pixel
 freshness, preview click/input, foreground/background FPS, offscreen Education host
 simulation, DPI/minimize/dialog recovery and taskbar/Task Manager behavior still
 need integrated runtime acceptance. Final installed branding and cache cleanup
-also remain unfinished. Their state and the next bounded
-action are recorded in the sole handoff, not inferred from this design contract.
+also require acceptance. The native installer candidate now has an explicit
+separate Lazy Tester identity and only the two reviewed engine DLLs; existing
+settings/profile paths are retained. It excludes private profile bindings, whose
+first-run setup remains unfinished. Packaging ownership and migration decisions
+are in engine/distribution/README.md. Their state and the next bounded action
+are recorded in the sole handoff, not inferred from this design contract.
 
 ## Historical workspace decisions below (superseded where inconsistent)
 

@@ -27,3 +27,4 @@ custom-protocol = ["tauri/custom-protocol"]
 # Never enabled by default. Requires the dedicated identity/payload-free
 # preview package overlay, verified again inside build.rs.
 native-workspace-preview = []
+lazy-tester-package = ["native-workspace-preview"]

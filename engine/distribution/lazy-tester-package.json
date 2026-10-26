@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "productName": "Lazy Tester",
+  "identifier": "com.mivubi.lazytester",
+  "mainBinaryName": "lazy-tester",
+  "installMode": "currentUser",
+  "requiredFiles": [
+    "lazy-tester.exe",
+    "independent-bootstrap/bootstrap-compat.dll",
+    "independent-bootstrap/bootstrap-enroll.dll",
+    "distribution/lazy-tester-package.json"
+  ],
+  "migration": {
+    "strategy": "side-by-side-from-preview",
+    "previousProductName": "Minecraft Instance Manager Preview",
+    "previousIdentifier": "com.mivubi.minecraft.instancemanager.preview",
+    "previousBinary": "minecraft-instance-manager-preview.exe",
+    "installerMayMigrateData": false,
+    "installerMayDeleteData": false,
+    "installerMayStopMinecraft": false
+  },
+  "runtime": {
+    "settingsRelativePath": "MinecraftInstanceManager/NativePreview/manager-settings.json",
+    "instanceLeaseVariant": "NativePilot",
+    "profiles": "retained-existing-private-file-identities",
+    "profileBindingIncluded": false,
+    "portableProfileProvisioning": "NOT_IMPLEMENTED",
+    "crossBinaryControllerHandoff": "UNSUPPORTED"
+  },
+  "excludedPayloads": [
+    "VMware",
+    "Sandboxie",
+    "Guest Agent",
+    "acceptance tooling",
+    "profile capabilities",
+    "accounts",
+    "tokens",
+    "worlds"
+  ],
+  "release": {
+    "publicationEnabled": false,
+    "requiresAuthenticodeBeforePublication": true
+  }
+}

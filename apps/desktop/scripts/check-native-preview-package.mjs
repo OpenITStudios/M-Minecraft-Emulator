@@ -63,7 +63,7 @@ export function verifyNativePreviewPackage() {
     "Preview configuration must explicitly delete legacy installer hooks.");
   fail(!Object.hasOwn(native, "plugins") && current.app?.security?.csp === base.app?.security?.csp,
     "Preview must not silently broaden desktop security permissions.");
-  fail(scripts["build:app"].includes("prepare:package-binaries") &&
+  fail(scripts["build:app"] === "npm run build:lazy-tester" &&
       legacy.includes("PACKAGE_BLOCKED_NATIVE_FEASIBILITY") &&
       legacy.includes("LEGACY_PACKAGE_RELEASE_APPROVED = false"),
     "Original legacy distribution safety hold must remain enabled.");

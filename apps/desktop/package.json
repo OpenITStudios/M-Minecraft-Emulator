@@ -13,7 +13,7 @@
     "dev:app": "npm run prepare:icons && tauri dev",
     "build:frontend": "vite build",
     "preview:frontend": "vite preview",
-    "build:app": "npm run prepare:icons && npm run prepare:package-binaries && tauri build --target x86_64-pc-windows-msvc --bundles nsis --config src-tauri/tauri.package.conf.json -- --locked",
+    "build:app": "npm run build:lazy-tester",
     "typecheck": "svelte-check --tsgo --tsconfig ./tsconfig.json",
     "check:rust": "npm run prepare:icons && cargo check --all-targets --locked --manifest-path src-tauri/Cargo.toml",
     "test:rust": "cargo test --all-targets --locked --manifest-path src-tauri/Cargo.toml",
@@ -24,7 +24,10 @@
     "typecheck:compat": "svelte-check --tsconfig ./tsconfig.json",
     "format:rust": "cargo fmt --all --check --manifest-path src-tauri/Cargo.toml",
     "check:preview-package": "node scripts/check-native-preview-package.mjs",
-    "build:preview": "npm run prepare:icons && npm run check:preview-package && tauri build --target x86_64-pc-windows-msvc --bundles nsis --config src-tauri/tauri.native-preview.conf.json --features native-workspace-preview -- --locked"
+    "build:preview": "npm run prepare:icons && npm run check:preview-package && tauri build --target x86_64-pc-windows-msvc --bundles nsis --config src-tauri/tauri.native-preview.conf.json --features native-workspace-preview -- --locked",
+    "prepare:lazy-payload": "node scripts/prepare-native-payload.mjs",
+    "check:lazy-package": "node scripts/check-lazy-tester-package.mjs",
+    "build:lazy-tester": "npm run prepare:icons && npm run check:lazy-package && npm run prepare:lazy-payload && tauri build --target x86_64-pc-windows-msvc --bundles nsis --config src-tauri/tauri.lazy-tester.conf.json --features lazy-tester-package -- --locked"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.4"

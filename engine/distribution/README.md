@@ -1,5 +1,42 @@
 # Emulator Distribution and Update Contracts
 
+## Active Lazy Tester installer candidate
+
+The native contract is [lazy-tester-package.json](lazy-tester-package.json),
+consumed by apps/desktop/src-tauri/tauri.lazy-tester.conf.json and its explicit
+lazy-tester-package Cargo feature. Root package:windows now routes through the
+desktop build:app alias to build:lazy-tester. The historical contract below remains
+blocked; it must not be substituted for this native package.
+
+The reviewed identity decision is a separate per-user installation: display name
+Lazy Tester, identifier com.mivubi.lazytester, binary lazy-tester.exe. Preview
+and VMware installations are not silently upgraded, uninstalled or relocated.
+Tauri/NSIS uses productName for its default installation/uninstall registry key;
+changing only the identifier would not establish that boundary. This is based on
+the upstream [NSIS template](https://github.com/tauri-apps/tauri/blob/dev/crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi)
+and is checked again in the actual generated script, not assumed from config.
+
+The existing MinecraftInstanceManager/NativePreview settings path, NativePilot
+single-manager lease and private game profile identities remain unchanged. Native
+installer hooks refuse when the shared session-controller mutex exists or cannot
+be checked. Uninstall forces preservation of application data. No hook runs a
+tool, kills Minecraft or migrates/deletes runtime data. Actual install/uninstall
+and mutex refusal behavior still require acceptance; compilation is insufficient.
+
+Build requires LAZY_TESTER_NATIVE_PAYLOAD_DIR pointing to the reviewed DLL folder.
+prepare-native-payload.mjs reads the runtime's existing SHA policy, verifies both
+DLLs before staging and copies exactly those bytes into ignored package resources.
+It rejects links, changed files and stale outputs; it never copies neighboring
+profile bindings. The installer contains the desktop, two DLLs and this native
+contract, with no VM/Guest Agent/acceptance payload or account/world material.
+
+Profile capabilities are machine-local and excluded. First-run profile binding is
+still unfinished; this installer is a development candidate, not a portable,
+ready-to-distribute product. No installed data has been changed by building it.
+Signing, publication and integrated Minecraft acceptance are not implied.
+
+## Historical VMware distribution contract (disabled)
+
 Distribution policy is separate from runtime lifecycle. Canonical source owner: `engine/distribution/`; update transport/validation lives in `engine/runtime-core/src/update.rs` and the packaged consumer in `apps/desktop/src-tauri/`.
 
 The installed product is still named **M-Bedrock Virtual Clients**. The repository rename must not silently change signed asset naming, installed state paths, Windows product identifier, release tag format, or package contents.

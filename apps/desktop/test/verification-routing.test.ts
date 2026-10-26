@@ -39,7 +39,8 @@ describe("Emulator source verification routing", () => {
     expect(root.scripts["verify:source"]).not.toMatch(/build:app|dev:app|vmrun/);
     expect(app.scripts["check:rust"]).toContain(" --locked ");
     expect(app.scripts["test:rust"]).toContain(" --locked ");
-    expect(app.scripts["build:app"]).toContain(" -- --locked");
+    expect(app.scripts["build:app"]).toBe("npm run build:lazy-tester");
+    expect(app.scripts["build:lazy-tester"]).toContain(" -- --locked");
   });
 
   it("prevents shipping the native pilot inside the existing VMware NSIS bundle", () => {
@@ -53,7 +54,8 @@ describe("Emulator source verification routing", () => {
     expect(packageBuilder.indexOf("PACKAGE_BLOCKED_NATIVE_FEASIBILITY"))
       .toBeLessThan(packageBuilder.indexOf("const binaries ="));
     expect(policy).toContain("guest/windows/virtual-guest-agent.exe");
-    expect(app.scripts["build:app"]).toContain("npm run prepare:package-binaries");
+    expect(app.scripts["build:lazy-tester"]).not.toContain("prepare:package-binaries");
+    expect(app.scripts["build:lazy-tester"]).toContain("--config src-tauri/tauri.lazy-tester.conf.json");
   });
 
   it("native preflight rejects unsupported Windows hosts and does not package legacy VM resources", () => {
