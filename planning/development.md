@@ -7,16 +7,21 @@ experiments PAUSED. User chose to RETAIN compiler caches; delete nothing.
 
 User requested consistent frame, smooth movement, per-launcher separate windows,
 persistent/larger previews, usable Close and understandable Task Manager entries.
-Installed App/root starter:1cddf597505b705920d31665730a6267e64bf9a4, replacing04b5c52.
+Installed App/root starter:6eba183ff437c4da410acd5e308a0b28864d2d90, replacing1cddf59.
 Actual Explorer startup Connected/five enabled/cacheInsideData=true PASS.
-Root/desktop shortcuts point to project Lazy Tester.exe. User reopened manager13660
-(root29568); controller40924 later observed with no game children. Recheck before
-staging. Do not stop games/processes by name or force termination.
+Root/desktop shortcuts point to project Lazy Tester.exe. Old idle manager13660 was
+closed using its own X after checking no games; root29568/controller40924 exited
+normally. New source staged with rollback backup, all App/root receipt hashes PASS.
+Final Explorer-open manager43284/root20804 deliberately left open. Never kill games.
 
 Latest user correction SUPERSEDES leave-games-open behavior: X must FULL EXIT,
 closing all managed Minecraft sessions normally, then the manager/controller.
-New full-exit source is pending commit/build/staging; installed1cddf59 still leaves
-games open. Do not claim full exit fixed in installed App until updated/tested.
+Full-exit source is built and installed. Actual UI smoke with no game: Settings,
+maximize/restore and X PASS; zero remaining App/root processes after exit (85ms).
+Receipts:workspace/runs/full-exit-actual-ui.json, full-exit-desktop-startup.json,
+full-exit-final-open.json. Real Minecraft exit/save remains NOT_EXECUTED.
+NSIS candidate:workspace/packages/lazy-tester/0.1.0-6eba183ff437-20261026T173510560Z;
+SHA256607cee7d50839a5186cd72c4475e98493df478751e884f84c78f501d43533b51.
 
 ## Current full-exit change
 
@@ -53,9 +58,7 @@ handling nonclient layout: those bits alone are NOT a valid frame assertion.
 Actual installed client top inset1px and all three custom controls present,
 Connected/five enabled in user-reopened PID13660, read-only observation.
 Receipts:workspace/runs/interaction-desktop-startup.json and
-interaction-frame-readonly.json. First style-bit smoke assertion was invalid;
-subsequent control-invocation smoke was refused because user reopened manager.
-No actual maximize/restore/close invocation PASS is claimed from that smoke.
+interaction-frame-readonly.json. Final6eba183 UI smoke supersedes earlier attempts.
 
 Pure Moved events use identity-checked ASYNCWINDOWPOS/NOSIZE and SURFACE try_lock,
 without helper roundtrip/game-thread acknowledgement. Contended/invalid geometry
@@ -83,8 +86,6 @@ Logs:interaction-stall-isolated.log, interaction-recovery-isolated.log,
 interaction-surface-tests.log, interaction-rust-check.log under workspace/runs.
 None establishes actual Minecraft drag smoothness or multi-account acceptance.
 
-Candidate1cddf59:workspace/packages/lazy-tester/0.1.0-1cddf597505b-20261026T172111066Z.
-NSIS SHA25632829a6592209e512d5eb7dd79e90ff106874f76c3b8e99bc13dcdbb1b49b1c3.
 Root starter FileDescription verified Lazy Tester - App Launcher. Helper-specific
 Task Manager labels still unresolved: exact same executable file identity is used
 for pipe authentication. Do not weaken identity checks for cosmetic naming.
@@ -108,6 +109,12 @@ unchanged. Keep High/Low,144/10 and16:9. Full account clear/export/restore absen
 Signing NOT_VERIFIED; installer execution/gameplay/license/multiplayer NOT_EXECUTED;
 publication DISABLED.
 
-Next: commit/build full-exit source, stage when old processes are closed normally,
-verify actual X exits idle application tree; real Minecraft full-exit and helper
-Task Manager labels remain explicit outstanding work. Overall request ACTIVE.
+Task Manager image metadata/main window title is Lazy Tester; starter metadata is
+Lazy Tester - App Launcher. Read-only Task Manager UI inspection exposed17 elements,
+no Processes navigation or matching row; this does NOT prove a missing process.
+Receipt:workspace/runs/task-manager-name-observation.json. Asked whether missing name
+occurs while UI is open or only after X leaves games behind; answer pending.
+
+Next: resolve that concrete Task Manager report and actual Minecraft full-exit/save
+proof. Helper-specific labels and actual-game movement/monitoring remain unaccepted.
+Overall request ACTIVE; no further rebuild or migration without a new finding.
