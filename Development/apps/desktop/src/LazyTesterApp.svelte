@@ -251,7 +251,17 @@
         }
       }
       if(!disposed)await refresh();
-    }finally{if(!disposed)initializing=false;}
+    }finally{
+      if(!disposed){
+        initializing=false;await tick();
+        void lazyTester.reportStartup({
+          connection:document.querySelector('.lt-connection')?.textContent?.trim()??'',
+          issue:document.querySelector('.lt-binding p')?.textContent??'',
+          cards:document.querySelectorAll('.lt-card').length,
+          enabled:document.querySelectorAll('.lt-card:not(:disabled)').length,
+        }).catch(error=>console.warn('Startup observation unavailable:',String(error)));
+      }
+    }
   }
   async function checkBinding(importProfiles = false) {
     try { binding = await lazyTester.binding(importProfiles); bindingIssue = ''; }

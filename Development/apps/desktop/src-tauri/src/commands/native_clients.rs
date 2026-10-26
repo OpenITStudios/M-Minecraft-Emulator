@@ -18,12 +18,14 @@ static MANAGER_RESOURCE_LOCK: Mutex<()> = Mutex::new(());
 
 #[tauri::command]
 pub async fn lazy_tester_data_location(action:native_clients::DataLocationAction) -> Result<native_clients::DataLocation,String> {
+    if crate::app_bootstrap::startup_diagnostic_mode() && !matches!(action,native_clients::DataLocationAction::Inspect) {return Err("Startup diagnostic permits inspection only".into());}
     tauri::async_runtime::spawn_blocking(move||run_manager_operation(||native_clients::data_location(action)))
         .await.map_err(|_|"Data location task failed".to_string())?.map_err(|error|error.to_string())
 }
 
 #[tauri::command]
 pub async fn lazy_tester_profile_binding(import: bool) -> Result<native_clients::ProfileBinding, String> {
+    if crate::app_bootstrap::startup_diagnostic_mode() && import {return Err("Startup diagnostic cannot import profiles".into());}
     tauri::async_runtime::spawn_blocking(move || run_manager_operation(|| native_clients::profile_binding(import)))
         .await.map_err(|_| "Profile binding task failed".to_string())?.map_err(|error| error.to_string())
 }
@@ -32,6 +34,7 @@ pub async fn lazy_tester_profile_binding(import: bool) -> Result<native_clients:
 pub async fn lazy_tester_session(
     request: crate::engine::native_clients_session::SessionRequest,
 ) -> Result<crate::engine::native_clients_session::SessionSnapshot, String> {
+    if crate::app_bootstrap::startup_diagnostic_mode() && !matches!(request,crate::engine::native_clients_session::SessionRequest::Inspect) {return Err("Startup diagnostic cannot launch or modify games".into());}
     tauri::async_runtime::spawn_blocking(move || run_manager_operation(|| {
         crate::engine::native_clients_session::request(request)
     })).await.map_err(|_| "Session task failed".to_string())?.map_err(|error| error.to_string())

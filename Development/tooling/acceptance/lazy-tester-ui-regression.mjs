@@ -39,6 +39,7 @@ try {
       transformCallback() { return ++callback; },
       async invoke(command, args) {
         window.__calls.push({command, args});
+        if(command==='startup_diagnostic_result')return null;
         if (command === 'plugin:event|listen') return callback;
         if (command === 'plugin:event|unlisten') return null;
         if (command === 'lazy_tester_profile_binding') {

@@ -124,6 +124,12 @@ export function verifyInitializedBinding(output) {
   return report;
 }
 
+export function verifyStartupObservation(output) {
+  const report=JSON.parse(output);
+  if(report.event!=='startup-observation'||report.connection!=='Connected'||report.issue!==''||report.cards!==5||report.enabled!==5||report.diagnosticOnly!==true||!Number.isInteger(report.processId)||report.processId<1)throw new Error('The real application UI did not confirm five available launchers');
+  return report;
+}
+
 function main() {
   if (process.argv.slice(2).some(arg => arg !== '--export-only') || process.argv.slice(2).length > 1) throw new Error('Only --export-only is supported');
   if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Windows x64 packaging is required');
@@ -154,6 +160,9 @@ function main() {
     const local = stageLocalApp(root,resolve(target,'x86_64-pc-windows-msvc/release'),sha);
     const initialized=execFileSync(resolve(local.app,'lazy-tester.exe'),['--lazy-tester-initialize'],{cwd:local.app,encoding:'utf8',windowsHide:true,timeout:60000,maxBuffer:32768});
     verifyInitializedBinding(initialized);
+    const startup=execFileSync(resolve(local.app,'lazy-tester.exe'),['--lazy-tester-check-webview'],{cwd:local.app,encoding:'utf8',windowsHide:true,timeout:30000,maxBuffer:32768});
+    verifyStartupObservation(startup);
+    console.log('Real WebView/Svelte startup verified: Connected; five launcher controls enabled. No game launched.');
     console.log('Launcher initialization verified before delivery; no game was launched.');
     const shortcuts=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-File',resolve(developmentRoot,'tooling/windows-toolchain/create-app-shortcuts.ps1'),'-Root',root],{encoding:'utf8',windowsHide:true});
     console.log(`Local app: ${local.app}\nOpen Lazy Tester from Desktop or Start Menu. Existing data is preserved.\n${shortcuts.trim()}`);

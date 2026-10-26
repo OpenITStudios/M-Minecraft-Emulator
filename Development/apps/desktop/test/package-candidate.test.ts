@@ -3,9 +3,15 @@ import {execFileSync} from 'node:child_process';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,linkSync,lstatSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname,join,resolve} from 'node:path';
-import {assembleCandidate,sourceRevision,stageLocalApp,verifyInitializedBinding} from '../scripts/package-lazy-tester.mjs';
+import {assembleCandidate,sourceRevision,stageLocalApp,verifyInitializedBinding,verifyStartupObservation} from '../scripts/package-lazy-tester.mjs';
 
 describe('Development source and distribution candidates',()=>{
+  it('requires the real UI to confirm five enabled launchers rather than only native binding',()=>{
+    const ready={event:'startup-observation',processId:42,connection:'Connected',issue:'',cards:5,enabled:5,diagnosticOnly:true};
+    expect(verifyStartupObservation(JSON.stringify(ready))).toEqual(ready);
+    for(const change of [{connection:'Connection unavailable'},{issue:'Windows error 2'},{enabled:0},{cards:0},{processId:0},{diagnosticOnly:false}])expect(()=>verifyStartupObservation(JSON.stringify({...ready,...change}))).toThrow();
+    expect(()=>verifyStartupObservation(JSON.stringify({schema:1,configured:true,issue:null}))).toThrow();
+  });
   it('requires confirmed launcher initialization before announcing a staged app is ready',()=>{
     expect(verifyInitializedBinding(JSON.stringify({schema:1,required:true,configured:true,issue:null})).configured).toBe(true);
     for(const report of [{schema:1,configured:false,issue:'missing'},{schema:2,configured:true,issue:null},{schema:1,configured:true,issue:'unverified'},{error:'preserved'}])expect(()=>verifyInitializedBinding(JSON.stringify(report))).toThrow();

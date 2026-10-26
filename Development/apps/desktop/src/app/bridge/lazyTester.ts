@@ -127,6 +127,7 @@ export function parsePreviewReport(value:unknown,slots:readonly ProfileSlot[]):P
 }
 
 export const lazyTester = {
+  reportStartup:(report:{connection:string;issue:string;cards:number;enabled:number})=>invokeRuntime<void>('startup_diagnostic_result',report),
   applyGraphics:async(slot:ProfileSlot,preset:GraphicsPreset)=>{
     if(!profileSlots.includes(slot)||!['High','Low'].includes(preset))throw new TypeError('Invalid graphics preset');
     return settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ApplyGraphicsPreset',slot,preset}}));

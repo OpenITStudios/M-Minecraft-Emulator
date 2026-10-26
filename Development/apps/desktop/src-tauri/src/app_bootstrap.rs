@@ -8,6 +8,13 @@ pub fn run() {
         return;
     }
 
+    let context = tauri::generate_context!();
+    #[cfg(all(windows, target_arch = "x86_64", feature = "lazy-tester-package"))]
+    if std::env::args_os().skip(1).eq([std::ffi::OsString::from("--lazy-tester-check-webview")]) {
+        check_webview_binding(context);
+        return;
+    }
+
     let _instance_lease = match app_instance::acquire() {
         Ok(lease) => lease,
         Err(error) => {
@@ -30,6 +37,7 @@ pub fn run() {
         // native-first pilot. Source and account-bearing guest data remain.
         // Re-enabling a route requires an explicit product decision.
         .invoke_handler(tauri::generate_handler![
+            startup_diagnostic_result,
             commands::native_clients::lazy_tester_session,
             commands::native_clients::lazy_tester_profile_binding,
             commands::native_clients::lazy_tester_data_location,
@@ -96,13 +104,53 @@ pub fn run() {
                 queue_workspace_update(window.clone());
             }
         })
-        .run(tauri::generate_context!());
+        .run(context);
     #[cfg(windows)]
     workspace_foreground::shutdown();
     let _ = crate::engine::workspace_surface::release();
     // Unhook from the worker's installation thread before exit.
     crate::engine::instance_focus_events::shutdown();
     result.expect("failed to run Minecraft Instance Manager desktop runtime");
+}
+
+#[cfg(all(windows, target_arch = "x86_64", feature = "lazy-tester-package"))]
+fn check_webview_binding(mut context: tauri::Context<tauri::Wry>) {
+    let _instance_observation = app_instance::acquire();
+    for window in &mut context.config_mut().app.windows {
+        window.visible = false;
+    }
+    // Exercise the real compiled UI and IPC, with no presentation or launch handlers.
+    tauri::Builder::default()
+        .setup(|app| {
+            use tauri::Manager;
+            let window = app.get_webview_window("main").ok_or_else(||std::io::Error::other("Main window missing"))?;
+            fit_initial_window(&window)?;
+            workspace_foreground::start(window.as_ref().window())?;
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::native_clients::lazy_tester_profile_binding,
+            commands::native_clients::lazy_tester_data_location,
+            commands::native_clients::lazy_tester_session,
+            startup_diagnostic_result,
+        ])
+        .run(context).expect("WebView startup diagnostic failed");
+    workspace_foreground::shutdown();
+}
+
+pub(crate) fn startup_diagnostic_mode() -> bool {
+    std::env::args_os().skip(1).eq([std::ffi::OsString::from("--lazy-tester-check-webview")])
+}
+
+#[tauri::command]
+fn startup_diagnostic_result(app: tauri::AppHandle, connection: String, issue: String, cards: u32, enabled: u32) -> Result<(), String> {
+    if connection.len()>128 || issue.len()>8192 || cards>5 || enabled>cards {
+        return Err("Invalid startup diagnostic".into());
+    }
+    use std::io::Write;
+    writeln!(std::io::stdout(), "{}", serde_json::json!({"event":"startup-observation","processId":std::process::id(),"connection":connection,"issue":issue,"cards":cards,"enabled":enabled,"diagnosticOnly":true})).map_err(|error|error.to_string())?;
+    if startup_diagnostic_mode() {app.exit(if connection=="Connected" && cards==5 && enabled==5 {0}else{2});}
+    Ok(())
 }
 
 #[cfg(windows)]

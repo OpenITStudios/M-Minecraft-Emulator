@@ -13,6 +13,15 @@ This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build
 
 ## Current Lazy Tester route — 26 October 2026
 
+Existing native registry stores now reopen through explicit current-user handles
+in independent_bootstrap.rs; product_profiles.rs shares that opener. Missing stores
+are never recreated as recovery. Product-only --lazy-tester-check-webview exercises
+the actual compiled Svelte/IPC startup in a hidden WebView with inspection-only
+handlers. startup_diagnostic_result emits bounded UI observations to stdout;
+normal startup also emits them without exiting. It is not a cached ready flag.
+Local delivery requires both native initialization and the real UI's Connected /
+five enabled controls observation before announcing readiness.
+
 The Svelte startup retries canonical launcher initialization/location reads before
 offering recovery; it does not turn a first missing report into a permanent setup
 screen. Product-only --lazy-tester-initialize uses the same profile_binding owner

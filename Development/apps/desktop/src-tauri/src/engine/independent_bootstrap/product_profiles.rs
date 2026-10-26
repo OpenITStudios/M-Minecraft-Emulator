@@ -219,24 +219,7 @@ fn open_at(logical: File, root: &Path) -> io::Result<[SlotStorage; 5]> {
         }
         let private_path = directory_path(&private)?;
         let _roaming = open_directory(&private_path.join("Roaming"), FILE_READ_ATTRIBUTES)?;
-        let key_path = wide(OsStr::new(&format!(
-            "Software\\MivubiEducationPilot\\{}",
-            registry_leaf(&directory_id(&private)?, slot)?
-        )))?;
-        let mut key = ptr::null_mut();
-        let status = unsafe {
-            RegOpenKeyExW(
-                HKEY_CURRENT_USER,
-                key_path.as_ptr(),
-                0,
-                KEY_ALL_ACCESS,
-                &mut key,
-            )
-        };
-        if status != 0 {
-            return Err(io::Error::from_raw_os_error(status as i32));
-        }
-        let registry = RegistryKey(key);
+        let registry = open_existing_registry_store(&directory_id(&private)?,slot)?;
         stores.push(SlotStorage {
             slot,
             logical: logical.try_clone()?,

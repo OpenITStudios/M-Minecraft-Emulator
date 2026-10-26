@@ -5,6 +5,8 @@
 #![allow(dead_code)]
 
 use crate::engine::instance_focus_events;
+#[cfg(test)]
+use windows_sys::Win32::System::Registry::HKEY_CURRENT_USER;
 use std::{
     ffi::OsStr,
     fs::{File, OpenOptions},
@@ -1360,7 +1362,7 @@ use windows_sys::Win32::{
         },
         Registry::{
             RegCloseKey, RegCreateKeyExW, RegOpenCurrentUser, RegOpenKeyExW, HKEY,
-            HKEY_CURRENT_USER, KEY_ALL_ACCESS, KEY_READ, REG_CREATED_NEW_KEY,
+            KEY_ALL_ACCESS, KEY_READ, REG_CREATED_NEW_KEY,
             REG_OPTION_NON_VOLATILE,
         },
         Threading::{
@@ -1532,13 +1534,29 @@ fn registry_leaf(id: &FILE_ID_INFO, slot: u32) -> io::Result<String> {
     ))
 }
 
-fn user_registry_path() -> io::Result<[u16; 512]> {
+fn open_existing_registry_store(id: &FILE_ID_INFO, slot: u32) -> io::Result<RegistryKey> {
+    // Match user_registry_path's explicit user hive, not a process-wide cached HKCU mapping.
+    let root = current_user_registry(KEY_READ)?;
+    let path = wide(OsStr::new(&format!("Software\\MivubiEducationPilot\\{}", registry_leaf(id,slot)?)))?;
     let mut key = ptr::null_mut();
-    let status = unsafe { RegOpenCurrentUser(KEY_READ, &mut key) };
+    let status = unsafe { RegOpenKeyExW(root.0,path.as_ptr(),0,KEY_ALL_ACCESS,&mut key) };
+    if status != 0 {
+        return Err(io::Error::new(io::Error::from_raw_os_error(status as i32).kind(),format!("Minecraft - {slot}: saved registry store cannot be opened (Windows error {status})")));
+    }
+    Ok(RegistryKey(key))
+}
+
+fn current_user_registry(access: u32) -> io::Result<RegistryKey> {
+    let mut key = ptr::null_mut();
+    let status = unsafe { RegOpenCurrentUser(access, &mut key) };
     if status != 0 {
         return Err(io::Error::from_raw_os_error(status as i32));
     }
-    let key = RegistryKey(key);
+    Ok(RegistryKey(key))
+}
+
+fn user_registry_path() -> io::Result<[u16; 512]> {
+    let key = current_user_registry(KEY_READ)?;
     type Query = unsafe extern "system" fn(HANDLE, u32, *mut c_void, u32, *mut u32) -> i32;
     let name = wide(OsStr::new("ntdll.dll"))?;
     let module = unsafe { GetModuleHandleW(name.as_ptr()) };
@@ -1617,6 +1635,7 @@ fn create_private_slot_at(logical: &File, private_path: &Path, slot: u32) -> io:
         std::fs::create_dir(private_path.join(leaf))?;
     }
     let id = directory_id(&private)?;
+    let root = current_user_registry(KEY_ALL_ACCESS)?;
     let path = wide(OsStr::new(&format!(
         "Software\\MivubiEducationPilot\\{}",
         registry_leaf(&id, slot)?
@@ -1625,7 +1644,7 @@ fn create_private_slot_at(logical: &File, private_path: &Path, slot: u32) -> io:
     let mut disposition = 0;
     let status = unsafe {
         RegCreateKeyExW(
-            HKEY_CURRENT_USER,
+            root.0,
             path.as_ptr(),
             0,
             ptr::null(),
@@ -1813,29 +1832,13 @@ fn reopen_slots_for<const N: usize>(
                 FILE_READ_ATTRIBUTES,
             )?);
         }
-        let path = wide(OsStr::new(&format!(
-            "Software\\MivubiEducationPilot\\{}",
-            registry_leaf(&directory_id(&private)?, slot)?
-        )))?;
-        let mut key = ptr::null_mut();
-        let status = unsafe {
-            RegOpenKeyExW(
-                HKEY_CURRENT_USER,
-                path.as_ptr(),
-                0,
-                KEY_ALL_ACCESS,
-                &mut key,
-            )
-        };
-        if status != 0 {
-            return Err(io::Error::new(io::Error::from_raw_os_error(status as i32).kind(),format!("Minecraft - {slot}: saved registry store cannot be opened (Windows error {status})")));
-        }
+        let registry = open_existing_registry_store(&directory_id(&private)?,slot)?;
         slots.push(SlotStorage {
             slot,
             logical: logical.try_clone()?,
             temporary: existing_private_temporary(&private).map_err(|error|io::Error::new(error.kind(),format!("Minecraft - {slot}: temporary folder is unavailable: {error}")))?,
             private,
-            registry: RegistryKey(key),
+            registry,
             user_key_path,
             private_path,
             singleton_caller_rva: 0,
@@ -2572,6 +2575,38 @@ impl SlotStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn existing_registry_store_uses_explicit_current_user_root() {
+        const CHILD: &str = "LAZY_TESTER_REGISTRY_ROOT_FIXTURE_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let module = module_path!().split_once("::").unwrap().1;
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", &format!("{module}::existing_registry_store_uses_explicit_current_user_root"), "--nocapture"])
+                .env(CHILD,"1").output().unwrap();
+            assert!(output.status.success(),"{}\n{}",String::from_utf8_lossy(&output.stdout),String::from_utf8_lossy(&output.stderr));
+            return;
+        }
+        use windows_sys::Win32::System::Registry::{RegOverridePredefKey,RegDeleteTreeW};
+        let parent = fresh_root(&std::env::temp_dir()).unwrap();
+        let logical = open_directory(&parent,FILE_READ_ATTRIBUTES).unwrap();
+        let store = create_private_slot(&logical,&parent,1).unwrap();
+        let id = directory_id(&store.private).unwrap();
+        let path = wide(OsStr::new(&format!("Software\\MivubiEducationPilot\\{}",registry_leaf(&id,1).unwrap()))).unwrap();
+        let mut empty = ptr::null_mut();let mut disposition=0;
+        assert_eq!(unsafe{RegCreateKeyExW(store.registry.0,wide(OsStr::new("EmptyView")).unwrap().as_ptr(),0,ptr::null(),0,KEY_ALL_ACCESS,ptr::null(),&mut empty,&mut disposition)},0);
+        let empty = RegistryKey(empty);
+        struct Restore;
+        impl Drop for Restore {fn drop(&mut self){assert_eq!(unsafe{RegOverridePredefKey(HKEY_CURRENT_USER,ptr::null_mut())},0);}}
+        assert_eq!(unsafe{RegOverridePredefKey(HKEY_CURRENT_USER,empty.0)},0);
+        let restore = Restore;
+        let result = open_existing_registry_store(&id,1);
+        let failure = result.as_ref().err().map(ToString::to_string);
+        let success = result.is_ok();drop(result);drop(restore);drop(empty);drop(store);
+        assert_eq!(unsafe{RegDeleteTreeW(HKEY_CURRENT_USER,path.as_ptr())},0);
+        drop(logical);assert_eq!(parent.parent(),Some(std::env::temp_dir().as_path()));std::fs::remove_dir_all(parent).unwrap();
+        assert!(success,"Existing store was mistaken for missing: {failure:?}");
+    }
     use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetExitCodeProcess};
 
     // Writable receipt exists only for our cooperative C++ control, never the game.
