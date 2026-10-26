@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 $checkout = (Resolve-Path -LiteralPath $Root).Path
 $appFolder = Join-Path $checkout 'App'
 $executable = Join-Path $appFolder 'lazy-tester.exe'
+$launcher = Join-Path $checkout 'Lazy Tester.exe'
 $receipt = Get-Content -LiteralPath (Join-Path $appFolder 'build-info.json') -Raw | ConvertFrom-Json
 $entry = @($receipt.files | Where-Object name -eq 'lazy-tester.exe')
 if ($entry.Count -ne 1 -or (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash -ine $entry[0].sha256) {
@@ -14,7 +15,7 @@ if (@(Get-Process -Name lazy-tester -ErrorAction SilentlyContinue).Count) {
 $shortcutPath = Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Lazy Tester.lnk'
 $links = New-Object -ComObject WScript.Shell
 $link = $links.CreateShortcut($shortcutPath)
-if ($link.TargetPath -ine $executable -or $link.WorkingDirectory -ine $appFolder -or $link.Arguments) {
+if ($link.TargetPath -ine $launcher -or $link.WorkingDirectory -ine $checkout -or $link.Arguments) {
     throw 'Desktop shortcut does not target this App directly.'
 }
 [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($links)
@@ -38,7 +39,9 @@ try {
         if ($candidates.Count -eq 1) {
             $manager = $candidates[0]
             $process = Get-CimInstance Win32_Process -Filter "ProcessId=$($manager.Id)"
-            if ($process.ParentProcessId -notin $explorer.Id) { throw 'App was not launched by Windows Explorer.' }
+            $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$($process.ParentProcessId)"
+            if ($parent.ExecutablePath -ine $launcher -or $parent.ParentProcessId -notin $explorer.Id) { throw 'Root launcher was not launched by Windows Explorer.' }
+            if (-not $receipt.launcher -or (Get-FileHash -LiteralPath $launcher -Algorithm SHA256).Hash -ine $receipt.launcher.sha256) { throw 'Root launcher does not match the receipt.' }
             $window = [System.Windows.Automation.AutomationElement]::FromHandle($manager.MainWindowHandle)
             $elements = @($window.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition))
             $names = @($elements | ForEach-Object { $_.Current.Name })

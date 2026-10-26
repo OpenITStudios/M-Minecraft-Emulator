@@ -21,9 +21,11 @@ describe('Development source and distribution candidates',()=>{
         writeFileSync(path,name.endsWith('.json')?'{}':'MZfixture');
       }
       writeFileSync(join(release,'private.bin'),'never copy');
+      writeFileSync(join(release,'Lazy Tester.exe'),'MZlauncher');
       linkSync(join(release,'lazy-tester.exe'),join(release,'cargo-artifact.exe'));
       const first=stageLocalApp(root,release,'a'.repeat(40));
       expect(lstatSync(join(first.app,'lazy-tester.exe')).nlink).toBe(1);
+      expect(readFileSync(join(root,'Lazy Tester.exe'),'utf8')).toBe('MZlauncher');
       expect(readdirSync(first.data)).toEqual([]);
       expect(readdirSync(first.app).sort()).toEqual(['build-info.json','distribution','independent-bootstrap','lazy-tester.exe']);
       writeFileSync(join(first.app,'data-location.json'),'{"schema":1,"path":"D:/My Data"}');
@@ -37,6 +39,9 @@ describe('Development source and distribution candidates',()=>{
       expect(readFileSync(join(next.app,'graphics.json'),'utf8')).toContain('"High"');
       expect(readFileSync(join(next.data,'world-fixture'),'utf8')).toBe('preserve');
       expect(readFileSync(join(next.backup!,'lazy-tester.exe'),'utf8')).toBe('MZfixture');
+      writeFileSync(join(root,'Lazy Tester.exe'),'MZunrelated');
+      expect(()=>stageLocalApp(root,release,'c'.repeat(40))).toThrow(/unrelated/);
+      writeFileSync(join(root,'Lazy Tester.exe'),'MZlauncher');
       writeFileSync(join(release,'lazy-tester.exe'),'invalid');
       expect(()=>stageLocalApp(root,release,'c'.repeat(40))).toThrow(/executable/);
       expect(readFileSync(join(next.app,'lazy-tester.exe'),'utf8')).toBe('MZupdated');

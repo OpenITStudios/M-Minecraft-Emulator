@@ -20,7 +20,10 @@ All project-owned data belongs beneath this single checkout root. Tool-native
 `Development/apps/desktop/node_modules/`, `Development/apps/desktop/dist/`, Rust/Tauri `target/`
 and Tauri staging are already **within** that checkout. Existing compiler
 caches were retained during source relocation; new Cargo commands through DEV.cmd
-use workspace/builds/desktop/target. Compiler-cache cleanup remains deferred. The pinned native-engine builder and
+use workspace/builds/desktop/target. Source-tree Cargo caches now reside in
+archive/compiler-cache-20261026. Automatic approval review rejected recursive
+deletion, so reversible archival retained all contents and reclaimed no space.
+Active toolchains and build caches remain in place. The pinned native-engine builder and
 assembler accept only fresh `workspace/builds/<run>/` and
 `workspace/packages/<run>/` output directories. Create their parent folders
 locally before running them, keep them ignored, and never reuse a run path.

@@ -24,6 +24,9 @@ test('physical layout rejects leftover source roots and root build metadata', ()
     for (const name of ['Development', 'Archive', 'App', 'Data', 'workspace']) mkdirSync(join(root, name));
     writeFileSync(join(root, '.git'), 'gitdir: linked-worktree');
     assert.deepEqual(checkPhysical(root), []);
+    writeFileSync(join(root,'Lazy Tester.exe'),'MZfixture');
+    assert.deepEqual(checkPhysical(root), []);
+    assert.ok(checkTracked(['Lazy Tester.exe']).length);
     mkdirSync(join(root, 'apps'));
     writeFileSync(join(root, 'package.json'), '{}');
     assert.deepEqual(checkPhysical(root).sort(), [

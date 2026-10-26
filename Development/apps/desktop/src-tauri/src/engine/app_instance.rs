@@ -239,6 +239,10 @@ fn is_reparse_point(_metadata: &fs::Metadata) -> bool {
 }
 
 fn instance_path() -> Result<PathBuf, String> {
+    #[cfg(feature="lazy-tester-package")]
+    {return crate::engine::manager_settings::product_settings().map(|path|path.join("desktop-instance.json")).map_err(|error|error.to_string());}
+    #[cfg(not(feature="lazy-tester-package"))]
+    {
     let base = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("APPDATA").map(PathBuf::from))
@@ -247,6 +251,7 @@ fn instance_path() -> Result<PathBuf, String> {
         .join("MinecraftInstanceManager")
         .join("NativePilot")
         .join("desktop-instance.json"))
+    }
 }
 
 fn stale_instance_path(path: &Path, process_id: u32, attempt: u8) -> PathBuf {

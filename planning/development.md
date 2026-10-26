@@ -3,87 +3,102 @@
 Local only; main/publication untouched; GitHub Actions entirely OFF.
 VMware, Sandboxie and RAM/renderer experiments remain PAUSED.
 
-## Active goal — reliable Desktop startup with centralized application data
+## Active goal — root-local application and reliable Desktop startup
 
-The user rejected repeated setup and premature completion claims. Current App
-source is 09eaca9eb7c2a7593e316848be833d8179f3cb84, with executable hash
-473a8363714ad5dcbadbee5427aa98d74f0c53b95cef2597271c68c691469541.
-Desktop and Start Menu shortcuts target this App correctly. Updating the same
-executable alone does not solve the observed storage-context failure.
+The user explicitly requested all app-owned data beneath the project, an ordinary
+root EXE and cleanup of scattered developer material, alongside the unresolved
+Desktop connection failure. The earlier proposal to copy five stores into native
+HKCU was NOT approved and remains unused. The chosen, subsequently authorized
+migration destination is project Data, with original data retained.
 
-Current source parent: ec929a97957aed029611dcb27e866a4189c6d825.
-The previous handoff's completion claim is overturned by actual Explorer startup.
+Source parent b7c5bf36150362e47d24bf7003a8619516bcf14c. Existing App still contains
+09eaca9eb7c2a7593e316848be833d8179f3cb84 until the new clean build/staging step.
+No original account/world data has been migrated or deleted at this checkpoint.
 
-## Reproduction and confirmed discrepancy
+## Confirmed cause and repaired source
 
-verify-desktop-startup.ps1 dispatches the Desktop shortcut through the interactive
-Explorer desktop's Document.Application, verifies Explorer parentage and reads the
-actual UI with Windows accessibility APIs. Shell.Application alone or Start-Process
-can inherit the development context; they were insufficient reproduction routes.
+Actual Explorer startup reproduced the exact error: PID38812, Explorer4764,
+five launcher cards, zero enabled, saved registry store Windows error2.
+Same user SID/logical HKCU-root hashes, neither elevated, but the development
+context sees1264 pilot subkeys and Explorer sees zero in32/64 views. Development
+CLI configured=true; Explorer CLI has no binding. The old binding is also under
+the development package's redirected LocalCache/Local. Build-tool/hidden WebView
+success therefore did not establish Desktop startup. The former completion claim
+was wrong. Root starter -> App verification must use Explorer and real UI.
 
-Executed RED with the installed App: PID38812, Explorer parent PID4764, five cards,
-zero enabled, connection unavailable and Minecraft - 1: saved registry store cannot
-be opened (Windows error 2). Exact receipt is ignored under
-workspace/runs/play-settings-implementation/desktop-startup-red.log.
+product_profiles.rs now owns schema2 Data/Launchers/Minecraft-1..5, each with
+Roaming, Local/Temp and Registry/HKCU.dat. Windows user, profile-directory and
+hive-file identities are validated. Missing hives fail before RegLoadAppKey and
+are never recreated as recovery. Data gets a protected user/System/Admin ACL.
+Legacy schema1 ordinary-HKCU reopening remains. The native enroller and DLL accept
+application hives only with correct directory/slot identity metadata, preserving
+user/access checks and the existing private/public wire versions.
 
-Read-only comparison: same Windows user SID hash, same logical native HKCU root
-hash, neither elevated; development context sees1264 pilot subkeys, Explorer
-context sees none in both32/64 views. Development CLI reports configured=true;
-Explorer CLI reports absent binding. Canonical binding metadata is also present
-under the development package's redirected LocalCache/Local directory. These are
-separate effective HKCU/AppData views despite the same user and executable.
-No registry values, account contents or worlds were inspected or printed.
-The earlier predefined-HKCU regression demonstrates a separate source defect;
-it did not establish the cause of the user's Desktop failure.
+Fixed operator-only --lazy-tester-migrate-data validates the original reviewed
+five stores, game/image/payload and idle state, takes the original app lease,
+preflights links, then copies each same slot opaquely using CopyFileW/SHCopyKeyW.
+The latter preserves the uniform destination hive descriptor. Original registry,
+accounts and worlds remain intact; no raw values or world contents enter logs.
+Preferences are retained and the catalog is published last. Existing/partial
+Data launchers are never overwritten, cleared or treated as fresh setup.
 
-## Source correction and verification boundary
+manager_settings.rs owns shared project-root resolution and Data/Settings FPS/
+graphics/location state; app_instance.rs uses its product marker there. WebView
+and process-local temporary storage now use Data/Cache. Existing outside-project
+location pointers fail for review rather than being ignored/reseeded. New
+selections stay in Data. No session/readiness owner or account automation added.
 
-package-lazy-tester.mjs now creates the normal shortcuts, then requires real
-Explorer/Desktop startup evidence, exact staged source/hash, Connected status and
-five enabled launcher buttons. Builder-context initializer/hidden WebView checks
-are no longer delivery readiness gates. Existing product diagnostic flags remain
-available; missing registry stores still fail closed and are never recreated as
-empty recovery. No runtime identity, gameplay, graphics or layout change is made.
+The root icon-bearing native Lazy Tester.exe forwards to fixed App/lazy-tester.exe,
+uses App working directory and waits/propagates exit. It writes no parallel state.
+Packaging builds/stages both with source/hash receipts and rollback preservation;
+Desktop/Start Menu shortcuts target the root starter. RUN.cmd is only a wrapper.
+Actual UI acceptance verifies Explorer -> root starter -> App, Connected and five
+enabled launchers at the expected revision. Native CLI success cannot replace it.
 
-A bounded opaque registry transfer was prepared privately and tested with a
-new disposable fixture across the two process contexts. Preflight of the original
-five stores passed: source handles readable, all five native destinations absent.
-The fixture alone was transferred and removed. No original profile was transferred.
-Private scripts/metadata remain ignored under workspace/private/desktop-registry-repair/.
-Original binding and registry stores remain intact. No account/world export exists.
+## Source/native evidence actually executed
 
-Permission was requested because CONTEXT.md prohibits copying tokens/profiles.
-The user did NOT approve that transfer; instead they requested all application data
-be centralized under the project root. Do not run the prepared Apply operation or
-infer approval from the request for a central data layout.
+34 frontend tests PASS; eight repository fixtures PASS; structure and G0 PASS.
+Targeted Rust: five product-store/migration tests, five binding tests, five settings
+tests (one separate test remains ignored), six app-instance tests PASS.
+Own C++ fixture with file hives exercised enrollment before dependency/TLS/main,
+two slots/two relaunch rounds and foreign-hive rejection PASS. No game launched.
+Root starter target/CWD/exit propagation passed with a disposable own executable;
+embedded icon count1 confirmed. Full Rust suite was not rerun (prior unrelated
+DACL/pipe fixture issues); no broad performance claim. Final source/native checks
+must be repeated only where later source/payload changes require them.
 
-## Latest direction — one authoritative project Data directory
+New reviewed native directory: workspace/builds/central-data-20261026/Release.
+Compatibility SHA256 0f45c07b370ff6c1bf150ccc20879ff6406c208f2b8c3ccdc596b82f2552381e.
+Enroller SHA256 51517528886483ba89f1b93b448c1ddd349f26f0e48e5322db434cbfe9c4de99.
+Old generated payload staging was preserved under workspace/archive before refresh.
+Logs/receipts remain ignored in workspace/runs/; never publish raw machine data.
 
-User wants data needed by Lazy Tester together and understandable, rather than
-scattered across AppData, registry contexts and arbitrary folders. Proposed target:
-App for application binaries; Data for runtime settings, per-launcher data and
-backups; Development/workspace for development only. One active source of truth,
-not continuous bidirectional copies. Existing data is retained until any explicitly
-approved migration has completed and actual Desktop reopening is verified.
+## Physical organization actually performed
 
-A file-backed per-launcher registry hive would require changes in the existing
-storage/bootstrap owner and actual registry isolation/reopen tests. It is a design
-candidate, not implemented. Windows-managed Microsoft sign-in components and the
-official Minecraft installation cannot be promised portable or relocated merely
-by choosing a project Data folder. No additional ready-state/configuration store.
+Metadata inventory: Development/apps21.49GiB; workspace/builds14.33GiB;
+workspace/tmp11.78GiB. Large size alone is not evidence material is disposable.
+Both obsolete source Cargo targets had valid CACHEDIR.TAG, no tracked files and
+no affected active process. Recursive deletion was rejected by automatic approval
+review. Reversible same-volume archival retained all contents:
+- Development/apps/desktop/src-tauri/target -> workspace/archive/compiler-cache-20261026/desktop-target
+- Development/engine/runtime-core/target -> workspace/archive/compiler-cache-20261026/runtime-target
+No space was reclaimed. Source directories no longer contain those compiler trees.
+Active toolchains/builds, tmp/private/profile/capability material, legacy working
+copies and unrelated TranslateIT processes were retained. No guessed junk deletion.
+Inventory/operation receipts: workspace/runs/root-inventory-before.json and
+root-cleanup-receipt.json. Initialized submodule and second worktree untouched.
 
-Next: finalize the central Data ownership and safe migration boundary with the user,
-then implement the existing owner's storage changes and verify repeated Desktop
-startup. The immediate connection issue remains UNRESOLVED pending that work.
+## Remaining work and evidence ceiling
 
-## Preservation and other limits
+Next: commit clean source, construct Windows/NSIS candidate, guard/stage App and
+root starter, run the fixed approved project-Data migration, then repeatedly verify
+actual Explorer/Desktop startup and identical source/native-Desktop data opening.
+Do not announce completion before those real process observations succeed.
 
-Keep existing16:9 viewport/native-input rectangle, five-session dock, normal
-1280x900 bounded window, High/Low presets and configurable144/10FPS defaults.
-All games must be stopped for cache cleanup or manual graphics changes.
-Full clear, world export, settings reset/restore, background audio, automatic game
-shutdown and data migration remain unavailable. No game/installer GUI or sign-in
-was automated. Updater was preserved; only verifier-owned managers closed normally.
-Initialized submodule and second worktree remain untouched. Signing is NOT_VERIFIED;
-installer execution/gameplay/license/multiplayer acceptance remain NOT_EXECUTED.
-Publication remains DISABLED. Do not call this repair complete yet.
+Original source backups outside the project are preserved for recovery until
+explicit retirement; no unrelated Windows profile/account cleanup is authorized.
+Full clear, world export, settings reset/restore, audio control and automatic game
+shutdown remain unavailable. Keep existing16:9 layout, High/Low and144/10 defaults.
+No Minecraft/game/installer GUI or sign-in is automated. Signing NOT_VERIFIED;
+installer execution/gameplay/license/multiplayer acceptance NOT_EXECUTED.
+Publication DISABLED. The overall repair remains ACTIVE at this checkpoint.

@@ -7,121 +7,84 @@ authority: CANONICAL
 lifecycle: ACTIVE
 ---
 
-# Lazy Tester application and data locations
+# Lazy Tester project data
 
-New per-user installations default to the visible `%USERPROFILE%/Lazy Tester/App`.
-The installer directory page permits another destination; a selected root receives
-an App subdirectory. Registered existing flat installations are retained in place.
-The application home is App's parent, or the executable's directory for an existing
-flat candidate. The working directory is never used to find data.
+The root native Lazy Tester.exe starts only App/lazy-tester.exe, with its working
+directory set to App. It carries the application icon and no independent settings
+or session authority. Desktop/Start Menu shortcuts use the same root entry point.
+Data is resolved from the executable/project location, never the working directory.
 
 ```text
-Lazy Tester/
-  App/
-    lazy-tester.exe
-    independent-bootstrap/       two reviewed native DLLs
-    distribution/               public package policy
-    data-location.json          private runtime-created location pointer
-    performance.json            saved FPS limits, created only by Save
+Minecraft-Emulator/
+  Lazy Tester.exe
+  App/                           application, two reviewed DLLs, build receipt
   Data/
-    profiles.json               private Windows-user/directory identities
-    Profiles/
-      Minecraft-1/              private Roaming, Local and Local/Temp
-      Minecraft-2/
-      Minecraft-3/
-      Minecraft-4/
-      Minecraft-5/
+    Cache/                       WebView data and process-local temporary files
+    Settings/
+      data-location.json         project-local location pointer
+      performance.json           saved FPS limits
+      graphics.json              five High/Low choices
+      desktop-instance.json      exclusive manager marker
+    profiles.json                private user/directory/hive file identities
+    Launchers/
+      Minecraft-1/
+        Roaming/
+        Local/Temp/
+        Registry/HKCU.dat        private application hive and Windows sidecars
+      Minecraft-2/ ... Minecraft-5/
+  Development/                   canonical source/tooling
+  workspace/                     developer builds, tools, cache and archives
 ```
 
-Data and the location pointer are never packaged. Uninstall preserves them; Data
-is outside App in new installations. Backups and centralized Logs remain future
-features, not automatically populated folders. Source checkouts ignore root
-App/Data/Logs and structure checks reject tracking them. Developer output remains
-governed by [artifact storage](artifact-storage.md).
+All runtime files are ignored and never bundled or tracked. App refresh preserves
+Data and the previous app/starter. project_profiles remains the existing
+product_profiles.rs owner; manager_settings.rs owns root/preferences and the
+original session controller alone owns games and admission. No parallel ready flag,
+registry gateway or profile catalog is introduced.
 
-## One product owner
+Catalog schema2 binds the Windows-user digest, five directory identities and five
+hive-file identities. Retained schema1 catalogs still use Profiles and ordinary
+HKCU validation. Missing/replaced catalogs, directories and registry files fail
+closed. Reopening checks that HKCU.dat exists before RegLoadAppKey can be called,
+preventing accidental empty account stores. Data gets a protected user/System/
+Administrators ACL before any profile contents are created.
 
-`Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/product_profiles.rs` owns
-location resolution, catalog validation, fresh store preparation and reopening.
-The existing session controller alone owns live games, handles and launch policy.
-The catalog reuses the bootstrap's filesystem/HKCU constructor. The storage DLL
-ABI and original profile data remain unchanged. Configurable FPS uses a private
-presentation v3 capability and newly pinned native payload bytes.
+The native enroller and compatibility DLL validate a nonsecret hive identity
+marker against the retained private directory ID and slot. Foreign slot handles
+are rejected before child code. Existing user/access checks and the private
+storage ABI/version remain unchanged. Loader-lock initialization never opens or
+loads a hive file; it checks metadata on the already inherited handle.
 
-## Performance settings
+## Explicit migration
 
-The existing manager_settings Rust owner stores only activeFps/backgroundFps in
-App/performance.json (beside the executable for retained flat installations).
-Missing settings use 144/10 without creating a file. Save validates integer limits
-1..1000, with background no higher than active, and atomically publishes both.
-Invalid/unreadable existing settings are reported and preserved, never silently
-replaced by defaults. This file has no credentials, world data or profile catalog.
-Local App refresh preserves it alongside data-location.json; it is never bundled.
+The fixed product-only --lazy-tester-migrate-data route requires the original
+reviewed five-profile capability, supported image, reviewed payload, idle
+controller and no games. It does not run from an installer hook or launch games.
+Source trees are checked for links before creating target launchers. CopyFileW
+copies the same slot's Roaming/Local files opaquely; SHCopyKeyW copies that slot's
+registry values/subkeys while retaining the uniform destination hive descriptor.
+No account values or world contents are printed, parsed or exported to logs.
 
-The retained session actor serializes Save with launch and preset actions. Save
-does not start games or a missing controller; it may run while games continue.
-Each new process receives immutable limits through the existing authenticated
-presentation capability. Running games keep their old limits until normal exit
-and a subsequent explicit launch. No settings watcher or per-frame file access
-is added. V2 retains 144/10; v3 validates packed limits in the same 120-byte private
-record, without changing storage/account capabilities.
+Saved App preferences are copied into Data/Settings without replacing saved
+settings. The complete catalog is published last and reopening is checked.
+Original data remains intact. Existing/partial destinations are never cleared,
+merged into replacement profiles or overwritten. Source preservation is recovery
+protection, not another active or bidirectionally synchronized data location.
+The earlier proposal to transfer into native HKCU remains unused; the user's
+subsequent project-local Data instruction defines this migration's destination.
 
-Settings also offers Apply to all profiles for the existing Simple/12-chunk
-graphics preset. Its original options writer owns validation, backups and
-idempotent updates. The sole session actor refuses live/uncertain sessions and
-checks external Minecraft processes before applying it. Simulation distance and
-unowned options stay unchanged. This action never launches a game.
+Old App location pointers are checked before fresh fallback. Outside-project
+locations fail for explicit migration review rather than being ignored/reseeded.
+New data selections stay under the project's Data subtree. Same-volume moves can
+retain identities; arbitrary cross-volume copies are rejected. The explicit
+reviewed migration creates and records new identities without mixing profiles.
 
-The relative default pointer `Data` follows the application home when the whole
-folder is moved and its executable is opened from the new location. This does not
-repair Windows shortcuts or installer registration after a manual application move.
-A selected data folder is saved as an absolute path. Storage shows the actual root
-and five profile paths, with Open folder, Locate data and initial Choose data folder
-actions. The mounted UI and new errors are English.
+Missing FPS settings retain144/10 defaults; Save validates whole limits1..1000,
+background no higher than active. High/Low, atomic preference writes, next-launch
+FPS application and all-games-stopped graphics/cache admission keep their owners.
+Full clear, general backup/restore and cross-PC account portability remain absent.
 
-## Setup and preservation
-
-Startup first reopens product data. Without product data, the reviewed old pilot
-can be discovered using bounded directory metadata/identity checks and adopted in
-place, without finding developer launcher folders. Its original reviewed digest
-and existing HKCU validation still apply. Invalid existing bindings are preserved,
-never replaced with five empty profiles.
-
-Only when neither product data nor a retained old binding exists may fresh setup
-create Data/Profiles/Minecraft-1..5. It requires the supported registered Minecraft
-image, reviewed DLLs, supported AppData layout and idle controller/game set. Each
-slot receives its own storage and HKCU store. No game starts automatically; login
-remains Minecraft-owned.
-
-Catalog publication is create-once, after all five stores exist. Reopening validates
-the current Windows-user digest, root/profile file identities, ordinary ancestors,
-fixed slot paths, existing directories and HKCU stores; no missing store is recreated.
-A valid catalog without its pointer repairs the pointer before admitting a game.
-Corrupt metadata, unavailable saved data and changed identities fail closed. Partial
-setup remains preserved for recovery, not automatically deleted/reseeded; an
-interactive partial-setup recovery flow remains unfinished.
-
-## Relocation support and limits
-
-Locate data verifies an existing product Data directory before changing the pointer.
-Same-volume moves by the same Windows user can retain the directory identities and
-registry stores. Location changes refuse while Minecraft or its controller is active.
-Dialog cancel changes no pointer; Choose cannot replace existing profile data.
-
-If inspection of a saved location fails, Storage retains the error and still
-offers Locate data. The backend rechecks idle state and the selected catalog,
-Windows user and directory identities before publishing a new pointer. Unknown
-location never exposes Choose data folder as a replacement/reset shortcut.
-The setup banner links to Manage data and keeps setup errors separate from
-session refreshes. Failed setup/location rechecks invalidate frontend readiness
-and stale storage measurements; successful reattachment rechecks profile binding.
-
-This is location persistence and verified reattachment, not a Move data copy engine.
-Cross-volume copies change identities and are rejected. Moving old pilot profiles
-into the new layout, per-slot moves, backup/restore and destructive reset remain
-unimplemented. No token export or account cloning is introduced.
-
-Current payload limitations remain: bounded ASCII paths, ordinary local directories,
-unsplit supported AppData and the exact reviewed Minecraft executable. Fixture and
-installer-build results do not prove installed behavior, fresh-profile login,
-gameplay, cross-PC portability or cross-volume account persistence.
+Windows-managed Microsoft identity/DPAPI components, the licensed Minecraft
+installation, Visual Studio/WDK and Git remain OS dependencies. Central Data does
+not relocate them, clone accounts, bypass licensing or automate sign-in. Real
+Minecraft sign-in, gameplay and multiplayer require their own observed evidence.

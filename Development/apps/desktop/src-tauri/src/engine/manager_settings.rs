@@ -67,11 +67,35 @@ impl PerformanceSettings {
         Ok(())
     }
 }
+pub(crate) fn application_root(executable: &std::path::Path) -> io::Result<PathBuf> {
+    let folder=executable.parent().ok_or_else(||io::Error::other("Application folder unavailable"))?;
+    if !folder.file_name().is_some_and(|name|name.eq_ignore_ascii_case("App")) {
+        for ancestor in folder.ancestors(){if ancestor.join("Development/package.json").is_file()&&ancestor.join("App").is_dir(){return Ok(ancestor.to_path_buf());}}
+    }
+    Ok(if folder.file_name().is_some_and(|name|name.eq_ignore_ascii_case("App")) {
+        folder.parent().ok_or_else(||io::Error::other("Project folder unavailable"))?
+    } else {folder}.to_path_buf())
+}
+pub(crate) fn product_settings() -> io::Result<PathBuf> {
+    product_directory("Settings")
+}
+pub(crate) fn product_cache() -> io::Result<PathBuf> {
+    product_directory("Cache")
+}
+fn product_directory(name:&str)->io::Result<PathBuf> {
+    let directory=application_root(&std::env::current_exe()?)?.join("Data").join(name);
+    for path in directory.ancestors() {
+        if !path.try_exists()? {continue;}
+        let metadata=fs::symlink_metadata(path)?;
+        #[cfg(windows)] {use std::os::windows::fs::MetadataExt;if metadata.file_attributes()&0x400!=0{return Err(io::Error::other("Settings path must not contain links"));}}
+        if !metadata.is_dir()||metadata.file_type().is_symlink(){return Err(io::Error::other("Settings path must contain ordinary directories"));}
+    }
+    Ok(directory)
+}
 fn performance_path() -> io::Result<PathBuf> {
-    Ok(std::env::current_exe()?
-        .parent()
-        .ok_or_else(|| io::Error::other("Application folder unavailable"))?
-        .join("performance.json"))
+    let directory=product_settings()?;
+    fs::create_dir_all(&directory)?;
+    Ok(directory.join("performance.json"))
 }
 pub fn load_performance() -> io::Result<PerformanceSettings> {
     read_performance(&performance_path()?)
@@ -134,9 +158,9 @@ fn write_performance(path: &std::path::Path, value: PerformanceSettings) -> io::
 // Preferences belong to the preview's own runtime data, but the desktop's
 // single-instance marker must remain shared across the older manager and the
 // preview to prevent two controllers from moving the same Minecraft window.
-#[cfg(feature = "native-workspace-preview")]
+#[cfg(all(not(feature="lazy-tester-package"),feature = "native-workspace-preview"))]
 const SETTINGS_VARIANT: &str = "NativePreview";
-#[cfg(not(feature = "native-workspace-preview"))]
+#[cfg(all(not(feature="lazy-tester-package"),not(feature = "native-workspace-preview")))]
 const SETTINGS_VARIANT: &str = "NativePilot";
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -167,12 +191,17 @@ impl ManagerSettings {
     }
 }
 fn path() -> io::Result<PathBuf> {
+    #[cfg(feature="lazy-tester-package")]
+    {return Ok(product_settings()?.join("manager-settings.json"));}
+    #[cfg(not(feature="lazy-tester-package"))]
+    {
     let base = std::env::var_os("LOCALAPPDATA")
         .ok_or_else(|| io::Error::other("Windows application data unavailable"))?;
     Ok(PathBuf::from(base)
         .join("MinecraftInstanceManager")
         .join(SETTINGS_VARIANT)
         .join("manager-settings.json"))
+    }
 }
 pub fn load() -> io::Result<ManagerSettings> {
     read(&path()?)

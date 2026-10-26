@@ -108,9 +108,17 @@ education_bootstrap::Config validate(HANDLE process, HANDLE thread, DWORD pid, U
     require(RegOpenCurrentUser(KEY_READ, &userKey.value) == ERROR_SUCCESS
         && keyName(userKey.value) == config.userKeyPath);
     wchar_t leaf[64]{};
-    require(probe::registryStoreLeaf(config.privateId, config.slot, leaf)
-        && _wcsicmp(keyName(backing.value).c_str(),
-            (std::wstring(config.userKeyPath) + L"\\Software\\MivubiEducationPilot\\" + leaf).c_str()) == 0);
+    require(probe::registryStoreLeaf(config.privateId, config.slot, leaf));
+    const auto backingName=keyName(backing.value);
+    const auto expected=std::wstring(config.userKeyPath)+L"\\Software\\MivubiEducationPilot\\"+leaf;
+    if (_wcsicmp(backingName.c_str(),expected.c_str())!=0) {
+        require(_wcsnicmp(backingName.c_str(),L"\\REGISTRY\\A\\",12)==0);
+        BYTE identity[28]{};DWORD kind=0,identitySize=sizeof(identity),slot=0;
+        require(RegQueryValueExW(backing.value,L"LazyTesterProfileIdentity",nullptr,&kind,identity,&identitySize)==ERROR_SUCCESS
+            && kind==REG_BINARY&&identitySize==sizeof(identity));
+        memcpy(&slot,identity+24,4);
+        require(slot==config.slot&&memcmp(identity,&config.privateId,sizeof(config.privateId))==0);
+    }
     return config;
 }
 void insert(HANDLE process) {

@@ -13,15 +13,28 @@ This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build
 
 ## Current Lazy Tester route — 26 October 2026
 
-Existing native registry stores now reopen through explicit current-user handles
-in independent_bootstrap.rs; product_profiles.rs shares that opener. Missing stores
+Project-local delivery has an icon-bearing native Lazy Tester.exe at checkout root.
+It forwards only to App/lazy-tester.exe and owns no configuration/session state.
+product_profiles.rs owns schema2 Data/Launchers/Minecraft-1..5, each with private
+Roaming/Local and Registry/HKCU.dat. Catalog validation binds user, directory and
+hive-file identities. The DLL/enroller validate inherited application hives using
+nonsecret directory/slot markers, retaining their ordinary-HKCU route and private
+ABI. Missing hives are not recreated. Data privacy ACLs precede profile creation.
+The fixed operator-only --lazy-tester-migrate-data copies the reviewed old five
+stores opaquely into project Data, preserving sources and publishing the catalog
+last. It never starts games or runs from packaging/installer hooks. See data-layout.md.
+manager_settings.rs and app_instance.rs use Data/Settings; root resolution also
+recognizes source execution within this checkout. New data locations stay in Data.
+
+Legacy native registry stores reopen through explicit current-user handles
+in independent_bootstrap.rs. Missing stores
 are never recreated as recovery. Product-only --lazy-tester-check-webview exercises
 the actual compiled Svelte/IPC startup in a hidden WebView with inspection-only
 handlers. startup_diagnostic_result emits bounded UI observations to stdout;
 normal startup also emits them without exiting. It is not a cached ready flag.
 Local delivery creates direct executable shortcuts, then verifies the normal UI
 through verify-desktop-startup.ps1, dispatched by the interactive Explorer desktop.
-It verifies the Explorer parent, exact App receipt/hash, Connected status and five
+It verifies Explorer -> root starter -> App ancestry, exact receipt/hashes, Connected status and five
 enabled launcher buttons. Build-tool child processes can see a different virtualized
 HKCU/AppData view despite the same user SID and logical registry root; their CLI
 or hidden WebView success alone cannot establish Desktop readiness. Missing stores
@@ -64,7 +77,7 @@ game shutdown remain unavailable; UI explanations do not authorize those actions
 
 Functional Settings uses the same lazy_tester_session adapter and retained
 session actor: InspectSettings, SavePerformance and ApplyPreset. Existing
-manager_settings.rs owns the executable-adjacent performance.json; the original
+manager_settings.rs owns Data/Settings/performance.json; the original
 game_preset.rs owns all graphics-option writes. Private presentation v3 passes
 validated immutable FPS limits to the existing pacer at startup. V2/defaults stay
 144/10; no parallel limiter, live update worker or profile-state owner is added.
@@ -84,7 +97,7 @@ independent_bootstrap/profile_binding.rs owns the installed product's explicit
 existing-profile import and private capability publication. It reuses the original
 replay identity validator, stores no login/world contents and never starts games.
 The UI consumes a separate typed binding report, not a game-ready/account flag.
-Its sibling product_profiles.rs owns the App/Data location pointer, private
+Its sibling product_profiles.rs owns the Data/Settings location pointer, private
 five-profile catalog, fresh store preparation and verified reopening/reattachment.
 It reuses the same storage constructor and session owner. The new
 lazy_tester_data_location command reports actual paths and gates native selection;

@@ -1343,13 +1343,27 @@ bool initializeRegistry(const InstallConfig& config) {
         } else if (swprintf_s(storePrefix, L"%s\\Software\\%s_Stores", userKeyPath, logical) < 0)
             return false;
         if (swprintf_s(expected, L"%s\\%s", storePrefix, leaf) < 0
-            || !keyName(config.inheritedRegistry, actual) || _wcsicmp(actual, expected) != 0)
-            return false;
+            || !keyName(config.inheritedRegistry, actual)) return false;
+        if (_wcsicmp(actual, expected) != 0) {
+            // A project-owned application hive carries only this nonsecret identity
+            // marker. Keep ordinary HKCU stores and their existing name binding.
+            if (!config.education || _wcsnicmp(actual, L"\\REGISTRY\\A\\", 12) != 0) return false;
+            wchar_t label[] = L"LazyTesterProfileIdentity";
+            UNICODE_STRING name{static_cast<USHORT>(sizeof(label)-sizeof(wchar_t)),sizeof(label),label};
+            alignas(8) BYTE buffer[40]{};
+            ULONG returned = 0;
+            if (originalQueryValue(config.inheritedRegistry, &name, 2, buffer, sizeof(buffer), &returned) < 0
+                || returned != sizeof(buffer)) return false;
+            ULONG kind = 0, dataLength = 0, slot = 0;
+            memcpy(&kind,buffer+4,4); memcpy(&dataLength,buffer+8,4); memcpy(&slot,buffer+36,4);
+            if (kind != REG_BINARY || dataLength != 28 || slot != config.slot
+                || memcmp(buffer+12,&ownDirectoryId,sizeof(ownDirectoryId)) != 0) return false;
+        }
         PUBLIC_OBJECT_BASIC_INFORMATION info{};
         ULONG returned = 0;
         if (queryObject(config.inheritedRegistry, 0, &info, sizeof(info), &returned) < 0
             || (info.GrantedAccess & KEY_ALL_ACCESS) != KEY_ALL_ACCESS) return false;
-        memcpy(storeOwn, expected, (wcslen(expected) + 1) * sizeof(wchar_t));
+        memcpy(storeOwn, actual, (wcslen(actual) + 1) * sizeof(wchar_t));
         privateHive.store(config.inheritedRegistry);
     }
     return true; // Handle/name metadata only; no load/create/profile/COM setup under loader lock.

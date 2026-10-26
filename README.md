@@ -13,9 +13,9 @@ There is one product source tree; do not maintain separate developing/release
 copies of the code.
 
 ```text
-RUN.cmd               Start the prepared local app (does not build or search folders)
+Lazy Tester.exe       Open the prepared local app directly, with its application icon
 App/                  Ignored runnable app, reviewed DLLs and build receipt
-Data/                 Ignored default product data location
+Data/                 Settings and private per-launcher files/registry hives
 Development/apps/desktop/         Desktop source, native integration and desktop build scripts
 Development/engine/               Runtime source and distribution contracts
 Development/tooling/              Developer tools, source checks and acceptance collectors
@@ -42,7 +42,12 @@ candidate while preserving the current App. Developer configuration is inside
 [Development](Development/README.md), and retained research is in
 [Archive](Archive/README.md). The old root apps/engine/tooling directories are gone.
 Portable toolchains stay in workspace/toolchains; new Cargo output defaults to
-workspace/builds/desktop/target. Existing compiler caches are retained.
+workspace/builds/desktop/target. Old source-tree Cargo caches were moved to
+workspace/archive/compiler-cache-20261026 without deleting their contents.
+
+The root executable starts only App/lazy-tester.exe and writes no separate
+configuration. Desktop/Start Menu shortcuts use that same entry point. RUN.cmd
+is retained only as a compatibility wrapper around the root executable.
 
 Only these three files are exported. Do not distribute this repository, a raw
 compiler output directory, `workspace`, or developer profile folders. The manifest

@@ -667,10 +667,10 @@ const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = None;
 #[cfg(not(test))]
 const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = Some(PayloadDigests {
     enroller: [
-        0x6e, 0x7c, 0x00, 0x0b, 0xee, 0x2d, 0xcf, 0x04, 0x3d, 0x37, 0x23, 0x17, 0xc7, 0x7a, 0x04, 0x07, 0x8c, 0xa1, 0x24, 0x51, 0xc7, 0x27, 0x3a, 0x18, 0xbd, 0x54, 0xe8, 0xf8, 0x9e, 0x62, 0xaf, 0x2a,
+        0x51, 0x51, 0x75, 0x28, 0x88, 0x64, 0x83, 0xba, 0x89, 0xf1, 0xb9, 0x3b, 0x44, 0x8c, 0x1d, 0xdd, 0x34, 0x9f, 0x26, 0xf0, 0xe4, 0x8e, 0x53, 0x22, 0xdb, 0x43, 0x4c, 0xbf, 0xe9, 0xc4, 0xde, 0x99,
     ],
     compatibility: [
-        0x9d, 0x1c, 0xf6, 0x06, 0x73, 0xc1, 0xeb, 0xbc, 0x0d, 0x94, 0xc3, 0x0c, 0x1e, 0x28, 0xe2, 0x26, 0xaa, 0x44, 0x29, 0x65, 0x39, 0x01, 0xe5, 0xab, 0xd6, 0xe9, 0x54, 0x00, 0x45, 0x7e, 0xf8, 0xcb,
+        0x0f, 0x45, 0xc0, 0x7b, 0x37, 0x0f, 0xf6, 0xc1, 0xbf, 0x15, 0x0c, 0xcc, 0x20, 0x87, 0x9f, 0xf6, 0x40, 0x6c, 0x20, 0x8f, 0x2b, 0x8c, 0x3c, 0xcd, 0xc5, 0x96, 0xb8, 0x2f, 0x25, 0x52, 0x38, 0x1e,
     ],
 });
 #[derive(Clone, Copy)]
@@ -1084,6 +1084,14 @@ fn prepare_registered_enrolled_for<const N: usize>() -> io::Result<PreparedEduca
 /// Fixed opt-in invocation in the existing manager, dispatched before creating its UI.
 /// No path/PID/options or hash override. Standard output is count/status metadata only.
 pub(super) fn maybe_run_startup_observation() -> bool {
+    #[cfg(feature = "lazy-tester-package")]
+    if std::env::args_os().skip(1).eq([OsString::from("--lazy-tester-migrate-data")]) {
+        use std::io::Write;
+        let result=std::thread::spawn(product_profiles::migrate_reviewed).join().unwrap_or_else(|_|Err(io::Error::other("Data migration task failed")));
+        let ready=result.is_ok();
+        let value=match result {Ok(())=>serde_json::json!({"schema":1,"configured":true,"migratedProfiles":5,"sourcePreserved":true,"gameLaunched":false}),Err(error)=>serde_json::json!({"error":error.to_string(),"sourcePreserved":true,"gameLaunched":false})};
+        let _=writeln!(io::stdout(),"{value}");std::process::exit(if ready{0}else{2});
+    }
     #[cfg(feature = "lazy-tester-package")]
     if std::env::args_os().skip(1).eq([OsString::from("--lazy-tester-initialize")]) {
         use std::io::Write;
@@ -2799,6 +2807,26 @@ mod tests {
 
     fn clone_store(store: &SlotStorage) -> SlotStorage {
         store.duplicate().unwrap()
+    }
+
+    #[test]
+    #[ignore="Requires the explicitly built own C++ payload; no game is launched"]
+    fn file_hives_reach_cpp_before_dependency_tls_and_survive_relaunch() {
+        let path=PathBuf::from(std::env::var_os("MIVUBI_BOOTSTRAP_CPP_READER").unwrap()).canonicalize().unwrap();
+        assert_eq!(path.file_name(),Some(OsStr::new("bootstrap-ordering.exe")));
+        let root=path.parent().unwrap();let library=BootstrapLibrary::load(root,fixture_digests(root)).unwrap();
+        let mut stores=test_slots();
+        for store in &mut stores {store.registry=product_profiles::open_hive(&store.private,store.slot,true).unwrap();}
+        let proof=FixtureReceipt::new();let mut wrong=clone_store(&stores[0]);wrong.registry=clone_store(&stores[1]).registry;
+        let mut rejected=create_unstarted_impl(&path,pin_image(&path).unwrap(),Some(wrong),false,Some(&proof)).unwrap();
+        assert_ne!(prepare_fixture(&library,&rejected,&proof,true),0);
+        assert!(library.enroll(&rejected).is_err());rejected.cancel().unwrap();
+        for _round in 1..=2 {for store in &stores {
+            let proof=FixtureReceipt::new();
+            let child=create_unstarted_impl(&path,pin_image(&path).unwrap(),Some(clone_store(store)),false,Some(&proof)).unwrap();
+            assert_eq!(prepare_fixture(&library,&child,&proof,true),0);
+            library.enroll(&child).unwrap();finish_fixture(&child);
+        }}
     }
 
     fn finish_fixture(child: &PendingEducationBootstrap) {

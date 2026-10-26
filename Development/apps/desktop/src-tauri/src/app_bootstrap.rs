@@ -8,7 +8,30 @@ pub fn run() {
         return;
     }
 
-    let context = tauri::generate_context!();
+    let mut context = tauri::generate_context!();
+    #[cfg(feature="lazy-tester-package")]
+    {
+        let storage=(||->std::io::Result<_>{
+            let cache=crate::engine::manager_settings::product_cache()?;
+            let temporary=cache.join("Temp");
+            let webview=cache.join("WebView");
+            for path in [&temporary,&webview] {
+                match std::fs::symlink_metadata(path) {
+                    Ok(metadata)=>{
+                        #[cfg(windows)] {use std::os::windows::fs::MetadataExt;if metadata.file_attributes()&0x400!=0{return Err(std::io::Error::other("Cache path must not contain links"));}}
+                        if !metadata.is_dir()||metadata.file_type().is_symlink(){return Err(std::io::Error::other("Cache path must be an ordinary directory"));}
+                    },
+                    Err(error)if error.kind()==std::io::ErrorKind::NotFound=>{},Err(error)=>return Err(error),
+                }
+                std::fs::create_dir_all(path)?;
+            }
+            Ok((temporary,webview))
+        })();
+        let (temporary,webview)=match storage {Ok(paths)=>paths,Err(error)=>{show_startup_error(&format!("Application cache is unavailable: {error}"));return;}};
+        // Process-local only, before the WebView and our worker threads start.
+        std::env::set_var("TEMP",&temporary);std::env::set_var("TMP",&temporary);
+        for window in &mut context.config_mut().app.windows {window.data_directory=Some(webview.clone());}
+    }
     #[cfg(all(windows, target_arch = "x86_64", feature = "lazy-tester-package"))]
     if std::env::args_os().skip(1).eq([std::ffi::OsString::from("--lazy-tester-check-webview")]) {
         check_webview_binding(context);

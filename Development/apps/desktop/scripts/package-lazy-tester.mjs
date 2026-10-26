@@ -5,6 +5,7 @@ import {copyFileSync, constants, existsSync, lstatSync, mkdirSync, mkdtempSync, 
 import {dirname, isAbsolute, relative, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {verifyLazyTesterPackage} from './check-lazy-tester-package.mjs';
+import {buildRootLauncher} from './build-root-launcher.mjs';
 
 const developmentRoot = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
 const root = resolve(developmentRoot, '..');
@@ -92,6 +93,15 @@ export function stageLocalApp(cwd, release, sha) {
     else if (bytes[0] !== 0x4d || bytes[1] !== 0x5a) throw new Error('Expected a Windows executable');
     return {name,bytes,sha256:digest(bytes)};
   });
+  const launcherPath=resolve(cwd,'Lazy Tester.exe');
+  const launcherBytes=readFileSync(resolve(release,'Lazy Tester.exe'));
+  if(launcherBytes.length>4*1024*1024||launcherBytes[0]!==0x4d||launcherBytes[1]!==0x5a)throw new Error('Invalid root launcher');
+  const launcher={name:'Lazy Tester.exe',sha256:digest(launcherBytes)};
+  if(existsSync(launcherPath)){
+    const info=lstatSync(launcherPath);
+    const prior=JSON.parse(readFileSync(resolve(app,'build-info.json'),'utf8'));
+    if(!info.isFile()||info.isSymbolicLink()||info.nlink!==1||!prior.launcher||digest(readFileSync(launcherPath))!==prior.launcher.sha256)throw new Error('Preserve an unrelated or modified root executable');
+  }
   const parent = resolve(cwd,'workspace/private/local-app-backups');
   ordinaryDirectories(parent); mkdirSync(parent,{recursive:true});
   const attempt = mkdtempSync(resolve(parent,'refresh-')), staged = resolve(attempt,'new-App');
@@ -109,11 +119,22 @@ export function stageLocalApp(cwd, release, sha) {
     copyFileSync(locator,resolve(staged,name),constants.COPYFILE_EXCL);
   }
   writeFileSync(resolve(staged,'build-info.json'),JSON.stringify({sourceCommit:sha,
-    files:files.map(({name,sha256})=>({name,sha256})),runtimeAcceptance:'NOT_EXECUTED'},null,2)+'\n',{flag:'wx'});
+    files:files.map(({name,sha256})=>({name,sha256})),launcher,runtimeAcceptance:'NOT_EXECUTED'},null,2)+'\n',{flag:'wx'});
+  const stagedLauncher=resolve(attempt,'new-launcher.exe');
+  writeFileSync(stagedLauncher,launcherBytes,{flag:'wx'});
+  const oldLauncher=existsSync(launcherPath)?resolve(attempt,'previous-launcher.exe'):null;
+  if(oldLauncher)renameSync(launcherPath,oldLauncher);
   const backup = existsSync(app) ? resolve(attempt,'previous-App') : null;
-  if (backup) renameSync(app,backup);
-  try { renameSync(staged,app); }
-  catch (error) { if (backup) renameSync(backup,app); throw error; }
+  try {
+    if (backup) renameSync(app,backup);
+    renameSync(staged,app);
+    renameSync(stagedLauncher,launcherPath);
+  } catch(error) {
+    if(existsSync(app)&&backup&&existsSync(backup))renameSync(app,resolve(attempt,'failed-App'));
+    if(backup&&existsSync(backup))renameSync(backup,app);
+    if(oldLauncher)renameSync(oldLauncher,launcherPath);
+    throw error;
+  }
   if (!existsSync(data)) mkdirSync(data); // Keep existing profiles and all contents untouched.
   return {app,data,backup};
 }
@@ -141,6 +162,7 @@ function main() {
   const version = readFileSync(resolve(developmentRoot,'VERSION'),'utf8').trim();
   const stamp = new Date().toISOString().replace(/[-:.]/g,'');
   execFileSync(process.execPath,[npm,'--prefix',resolve(developmentRoot,'apps/desktop'),'run','build:app'], {cwd:developmentRoot, stdio:'inherit', env:{...process.env,CARGO_TARGET_DIR:target}});
+  buildRootLauncher(root,resolve(target,'x86_64-pc-windows-msvc/release'));
   if (sourceRevision(root) !== sha) throw new Error('Source changed during the build; no candidate exported');
   const installer = resolve(target,'x86_64-pc-windows-msvc/release/bundle/nsis',`Lazy Tester_${version}_x64-setup.exe`);
   const result = assembleCandidate(root,installer,sha,version,stamp);

@@ -34,6 +34,11 @@ export function checkPhysical(root) {
   const errors = [];
   for (const entry of readdirSync(root, {withFileTypes:true})) {
     if (entry.name === '.git') continue; // A linked worktree may use a .git file.
+    if (entry.name === 'Lazy Tester.exe') {
+      const info = lstatSync(resolve(root,entry.name));
+      if (!info.isFile() || info.isSymbolicLink()) errors.push('Expected ordinary root launcher: ' + entry.name);
+      continue; // Generated, ignored entry point; never source control a local executable.
+    }
     if (['App', 'Data', 'Logs', ...roots].includes(entry.name)) {
       const info = lstatSync(resolve(root, entry.name));
       if (!info.isDirectory() || info.isSymbolicLink()) errors.push('Expected ordinary directory: ' + entry.name);
