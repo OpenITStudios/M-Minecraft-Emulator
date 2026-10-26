@@ -20,6 +20,10 @@ route to `engine/native_clients_session.rs` (reconnecting transport via its
 `independent_bootstrap/session_controller.rs`. That owner reuses the reviewed
 five-profile capability, game/DLL verification, original process handles, FPS
 policy channels, and preset writer. It is not a second Windows isolation engine.
+Its sibling independent_bootstrap/profile_storage.rs owns bounded cache
+classification, disk-space metadata and handle-based HTTP-cache deletion; the
+session actor alone admits cleanup against game lifetime. No other storage owner
+or periodic cleaner exists.
 
 Native composition, five-window parking and recovery remain owned by
 `workspace_surface.rs`. Its `workspace_surface/previews.rs` owns the four DWM

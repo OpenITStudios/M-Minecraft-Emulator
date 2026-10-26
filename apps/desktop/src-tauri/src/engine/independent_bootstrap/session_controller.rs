@@ -186,6 +186,11 @@ impl Sessions {
                     bytes: 0,
                     files: 0,
                     partial: false,
+                    disk: profile_storage::disk(&store.private).ok(),
+                    cache: profile_storage::inspect(
+                        &store.private,
+                        self.running.iter().all(Option::is_none),
+                    ),
                 };
                 scan(&path, &mut result, std::time::Instant::now(), 0);
                 Ok(result)
@@ -218,6 +223,23 @@ impl Sessions {
             ));
         }
         Ok(())
+    }
+
+    fn clear_cache(&mut self, slot: u32) -> io::Result<()> {
+        self.reap();
+        let inactive = self.running.iter().all(Option::is_none);
+        // Requests are serialized with launches by this sole session actor.
+        // External/unattributed games must also be closed, without killing any.
+        if !inactive
+            || !super::super::inspect_native_workspace()?
+                .processes
+                .is_empty()
+        {
+            return Err(invalid(
+                "Close all Minecraft sessions normally before clearing cache",
+            ));
+        }
+        profile_storage::clear(&self.store(slot)?.private, inactive)
     }
 }
 
@@ -389,6 +411,12 @@ fn run() -> io::Result<()> {
                 SessionRequest::InspectStorage => {
                     storage = Some(sessions.storage().map_err(|error| error.to_string())?)
                 }
+                SessionRequest::ClearProfileCache { slot } => {
+                    sessions
+                        .clear_cache(slot)
+                        .map_err(|error| error.to_string())?;
+                    storage = Some(sessions.storage().map_err(|error| error.to_string())?);
+                }
                 SessionRequest::OpenProfileFolder { slot } => sessions
                     .open_folder(slot)
                     .map_err(|error| error.to_string())?,
@@ -443,6 +471,8 @@ mod tests {
             bytes: 0,
             files: 0,
             partial: false,
+            disk: None,
+            cache: Default::default(),
         };
         scan(&directory, &mut result, std::time::Instant::now(), 0);
         assert_eq!((result.bytes, result.files, result.partial), (40, 2, false));

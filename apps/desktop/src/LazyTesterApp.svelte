@@ -6,6 +6,7 @@
   import './lazy-tester.css';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
+  let clearSlot: ProfileSlot | null = null, storageNotice = '';
   let page: 'workspace' | 'launchers' | 'storage' | 'settings' = 'workspace';
   let active: ProfileSlot | null = null, requested: ProfileSlot | null = null, queued: ProfileSlot | null = null;
   let viewport: HTMLDivElement, observer: ResizeObserver | undefined;
@@ -122,7 +123,7 @@
   }
   async function inspectStorage() {
     if (busy || refreshing || resizing) return;
-    busy = true; issue = '';
+    busy = true; issue = ''; clearSlot = null; storageNotice = '';
     try { const snapshot = await lazyTester.storage(); profiles = snapshot.profiles; storage = snapshot.storage; }
     catch (error) { issue = String(error); }
     finally { busy = false; }
@@ -133,6 +134,17 @@
     try { await lazyTester.openFolder(slot); }
     catch (error) { issue = String(error); }
     finally { busy = false; }
+  }
+  async function clearCache(slot: ProfileSlot) {
+    if (busy || refreshing || resizing || clearSlot !== slot || runningCount > 0) return;
+    busy = true; issue = ''; storageNotice = ''; clearSlot = null;
+    try {
+      const snapshot = await lazyTester.clearCache(slot);
+      profiles = snapshot.profiles; storage = snapshot.storage;
+      storageNotice = 'Cache web Minecraft - ' + slot + ' telah dibersihkan. Cache dapat dibuat kembali saat dibutuhkan.';
+    } catch (error) {
+      issue = String(error); storage = null;
+    } finally { busy = false; }
   }
   onMount(() => {
     mounted = true; void refresh();
@@ -190,7 +202,36 @@
       <p class="lt-description">Buka hanya Minecraft yang ingin Anda gunakan. Tidak ada game yang dibuka otomatis.</p>
       <div class="lt-profile-list">{#each profiles as profile (profile.slot)}<article><span class="lt-profile-number">{profile.slot}</span><div><h2>Minecraft - {profile.slot}</h2><p>{labels[profile.state]}</p>{#if profile.issue}<p class="lt-error">{profile.issue}</p>{/if}</div>{#if profile.state === 'RUNNING'}<button disabled={busy || !available} on:click={() => select(profile.slot)}>Tampilkan</button>{:else}<button disabled={busy || refreshing || resizing || !available || ['STARTING','NOT_RESPONDING'].includes(profile.state)} on:click={() => launch(profile.slot)}>{profile.state === 'STARTING' ? 'Membuka…' : profile.state === 'NOT_RESPONDING' ? 'Tidak merespons' : 'Buka Minecraft'}</button>{/if}</article>{/each}</div>
     {:else if page === 'storage'}
-      <section class="lt-panel"><h2>Data terpisah untuk setiap Minecraft</h2><p>Akun, dunia, dan pengaturan memakai lima profil yang sama dengan sesi sebelumnya. Ukuran dihitung hanya saat diminta, tanpa membaca isi file.</p><p><button disabled={busy || refreshing} on:click={inspectStorage}>{busy ? 'Menghitung…' : 'Hitung penggunaan ruang'}</button></p>{#if storage}{#each storage as item}<div class="lt-setting"><div><strong>Minecraft - {item.slot}</strong><p>{(item.bytes / 1048576).toFixed(1)} MB · {item.files.toLocaleString('id-ID')} file{item.partial ? ' · sebagian belum terhitung' : ''}</p></div><button class="lt-secondary" disabled={busy || refreshing} on:click={() => openFolder(item.slot)}>Buka folder</button></div>{/each}<p>Ukuran merupakan hasil pengukuran terakhir dan dapat berubah selama bermain.</p>{/if}<p>Pembersihan cache belum diaktifkan: folder yang aman dihapus harus dipisahkan terlebih dahulu dari data login dan dunia.</p></section>
+      <section class="lt-panel">
+        <h2>Penyimpanan Minecraft</h2>
+        <p>Akun, dunia, dan pengaturan tetap berada di profil masing-masing. Ukuran dihitung saat diminta dan dapat berubah selama bermain.</p>
+        <p><button disabled={busy || refreshing || resizing} on:click={inspectStorage}>{busy ? 'Memproses…' : 'Hitung penggunaan ruang'}</button></p>
+        {#if storageNotice}<p role="status">{storageNotice}</p>{/if}
+        {#if storage}
+          {#each storage as item}
+            <article class="lt-storage-profile">
+              <h3>Minecraft - {item.slot}</h3>
+              <div class="lt-storage-metrics">
+                <div><span>Data profil</span><strong>{(item.bytes / 1048576).toFixed(1)} MB</strong><small>{item.files.toLocaleString('id-ID')} file{item.partial ? ' · perhitungan sebagian' : ''}</small></div>
+                <div><span>Ruang disk tersedia</span><strong>{item.disk ? (item.disk.availableBytes / 1073741824).toFixed(1) + ' GB' : 'Tidak tersedia'}</strong><small>{item.disk ? 'dari ' + (item.disk.totalBytes / 1073741824).toFixed(1) + ' GB · dipakai bersama' : 'Windows belum memberikan informasi disk'}</small></div>
+                <div><span>Cache web yang dikenali</span><strong>{item.cache.partial ? 'Belum dapat dihitung' : (item.cache.bytes / 1048576).toFixed(1) + ' MB'}</strong><small>Termasuk dalam ukuran profil</small></div>
+              </div>
+              {#if item.cache.issue}<p>{item.cache.issue}</p>{/if}
+              <div class="lt-actions">
+                <button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={() => openFolder(item.slot)}>Buka folder</button>
+                <button class="lt-secondary" disabled={busy || refreshing || resizing || runningCount > 0 || !item.cache.canClear} on:click={() => clearSlot = item.slot}>Bersihkan cache</button>
+              </div>
+              {#if clearSlot === item.slot && item.cache.canClear && runningCount === 0}
+                <div class="lt-cache-confirm" role="group" aria-label={'Konfirmasi pembersihan cache Minecraft - ' + item.slot}>
+                  <p>Hapus {(item.cache.bytes / 1048576).toFixed(1)} MB cache web Minecraft - {item.slot}? Login, dunia, pengaturan, dan cache lain tetap dipertahankan. Pembukaan konten web berikutnya mungkin lebih lambat.</p>
+                  <div class="lt-actions"><button disabled={busy || refreshing || resizing} on:click={() => clearCache(item.slot)}>Hapus cache terpilih</button><button class="lt-secondary" disabled={busy} on:click={() => clearSlot = null}>Batal</button></div>
+                </div>
+              {/if}
+            </article>
+          {/each}
+        {/if}
+        <p>Pembersihan hanya mencakup cache HTTP Code Builder yang dikenali. Semua Minecraft harus ditutup normal; berkas terkunci, tautan, dan data yang belum dikenali tidak dibersihkan.</p>
+      </section>
     {:else if page === 'settings'}
       <section class="lt-panel"><h2>Performa</h2><div class="lt-setting"><span>FPS saat game aktif</span><strong>144</strong></div><div class="lt-setting"><span>FPS saat game di latar</span><strong>10</strong></div><p>Angka di atas adalah batas FPS. Counter di dalam game menunjukkan hasil aktual.</p><h2>Preset grafis</h2><p>Simple · jarak render 12 chunk · efek visual hemat. Diterapkan sebelum profil dibuka; jarak simulasi dipertahankan.</p><h2>Saat aplikasi ditutup</h2><p>Minecraft tetap berjalan. Jendela yang ditampilkan dikembalikan ke Windows.</p></section>
     {/if}

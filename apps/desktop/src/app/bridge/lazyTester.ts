@@ -10,7 +10,11 @@ export interface ProfileSession {
   process: OwnedProcess | null;
   issue: string | null;
 }
-export interface ProfileStorage {slot: ProfileSlot; bytes: number; files: number; partial: boolean}
+export interface ProfileStorage {
+  slot: ProfileSlot; bytes: number; files: number; partial: boolean;
+  disk: {availableBytes: number; totalBytes: number} | null;
+  cache: {bytes: number; files: number; partial: boolean; canClear: boolean; issue: string | null};
+}
 export interface SessionSnapshot {schema: 1; profiles: ProfileSession[]; storage: ProfileStorage[] | null}
 export interface PreviewPlacement {slot: ProfileSlot; viewport: WorkspaceViewport}
 export interface PreviewStatus {slot: ProfileSlot; registered: boolean; reason: string | null}
@@ -38,9 +42,20 @@ export function parseSession(value: unknown): SessionSnapshot {
   if (value.storage !== null) {
     if (!Array.isArray(value.storage) || value.storage.length !== 5) throw new TypeError('Invalid storage response');
     value.storage.forEach((storage: unknown, index: number) => {
-      if (!record(storage) || !exact(storage, ['slot', 'bytes', 'files', 'partial']) || storage.slot !== index + 1 ||
+      if (!record(storage) || !exact(storage, ['slot', 'bytes', 'files', 'partial', 'disk', 'cache']) || storage.slot !== index + 1 ||
           !Number.isSafeInteger(storage.bytes) || Number(storage.bytes) < 0 || !Number.isInteger(storage.files) ||
           Number(storage.files) < 0 || Number(storage.files) > 100000 || typeof storage.partial !== 'boolean') throw new TypeError('Invalid storage metadata');
+      const {disk, cache} = storage;
+      if (disk !== null && (!record(disk) || !exact(disk, ['availableBytes', 'totalBytes']) ||
+          !Number.isSafeInteger(disk.availableBytes) || Number(disk.availableBytes) < 0 ||
+          !Number.isSafeInteger(disk.totalBytes) || Number(disk.totalBytes) <= 0 ||
+          Number(disk.availableBytes) > Number(disk.totalBytes))) throw new TypeError('Invalid disk metadata');
+      if (!record(cache) || !exact(cache, ['bytes', 'files', 'partial', 'canClear', 'issue']) ||
+          !Number.isSafeInteger(cache.bytes) || Number(cache.bytes) < 0 || !Number.isInteger(cache.files) ||
+          Number(cache.files) < 0 || Number(cache.files) > 2048 || typeof cache.partial !== 'boolean' ||
+          typeof cache.canClear !== 'boolean' || !(cache.issue === null || typeof cache.issue === 'string' && cache.issue.length <= 8192) ||
+          cache.canClear && (cache.partial || cache.files === 0 || cache.issue !== null ||
+            (value.profiles as ProfileSession[]).some(profile => ['STARTING', 'RUNNING', 'NOT_RESPONDING'].includes(profile.state)))) throw new TypeError('Invalid cache metadata');
     });
   }
   return value as unknown as SessionSnapshot;
@@ -71,6 +86,7 @@ export const lazyTester = {
   launch: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'Launch', slot}})),
   storage: async () => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'InspectStorage'}})),
   openFolder: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'OpenProfileFolder', slot}})),
+  clearCache: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'ClearProfileCache', slot}})),
   present: (slot: ProfileSlot, rect: WorkspaceRectangle) => invokeRuntime<void>('lazy_tester_present', {
     slot, viewport: workspaceViewport(rect, window.devicePixelRatio),
   }),

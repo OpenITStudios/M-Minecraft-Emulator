@@ -444,6 +444,8 @@ mod game_preset;
 
 #[path = "independent_bootstrap/session_controller.rs"]
 mod session_controller;
+#[path = "independent_bootstrap/profile_storage.rs"]
+mod profile_storage;
 
 /// Source-only two-slot preparation. No game/DLL code can be resumed here.
 /// The existing registered-image resolver remains the only target selector.

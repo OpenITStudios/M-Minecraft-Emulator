@@ -34,8 +34,10 @@ fixtures, including two successive client processes. Four native DWM preview til
 are now wired into the workspace, with background adoption and retained recovery
 checkpoints. Native DWM registration/update/release passed on hidden test windows;
 live Minecraft pixels, offscreen host-world behavior and the complete UI remain
-unverified. Safe cache cleanup, final installed branding and a portable product
-payload remain unfinished. Task Manager grouping is not claimed.
+unverified. Per-profile disk usage/free-space reporting and explicit classified
+HTTP-cache cleanup are implemented with inactive-game admission and handle-based
+filesystem checks, verified only on disposable fixtures. Final installed branding
+and a portable product payload remain unfinished. Task Manager grouping is not claimed.
 
 See [workspace contract](docs/product/unified-workspace.md) for product behavior,
 [implementation map](docs/system/implementation-map.md) for ownership, and

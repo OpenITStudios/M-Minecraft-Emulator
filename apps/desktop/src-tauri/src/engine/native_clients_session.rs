@@ -30,6 +30,23 @@ pub struct ProfileStorage {
     pub bytes: u64,
     pub files: u32,
     pub partial: bool,
+    pub disk: Option<DiskSpace>,
+    pub cache: CacheStorage,
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DiskSpace {
+    pub available_bytes: u64,
+    pub total_bytes: u64,
+}
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CacheStorage {
+    pub bytes: u64,
+    pub files: u32,
+    pub partial: bool,
+    pub can_clear: bool,
+    pub issue: Option<String>,
 }
 impl SessionSnapshot {
     pub fn stopped() -> Self {
@@ -54,6 +71,7 @@ pub enum SessionRequest {
     Inspect,
     InspectStorage,
     OpenProfileFolder { slot: u32 },
+    ClearProfileCache { slot: u32 },
     Launch { slot: u32 },
 }
 
@@ -79,7 +97,7 @@ static CONTROLLER: Mutex<Controller> = Mutex::new(Controller {
 
 #[cfg(windows)]
 pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
-    if matches!(request, SessionRequest::Launch { slot } | SessionRequest::OpenProfileFolder { slot } if !(1..=5).contains(&slot))
+    if matches!(request, SessionRequest::Launch { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } if !(1..=5).contains(&slot))
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,

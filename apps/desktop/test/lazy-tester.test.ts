@@ -7,6 +7,27 @@ const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process
   pid: slot + 100, createdFileTime: String(slot + 200), sessionId: 1, windowHandle: `0x${slot}`, responding: true,
 }});
 describe('Lazy Tester profile contract', () => {
+  it('validates quota-aware disk space and refuses unsafe cache cleanup status', () => {
+    const storage = [1,2,3,4,5].map(slot => ({slot, bytes: 100, files: 2, partial: false,
+      disk: {availableBytes: 20, totalBytes: 1000},
+      cache: {bytes: 50, files: 1, partial: false, canClear: true, issue: null}}));
+    const snapshot = {...stopped(), storage};
+    expect(parseSession(snapshot).storage![4]!.cache.canClear).toBe(true);
+    expect(parseSession({...snapshot, storage: storage.map(item => ({...item, disk: null}))}).storage![0]!.disk).toBeNull();
+    const invalid = [
+      {...storage[0]!, disk: {availableBytes: 1001, totalBytes: 1000}},
+      {...storage[0]!, disk: {availableBytes: -1, totalBytes: 1000}},
+      {...storage[0]!, cache: {...storage[0]!.cache, partial: true}},
+      {...storage[0]!, cache: {...storage[0]!.cache, issue: 'Locked'}},
+      {...storage[0]!, cache: {...storage[0]!.cache, files: 0}},
+      {...storage[0]!, cache: {...storage[0]!.cache, files: 2049}},
+      {...storage[0]!, cache: {...storage[0]!.cache, path: 'untrusted'}},
+    ];
+    for (const item of invalid) expect(() => parseSession({...snapshot, storage: [item, ...storage.slice(1)]})).toThrow();
+    const active = {...snapshot, profiles: snapshot.profiles.map(profile => profile.slot === 2 ? running(2) : profile)};
+    expect(() => parseSession(active)).toThrow();
+    expect(parseSession({...active, storage: storage.map(item => ({...item, cache: {...item.cache, canClear: false, issue: 'Close Minecraft'}}))}).storage).toHaveLength(5);
+  });
   it('validates exactly the requested preview slots and keeps unavailable previews explicit',()=>{
     const report={schema:1,tiles:[{slot:2,registered:true,reason:null},{slot:5,registered:false,reason:'Window not available'}]};
     expect(parsePreviewReport(report,[2,5])).toEqual(report);
