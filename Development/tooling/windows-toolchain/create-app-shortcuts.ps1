@@ -3,6 +3,7 @@ param(
     [switch]$PlanOnly
 )
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Utility') -ErrorAction Stop
 $checkout = (Resolve-Path -LiteralPath $Root).Path
 $appFolder = Join-Path $checkout 'App'
 $executable = Join-Path $appFolder 'lazy-tester.exe'

@@ -1,5 +1,7 @@
 param([Parameter(Mandatory=$true)][string]$Root, [switch]$KeepOpen)
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Utility') -ErrorAction Stop
+Import-Module (Join-Path $PSHOME 'Modules/CimCmdlets') -ErrorAction Stop
 $checkout = (Resolve-Path -LiteralPath $Root).Path
 $appFolder = Join-Path $checkout 'App'
 $executable = Join-Path $appFolder 'lazy-tester.exe'
