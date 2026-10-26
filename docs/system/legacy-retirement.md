@@ -15,7 +15,8 @@ lifecycle: ACTIVE
 This document is the **single deprecation register**. Executable command
 authority is engine/runtime-core/src/command.rs; desktop entry is
 apps/desktop/src/main.ts; Tauri command registration is
-apps/desktop/src-tauri/src/app_bootstrap.rs. Retired code is not removed.
+apps/desktop/src-tauri/src/app_bootstrap.rs. Retired runtime/VM code remains gated;
+the old desktop UI is preserved in immutable Git archives rather than active copies.
 
 ## Lazy Tester archive transition — 26 October 2026
 
@@ -24,15 +25,32 @@ The pre-migration repository is preserved on
 `d166b5c8b24e8435f2c84675cb00a61c753aeb6a`. Only `Local` receives product changes.
 
 `LazyTesterApp.svelte` now replaces `UnifiedManagerApp.svelte` at the mounted entry.
-Old Unified/Compact/VM screens are historical source, not alternate user launchers.
-The old app.css is now also excluded from the active entry/bundle; Lazy Tester
-consumes its own stylesheet. Physical legacy source relocation is still pending.
-Their remaining tests/imports and shared Rust consumers must be traced before a
-physical source move; this first integration does not claim that cleanup completed.
+Old Unified/Compact/VM/feasibility screens and their exclusive TS/components/styles
+are now removed from the active source tree: 35 files, plus 20 exclusive test files
+and three UI-only cases in retained mixed suites. The exact pre-removal source,
+including the old verifier, remains at
+[5601c354fb91db78a2697ceb6ec710590d7d17be](https://github.com/OpenITStudios/M-Minecraft-Emulator/tree/5601c354fb91db78a2697ceb6ec710590d7d17be/apps/desktop).
+The earlier archive branch remains intact. This avoids a second stale code mirror
+inside Local. No installed app or runtime data is an archive target.
+
+The active frontend has seven reachable files: main entry, LazyTesterApp, its CSS,
+and lazyTester/invokeRuntime/workspaceSurface/observedProcess bridges. The shared
+OS process parser was extracted byte-for-byte from the retired owned-provider
+bridge; its bounds/unknown-field tests remain active. Legacy provider presentation
+methods were removed from the frontend facade; Rust presentation/recovery owners
+remain unchanged. Existing workspace Rust-boundary tests remain active.
+
+The root verifier now checks this real import graph and current package/legacy
+holds. Obsolete UI/vendor-marker assertions are archived with their source.
+Version/lock metadata, CI-off, private outputs/bindings, VM command pause ordering,
+unregistered VM handlers, Sandboxie refusal, legacy installer hold, native package
+identity/resources and documentation links remain checked. Backend tests and
+optional historical tooling routes are retained; no VM/Sandboxie gate was relaxed.
 Sandboxie/VMware startup and installer gates remain disabled. No account-bearing
 files, guest disks, installed services, worlds, or snapshots were moved or deleted.
 
-Current runtime source must not be archived merely because its directory is named
+Other backend/source retirement still requires consumer tracing. Current runtime
+source must not be archived merely because its directory is named
 `acceptance`: bootstrap-ordering contains the actually used independent DLL code.
 Likewise, `OwnedProcess` is still a shared process metadata type consumed by native
 presentation. Remove historical dependencies through their consumers before moving

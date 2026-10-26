@@ -20,9 +20,4 @@ describe("Active native-first startup boundary", () => {
     expect(bootstrap).not.toContain("commands::window_arrangement::window_");
   });
 
-  it("keeps archived VM diagnostics from polling update checks in refresh", () => {
-    const source = readFileSync(new URL("../src/App.svelte", import.meta.url), "utf8");
-    const refresh = source.slice(source.indexOf("async function refresh"), source.indexOf("async function checkUpdateOnce"));
-    expect(refresh).not.toContain("backend.checkUpdate()");
-  });
 });

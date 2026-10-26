@@ -20,28 +20,9 @@ it('keeps focus authority in the foreground manager and geometry in the recovery
 it('keeps fractional CSS coordinates and explicit display scale for native conversion',()=>{
   expect(workspaceViewport({x:40.25,y:80.5,width:960.5,height:540.25},1.5)).toEqual({x:40.25,y:80.5,width:960.5,height:540.25,pixelRatio:1.5});
 });
-it('retries layout on the next event after a transient error instead of permanently disabling resize',async()=>{
-  const source=readFileSync(new URL('../src/NativeWorkspace.svelte',import.meta.url),'utf8');
-  const start=source.indexOf('async function update()'),end=source.indexOf('async function returnToWindows()',start);
-  const fn=source.slice(start,end);
-  let attempts=0;
-  const run=new Function('workspaceSurface',`let suspended=false,updatePending=false,updating=false,busy=false,working=false,activeClient='01',failedPresentation=null,issue=null;const viewport={getBoundingClientRect:()=>({})};const operationIssue=e=>e;${fn};return (async()=>{await update();await update();})();`);
-  await run({update:async()=>{if(++attempts===1)throw new Error('layout changed');}});
-  expect(attempts).toBe(2);
-});
 it('rejects impossible areas and nonfinite or unsupported display scale before IPC',()=>{
   for(const rect of [{x:-1,y:0,width:800,height:600},{x:0,y:NaN,width:800,height:600},{x:0,y:0,width:0,height:600},{x:19999,y:0,width:800,height:600}])expect(()=>workspaceViewport(rect)).toThrow();
   for(const scale of [0,Infinity,NaN,9])expect(()=>workspaceViewport({x:0,y:0,width:800,height:600},scale)).toThrow();
-});
-
-it('observed-window refresh checks the selected slot rather than treating any game PID as its identity',()=>{
-  const source=readFileSync(new URL('../src/NativeWorkspace.svelte',import.meta.url),'utf8');
-  expect(source).toContain('export async function reconcileObserved(assignments:ObservedSlotMap)');
-  expect(source).toContain('const process=assignments[activeClient]');
-  expect(source).toContain('await reconcileProcesses(process?[process]:[])');
-  expect(source).toContain('if(releaseOnly)await workspaceSurface.presentObserved');
-  const manager=readFileSync(new URL('../src/UnifiedManagerApp.svelte',import.meta.url),'utf8');
-  expect(manager).toContain('await workspace.reconcileObserved(observedSlots)');
 });
 
 it('retained workspace windows require positive OS identity even when native queries fail',()=>{

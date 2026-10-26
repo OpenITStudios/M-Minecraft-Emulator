@@ -57,7 +57,10 @@ The pre-Lazy-Tester source is preserved at
 pinned to `d166b5c8b24e8435f2c84675cb00a61c753aeb6a`. This is a historical
 snapshot, not another active implementation branch. The
 [retirement register](docs/system/legacy-retirement.md) owns remaining source
-removal/movement. Legacy disks, worlds, accounts, and installed data are retained.
+removal/movement. The 35 retired frontend files and their exclusive tests have
+left the active tree and remain recoverable at pre-removal commit 5601c354.
+The sole mounted frontend is Lazy Tester, with seven reachable source files.
+Legacy disks, worlds, accounts, and installed data are retained.
 
 The GUI continues to use Tauri 2, Rust, Svelte, and TypeScript with locked existing
 dependencies. The [native packaging decision](engine/distribution/README.md)

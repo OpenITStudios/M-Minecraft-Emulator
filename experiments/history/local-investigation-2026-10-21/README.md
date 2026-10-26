@@ -8,7 +8,10 @@ Audit dimulai pada `Local` `2668c21037451b6ece2497581092d86047c5c2d1` yang saat
 itu sama dengan GitHub. Tidak ada perubahan tracked atau untracked biasa yang
 belum dikirim; skrip di bawah sebelumnya tersembunyi oleh aturan ignore workspace.
 
-## Mulai analisis dari source aktif
+## Rujukan source dan snapshot sebelum pengarsipan UI
+
+Bridge/layar lama yang sudah dikeluarkan dari source aktif ditautkan ke snapshot
+Git `5601c354`. Rujukan ini hanya untuk membaca histori, bukan menjalankan UI lama.
 
 | Bagian | Source / catatan kanonis |
 | --- | --- |
@@ -16,9 +19,9 @@ belum dikirim; skrip di bawah sebelumnya tersembunyi oleh aturan ignore workspac
 | Arsitektur dan tanggung jawab | [Architecture](../../../docs/system/architecture.md) |
 | Status jeda | [Development handoff](../../../planning/development.md) |
 | Batas pensiun dan perlindungan data lama | [Retirement register](../../../docs/system/legacy-retirement.md) |
-| Inspector identitas Windows | [instance_identity.rs](../../../apps/desktop/src-tauri/src/engine/instance_identity.rs), [typed bridge](../../../apps/desktop/src/app/bridge/processContext.ts), [tests](../../../apps/desktop/test/process-context.test.ts) |
+| Inspector identitas Windows | [instance_identity.rs](../../../apps/desktop/src-tauri/src/engine/instance_identity.rs), [typed bridge arsip](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/5601c354fb91db78a2697ceb6ec710590d7d17be/apps/desktop/src/app/bridge/processContext.ts), [tests arsip](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/5601c354fb91db78a2697ceb6ec710590d7d17be/apps/desktop/test/process-context.test.ts) |
 | Native AppContainer sintetis | [appcontainer-probe.cpp](../../../tooling/acceptance/windows/appcontainer-probe.cpp), [runner](../../../tooling/acceptance/windows/test-appcontainer-isolation.ps1) |
-| Tab dan recovery window | [workspace_surface.rs](../../../apps/desktop/src-tauri/src/engine/workspace_surface.rs), [NativeWorkspace.svelte](../../../apps/desktop/src/NativeWorkspace.svelte) |
+| Tab dan recovery window | [workspace_surface.rs](../../../apps/desktop/src-tauri/src/engine/workspace_surface.rs), [NativeWorkspace.svelte arsip](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/5601c354fb91db78a2697ceb6ec710590d7d17be/apps/desktop/src/NativeWorkspace.svelte) |
 | Penolakan launch route lama | [instance_catalog.rs](../../../apps/desktop/src-tauri/src/engine/instance_catalog.rs) |
 | Source fork lama, sudah dipensiunkan | [engine/isolation-owned](../../../engine/isolation-owned/) dan histori Git; bukan implementasi engine mandiri |
 

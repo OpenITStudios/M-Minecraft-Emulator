@@ -1,5 +1,5 @@
 import {invokeRuntime} from './invokeRuntime.js';
-import {parseObservedProcess, type OwnedProcess} from './ownedProviderApi.js';
+import {parseObservedProcess, type OwnedProcess} from './observedProcess.js';
 import {previewViewport, workspaceViewport, type WorkspaceRectangle, type WorkspaceViewport} from './workspaceSurface.js';
 
 export const profileSlots = [1, 2, 3, 4, 5] as const;

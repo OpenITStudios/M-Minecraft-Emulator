@@ -28,6 +28,11 @@ independent_bootstrap/profile_binding.rs owns the installed product's explicit
 existing-profile import and private capability publication. It reuses the original
 replay identity validator, stores no login/world contents and never starts games.
 The UI consumes a separate typed binding report, not a game-ready/account flag.
+The frontend's only other runtime bridges are invokeRuntime, workspaceSurface and
+observedProcess. The latter retains the shared validated OS metadata parser; it
+does not import any retired provider API. All active frontend files are reachable
+from main.ts. Old screens/VM schemas and exclusive tests are preserved in Git at
+5601c354fb91db78a2697ceb6ec710590d7d17be; consult legacy-retirement.md.
 
 Native packaging policy is engine/distribution/lazy-tester-package.json; the
 consumer is tauri.lazy-tester.conf.json with the lazy-tester-package feature and
@@ -42,7 +47,7 @@ preview destinations, geometry checks, click notifications and visibility;
 `workspace_surface/recovery_gate.rs` serializes original-checkpoint handoff across
 GUI/recovery-helper exits. Neither module owns game lifecycle or profile storage.
 Compatibility DLL code still lives in `tooling/acceptance/windows/bootstrap-ordering/`;
-its product-source relocation is pending. UI copies and old provider/source paths
+its product-source relocation is pending. Archived UI and old provider/source paths
 below are historical navigation. Current evidence and next work belong only to
 [planning/development.md](../../planning/development.md).
 
@@ -367,7 +372,7 @@ they must never be chosen automatically as current build or activation code.
 | --- | --- | --- |
 | Classic credential fallback, Protected Storage host fallback and compartment bypass | `engine/isolation-owned/Sandboxie/core/dll/cred.c`, `pst.cpp`, `ipstore_impl.cpp` and `core/svc/pstoreserver.cpp` | Exact current delta in `tooling/isolation-source/owned-credential-policy.mjs`, reconstructed by the v1.18.6 verifier; compiled synthetic routine regression and build-only evidence in [native pilot report](../validation/native-pilot-localtest.md). WAM/SSO, game cache and account acceptance remain unproven. |
 | Four-tab native composition, shell eligibility and window recovery | `apps/desktop/src/NativeWorkspace.svelte` → `app/bridge/workspaceSurface.ts` → `src-tauri/src/engine/workspace_surface.rs`, gated by existing owned provider | [Workspace contract](../product/unified-workspace.md); retained checkpoints, same-executable recovery helpers, coalesced manager foreground updates in `app_bootstrap.rs`; playable rendering/input and single-taskbar acceptance pending |
-| Unified dashboard, saved locations and canonical Minecraft targets | `apps/desktop/src/UnifiedManagerApp.svelte` → `manager_settings.rs` | Existing NativePilot data directory; `engine/isolation-native/owned-runtime/minecraft-targets.json`, shared `education-target.ps1`, existing owned provider; old Compact Manager is unmounted |
+| Archived Unified dashboard | Git snapshot `5601c354` → old `UnifiedManagerApp.svelte` | Historical location/provider UX; the current Lazy Tester binding/session owners are listed above |
 | Explicit debug-manager owned engine selection and four-slot operations | `apps/desktop/src-tauri/src/engine/owned_provider.rs` → embedded `tooling/isolation-source/windows/owned-manager.ps1` | Existing catalog/resource lock, typed `ownedProviderApi.ts`, mounted `OwnedManagerPanel.svelte`; one-shot Create-only helper in the same executable; no production activation or service installation |
 | Diagnose Minecraft present-interval stutter without adding a game hook or daemon | `tooling/acceptance/analyze-presentmon.mjs` + `tooling/acceptance/analyze-presentmon.test.mjs` | Offline operator-supplied PresentMon CSV, one selected Minecraft PID and swap chain, p50/p95/p99 `MsBetweenPresents` only; output excludes PID/account data, never claims FPS/VRAM/gameplay PASS. See `tooling/acceptance/windows/README.md` |
 | On-demand GPU counter hint plus stable CPU/RAM report writing | `tooling/acceptance/windows/collect-native-performance.ps1` (`-GpuSnapshot`) → `tooling/acceptance/evaluate-native-performance.mjs` | Default schema-1 remains; optional schema-2 is skipped after PID identity loss; complete UTF8-no-BOM JSON published through exclusive temporary-file move, historical PowerShell 5.1 BOM read; no FPS/VRAM or gameplay claim, see `tooling/acceptance/windows/README.md` |
@@ -416,7 +421,7 @@ they must never be chosen automatically as current build or activation code.
 | State schema, durable profile and recovery | `engine/runtime-core/src/schema.rs`, `persistence.rs` | `journal.rs`, `runtime.rs` |
 | Update policy, signed-asset manifest, installer integrity | `engine/runtime-core/src/update.rs`, `engine/distribution/` | Tauri package configurations, package smoke |
 | Open host-native Windows Minecraft / inspect candidate HWNDs without claiming account or gameplay proof | `apps/desktop/src-tauri/src/engine/native_clients.rs`, native Tauri adapter | Active `apps/desktop/src/app/bridge/nativeFeasibilityApi.ts`; legacy `virtualClientsApi.ts` unmounted |
-| Active desktop navigation / transient visual state | `apps/desktop/src/UnifiedManagerApp.svelte`, `apps/desktop/src/app/presentation/compactManager.ts` | `apps/desktop/src/main.ts` mounts Unified Manager; `App.svelte` and `NativeFeasibilityApp.svelte` are unmounted legacy components |
+| Active desktop navigation / transient visual state | `apps/desktop/src/LazyTesterApp.svelte` | `apps/desktop/src/main.ts` mounts Lazy Tester; old App/Unified/Compact/feasibility components are archived in Git, absent from active source |
 | Typed frontend/backend IPC and contract validation | `apps/desktop/src/app/bridge/` | `apps/desktop/src-tauri/src/commands/` |
 | Display DPI bootstrap (active); legacy VMware layout/overlay (inactive) | `apps/desktop/src-tauri/src/engine/dpi.rs`; unmounted `window_arrangement.rs` and `screen_overlay.rs` | Active Client 02 **Move window** is in `native_clients.rs`; legacy layout Tauri commands are unregistered |
 | Windows package contents/install lifecycle | `engine/distribution/package-contract.json`, `install-lifecycle-policy.json` | `apps/desktop/src-tauri/tauri*.json`, `scripts/prepare-package-binaries.mjs` |
