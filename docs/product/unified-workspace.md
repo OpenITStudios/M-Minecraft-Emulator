@@ -61,8 +61,12 @@ repair; no automatic reset is provided. Fresh product stores use the separate
 catalog and location owner described above. Actual new-machine login, first-run
 dialog/import and installed gameplay still need acceptance.
 
-Closing the manager preserves games and restores presented windows. Helpers retain
-policy/storage handles after UI exit until the games exit normally. Reopening
+Full exit (user decision27October2026) restores presented windows, requests normal
+WM_CLOSE only for the controller's verified managed games, waits for normal exit,
+then closes the manager. A pending dialog, missing window/identity or timeout keeps
+the manager open with an explanation; games are never force-terminated. Unrelated
+games are untouched. A crash or lost UI connection still preserves game ownership
+and policy/storage handles until normal game exit. Reopening
 the same application binary reconnects through its local named pipe,
 scoped by executable file identity and Windows logon/session. Both peers verify
 user, logon, integrity, executable and a retained live process identity before any

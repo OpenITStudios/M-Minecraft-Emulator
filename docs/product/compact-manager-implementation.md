@@ -197,7 +197,7 @@ Current capability: **Client 02 only**: `Move window` -> choose `Left`/`Right` -
 - **Open manager:** show Instances immediately. The current inspector is user-triggered and bounded; future one-shot startup inspection is a separate performance/security review, not part of this UI refactor. Never gate first paint behind inspection or introduce persistent polling.
 - **One operation at a time:** preserve the existing frontend busy guard and backend Client 02 launch serialization. Disable conflicting commands but keep existing information, Settings and Help readable.
 - **Minimize:** use native Windows behavior; never stop/reposition Minecraft.
-- **Close:** manager does not call a Minecraft Stop function. Do not promise game persistence until Windows process-lifetime behavior is actually tested, especially during in-flight launch.
+- **Close (legacy two-client surface):** no Minecraft Stop function. Current Lazy Tester behavior is superseded by the27October2026 full-exit decision in [the workspace contract](unified-workspace.md): normal closure of owned sessions before manager exit, with pending saves/dialogs explained and no forced termination.
 - **Second manager launch:** currently prevented by exclusive desktop instance lock; it may show a dialog. Bringing existing window to front is a FUTURE product enhancement, not an implemented feature.
 - **Reopen or Windows restart:** no stale process result as live status. Nonsecret preferences may be restored only after a reviewed persistence contract exists.
 - **No system tray, hidden resident launcher or automatic multi-client startup** in first version.
