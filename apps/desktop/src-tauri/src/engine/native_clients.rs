@@ -3,6 +3,21 @@
 #[path = "independent_bootstrap.rs"]
 mod independent_bootstrap;
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProfileBinding {
+    pub schema: u32,
+    pub required: bool,
+    pub configured: bool,
+    pub issue: Option<String>,
+}
+pub fn profile_binding(import: bool) -> io::Result<ProfileBinding> {
+    #[cfg(all(windows, target_arch = "x86_64", feature = "lazy-tester-package"))]
+    { independent_bootstrap::profile_binding::run(import) }
+    #[cfg(not(all(windows, target_arch = "x86_64", feature = "lazy-tester-package")))]
+    { let _ = import; Ok(ProfileBinding { schema: 1, required: false, configured: true, issue: None }) }
+}
+
 // Internal same-executable mode, never a Tauri command or Launch admission.
 pub fn maybe_run_education_startup_observation() -> bool {
     #[cfg(all(windows, target_arch = "x86_64"))]

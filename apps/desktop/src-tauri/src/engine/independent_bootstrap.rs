@@ -492,6 +492,8 @@ mod game_preset;
 mod session_controller;
 #[path = "independent_bootstrap/profile_storage.rs"]
 mod profile_storage;
+#[path = "independent_bootstrap/profile_binding.rs"]
+pub(super) mod profile_binding;
 
 /// Source-only two-slot preparation. No game/DLL code can be resumed here.
 /// The existing registered-image resolver remains the only target selector.
@@ -1568,6 +1570,13 @@ fn private_temporary(private: &File) -> io::Result<[File; 2]> {
     Ok([local, temporary]) // Never follow a reparse, clear a cache or copy a profile.
 }
 
+fn existing_private_temporary(private: &File) -> io::Result<[File; 2]> {
+    let access = FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY;
+    let local = open_directory(&directory_path(private)?.join("Local"), access)?;
+    let temporary = open_directory(&directory_path(&local)?.join("Temp"), access)?;
+    Ok([local, temporary])
+}
+
 fn create_private_slot(logical: &File, root: &Path, slot: u32) -> io::Result<SlotStorage> {
     if !(1..=MAX_EDUCATION_SLOTS).contains(&slot) {
         return Err(invalid("Invalid Education slot"));
@@ -1798,7 +1807,7 @@ fn reopen_slots_for<const N: usize>(
         slots.push(SlotStorage {
             slot,
             logical: logical.try_clone()?,
-            temporary: private_temporary(&private)?,
+            temporary: existing_private_temporary(&private)?,
             private,
             registry: RegistryKey(key),
             user_key_path,
@@ -1935,29 +1944,7 @@ fn prepare_five_profiles() -> io::Result<i32> {
     Ok(0)
 }
 
-fn registered_slots<const N: usize>(observe: bool) -> io::Result<[SlotStorage; N]> {
-    if N != 2 && N != 5 {
-        return Err(invalid("Unsupported replay slot count"));
-    }
-    // Authorized observation reuses an existing pair or refuses. An unset
-    // review policy must never silently become fresh account/world storage.
-    let replay = if observe {
-        Some(
-            (if N == 2 {
-                REVIEWED_REPLAY
-            } else {
-                REVIEWED_FIVE_REPLAY
-            })
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::Unsupported,
-                    "No reviewed existing Education profile pair",
-                )
-            })?,
-        )
-    } else {
-        None
-    };
+fn replay_roots() -> io::Result<(File, PathBuf)> {
     let roaming = known_folder(&FOLDERID_RoamingAppData)?;
     let local = known_folder(&FOLDERID_LocalAppData)?;
     if roaming.file_name() != Some(OsStr::new("Roaming"))
@@ -1985,16 +1972,48 @@ fn registered_slots<const N: usize>(observe: bool) -> io::Result<[SlotStorage; N
         ));
     }
     let parent = known_folder(&FOLDERID_Profile)?;
+    Ok((a, parent))
+}
+
+fn registered_slots<const N: usize>(observe: bool) -> io::Result<[SlotStorage; N]> {
+    if N != 2 && N != 5 {
+        return Err(invalid("Unsupported replay slot count"));
+    }
+    // Authorized observation reuses an existing pair or refuses. An unset
+    // review policy must never silently become fresh account/world storage.
+    let replay = if observe {
+        Some(
+            (if N == 2 {
+                REVIEWED_REPLAY
+            } else {
+                REVIEWED_FIVE_REPLAY
+            })
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "No reviewed existing Education profile pair",
+                )
+            })?,
+        )
+    } else {
+        None
+    };
+    let (a, parent) = replay_roots()?;
     if let Some(expected) = replay {
         use std::io::Read;
-        let path = std::env::current_exe()?
+        let binding = if N == 5 && cfg!(feature = "lazy-tester-package") {
+            Some(profile_binding::binding_path(false)?)
+        } else { None };
+        let path = if let Some((path, _pins)) = &binding {
+            path.clone()
+        } else { std::env::current_exe()?
             .parent()
             .ok_or_else(|| invalid("Missing replay payload root"))?
             .join(if N == 2 {
                 "independent-bootstrap/replay-profile-pair.bin"
             } else {
                 "independent-bootstrap/replay-profile-five.bin"
-            });
+            }) };
         let mut file = pin_image(&path)?;
         let size = 168 + N * 24;
         if file.metadata()?.len() != size as u64 {

@@ -1,11 +1,12 @@
 <script lang="ts">
   import {onMount, tick} from 'svelte';
   import {listen} from '@tauri-apps/api/event';
-  import {lazyTester, nextProfile, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus} from './app/bridge/lazyTester.js';
+  import {lazyTester, nextProfile, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, type ProfileBinding} from './app/bridge/lazyTester.js';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazy-tester.css';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
+  let binding: ProfileBinding | null = null;
   let clearSlot: ProfileSlot | null = null, storageNotice = '';
   let page: 'workspace' | 'launchers' | 'storage' | 'settings' = 'workspace';
   let active: ProfileSlot | null = null, requested: ProfileSlot | null = null, queued: ProfileSlot | null = null;
@@ -65,7 +66,7 @@
     finally { refreshing = false; }
   }
   async function launch(slot: ProfileSlot) {
-    if (busy || refreshing || resizing) return;
+    if (busy || refreshing || resizing || !binding?.configured) return;
     busy = true; issue = ''; requested = slot;
     try {
       profiles = (await lazyTester.launch(slot)).profiles; storage = null; available = true;
@@ -128,6 +129,13 @@
     catch (error) { issue = String(error); }
     finally { busy = false; }
   }
+  async function loadBinding(importProfiles = false) {
+    if (busy || refreshing || resizing || disposed) return;
+    busy = true; issue = '';
+    try { binding = await lazyTester.binding(importProfiles); }
+    catch (error) { issue = String(error); }
+    finally { busy = false; }
+  }
   async function openFolder(slot: ProfileSlot) {
     if (busy || refreshing || resizing) return;
     busy = true; issue = '';
@@ -147,7 +155,7 @@
     } finally { busy = false; }
   }
   onMount(() => {
-    mounted = true; void refresh();
+    mounted = true; void (async () => { await loadBinding(); await refresh(); })();
     const interval = setInterval(() => { if (!document.hidden) void refresh(); }, 2000);
     observer = new ResizeObserver(() => { dirty = true; }); observer.observe(viewport, {box: 'device-pixel-content-box'});
     for (const node of images.values()) observer.observe(node);
@@ -182,6 +190,12 @@
   <main>
     <header class="lt-page-header"><div><p class="lt-caption">RUANG BERMAIN ANDA</p><h1>{page === 'workspace' ? 'Workspace' : page === 'launchers' ? 'Launcher Minecraft' : page === 'storage' ? 'Penyimpanan' : 'Pengaturan'}</h1></div><button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={refresh}>Perbarui status</button></header>
     {#if issue || connectionIssue}<div class="lt-alert" role="alert"><strong>Operasi membutuhkan perhatian</strong>{#if issue}<p>{issue}</p>{/if}{#if connectionIssue}<p>{connectionIssue}</p>{/if}<span>Game dan data yang sudah ada tetap dipertahankan.</span></div>{/if}
+    {#if !binding?.configured}
+      <section class="lt-binding" aria-label="Pengaitan profil lama">
+        <div><strong>Hubungkan lima profil Minecraft lama</strong><p>{binding?.issue ?? 'Pengaitan profil belum dapat dipastikan.'}</p><small>Hanya metadata pengikat yang disimpan. Login, dunia, dan pengaturan tetap di lokasi aslinya.</small></div>
+        <div class="lt-actions"><button disabled={busy || refreshing || resizing || runningCount > 0} on:click={() => loadBinding(true)}>Pilih folder launcher lama</button><button class="lt-secondary" disabled={busy || refreshing || resizing} on:click={() => loadBinding()}>Periksa lagi</button></div>
+      </section>
+    {/if}
     <section class="lt-workspace" hidden={page !== 'workspace'} aria-label="Workspace Minecraft">
       <header class="lt-stage-header"><div><h2>{active ? 'Minecraft - ' + active : requested ? 'Membuka Minecraft - ' + requested : 'Pilih Minecraft untuk mulai'}</h2><p>{active ? 'Sedang ditampilkan · klik di dalam game untuk mengontrol' : detached ? 'Jendela telah dikembalikan ke Windows.' : 'Buka profil pilihan Anda melalui halaman Launcher.'}</p></div>
         <div class="lt-actions"><button class="lt-secondary" disabled={busy || !available || !playableCount} on:click={() => step(-1)} aria-label="Minecraft sebelumnya">←</button><button class="lt-secondary" disabled={busy || !available || !playableCount} on:click={() => step(1)}>Berikutnya →</button>{#if runningCount}<button class="lt-secondary" disabled={busy || resizing} on:click={release}>Lepas jendela</button>{/if}</div>
@@ -200,12 +214,12 @@
     </section>
     {#if page === 'launchers'}
       <p class="lt-description">Buka hanya Minecraft yang ingin Anda gunakan. Tidak ada game yang dibuka otomatis.</p>
-      <div class="lt-profile-list">{#each profiles as profile (profile.slot)}<article><span class="lt-profile-number">{profile.slot}</span><div><h2>Minecraft - {profile.slot}</h2><p>{labels[profile.state]}</p>{#if profile.issue}<p class="lt-error">{profile.issue}</p>{/if}</div>{#if profile.state === 'RUNNING'}<button disabled={busy || !available} on:click={() => select(profile.slot)}>Tampilkan</button>{:else}<button disabled={busy || refreshing || resizing || !available || ['STARTING','NOT_RESPONDING'].includes(profile.state)} on:click={() => launch(profile.slot)}>{profile.state === 'STARTING' ? 'Membuka…' : profile.state === 'NOT_RESPONDING' ? 'Tidak merespons' : 'Buka Minecraft'}</button>{/if}</article>{/each}</div>
+      <div class="lt-profile-list">{#each profiles as profile (profile.slot)}<article><span class="lt-profile-number">{profile.slot}</span><div><h2>Minecraft - {profile.slot}</h2><p>{labels[profile.state]}</p>{#if profile.issue}<p class="lt-error">{profile.issue}</p>{/if}</div>{#if profile.state === 'RUNNING'}<button disabled={busy || !available} on:click={() => select(profile.slot)}>Tampilkan</button>{:else}<button disabled={busy || refreshing || resizing || !available || !binding?.configured || ['STARTING','NOT_RESPONDING'].includes(profile.state)} on:click={() => launch(profile.slot)}>{profile.state === 'STARTING' ? 'Membuka…' : profile.state === 'NOT_RESPONDING' ? 'Tidak merespons' : 'Buka Minecraft'}</button>{/if}</article>{/each}</div>
     {:else if page === 'storage'}
       <section class="lt-panel">
         <h2>Penyimpanan Minecraft</h2>
         <p>Akun, dunia, dan pengaturan tetap berada di profil masing-masing. Ukuran dihitung saat diminta dan dapat berubah selama bermain.</p>
-        <p><button disabled={busy || refreshing || resizing} on:click={inspectStorage}>{busy ? 'Memproses…' : 'Hitung penggunaan ruang'}</button></p>
+        <p><button disabled={busy || refreshing || resizing || !binding?.configured} on:click={inspectStorage}>{busy ? 'Memproses…' : 'Hitung penggunaan ruang'}</button></p>
         {#if storageNotice}<p role="status">{storageNotice}</p>{/if}
         {#if storage}
           {#each storage as item}

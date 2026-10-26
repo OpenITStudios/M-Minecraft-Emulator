@@ -35,6 +35,28 @@ resume attempt, the existing started owner retains the game and its uncertain
 outcome. Disposable Windows fixtures cover the cleanup boundary; actual Minecraft
 failure/retry with live peers remains unexecuted.
 
+The installed Lazy Tester asks the user to select the old launcher folder once;
+the backend reads its fixed independent-bootstrap/replay-profile-five.bin only.
+Import is unavailable while a retained controller
+exists, checks the reviewed capability hash, original folder IDs and existing HKCU keys, and
+publishes only 288 bytes of identity metadata beneath the existing private
+MinecraftInstanceManager/NativePreview directory. No login/world contents are
+copied and no game is launched. Selecting the same bytes is idempotent; different
+or malformed preexisting metadata is preserved/refused instead of overwritten.
+The installed product reads this private binding, with no fallback to capability
+files beside its executable. The private developer preview keeps its original
+adjacent-capability route. Existing profile inspection now opens TEMP only if it
+exists; it never creates missing profile directories during validation.
+
+The typed binding report says only whether the original profile identities can
+be opened; it is not account/sign-in/gameplay readiness. Launch controls wait for
+that report, and the bootstrap revalidates identities on every launch. A cancelled
+file picker leaves metadata unchanged. Publication uses a create-new temporary,
+flush and same-directory [MoveFileExW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw)
+without replacement. An incomplete/different existing binding requires deliberate
+repair; no automatic reset is provided. Generic new-machine provisioning remains
+unsupported. Actual first-run dialog/import and installed gameplay need acceptance.
+
 Closing the manager preserves games and restores presented windows. Helpers retain
 policy/storage handles after UI exit until the games exit normally. Reopening
 the same application binary reconnects through its local named pipe,
@@ -124,7 +146,7 @@ need integrated runtime acceptance. Final installed branding and cache cleanup
 also require acceptance. The native installer candidate now has an explicit
 separate Lazy Tester identity and only the two reviewed engine DLLs; existing
 settings/profile paths are retained. It excludes private profile bindings, whose
-first-run setup remains unfinished. Packaging ownership and migration decisions
+first-run import is implemented for the reviewed existing profiles. Packaging ownership and migration decisions
 are in engine/distribution/README.md. Their state and the next bounded action
 are recorded in the sole handoff, not inferred from this design contract.
 

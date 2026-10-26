@@ -212,7 +212,7 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
 }
 
 #[cfg(windows)]
-fn existing_controller_gate(name: &str) -> io::Result<bool> {
+pub(crate) fn existing_controller_gate(name: &str) -> io::Result<bool> {
     use std::os::windows::io::{FromRawHandle, OwnedHandle};
     use windows_sys::Win32::{
         Foundation::GetLastError,

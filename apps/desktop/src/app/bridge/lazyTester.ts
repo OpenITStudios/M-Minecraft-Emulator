@@ -19,10 +19,19 @@ export interface SessionSnapshot {schema: 1; profiles: ProfileSession[]; storage
 export interface PreviewPlacement {slot: ProfileSlot; viewport: WorkspaceViewport}
 export interface PreviewStatus {slot: ProfileSlot; registered: boolean; reason: string | null}
 export interface PreviewReport {schema: 1; tiles: PreviewStatus[]}
+export interface ProfileBinding {schema: 1; required: boolean; configured: boolean; issue: string | null}
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const exact = (value: Record<string, unknown>, names: string[]) =>
   Object.keys(value).length === names.length && names.every(name => Object.hasOwn(value, name));
+
+export function parseProfileBinding(value: unknown): ProfileBinding {
+  if (!record(value) || !exact(value, ['schema','required','configured','issue']) || value.schema !== 1 ||
+      typeof value.required !== 'boolean' || typeof value.configured !== 'boolean' ||
+      !(value.issue === null || typeof value.issue === 'string' && value.issue.length <= 8192) ||
+      value.configured && value.issue !== null || !value.required && !value.configured) throw new TypeError('Invalid profile binding');
+  return value as unknown as ProfileBinding;
+}
 
 export function parseSession(value: unknown): SessionSnapshot {
   if (!record(value) || !exact(value, ['schema', 'profiles', 'storage']) || value.schema !== 1 ||
@@ -82,6 +91,7 @@ export function parsePreviewReport(value:unknown,slots:readonly ProfileSlot[]):P
 }
 
 export const lazyTester = {
+  binding: async (importProfiles = false) => parseProfileBinding(await invokeRuntime<unknown>('lazy_tester_profile_binding', {import: importProfiles})),
   inspect: async () => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'Inspect'}})),
   launch: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'Launch', slot}})),
   storage: async () => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'InspectStorage'}})),

@@ -37,8 +37,9 @@ live Minecraft pixels, offscreen host-world behavior and the complete UI remain
 unverified. Per-profile disk usage/free-space reporting and explicit classified
 HTTP-cache cleanup are implemented with inactive-game admission and handle-based
 filesystem checks, verified only on disposable fixtures. A separate Lazy Tester
-installer candidate now includes the native DLLs and branding. First-run private
-profile binding, installer acceptance and portable distribution remain unfinished.
+installer candidate now includes the native DLLs and branding. Explicit private
+binding of the reviewed five existing profiles is implemented; installed startup,
+integrated acceptance and generic portable provisioning remain unfinished.
 Task Manager grouping is not claimed.
 
 See [workspace contract](docs/product/unified-workspace.md) for product behavior,

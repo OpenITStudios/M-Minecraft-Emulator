@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {nextProfile, parseSession, parsePreviewReport, type ProfileSession} from '../src/app/bridge/lazyTester.js';
+import {nextProfile, parseSession, parsePreviewReport, parseProfileBinding, type ProfileSession} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
@@ -7,6 +7,17 @@ const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process
   pid: slot + 100, createdFileTime: String(slot + 200), sessionId: 1, windowHandle: `0x${slot}`, responding: true,
 }});
 describe('Lazy Tester profile contract', () => {
+  it('keeps missing or invalid binding separate from launch/game/account readiness', () => {
+    expect(parseProfileBinding({schema:1,required:true,configured:false,issue:'Select existing binding'}).configured).toBe(false);
+    expect(parseProfileBinding({schema:1,required:true,configured:true,issue:null}).configured).toBe(true);
+    expect(parseProfileBinding({schema:1,required:false,configured:true,issue:null}).required).toBe(false);
+    for(const value of [
+      {schema:1,required:true,configured:true,issue:'Invalid'},
+      {schema:1,required:false,configured:false,issue:null},
+      {schema:1,required:true,configured:true,issue:null,authenticated:true},
+      {schema:2,required:true,configured:false,issue:null},
+    ]) expect(()=>parseProfileBinding(value)).toThrow();
+  });
   it('validates quota-aware disk space and refuses unsafe cache cleanup status', () => {
     const storage = [1,2,3,4,5].map(slot => ({slot, bytes: 100, files: 2, partial: false,
       disk: {availableBytes: 20, totalBytes: 1000},

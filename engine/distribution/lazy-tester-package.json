@@ -24,6 +24,8 @@
     "instanceLeaseVariant": "NativePilot",
     "profiles": "retained-existing-private-file-identities",
     "profileBindingIncluded": false,
+    "profileBindingRelativePath": "MinecraftInstanceManager/NativePreview/profile-binding-five.bin",
+    "profileBindingImport": "reviewed-existing-five-only",
     "portableProfileProvisioning": "NOT_IMPLEMENTED",
     "crossBinaryControllerHandoff": "UNSUPPORTED"
   },

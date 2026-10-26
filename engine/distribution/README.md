@@ -30,10 +30,21 @@ It rejects links, changed files and stale outputs; it never copies neighboring
 profile bindings. The installer contains the desktop, two DLLs and this native
 contract, with no VM/Guest Agent/acceptance payload or account/world material.
 
-Profile capabilities are machine-local and excluded. First-run profile binding is
-still unfinished; this installer is a development candidate, not a portable,
-ready-to-distribute product. No installed data has been changed by building it.
-Signing, publication and integrated Minecraft acceptance are not implied.
+Profile capabilities are machine-local and excluded. On first run, the UI can
+explicitly select the old launcher folder; the backend reads its existing
+independent-bootstrap/replay-profile-five.bin. The sole bootstrap owner
+checks its reviewed hash, original folder IDs and existing per-profile HKCU keys, then stores
+only its 288 metadata bytes at the contract's private profileBindingRelativePath.
+That directory is outside the installer; existing preferences and game data stay
+in place. A different existing binding is preserved/refused. Native package
+launches read only this private binding, with no fallback to installer-adjacent
+capabilities and no automatic game launch.
+
+The workflow is implemented for the reviewed existing five-profile set, not
+generic portable provisioning. First-run dialog/import, installed startup and
+gameplay acceptance remain unexecuted. The installer is a development candidate;
+no installed data has been changed by building it. Signing/publication is not
+implied.
 
 ## Historical VMware distribution contract (disabled)
 

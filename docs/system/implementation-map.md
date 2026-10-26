@@ -24,6 +24,10 @@ Its sibling independent_bootstrap/profile_storage.rs owns bounded cache
 classification, disk-space metadata and handle-based HTTP-cache deletion; the
 session actor alone admits cleanup against game lifetime. No other storage owner
 or periodic cleaner exists.
+independent_bootstrap/profile_binding.rs owns the installed product's explicit
+existing-profile import and private capability publication. It reuses the original
+replay identity validator, stores no login/world contents and never starts games.
+The UI consumes a separate typed binding report, not a game-ready/account flag.
 
 Native packaging policy is engine/distribution/lazy-tester-package.json; the
 consumer is tauri.lazy-tester.conf.json with the lazy-tester-package feature and
