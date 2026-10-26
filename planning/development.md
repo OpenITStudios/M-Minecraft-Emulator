@@ -53,17 +53,21 @@ Log: workspace/runs/play-settings-implementation/automatic-reconnect-package.log
 The release initializer succeeded twice against the reviewed existing connection;
 binding bytes remained identical and no game was launched. This is metadata proof.
 
-App staging is PENDING: PID18644 still runs App/lazy-tester.exe. The user was asked
-to close that window normally; no reply/closure has been observed. Never kill it
-or overwrite its executable. The prepared ignored staging script is
-workspace/runs/play-settings-implementation/stage-automatic-reconnect.mjs; it uses
-the canonical stager, checks source/candidate hashes, executes initialization,
-verifies four staged payload hashes, then creates verified normal shortcuts.
-Do not report the fix as installed while App still contains the prior revision.
+The user confirmed normal closure. Process inspection found no running manager;
+guarded staging then completed successfully without terminating any process.
+App now contains d2399c0acf7053a71b238a7136a95e3376925ce1. Its actual initializer
+returned configured=true, issue=null before delivery. All four staged payload
+hashes and the candidate installer hash were verified. Desktop/Start Menu links
+were recreated and verified with direct App executable, App working directory,
+empty args and embedded icon. Previous App/data pointers remain preserved by the
+canonical stager. No game or GUI was launched during this installation step.
+Receipt: workspace/runs/play-settings-implementation/automatic-reconnect-staged.json.
+The ignored stage-automatic-reconnect.mjs orchestrates the existing stager and
+initialization/hash/shortcut checks; it is not a new runtime owner.
 
 ## Preserved App and prior accepted layout
 
-App currently contains clean source 835f40d25a6017a6c5012d37defa15779a42ef43.
+The preceding App contained source 835f40d25a6017a6c5012d37defa15779a42ef43.
 Its Windows/NSIS construction and guarded staging passed. All four payload hashes
 and installer hash were verified. Normal Desktop/Start Menu shortcuts target
 App/lazy-tester.exe directly with App working directory, empty args and LT icon.
@@ -96,5 +100,6 @@ Signing NOT_VERIFIED; installer execution and new-layout native mouse interactio
 gameplay/license and multiplayer acceptance NOT_EXECUTED. Publication DISABLED.
 User-reported earlier normal play is not independent four-client acceptance.
 
-Next: complete guarded App staging when the running manager exits normally,
-then verify prepared launcher connection before delivery through normal shortcuts.
+Next: observe startup through the normal shortcut on the user's display; verify
+automatic reconnection and normal session use. The original first native missing
+read remains UNKNOWN; successful initialization is not visual/gameplay acceptance.
