@@ -14,10 +14,14 @@ This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build
 ## Current Lazy Tester route — 26 October 2026
 
 WindowTitlebar.svelte owns the shared product frame controls; main-window-only
-Tauri permissions allow drag/minimize/maximize/close. A native game aperture disables
-DWM frame rendering, so product chrome is drawn consistently in the UI. Moved events
-use workspace_surface::follow_manager for nonblocking identity-checked translation;
-resize/recovery retain the original helper. release_for_close rejects reacquisition
+Tauri permissions allow drag/minimize/maximize/close. workspace_surface.rs keeps
+the manager opaque, preserving DWM frame rendering. The existing DWM preview worker
+also renders the unfocused primary game; its ordinary click selects the verified
+native HWND, with no input forwarding. Explicit presentation removes that primary
+image before activating native gameplay. Manager focus/drag parks the independent
+game while its DWM destination follows the manager; foreground and move/size-end
+events reconcile current geometry through the existing coalesced worker.
+release_for_close rejects reacquisition
 while restoring games. Product CloseRequested then sends CloseAll to the retained
 session controller: identity-checked WM_CLOSE to its own original game windows,
 normal process-exit/reap wait, no force termination. Absent controller never starts

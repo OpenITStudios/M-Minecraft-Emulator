@@ -74,14 +74,15 @@ native_clients_session.rs/pipe.rs; lifecycle: independent_bootstrap/session_cont
 settings/storage: manager_settings.rs, game_preset.rs, profile_storage.rs. No second
 lifecycle/readiness/credentials owner.
 
-Current independent top-level game + manager aperture can diverge during movement.
-Own probe proved SetWindowRgn disables DWM nonclient rendering1->0; forcing enabled
-policy still0. decorations=false/custom frame did not fix geometry divergence.
-ASYNCWINDOWPOS returns before actual game movement, so the last fast-path change
-was insufficient. Need coherent visual/input handoff and final catch-up with no
-exposed region on failure. DWM thumbnail destination must be a caller-owned top-level
-window; child destinations unsupported. Prove alternatives on own synthetic windows
-before changing live games; do not assume parenting fixes composition/grouping.
+Presentation source correction27October (based on17acc411): remove region holes;
+retain opaque host and DWM frame. Existing preview worker gains unfocused primary
+image; explicit selection removes it before native focus. Independent game parks
+while manager owns input; same retained identity/recovery helper, no input relay.
+Focus/move-size boundaries reconcile through existing worker. Executed RED then
+GREEN stalled-drag opacity test; nine surface tests, native DWM primary translation/
+minimize test and focus-event test PASS. Isolated stall/recovery/pipe-loss/helper-
+crash fixtures PASS;40 synthetic retained swaps p95/max2ms. Logs: workspace/runs/
+opaque-*.log. Actual game drag/focus/frame acceptance NOT_EXECUTED; not staged.
 
 WebView2 grouping matches OPEN upstream reports: AppUserModelID/EXE metadata alone
 was insufficient. Investigate actual parent/logon/integrity; do not call locally fixed:
@@ -111,6 +112,6 @@ Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4 and second worktree47a45f9 pre
 Signing NOT_VERIFIED; installer execution, real Minecraft full-exit/save, audio and
 multi-client acceptance NOT_EXECUTED. Publication DISABLED.
 
-Next: build a red-capable synthetic drag-end geometry/composition reproduction,
-select the smallest safe correction and verify before updating installed App.
+Next: update120/5 defaults and validation, then complete settings/storage/audio;
+build a clean candidate and verify presentation before replacing installed App.
 Continue through ordered outcomes; overall goal ACTIVE, not complete.

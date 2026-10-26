@@ -285,7 +285,7 @@ mod workspace_foreground {
     fn accepts(event: u32, window: u64, object: i32, child: i32, manager: u64) -> bool {
         manager != 0
             && window == manager
-            && event == EVENT_SYSTEM_FOREGROUND
+            && matches!(event, EVENT_SYSTEM_FOREGROUND | EVENT_SYSTEM_MOVESIZESTART | EVENT_SYSTEM_MOVESIZEEND)
             && object == 0
             && child == 0
     }
@@ -309,6 +309,7 @@ mod workspace_foreground {
             child,
             HANDLE.load(Ordering::Acquire),
         ) {
+            crate::engine::workspace_surface::refresh_previews();
             if let Some(window) = WINDOW.get() {
                 super::queue_workspace_update(window.clone());
             }
@@ -326,7 +327,7 @@ mod workspace_foreground {
             PeekMessageW(&mut message, ptr::null_mut(), 0, 0, PM_NOREMOVE);
             let hook = SetWinEventHook(
                 EVENT_SYSTEM_FOREGROUND,
-                EVENT_SYSTEM_FOREGROUND,
+                EVENT_SYSTEM_MOVESIZEEND,
                 ptr::null_mut(),
                 Some(changed),
                 0,
@@ -373,13 +374,16 @@ mod workspace_foreground {
         }
     }
     #[test]
-    fn only_manager_foreground_events_can_restore_the_surface() {
+    fn only_manager_focus_and_move_boundaries_can_update_the_surface() {
         assert!(accepts(EVENT_SYSTEM_FOREGROUND, 17, 0, 0, 17));
+        assert!(accepts(EVENT_SYSTEM_MOVESIZESTART, 17, 0, 0, 17));
+        assert!(accepts(EVENT_SYSTEM_MOVESIZEEND, 17, 0, 0, 17));
         for (event, window, object, child, manager) in [
             (EVENT_SYSTEM_FOREGROUND, 18, 0, 0, 17),
             (EVENT_SYSTEM_FOREGROUND, 17, 1, 0, 17),
             (EVENT_SYSTEM_FOREGROUND, 17, 0, 1, 17),
             (EVENT_OBJECT_SHOW, 17, 0, 0, 17),
+            (EVENT_SYSTEM_MOVESIZEEND, 18, 0, 0, 17),
             (EVENT_SYSTEM_FOREGROUND, 0, 0, 0, 0),
         ] {
             assert!(!accepts(event, window, object, child, manager));

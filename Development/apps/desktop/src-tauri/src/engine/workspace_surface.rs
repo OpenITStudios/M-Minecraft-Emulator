@@ -489,6 +489,13 @@ mod native {
     }
     pub(super) fn follow(saved: &Saved, rect: Rectangle) -> io::Result<()> {
         let (_process, window) = hwnd(&saved.target)?;
+        // Dragging belongs to the manager: DWM follows it independently of the game thread.
+        // The host stays opaque even while an asynchronous game placement is pending.
+        let rect = if receiving_input(&saved.target) { rect } else {
+            if !can_park(&saved.target)? { return Ok(()); }
+            if parked_at(&saved.target, rect) { return Ok(()); }
+            parking_rectangle(rect)?
+        };
         unsafe {
             if SetWindowPos(window, std::ptr::null_mut(), rect.x, rect.y, 0, 0,
                 SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS) == 0 {
@@ -497,7 +504,10 @@ mod native {
         }
         Ok(())
     }
-    pub(super) fn aperture(manager: u64, rect: Option<Rectangle>) -> io::Result<()> {
+    pub(super) fn receiving_input(target: &OwnedProcess) -> bool {
+        hwnd(target).is_ok_and(|(_pin, window)| unsafe { GetForegroundWindow() == window })
+    }
+    pub(super) fn clear_aperture(manager: u64) -> io::Result<()> {
         use windows_sys::Win32::Graphics::Gdi::*;
         let manager = manager as usize as HWND;
         unsafe {
@@ -506,63 +516,17 @@ mod native {
             if IsWindow(manager) == 0 || pid != std::process::id() {
                 return Err(io::Error::other("Invalid workspace aperture owner"));
             }
-            let Some(rect) = rect else {
-                let current = CreateRectRgn(0, 0, 0, 0);
-                if current.is_null() {
-                    return Err(io::Error::last_os_error());
-                }
-                let absent = GetWindowRgn(manager, current) == ERROR;
-                DeleteObject(current);
-                if !absent && SetWindowRgn(manager, std::ptr::null_mut(), 1) == 0 {
-                    return Err(io::Error::last_os_error());
-                }
-                // Repaint WebView children too; removing the region alone can leave stale transparency.
-                if RedrawWindow(manager, std::ptr::null(), std::ptr::null_mut(),
-                    RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN) == 0 {
-                    return Err(io::Error::last_os_error());
-                }
-                return Ok(());
-            };
-            let mut bounds: RECT = std::mem::zeroed();
-            if GetWindowRect(manager, &mut bounds) == 0 {
-                return Err(io::Error::last_os_error());
-            }
-            let outer = CreateRectRgn(0, 0, bounds.right - bounds.left, bounds.bottom - bounds.top);
-            let hole = CreateRectRgn(
-                rect.x - bounds.left,
-                rect.y - bounds.top,
-                rect.x - bounds.left + rect.width,
-                rect.y - bounds.top + rect.height,
-            );
-            if outer.is_null() || hole.is_null() {
-                if !outer.is_null() {
-                    DeleteObject(outer);
-                }
-                if !hole.is_null() {
-                    DeleteObject(hole);
-                }
-                return Err(io::Error::last_os_error());
-            }
-            let combined = CombineRgn(outer, outer, hole, RGN_DIFF);
-            DeleteObject(hole);
             let current = CreateRectRgn(0, 0, 0, 0);
-            if current.is_null() {
-                DeleteObject(outer);
+            if current.is_null() { return Err(io::Error::last_os_error()); }
+            let absent = GetWindowRgn(manager, current) == ERROR;
+            DeleteObject(current);
+            if !absent && SetWindowRgn(manager, std::ptr::null_mut(), 1) == 0 {
                 return Err(io::Error::last_os_error());
             }
-            // SetWindowRgn emits window-position events; equal regions must not create a loop.
-            let unchanged =
-                GetWindowRgn(manager, current) != ERROR && EqualRgn(current, outer) != 0;
-            DeleteObject(current);
-            if unchanged {
-                DeleteObject(outer);
-                return Ok(());
+            if RedrawWindow(manager, std::ptr::null(), std::ptr::null_mut(),
+                RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN) == 0 {
+                return Err(io::Error::last_os_error());
             }
-            if combined == ERROR || SetWindowRgn(manager, outer, 1) == 0 {
-                DeleteObject(outer);
-                return Err(io::Error::other("Workspace aperture update refused"));
-            }
-            // Windows now owns outer. The game remains an independent top-level window.
             Ok(())
         }
     }
@@ -879,7 +843,8 @@ mod native {
     }
     pub(super) fn can_park(_: &OwnedProcess) -> io::Result<bool> { unavailable() }
     pub(super) fn parked_at(_: &OwnedProcess, _: Rectangle) -> bool { false }
-    pub(super) fn aperture(_: u64, _: Option<Rectangle>) -> io::Result<()> {
+    pub(super) fn receiving_input(_: &OwnedProcess) -> bool { false }
+    pub(super) fn clear_aperture(_: u64) -> io::Result<()> {
         unavailable()
     }
     pub(super) fn confirm_foreground(_: &Saved, _: Rectangle, _: u64, _: bool) -> io::Result<()> {
@@ -962,6 +927,7 @@ mod controller {
             }
         }
         fn place(&mut self, rect: Rectangle, activate: bool) -> io::Result<()> {
+            if activate { super::previews::clear_primary()?; }
             if !matches!(
                 self.send(Command::Place {
                     rect,
@@ -971,8 +937,8 @@ mod controller {
             ) {
                 return Err(io::Error::other("Surface presentation failed"));
             }
-            // A maximized foreground manager must not cover the independently rendered game.
-            native::aperture(self.manager, Some(rect))?;
+            // Keep the host opaque; unfocused presentation is a DWM image, not a window hole.
+            native::clear_aperture(self.manager)?;
             native::confirm_foreground(
                 self.saved
                     .as_ref()
@@ -1108,7 +1074,7 @@ mod controller {
             .map_err(|_| io::Error::other("Workspace state unavailable"))?;
         let mut error = preview_error;
         if let Some(lease) = state.active.iter().chain(state.parked.iter()).next() {
-            native::aperture(lease.manager, None)?;
+            native::clear_aperture(lease.manager)?;
         }
         if let Some(active) = state.active.as_mut() {
             match active.stop() {
@@ -1138,7 +1104,7 @@ mod controller {
             .lock()
             .map_err(|_| io::Error::other("Workspace state unavailable"))?;
         if let Some(lease) = state.active.as_ref() {
-            native::aperture(lease.manager, None)?;
+            native::clear_aperture(lease.manager)?;
         }
         if let Some(lease) = state.active.as_mut() {
             if lease.child.try_wait()?.is_some()
@@ -1168,7 +1134,7 @@ mod controller {
             .as_ref()
             .is_some_and(|lease| same(lease, target))
         {
-            native::aperture(state.active.as_ref().unwrap().manager, None)?;
+            native::clear_aperture(state.active.as_ref().unwrap().manager)?;
             state.active.as_mut().unwrap().stop()?;
             state.active = None;
             return Ok(());
@@ -1250,7 +1216,7 @@ mod controller {
                         .as_ref()
                         .is_some_and(|lease| same(lease, &saved.target))
                     {
-                        let _ = native::aperture(manager, None);
+                        let _ = native::clear_aperture(manager);
                         state.suspended = true;
                     }
                 }
@@ -1419,7 +1385,7 @@ mod controller {
                         io::ErrorKind::TimedOut | io::ErrorKind::BrokenPipe
                     );
                     if state.suspended {
-                        native::aperture(manager, None)?;
+                        native::clear_aperture(manager)?;
                     }
                     return Err(error);
                 }
@@ -1456,7 +1422,7 @@ mod controller {
                 old.place(rect, false)?;
                 state.suspended = false;
             } else {
-                native::aperture(manager, None)?;
+                native::clear_aperture(manager)?;
             }
             return Err(io::Error::other(format!(
                 "Workspace placement failed: {detail}. Previous session preserved."
@@ -1510,7 +1476,7 @@ mod controller {
             None => lease.viewport,
         };
         if native::minimized(manager)? {
-            native::aperture(manager, None)?;
+            native::clear_aperture(manager)?;
             return lease.background(Rectangle { x:0,y:0,
                 width:(lease.viewport.width*lease.viewport.pixel_ratio).round() as i32,
                 height:(lease.viewport.height*lease.viewport.pixel_ratio).round() as i32 }, live);
@@ -1522,15 +1488,20 @@ mod controller {
             Err(error) => return Err(error),
         };
         lease.viewport = next_viewport;
+        let result = if live && lease.saved.as_ref().is_some_and(|saved| !native::receiving_input(&saved.target)) {
+            // Keep native gameplay independent; a click on its DWM image reuses present_bound.
+            // The parked surface stays live while the manager is moved/resized or configured.
+            lease.background(rect, true)
+        } else { lease.place(rect, false) };
         // A transient layout/stacking failure must not hide the live session or latch suspension.
-        match lease.place(rect, false) {
+        match result {
             Err(error) => {
                 state.suspended = matches!(
                     error.kind(),
                     io::ErrorKind::TimedOut | io::ErrorKind::BrokenPipe
                 );
                 if state.suspended {
-                    native::aperture(manager, None)?;
+                    native::clear_aperture(manager)?;
                 }
                 Err(error)
             }
@@ -1674,6 +1645,51 @@ mod controller {
         }
         #[test]
         #[ignore = "Requires the built debug manager and Windows .NET compiler; synthetic windows only"]
+        fn presentation_keeps_manager_opaque_during_a_stalled_drag() {
+            crate::engine::dpi::configure().unwrap();
+            let class: Vec<u16> = "STATIC\0".encode_utf16().collect();
+            let manager = unsafe {
+                CreateWindowExW(0, class.as_ptr(), class.as_ptr(), WS_OVERLAPPEDWINDOW,
+                    50, 50, 1200, 900, std::ptr::null_mut(), std::ptr::null_mut(),
+                    std::ptr::null_mut(), std::ptr::null())
+            };
+            assert!(!manager.is_null());
+            let (_fixture, target) = fixture();
+            let original = native::capture(target.clone()).unwrap();
+            let viewport = Viewport { x: 20.0, y: 60.0, width: 700.0, height: 450.0,
+                pixel_ratio: unsafe { windows_sys::Win32::UI::HiDpi::GetDpiForWindow(manager) } as f64 / 96.0 };
+            present(manager as usize as u64, viewport, target.clone()).unwrap();
+            let source = u64::from_str_radix(target.window_handle.trim_start_matches("0x"),16).unwrap() as usize as HWND;
+            unsafe { assert_ne!(PostMessageW(source, 0x8001, 0, 0), 0); }
+            std::thread::sleep(Duration::from_millis(100));
+            unsafe { assert_ne!(SetWindowPos(manager, std::ptr::null_mut(), 250, 160, 0, 0,
+                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE), 0); }
+            let started = Instant::now();
+            follow_manager(manager as usize as u64).unwrap();
+            let elapsed = started.elapsed();
+            let opaque = unsafe {
+                use windows_sys::Win32::Graphics::Gdi::*;
+                let region = CreateRectRgn(0,0,0,0);
+                let mut bounds: RECT = std::mem::zeroed();
+                GetWindowRect(manager, &mut bounds);
+                let destination = native::rectangle(manager as usize as u64, viewport).unwrap();
+                let result = GetWindowRgn(manager, region) == ERROR || PtInRegion(region,
+                    destination.x - bounds.left + destination.width / 2,
+                    destination.y - bounds.top + destination.height / 2) != 0;
+                DeleteObject(region);
+                result
+            };
+            // Restore our own fixture even when the regression assertion fails.
+            release().unwrap();
+            let restored = native::capture(target).unwrap();
+            unsafe { DestroyWindow(manager); }
+            assert_eq!(restored.rect, original.rect);
+            assert_eq!(restored.style, original.style);
+            assert!(elapsed < Duration::from_millis(100), "Drag blocked on the game thread");
+            assert!(opaque, "A delayed game exposes the desktop through the manager viewport");
+        }
+        #[test]
+        #[ignore = "Requires the built debug manager and Windows .NET compiler; synthetic windows only"]
         fn stalled_window_reports_the_native_stage_and_recovers_without_game_termination() {
             crate::engine::dpi::configure().unwrap();
             let class: [u16; 7] = [83, 84, 65, 84, 73, 67, 0];
@@ -1800,19 +1816,10 @@ mod controller {
                     unsafe {
                         use windows_sys::Win32::Graphics::Gdi::*;
                         let region = CreateRectRgn(0, 0, 0, 0);
-                        assert_ne!(GetWindowRgn(manager, region), ERROR);
-                        let mut bounds: RECT = std::mem::zeroed();
-                        GetWindowRect(manager, &mut bounds);
                         assert_eq!(
-                            PtInRegion(
-                                region,
-                                composed.rect.x - bounds.left + composed.rect.width / 2,
-                                composed.rect.y - bounds.top + composed.rect.height / 2
-                            ),
-                            0,
-                            "Manager covers the game's center"
+                            GetWindowRgn(manager, region), ERROR,
+                            "Presentation must preserve the opaque manager and DWM frame"
                         );
-                        assert_ne!(PtInRegion(region, 5, 5), 0, "Manager chrome was cut out");
                         DeleteObject(region);
                     }
                     assert_ne!(composed.style, original.style);
@@ -2190,7 +2197,7 @@ mod tests {
                 ValidateRect(manager, std::ptr::null());
                 ValidateRect(child, std::ptr::null());
                 assert_eq!(GetUpdateRect(child, std::ptr::null_mut(), 0), 0);
-                native::aperture(manager as usize as u64, None).unwrap();
+                native::clear_aperture(manager as usize as u64).unwrap();
                 assert_ne!(GetUpdateRect(child, std::ptr::null_mut(), 0), 0, "WebView child was not invalidated");
                 let region = CreateRectRgn(0, 0, 0, 0);
                 assert_eq!(GetWindowRgn(manager, region), ERROR);

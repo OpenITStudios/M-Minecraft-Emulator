@@ -1,4 +1,4 @@
-//! DWM renders the game's surface directly into four owned, nonactivating windows.
+//! DWM renders monitoring tiles and the unfocused main game into owned windows.
 //! No screenshot loop, encoder, game input forwarding, or new lifecycle authority.
 use super::{controller, native, OwnedProcess, Rectangle, Viewport};
 use serde::{Deserialize, Serialize};
@@ -70,7 +70,8 @@ pub(super) fn configure(
         }
         let monitored=profiles.iter().filter(|(slot,_)|tiles.iter().any(|tile|tile.slot==*slot)).cloned().collect::<Vec<_>>();
         let unavailable = controller::adopt_preview_sources(manager, viewport, &monitored)?;
-        windows::apply(window, tiles, profiles, unavailable)
+        let primary = active.map(|slot| PreviewTile { slot, viewport });
+        windows::apply(window, tiles, primary, profiles, unavailable)
     }
     #[cfg(not(windows))]
     {
@@ -110,11 +111,13 @@ mod windows {
         Layout {
             window: tauri::Window,
             tiles: Vec<PreviewTile>,
+            primary: Option<PreviewTile>,
             profiles: Vec<(u32, OwnedProcess)>,
             unavailable: Vec<(u32, String)>,
             reply: mpsc::SyncSender<io::Result<PreviewReport>>,
         },
         Clear(mpsc::SyncSender<io::Result<()>>),
+        ClearPrimary(mpsc::SyncSender<io::Result<()>>),
     }
     struct Worker {
         sender: mpsc::SyncSender<Job>,
@@ -314,6 +317,7 @@ mod windows {
         manager: u64,
         profiles: Vec<(u32, OwnedProcess)>,
         thumbnails: Vec<Thumbnail>,
+        primary: Option<Thumbnail>,
     }
     impl Scene {
         fn visibility(&self) -> bool {
@@ -338,17 +342,28 @@ mod windows {
                     thumbnail.hide();
                 }
             }
+            if let Some(primary) = &mut self.primary {
+                // Never overlay the interactive game. Its native HWND receives all input.
+                let playing = native::receiving_input(&primary.target);
+                if let Err(error) = primary.update(visible && !playing) {
+                    if error.kind() != io::ErrorKind::WouldBlock {
+                        primary.hide();
+                    }
+                }
+            }
         }
         fn layout(
             &mut self,
             window: tauri::Window,
             tiles: Vec<PreviewTile>,
+            primary: Option<PreviewTile>,
             profiles: Vec<(u32, OwnedProcess)>,
             unavailable: Vec<(u32, String)>,
         ) -> io::Result<PreviewReport> {
             let manager = window.hwnd().map_err(io::Error::other)?.0 as usize as u64;
             if self.manager != manager {
                 self.thumbnails.clear();
+                self.primary = None;
             }
             self.window = Some(window);
             self.manager = manager;
@@ -362,6 +377,20 @@ mod windows {
                     && !unavailable.iter().any(|(slot, _)| *slot == thumbnail.slot)
             });
             let visible = self.visibility();
+            match primary {
+                Some(tile) => {
+                    let target = self.profiles.iter().find(|(slot,_)| *slot == tile.slot)
+                        .map(|(_,target)|target).ok_or_else(||io::Error::other("Active game preview source is unavailable"))?;
+                    if self.primary.as_ref().is_none_or(|image| !image.matches(tile.slot,target)) {
+                        self.primary = None;
+                        self.primary = Some(Thumbnail::create(manager, &tile, target.clone())?);
+                    }
+                    let image = self.primary.as_mut().unwrap();
+                    image.viewport = tile.viewport;
+                    image.update(visible && !native::receiving_input(target))?;
+                }
+                None => self.primary = None,
+            }
             let mut statuses = Vec::with_capacity(tiles.len());
             for tile in tiles {
                 let mut status = TileStatus {
@@ -438,6 +467,7 @@ mod windows {
                 manager: 0,
                 profiles: Vec::new(),
                 thumbnails: Vec::new(),
+                primary: None,
             };
             while GetMessageW(&mut message, ptr::null_mut(), 0, 0) > 0 {
                 if message.message == SELECT {
@@ -452,17 +482,23 @@ mod windows {
                             Job::Layout {
                                 window,
                                 tiles,
+                                primary,
                                 profiles,
                                 unavailable,
                                 reply,
                             } => {
                                 let _ =
-                                    reply.send(scene.layout(window, tiles, profiles, unavailable));
+                                    reply.send(scene.layout(window, tiles, primary, profiles, unavailable));
                                 laid_out = true;
                             }
                             Job::Clear(reply) => {
                                 scene.thumbnails.clear();
+                                scene.primary = None;
                                 scene.profiles.clear();
+                                let _ = reply.send(Ok(()));
+                            }
+                            Job::ClearPrimary(reply) => {
+                                scene.primary = None;
                                 let _ = reply.send(Ok(()));
                             }
                         }
@@ -533,6 +569,7 @@ mod windows {
     pub(super) fn apply(
         window: tauri::Window,
         tiles: Vec<PreviewTile>,
+        primary: Option<PreviewTile>,
         profiles: Vec<(u32, OwnedProcess)>,
         unavailable: Vec<(u32, String)>,
     ) -> io::Result<PreviewReport> {
@@ -550,7 +587,7 @@ mod windows {
                 })
                 .collect(),
         };
-        if !tiles.iter().any(|tile| {
+        if primary.is_none() && !tiles.iter().any(|tile| {
             profiles.iter().any(|(slot, _)| *slot == tile.slot)
                 && !unavailable.iter().any(|(slot, _)| *slot == tile.slot)
         }) {
@@ -561,6 +598,7 @@ mod windows {
             |reply| Job::Layout {
                 window,
                 tiles,
+                primary,
                 profiles,
                 unavailable,
                 reply,
@@ -571,6 +609,9 @@ mod windows {
     }
     pub(super) fn clear() -> io::Result<()> {
         send(Job::Clear, false).map(|_| ())
+    }
+    pub(super) fn clear_primary() -> io::Result<()> {
+        send(Job::ClearPrimary, false).map(|_| ())
     }
     pub(super) fn refresh() {
         let id = THREAD.load(Ordering::Acquire);
@@ -658,23 +699,45 @@ mod windows {
                     },
                 };
                 let mut thumbnail =
-                    Thumbnail::create(manager as usize as u64, &tile, target).unwrap();
+                    Thumbnail::create(manager as usize as u64, &tile, target.clone()).unwrap();
                 thumbnail.update(false).unwrap();
                 let mut size: SIZE = mem::zeroed();
                 assert!(DwmQueryThumbnailSourceSize(thumbnail.thumbnail, &mut size) >= 0);
                 assert!(size.cx > 0 && size.cy > 0);
                 assert_eq!(IsWindowVisible(thumbnail.window), 0);
                 ShowWindow(manager, SW_SHOWNOACTIVATE);
-                let scene=Scene{window:None,manager:manager as usize as u64,profiles:Vec::new(),thumbnails:Vec::new()};
+                let primary_tile = PreviewTile { slot: 5, viewport: Viewport {
+                    x: 10.0, y: 100.0, width: 640.0, height: 360.0, ..tile.viewport } };
+                let primary = Thumbnail::create(manager as usize as u64, &primary_tile, target).unwrap();
+                let mut scene=Scene{window:None,manager:manager as usize as u64,profiles:Vec::new(),thumbnails:Vec::new(),primary:Some(primary)};
                 assert_ne!(GetForegroundWindow(),manager);
                 assert!(scene.visibility(),"Visible monitoring must survive focus moving elsewhere");
                 thumbnail.update(scene.visibility()).unwrap();
                 assert_ne!(IsWindowVisible(thumbnail.window),0);
+                for (x,y) in [(-31000,-31500),(-31500,-31000),(-32000,-32000)] {
+                    assert_ne!(SetWindowPos(manager,ptr::null_mut(),x,y,0,0,
+                        SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE),0);
+                    scene.refresh();
+                    let primary = scene.primary.as_ref().unwrap();
+                    assert_ne!(IsWindowVisible(primary.window),0);
+                    let expected = native::rectangle(manager as usize as u64,primary_tile.viewport).unwrap();
+                    let mut observed: RECT = mem::zeroed();
+                    assert_ne!(GetWindowRect(primary.window,&mut observed),0);
+                    assert_eq!((observed.left,observed.top,observed.right-observed.left,observed.bottom-observed.top),
+                        (expected.x,expected.y,expected.width,expected.height),"Main DWM image lagged its manager");
+                    assert_eq!(GetWindow(primary.window,GW_OWNER),manager);
+                    let region = CreateRectRgn(0,0,0,0);
+                    assert_eq!(GetWindowRgn(manager,region),ERROR,"Preview cut a desktop hole");
+                    DeleteObject(region);
+                }
                 ShowWindow(manager,SW_MINIMIZE);
                 assert!(!scene.visibility());
+                scene.refresh();
+                assert_eq!(IsWindowVisible(scene.primary.as_ref().unwrap().window),0);
                 thumbnail.update(scene.visibility()).unwrap();
                 assert_eq!(IsWindowVisible(thumbnail.window),0);
                 drop(thumbnail);
+                drop(scene);
                 DestroyWindow(source);
                 DestroyWindow(manager);
             }
@@ -710,6 +773,12 @@ pub(super) fn clear() -> io::Result<()> {
     {
         Ok(())
     }
+}
+pub(super) fn clear_primary() -> io::Result<()> {
+    #[cfg(windows)]
+    { windows::clear_primary() }
+    #[cfg(not(windows))]
+    { Ok(()) }
 }
 pub(super) fn refresh() {
     #[cfg(windows)]
