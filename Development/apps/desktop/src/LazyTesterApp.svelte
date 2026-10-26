@@ -1,13 +1,19 @@
 <script lang="ts">
   import {onMount, tick} from 'svelte';
   import {listen} from '@tauri-apps/api/event';
-  import {lazyTester, nextProfile, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, type ProfileBinding, type DataLocation} from './app/bridge/lazyTester.js';
+  import {lazyTester, nextProfile, validFpsLimits, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, type ProfileBinding, type DataLocation, type SettingsReport} from './app/bridge/lazyTester.js';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazy-tester.css';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
   let binding: ProfileBinding | null = null;
   let dataLocation:DataLocation|null=null;
+  let settings:SettingsReport|null=null, settingsNotice='';
+  let applyingPreset=false;
+  let savingPerformance=false;
+  let activeFps:number|undefined=144,backgroundFps:number|undefined=10,performanceNotice='';
+  $: performanceDirty=settings!==null&&(activeFps!==settings.activeFps||backgroundFps!==settings.backgroundFps);
+  $: performanceValid=validFpsLimits(activeFps,backgroundFps);
   let clearSlot: ProfileSlot | null = null, storageNotice = '';
   let page: 'workspace' | 'launchers' | 'storage' | 'settings' = 'workspace';
   let active: ProfileSlot | null = null, requested: ProfileSlot | null = null, queued: ProfileSlot | null = null;
@@ -47,9 +53,13 @@
     if (busy || refreshing || resizing || disposed) return;
     refreshing = true;
     try {
-      const snapshot = await lazyTester.inspect();
+      const snapshot = page === 'settings' ? await lazyTester.settings() : await lazyTester.inspect();
       if (disposed) return;
       profiles = snapshot.profiles; available = true; connectionIssue = '';
+      if(snapshot.settings){
+        if(!performanceDirty){activeFps=snapshot.settings.activeFps;backgroundFps=snapshot.settings.backgroundFps;}
+        settings=snapshot.settings;
+      }
       if (active !== null && selectedIdentity !== identity(profiles.find(profile => profile.slot === active))) {
         await workspaceSurface.release(); active = null; selectedIdentity = '';
       }
@@ -90,6 +100,29 @@
       dirty = true;
     } catch (error) { issue = String(error); }
     finally { busy = false; }
+    if(page==='settings')void refresh();
+  }
+  async function applyPreset() {
+    if(busy||refreshing||resizing||!available||!binding?.configured||!settings?.canApplyPreset||runningCount>0)return;
+    busy=true;applyingPreset=true;issue='';settingsNotice='';
+    try {
+      const snapshot=await lazyTester.applyPreset();
+      profiles=snapshot.profiles;settings=snapshot.settings;
+      if(settings.changedProfiles===null)throw new Error('The preset update was not confirmed. Refresh settings before trying again.');
+      settingsNotice=settings.changedProfiles===0?'All five profiles already use this preset.':'Graphics preset saved for all five profiles.';
+    }catch(error){issue=String(error);settings=null;}
+    finally{applyingPreset=false;busy=false;}
+  }
+  async function savePerformance() {
+    if(busy||refreshing||resizing||!available||!settings||!performanceValid||!performanceDirty)return;
+    busy=true;savingPerformance=true;issue='';performanceNotice='';
+    try{
+      const snapshot=await lazyTester.savePerformance(activeFps!,backgroundFps!);
+      profiles=snapshot.profiles;settings=snapshot.settings;
+      activeFps=settings.activeFps;backgroundFps=settings.backgroundFps;
+      performanceNotice='Saved. New limits apply when each Minecraft profile next starts.';
+    }catch(error){issue=String(error);}
+    finally{savingPerformance=false;busy=false;}
   }
   async function release() {
     if (busy || refreshing || resizing) return;
@@ -265,7 +298,33 @@
         <p>Close all Minecraft sessions before clearing web cache.</p>
       </section>
     {:else if page === 'settings'}
-      <section class="lt-panel"><h2>Performance</h2><div class="lt-setting"><span>Active FPS limit</span><strong>144</strong></div><div class="lt-setting"><span>Background FPS limit</span><strong>10</strong></div><p>The in-game counter shows the actual frame rate.</p><h2>Graphics preset</h2><p>Simple · 12-chunk render distance · reduced effects. Applied at launch. Simulation distance stays unchanged.</p><h2>When Lazy Tester closes</h2><p>Minecraft keeps running and its windows return to the desktop.</p></section>
+      <section class="lt-panel" aria-label="Settings" aria-busy={applyingPreset||savingPerformance}>
+        <h2>Performance</h2>
+        {#if settings}
+          <form on:submit|preventDefault={savePerformance}>
+            <label class="lt-setting"><span>Active FPS limit</span><input type="number" min="1" max="1000" step="1" required bind:value={activeFps} on:input={()=>performanceNotice=''} disabled={busy} aria-describedby="fps-help" /></label>
+            <label class="lt-setting"><span>Background FPS limit</span><input type="number" min="1" max={activeFps??1000} step="1" required bind:value={backgroundFps} on:input={()=>performanceNotice=''} disabled={busy} aria-describedby="fps-help" /></label>
+            <p id="fps-help" class="lt-setting-help">Shared by all five profiles. Saved limits apply at the next launch; running games keep their current limits.</p>
+            {#if !performanceValid}<p class="lt-error" role="alert">Enter whole numbers from 1 to 1000. Background FPS must not exceed active FPS.</p>{/if}
+            <div class="lt-actions lt-setting-actions"><button type="submit" disabled={busy||refreshing||resizing||!available||!performanceDirty||!performanceValid}>{savingPerformance?'Saving…':'Save'}</button><button type="button" class="lt-secondary" disabled={busy} on:click={()=>{activeFps=144;backgroundFps=10;performanceNotice='';}}>Restore defaults</button></div>
+            {#if performanceDirty}<p class="lt-setting-help">Unsaved changes</p>{/if}
+            {#if performanceNotice}<p class="lt-setting-help" role="status">{performanceNotice}</p>{/if}
+          </form>
+          <p class="lt-setting-help">The in-game counter shows the actual frame rate.</p>
+        {:else}<p>{refreshing?'Loading settings…':'Settings unavailable. Use Refresh to try again.'}</p>{/if}
+        <h2>Graphics preset</h2>
+        <div class="lt-setting"><span>Graphics mode</span><strong>Simple</strong></div>
+        <div class="lt-setting"><span>Render distance</span><strong>{settings?settings.renderDistanceChunks+' chunks':'Unavailable'}</strong></div>
+        <div class="lt-setting"><span>Visual effects</span><strong>Reduced</strong></div>
+        <div class="lt-setting"><span>Simulation distance</span><strong>Unchanged</strong></div>
+        <p class="lt-setting-help">Saved in each profile and applied again at launch. Close all Minecraft sessions to apply it now.</p>
+        <div class="lt-actions lt-setting-actions"><button disabled={busy||refreshing||resizing||!available||!binding?.configured||!settings?.canApplyPreset||runningCount>0} on:click={applyPreset}>{applyingPreset?'Applying…':'Apply to all profiles'}</button></div>
+        {#if settingsNotice}<p class="lt-setting-help" role="status">{settingsNotice}</p>{/if}
+        {#if !binding?.configured}<p class="lt-setting-help">Complete profile setup before applying the preset.</p>{:else if settings&&!settings.canApplyPreset}<p class="lt-setting-help">Close all Minecraft sessions normally, then refresh settings.</p>{/if}
+        <h2>Profile data</h2><p>View profile locations, storage use and cache controls in Storage.</p>
+        <div class="lt-actions lt-setting-actions"><button class="lt-secondary" disabled={busy||refreshing||resizing} on:click={()=>navigate('storage')}>Manage storage</button></div>
+        <h2>When Lazy Tester closes</h2><p>Minecraft keeps running and its windows return to the desktop.</p>
+      </section>
     {/if}
   </main>
 </div>

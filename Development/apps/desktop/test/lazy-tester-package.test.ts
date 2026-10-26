@@ -31,11 +31,11 @@ describe('Lazy Tester native package',()=>{
   it('derives hashes from the exact runtime policy and refuses absent or malformed review',()=>{
     const source=readFileSync(new URL('../src-tauri/src/engine/independent_bootstrap.rs',import.meta.url),'utf8');
     expect(reviewedDigests(source)).toEqual({
-      'bootstrap-compat.dll':'f65f263b6cbf76054a86d67e50ba4d02d3c5b15fc98a70e627ea19a73eab2edf',
-      'bootstrap-enroll.dll':'73f9038364b2b853a50e6d058613049234568fccd054ce9a758f572531707368',
+      'bootstrap-compat.dll':'9d1cf60673c1ebbc0d94c30c1e28e226aa4429653901e5abd6e95400457ef8cb',
+      'bootstrap-enroll.dll':'6e7c000bee2dcf043d372317c77a04078ca12451c7273a18bd54e8f89e62af2a',
     });
     expect(()=>reviewedDigests('const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = None;')).toThrow();
-    expect(()=>reviewedDigests(source.replace('0x73, 0xf9','0x73'))).toThrow();
+    expect(()=>reviewedDigests(source.replace('0x6e, 0x7c','0x6e'))).toThrow();
   });
   it('stages exactly two verified DLLs, refuses changed bytes and never copies adjacent profiles',()=>{
     const root=mkdtempSync(join(tmpdir(),'lazy-package-fixture-'));

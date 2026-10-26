@@ -208,9 +208,12 @@ pub(super) fn apply(stores: &[SlotStorage]) -> io::Result<usize> {
 // The retained session owner proves these particular profiles have no resumed child.
 // Other profiles may be running; never pass their stores here.
 pub(super) fn apply_inactive(stores: &[SlotStorage]) -> io::Result<usize> {
-    let prepared: Vec<_> = stores
-        .iter()
-        .map(|store| Prepared::read(&store.private))
+    apply_directories(stores.iter().map(|store| &store.private))
+}
+
+fn apply_directories<'a>(directories: impl Iterator<Item = &'a File>) -> io::Result<usize> {
+    let prepared: Vec<_> = directories
+        .map(Prepared::read)
         .collect::<io::Result<_>>()?;
     // Validate every profile before replacing any options file; retries are idempotent.
     let mut changed = 0;
@@ -223,6 +226,27 @@ pub(super) fn apply_inactive(stores: &[SlotStorage]) -> io::Result<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn five_profile_preset_validates_all_inputs_before_writing_and_retries_idempotently() {
+        let roots: Vec<_> = (0..5).map(|_| super::super::fresh_root(&std::env::temp_dir()).unwrap()).collect();
+        let pins: Vec<_> = roots.iter().map(|root| open_directory(root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap()).collect();
+        let paths: Vec<_> = pins.iter().map(|pin| Prepared::read(pin).unwrap().path).collect();
+        for path in &paths { fs::write(path, b"graphics_mode:1\nsimulation:7\nother:kept\n").unwrap(); }
+        fs::write(&paths[4], b"invalid:\xff").unwrap();
+        assert!(apply_directories(pins.iter()).is_err());
+        for path in &paths[..4] { assert_eq!(fs::read(path).unwrap(), b"graphics_mode:1\nsimulation:7\nother:kept\n"); }
+        fs::write(&paths[4], b"simulation:7\nother:kept\n").unwrap();
+        assert_eq!(apply_directories(pins.iter()).unwrap(), 5);
+        assert_eq!(apply_directories(pins.iter()).unwrap(), 0);
+        for path in &paths {
+            let text = fs::read_to_string(path).unwrap();
+            assert!(text.contains("simulation:7\nother:kept\n"));
+            assert!(text.contains("gfx_viewdistance:192\n"));
+        }
+        drop(pins);
+        for root in roots { assert_eq!(root.parent(), Some(std::env::temp_dir().as_path())); fs::remove_dir_all(root).unwrap(); }
+    }
 
     #[test]
     fn preset_preserves_unowned_settings_and_is_idempotent() {

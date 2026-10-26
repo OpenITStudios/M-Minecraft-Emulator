@@ -36,7 +36,9 @@ bool validPolicy(const PolicyConfig& config, const education_bootstrap::Config& 
     const auto object = reinterpret_cast<Query>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryObject"));
     const auto event = reinterpret_cast<Query>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryEvent"));
     const auto compare = reinterpret_cast<Compare>(GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "CompareObjectHandles"));
-    if (!object || !event || !compare || config.reserved || config.controllerPid == child.pid) return false;
+    unsigned active=0, background=0;
+    const bool limits = pacingLimits(config,active,background);
+    if (!object || !event || !compare || !limits || config.controllerPid == child.pid) return false;
     const HANDLE handles[]{config.level, config.changed, config.stop, config.controller};
     for (unsigned i = 0; i < 4; ++i) {
         const HANDLE handle = handles[i];
@@ -188,7 +190,7 @@ bool prepare(const education_bootstrap::Config& process) noexcept {
     const auto& config = capability.creation;
     UnmapViewOfFile(view); CloseHandle(section);
     CreationConfig actual{}; HMODULE module = nullptr;
-    if (config.magic != CreationMagic || config.version != (pacing ? 2UL : 1UL) || config.bytes != bytes
+    if (config.magic != CreationMagic || (pacing ? config.version != 2 && config.version != 3 : config.version != 1) || config.bytes != bytes
         || config.pid != process.pid || config.session != process.session
         || memcmp(&config.created, &process.created, sizeof(FILETIME))
         || !imageMetadata(actual, module) || config.imageBytes != actual.imageBytes
@@ -208,6 +210,10 @@ bool prepare(const education_bootstrap::Config& process) noexcept {
     if (pacing) {
         if (!validPolicy(capability, process)) return false;
         input = {capability.level, capability.changed, capability.stop, capability.controller};
+        if (config.version == 3) {
+            input.activeFps = capability.reserved & 0xffff;
+            input.backgroundFps = capability.reserved >> 16;
+        }
     }
     armed = true;
     return true;

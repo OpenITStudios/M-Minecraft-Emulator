@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {nextProfile, parseSession, parsePreviewReport, parseProfileBinding, parseDataLocation, type ProfileSession} from '../src/app/bridge/lazyTester.js';
+import {nextProfile, parseSession, parsePreviewReport, parseProfileBinding, parseDataLocation, validFpsLimits, type ProfileSession} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
@@ -7,6 +7,24 @@ const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process
   pid: slot + 100, createdFileTime: String(slot + 200), sessionId: 1, windowHandle: `0x${slot}`, responding: true,
 }});
 describe('Lazy Tester profile contract', () => {
+  it('validates configured Settings policy and refuses a successful preset update while games are active',()=>{
+    const settings={activeFps:144,backgroundFps:10,renderDistanceChunks:12,canApplyPreset:true,changedProfiles:null};
+    expect(parseSession({...stopped(),settings}).settings).toEqual(settings);
+    expect(parseSession({...stopped(),settings:{...settings,changedProfiles:0}}).settings!.changedProfiles).toBe(0);
+    expect(parseSession({...stopped(),settings:{...settings,changedProfiles:5}}).settings!.changedProfiles).toBe(5);
+    expect(parseSession({...stopped(),settings:{...settings,activeFps:60,backgroundFps:5}}).settings!.activeFps).toBe(60);
+    for(const invalid of [{...settings,activeFps:0},{...settings,activeFps:1001},{...settings,backgroundFps:145},
+      {...settings,renderDistanceChunks:8},{...settings,changedProfiles:-1},{...settings,changedProfiles:6},
+      {...settings,changedProfiles:0.5},{...settings,measuredFps:144},
+      {...settings,canApplyPreset:false,changedProfiles:1}])expect(()=>parseSession({...stopped(),settings:invalid})).toThrow();
+    const active={...stopped(),profiles:[running(1),...stopped().profiles.slice(1)],settings};
+    expect(()=>parseSession(active)).toThrow();
+    expect(parseSession({...active,settings:{...settings,canApplyPreset:false}}).settings!.canApplyPreset).toBe(false);
+  });
+  it('accepts bounded custom FPS pairs and rejects missing, fractional and inverted limits',()=>{
+    for(const [active,background] of [[144,10],[60,5],[1,1],[1000,1000]])expect(validFpsLimits(active,background)).toBe(true);
+    for(const [active,background] of [[0,1],[1001,10],[60,61],[60,0],[60.5,5],[NaN,5],[undefined,5],['60',5]])expect(validFpsLimits(active,background)).toBe(false);
+  });
   it('validates persisted data locations without inferring account readiness',()=>{
     const value={schema:1,defaultPath:'D:\\Lazy Tester\\Data',path:'D:\\Lazy Tester\\Data',canLocate:true,
       profiles:[1,2,3,4,5].map(slot=>({slot,path:`D:\\Lazy Tester\\Data\\Profiles\\Minecraft-${slot}`}))};

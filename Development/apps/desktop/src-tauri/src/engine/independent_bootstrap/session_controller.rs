@@ -3,7 +3,7 @@ use super::*;
 use crate::engine::{
     native_clients_session::{
         pipe::{Endpoint, Peer, Server},
-        ProfileSession, ProfileStorage, SessionRequest, SessionSnapshot,
+        ProfileSession, ProfileStorage, SessionRequest, SessionSnapshot, SettingsReport,
     },
     owned_provider::OwnedProcess,
 };
@@ -79,6 +79,7 @@ impl Sessions {
             ));
         }
         let payload = BootstrapLibrary::reviewed()?;
+        crate::engine::manager_settings::load_performance()?;
         // Revalidate registration and exact game bytes before every launch.
         let (path, image) = registered_image(true)?;
         if path != self.path || !same_image(&image_id(&image)?, &image_id(&self.image)?) {
@@ -179,6 +180,7 @@ impl Sessions {
             schema: 1,
             profiles,
             storage: None,
+            settings: None,
         }
     }
 
@@ -262,6 +264,28 @@ impl Sessions {
         }
         profile_storage::clear(&self.store(slot)?.private, inactive)
     }
+
+    fn settings(&mut self, apply: bool) -> io::Result<SettingsReport> {
+        self.reap();
+        let idle = self.running.iter().all(Option::is_none)
+            && self.stores.iter().all(Option::is_some)
+            && super::super::inspect_native_workspace()?.processes.is_empty();
+        let mut report = SettingsReport::policy(idle, None)?;
+        let changed = if apply {
+            require_preset_idle(idle)?;
+            // Retain the original directory/registry pins; never open or seed replacement profiles.
+            let stores = self.stores.iter().map(|store| store.as_ref().unwrap().duplicate())
+                .collect::<io::Result<Vec<_>>>()?;
+            Some(game_preset::apply(&stores)? as u32)
+        } else { None };
+        report.changed_profiles = changed;
+        Ok(report)
+    }
+}
+
+fn require_preset_idle(idle: bool) -> io::Result<()> {
+    if !idle { return Err(invalid("Close all Minecraft sessions normally before applying the graphics preset")); }
+    Ok(())
 }
 
 // Metadata only, bounded, and no traversal through junctions/symlinks. Not a cache classifier.
@@ -424,8 +448,20 @@ fn run() -> io::Result<()> {
         manager = Some(envelope.peer);
         let reply = (|| {
             let mut storage = None;
+            let mut settings = None;
             match envelope.request {
                 SessionRequest::Inspect => {}
+                SessionRequest::InspectSettings => {
+                    settings = Some(sessions.settings(false).map_err(|error| error.to_string())?);
+                }
+                SessionRequest::ApplyPreset => {
+                    settings = Some(sessions.settings(true).map_err(|error| error.to_string())?);
+                }
+                SessionRequest::SavePerformance {active_fps,background_fps} => {
+                    crate::engine::manager_settings::save_performance(crate::engine::manager_settings::PerformanceSettings {active_fps,background_fps})
+                        .map_err(|error|error.to_string())?;
+                    settings=Some(sessions.settings(false).map_err(|error|error.to_string())?);
+                }
                 SessionRequest::Launch { slot } => {
                     sessions.launch(slot).map_err(|error| error.to_string())?
                 }
@@ -444,6 +480,7 @@ fn run() -> io::Result<()> {
             }
             let mut snapshot = sessions.snapshot();
             snapshot.storage = storage;
+            snapshot.settings = settings;
             Ok(snapshot)
         })();
         let _ = envelope.reply.send(reply); // A disconnected UI never cancels an admitted launch.
@@ -472,6 +509,18 @@ pub(super) fn maybe_run() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preset_request_refuses_uncertain_storage_before_writing_or_starting_any_game() {
+        let mut sessions=Sessions {
+            stores:(0..5).map(|_|None).collect(), running:(0..5).map(|_|None).collect(),
+            issues:vec![None;5], windows:vec![None;5], path:String::new(),
+            image:File::open(std::env::current_exe().unwrap()).unwrap(),
+        };
+        assert!(sessions.settings(true).unwrap_err().to_string().contains("Close all Minecraft"));
+        assert!(sessions.running.iter().all(Option::is_none));
+        assert!(sessions.snapshot().profiles.iter().all(|profile|profile.state=="ATTENTION"));
+    }
 
     #[test]
     fn metadata_scan_counts_files_and_reports_bounds_without_opening_contents() {

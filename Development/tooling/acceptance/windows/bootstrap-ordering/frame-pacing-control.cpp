@@ -1,4 +1,5 @@
 #include "frame-pacing.h"
+#include "presentation-enrollment.h"
 #include "dxgi-pacing.h"
 #include <d3d11.h>
 #include <d3d12.h>
@@ -12,6 +13,7 @@
 #include <vector>
 #include <exception>
 #include <string>
+#include <utility>
 
 namespace {
 using Microsoft::WRL::ComPtr;
@@ -544,6 +546,39 @@ int run() {
 }
 } // namespace
 int wmain(int argc, wchar_t** argv) {
+    if (argc == 2 && wcscmp(argv[1], L"--run-configurable-limits-self-test") == 0) {
+        try {
+            presentation_enrollment::PolicyConfig config{}; unsigned active=0,background=0;
+            config.creation.version=2;
+            check(presentation_enrollment::pacingLimits(config,active,background) && active==144 && background==10);
+            config.reserved=60|(5<<16);
+            check(!presentation_enrollment::pacingLimits(config,active,background));
+            config.creation.version=3;
+            check(presentation_enrollment::pacingLimits(config,active,background) && active==60 && background==5);
+            config.reserved=60|(61<<16); check(!presentation_enrollment::pacingLimits(config,active,background));
+            config.creation.version=4; check(!presentation_enrollment::pacingLimits(config,active,background));
+            for (const auto invalid : {std::pair<unsigned,unsigned>{0,1}, {1001,10}, {60,0}, {60,61}}) {
+                presentation_pacing::Input input{}; input.activeFps=invalid.first; input.backgroundFps=invalid.second;
+                bool refused=false; try { presentation_pacing::Pacer pacer(input); } catch (...) { refused=true; }
+                check(refused);
+            }
+            presentation_pacing::Input input{}; input.activeFps=60; input.backgroundFps=5;
+            presentation_pacing::Pacer pacer(input);
+            LARGE_INTEGER frequency{}; check(QueryPerformanceFrequency(&frequency) != FALSE);
+            check(pacer.foreground(true));
+            const auto first=pacer.wait_for_frame(), second=pacer.wait_for_frame();
+            check(first.outcome==Outcome::Frame && second.ceiling==60
+                && second.released-first.released >= (frequency.QuadPart+59)/60);
+            check(pacer.foreground(false));
+            const auto backgroundFrame=pacer.wait_for_frame();
+            check(backgroundFrame.ceiling==5 && backgroundFrame.released-second.released >= (frequency.QuadPart+4)/5);
+            check(pacer.foreground(true));
+            check(pacer.wait_for_frame().ceiling==60);
+            check(pacer.stop() && pacer.wait_for_frame().outcome==Outcome::Stopped);
+            std::printf("{\"scope\":\"CONFIGURABLE_PACER_ONLY\",\"selfCheck\":true,\"activeFps\":60,\"backgroundFps\":5,\"minecraft\":\"NOT_EXECUTED\"}\n");
+            return 0;
+        } catch (...) { return 1; }
+    }
     if (argc == 2 && wcscmp(argv[1], L"--policy-controller-exit") == 0) return 0;
     if (argc != 2) return 64;
     const bool modern = wcscmp(argv[1], L"--run-d3d12-adapter-self-test") == 0;

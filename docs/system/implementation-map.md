@@ -13,6 +13,13 @@ This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build
 
 ## Current Lazy Tester route — 26 October 2026
 
+Functional Settings uses the same lazy_tester_session adapter and retained
+session actor: InspectSettings, SavePerformance and ApplyPreset. Existing
+manager_settings.rs owns the executable-adjacent performance.json; the original
+game_preset.rs owns all graphics-option writes. Private presentation v3 passes
+validated immutable FPS limits to the existing pacer at startup. V2/defaults stay
+144/10; no parallel limiter, live update worker or profile-state owner is added.
+
 The mounted desktop is `Development/apps/desktop/src/LazyTesterApp.svelte`, consuming
 `app/bridge/lazyTester.ts`. Thin commands in `src-tauri/src/commands/native_clients.rs`
 route to `Development/engine/native_clients_session.rs` (reconnecting transport via its

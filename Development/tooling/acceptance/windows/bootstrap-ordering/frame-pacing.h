@@ -17,21 +17,29 @@ struct Permit {
 // Trusted producer contract: manual-reset level/stop, auto-reset changed, and
 // the controller PROCESS handle. The consumer duplicates SYNCHRONIZE rights;
 // the capability decoder must establish object types/identity before handing off.
-struct Input { HANDLE level = nullptr, changed = nullptr, stop = nullptr, controller = nullptr; };
+inline bool validCeilings(unsigned active, unsigned background) noexcept {
+    return active >= 1 && active <= 1000 && background >= 1 && background <= active;
+}
+struct Input {
+    HANDLE level = nullptr, changed = nullptr, stop = nullptr, controller = nullptr;
+    unsigned activeFps = 144, backgroundFps = 10;
+};
 class Pacer {
     enum class Mode { Background, Foreground, Stopped };
     std::atomic<Mode> mode_{Mode::Background};
     HANDLE changed_ = nullptr, timer_ = nullptr;
     LONGLONG frequency_ = 0, previous_ = 0;
     HANDLE external_[4]{};
+    unsigned activeFps_, backgroundFps_;
     void close() noexcept {
         if (timer_) CloseHandle(timer_);
         if (changed_) CloseHandle(changed_);
         for (HANDLE handle : external_) if (handle) CloseHandle(handle);
     }
 public:
-    explicit Pacer(const Input& input = {}) {
+    explicit Pacer(const Input& input = {}) : activeFps_(input.activeFps), backgroundFps_(input.backgroundFps) {
         try {
+            if (!validCeilings(activeFps_, backgroundFps_)) throw std::runtime_error("Invalid FPS limits");
             const HANDLE source[]{input.level, input.changed, input.stop, input.controller};
             unsigned count = 0;
             for (HANDLE handle : source) {
@@ -97,7 +105,7 @@ public:
                 if (level != WAIT_OBJECT_0 && level != WAIT_TIMEOUT) return {Outcome::Error, 0, 0};
                 mode = level == WAIT_OBJECT_0 ? Mode::Foreground : Mode::Background;
             }
-            const unsigned ceiling = mode == Mode::Foreground ? 144 : 10;
+            const unsigned ceiling = mode == Mode::Foreground ? activeFps_ : backgroundFps_;
             LARGE_INTEGER now{};
             if (!QueryPerformanceCounter(&now) || now.QuadPart < previous_)
                 return {Outcome::Error, 0, 0};

@@ -22,6 +22,7 @@ Lazy Tester/
     independent-bootstrap/       two reviewed native DLLs
     distribution/               public package policy
     data-location.json          private runtime-created location pointer
+    performance.json            saved FPS limits, created only by Save
   Data/
     profiles.json               private Windows-user/directory identities
     Profiles/
@@ -43,8 +44,33 @@ governed by [artifact storage](artifact-storage.md).
 `Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/product_profiles.rs` owns
 location resolution, catalog validation, fresh store preparation and reopening.
 The existing session controller alone owns live games, handles and launch policy.
-The new catalog reuses the bootstrap's filesystem/HKCU constructor. The DLL ABI,
-reviewed DLL bytes and original profile data are unchanged.
+The catalog reuses the bootstrap's filesystem/HKCU constructor. The storage DLL
+ABI and original profile data remain unchanged. Configurable FPS uses a private
+presentation v3 capability and newly pinned native payload bytes.
+
+## Performance settings
+
+The existing manager_settings Rust owner stores only activeFps/backgroundFps in
+App/performance.json (beside the executable for retained flat installations).
+Missing settings use 144/10 without creating a file. Save validates integer limits
+1..1000, with background no higher than active, and atomically publishes both.
+Invalid/unreadable existing settings are reported and preserved, never silently
+replaced by defaults. This file has no credentials, world data or profile catalog.
+Local App refresh preserves it alongside data-location.json; it is never bundled.
+
+The retained session actor serializes Save with launch and preset actions. Save
+does not start games or a missing controller; it may run while games continue.
+Each new process receives immutable limits through the existing authenticated
+presentation capability. Running games keep their old limits until normal exit
+and a subsequent explicit launch. No settings watcher or per-frame file access
+is added. V2 retains 144/10; v3 validates packed limits in the same 120-byte private
+record, without changing storage/account capabilities.
+
+Settings also offers Apply to all profiles for the existing Simple/12-chunk
+graphics preset. Its original options writer owns validation, backups and
+idempotent updates. The sole session actor refuses live/uncertain sessions and
+checks external Minecraft processes before applying it. Simulation distance and
+unowned options stay unchanged. This action never launches a game.
 
 The relative default pointer `Data` follows the application home when the whole
 folder is moved and its executable is opened from the new location. This does not

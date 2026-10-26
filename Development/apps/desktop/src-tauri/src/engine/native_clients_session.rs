@@ -21,6 +21,26 @@ pub struct SessionSnapshot {
     pub schema: u32,
     pub profiles: Vec<ProfileSession>,
     pub storage: Option<Vec<ProfileStorage>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settings: Option<SettingsReport>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SettingsReport {
+    pub active_fps: u32,
+    pub background_fps: u32,
+    pub render_distance_chunks: u32,
+    pub can_apply_preset: bool,
+    pub changed_profiles: Option<u32>,
+}
+impl SettingsReport {
+    pub fn policy(can_apply_preset: bool, changed_profiles: Option<u32>) -> io::Result<Self> {
+        // Configured ceilings of the reviewed payload, never measured frame rates.
+        let limits=super::manager_settings::load_performance()?;
+        Ok(Self { active_fps: limits.active_fps, background_fps: limits.background_fps, render_distance_chunks: 12,
+            can_apply_preset, changed_profiles })
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -53,6 +73,7 @@ impl SessionSnapshot {
         Self {
             schema: 1,
             storage: None,
+            settings: None,
             profiles: (1..=5)
                 .map(|slot| ProfileSession {
                     slot,
@@ -69,6 +90,9 @@ impl SessionSnapshot {
 #[serde(tag = "operation", deny_unknown_fields)]
 pub enum SessionRequest {
     Inspect,
+    InspectSettings,
+    ApplyPreset,
+    SavePerformance { #[serde(rename="activeFps")] active_fps:u32, #[serde(rename="backgroundFps")] background_fps:u32 },
     InspectStorage,
     OpenProfileFolder { slot: u32 },
     ClearProfileCache { slot: u32 },
@@ -97,6 +121,9 @@ static CONTROLLER: Mutex<Controller> = Mutex::new(Controller {
 
 #[cfg(windows)]
 pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
+    if let SessionRequest::SavePerformance {active_fps,background_fps}=request {
+        super::manager_settings::PerformanceSettings {active_fps,background_fps}.validate()?;
+    }
     if matches!(request, SessionRequest::Launch { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } if !(1..=5).contains(&slot))
     {
         return Err(io::Error::new(
@@ -104,7 +131,7 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
             "Unknown Minecraft profile",
         ));
     }
-    let inspecting = matches!(request, SessionRequest::Inspect);
+    let inspecting = matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings);
     let mut owner = CONTROLLER
         .lock()
         .map_err(|_| io::Error::other("Session transport unavailable"))?;
@@ -185,8 +212,16 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
         return Err(io::Error::new(io::ErrorKind::WouldBlock,
             "An existing Minecraft controller uses another build or is still starting. Its games are preserved; no replacement was started."));
     }
-    if matches!(request, SessionRequest::Inspect) {
-        return Ok(Ok(SessionSnapshot::stopped()));
+    if matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings | SessionRequest::SavePerformance { .. }) {
+        let mut snapshot = SessionSnapshot::stopped();
+        if let SessionRequest::SavePerformance { active_fps, background_fps } = request {
+            super::manager_settings::save_performance(super::manager_settings::PerformanceSettings {active_fps,background_fps})?;
+        }
+        if !matches!(request, SessionRequest::Inspect) {
+            let idle = super::native_clients::inspect_native_workspace()?.processes.is_empty();
+            snapshot.settings = Some(SettingsReport::policy(idle, None)?);
+        }
+        return Ok(Ok(snapshot));
     }
     // Explicit user action only. A fresh UI first tries the existing authenticated endpoint.
     let mut child = Command::new(std::env::current_exe()?)
@@ -258,6 +293,19 @@ pub(super) fn read_message(input: &mut impl io::BufRead) -> io::Result<Option<St
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn settings_report_describes_the_reviewed_policy_without_starting_a_controller() {
+        let policy = SettingsReport::policy(false, None).unwrap();
+        assert_eq!((policy.active_fps, policy.background_fps, policy.render_distance_chunks), (144, 10, 12));
+        let pacing = include_str!("../../../../../tooling/acceptance/windows/bootstrap-ordering/frame-pacing.h");
+        assert!(pacing.contains("activeFps = 144, backgroundFps = 10"));
+        let snapshot = SessionSnapshot::stopped();
+        assert!(!serde_json::to_value(&snapshot).unwrap().as_object().unwrap().contains_key("settings"));
+        assert!(serde_json::from_str::<SessionRequest>(r#"{"operation":"ApplyPreset"}"#).is_ok());
+        assert!(serde_json::from_str::<SessionRequest>(r#"{"operation":"InspectSettings"}"#).is_ok());
+        #[cfg(windows)]
+        assert_eq!(request(SessionRequest::SavePerformance {active_fps:0,background_fps:10}).unwrap_err().kind(),io::ErrorKind::InvalidInput);
+    }
     #[cfg(windows)]
     #[test]
     fn existing_incompatible_controller_gate_is_distinguished_from_absence() {
@@ -286,6 +334,8 @@ mod tests {
         for input in [
             r#"{"operation":"Launch","slot":1,"path":"other.exe"}"#,
             r#"{"operation":"Delete","slot":1}"#,
+            r#"{"operation":"SavePerformance","activeFps":60,"backgroundFps":5,"path":"other.json"}"#,
+            r#"{"operation":"SavePerformance","activeFps":60.5,"backgroundFps":5}"#,
         ] {
             assert!(serde_json::from_str::<SessionRequest>(input).is_err());
         }

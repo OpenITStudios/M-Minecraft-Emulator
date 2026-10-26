@@ -101,11 +101,12 @@ export function stageLocalApp(cwd, release, sha) {
     writeFileSync(target,bytes,{flag:'wx'});
     if (digest(readFileSync(target)) !== sha256) throw new Error('Local app copy failed verification');
   }
-  const locator = resolve(app,'data-location.json');
-  if (existsSync(locator)) {
+  for (const name of ['data-location.json','performance.json']) {
+    const locator = resolve(app,name);
+    if (!existsSync(locator)) continue;
     const info = lstatSync(locator);
     if (!info.isFile() || info.isSymbolicLink() || info.size > 16384) throw new Error('Invalid existing data locator');
-    copyFileSync(locator,resolve(staged,'data-location.json'),constants.COPYFILE_EXCL);
+    copyFileSync(locator,resolve(staged,name),constants.COPYFILE_EXCL);
   }
   writeFileSync(resolve(staged,'build-info.json'),JSON.stringify({sourceCommit:sha,
     files:files.map(({name,sha256})=>({name,sha256})),runtimeAcceptance:'NOT_EXECUTED'},null,2)+'\n',{flag:'wx'});

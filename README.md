@@ -72,6 +72,13 @@ compatibility layer is not a general Windows security sandbox.
 
 ## Product and evidence
 
+Settings now includes editable Active/Background FPS limits, Save and Restore
+defaults (144/10). Limits are shared across five profiles and take effect on each
+profile's next launch. Apply to all profiles saves the existing Simple/12-chunk
+graphics preset only while all sessions are closed. These controls do not launch
+or stop Minecraft. See [data layout](docs/system/data-layout.md) for persistence
+and validation. Native pacer fixtures are not fresh Minecraft gameplay acceptance.
+
 The prior five-client pilot was operator-confirmed with five licensed accounts in
 the same Education Host World, persistent sign-in/world data, and the 144 active /
 10 background FPS policy. That acceptance does not automatically validate the new

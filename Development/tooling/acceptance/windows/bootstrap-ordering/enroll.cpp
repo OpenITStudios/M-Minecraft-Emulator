@@ -188,9 +188,9 @@ extern "C" __declspec(dllexport) DWORD WINAPI EnrollPreparedEducationV2(
     } catch (...) { return ERROR_INVALID_DATA; }
 }
 // Parent-side preparation only, outside DllMain; no injection or resume here.
-extern "C" __declspec(dllexport) DWORD WINAPI PrepareEducationPresentationV2(
+static DWORD preparePresentation(
     HANDLE process, HANDLE thread, DWORD pid, ULONGLONG birth, HANDLE configuration,
-    HANDLE expectedImage, HANDLE writablePresentation, const HANDLE* inputs) {
+    HANDLE expectedImage, HANDLE writablePresentation, const HANDLE* inputs, DWORD version, DWORD ceilings) {
     try {
         require(inputs != nullptr);
         const auto storage = validate(process, thread, pid, birth, configuration, expectedImage);
@@ -212,7 +212,8 @@ extern "C" __declspec(dllexport) DWORD WINAPI PrepareEducationPresentationV2(
         };
         creation.oldRva = rva(table[10]); creation.hwndRva = rva(table[15]);
         require(creation.oldRva != creation.hwndRva);
-        creation.magic = presentation_enrollment::CreationMagic; creation.version = 2;
+        creation.magic = presentation_enrollment::CreationMagic; creation.version = version;
+        policy.reserved = ceilings;
         creation.bytes = sizeof(policy); creation.pid = storage.pid;
         creation.created = storage.created; creation.session = storage.session;
         policy.controllerPid = GetProcessId(inputs[3]);
@@ -236,6 +237,18 @@ extern "C" __declspec(dllexport) DWORD WINAPI PrepareEducationPresentationV2(
         memcpy(view.value, &policy, sizeof(policy));
         return ERROR_SUCCESS;
     } catch (...) { return ERROR_INVALID_DATA; }
+}
+extern "C" __declspec(dllexport) DWORD WINAPI PrepareEducationPresentationV2(
+    HANDLE process, HANDLE thread, DWORD pid, ULONGLONG birth, HANDLE configuration,
+    HANDLE expectedImage, HANDLE writablePresentation, const HANDLE* inputs) {
+    return preparePresentation(process, thread, pid, birth, configuration, expectedImage, writablePresentation, inputs, 2, 0);
+}
+extern "C" __declspec(dllexport) DWORD WINAPI PrepareEducationPresentationV3(
+    HANDLE process, HANDLE thread, DWORD pid, ULONGLONG birth, HANDLE configuration,
+    HANDLE expectedImage, HANDLE writablePresentation, const HANDLE* inputs, DWORD activeFps, DWORD backgroundFps) {
+    if (!presentation_pacing::validCeilings(activeFps, backgroundFps)) return ERROR_INVALID_DATA;
+    return preparePresentation(process, thread, pid, birth, configuration, expectedImage, writablePresentation, inputs, 3,
+        activeFps | (backgroundFps << 16));
 }
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) module = instance;

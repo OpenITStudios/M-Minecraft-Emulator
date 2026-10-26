@@ -4,6 +4,97 @@ use std::{fs, io, io::Read, path::PathBuf};
 pub const TARGETS: &str =
     include_str!("../../../../../engine/isolation-native/owned-runtime/minecraft-targets.json");
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PerformanceSettings {
+    pub active_fps: u32,
+    pub background_fps: u32,
+}
+impl Default for PerformanceSettings {
+    fn default() -> Self {
+        Self {
+            active_fps: 144,
+            background_fps: 10,
+        }
+    }
+}
+impl PerformanceSettings {
+    pub fn validate(&self) -> io::Result<()> {
+        if !(1..=1000).contains(&self.active_fps)
+            || !(1..=self.active_fps).contains(&self.background_fps)
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Use whole FPS limits from 1 to 1000. Background FPS must not exceed active FPS.",
+            ));
+        }
+        Ok(())
+    }
+}
+fn performance_path() -> io::Result<PathBuf> {
+    Ok(std::env::current_exe()?
+        .parent()
+        .ok_or_else(|| io::Error::other("Application folder unavailable"))?
+        .join("performance.json"))
+}
+pub fn load_performance() -> io::Result<PerformanceSettings> {
+    read_performance(&performance_path()?)
+}
+pub fn save_performance(value: PerformanceSettings) -> io::Result<()> {
+    write_performance(&performance_path()?, value)
+}
+fn read_performance(path: &std::path::Path) -> io::Result<PerformanceSettings> {
+    match fs::symlink_metadata(path) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Ok(PerformanceSettings::default())
+        }
+        Err(error) => return Err(error),
+        Ok(metadata) if !metadata.is_file() || metadata.file_type().is_symlink() => {
+            return Err(io::Error::other(
+                "Performance settings must be an ordinary file",
+            ))
+        }
+        Ok(_) => {}
+    }
+    let mut bytes = Vec::new();
+    fs::File::open(path)?.take(4097).read_to_end(&mut bytes)?;
+    if bytes.len() > 4096 {
+        return Err(io::Error::other("Performance settings file is too large"));
+    }
+    let value: PerformanceSettings = serde_json::from_slice(&bytes).map_err(|_| {
+        io::Error::other("Performance settings are invalid; the saved file was preserved")
+    })?;
+    value.validate()?;
+    Ok(value)
+}
+fn write_performance(path: &std::path::Path, value: PerformanceSettings) -> io::Result<()> {
+    use std::io::Write;
+    value.validate()?;
+    read_performance(path)?; // Never silently replace corrupt settings or a link.
+    let temp = path.with_extension(format!(
+        "{}-{}.tmp",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(io::Error::other)?
+            .as_nanos()
+    ));
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)?;
+    let result = (|| {
+        file.write_all(&serde_json::to_vec_pretty(&value).map_err(io::Error::other)?)?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&temp, path)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temp);
+    }
+    result
+}
+
 // Preferences belong to the preview's own runtime data, but the desktop's
 // single-instance marker must remain shared across the older manager and the
 // preview to prevent two controllers from moving the same Minecraft window.
@@ -85,6 +176,21 @@ fn write(path: &std::path::Path, value: &ManagerSettings) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn performance_defaults_persist_validate_and_preserve_invalid_files() {
+        let root=std::env::temp_dir().join(format!("lazy-performance-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir(&root).unwrap();let path=root.join("performance.json");
+        assert_eq!(read_performance(&path).unwrap(),PerformanceSettings::default());
+        assert!(!path.exists());
+        let custom=PerformanceSettings {active_fps:60,background_fps:5};
+        write_performance(&path,custom).unwrap();assert_eq!(read_performance(&path).unwrap(),custom);
+        for value in [PerformanceSettings {active_fps:0,background_fps:1},PerformanceSettings {active_fps:1001,background_fps:10},PerformanceSettings {active_fps:60,background_fps:61}] {
+            assert!(write_performance(&path,value).is_err());assert_eq!(read_performance(&path).unwrap(),custom);
+        }
+        fs::write(&path,b"invalid").unwrap();
+        assert!(read_performance(&path).is_err());assert!(write_performance(&path,PerformanceSettings::default()).is_err());assert_eq!(fs::read(&path).unwrap(),b"invalid");
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn workspace_errors_remain_structured_without_masking_engine_failures() {
         let geometry = OperationFailure::from(io::Error::other(

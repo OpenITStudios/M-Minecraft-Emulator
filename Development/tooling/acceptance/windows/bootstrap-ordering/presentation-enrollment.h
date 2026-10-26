@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <cwchar>
 #include "education-config.h"
+#include "frame-pacing.h"
 
 namespace presentation_enrollment {
 constexpr wchar_t Variable[] = L"MIVUBI_EDUCATION_PRESENTATION";
@@ -19,10 +20,16 @@ static_assert(sizeof(CreationConfig) == 72);
 struct PolicyConfig {
     CreationConfig creation;
     HANDLE level, changed, stop, controller;
-    DWORD controllerPid, reserved;
+    DWORD controllerPid, reserved; // v2: zero; v3: active FPS low 16 bits, background high 16 bits.
     FILETIME controllerCreated;
 };
 static_assert(sizeof(PolicyConfig) == 120);
+inline bool pacingLimits(const PolicyConfig& config, unsigned& active, unsigned& background) noexcept {
+    if (config.creation.version == 2 && config.reserved == 0) { active=144; background=10; return true; }
+    if (config.creation.version != 3) return false;
+    active=config.reserved & 0xffff; background=config.reserved >> 16;
+    return presentation_pacing::validCeilings(active,background);
+}
 // Metadata only: never create a factory/device while the loader lock is held.
 inline bool imageMetadata(CreationConfig& result, HMODULE& module) noexcept {
     module = GetModuleHandleW(L"dxgi.dll");

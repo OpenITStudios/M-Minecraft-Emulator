@@ -15,7 +15,8 @@ export interface ProfileStorage {
   disk: {availableBytes: number; totalBytes: number} | null;
   cache: {bytes: number; files: number; partial: boolean; canClear: boolean; issue: string | null};
 }
-export interface SessionSnapshot {schema: 1; profiles: ProfileSession[]; storage: ProfileStorage[] | null}
+export interface SettingsReport {activeFps:number; backgroundFps:number; renderDistanceChunks:number; canApplyPreset:boolean; changedProfiles:number|null}
+export interface SessionSnapshot {schema: 1; profiles: ProfileSession[]; storage: ProfileStorage[] | null; settings?:SettingsReport}
 export interface PreviewPlacement {slot: ProfileSlot; viewport: WorkspaceViewport}
 export interface PreviewStatus {slot: ProfileSlot; registered: boolean; reason: string | null}
 export interface PreviewReport {schema: 1; tiles: PreviewStatus[]}
@@ -25,6 +26,11 @@ const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const exact = (value: Record<string, unknown>, names: string[]) =>
   Object.keys(value).length === names.length && names.every(name => Object.hasOwn(value, name));
+
+export function validFpsLimits(active:unknown,background:unknown):boolean {
+  return Number.isInteger(active)&&Number(active)>=1&&Number(active)<=1000&&
+    Number.isInteger(background)&&Number(background)>=1&&Number(background)<=Number(active);
+}
 
 export function parseDataLocation(value:unknown):DataLocation {
   const path=(value:unknown):value is string=>typeof value==='string'&&value.length>0&&value.length<=4096&&!/[\x00-\x1f]/.test(value);
@@ -46,7 +52,7 @@ export function parseProfileBinding(value: unknown): ProfileBinding {
 }
 
 export function parseSession(value: unknown): SessionSnapshot {
-  if (!record(value) || !exact(value, ['schema', 'profiles', 'storage']) || value.schema !== 1 ||
+  if (!record(value) || !exact(value, Object.hasOwn(value,'settings') ? ['schema','profiles','storage','settings'] : ['schema', 'profiles', 'storage']) || value.schema !== 1 ||
       !Array.isArray(value.profiles) || value.profiles.length !== 5) throw new TypeError('Invalid session response');
   const pids = new Set<number>();
   value.profiles.forEach((profile: unknown, index: number) => {
@@ -79,7 +85,23 @@ export function parseSession(value: unknown): SessionSnapshot {
             (value.profiles as ProfileSession[]).some(profile => ['STARTING', 'RUNNING', 'NOT_RESPONDING'].includes(profile.state)))) throw new TypeError('Invalid cache metadata');
     });
   }
+  if(Object.hasOwn(value,'settings')) {
+    const settings=value.settings;
+    if(!record(settings)||!exact(settings,['activeFps','backgroundFps','renderDistanceChunks','canApplyPreset','changedProfiles'])||
+      !Number.isInteger(settings.activeFps)||Number(settings.activeFps)<1||Number(settings.activeFps)>1000||
+      !Number.isInteger(settings.backgroundFps)||Number(settings.backgroundFps)<1||Number(settings.backgroundFps)>Number(settings.activeFps)||
+      settings.renderDistanceChunks!==12||typeof settings.canApplyPreset!=='boolean'||
+      !(settings.changedProfiles===null||Number.isInteger(settings.changedProfiles)&&Number(settings.changedProfiles)>=0&&Number(settings.changedProfiles)<=5)||
+      settings.canApplyPreset&&(value.profiles as ProfileSession[]).some(p=>['STARTING','RUNNING','NOT_RESPONDING'].includes(p.state))||
+      settings.changedProfiles!==null&&!settings.canApplyPreset)throw new TypeError('Invalid settings response');
+  }
   return value as unknown as SessionSnapshot;
+}
+
+function settingsSession(value:unknown):SessionSnapshot & {settings:SettingsReport} {
+  const snapshot=parseSession(value);
+  if(!snapshot.settings)throw new TypeError('Settings are unavailable. Update Lazy Tester and try again.');
+  return snapshot as SessionSnapshot & {settings:SettingsReport};
 }
 
 export function nextProfile(profiles: ProfileSession[], active: ProfileSlot | null, direction: 1 | -1): ProfileSlot | null {
@@ -103,6 +125,12 @@ export function parsePreviewReport(value:unknown,slots:readonly ProfileSlot[]):P
 }
 
 export const lazyTester = {
+  settings:async()=>settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'InspectSettings'}})),
+  savePerformance:async(activeFps:number,backgroundFps:number)=>{
+    if(!validFpsLimits(activeFps,backgroundFps))throw new TypeError('Use whole FPS limits from 1 to 1000. Background FPS must not exceed active FPS.');
+    return settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'SavePerformance',activeFps,backgroundFps}}));
+  },
+  applyPreset:async()=>settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ApplyPreset'}})),
   dataLocation:async(action:'Inspect'|'Open'|'Locate'|'Choose'='Inspect')=>parseDataLocation(await invokeRuntime<unknown>('lazy_tester_data_location',{action})),
   binding: async (importProfiles = false) => parseProfileBinding(await invokeRuntime<unknown>('lazy_tester_profile_binding', {import: importProfiles})),
   inspect: async () => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'Inspect'}})),
