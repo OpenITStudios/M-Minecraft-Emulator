@@ -6,6 +6,38 @@ running. The runtime uses our native compatibility implementation, one official
 Minecraft installation, and persistent private profiles. It does not require
 Sandboxie or VMware.
 
+## Repository and distribution layout
+
+This checkout is the development project, not the folder distributed to players.
+There is one product source tree; do not maintain separate developing/release
+copies of the code.
+
+```text
+apps/desktop/         Desktop source, native integration and desktop build scripts
+engine/               Runtime source and distribution contracts
+tooling/              Developer tools, source checks and acceptance collectors
+docs/                 Architecture and user/developer documentation
+planning/             Current handoff and historical work
+experiments/          Historical research
+workspace/            Ignored local tools, builds, candidates and private material
+```
+
+`npm run dev` opens the development app. `npm run package:windows` builds the
+native installer from a clean, committed `Local` revision and exports a new folder:
+
+```text
+workspace/packages/lazy-tester/<version>-<commit>-<UTC>/
+  Lazy-Tester-<version>-windows-x86_64-setup.exe
+  SHA256SUMS.txt
+  package-manifest.json
+```
+
+Only these three files are exported. Do not distribute this repository, a raw
+compiler output directory, `workspace`, or developer profile folders. The manifest
+identifies an unaccepted development candidate, not an approved public release.
+Signing, installed/gameplay acceptance and publication remain separate. See the
+[storage policy](docs/system/artifact-storage.md) for the source/build/runtime split.
+
 ## Active architecture
 
 - `apps/desktop/src/LazyTesterApp.svelte`: the mounted Svelte interface.

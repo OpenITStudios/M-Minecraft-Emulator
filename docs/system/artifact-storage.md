@@ -42,6 +42,36 @@ in this change. Do not describe source inspection as REA runtime proof.
 
 Only `workspace/README.md` may be Git-tracked under `workspace/`.
 
+## Lazy Tester development, candidate and installed data
+
+There is one source tree. `Local` owns product development; `main` is reserved for
+separately authorized release work. Neither branch stores built installers or
+private runtime data. Do not create root developing/release copies of source.
+
+Root `npm run package:windows` is owned by
+`apps/desktop/scripts/package-lazy-tester.mjs`. It requires clean committed Local
+source (a detached worktree must match Local exactly), declared Node/npm versions,
+and the reviewed native payload. It runs the existing desktop build:app, then
+rechecks the source revision/cleanliness before exporting. A build failure or
+source change produces no completed export. Relative/external compiler-output
+overrides and linked output directories are refused.
+
+Each export is a new ignored
+`workspace/packages/lazy-tester/<version>-<12-character-SHA>-<UTC>/` directory.
+It contains exactly the renamed installer, SHA256SUMS.txt and package-manifest.json.
+The manifest is written last, records the full source SHA and installer digest,
+and always marks publication disabled, signing unverified and runtime acceptance
+not executed. It is a build receipt, not a second runtime-readiness store.
+Existing exports are never overwritten or recursively copied into newer ones.
+This command does not sign, upload, install or run the application.
+
+The installer payload remains governed by
+`engine/distribution/lazy-tester-package.json` and the Tauri native configuration;
+the export does not add source, tools, profile bindings, accounts or worlds.
+Installed app files and user data remain outside this checkout and are not
+relocated by reorganizing development output. Custom user data locations and
+fresh-PC profile provisioning require their own runtime implementation.
+
 **Repository-controlled storage contract:** one checkout root is the parent
 of every project download, source tree, locally staged payload and
 project-generated report. The current owned v1.18.6 builder must accept

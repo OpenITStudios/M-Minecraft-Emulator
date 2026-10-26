@@ -40,6 +40,7 @@ describe("Emulator source verification routing", () => {
     expect(app.scripts["check:rust"]).toContain(" --locked ");
     expect(app.scripts["test:rust"]).toContain(" --locked ");
     expect(app.scripts["build:app"]).toBe("npm run build:lazy-tester");
+    expect(root.scripts["package:windows"]).toBe("node apps/desktop/scripts/package-lazy-tester.mjs");
     expect(app.scripts["build:lazy-tester"]).toContain(" -- --locked");
   });
 

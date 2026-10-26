@@ -5,7 +5,13 @@
 The native contract is [lazy-tester-package.json](lazy-tester-package.json),
 consumed by apps/desktop/src-tauri/tauri.lazy-tester.conf.json and its explicit
 lazy-tester-package Cargo feature. Root package:windows now routes through the
-desktop build:app alias to build:lazy-tester. The historical contract below remains
+desktop build:app alias to build:lazy-tester through the clean-source packaging
+wrapper. It exports a fresh installer/checksum/manifest folder under ignored
+workspace/packages/lazy-tester, as defined by the
+[storage policy](../../docs/system/artifact-storage.md). The desktop build command
+still owns native construction; the wrapper owns only source pinning and candidate
+export. It does not sign, publish, install or grant release acceptance.
+The historical contract below remains
 blocked; it must not be substituted for this native package.
 
 The reviewed identity decision is a separate per-user installation: display name

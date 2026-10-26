@@ -19,7 +19,7 @@
     "test:runtime": "cargo test --locked --all-targets --manifest-path engine/runtime-core/Cargo.toml",
     "format:runtime": "cargo fmt --manifest-path engine/runtime-core/Cargo.toml --all --check",
     "verify:source": "npm run verify:repository -- --g0 && npm run check:structure && npm run check:dependencies && npm run test:repository && npm run test:localtest && npm run test:feasibility && npm run test:isolation-source && npm run test:native-feasibility && npm run test:sandboxie-feasibility && npm run test:native-performance && npm run test:presentmon && npm run check:desktop && npm run check:runtime && npm run test:runtime && npm run format:runtime",
-    "package:windows": "npm --prefix apps/desktop run build:app",
+    "package:windows": "node apps/desktop/scripts/package-lazy-tester.mjs",
     "test:feasibility": "node --test tooling/acceptance/evaluate-client-feasibility.test.mjs",
     "feasibility:review": "node tooling/acceptance/evaluate-client-feasibility.mjs",
     "test:native-feasibility": "node --test tooling/acceptance/evaluate-native-feasibility.test.mjs tooling/acceptance/watch-workspace-process.test.mjs tooling/acceptance/evaluate-appcontainer-isolation.test.mjs",

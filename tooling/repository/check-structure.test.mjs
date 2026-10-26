@@ -9,7 +9,10 @@ test('reject outputs and competing root owners while preserving native provenanc
   assert.deepEqual(checkTracked(['README.md', 'workspace/README.md',
     'engine/isolation-owned/tools/dist/tool.exe', 'engine/isolation-candidates/target/reference.log']), []);
   for (const path of ['apps/desktop/.svelte-check/tsconfig.json', 'scratch.mjs', 'workspace/report.json', 'apps/desktop/dist/index.html',
-    'engine/runtime-core/target/debug/core.exe', '.github/workflows/verify.yml']) {
+    'engine/runtime-core/target/debug/core.exe', '.github/workflows/verify.yml',
+    'apps/desktop/src-tauri/package-resources/lazy-tester/bootstrap-compat.dll',
+    'apps/desktop/src-tauri/icons/icon.ico', 'apps/desktop/src-tauri/gen/schema.json',
+    'apps/desktop/src-tauri/binaries/old.exe', 'release/setup.exe', 'develop/copy.ts']) {
     assert.ok(checkTracked([path]).length > 0, path);
   }
 });
