@@ -90,6 +90,10 @@ Existing250ms wakeups; endpoint/session discovery1second or ownership change.
 Real silent Windows sessions PASS: inactive mute, active restore, preexisting/later
 user mute, lease removal and another subprocess unchanged.6 settings tests and38
 frontend tests/typecheck PASS. Logs workspace/runs/audio-*. Candidate not yet staged.
+Real UI exposed polling closing the audio dropdown: native probe observed Expanded
+become Collapsed/disabled during2second refresh. Audio selection now remains enabled
+during background polling and queues its save until that request finishes. UI proof
+of the correction and exact candidate delivery are pending.
 Abrupt controller-crash mixer recovery, long-launch audio response and actual
 Minecraft audio remain unverified. Continue in these owners, no second lifecycle.
 Launch performance and actual Task Manager roles/grouping remain unproven.
