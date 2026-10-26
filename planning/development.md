@@ -56,10 +56,31 @@ Logs and synthetic screenshots remain ignored under workspace/runs/.
 
 ## App/package state and remaining work
 
-Before this bounded update, App remained clean source
-1c8a3cd129cebf41472facb25021ed6011bc70a9. Build/stage a clean new source revision,
-recheck all relevant processes and record exact new payload/installer/shortcut
-verification after completion. Do not terminate a game/controller to force staging.
+App now contains clean product sourcef7f42fb067ec13a5d92f92b190c0988c1ea618a5.
+Windows/NSIS construction, guarded staging and Desktop/Start Menu shortcut creation
+completed successfully. All four App payload hashes and installer hash were checked.
+Candidate: workspace/packages/lazy-tester/0.1.0-f7f42fb067ec-20261026T132654576Z.
+Installer SHA256d45d33f200c9af28409f09c3bb347579a3a594bd42a483d4169aa92f3bf372f0.
+Log: workspace/runs/play-settings-implementation/startup-package-final.log.
+
+The first shortcut attempt failed after successful staging because Windows
+PowerShell lacked Get-FileHash. The helper now uses .NET SHA256 and was tested
+with the exact powershell.exe host. The final complete package command exited0;
+both shortcuts' target, working directory, arguments and icon were verified.
+Desktop: C:/Users/Administrator/Desktop/Lazy Tester.lnk.
+Start Menu: Programs/Lazy Tester/Lazy Tester.lnk under the user's Start Menu.
+
+The staged executable's fixed read-only setup mode returned configured=true,
+issue=null and exit0. Its receipt is ignored at
+workspace/runs/play-settings-implementation/staged-setup-status.json.
+Then the Desktop shortcut was actually opened. The expected App/lazy-tester.exe
+process appeared and Responding was true. This proves shell launch, not visual
+acceptance or game readiness. The user-facing app was left open; no Minecraft
+process was started, account UI automated, or account/world contents read.
+No user process was terminated for staging. Earlier app process had exited before
+the guarded build/stage; all data and preference pointers remained preserved.
+Submodule and second worktree remain unchanged. This final handoff update changes
+documentation only; the product source SHA above remains the exact App source.
 
 Clear All Data, world export, settings reset/restore, background audio, automatic
 game shutdown and data migration remain unavailable. Preserve all prior data and
