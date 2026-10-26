@@ -19,14 +19,20 @@ are never recreated as recovery. Product-only --lazy-tester-check-webview exerci
 the actual compiled Svelte/IPC startup in a hidden WebView with inspection-only
 handlers. startup_diagnostic_result emits bounded UI observations to stdout;
 normal startup also emits them without exiting. It is not a cached ready flag.
-Local delivery requires both native initialization and the real UI's Connected /
-five enabled controls observation before announcing readiness.
+Local delivery creates direct executable shortcuts, then verifies the normal UI
+through verify-desktop-startup.ps1, dispatched by the interactive Explorer desktop.
+It verifies the Explorer parent, exact App receipt/hash, Connected status and five
+enabled launcher buttons. Build-tool child processes can see a different virtualized
+HKCU/AppData view despite the same user SID and logical registry root; their CLI
+or hidden WebView success alone cannot establish Desktop readiness. Missing stores
+must not be recreated as empty recovery. Existing-profile transfer needs explicit
+operator approval; packaging never imports account-bearing registry trees.
 
 The Svelte startup retries canonical launcher initialization/location reads before
 offering recovery; it does not turn a first missing report into a permanent setup
 screen. Product-only --lazy-tester-initialize uses the same profile_binding owner
-without launching games. Local package delivery executes and verifies that fixed
-mode after guarded App staging before announcing readiness. It adds no ready flag,
+without launching games. This fixed mode remains a diagnostic; local delivery no
+longer uses builder-context initialization as a readiness gate. It adds no ready flag,
 profile store or installer mutation route; export-only builds do not run it.
 
 The Play viewport is a centered largest-fit 16:9 element inside a size-observed

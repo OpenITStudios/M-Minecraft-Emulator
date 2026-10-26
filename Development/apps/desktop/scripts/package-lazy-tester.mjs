@@ -118,18 +118,6 @@ export function stageLocalApp(cwd, release, sha) {
   return {app,data,backup};
 }
 
-export function verifyInitializedBinding(output) {
-  const report=JSON.parse(output);
-  if(report.schema!==1||report.configured!==true||report.issue!==null)throw new Error('Launcher initialization was not confirmed; existing data was preserved');
-  return report;
-}
-
-export function verifyStartupObservation(output) {
-  const report=JSON.parse(output);
-  if(report.event!=='startup-observation'||report.connection!=='Connected'||report.issue!==''||report.cards!==5||report.enabled!==5||report.diagnosticOnly!==true||!Number.isInteger(report.processId)||report.processId<1)throw new Error('The real application UI did not confirm five available launchers');
-  return report;
-}
-
 function main() {
   if (process.argv.slice(2).some(arg => arg !== '--export-only') || process.argv.slice(2).length > 1) throw new Error('Only --export-only is supported');
   if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Windows x64 packaging is required');
@@ -158,16 +146,20 @@ function main() {
   const result = assembleCandidate(root,installer,sha,version,stamp);
   if (!process.argv.includes('--export-only')) {
     const local = stageLocalApp(root,resolve(target,'x86_64-pc-windows-msvc/release'),sha);
-    const initialized=execFileSync(resolve(local.app,'lazy-tester.exe'),['--lazy-tester-initialize'],{cwd:local.app,encoding:'utf8',windowsHide:true,timeout:60000,maxBuffer:32768});
-    verifyInitializedBinding(initialized);
-    const startup=execFileSync(resolve(local.app,'lazy-tester.exe'),['--lazy-tester-check-webview'],{cwd:local.app,encoding:'utf8',windowsHide:true,timeout:30000,maxBuffer:32768});
-    verifyStartupObservation(startup);
-    console.log('Real WebView/Svelte startup verified: Connected; five launcher controls enabled. No game launched.');
-    console.log('Launcher initialization verified before delivery; no game was launched.');
     const shortcuts=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-File',resolve(developmentRoot,'tooling/windows-toolchain/create-app-shortcuts.ps1'),'-Root',root],{encoding:'utf8',windowsHide:true});
+    const startup=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-File',resolve(developmentRoot,'tooling/windows-toolchain/verify-desktop-startup.ps1'),'-Root',root],{encoding:'utf8',windowsHide:true,timeout:60000,maxBuffer:32768});
+    verifyDesktopStartup(startup,sha);
+    console.log('Actual Windows Explorer/Desktop startup verified; five launcher controls enabled. No game launched.');
     console.log(`Local app: ${local.app}\nOpen Lazy Tester from Desktop or Start Menu. Existing data is preserved.\n${shortcuts.trim()}`);
   }
   console.log(`Development candidate: ${result.output}\nSigning is not verified; installation and gameplay are not executed; publication is disabled.`);
+}
+
+export function verifyDesktopStartup(output,expectedSource) {
+  const report=JSON.parse(output);
+  if(report.event!=='desktop-startup-observation'||report.explorerParent!==true||report.connected!==true||report.issue!==''||report.cards!==5||report.enabled!==5||!Number.isInteger(report.processId)||report.processId<1||!Number.isInteger(report.parentProcessId)||report.parentProcessId<1||!/^[a-f0-9]{40}$/.test(report.sourceCommit))throw new Error('Actual Desktop startup was not confirmed');
+  if(report.sourceCommit!==expectedSource)throw new Error('Desktop startup belongs to a different source revision');
+  return report;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
