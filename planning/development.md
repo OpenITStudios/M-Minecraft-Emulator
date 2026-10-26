@@ -47,11 +47,33 @@ tests (new registry-root child fixture, five binding tests, three product-store
 preservation/reopen tests) PASS. Compiled browser regression PASS including startup
 retries, seven-size 16:9 layout, DPI IPC, 30-second stable polling and recovery.
 Logs remain ignored under workspace/runs/play-settings-implementation/.
-Clean candidate and actual App startup observations will be recorded after build.
+Clean product source: 09eaca9eb7c2a7593e316848be833d8179f3cb84.
+Windows release/NSIS build and guarded App staging completed successfully.
+Candidate: workspace/packages/lazy-tester/0.1.0-09eaca9eb7c2-20261026T144747409Z.
+Installer SHA256: bcf6dacfd0be3e00d9e36291a83878f7b3efc7765162a5d0f4fb46fad8cef0dd.
+Build log: workspace/runs/play-settings-implementation/registry-reopen-package.log.
+
+The old blocked manager PID33088 was closed normally with CloseMainWindow after
+checking that no Minecraft game process was present; no process was killed.
+MinecraftEducationUpdater was left untouched. Staging verified all four App
+payload hashes and installer hash. The existing binding bytes remained identical.
+Desktop/Start Menu targets, working directory, arguments and icon were verified.
+
+Three fresh processes using the installed App's real hidden WebView/Svelte/IPC
+reported Connected, five cards, five enabled controls and no connection issue.
+Then the installed App was opened normally with no CLI flags and its real UI
+reported the same result from PID46300. Process path matched App/lazy-tester.exe,
+Responding=true and MainWindowHandle was nonzero. This is actual normal UI startup
+proof, not merely CLI binding or mocked frontend evidence. The visible updated
+manager was left open for the user; no Minecraft/gameplay/sign-in was automated.
+Receipts: workspace/runs/play-settings-implementation/registry-reopen-staged.json
+and normal-app-startup-verified.json. Normal stdout/stderr are alongside them.
+No source edits followed the clean product build; this handoff update is docs only.
 
 ## Existing App and preservation
 
-App before this repair contains d2399c0acf7053a71b238a7136a95e3376925ce1.
+App before this repair contained d2399c0acf7053a71b238a7136a95e3376925ce1;
+it now contains the verified product source above.
 Its previous initialization succeeded but user-provided normal UI still failed;
 that revision is not accepted as fixed. Existing normal Desktop/Start Menu links
 point directly to App/lazy-tester.exe with App working directory and embedded icon.
@@ -70,5 +92,6 @@ native payload pins. No game/installer GUI or account sign-in is automated.
 Signing remains NOT_VERIFIED; installer execution/gameplay/license/multiplayer
 acceptance remain NOT_EXECUTED. Publication remains DISABLED.
 
-Next: build the clean Windows candidate, replace App after normal manager closure,
-then verify real hidden and normal visible App startup before reporting completion.
+The bounded registry/startup repair is complete with actual installed UI evidence.
+Next: observe normal launcher/game use on this exact product source; Microsoft
+sign-in stays manual and gameplay acceptance remains separate from startup proof.
