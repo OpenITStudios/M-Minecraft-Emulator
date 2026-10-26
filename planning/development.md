@@ -1,115 +1,117 @@
 # Current Development Handoff — Lazy Tester
 
-## Single active goal — revised by user27October2026
+## Single active goal — user revised27October2026
 
 Deliver a dependable Lazy Tester: same Play/Settings frame; no stuck/misaligned game
 or exposed desktop during drag; measured faster switching/Launch; clear process
-ownership; real scoped Settings/Data Storage actions. New defaults120FPS active /
-5FPS background, minimum configurable5FPS, background<=active. Supersedes144/10 for
-new defaults; do not silently replace arbitrary saved user preferences. Goal ACTIVE; this file owns scope/evidence/next action.
+ownership; functional Settings/Data Storage. Defaults120FPS active/5 background,
+minimum newly configurable5FPS, background<=active. Goal ACTIVE, not complete.
 
 Local only; main/publication untouched; CI OFF. VM/Sandboxie and RAM/renderer work
-PAUSED. Compiler caches explicitly RETAINED; delete nothing as cleanup. Clear all
-data is a product feature to implement/test on synthetic data, not permission to
-wipe actual user profiles during development. Actual destructive use needs review
-and confirmation for the selected launcher in the app.
+PAUSED. Compiler caches explicitly RETAINED. No incidental cleanup or actual profile
+wipe. Clear all data is a product feature tested with synthetic fixtures; actual use
+requires selected-launcher review/confirmation.
 
-## Ordered outcomes and acceptance
+## Acceptance — preserve all outcomes
 
-1. Stable presentation. Reproduce drag snag: game rectangle lags manager, aperture
-   exposes desktop/Explorer. Correct composition/coordination, not just CSS or event
-   frequency. Same frame in Play/Settings through drag end/cancel, resize, maximize,
-   restore, focus and DPI/monitor changes. Main game stays16:9. No destructive game
-   reparenting, game-binary modification or input injection.
-2. Fast switch/Launch. Measure UI request -> actual focus/bounds; separate launch
-   phases (controller, validation, enrollment, window ready). Reuse original verified
-   leases/immutable pinned image safely; remove duplicate work/inspection queues.
-   Preserve game/DLL verification and original process identity. No fake readiness,
-   unsupported timing claims, extra busy polling or weakening isolation for speed.
-3. Process clarity. Identify main UI, starter, session controller, recovery per game,
-   official Minecraft and WebView renderer/GPU/services. Investigate supported
-   Task Manager grouping and prove local result before claiming one group. Do not
-   hide/rename official binaries, disable browser sandbox, merge unrelated apps or
-   weaken same-image pipe authentication. A role/PID explanation is not proof of
-   actual Task Manager naming/grouping. Explain any proven upstream limitation.
-4. Functional General. High/Low only. Save/apply valid whole5..1000 FPS (default120/5)
-   with truthful application timing. Background audio must really support Keep audio
-   and Mute background, scoped to original games/audio sessions, never other apps.
-   No ignored dropdown values or placeholder actions presented as features.
-5. Functional Data Storage per launcher. Actual sizes/path and cache cleanup for
-   eligible selected launcher with specific blocked reason. Verify whether stopped
-   launcher4 can safely clean while other games run; avoid unnecessary blanket gate.
-   Implement settings reset plus verified settings backup/restore through existing
-   writer. Clear all data leaves a fresh empty launcher, removes only its owned local
-   account/world/cache/settings/backup data, preserves installed game/other launchers,
-   explains external Windows identity limits. Define confirmation, optional recovery,
-   catalog/identity updates and interruption behavior. Test running profile, malformed
-   paths, junctions, cancellation, partial failure and cross-profile isolation before
-   enabling real destructive use. A permanently disabled button is not completion.
-6. Delivery. Build clean exact Local candidate, check frontend/Rust/fixtures/package,
-   stage App/root EXE/shortcuts preserving Data. Verify real Explorer startup, common
-   frame, drag, switching, previews, full exit, functional settings/storage and process
-   ownership to available proof. Static/synthetic/Windows/Minecraft evidence remain
-   separate; successful compilation is not usability acceptance.
+1. Stable presentation: correct the native composition/coordination causing drag
+   snag and desktop/Explorer exposure. Same Play/Settings frame through drag end/
+   cancel, resize, maximize/restore, focus and DPI/monitor changes. Main game16:9.
+   No game parenting, binary patching, destructive owner relationship or input relay.
+2. Fast switch/Launch: measure request -> actual focus/bounds and launch phases
+   (controller, validation, enrollment, window ready). Reuse verified original leases
+   and immutable image pins; remove duplicate work without weakening game/DLL/
+   process identity or inventing readiness. No busy polling or unsupported claims.
+3. Process clarity: main UI, root starter, session controller, recovery per game,
+   official Minecraft, WebView renderer/GPU/services. Investigate supported Task
+   Manager naming/grouping and prove actual results. Do not hide processes, rename
+   official binaries, disable browser sandbox or weaken same-image pipe checks.
+   An app role/PID page is not proof of actual Task Manager grouping. Explain any
+   proven upstream limitation; do not attribute LazyDesigner without PID evidence.
+4. General: High/Low only; truthful valid whole5..1000 FPS saves with120/5 defaults.
+   Preserve explicit older preferences; new defaults do not overwrite user choices.
+   Keep/Mute background audio must actually scope original game audio sessions,
+   never other apps. No ignored selections or placeholder controls as features.
+5. Data Storage per launcher: actual sizes/path; clear cache for eligible selected
+   launcher with specific blocked reason, allowing proven unrelated managed games.
+   Complete settings reset plus verified backup/restore via existing writer. Clear
+   all data removes only selected owned local accounts/world/cache/settings/backups,
+   leaves empty launcher ready for a new account, retains installation/others, states
+   Windows identity limits. Define confirmation, recovery/catalog identity updates
+   and interruption handling. Test active profile, malformed paths, links, cancel,
+   partial failure and cross-profile isolation before real destructive use.
+6. Delivery: clean exact Local Windows candidate, frontend/Rust/fixtures/package
+   checks; stage App/root EXE/shortcuts preserving Data. Verify actual Explorer
+   startup, common frame, drag/switch/previews/full exit/settings/storage/process
+   roles to available proof. Compilation never substitutes for usability acceptance.
 
-## Exact source/installed state and user evidence
+## Current exact source and delivery
 
-Revised-goal base91e82526a0bd161b9869cb3bd85ee501356d6984. Installed App/root
-source6eba183ff437c4da410acd5e308a0b28864d2d90. Recheck live PIDs before staging;
-never kill by name. Screenshots show identical process names,
-separate Minecraft rows and WebView2 Manager group while UI OPEN. Verify actual PID/path/parent; LazyDesigner involvement unproven. Drag exposes Explorer;
-Play/Settings frame differs; switching/launch feel slow. Earlier fixture PASS did
-not establish usability. Disabled storage/audio actions are explicitly in scope.
-## Canonical owners and investigation
+Installed App/root source35ed4be6d9ae189cc3ec6dd0d6bb90b0533e4358 (Local clean at
+build). Product source changes:2c9e284 opaque presentation;1262efb FPS defaults;
+35ed4be selected-launcher cache admission. App/lazy-tester.exe SHA256:
+ae4e8677d4f4065812863ebe0396f697df0cb5ce861fa7c1125465436043e8b6.
+Root starter hash is recorded and verified in App/build-info.json.
+Candidate workspace/packages/lazy-tester/0.1.0-35ed4be6d9ae-20261026T181321305Z;
+NSIS2651492 bytes SHA256:
+8b8e71ac97ef3c4f043878c8d584cac875ccf806f4c13e9dea7fd6b0ba9da37e.
+Signing NOT_VERIFIED; installer execution/publication NOT_EXECUTED/DISABLED.
 
-Presentation: workspace_surface.rs and workspace_surface/previews.rs; main events/
-full exit: app_bootstrap.rs; UI: LazyTesterApp.svelte/WindowTitlebar.svelte; transport:
-native_clients_session.rs/pipe.rs; lifecycle: independent_bootstrap/session_controller.rs;
-settings/storage: manager_settings.rs, game_preset.rs, profile_storage.rs. No second
-lifecycle/readiness/credentials owner.
+Actual Explorer startup after staging: source35ed4be, manager20252/root38940,
+Explorer ancestry true, Connected, five enabled Launch cards, no issue, WebView
+cache inside Data. Verifier closed only its own idle manager normally; subsequent
+process inventory showed zero manager/starter/games. Recheck before next staging;
+never terminate by name. Data and five profiles retained, no repeated setup.
 
-Presentation source correction27October (based on17acc411): remove region holes;
-retain opaque host and DWM frame. Existing preview worker gains unfocused primary
-image; explicit selection removes it before native focus. Independent game parks
-while manager owns input; same retained identity/recovery helper, no input relay.
-Focus/move-size boundaries reconcile through existing worker. Executed RED then
-GREEN stalled-drag opacity test; nine surface tests, native DWM primary translation/
-minimize test and focus-event test PASS. Isolated stall/recovery/pipe-loss/helper-
-crash fixtures PASS;40 synthetic retained swaps p95/max2ms. Logs: workspace/runs/
-opaque-*.log. Actual game drag/focus/frame acceptance NOT_EXECUTED; not staged.
+## Implemented corrections and executed evidence
 
-WebView2 grouping matches OPEN upstream reports: AppUserModelID/EXE metadata alone
-was insufficient. Investigate actual parent/logon/integrity; do not call locally fixed:
+Presentation: workspace_surface.rs keeps host opaque; existing previews.rs worker
+adds unfocused primary DWM image. Selection removes image before activating exact
+native HWND. Background parking, original identity/checkpoints/recovery retained;
+no input relay. Foreground/move-size events reconcile via existing coalesced worker.
+RED->GREEN stalled-game opacity fixture, nine surface tests, DWM primary translation/
+minimize/owner assertions, focus routing and isolated stall/recovery tests PASS.
+Normal/maximized release/pipe-loss/helper-crash PASS. Forty synthetic swaps p95/max
+2ms; not actual Minecraft latency. Logs workspace/runs/opaque-*. Actual game drag/
+focus/frame/switch/DPI acceptance NOT_EXECUTED.
+
+FPS:120/5 defaults, saves5..1000, background<=active across UI/bridge/backend.
+Historical explicit1..4 and144/10 readable without rewriting. V3 pacer gets saved
+values next launch; historical V2 defaults unchanged. Rust default/roundtrip/legacy/
+boundaries PASS; actual120/5 game pacing NOT_EXECUTED.
+
+Cache: selected pinned profile must be stopped; all retained game identities checked.
+Other exact managed games may continue; unknown external game blocks. Actor still
+serializes launch/deletion; pinned paths/exclusive HTTP-cache plans unchanged.
+UI/parser/classifier agree. Four synthetic deletion tests and scoped PID/birth spoof
+admission PASS, including locks/links/incomplete plan/cross-profile preservation.
+No real cache/account/world deleted.35 frontend tests, typecheck0errors/warnings,
+G0/structure PASS. NSIS built, export hash checked, App/root startup receipts verified.
+Existing Rust warnings remain.
+## Remaining work and owners
+
+Full clear/reset/backup/restore/audio controls remain incomplete. Use the existing
+session_controller.rs actor, game_preset.rs options writer, profile_storage.rs/
+product_profiles.rs pinned stores, manager_settings.rs and current UI/bridge.
+Launch performance and actual Task Manager roles/grouping remain unproven.
+WebView2 grouping matches OPEN upstream reports; AppUserModelID/metadata alone
+insufficient. Investigate actual parent/logon/integrity and supported APIs:
 https://github.com/MicrosoftEdge/WebView2Feedback/issues/5628
 https://github.com/tauri-apps/tauri/issues/15567
+DWM destination must be caller-owned top-level, not child:
 https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/nf-dwmapi-dwmregisterthumbnail
+No one-group Task Manager success claim. Full-exit source from6eba183 closes only
+managed games normally and keeps manager open on pending dialog/timeout; actual
+Minecraft save/full-exit acceptance remains NOT_EXECUTED.
 
-## Revision-scoped evidence
+Five profiles already migrated opaquely into Data/Launchers/Minecraft-1..5; original
+external stores remain recovery only, never new active dependencies. Data/Settings
+owns preferences/location/lease, Data/Cache owns Temp/WebView. Private hives, ACLs,
+reviewed DLL pins unchanged (App/build-info.json). Do not read account/world data.
+Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4; second worktree detached47a45f9c7d4a8ce6799d56997fd38e4b4df49ce7 unchanged.
+Four licensed playable clients, gameplay/network/migration/installer acceptance
+are separate obligations, NOT_EXECUTED here. Compiler caches remain ignored.
 
-Installed6eba183 only: Explorer Connected/five enabled/project cache; idle Settings/
-maximize/restore/X exits85ms with zero App processes. No actual-game exit/save proof.
-Source2c9e284: opaque host/DWM primary correction, synthetic proof described above.
-Source1262efb: defaults120/5, saves5..1000; explicit older preferences retained.
-35 frontend tests/typecheck and Rust preference roundtrip/boundaries PASS.
-Cache correction: selected stopped profile may clear while other exact owned games
-run; retained child identity checks and unknown-external-game refusal stay required.
-Actor, classifier, frontend parser and UI gates agree. Four native deletion fixtures
-(including links/locks/incomplete plan/cross-profile preservation), admission spoof-
-identity test and35 frontend tests/typecheck PASS. Synthetic data only; real cleanup
-NOT_EXECUTED. Full clear/reset/restore/audio and actual presentation acceptance remain.
-## Preservation and delivery boundary
-
-Five profiles already migrated opaquely into Data/Launchers/Minecraft-1..5; outside
-originals remain recovery only. No repeated setup/migration. Data/Settings owns
-preferences/location/lease; Data/Cache owns Temp/actual WebView. Five private hives,
-protected ACL, zero Data links verified previously. Licensed game/Windows identity
-remain external. Keep private/account/world material out of Git and diagnostics.
-Reviewed DLLs unchanged in workspace/builds/central-data-20261026/Release;
-pins remain in independent_bootstrap.rs and App/build-info.json.
-Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4 and second worktree47a45f9 preserved.
-Signing NOT_VERIFIED; installer execution, real Minecraft full-exit/save, audio and
-multi-client acceptance NOT_EXECUTED. Publication DISABLED.
-
-Next: complete selected-launcher settings/storage/audio;
-build a clean candidate and verify presentation before replacing installed App.
-Continue through ordered outcomes; overall goal ACTIVE, not complete.
+Next: implement settings reset/backup/restore through the existing options writer,
+with synthetic path/link/interruption tests, then full clear/audio and remaining
+actual presentation/performance/process acceptance. Overall goal stays ACTIVE.
