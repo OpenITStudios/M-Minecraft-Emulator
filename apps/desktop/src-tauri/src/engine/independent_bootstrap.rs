@@ -96,6 +96,25 @@ fn pin_image(path: &Path) -> io::Result<File> {
 }
 
 /// Owns original CreateProcessW handles, or verified duplicates in the fixed cfg(test) handoff.
+// Per-attempt cleanup receipt, shared only with the original unstarted child.
+// It never grants permission after a resume attempt or unconfirmed cancellation.
+#[derive(Clone)]
+struct UnstartedCleanup(std::sync::Arc<std::sync::atomic::AtomicBool>);
+impl UnstartedCleanup {
+    fn new() -> Self {
+        Self(std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)))
+    }
+    fn retry_safe(&self) -> bool {
+        self.0.load(std::sync::atomic::Ordering::Acquire)
+    }
+    fn pending(&self) {
+        self.0.store(false, std::sync::atomic::Ordering::Release);
+    }
+    fn confirmed(&self) {
+        self.0.store(true, std::sync::atomic::Ordering::Release);
+    }
+}
+
 /// Cancellation is allowed only before the first resume attempt; no PID-reopen API.
 pub(super) struct PendingEducationBootstrap {
     process: OwnedHandle,
@@ -108,6 +127,7 @@ pub(super) struct PendingEducationBootstrap {
     observation: Option<StartupObservation>,
     policy: Option<instance_focus_events::PolicyChannel>,
     resume_attempted: bool,
+    cleanup: Option<UnstartedCleanup>,
 }
 
 impl PendingEducationBootstrap {
@@ -162,8 +182,15 @@ impl PendingEducationBootstrap {
 
 impl Drop for PendingEducationBootstrap {
     fn drop(&mut self) {
-        if !self.resume_attempted && self.cancel().is_err() {
-            eprintln!("Unstarted Education bootstrap child cleanup is unconfirmed");
+        if !self.resume_attempted {
+            match self.cancel() {
+                Ok(()) => {
+                    if let Some(receipt) = &self.cleanup {
+                        receipt.confirmed();
+                    }
+                }
+                Err(_) => eprintln!("Unstarted Education bootstrap child cleanup is unconfirmed"),
+            }
         }
     }
 }
@@ -222,6 +249,19 @@ fn create_unstarted_configured(
     storage: Option<SlotStorage>,
     observe: bool,
     presentation_library: Option<&BootstrapLibrary>,
+    #[cfg(test)] proof: Option<&tests::FixtureReceipt>,
+) -> io::Result<PendingEducationBootstrap> {
+    create_unstarted_tracked(path, image, storage, observe, presentation_library, None,
+        #[cfg(test)] proof)
+}
+
+fn create_unstarted_tracked(
+    path: &Path,
+    image: File,
+    storage: Option<SlotStorage>,
+    observe: bool,
+    presentation_library: Option<&BootstrapLibrary>,
+    cleanup: Option<UnstartedCleanup>,
     #[cfg(test)] proof: Option<&tests::FixtureReceipt>,
 ) -> io::Result<PendingEducationBootstrap> {
     if presentation_library.is_some() && storage.is_none() {
@@ -309,6 +349,7 @@ fn create_unstarted_configured(
     };
     startup.lpAttributeList = attributes.as_ref().map_or(ptr::null_mut(), |a| a.list);
     let mut info: PROCESS_INFORMATION = unsafe { mem::zeroed() };
+    if let Some(receipt) = &cleanup { receipt.pending(); }
     // SAFETY: Absolute lpApplicationName; writable quoted argv[0] only; no shell,
     // arbitrary arguments, ambient handle inheritance, custom token, elevation or breakaway fallback.
     if unsafe {
@@ -334,7 +375,11 @@ fn create_unstarted_configured(
         )
     } == 0
     {
-        return Err(io::Error::last_os_error());
+        let error = io::Error::last_os_error();
+        // Failed CreateProcess returns no owned child. Later failures need a
+        // confirmed exit from the retained never-resumed process before retry.
+        if let Some(receipt) = &cleanup { receipt.confirmed(); }
+        return Err(error);
     }
     // SAFETY: A successful CreateProcessW returns two newly owned valid handles.
     let mut child = PendingEducationBootstrap {
@@ -348,6 +393,7 @@ fn create_unstarted_configured(
         observation,
         policy: None,
         resume_attempted: false,
+        cleanup,
     };
     #[cfg(test)]
     if let Some(proof) = proof {
@@ -2439,7 +2485,6 @@ impl OwnedHelperTransaction<'_> {
     }
 }
 
-#[cfg(test)]
 impl SlotStorage {
     fn duplicate(&self) -> io::Result<Self> {
         let mut key = ptr::null_mut();
@@ -3596,6 +3641,94 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn tracked_startup_restores_retry_only_before_creation_or_after_confirmed_exit() {
+        let path = std::env::current_exe().unwrap().canonicalize().unwrap();
+        let before_creation = UnstartedCleanup::new();
+        assert!(create_unstarted_tracked(Path::new("relative.exe"), pin_image(&path).unwrap(),
+            None, false, None, Some(before_creation.clone()), None).is_err());
+        assert!(before_creation.retry_safe());
+
+        let missing = UnstartedCleanup::new();
+        let absent = path.parent().unwrap().join(format!("absent-startup-{}.exe", std::process::id()));
+        assert!(!absent.exists());
+        assert!(create_unstarted_tracked(&absent, pin_image(&path).unwrap(),
+            None, false, None, Some(missing.clone()), None).is_err());
+        assert!(missing.retry_safe());
+
+        let cleanup = UnstartedCleanup::new();
+        let child = create_unstarted_tracked(&path, pin_image(&path).unwrap(),
+            None, false, None, Some(cleanup.clone()), None).unwrap();
+        let process = child.process.try_clone().unwrap();
+        assert!(!cleanup.retry_safe());
+        drop(child); // Own test executable remains suspended throughout.
+        assert!(cleanup.retry_safe());
+        assert_eq!(unsafe { WaitForSingleObject(process.as_raw_handle() as _, 0) }, WAIT_OBJECT_0);
+    }
+
+    #[test]
+    fn unconfirmed_cancellation_and_resume_boundary_never_restore_retry() {
+        let path = std::env::current_exe().unwrap().canonicalize().unwrap();
+        for attempted in [false, true] {
+            let cleanup = UnstartedCleanup::new();
+            let mut child = create_unstarted_tracked(&path, pin_image(&path).unwrap(),
+                None, false, None, Some(cleanup.clone()), None).unwrap();
+            let full = child.process.try_clone().unwrap();
+            if attempted {
+                // Simulate only the irreversible boundary; never resume this fixture.
+                child.resume_attempted = true;
+            } else {
+                let mut limited = ptr::null_mut();
+                assert_ne!(unsafe { DuplicateHandle(GetCurrentProcess(), child.process.as_raw_handle() as _,
+                    GetCurrentProcess(), &mut limited,
+                    windows_sys::Win32::System::Threading::SYNCHRONIZATION_SYNCHRONIZE,
+                    0, 0) }, 0);
+                child.process = unsafe { OwnedHandle::from_raw_handle(limited as _) };
+            }
+            drop(child);
+            assert!(!cleanup.retry_safe());
+            assert_eq!(unsafe { WaitForSingleObject(full.as_raw_handle() as _, 0) }, WAIT_TIMEOUT);
+            // Only the retained full-access handle to the own, never-resumed fixture.
+            assert_ne!(unsafe { TerminateProcess(full.as_raw_handle() as _, 91) }, 0);
+            assert_eq!(unsafe { WaitForSingleObject(full.as_raw_handle() as _, 5000) }, WAIT_OBJECT_0);
+            assert!(!cleanup.retry_safe()); // External teardown is not a receipt.
+        }
+    }
+
+    #[test]
+    fn duplicated_storage_pins_keep_the_same_profile_after_failed_creation() {
+        let parent = fresh_root(&std::env::temp_dir()).unwrap();
+        let logical_path = parent.join("logical");
+        std::fs::create_dir(&logical_path).unwrap();
+        for name in ["Roaming", "Local"] { std::fs::create_dir(logical_path.join(name)).unwrap(); }
+        let logical = open_directory(&logical_path, FILE_READ_ATTRIBUTES).unwrap();
+        let store = create_private_slot(&logical, &parent, 1).unwrap();
+        let leaf = registry_leaf(&directory_id(&store.private).unwrap(), 1).unwrap();
+        let sentinel = directory_path(&store.private).unwrap().join("Roaming/world-fixture.bin");
+        std::fs::write(&sentinel, b"preserve").unwrap();
+        let duplicate = store.duplicate().unwrap();
+        assert!(same_image(&directory_id(&store.private).unwrap(), &directory_id(&duplicate.private).unwrap()));
+        assert!(same_image(&directory_id(&store.logical).unwrap(), &directory_id(&duplicate.logical).unwrap()));
+        assert_eq!(store.private_path, duplicate.private_path);
+        assert_eq!(store.user_key_path, duplicate.user_key_path);
+        for index in 0..2 {
+            assert!(same_image(&directory_id(&store.temporary[index]).unwrap(), &directory_id(&duplicate.temporary[index]).unwrap()));
+        }
+        let path = std::env::current_exe().unwrap().canonicalize().unwrap();
+        let cleanup = UnstartedCleanup::new();
+        assert!(create_unstarted_tracked(Path::new("relative.exe"), pin_image(&path).unwrap(),
+            Some(duplicate), false, None, Some(cleanup.clone()), None).is_err());
+        assert!(cleanup.retry_safe());
+        let retry = store.duplicate().unwrap();
+        assert_eq!(std::fs::read(&sentinel).unwrap(), b"preserve");
+        assert!(same_image(&directory_id(&store.private).unwrap(), &directory_id(&retry.private).unwrap()));
+        drop(retry); drop(store); drop(logical);
+        let key = wide(OsStr::new(&format!("Software\\MivubiEducationPilot\\{leaf}"))).unwrap();
+        assert_eq!(unsafe { windows_sys::Win32::System::Registry::RegDeleteTreeW(HKEY_CURRENT_USER, key.as_ptr()) }, 0);
+        assert_eq!(parent.parent(), Some(std::env::temp_dir().as_path()));
+        std::fs::remove_dir_all(parent).unwrap();
     }
 
     fn test_slots() -> [SlotStorage; 2] {

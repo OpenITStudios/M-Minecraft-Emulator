@@ -86,25 +86,46 @@ impl Sessions {
         }
         let store = self.stores[index]
             .as_mut()
-            .ok_or_else(|| invalid("Profile requires controller restart before retry"))?;
+            .ok_or_else(|| invalid("Profile is unavailable after unconfirmed startup cleanup; existing processes are preserved"))?;
         store.singleton_caller_rva = 0x2cdc30;
         game_preset::apply_inactive(std::slice::from_ref(store))?;
-        let child = create_unstarted_configured(
-            Path::new(&self.path),
-            self.image.try_clone()?,
-            self.stores[index].take(),
-            true,
-            Some(&payload),
-            #[cfg(test)]
-            None,
-        )?;
-        // A pre-resume error cancels only this never-resumed child. Persistent files survive.
-        payload.enroll(&child)?;
-        let started = PreparedEducationEnrollment {
-            _children: [child],
-            _payload: payload,
-        }
-        .resume_for_authorized_observation()?;
+        // Keep the exact validated store until ownership reaches the started
+        // transaction. Cloning handles neither reopens paths nor seeds a profile.
+        let cleanup = UnstartedCleanup::new();
+        let attempt = (|| {
+            let child = create_unstarted_tracked(
+                Path::new(&self.path),
+                self.image.try_clone()?,
+                Some(self.stores[index].as_ref().unwrap().duplicate()?),
+                true,
+                Some(&payload),
+                Some(cleanup.clone()),
+                #[cfg(test)]
+                None,
+            )?;
+            payload.enroll(&child)?;
+            PreparedEducationEnrollment {
+                _children: [child],
+                _payload: payload,
+            }
+            .resume_for_authorized_observation()
+        })();
+        let started = match attempt {
+            Ok(started) => started,
+            Err(error) => {
+                let issue = if cleanup.retry_safe() {
+                    error.to_string()
+                } else {
+                    // Never restore retry permission merely because an error
+                    // returned: cancellation must confirm this child's exit.
+                    self.stores[index] = None;
+                    format!("Startup cleanup is unconfirmed; retry disabled and existing processes preserved: {error}")
+                };
+                self.issues[index] = Some(issue.clone());
+                return Err(io::Error::other(issue));
+            }
+        };
+        self.stores[index] = None; // Started transaction now owns the duplicate pins.
         self.issues[index] = match &started.attempts[0] {
             StartupAttempt::Resumed => None,
             _ => Some("Resume outcome is uncertain; game preserved without retry".into()),

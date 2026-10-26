@@ -22,6 +22,19 @@ Roaming/Local/TEMP/HKCU stores, scoped singleton compatibility, and 144/10 FPS p
 Presets are written only to the selected inactive profile before its launch, with
 existing backup/atomic-write behavior and simulation settings preserved.
 
+An inactive profile retains its validated storage handles until startup transfers
+ownership to the started transaction. The child receives noninheritable duplicates
+of those same directory/local-registry objects, not paths reopened as fresh data.
+This follows Windows [DuplicateHandle semantics](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-duplicatehandle).
+A failed startup permits a later explicit retry only if no child was created or
+the retained never-resumed child was confirmed exited during cancellation. The
+per-attempt in-memory cleanup receipt is not a readiness flag or another lifecycle
+owner. Unconfirmed cancellation discards retry admission and reports uncertainty;
+no controller restart, game kill or automatic relaunch is attempted. After any
+resume attempt, the existing started owner retains the game and its uncertain
+outcome. Disposable Windows fixtures cover the cleanup boundary; actual Minecraft
+failure/retry with live peers remains unexecuted.
+
 Closing the manager preserves games and restores presented windows. Helpers retain
 policy/storage handles after UI exit until the games exit normally. Reopening
 the same application binary reconnects through its local named pipe,

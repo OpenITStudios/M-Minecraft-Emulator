@@ -335,6 +335,7 @@ impl BootstrapLibrary {
             observation: None,
             policy: None,
             resume_attempted: false,
+            cleanup: None,
         };
         let mut storage = store.duplicate()?;
         storage.singleton_caller_rva = 0;
