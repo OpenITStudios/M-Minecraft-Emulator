@@ -57,7 +57,16 @@ v3 decoding and unknown-version rejection. No Minecraft or window was used.
 Targeted Windows Rust tests PASS: performance persistence/validation (including
 corrupt-file preservation), settings protocol/admission, five-profile graphics
 updates/invalid-last-profile preservation/idempotent retry and existing writer
-regressions. Exact revision Windows product/NSIS packaging remains to be recorded.
+regressions. Exact clean Local source 19860393bb54a8d573ff8b16e4d597f10e8753a3 built and
+exported successfully with npm --prefix Development run package:windows. Root App
+was safely refreshed, with its previous candidate preserved by the existing
+stager. All four App hashes match build-info.json. Data remains empty; no actual
+performance.json was created (144/10 defaults until the user chooses Save).
+Export: workspace/packages/lazy-tester/0.1.0-19860393bb54-20261026T091732253Z.
+Installer SHA256:d68898472747eb62411bc6cb37bc9ac5b0f0cea2c8988a822695ddc18ca1eda6
+App and installer are NotSigned. Export has exactly installer, package-manifest.json
+and SHA256SUMS.txt. The subsequent handoff commit changes documentation only;
+no newer binary acceptance is implied. Metadata proof is in completion.json.
 
 Do not claim a globally green source suite: the preceding work recorded a broad
 DACL disposable-fixture refusal, oversized-pipe fixture hang and existing rustfmt
@@ -72,6 +81,8 @@ partial-setup recovery and installed lifecycle acceptance remain unfinished.
 
 ## Next — one action
 
-Build/export the exact clean Local Settings candidate, stage it only if App is
-not running, then record source SHA, payload hashes and actual proof limits. Do
-not run Minecraft or resume RAM experiments incidentally.
+At the next appropriate interactive session, validate saving custom/default FPS,
+normal profile restart and actual 144/10/custom FPS, login/world persistence and
+Education Host World behavior using this exact candidate. This remains runtime
+acceptance, not a prerequisite imposed on further independently useful source work.
+STOP for the completed Settings scope; do not resume paused RAM experiments.
