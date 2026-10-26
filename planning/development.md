@@ -6,8 +6,7 @@ Deliver a dependable Lazy Tester: same Play/Settings frame; no stuck/misaligned 
 or exposed desktop during drag; measured faster switching/Launch; clear process
 ownership; real scoped Settings/Data Storage actions. New defaults120FPS active /
 5FPS background, minimum configurable5FPS, background<=active. Supersedes144/10 for
-new defaults; do not silently replace arbitrary saved user preferences. Goals tool
-remains ACTIVE; this file is the sole detailed scope/evidence/next-action handoff.
+new defaults; do not silently replace arbitrary saved user preferences. Goal ACTIVE; this file owns scope/evidence/next action.
 
 Local only; main/publication untouched; CI OFF. VM/Sandboxie and RAM/renderer work
 PAUSED. Compiler caches explicitly RETAINED; delete nothing as cleanup. Clear all
@@ -55,17 +54,12 @@ and confirmation for the selected launcher in the app.
 
 ## Exact source/installed state and user evidence
 
-Source HEAD at revised-goal start91e82526a0bd161b9869cb3bd85ee501356d6984, Local clean.
-Installed App/root source6eba183ff437c4da410acd5e308a0b28864d2d90. Last observed
-manager43284/root20804, controller18816, games3564/42036, helpers34184/8128. Recheck IDs;
-never kill by name. User confirms unclear Task Manager ownership WHILE UI OPEN.
-Screenshots show Lazy Tester four identical names, two separate Minecraft Education
-rows, WebView2 Manager six entries (Lazy Tester renderer/GPU/services). No evidence
-this is LazyDesigner; attribute exact PIDs/parents/paths. User still sees different
-Play/Settings border and slow switching/launch. Drag screenshot proves a displaced
-game exposing Explorer/desktop. Prior synthetic PASS is insufficient. Disabled
-cache/clear/reset/restore/audio controls are now explicitly in scope to complete.
-
+Revised-goal base91e82526a0bd161b9869cb3bd85ee501356d6984. Installed App/root
+source6eba183ff437c4da410acd5e308a0b28864d2d90. Recheck live PIDs before staging;
+never kill by name. Screenshots show identical process names,
+separate Minecraft rows and WebView2 Manager group while UI OPEN. Verify actual PID/path/parent; LazyDesigner involvement unproven. Drag exposes Explorer;
+Play/Settings frame differs; switching/launch feel slow. Earlier fixture PASS did
+not establish usability. Disabled storage/audio actions are explicitly in scope.
 ## Canonical owners and investigation
 
 Presentation: workspace_surface.rs and workspace_surface/previews.rs; main events/
@@ -90,16 +84,19 @@ https://github.com/MicrosoftEdge/WebView2Feedback/issues/5628
 https://github.com/tauri-apps/tauri/issues/15567
 https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/nf-dwmapi-dwmregisterthumbnail
 
-## Previous evidence — revision6eba183 only
+## Revision-scoped evidence
 
-Explorer Connected/five enabled/project cache; Settings/maximize/restore; idle X
-exits with zero remaining App processes85ms; payload hashes PASS.35 frontend tests,
-typecheck/G0, nine surface tests, four scoped synthetic close tests PASS. Isolated
-recovery/stall tests passed; one combined run failed recovery timing. Logs remain
-in workspace/runs. These do not prove actual-game drag/exit/save/audio/storage.
-FPS source now defaults120/5, saves5..1000; older explicit values retained.
+Installed6eba183 only: Explorer Connected/five enabled/project cache; idle Settings/
+maximize/restore/X exits85ms with zero App processes. No actual-game exit/save proof.
+Source2c9e284: opaque host/DWM primary correction, synthetic proof described above.
+Source1262efb: defaults120/5, saves5..1000; explicit older preferences retained.
 35 frontend tests/typecheck and Rust preference roundtrip/boundaries PASS.
-
+Cache correction: selected stopped profile may clear while other exact owned games
+run; retained child identity checks and unknown-external-game refusal stay required.
+Actor, classifier, frontend parser and UI gates agree. Four native deletion fixtures
+(including links/locks/incomplete plan/cross-profile preservation), admission spoof-
+identity test and35 frontend tests/typecheck PASS. Synthetic data only; real cleanup
+NOT_EXECUTED. Full clear/reset/restore/audio and actual presentation acceptance remain.
 ## Preservation and delivery boundary
 
 Five profiles already migrated opaquely into Data/Launchers/Minecraft-1..5; outside

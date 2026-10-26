@@ -80,6 +80,10 @@ describe('Lazy Tester profile contract', () => {
     for (const item of invalid) expect(() => parseSession({...snapshot, storage: [item, ...storage.slice(1)]})).toThrow();
     const active = {...snapshot, profiles: snapshot.profiles.map(profile => profile.slot === 2 ? running(2) : profile)};
     expect(() => parseSession(active)).toThrow();
+    const scoped = {...active, storage: storage.map(item => item.slot === 2 ?
+      {...item, cache: {...item.cache, canClear:false, issue:'Close this Minecraft'}} : item)};
+    expect(parseSession(scoped).storage![3]!.cache.canClear).toBe(true);
+    expect(parseSession(scoped).storage![1]!.cache.canClear).toBe(false);
     expect(parseSession({...active, storage: storage.map(item => ({...item, cache: {...item.cache, canClear: false, issue: 'Close Minecraft'}}))}).storage).toHaveLength(5);
   });
   it('validates exactly the requested preview slots and keeps unavailable previews explicit',()=>{

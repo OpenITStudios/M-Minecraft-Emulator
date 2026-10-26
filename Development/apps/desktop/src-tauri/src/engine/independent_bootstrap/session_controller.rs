@@ -235,6 +235,7 @@ impl Sessions {
     }
 
     fn storage(&self) -> io::Result<Vec<ProfileStorage>> {
+        let observed = super::super::inspect_native_workspace()?.processes;
         (1..=5)
             .map(|slot| {
                 let store = self.store(slot)?;
@@ -245,10 +246,14 @@ impl Sessions {
                     files: 0,
                     partial: false,
                     disk: profile_storage::disk(&store.private).ok(),
-                    cache: profile_storage::inspect(
-                        &store.private,
-                        self.running.iter().all(Option::is_none),
-                    ),
+                    cache: {
+                        let admission = self.cache_admission(slot, &observed);
+                        let mut cache = profile_storage::inspect(&store.private, admission.is_ok());
+                        if !cache.partial {
+                            if let Err(error) = admission { cache.issue = Some(error.to_string()); }
+                        }
+                        cache
+                    },
                 };
                 scan(&path, &mut result, std::time::Instant::now(), 0);
                 Ok(result)
@@ -285,19 +290,21 @@ impl Sessions {
 
     fn clear_cache(&mut self, slot: u32) -> io::Result<()> {
         self.reap();
-        let inactive = self.running.iter().all(Option::is_none);
-        // Requests are serialized with launches by this sole session actor.
-        // External/unattributed games must also be closed, without killing any.
-        if !inactive
-            || !super::super::inspect_native_workspace()?
-                .processes
-                .is_empty()
-        {
-            return Err(invalid(
-                "Close all Minecraft sessions normally before clearing cache",
-            ));
-        }
-        profile_storage::clear(&self.store(slot)?.private, inactive)
+        let observed = super::super::inspect_native_workspace()?.processes;
+        self.cache_admission(slot, &observed)?;
+        // The sole session actor serializes admission, exact-directory deletion and launch.
+        profile_storage::clear(&self.store(slot)?.private, true)
+    }
+
+    fn cache_admission(&self, slot: u32, observed: &[OwnedProcess]) -> io::Result<()> {
+        self.store(slot)?;
+        if self.exiting { return Err(invalid("Minecraft sessions are closing; wait before cleanup")); }
+        let owned = self.running.iter().flatten().map(|started| {
+            let child = &started.children[0];
+            child.identity()?;
+            Ok((child.pid, child.created))
+        }).collect::<io::Result<Vec<_>>>()?;
+        require_cache_idle(self.running[slot as usize - 1].is_none(), &owned, observed)
     }
 
     fn settings(&mut self, apply: bool) -> io::Result<SettingsReport> {
@@ -316,6 +323,15 @@ impl Sessions {
         report.changed_profiles = changed;
         Ok(report)
     }
+}
+
+fn require_cache_idle(selected_idle: bool, owned: &[(u32,u64)], observed: &[OwnedProcess]) -> io::Result<()> {
+    if !selected_idle { return Err(invalid("Close this Minecraft session normally before clearing its cache.")); }
+    if observed.iter().any(|process| !owned.iter().any(|(pid,birth)|
+        process.pid == *pid && process.created_file_time.parse::<u64>().ok() == Some(*birth))) {
+        return Err(invalid("An unmanaged Minecraft session is open. Close it normally before cleanup; managed sessions in other launchers may stay open."));
+    }
+    Ok(())
 }
 
 fn require_preset_idle(idle: bool) -> io::Result<()> {
@@ -575,6 +591,17 @@ pub(super) fn maybe_run() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn stopped_profile_cache_allows_other_owned_games_but_rejects_unknown_or_reused_processes() {
+        let other = OwnedProcess { pid:42, created_file_time:"123456".into(), session_id:1,
+            window_handle:"0x1234".into(), responding:true };
+        assert!(require_cache_idle(true, &[(42,123456)], std::slice::from_ref(&other)).is_ok());
+        assert!(require_cache_idle(false, &[(42,123456)], std::slice::from_ref(&other)).is_err());
+        assert!(require_cache_idle(true, &[], std::slice::from_ref(&other)).is_err());
+        assert!(require_cache_idle(true, &[(42,123455)], std::slice::from_ref(&other)).is_err());
+        assert!(require_cache_idle(true, &[(43,123456)], std::slice::from_ref(&other)).is_err());
+        assert!(require_cache_idle(true, &[], &[]).is_ok());
+    }
 
     #[test]
     fn full_exit_of_idle_sessions_does_not_prepare_profiles_and_denies_new_launches() {

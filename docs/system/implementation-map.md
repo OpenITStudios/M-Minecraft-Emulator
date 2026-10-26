@@ -89,8 +89,9 @@ and Data Storage; Advanced options is an emphasized disclosure inside the select
 launcher's storage page. High/Low graphics selections are owned by the original
 game_preset.rs writer and manager_settings.rs graphics.json (five selections).
 ApplyGraphicsPreset is serialized by the same session actor; launch reapplies the
-saved selection. All games must be stopped before manual preset writes or cache
-cleanup. The package stager preserves graphics.json with existing preferences.
+saved selection. All games must be stopped before manual preset writes. Cache cleanup requires
+the selected launcher to be stopped; other verified managed games may continue.
+Unknown external game identities still block cleanup through the session actor. The package stager preserves graphics.json with existing preferences.
 Full account clear, world export, settings reset/restore and audio control remain
 unavailable. Full product exit closes only its managed games normally through the
 existing session owner; it never terminates unrelated games or reads their data.

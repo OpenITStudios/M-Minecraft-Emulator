@@ -83,7 +83,7 @@ export function parseSession(value: unknown): SessionSnapshot {
           Number(cache.files) < 0 || Number(cache.files) > 2048 || typeof cache.partial !== 'boolean' ||
           typeof cache.canClear !== 'boolean' || !(cache.issue === null || typeof cache.issue === 'string' && cache.issue.length <= 8192) ||
           cache.canClear && (cache.partial || cache.files === 0 || cache.issue !== null ||
-            (value.profiles as ProfileSession[]).some(profile => ['STARTING', 'RUNNING', 'NOT_RESPONDING'].includes(profile.state)))) throw new TypeError('Invalid cache metadata');
+            (value.profiles as ProfileSession[]).some(profile => profile.slot === storage.slot && ['STARTING', 'RUNNING', 'NOT_RESPONDING'].includes(profile.state)))) throw new TypeError('Invalid cache metadata');
     });
   }
   if(Object.hasOwn(value,'settings')) {

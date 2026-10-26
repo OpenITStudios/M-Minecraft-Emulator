@@ -163,7 +163,7 @@ pub(super) fn inspect(private: &File, inactive: bool) -> CacheStorage {
             issue: if inactive {
                 None
             } else {
-                Some("Close all Minecraft sessions before clearing cache.".into())
+                Some("Close this Minecraft session before clearing its cache.".into())
             },
         },
         Err(_) => CacheStorage {
@@ -181,7 +181,7 @@ pub(super) fn inspect(private: &File, inactive: bool) -> CacheStorage {
 pub(super) fn clear(private: &File, inactive: bool) -> io::Result<()> {
     if !inactive {
         return Err(invalid(
-            "Close all Minecraft sessions normally before clearing cache",
+            "Close this Minecraft session normally before clearing its cache",
         ));
     }
     let plan = plan(private, true)?;
@@ -242,6 +242,11 @@ mod tests {
     #[test]
     fn clears_only_http_cache_preserving_auth_world_settings_and_other_temp() {
         let fixture = Fixture::new();
+        let other = Fixture::new();
+        fs::create_dir_all(other.cache()).unwrap();
+        fs::write(other.cache().join("other-profile-cache"), b"other profile").unwrap();
+        let other_lock = OpenOptions::new().read(true).share_mode(FILE_SHARE_READ)
+            .open(other.cache().join("other-profile-cache")).unwrap();
         let cache = fixture.cache();
         fs::create_dir_all(cache.join("Cache_Data/index-dir")).unwrap();
         fs::write(cache.join("Cache_Data/a"), [0u8; 17]).unwrap();
@@ -268,6 +273,8 @@ mod tests {
         let space = disk(&pin).unwrap();
         assert!(space.total_bytes > 0 && space.available_bytes <= space.total_bytes);
         clear(&pin, true).unwrap();
+        assert_eq!(fs::read(other.cache().join("other-profile-cache")).unwrap(), b"other profile");
+        drop(other_lock);
         assert_eq!(inspect(&pin, true).files, 0);
         for name in protected {
             assert_eq!(fs::read(fixture.0.join(name)).unwrap(), b"preserve");
