@@ -1,7 +1,7 @@
 // Build from one clean Local revision; export only an installer and its receipts.
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
-import {copyFileSync, constants, existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {copyFileSync, constants, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync} from 'node:fs';
 import {dirname, isAbsolute, relative, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {verifyLazyTesterPackage} from './check-lazy-tester-package.mjs';
@@ -66,6 +66,56 @@ export function assembleCandidate(cwd, installer, sha, version, stamp) {
   return {output, manifest};
 }
 
+export function stageLocalApp(cwd, release, sha) {
+  if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('Invalid source revision');
+  const app = resolve(cwd,'App'), data = resolve(cwd,'Data');
+  ordinaryDirectories(app); ordinaryDirectories(data); ordinaryDirectories(release);
+  // Never replace a running local candidate or modify its account/world data.
+  if (process.platform === 'win32' && existsSync(app)) {
+    const paths = execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',
+      "$ErrorActionPreference='Stop'; @(Get-Process -Name lazy-tester -ErrorAction SilentlyContinue) | ForEach-Object { if (-not $_.Path) { throw 'Process path unavailable' }; $_.Path }"],
+      {encoding:'utf8',windowsHide:true}).split(/\r?\n/).filter(Boolean);
+    if (paths.some(path => resolve(path).toLowerCase() === resolve(app,'lazy-tester.exe').toLowerCase())) {
+      throw new Error('Close the local Lazy Tester before refreshing App');
+    }
+  }
+  const names = ['lazy-tester.exe','independent-bootstrap/bootstrap-compat.dll',
+    'independent-bootstrap/bootstrap-enroll.dll','distribution/lazy-tester-package.json'];
+  const files = names.map(name => {
+    const source = resolve(release,name); ordinaryDirectories(dirname(source));
+    const info = lstatSync(source);
+    // Cargo hardlinks its executable into deps; read bytes and write an independent copy.
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 64 * 1024 * 1024) throw new Error('Invalid local app payload');
+    const bytes = readFileSync(source);
+    if (name.endsWith('.json')) JSON.parse(bytes.toString('utf8'));
+    else if (bytes[0] !== 0x4d || bytes[1] !== 0x5a) throw new Error('Expected a Windows executable');
+    return {name,bytes,sha256:digest(bytes)};
+  });
+  const parent = resolve(cwd,'workspace/private/local-app-backups');
+  ordinaryDirectories(parent); mkdirSync(parent,{recursive:true});
+  const attempt = mkdtempSync(resolve(parent,'refresh-')), staged = resolve(attempt,'new-App');
+  mkdirSync(staged);
+  for (const {name,bytes,sha256} of files) {
+    const target = resolve(staged,name); mkdirSync(dirname(target),{recursive:true});
+    writeFileSync(target,bytes,{flag:'wx'});
+    if (digest(readFileSync(target)) !== sha256) throw new Error('Local app copy failed verification');
+  }
+  const locator = resolve(app,'data-location.json');
+  if (existsSync(locator)) {
+    const info = lstatSync(locator);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 16384) throw new Error('Invalid existing data locator');
+    copyFileSync(locator,resolve(staged,'data-location.json'),constants.COPYFILE_EXCL);
+  }
+  writeFileSync(resolve(staged,'build-info.json'),JSON.stringify({sourceCommit:sha,
+    files:files.map(({name,sha256})=>({name,sha256})),runtimeAcceptance:'NOT_EXECUTED'},null,2)+'\n',{flag:'wx'});
+  const backup = existsSync(app) ? resolve(attempt,'previous-App') : null;
+  if (backup) renameSync(app,backup);
+  try { renameSync(staged,app); }
+  catch (error) { if (backup) renameSync(backup,app); throw error; }
+  if (!existsSync(data)) mkdirSync(data); // Keep existing profiles and all contents untouched.
+  return {app,data,backup};
+}
+
 function main() {
   if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Windows x64 packaging is required');
   const sha = sourceRevision(root);
@@ -91,6 +141,8 @@ function main() {
   if (sourceRevision(root) !== sha) throw new Error('Source changed during the build; no candidate exported');
   const installer = resolve(target,'x86_64-pc-windows-msvc/release/bundle/nsis',`Lazy Tester_${version}_x64-setup.exe`);
   const result = assembleCandidate(root,installer,sha,version,stamp);
+  const local = stageLocalApp(root,resolve(target,'x86_64-pc-windows-msvc/release'),sha);
+  console.log(`Local app: ${local.app}\nStart with RUN.cmd. Existing data is preserved.`);
   console.log(`Development candidate: ${result.output}\nSigning is not verified; installation and gameplay are not executed; publication is disabled.`);
 }
 

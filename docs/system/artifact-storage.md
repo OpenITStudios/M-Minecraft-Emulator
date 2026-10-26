@@ -65,12 +65,22 @@ not executed. It is a build receipt, not a second runtime-readiness store.
 Existing exports are never overwritten or recursively copied into newer ones.
 This command does not sign, upload, install or run the application.
 
+After exporting, the same command stages only the four required runtime payload
+files into the ignored root `App/`, with a source/hash receipt. Root `RUN.cmd`
+opens this app without a folder picker. It creates an empty `Data/` only when
+absent, preserves an existing data locator, and archives the previous `App/`
+under `workspace/private/local-app-backups/` before replacement. Running local
+apps prevent refresh. No profile capabilities, accounts or worlds are copied.
+An empty unconfigured default Data folder can be initialized; nonempty partial
+data or an unavailable saved location still blocks fresh replacement.
+
 The installer payload remains governed by
 `engine/distribution/lazy-tester-package.json` and the Tauri native configuration;
 the export does not add source, tools, profile bindings, accounts or worlds.
-Installed app files and user data remain outside this checkout and are not
-relocated by reorganizing development output. Custom user data locations and
-fresh-PC profile provisioning require their own runtime implementation.
+Installed copies are independent of this optional checkout-local candidate.
+Reorganizing development output never relocates their user data. Product data
+locations are owned by product_profiles.rs; cross-volume migration and fresh-PC
+Minecraft acceptance remain unfinished.
 
 **Repository-controlled storage contract:** one checkout root is the parent
 of every project download, source tree, locally staged payload and

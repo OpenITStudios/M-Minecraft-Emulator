@@ -5,7 +5,39 @@ Current goal: a modular five-profile native app with visible application/data
 folders, persistent locations, English UI and safe distribution. CI remains OFF.
 Renderer/RAM experiments remain PAUSED. Main is release-reserved.
 
-## Current bounded outcome — App/Data layout and persistent product profiles
+## Current bounded outcome — physical checkout entry point and app staging
+
+Source parent: 84d5af5b0813b2ece3d49c085d650ecb3f2d9187.
+The operator requested that the actual local root match the documented layout,
+and explicitly authorized removal of unused material. Root RUN.cmd now starts
+only App/lazy-tester.exe. The existing package owner stages the four required
+runtime files plus a source/hash receipt into ignored root App after building
+and exporting a clean Local candidate. It preserves data-location.json, archives
+the previous app under workspace/private/local-app-backups, refuses a running
+local app, and never copies adjacent private capabilities. Existing Data is
+untouched; absent Data is created empty. The product owner now admits an empty
+unconfigured default folder, while nonempty partial/saved unavailable data still
+fails closed. Old accounts/worlds remain in place, not migrated into Data.
+
+Executed: 30 frontend tests PASS, Svelte check zero errors/warnings, two targeted
+product-profile Rust fixtures PASS, two structure fixtures PASS, structure/G0
+checks PASS, and Windows release/NSIS build PASS (existing compiler warnings).
+No UI, game, installer or Computer Use was launched. Runtime acceptance remains
+NOT_EXECUTED for this change. The clean-revision package command is the next
+physical staging step, with hashes recorded in App/build-info.json.
+
+Cleanup inventory: apps/desktop/src-tauri/target contains 22,912,765,268 bytes
+(21.34 GiB), is Git-ignored/untracked, has a Cargo CACHEDIR.TAG, no reparse points
+and no running process below it. Both guarded and literal-path removal attempts
+were rejected by automatic execution policy as "blocked by policy". Nothing
+was deleted; do not report reclaimed space. Toolchains, old profile/capability
+folders, worlds and historical evidence remain preserved. The separate current
+build cache under workspace/builds/lazy-tester-layout-20261026 is retained.
+
+Next: stage the clean committed candidate into App, verify exact payload hashes
+without running it, and record the actual local outcome.
+
+## Previous bounded outcome — App/Data layout and persistent product profiles
 
 Source parent: d216830bd0e5e4923399db34235e0ac84bc22885.
 The operator approved a visible Lazy Tester root with App and Data, an automatic

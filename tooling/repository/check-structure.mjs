@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 
 const rootFiles = new Set(['.editorconfig', '.gitattributes', '.gitignore', '.gitmodules',
   '.node-version', 'AGENTS.md', 'CONTEXT.md', 'CONTRIBUTING.md', 'DEV.cmd',
-  'GITHUB_RULES.md', 'README.md', 'SECURITY.md', 'VERSION', 'package.json', 'toolchain.json']);
+  'GITHUB_RULES.md', 'README.md', 'RUN.cmd', 'SECURITY.md', 'VERSION', 'package.json', 'toolchain.json']);
 const roots = new Set(['.agents', 'apps', 'docs', 'engine', 'experiments', 'planning', 'tooling', 'workspace']);
 // Upstream resources and tools are deliberate provenance inputs, including binaries.
 const upstream = /^(?:engine\/isolation-owned\/|engine\/isolation-candidates\/)/;

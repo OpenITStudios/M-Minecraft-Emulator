@@ -1,11 +1,39 @@
 import {describe,expect,it} from 'vitest';
 import {execFileSync} from 'node:child_process';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,linkSync,lstatSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname,join,resolve} from 'node:path';
-import {assembleCandidate,sourceRevision} from '../scripts/package-lazy-tester.mjs';
+import {assembleCandidate,sourceRevision,stageLocalApp} from '../scripts/package-lazy-tester.mjs';
 
 describe('Development source and distribution candidates',()=>{
+  it('stages only app payloads, preserves the location and old app, and never touches Data',()=>{
+    const root=mkdtempSync(join(tmpdir(),'lazy-local-app-'));
+    try {
+      const release=join(root,'build');
+      for (const name of ['lazy-tester.exe','independent-bootstrap/bootstrap-compat.dll','independent-bootstrap/bootstrap-enroll.dll','distribution/lazy-tester-package.json']) {
+        const path=join(release,name);mkdirSync(dirname(path),{recursive:true});
+        writeFileSync(path,name.endsWith('.json')?'{}':'MZfixture');
+      }
+      writeFileSync(join(release,'private.bin'),'never copy');
+      linkSync(join(release,'lazy-tester.exe'),join(release,'cargo-artifact.exe'));
+      const first=stageLocalApp(root,release,'a'.repeat(40));
+      expect(lstatSync(join(first.app,'lazy-tester.exe')).nlink).toBe(1);
+      expect(readdirSync(first.data)).toEqual([]);
+      expect(readdirSync(first.app).sort()).toEqual(['build-info.json','distribution','independent-bootstrap','lazy-tester.exe']);
+      writeFileSync(join(first.app,'data-location.json'),'{"schema":1,"path":"D:/My Data"}');
+      writeFileSync(join(first.data,'world-fixture'),'preserve');
+      writeFileSync(join(release,'lazy-tester.exe'),'MZupdated');
+      const next=stageLocalApp(root,release,'b'.repeat(40));
+      expect(readFileSync(join(next.app,'data-location.json'),'utf8')).toContain('D:/My Data');
+      expect(readFileSync(join(next.data,'world-fixture'),'utf8')).toBe('preserve');
+      expect(readFileSync(join(next.backup!,'lazy-tester.exe'),'utf8')).toBe('MZfixture');
+      writeFileSync(join(release,'lazy-tester.exe'),'invalid');
+      expect(()=>stageLocalApp(root,release,'c'.repeat(40))).toThrow(/executable/);
+      expect(readFileSync(join(next.app,'lazy-tester.exe'),'utf8')).toBe('MZupdated');
+    } finally {
+      expect(dirname(resolve(root))).toBe(resolve(tmpdir()));rmSync(root,{recursive:true});
+    }
+  });
   it('exports only the installer and receipts, refuses reuse and never copies adjacent private data',()=>{
     const root=mkdtempSync(join(tmpdir(),'lazy-candidate-'));
     try {

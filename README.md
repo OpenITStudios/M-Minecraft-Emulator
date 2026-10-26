@@ -13,6 +13,9 @@ There is one product source tree; do not maintain separate developing/release
 copies of the code.
 
 ```text
+RUN.cmd               Start the prepared local app (does not build or search folders)
+App/                  Ignored runnable app, reviewed DLLs and build receipt
+Data/                 Ignored default product data location
 apps/desktop/         Desktop source, native integration and desktop build scripts
 engine/               Runtime source and distribution contracts
 tooling/              Developer tools, source checks and acceptance collectors
@@ -23,7 +26,8 @@ workspace/            Ignored local tools, builds, candidates and private materi
 ```
 
 `npm run dev` opens the development app. `npm run package:windows` builds the
-native installer from a clean, committed `Local` revision and exports a new folder:
+native installer from a clean, committed `Local` revision, refreshes the local
+`App/` payload, and exports a new folder:
 
 ```text
 workspace/packages/lazy-tester/<version>-<commit>-<UTC>/
@@ -37,6 +41,12 @@ compiler output directory, `workspace`, or developer profile folders. The manife
 identifies an unaccepted development candidate, not an approved public release.
 Signing, installed/gameplay acceptance and publication remain separate. See the
 [storage policy](docs/system/artifact-storage.md) for the source/build/runtime split.
+
+For this checkout, start the prepared candidate with `RUN.cmd`. Packaging does
+not start the app or any game. A refresh preserves `App/data-location.json`,
+archives the previous app under `workspace/private/local-app-backups/`, and
+leaves all existing data untouched. `Data/` starts empty; existing pilot accounts
+and worlds remain in their original profiles. An empty folder is not a migration.
 
 ## Active architecture
 

@@ -272,12 +272,19 @@ pub(super) fn open() -> io::Result<Option<[SlotStorage; 5]>> {
             Ok(Some(stores))
         }
         Err(error)
-            if default && error.kind() == io::ErrorKind::NotFound && !root.try_exists()? =>
+            if default && error.kind() == io::ErrorKind::NotFound && empty_default(&root)? =>
         {
             Ok(None)
         }
         Err(error) => Err(error), // Missing mounted data or a partial setup never becomes fresh profiles.
     }
+}
+fn empty_default(root: &Path) -> io::Result<bool> {
+    if !root.try_exists()? {
+        return Ok(true);
+    }
+    let _pins = pin_chain(root)?;
+    Ok(std::fs::read_dir(root)?.next().is_none())
 }
 fn initialize_at(logical: &File, root: &Path) -> io::Result<()> {
     let parent = root
@@ -561,6 +568,11 @@ mod tests {
     #[test]
     fn relative_default_follows_home_and_custom_missing_paths_never_fall_back() {
         let fixture = Fixture::new();
+        let empty = fixture.root.join("Data");
+        std::fs::create_dir(&empty).unwrap();
+        assert!(empty_default(&empty).unwrap());
+        std::fs::write(empty.join("preserved"), b"keep").unwrap();
+        assert!(!empty_default(&empty).unwrap());
         let app = fixture.root.join("App");
         std::fs::create_dir(&app).unwrap();
         let locator = app.join(LOCATOR);
