@@ -97,7 +97,8 @@ exits with zero remaining App processes85ms; payload hashes PASS.35 frontend tes
 typecheck/G0, nine surface tests, four scoped synthetic close tests PASS. Isolated
 recovery/stall tests passed; one combined run failed recovery timing. Logs remain
 in workspace/runs. These do not prove actual-game drag/exit/save/audio/storage.
-Source still implements144/10, minimum1 until changed/tested.
+FPS source now defaults120/5, saves5..1000; older explicit values retained.
+35 frontend tests/typecheck and Rust preference roundtrip/boundaries PASS.
 
 ## Preservation and delivery boundary
 
@@ -112,6 +113,6 @@ Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4 and second worktree47a45f9 pre
 Signing NOT_VERIFIED; installer execution, real Minecraft full-exit/save, audio and
 multi-client acceptance NOT_EXECUTED. Publication DISABLED.
 
-Next: update120/5 defaults and validation, then complete settings/storage/audio;
+Next: complete selected-launcher settings/storage/audio;
 build a clean candidate and verify presentation before replacing installed App.
 Continue through ordered outcomes; overall goal ACTIVE, not complete.

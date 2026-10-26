@@ -29,8 +29,8 @@ const exact = (value: Record<string, unknown>, names: string[]) =>
   Object.keys(value).length === names.length && names.every(name => Object.hasOwn(value, name));
 
 export function validFpsLimits(active:unknown,background:unknown):boolean {
-  return Number.isInteger(active)&&Number(active)>=1&&Number(active)<=1000&&
-    Number.isInteger(background)&&Number(background)>=1&&Number(background)<=Number(active);
+  return Number.isInteger(active)&&Number(active)>=5&&Number(active)<=1000&&
+    Number.isInteger(background)&&Number(background)>=5&&Number(background)<=Number(active);
 }
 
 export function parseDataLocation(value:unknown):DataLocation {
@@ -137,7 +137,7 @@ export const lazyTester = {
   },
   settings:async()=>settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'InspectSettings'}})),
   savePerformance:async(activeFps:number,backgroundFps:number)=>{
-    if(!validFpsLimits(activeFps,backgroundFps))throw new TypeError('Use whole FPS limits from 1 to 1000. Background FPS must not exceed active FPS.');
+    if(!validFpsLimits(activeFps,backgroundFps))throw new TypeError('Use whole FPS limits from 5 to 1000. Background FPS must not exceed active FPS.');
     return settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'SavePerformance',activeFps,backgroundFps}}));
   },
   applyPreset:async()=>settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ApplyPreset'}})),

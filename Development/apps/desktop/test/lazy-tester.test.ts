@@ -27,6 +27,9 @@ describe('Lazy Tester profile contract', () => {
     expect(parseSession({...stopped(),settings:{...settings,changedProfiles:0}}).settings!.changedProfiles).toBe(0);
     expect(parseSession({...stopped(),settings:{...settings,changedProfiles:5}}).settings!.changedProfiles).toBe(5);
     expect(parseSession({...stopped(),settings:{...settings,activeFps:60,backgroundFps:5}}).settings!.activeFps).toBe(60);
+    expect(parseSession({...stopped(),settings:{...settings,activeFps:120,backgroundFps:5}}).settings!.backgroundFps).toBe(5);
+    // Previously saved preferences remain readable, but cannot be newly saved below 5 FPS.
+    expect(parseSession({...stopped(),settings:{...settings,backgroundFps:1}}).settings!.backgroundFps).toBe(1);
     for(const invalid of [{...settings,activeFps:0},{...settings,activeFps:1001},{...settings,backgroundFps:145},
       {...settings,renderDistanceChunks:8},{...settings,changedProfiles:-1},{...settings,changedProfiles:6},
       {...settings,changedProfiles:0.5},{...settings,measuredFps:144},
@@ -36,8 +39,8 @@ describe('Lazy Tester profile contract', () => {
     expect(parseSession({...active,settings:{...settings,canApplyPreset:false}}).settings!.canApplyPreset).toBe(false);
   });
   it('accepts bounded custom FPS pairs and rejects missing, fractional and inverted limits',()=>{
-    for(const [active,background] of [[144,10],[60,5],[1,1],[1000,1000]])expect(validFpsLimits(active,background)).toBe(true);
-    for(const [active,background] of [[0,1],[1001,10],[60,61],[60,0],[60.5,5],[NaN,5],[undefined,5],['60',5]])expect(validFpsLimits(active,background)).toBe(false);
+    for(const [active,background] of [[120,5],[144,10],[60,5],[5,5],[1000,1000]])expect(validFpsLimits(active,background)).toBe(true);
+    for(const [active,background] of [[1,1],[4,4],[120,4],[0,1],[1001,10],[60,61],[60,0],[60.5,5],[NaN,5],[undefined,5],['60',5]])expect(validFpsLimits(active,background)).toBe(false);
   });
   it('validates persisted data locations without inferring account readiness',()=>{
     const value={schema:1,defaultPath:'D:\\Lazy Tester\\Data',path:'D:\\Lazy Tester\\Data',canLocate:true,

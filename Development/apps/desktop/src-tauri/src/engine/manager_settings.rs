@@ -49,19 +49,19 @@ pub struct PerformanceSettings {
 impl Default for PerformanceSettings {
     fn default() -> Self {
         Self {
-            active_fps: 144,
-            background_fps: 10,
+            active_fps: 120,
+            background_fps: 5,
         }
     }
 }
 impl PerformanceSettings {
     pub fn validate(&self) -> io::Result<()> {
-        if !(1..=1000).contains(&self.active_fps)
-            || !(1..=self.active_fps).contains(&self.background_fps)
+        if !(5..=1000).contains(&self.active_fps)
+            || !(5..=self.active_fps).contains(&self.background_fps)
         {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "Use whole FPS limits from 1 to 1000. Background FPS must not exceed active FPS.",
+                "Use whole FPS limits from 5 to 1000. Background FPS must not exceed active FPS.",
             ));
         }
         Ok(())
@@ -124,7 +124,10 @@ fn read_performance(path: &std::path::Path) -> io::Result<PerformanceSettings> {
     let value: PerformanceSettings = serde_json::from_slice(&bytes).map_err(|_| {
         io::Error::other("Performance settings are invalid; the saved file was preserved")
     })?;
-    value.validate()?;
+    // Retain older explicit 1..4 FPS preferences; only newly saved settings require 5 FPS.
+    if !(1..=1000).contains(&value.active_fps) || !(1..=value.active_fps).contains(&value.background_fps) {
+        return Err(io::Error::other("Saved FPS limits are invalid; the saved file was preserved"));
+    }
     Ok(value)
 }
 fn write_performance(path: &std::path::Path, value: PerformanceSettings) -> io::Result<()> {
@@ -258,12 +261,21 @@ mod tests {
         let root=std::env::temp_dir().join(format!("lazy-performance-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
         fs::create_dir(&root).unwrap();let path=root.join("performance.json");
         assert_eq!(read_performance(&path).unwrap(),PerformanceSettings::default());
+        assert_eq!(PerformanceSettings::default(),PerformanceSettings {active_fps:120,background_fps:5});
         assert!(!path.exists());
         let custom=PerformanceSettings {active_fps:60,background_fps:5};
         write_performance(&path,custom).unwrap();assert_eq!(read_performance(&path).unwrap(),custom);
-        for value in [PerformanceSettings {active_fps:0,background_fps:1},PerformanceSettings {active_fps:1001,background_fps:10},PerformanceSettings {active_fps:60,background_fps:61}] {
+        for value in [PerformanceSettings {active_fps:4,background_fps:4}, PerformanceSettings {active_fps:120,background_fps:4}, PerformanceSettings {active_fps:0,background_fps:1},PerformanceSettings {active_fps:1001,background_fps:10},PerformanceSettings {active_fps:60,background_fps:61}] {
             assert!(write_performance(&path,value).is_err());assert_eq!(read_performance(&path).unwrap(),custom);
         }
+        fs::write(&path,br#"{"activeFps":144,"backgroundFps":10}"#).unwrap();
+        assert_eq!(read_performance(&path).unwrap(),PerformanceSettings {active_fps:144,background_fps:10});
+        let legacy=br#"{"activeFps":60,"backgroundFps":1}"#;
+        fs::write(&path,legacy).unwrap();
+        assert_eq!(read_performance(&path).unwrap().background_fps,1);
+        assert_eq!(fs::read(&path).unwrap(),legacy);
+        write_performance(&path,PerformanceSettings {active_fps:5,background_fps:5}).unwrap();
+        assert_eq!(read_performance(&path).unwrap().active_fps,5);
         fs::write(&path,b"invalid").unwrap();
         assert!(read_performance(&path).is_err());assert!(write_performance(&path,PerformanceSettings::default()).is_err());assert_eq!(fs::read(&path).unwrap(),b"invalid");
         fs::remove_dir_all(root).unwrap();

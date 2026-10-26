@@ -303,7 +303,8 @@ mod tests {
     #[test]
     fn settings_report_describes_the_reviewed_policy_without_starting_a_controller() {
         let policy = SettingsReport::policy(false, None).unwrap();
-        assert_eq!((policy.active_fps, policy.background_fps, policy.render_distance_chunks), (144, 10, 12));
+        let saved = super::super::manager_settings::load_performance().unwrap();
+        assert_eq!((policy.active_fps, policy.background_fps, policy.render_distance_chunks), (saved.active_fps, saved.background_fps, 12));
         let pacing = include_str!("../../../../../tooling/acceptance/windows/bootstrap-ordering/frame-pacing.h");
         assert!(pacing.contains("activeFps = 144, backgroundFps = 10"));
         let snapshot = SessionSnapshot::stopped();
