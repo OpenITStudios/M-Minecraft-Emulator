@@ -1,5 +1,30 @@
 # Current Development Handoff — v0.1
 
+## P0 windowless-game restoration must remain unconfirmed — 27 October 2026
+
+The recovery-helper's original `restore_traced` allowed a stale or
+recycled HWND to count as successfully restored when `retired(target)`
+returned true, even if its original Minecraft process remained alive.
+That was a real source-level false-success path: a still-running game
+with a missing HWND could be acknowledged as recovered. The existing
+native window-recovery owner now distinguishes a missing HWND from a
+terminated original game. It attempts a read-only OpenProcess with
+query/synchronize access, verifies the exact creation FILETIME, then
+checks the pinned process HANDLE for a signaled exit. An absent original
+PID or a reused PID cannot authorize a replacement-window mutation.
+If the same original game process remains alive but the saved HWND
+is gone/replaced, restoration returns WouldBlock/UNCONFIRMED, keeping
+the existing lease and error recovery path instead of declaring success.
+If OS process identity cannot be established, recovery also fails
+closed. It does not adopt a new HWND, restart a game, terminate any
+process, or read account/world contents.
+
+Own-process synthetic regression cases cover a still-live original
+process paired with a nonexistent HWND and a PID whose original birth
+identity differs; they do not execute any Minecraft/game process.
+The Rust/Windows/game tests are authored NOT_EXECUTED in ChatGPT.
+MC02 native shutdown/visual acceptance remain UNKNOWN.
+
 ## P0 HWND owner identity and responsive discovery — 27 October 2026
 
 The retained close controller originally deduplicated WM_CLOSE requests

@@ -655,6 +655,49 @@ mod native {
             Ok(IsIconic(window) != 0)
         }
     }
+    // A stale game HWND is not proof that the original Minecraft process
+    // exited. PID reuse and access-denied must not authorize mutation of
+    // another window or a successful recovery acknowledgement.
+    fn original_game_process_exited(target: &OwnedProcess) -> io::Result<bool> {
+        let expected = target.created_file_time.parse::<u64>()
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid game process creation time"))?;
+        if target.pid == 0 || expected == 0 {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid game process identity"));
+        }
+        unsafe {
+            let raw=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZATION_SYNCHRONIZE,0,target.pid);
+            if raw.is_null() {
+                let error=io::Error::last_os_error();
+                // A nonexistent PID has no live original game process.
+                // Access denied or any other failed identity probe is
+                // uncertainty, not a license to claim recovery.
+                if error.raw_os_error()==Some(ERROR_INVALID_PARAMETER as i32) {
+                    return Ok(true);
+                }
+                return Err(error);
+            }
+            let pin=ProcessHandle(raw);
+            let mut created:FILETIME=std::mem::zeroed();
+            let mut exited:FILETIME=std::mem::zeroed();
+            let mut kernel:FILETIME=std::mem::zeroed();
+            let mut user:FILETIME=std::mem::zeroed();
+            if GetProcessTimes(pin.0,&mut created,&mut exited,&mut kernel,&mut user)==0 {
+                return Err(io::Error::last_os_error());
+            }
+            let observed=((created.dwHighDateTime as u64)<<32)|created.dwLowDateTime as u64;
+            if observed!=expected {
+                // PID was reused; the original lifetime has ended, and the
+                // replacement is not a window-recovery target.
+                return Ok(true);
+            }
+            match WaitForSingleObject(pin.0,0) {
+                WAIT_OBJECT_0=>Ok(true),
+                WAIT_TIMEOUT=>Ok(false),
+                _=>Err(io::Error::last_os_error()),
+            }
+        }
+    }
+
     pub(super) fn restore(saved: &Saved) -> io::Result<()> {
         restore_traced(saved, &mut |_| Ok(()))
     }
@@ -666,11 +709,21 @@ mod native {
         let (_process, window) = match hwnd(&saved.target) {
             Ok(window) => window,
             Err(error) => {
-                // An exited/reused process must never authorize touching a replacement HWND.
+                // Disappeared/reused HWND != exited game. Previously a live
+                // game that lost its original HWND was reported restored.
+                // Never touch another window, and never claim successful
+                // restore until the original process lifetime is proven over.
                 if retired(&saved.target) {
-                    return Ok(());
+                    return match original_game_process_exited(&saved.target) {
+                        Ok(true)=>Ok(()),
+                        Ok(false)=>Err(io::Error::new(io::ErrorKind::WouldBlock,
+                            "Window recovery unconfirmed: original Minecraft process is still alive, but its saved game HWND changed or disappeared")),
+                        Err(probe)=>Err(io::Error::other(format!(
+                            "Window recovery unconfirmed: {error}; game process exit could not be verified: {probe}"
+                        ))),
+                    };
                 }
-                return Err(error);
+                Err(error)
             }
         };
         unsafe {
@@ -737,6 +790,50 @@ mod native {
             }
         }
         Ok(())
+    }
+    #[test]
+    fn lost_game_hwnd_with_original_live_process_never_counts_as_restored() {
+        use windows_sys::Win32::System::Threading::{GetCurrentProcess,GetCurrentProcessId,GetProcessTimes};
+        unsafe {
+            let mut birth:FILETIME=std::mem::zeroed();
+            let mut exit:FILETIME=std::mem::zeroed();
+            let mut kernel:FILETIME=std::mem::zeroed();
+            let mut user:FILETIME=std::mem::zeroed();
+            assert_ne!(GetProcessTimes(GetCurrentProcess(),&mut birth,&mut exit,&mut kernel,&mut user),0);
+            let pid=GetCurrentProcessId();
+            let target=OwnedProcess {
+                pid,
+                created_file_time:(((birth.dwHighDateTime as u64)<<32)|birth.dwLowDateTime as u64).to_string(),
+                session_id:1,
+                // Synthetic nonexistent HWND. No real game or window is used.
+                window_handle:"0xffffffffffff".into(),
+                responding:false,
+            };
+            let saved=Saved {
+                target,style:0,extended_style:0,
+                rect:Rectangle{x:0,y:0,width:1,height:1},
+                manager_pid:pid,
+            };
+            assert!(retired(&saved.target));
+            assert_eq!(original_game_process_exited(&saved.target).unwrap(),false);
+            let error=restore(&saved).unwrap_err();
+            assert_eq!(error.kind(),io::ErrorKind::WouldBlock);
+            assert!(error.to_string().contains("original Minecraft process is still alive"));
+        }
+    }
+    #[test]
+    fn reused_pid_never_authorizes_native_window_mutation() {
+        use windows_sys::Win32::System::Threading::{GetCurrentProcessId};
+        // Same currently live PID but wrong original creation FILETIME:
+        // the saved game lifetime has already ended.
+        let target=OwnedProcess{
+            pid:unsafe{GetCurrentProcessId()},
+            created_file_time:"1".into(),
+            session_id:1,
+            window_handle:"0xffffffffffff".into(),
+            responding:false,
+        };
+        assert!(original_game_process_exited(&target).unwrap());
     }
     pub(super) fn retired(target: &OwnedProcess) -> bool {
         unsafe {
