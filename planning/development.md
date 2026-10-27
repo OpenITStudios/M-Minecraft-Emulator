@@ -2,7 +2,8 @@
 
 ## Single active goal — user revised27October2026
 
-Priority: fix and prove the black screen and lost game interaction. Next make one
+Priority: repair stuck launcher/full exit, active/background FPS response, Task Manager
+process grouping and naming; retain blackscreen/input acceptance. Make one
 normal app exit close its two owned sessions, then verify preview/drag/focus and
 Play/Settings frames. Measure Launch/switch and finish functional Settings/Data
 Storage and clear process roles. Defaults120/5, minimum5FPS, background<=active.
@@ -100,7 +101,8 @@ Latest 6dff3d1 runtime: launch two sessions PASS; first switch test failed becau
 Minecraft 2 was covered, retry six switches/drag PASS. Pixels/input NOT_PROVEN.
 Full exit timed out: MC1 exited, MC2 and manager remain. No force termination.
 Logs workspace/runs/current-two-session-{launch,presentation,presentation-retry,exit}.log.
-Next: diagnose intermittent coverage and incomplete exit; verify two real sessions,
+Next: inspect lost game window during close, FPS focus policy and process grouping;
+source tests first without PC control. Then verify two real sessions,
 including visible output, interaction, drag, preview, switching and one-click exit.
 User explicitly AUTHORIZED2sessions started by Lazy Tester for Launch/switch/drag/
 preview/full-exit. No world/login/account-content access or closing unrelated games.
