@@ -907,6 +907,25 @@ mod controller {
     mod rollback_tests {
         use super::*;
         #[test]
+        fn final_restoration_is_not_confused_with_late_helper_replies() {
+            let (sender,receiver)=mpsc::channel();
+            sender.send(Event::Reply(Reply::Placed)).unwrap();
+            sender.send(Event::Reply(Reply::Restored)).unwrap();
+            sender.send(Event::End(Ok(()))).unwrap();
+            assert!(wait_for_restoration_end(&receiver,Duration::from_millis(10)).unwrap().is_ok());
+
+            let (sender,receiver)=mpsc::channel();
+            sender.send(Event::Reply(Reply::Restored)).unwrap();
+            drop(sender);
+            assert!(wait_for_restoration_end(&receiver,Duration::from_millis(10)).is_err());
+
+            let (sender,receiver)=mpsc::channel();
+            sender.send(Event::Reply(Reply::Error("Helper interrupted".into()))).unwrap();
+            sender.send(Event::End(Ok(()))).unwrap();
+            assert!(wait_for_restoration_end(&receiver,Duration::from_millis(10)).unwrap().is_ok());
+        }
+
+        #[test]
         fn incomplete_recovery_reports_each_failed_step() {
             let ok = Ok(());
             let parking = Err(io::Error::other("park failed"));
@@ -922,6 +941,28 @@ mod controller {
         Reply(Reply),
         End(Result<(), String>),
     }
+
+    // A timed-out helper may still deliver its previous Place/Park/Restore
+    // reply before stdout EOF. Only the reader's final End result confirms
+    // restoration (helper acknowledgement or identity-checked owner fallback).
+    fn wait_for_restoration_end(events: &mpsc::Receiver<Event>, timeout: Duration) -> io::Result<Result<(), String>> {
+        let deadline=Instant::now()+timeout;
+        let mut latest_error=None;
+        loop {
+            match events.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+                Ok(Event::End(result)) => return Ok(result),
+                Ok(Event::Reply(Reply::Error(error))) => latest_error=Some(error),
+                Ok(Event::Reply(_)) => {}, // An earlier reply is never final recovery evidence.
+                Err(_) => {
+                    let detail=latest_error.unwrap_or_else(||"final owner restoration was not observed".into());
+                    return Err(io::Error::other(format!(
+                        "Window recovery not confirmed: {detail}. Do not start another surface."
+                    )));
+                }
+            }
+        }
+    }
+
     struct Lease {
         child: Child,
         input: Option<ChildStdin>,
@@ -1037,17 +1078,13 @@ mod controller {
                 return result.clone().map_err(io::Error::other);
             }
             if !restored && self.child.try_wait()?.is_none() {
+                // Kill only our own recovery helper, never Minecraft. The
+                // reader retains the checkpoint and attempts native restore.
                 self.child.kill()?;
             }
-            match self.events.recv_timeout(Duration::from_secs(3)) {
-                Ok(Event::End(result)) => {
-                    self.ended = Some(result.clone());
-                    result.map_err(io::Error::other)
-                }
-                _ => Err(io::Error::other(
-                    "Window recovery not confirmed; do not start another surface",
-                )),
-            }
+            let result=wait_for_restoration_end(&self.events,Duration::from_secs(3))?;
+            self.ended=Some(result.clone());
+            result.map_err(io::Error::other)
         }
     }
     struct Surfaces {

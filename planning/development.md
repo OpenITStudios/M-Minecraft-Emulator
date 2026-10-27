@@ -79,6 +79,22 @@ a surviving game has a valid HWND or that shutdown now succeeds. Existing
 controller, profiles, game windows, and account/world data remain unchanged.
 Svelte/Rust/Windows/game checks were NOT_EXECUTED; GitHub static review only.
 
+## P0 source correction — complete recovery helper response ordering (27 October 2026)
+
+The workspace's existing per-window recovery helper still uses bounded
+commands, its own checkpoint and a reader-thread fallback that attempts
+identity-checked native restore if the helper exits unexpectedly. Killing the
+*helper* alone on timeout is not a Minecraft force-kill. A source inspection
+found the stop path consumed exactly one remaining response while waiting for
+its final reader End event: a late previous Placed/Restored/Error response
+could be mistaken for incomplete recovery even if the reader later confirmed
+actual restoration. The existing helper owner now drains earlier finite
+responses within the same three-second deadline and only accepts its final
+End(Result) as restoration evidence. No new helper, worker, process ownership
+or timeout extension is introduced. Synthetic in-memory event-ordering tests
+were authored, not executed. All real Windows/Minecraft recovery results
+remain NOT_EXECUTED.
+
 ## State and operator request — 27 October 2026
 
 The v0.1 checkpoint was saved and paused in Codex. The operator subsequently
@@ -193,10 +209,9 @@ Settings/Data Storage: queued saves, stable review dialogs, admission checks. 39
 
 ## Continuation, build and preservation
 
-Next: review the remaining source-only window-recovery helper timeout / reader
-fallback and verified close-dialog lifecycle together; treat any genuine
-unresolved machine behavior as NOT_EXECUTED. The operator has not authorized
-Local PC tests or a new runtime campaign.
+Next: continue source-only review for any unhandled close-on-error window
+identity and normal-close UX gaps, then stop with an exact-head static handoff.
+No local PC testing or Windows/Minecraft runtime execution until authorized.
 No request to use a Local PC, no Windows or Minecraft execution and no
 installer publication until the operator explicitly authorizes them.
 The detailed game process/thread/dialog evidence remains an unexecuted
