@@ -259,7 +259,11 @@ impl Sessions {
                 // A posted dialog command is NOT an exit acknowledgement. Always
                 // retain the game process until its original HANDLE is signaled.
                 if progress[index].submit_exit_dialog(child)? { return Ok(()); }
-                let Some(target)=profile.process else {return Ok(());};
+                // A game may hide its main OGLES HWND before exiting. The
+                // ordinary Play selector is intentionally visible-only; this
+                // close-only fallback may still reach one verified hidden
+                // original game HWND, never a native dialog or foreign PID.
+                let Some(target)=profile.process.or_else(||hidden_window_for_close(child)) else {return Ok(());};
                 if target.pid!=child.pid || target.created_file_time!=child.created.to_string() {
                     return Err(invalid("Game identity changed"));
                 }
@@ -294,7 +298,7 @@ impl Sessions {
                     // Once a dialog is posted, continue observing it. Do not
                     // re-post the same IDOK or assume Minecraft processed it.
                     if !submitted {
-                        if let Some(target)=window(child, false) {
+                        if let Some(target)=window(child, false).or_else(||hidden_window_for_close(child)) {
                             progress[index].request_window(&target)?;
                         }
                     }
@@ -645,8 +649,11 @@ impl NormalCloseProgress {
 
     fn describe_pending(&self, child: &PendingEducationBootstrap) -> String {
         // Never inspect account, world, dialog text or arbitrary process memory.
-        let game_window_present=window(child, false).is_some();
-        let main_window = if game_window_present { "present" } else { "absent or ambiguous" };
+        let visible=window(child, false).is_some();
+        let hidden=!visible && hidden_window_for_close(child).is_some();
+        let game_window_present=visible||hidden;
+        let main_window=if visible { "visible" } else if hidden { "hidden but owned" }
+            else { "absent or ambiguous" };
         format!(
             "game process still running; close phase: {}; unique verified main HWND: {main_window}; original window thread: {}; distinct WM_CLOSE requests: {}; disabled main window encountered: {}; distinct exact exit-dialog commands posted: {}",
             self.phase(game_window_present),
@@ -780,6 +787,55 @@ fn confirm_exit_dialog_once(owned_pid:u32, verify:impl Fn()->bool, sent:&mut Vec
     if unsafe {PostMessageW(dialog,WM_COMMAND,1,0)}==0 {return Err(io::Error::last_os_error());}
     sent.push(identity);
     Ok(true)
+}
+
+// Exactly the confirmed game's original top-level OGLES root can receive
+// WM_CLOSE while hidden. Ordinary launcher selection is deliberately
+// visibility-only. A modal #32770 prompt must NEVER be eligible here.
+fn hidden_close_candidate(hwnd:windows_sys::Win32::Foundation::HWND,expected_pid:u32)->bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::*;
+    let mut actual_pid=0;
+    unsafe {
+        IsWindow(hwnd)!=0
+            && GetWindowThreadProcessId(hwnd,&mut actual_pid)!=0
+            && actual_pid==expected_pid
+            && IsWindowVisible(hwnd)==0
+            && game_window_class(hwnd)
+            && GetAncestor(hwnd,GA_ROOT)==hwnd
+            && GetWindow(hwnd,GW_OWNER).is_null()
+    }
+}
+
+fn hidden_window_for_close(child:&PendingEducationBootstrap)->Option<OwnedProcess> {
+    use windows_sys::Win32::{Foundation::HWND,UI::WindowsAndMessaging::*};
+    struct Found { pid:u32, total:u32, hidden:HWND }
+    unsafe extern "system" fn select(hwnd:HWND,context:isize)->i32 {
+        let found=&mut *(context as *mut Found);
+        let mut pid=0;
+        if GetWindowThreadProcessId(hwnd,&mut pid)!=0 && pid==found.pid
+            && IsWindow(hwnd)!=0 && game_window_class(hwnd)
+            && GetAncestor(hwnd,GA_ROOT)==hwnd && GetWindow(hwnd,GW_OWNER).is_null() {
+            // Refuse any ambiguity, including an additional visible OGLES.
+            found.total+=1;
+            if IsWindowVisible(hwnd)==0 {found.hidden=hwnd;}
+        }
+        1
+    }
+    let (pid,birth)=child.identity().ok()?;
+    let mut found=Found{pid,total:0,hidden:ptr::null_mut()};
+    if unsafe{EnumWindows(Some(select),&mut found as *mut Found as isize)}==0
+        || found.total!=1 || found.hidden.is_null() {return None;}
+    if child.identity().ok()!=Some((pid,birth)) || !hidden_close_candidate(found.hidden,pid){
+        return None;
+    }
+    let candidate=OwnedProcess{
+        pid,
+        created_file_time:birth.to_string(),
+        session_id:interactive_session(pid).ok()?,
+        window_handle:format!("0x{:x}",found.hidden as usize),
+        responding:false, // Hidden is not equivalent to playable or visible.
+    };
+    valid_retained_window(&candidate).then_some(candidate)
 }
 
 fn window(child: &PendingEducationBootstrap, label: bool) -> Option<OwnedProcess> {
@@ -1166,6 +1222,31 @@ mod tests {
         }
     }
 
+
+    #[test]
+    fn hidden_game_close_candidate_refuses_dialog_and_foreign_pid() {
+        use windows_sys::Win32::UI::WindowsAndMessaging::*;
+        unsafe {
+            let game=fixture_game_window();
+            let dialog=CreateWindowExW(0,windows_sys::w!("#32770"),
+                windows_sys::w!("Minecraft Education"),WS_POPUP,
+                0,0,200,120,std::ptr::null_mut(),std::ptr::null_mut(),
+                std::ptr::null_mut(),std::ptr::null());
+            assert!(!game.is_null()&&!dialog.is_null());
+            let result=std::panic::catch_unwind(||{
+                let pid=std::process::id();
+                assert_eq!(IsWindowVisible(game),0);
+                assert!(hidden_close_candidate(game,pid));
+                assert!(!hidden_close_candidate(game,pid.wrapping_add(1)));
+                assert!(!hidden_close_candidate(dialog,pid));
+                let mut posted:MSG=std::mem::zeroed();
+                assert_eq!(PeekMessageW(&mut posted,dialog,WM_CLOSE,WM_CLOSE,PM_NOREMOVE),0);
+            });
+            DestroyWindow(dialog);
+            DestroyWindow(game);
+            if let Err(error)=result{std::panic::resume_unwind(error);}
+        }
+    }
 
     #[test]
     fn exit_dialog_is_not_accepted_as_an_ogles_game_window() {

@@ -1,5 +1,27 @@
 # Current Development Handoff — v0.1
 
+## P0 MC02 close-only hidden OGLES HWND path — 27 October 2026
+
+The ordinary game-window selector calls a visible/unowned-top-level
+legacy verifier. This is intentional for Play, but in CloseAll/CloseOne
+it meant a game that hid its original OGLES HWND before terminating
+could disappear from the close candidate set while its original
+process and window thread were still alive. The retained session
+controller now has a *close-only*, read-only hidden OGLES selector:
+it requires a single top-level unowned OGLES HWND in the pinned
+original PID, rechecks original PID/birth/session and exact HWND
+identity, and never selects a #32770 dialog or a foreign process.
+Normal visible-window selection remains preferred and unchanged.
+The same bounded normal WM_CLOSE request can target this hidden
+window if it is the sole safe game root. When several OGLES roots
+are present, the hidden fallback refuses ambiguity instead of
+guessing. No force termination, GUI adoption, new launcher state
+or data access occurs. Timeout evidence distinguishes a hidden,
+owned game HWND from a destroyed/ambiguous one. A synthetic fixture
+checks one hidden OGLES and a native dialog (NOT_EXECUTED).
+The observed MC02 state has not been proven to be a hidden HWND;
+actual Minecraft/Windows acceptance is still UNKNOWN.
+
 ## P0 MC02 exit-dialog responsiveness before startup journal flush — 27 October 2026
 
 Source audit found another direct ordering hazard in the single-threaded
