@@ -1,5 +1,24 @@
 # Current Development Handoff — v0.1
 
+## P0 CloseOne recovery-window partial failure — 27 October 2026
+
+Source audit identified a previously unhandled ambiguity: restoring a
+selected game's window can fail *after* clear_aperture or helper Restore
+has already modified native state. The dedicated CloseOne command formerly
+propagated this as an ordinary preflight error; Svelte then preserved its
+old "Playing here" claim even though the HWND might have moved/vanished.
+The current owner now distinguishes a failure before game window mutation
+from one after release was attempted. A preflight/lock failure remains Err
+without changing Play. A partial/uncertain native release returns a strict
+SelectedCloseReport (presentationReleased=false, issue, no snapshot) and
+DOES NOT issue CloseOne. UI treats this as unverified restoration, drops
+any stale active-window claim for that slot, shows explicit recovery text,
+and never automatically reselects the uncertain game. It may inspect
+the still-owned process read-only. A confirmed release continues to
+use the previous success/pending-exit contract. No other slot is asked
+to close or forcibly moved; no account/world operations are performed.
+Contract regressions are authored but NOT_EXECUTED.
+
 ## P0 five-launcher registered-process observation — 27 October 2026
 
 The source audit found a mismatched capacity contract: Lazy Tester supports

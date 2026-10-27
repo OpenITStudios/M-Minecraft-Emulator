@@ -68,7 +68,20 @@ pub async fn lazy_tester_close_one(
         if selected.state=="STOPPED" || selected.state=="ATTENTION" {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,"Minecraft session is not running"));
         }
-        crate::engine::workspace_surface::release_managed_slot(slot)?;
+        match crate::engine::workspace_surface::release_managed_slot(slot) {
+            Ok(()) => {}
+            Err((false,error)) => return Err(error),
+            Err((true,error)) => {
+                // Window changes may be partial. CloseOne was NOT sent, and
+                // it is unsafe to claim this game remains embedded in Play.
+                return Ok(SelectedCloseReport {
+                    schema:1,
+                    presentation_released:false,
+                    snapshot:None,
+                    issue:Some(format!("Window restoration is unconfirmed; Minecraft was not asked to close: {error}")),
+                });
+            }
+        }
         // Once native restoration has succeeded, an uncertain game exit
         // must not be disguised as an entirely failed/pre-release action.
         let result=request(SessionRequest::CloseOne {slot});

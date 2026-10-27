@@ -1157,24 +1157,27 @@ mod controller {
     }
     // Restore only the slot's previously admitted native presentation; do
     // not touch windows leased by other Minecraft profiles or by other apps.
-    pub fn release_managed_slot(slot:u32)->io::Result<()> {
+    pub fn release_managed_slot(slot:u32)->Result<(),(bool,io::Error)> {
+        // The bool reports whether mutation of a game window was attempted.
+        // An error AFTER that point must not be represented to Play as a
+        // no-op: clear_aperture or helper Restore can partially succeed.
         if !(1..=5).contains(&slot) {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput,"Unknown Minecraft profile"));
+            return Err((false,io::Error::new(io::ErrorKind::InvalidInput,"Unknown Minecraft profile")));
         }
         let client=format!("{slot:02}");
         let owned=|lease:&Lease|lease.authority.as_ref().is_some_and(|(authority,value)|
             authority=="LAZY_TESTER_MANAGED_SESSION" && value==&client);
-        previews::clear()?;
-        let mut state=SURFACE.lock().map_err(|_|io::Error::other("Workspace state unavailable"))?;
-        if state.closing {return Err(io::Error::new(io::ErrorKind::WouldBlock,"Workspace is closing"));}
+        previews::clear().map_err(|error|(false,error))?;
+        let mut state=SURFACE.lock().map_err(|_|(false,io::Error::other("Workspace state unavailable")))?;
+        if state.closing {return Err((false,io::Error::new(io::ErrorKind::WouldBlock,"Workspace is closing")));}
         if state.active.as_ref().is_some_and(&owned) {
             let manager=state.active.as_ref().unwrap().manager;
-            native::clear_aperture(manager)?;
-            state.active.as_mut().unwrap().stop()?;
+            native::clear_aperture(manager).map_err(|error|(true,error))?;
+            state.active.as_mut().unwrap().stop().map_err(|error|(true,error))?;
             state.active=None;
         }
         if let Some(index)=state.parked.iter().position(&owned) {
-            state.parked[index].stop()?;
+            state.parked[index].stop().map_err(|error|(true,error))?;
             state.parked.remove(index);
         }
         Ok(())

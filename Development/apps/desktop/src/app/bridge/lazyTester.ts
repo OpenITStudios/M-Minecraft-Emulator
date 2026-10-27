@@ -153,17 +153,18 @@ export function parsePreviewReport(value:unknown,slots:readonly ProfileSlot[]):P
 
 export interface SelectedCloseReport {
   schema:1;
-  presentationReleased:true;
+  presentationReleased:boolean;
   snapshot:SessionSnapshot|null;
   issue:string|null;
 }
 export function parseSelectedClose(value:unknown):SelectedCloseReport {
   if(!record(value)||!exact(value,['schema','presentationReleased','snapshot','issue'])||
-     value.schema!==1||value.presentationReleased!==true||
+     value.schema!==1||typeof value.presentationReleased!=='boolean'||
      !(value.issue===null||typeof value.issue==='string'&&value.issue.length>0&&value.issue.length<=8192)||
-     (value.snapshot===null)!==(value.issue!==null)) throw new TypeError('Invalid selected close receipt');
+     (value.snapshot===null)!==(value.issue!==null)||
+     (!value.presentationReleased && value.snapshot!==null)) throw new TypeError('Invalid selected close receipt');
   const snapshot=value.snapshot===null?null:parseSession(value.snapshot);
-  return {schema:1,presentationReleased:true,snapshot,issue:value.issue as string|null};
+  return {schema:1,presentationReleased:value.presentationReleased as boolean,snapshot,issue:value.issue as string|null};
 }
 
 export const lazyTester = {

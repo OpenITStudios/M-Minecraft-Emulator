@@ -141,10 +141,14 @@ describe('Lazy Tester profile contract', () => {
     const snapshot=stopped();
     expect(parseSelectedClose({schema:1,presentationReleased:true,snapshot,issue:null}).snapshot?.profiles).toHaveLength(5);
     expect(parseSelectedClose({schema:1,presentationReleased:true,snapshot:null,issue:'Minecraft - 2 still running'}).issue).toContain('still running');
+    expect(parseSelectedClose({schema:1,presentationReleased:false,snapshot:null,issue:'Native window restore not confirmed'}))
+      .toMatchObject({presentationReleased:false,snapshot:null});
     for(const invalid of [
       {schema:1,presentationReleased:false,snapshot,issue:null},
       {schema:1,presentationReleased:true,snapshot:null,issue:null},
       {schema:1,presentationReleased:true,snapshot,issue:'contradictory'},
+      {schema:1,presentationReleased:false,snapshot,issue:null},
+      {schema:1,presentationReleased:false,snapshot,issue:'Cannot claim success'},
       {schema:1,presentationReleased:true,snapshot:null,issue:''},
       {schema:1,presentationReleased:true,snapshot,issue:null,process:123},
     ])expect(()=>parseSelectedClose(invalid)).toThrow();

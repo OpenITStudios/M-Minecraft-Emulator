@@ -44,6 +44,8 @@
   // Display state only; the retained Rust controller still owns game lifetime.
   let closeInProgress = false, closeFailure = '';
   let closeOneSlot: ProfileSlot | null = null, closingOneSlot: ProfileSlot | null = null;
+  // UI warning only; native presentation authority remains in workspace_surface.
+  let uncertainWindowSlot: ProfileSlot | null = null;
   let previewStatuses: PreviewStatus[] = [];
   const images = new Map<ProfileSlot, HTMLElement>();
   const labels = {STOPPED: 'Not running', STARTING: 'Starting', RUNNING: 'Running', NOT_RESPONDING: 'Not responding', ATTENTION: 'Needs attention'};
@@ -88,6 +90,10 @@
       if (disposed) return;
       const layoutChanged=!available||layoutIdentity(profiles)!==layoutIdentity(snapshot.profiles);
       profiles = snapshot.profiles; available = true; connectionIssue = '';
+      if (uncertainWindowSlot !== null
+        && profiles.find(profile => profile.slot===uncertainWindowSlot)?.state === 'STOPPED') {
+        uncertainWindowSlot = null;
+      }
       if(snapshot.settings){
         if(!performanceDirty){activeFps=snapshot.settings.activeFps;backgroundFps=snapshot.settings.backgroundFps;}
         settings=snapshot.settings;
@@ -227,9 +233,23 @@
     closeOneSlot=null; closingOneSlot=slot; busy=true; issue='';
     try {
       const report=await lazyTester.closeOne(slot);
-      // Only the native restoration receipt permits changing the embedded
-      // window claim. Preserve other already-owned game presentation leases.
-      const wasActive=active===slot && report.presentationReleased;
+      if (!report.presentationReleased) {
+        // Release was attempted but did not confirm restoration. Do not
+        // pretend the previous Play surface still owns the original HWND.
+        uncertainWindowSlot = slot;
+        issue = `Minecraft - ${slot}: window recovery could not be confirmed. The game was not asked to close. ${report.issue??''}`;
+        if (active===slot) {
+          active=null;selectedIdentity='';requested=null;queued=null;detached=true;
+          previewStatuses=[];
+        }
+        try {profiles=(await lazyTester.inspect()).profiles;available=true;connectionIssue='';}
+        catch(refreshError){available=false;connectionIssue=String(refreshError);}
+        return;
+      }
+      if (uncertainWindowSlot===slot) uncertainWindowSlot=null;
+      // Only a confirmed native restoration receipt permits a normal
+      // selected close transition and automatic selection of another peer.
+      const wasActive=active===slot;
       if (wasActive) {
         active=null;selectedIdentity='';requested=null;queued=null;
         separateSlots=new Set([...separateSlots].filter(value=>value!==slot));
@@ -480,7 +500,7 @@
     {#if page!=='workspace'}<aside class="lt-sidebar"><h2>Settings</h2><nav aria-label="Settings navigation"><button class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}
     <main>
       <header class="lt-page-header" class:lt-play-header={page==='workspace'}>
-        <div><h1>{page==='workspace'?(detached?'Separate windows':active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p>{detached?'Your games keep running on the desktop.':active?'Click the game to play.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
+        <div><h1>{page==='workspace'?(detached?(uncertainWindowSlot!==null?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p>{detached?'Your games keep running on the desktop.':active?'Click the game to play.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
         <div class="lt-header-actions"><button class="lt-secondary" disabled={busy||manualRefreshing||manualRefreshRequested} on:click={()=>manualRefreshRequested=true}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'&&active!==null}<button class="lt-secondary" disabled={busy||refreshing||resizing} title={'Open only Minecraft - '+active+' in its own window'} on:click={release}>Open Minecraft - {active} in a window</button>{/if}</div>
       </header>
       {#if issue||connectionIssue}<div class="lt-alert" role="alert">{#if issue}<p>{issue}</p>{/if}{#if connectionIssue}<p>{connectionIssue}</p>{/if}</div>{/if}
@@ -497,7 +517,7 @@
       <section class="lt-workspace" hidden={page!=='workspace'} aria-label="Minecraft play area">
         <div class="lt-stage-space" bind:this={stageSpace}>
         <div class="lt-viewport" class:lt-desktop={detached} bind:this={viewport}>
-          {#if detached}<div class="lt-empty"><h2>{closeFailure?'Exit incomplete — sessions preserved':'Games are in separate windows'}</h2><p>{closeFailure?'Some games may still be running or need attention. Select a responsive game below to resume Play.':'Use the Windows taskbar, or choose a game below to open it in Play.'}</p><p>{runningCount} of 5 running</p></div>{:else if !active}<div class="lt-empty"><span>LT</span><h2>{initializing?'Preparing launchers…':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Reconnecting saved data automatically. No setup is needed.':!binding?.configured?'Retry the connection. Your existing accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
+          {#if detached}<div class="lt-empty"><h2>{uncertainWindowSlot!==null?'Window restoration not verified':closeFailure?'Exit incomplete — sessions preserved':'Games are in separate windows'}</h2><p>{uncertainWindowSlot!==null?'Minecraft - '+uncertainWindowSlot+' may still have a native window that was not restored. Its process was preserved. Review the error and Refresh; do not assume its window is accessible.':closeFailure?'Some Minecraft sessions may still be running and native window recovery is not guaranteed. Review each session before returning to Play.':'Use the Windows taskbar, or choose a game below to open it in Play.'}</p><p>{runningCount} of 5 running</p></div>{:else if !active}<div class="lt-empty"><span>LT</span><h2>{initializing?'Preparing launchers…':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Reconnecting saved data automatically. No setup is needed.':!binding?.configured?'Retry the connection. Your existing accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
         </div>
         </div>
         <div class="lt-games-heading"><span>Your games</span><span>{runningCount} of 5 running</span></div>
