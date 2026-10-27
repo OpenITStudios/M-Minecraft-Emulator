@@ -1,5 +1,6 @@
 #include "fps-hud.h"
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cwchar>
 #include <stdexcept>
@@ -119,6 +120,8 @@ struct Hud::State {
     SRWLOCK gate = SRWLOCK_INIT;
     HWND owner = nullptr;
     DWORD ownerThread = 0;
+    HANDLE ownerLife = nullptr;
+    std::atomic<bool> workerFinished{false};
     unsigned generation = 0;
     Snapshot display{};
     HANDLE stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -138,6 +141,7 @@ struct Hud::State {
     }
     ~State() {
         SetEvent(stop); if (worker.joinable()) worker.join();
+        if (ownerLife) CloseHandle(ownerLife);
         CloseHandle(changed); CloseHandle(stop);
     }
     void fail() noexcept { AcquireSRWLockExclusive(&gate); ++display.failures; ReleaseSRWLockExclusive(&gate); }
@@ -169,9 +173,13 @@ struct Hud::State {
             bool previousValid = false;
             RECT previousBounds{}; UINT previousDpi = 0;
             for (;;) {
-                AcquireSRWLockShared(&gate);
+                AcquireSRWLockExclusive(&gate);
+                if (ownerLife && WaitForSingleObject(ownerLife, 0) == WAIT_OBJECT_0) {
+                    workerFinished.store(true, std::memory_order_release);
+                    ReleaseSRWLockExclusive(&gate); break;
+                }
                 const HWND target = owner; const DWORD thread = ownerThread; const unsigned version = generation;
-                ReleaseSRWLockShared(&gate);
+                ReleaseSRWLockExclusive(&gate);
                 DWORD pid = 0; RECT client{};
                 const bool bound = target && GetWindowThreadProcessId(target, &pid) == thread && pid == GetCurrentProcessId();
                 if (!bound || target != previousOwner || version != previousGeneration || (hud && !IsWindow(hud))) {
@@ -213,7 +221,7 @@ struct Hud::State {
                     AcquireSRWLockExclusive(&gate); display.window = nullptr; display.visible = false; ReleaseSRWLockExclusive(&gate);
                 }
                 HANDLE waits[]{stop, changed};
-                const DWORD result = MsgWaitForMultipleObjectsEx(2, waits, bound ? 250 : INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+                const DWORD result = MsgWaitForMultipleObjectsEx(2, waits, 250, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
                 if (result == WAIT_OBJECT_0) break;
                 if (result == WAIT_FAILED) throw std::runtime_error("HUD wait failed");
                 MSG message{};
@@ -236,7 +244,16 @@ bool Hud::bind(HWND owner, DWORD thread) noexcept {
         || GetAncestor(owner, GA_ROOT) != owner) return false;
     auto& s = *state_;
     try {
+        HANDLE life = OpenThread(SYNCHRONIZE, FALSE, thread);
+        if (!life) return false;
+        AcquireSRWLockExclusive(&s.gate);
+        const bool finished = s.workerFinished.load(std::memory_order_acquire);
+        if (s.ownerLife) CloseHandle(s.ownerLife);
+        s.ownerLife = life;
+        ReleaseSRWLockExclusive(&s.gate);
+        if (finished && s.worker.joinable()) s.worker.join();
         if (!s.worker.joinable()) {
+            s.workerFinished.store(false, std::memory_order_release);
             HMODULE pinned = nullptr;
             if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
                 reinterpret_cast<LPCWSTR>(moduleAnchor), &pinned)) return false;

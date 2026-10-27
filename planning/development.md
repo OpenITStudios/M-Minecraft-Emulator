@@ -101,8 +101,8 @@ is missing; identity rechecked before posting. Cargo check and refusal test PASS
 actual dialog without window NOT_EXECUTED. Exit wait also checks the retained child
 after window loss. Starting games are polled for a verified window until the existing
 exit deadline; cargo check and idle test PASS, startup transition NOT_EXECUTED.
-Suspect: HUD worker waits indefinitely after unbind and may retain process after
-game window loss. Causation unproven; create isolated process-exit fixture.
+HUD worker now exits when pinned owner thread ends; hidden process fixture previously
+hung and now exits; HUD rebind fixture PASS. Minecraft causation NOT_PROVEN.
 FPS foreground sampling retries transient instability; unit test PASS, actual FPS
 response and sustained instability NOT_EXECUTED.
 Next: inspect FPS focus policy and process grouping;
