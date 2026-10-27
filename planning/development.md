@@ -42,6 +42,24 @@ IDOK for one live dialog, no action after its text changes and diagnostics that
 never classify a sent command as process exit. No tests were executed in
 ChatGPT/GitHub. MC02 real-game completion remains NOT_EXECUTED and UNKNOWN.
 
+## P0 source correction — HUD worker lifetime on destroyed game HWND (27 October 2026)
+
+The existing HUD worker could remain running after its owner game window was
+destroyed while the game's UI thread was still alive: it only exited on owner
+thread termination, explicit STOP, or an exception. In addition, most worker
+exit paths left `workerFinished=false`, so a later bind might mistake a
+finished but still joinable thread for a live HUD worker. The source now exits
+on a genuinely destroyed owner HWND (including an unbound previous HWND),
+rechecking the binding generation under the existing SRW lock to avoid
+retiring a newly rebound owner, and publishes `workerFinished` on every
+exit path. Existing policy, DLL ownership and frame-pacing semantics remain
+unchanged. A synthetic hidden-window fixture covers HWND destruction while
+the original owner thread remains alive, followed by a successful rebind.
+
+The fixture is authored but not executed. This correction prevents one
+identifiable stale HUD-worker path, but does not prove that it caused the MC02
+stuck process; process runtime/Windows/Minecraft remain NOT_EXECUTED.
+
 ## State and operator request — 27 October 2026
 
 The v0.1 checkpoint was saved and paused in Codex. The operator subsequently
@@ -156,9 +174,9 @@ Settings/Data Storage: queued saves, stable review dialogs, admission checks. 39
 
 ## Continuation, build and preservation
 
-Next: continue source-only audit of native HUD worker lifetime and window
-recovery helper ownership; once source corrections are coherent, audit frontend
-close-failure recovery against the same single session controller.
+Next: continue source-only audit of workspace window-recovery helper ownership,
+then repair frontend close-failure reconciliation against the existing controller.
+No Local PC testing until the operator explicitly authorizes it.
 No request to use a Local PC, no Windows or Minecraft execution and no
 installer publication until the operator explicitly authorizes them.
 The detailed game process/thread/dialog evidence remains an unexecuted

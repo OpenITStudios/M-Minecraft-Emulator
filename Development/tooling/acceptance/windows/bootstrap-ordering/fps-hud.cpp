@@ -182,6 +182,18 @@ struct Hud::State {
                 ReleaseSRWLockExclusive(&gate);
                 DWORD pid = 0; RECT client{};
                 const bool bound = target && GetWindowThreadProcessId(target, &pid) == thread && pid == GetCurrentProcessId();
+                // An unbound HUD must not retain a worker after its former
+                // game HWND was destroyed while the owner's thread survives.
+                // A newly bound owner/generation wins over a stale observation.
+                const bool destroyedOwner = target ? !bound : previousOwner && !IsWindow(previousOwner);
+                if (destroyedOwner) {
+                    AcquireSRWLockExclusive(&gate);
+                    const bool unchanged = owner == target && generation == version;
+                    if (unchanged) workerFinished.store(true, std::memory_order_release);
+                    ReleaseSRWLockExclusive(&gate);
+                    if (unchanged) break;
+                    continue;
+                }
                 if (!bound || target != previousOwner || version != previousGeneration || (hud && !IsWindow(hud))) {
                     if (hud && IsWindow(hud)) DestroyWindow(hud);
                     hud = nullptr; previousOwner = target; previousGeneration = version; previousDpi = 0;
@@ -232,7 +244,12 @@ struct Hud::State {
         if (hook) UnhookWinEvent(hook);
         callbackOwner = nullptr;
         if (dpiContext) SetThreadDpiAwarenessContext(dpiContext);
-        AcquireSRWLockExclusive(&gate); display.window = nullptr; display.visible = false; ReleaseSRWLockExclusive(&gate);
+        AcquireSRWLockExclusive(&gate);
+        display.window = nullptr; display.visible = false;
+        // Every worker exit path (owner exited, owner HWND destroyed, STOP or
+        // a native/GDI error) must permit bind() to join and restart it.
+        workerFinished.store(true, std::memory_order_release);
+        ReleaseSRWLockExclusive(&gate);
     }
 };
 thread_local Hud::State* Hud::State::callbackOwner = nullptr;

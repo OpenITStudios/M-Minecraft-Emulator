@@ -148,6 +148,27 @@ int run() {
             && GetWindowThreadProcessId(hud.snapshot().window, nullptr) == originalWorker);
         hud.unbind(); until([&] { return hud.snapshot().window == nullptr; });
     }
+    // Dropping/recreating the window without unbinding is a realistic
+    // Minecraft shutdown sequence: the GUI thread itself may remain alive.
+    // HUD worker must retire, then a later verified game window can rebind
+    // the same policy without a dead joinable std::thread.
+    {
+        fps_hud::Hud retained;
+        HWND old=CreateWindowExW(WS_EX_NOACTIVATE|WS_EX_TOOLWINDOW,type.lpszClassName,L"",
+            WS_POPUP,100,100,850,550,nullptr,nullptr,type.hInstance,nullptr);
+        check(old && retained.bind(old,GetCurrentThreadId()));
+        until([&] {auto state=retained.snapshot();check(!state.failures);return state.window!=nullptr;});
+        check(DestroyWindow(old));
+        until([&] {return retained.snapshot().window==nullptr;});
+        HWND replacement=CreateWindowExW(WS_EX_NOACTIVATE|WS_EX_TOOLWINDOW,type.lpszClassName,L"",
+            WS_POPUP,100,100,850,550,nullptr,nullptr,type.hInstance,nullptr);
+        check(replacement);
+        // The destroyed-owner worker is finished before its display is cleared.
+        check(retained.bind(replacement,GetCurrentThreadId()));
+        until([&] {auto state=retained.snapshot();check(!state.failures);return state.window!=nullptr;});
+        retained.unbind();
+        check(DestroyWindow(replacement));
+    }
     check(GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS) == baseGdi);
     check(DestroyWindow(owner)); check(SetThreadDpiAwarenessContext(oldDpi));
     LARGE_INTEGER frequency{}; check(QueryPerformanceFrequency(&frequency));
