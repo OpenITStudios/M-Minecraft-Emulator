@@ -2,6 +2,9 @@
   import {onMount} from 'svelte';
   import {getCurrentWindow} from '@tauri-apps/api/window';
   import {listen} from '@tauri-apps/api/event';
+  import type {NativeBackendSupport} from './app/bridge/lazyTester.js';
+  // UI wording only; the native controller owns Minecraft exit.
+  export let backendSupport: NativeBackendSupport | null = null;
   let maximized=false, closing=false, error='';
   async function action(operation:'minimize'|'toggleMaximize'|'close') {
     error='';
@@ -27,7 +30,7 @@
   <button class="lt-window-drag" data-tauri-drag-region aria-label="Move Lazy Tester window" on:dblclick={()=>action('toggleMaximize')}><span aria-hidden="true" data-tauri-drag-region>LT</span><span data-tauri-drag-region>Lazy Tester</span></button>
   <button class="lt-window-control" aria-label="Minimize" title="Minimize" on:click={()=>action('minimize')}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10"/></svg></button>
   <button class="lt-window-control" aria-label={maximized?'Restore down':'Maximize'} title={maximized?'Restore down':'Maximize'} on:click={()=>action('toggleMaximize')}><svg viewBox="0 0 16 16" aria-hidden="true">{#if maximized}<path d="M5 5V3h8v8h-2M3 5h8v8H3Z"/>{:else}<path d="M3 3h10v10H3Z"/>{/if}</svg></button>
-  <button class="lt-window-control lt-window-close" disabled={closing} aria-label="Close Lazy Tester" title="Exit Lazy Tester and all managed Minecraft sessions" on:click={()=>action('close')}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"/></svg></button>
+  <button class="lt-window-control lt-window-close" disabled={closing} aria-label="Close Lazy Tester" title={backendSupport === 'WindowsNative' ? 'Exit Lazy Tester and all managed Minecraft sessions' : 'Close Lazy Tester'} on:click={()=>action('close')}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"/></svg></button>
 </div>
-{#if closing}<div class="lt-alert" role="status">Closing Lazy Tester… Waiting for managed games and pending work to finish.</div>{/if}
+{#if closing}<div class="lt-alert" role="status">{backendSupport === 'WindowsNative' ? 'Closing Lazy Tester… Waiting for managed games and pending work to finish.' : 'Closing Lazy Tester…'}</div>{/if}
 {#if error}<p class="lt-alert" role="alert">{error}</p>{/if}

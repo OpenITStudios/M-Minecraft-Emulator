@@ -75,14 +75,14 @@
   $: others = profiles.filter(profile => profile.slot !== primary);
   $: runningCount = profiles.filter(profile => ['STARTING', 'RUNNING', 'NOT_RESPONDING'].includes(profile.state)).length;
   $: playableCount = profiles.filter(profile => profile.state === 'RUNNING').length;
-  $: if (mounted && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio!==null) {const mode=queuedAudio;queuedAudio=null;void saveAudio(mode);}
-  $: if (mounted && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance!==null) {const limits=queuedPerformance;queuedPerformance=null;void savePerformance(limits);}
-  $: if (mounted && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset!==null) {const request=queuedPreset;queuedPreset=null;void applyPreset(request);}
-  $: if (mounted && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage !== null) void consumeNavigation();
-  $: if (mounted && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPreset===null && queuedPage===null && manualRefreshRequested) {manualRefreshRequested=false;void refreshPage();}
-  $: if (mounted && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPreset===null && queuedPage===null && queuedLaunch!==null) {const slot=queuedLaunch;queuedLaunch=null;void launch(slot);}
-  $: if (mounted && !closeInProgress && !closeReviewPending && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage === null && queued !== null) void consumeSelection();
-  $: if (mounted && !closeInProgress && !closeReviewPending && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage === null && queued === null && dirty) void syncLayout();
+  $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio!==null) {const mode=queuedAudio;queuedAudio=null;void saveAudio(mode);}
+  $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance!==null) {const limits=queuedPerformance;queuedPerformance=null;void savePerformance(limits);}
+  $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset!==null) {const request=queuedPreset;queuedPreset=null;void applyPreset(request);}
+  $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage !== null) void consumeNavigation();
+  $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPreset===null && queuedPage===null && manualRefreshRequested) {manualRefreshRequested=false;void refreshPage();}
+  $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPreset===null && queuedPage===null && queuedLaunch!==null) {const slot=queuedLaunch;queuedLaunch=null;void launch(slot);}
+  $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage === null && queued !== null) void consumeSelection();
+  $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage === null && queued === null && dirty) void syncLayout();
 
   function image(node: HTMLElement, slot: ProfileSlot) {
     images.set(slot, node); observer?.observe(node); dirty = true;
@@ -103,7 +103,7 @@
     finally { busy = false; }
   }
   async function refresh() {
-    if (closeReviewActive(reviewState()) || busy || refreshing || resizing || disposed) return;
+    if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) || busy || refreshing || resizing || disposed) return;
     const issued = observationEpoch;
     refreshing = true;
     try {
@@ -163,6 +163,8 @@
     finally { busy = false; }
   }
   function navigate(next: typeof page) {
+    // Settings and storage require the Windows native session owner.
+    if (nativeBackend !== 'WindowsNative') return;
     closeOneSlot=null;recovery=null;clearSlot=null;fullReview=null;
     if(next==='launchers')next='workspace';
     queuedPage = next; queued = null;queuedLaunch=null;
@@ -193,7 +195,7 @@
     finally { busy = false; }
   }
   async function refreshPage() {
-    if (busy || refreshing || resizing) return;
+    if (nativeBackend !== 'WindowsNative' || busy || refreshing || resizing) return;
     manualRefreshing=true;
     try {
     issue = '';
@@ -335,7 +337,7 @@
     finally { busy = false; }
   }
   async function syncLayout() {
-    if (closeReviewActive(reviewState()) || busy || refreshing || resizing || !mounted) return;
+    if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) || busy || refreshing || resizing || !mounted) return;
     dirty = false; resizing = true;
     try {
       if (page !== 'workspace' || detached || !available || document.hidden) {
@@ -374,7 +376,7 @@
     finally { checkingStorage = false; busy = false; }
   }
   async function loadBinding(importProfiles = false) {
-    if (busy || refreshing || resizing || disposed) return;
+    if (nativeBackend !== 'WindowsNative' || busy || refreshing || resizing || disposed) return;
     busy = true; issue = '';
     try { await checkBinding(importProfiles); }
     finally { busy = false; }
@@ -394,6 +396,7 @@
       if (nativeBackend === 'Unsupported') {
         binding=null;
         bindingIssue='Minecraft Education native session management is not implemented on this platform. No game, account or profile data was accessed.';
+        queuedPage=null;queuedLaunch=null;queued=null;manualRefreshRequested=false;dirty=false;
         return;
       }
       // Retry the canonical Windows initializer before offering recovery.
@@ -549,16 +552,18 @@
     return () => {
       mounted = false; disposed = true; clearInterval(interval); observer?.disconnect();
       window.removeEventListener('resize', changed); document.removeEventListener('visibilitychange', changed);
-      stops.forEach(stop => stop()); void workspaceSurface.release().catch(() => {});
+      stops.forEach(stop => stop());
+      // Unsupported diagnostic UI holds no native game-window lease.
+      if (nativeBackend === 'WindowsNative') void workspaceSurface.release().catch(() => {});
     };
   });
 </script>
 <svelte:head><title>Lazy Tester</title></svelte:head>
 <div class="lt-app">
-  <WindowTitlebar />
+  <WindowTitlebar backendSupport={nativeBackend} />
   <header class="lt-topbar">
     <a class="lt-brand" href="#play" on:click|preventDefault={() => navigate('workspace')}><span>LT</span>Lazy Tester</a>
-    <nav aria-label="Main navigation"><button disabled={closeInProgress} class:chosen={page==='workspace'} aria-current={page==='workspace'?'page':undefined} on:click={()=>navigate('workspace')}>Play</button><button disabled={closeInProgress} class:chosen={page!=='workspace'} aria-current={page!=='workspace'?'page':undefined} on:click={()=>navigate('settings')}>Settings</button></nav>
+    <nav aria-label="Main navigation"><button disabled={closeInProgress} class:chosen={page==='workspace'} aria-current={page==='workspace'?'page':undefined} on:click={()=>navigate('workspace')}>Play</button><button disabled={closeInProgress||nativeBackend!=='WindowsNative'} class:chosen={page!=='workspace'} aria-current={page!=='workspace'?'page':undefined} on:click={()=>navigate('settings')}>Settings</button></nav>
     <span class="lt-connection" role="status"><span class="lt-dot" class:waiting={!available||!binding?.configured}></span>{initializing?'Preparing launchers…':nativeBackend==='Unsupported'?'Game backend unavailable':!binding?.configured?'Connection unavailable':available?'Connected':'Unavailable'}</span>
   </header>
   <div class="lt-layout" class:lt-settings-layout={page!=='workspace'} inert={closeInProgress}>
@@ -566,7 +571,7 @@
     <main>
       <header class="lt-page-header" class:lt-play-header={page==='workspace'}>
         <div><h1>{page==='workspace'?(detached?(uncertainWindowSlot!==null?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p>{detached?'Your games keep running on the desktop.':active?'Click the game to play.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
-        <div class="lt-header-actions"><button class="lt-secondary" disabled={busy||manualRefreshing||manualRefreshRequested||nativeBackend==='Unsupported'} on:click={()=>manualRefreshRequested=true}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'&&active!==null}<button class="lt-secondary" disabled={busy||refreshing||resizing} title={'Open only Minecraft - '+active+' in its own window'} on:click={release}>Open Minecraft - {active} in a window</button>{/if}</div>
+        <div class="lt-header-actions"><button class="lt-secondary" disabled={busy||manualRefreshing||manualRefreshRequested||nativeBackend!=='WindowsNative'} on:click={()=>manualRefreshRequested=true}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'&&active!==null}<button class="lt-secondary" disabled={busy||refreshing||resizing} title={'Open only Minecraft - '+active+' in its own window'} on:click={release}>Open Minecraft - {active} in a window</button>{/if}</div>
       </header>
       {#if issue||connectionIssue}<div class="lt-alert" role="alert">{#if issue}<p>{issue}</p>{/if}{#if connectionIssue}<p>{connectionIssue}</p>{/if}</div>{/if}
       {#if closeFailure}
@@ -578,7 +583,12 @@
         </section>
       {/if}
 
-      {#if nativeBackend==='Unsupported'&&!initializing}
+      {#if nativeBackend===null&&!initializing}
+        <section class="lt-binding" aria-label="Backend capability unavailable">
+          <div><strong>Backend capability could not be verified</strong><p>{bindingIssue||'Native support check failed. No Minecraft operation was attempted.'}</p></div>
+          <div class="lt-actions"><button disabled={busy} on:click={()=>void initializeLaunchers()}>Retry backend check</button></div>
+        </section>
+      {:else if nativeBackend==='Unsupported'&&!initializing}
         <section class="lt-binding" aria-label="Unsupported platform">
           <div><strong>Minecraft backend unavailable</strong><p>{bindingIssue}</p></div>
         </section>
@@ -589,6 +599,7 @@
           {#if detached}<div class="lt-empty"><h2>{uncertainWindowSlot!==null?'Window restoration not verified':closeFailure?'Exit incomplete — sessions preserved':'Games are in separate windows'}</h2><p>{uncertainWindowSlot!==null?'Minecraft - '+uncertainWindowSlot+' may still have a native window that was not restored. Its process was preserved. Review the error and Refresh; do not assume its window is accessible.':closeFailure?'Some Minecraft sessions may still be running and native window recovery is not guaranteed. Review each session before returning to Play.':'Use the Windows taskbar, or choose a game below to open it in Play.'}</p><p>{runningCount} of 5 running</p></div>{:else if !active}<div class="lt-empty"><span>LT</span><h2>{initializing?'Preparing launchers…':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Reconnecting saved data automatically. No setup is needed.':nativeBackend==='Unsupported'?'Native Minecraft sessions are not supported by this application build on this OS.':!binding?.configured?'Retry the connection. Your existing accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
         </div>
         </div>
+        {#if nativeBackend === 'WindowsNative'}
         <div class="lt-games-heading"><span>Your games</span><span>{runningCount} of 5 running</span></div>
         <div class="lt-filmstrip" aria-label="Minecraft launchers">
           {#each profiles as profile (profile.slot)}
@@ -618,6 +629,7 @@
         {#if closingOneSlot!==null}<p role="status">Waiting for Minecraft - {closingOneSlot} to close normally…</p>{/if}
         <p class="lt-help">{!binding?.configured?'Saved launcher data is checked automatically.':detached?'Select a running game to bring it into Play.':'Click a game to switch. Other games keep running.'}</p>
         {#if previewIssue}<details class="lt-preview-details"><summary>Preview unavailable</summary><p>{previewIssue}</p></details>{/if}
+        {/if}
       </section>
       {#if page==='settings'}
         <div class="lt-settings-content">

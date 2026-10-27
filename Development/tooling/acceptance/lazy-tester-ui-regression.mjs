@@ -41,6 +41,10 @@ try {
         window.__calls.push({command, args});
         if(command==='startup_diagnostic_result')return null;
         if(command==='lazy_tester_backend_support') {
+          if (new URL(location.href).searchParams.has('capability-error') && !window.__capabilityCheckedOnce) {
+            window.__capabilityCheckedOnce=true;
+            throw 'Host backend capability temporarily unavailable';
+          }
           return new URL(location.href).searchParams.has('unsupported-platform') ? 'Unsupported' : 'WindowsNative';
         }
         if (command === 'plugin:event|listen') return callback;
@@ -114,6 +118,25 @@ try {
   assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
     call.command==='lazy_tester_backend_support').length),1);
   assert.equal(await page.locator('.lt-card:not(:disabled)').count(),0);
+  assert.equal(await nav('Settings').isDisabled(),true,'unsupported host must not expose native settings');
+  assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true);
+  assert.equal(await page.locator('.lt-filmstrip').count(),0,'unsupported host has no game inventory');
+  assert.equal(await page.getByRole('button',{name:'Close Lazy Tester'}).getAttribute('title'),'Close Lazy Tester');
+  await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
+  await page.waitForTimeout(180);
+  assert.deepEqual(await page.evaluate(()=>window.__calls.filter(({command})=>
+    command.startsWith('desktop_') || (command.startsWith('lazy_tester_') &&
+    command!=='lazy_tester_backend_support')).map(({command})=>command)),[],
+    'unsupported UI must not request native game, storage or preview IPC after resize');
+
+  await page.goto('http://lazy-tester.test/?capability-error=1');
+  await page.getByRole('region',{name:'Backend capability unavailable'}).waitFor();
+  assert.equal(await nav('Settings').isDisabled(),true);
+  assert.equal(await page.evaluate(()=>window.__calls.some(c=>c.command==='lazy_tester_profile_binding')),false);
+  await page.getByRole('button',{name:'Retry backend check'}).click();
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  await heading('Ready when you are').waitFor();
 
   await page.goto('http://lazy-tester.test/');
   await page.waitForFunction(()=>!!window.__finishBinding);await page.evaluate(()=>window.__finishBinding());

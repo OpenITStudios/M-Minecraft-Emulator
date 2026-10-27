@@ -19,6 +19,23 @@ lifecycle: ACTIVE
 
 This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build tooling in [Isolation Source Tooling](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md) is retired product history, not the native engine. The only active goal, blocker and next action are in [planning/development.md](../../planning/development.md). Treat historical `Next` here as superseded; inspect owning source and consumers.
 
+## Unsupported-platform UI admission — 28 October 2026
+
+The mounted UI now requires Rust-reported `WindowsNative` before
+dispatching queued Minecraft work, opening native Settings, refreshing
+sessions, or applying DWM preview layout. This corrects a source defect:
+`ResizeObserver` could request `clearPreviews` on unsupported platforms
+and Settings navigation could invoke native session IPC. Unsupported
+hosts now show no five-profile inventory or game settings controls.
+A failed capability lookup offers a separate explicit backend-check
+retry rather than an unsafe profile retry. `WindowTitlebar` has a
+presentation-only backend prop so the Close tooltip/status mentions
+Minecraft sessions only when native Windows is supported. Non-Windows
+unmount never invokes workspace recovery IPC. No new native controller,
+backend, OS guess or Tauri command was introduced; Windows behavior
+is preserved after host capability admission. Browser regression and
+source verifier were authored, NOT_EXECUTED.
+
 ## macOS diagnostic shell feasibility inventory — 28 October 2026
 
 | Boundary | Exact source finding | Proof ceiling |

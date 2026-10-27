@@ -110,6 +110,15 @@ export function verifyRepository(root,g0=false) {
   const buildScript=read('Development/apps/desktop/src-tauri/build.rs');
   assert.ok(buildScript.includes('CARGO_CFG_TARGET_OS') && buildScript.includes('CARGO_FEATURE_LAZY_TESTER_PACKAGE'),
     'Native Windows-only product packaging must reject unsupported OS targets');
+  const mountedUI=read('Development/apps/desktop/src/LazyTesterApp.svelte');
+  const titlebar=read('Development/apps/desktop/src/WindowTitlebar.svelte');
+  assert.ok(mountedUI.includes('<WindowTitlebar backendSupport={nativeBackend} />') &&
+    mountedUI.includes("if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState())") &&
+    mountedUI.includes("if (nativeBackend !== 'WindowsNative') return;") &&
+    mountedUI.includes("if (nativeBackend === 'WindowsNative') void workspaceSurface.release()") &&
+    mountedUI.includes("{#if nativeBackend === 'WindowsNative'}") &&
+    titlebar.includes("title={backendSupport === 'WindowsNative' ?"),
+    'Unsupported diagnostic UI must not schedule game IPC or advertise CloseAll');
   const nativeSource=read('Development/apps/desktop/src-tauri/src/engine/native_clients.rs');
   assert.ok(nativeSource.includes('pub enum NativeBackendSupport') &&
     nativeSource.includes('cfg!(all(windows, target_arch = "x86_64"))'),

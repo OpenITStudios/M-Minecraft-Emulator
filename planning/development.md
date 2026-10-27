@@ -127,18 +127,21 @@ has been executed.
 
 ## Native exit and macOS feasibility — 28 October 2026
 
-The Windows process/window/pipe observers and native close/cleanup remain
-target-gated; non-Windows retains default Tauri close and no native helper.
-Mac source inventory is recorded in `docs/system/implementation-map.md`:
-compile/window/capability IPC, permission scope, single-instance, OS close
-and Mac package/signing remain unverified or absent. The existing
-`native-workspace-preview` feature, not just the Lazy Tester product
-feature, is now refused by `build.rs` on all non-Windows targets. Source
-package verifier pins NSIS-only base and main-window event/window permissions.
-No package, CI, tests or Mac/Windows gameplay has been executed.
+Win32 process/pipe/window and CloseAll/recovery stay `cfg(windows)`.
+Non-Windows keeps default Tauri close, no native helper or instance lease.
+Both native package features refuse non-Windows targets. Mac compile,
+single-instance, WebView, signing and gameplay remain NOT_EXECUTED or absent.
+
+## Unsupported-platform UI admission — 28 October 2026
+
+Svelte now gates queued native work, ResizeObserver preview IPC, Settings
+navigation, game refresh and unmount recovery on Rust `WindowsNative`.
+Unsupported hosts show no game inventory/actions; unknown host support
+offers explicit capability retry. Close-window UI no longer implies
+managed Minecraft shutdown on Mac. Windows behavior after backend admission
+is preserved. Static/Browser regression authored, NOT_EXECUTED.
 
 ## Next bounded action
 
-Audit the non-Windows frontend/window UX for unsupported controls or
-misleading exit/recovery text; change only proven UI defects without
-introducing Mac gameplay or running Local PC tests.
+Audit remaining unsupported-platform frontend IPC entrypoints, then stop
+expanding Mac scaffolding until compile/runtime work is explicitly authorized.
