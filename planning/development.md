@@ -14,6 +14,15 @@ Proof: REMOTE_GITHUB exact-tree/source review only; all source execution,
 Windows package and Minecraft gameplay NOT_EXECUTED.
 
 
+## Source-retirement phase 5 — restrict Tauri IPC to mounted Lazy Tester
+
+The mounted Lazy Tester Svelte graph invokes only the startup diagnostic, seven
+lazy_tester commands and three workspace layout/release commands. Removed all
+legacy Sandboxie/owned-provider/fork/focus/developer-inspection handlers from
+Tauri registration. This is a capability removal, not removal of all old Rust
+module bodies; obsolete providers remain compiled pending consumer extraction.
+Source verification is authored but NOT_EXECUTED; no Windows/Minecraft tests.
+
 ## Source-retirement phase 4 — remove unmounted desktop VM/overlay source
 
 Deleted the unregistered legacy Tauri commands (virtual clients, setup tools,

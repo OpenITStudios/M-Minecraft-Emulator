@@ -9,6 +9,16 @@ lifecycle: ACTIVE
 
 # Selected Windows isolation pilot and inactive legacy inventory
 
+## Legacy Tauri command registration retired — 27 October 2026
+
+Tauri now registers only the commands reachable from the mounted Lazy Tester
+Svelte bridges: startup diagnostic, the seven lazy_tester session/profile/
+presentation commands, and native workspace update/release/suspend. Previously
+registered Sandboxie/owned-fork/VM capability and diagnostic handlers are removed
+from runtime IPC registration, even when their historical Rust source is still
+compiled. This cannot reactivate a legacy launch or service. Remaining unused
+adapters are marked for physical source removal in the next bounded change.
+
 ## Unmounted desktop VM route deletion — 27 October 2026
 
 All three unregistered Tauri VM/setup/window command files and their three

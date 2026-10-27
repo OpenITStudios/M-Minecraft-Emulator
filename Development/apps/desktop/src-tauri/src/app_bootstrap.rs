@@ -57,9 +57,9 @@ pub fn run() {
             }
             Ok(())
         })
-        // Legacy VM/Tauri routes are deliberately not registered in the
-        // native-first pilot. Source and account-bearing guest data remain.
-        // Re-enabling a route requires an explicit product decision.
+        // Only the mounted Lazy Tester UI's current IPC commands are exposed.
+        // Dormant Sandboxie/VMware and developer inspection handlers are not
+        // reachable through Tauri until independently reviewed and reauthorized.
         .invoke_handler(tauri::generate_handler![
             startup_diagnostic_result,
             commands::native_clients::lazy_tester_session,
@@ -69,36 +69,9 @@ pub fn run() {
             commands::native_clients::lazy_tester_present,
             commands::native_clients::lazy_tester_previews,
             commands::native_clients::lazy_tester_clear_previews,
-            commands::native_clients::desktop_compare_process_contexts,
-            commands::native_clients::desktop_present_workspace,
             commands::native_clients::desktop_update_workspace,
             commands::native_clients::desktop_release_workspace,
             commands::native_clients::desktop_suspend_workspace,
-            commands::native_clients::desktop_manager_settings,
-            commands::native_clients::desktop_owned_test_operation,
-            commands::native_clients::desktop_select_owned_test_session,
-            commands::native_clients::desktop_list_instance_slots,
-            commands::native_clients::desktop_inspect_instance_overview,
-            commands::native_clients::desktop_open_native_minecraft,
-            commands::native_clients::desktop_inspect_native_workspace,
-            commands::native_clients::desktop_inspect_native_auth_family,
-            commands::native_clients::desktop_inspect_native_psec_capabilities,
-            commands::native_clients::desktop_present_observed_window,
-            commands::native_clients::desktop_focus_observed_native_window,
-            commands::native_clients::desktop_inspect_native_candidates,
-            commands::native_clients::desktop_select_education_exe,
-            commands::native_clients::desktop_request_sandbox_client_02,
-            commands::native_clients::desktop_inspect_sandbox_client_02,
-            commands::native_clients::desktop_inspect_owned_engine_candidate,
-            commands::native_clients::desktop_inspect_owned_engine_host,
-            commands::native_clients::desktop_discover_existing_virtuals,
-            commands::native_clients::desktop_select_owned_engine_candidate_directory,
-            commands::native_clients::desktop_inspect_instance_focus,
-            commands::native_clients::desktop_read_focus_observer,
-            commands::native_clients::desktop_start_focus_observer,
-            commands::native_clients::desktop_stop_focus_observer,
-            commands::native_clients::desktop_focus_observed_client_02,
-            commands::native_clients::desktop_place_observed_client_02,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested{api,..}=event {

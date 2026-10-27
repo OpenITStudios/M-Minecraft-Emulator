@@ -66,6 +66,15 @@ export function verifyRepository(root,g0=false) {
   const bootstrap=read('Development/apps/desktop/src-tauri/src/app_bootstrap.rs');
   for(const name of ['lazy_tester_session','lazy_tester_profile_binding','lazy_tester_present','lazy_tester_previews'])assert.ok(bootstrap.includes('commands::native_clients::'+name+','),name);
   assert.ok(!/commands::virtual_clients::|commands::setup_tools::|commands::window_arrangement::/.test(bootstrap),'Legacy handlers must remain unregistered');
+  const invoked=bootstrap.split('.invoke_handler(tauri::generate_handler![')[1]?.split('])')[0]??'';
+  const exposed=[...invoked.matchAll(/commands::native_clients::([a-z_]+),/g)].map(m=>m[1]);
+  assert.deepEqual(exposed,[
+    'lazy_tester_session','lazy_tester_close_one','lazy_tester_profile_binding',
+    'lazy_tester_data_location','lazy_tester_present','lazy_tester_previews',
+    'lazy_tester_clear_previews','desktop_update_workspace',
+    'desktop_release_workspace','desktop_suspend_workspace',
+  ],'Only mounted Lazy Tester handlers may be exposed; retired provider IPC forbidden');
+
   for(const path of [
     'Development/apps/desktop/src-tauri/src/commands/virtual_clients.rs',
     'Development/apps/desktop/src-tauri/src/commands/setup_tools.rs',
