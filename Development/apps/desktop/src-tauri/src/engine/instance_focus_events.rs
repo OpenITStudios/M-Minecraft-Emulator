@@ -239,6 +239,10 @@ mod windows {
             }
         }
     }
+    // A foreground change can race one sample; retry without blocking the event thread.
+    fn retry_focus_sample(mut sample: impl FnMut() -> Option<u32>) -> Option<u32> {
+        (0..3).find_map(|_| sample())
+    }
     fn refresh() {
         let bindings = match POLICIES.lock() {
             Ok(list) => list,
@@ -252,16 +256,19 @@ mod windows {
         if bindings.is_empty() {
             return;
         }
-        let window = unsafe { GetForegroundWindow() };
-        let mut pid = 0;
-        let mut confirmed_pid = 0;
-        let stable = !window.is_null()
-            && unsafe { GetWindowThreadProcessId(window, &mut pid) } != 0
-            && unsafe { GetForegroundWindow() } == window
-            && unsafe { GetWindowThreadProcessId(window, &mut confirmed_pid) } != 0
-            && pid == confirmed_pid
-            && unsafe { GetForegroundWindow() } == window;
-        publish(&bindings, if stable { Some(pid) } else { None });
+        let selected = retry_focus_sample(|| {
+            let window = unsafe { GetForegroundWindow() };
+            let mut pid = 0;
+            let mut confirmed_pid = 0;
+            let stable = !window.is_null()
+                && unsafe { GetWindowThreadProcessId(window, &mut pid) } != 0
+                && unsafe { GetForegroundWindow() } == window
+                && unsafe { GetWindowThreadProcessId(window, &mut confirmed_pid) } != 0
+                && pid == confirmed_pid
+                && unsafe { GetForegroundWindow() } == window;
+            stable.then_some(pid)
+        });
+        publish(&bindings, selected);
     }
     fn finish_policies() {
         let list = POLICIES
@@ -726,6 +733,15 @@ mod windows {
             drop(bindings);
             assert!(readers.iter().all(|r| state(&r[2])));
         }
+        #[test]
+        fn focus_sample_recovers_from_transient_instability_without_guessing() {
+            let mut samples = [None, Some(42)].into_iter();
+            assert_eq!(retry_focus_sample(|| samples.next().flatten()), Some(42));
+            let mut attempts = 0;
+            assert_eq!(retry_focus_sample(|| { attempts += 1; None }), None);
+            assert_eq!(attempts, 3);
+        }
+
         #[test]
         fn registered_policies_share_one_worker_and_leave_no_active_lease() {
             let children: Vec<_> = (0..6).map(|_| Child::new()).collect();
