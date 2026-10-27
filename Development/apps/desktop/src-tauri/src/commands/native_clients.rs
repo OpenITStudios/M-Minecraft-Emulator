@@ -471,6 +471,27 @@ fn run_manager_operation<T>(operation: impl FnOnce() -> io::Result<T>) -> io::Re
     admit_resource_operation(&MANAGER_RESOURCE_LOCK, operation)
 }
 
+// CloseRequested must use the SAME existing manager admission gate as
+// CloseOne/Launch/Present. Acquire it BEFORE restoring any native HWND so
+// another action cannot mutate presentation between release and CloseAll.
+// On contention we fail before modifying windows or game processes; the
+// existing window-event error path preserves the open manager for retry.
+pub(crate) fn close_all_managed() -> io::Result<()> {
+    run_manager_operation(|| {
+        crate::engine::workspace_surface::release_for_close()?;
+        #[cfg(feature = "lazy-tester-package")]
+        {
+            crate::engine::native_clients_session::request(
+                crate::engine::native_clients_session::SessionRequest::CloseAll,
+            ).map(|_| ())
+        }
+        #[cfg(not(feature = "lazy-tester-package"))]
+        {
+            Ok(())
+        }
+    })
+}
+
 // Explicit inspection of all four stable IDs. The two existing Windows
 // collectors run sequentially beneath ONE manager resource lock. No new
 // inspector service, process monitor, or shared runtime state is created.
@@ -727,6 +748,25 @@ mod resource_admission_tests {
             run_slot_operation("02", SlotOperation::Inspect, || Ok("read-only")).unwrap(),
             "read-only"
         );
+    }
+
+    #[test]
+    fn contending_close_sequence_refuses_before_native_window_mutation() {
+        let gate = Mutex::new(());
+        let currently_closing_one = gate.lock().unwrap();
+        let restored = Cell::new(false);
+        let result = admit_resource_operation(&gate, || {
+            restored.set(true);
+            Ok(())
+        });
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::WouldBlock);
+        assert!(!restored.get(), "Full exit must not restore any HWND while a slot close owns admission");
+        drop(currently_closing_one);
+        admit_resource_operation(&gate, || {
+            restored.set(true);
+            Ok(())
+        }).unwrap();
+        assert!(restored.get());
     }
 
     #[test]

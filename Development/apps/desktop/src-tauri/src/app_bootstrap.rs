@@ -135,12 +135,10 @@ pub fn run() {
                                 return;
                             }
                             let _=window.emit("lazy-tester-closing",true);
-                            let result=crate::engine::workspace_surface::release_for_close().and_then(|_|{
-                                #[cfg(feature="lazy-tester-package")]
-                                {crate::engine::native_clients_session::request(crate::engine::native_clients_session::SessionRequest::CloseAll).map(|_|())}
-                                #[cfg(not(feature="lazy-tester-package"))]
-                                {Ok(())}
-                            });
+                            // Serialize the entire close sequence with the same
+                            // manager admission used by CloseOne/Launch/Present.
+                            // On contention, no HWND or Minecraft process is touched.
+                            let result=commands::native_clients::close_all_managed();
                             match result{
                                 Ok(())=>{let _=window.destroy();},
                                 Err(error)=>{

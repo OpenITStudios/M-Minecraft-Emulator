@@ -15,6 +15,25 @@ five distinct identities (one windowless) and six-candidate refusal.
 No local PC, Windows, Minecraft or source execution took place. Tests
 are authored, NOT_EXECUTED.
 
+## P0 CloseAll / CloseOne admission ordering — 27 October 2026
+
+Source review found that the product CloseRequested path directly called
+workspace_surface::release_for_close() and then CloseAll without first
+acquiring the manager resource lock already used by CloseOne, Launch,
+present and settings. This permitted a full-close presentation release
+to overlap an in-progress single-slot close or native layout update.
+The existing desktop command owner now exposes a narrow
+`close_all_managed()` function that holds its canonical
+MANAGER_RESOURCE_LOCK across BOTH workspace release and the retained
+session controller CloseAll request. CloseRequested delegates to this
+function after the same explicit user confirmation. Competing operations
+fail before any full-close window mutation, leaving the manager open
+with the existing failure feedback and no forced game termination.
+The existing resource-admission fixture has a new contention/no-HWND-
+mutation case. This reuses ONE lock and the ONE game lifecycle actor,
+not another coordinator or new state store. No local PC, Rust, Windows
+or Minecraft tests were executed; normal MC02 exit remains UNKNOWN.
+
 ## P0 source audit — 27 October 2026 (no Local PC testing)
 
 The operator explicitly requires ChatGPT + GitHub-only work. Windows, installer,
