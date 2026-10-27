@@ -1,9 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{fs, io, io::Read, path::PathBuf};
 
-pub const TARGETS: &str =
-    include_str!("legacy-targets.json");
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 pub enum BackgroundAudio { #[default] Keep, Mute }
 pub fn load_audio()->io::Result<BackgroundAudio> {read_audio(&product_settings()?.join("audio.json"))}
@@ -182,89 +179,6 @@ fn write_performance(path: &std::path::Path, value: PerformanceSettings) -> io::
     result
 }
 
-// Preferences belong to the preview's own runtime data, but the desktop's
-// single-instance marker must remain shared across the older manager and the
-// preview to prevent two controllers from moving the same Minecraft window.
-#[cfg(all(not(feature="lazy-tester-package"),feature = "native-workspace-preview"))]
-const SETTINGS_VARIANT: &str = "NativePreview";
-#[cfg(all(not(feature="lazy-tester-package"),not(feature = "native-workspace-preview")))]
-const SETTINGS_VARIANT: &str = "NativePilot";
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ManagerSettings {
-    pub session_directory: String,
-    pub minecraft_executable: String,
-}
-impl ManagerSettings {
-    pub fn validate(&self) -> io::Result<()> {
-        for value in [&self.session_directory, &self.minecraft_executable] {
-            if value.len() > 2048
-                || value.chars().any(char::is_control)
-                || value.contains(['\'', '"'])
-            {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Invalid settings path",
-                ));
-            }
-            if !value.is_empty() && !std::path::Path::new(value).is_absolute() {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "An absolute path is required",
-                ));
-            }
-        }
-        Ok(())
-    }
-}
-fn path() -> io::Result<PathBuf> {
-    #[cfg(feature="lazy-tester-package")]
-    {return Ok(product_settings()?.join("manager-settings.json"));}
-    #[cfg(not(feature="lazy-tester-package"))]
-    {
-    let base = std::env::var_os("LOCALAPPDATA")
-        .ok_or_else(|| io::Error::other("Windows application data unavailable"))?;
-    Ok(PathBuf::from(base)
-        .join("MinecraftInstanceManager")
-        .join(SETTINGS_VARIANT)
-        .join("manager-settings.json"))
-    }
-}
-pub fn load() -> io::Result<ManagerSettings> {
-    read(&path()?)
-}
-fn read(path: &std::path::Path) -> io::Result<ManagerSettings> {
-    let bytes = fs::File::open(path).and_then(|file| {
-        let mut bytes = Vec::new();
-        file.take(16385).read_to_end(&mut bytes)?;
-        Ok(bytes)
-    });
-    match bytes {
-        Ok(bytes) if bytes.len() <= 16384 => {
-            let value: ManagerSettings =
-                serde_json::from_slice(&bytes).map_err(io::Error::other)?;
-            value.validate()?;
-            Ok(value)
-        }
-        Ok(_) => Err(io::Error::other("Settings file is too large")),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(ManagerSettings::default()),
-        Err(e) => Err(e),
-    }
-}
-pub fn save(value: &ManagerSettings) -> io::Result<()> {
-    write(&path()?, value)
-}
-fn write(path: &std::path::Path, value: &ManagerSettings) -> io::Result<()> {
-    value.validate()?;
-    fs::create_dir_all(path.parent().unwrap())?;
-    // Same manager lock serializes reads and writes; publish a complete file.
-    let temporary = path.with_extension("tmp");
-    fs::write(
-        &temporary,
-        serde_json::to_vec_pretty(value).map_err(io::Error::other)?,
-    )?;
-    fs::rename(temporary, path)
-}
 #[cfg(test)]
 mod tests {
     #[test]
@@ -338,53 +252,8 @@ mod tests {
         ));
         assert_eq!(covered.message, "Minecraft is hidden behind the manager.");
     }
-    #[test]
-    fn catalog_has_four_unique_owned_routes() {
-        let v: serde_json::Value = serde_json::from_str(TARGETS).unwrap();
-        let targets = v["targets"].as_array().unwrap();
-        assert_eq!(targets.len(), 4);
-        for (i, target) in targets.iter().enumerate() {
-            assert_eq!(target["id"], format!("{:02}", i + 1));
-            if i > 0 {
-                assert_eq!(target["provider"], "OWNED_V1186");
-            }
-        }
-    }
-    #[test]
-    fn settings_roundtrip_and_changed_target_are_preferences_only() {
-        let p = std::env::temp_dir().join(format!("manager-settings-{}.json", std::process::id()));
-        let settings = ManagerSettings {
-            session_directory: String::new(),
-            minecraft_executable: std::env::current_exe()
-                .unwrap()
-                .to_string_lossy()
-                .into_owned(),
-        };
-        write(&p, &settings).unwrap();
-        assert_eq!(
-            read(&p).unwrap().minecraft_executable,
-            settings.minecraft_executable
-        );
-        write(&p, &ManagerSettings::default()).unwrap();
-        assert!(read(&p).unwrap().minecraft_executable.is_empty());
-        fs::write(&p, b"{}").unwrap();
-        assert!(read(&p).is_err());
-        fs::remove_file(&p).unwrap();
-        assert!(ManagerSettings {
-            session_directory: "relative".into(),
-            minecraft_executable: String::new()
-        }
-        .validate()
-        .is_err());
-    }
-    #[test]
-    #[ignore = "requires a real registered Minecraft Education Windows installation"]
-    fn actual_registered_game_matches_native_launcher() {
-        let path = super::super::native_clients::registered_education_target().unwrap();
-        assert!(std::path::Path::new(&path).is_file());
-        assert!(path.ends_with("Minecraft.Windows.exe"));
-    }
 }
+
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OperationFailure {
@@ -451,79 +320,4 @@ impl From<std::io::Error> for OperationFailure {
             details,
         }
     }
-}
-/// Default startup is native-first and does NOT contact retired SCM/Sandboxie.
-pub fn prepare(requested: Option<ManagerSettings>) -> io::Result<serde_json::Value> {
-    prepare_with_legacy_mode(requested, false)
-}
-
-/// An explicit operator request may inspect and recover an existing legacy
-/// session, but never unlocks its retired Launch/Provision routes.
-pub fn prepare_legacy(requested: Option<ManagerSettings>) -> io::Result<serde_json::Value> {
-    if cfg!(feature = "native-workspace-preview") && !cfg!(debug_assertions) {
-        // A direct Tauri IPC call must not reach retired SCM or owned-session
-        // discovery even though the release preview hides the recovery button.
-        return Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "Retired session recovery is unavailable in the native preview",
-        ));
-    }
-    prepare_with_legacy_mode(requested, true)
-}
-
-fn prepare_with_legacy_mode(
-    requested: Option<ManagerSettings>,
-    include_legacy: bool,
-) -> io::Result<serde_json::Value> {
-    if let Some(value) = requested {
-        save(&value)?;
-    }
-    let loaded = load();
-    let mut settings = loaded
-        .as_ref()
-        .map(|s| ManagerSettings {
-            session_directory: s.session_directory.clone(),
-            minecraft_executable: s.minecraft_executable.clone(),
-        })
-        .unwrap_or_default();
-    let detected = super::native_clients::registered_education_target();
-    let target_error = loaded
-        .err()
-        .map(|e| format!("Saved preferences could not be read. {e}"))
-        .or_else(|| detected.as_ref().err().map(|e| e.to_string()));
-    let mut engine_error = None;
-    let mut observation = None;
-    // No SCM query, owned test session discovery, child helper, native
-    // signature probe or legacy configuration write on normal MC01 startup.
-    if include_legacy {
-        if settings.session_directory.is_empty() {
-            match super::owned_provider::discover_active_session() {
-                Ok(path) => settings.session_directory = path.to_string_lossy().into_owned(),
-                Err(error) => engine_error = Some(OperationFailure::from(error)),
-            }
-        }
-        if !settings.session_directory.is_empty() && detected.is_ok() {
-            let request = super::owned_provider::OwnedRequest {
-                session_directory: settings.session_directory.clone(),
-                client_id: "02".into(),
-                operation: super::owned_provider::OwnedOperation::Inspect,
-                licensed: false,
-                compatibility_confirmed: false,
-                target: None,
-            };
-            match (super::owned_provider::OwnedTestBackend { request: &request }).execute() {
-                Ok(value) => {
-                    observation = Some(value);
-                    if settings.minecraft_executable.is_empty() {
-                        settings.minecraft_executable = detected.as_ref().unwrap().clone();
-                    }
-                    save(&settings)?;
-                }
-                Err(error) => engine_error = Some(OperationFailure::from(error)),
-            }
-        }
-    }
-    Ok(
-        serde_json::json!({"settings":settings,"catalog":serde_json::from_str::<serde_json::Value>(TARGETS).map_err(io::Error::other)?,"detectedMinecraft":detected.ok(),"targetError":target_error,"engineError":engine_error,"observation":observation}),
-    )
 }

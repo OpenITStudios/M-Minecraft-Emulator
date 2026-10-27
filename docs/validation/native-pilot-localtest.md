@@ -1786,7 +1786,7 @@ The sole mounted `UnifiedManagerApp.svelte` shows 01 native and owned 02–04.
 Legacy Compact Manager/pilot source and all existing profile/account/world data
 remain preserved and unmounted. The active UI never falls back to official Sandboxie.
 Canonical slot/provider/profile definitions live in
-[`minecraft-targets.json`](../../Development/apps/desktop/src-tauri/src/engine/legacy-targets.json).
+[`minecraft-targets.json`](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/apps/desktop/src-tauri/src/engine/legacy-targets.json).
 The existing legacy diagnostic catalog projects those identities onto its historical
 pilot metadata; that projection is not the unified dashboard's provider selection.
 
@@ -1935,7 +1935,7 @@ upstream helpers perform bounded stop/start; original image paths/hashes/signers
 are journaled before redirection. This replaces the earlier proposed
 delete/reinstall approach with a smaller reversible operation. No legacy Apply
 gate or desktop provider is enabled. Commands are in
-[Isolation Source Tooling](../../Development/tooling/isolation-source/README.md).
+[Isolation Source Tooling](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md).
 
 | Check | Result | Actual evidence |
 | --- | --- | --- |
@@ -1962,7 +1962,7 @@ ABI pass. Manual login and playable-world acceptance remain outstanding.
 
 **ACTIVE, not gameplay-ready.** Source revision
 `d99f2a47392bc976de717349a5289a6b30f6e7e7` adds the explicit v1.18.6 developer
-preparation procedure described in [Isolation Source Tooling](../../Development/tooling/isolation-source/README.md).
+preparation procedure described in [Isolation Source Tooling](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md).
 The operator now authorizes local developer test signing on this Windows host,
 manual reboot checkpoints and a later controlled, reversible replacement of the
 official service namespace. This supersedes the **local testing** production-only
@@ -2138,7 +2138,7 @@ It reads the path explicitly selected with MIVUBI_TEST_OWNED_PAYLOAD, checks the
 actual payload and current service namespace, and never loads its DLL/driver,
 starts/stops services or changes account state. The selected path is cleared from
 the test process environment afterward. Command usage belongs to the
-[native source guide](../../Development/tooling/isolation-source/README.md).
+[native source guide](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md).
 
 **Signing requirements checked against current Microsoft documentation:** new
 kernel drivers use the Hardware Developer Program signing path; an EV certificate

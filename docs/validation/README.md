@@ -32,7 +32,7 @@ returns **no-write SummaryOnly** evidence to the desktop; a separately invoked f
 
 | Question | Authoritative reference |
 | --- | --- |
-| What is the **current** v1.18.6 owned source/build path? | [One native source/build owner](../../Development/tooling/isolation-source/README.md) — unsigned, noninstallable and not the current runtime provider |
+| What is the **current** v1.18.6 owned source/build path? | [One native source/build owner](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md) — unsigned, noninstallable and not the current runtime provider |
 | What was the old v1.18.5 build inventory? | [Historical pinned upstream inventory](owned-isolation-upstream-inventory.md) — research snapshot only |
 | What passed in the first two-client run, and what remains unstable? | [First success and subsequent crash, 14 Oct 2026](two-client-first-success-2026-10-14.md) — operator-confirmed gameplay, observed compatibility probes and unresolved idle crash |
 | How do I prepare and execute the current Windows local test safely? | [Native + Sandboxie local test](native-pilot-localtest.md) — exact-HEAD build, manual two-client steps, failure handling and evidence limits |

@@ -1,29 +1,36 @@
-# Virtual Clients Desktop Rules
+# Lazy Tester Desktop Rules
 
-Applies to `Development/apps/desktop/`.
+Scope: `Development/apps/desktop/`. This is the mounted Tauri 2 / Svelte
+front end for the native Minecraft Education five-profile controller.
 
-## Boundary
+## Boundaries
 
-This is the canonical Tauri 2 + Svelte desktop application for the Virtual Clients Rust backend under `Development/engine/runtime-core/`.
+- `LazyTesterApp.svelte` projects typed native state; the UI does not own
+  process or authentication lifetime. Mounted Tauri IPC is allowlisted in
+  `src-tauri/src/app_bootstrap.rs`.
+- `engine/independent_bootstrap/session_controller.rs` owns original game
+  process handles, profile storage and normal exit. Do not add another actor,
+  daemon, power-management provider, process registry or credentials store.
+- `engine/process_identity.rs` supplies serialization-only identity values.
+  Exact OS handle/birth/window checks remain in native owners.
+- `engine/workspace_surface.rs` owns presentation, DWM preview, parking,
+  native recovery helpers and restoration. UI never claims a successful
+  restore from a posted command, PID or HWND alone.
+- Immutable private profile locations/data, settings, worlds, authentication
+  and Windows hives are never deleted/recreated by packaging or repository
+  cleanup. Profile clear still requires its own explicit admission/confirmation.
+- `engine/native_clients_session.rs` owns checked reconnect and the retained
+  controller IPC. A timed-out operation cannot start a replacement worker.
+- Deprecated VMware/Sandboxie/owned-fork Tauri handlers, provider helpers
+  and box/Guest Agent tooling are not active fallback routes and must not
+  be reintroduced by tests or previews.
 
-## Rules
+## Verification boundary
 
-- Layering is `Svelte surfaces → typed Tauri facade → thin Tauri commands → Rust domain owner`.
-- Consume `PUBLIC_CONTRACT_SCHEMA = 1`; never invent a second lifecycle, identity, resource, update, or recovery policy.
-- Lifecycle controls consume backend `actions` availability. Presentation code must not infer permission from client state.
-- Setup guidance consumes `DoctorReport.nextSetupAction`; health issues are diagnostic facts only.
-- `EnginePolicy` is read-only product policy. Do not create desktop-owned configuration for invariant values.
-- Desktop-native behavior such as window arrangement belongs under `src-tauri/src/engine/`; VM lifecycle semantics do not.
-- Tauri commands are adapters only. They do not duplicate backend business rules.
-- No account credentials, Microsoft tokens, Guest Agent tokens, world content, or independent persistent state.
-- No fake runtime state in production code. Tauri/backend failures must surface explicitly.
-- Presentation-only preferences may use one local owner when persistence materially improves daily use; Window Layout uses `src/app/windowLayoutPreference.ts`. Do not create a general settings framework for presentation state.
-- Every backend response must pass the versioned public contract boundary before entering presentation state.
-- Do not reintroduce localhost HTTP transport between the desktop frontend and backend, browser-global bridge injection, Inno Setup, or another desktop host. The guest-internal Interactive Launcher is a separate fixed-action Windows boundary and may bind localhost only inside the guest.
-
-- User-facing feature name is **Window Layout**. `window_arrangement` is only an internal Windows adapter/command implementation term.
-- Window Layout geometry has one owner: `src-tauri/src/engine/window_arrangement.rs`; Screen Overlay consumes its slots and never calculates a second layout.
-- Public Window Layout mutation has one path: `window_apply_layout`. Do not restore legacy arrange/overlay mutation commands.
-- Guest Minecraft launch policy belongs to `Development/engine/runtime-core/src/minecraft_runtime.rs`; desktop code does not infer Guest Agent capability.
-- Do not add Start Session, account-state detection, auth automation, forced network mode, GPU thresholds, reconnect machinery, or another launcher owner without target-machine evidence recorded in the canonical acceptance/failure matrix.
-- Do not retain unused public commands or speculative engines for a future consumer; add them when a proven workflow needs them.
+Source-level review and authored fixtures are **not** executable verification.
+Never claim Windows, Minecraft gameplay, five account persistence or Mac
+compatibility from a GitHub-only commit. Native DLLs in
+`tooling/acceptance/windows/bootstrap-ordering/` are active source and
+must not be deleted as historical fixture code. Keep CI disabled and use
+`Local` exclusively for development. Do not initiate user-PC testing until
+explicitly authorized.

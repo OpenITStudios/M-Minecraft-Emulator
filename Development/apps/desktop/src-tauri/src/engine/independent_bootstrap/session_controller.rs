@@ -5,7 +5,7 @@ use crate::engine::{
         pipe::{Endpoint, Peer, Server},
         ProfileSession, ProfileStorage, SessionRequest, SessionSnapshot, SettingsReport,
     },
-    owned_provider::OwnedProcess,
+    process_identity::OwnedProcess,
 };
 use std::{io::Write, time::Duration};
 

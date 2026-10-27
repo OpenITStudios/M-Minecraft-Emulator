@@ -33,9 +33,9 @@ were not touched by this source-only change.
 
 The VMware Guest Agent scripts, fork-only build tree and legacy distribution
 resources have now been retired from the active source checkout. Unreachable legacy VM/setup/window modules were also deleted from desktop.
-Some historical Sandboxie observation adapters and three embedded helper scripts remain compiled
-until their callers are safely disconnected. Trace their remaining desktop/runtime/tooling
-consumers before deleting them. This work cannot by itself establish gameplay,
+The retired Sandboxie Client02 adapter, box observer and owned-fork helper scripts
+are now absent from the native desktop source tree. Registered Education image
+resolution is retained with the active Windows-native tooling. This work cannot by itself establish gameplay,
 packaging or cross-platform acceptance.
 
 See [retirement register](../../../docs/system/legacy-retirement.md),

@@ -1,5 +1,5 @@
 //! Presentation only: independent top-level game, no parenting or injected input.
-use super::owned_provider::OwnedProcess;
+use super::process_identity::OwnedProcess;
 use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, Write};
 

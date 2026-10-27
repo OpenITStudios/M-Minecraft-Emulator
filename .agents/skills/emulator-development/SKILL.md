@@ -1,6 +1,6 @@
 ---
 name: emulator-development
-description: GitHub-first engineering work on M-Minecraft-Emulator Local; preserves VM lifecycle and proof boundaries.
+description: GitHub-first native Lazy Tester development; preserve account/world data and exact proof boundaries.
 ---
 
 # Emulator Product Development
@@ -19,12 +19,12 @@ Applies to system development, refactoring, bug fixes and documentation that cha
 
 ## Canonical owners
 
-- VM policy, lifecycle, provider, identity and updates: Development/engine/runtime-core/.
-- Windows guest preparation: Development/engine/guest/windows/.
+- Native game lifecycle and identity: Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/ and process_identity.rs.
+- Platform-neutral contracts and bounded process helpers: Development/engine/runtime-core/.
 - Machine-readable installer/release contracts: Development/engine/distribution/.
 - UI/typed Tauri bridge/windows: Development/apps/desktop/.
 - Runtime test collection: Development/tooling/acceptance/windows/ plus docs/validation/.
-- Build and source checks: Development/tooling/repository/, .github/workflows/.
+- Build and source checks: Development/tooling/repository/; GitHub Actions remain absent.
 - Stable policies: docs/system/; current progress: planning/development.md.
 
 An automatic workflow, new release, destructive reprovision or promotion to main is never implied by this procedure.

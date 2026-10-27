@@ -11,8 +11,5 @@ fn main() {
     if engine::workspace_surface::maybe_run_helper() {
         return;
     }
-    if engine::owned_provider::maybe_run_profile_helper() {
-        return;
-    }
     app_bootstrap::run();
 }

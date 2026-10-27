@@ -9,6 +9,30 @@ lifecycle: ACTIVE
 
 # Selected Windows isolation pilot and inactive legacy inventory
 
+## Source retirement completion — 27 October 2026
+
+Retired Sandboxie/VMware source is no longer part of the active `Local`
+build graph. The historical owned-provider implementation, Sandboxie
+Client02 collector/launch path, legacy four-slot catalog/focus projection,
+old auxiliary process helper entrypoint and obsolete fork/VMware scripts
+have been deleted. The plain process identity record is now maintained in
+`Development/apps/desktop/src-tauri/src/engine/process_identity.rs`
+with its existing wire fields, and the official Minecraft Education
+registration resolver resides in the native Windows acceptance tooling.
+
+The only remaining game owner is the five-session native bootstrap/controller.
+The currently registered Tauri commands are those required by mounted Lazy
+Tester UI. Windows/native DLL source and active profile-preservation paths
+remain intact. Legacy data, installed applications, worlds, accounts and
+VM disks are unaffected. This is GitHub/source-only evidence; actual Rust,
+desktop, installer, Windows and Minecraft checks remain NOT_EXECUTED.
+
+**Historical note:** Sections below document superseded implementation
+snapshots and may refer to files no longer present in `Local`.
+Use the dated Git history for those sources; do not interpret old
+links, commands or status tables as current product authority.
+
+
 ## Retired vendor/box inspector modules removed — 27 October 2026
 
 The owned Sandboxie fork candidate inspector and the virtual-box inventory

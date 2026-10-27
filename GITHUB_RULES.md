@@ -31,9 +31,15 @@ Before mutation, establish repository, branch `Local`, HEAD SHA, first semantic 
 
 A static test **authored** is not a test **executed**. A VM process is not game-ready, signed-in, or network-ready proof. Multiple SHAs cannot be combined as exact-head acceptance.
 
-## Paused legacy VM routes
+## Retired VM and Sandboxie routes
 
-The old VMware App, App Sandbox power controls and Guest Agent operations are preserved as source but paused by Development/engine/runtime-core/src/command.rs and not registered in Tauri. Consult docs/system/legacy-retirement.md before any future changes; do not resume VMware onboarding, remove saved guest data or re-enable guest mutations without explicit authorization and real Windows/gameplay evidence. Read-only diagnostics are not permission to mutate VM state.
+The legacy VMware, App Sandbox pilot and Sandboxie fork/box implementation
+is absent from the active source/IPC graph. It is not a supported recovery
+or launch fallback. The old legacy packager remains a hard refusal; source
+cleanup must not remove the Native Lazy Tester installer admission safeguards.
+Historical Git revisions are provenance, not instructions to reactivate VM
+or sandbox operations. Never touch an installed service, VM disk, snapshot,
+game account, stored world or running Minecraft process during source cleanup.
 
 ## 3. Read minimum
 
@@ -42,16 +48,17 @@ Default work starts with `AGENTS.md` → [Implementation Map](docs/system/implem
 ## 4. Diagnose the first wrong owner
 
 ```text
-VM lifecycle / version / identity wrong    → Development/engine/runtime-core
-Guest agent/Windows setup wrong            → Development/engine/guest or Development/engine/runtime-core guest protocol
-Desktop flow/window wrong                  → Development/apps/desktop
-Installer/update trust wrong               → Development/engine/distribution + Tauri package consumer
-Source verifier or optional CLI wrong      → tooling
-Docs navigation/wording wrong              → docs or root router
-Missing provider/Windows/Minecraft proof   → actual acceptance evidence, not imaginary source code
+Game launch/lifecycle/profile issue   → desktop engine independent_bootstrap / session_controller
+Identity and native window issue      → process_identity / native_clients / workspace_surface
+Session transport / IPC issue         → native_clients_session and its pipe
+Bundle/trust/preservation issue       → distribution/lazy-tester-package.json + Tauri source
+Portable domain/finite runner issue   → Development/engine/runtime-core/
+Source verifier or developer CLI      → Development/tooling/
+Historical VM/box behavior            → Git archive only, no executable owner
 ```
 
-Avoid second managers, inconsistent API aliases, undocumented state caches, or redundant root files.
+Do not introduce second lifecycle managers, mutable frontend truth or a
+desktop IPC route back to retired sandbox/guest code.
 
 ## 5. GitHub-first and no-user-PC boundary
 

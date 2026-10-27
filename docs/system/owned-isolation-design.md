@@ -10,7 +10,7 @@ lifecycle: HISTORICAL
 # App-owned isolation design — decision and incremental implementation
 
 > **HISTORICAL v1.18.5 design/inventory snapshot.** The only current
-> owned v1.18.6 source/build route is [Isolation Source Tooling](../../Development/tooling/isolation-source/README.md).
+> owned v1.18.6 source/build route is [Isolation Source Tooling](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md).
 > External checkout paths, old fork procedures and pending tests below are
 > not current `Local` commands.
 

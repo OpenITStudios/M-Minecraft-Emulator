@@ -15,6 +15,11 @@ export function checkTracked(paths) {
   const errors = [];
   for (const path of paths) {
     if (retired.test(path)) errors.push('Retired Sandboxie source: ' + path);
+    if (/^Development\/tooling\/isolation-source(?:\/|$)/.test(path) ||
+        /^Development\/apps\/desktop\/src-tauri\/src\/engine\/(?:owned_provider|instance_catalog|instance_discovery|instance_focus|legacy-targets)\.(?:rs|json)$/.test(path) ||
+        /^Development\/tooling\/acceptance\/windows\/(?:collect-sandboxie-feasibility|collect-virtual-boxes)\.ps1$/.test(path))
+      errors.push('Retired Sandboxie implementation: ' + path);
+
     if (/^Development\/engine\/(?:guest|isolation-native)(?:\/|$)/.test(path)||
         /^Development\/apps\/desktop\/src-tauri\/(?:tauri\.package\.conf\.json|windows\/installer-hooks\.nsh)$/.test(path)) {
       errors.push('Retired VM or fork packaging source: ' + path);

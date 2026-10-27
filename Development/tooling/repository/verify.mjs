@@ -102,8 +102,24 @@ export function verifyRepository(root,g0=false) {
     'Development/engine/runtime-core/src/bin/virtual-guest-agent.rs']) {
     assert.ok(!existsSync(resolve(root,path)),'Retired VM source returned: '+path);
   }
-  assert.ok(read('Development/apps/desktop/src-tauri/src/engine/instance_catalog.rs').includes('SANDBOXIE_RETIRED'),
-    'Unapproved legacy game-launch routes must remain refused');
+  for (const path of [
+    'Development/apps/desktop/src-tauri/src/engine/owned_provider.rs',
+    'Development/apps/desktop/src-tauri/src/engine/instance_catalog.rs',
+    'Development/apps/desktop/src-tauri/src/engine/instance_discovery.rs',
+    'Development/apps/desktop/src-tauri/src/engine/instance_focus.rs',
+    'Development/apps/desktop/src-tauri/src/engine/legacy-targets.json',
+    'Development/tooling/isolation-source',
+    'Development/tooling/acceptance/windows/collect-sandboxie-feasibility.ps1',
+    'Development/tooling/acceptance/windows/collect-virtual-boxes.ps1'
+  ]) assert.ok(!existsSync(resolve(root,path)), 'Retired Sandboxie runtime returned: '+path);
+  const ownerModules=read('Development/apps/desktop/src-tauri/src/engine/mod.rs');
+  assert.ok(ownerModules.includes('pub mod process_identity;') &&
+    !ownerModules.includes('pub mod owned_provider;'), 'Native process identity must be standalone');
+  const gameSource=read('Development/apps/desktop/src-tauri/src/engine/native_clients.rs');
+  assert.ok(!/OfficialSandboxieBackend|request_sandbox_client_02|collect-sandboxie-feasibility/.test(gameSource),
+    'Legacy Sandboxie Client02 source must remain retired');
+  const launcher=read('Development/apps/desktop/src-tauri/src/main.rs');
+  assert.ok(!launcher.includes('maybe_run_profile_helper'), 'Retired fork helper role must not start');
   assert.ok(read('Development/apps/desktop/scripts/prepare-package-binaries.mjs').includes('const LEGACY_PACKAGE_RELEASE_APPROVED = false;'),'Legacy package hold must remain');
   verifyNativePreviewPackage();verifyLazyTesterPackage();
   const tracked=execFileSync('git',['ls-files','-z'],{cwd:root,encoding:'utf8'}).split('\0').filter(Boolean);

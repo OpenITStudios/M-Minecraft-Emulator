@@ -13,10 +13,7 @@ describe("Emulator source verification routing", () => {
       "npm run check:dependencies",
       "npm run test:repository",
       "npm run test:localtest",
-      "npm run test:feasibility",
-      "npm run test:isolation-source",
       "npm run test:native-feasibility",
-      "npm run test:sandboxie-feasibility",
       "npm run test:native-performance",
       "npm run test:presentmon",
       "npm run check:desktop",
@@ -58,14 +55,15 @@ describe("Emulator source verification routing", () => {
   it("prevents shipping the native pilot inside the existing VMware NSIS bundle", () => {
     const entry = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
     const packageBuilder = readFileSync(new URL("../scripts/prepare-package-binaries.mjs", import.meta.url), "utf8");
-    const policy = readFileSync(new URL("../../../engine/distribution/package-contract.json", import.meta.url), "utf8");
+    const policy = JSON.parse(readFileSync(new URL("../../../engine/distribution/lazy-tester-package.json", import.meta.url), "utf8"));
     expect(entry).toContain("LazyTesterApp");
     expect(packageBuilder).toContain("PACKAGE_BLOCKED_NATIVE_FEASIBILITY");
     expect(packageBuilder).toContain("const LEGACY_PACKAGE_RELEASE_APPROVED = false;");
     expect(packageBuilder).toContain("if (!LEGACY_PACKAGE_RELEASE_APPROVED)");
-    expect(packageBuilder.indexOf("PACKAGE_BLOCKED_NATIVE_FEASIBILITY"))
-      .toBeLessThan(packageBuilder.indexOf("const binaries ="));
-    expect(policy).toContain("guest/windows/virtual-guest-agent.exe");
+    expect(packageBuilder).not.toContain("virtual-guest-agent.exe");
+    expect(packageBuilder).not.toContain("spawnSync");
+    expect(policy.excludedPayloads).toContain("VMware");
+    expect(policy.excludedPayloads).toContain("Guest Agent");
     expect(app.scripts["build:lazy-tester"]).not.toContain("prepare:package-binaries");
     expect(app.scripts["build:lazy-tester"]).toContain("--config src-tauri/tauri.lazy-tester.conf.json");
   });

@@ -1,24 +1,45 @@
 # Security and Data Protection
 
-The product controls host virtualization, per-guest Windows services and Microsoft-account-bearing application sessions. Treat both host and guest as explicit trust boundaries.
+Lazy Tester manages independent Minecraft Education processes in the
+current Windows user environment. It is **not** a general sandbox and its
+in-process compatibility DLL does not establish an OS security boundary.
 
-## Canonical owners
+## Current ownership
 
-- Guest authenticated status/launch transport and per-VM tokens: `Development/engine/runtime-core/src/guest.rs` and `Development/engine/runtime-core/src/bin/virtual-guest-agent.rs`.
-- VM provider state, clone/recovery safeguards and disk paths: `Development/engine/runtime-core/`.
-- Windows guest agent installation, Scheduled Task and firewall scopes: `Development/engine/guest/windows/`.
-- Update trust and installer data-preservation policy: `Development/engine/distribution/` and desktop Tauri package config.
-- Bounded collection of Windows acceptance evidence: `Development/tooling/acceptance/windows/`.
+- Native game/process lifetime and per-profile storage: desktop
+  `independent_bootstrap/` and retained `session_controller.rs`.
+- Observed process/window metadata: `process_identity.rs`; PID/HWND values
+  are not authorization without original live handle and creation time checks.
+- Window recovery and helpers: `workspace_surface.rs`, with exact session
+  and helper ownership and terminal completion requirements.
+- Controller IPC: `native_clients_session/pipe.rs`, with same-binary,
+  logon/session and live peer checks.
+- Windows distribution: `Development/engine/distribution/lazy-tester-package.json`,
+  Tauri package config and preservation-only installer hooks.
 
-## Hard boundaries
+## Non-negotiable boundaries
 
-- No Microsoft passwords, access/refresh tokens, session cookies, Guest Agent tokens, signer private keys, private Minecraft worlds, user VM images or raw host machine-identity values in source or repository evidence.
-- No automated Microsoft sign-in/MFA, unauthenticated remote-control transport or arbitrary guest command execution endpoints.
-- Each virtual client must own independent account/session state. Routine lifecycle operations preserve guest disks. Reprovision/snapshot reset require the original safeguards and explicit user authorization where destructive.
-- Provider mutation results that cannot be reconciled must fail closed; do not blindly retry or silently report success.
-- Update staging requires trusted artifact identity/integrity; self-apply remains disabled. Release signing/publishing is a separate explicitly approved operation.
-- Installer upgrade and uninstall do not implicitly delete Base/Virtual runtime data.
+- Never commit Microsoft passwords, tokens, session cookies, profile
+  capabilities, world contents, private Windows hives, signing keys, VM
+  snapshots or account-bearing test captures.
+- Do not automate authentication/MFA, bypass licensing, copy tokens, patch
+  original Minecraft executable bytes, or adopt another process by PID/title.
+- Keep independent profile storage and normal-exit semantics. An uncertain
+  exit/recovery result must remain uncertain; never force-kill Minecraft or
+  erase data as a fallback.
+- Sandboxie/VMware source is retired, not a supported launch or security
+  provider. Removing source does not uninstall services, power off machines
+  or delete existing local account/guest data.
+- Installer and update source must not migrate or delete game/user data,
+  touch VM disks, or change legacy installed identity without separately
+  reviewed migration policy.
+- User-controlled macOS capture must respect OS permissions; absence of
+  screen-recording authorization is not consent for alternate capture routes.
 
-Source review cannot verify effective Windows ACL, VMware guest isolation, network/firewall policy, Authenticode signing or Microsoft/Minecraft account behavior. Those require matching Windows/VMware/Minecraft acceptance evidence; use `docs/validation/README.md`.
+Source review cannot establish real Windows ACL correctness, authenticated
+gameplay, renderer/input stability, installed package integrity, or effective
+multi-account isolation on Windows or Mac. These remain separate evidence
+requirements.
 
-Report a potential security issue without attaching real secrets or private guest data to public GitHub issues.
+Report security findings without exposing personal secrets or local profile
+data in public GitHub issues.

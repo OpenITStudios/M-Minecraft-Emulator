@@ -44,5 +44,5 @@ signing/installation, service namespace ownership, WAM sign-in,
 multi-instance graphics, two-client crash recovery, and four-client
 performance. Existing game accounts/boxes and official Sandboxie
 are unchanged. An earlier installer reference is not a signed, approved owned engine.
-Use the [one current native build procedure](../../Development/tooling/isolation-source/README.md).
+Use the [one current native build procedure](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md).
 

@@ -222,7 +222,7 @@ function Invoke-MC01ReactivationObservation {
         } finally { Remove-MC01LifecycleObserver $ids }
         return
     }
-    . (Join-Path $PSScriptRoot '../../isolation-source/windows/education-target.ps1')
+    . (Join-Path $PSScriptRoot 'education-target.ps1')
     $registered = Resolve-ManagerEducationTarget -RegisteredOnly
     $hash = (Get-FileHash -LiteralPath $registered -Algorithm SHA256).Hash
     $appId = Get-MC01ReactivationApp $registered
@@ -387,7 +387,7 @@ if ($blocker) {
     return
 }
 
-. (Join-Path $PSScriptRoot '../../isolation-source/windows/education-target.ps1')
+. (Join-Path $PSScriptRoot 'education-target.ps1')
 $registeredImage = Resolve-ManagerEducationTarget -RegisteredOnly
 $imageHash = (Get-FileHash -LiteralPath $registeredImage -Algorithm SHA256).Hash
 $profile = Join-Path $PSScriptRoot 'mc01-startup.wprp'

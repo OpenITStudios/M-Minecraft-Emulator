@@ -35,12 +35,12 @@ Minecraft sign-in remain unproven.
 
 The MIVUBI private fork now includes a functional native C++ source
 change to upstream `Sandboxie/apps/start/start.cpp`: the canonical
-[owned Start policy](../../Development/engine/isolation-native/owned-runtime/mivubi_owned_start_policy.h)
+[owned Start policy](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/b1daa1ecf6679234f9433020aea7f11d93c2e613/Development/engine/isolation-native/owned-runtime/mivubi_owned_start_policy.h)
 is inlined into the fork and provides an opt-in `/mivubi_client:02`,
 `:03` or `:04` launch path for `MivubiEdu02/03/04`, limited to one
 quoted Minecraft Education Windows executable. Its 20-case C++ test
 compiled and passed with GCC and Clang in ChatGPT. The accompanying
-[owned profile contract](../../Development/engine/isolation-native/owned-runtime/minecraft-profiles.mjs)
+[owned profile contract](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/b1daa1ecf6679234f9433020aea7f11d93c2e613/Development/engine/isolation-native/owned-runtime/minecraft-profiles.mjs)
 generates three persistent, non-auto-deleting sandbox configuration sections
 and exact corresponding launch arguments.
 

@@ -30,8 +30,7 @@ export function verifyNativePreviewPackage() {
   const build = source("src-tauri/build.rs");
   const surface = source("src-tauri/src/engine/workspace_surface.rs");
   const instance = source("src-tauri/src/engine/app_instance.rs");
-  const settings = source("src-tauri/src/engine/manager_settings.rs");
-  const gameTarget = source("../../tooling/isolation-source/windows/education-target.ps1");
+  const gameTarget = source("../../tooling/acceptance/windows/education-target.ps1");
   const nativeProcess = source("src-tauri/src/engine/native_clients.rs");
   const legacy = source("scripts/prepare-package-binaries.mjs");
   const fail = (condition, reason) => {
@@ -56,9 +55,9 @@ export function verifyNativePreviewPackage() {
     "VMware, Guest Agent, acceptance and virtual-client payloads must not be packaged.");
   fail(Array.isArray(current.bundle?.externalBin) && current.bundle.externalBin.length === 0,
     "Preview must not bundle the legacy virtual-clients sidecar.");
-  fail(Object.keys(native.bundle?.resources ?? {}).length === Object.keys(base.bundle?.resources ?? {}).length &&
-    Object.keys(base.bundle.resources).every(key => native.bundle.resources[key] === null),
-    "Every inherited VMware resource must be explicitly removed.");
+  fail(Object.keys(base.bundle?.resources ?? {}).length === 0 &&
+    Object.keys(native.bundle?.resources ?? {}).length === 0,
+    "Base and preview must remain free of retired VM/driver resource entries.");
   fail(native.bundle.windows.nsis.installerHooks === null,
     "Preview configuration must explicitly delete legacy installer hooks.");
   fail(!Object.hasOwn(native, "plugins") && current.app?.security?.csp === base.app?.security?.csp,
@@ -95,19 +94,17 @@ export function verifyNativePreviewPackage() {
       !JSON.stringify(current).includes("guest/windows"),
     "Resolved native bundle still references retired Guest Agent resources.");
   fail(instance.includes('.join("NativePilot")') &&
-      !instance.includes('.join("NativePreview")') &&
-      settings.includes('const SETTINGS_VARIANT: &str = "NativePreview"') &&
-      settings.includes('const SETTINGS_VARIANT: &str = "NativePilot"') &&
-      settings.includes(".join(SETTINGS_VARIANT)"),
-    "Preview must use separate preferences but retain the cross-version single-manager lease.");
+      !instance.includes('.join("NativePreview")'),
+    "Native preview must retain the existing cross-version single-manager lease.");
   fail(gameTarget.includes("param([switch]$RegisteredOnly)") &&
       gameTarget.includes("if(-not $RegisteredOnly)") &&
       nativeProcess.includes('"Resolve-ManagerEducationTarget -RegisteredOnly"') &&
       nativeProcess.includes("OFFICIAL_TARGET_SELECTOR"),
-    "Preview game discovery must not read the retired NativePilot executable preference.");
-  fail(settings.includes('cfg!(feature = "native-workspace-preview") && !cfg!(debug_assertions)') &&
-      settings.includes("Retired session recovery is unavailable in the native preview"),
-    "Preview release must reject direct legacy recovery IPC before reading retired services.");
+    "Registered Education resolution must not read retired executable preferences.");
+  fail(!source("src-tauri/src/engine/mod.rs").includes("pub mod owned_provider;") &&
+      !nativeProcess.includes("OfficialSandboxieBackend") &&
+      !nativeProcess.includes("request_sandbox_client_02"),
+    "Retired Sandboxie providers must not be part of the native package.");
 
   return { identifier: current.identifier, resources: 0, sidecars: 0,
     installMode: current.bundle.windows.nsis.installMode, config: current };

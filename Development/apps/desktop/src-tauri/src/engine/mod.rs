@@ -5,10 +5,8 @@ pub mod app_instance;
 #[cfg(windows)]
 pub(crate) mod process_roles;
 pub mod native_clients_session;
+pub mod process_identity;
 pub mod dpi;
-pub mod instance_catalog;
-pub mod instance_discovery;
-pub mod instance_focus;
 pub mod instance_focus_events;
 pub mod instance_identity;
 // Native Win32 job-owned fixture; never mounted as a game launch provider.
@@ -31,5 +29,4 @@ mod independent_pipe_peer;
 mod independent_pipe_server;
 pub mod manager_settings;
 pub mod native_clients;
-pub mod owned_provider;
 pub mod workspace_surface;

@@ -1,5 +1,5 @@
 //! Lazy Tester transport. The existing bootstrap owns games in one retained helper.
-use super::owned_provider::OwnedProcess;
+use super::process_identity::OwnedProcess;
 use serde::{Deserialize, Serialize};
 use std::{
     io::{self, BufRead},

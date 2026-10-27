@@ -19,11 +19,22 @@ For material writes read `GITHUB_RULES.md`, pin exact `Local` HEAD, and consult 
 
 ## Current product goal and handoff
 
-**SINGLE P0:** establish a real independently playable and licensed Minecraft Education MC02 alongside MC01, with effective Roaming/HKCU/auth isolation. Only then extend MC03/04, benchmark against Sandboxie, and package. `planning/development.md` is the sole active goal/blocker/next action. Historical `Next:` entries, PSEC availability, PID counts and synthetic fixtures do not authorize isolated Launch/Provision.
+The active product is **Lazy Tester**, with five independently managed
+Minecraft Education Windows profiles. The current source initiative is
+retiring the superseded Sandboxie/VMware implementation without changing the
+native session, original game, account data or normal-close contracts.
+`planning/development.md` owns the current blocker and next source action.
+Target Windows/macOS platform-neutral adapters remain future work; a build
+alone cannot claim multi-account Mac compatibility.
 
 ## Current product mode
 
-The native-first pilot is the only active desktop route. Legacy VMware, App Sandbox pilot power operations, Base/Guest Agent preparation and VM window arrangement are intentionally disabled, not removed. Do not revive or delete legacy account-bearing data as incidental cleanup. Use docs/system/legacy-retirement.md for one inventory and removal criteria; the actual VM command gate is Development/engine/runtime-core/src/command.rs.
+The native-first five-profile controller, workspace recovery, FPS policy and
+reviewed native DLL are the only game/runtime owners. Sandboxie forks and
+VMware/Guest Agent source have been retired from the current branch; historical
+source is recoverable from Git. Do not revive old providers or assume external
+running processes were stopped by removing their source. The legacy installer
+is explicitly blocked.
 
 ## Execution and evidence
 
@@ -63,9 +74,9 @@ A diagnosis does not automatically authorize code changes or a destructive VM ac
 
 ## Canonical owners
 
-- Backend lifecycle, doctor, version parity, providers, resource policy, Guest Agent protocol: `Development/engine/runtime-core/`.
-- Guest Windows preparation/agent install: `Development/engine/guest/windows/`.
-- Machine-readable release and installer policy: `Development/engine/distribution/`.
+- Game startup/session lifecycle and process identity: `Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`, `independent_bootstrap/session_controller.rs`, and `process_identity.rs`.
+- Platform-neutral domain types and bounded subprocess helpers: `Development/engine/runtime-core/`.
+- Native installer/preservation contract: `Development/engine/distribution/lazy-tester-package.json` plus desktop Tauri configuration.
 - User-facing UI/typed Tauri bridge/window arrangement: `Development/apps/desktop/`.
 - Source verification, optional developer commands and acceptance collectors: `Development/tooling/`.
 - Stable architecture and how-to: `docs/`.

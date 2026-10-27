@@ -1,85 +1,61 @@
 # Emulator Stable Context
 
-Product direction updated: 2026-10-14. This file contains **stable product and repository facts only**. Current tasks, progress and evidence status belong in `planning/development.md`.
+Current product: **Lazy Tester**, a Tauri 2 / Svelte desktop manager for up to
+five individually licensed Minecraft Education Windows sessions. The game
+itself owns authentication, rendering, worlds and networking. The app retains
+one verified game process/session controller, persistent private profile
+Roaming/Local/HKCU handles, a Windows DWM preview owner, native compatibility
+DLLs and explicit normal-exit/recovery handling.
 
-## Product and target
+The last live Windows observation recorded in the source handoff found one
+MC02 normal-exit failure. Subsequent source corrections are not Windows/game
+acceptance. Every actual execution requirement remains `NOT_EXECUTED` unless
+measured on that exact revision.
 
-**Approved product outcome (2026-10-12):** Four concurrently playable Minecraft Education Windows Desktop clients using four distinct, properly licensed accounts on one PC. **Historical implemented route:** official Windows Desktop installation; Client 01 native and Client 02 through a persistent licensed Sandboxie Plus box named `MinecraftClient02`. This remains a two-client pilot, not four-client support. See the [first-success and subsequent-crash report](docs/validation/two-client-first-success-2026-10-14.md) for revision-scoped observations; it does not establish stable full acceptance or resource savings. Do not modify game binaries, bypass sign-in or copy tokens/profiles.
+## Project goal
 
-**Current direction (2026-10-21):** retire Sandboxie and the Sandboxie-derived
-owned fork as launch providers. An owned fork is not an independent engine.
-Desktop admission rejects new fork profile creation and isolated launches.
-Existing session observation, window recovery and normal close remain available
-to preserve data. No independent four-session provider is implemented. The independent direction
-is a Minecraft-specific Windows engine; the first read-only context inspector
-uses Windows process/token/profile APIs without Sandboxie. Per-user RunAs is not
-selected as the authentication solution; see
-[independent architecture](docs/system/architecture.md) and
-[primary-source feasibility](docs/system/independent-isolation.md).
-Do not resume fork activation, certificate enablement or VM routes as an implied
-fallback. See [retirement register](docs/system/legacy-retirement.md) and
-[current continuation](planning/development.md).
+Improve stability and efficiency without patching the original game or
+copying credentials/tokens, then develop a platform-neutral orchestration
+core with explicit Windows and macOS adapters. The existence of an official
+Minecraft Education Mac application does not prove five independent accounts,
+session storage or interactive window composition there.
 
-The legacy implementation path is:
+Retired: the vendored Sandboxie trees/fork, native box/Client02 bridge,
+VMware VMX/Guest Agent runtime, legacy packaging and unmounted frontend
+and Tauri command routes. Legacy sources remain in Git history, not in
+the active runtime or installer. Neither installed software nor any
+account/world/VM disk is removed by repository commits.
 
-```text
-Host Native Minecraft Education
-+ VMware Virtual-01
-+ VMware Virtual-02
-+ VMware Virtual-03
-```
+## Current owners
 
+- `Development/apps/desktop/src/LazyTesterApp.svelte`: mounted UI only.
+- `Development/apps/desktop/src-tauri/src/commands/native_clients.rs`:
+  allowlisted Tauri commands; one manager resource admission gate.
+- `Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`
+  and `independent_bootstrap/session_controller.rs`: native five-profile
+  launch, verified process lifetime, normal exit and policy ownership.
+- `Development/apps/desktop/src-tauri/src/engine/process_identity.rs`:
+  untrusted process/window value type; verification stays in native owners.
+- `Development/apps/desktop/src-tauri/src/engine/workspace_surface.rs`:
+  Windows surface placement, DWM preview, restoration and helper checkpoint.
+- `Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs`:
+  authenticated retained controller connection.
+- `Development/engine/runtime-core/src/independent_engine/`:
+  platform-independent contracts, not an alternate game launcher.
+- `Development/tooling/acceptance/windows/bootstrap-ordering/`:
+  **ACTIVE** native DLL source, despite its historical directory name.
+- `Development/engine/distribution/lazy-tester-package.json`:
+  native Windows installation and data-preservation contract.
 
-## Branch and execution authority
+## Source and deployment boundaries
 
-```text
-Local  → GitHub development/source authority
-main   → reviewed stable/release authority
+`Local` is the only active GitHub development branch; `main` is
+release-reserved. GitHub Actions are disabled by operator decision.
+Remote GitHub review can establish source layout/contract changes only,
+not compiler acceptance, installed Windows behavior or Minecraft gameplay.
+No local-PC tests until explicitly authorized.
 
-REMOTE_GITHUB source work
-→ exact-head bounded source evidence
-→ unresolved executable/Windows/Minecraft evidence explicitly separated
-```
-
-ChatGPT + GitHub work does not require a user PC. A committed test or written acceptance procedure is not equivalent to a passed test.
-
-## Canonical repository ownership
-
-```text
-Development/apps/desktop/           UI, Tauri bridges, desktop-native window behavior
-Development/engine/runtime-core/    Rust lifecycle, provider, identity, version, readiness, recovery
-Development/engine/guest/windows/   Windows Base/Guest Agent setup
-Development/engine/distribution/    release, package and installer policy
-docs/                   durable product, system and validation explanation
-planning/               current development and operations intent
-Development/tooling/                developer checks, optional Windows entrypoint, acceptance collectors
-workspace/              project-scoped working handoff; sensitive captures ignored
-Archive/experiments/            non-authoritative bounded research
-.agents/                bounded agent procedure
-```
-
-One implemented behavior has one owner and one source of truth. The Rust runtime owns VM lifecycle and setup decisions. Svelte presentation may project runtime truth but never duplicate it.
-
-## Stable runtime contracts
-
-- Tauri 2 + Svelte 5 desktop, thin Tauri commands, Rust canonical runtime-core.
-- VMware Workstation/Fusion and App Sandbox GPU-PV remain **inactive legacy implementation and guarded research sources**, not active client launch providers. The old VMware-oriented NSIS package is intentionally **blocked**, and no separate native distribution is approved.
-- Native Minecraft Education version is the version authority; Base and guest version/lineage must match before unsafe lifecycle actions.
-- Base lifecycle: REGISTERED → FINALIZING → FINALIZED. Clone/provision requires a stopped finalized Base.
-- Normal stop/start/suspend/restart must not replace a Virtual's account-bearing guest disk. Reprovision is explicitly destructive.
-- Guest Agent protocol and tokens remain authenticated and isolated per VM; Windows interactive session is not SYSTEM session 0.
-- VM RUNNING, agent reachable, Minecraft process RUNNING, signed-in menu usable and multiplayer READY are distinct observations.
-- Virtual profile policy currently caps a guest at 4096 MB RAM and 2 vCPUs; this is not a measured real-world performance guarantee.
-- Installed **M-Bedrock Virtual Clients** identity, release asset name, persisted Windows runtime path, Guest Agent protocol and external schemas are compatibility boundaries. Source folder renames do not alter them.
-- Self-apply update remains disabled. Release publication/signing requires separate authorization.
-
-## Navigation
-
-```text
-README.md → docs/README.md → domain documentation
-AGENTS.md → GITHUB_RULES.md → docs/system/implementation-map.md → canonical source
-planning/development.md → current work and next single task
-docs/validation/acceptance.md → target-machine proof obligations
-```
-
-Source provenance: MIVUBI-STD/M-Lazy-Developer Experimental @ 89cb8691f6757d287707bb8cae2d0d810b751404.
+Never silently change the old installed application identifier, migrate
+accounts/worlds, remove snapshots or reinstall legacy services.
+`planning/development.md` owns current status and next action;
+`docs/system/legacy-retirement.md` records retired source provenance.

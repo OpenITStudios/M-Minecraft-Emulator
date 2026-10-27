@@ -111,7 +111,7 @@ running, including another session or unreadable identity. Preserve that session
 do not close/sign out just to collect evidence. In default/first-startup mode, the collector never launches,
 restarts, injects or stops a game and never changes product admission.
 Installation resolution reuses
-[`Resolve-ManagerEducationTarget -RegisteredOnly`](../../isolation-source/windows/education-target.ps1);
+[`Resolve-ManagerEducationTarget -RegisteredOnly`](education-target.ps1);
 the operator's normal first launch belongs to the existing
 [`open_native_minecraft`](../../../apps/desktop/src-tauri/src/engine/native_clients.rs)
 owner. No direct EXE/Explorer activation is implemented here.

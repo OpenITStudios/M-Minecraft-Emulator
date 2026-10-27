@@ -13,7 +13,7 @@ Choose one document based on the requested concern:
 
 | Concern | Canonical document |
 | --- | --- |
-| Native engine current v1.18.6 build/verification | [Isolation Source Tooling](../../Development/tooling/isolation-source/README.md) — no v1.18.5 fallback |
+| Native engine current v1.18.6 build/verification | [Isolation Source Tooling](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md) — no v1.18.5 fallback |
 | Layering, source authority and architecture | [Architecture](architecture.md) |
 | Future app-owned isolation backend, compatibility and cutover gates | [Owned Isolation Design](owned-isolation-design.md) — design only, not active runtime |
 | Paused VM pathways and safe future deletion | [Legacy Retirement](legacy-retirement.md) |
