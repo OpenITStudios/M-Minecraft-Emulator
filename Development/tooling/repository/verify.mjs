@@ -68,12 +68,19 @@ export function verifyRepository(root,g0=false) {
   assert.ok(!/commands::virtual_clients::|commands::setup_tools::|commands::window_arrangement::/.test(bootstrap),'Legacy handlers must remain unregistered');
   const commands=read('Development/apps/desktop/src-tauri/src/commands/mod.rs');
   assert.ok(!/^\s*pub mod (virtual_clients|setup_tools|window_arrangement);/m.test(commands));
-  const vm=read('Development/engine/runtime-core/src/command.rs');
-  const paused=vm.match(/const PAUSED_VM_COMMANDS:[\s\S]*?= &\[([\s\S]*?)\];/)?.[1]??'';
-  for(const command of ['provision','reprovision','start','start-client','stop','restart','reset','launch-minecraft'])assert.ok(paused.includes('"'+command+'"'),'VM pause gate missing: '+command);
-  const pauseGate=vm.indexOf('if legacy_operation_paused(command, args)');
-  assert.ok(pauseGate>=0&&vm.indexOf('let app = VirtualClients;')>pauseGate,'VM mutations must be refused before provider discovery');
-  assert.ok(read('Development/apps/desktop/src-tauri/src/engine/instance_catalog.rs').includes('SANDBOXIE_RETIRED'),'Sandboxie new-session refusal must remain');
+  const core=read('Development/engine/runtime-core/src/lib.rs');
+  assert.ok(core.includes('pub mod independent_engine;')&&core.includes('mod process;'),
+    'Native-only Rust engine must retain inspection contracts and bounded process runner');
+  assert.ok(!/mod (?:runtime|guest|provider|command|doctor|profile|update);/.test(core),
+    'Retired VM runtime and provider modules must not be reactivated');
+  for(const path of ['Development/engine/runtime-core/src/command.rs',
+    'Development/engine/runtime-core/src/runtime.rs',
+    'Development/engine/runtime-core/src/provider/vmx.rs',
+    'Development/engine/runtime-core/src/bin/virtual-guest-agent.rs']) {
+    assert.ok(!existsSync(resolve(root,path)),'Retired VM source returned: '+path);
+  }
+  assert.ok(read('Development/apps/desktop/src-tauri/src/engine/instance_catalog.rs').includes('SANDBOXIE_RETIRED'),
+    'Unapproved legacy game-launch routes must remain refused');
   assert.ok(read('Development/apps/desktop/scripts/prepare-package-binaries.mjs').includes('const LEGACY_PACKAGE_RELEASE_APPROVED = false;'),'Legacy package hold must remain');
   verifyNativePreviewPackage();verifyLazyTesterPackage();
   const tracked=execFileSync('git',['ls-files','-z'],{cwd:root,encoding:'utf8'}).split('\0').filter(Boolean);

@@ -14,6 +14,18 @@ Proof: REMOTE_GITHUB exact-tree/source review only; all source execution,
 Windows package and Minecraft gameplay NOT_EXECUTED.
 
 
+## Source-retirement phase 2 — remove VM runtime compilation from core
+
+The desktop's historical `virtual-clients-core` dependency is retained by
+its existing package identity, but its compiled graph now exposes only the
+independent_engine domain contracts and an unchanged bounded subprocess runner
+moved from provider/process.rs. The VMX/VMware providers, Guest Agent, legacy
+runtime/command/CLI and VM-specific core integration tests leave `Local`; the
+native desktop session controller, preview and compatibility DLL remain unchanged.
+Legacy installer/guest scripts elsewhere remain deliberately gated and will be
+removed only with caller/configuration review. Proof: REMOTE_GITHUB static source
+and consumer review only; Rust/Node/Windows/game tests NOT_EXECUTED.
+
 ## P0 CloseOne preview cleanup must not impact other launchers — 27 October 2026
 
 One additional source-level blocker affected ALL five slots: selected

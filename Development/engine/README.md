@@ -17,9 +17,10 @@ or Sandboxie-backed product.
   location under acceptance tooling does not make it disposable.
 - `Development/engine/distribution/lazy-tester-package.json`: native product
   package contract and preservation policy.
-- `Development/engine/runtime-core/`: still compiled by desktop for shared
-  process helpers and native inspection contracts; legacy VMware/provider modules
-  remain here pending consumer extraction. Do not delete this crate as a folder.
+- `Development/engine/runtime-core/`: still compiled by desktop, but now
+  contains only portable independent-engine contracts, a bounded subprocess runner,
+  and a synthetic diagnostic helper. VMware/Guest Agent/provider runtime modules
+  and VM CLI source have been retired from this crate.
 
 ## Retired source
 
@@ -30,8 +31,8 @@ into another live directory. No Sandboxie fork or driver is a product launch
 provider. Installed systems, guest disks, worlds, accounts and registry profiles
 were not touched by this source-only change.
 
-Legacy Windows VMware Guest Agent/build utilities and historical provider code
-are **not yet fully removed**. Trace their remaining desktop/runtime/tooling
+Windows VMware Guest Agent and historical package/acceptance scripts outside
+this crate have **not yet been fully removed**. Trace their remaining desktop/runtime/tooling
 consumers before deleting them. This work cannot by itself establish gameplay,
 packaging or cross-platform acceptance.
 
