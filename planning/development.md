@@ -35,13 +35,13 @@ requires selected-launcher review/confirmation.
 
 ## Current exact source and delivery
 
-Installed App/root sourceba2731dec061f384273e12efdfddc6362d5cddd3, clean Local build.
-App SHA256:c07218f175024625abcc5a914efadc0d833f8615b227973a27d64b64d8b1eee1.
+Installed App/root sourcee4be7ed4c7b7da6a8f7ad3bf786e0a0208e1df4b, clean Local build.
+App SHA256:186f0ca6fb2f760ac6271c2e07839836c2d8b62c113cd45bb9cf9fdc6c430220.
 Root starter/DLL hashes: App/build-info.json, verified during Explorer startup.
-Candidate workspace/packages/lazy-tester/0.1.0-ba2731dec061-20261027T032330370Z;
+Candidate workspace/packages/lazy-tester/0.1.0-e4be7ed4c7b7-20261027T033008416Z;
 installer hash is recorded in its SHA256SUMS.txt.
 Signing NOT_VERIFIED; installer execution/publication NOT_EXECUTED/DISABLED.
-Actual Explorer startup PID31852: Connected/five enabled/no issue/local WebView cache,
+Previous ba2731d Explorer startup PID36904: Connected/five enabled/no issue/local cache,
 log workspace/runs/process-roles-desktop-startup.log. Two owned game windows launched
 in 7977/6587ms; controller and recovery roles verified by actual process metadata.
 Six switch samples took 481–581ms from click to foreground. One 60x30px drag kept
@@ -50,7 +50,7 @@ These checks did not prove visible pixels or usable gameplay; the user then repo
 a black primary viewport and inaccessible game. First full-exit attempt timed out
 with both games retained; a subsequent request exited the owned games and manager.
 Both games showed the exact native "Exit Minecraft Education?" OK/Cancel prompt.
-Working controller change confirms only this exact prompt for the pinned original
+Installed controller change confirms only this exact prompt for the pinned original
 game; unknown prompts are preserved. Six controller fixtures PASS, including exact
 dialog and unrelated/unknown refusal. Real one-click exit remains unproven.
 Logs workspace/runs/two-session-*.log and full-exit-dialog-fixture.log.
@@ -64,9 +64,10 @@ Actual probe captured focused Minecraft - 1 parked at x2592 outside the manager;
 its primary preview was hidden. Live stability check reproduced displacement after
 selection (black-screen-live-stability.log). Previous fix removed an unordered drag
 move; synthetic race and stalled-drag fixtures PASS, but actual issue persisted.
-Working change wakes the ordered geometry worker for foreground transitions as well;
-focus event fixture failed before and passes after (black-screen-focus-*.log). Build,
-stage and repeat live stability and user-visible interaction proof. Multi-DPI untested.
+Installed change wakes the ordered geometry worker for foreground transitions as well;
+focus event fixture failed before and passes after (black-screen-focus-*.log). Clean
+Windows build and App staging PASS; live stability and user-visible proof pending.
+Multi-DPI untested.
 
 FPS120/5, saves5..1000/background<=active, explicit legacy1..4/144/10 preserved.
 V3 applies next launch, V2 unchanged. Rust policy fixtures PASS; game pacing untested.
@@ -106,8 +107,8 @@ Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4; second worktree detached47a45
 Four licensed playable clients, gameplay/network/migration/installer acceptance
 are separate obligations, NOT_EXECUTED here. Compiler caches remain ignored.
 
-Next: build and stage the foreground-reconciliation fix, then repeat real-session tests
-including visible output, interaction, drag, preview, switching and full exit.
+Next: when the user is available, verify two real sessions on installed e4be7ed,
+including visible output, interaction, drag, preview, switching and one-click exit.
 User explicitly AUTHORIZED2sessions started by Lazy Tester for Launch/switch/drag/
 preview/full-exit. No world/login/account-content access or closing unrelated games.
 Audio crash/long-launch response and presentation/process acceptance remain open.
