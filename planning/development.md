@@ -79,14 +79,11 @@ Audio: session_audio.rs; exact PID/birth, preserves mute/volume. Silent Windows 
 and6 settings fixtures PASS; logs workspace/runs/audio-*. Checkbox queues saves.
 Abrupt controller-crash mixer recovery, long-launch audio response and actual
 Minecraft audio remain unverified. Continue in these owners, no second lifecycle.
-Launch preflight retains the original EXE pin and rechecks registration/identity/hash.
-Validation median2280->1176ms; identity and5 controller tests PASS. Actual timings above.
+Launch preflight retains identity pins; five controller tests PASS.
 Process roles: pinned hard links for Sessions/Window Recovery, copies rejected;
 MUI descriptions verified. Installer execution NOT_EXECUTED.
 WebView2 grouping matches OPEN upstream reports. Browser/controller parented toUI;
 Task Manager GUI NOT_OBSERVED. Log workspace/runs/process-role-observation.log.
-https://github.com/MicrosoftEdge/WebView2Feedback/issues/5628
-https://github.com/tauri-apps/tauri/issues/15567
 No one-group Task Manager success claim. Full-exit closes only managed games normally
 and keeps manager open on pending dialog/timeout; first attempt failed as above.
 
@@ -103,7 +100,10 @@ Full exit timed out: MC1 exited, MC2 and manager remain. No force termination.
 Logs workspace/runs/current-two-session-{launch,presentation,presentation-retry,exit}.log.
 Source: full exit can confirm the exact owned exit dialog even if its main window
 is missing; identity rechecked before posting. Cargo check and refusal test PASS;
-actual dialog without window NOT_EXECUTED. Other stuck states still require diagnosis.
+actual dialog without window NOT_EXECUTED. Exit wait also checks the retained child
+after window loss. Other stuck states still require diagnosis.
+FPS foreground sampling retries transient instability; unit test PASS, actual FPS
+response and sustained instability NOT_EXECUTED.
 Next: inspect FPS focus policy and process grouping;
 source tests first without PC control. Then verify two real sessions,
 including visible output, interaction, drag, preview, switching and one-click exit.
