@@ -56,17 +56,13 @@ Earlier audio toggle and Clear/Reset review/Cancel PASS; no real deletion.
 ## Implemented corrections and executed evidence
 
 Presentation: opaque host and primary DWM image; original pins/recovery retained.
-At ba2731d two games launched (8509/5759ms), but user confirms black screen remains.
-Actual probe captured focused Minecraft - 1 parked at x2592 outside the manager;
-its primary preview was hidden. Live stability check reproduced displacement after
-selection (black-screen-live-stability.log). Previous fix removed an unordered drag
-move; synthetic race and stalled-drag fixtures PASS, but actual issue persisted.
+At ba2731d two games launched but black screen remained. The focused game was parked
+outside the manager and its preview hidden (black-screen-live-stability.log).
 Installed change wakes the ordered geometry worker for foreground transitions as well;
 focus event fixture failed before and passes after (black-screen-focus-*.log). Clean
 Windows build and App staging PASS; live stability and user-visible proof pending.
-Source9d5ec16 additionally keeps the primary preview until the focused game is
-visible at its viewport, refreshes after repositioning, and rechecks focus after
-parking. Five surface logic regressions PASS; real pixels/input remain unverified.
+Source9d5ec16 keeps the preview until the focused game is positioned, refreshes it
+after repositioning and rechecks focus after parking. Five surface regressions PASS.
 Frontend schedules preview reconstruction after failed selection, launch or page
 transition. Headless synthetic failed-switch test reproduced the missing refresh on
 prior source and passed after the fix; previous session and error remain visible.
@@ -78,6 +74,8 @@ FPS120/5, saves5..1000/background<=active, legacy preferences preserved. V3 appl
 next launch. FPS save now queues during polling: headless synthetic UI passed success,
 invalid limits and refresh-failure cases; previous source disabled Save. Logs
 workspace/runs/fps-queue-headless-*.log. Real WebView/game pacing still unverified.
+Graphics applies the selected slot/preset after polling, rechecking idle admission.
+Headless synthetic refresh and changed-admission cases PASS; actual UI not verified.
 
 Cache: selected profile stopped, other exact managed games allowed, unknown external
 games block. Four lock/link/admission/peer fixtures PASS. No real data deleted.

@@ -12,6 +12,7 @@
   let dataLocation:DataLocation|null=null;
   let settings:SettingsReport|null=null, settingsNotice='';
   let applyingPreset=false;
+  let queuedPreset:{slot:ProfileSlot;preset:GraphicsPreset}|null=null;
   let queuedAudio:'Keep'|'Mute'|null=null;
   let selectedSlot:ProfileSlot=1, graphicsPreset:GraphicsPreset='Low';
   let advanced=false;
@@ -51,11 +52,12 @@
   $: playableCount = profiles.filter(profile => profile.state === 'RUNNING').length;
   $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedAudio!==null) {const mode=queuedAudio;queuedAudio=null;void saveAudio(mode);}
   $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance!==null) {const limits=queuedPerformance;queuedPerformance=null;void savePerformance(limits);}
-  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPage !== null) void consumeNavigation();
-  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPage===null && manualRefreshRequested) {manualRefreshRequested=false;void refreshPage();}
-  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPage===null && queuedLaunch!==null) {const slot=queuedLaunch;queuedLaunch=null;void launch(slot);}
-  $: if (mounted && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPage === null && queued !== null) void consumeSelection();
-  $: if (mounted && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPage === null && queued === null && dirty) void syncLayout();
+  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset!==null) {const request=queuedPreset;queuedPreset=null;void applyPreset(request);}
+  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage !== null) void consumeNavigation();
+  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPreset===null && queuedPage===null && manualRefreshRequested) {manualRefreshRequested=false;void refreshPage();}
+  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPreset===null && queuedPage===null && queuedLaunch!==null) {const slot=queuedLaunch;queuedLaunch=null;void launch(slot);}
+  $: if (mounted && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage === null && queued !== null) void consumeSelection();
+  $: if (mounted && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage === null && queued === null && dirty) void syncLayout();
 
   function image(node: HTMLElement, slot: ProfileSlot) {
     images.set(slot, node); observer?.observe(node); dirty = true;
@@ -179,14 +181,18 @@
     catch(error){issue=String(error);}
     finally{busy=false;}
   }
-  async function applyPreset() {
-    if(busy||refreshing||resizing||!available||!binding?.configured||!settings?.canApplyPreset||runningCount>0)return;
+  function requestPreset() {
+    if(busy||queuedPreset!==null||!available||!binding?.configured||!settings?.canApplyPreset||!graphicsDirty||runningCount>0)return;
+    queuedPreset={slot:selectedSlot,preset:graphicsPreset};
+  }
+  async function applyPreset(request:{slot:ProfileSlot;preset:GraphicsPreset}) {
+    if(!available||!binding?.configured||!settings?.canApplyPreset||runningCount>0){issue='Graphics preset could not be applied. Close Minecraft sessions and refresh, then try again.';return;}
     busy=true;applyingPreset=true;issue='';settingsNotice='';
     try {
-      const snapshot=await lazyTester.applyGraphics(selectedSlot,graphicsPreset);
+      const snapshot=await lazyTester.applyGraphics(request.slot,request.preset);
       profiles=snapshot.profiles;settings=snapshot.settings;
       if(settings.changedProfiles===null)throw new Error('The preset update was not confirmed. Refresh settings before trying again.');
-      settingsNotice='Minecraft - '+selectedSlot+': '+graphicsPreset+' saved and applied. This preset is reapplied at launch.';
+      settingsNotice='Minecraft - '+request.slot+': '+request.preset+' saved and applied. This preset is reapplied at launch.';
     }catch(error){issue=String(error);settings=null;}
     finally{applyingPreset=false;busy=false;}
   }
@@ -427,9 +433,9 @@
       </section>
       {#if page==='settings'}
         <div class="lt-settings-content">
-          <section class="lt-group"><h2>Graphics</h2><label class="lt-target">Applies to <select value={selectedSlot} on:change={event=>chooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft - {p.slot}</option>{/each}</select></label>
-            <div class="lt-setting"><div><h3><label for="graphics-preset">Graphics preset</label></h3><p>High enables visual effects. Low reduces them. Both use 12 chunks; simulation distance is unchanged.</p></div><select id="graphics-preset" bind:value={graphicsPreset} disabled={busy||!settings?.graphicsPresets}><option>High</option><option>Low</option></select></div>
-            <div class="lt-actions"><button disabled={busy||refreshing||resizing||!available||!binding?.configured||!settings?.canApplyPreset||!graphicsDirty||runningCount>0} on:click={applyPreset}>{applyingPreset?'Applying…':'Apply preset'}</button></div>
+          <section class="lt-group"><h2>Graphics</h2><label class="lt-target">Applies to <select value={selectedSlot} disabled={busy||queuedPreset!==null} on:change={event=>chooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft - {p.slot}</option>{/each}</select></label>
+            <div class="lt-setting"><div><h3><label for="graphics-preset">Graphics preset</label></h3><p>High enables visual effects. Low reduces them. Both use 12 chunks; simulation distance is unchanged.</p></div><select id="graphics-preset" bind:value={graphicsPreset} disabled={busy||queuedPreset!==null||!settings?.graphicsPresets}><option>High</option><option>Low</option></select></div>
+            <div class="lt-actions"><button disabled={busy||queuedPreset!==null||!available||!binding?.configured||!settings?.canApplyPreset||!graphicsDirty||runningCount>0} on:click={requestPreset}>{applyingPreset||queuedPreset!==null?'Applying…':'Apply preset'}</button></div>
             <p class="lt-help">Close all Minecraft sessions before applying. The saved preset is reapplied when this launcher starts.</p>{#if settings&&!settings.graphicsPresets}<p class="lt-error">The running controller needs an update before High/Low can be selected. Existing games are preserved.</p>{/if}{#if settingsNotice}<p role="status">{settingsNotice}</p>{/if}
           </section>
           <section class="lt-group"><h2>Frame Limits <small>All launchers</small></h2>{#if settings}<form on:submit|preventDefault={requestPerformanceSave}>
