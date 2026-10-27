@@ -1,5 +1,29 @@
 # Current Development Handoff — v0.1
 
+## P0 HWND owner identity and responsive discovery — 27 October 2026
+
+The retained close controller originally deduplicated WM_CLOSE requests
+using only the numerical HWND, even though Windows may recycle that value
+for another window during the same game process's lifetime. It now uses
+the verified (HWND, owner thread ID) pair, retaining each available owner
+thread HANDLE until that close attempt finishes. A recycled numerical
+handle on a distinct thread is therefore eligible for another bounded
+normal-close request, while the same observed owner receives no duplicate
+WM_CLOSE. GUI-thread pinning is read-only/optional; inability to open
+the thread does not create permission to target another process.
+An HWND recycled by the *same* surviving game GUI thread remains
+indistinguishable without a stronger in-process window-lifetime marker;
+we deliberately do not inject a new marker or claim total proof.
+The existing four-distinct-target bound remains in place.
+
+A separate audit found that freshly enumerated OGLES windows were always
+reported `responding:true`, even though the only checks were for visible,
+unowned native roots. The game-window discovery now samples
+IsHungAppWindow and revalidates PID/class/window attribution before
+publishing a responsive session. The previously cached-window path
+already checked IsHungAppWindow. Source-level regression covers the
+thread-key dedupe; Windows/Minecraft execution remains NOT_EXECUTED.
+
 ## P0 CloseOne recovery-window partial failure — 27 October 2026
 
 Source audit identified a previously unhandled ambiguity: restoring a

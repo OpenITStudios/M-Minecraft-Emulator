@@ -514,31 +514,54 @@ fn valid_retained_window(target: &OwnedProcess) -> bool {
     }
 }
 
+struct RequestedWindow {
+    handle: String,
+    thread_id: u32,
+    // Retain thread identity while this bounded close attempt runs. If that
+    // thread exits, Windows cannot recycle its thread ID until the retained
+    // handle is released. No game process is owned or terminated by this pin.
+    _thread_pin: Option<OwnedHandle>,
+}
+
 #[derive(Default)]
 struct NormalCloseProgress {
-    requested_windows: Vec<String>,
+    requested_windows: Vec<RequestedWindow>,
     // Bounded once-per-exact-dialog (HWND, owning thread). Posting IDOK is not
     // evidence that the dialog was processed or the game process exited.
     submitted_dialogs: Vec<(usize, u32)>,
-    original_window_thread: Option<OwnedHandle>,
     blocked_by_modal: bool,
 }
 
 impl NormalCloseProgress {
+    fn already_requested(&self, handle:&str, thread_id:u32) -> bool {
+        self.requested_windows.iter().any(|request|
+            request.handle==handle && request.thread_id==thread_id)
+    }
+
     // A posted WM_CLOSE is only a request, not proof that the game consumed it.
-    // Permit another request only for a different, freshly verified game HWND.
+    // A new verified HWND on a different owner thread is not the same lifetime
+    // merely because the numeric HWND was reused.
     fn request_window(&mut self, target: &OwnedProcess) -> io::Result<()> {
-        if self.requested_windows.contains(&target.window_handle) {
+        use windows_sys::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+        let window=target.window_handle.strip_prefix("0x")
+            .and_then(|value|usize::from_str_radix(value,16).ok())
+            .ok_or_else(|| invalid("Invalid game window"))? as windows_sys::Win32::Foundation::HWND;
+        let mut pid=0;
+        let thread_id=unsafe {GetWindowThreadProcessId(window,&mut pid)};
+        if thread_id==0 || pid!=target.pid || !valid_retained_window(target) {
+            // A changing HWND does not authorize targeting a replacement or
+            // failing the whole close. The same pinned child is reobserved.
+            return Ok(());
+        }
+        if self.already_requested(&target.window_handle,thread_id) {
             return Ok(());
         }
         if self.requested_windows.len() >= 4 {
             return Err(invalid("Minecraft replaced its main window repeatedly during normal close"));
         }
-        let thread = if self.requested_windows.is_empty() {
-            pin_window_thread(target)
-        } else {
-            None
-        };
+        let thread_pin=pin_window_thread(target).filter(|handle|unsafe {
+            windows_sys::Win32::System::Threading::GetThreadId(handle.as_raw_handle() as _)==thread_id
+        });
         match close_verified_window(target) {
             // A native modal prompt disables its game owner. Wait for the
             // verified prompt or a re-enabled main window; do not abort early.
@@ -553,10 +576,11 @@ impl NormalCloseProgress {
             Err(_) if !valid_retained_window(target) => return Ok(()),
             Err(error) => return Err(error),
         }
-        if self.requested_windows.is_empty() {
-            self.original_window_thread = thread;
-        }
-        self.requested_windows.push(target.window_handle.clone());
+        self.requested_windows.push(RequestedWindow {
+            handle:target.window_handle.clone(),
+            thread_id,
+            _thread_pin:thread_pin,
+        });
         Ok(())
     }
 
@@ -573,7 +597,7 @@ impl NormalCloseProgress {
     }
 
     fn original_thread_state(&self) -> &'static str {
-        let Some(thread) = self.original_window_thread.as_ref() else {
+        let Some(thread) = self.requested_windows.first().and_then(|value|value._thread_pin.as_ref()) else {
             return "not captured";
         };
         match unsafe { WaitForSingleObject(thread.as_raw_handle() as _, 0) } {
@@ -760,13 +784,20 @@ fn window(child: &PendingEducationBootstrap, label: bool) -> Option<OwnedProcess
     if label {
         let _ = label_slot_window(selected.hwnd, child.pid, slot);
     }
-    Some(OwnedProcess {
+    let process=OwnedProcess {
         pid: child.pid,
         created_file_time: child.created.to_string(),
         session_id: interactive_session(child.pid).ok()?,
         window_handle: format!("0x{:x}", selected.hwnd as usize),
-        responding: true,
-    })
+        // Enumeration only verifies a visible root. It does not establish
+        // message-loop responsiveness; match the retained-HWND snapshot path.
+        responding: unsafe {
+            windows_sys::Win32::UI::WindowsAndMessaging::IsHungAppWindow(selected.hwnd)==0
+        },
+    };
+    // Recheck immediately after observing/optionally labeling. A recycled
+    // HWND or destroyed game surface is never published as a playable game.
+    valid_retained_window(&process).then_some(process)
 }
 
 fn sync_audio(sessions:&Sessions,audio:&mut Option<super::session_audio::Audio>,mode:crate::engine::manager_settings::BackgroundAudio)->io::Result<()> {
@@ -1111,13 +1142,32 @@ mod tests {
 
 
     #[test]
+    fn hwnd_reuse_on_another_thread_is_not_silently_deduplicated() {
+        let mut progress=NormalCloseProgress::default();
+        progress.requested_windows.push(RequestedWindow {
+            handle:"0x42".into(),
+            thread_id:77,
+            _thread_pin:None,
+        });
+        assert!(progress.already_requested("0x42",77));
+        assert!(!progress.already_requested("0x42",78));
+        assert!(!progress.already_requested("0x43",77));
+        // Same numeric HWND reused on the same live GUI thread remains
+        // unprovable without in-process lifetime evidence. No blind repost.
+    }
+
+    #[test]
     fn close_phase_never_claims_process_exit_from_a_posted_message() {
         let mut progress=NormalCloseProgress::default();
         assert_eq!(progress.phase(false),"WAITING_FOR_WINDOW");
         assert_eq!(progress.phase(true),"WINDOW_AVAILABLE");
         progress.blocked_by_modal=true;
         assert_eq!(progress.phase(true),"WAITING_FOR_MODAL");
-        progress.requested_windows.push("0x42".into());
+        progress.requested_windows.push(RequestedWindow {
+            handle:"0x42".into(),
+            thread_id:77,
+            _thread_pin:None,
+        });
         assert_eq!(progress.phase(false),"CLOSE_REQUESTED");
         progress.submitted_dialogs.push((0x99,42));
         assert_eq!(progress.phase(false),"DIALOG_CONFIRMATION_SENT");
