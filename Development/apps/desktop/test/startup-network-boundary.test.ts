@@ -12,7 +12,7 @@ describe("Active native-first startup boundary", () => {
     expect(active).not.toContain("OwnedManagerPanel");
     expect(active).not.toContain("ownedProvider.execute(");
     expect(active).not.toContain("backend.");
-    expect(active).toContain("if (!document.hidden && binding?.configured) void refresh()");
+    expect(active).toContain("if (!document.hidden && binding?.configured && clearSlot===null && recovery===null && fullReview===null) void refresh()");
     expect(active).not.toContain("onMount(() => lazyTester.launch");
     expect(active).not.toContain("checkUpdateOnce");
     expect(bootstrap).not.toContain("commands::virtual_clients::virtual_clients_");

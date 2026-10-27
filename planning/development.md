@@ -77,8 +77,10 @@ workspace/runs/fps-queue-headless-*.log. Real WebView/game pacing still unverifi
 Graphics applies the selected slot/preset after polling, rechecking idle admission.
 Headless synthetic refresh and changed-admission cases PASS; actual UI not verified.
 
-Cache: selected profile stopped, other exact managed games allowed, unknown external
-games block. Four lock/link/admission/peer fixtures PASS. No real data deleted.
+Cache: selected profile stopped, other managed games allowed; unknown games block.
+Review confirmations pause automatic polling, avoiding ignored clicks/flicker; manual
+refresh disables actions while pending, backend rechecks admission. Headless cache,
+reset, full-clear and folder controls PASS; no real data deleted. Lock/link fixtures PASS.
 ## Remaining work and owners
 
 Reset/restore backs up and verifies settings before replacement;8 fixtures PASS.
