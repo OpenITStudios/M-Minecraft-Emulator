@@ -109,6 +109,26 @@ confirmed `lazy-tester-closing` event. rfd 0.17.2's OkCancel result
 is compared explicitly against Ok; all other results preserve games.
 These are source changes only, not a runtime UI acceptance claim.
 
+## P0 selected normal close — retained five-slot session actor (27 October 2026)
+
+A typed CloseOne {slot} (fixed slot 1..5) now routes through the same retained
+Rust controller as CloseAll, sharing its bounded normal WM_CLOSE/exact dialog
+and original game process-HANDLE exit proof. A one-slot selection mask excludes
+all other sessions from close commands, timeout targets, and completion criteria;
+after the request completes it restores the manager's nonterminal admission
+state, unlike full CloseAll. An absent controller never launches a replacement
+for CloseOne and no PID/HWND selection is accepted from the UI.
+
+One Tauri action serializes inspection, release of only the native workspace
+lease already attributed to the selected LAZY_TESTER_MANAGED_SESSION slot,
+and CloseOne through the existing manager resource lock. Other game leases
+are not released or closed; the preview compositor is cleared for refresh.
+A failed release prevents a close request rather than leaving a partially
+restored target. Fixed-mask/unknown-field/out-of-range Rust fixtures are
+authored but not executed. This source change is not proof of MC02 exit.
+All local PC tests and Minecraft acceptance remain prohibited pending
+explicit operator authorization.
+
 ## State and operator request — 27 October 2026
 
 The v0.1 checkpoint was saved and paused in Codex. The operator subsequently

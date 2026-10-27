@@ -1155,6 +1155,30 @@ mod controller {
         state.live_previews = false;
         Ok(())
     }
+    // Restore only the slot's previously admitted native presentation; do
+    // not touch windows leased by other Minecraft profiles or by other apps.
+    pub fn release_managed_slot(slot:u32)->io::Result<()> {
+        if !(1..=5).contains(&slot) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,"Unknown Minecraft profile"));
+        }
+        let client=format!("{slot:02}");
+        let owned=|lease:&Lease|lease.authority.as_ref().is_some_and(|(authority,value)|
+            authority=="LAZY_TESTER_MANAGED_SESSION" && value==&client);
+        previews::clear()?;
+        let mut state=SURFACE.lock().map_err(|_|io::Error::other("Workspace state unavailable"))?;
+        if state.closing {return Err(io::Error::new(io::ErrorKind::WouldBlock,"Workspace is closing"));}
+        if state.active.as_ref().is_some_and(&owned) {
+            let manager=state.active.as_ref().unwrap().manager;
+            native::clear_aperture(manager)?;
+            state.active.as_mut().unwrap().stop()?;
+            state.active=None;
+        }
+        if let Some(index)=state.parked.iter().position(&owned) {
+            state.parked[index].stop()?;
+            state.parked.remove(index);
+        }
+        Ok(())
+    }
     pub fn suspend() -> io::Result<bool> {
         previews::clear()?;
         let mut state = SURFACE
@@ -2263,7 +2287,7 @@ mod controller {
     }
 }
 pub use controller::{
-    is_active, present_retained, present_verified, release, release_for_close, cancel_close, release_target, suspend, update,
+    is_active, present_retained, present_verified, release, release_for_close, cancel_close, release_target, release_managed_slot, suspend, update,
 };
 #[cfg(windows)]
 pub use controller::follow_manager;

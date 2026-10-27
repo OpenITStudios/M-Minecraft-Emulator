@@ -210,14 +210,25 @@ impl Sessions {
         }
     }
 
-    fn close_all(&mut self) -> io::Result<()> {
+    fn close_all(&mut self) -> io::Result<()> { self.close_sessions(None) }
+    fn close_one(&mut self, slot:u32) -> io::Result<()> { self.close_sessions(Some(slot)) }
+    fn close_sessions(&mut self,slot:Option<u32>)->io::Result<()> {
+        let mask=normal_close_mask(slot)?;
         self.exiting=true;
+        let result=self.close_selected_sessions(mask);
+        // Full exit preserves its terminal gate; selected exit never blocks
+        // later launcher operations after its request completes.
+        if slot.is_some() || result.is_err() {self.exiting=false;}
+        result
+    }
+    fn close_selected_sessions(&mut self,mask:[bool;5])->io::Result<()> {
         self.reap();
         let snapshot=self.snapshot();
         let mut issues=Vec::new();
         let mut progress: [NormalCloseProgress; 5] = std::array::from_fn(|_| NormalCloseProgress::default());
         for profile in snapshot.profiles {
             let index=profile.slot as usize-1;
+            if !mask[index] {continue;}
             let Some(started)=&self.running[index] else {continue;};
             let child=&started.children[0];
             let outcome=(||{
@@ -242,9 +253,10 @@ impl Sessions {
         let deadline=std::time::Instant::now()+Duration::from_secs(20);
         loop {
             self.reap();
-            if self.running.iter().all(Option::is_none){return Ok(());}
-            if !issues.is_empty(){self.exiting=false;return Err(io::Error::other(issues.join("; ")));}
+            if (0..5).all(|index|!mask[index]||self.running[index].is_none()){return Ok(());}
+            if !issues.is_empty(){return Err(io::Error::other(issues.join("; ")));}
             for index in 0..5 {
+                if !mask[index] {continue;}
                 let Some(started)=&self.running[index] else {continue;};
                 let child=&started.children[0];
                 let result=progress[index].submit_exit_dialog(child).and_then(|submitted| {
@@ -259,19 +271,18 @@ impl Sessions {
                 });
                 if let Err(error)=result {
                     if child.exit_code_after_exit().is_err() {
-                        self.exiting=false;
                         return Err(error);
                     }
                 }
             }
             if std::time::Instant::now()>=deadline {
                 let pending = (0..5).filter_map(|index| {
+                    if !mask[index] {return None;}
                     let started = self.running[index].as_ref()?;
                     let evidence = progress[index].describe_pending(&started.children[0]);
                     self.issues[index] = Some(format!("Normal exit pending: {evidence}"));
                     Some(format!("Minecraft - {}: {evidence}", index + 1))
                 }).collect::<Vec<_>>();
-                self.exiting=false;
                 return Err(io::Error::new(io::ErrorKind::TimedOut,format!(
                     "Normal Minecraft exit is still pending. {}. Finish a remaining game prompt normally and retry; no game was force-terminated.",
                     pending.join("; ")
@@ -467,6 +478,13 @@ fn scan(path: &Path, result: &mut ProfileStorage, started: std::time::Instant, d
             result.files += 1;
         }
     }
+}
+
+fn normal_close_mask(slot:Option<u32>)->io::Result<[bool;5]> {
+    if slot.is_some_and(|value|!(1..=5).contains(&value)) {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput,"Unknown Minecraft profile"));
+    }
+    Ok(std::array::from_fn(|index|slot.is_none_or(|value|value==index as u32+1)))
 }
 
 // Only the reviewed Minecraft Education main game surface (OGLES) is
@@ -863,6 +881,7 @@ fn run() -> io::Result<()> {
                     sessions.launch(slot).map_err(|error| error.to_string())?
                 }
                 SessionRequest::CloseAll => sessions.close_all().map_err(|error|error.to_string())?,
+                SessionRequest::CloseOne {slot} => sessions.close_one(slot).map_err(|error|error.to_string())?,
                 SessionRequest::InspectStorage => {
                     storage = Some(sessions.storage().map_err(|error| error.to_string())?)
                 }
@@ -961,8 +980,24 @@ mod tests {
     }
 
     #[test]
+    fn selected_normal_close_mask_affects_only_one_launcher() {
+        assert_eq!(normal_close_mask(None).unwrap(),[true;5]);
+        for slot in 1..=5 {
+            let mask=normal_close_mask(Some(slot)).unwrap();
+            for (index,selected) in mask.iter().enumerate() {
+                assert_eq!(*selected,index as u32+1==slot);
+            }
+        }
+        for slot in [0,6,u32::MAX] {
+            assert_eq!(normal_close_mask(Some(slot)).unwrap_err().kind(),io::ErrorKind::InvalidInput);
+        }
+    }
+
+    #[test]
     fn full_exit_of_idle_sessions_does_not_prepare_profiles_and_denies_new_launches() {
         let mut sessions=Sessions{stores:(0..5).map(|_|None).collect(),running:(0..5).map(|_|None).collect(),issues:vec![None;5],windows:vec![None;5],path:String::new(),image:File::open(std::env::current_exe().unwrap()).unwrap(),exiting:false};
+        sessions.close_one(3).unwrap();
+        assert!(!sessions.exiting);
         sessions.close_all().unwrap();
         assert!(sessions.exiting);
         assert!(sessions.stores.iter().all(Option::is_none));

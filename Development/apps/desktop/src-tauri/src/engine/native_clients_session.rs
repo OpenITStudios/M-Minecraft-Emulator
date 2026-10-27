@@ -130,6 +130,7 @@ pub enum SessionRequest {
     RestoreGameSettings { slot: u32 },
     ClearProfileData {slot:u32, #[serde(rename="confirmationToken")] confirmation_token:String, #[serde(rename="confirmationName")] confirmation_name:String},
     Launch { slot: u32 },
+    CloseOne { slot: u32 },
     CloseAll,
 }
 
@@ -163,7 +164,7 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     if let SessionRequest::SavePerformance {active_fps,background_fps}=request {
         super::manager_settings::PerformanceSettings {active_fps,background_fps}.validate()?;
     }
-    if matches!(request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } | SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } if !(1..=5).contains(&slot))
+    if matches!(request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } | SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } if !(1..=5).contains(&slot))
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -252,7 +253,7 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
             "An existing Minecraft controller uses another build or is still starting. Its games are preserved; no replacement was started."));
     }
     // Closing an idle manager must never provision/start a new controller or game.
-    if matches!(request,SessionRequest::CloseAll) {return Ok(Ok(SessionSnapshot::stopped()));}
+    if matches!(request,SessionRequest::CloseAll | SessionRequest::CloseOne {..}) {return Ok(Ok(SessionSnapshot::stopped()));}
     if matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings | SessionRequest::SavePerformance { .. } | SessionRequest::SaveAudio {..}) {
         let mut snapshot = SessionSnapshot::stopped();
         if let SessionRequest::SaveAudio {mode}=request {super::manager_settings::save_audio(mode)?;}
@@ -340,11 +341,13 @@ mod tests {
     #[test]
     fn recovery_rejects_out_of_range_slots_before_controller_or_storage_access() {
         for slot in [0,6,u32::MAX] {
-            for operation in [SessionRequest::ResetGameSettings {slot},SessionRequest::RestoreGameSettings {slot}] {
+            for operation in [SessionRequest::ResetGameSettings {slot},SessionRequest::RestoreGameSettings {slot},SessionRequest::CloseOne {slot}] {
                 assert_eq!(request(operation).unwrap_err().kind(),io::ErrorKind::InvalidInput);
             }
         }
         assert!(serde_json::from_str::<SessionRequest>(r#"{"operation":"RestoreGameSettings","slot":1,"path":"outside"}"#).is_err());
+        assert!(serde_json::from_str::<SessionRequest>(r#"{"operation":"CloseOne","slot":1,"pid":123}"#).is_err());
+        assert!(matches!(serde_json::from_str::<SessionRequest>(r#"{"operation":"CloseOne","slot":3}"#),Ok(SessionRequest::CloseOne{slot:3})));
         for (slot,token,name) in [(0,"a".repeat(64),"Minecraft - 0"),(1,"bad".into(),"Minecraft - 1"),(1,"a".repeat(64),"Minecraft - 2")] {
             assert_eq!(request(SessionRequest::ClearProfileData {slot,confirmation_token:token,confirmation_name:name.into()}).unwrap_err().kind(),io::ErrorKind::InvalidInput);
         }

@@ -40,6 +40,28 @@ pub async fn lazy_tester_session(
     })).await.map_err(|_| "Session task failed".to_string())?.map_err(|error| error.to_string())
 }
 
+// This one command admits the entire selected-close sequence under the
+// existing manager lock. The retained session controller owns lifecycle.
+#[tauri::command]
+pub async fn lazy_tester_close_one(
+    slot:u32,
+) -> Result<crate::engine::native_clients_session::SessionSnapshot,String> {
+    if crate::app_bootstrap::startup_diagnostic_mode() {return Err("Startup diagnostic cannot close games".into());}
+    if !(1..=5).contains(&slot) {return Err("Unknown Minecraft profile".into());}
+    tauri::async_runtime::spawn_blocking(move||run_manager_operation(||{
+        use crate::engine::native_clients_session::{request,SessionRequest};
+        let snapshot=request(SessionRequest::Inspect)?;
+        let selected=snapshot.profiles.iter().find(|profile|profile.slot==slot)
+            .ok_or_else(||io::Error::new(io::ErrorKind::InvalidInput,"Unknown Minecraft profile"))?;
+        if selected.state=="STOPPED" || selected.state=="ATTENTION" {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,"Minecraft session is not running"));
+        }
+        crate::engine::workspace_surface::release_managed_slot(slot)?;
+        request(SessionRequest::CloseOne {slot})
+    })).await.map_err(|_|"Selected Minecraft close task failed".to_string())?
+        .map_err(|error|error.to_string())
+}
+
 #[tauri::command]
 pub async fn lazy_tester_present(
     window: tauri::WebviewWindow,
