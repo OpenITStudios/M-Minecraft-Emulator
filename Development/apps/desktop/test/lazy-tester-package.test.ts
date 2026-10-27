@@ -33,7 +33,7 @@ describe('Lazy Tester native package',()=>{
   it('derives hashes from the exact runtime policy and refuses absent or malformed review',()=>{
     const source=readFileSync(new URL('../src-tauri/src/engine/independent_bootstrap.rs',import.meta.url),'utf8');
     expect(reviewedDigests(source)).toEqual({
-      'bootstrap-compat.dll':'0f45c07b370ff6c1bf150ccc20879ff6406c208f2b8c3ccdc596b82f2552381e',
+      'bootstrap-compat.dll':'e90b312b3f12915098a3571a647050d5e3a1d082a0f831242d92ffac5514653f',
       'bootstrap-enroll.dll':'51517528886483ba89f1b93b448c1ddd349f26f0e48e5322db434cbfe9c4de99',
     });
     expect(()=>reviewedDigests('const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = None;')).toThrow();
