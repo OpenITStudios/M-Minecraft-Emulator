@@ -1,114 +1,115 @@
-# Current Development Handoff — Lazy Tester
+# Current Development Handoff — v0.1
 
-## Single active goal — user revised27October2026
+## State and operator request — 27 October 2026
 
-Priority: repair stuck launcher/full exit, active/background FPS response, Task Manager
-process grouping and naming; retain blackscreen/input acceptance. Make one
-normal app exit close its two owned sessions, then verify preview/drag/focus and
-Play/Settings frames. Measure Launch/switch and finish functional Settings/Data
-Storage and clear process roles. Defaults120/5, minimum5FPS, background<=active.
-Work remains incomplete. Keep the user's desktop undisturbed; interactive testing
-is deferred until the end.
+PAUSED IN CODEX at the user's request: save all source and continuation notes to
+GitHub Local and tag v0.1 so development can continue outside Codex. Do not resume
+runtime tests or close remaining processes from historical Next entries. This is
+an incomplete development checkpoint, not a release or a usable-product claim.
+main remains untouched; GitHub Actions OFF; no release/installer publication.
 
-Local only; main/publication untouched; CI OFF. VM/Sandboxie and RAM/renderer work
-PAUSED. Compiler caches explicitly RETAINED. No incidental cleanup or actual profile
-wipe. Clear all data is a product feature tested with synthetic fixtures; actual use
-requires selected-launcher review/confirmation.
+Tag v0.1 points to this handoff; preceding implementation:
+a788a06a9d9a7d4e944fc3b04505b185446ac6e3.
+Do not repeat the same failed two-launcher test.
+Diagnose the code before another runtime repetition.
 
-## Acceptance — preserve all outcomes
+## Priority and full scope retained
 
-1. Same Play/Settings frame; stable drag/resize/focus/DPI, 16:9 main game and
-   persistent monitoring previews. No parenting, binary patch or input relay.
-2. Measure Launch/switch; reuse original leases and pins without weakening identity.
-3. Task Manager UI/starter/controller/recovery/Minecraft/WebView roles and grouping;
-   do not hide processes, alter official binaries or weaken peer gates.
-4. General: High/Low only; truthful valid whole5..1000 FPS saves with120/5 defaults.
-   Preserve explicit older preferences; new defaults do not overwrite user choices.
-   Keep/Mute background audio must actually scope original game audio sessions,
-   never other apps. No ignored selections or placeholder controls as features.
-5. Per-launcher Data Storage: real sizes/path, cache cleanup, settings reset/backup/
-   restore, full selected account/world/cache/settings/backup clear to empty launcher.
-   Preserve installation/peers; verify confirmation, recovery, interruption,
-   active profiles, malformed paths, links, cancel and peer isolation.
-6. Clean exact Local Windows candidate/checks/receipts, App/root EXE/shortcuts,
-   Data preserved. Verify Explorer startup and all requested UX/runtime flows;
-   compilation never substitutes for usability acceptance.
+P0: one normal Lazy Tester exit must close every original managed Minecraft session.
+Observed failure: with two launched sessions, MC01 exits but MC02 loses its main
+window and stays alive; manager/controller consequently remain open. Reproduced
+before and AFTER the HUD lifetime change. Root cause remains UNKNOWN.
 
-## Current exact source and delivery
+Other outstanding requirements:
+- Active game should promptly reach the saved FPS limit; background games use the
+  background limit. Defaults 120/5, new saves whole 5..1000, background <= active;
+  preserve existing explicit settings. Actual focus-to-FPS behavior unverified.
+- No blackscreen or loss of click input on selection; stable native geometry while
+  dragging/resizing; shared Play/Settings frame; comfortable 16:9 main display.
+- Persistent, useful background previews; smooth switching and efficient launch.
+- Clear Task Manager roles/grouping for UI, controller, recovery, Minecraft and
+  WebView2. Child process parentage and names do not prove one Windows group.
+- Functional General/Data Storage: High/Low graphics, FPS, per-session audio,
+  cache/reset/restore and confirmed per-launcher full local profile clear.
+- Keep root EXE/shortcuts and project-local Data; preserve installation, peers,
+  identity pins, file-backed hives, backups, submodule and second worktree.
 
-Installed App/root source e735b7ea15cefe15f83017b326de8e2c95cff902, clean Local build.
-App SHA256:4bfdd894fa24a11c2882eb5b573149b752609078850c36e91a43127b6ce128e3.
-Root starter/DLL hashes: App/build-info.json, verified during Explorer startup.
-Signing NOT_VERIFIED; installer execution/publication NOT_EXECUTED/DISABLED.
-Earlier two-session testing found blackscreen and exit timeout; six synthetic exit-dialog fixtures passed. Real acceptance is revision-specific.
-Earlier audio toggle and Clear/Reset review/Cancel PASS; no real deletion.
-## Implemented corrections and executed evidence
+Do not bypass sign-in/licensing, patch official game binaries, read account/world
+contents, delete runtime data, revive VM/Sandboxie routes or resume RAM experiments.
+Compiler caches were explicitly retained. No incidental cleanup is authorized.
+Four independently licensed playable clients and gameplay/network acceptance are
+separate obligations, NOT_EXECUTED here.
 
-Presentation: opaque host and primary DWM image; original pins/recovery retained.
-At ba2731d two games launched but black screen remained. The focused game was parked
-outside the manager and its preview hidden (black-screen-live-stability.log).
-Installed change wakes the ordered geometry worker for foreground transitions as well;
-focus event fixture failed before and passes after (black-screen-focus-*.log). Clean
-Windows build and App staging PASS; live stability and user-visible proof pending.
-Source9d5ec16 keeps the preview until the focused game is positioned, refreshes it
-after repositioning and rechecks focus after parking. Five surface regressions PASS.
-Frontend schedules preview reconstruction after failed selection, launch or page
-transition. Headless synthetic failed-switch test reproduced the missing refresh on
-prior source and passed after the fix; previous session and error remain visible.
-Switch rollback now reports failed parking/restoration and suspends automatic
-updates on incomplete recovery. Logic test PASS; actual recovery remains unverified.
-Clean candidate c5ef097: workspace/packages/lazy-tester/0.1.0-c5ef0970a16b-20261027T034907265Z; built, not staged. Interactive testing deferred.
+## Installed artifacts and latest actual failure
 
-FPS120/5, saves5..1000/background<=active, legacy preferences preserved. V3 applies
-next launch. FPS save now queues during polling: headless synthetic UI passed success,
-invalid limits and refresh-failure cases; previous source disabled Save. Logs
-workspace/runs/fps-queue-headless-*.log. Real WebView/game pacing still unverified.
-Graphics applies the selected slot/preset after polling, rechecking idle admission.
-Headless synthetic refresh and changed-admission cases PASS; actual UI not verified.
+Installed App/root receipt source:
+a788a06a9d9a7d4e944fc3b04505b185446ac6e3.
+App/lazy-tester.exe SHA256:
+decfba747d812bdcf2dce49ec35e0f724886467752c89d8e35f82245ff5ad1e2.
+Native bootstrap-compat.dll SHA256:
+e90b312b3f12915098a3571a647050d5e3a1d082a0f831242d92ffac5514653f.
+Native bootstrap-enroll.dll SHA256:
+51517528886483ba89f1b93b448c1ddd349f26f0e48e5322db434cbfe9c4de99.
+App/build-info.json owns local root starter/helper/MUI receipts.
 
-Cache: selected profile stopped, other managed games allowed; unknown games block.
-Review confirmations pause automatic polling, avoiding ignored clicks/flicker; manual
-refresh disables actions while pending, backend rechecks admission. Headless cache,
-reset, full-clear and folder controls PASS; no real data deleted. Lock/link fixtures PASS.
-## Remaining work and owners
+Latest local package:
+workspace/packages/lazy-tester/0.1.0-a788a06a9d9a-20261027T051600372Z.
+Installer SHA256:
+13ddb8919be3053fe83b21d8d69d36014b46a27875dd7f8eb4a697abcba311c1.
+NSIS construction and App staging succeeded. Signing NOT_VERIFIED; installer
+install/repair/uninstall NOT_EXECUTED. No installer is published by this tag.
 
-Reset/restore backs up and verifies settings before replacement;8 fixtures PASS.
-Full clear uses generation-bound confirmation, rollback and explicit purge recovery;
-13 profile and5 controller fixtures PASS. No real reset/clear; review/Cancel above.
-Audio: session_audio.rs; exact PID/birth, preserves mute/volume. Silent Windows audio
-and6 settings fixtures PASS; logs workspace/runs/audio-*. Checkbox queues saves.
-Abrupt controller-crash mixer recovery, long-launch audio response and actual
-Minecraft audio remain unverified. Continue in these owners, no second lifecycle.
-Launch preflight retains identity pins; five controller tests PASS.
-Process roles: pinned hard links for Sessions/Window Recovery, copies rejected;
-MUI descriptions verified. Installer execution NOT_EXECUTED.
-WebView2 grouping matches OPEN upstream reports. Browser/controller parented toUI;
-Task Manager GUI NOT_OBSERVED. Log workspace/runs/process-role-observation.log.
-No one-group Task Manager success claim. Full-exit closes only managed games normally
-and keeps manager open on pending dialog/timeout; first attempt failed as above.
+Latest actual two-session run on a788a06:
+- Explorer startup: connected, five enabled launch controls, WebView cache in Data.
+- MC01 visible-window observation ~7774 ms; MC02 ~5470 ms. This is not gameplay proof.
+- One full-exit request timed out after the observer's 35-second bound.
+- MC01 exited; MC02 and manager/controller remained. HUD change did NOT resolve it.
+- Last metadata check: UI PID 53364, controller PID 47048, MC02 PID 53992.
+  These are historical observations, not authority for a future PID-based action.
+- No further input/exit testing after user requested source focus.
+- Previous runs also had intermittent covered game/black screen and inaccessible
+  input. Six-switch/drag geometry checks passed on some runs, but pixels/menu clicks,
+  pacing and stable play are NOT_ACCEPTED.
 
-Preserve migrated Data/Launchers/Minecraft-1..5, Data/Settings and Data/Cache; external
-originals remain recovery only. Keep file-backed hives/ACLs/DLL pins; no account/world
-content reads. App/build-info.json records reviewed payloads; no repeat migration.
-Submodule and second worktree preserved.
-Four-client, gameplay, network, migration and installer acceptance NOT_EXECUTED.
+Old test games were force-stopped after approval; an old manager was also force-stopped. No approval carries to current/reused PIDs. Current sessions remain running.
 
-Latest e735b7e runtime: two launches, six switches and drag PASS (geometry only).
-Full exit timed out: MC1 exited, MC2 and manager remain. Pixels/input NOT_PROVEN.
-Logs workspace/runs/latest-two-session-{launch,presentation,exit}.log.
-Source: full exit can confirm the exact owned exit dialog even if its main window
-is missing; identity rechecked before posting. Cargo check and refusal test PASS;
-actual dialog without window NOT_EXECUTED. Exit wait also checks the retained child
-after window loss. Starting games are polled for a verified window until the existing
-exit deadline; cargo check and idle test PASS, startup transition NOT_EXECUTED.
-HUD worker now exits when pinned owner thread ends; hidden process fixture previously
-hung and now exits; HUD rebind fixture PASS. Minecraft causation NOT_PROVEN.
-FPS foreground sampling retries transient instability; unit test PASS, actual FPS
-response and sustained instability NOT_EXECUTED.
-Next: inspect FPS focus policy and process grouping;
-source tests first without PC control. Then verify two real sessions,
-including visible output, interaction, drag, preview, switching and one-click exit.
-User explicitly AUTHORIZED2sessions started by Lazy Tester for Launch/switch/drag/
-preview/full-exit. No world/login/account-content access or closing unrelated games.
-Audio crash/long-launch response and presentation/process acceptance remain open.
-Overall work is not complete.
+## Source owners, changes and proof limits
+
+app_bootstrap.rs prevents close, releases/restores surfaces via workspace_surface.rs, then sends CloseAll. Failure keeps UI open.
+
+independent_bootstrap/session_controller.rs retains process/birth pins, verifies normal WM_CLOSE and exact English exit dialog, waits 20s for startup/exit, reaps process exit and tolerates identity races. No automatic force kill. Real MC02 still FAILED; missing HWND misleadingly maps to STARTING.
+
+Key recent commits:
+- 2685a08 / 79af35e: owned exit-dialog checks survive missing main HWND.
+- 64f2af6: wait for starting game HWND within existing close deadline.
+- e735b7e: tolerate game exit racing close checks.
+- d39544a: bounded retries of unstable foreground sampling.
+- 57b6842 / ba40d73: HUD worker lifetime and owner-thread validation.
+- a788a06: pin rebuilt HUD native payload; packaging digest fixture updated.
+
+Native HUD owner: Development/tooling/acceptance/windows/bootstrap-ordering/fps-hud.cpp pins owner thread, exits worker when it ends and reuses/restarts it on bind. hud-lifetime-control.cpp (main thread ExitThread) hung before and exits after; hidden HUD self-test passed eight reuse cycles. Actual MC02 still fails, so causation is NOT_PROVEN; review owner-thread replacement races.
+
+FPS: instance_focus_events.rs publishes identity-bound events; frame-pacing.h consumes limits. Synthetic promotion ~0.06ms and policy fixtures passed; real focus/FPS unproven. Changes apply next launch. Preview geometry/recovery changes passed synthetic checks; blackscreen/input remain unresolved.
+
+Process roles: process_roles.rs and windows/process-roles.json use pinned hard links
+and MUI descriptions. WebView/controller parentage observed; Task Manager one-group
+result not achieved. Official Minecraft binary identity is preserved.
+
+Settings/Data Storage: queued saves, stable review dialogs, admission checks. 39 frontend tests, typecheck and synthetic storage/reset/clear/audio fixtures passed at their implementation revisions. No real profile deletion/reset. Full clear excludes Windows identity services; fresh-account sign-in unverified. Audio crash recovery and Minecraft mute/volume unverified.
+
+## Continuation, build and preservation
+
+Next: trace why the LAST/active session loses its HWND but not its process during
+normal close. Compare active vs parked restoration, WM_CLOSE/dialog lifecycle and
+native presentation/HUD thread lifetime. Establish a new discriminating code-level
+signal; do not repeat identical two-launcher tests as the diagnosis.
+Only after a justified source change, test two owned sessions; no login/world access.
+Keep every remaining requirement above open until its own actual evidence exists.
+
+Build: source Development/tooling/windows-toolchain/local-env.ps1 and call Set-LocalDeveloperEnvironment -Root <checkout>. Use pinned native CMake/Detours assets. Rust --locked --offline, feature lazy-tester-package; existing GetSecurityInfo declaration warnings remain. Candidate: npm --prefix Development run package:windows -- --export-only, with workspace CARGO_TARGET_DIR and reviewed LAZY_TESTER_NATIVE_PAYLOAD_DIR. Without --export-only it stages and opens startup verification. Source/structure checks: node Development/tooling/repository/verify.mjs --g0 and node Development/tooling/repository/check-structure.mjs.
+
+Ignored local artifacts remain on this PC: App, Data, packages, caches/toolchains,
+private recovery originals and workspace/runs logs. They are intentionally not in Git.
+Safe observed facts are recorded here because runtime logs are not portable proof.
+Second worktree remains detached at 47a45f9c7d4a8ce6799d56997fd38e4b4df49ce7;
+submodule at abd4c240031cfb46666daa74ca47ed4e48b561e4. Do not reset either incidentally.
