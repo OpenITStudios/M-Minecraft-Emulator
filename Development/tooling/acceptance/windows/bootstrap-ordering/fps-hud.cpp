@@ -122,6 +122,11 @@ struct Hud::State {
     DWORD ownerThread = 0;
     HANDLE ownerLife = nullptr;
     std::atomic<bool> workerFinished{false};
+    std::atomic<bool> workerActive{false};
+    // The process-global policy outlives all swap chains. Once the last
+    // chain unbinds, a still-valid but unused game HWND must not keep the
+    // separate native HUD message-loop thread alive indefinitely.
+    ULONGLONG unboundAt = 0;
     unsigned generation = 0;
     Snapshot display{};
     HANDLE stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -154,6 +159,7 @@ struct Hud::State {
     }
     void run() noexcept {
         HWND hud = nullptr, previousOwner = nullptr;
+        workerActive.store(true, std::memory_order_release);
         callbackOwner = this;
         const auto dpiContext = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         HWINEVENTHOOK hook = nullptr;
@@ -178,17 +184,25 @@ struct Hud::State {
                     workerFinished.store(true, std::memory_order_release);
                     ReleaseSRWLockExclusive(&gate); break;
                 }
-                const HWND target = owner; const DWORD thread = ownerThread; const unsigned version = generation;
+                const HWND target = owner; const DWORD thread = ownerThread;
+                const unsigned version = generation; const ULONGLONG idleSince = unboundAt;
                 ReleaseSRWLockExclusive(&gate);
                 DWORD pid = 0; RECT client{};
                 const bool bound = target && GetWindowThreadProcessId(target, &pid) == thread && pid == GetCurrentProcessId();
-                // An unbound HUD must not retain a worker after its former
-                // game HWND was destroyed while the owner's thread survives.
-                // A newly bound owner/generation wins over a stale observation.
-                const bool destroyedOwner = target ? !bound : previousOwner && !IsWindow(previousOwner);
-                if (destroyedOwner) {
+                // The unbind path runs before the original Minecraft GUI
+                // thread/HWND necessarily exits. A process-global Policy must
+                // not retain this native worker indefinitely after that.
+                // Allow a short grace period for normal swap-chain recreation.
+                constexpr ULONGLONG UnboundGraceMilliseconds = 1000;
+                const bool destroyedOwner = target && !bound;
+                const bool idleExpired = !target && idleSince
+                    && GetTickCount64() - idleSince >= UnboundGraceMilliseconds;
+                if (destroyedOwner || idleExpired) {
                     AcquireSRWLockExclusive(&gate);
-                    const bool unchanged = owner == target && generation == version;
+                    // Publish a new owner and advance generation under this
+                    // same gate in bind(); never retire a newer rebind.
+                    const bool unchanged = owner == target && generation == version
+                        && (!idleExpired || unboundAt == idleSince);
                     if (unchanged) workerFinished.store(true, std::memory_order_release);
                     ReleaseSRWLockExclusive(&gate);
                     if (unchanged) break;
@@ -246,8 +260,9 @@ struct Hud::State {
         if (dpiContext) SetThreadDpiAwarenessContext(dpiContext);
         AcquireSRWLockExclusive(&gate);
         display.window = nullptr; display.visible = false;
-        // Every worker exit path (owner exited, owner HWND destroyed, STOP or
-        // a native/GDI error) must permit bind() to join and restart it.
+        // Every worker exit path (owner exited, owner HWND destroyed,
+        // grace-expired unbind, STOP or a native/GDI error) is observable.
+        workerActive.store(false, std::memory_order_release);
         workerFinished.store(true, std::memory_order_release);
         ReleaseSRWLockExclusive(&gate);
     }
@@ -271,25 +286,35 @@ bool Hud::bind(HWND owner, DWORD thread) noexcept {
             CloseHandle(life); return false;
         }
         AcquireSRWLockExclusive(&s.gate);
-        const bool finished = s.workerFinished.load(std::memory_order_acquire);
         if (s.ownerLife) CloseHandle(s.ownerLife);
         s.ownerLife = life;
+        // Publish the new generation BEFORE checking the retirement marker.
+        // Otherwise an idle worker could commit to exit between the check
+        // and the new binding, silently dropping the replacement HUD.
+        s.owner = owner; s.ownerThread = thread; s.unboundAt = 0;
+        ++s.generation; s.meter.reset();
+        const bool finished = s.workerFinished.load(std::memory_order_acquire);
         ReleaseSRWLockExclusive(&s.gate);
         if (finished && s.worker.joinable()) s.worker.join();
         if (!s.worker.joinable()) {
-            s.workerFinished.store(false, std::memory_order_release);
             HMODULE pinned = nullptr;
             if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-                reinterpret_cast<LPCWSTR>(moduleAnchor), &pinned)) return false;
+                reinterpret_cast<LPCWSTR>(moduleAnchor), &pinned)) {
+                unbind();
+                return false;
+            }
+            s.workerFinished.store(false, std::memory_order_release);
             s.worker = std::thread([&s] { s.run(); });
         }
-        AcquireSRWLockExclusive(&s.gate); s.owner = owner; s.ownerThread = thread; ++s.generation; s.meter.reset(); ReleaseSRWLockExclusive(&s.gate);
         return SetEvent(s.changed) != FALSE;
-    } catch (...) { s.fail(); return false; }
+    } catch (...) { unbind(); s.fail(); return false; }
 }
 void Hud::unbind() noexcept {
     auto& s = *state_;
-    AcquireSRWLockExclusive(&s.gate); s.owner = nullptr; s.ownerThread = 0; ++s.generation; s.meter.reset(); ReleaseSRWLockExclusive(&s.gate);
+    AcquireSRWLockExclusive(&s.gate);
+    s.owner = nullptr; s.ownerThread = 0;
+    s.unboundAt = GetTickCount64(); ++s.generation; s.meter.reset();
+    ReleaseSRWLockExclusive(&s.gate);
     SetEvent(s.changed);
 }
 void Hud::present(HRESULT result, UINT flags) noexcept {
@@ -298,7 +323,9 @@ void Hud::present(HRESULT result, UINT flags) noexcept {
 Snapshot Hud::snapshot() noexcept {
     auto& s = *state_;
     AcquireSRWLockShared(&s.gate); auto value = s.display; ReleaseSRWLockShared(&s.gate);
-    value.reading = s.meter.read(); return value;
+    value.reading = s.meter.read();
+    value.workerActive = s.workerActive.load(std::memory_order_acquire);
+    return value;
 }
 }
 

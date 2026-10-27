@@ -28,6 +28,8 @@ struct Snapshot {
     UINT dpi = 0;
     unsigned draws = 0, failures = 0;
     bool visible = false;
+    // Synthetic/runtime diagnostic only: not a gameplay or FPS verdict.
+    bool workerActive = false;
 };
 // Create/destroy outside loader lock; join rendering callers before destruction.
 // One process policy retains this object across native chain recreation.

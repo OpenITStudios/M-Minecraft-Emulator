@@ -1,5 +1,38 @@
 # Current Development Handoff — v0.1
 
+## P0 MC02 shutdown source: native HUD worker after final swap-chain unbind — 27 October 2026
+
+The operator asked to prioritize MC02 remaining alive after its game
+HWND disappears, not further UI features. Source audit traversed the
+retained normal-close controller -> DXGI swap-chain wrapper ->
+per-process FPS HUD policy. The process-global DXGI policy holds one
+persistent HUD State, and its original `Hud::unbind()` only cleared
+owner HWND/thread and signaled the worker. `Hud::State::run()`
+formerly retired on an exited GUI thread, destroyed HWND or explicit
+stop; after unbind with the original HWND still valid and GUI thread
+still running, the native HUD worker could remain alive indefinitely.
+This is a source-confirmed leak path, **not a proven diagnosis of the
+historical MC02 run**.
+
+The same HUD worker now retires after a fixed 1000ms without a bound
+owner, retaining the 250ms existing message-pump cadence and allowing
+rapid swap-chain recreation to reuse the worker. A generation-checked
+state transition prevents an outdated idle observation from retiring
+a replacement binding. `bind()` now publishes owner/generation under
+the existing HUD SRW lock *before* checking whether a worker committed
+to retirement, then joins/restarts a completed thread outside the
+lock. The process-scoped pacing policy and DXGI COM wrapper remain
+unchanged. HUD snapshot exposes read-only workerActive evidence.
+A synthetic self-owned Windows fixture covers unbind while the HWND
+and original GUI thread remain **alive**, eventual worker retirement
+and rebind into a fresh thread; the previous rapid rebinding check
+no longer requires worker thread-ID stability after a possible retire.
+
+The DLL/official game is not forcibly terminated or modified; account,
+world, registry, FPS limits, CI and installed artifacts are untouched.
+All new C++ fixtures are authored only and NOT_EXECUTED. Minecraft MC02
+shutdown remains NOT_ACCEPTED until permitted runtime evidence exists.
+
 ## P0 native restoration completion uses readback — 27 October 2026
 
 The native restore path previously accepted SetWindowPos's success

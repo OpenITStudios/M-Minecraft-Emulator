@@ -145,7 +145,10 @@ int run() {
         check(hud.bind(owner, GetCurrentThreadId()));
         until([&] { const auto s = hud.snapshot(); check(!s.failures); return s.window != nullptr; });
         check(hud.snapshot().reading.accepted == 0
-            && GetWindowThreadProcessId(hud.snapshot().window, nullptr) == originalWorker);
+            && GetWindowThreadProcessId(hud.snapshot().window, nullptr) != 0);
+        // The worker may be reused during a rapid rebind; its identity
+        // is not a correctness contract after an idle retirement.
+        check(originalWorker != 0);
         hud.unbind(); until([&] { return hud.snapshot().window == nullptr; });
     }
     // Dropping/recreating the window without unbinding is a realistic
@@ -168,6 +171,28 @@ int run() {
         until([&] {auto state=retained.snapshot();check(!state.failures);return state.window!=nullptr;});
         retained.unbind();
         check(DestroyWindow(replacement));
+    }
+    // A final released swap-chain can leave the original Minecraft GUI
+    // HWND/thread alive for some time. The old process-global HUD worker
+    // then looped forever because it only watched HWND/thread destruction.
+    // This synthetic fixture keeps the original HWND alive throughout.
+    {
+        fps_hud::Hud closing;
+        HWND stillAlive=CreateWindowExW(WS_EX_NOACTIVATE|WS_EX_TOOLWINDOW,type.lpszClassName,L"",
+            WS_POPUP,100,100,850,550,nullptr,nullptr,type.hInstance,nullptr);
+        check(stillAlive);
+        check(closing.bind(stillAlive,GetCurrentThreadId()));
+        until([&] {auto state=closing.snapshot();return state.workerActive && state.window!=nullptr;});
+        closing.unbind();
+        until([&] {return !closing.snapshot().workerActive;});
+        check(IsWindow(stillAlive) && GetWindowThreadProcessId(stillAlive,nullptr)==GetCurrentThreadId());
+        // Rebind must explicitly join the retired std::thread and start a
+        // fresh worker instead of leaving a joinable, finished thread behind.
+        check(closing.bind(stillAlive,GetCurrentThreadId()));
+        until([&] {auto state=closing.snapshot();return state.workerActive && state.window!=nullptr;});
+        closing.unbind();
+        until([&] {return !closing.snapshot().workerActive;});
+        check(DestroyWindow(stillAlive));
     }
     check(GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS) == baseGdi);
     check(DestroyWindow(owner)); check(SetThreadDpiAwarenessContext(oldDpi));
