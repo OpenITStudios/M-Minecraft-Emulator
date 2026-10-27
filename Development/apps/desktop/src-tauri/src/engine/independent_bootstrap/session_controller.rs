@@ -142,6 +142,14 @@ impl Sessions {
 
     fn snapshot(&mut self) -> SessionSnapshot {
         self.reap();
+        self.snapshot_without_reaping()
+    }
+
+    // During a coordinated normal CloseAll/CloseOne, the game process
+    // observation must not synchronously flush another game's startup
+    // journal before WM_CLOSE and exact dialog processing can proceed.
+    // The ordinary Inspect route continues to reap/persist as before.
+    fn snapshot_without_reaping(&mut self) -> SessionSnapshot {
         let profiles = (0..5)
             .map(|index| {
                 let process = self.running[index].as_ref().and_then(|started| {
@@ -221,9 +229,24 @@ impl Sessions {
         if slot.is_some() || result.is_err() {self.exiting=false;}
         result
     }
+    fn selected_processes_exited(&self,mask:&[bool;5])->io::Result<bool> {
+        for index in 0..5 {
+            if !mask[index] { continue; }
+            let Some(started)=self.running[index].as_ref() else { continue; };
+            match started.children[0].exit_code_after_exit() {
+                Ok(_) => {},
+                Err(error) if error.kind()==io::ErrorKind::WouldBlock => return Ok(false),
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(true)
+    }
+
     fn close_selected_sessions(&mut self,mask:[bool;5])->io::Result<()> {
-        self.reap();
-        let snapshot=self.snapshot();
+        // No journal write or sync_all until every targeted game process
+        // has exited. MC01 disk persistence must not stall MC02's native
+        // prompt confirmation on this single-threaded session actor.
+        let snapshot=self.snapshot_without_reaping();
         let mut issues=Vec::new();
         let mut progress: [NormalCloseProgress; 5] = std::array::from_fn(|_| NormalCloseProgress::default());
         for profile in snapshot.profiles {
@@ -252,8 +275,16 @@ impl Sessions {
         }
         let deadline=std::time::Instant::now()+Duration::from_secs(20);
         loop {
-            self.reap();
-            if (0..5).all(|index|!mask[index]||self.running[index].is_none()){return Ok(());}
+            // Query only original retained process handles while any target
+            // remains alive. Reaping would invoke blocking disk sync_all for
+            // an already-exited peer, starving the still-live game's dialog.
+            if self.selected_processes_exited(&mask)? {
+                self.reap(); // Only after selected game exits, persist journals.
+                if (0..5).all(|index|!mask[index]||self.running[index].is_none()) {
+                    return Ok(());
+                }
+                return Err(io::Error::other("Selected Minecraft process exit was observed, but its startup journal cleanup is still pending"));
+            }
             if !issues.is_empty(){return Err(io::Error::other(issues.join("; ")));}
             for index in 0..5 {
                 if !mask[index] {continue;}
@@ -279,7 +310,12 @@ impl Sessions {
                 let pending = (0..5).filter_map(|index| {
                     if !mask[index] {return None;}
                     let started = self.running[index].as_ref()?;
-                    let evidence = progress[index].describe_pending(&started.children[0]);
+                    let child=&started.children[0];
+                    // The snapshot may still retain an exited child until
+                    // all selected processes have exited. Do not accuse
+                    // an already-stopped MC01 of delaying MC02 shutdown.
+                    if child.exit_code_after_exit().is_ok() {return None;}
+                    let evidence = progress[index].describe_pending(child);
                     self.issues[index] = Some(format!("Normal exit pending: {evidence}"));
                     Some(format!("Minecraft - {}: {evidence}", index + 1))
                 }).collect::<Vec<_>>();
@@ -1008,6 +1044,26 @@ mod tests {
         assert!(require_data_idle(true, &[(42,123455)], std::slice::from_ref(&other)).is_err());
         assert!(require_data_idle(true, &[(43,123456)], std::slice::from_ref(&other)).is_err());
         assert!(require_data_idle(true, &[], &[]).is_ok());
+    }
+
+    #[test]
+    fn normal_close_only_reaps_after_all_selected_processes_have_exited() {
+        let mut sessions=Sessions{
+            stores:(0..5).map(|_|None).collect(),
+            running:(0..5).map(|_|None).collect(),
+            issues:vec![None;5],windows:vec![None;5],
+            path:String::new(),
+            image:File::open(std::env::current_exe().unwrap()).unwrap(),
+            exiting:false,
+        };
+        let one=normal_close_mask(Some(2)).unwrap();
+        assert!(sessions.selected_processes_exited(&one).unwrap());
+        let all=normal_close_mask(None).unwrap();
+        assert!(sessions.selected_processes_exited(&all).unwrap());
+        // Inspect is still an ordinary reaping operation, while the close
+        // path can safely take a non-reaping snapshot of all five slots.
+        assert_eq!(sessions.snapshot_without_reaping().profiles.len(),5);
+        assert!(sessions.running.iter().all(Option::is_none));
     }
 
     #[test]

@@ -1,5 +1,31 @@
 # Current Development Handoff — v0.1
 
+## P0 MC02 exit-dialog responsiveness before startup journal flush — 27 October 2026
+
+Source audit found another direct ordering hazard in the single-threaded
+retained controller: `close_selected_sessions()` called `snapshot()`
+(which reaps) before posting game WM_CLOSE, and then called `reap()`
+on every 50ms shutdown iteration. `reap()` performs after-exit
+startup-journal file creation, write_all and sync_all on any already
+exited launcher. If MC01 finishes while MC02 is waiting for its
+Minecraft Education native exit confirmation, synchronous MC01 disk
+I/O could block all subsequent MC02 dialog servicing. This is a
+source-confirmed potential *delay/deadline starvation* path; no
+observed runtime disk stall has been supplied.
+
+The normal-close owner now takes a non-reaping read-only snapshot,
+posts CloseAll/CloseOne requests, monitors the pinned original
+process HANDLEs without writing disk, and reaps/saves journals
+only after all *selected* games have exited. An already-exited
+MC01 remains observable until group completion but is not reported
+as still-running on timeout. Ordinary Inspect and idle controller
+still call `reap()` as before. CloseOne waits only for its selected
+slot, so unrelated active games remain running and are not
+closed. No journal data is dropped, no separate worker or async
+lifecycle service is created, and game/account/world bytes remain
+untouched. A synthetic selected-mask fixture is authored only;
+Rust, Windows and Minecraft execution remain NOT_EXECUTED.
+
 ## P0 MC02 shutdown source: native HUD worker after final swap-chain unbind — 27 October 2026
 
 The operator asked to prioritize MC02 remaining alive after its game
