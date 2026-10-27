@@ -209,16 +209,19 @@ impl Sessions {
         let snapshot=self.snapshot();
         let mut issues=Vec::new();
         let mut confirmed = [false; 5];
+        let mut requested = [false; 5];
         for profile in snapshot.profiles {
             let index=profile.slot as usize-1;
             let Some(started)=&self.running[index] else {continue;};
             let child=&started.children[0];
             let outcome=(||{
                 child.identity()?;
-                let Some(target)=profile.process else { if confirm_owned_exit(child)? {confirmed[index]=true;return Ok(());} return Err(invalid("Game window is not ready; wait for it to finish starting")); };
+                let Some(target)=profile.process else { if confirm_owned_exit(child)? {confirmed[index]=true;} return Ok(()); };
                 if target.pid!=child.pid || target.created_file_time!=child.created.to_string(){return Err(invalid("Game identity changed"));}
                 if confirm_education_exit(&target)? {confirmed[index]=true;return Ok(());}
-                close_verified_window(&target)
+                close_verified_window(&target)?;
+                requested[index]=true;
+                Ok(())
             })();
             if let Err(error)=outcome {issues.push(format!("Minecraft - {}: {error}",profile.slot));}
         }
@@ -231,7 +234,16 @@ impl Sessions {
                 if confirmed[index] { continue; }
                 let Some(started)=&self.running[index] else {continue;};
                 // The main HWND can disappear while its owned exit dialog remains.
-                let result=confirm_owned_exit(&started.children[0]);
+                let child=&started.children[0];
+                let result=confirm_owned_exit(child).and_then(|confirmed| {
+                    if !confirmed && !requested[index] {
+                        if let Some(target)=window(child) {
+                            close_verified_window(&target)?;
+                            requested[index]=true;
+                        }
+                    }
+                    Ok(confirmed)
+                });
                 match result {
                     Ok(value)=>confirmed[index]=value,
                     Err(error)=>{self.exiting=false;return Err(error);}
