@@ -27,7 +27,10 @@ source correction tracks verified HWNDs per session, permits a bounded
 WM_CLOSE request only for a newly verified window, and records the original
 window thread's signaled/alive state together with whether a dialog was
 submitted. Normal-close timeout evidence is attached to the affected session
-for subsequent Inspect, which now reports ATTENTION rather than STARTING.
+for subsequent Inspect, which now reports NOT_RESPONDING instead of STARTING: the UI treats a
+still-running game without a usable HWND as non-launchable and counts it as
+an active process, without changing the existing session wire schema. A
+frontend contract regression was authored for this case.
 No force termination, account/world reads, new provider or background probe
 is introduced. This is a diagnostic/close-retry correction, not proof that
 the original MC02 hang is fixed; Windows and Minecraft tests are NOT_EXECUTED.

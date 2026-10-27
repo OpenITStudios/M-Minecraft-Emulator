@@ -137,6 +137,22 @@ describe('Lazy Tester profile contract', () => {
     expect(previewViewport({x:10,y:450,width:145,height:80},1.5)).toEqual({x:10,y:450,width:145,height:80,pixelRatio:1.5});
     for(const rect of [{x:-1,y:450,width:145,height:80},{x:10,y:450,width:31,height:80},{x:10,y:450,width:145,height:NaN}])expect(()=>previewViewport(rect)).toThrow();
   });
+  it('keeps a windowless normal-exit survivor non-launchable in the existing protocol', () => {
+    const original = stopped();
+    const pending = {
+      ...original,
+      profiles: original.profiles.map(profile => profile.slot === 2
+        ? {...profile, state:'NOT_RESPONDING', issue:'Normal exit pending: game process still running'}
+        : profile),
+    };
+    const parsed = parseSession(pending);
+    expect(parsed.profiles[1]).toMatchObject({
+      slot:2, state:'NOT_RESPONDING', process:null,
+      issue:'Normal exit pending: game process still running',
+    });
+    expect(parsed.profiles.filter(profile => ['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state))).toHaveLength(1);
+  });
+
   it('keeps all five stopped profiles without deriving login or starting a game', () => {
     const snapshot = parseSession(stopped());
     expect(snapshot.profiles.map(profile => profile.slot)).toEqual([1,2,3,4,5]);

@@ -180,7 +180,10 @@ impl Sessions {
                     match process.as_ref() {
                         Some(p) if p.responding => "RUNNING",
                         Some(_) => "NOT_RESPONDING",
-                        None if issue.is_some() => "ATTENTION",
+                        // This owned process is still alive but has no usable game HWND.
+                        // NOT_RESPONDING prevents an unsafe second Launch in the UI;
+                        // ATTENTION without a process is reserved for stopped profiles.
+                        None if issue.is_some() => "NOT_RESPONDING",
                         None => "STARTING",
                     }
                 } else if issue.is_some() || self.stores[index].is_none() {
