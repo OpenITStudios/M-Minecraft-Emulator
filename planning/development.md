@@ -91,8 +91,7 @@ Preserve migrated Data/Launchers/Minecraft-1..5, Data/Settings and Data/Cache; e
 originals remain recovery only. Keep file-backed hives/ACLs/DLL pins; no account/world
 content reads. App/build-info.json records reviewed payloads; no repeat migration.
 Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4; second worktree detached47a45f9c7d4a8ce6799d56997fd38e4b4df49ce7 unchanged.
-Four licensed playable clients, gameplay/network/migration/installer acceptance
-are separate obligations, NOT_EXECUTED here. Compiler caches remain ignored.
+Four-client, gameplay, network, migration and installer acceptance NOT_EXECUTED.
 
 Latest 6dff3d1 runtime: launch two sessions PASS; first switch test failed because
 Minecraft 2 was covered, retry six switches/drag PASS. Pixels/input NOT_PROVEN.
@@ -101,7 +100,9 @@ Logs workspace/runs/current-two-session-{launch,presentation,presentation-retry,
 Source: full exit can confirm the exact owned exit dialog even if its main window
 is missing; identity rechecked before posting. Cargo check and refusal test PASS;
 actual dialog without window NOT_EXECUTED. Exit wait also checks the retained child
-after window loss. Other stuck states still require diagnosis.
+after window loss. Starting games are polled for a verified window until the existing
+exit deadline; cargo check and idle test PASS, startup transition NOT_EXECUTED.
+Other stuck states still require diagnosis.
 FPS foreground sampling retries transient instability; unit test PASS, actual FPS
 response and sustained instability NOT_EXECUTED.
 Next: inspect FPS focus policy and process grouping;
