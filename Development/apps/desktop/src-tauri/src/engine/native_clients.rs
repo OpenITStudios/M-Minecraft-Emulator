@@ -402,12 +402,17 @@ pub struct NativeWorkspaceObservation {
     pub processes: Vec<super::owned_provider::OwnedProcess>,
 }
 
+// Lazy Tester owns five launcher slots. The registered-image observer also
+// sees unrelated game candidates, so >5 still fails closed rather than
+// silently truncating identities. This is an observation cap, not ownership.
+const MAX_NATIVE_WORKSPACE_PROCESSES: usize = 5;
+
 fn parse_native_workspace_observation(raw: &str) -> io::Result<NativeWorkspaceObservation> {
     let result: NativeWorkspaceObservation = serde_json::from_str(raw)
         .map_err(|_| invalid_evidence("Malformed native workspace observation"))?;
     if result.schema != 1
         || result.evidence_class != "REGISTERED_IMAGE_PATH_CANDIDATE_ONLY"
-        || result.processes.len() > 4
+        || result.processes.len() > MAX_NATIVE_WORKSPACE_PROCESSES
     {
         return Err(invalid_evidence("Too many or unsupported observed Minecraft processes"));
     }
@@ -728,8 +733,8 @@ mod native_workspace_windows {
             if exact_windows_path(executable_name(&entry)?, &expected_image) {
                 if let Some(process) = observe_one(entry.th32ProcessID, &target_wide, current_session)? {
                     processes.push(process);
-                    if processes.len() > 4 {
-                        return Err(io::Error::new(io::ErrorKind::InvalidData, "More than four registered Minecraft processes"));
+                    if processes.len() > MAX_NATIVE_WORKSPACE_PROCESSES {
+                        return Err(io::Error::new(io::ErrorKind::InvalidData, "More than five registered Minecraft processes"));
                     }
                 }
             }
@@ -924,6 +929,40 @@ mod native_workspace_tests {
             r#"{"schema":1,"evidenceClass":"REGISTERED_IMAGE_PATH_CANDIDATE_ONLY","processes":[]}"#,
         ).unwrap();
         assert!(!matches_native_workspace_target(&empty, &target));
+    }
+
+    #[test]
+    fn native_workspace_admits_five_distinct_game_processes_including_windowless() {
+        let processes=(1_u32..=5).map(|slot|serde_json::json!({
+            "pid":100+slot,
+            "createdFileTime":(134000000000000001_u64+slot as u64).to_string(),
+            "sessionId":1,
+            "windowHandle":if slot==5{"0x0".to_string()}else{format!("0x{:x}",0x200+slot)},
+            "responding":slot!=5,
+        })).collect::<Vec<_>>();
+        let report=serde_json::json!({
+            "schema":1,
+            "evidenceClass":"REGISTERED_IMAGE_PATH_CANDIDATE_ONLY",
+            "processes":processes
+        });
+        let observed=parse_native_workspace_observation(&report.to_string()).unwrap();
+        assert_eq!(observed.processes.len(),5);
+        assert_eq!(observed.processes[4].window_handle,"0x0");
+        assert!(!observed.processes[4].responding);
+        for process in &observed.processes[..4] {
+            assert!(matches_native_workspace_target(&observed,process));
+        }
+        // A sixth independently identified registered game must not be
+        // ignored or misattributed to a permitted launcher.
+        let mut excessive=report;
+        excessive["processes"].as_array_mut().unwrap().push(serde_json::json!({
+            "pid":106,
+            "createdFileTime":"134000000000000106",
+            "sessionId":1,
+            "windowHandle":"0x206",
+            "responding":true
+        }));
+        assert!(parse_native_workspace_observation(&excessive.to_string()).is_err());
     }
 
     #[test]

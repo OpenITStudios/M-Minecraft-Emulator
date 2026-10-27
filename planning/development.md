@@ -1,5 +1,20 @@
 # Current Development Handoff — v0.1
 
+## P0 five-launcher registered-process observation — 27 October 2026
+
+The source audit found a mismatched capacity contract: Lazy Tester supports
+five independently managed Minecraft Education profiles but the canonical
+registered-native-process collector and its JSON verifier rejected more
+than four candidates. The existing observation owner now admits up to five
+registered-image process candidates using a shared fixed cap, including
+windowless processes with HWND 0 that can survive an incomplete shutdown.
+Six or more candidates still fail closed, as do duplicate PID, HWND,
+unbounded or forged fields. Nothing in this observation grants game
+ownership, account evidence or a new launcher. Synthetic fixtures cover
+five distinct identities (one windowless) and six-candidate refusal.
+No local PC, Windows, Minecraft or source execution took place. Tests
+are authored, NOT_EXECUTED.
+
 ## P0 source audit — 27 October 2026 (no Local PC testing)
 
 The operator explicitly requires ChatGPT + GitHub-only work. Windows, installer,
