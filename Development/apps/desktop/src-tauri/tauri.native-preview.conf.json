@@ -21,15 +21,7 @@
     "shortDescription": "Preview: manage existing Minecraft Education windows",
     "longDescription": "Preview of the native Windows Minecraft Education window manager. Supports opening the registered Client 01 and showing already running game windows. Does not provide independent Client 02–04 account isolation.",
     "externalBin": [],
-    "resources": {
-      "../../../engine/guest/windows/": null,
-      "../../../tooling/acceptance/windows/": null,
-      "../../../engine/distribution/release-channel.json": null,
-      "../../../engine/distribution/package-contract.json": null,
-      "../../../engine/distribution/install-lifecycle-policy.json": null,
-      "../../../engine/distribution/test-upgrade.ps1": null,
-      "../../../engine/distribution/write-payload-manifest.ps1": null
-    },
+    "resources": {},
     "windows": {
       "nsis": {
         "installMode": "currentUser",

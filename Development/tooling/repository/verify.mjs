@@ -85,6 +85,11 @@ export function verifyRepository(root,g0=false) {
   verifyNativePreviewPackage();verifyLazyTesterPackage();
   const tracked=execFileSync('git',['ls-files','-z'],{cwd:root,encoding:'utf8'}).split('\0').filter(Boolean);
   assert.deepEqual(checkTracked(tracked),[]);
+  for(const path of ['Development/engine/guest/windows', 'Development/engine/isolation-native',
+    'Development/apps/desktop/src-tauri/tauri.package.conf.json',
+    'Development/apps/desktop/src-tauri/windows/installer-hooks.nsh']) {
+    assert.ok(!existsSync(resolve(root,path)),'Retired Windows VM/source route returned: '+path);
+  }
   assert.ok(!tracked.some(path=>path==='.gitmodules'||/^Development\/engine\/isolation-(?:owned|candidates|upstream)(?:\/|$)/.test(path)),
     'Retired Sandboxie vendor source or submodule must not return');
   assert.ok(!tracked.some(path=>/(?:replay-profile-(?:pair|five)|profile-binding-five)\.bin$/.test(path)),'Private bindings must never be tracked');

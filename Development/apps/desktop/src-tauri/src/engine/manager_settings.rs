@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::{fs, io, io::Read, path::PathBuf};
 
 pub const TARGETS: &str =
-    include_str!("../../../../../engine/isolation-native/owned-runtime/minecraft-targets.json");
+    include_str!("legacy-targets.json");
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 pub enum BackgroundAudio { #[default] Keep, Mute }

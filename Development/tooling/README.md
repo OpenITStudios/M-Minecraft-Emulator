@@ -12,10 +12,11 @@ a second live game process/session owner.
 | `dependencies/` | Dependency consistency review and maintenance |
 | `acceptance/windows/bootstrap-ordering/` | **Active native DLL source** used by the five-session game bootstrap |
 | `acceptance/` | Native and historical acceptance collectors; older Sandboxie/VM results are not current gameplay proof |
-| `isolation-source/` | **Retired Sandboxie build/provision research**; some embedded helper scripts are still included by legacy Rust code and must be migrated before this directory can disappear |
+| `isolation-source/windows/` | Three retained embedded PowerShell helpers for the still-compiled legacy Rust compatibility adapter; all obsolete fork/provision tooling removed |
 | `local-test/` | Optional source acceptance bookkeeping, not runtime evidence until executed |
 
-The complete vendored Sandboxie fork/reference trees and gitlink have left
-`Local`, but historical collectors and inherited code dependencies remain
+The vendored Sandboxie trees, VMware Guest Agent resources, and retired fork
+build/provision scripts have left `Local`, but historical collectors and the
+three embedded legacy compatibility helpers remain
 until their callers are removed. Do not run legacy service/VM scripts, grant
 new game-launch authority or delete user data during source cleanup.

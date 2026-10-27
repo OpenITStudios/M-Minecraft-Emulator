@@ -14,6 +14,17 @@ Proof: REMOTE_GITHUB exact-tree/source review only; all source execution,
 Windows package and Minecraft gameplay NOT_EXECUTED.
 
 
+## Source-retirement phase 3 — deactivate historical build and guest resources
+
+`Local` now removes VMware guest scripts, old standalone VM distribution assets,
+legacy NSIS variant/hooks, discontinued Sandboxie/owned-fork source/build tooling,
+and unused VM acceptance scripts. The old disabled package entrypoint is reduced
+to a deterministic refusal, and Tauri's base bundle owns no legacy resources.
+The original four-slot historical target metadata is embedded beside the desktop
+source so old read-only diagnostics can still compile; it is not launch authority.
+Remaining legacy adapters/helpers are listed in the retirement register. Package,
+Node/Rust checks and Windows/Minecraft execution: NOT_EXECUTED.
+
 ## Source-retirement phase 2 — remove VM runtime compilation from core
 
 The desktop's historical `virtual-clients-core` dependency is retained by

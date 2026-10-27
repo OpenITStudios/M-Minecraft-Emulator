@@ -46,20 +46,9 @@ fn main() {
         let resources = patch.pointer("/bundle/resources")
             .and_then(serde_json::Value::as_object)
             .expect("Native preview must explicitly remove legacy package resources");
-        for name in [
-            "../../../engine/guest/windows/",
-            "../../../tooling/acceptance/windows/",
-            "../../../engine/distribution/release-channel.json",
-            "../../../engine/distribution/package-contract.json",
-            "../../../engine/distribution/install-lifecycle-policy.json",
-            "../../../engine/distribution/test-upgrade.ps1",
-            "../../../engine/distribution/write-payload-manifest.ps1",
-        ] {
-            assert_eq!(
-                resources.get(name),
-                Some(&serde_json::Value::Null),
-                "Native preview must delete every inherited VMware package resource",
-            );
+        // Base config is payload-free. The native overlay owns every resource.
+        if !lazy {
+            assert!(resources.is_empty(), "Preview cannot bundle resource payloads");
         }
         if lazy {
             assert_eq!(patch.get("productName").and_then(serde_json::Value::as_str), Some("Lazy Tester"));
@@ -72,7 +61,7 @@ fn main() {
                 assert_eq!(resources.get(source).and_then(serde_json::Value::as_str), Some(target));
             }
         }
-        assert_eq!(resources.len(), if lazy { 11 } else { 7 }, "Unexpected native package resources");
+        assert_eq!(resources.len(), if lazy { 4 } else { 0 }, "Unexpected native package resources");
         assert_eq!(
             patch.pointer("/bundle/externalBin").and_then(serde_json::Value::as_array)
                 .map(Vec::len),

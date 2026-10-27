@@ -1786,7 +1786,7 @@ The sole mounted `UnifiedManagerApp.svelte` shows 01 native and owned 02–04.
 Legacy Compact Manager/pilot source and all existing profile/account/world data
 remain preserved and unmounted. The active UI never falls back to official Sandboxie.
 Canonical slot/provider/profile definitions live in
-[`minecraft-targets.json`](../../Development/engine/isolation-native/owned-runtime/minecraft-targets.json).
+[`minecraft-targets.json`](../../Development/apps/desktop/src-tauri/src/engine/legacy-targets.json).
 The existing legacy diagnostic catalog projects those identities onto its historical
 pilot metadata; that projection is not the unified dashboard's provider selection.
 

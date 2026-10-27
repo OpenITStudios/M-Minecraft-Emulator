@@ -62,15 +62,7 @@
       "icons/128x128@2x.png",
       "icons/icon.ico"
     ],
-    "resources": {
-      "../../../engine/guest/windows/": "guest/windows/",
-      "../../../tooling/acceptance/windows/": "acceptance/windows/",
-      "../../../engine/distribution/release-channel.json": "distribution/release-channel.json",
-      "../../../engine/distribution/package-contract.json": "distribution/package-contract.json",
-      "../../../engine/distribution/install-lifecycle-policy.json": "distribution/install-lifecycle-policy.json",
-      "../../../engine/distribution/test-upgrade.ps1": "distribution/test-upgrade.ps1",
-      "../../../engine/distribution/write-payload-manifest.ps1": "distribution/write-payload-manifest.ps1"
-    },
+    "resources": {},
     "windows": {
       "allowDowngrades": false,
       "webviewInstallMode": {
@@ -85,8 +77,7 @@
         "displayLanguageSelector": false,
         "installerIcon": "icons/icon.ico",
         "uninstallerIcon": "icons/icon.ico",
-        "startMenuFolder": "M-Bedrock Virtual Clients",
-        "installerHooks": "windows/installer-hooks.nsh"
+        "startMenuFolder": "M-Bedrock Virtual Clients"
       }
     }
   }

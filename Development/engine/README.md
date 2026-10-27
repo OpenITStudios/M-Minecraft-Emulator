@@ -31,8 +31,10 @@ into another live directory. No Sandboxie fork or driver is a product launch
 provider. Installed systems, guest disks, worlds, accounts and registry profiles
 were not touched by this source-only change.
 
-Windows VMware Guest Agent and historical package/acceptance scripts outside
-this crate have **not yet been fully removed**. Trace their remaining desktop/runtime/tooling
+The VMware Guest Agent scripts, fork-only build tree and legacy distribution
+resources have now been retired from the active source checkout. Some historical
+Sandboxie observation adapters and three embedded helper scripts remain compiled
+until their callers are safely disconnected. Trace their remaining desktop/runtime/tooling
 consumers before deleting them. This work cannot by itself establish gameplay,
 packaging or cross-platform acceptance.
 

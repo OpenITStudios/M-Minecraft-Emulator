@@ -586,7 +586,7 @@ rather than enable fallback on unsupported Windows versions.
 ### Service-owned native desktop-image Authenticode preflight (22 October 2026)
 
 The standalone, source-only Windows SCM service now includes an
-original [peer_image.rs](../../Development/engine/isolation-native/independent-service/src/peer_image.rs)
+original [peer_image.rs](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/b1daa1ecf6679234f9433020aea7f11d93c2e613/Development/engine/isolation-native/independent-service/src/peer_image.rs)
 native observer only when `readonly-ipc-pilot` is explicitly enabled
 (default feature list remains empty). It is NOT a Tauri bridge
 or a second executable launcher. After the service's existing
@@ -763,7 +763,7 @@ The native Windows service IPC had a second TokenUser reader that
 called IsValidSid on the returned SID pointer without first proving
 that the entire SID lay within the live GetTokenInformation allocation.
 This is now corrected in the existing
-[service_identity.rs](../../Development/engine/isolation-native/independent-service/src/service_identity.rs):
+[service_identity.rs](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/b1daa1ecf6679234f9433020aea7f11d93c2e613/Development/engine/isolation-native/independent-service/src/service_identity.rs):
 a single bounded SID copier is used by both TokenGroups and TokenUser.
 It checks the returned byte count, header location, SID revision,
 subauthority count, complete SID body and native IsValidSid/length
@@ -947,7 +947,7 @@ profile operations or filesystem/registry enforcement.
 
 The independent standalone service now has a Windows-only
 `readonly-ipc-pilot` Cargo feature, **OFF by default**. The feature
-adds a service-owned [ipc_worker.rs](../../Development/engine/isolation-native/independent-service/src/ipc_worker.rs)
+adds a service-owned [ipc_worker.rs](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/b1daa1ecf6679234f9433020aea7f11d93c2e613/Development/engine/isolation-native/independent-service/src/ipc_worker.rs)
 and imports the ONE canonical, fixed 32-byte read-only broker parser
 from runtime-core instead of duplicating the schema. The default SCM
 host remains inert. An explicitly compiled pilot creates a single

@@ -15,6 +15,10 @@ export function checkTracked(paths) {
   const errors = [];
   for (const path of paths) {
     if (retired.test(path)) errors.push('Retired Sandboxie source: ' + path);
+    if (/^Development\/engine\/(?:guest|isolation-native)(?:\/|$)/.test(path)||
+        /^Development\/apps\/desktop\/src-tauri\/(?:tauri\.package\.conf\.json|windows\/installer-hooks\.nsh)$/.test(path)) {
+      errors.push('Retired VM or fork packaging source: ' + path);
+    }
     if (!path.includes('/')) {
       if (!rootFiles.has(path)) errors.push('Unreviewed root owner: ' + path);
     } else if (!roots.has(path.split('/')[0])) errors.push('Unreviewed directory owner: ' + path);

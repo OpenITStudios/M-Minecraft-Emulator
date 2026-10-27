@@ -9,6 +9,22 @@ lifecycle: ACTIVE
 
 # Selected Windows isolation pilot and inactive legacy inventory
 
+## Repository VM/legacy package retirement — 27 October 2026
+
+The `runtime-core` VMX/VMware/Guest Agent modules were retired from the active
+Rust crate; the original subprocess helper was kept intact under its own native
+module. The legacy Windows guest script tree, old NSIS variant and hooks, VMware
+distribution resources/service-prototype and fork-only `isolation-native`
+source were also removed from `Local`. The former target manifest is embedded
+in the desktop's legacy compatibility catalog rather than rooted in the fork.
+
+The common Tauri configuration is payload-free. Release without an explicit
+native package feature is still blocked. Old installer IDs, old installations,
+accounts, worlds and disks are not migrated or deleted. A few compiled
+Sandboxie-era read-only adapters and the embedded scripts they reference remain
+pending separately reviewed consumer extraction. Tests/packages/gameplay were
+NOT_EXECUTED; this change is only source-level.
+
 ## Repository vendor-source retirement — 27 October 2026
 
 On `Local`, the vendored `Development/engine/isolation-owned/` and

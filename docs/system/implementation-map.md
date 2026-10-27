@@ -9,6 +9,14 @@ lifecycle: ACTIVE
 
 # Implementation Ownership Map
 
+> **Retirement note (27 October 2026):** Older sections below contain historical
+> Sandboxie/VMware navigation and revision-specific evidence. Vendored Sandboxie
+> trees, fork-build sources, legacy Windows guest/installer resources and VMware
+> runtime modules have now been retired from `Local`. Treat any older reference
+> to these paths as Git-history provenance, not a current file or active owner.
+> The current Lazy Tester native controller, window recovery and compatibility
+> DLL source remain the product owners.
+
 This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build tooling in [Isolation Source Tooling](../../Development/tooling/isolation-source/README.md) is retired product history, not the native engine. The only active goal, blocker and next action are in [planning/development.md](../../planning/development.md). Treat historical `Next` here as superseded; inspect owning source and consumers.
 
 ## Current Lazy Tester route — 26 October 2026

@@ -22,7 +22,7 @@ export function verifyLazyTesterPackage(patch=JSON.parse(read('src-tauri/tauri.l
   };
   fail(JSON.stringify(Object.entries(config.bundle.resources).sort())===JSON.stringify(Object.entries(allowed).sort()),'Unexpected or missing native payload');
   fail(config.build.beforeBundleCommand==='node scripts/prepare-process-roles.mjs','Process role metadata hook required');
-  fail(Object.keys(base.bundle.resources).every(key=>patch.bundle.resources[key]===null),'Every legacy resource must be removed');
+  fail(Object.keys(base.bundle.resources).length===0&&Object.values(patch.bundle.resources).every(value=>value!==null),'Shared bundle must remain payload-free; overlay may contain only native assets');
   fail(Array.isArray(config.bundle.externalBin)&&config.bundle.externalBin.length===0,'Legacy sidecars forbidden');
   fail(JSON.stringify(config.app.security)===JSON.stringify(base.app.security)&&!Object.hasOwn(config,'plugins'),'Desktop security must remain unchanged');
   const hooks=read('src-tauri/windows/lazy-tester-hooks.nsh');
