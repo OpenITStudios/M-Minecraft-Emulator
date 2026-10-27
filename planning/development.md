@@ -159,6 +159,20 @@ through read-only Inspect. This corrects an identified misleading-UI path
 without a new native lifecycle authority. Tests are authored but not
 executed; runtime success remains NOT_EXECUTED.
 
+## P0 preserved-peer presentation after selected close — 27 October 2026
+
+When the currently embedded launcher receives an acknowledged native
+presentation-release receipt, Play now selects another verified responsive
+peer from the existing controller snapshot. This avoids leaving the other
+session's still-retained parked native game window inaccessible after one
+selected Minecraft exits. When selected exit remains uncertain, automatic
+selection explicitly excludes the pending target; a different responding
+peer may resume. With no verified responsive peer, Play remains in
+separate-window/recovery mode, never claims to have a playable embedded
+session, and does not force-kill or silently capture the unresolved target.
+An unacknowledged pre-release error still preserves the original view.
+Only the Svelte selection policy changed, not the game actor or ownership.
+
 ## State and operator request — 27 October 2026
 
 The v0.1 checkpoint was saved and paused in Codex. The operator subsequently

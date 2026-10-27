@@ -227,19 +227,33 @@
     closeOneSlot=null; closingOneSlot=slot; busy=true; issue='';
     try {
       const report=await lazyTester.closeOne(slot);
-      // Only this successful native restoration receipt permits us to mark
-      // the selected game no longer embedded, even if its process remains.
-      if (active===slot && report.presentationReleased) {
+      // Only the native restoration receipt permits changing the embedded
+      // window claim. Preserve other already-owned game presentation leases.
+      const wasActive=active===slot && report.presentationReleased;
+      if (wasActive) {
         active=null;selectedIdentity='';requested=null;queued=null;
         separateSlots=new Set([...separateSlots].filter(value=>value!==slot));
-        detached=true;
       }
       if (report.snapshot) {
         profiles=report.snapshot.profiles;available=true;connectionIssue='';storage=null;
+        if (wasActive) {
+          // Existing background games may still be parked offscreen with
+          // WS_EX_TOOLWINDOW. Promote another verified responsive peer into
+          // Play instead of leaving it inaccessible without a preview.
+          queued=firstEmbeddedProfile(profiles,separateSlots);
+          detached=queued===null;
+        }
       } else {
         issue=`Minecraft - ${slot} has not finished closing normally. ${report.issue??'Refresh to inspect the current session.'}`;
         try {profiles=(await lazyTester.inspect()).profiles;available=true;connectionIssue='';}
         catch(refreshError){available=false;connectionIssue=String(refreshError);}
+        if (wasActive) {
+          // Never automatically reselect the game whose exit outcome is
+          // uncertain; a different responding peer can still be presented.
+          const excluded=new Set<ProfileSlot>([...separateSlots,slot]);
+          queued=available?firstEmbeddedProfile(profiles,excluded):null;
+          detached=queued===null;
+        }
       }
     } catch (error) {
       // The command did not acknowledge releasing the target presentation.
