@@ -1121,6 +1121,9 @@ pub fn focus_observed_native_window(target: OwnedProcess) -> io::Result<()> {
     }
 }
 
+// Only Windows compiles the existing HWND/OGLES recovery controller. Its
+// process roles and exact native checkpoint ownership have no Mac analogue.
+#[cfg(windows)]
 mod controller {
     use super::*;
     use std::{
@@ -2665,6 +2668,11 @@ mod controller {
         }
     }
 }
+// Unsupported platforms retain the same command signatures without loading
+// Win32 recovery process code or pretending to own a Minecraft HWND.
+#[cfg(not(windows))]
+#[path = "workspace_surface/unsupported_controller.rs"]
+mod controller;
 pub use controller::{
     is_active, present_retained, present_verified, release, release_for_close, allow_game_close_after_failed_restore, allow_managed_slot_close_after_failed_restore, release_exited_managed_slot_checkpoint, cancel_close, release_target, release_managed_slot, suspend, update,
 };

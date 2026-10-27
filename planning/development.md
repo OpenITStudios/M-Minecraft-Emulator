@@ -117,8 +117,18 @@ unchanged; static repository guard and negative fixtures are added. Windows
 packaging, Tauri IPC, lifecycle and installed data were not changed. This is
 source-only; Mac compilation and native backend remain NOT_EXECUTED.
 
+## Native presentation boundary — 28 October 2026
+
+`workspace_surface` now compiles its existing window recovery/controller
+only on Windows. The non-Windows compilation path has a fail-closed,
+side-effect-free contract with no process/helper ownership. The public
+presentation API and Windows implementation stay unchanged. Authored
+non-Windows Rust regression and source guard have not executed; Mac build,
+account/profile isolation, game playback and actual optimizations remain
+NOT_EXECUTED.
+
 ## Next bounded action
 
-Inspect and isolate the first actual Windows-only source compilation barrier
-without copying lifecycle authority or creating a speculative macOS adapter.
-Keep build, tests, package and Minecraft acceptance NOT_EXECUTED.
+Inspect any remaining unguarded Windows-only source imports in the Tauri
+entrypoint and live owner graph; correct one verified barrier at a time.
+Do not introduce an unproven macOS game provider or run local PC tests.

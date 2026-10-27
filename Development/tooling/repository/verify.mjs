@@ -144,6 +144,16 @@ export function verifyRepository(root,g0=false) {
     'Development/tooling/acceptance/windows/collect-virtual-boxes.ps1'
   ]) assert.ok(!existsSync(resolve(root,path)), 'Retired Sandboxie runtime returned: '+path);
   const ownerModules=read('Development/apps/desktop/src-tauri/src/engine/mod.rs');
+  const surface=read('Development/apps/desktop/src-tauri/src/engine/workspace_surface.rs');
+  const unavailableSurface=read('Development/apps/desktop/src-tauri/src/engine/workspace_surface/unsupported_controller.rs');
+  assert.ok(/#\[cfg\(windows\)\]\s*mod controller \{/.test(surface)
+    && /#\[cfg\(not\(windows\)\)\]\s*#\[path = "workspace_surface\/unsupported_controller\.rs"\]\s*mod controller;/.test(surface),
+    'Native Win32 recovery controller must not be compiled on other OS targets');
+  assert.ok(unavailableSurface.includes('io::ErrorKind::Unsupported')
+    && unavailableSurface.includes('pub fn is_active() -> bool')
+    && unavailableSurface.includes('false // No native workspace lease')
+    && !/windows(_sys)?::|std::os::windows|\.spawn\(/.test(unavailableSurface),
+    'Non-Windows workspace must not start helpers, import Win32, or claim active leases');
   assert.ok(ownerModules.includes('pub mod process_identity;') &&
     !ownerModules.includes('pub mod owned_provider;'), 'Native process identity must be standalone');
   const gameSource=read('Development/apps/desktop/src-tauri/src/engine/native_clients.rs');

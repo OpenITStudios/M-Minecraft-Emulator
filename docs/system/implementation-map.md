@@ -19,6 +19,20 @@ lifecycle: ACTIVE
 
 This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build tooling in [Isolation Source Tooling](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md) is retired product history, not the native engine. The only active goal, blocker and next action are in [planning/development.md](../../planning/development.md). Treat historical `Next` here as superseded; inspect owning source and consumers.
 
+## Native presentation target boundary — 28 October 2026
+
+`workspace_surface.rs` now compiles its existing native HWND/DWM
+`controller` module exclusively on Windows. Non-Windows targets use the
+small `workspace_surface/unsupported_controller.rs` contract implementation:
+no process, HWND, helper, state, startup or recovery operation is performed;
+the same public functions fail with Unsupported and `is_active` is false.
+Selected-close refusal reports no window mutation, and out-of-range slots
+remain InvalidInput. Windows controller/recovery logic, Tauri IPC and
+presentation schemas have not changed. Native Windows remains the only
+implemented backend; this **does not** prove macOS compile readiness,
+profile isolation, Minecraft login or multi-instance gameplay. Authored
+non-Windows source tests and repository guard have not been executed.
+
 ## Windows-only Cargo dependencies — 28 October 2026
 
 The desktop crate declares the same `windows` and `windows-sys` versions and
