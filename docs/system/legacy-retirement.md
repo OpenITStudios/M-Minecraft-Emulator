@@ -9,6 +9,16 @@ lifecycle: ACTIVE
 
 # Selected Windows isolation pilot and inactive legacy inventory
 
+## Retired vendor/box inspector modules removed — 27 October 2026
+
+The owned Sandboxie fork candidate inspector and the virtual-box inventory
+module have no consumers in the mounted Lazy Tester graph. Their unregistered
+Tauri commands and private `native_clients.rs` inspection wrappers were deleted,
+then both Rust module bodies removed from `Local`. The normal Minecraft
+launch/session owner, original installer identity and native workspace remain
+untouched. Historical source remains available at the previous exact commit.
+No runtime or source checks were executed.
+
 ## Legacy Tauri command registration retired — 27 October 2026
 
 Tauri now registers only the commands reachable from the mounted Lazy Tester

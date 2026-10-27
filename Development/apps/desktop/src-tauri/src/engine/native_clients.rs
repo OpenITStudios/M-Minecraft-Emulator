@@ -1712,33 +1712,6 @@ pub fn request_sandbox_client_02(executable: String, licensed: bool) -> io::Resu
     request_with_backend(&ACTIVE_ISOLATION_BACKEND, executable, licensed)
 }
 
-// Inspection only: a valid staged candidate is still neither loadable nor
-// enabled. No state or driver operations are performed by this command.
-pub fn inspect_owned_engine_candidate(
-    directory: String,
-) -> io::Result<crate::engine::owned_isolation::OwnedCandidateInspection> {
-    crate::engine::owned_isolation::inspect_candidate_path(directory)
-}
-
-// Read-only SCM namespace probe: does not select or install an owned backend.
-pub fn inspect_owned_engine_host() -> io::Result<crate::engine::owned_isolation::OwnedHostInspection>
-{
-    crate::engine::owned_isolation::inspect_host_service_namespace()
-}
-
-#[cfg(windows)]
-pub fn select_owned_candidate_directory() -> io::Result<Option<String>> {
-    Ok(rfd::FileDialog::new()
-        .set_title("Select staged owned isolation engine (read-only)")
-        .pick_folder()
-        .map(|p| p.to_string_lossy().into_owned()))
-}
-
-#[cfg(not(windows))]
-pub fn select_owned_candidate_directory() -> io::Result<Option<String>> {
-    Err(io::Error::new(io::ErrorKind::Unsupported, "Windows only"))
-}
-
 // Original official launch implementation: policy, admission, lock, and
 // Microsoft executable signature checks remain unchanged.
 #[cfg(windows)]

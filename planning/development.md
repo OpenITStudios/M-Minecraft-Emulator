@@ -14,6 +14,16 @@ Proof: REMOTE_GITHUB exact-tree/source review only; all source execution,
 Windows package and Minecraft gameplay NOT_EXECUTED.
 
 
+## Source-retirement phase 6 — remove unregistered fork inspection modules
+
+Removed retired `owned_isolation.rs` and `virtual_inventory.rs` plus their
+private Native Clients adapters and Tauri command endpoints. Their consumers
+had already been removed from the mounted Svelte/Tauri command graph. Source
+identity checks and game bootstrap owners are retained; no test commands run.
+Further remaining source-only work: retire Sandboxie client02 observer/launch
+path and owned-provider helper after extracting shared process identity.
+Proof: REMOTE_GITHUB static review; Node/Rust/Windows/Minecraft NOT_EXECUTED.
+
 ## Source-retirement phase 5 — restrict Tauri IPC to mounted Lazy Tester
 
 The mounted Lazy Tester Svelte graph invokes only the startup diagnostic, seven

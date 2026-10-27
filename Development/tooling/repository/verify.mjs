@@ -76,6 +76,11 @@ export function verifyRepository(root,g0=false) {
   ],'Only mounted Lazy Tester handlers may be exposed; retired provider IPC forbidden');
 
   for(const path of [
+    'Development/apps/desktop/src-tauri/src/engine/owned_isolation.rs',
+    'Development/apps/desktop/src-tauri/src/engine/virtual_inventory.rs']) {
+    assert.ok(!existsSync(resolve(root,path)),'Retired fork inspector or Sandboxie inventory returned: '+path);
+  }
+  for(const path of [
     'Development/apps/desktop/src-tauri/src/commands/virtual_clients.rs',
     'Development/apps/desktop/src-tauri/src/commands/setup_tools.rs',
     'Development/apps/desktop/src-tauri/src/commands/window_arrangement.rs',
