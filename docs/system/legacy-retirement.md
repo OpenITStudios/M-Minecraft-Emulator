@@ -9,6 +9,27 @@ lifecycle: ACTIVE
 
 # Selected Windows isolation pilot and inactive legacy inventory
 
+## Repository vendor-source retirement — 27 October 2026
+
+On `Local`, the vendored `Development/engine/isolation-owned/` and
+`Development/engine/isolation-candidates/` Sandboxie trees and the historical
+`Development/engine/isolation-upstream/Sandboxie` gitlink/`.gitmodules`
+have been removed. Their Git blobs remain available in historical commits;
+the immutable pre-Lazy-Tester archive branch is not modified. This is a
+**source checkout cleanup**, not a runtime provider replacement, physical
+uninstall or evidence of Minecraft functionality.
+
+**Still in use:** the independent native bootstrap code beneath
+`Development/tooling/acceptance/windows/bootstrap-ordering/`, Windows
+session/controller/window recovery, and `OwnedProcess` metadata. The
+`owned_provider.rs` consumer still embeds legacy scripts from
+`Development/tooling/isolation-source/windows/`, and desktop retains a
+dependency on `Development/engine/runtime-core/`. Those must be untangled
+before eliminating the remaining historical Sandboxie/VM adapters. No
+guest-world/account data, installed service, local VM disk or snapshot is
+modified, and no local/Windows/Minecraft tests were executed.
+
+
 **Historical decision 2026-10-12 (superseded below):** Use one official Minecraft Education Desktop installation and one selected **native + Sandboxie Plus** two-client experiment before extending to the four-account target. This outcome is
 **UNPROVEN**. The current desktop pilot does not claim four working clients.
 

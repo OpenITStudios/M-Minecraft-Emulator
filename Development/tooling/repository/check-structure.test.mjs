@@ -6,10 +6,12 @@ import { join } from 'node:path';
 import { checkTracked, checkLinks, checkPhysical } from './check-structure.mjs';
 
 test('reject outputs and competing root owners while preserving native provenance', () => {
-  assert.deepEqual(checkTracked(['README.md', 'workspace/README.md',
-    'Development/engine/isolation-owned/tools/dist/tool.exe', 'Development/engine/isolation-candidates/target/reference.log']), []);
+  assert.deepEqual(checkTracked(['README.md', 'workspace/README.md']), []);
   for (const path of ['Development/apps/desktop/.svelte-check/tsconfig.json', 'scratch.mjs', 'workspace/report.json', 'Development/apps/desktop/dist/index.html',
     'Development/engine/runtime-core/target/debug/core.exe', '.github/workflows/verify.yml',
+    '.gitmodules', 'Development/engine/isolation-owned/tools/dist/tool.exe',
+    'Development/engine/isolation-candidates/target/reference.log',
+    'Development/engine/isolation-upstream/Sandboxie',
     'Development/apps/desktop/src-tauri/package-resources/lazy-tester/bootstrap-compat.dll',
     'Development/apps/desktop/src-tauri/icons/icon.ico', 'Development/apps/desktop/src-tauri/gen/schema.json',
     'Development/apps/desktop/src-tauri/binaries/old.exe', 'release/setup.exe', 'develop/copy.ts',

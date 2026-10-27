@@ -78,6 +78,8 @@ export function verifyRepository(root,g0=false) {
   verifyNativePreviewPackage();verifyLazyTesterPackage();
   const tracked=execFileSync('git',['ls-files','-z'],{cwd:root,encoding:'utf8'}).split('\0').filter(Boolean);
   assert.deepEqual(checkTracked(tracked),[]);
+  assert.ok(!tracked.some(path=>path==='.gitmodules'||/^Development\/engine\/isolation-(?:owned|candidates|upstream)(?:\/|$)/.test(path)),
+    'Retired Sandboxie vendor source or submodule must not return');
   assert.ok(!tracked.some(path=>/(?:replay-profile-(?:pair|five)|profile-binding-five)\.bin$/.test(path)),'Private bindings must never be tracked');
   for(const path of ['workspace/private/profile.json','workspace/packages/installer.exe','workspace/runtime/replay-profile-five.bin',
     'Data/profiles.json','App/data-location.json','Logs/session.log']) {

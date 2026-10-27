@@ -1,51 +1,40 @@
-# Emulator Engine — One Active Owner per Function
+# M-Minecraft-Emulator engine source
 
-## Native-only Windows preview installer source — 23 October 2026
+The active product is **Lazy Tester**: five managed Minecraft Education profiles,
+owned by the Windows-native session controller. Minecraft remains responsible for
+its own authentication, rendering, worlds and networking. This is not a VMware
+or Sandboxie-backed product.
 
-This repository now has a **separate opt-in Windows NSIS preview build
-route** for the native Minecraft Education window manager. It allows release
-compilation of the MC01 native launcher and the existing window presentation
-helper without selecting any legacy isolation engine. It does not create an
-independent MC02–04 provider.
+## Current source boundaries
 
-Source build: `npm --prefix Development/apps/desktop run build:preview`.
-Configuration-only check:
-`npm --prefix Development/apps/desktop run check:preview-package`.
-Both are separate from the blocked original `build:app` path.
+- `Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs` and
+  `independent_bootstrap/session_controller.rs`: reviewed native process/profile
+  startup, exact process identities and normal-exit lifecycle.
+- `Development/apps/desktop/src-tauri/src/engine/workspace_surface.rs`:
+  Windows presentation, restoration and DWM preview ownership.
+- `Development/tooling/acceptance/windows/bootstrap-ordering/`: **active**
+  compatibility/enrollment DLL source and FPS/presentation support. Its historical
+  location under acceptance tooling does not make it disposable.
+- `Development/engine/distribution/lazy-tester-package.json`: native product
+  package contract and preservation policy.
+- `Development/engine/runtime-core/`: still compiled by desktop for shared
+  process helpers and native inspection contracts; legacy VMware/provider modules
+  remain here pending consumer extraction. Do not delete this crate as a folder.
 
-The preview uses an independent Tauri name, app identifier, and executable
-filename; per-user NSIS installation; RFC 7396 removal of every inherited Guest Agent/VMware
-resource and installer hook, and no external VM sidecar. The existing
-manager window recovery helper checks its parent process. The release
-build enables that helper only with the dedicated Cargo feature and a
-build.rs check of its distinct preview identity and scrubbed payload;
-ordinary legacy release attempts remain blocked.
+## Retired source
 
-**Proof limit:** no Windows/MSVC compiler, NSIS build, signing certificate,
-installed preview, Minecraft Education gameplay or four-account acceptance
-was executed. No user game data, credentials, releases or `main` branch were
-touched. This is a preview source route, not a signed public product release.
+Both full Sandboxie v1.18.6 checkout copies and the historical Sandboxie
+submodule/gitlink are removed from the active `Local` tree. Their exact source
+is recoverable from Git history / the pre-Lazy-Tester archive branch, not copied
+into another live directory. No Sandboxie fork or driver is a product launch
+provider. Installed systems, guest disks, worlds, accounts and registry profiles
+were not touched by this source-only change.
 
-The active desktop source offers an official Minecraft Education Client 01 launch and presentation of up to four **already-running** registered Windows game-window candidates without an isolation provider (Windows/Minecraft execution NOT_EXECUTED). Existing-window presentation is not new client provisioning or independent account proof. New Client 02–04 Launch/Provision remain **blocked** until an independent, game-compatible provider is demonstrated. Sandboxie, the owned fork and VMware are retired for new sessions; old account-bearing data and recovery source are preserved. The v1.18.6 fork is **not** the independent replacement.
+Legacy Windows VMware Guest Agent/build utilities and historical provider code
+are **not yet fully removed**. Trace their remaining desktop/runtime/tooling
+consumers before deleting them. This work cannot by itself establish gameplay,
+packaging or cross-platform acceptance.
 
-| Source | Status and unique responsibility |
-| --- | --- |
-| [`isolation-owned/`](isolation-owned) | **Current editable** Sandboxie-derived v1.18.6 source |
-| [`isolation-candidates/sandboxie-v1.18.6/`](isolation-candidates/sandboxie-v1.18.6) | **Immutable upstream reference** used only for source-byte comparison |
-| [`isolation-native/`](isolation-native) | ABI probe/policy helpers; v1.18.5 overlay is **historical** and not a current engine |
-| [`isolation-upstream/Sandboxie`](isolation-upstream/Sandboxie) | Historical v1.18.5 upstream Gitlink; not the current source/build |
-| [`runtime-core/`](runtime-core) | One Rust lifecycle, identity and provider authority, with legacy VMware operations blocked |
-| [`guest/windows/`](guest/windows) | Inactive VMware guest/Base preparation and guest-agent source |
-| [`distribution/`](distribution) | Packaging/release/update contracts; legacy NSIS package intentionally blocked |
-
-**One current source/build route:** the
-[Isolation Source Tooling README](../tooling/isolation-source/README.md)
-owns v1.18.6 verification, optional unsigned native build and
-`workspace/builds/` → `workspace/packages/` staging. The immutable
-machine-readable component contract remains
-`Development/engine/isolation-native/owned-runtime/build-profile-v1186.json`.
-
-**Historical source is preserved intentionally** for regressions, licenses,
-provenance and possible future compatibility review. It is not an executable
-fallback or a second active engine. Do not delete, rename or reinstall
-source, Windows services, Minecraft accounts or sandbox data as a tidy-up.
+See [retirement register](../../../docs/system/legacy-retirement.md),
+[implementation map](../../../docs/system/implementation-map.md) and
+[current handoff](../../../planning/development.md).

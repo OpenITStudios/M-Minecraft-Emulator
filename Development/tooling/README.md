@@ -1,22 +1,21 @@
-# Developer and Acceptance Tooling
+# Developer tooling
 
-Tooling provides optional, bounded checks and evidence collection. **It does
-not implement a second Minecraft runtime or background service.**
+The only active product is the Lazy Tester native Minecraft Education manager.
+This directory contains source/structure checks, package preparation, Windows
+native compatibility source, and retained historical evidence. Nothing here is
+a second live game process/session owner.
 
-| Owner | Current use |
+| Path | Status |
 | --- | --- |
-| [`isolation-source/README.md`](isolation-source/README.md) | **Sole current v1.18.6** source verifier, optional compile-only build and NOT-INSTALLABLE assembler; v1.18.5 scripts are historical |
-| [`dependencies/README.md`](dependencies/README.md) | Dependency audit, coupled upgrades and lock consistency commands |
-| [`repository/verify.mjs`](repository/verify.mjs) | Static repository/source ownership invariants |
-| [`local-test/session.mjs`](local-test/session.mjs) | Metadata-only exact-SHA source-preflight records; never captures raw logs or Minecraft profiles |
-| [`windows-toolchain/dev.ps1`](windows-toolchain/dev.ps1) | Portable `DEV.cmd bootstrap` / `doctor` / `preflight` / `dev` using one checkout |
-| [`acceptance/windows/collect-sandboxie-feasibility.ps1`](acceptance/windows/collect-sandboxie-feasibility.ps1) | **Active** fixed `MinecraftClient02` candidate and box inspection; desktop calls `-SummaryOnly` without writing a report |
-| [`acceptance/evaluate-sandboxie-feasibility.mjs`](acceptance/evaluate-sandboxie-feasibility.mjs) | Interprets collected account/gameplay claims **only as operator-attributed evidence**, not automatic login proof |
-| [`acceptance/windows/README.md`](acceptance/windows/README.md) | Active Sandboxie entrypoint plus preserved historical VMware G0–G4 stage documentation |
-| [`acceptance/evaluate-client-feasibility.mjs`](acceptance/evaluate-client-feasibility.mjs) | **Legacy guest-VM** feasibility evidence; inactive for selected Client 02 path |
-| [`acceptance/evaluate-native-feasibility.mjs`](acceptance/evaluate-native-feasibility.mjs) | Earlier native-only feasibility evidence; not the selected isolation engine |
+| `repository/` | Active Git-tree, dependency, route, CI-disabled and documentation-link checks |
+| `windows-toolchain/` | Source/build/package helpers when explicitly requested; no automatic local test |
+| `dependencies/` | Dependency consistency review and maintenance |
+| `acceptance/windows/bootstrap-ordering/` | **Active native DLL source** used by the five-session game bootstrap |
+| `acceptance/` | Native and historical acceptance collectors; older Sandboxie/VM results are not current gameplay proof |
+| `isolation-source/` | **Retired Sandboxie build/provision research**; some embedded helper scripts are still included by legacy Rust code and must be migrated before this directory can disappear |
+| `local-test/` | Optional source acceptance bookkeeping, not runtime evidence until executed |
 
-Sandboxie inspector output is candidate-only. Source tests are not measured
-CPU/RAM savings, authenticated Minecraft Education accounts or Windows
-gameplay acceptance. Canonical architecture:
-[Lightweight Windows Architecture](../../docs/system/architecture.md).
+The complete vendored Sandboxie fork/reference trees and gitlink have left
+`Local`, but historical collectors and inherited code dependencies remain
+until their callers are removed. Do not run legacy service/VM scripts, grant
+new game-launch authority or delete user data during source cleanup.

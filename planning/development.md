@@ -1,5 +1,19 @@
 # Current Development Handoff — v0.1
 
+## Source-retirement phase 1 — 27 October 2026
+
+Operator authorized removal of unused Sandboxie/VM source to prepare a lean,
+stable Windows/macOS-oriented engine. This phase removes both full vendored
+Sandboxie trees and the old upstream submodule from `Local`, and updates
+the repository's no-reintroduction checks. No game, account, VM image,
+local cache, installer, service or runtime process was touched.
+ACTIVE bootstrap-ordering DLL, session controller and workspace recovery
+stay in place. Still pending: disentangle legacy Rust provider/helper
+consumers and VMware runtime/packaging before removing those files.
+Proof: REMOTE_GITHUB exact-tree/source review only; all source execution,
+Windows package and Minecraft gameplay NOT_EXECUTED.
+
+
 ## P0 CloseOne preview cleanup must not impact other launchers — 27 October 2026
 
 One additional source-level blocker affected ALL five slots: selected

@@ -4,16 +4,17 @@ import { dirname, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 
-const rootFiles = new Set(['.editorconfig', '.gitattributes', '.gitignore', '.gitmodules',
+const rootFiles = new Set(['.editorconfig', '.gitattributes', '.gitignore',
   'AGENTS.md', 'CONTEXT.md', 'CONTRIBUTING.md', 'DEV.cmd',
   'GITHUB_RULES.md', 'README.md', 'RUN.cmd', 'SECURITY.md']);
 const roots = new Set(['.agents', 'Development', 'Archive', 'docs', 'planning', 'workspace']);
 const development = new Set(['apps', 'engine', 'tooling', 'README.md', 'package.json', 'toolchain.json', 'VERSION', '.node-version']);
-// Upstream resources and tools are deliberate provenance inputs, including binaries.
-const upstream = /^(?:Development\/engine\/isolation-owned\/|Development\/engine\/isolation-candidates\/)/;
+// Vendor forks and upstream gitlinks are retired from the active source tree.
+const retired = /^(?:\.gitmodules$|Development\/engine\/isolation-(?:owned|candidates|upstream)(?:\/|$))/;
 export function checkTracked(paths) {
   const errors = [];
   for (const path of paths) {
+    if (retired.test(path)) errors.push('Retired Sandboxie source: ' + path);
     if (!path.includes('/')) {
       if (!rootFiles.has(path)) errors.push('Unreviewed root owner: ' + path);
     } else if (!roots.has(path.split('/')[0])) errors.push('Unreviewed directory owner: ' + path);
@@ -23,7 +24,7 @@ export function checkTracked(paths) {
     if (/^Development\/apps\/desktop\/src-tauri\/(?:icons|gen|binaries|package-resources)\//.test(path)) {
       errors.push('Tracked desktop staging output: ' + path);
     }
-    if (!upstream.test(path) && /(?:^|\/)(?:node_modules|target|dist|coverage|test-results|\.svelte-check)\/|\.(?:log|tmp)$/.test(path)) {
+    if (/(?:^|\/)(?:node_modules|target|dist|coverage|test-results|\.svelte-check)\/|\.(?:log|tmp)$/.test(path)) {
       errors.push('Tracked generated output: ' + path);
     }
     if (/^\.github\/workflows\//.test(path)) errors.push('GitHub Actions must stay disabled: ' + path);
@@ -49,7 +50,7 @@ export function checkPhysical(root) {
 export function checkLinks(root, paths) {
   const errors = [];
   for (const path of paths.filter(p => p.endsWith('.md') &&
-    !upstream.test(p) && !p.startsWith('planning/history/'))) {
+    !p.startsWith('planning/history/'))) {
     const text = readFileSync(resolve(root, path), 'utf8');
     if (/lifecycle: HISTORICAL/.test(text)) continue;
     for (const match of text.matchAll(/!?\[[^\]\n]*\]\(([^)\s]+)\)/g)) {
@@ -80,7 +81,7 @@ export function verifyStructure(root) {
     }
   }
   assert.deepEqual(errors, [], errors.join('\n'));
-  console.log('Repository structure: PASS (' + paths.length + ' tracked files; upstream resources preserved)');
+  console.log('Repository structure: PASS (' + paths.length + ' tracked files; retired vendor source denied)');
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   verifyStructure(resolve(dirname(fileURLToPath(import.meta.url)), '../../..'));

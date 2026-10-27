@@ -1,6 +1,0 @@
-*==========
-* Missing Messages in Text-German-1031.txt
-*==========
-
-There are no missing messages.
-
