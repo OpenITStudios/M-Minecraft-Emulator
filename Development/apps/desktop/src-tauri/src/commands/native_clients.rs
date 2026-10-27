@@ -68,26 +68,50 @@ pub async fn lazy_tester_close_one(
         if selected.state=="STOPPED" || selected.state=="ATTENTION" {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,"Minecraft session is not running"));
         }
-        match crate::engine::workspace_surface::release_managed_slot(slot) {
-            Ok(()) => {}
+        let recovery_issue=match crate::engine::workspace_surface::release_managed_slot(slot) {
+            Ok(()) => None,
             Err((false,error)) => return Err(error),
-            Err((true,error)) => {
-                // Window changes may be partial. CloseOne was NOT sent, and
-                // it is unsafe to claim this game remains embedded in Play.
-                return Ok(SelectedCloseReport {
-                    schema:1,
-                    presentation_released:false,
-                    snapshot:None,
-                    issue:Some(format!("Window restoration is unconfirmed; Minecraft was not asked to close: {error}")),
-                });
+            Err((true,error)) => Some(error),
+        };
+        if let Some(ref recovery)=recovery_issue {
+            // A lost original OGLES HWND need not prevent the game's normal
+            // close: only the target's own helper may grant the fallback, and
+            // only after its terminal End + process exit are both observed.
+            let quiesced=crate::engine::workspace_surface::allow_managed_slot_close_after_failed_restore(slot);
+            match quiesced {
+                Ok(true) => {}
+                Ok(false) => return Ok(SelectedCloseReport {
+                    schema:1,presentation_released:false,snapshot:None,
+                    issue:Some(format!("Window recovery unconfirmed: {recovery}. Target helper still active or ambiguous; Minecraft close not requested.")),
+                }),
+                Err(error) => return Ok(SelectedCloseReport {
+                    schema:1,presentation_released:false,snapshot:None,
+                    issue:Some(format!("Window recovery unconfirmed: {recovery}. Helper identity unavailable: {error}; Minecraft close not requested.")),
+                }),
             }
         }
-        // Once native restoration has succeeded, an uncertain game exit
-        // must not be disguised as an entirely failed/pre-release action.
+        // All five slots share this SAME single-child normal-close controller.
+        // No extra worker, PID/HWND selector or peer shutdown is permitted.
         let result=request(SessionRequest::CloseOne {slot});
+        if let Some(recovery)=recovery_issue {
+            return match result {
+                Err(close) => Ok(SelectedCloseReport {
+                    schema:1,presentation_released:false,snapshot:None,
+                    issue:Some(format!("Window restoration unconfirmed: {recovery}. Normal Minecraft close was requested but remains pending: {close}")),
+                }),
+                Ok(snapshot) => match crate::engine::workspace_surface::release_exited_managed_slot_checkpoint(slot) {
+                    Ok(()) => Ok(SelectedCloseReport {
+                        schema:1,presentation_released:true,snapshot:Some(snapshot),issue:None,
+                    }),
+                    Err(cleanup) => Ok(SelectedCloseReport {
+                        schema:1,presentation_released:false,snapshot:None,
+                        issue:Some(format!("Minecraft closed but its native window checkpoint is still unconfirmed: {recovery}; {cleanup}")),
+                    }),
+                },
+            };
+        }
         Ok(SelectedCloseReport {
-            schema:1,
-            presentation_released:true,
+            schema:1,presentation_released:true,
             snapshot:result.as_ref().ok().cloned(),
             issue:result.err().map(|error|error.to_string()),
         })

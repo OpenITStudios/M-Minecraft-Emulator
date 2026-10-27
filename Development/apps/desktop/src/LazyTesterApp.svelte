@@ -237,7 +237,7 @@
         // Release was attempted but did not confirm restoration. Do not
         // pretend the previous Play surface still owns the original HWND.
         uncertainWindowSlot = slot;
-        issue = `Minecraft - ${slot}: window recovery could not be confirmed. The game was not asked to close. ${report.issue??''}`;
+        issue = `Minecraft - ${slot}: ${report.issue??'Window recovery or game exit has not been confirmed.'}`;
         if (active===slot) {
           active=null;selectedIdentity='';requested=null;queued=null;detached=true;
           previewStatuses=[];

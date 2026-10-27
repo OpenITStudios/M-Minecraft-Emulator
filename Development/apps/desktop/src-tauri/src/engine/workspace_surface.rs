@@ -698,7 +698,7 @@ mod native {
     // A stale game HWND is not proof that the original Minecraft process
     // exited. PID reuse and access-denied must not authorize mutation of
     // another window or a successful recovery acknowledgement.
-    fn original_game_process_exited(target: &OwnedProcess) -> io::Result<bool> {
+    pub(super) fn original_game_process_exited(target: &OwnedProcess) -> io::Result<bool> {
         let expected = target.created_file_time.parse::<u64>()
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid game process creation time"))?;
         if target.pid == 0 || expected == 0 {
@@ -1095,6 +1095,9 @@ mod native {
     pub(super) fn retired(_: &OwnedProcess) -> bool {
         false
     }
+    pub(super) fn original_game_process_exited(_: &OwnedProcess) -> io::Result<bool> {
+        unavailable()
+    }
 }
 
 /// Activate the exact official game process in Windows, without parenting,
@@ -1159,6 +1162,27 @@ mod controller {
             assert!(!close_only_if_helpers_quiesced(false,true));
             assert!(!close_only_if_helpers_quiesced(true,false));
             assert!(close_only_if_helpers_quiesced(true,true));
+        }
+        #[test]
+        fn all_five_slot_close_fallbacks_require_only_their_own_finished_helper() {
+            for slot in 1..=5 {
+                let client=format!("{slot:02}");
+                let own=("LAZY_TESTER_MANAGED_SESSION".to_owned(),client.clone());
+                assert!(matches_managed_authority(Some(&own),&client));
+                assert!(!matches_managed_authority(Some(&own),&format!("{:02}",slot%5+1)));
+                let foreign=("EXTERNAL_SESSION".to_owned(),client.clone());
+                assert!(!matches_managed_authority(Some(&foreign),&client));
+                let mut evidence=(1..=5)
+                    .map(|value|(value==slot,true)).collect::<Vec<_>>();
+                assert!(selected_helper_quiesced(&evidence));
+                evidence[slot as usize-1].1=false;
+                assert!(!selected_helper_quiesced(&evidence));
+                evidence[slot as usize-1].1=true;
+                evidence.push((true,true));
+                assert!(!selected_helper_quiesced(&evidence));
+            }
+            assert!(!selected_helper_quiesced(&[]));
+            assert!(!selected_helper_quiesced(&[(false,true),(false,false)]));
         }
         #[test]
         fn incomplete_recovery_reports_each_failed_step() {
@@ -1383,6 +1407,93 @@ mod controller {
         state.closing=true;
         Ok(true)
     }
+    // Fixed five-slot presentation identity, not a process-title/PID guess.
+    // Keep one rule for normal release, retry after uncertain restore, and
+    // checkpoint retirement after an actually exited managed game.
+    fn matches_managed_authority(authority:Option<&(String,String)>,client:&str)->bool {
+        authority.is_some_and(|(name,value)|
+            name=="LAZY_TESTER_MANAGED_SESSION" && value==client)
+    }
+    fn slot_lease(lease:&Lease,client:&str)->bool {
+        matches_managed_authority(lease.authority.as_ref(),client)
+    }
+    // Exactly one original lease for the selected slot may permit a close
+    // despite unconfirmed window restoration. No status of any peer grants
+    // authority over a different Minecraft instance.
+    fn selected_helper_quiesced(evidence:&[(bool,bool)])->bool {
+        let mut selected=0;
+        for (matches,finished) in evidence {
+            if *matches {
+                selected+=1;
+                if !*finished {return false;}
+            }
+        }
+        selected==1
+    }
+    pub fn allow_managed_slot_close_after_failed_restore(slot:u32)->io::Result<bool> {
+        if !(1..=5).contains(&slot) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,"Unknown Minecraft profile"));
+        }
+        let client=format!("{slot:02}");
+        let mut state=SURFACE.lock().map_err(|_|io::Error::other("Workspace state unavailable"))?;
+        if state.closing {return Ok(false);}
+        let mut evidence=Vec::with_capacity(1+state.parked.len());
+        if let Some(lease)=state.active.as_mut() {
+            let matches=slot_lease(lease,&client);
+            let completed=matches && lease.saved.is_some()
+                && close_only_if_helpers_quiesced(
+                    lease.ended.is_some(),lease.child.try_wait()?.is_some());
+            evidence.push((matches,completed));
+        }
+        for lease in &mut state.parked {
+            let matches=slot_lease(lease,&client);
+            let completed=matches && lease.saved.is_some()
+                && close_only_if_helpers_quiesced(
+                    lease.ended.is_some(),lease.child.try_wait()?.is_some());
+            evidence.push((matches,completed));
+        }
+        Ok(selected_helper_quiesced(&evidence))
+    }
+    // Called ONLY after the retained session controller positively completed
+    // CloseOne. A previously failed native Restore can leave a cached End(err)
+    // lease. Discard it only after the ORIGINAL game process is also proven
+    // exited; otherwise keep its checkpoint and do not touch another HWND.
+    pub fn release_exited_managed_slot_checkpoint(slot:u32)->io::Result<()> {
+        if !(1..=5).contains(&slot) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,"Unknown Minecraft profile"));
+        }
+        let client=format!("{slot:02}");
+        let mut state=SURFACE.lock().map_err(|_|io::Error::other("Workspace state unavailable"))?;
+        let active_match=state.active.as_ref().is_some_and(|lease|slot_lease(lease,&client));
+        let parked_matches=state.parked.iter().filter(|lease|slot_lease(lease,&client)).count();
+        if usize::from(active_match)+parked_matches>1 {
+            return Err(io::Error::other("Ambiguous Minecraft presentation checkpoints for one slot"));
+        }
+        if active_match {
+            let lease=state.active.as_mut().unwrap();
+            if !close_only_if_helpers_quiesced(lease.ended.is_some(),lease.child.try_wait()?.is_some())
+                || !lease.saved.as_ref().is_some_and(|saved|
+                    native::original_game_process_exited(&saved.target).unwrap_or(false)) {
+                return Err(io::Error::new(io::ErrorKind::WouldBlock,
+                    "Native checkpoint still active or original Minecraft exit unverified"));
+            }
+            state.active=None;
+        }
+        if let Some(index)=state.parked.iter().position(|lease|slot_lease(lease,&client)) {
+            let lease=&mut state.parked[index];
+            if !close_only_if_helpers_quiesced(lease.ended.is_some(),lease.child.try_wait()?.is_some())
+                || !lease.saved.as_ref().is_some_and(|saved|
+                    native::original_game_process_exited(&saved.target).unwrap_or(false)) {
+                return Err(io::Error::new(io::ErrorKind::WouldBlock,
+                    "Native checkpoint still active or original Minecraft exit unverified"));
+            }
+            state.parked.remove(index);
+        }
+        if state.active.is_none() && state.parked.is_empty() {
+            state.suspended=false;
+        }
+        Ok(())
+    }
     pub fn cancel_close() {if let Ok(mut state)=SURFACE.lock(){state.closing=false;}}
     pub fn release() -> io::Result<()> {
         let preview_error = previews::clear().err();
@@ -1425,8 +1536,7 @@ mod controller {
             return Err((false,io::Error::new(io::ErrorKind::InvalidInput,"Unknown Minecraft profile")));
         }
         let client=format!("{slot:02}");
-        let owned=|lease:&Lease|lease.authority.as_ref().is_some_and(|(authority,value)|
-            authority=="LAZY_TESTER_MANAGED_SESSION" && value==&client);
+        let owned=|lease:&Lease|slot_lease(lease,&client);
         previews::clear().map_err(|error|(false,error))?;
         let mut state=SURFACE.lock().map_err(|_|(false,io::Error::other("Workspace state unavailable")))?;
         if state.closing {return Err((false,io::Error::new(io::ErrorKind::WouldBlock,"Workspace is closing")));}
@@ -2550,7 +2660,7 @@ mod controller {
     }
 }
 pub use controller::{
-    is_active, present_retained, present_verified, release, release_for_close, allow_game_close_after_failed_restore, cancel_close, release_target, release_managed_slot, suspend, update,
+    is_active, present_retained, present_verified, release, release_for_close, allow_game_close_after_failed_restore, allow_managed_slot_close_after_failed_restore, release_exited_managed_slot_checkpoint, cancel_close, release_target, release_managed_slot, suspend, update,
 };
 #[cfg(windows)]
 pub use controller::follow_manager;

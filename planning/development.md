@@ -1,5 +1,42 @@
 # Current Development Handoff — v0.1
 
+## P0 all-five Minecraft shutdown recovery parity — 27 October 2026
+
+The operator explicitly required the MC02 normal-shutdown fix to apply to
+every Minecraft launcher MC01–MC05, and for CloseOne as well as CloseAll.
+The retained controller already applies one validated five-slot close mask,
+sends its selected game's acknowledged pacing STOP before WM_CLOSE, and
+waits on that game's original process HANDLE. The gap was at the desktop
+presentation boundary: CloseAll could proceed after an unconfirmed Restore
+when all helpers had finished, while CloseOne always refused the analogous
+case, potentially leaving any windowless game running indefinitely.
+
+The same workspace owner now implements a **slot-specific**, fail-closed
+recovery quiescence gate keyed only by its already-admitted
+LAZY_TESTER_MANAGED_SESSION plus fixed two-digit slot identity. The
+selected slot must have EXACTLY one matching checkpoint whose helper
+process has exited and whose reader recorded terminal End. Peer leases
+do not authorize or block the selected game's CloseOne. A still-running
+or ambiguous helper refuses game close; a confirmed stopped helper lets
+the existing retained controller request normal exit even if native
+window restoration remained unconfirmed. A failed game exit remains
+explicitly pending, without claiming the game is safely detached.
+
+After the controller has positively acknowledged the selected game's
+process exit, the native owner may release a stale failed-restore
+checkpoint **only** if that specific helper is terminal and the
+original game PID plus creation time is proven no longer alive.
+No other lease is discarded. Checkpoint verification failure remains
+reported and retains the protected checkpoint for later inspection.
+A successful game exit + completed checkpoint cleanup returns the
+existing successful SelectedCloseReport. Frontend messages now
+distinguish "close was never requested" from "normal close requested,
+but still pending" for any of five slots. Synthetic pure fixtures
+cover every slot's exact authority, refusal of foreign slots,
+unfinished helper, double checkpoint, and nonexistent target.
+These tests are AUTHORED NOT_EXECUTED; real Windows/Minecraft behavior
+cannot honestly be declared normal/accepted without runtime proof.
+
 ## P0 MC02 normal Exit blocked by missing-HWND workspace restore — 27 October 2026
 
 A concrete circular dependency was found at the manager/desktop boundary.
