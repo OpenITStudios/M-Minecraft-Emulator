@@ -8,6 +8,7 @@ use crate::engine::{
     process_identity::OwnedProcess,
 };
 use std::{io::Write, time::Duration};
+use virtual_clients_core::InspectionBudget;
 
 struct Sessions {
     stores: Vec<Option<SlotStorage>>,
@@ -354,11 +355,25 @@ impl Sessions {
     }
 
     fn storage(&self) -> io::Result<Vec<ProfileStorage>> {
+        // One cooperative traversal budget for this *entire* read-only request,
+        // not two seconds independently for each of five profiles and caches.
+        // Native OS calls and the separate clear-confirmation inspection can
+        // still block; this is not a hard latency guarantee or a new worker.
+        let budget = InspectionBudget::new(Duration::from_secs(2));
         let observed = super::super::inspect_native_workspace()?.processes;
         (1..=5)
             .map(|slot| {
                 let store = self.store(slot)?;
                 let path = directory_path(&store.private)?;
+                // Only read-only reports share this admission observation.
+                // Cache deletion, profile clear, launch and settings writes each
+                // recheck their own authority at the moment of mutation.
+                let admission = self.data_admission(slot, &observed);
+                let replay_admission = || {
+                    admission.as_ref().map(|_| ()).map_err(|error| {
+                        io::Error::new(error.kind(), error.to_string())
+                    })
+                };
                 let mut result = ProfileStorage {
                     slot,
                     bytes: 0,
@@ -366,17 +381,16 @@ impl Sessions {
                     partial: false,
                     disk: profile_storage::disk(&store.private).ok(),
                     cache: {
-                        let admission = self.data_admission(slot, &observed);
-                        let mut cache = profile_storage::inspect(&store.private, admission.is_ok());
+                        let mut cache = profile_storage::inspect(&store.private, admission.is_ok(), budget);
                         if !cache.partial {
-                            if let Err(error) = admission { cache.issue = Some(error.to_string()); }
+                            if let Err(error) = &admission { cache.issue = Some(error.to_string()); }
                         }
                         cache
                     },
-                    game_settings: Some(game_preset::inspect_settings(&store.private, self.data_admission(slot, &observed))),
-                    full_clear: Some(product_profiles::clear::inspect(store,self.data_admission(slot,&observed))),
+                    game_settings: Some(game_preset::inspect_settings(&store.private, replay_admission())),
+                    full_clear: Some(product_profiles::clear::inspect(store, replay_admission())),
                 };
-                scan(&path, &mut result, std::time::Instant::now(), 0);
+                scan(&path, &mut result, budget, 0);
                 Ok(result)
             })
             .collect()
@@ -487,8 +501,8 @@ fn require_preset_idle(idle: bool) -> io::Result<()> {
 }
 
 // Metadata only, bounded, and no traversal through junctions/symlinks. Not a cache classifier.
-fn scan(path: &Path, result: &mut ProfileStorage, started: std::time::Instant, depth: usize) {
-    if depth > 48 || result.files >= 100_000 || started.elapsed() > Duration::from_secs(2) {
+fn scan(path: &Path, result: &mut ProfileStorage, budget: InspectionBudget, depth: usize) {
+    if depth > 48 || result.files >= 100_000 || budget.exhausted() {
         result.partial = true;
         return;
     }
@@ -501,7 +515,7 @@ fn scan(path: &Path, result: &mut ProfileStorage, started: std::time::Instant, d
         return;
     };
     for entry in entries {
-        if result.files >= 100_000 || started.elapsed() > Duration::from_secs(2) {
+        if result.files >= 100_000 || budget.exhausted() {
             result.partial = true;
             break;
         }
@@ -519,7 +533,7 @@ fn scan(path: &Path, result: &mut ProfileStorage, started: std::time::Instant, d
             continue;
         }
         if metadata.is_dir() {
-            scan(&entry.path(), result, started, depth + 1);
+            scan(&entry.path(), result, budget, depth + 1);
         } else if metadata.is_file() {
             result.bytes = result.bytes.saturating_add(metadata.len());
             result.files += 1;
@@ -1400,10 +1414,17 @@ mod tests {
             game_settings: None,
             full_clear: None,
         };
-        scan(&directory, &mut result, std::time::Instant::now(), 0);
+        scan(&directory, &mut result, InspectionBudget::new(Duration::from_secs(2)), 0);
         assert_eq!((result.bytes, result.files, result.partial), (40, 2, false));
-        scan(&directory, &mut result, std::time::Instant::now(), 49);
+        scan(&directory, &mut result, InspectionBudget::new(Duration::from_secs(2)), 49);
         assert_eq!((result.bytes, result.files, result.partial), (40, 2, true));
+        // Expired shared admission never pretends a zero-byte snapshot is complete.
+        let mut expired = result.clone();
+        expired.bytes = 0;
+        expired.files = 0;
+        expired.partial = false;
+        scan(&directory, &mut expired, InspectionBudget::new(Duration::ZERO), 0);
+        assert_eq!((expired.bytes, expired.files, expired.partial), (0, 0, true));
         // Only the unique, create-new disposable fixture directory created above.
         assert_eq!(directory.parent(), Some(std::env::temp_dir().as_path()));
         std::fs::remove_dir_all(directory).unwrap();

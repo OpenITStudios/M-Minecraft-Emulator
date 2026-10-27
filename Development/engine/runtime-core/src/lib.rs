@@ -3,7 +3,9 @@
 // Platform-neutral Minecraft session contracts and the bounded subprocess runner.
 // VMware/Guest Agent/App Sandbox lifecycle code is retired from this crate.
 pub mod independent_engine;
+mod inspection_budget;
 mod process;
+pub use inspection_budget::InspectionBudget;
 
 // The desktop uses this bounded process runner for reviewed on-demand helpers.
 #[doc(hidden)]

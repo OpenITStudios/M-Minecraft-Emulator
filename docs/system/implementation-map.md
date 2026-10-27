@@ -19,6 +19,20 @@ lifecycle: ACTIVE
 
 This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build tooling in [Isolation Source Tooling](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md) is retired product history, not the native engine. The only active goal, blocker and next action are in [planning/development.md](../../planning/development.md). Treat historical `Next` here as superseded; inspect owning source and consumers.
 
+## Read-only storage inspection policy — 27 October 2026
+
+`runtime-core/src/inspection_budget.rs` owns the portable monotonic,
+copyable inspection deadline. The Windows `session_controller.rs` uses one
+two-second cooperative budget for all five slots' cache classifications and
+profile metadata enumeration during one `InspectStorage` report, instead of
+resetting separate two-second scans per profile. When exhausted, affected
+results remain `partial` and cache clearance is disabled. The source still
+inspects independent clear-confirmation/settings metadata; native OS calls
+may block, so this is **not** a hard bound on the full request. Storage
+mutations, Windows handle checks, account/world data, session lifecycle and
+the user-visible wire schema are unchanged. A different OS can reuse the
+budget policy without reusing Win32 filesystem code.
+
 ## Current Lazy Tester route — 26 October 2026
 
 WindowTitlebar.svelte owns the shared product frame controls; main-window-only

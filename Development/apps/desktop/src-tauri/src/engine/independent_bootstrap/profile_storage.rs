@@ -6,8 +6,9 @@ use std::{
     io, mem,
     os::windows::{fs::OpenOptionsExt, io::AsRawHandle},
     path::Path,
-    time::{Duration, Instant},
+    time::Duration,
 };
+use virtual_clients_core::InspectionBudget;
 use windows_sys::Win32::Storage::FileSystem::*;
 
 // Exact observed Chromium profile. Never classify Default itself, Cookies, Local
@@ -52,17 +53,17 @@ struct CachePlan {
     files: Vec<File>,
     bytes: u64,
     entries: usize,
-    started: Instant,
+    budget: InspectionBudget,
     deleting: bool,
 }
 impl CachePlan {
-    fn new(deleting: bool) -> Self {
+    fn new(deleting: bool, budget: InspectionBudget) -> Self {
         Self {
             directories: Vec::new(),
             files: Vec::new(),
             bytes: 0,
             entries: 0,
-            started: Instant::now(),
+            budget,
             deleting,
         }
     }
@@ -71,7 +72,7 @@ impl CachePlan {
             || self.files.len() >= MAX_FILES
             || self.directories.len() >= MAX_DIRECTORIES
             || self.entries >= MAX_FILES + MAX_DIRECTORIES
-            || self.started.elapsed() > Duration::from_secs(2)
+            || self.budget.exhausted()
         {
             return Err(invalid(
                 "Cache inspection limit reached; nothing was deleted",
@@ -137,24 +138,34 @@ impl CachePlan {
     }
 }
 
-fn plan(private: &File, deleting: bool) -> io::Result<CachePlan> {
-    let mut plan = CachePlan::new(deleting);
+fn plan(private: &File, deleting: bool, budget: InspectionBudget) -> io::Result<CachePlan> {
+    let mut plan = CachePlan::new(deleting, budget);
+    // Check the read-only deadline before every ancestor inspection. The
+    // mutating clear path gets its own unchanged two-second local budget.
+    if !deleting { plan.bounded(0)?; }
     let mut path = directory_path(private)?;
     plan.directories.push(private.try_clone()?);
     for part in CACHE_PARTS {
+        if !deleting { plan.bounded(0)?; }
         path.push(part);
         match open_directory(&path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY) {
             Ok(pin) => plan.directories.push(pin),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(plan),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                if !deleting { plan.bounded(0)?; }
+                return Ok(plan);
+            }
             Err(error) => return Err(error),
         }
     }
     plan.visit(&path, 0)?;
+    // A scan that consumed the budget on its final OS call is not a complete
+    // observation and must never advertise cache cleanup eligibility.
+    if !deleting { plan.bounded(0)?; }
     Ok(plan)
 }
 
-pub(super) fn inspect(private: &File, inactive: bool) -> CacheStorage {
-    match plan(private, false) {
+pub(super) fn inspect(private: &File, inactive: bool, budget: InspectionBudget) -> CacheStorage {
+    match plan(private, false, budget) {
         Ok(plan) => CacheStorage {
             bytes: plan.bytes,
             files: plan.files.len() as u32,
@@ -184,7 +195,7 @@ pub(super) fn clear(private: &File, inactive: bool) -> io::Result<()> {
             "Close this Minecraft session normally before clearing its cache",
         ));
     }
-    let plan = plan(private, true)?;
+    let plan = plan(private, true, InspectionBudget::new(Duration::from_secs(2)))?;
     // No path-based delete or recursive directory removal. Retain ancestor pins
     // and exclusive file handles until all dispositions have been attempted.
     for file in &plan.files {
@@ -209,6 +220,9 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    fn inspect_fixture(private: &File, inactive: bool) -> CacheStorage {
+        inspect(private, inactive, InspectionBudget::new(Duration::from_secs(2)))
+    }
     struct Fixture(PathBuf);
     impl Fixture {
         fn new() -> Self {
@@ -264,10 +278,10 @@ mod tests {
         }
         let pin = fixture.pin();
         assert_eq!(
-            (inspect(&pin, true).bytes, inspect(&pin, true).files),
+            (inspect_fixture(&pin, true).bytes, inspect_fixture(&pin, true).files),
             (40, 2)
         );
-        assert!(!inspect(&pin, false).can_clear);
+        assert!(!inspect_fixture(&pin, false).can_clear);
         assert!(clear(&pin, false).is_err());
         assert!(cache.join("Cache_Data/a").exists());
         let space = disk(&pin).unwrap();
@@ -275,7 +289,7 @@ mod tests {
         clear(&pin, true).unwrap();
         assert_eq!(fs::read(other.cache().join("other-profile-cache")).unwrap(), b"other profile");
         drop(other_lock);
-        assert_eq!(inspect(&pin, true).files, 0);
+        assert_eq!(inspect_fixture(&pin, true).files, 0);
         for name in protected {
             assert_eq!(fs::read(fixture.0.join(name)).unwrap(), b"preserve");
         }
@@ -297,7 +311,7 @@ mod tests {
         assert!(cache.join("a").exists());
         drop(lock);
         fs::hard_link(cache.join("b"), fixture.0.join("outside")).unwrap();
-        assert!(!inspect(&pin, true).can_clear);
+        assert!(!inspect_fixture(&pin, true).can_clear);
         assert!(clear(&pin, true).is_err());
         assert!(cache.join("a").exists());
         assert_eq!(fs::read(fixture.0.join("outside")).unwrap(), b"locked");
@@ -306,7 +320,7 @@ mod tests {
     fn missing_cache_is_empty_and_reparse_ancestor_is_refused() {
         let fixture = Fixture::new();
         let pin = fixture.pin();
-        assert_eq!(inspect(&pin, true).bytes, 0);
+        assert_eq!(inspect_fixture(&pin, true).bytes, 0);
         clear(&pin, true).unwrap();
         fs::create_dir(fixture.0.join("outside")).unwrap();
         // Junction creation needs no elevation; cmd is used only to construct the
@@ -318,10 +332,22 @@ mod tests {
             .output()
             .unwrap();
         assert!(status.status.success());
-        assert!(inspect(&pin, true).partial);
+        assert!(inspect_fixture(&pin, true).partial);
         assert!(clear(&pin, true).is_err());
         fs::remove_dir(fixture.0.join("Local")).unwrap();
     }
+    #[test]
+    fn expired_read_only_budget_never_grants_cache_clear() {
+        let fixture = Fixture::new();
+        let cache = fixture.cache();
+        fs::create_dir_all(&cache).unwrap();
+        fs::write(cache.join("retained"), b"must survive").unwrap();
+        let status = inspect(&fixture.pin(), true, InspectionBudget::new(Duration::ZERO));
+        assert!(status.partial);
+        assert!(!status.can_clear);
+        assert!(cache.join("retained").exists());
+    }
+
     #[test]
     fn incomplete_plan_refuses_before_deleting_any_cache_file() {
         let fixture = Fixture::new();
@@ -334,7 +360,7 @@ mod tests {
         }
         fs::create_dir_all(deep).unwrap();
         let pin = fixture.pin();
-        assert!(inspect(&pin, true).partial);
+        assert!(inspect_fixture(&pin, true).partial);
         assert!(clear(&pin, true).is_err());
         assert!(cache.join("keep-until-plan-complete").exists());
     }

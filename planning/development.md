@@ -5,7 +5,8 @@
 **Goal:** optimize the existing five-profile Minecraft Education Windows
 runtime after the completed Sandboxie/VMware source retirement. Protect the
 one authoritative controller, native presentation, account/world data and
-normal-exit contracts. Defer multiplatform changes until this audit is bounded.
+normal-exit contracts. Extract only genuinely portable policies in preparation
+for Windows/macOS; a macOS game backend remains future feasibility work.
 
 **State:** ACTIVE (retirement source audit complete; runtime-efficiency review
 underway; current build/gameplay and performance measurements NOT_EXECUTED).
@@ -93,10 +94,10 @@ reachable. This is a production compile-graph reduction, **not** verified
 runtime CPU/RAM savings. Actual compiler/tests/bundles NOT_EXECUTED.
 
 Review identified three separate scheduling concerns, not yet changed:
-- `session_controller.rs` serializes all lifecycle operations with
-  `InspectStorage`; metadata directory scanning can take up to two seconds
-  per profile, making unprioritized read-only inspection a source-level
-  head-of-line blocking candidate. Never allow parallel game authorities.
+- `session_controller.rs` serializes lifecycle operations with
+  `InspectStorage`; repeated directory/cache time budgets have now been
+  consolidated, but native inspection and settings/clear metadata may still
+  block. Never allow parallel game authorities.
 - Idle controller receive polling is 250 ms; normal-close observation polls
   every 50 ms for up to 20 seconds. Both are bounded, and neither is proof of
   a meaningful CPU bottleneck. Preserve exact dialog/progress/exit semantics.
@@ -109,9 +110,24 @@ exit, power/RAM improvement, Windows build, native DLL/installer acceptance,
 or macOS support from these changes. No tests, CI, games, or user PC operations
 were run.
 
+## Shared inspection budget — 27 October 2026
+
+Source-only: `runtime-core/inspection_budget.rs` now holds the reusable,
+OS-neutral monotonic deadline. One cooperative two-second budget spans all
+five read-only cache classifiers and profile metadata walks per
+`InspectStorage`; expired work becomes partial, never deletion permission.
+Each storage report reuses one read-only admission observation per slot.
+Mutating cache clears retain their independent fresh two-second safety plan.
+Existing controller, IPC wire, profiles, DLL, normal-close and Win32
+authority are unchanged; no new worker, queue or macOS backend is added.
+Added source regression cases for expired budget and incomplete cache.
+Compiler/tests/Windows/gameplay/performance remain NOT_EXECUTED. OS calls and
+clear-confirmation inspection are not preempted, so a hard latency cap is not
+claimed.
+
 ## Next bounded action
 
-Review read-only storage inspection scheduling/latency against CloseOne and
-CloseAll admission, and identify the smallest source-only improvement that
-does not add another lifecycle owner or change public wire schemas. Keep
-unmeasured runtime performance claims UNKNOWN and defer local PC testing.
+Review controller request scheduling and read-only inspect coalescing versus
+CloseOne/CloseAll while preserving exact process authority, then evaluate the
+existing Tauri/Rust Windows-only compile boundary before macOS adapter work.
+No Local PC testing without explicit approval.
