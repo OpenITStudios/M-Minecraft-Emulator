@@ -1043,8 +1043,7 @@ mod tests {
         unsafe {
             let make=|class,caption,style,parent,id|CreateWindowExW(WS_EX_NOACTIVATE,class,caption,style,
                 -30000,-30000,200,100,parent,id as _,std::ptr::null_mut(),std::ptr::null());
-            let game=make(windows_sys::w!("STATIC"),windows_sys::w!("Fixture"),WS_OVERLAPPEDWINDOW,
-                std::ptr::null_mut(),0usize);
+            let game=fixture_game_window();
             let dialog=make(windows_sys::w!("#32770"),windows_sys::w!("Minecraft Education"),WS_POPUP|WS_VISIBLE,
                 std::ptr::null_mut(),0usize);
             assert!(!game.is_null()&&!dialog.is_null());
