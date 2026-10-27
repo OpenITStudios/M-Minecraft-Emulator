@@ -2,6 +2,7 @@
   "productName": "Lazy Tester",
   "identifier": "com.mivubi.lazytester",
   "mainBinaryName": "lazy-tester",
+  "build": {"beforeBundleCommand":"node scripts/prepare-process-roles.mjs"},
   "app": {
     "windows": [
       {
@@ -34,7 +35,8 @@
       "../../../engine/distribution/write-payload-manifest.ps1": null,
       "package-resources/lazy-tester/bootstrap-compat.dll": "independent-bootstrap/bootstrap-compat.dll",
       "package-resources/lazy-tester/bootstrap-enroll.dll": "independent-bootstrap/bootstrap-enroll.dll",
-      "../../../engine/distribution/lazy-tester-package.json": "distribution/lazy-tester-package.json"
+      "../../../engine/distribution/lazy-tester-package.json": "distribution/lazy-tester-package.json",
+      "package-resources/lazy-tester/en-US/": "en-US/"
     },
     "windows": {
       "nsis": {

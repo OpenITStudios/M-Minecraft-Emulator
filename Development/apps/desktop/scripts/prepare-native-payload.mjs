@@ -61,6 +61,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   if (!source) throw new Error('Set LAZY_TESTER_NATIVE_PAYLOAD_DIR to the reviewed native DLL directory');
   const policy = reviewedDigests(readFileSync(resolve(root,'src-tauri/src/engine/independent_bootstrap.rs'),'utf8'));
   const result = stageNativePayload(resolve(source),resolve(root,'src-tauri/package-resources/lazy-tester'),policy);
+  mkdirSync(resolve(root,'src-tauri/package-resources/lazy-tester/en-US'),{recursive:true});
   process.stdout.write(JSON.stringify({staged:result,profileCapabilitiesIncluded:false}) + '\n');
 }
 

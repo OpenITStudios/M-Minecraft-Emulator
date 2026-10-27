@@ -67,11 +67,12 @@ fn main() {
                 ("package-resources/lazy-tester/bootstrap-compat.dll", "independent-bootstrap/bootstrap-compat.dll"),
                 ("package-resources/lazy-tester/bootstrap-enroll.dll", "independent-bootstrap/bootstrap-enroll.dll"),
                 ("../../../engine/distribution/lazy-tester-package.json", "distribution/lazy-tester-package.json"),
+                ("package-resources/lazy-tester/en-US/", "en-US/"),
             ] {
                 assert_eq!(resources.get(source).and_then(serde_json::Value::as_str), Some(target));
             }
         }
-        assert_eq!(resources.len(), if lazy { 10 } else { 7 }, "Unexpected native package resources");
+        assert_eq!(resources.len(), if lazy { 11 } else { 7 }, "Unexpected native package resources");
         assert_eq!(
             patch.pointer("/bundle/externalBin").and_then(serde_json::Value::as_array)
                 .map(Vec::len),

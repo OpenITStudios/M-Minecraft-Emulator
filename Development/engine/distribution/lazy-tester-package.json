@@ -8,7 +8,12 @@
     "lazy-tester.exe",
     "independent-bootstrap/bootstrap-compat.dll",
     "independent-bootstrap/bootstrap-enroll.dll",
-    "distribution/lazy-tester-package.json"
+    "distribution/lazy-tester-package.json",
+    "en-US/lazy-tester.exe.mui",
+    "en-US/Lazy Tester - Sessions.exe.mui",
+    "en-US/Lazy Tester - Window Recovery.exe.mui",
+    "Lazy Tester - Sessions.exe",
+    "Lazy Tester - Window Recovery.exe"
   ],
   "migration": {
     "strategy": "side-by-side-from-preview",

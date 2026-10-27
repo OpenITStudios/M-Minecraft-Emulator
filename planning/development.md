@@ -41,15 +41,13 @@ Installed App/root sourcea0b88440a526fea4499a1715ff1dd05fde862b53, clean Local b
 App SHA256:24717334c6c93f8b04f0832bb5c0697edd5e4c37c524e762b0d4456b071e371a.
 Root starter/DLL hashes: App/build-info.json, verified during Explorer startup.
 Candidate workspace/packages/lazy-tester/0.1.0-a0b88440a526-20261026T194457432Z;
-NSIS SHA256:d7cc20867ab82f31b44ec10e0c9162a08558fa2623327c50ef61d3f7a4a4d193.
+installer hash is recorded in its SHA256SUMS.txt.
 Signing NOT_VERIFIED; installer execution/publication NOT_EXECUTED/DISABLED.
 Actual Explorer startup PID18724: Connected/five enabled/no issue/local WebView cache,
 log workspace/runs/launch-desktop-startup.log. Data Storage UI opened controller
 without games; own idle UI/controller closed normally, no remaining app/game process.
-Earlier7b7b0e1 PID37644 audio checkbox stable across2refreshes, Mute/Keep saved viaUI;
-workspace/runs/audio-ui-smoke.log/.ps1. No real game audio tested.
-Earlier03a7d49 Clear review/name+ack gating/Cancel preserved catalog/options and
-created no deletion journal;7eb8ca1 Reset review/Cancel PASS. Data retained; no setup.
+Earlier audio toggle/persistence, Clear/Reset review/Cancel PASS; logs audio-ui-smoke,
+full-clear-ui-smoke, settings-recovery-ui-smoke in workspace/runs. No real deletion.
 ## Implemented corrections and executed evidence
 
 Presentation: opaque workspace_surface.rs host and previews.rs primary DWM image,
@@ -61,10 +59,8 @@ drag/focus/frame/switch/DPI NOT_EXECUTED.
 FPS120/5, saves5..1000/background<=active, explicit legacy1..4/144/10 preserved.
 V3 applies next launch, V2 unchanged. Rust policy fixtures PASS; game pacing untested.
 
-Cache: selected profile stopped; other exact managed games may continue, unknown
-external games block. Actor serializes pinned/exclusive cleanup. Four deletion and
-PID/birth admission fixtures PASS (locks/links/incomplete plans/peer preservation).
-No real cache/account/world deleted. Existing Rust warnings remain.
+Cache: selected profile stopped, other exact managed games allowed, unknown external
+games block. Four lock/link/admission/peer fixtures PASS. No real data deleted.
 ## Remaining work and owners
 
 Reset/restore: game_preset.rs verified/flushed backup+SHA256 receipt before atomic
@@ -74,12 +70,10 @@ generation-bound name+ack, same-volume cutover/catalog/pinned purge. Precommit r
 explicit committed purge recovery; read-only inspection never mutates.13 profile
 tests (7 clear),5 controller/invalid admission PASS: locks/links/corrupt paths/faults/
 partial purge/stale token/readonly/peers. No real reset/clear; review/Cancel proof above.
-Audio: session_audio.rs, existing controller/bridge/General; Data/Settings/audio.json
-defaults Keep. Exact live PID/birth, no cross-process/system sessions, preserves
-mute/volume.250ms wakeups, discovery1second/ownership change. Silent Windows sessions
-PASS (mute/restore/user mute/foreign process/lease removal);6 settings and38 frontend
-tests/typecheck PASS. Logs workspace/runs/audio-*. UI checkbox stays enabled through
-polling and queues saves; real toggle/persistence proof above.
+Audio: session_audio.rs via existing actor/bridge; Data/Settings/audio.json defaults
+Keep. Exact PID/birth, no system/cross-process sessions, preserves mute/volume.
+250ms wakeups/1second discovery. Silent Windows audio and6 settings fixtures PASS;
+logs workspace/runs/audio-*. Checkbox stays enabled through polling, queues saves.
 Abrupt controller-crash mixer recovery, long-launch audio response and actual
 Minecraft audio remain unverified. Continue in these owners, no second lifecycle.
 Launch preflight: original EXE pin, one fresh full Windows resolver instead of two,
@@ -88,12 +82,18 @@ Release3sample median2280->1176ms for validation only; read-only benchmark never
 opens profiles/starts Minecraft. Identity/path/hash/write-sharing test and5 controller
 regressions PASS. Logs workspace/runs/launch-preflight-release-*.log. Candidate staged;
 actual launch/window-ready timing and Task Manager roles/grouping remain unproven.
-WebView2 grouping matches OPEN upstream reports; AppUserModelID/metadata alone
-insufficient. Actual process graph at installed source: WebView2 manager24624 and
-controller28932 both parented toUI39612; browser owns renderer/GPU/network/storage/
-crash children. UI/controller both FileDescription Lazy Tester. No LazyDesigner
-attribution. Log workspace/runs/process-role-observation.log/.ps1; Task Manager GUI
-grouping NOT_OBSERVED. Investigate role labels without weakening same-image gates:
+Process roles (working source, not yet installed): process_roles.rs accepts only
+same-file hard links for Sessions/Window Recovery, retaining pins through spawn.
+Copies/stale binaries rejected; native identity regression PASS. Build-only MUI
+resources give LT Sessions/LT Recovery descriptions; actual Windows version API probe
+PASS with identical NTFS FileID.39 frontend tests/typecheck and dirty iteration
+NSIS build PASS; exact clean candidate/installed helper launch still pending.
+Stager/NSIS create fixed links; installer removes only identity-verified links by
+handle, leaving main/Data intact. Installer execution NOT_EXECUTED.
+WebView2 grouping matches OPEN upstream reports; metadata alone insufficient.
+Actual previous process graph: browser/controller parented toUI; browser owns
+renderer/GPU/network/storage/crash children. No LazyDesigner attribution.
+Log workspace/runs/process-role-observation.log/.ps1; Task Manager GUI NOT_OBSERVED.
 https://github.com/MicrosoftEdge/WebView2Feedback/issues/5628
 https://github.com/tauri-apps/tauri/issues/15567
 No one-group Task Manager success claim. Full-exit source from6eba183 closes only
@@ -107,8 +107,8 @@ Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4; second worktree detached47a45
 Four licensed playable clients, gameplay/network/migration/installer acceptance
 are separate obligations, NOT_EXECUTED here. Compiler caches remain ignored.
 
-Next: investigate supported per-role labels preserving binary/peer identity.
-User question pending: permission for2managed-game Launch/switch/drag/preview/full-exit
-tests, no world/login/account-content access; earlier no-game restriction still holds.
+Next: finish exact clean role-label candidate, stage and run authorized2game tests.
+User explicitly AUTHORIZED2sessions started by Lazy Tester for Launch/switch/drag/
+preview/full-exit. No world/login/account-content access or closing unrelated games.
 Audio crash/long-launch response and presentation/process acceptance remain open.
 Overall goal stays ACTIVE.

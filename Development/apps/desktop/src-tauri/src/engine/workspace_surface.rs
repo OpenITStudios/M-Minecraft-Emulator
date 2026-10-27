@@ -261,7 +261,8 @@ mod native {
             let image =
                 std::path::PathBuf::from(String::from_utf16_lossy(&name[..length as usize]))
                     .canonicalize()?;
-            if !permitted_image(&image, &std::env::current_exe()?.canonicalize()?) {
+            let current=std::env::current_exe()?.canonicalize()?;
+            if !permitted_image(&image, &current) && !crate::engine::process_roles::same_main_image(&image,&current)? {
                 return Err(io::Error::other(
                     "Workspace helper requires its manager caller",
                 ));
@@ -1156,7 +1157,9 @@ mod controller {
         native::rectangle(manager, viewport)?;
         let recovery_gate = recovery_gate::create(&target)?;
         #[cfg(not(test))]
-        let executable = std::env::current_exe()?;
+        let role_image=crate::engine::process_roles::image("recovery")?;
+        #[cfg(not(test))]
+        let executable = &role_image.path;
         #[cfg(test)]
         let executable = std::env::var_os("MIVUBI_TEST_SURFACE_EXECUTABLE")
             .map(std::path::PathBuf::from)

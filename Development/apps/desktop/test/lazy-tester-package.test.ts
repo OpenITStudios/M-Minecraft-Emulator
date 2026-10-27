@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join,dirname,resolve} from 'node:path';
 import {verifyLazyTesterPackage} from '../scripts/check-lazy-tester-package.mjs';
 import {reviewedDigests,stageNativePayload} from '../scripts/prepare-native-payload.mjs';
+import {processRoles,roleMuiNames} from '../scripts/prepare-process-roles.mjs';
 
 describe('Lazy Tester native package',()=>{
   it('keeps independent installer identity and excludes private bindings and legacy payloads',()=>{
@@ -12,7 +13,8 @@ describe('Lazy Tester native package',()=>{
     expect(config.productName).toBe('Lazy Tester');
     expect(config.identifier).toBe('com.mivubi.lazytester');
     expect(config.bundle.externalBin).toEqual([]);
-    expect(Object.values(config.bundle.resources).sort()).toEqual(policy.requiredFiles.filter(name=>name!=='lazy-tester.exe').sort());
+    const packaged=Object.values(config.bundle.resources).flatMap(name=>name==='en-US/'?roleMuiNames:[name]);
+    expect([...packaged,'lazy-tester.exe',...processRoles.map(r=>r.file)].sort()).toEqual([...policy.requiredFiles].sort());
     expect(policy.migration.installerMayDeleteData).toBe(false);
     expect(policy.runtime.defaultDataRelativePath).toBe('Data');
     expect(policy.runtime.dataLocatorRelativePath).toBe('App/data-location.json');

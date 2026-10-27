@@ -34,6 +34,12 @@ window stacking. These paths do not control Minecraft lifecycle or sign-in.
 
 Project-local delivery has an icon-bearing native Lazy Tester.exe at checkout root.
 It forwards only to App/lazy-tester.exe and owns no configuration/session state.
+process_roles.rs admits only fixed named hard links to that same executable file
+for Sessions and Window Recovery. Existing file-identity/peer checks remain in force.
+windows/process-roles.json owns names; prepare-process-roles.mjs builds localized
+Windows descriptions without changing runtime code. The stager and NSIS hooks
+create/remove only these verified App links; en-US resources ship with the executable.
+This identifies helper roles but does not control Windows/WebView Task Manager grouping.
 product_profiles.rs owns schema2 Data/Launchers/Minecraft-1..5, each with private
 Roaming/Local and Registry/HKCU.dat. Catalog validation binds user, directory and
 hive-file identities. The DLL/enroller validate inherited application hives using

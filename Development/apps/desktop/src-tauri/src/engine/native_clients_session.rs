@@ -266,7 +266,8 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
         return Ok(Ok(snapshot));
     }
     // Explicit user action only. A fresh UI first tries the existing authenticated endpoint.
-    let mut child = Command::new(std::env::current_exe()?)
+    let executable=super::process_roles::image("sessions")?;
+    let mut child = Command::new(&executable.path)
         .arg("--lazy-tester-controller")
         .creation_flags(0x08000000)
         .stdin(Stdio::null())

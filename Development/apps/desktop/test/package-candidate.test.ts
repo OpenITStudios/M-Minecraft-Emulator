@@ -4,8 +4,18 @@ import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,link
 import {tmpdir} from 'node:os';
 import {dirname,join,resolve} from 'node:path';
 import {assembleCandidate,sourceRevision,stageLocalApp,verifyDesktopStartup} from '../scripts/package-lazy-tester.mjs';
+import {processRoles,roleMuiNames,roleResource} from '../scripts/prepare-process-roles.mjs';
 
 describe('Development source and distribution candidates',()=>{
+  it('changes only the fixed Windows description string and rejects an unexpected resource',()=>{
+    const source=Buffer.concat([Buffer.alloc(16),Buffer.from('FileDescription\0','utf16le'),Buffer.alloc(2),Buffer.from('Lazy Tester\0','utf16le'),Buffer.alloc(16)]);
+    const result=roleResource(source,'LT Sessions');
+    expect(result.includes(Buffer.from('LT Sessions\0','utf16le'))).toBe(true);
+    expect(source.includes(Buffer.from('Lazy Tester\0','utf16le'))).toBe(true);
+    expect(result.length).toBe(source.length);
+    expect(()=>roleResource(Buffer.from('unexpected'),'LT Sessions')).toThrow();
+    expect(()=>roleResource(source,'too long description')).toThrow();
+  });
   it('requires Explorer-parented Desktop UI evidence and rejects build-tool-only success',()=>{
     const ready={event:'desktop-startup-observation',sourceCommit:'a'.repeat(40),processId:42,parentProcessId:7,explorerParent:true,connected:true,issue:'',cards:5,enabled:5,cacheInsideData:true};
     expect(verifyDesktopStartup(JSON.stringify(ready),ready.sourceCommit)).toEqual(ready);
@@ -21,14 +31,16 @@ describe('Development source and distribution candidates',()=>{
         const path=join(release,name);mkdirSync(dirname(path),{recursive:true});
         writeFileSync(path,name.endsWith('.json')?'{}':'MZfixture');
       }
+      for(const name of roleMuiNames){const path=join(release,name);mkdirSync(dirname(path),{recursive:true});writeFileSync(path,'MZresource fixture');}
       writeFileSync(join(release,'private.bin'),'never copy');
       writeFileSync(join(release,'Lazy Tester.exe'),'MZlauncher');
       linkSync(join(release,'lazy-tester.exe'),join(release,'cargo-artifact.exe'));
       const first=stageLocalApp(root,release,'a'.repeat(40));
-      expect(lstatSync(join(first.app,'lazy-tester.exe')).nlink).toBe(1);
+      expect(lstatSync(join(first.app,'lazy-tester.exe')).nlink).toBe(3);
+      for(const role of processRoles)expect(lstatSync(join(first.app,role.file),{bigint:true}).ino).toBe(lstatSync(join(first.app,'lazy-tester.exe'),{bigint:true}).ino);
       expect(readFileSync(join(root,'Lazy Tester.exe'),'utf8')).toBe('MZlauncher');
       expect(readdirSync(first.data)).toEqual([]);
-      expect(readdirSync(first.app).sort()).toEqual(['build-info.json','distribution','independent-bootstrap','lazy-tester.exe']);
+      expect(readdirSync(first.app).sort()).toEqual(['build-info.json','distribution','independent-bootstrap','lazy-tester.exe','en-US',...processRoles.map(r=>r.file)].sort());
       writeFileSync(join(first.app,'data-location.json'),'{"schema":1,"path":"D:/My Data"}');
       writeFileSync(join(first.app,'performance.json'),'{"activeFps":60,"backgroundFps":5}');
       writeFileSync(join(first.app,'graphics.json'),'["High","Low","Low","Low","Low"]');

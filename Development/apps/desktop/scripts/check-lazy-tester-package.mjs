@@ -18,8 +18,10 @@ export function verifyLazyTesterPackage(patch=JSON.parse(read('src-tauri/tauri.l
     'package-resources/lazy-tester/bootstrap-compat.dll':'independent-bootstrap/bootstrap-compat.dll',
     'package-resources/lazy-tester/bootstrap-enroll.dll':'independent-bootstrap/bootstrap-enroll.dll',
     '../../../engine/distribution/lazy-tester-package.json':'distribution/lazy-tester-package.json',
+    'package-resources/lazy-tester/en-US/':'en-US/',
   };
   fail(JSON.stringify(Object.entries(config.bundle.resources).sort())===JSON.stringify(Object.entries(allowed).sort()),'Unexpected or missing native payload');
+  fail(config.build.beforeBundleCommand==='node scripts/prepare-process-roles.mjs','Process role metadata hook required');
   fail(Object.keys(base.bundle.resources).every(key=>patch.bundle.resources[key]===null),'Every legacy resource must be removed');
   fail(Array.isArray(config.bundle.externalBin)&&config.bundle.externalBin.length===0,'Legacy sidecars forbidden');
   fail(JSON.stringify(config.app.security)===JSON.stringify(base.app.security)&&!Object.hasOwn(config,'plugins'),'Desktop security must remain unchanged');

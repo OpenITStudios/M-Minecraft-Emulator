@@ -1,6 +1,8 @@
 // Only the active native pilot belongs to the current desktop compile graph.
 // Legacy VMware and screen-overlay sources remain in Git but are unmounted.
 pub mod app_instance;
+#[cfg(windows)]
+pub(crate) mod process_roles;
 pub mod native_clients_session;
 pub mod dpi;
 pub mod instance_catalog;

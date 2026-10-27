@@ -1,11 +1,12 @@
 // Build from one clean Local revision; export only an installer and its receipts.
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
-import {copyFileSync, constants, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync} from 'node:fs';
+import {copyFileSync, constants, existsSync, lstatSync, linkSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync} from 'node:fs';
 import {dirname, isAbsolute, relative, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {verifyLazyTesterPackage} from './check-lazy-tester-package.mjs';
 import {buildRootLauncher} from './build-root-launcher.mjs';
+import {processRoles,roleMuiNames} from './prepare-process-roles.mjs';
 
 const developmentRoot = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
 const root = resolve(developmentRoot, '..');
@@ -74,15 +75,18 @@ export function stageLocalApp(cwd, release, sha) {
   ordinaryDirectories(app); ordinaryDirectories(data); ordinaryDirectories(release);
   // Never replace a running local candidate or modify its account/world data.
   if (process.platform === 'win32' && existsSync(app)) {
+    const imageNames=['lazy-tester.exe',...processRoles.map(role=>role.file)];
+    const processNames=imageNames.map(name=>"'"+name.slice(0,-4).replaceAll("'","''")+"'").join(',');
     const paths = execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',
-      "$ErrorActionPreference='Stop'; @(Get-Process -Name lazy-tester -ErrorAction SilentlyContinue) | ForEach-Object { if (-not $_.Path) { throw 'Process path unavailable' }; $_.Path }"],
+      "$ErrorActionPreference='Stop'; @(Get-Process -Name "+processNames+" -ErrorAction SilentlyContinue) | ForEach-Object { if (-not $_.Path) { throw 'Process path unavailable' }; $_.Path }"],
       {encoding:'utf8',windowsHide:true}).split(/\r?\n/).filter(Boolean);
-    if (paths.some(path => resolve(path).toLowerCase() === resolve(app,'lazy-tester.exe').toLowerCase())) {
+    const appImages=imageNames.map(name=>resolve(app,name).toLowerCase());
+    if (paths.some(path => appImages.includes(resolve(path).toLowerCase()))) {
       throw new Error('Close the local Lazy Tester before refreshing App');
     }
   }
   const names = ['lazy-tester.exe','independent-bootstrap/bootstrap-compat.dll',
-    'independent-bootstrap/bootstrap-enroll.dll','distribution/lazy-tester-package.json'];
+    'independent-bootstrap/bootstrap-enroll.dll','distribution/lazy-tester-package.json',...roleMuiNames];
   const files = names.map(name => {
     const source = resolve(release,name); ordinaryDirectories(dirname(source));
     const info = lstatSync(source);
@@ -111,6 +115,10 @@ export function stageLocalApp(cwd, release, sha) {
     writeFileSync(target,bytes,{flag:'wx'});
     if (digest(readFileSync(target)) !== sha256) throw new Error('Local app copy failed verification');
   }
+  const aliases=processRoles.map(role=>{
+    linkSync(resolve(staged,'lazy-tester.exe'),resolve(staged,role.file));
+    return {name:role.file,sha256:files[0].sha256};
+  });
   for (const name of ['data-location.json','performance.json','graphics.json']) {
     const locator = resolve(app,name);
     if (!existsSync(locator)) continue;
@@ -119,7 +127,7 @@ export function stageLocalApp(cwd, release, sha) {
     copyFileSync(locator,resolve(staged,name),constants.COPYFILE_EXCL);
   }
   writeFileSync(resolve(staged,'build-info.json'),JSON.stringify({sourceCommit:sha,
-    files:files.map(({name,sha256})=>({name,sha256})),launcher,runtimeAcceptance:'NOT_EXECUTED'},null,2)+'\n',{flag:'wx'});
+    files:[...files.map(({name,sha256})=>({name,sha256})),...aliases],launcher,runtimeAcceptance:'NOT_EXECUTED'},null,2)+'\n',{flag:'wx'});
   const stagedLauncher=resolve(attempt,'new-launcher.exe');
   writeFileSync(stagedLauncher,launcherBytes,{flag:'wx'});
   const oldLauncher=existsSync(launcherPath)?resolve(attempt,'previous-launcher.exe'):null;
