@@ -215,7 +215,6 @@ impl Sessions {
         self.reap();
         let snapshot=self.snapshot();
         let mut issues=Vec::new();
-        let mut confirmed = [false; 5];
         let mut progress: [NormalCloseProgress; 5] = std::array::from_fn(|_| NormalCloseProgress::default());
         for profile in snapshot.profiles {
             let index=profile.slot as usize-1;
@@ -223,14 +222,18 @@ impl Sessions {
             let child=&started.children[0];
             let outcome=(||{
                 child.identity()?;
-                let Some(target)=profile.process else { if confirm_owned_exit(child)? {confirmed[index]=true;} return Ok(()); };
-                if target.pid!=child.pid || target.created_file_time!=child.created.to_string(){return Err(invalid("Game identity changed"));}
-                if confirm_education_exit(&target)? {confirmed[index]=true;return Ok(());}
-                progress[index].request_window(&target)?;
-                Ok(())
+                // A posted dialog command is NOT an exit acknowledgement. Always
+                // retain the game process until its original HANDLE is signaled.
+                if progress[index].submit_exit_dialog(child)? { return Ok(()); }
+                let Some(target)=profile.process else {return Ok(());};
+                if target.pid!=child.pid || target.created_file_time!=child.created.to_string() {
+                    return Err(invalid("Game identity changed"));
+                }
+                progress[index].request_window(&target)
             })();
             if let Err(error)=outcome {
-                // A normal exit can race the identity/window checks; reap it on the next pass.
+                // A normal exit may race the identity/window checks. Other games
+                // still receive their close requests before we report the error.
                 if child.exit_code_after_exit().is_err() {
                     issues.push(format!("Minecraft - {}: {error}",profile.slot));
                 }
@@ -242,29 +245,29 @@ impl Sessions {
             if self.running.iter().all(Option::is_none){return Ok(());}
             if !issues.is_empty(){self.exiting=false;return Err(io::Error::other(issues.join("; ")));}
             for index in 0..5 {
-                if confirmed[index] { continue; }
                 let Some(started)=&self.running[index] else {continue;};
-                // The main HWND can disappear while its owned exit dialog remains.
                 let child=&started.children[0];
-                let result=confirm_owned_exit(child).and_then(|confirmed| {
-                    if !confirmed {
+                let result=progress[index].submit_exit_dialog(child).and_then(|submitted| {
+                    // Once a dialog is posted, continue observing it. Do not
+                    // re-post the same IDOK or assume Minecraft processed it.
+                    if !submitted {
                         if let Some(target)=window(child, false) {
                             progress[index].request_window(&target)?;
                         }
                     }
-                    Ok(confirmed)
+                    Ok(())
                 });
-                match result {
-                    Ok(value)=>confirmed[index]=value,
-                    Err(error)=>{
-                        if child.exit_code_after_exit().is_err() {self.exiting=false;return Err(error);}
+                if let Err(error)=result {
+                    if child.exit_code_after_exit().is_err() {
+                        self.exiting=false;
+                        return Err(error);
                     }
                 }
             }
             if std::time::Instant::now()>=deadline {
                 let pending = (0..5).filter_map(|index| {
                     let started = self.running[index].as_ref()?;
-                    let evidence = progress[index].describe_pending(&started.children[0], confirmed[index]);
+                    let evidence = progress[index].describe_pending(&started.children[0]);
                     self.issues[index] = Some(format!("Normal exit pending: {evidence}"));
                     Some(format!("Minecraft - {}: {evidence}", index + 1))
                 }).collect::<Vec<_>>();
@@ -496,6 +499,9 @@ fn valid_retained_window(target: &OwnedProcess) -> bool {
 #[derive(Default)]
 struct NormalCloseProgress {
     requested_windows: Vec<String>,
+    // Bounded once-per-exact-dialog (HWND, owning thread). Posting IDOK is not
+    // evidence that the dialog was processed or the game process exited.
+    submitted_dialogs: Vec<(usize, u32)>,
     original_window_thread: Option<OwnedHandle>,
     blocked_by_modal: bool,
 }
@@ -523,6 +529,10 @@ impl NormalCloseProgress {
                 self.blocked_by_modal = true;
                 return Ok(());
             }
+            // A destroyed/replaced HWND between enumeration and PostMessageW
+            // is an observation race. The pinned child, not this HWND, remains
+            // the process authority. A fresh lookup can find its successor.
+            Err(_) if !valid_retained_window(target) => return Ok(()),
             Err(error) => return Err(error),
         }
         if self.requested_windows.is_empty() {
@@ -530,6 +540,18 @@ impl NormalCloseProgress {
         }
         self.requested_windows.push(target.window_handle.clone());
         Ok(())
+    }
+
+    fn submit_exit_dialog(&mut self, child: &PendingEducationBootstrap) -> io::Result<bool> {
+        confirm_owned_exit_once(child, &mut self.submitted_dialogs)
+    }
+
+    fn phase(&self, game_window_present: bool) -> &'static str {
+        if !self.submitted_dialogs.is_empty() { "DIALOG_CONFIRMATION_SENT" }
+        else if !self.requested_windows.is_empty() { "CLOSE_REQUESTED" }
+        else if self.blocked_by_modal { "WAITING_FOR_MODAL" }
+        else if game_window_present { "WINDOW_AVAILABLE" }
+        else { "WAITING_FOR_WINDOW" }
     }
 
     fn original_thread_state(&self) -> &'static str {
@@ -543,14 +565,17 @@ impl NormalCloseProgress {
         }
     }
 
-    fn describe_pending(&self, child: &PendingEducationBootstrap, dialog_confirmed: bool) -> String {
+    fn describe_pending(&self, child: &PendingEducationBootstrap) -> String {
         // Never inspect account, world, dialog text or arbitrary process memory.
-        let main_window = if window(child, false).is_some() { "present" } else { "absent or ambiguous" };
+        let game_window_present=window(child, false).is_some();
+        let main_window = if game_window_present { "present" } else { "absent or ambiguous" };
         format!(
-            "game process still running; unique verified main HWND: {main_window}; original window thread: {}; distinct WM_CLOSE requests: {}; disabled main window encountered: {}; exact exit confirmation submitted: {dialog_confirmed}",
+            "game process still running; close phase: {}; unique verified main HWND: {main_window}; original window thread: {}; distinct WM_CLOSE requests: {}; disabled main window encountered: {}; distinct exact exit-dialog commands posted: {}",
+            self.phase(game_window_present),
             self.original_thread_state(),
             self.requested_windows.len(),
             self.blocked_by_modal,
+            self.submitted_dialogs.len(),
         )
     }
 }
@@ -612,17 +637,25 @@ fn close_verified_window(target:&OwnedProcess)->io::Result<()> {
 
 // Minecraft Education's standard English exit prompt is an unowned native dialog.
 // Unknown/localized prompts remain for the user; never click arbitrary dialogs.
+#[cfg(test)]
 fn confirm_education_exit(target:&OwnedProcess)->io::Result<bool> {
     if !valid_retained_window(target) { return Ok(false); }
     confirm_exit_dialog(target.pid, || valid_retained_window(target))
 }
 
-fn confirm_owned_exit(child:&PendingEducationBootstrap)->io::Result<bool> {
+fn confirm_owned_exit_once(child:&PendingEducationBootstrap, sent:&mut Vec<(usize,u32)>)->io::Result<bool> {
     let (pid, birth)=child.identity()?;
-    confirm_exit_dialog(pid, || child.identity().ok()==Some((pid,birth)))
+    confirm_exit_dialog_once(pid, || child.identity().ok()==Some((pid,birth)), sent)
 }
 
+// Wrapper retained for the existing exact-prompt fixture. Production CloseAll
+// owns one bounded 'sent' set for each managed child throughout its attempt.
+#[cfg(test)]
 fn confirm_exit_dialog(owned_pid:u32, verify:impl Fn()->bool)->io::Result<bool> {
+    confirm_exit_dialog_once(owned_pid,verify,&mut Vec::new())
+}
+
+fn confirm_exit_dialog_once(owned_pid:u32, verify:impl Fn()->bool, sent:&mut Vec<(usize,u32)>)->io::Result<bool> {
     use windows_sys::Win32::{Foundation::HWND,UI::{Input::KeyboardAndMouse::IsWindowEnabled,WindowsAndMessaging::*}};
     if !verify() { return Ok(false); }
     struct Search { pid:u32, matches:Vec<isize> }
@@ -658,7 +691,16 @@ fn confirm_exit_dialog(owned_pid:u32, verify:impl Fn()->bool)->io::Result<bool> 
     // HWNDs can be destroyed/reused after EnumWindows. Revalidate ALL dialog
     // properties immediately before posting IDOK, not merely its owning PID.
     if !unsafe {matches_exact_prompt(dialog,owned_pid)} || !verify() {return Ok(false);}
+    let mut actual_pid=0;
+    let thread=unsafe {GetWindowThreadProcessId(dialog,&mut actual_pid)};
+    if thread==0 || actual_pid!=owned_pid {return Ok(false);}
+    let identity=(dialog as usize,thread);
+    if sent.contains(&identity) { return Ok(true); }
+    if sent.len()>=4 {
+        return Err(invalid("Minecraft opened too many distinct exit prompts during normal close"));
+    }
     if unsafe {PostMessageW(dialog,WM_COMMAND,1,0)}==0 {return Err(io::Error::last_os_error());}
+    sent.push(identity);
     Ok(true)
 }
 
@@ -1032,6 +1074,21 @@ mod tests {
         }
     }
 
+
+    #[test]
+    fn close_phase_never_claims_process_exit_from_a_posted_message() {
+        let mut progress=NormalCloseProgress::default();
+        assert_eq!(progress.phase(false),"WAITING_FOR_WINDOW");
+        assert_eq!(progress.phase(true),"WINDOW_AVAILABLE");
+        progress.blocked_by_modal=true;
+        assert_eq!(progress.phase(true),"WAITING_FOR_MODAL");
+        progress.requested_windows.push("0x42".into());
+        assert_eq!(progress.phase(false),"CLOSE_REQUESTED");
+        progress.submitted_dialogs.push((0x99,42));
+        assert_eq!(progress.phase(false),"DIALOG_CONFIRMATION_SENT");
+        // The real process-exit state is owned solely by Sessions::reap().
+    }
+
     #[test]
     fn exit_dialog_refuses_unverified_process_without_enumerating_windows() {
         assert!(!confirm_exit_dialog(std::process::id(), || false).unwrap());
@@ -1057,10 +1114,19 @@ mod tests {
                 let target=OwnedProcess{pid:std::process::id(),created_file_time:(((birth.dwHighDateTime as u64)<<32)|birth.dwLowDateTime as u64).to_string(),session_id:interactive_session(std::process::id()).unwrap(),window_handle:format!("0x{:x}",game as usize),responding:true};
                 assert!(!confirm_education_exit(&target).unwrap());
                 assert_ne!(SetWindowTextW(message,windows_sys::w!("Exit Minecraft Education?")),0);
-                assert!(confirm_education_exit(&target).unwrap());
+                let mut submitted=Vec::new();
+                assert!(confirm_exit_dialog_once(target.pid,||valid_retained_window(&target),&mut submitted).unwrap());
                 let mut received:MSG=std::mem::zeroed();
                 assert_ne!(PeekMessageW(&mut received,dialog,WM_COMMAND,WM_COMMAND,PM_REMOVE),0);
                 assert_eq!(received.wParam,1);
+                assert_eq!(submitted.len(),1);
+                // Still-present same dialog is observed, never spammed with IDOK.
+                assert!(confirm_exit_dialog_once(target.pid,||valid_retained_window(&target),&mut submitted).unwrap());
+                assert_eq!(submitted.len(),1);
+                assert_eq!(PeekMessageW(&mut received,dialog,WM_COMMAND,WM_COMMAND,PM_REMOVE),0);
+                assert_ne!(SetWindowTextW(message,windows_sys::w!("Different question")),0);
+                assert!(!confirm_exit_dialog_once(target.pid,||valid_retained_window(&target),&mut submitted).unwrap());
+                assert_eq!(submitted.len(),1);
                 let mut forged=target.clone();forged.pid=forged.pid.wrapping_add(1);
                 assert!(!confirm_education_exit(&forged).unwrap());
             });

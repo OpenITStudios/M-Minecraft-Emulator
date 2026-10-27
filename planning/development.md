@@ -22,6 +22,26 @@ original MC02 hang is NOT_ACCEPTED and no universal thread/process termination
 fallback was introduced. Remaining work: source-only lifecycle/HUD ownership
 review until the operator separately authorizes runtime acceptance.
 
+## P0 source correction — dialog command is not game exit (27 October 2026)
+
+The CloseAll request now tracks a bounded per-session sequence: verified game
+WM_CLOSE request, exact modal confirmation request and ongoing observation of
+the retained **game process handle**. Posting WM_COMMAND/IDOK is recorded once
+per exact observed dialog (HWND + owner-thread ID), NOT interpreted as Minecraft
+exit, and cannot stop the remaining game's normal-close processing. A distinct
+verified prompt may be handled at most four times per attempt; foreign/changed
+dialogs refuse. A game HWND that disappears between enumeration and its guarded
+close request is re-observed rather than immediately failing the entire attempt.
+The transient modal-disabled path remains deferrable. The process is accepted
+as exited only after the original process handle signals and reap completes.
+The existing normal-close deadline and no-force-kill safeguards remain in place.
+
+Typed UI/session contracts, protected account/world storage and native DLLs were
+not changed by this increment. A source-level fixture now asserts no duplicate
+IDOK for one live dialog, no action after its text changes and diagnostics that
+never classify a sent command as process exit. No tests were executed in
+ChatGPT/GitHub. MC02 real-game completion remains NOT_EXECUTED and UNKNOWN.
+
 ## State and operator request — 27 October 2026
 
 The v0.1 checkpoint was saved and paused in Codex. The operator subsequently
@@ -136,8 +156,9 @@ Settings/Data Storage: queued saves, stable review dialogs, admission checks. 39
 
 ## Continuation, build and preservation
 
-Next: continue source-only audit of normal-exit ownership, including HUD
-worker lifetime, native dialog handling and verified game HWND changes.
+Next: continue source-only audit of native HUD worker lifetime and window
+recovery helper ownership; once source corrections are coherent, audit frontend
+close-failure recovery against the same single session controller.
 No request to use a Local PC, no Windows or Minecraft execution and no
 installer publication until the operator explicitly authorizes them.
 The detailed game process/thread/dialog evidence remains an unexecuted
