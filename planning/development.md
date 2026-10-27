@@ -35,22 +35,11 @@ requires selected-launcher review/confirmation.
 
 ## Current exact source and delivery
 
-Installed App/root sourcee4be7ed4c7b7da6a8f7ad3bf786e0a0208e1df4b, clean Local build.
-App SHA256:186f0ca6fb2f760ac6271c2e07839836c2d8b62c113cd45bb9cf9fdc6c430220.
+Installed App/root source 6dff3d15f237436e0f259a0d41521a21e52d51a6, clean Local build.
+App SHA256:228f46f4f19ce212777ddc5d3235e59871f7ee10bd165798709fc237e7b87204.
 Root starter/DLL hashes: App/build-info.json, verified during Explorer startup.
-Candidate workspace/packages/lazy-tester/0.1.0-e4be7ed4c7b7-20261027T033008416Z;
-installer hash is recorded in its SHA256SUMS.txt.
 Signing NOT_VERIFIED; installer execution/publication NOT_EXECUTED/DISABLED.
-Previous startup and process metadata verified. Two games opened in 7977/6587ms,
-six switches took 481–581ms; one drag and frame-style check passed (two-session logs).
-These checks did not prove visible pixels or usable gameplay; the user then reported
-a black primary viewport and inaccessible game. First full-exit attempt timed out
-with both games retained; a subsequent request exited the owned games and manager.
-Both games showed the exact native "Exit Minecraft Education?" OK/Cancel prompt.
-Installed controller change confirms only this exact prompt for the pinned original
-game; unknown prompts are preserved. Six controller fixtures PASS, including exact
-dialog and unrelated/unknown refusal. Real one-click exit remains unproven.
-Log workspace/runs/full-exit-dialog-fixture.log.
+Earlier two-session testing found blackscreen and exit timeout; six synthetic exit-dialog fixtures passed. Real acceptance is revision-specific.
 Earlier audio toggle and Clear/Reset review/Cancel PASS; no real deletion.
 ## Implemented corrections and executed evidence
 
@@ -107,7 +96,11 @@ Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4; second worktree detached47a45
 Four licensed playable clients, gameplay/network/migration/installer acceptance
 are separate obligations, NOT_EXECUTED here. Compiler caches remain ignored.
 
-Next: stage the newer candidate safely, then when the user is available verify two real sessions,
+Latest 6dff3d1 runtime: launch two sessions PASS; first switch test failed because
+Minecraft 2 was covered, retry six switches/drag PASS. Pixels/input NOT_PROVEN.
+Full exit timed out: MC1 exited, MC2 and manager remain. No force termination.
+Logs workspace/runs/current-two-session-{launch,presentation,presentation-retry,exit}.log.
+Next: diagnose intermittent coverage and incomplete exit; verify two real sessions,
 including visible output, interaction, drag, preview, switching and one-click exit.
 User explicitly AUTHORIZED2sessions started by Lazy Tester for Launch/switch/drag/
 preview/full-exit. No world/login/account-content access or closing unrelated games.
