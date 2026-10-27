@@ -19,8 +19,10 @@ the manager opaque, preserving DWM frame rendering. The existing DWM preview wor
 also renders the unfocused primary game; its ordinary click selects the verified
 native HWND, with no input forwarding. Explicit presentation removes that primary
 image before activating native gameplay. Manager focus/drag parks the independent
-game while its DWM destination follows the manager; foreground and move/size-end
-events reconcile current geometry through the existing coalesced worker.
+game while its DWM destination follows the manager; foreground and move events
+reconcile native geometry through the existing coalesced worker and ordered helper.
+The UI move callback does not queue an independent asynchronous game-window move:
+such a move can arrive after an acknowledged selection and displace the active game.
 release_for_close rejects reacquisition
 while restoring games. Product CloseRequested then sends CloseAll to the retained
 session controller: identity-checked WM_CLOSE to its own original game windows,

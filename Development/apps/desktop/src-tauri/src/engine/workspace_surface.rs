@@ -488,23 +488,6 @@ mod native {
         }
         Ok(())
     }
-    pub(super) fn follow(saved: &Saved, rect: Rectangle) -> io::Result<()> {
-        let (_process, window) = hwnd(&saved.target)?;
-        // Dragging belongs to the manager: DWM follows it independently of the game thread.
-        // The host stays opaque even while an asynchronous game placement is pending.
-        let rect = if receiving_input(&saved.target) { rect } else {
-            if !can_park(&saved.target)? { return Ok(()); }
-            if parked_at(&saved.target, rect) { return Ok(()); }
-            parking_rectangle(rect)?
-        };
-        unsafe {
-            if SetWindowPos(window, std::ptr::null_mut(), rect.x, rect.y, 0, 0,
-                SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS) == 0 {
-                return Err(io::Error::last_os_error());
-            }
-        }
-        Ok(())
-    }
     pub(super) fn receiving_input(target: &OwnedProcess) -> bool {
         hwnd(target).is_ok_and(|(_pin, window)| unsafe { GetForegroundWindow() == window })
     }
@@ -1449,14 +1432,14 @@ mod controller {
     }
     #[cfg(windows)]
     pub fn follow_manager(manager: u64) -> io::Result<bool> {
-        // Never queue behind lifecycle, recovery or a slow game's resize acknowledgement.
+        // This runs on the UI thread. DWM follows independently; native placement must
+        // use the ordered helper on the existing worker, never an async HWND move that
+        // can execute after a later acknowledged selection and park the active game.
         let Ok(state) = SURFACE.try_lock() else { return Ok(false); };
         if state.suspended || state.closing { return Ok(true); }
         let Some(lease) = &state.active else { return Ok(true); };
         if lease.manager != manager || native::minimized(manager)? { return Ok(true); }
-        let Some(saved) = &lease.saved else { return Ok(true); };
-        native::follow(saved, native::rectangle(manager, lease.viewport)?)?;
-        Ok(true)
+        Ok(false)
     }
     pub fn update(manager: u64, viewport: Option<Viewport>) -> io::Result<()> {
         let mut state = SURFACE
@@ -1645,6 +1628,29 @@ mod controller {
                 }
             };
             (fixture, target)
+        }
+        #[test]
+        #[ignore = "Requires the built debug manager and Windows .NET compiler; synthetic windows only"]
+        fn drag_callback_does_not_leave_an_unordered_game_move_after_selection() {
+            crate::engine::dpi::configure().unwrap();
+            let class=windows_sys::w!("STATIC");
+            let manager=unsafe { CreateWindowExW(0,class,class,WS_OVERLAPPEDWINDOW,
+                50,50,1200,900,std::ptr::null_mut(),std::ptr::null_mut(),std::ptr::null_mut(),std::ptr::null()) };
+            assert!(!manager.is_null());
+            let (_fixture,target)=fixture();
+            let viewport=Viewport {x:20.0,y:60.0,width:700.0,height:450.0,
+                pixel_ratio:unsafe {windows_sys::Win32::UI::HiDpi::GetDpiForWindow(manager)} as f64/96.0};
+            present(manager as usize as u64,viewport,target.clone()).unwrap();
+            let before=native::capture(target.clone()).unwrap().rect;
+            let deferred=follow_manager(manager as usize as u64).unwrap();
+            // An async SetWindowPos can arrive after a later, acknowledged selection.
+            // Only the ordered helper may place/park the native game; the UI callback defers.
+            std::thread::sleep(Duration::from_millis(250));
+            let after=native::capture(target).unwrap().rect;
+            release().unwrap();
+            unsafe {DestroyWindow(manager);}
+            assert_eq!(after,before,"A delayed drag move can park the foreground game after selection");
+            assert!(!deferred,"Active translation must be reconciled by the existing worker");
         }
         #[test]
         #[ignore = "Requires the built debug manager and Windows .NET compiler; synthetic windows only"]

@@ -2,9 +2,11 @@
 
 ## Single active goal — user revised27October2026
 
-Dependable Lazy Tester: stable Play/Settings/game windows, faster switch/Launch,
-clear process roles, functional Settings/Data Storage. Defaults120/5, minimum5FPS,
-background<=active. Goal ACTIVE, not complete.
+Priority: fix and prove the reported black screen and lost game interaction.
+Then verify stable Play/Settings frame, preview/drag, per-slot focus and full exit
+with two owned sessions; optimize measured Launch/switch, finish functional
+Settings/Data Storage, clear process roles and honest Windows acceptance. Defaults
+120/5, minimum5FPS, background<=active. Work remains incomplete.
 
 Local only; main/publication untouched; CI OFF. VM/Sandboxie and RAM/renderer work
 PAUSED. Compiler caches explicitly RETAINED. No incidental cleanup or actual profile
@@ -37,24 +39,31 @@ requires selected-launcher review/confirmation.
 
 ## Current exact source and delivery
 
-Installed App/root sourcea0b88440a526fea4499a1715ff1dd05fde862b53, clean Local build.
-App SHA256:24717334c6c93f8b04f0832bb5c0697edd5e4c37c524e762b0d4456b071e371a.
+Installed App/root source8c0d171c6326988bb2a7bcf52f4b83059b3f46ad, clean Local build.
+App SHA256:cf573d6469c9d1d33419d8bb0b7c09c6650f8c0ae0637060acda09d32c568006.
 Root starter/DLL hashes: App/build-info.json, verified during Explorer startup.
-Candidate workspace/packages/lazy-tester/0.1.0-a0b88440a526-20261026T194457432Z;
+Candidate workspace/packages/lazy-tester/0.1.0-8c0d171c6326-20261027T030410242Z;
 installer hash is recorded in its SHA256SUMS.txt.
 Signing NOT_VERIFIED; installer execution/publication NOT_EXECUTED/DISABLED.
-Actual Explorer startup PID18724: Connected/five enabled/no issue/local WebView cache,
-log workspace/runs/launch-desktop-startup.log. Data Storage UI opened controller
-without games; own idle UI/controller closed normally, no remaining app/game process.
+Actual Explorer startup PID31852: Connected/five enabled/no issue/local WebView cache,
+log workspace/runs/process-roles-desktop-startup.log. Two owned game windows launched
+in 7977/6587ms; controller and recovery roles verified by actual process metadata.
+Six switch samples took 481–581ms from click to foreground. One 60x30px drag kept
+the background preview aligned, and Play/Settings native frame styles matched.
+These checks did not prove visible pixels or usable gameplay; the user then reported
+a black primary viewport and inaccessible game. First full-exit attempt timed out
+with both games retained; a subsequent request exited the owned games and manager.
+One-click full exit remains unproven. Logs workspace/runs/two-session-*.log.
 Earlier audio toggle/persistence, Clear/Reset review/Cancel PASS; logs audio-ui-smoke,
 full-clear-ui-smoke, settings-recovery-ui-smoke in workspace/runs. No real deletion.
 ## Implemented corrections and executed evidence
 
-Presentation: opaque workspace_surface.rs host and previews.rs primary DWM image,
-removed before native activation. Original pins/recovery and coalesced foreground/
-move worker retained. Nine surface/opacity/translation/focus/stall/recovery fixtures
-PASS.40 synthetic swaps p95/max2ms. Logs workspace/runs/opaque-*. Actual Minecraft
-drag/focus/frame/switch/DPI NOT_EXECUTED.
+Presentation: opaque host and primary DWM image; original pins/recovery retained.
+Potential black-screen race reproduced synthetically: an asynchronous drag move
+displaced the game after presentation. Working change defers moves to the ordered
+helper/worker; regression failed before and passed after (black-screen-drag-*.log).
+This proves the race, not yet that it alone caused the user's black screen. Build,
+stage and validate actual pixels/input after the fix. Multi-DPI remains untested.
 
 FPS120/5, saves5..1000/background<=active, explicit legacy1..4/144/10 preserved.
 V3 applies next launch, V2 unchanged. Rust policy fixtures PASS; game pacing untested.
@@ -63,42 +72,29 @@ Cache: selected profile stopped, other exact managed games allowed, unknown exte
 games block. Four lock/link/admission/peer fixtures PASS. No real data deleted.
 ## Remaining work and owners
 
-Reset/restore: game_preset.rs verified/flushed backup+SHA256 receipt before atomic
-options.txt replacement; restore backs up current settings.8 fixtures PASS.
-Full clear: product_profiles/clear.rs via same actor/bridge/UI; fresh hive/directory,
-generation-bound name+ack, same-volume cutover/catalog/pinned purge. Precommit rollback,
-explicit committed purge recovery; read-only inspection never mutates.13 profile
-tests (7 clear),5 controller/invalid admission PASS: locks/links/corrupt paths/faults/
-partial purge/stale token/readonly/peers. No real reset/clear; review/Cancel proof above.
+Reset/restore backs up and verifies settings before replacement;8 fixtures PASS.
+Full clear uses generation-bound confirmation, rollback and explicit purge recovery;
+13 profile and5 controller fixtures PASS. No real reset/clear; review/Cancel above.
 Audio: session_audio.rs via existing actor/bridge; Data/Settings/audio.json defaults
 Keep. Exact PID/birth, no system/cross-process sessions, preserves mute/volume.
 250ms wakeups/1second discovery. Silent Windows audio and6 settings fixtures PASS;
 logs workspace/runs/audio-*. Checkbox stays enabled through polling, queues saves.
 Abrupt controller-crash mixer recovery, long-launch audio response and actual
 Minecraft audio remain unverified. Continue in these owners, no second lifecycle.
-Launch preflight: original EXE pin, one fresh full Windows resolver instead of two,
-named-file ID check and reviewed hash per launch. Initial admission stays two-pass.
-Release3sample median2280->1176ms for validation only; read-only benchmark never
-opens profiles/starts Minecraft. Identity/path/hash/write-sharing test and5 controller
-regressions PASS. Logs workspace/runs/launch-preflight-release-*.log. Candidate staged;
-actual launch/window-ready timing and Task Manager roles/grouping remain unproven.
-Process roles (working source, not yet installed): process_roles.rs accepts only
-same-file hard links for Sessions/Window Recovery, retaining pins through spawn.
-Copies/stale binaries rejected; native identity regression PASS. Build-only MUI
-resources give LT Sessions/LT Recovery descriptions; actual Windows version API probe
-PASS with identical NTFS FileID.39 frontend tests/typecheck and dirty iteration
-NSIS build PASS; exact clean candidate/installed helper launch still pending.
-Stager/NSIS create fixed links; installer removes only identity-verified links by
-handle, leaving main/Data intact. Installer execution NOT_EXECUTED.
+Launch preflight retains the original EXE pin and rechecks registration/identity/hash.
+Release3sample validation median2280->1176ms; identity and5 controller tests PASS.
+Logs workspace/runs/launch-preflight-release-*.log; actual timings are above.
+Process roles (installed at 8c0d171): same-file pinned hard links for Sessions/Window
+Recovery, copies rejected. MUI descriptions verified via Windows and live processes.
+39 frontend tests/typecheck and clean NSIS build PASS; installer execution NOT_EXECUTED.
 WebView2 grouping matches OPEN upstream reports; metadata alone insufficient.
 Actual previous process graph: browser/controller parented toUI; browser owns
 renderer/GPU/network/storage/crash children. No LazyDesigner attribution.
 Log workspace/runs/process-role-observation.log/.ps1; Task Manager GUI NOT_OBSERVED.
 https://github.com/MicrosoftEdge/WebView2Feedback/issues/5628
 https://github.com/tauri-apps/tauri/issues/15567
-No one-group Task Manager success claim. Full-exit source from6eba183 closes only
-managed games normally and keeps manager open on pending dialog/timeout; actual
-Minecraft save/full-exit acceptance remains NOT_EXECUTED.
+No one-group Task Manager success claim. Full-exit closes only managed games normally
+and keeps manager open on pending dialog/timeout; first attempt failed as above.
 
 Preserve migrated Data/Launchers/Minecraft-1..5, Data/Settings and Data/Cache; external
 originals remain recovery only. Keep file-backed hives/ACLs/DLL pins; no account/world
@@ -107,8 +103,9 @@ Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4; second worktree detached47a45
 Four licensed playable clients, gameplay/network/migration/installer acceptance
 are separate obligations, NOT_EXECUTED here. Compiler caches remain ignored.
 
-Next: finish exact clean role-label candidate, stage and run authorized2game tests.
+Next: build and stage the black-screen fix, then repeat authorized real-session tests
+including visible output, interaction, drag, preview, switching and full exit.
 User explicitly AUTHORIZED2sessions started by Lazy Tester for Launch/switch/drag/
 preview/full-exit. No world/login/account-content access or closing unrelated games.
 Audio crash/long-launch response and presentation/process acceptance remain open.
-Overall goal stays ACTIVE.
+Overall work is not complete.
