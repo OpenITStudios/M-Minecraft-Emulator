@@ -36,8 +36,8 @@ requires selected-launcher review/confirmation.
 
 ## Current exact source and delivery
 
-Installed App/root source 6dff3d15f237436e0f259a0d41521a21e52d51a6, clean Local build.
-App SHA256:228f46f4f19ce212777ddc5d3235e59871f7ee10bd165798709fc237e7b87204.
+Installed App/root source e735b7ea15cefe15f83017b326de8e2c95cff902, clean Local build.
+App SHA256:4bfdd894fa24a11c2882eb5b573149b752609078850c36e91a43127b6ce128e3.
 Root starter/DLL hashes: App/build-info.json, verified during Explorer startup.
 Signing NOT_VERIFIED; installer execution/publication NOT_EXECUTED/DISABLED.
 Earlier two-session testing found blackscreen and exit timeout; six synthetic exit-dialog fixtures passed. Real acceptance is revision-specific.
@@ -93,10 +93,9 @@ content reads. App/build-info.json records reviewed payloads; no repeat migratio
 Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4; second worktree detached47a45f9c7d4a8ce6799d56997fd38e4b4df49ce7 unchanged.
 Four-client, gameplay, network, migration and installer acceptance NOT_EXECUTED.
 
-Latest 6dff3d1 runtime: launch two sessions PASS; first switch test failed because
-Minecraft 2 was covered, retry six switches/drag PASS. Pixels/input NOT_PROVEN.
-Full exit timed out: MC1 exited, MC2 and manager remain. No force termination.
-Logs workspace/runs/current-two-session-{launch,presentation,presentation-retry,exit}.log.
+Latest e735b7e runtime: two launches, six switches and drag PASS (geometry only).
+Full exit timed out: MC1 exited, MC2 and manager remain. Pixels/input NOT_PROVEN.
+Logs workspace/runs/latest-two-session-{launch,presentation,exit}.log.
 Source: full exit can confirm the exact owned exit dialog even if its main window
 is missing; identity rechecked before posting. Cargo check and refusal test PASS;
 actual dialog without window NOT_EXECUTED. Exit wait also checks the retained child
