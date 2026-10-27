@@ -51,6 +51,11 @@ struct Rectangle {
     height: i32,
 }
 #[cfg(any(windows, test))]
+fn interactive_surface(focused: bool, visible: bool, actual: Rectangle, expected: Rectangle) -> bool {
+    focused && visible && actual.x.abs_diff(expected.x) <= 2 && actual.y.abs_diff(expected.y) <= 2
+        && actual.width.abs_diff(expected.width) <= 2 && actual.height.abs_diff(expected.height) <= 2
+}
+#[cfg(any(windows, test))]
 fn foreground_surface_covered(foreground: u64, game: u64, manager: u64, point_root: u64) -> bool {
     (foreground == game || foreground == manager) && point_root != game
 }
@@ -490,6 +495,16 @@ mod native {
     }
     pub(super) fn receiving_input(target: &OwnedProcess) -> bool {
         hwnd(target).is_ok_and(|(_pin, window)| unsafe { GetForegroundWindow() == window })
+    }
+    pub(super) fn interactive_at(target: &OwnedProcess, manager: u64, viewport: Viewport) -> bool {
+        let Ok((_pin, window)) = hwnd(target) else { return false; };
+        let Ok(expected) = rectangle(manager, viewport) else { return false; };
+        unsafe {
+            let mut rect: RECT = std::mem::zeroed();
+            if GetWindowRect(window, &mut rect) == 0 { return false; }
+            super::interactive_surface(GetForegroundWindow() == window, IsWindowVisible(window) != 0,
+                Rectangle { x: rect.left, y: rect.top, width: rect.right - rect.left, height: rect.bottom - rect.top }, expected)
+        }
     }
     pub(super) fn clear_aperture(manager: u64) -> io::Result<()> {
         use windows_sys::Win32::Graphics::Gdi::*;
@@ -1477,7 +1492,12 @@ mod controller {
         let result = if live && lease.saved.as_ref().is_some_and(|saved| !native::receiving_input(&saved.target)) {
             // Keep native gameplay independent; a click on its DWM image reuses present_bound.
             // The parked surface stays live while the manager is moved/resized or configured.
-            lease.background(rect, true)
+            lease.background(rect, true).and_then(|()| {
+                // Focus can change while the helper is parking the game.
+                if lease.saved.as_ref().is_some_and(|saved| native::receiving_input(&saved.target)) {
+                    lease.place(rect, false)
+                } else { Ok(()) }
+            })
         } else { lease.place(rect, false) };
         // A transient layout/stacking failure must not hide the live session or latch suspension.
         match result {
@@ -2190,6 +2210,15 @@ pub fn refresh_previews() { previews::refresh(); }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn focused_game_outside_viewport_is_not_an_interactive_surface() {
+        let viewport=Rectangle{x:78,y:141,width:700,height:450};
+        let parked=Rectangle{x:2592,y:0,..viewport};
+        assert!(!interactive_surface(true,true,parked,viewport));
+        assert!(!interactive_surface(false,true,viewport,viewport));
+        assert!(!interactive_surface(true,false,viewport,viewport));
+        assert!(interactive_surface(true,true,viewport,viewport));
+    }
     #[cfg(windows)]
     #[test]
     fn clearing_aperture_repaints_children_even_when_region_is_already_clear() {

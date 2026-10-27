@@ -432,6 +432,8 @@ fn queue_workspace_update(window: tauri::Window) {
         });
         if let Err(error) = result {
             let _ = window.emit("workspace-surface-error", error);
+        } else {
+            crate::engine::workspace_surface::refresh_previews();
         }
     });
 }

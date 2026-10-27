@@ -41,11 +41,9 @@ Root starter/DLL hashes: App/build-info.json, verified during Explorer startup.
 Candidate workspace/packages/lazy-tester/0.1.0-e4be7ed4c7b7-20261027T033008416Z;
 installer hash is recorded in its SHA256SUMS.txt.
 Signing NOT_VERIFIED; installer execution/publication NOT_EXECUTED/DISABLED.
-Previous ba2731d Explorer startup PID36904: Connected/five enabled/no issue/local cache,
-log workspace/runs/process-roles-desktop-startup.log. Two owned game windows launched
-in 7977/6587ms; controller and recovery roles verified by actual process metadata.
-Six switch samples took 481–581ms from click to foreground. One 60x30px drag kept
-the background preview aligned, and Play/Settings native frame styles matched.
+Previous startup: Connected/five enabled/local cache; process role metadata verified.
+Two games opened in 7977/6587ms, six switches took 481–581ms. One drag kept preview
+aligned; Play/Settings frame styles matched. Logs workspace/runs/two-session-*.log.
 These checks did not prove visible pixels or usable gameplay; the user then reported
 a black primary viewport and inaccessible game. First full-exit attempt timed out
 with both games retained; a subsequent request exited the owned games and manager.
@@ -53,9 +51,8 @@ Both games showed the exact native "Exit Minecraft Education?" OK/Cancel prompt.
 Installed controller change confirms only this exact prompt for the pinned original
 game; unknown prompts are preserved. Six controller fixtures PASS, including exact
 dialog and unrelated/unknown refusal. Real one-click exit remains unproven.
-Logs workspace/runs/two-session-*.log and full-exit-dialog-fixture.log.
-Earlier audio toggle/persistence, Clear/Reset review/Cancel PASS; logs audio-ui-smoke,
-full-clear-ui-smoke, settings-recovery-ui-smoke in workspace/runs. No real deletion.
+Log workspace/runs/full-exit-dialog-fixture.log.
+Earlier audio toggle and Clear/Reset review/Cancel PASS; no real deletion.
 ## Implemented corrections and executed evidence
 
 Presentation: opaque host and primary DWM image; original pins/recovery retained.
@@ -67,7 +64,10 @@ move; synthetic race and stalled-drag fixtures PASS, but actual issue persisted.
 Installed change wakes the ordered geometry worker for foreground transitions as well;
 focus event fixture failed before and passes after (black-screen-focus-*.log). Clean
 Windows build and App staging PASS; live stability and user-visible proof pending.
-Multi-DPI untested.
+Current source additionally keeps the primary preview until the focused game is
+visible at its viewport, refreshes after repositioning, and rechecks focus after
+parking. Five surface logic regressions PASS; real pixels/input remain unverified.
+Interactive testing deferred; do not control the user's desktop during source work.
 
 FPS120/5, saves5..1000/background<=active, explicit legacy1..4/144/10 preserved.
 V3 applies next launch, V2 unchanged. Rust policy fixtures PASS; game pacing untested.

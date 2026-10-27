@@ -25,6 +25,9 @@ The UI move callback does not queue an independent asynchronous game-window move
 such a move can arrive after an acknowledged selection and displace the active game.
 Foreground changes also wake the same worker: it rechecks the active owned game's
 current focus and geometry, including when a parked game receives foreground focus.
+The primary preview is hidden only after the foreground game is visible at the
+expected viewport; the worker refreshes previews after reconciling geometry.
+Parking rechecks focus on completion to recover a concurrent focus change.
 release_for_close rejects reacquisition
 while restoring games. Product CloseRequested then sends CloseAll to the retained
 session controller: identity-checked WM_CLOSE to its own original game windows,

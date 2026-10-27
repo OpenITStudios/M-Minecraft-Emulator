@@ -344,7 +344,7 @@ mod windows {
             }
             if let Some(primary) = &mut self.primary {
                 // Never overlay the interactive game. Its native HWND receives all input.
-                let playing = native::receiving_input(&primary.target);
+                let playing = native::interactive_at(&primary.target, primary.manager, primary.viewport);
                 if let Err(error) = primary.update(visible && !playing) {
                     if error.kind() != io::ErrorKind::WouldBlock {
                         primary.hide();
@@ -387,7 +387,7 @@ mod windows {
                     }
                     let image = self.primary.as_mut().unwrap();
                     image.viewport = tile.viewport;
-                    image.update(visible && !native::receiving_input(target))?;
+                    image.update(visible && !native::interactive_at(target, manager, tile.viewport))?;
                 }
                 None => self.primary = None,
             }
