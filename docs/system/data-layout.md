@@ -83,10 +83,13 @@ New data selections stay under the project's Data subtree. Same-volume moves can
 retain identities; arbitrary cross-volume copies are rejected. The explicit
 reviewed migration creates and records new identities without mixing profiles.
 
-Missing FPS settings retain144/10 defaults; Save validates whole limits1..1000,
+Missing FPS settings default to 120/5; Save validates whole limits 5..1000,
 background no higher than active. High/Low, atomic preference writes, next-launch
 FPS application and all-games-stopped graphics/cache admission keep their owners.
-Full clear, general backup/restore and cross-PC account portability remain absent.
+Full clear replaces the selected verified local profile and hive after confirmation;
+its recovery and isolation have synthetic fixture evidence only. Windows-managed
+sign-in data is outside that operation, and a fresh account sign-in is not yet
+verified. General backup/restore and cross-PC account portability remain absent.
 
 Windows-managed Microsoft identity/DPAPI components, the licensed Minecraft
 installation, Visual Studio/WDK and Git remain OS dependencies. Central Data does
