@@ -173,6 +173,21 @@ session, and does not force-kill or silently capture the unresolved target.
 An unacknowledged pre-release error still preserves the original view.
 Only the Svelte selection policy changed, not the game actor or ownership.
 
+## P0 no false shutdown result after losing the controller (27 October 2026)
+
+The previous transport returned five STOPPED profiles when CloseAll or
+CloseOne found no session pipe/controller mutex, even though Minecraft
+may survive its original controller. Source now inspects registered-game
+process candidates through the existing read-only Windows Toolhelp
+collector before returning a stopped result. Windowless game processes
+are included. A nonzero count refuses success without adopting, killing
+or mutating anyone's Minecraft session. An inspection failure also
+fails closed. No candidates retains the existing idle success path.
+Other unrelated registered games can conservatively block this Exit;
+this limitation is explicitly retained rather than pretending they
+are owned. Unit-source fixture covers zero, one and five candidates.
+No Windows/Minecraft runtime tests were run; P0 remains unaccepted.
+
 ## State and operator request — 27 October 2026
 
 The v0.1 checkpoint was saved and paused in Codex. The operator subsequently

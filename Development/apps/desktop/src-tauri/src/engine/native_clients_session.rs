@@ -233,6 +233,13 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     }
 }
 
+// A disappeared controller does not prove that its resumed game exited.
+// The existing registered-image inspector is read-only; no game is adopted.
+fn absent_controller_close_reply(registered_process_count:usize)->SessionReply {
+    if registered_process_count==0 {Ok(SessionSnapshot::stopped())}
+    else {Err("Minecraft processes remain but no compatible Lazy Tester controller is available. Games are preserved; reconnect the correct controller before retrying.".into())}
+}
+
 #[cfg(windows)]
 fn transact(request: SessionRequest) -> io::Result<SessionReply> {
     use std::{
@@ -252,8 +259,13 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
         return Err(io::Error::new(io::ErrorKind::WouldBlock,
             "An existing Minecraft controller uses another build or is still starting. Its games are preserved; no replacement was started."));
     }
-    // Closing an idle manager must never provision/start a new controller or game.
-    if matches!(request,SessionRequest::CloseAll | SessionRequest::CloseOne {..}) {return Ok(Ok(SessionSnapshot::stopped()));}
+    // With no controller, even a windowless registered Minecraft process
+    // prevents us from pretending that the CloseAll/CloseOne target has exited.
+    // This does not adopt or close any unmanaged Minecraft game.
+    if matches!(request,SessionRequest::CloseAll | SessionRequest::CloseOne {..}) {
+        let observation=super::native_clients::inspect_native_workspace()?;
+        return Ok(absent_controller_close_reply(observation.processes.len()));
+    }
     if matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings | SessionRequest::SavePerformance { .. } | SessionRequest::SaveAudio {..}) {
         let mut snapshot = SessionSnapshot::stopped();
         if let SessionRequest::SaveAudio {mode}=request {super::manager_settings::save_audio(mode)?;}
@@ -388,6 +400,12 @@ mod tests {
         assert!(existing_controller_gate(&name).unwrap());
         drop(handle);
         assert!(!existing_controller_gate(&name).unwrap());
+    }
+    #[test]
+    fn missing_controller_refuses_false_close_when_native_game_candidates_exist() {
+        assert!(absent_controller_close_reply(0).is_ok());
+        assert!(absent_controller_close_reply(1).unwrap_err().contains("no compatible Lazy Tester"));
+        assert!(absent_controller_close_reply(5).is_err());
     }
     #[test]
     fn protocol_rejects_paths_unknown_operations_and_unbounded_input() {
