@@ -23,6 +23,8 @@ game while its DWM destination follows the manager; foreground and move events
 reconcile native geometry through the existing coalesced worker and ordered helper.
 The UI move callback does not queue an independent asynchronous game-window move:
 such a move can arrive after an acknowledged selection and displace the active game.
+Foreground changes also wake the same worker: it rechecks the active owned game's
+current focus and geometry, including when a parked game receives foreground focus.
 release_for_close rejects reacquisition
 while restoring games. Product CloseRequested then sends CloseAll to the retained
 session controller: identity-checked WM_CLOSE to its own original game windows,

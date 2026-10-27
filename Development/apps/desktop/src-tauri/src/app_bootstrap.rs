@@ -284,8 +284,9 @@ mod workspace_foreground {
     static WORKER: Mutex<Option<(u32, JoinHandle<()>)>> = Mutex::new(None);
     fn accepts(event: u32, window: u64, object: i32, child: i32, manager: u64) -> bool {
         manager != 0
-            && window == manager
-            && matches!(event, EVENT_SYSTEM_FOREGROUND | EVENT_SYSTEM_MOVESIZESTART | EVENT_SYSTEM_MOVESIZEEND)
+            && window != 0
+            && (event == EVENT_SYSTEM_FOREGROUND
+                || (window == manager && matches!(event, EVENT_SYSTEM_MOVESIZESTART | EVENT_SYSTEM_MOVESIZEEND)))
             && object == 0
             && child == 0
     }
@@ -298,7 +299,8 @@ mod workspace_foreground {
         _: u32,
         _: u32,
     ) {
-        // Foreground changes only refresh our own preview visibility. No external titles/PIDs.
+        // Reconcile current owned-game geometry on focus changes, without inspecting
+        // the foreground application's title, PID, or contents.
         if event == EVENT_SYSTEM_FOREGROUND && object == 0 && child == 0 {
             crate::engine::workspace_surface::refresh_previews();
         }
@@ -374,12 +376,17 @@ mod workspace_foreground {
         }
     }
     #[test]
-    fn only_manager_focus_and_move_boundaries_can_update_the_surface() {
+    fn game_foreground_change_reconciles_its_position() {
+        // The active game may receive focus while still parked outside the desktop.
+        // The existing worker must reconcile its current foreground and geometry.
+        assert!(accepts(EVENT_SYSTEM_FOREGROUND, 18, 0, 0, 17));
+    }
+    #[test]
+    fn foreground_and_manager_move_boundaries_can_update_the_surface() {
         assert!(accepts(EVENT_SYSTEM_FOREGROUND, 17, 0, 0, 17));
         assert!(accepts(EVENT_SYSTEM_MOVESIZESTART, 17, 0, 0, 17));
         assert!(accepts(EVENT_SYSTEM_MOVESIZEEND, 17, 0, 0, 17));
         for (event, window, object, child, manager) in [
-            (EVENT_SYSTEM_FOREGROUND, 18, 0, 0, 17),
             (EVENT_SYSTEM_FOREGROUND, 17, 1, 0, 17),
             (EVENT_SYSTEM_FOREGROUND, 17, 0, 1, 17),
             (EVENT_OBJECT_SHOW, 17, 0, 0, 17),

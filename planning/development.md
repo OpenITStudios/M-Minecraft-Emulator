@@ -39,10 +39,10 @@ requires selected-launcher review/confirmation.
 
 ## Current exact source and delivery
 
-Installed App/root source8c0d171c6326988bb2a7bcf52f4b83059b3f46ad, clean Local build.
-App SHA256:cf573d6469c9d1d33419d8bb0b7c09c6650f8c0ae0637060acda09d32c568006.
+Installed App/root sourceba2731dec061f384273e12efdfddc6362d5cddd3, clean Local build.
+App SHA256:c07218f175024625abcc5a914efadc0d833f8615b227973a27d64b64d8b1eee1.
 Root starter/DLL hashes: App/build-info.json, verified during Explorer startup.
-Candidate workspace/packages/lazy-tester/0.1.0-8c0d171c6326-20261027T030410242Z;
+Candidate workspace/packages/lazy-tester/0.1.0-ba2731dec061-20261027T032330370Z;
 installer hash is recorded in its SHA256SUMS.txt.
 Signing NOT_VERIFIED; installer execution/publication NOT_EXECUTED/DISABLED.
 Actual Explorer startup PID31852: Connected/five enabled/no issue/local WebView cache,
@@ -59,11 +59,14 @@ full-clear-ui-smoke, settings-recovery-ui-smoke in workspace/runs. No real delet
 ## Implemented corrections and executed evidence
 
 Presentation: opaque host and primary DWM image; original pins/recovery retained.
-Potential black-screen race reproduced synthetically: an asynchronous drag move
-displaced the game after presentation. Working change defers moves to the ordered
-helper/worker; regression failed before and passed after (black-screen-drag-*.log).
-This proves the race, not yet that it alone caused the user's black screen. Build,
-stage and validate actual pixels/input after the fix. Multi-DPI remains untested.
+At ba2731d two games launched (8509/5759ms), but user confirms black screen remains.
+Actual probe captured focused Minecraft - 1 parked at x2592 outside the manager;
+its primary preview was hidden. Live stability check reproduced displacement after
+selection (black-screen-live-stability.log). Previous fix removed an unordered drag
+move; synthetic race and stalled-drag fixtures PASS, but actual issue persisted.
+Working change wakes the ordered geometry worker for foreground transitions as well;
+focus event fixture failed before and passes after (black-screen-focus-*.log). Build,
+stage and repeat live stability and user-visible interaction proof. Multi-DPI untested.
 
 FPS120/5, saves5..1000/background<=active, explicit legacy1..4/144/10 preserved.
 V3 applies next launch, V2 unchanged. Rust policy fixtures PASS; game pacing untested.
@@ -103,7 +106,7 @@ Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4; second worktree detached47a45
 Four licensed playable clients, gameplay/network/migration/installer acceptance
 are separate obligations, NOT_EXECUTED here. Compiler caches remain ignored.
 
-Next: build and stage the black-screen fix, then repeat authorized real-session tests
+Next: build and stage the foreground-reconciliation fix, then repeat real-session tests
 including visible output, interaction, drag, preview, switching and full exit.
 User explicitly AUTHORIZED2sessions started by Lazy Tester for Launch/switch/drag/
 preview/full-exit. No world/login/account-content access or closing unrelated games.
