@@ -67,8 +67,7 @@ transition. Headless synthetic failed-switch test reproduced the missing refresh
 prior source and passed after the fix; previous session and error remain visible.
 Switch rollback now reports failed parking/restoration and suspends automatic
 updates on incomplete recovery. Logic test PASS; actual recovery remains unverified.
-Clean candidate workspace/packages/lazy-tester/0.1.0-9d5ec163726b-20261027T033405938Z
-built, not staged. Interactive testing deferred; do not control the user's desktop.
+Clean candidate c5ef097: workspace/packages/lazy-tester/0.1.0-c5ef0970a16b-20261027T034907265Z; built, not staged. Interactive testing deferred.
 
 FPS120/5, saves5..1000/background<=active, legacy preferences preserved. V3 applies
 next launch. FPS save now queues during polling: headless synthetic UI passed success,
@@ -108,7 +107,7 @@ Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4; second worktree detached47a45
 Four licensed playable clients, gameplay/network/migration/installer acceptance
 are separate obligations, NOT_EXECUTED here. Compiler caches remain ignored.
 
-Next: when the user is available, verify two real sessions on installed e4be7ed,
+Next: stage the newer candidate safely, then when the user is available verify two real sessions,
 including visible output, interaction, drag, preview, switching and one-click exit.
 User explicitly AUTHORIZED2sessions started by Lazy Tester for Launch/switch/drag/
 preview/full-exit. No world/login/account-content access or closing unrelated games.
