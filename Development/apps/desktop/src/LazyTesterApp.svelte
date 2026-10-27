@@ -70,7 +70,7 @@
       active = slot; selectedIdentity = identity(profiles.find(profile => profile.slot === slot));
       detached = false; requested = null; dirty = true;
       separateSlots = new Set([...separateSlots].filter(value=>value!==slot));
-    } catch (error) { issue = String(error); }
+    } catch (error) { issue = String(error); dirty = true; }
     finally { busy = false; }
   }
   async function refresh() {
@@ -116,7 +116,7 @@
         await tick();
         await lazyTester.present(active, viewport.getBoundingClientRect());
       }
-    } catch (error) { issue = String(error); requested = null; }
+    } catch (error) { issue = String(error); requested = null; dirty = true; }
     finally { busy = false; }
   }
   function navigate(next: typeof page) {
@@ -146,7 +146,7 @@
         storageCheckedAt=new Date().toLocaleTimeString('en-US');
       }
       dirty = true;
-    } catch (error) { issue = String(error); }
+    } catch (error) { issue = String(error); dirty = true; }
     finally { busy = false; }
   }
   async function refreshPage() {

@@ -67,6 +67,8 @@ Windows build and App staging PASS; live stability and user-visible proof pendin
 Source9d5ec16 additionally keeps the primary preview until the focused game is
 visible at its viewport, refreshes after repositioning, and rechecks focus after
 parking. Five surface logic regressions PASS; real pixels/input remain unverified.
+Frontend schedules preview reconstruction after a failed selection, launch or page
+transition;39 frontend tests and typecheck PASS. Real failure recovery is unverified.
 Clean candidate workspace/packages/lazy-tester/0.1.0-9d5ec163726b-20261027T033405938Z
 built, not staged. Interactive testing deferred; do not control the user's desktop.
 
@@ -80,10 +82,8 @@ games block. Four lock/link/admission/peer fixtures PASS. No real data deleted.
 Reset/restore backs up and verifies settings before replacement;8 fixtures PASS.
 Full clear uses generation-bound confirmation, rollback and explicit purge recovery;
 13 profile and5 controller fixtures PASS. No real reset/clear; review/Cancel above.
-Audio: session_audio.rs via existing actor/bridge; Data/Settings/audio.json defaults
-Keep. Exact PID/birth, no system/cross-process sessions, preserves mute/volume.
-250ms wakeups/1second discovery. Silent Windows audio and6 settings fixtures PASS;
-logs workspace/runs/audio-*. Checkbox stays enabled through polling, queues saves.
+Audio: session_audio.rs; exact PID/birth, preserves mute/volume. Silent Windows audio
+and6 settings fixtures PASS; logs workspace/runs/audio-*. Checkbox queues saves.
 Abrupt controller-crash mixer recovery, long-launch audio response and actual
 Minecraft audio remain unverified. Continue in these owners, no second lifecycle.
 Launch preflight retains the original EXE pin and rechecks registration/identity/hash.
