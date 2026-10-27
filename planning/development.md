@@ -60,6 +60,25 @@ The fixture is authored but not executed. This correction prevents one
 identifiable stale HUD-worker path, but does not prove that it caused the MC02
 stuck process; process runtime/Windows/Minecraft remain NOT_EXECUTED.
 
+## P0 user-facing recovery — no stale embedded-game claim (27 October 2026)
+
+The GUI now listens to the already-existing product-close/close-error Tauri
+events (without adding a new IPC command or game/session authority). During a
+normal exit request it suspends UI inspection, launcher actions, navigation and
+automatic native workspace reconciliation. On an incomplete exit, it clears
+the stale embedded-window selection and queued launch/switch state, returns to
+the Play page in separated-session mode and explicitly inspects the remaining
+sessions without automatically recapturing them. A compact recovery panel shows
+plain-language guidance and leaves diagnostic details expandable. The titlebar
+uses short error text instead of duplicating a raw technical trace. A launcher
+that has an error while still NOT_RESPONDING no longer leaves the pending Start
+header indefinitely, and the card does not depict a new Launch.
+
+This is bounded UX recovery after an acknowledged failed close, not a claim that
+a surviving game has a valid HWND or that shutdown now succeeds. Existing
+controller, profiles, game windows, and account/world data remain unchanged.
+Svelte/Rust/Windows/game checks were NOT_EXECUTED; GitHub static review only.
+
 ## State and operator request — 27 October 2026
 
 The v0.1 checkpoint was saved and paused in Codex. The operator subsequently
@@ -174,9 +193,10 @@ Settings/Data Storage: queued saves, stable review dialogs, admission checks. 39
 
 ## Continuation, build and preservation
 
-Next: continue source-only audit of workspace window-recovery helper ownership,
-then repair frontend close-failure reconciliation against the existing controller.
-No Local PC testing until the operator explicitly authorizes it.
+Next: review the remaining source-only window-recovery helper timeout / reader
+fallback and verified close-dialog lifecycle together; treat any genuine
+unresolved machine behavior as NOT_EXECUTED. The operator has not authorized
+Local PC tests or a new runtime campaign.
 No request to use a Local PC, no Windows or Minecraft execution and no
 installer publication until the operator explicitly authorizes them.
 The detailed game process/thread/dialog evidence remains an unexecuted

@@ -41,6 +41,8 @@
   let mounted = false, disposed = false, dirty = false, detached = false;
   let separateSlots = new Set<ProfileSlot>();
   let issue = '', connectionIssue = '', previewIssue = '', selectedIdentity = '';
+  // Display state only; the retained Rust controller still owns game lifetime.
+  let closeInProgress = false, closeFailure = '';
   let previewStatuses: PreviewStatus[] = [];
   const images = new Map<ProfileSlot, HTMLElement>();
   const labels = {STOPPED: 'Not running', STARTING: 'Starting', RUNNING: 'Running', NOT_RESPONDING: 'Not responding', ATTENTION: 'Needs attention'};
@@ -50,14 +52,14 @@
   $: others = profiles.filter(profile => profile.slot !== primary);
   $: runningCount = profiles.filter(profile => ['STARTING', 'RUNNING', 'NOT_RESPONDING'].includes(profile.state)).length;
   $: playableCount = profiles.filter(profile => profile.state === 'RUNNING').length;
-  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedAudio!==null) {const mode=queuedAudio;queuedAudio=null;void saveAudio(mode);}
-  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance!==null) {const limits=queuedPerformance;queuedPerformance=null;void savePerformance(limits);}
-  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset!==null) {const request=queuedPreset;queuedPreset=null;void applyPreset(request);}
-  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage !== null) void consumeNavigation();
-  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPreset===null && queuedPage===null && manualRefreshRequested) {manualRefreshRequested=false;void refreshPage();}
-  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPreset===null && queuedPage===null && queuedLaunch!==null) {const slot=queuedLaunch;queuedLaunch=null;void launch(slot);}
-  $: if (mounted && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage === null && queued !== null) void consumeSelection();
-  $: if (mounted && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage === null && queued === null && dirty) void syncLayout();
+  $: if (mounted && !closeInProgress && !initializing && !busy && !refreshing && !resizing && queuedAudio!==null) {const mode=queuedAudio;queuedAudio=null;void saveAudio(mode);}
+  $: if (mounted && !closeInProgress && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance!==null) {const limits=queuedPerformance;queuedPerformance=null;void savePerformance(limits);}
+  $: if (mounted && !closeInProgress && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset!==null) {const request=queuedPreset;queuedPreset=null;void applyPreset(request);}
+  $: if (mounted && !closeInProgress && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage !== null) void consumeNavigation();
+  $: if (mounted && !closeInProgress && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPreset===null && queuedPage===null && manualRefreshRequested) {manualRefreshRequested=false;void refreshPage();}
+  $: if (mounted && !closeInProgress && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPreset===null && queuedPage===null && queuedLaunch!==null) {const slot=queuedLaunch;queuedLaunch=null;void launch(slot);}
+  $: if (mounted && !closeInProgress && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage === null && queued !== null) void consumeSelection();
+  $: if (mounted && !closeInProgress && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage === null && queued === null && dirty) void syncLayout();
 
   function image(node: HTMLElement, slot: ProfileSlot) {
     images.set(slot, node); observer?.observe(node); dirty = true;
@@ -78,7 +80,7 @@
     finally { busy = false; }
   }
   async function refresh() {
-    if (busy || refreshing || resizing || disposed) return;
+    if (closeInProgress || busy || refreshing || resizing || disposed) return;
     refreshing = true;
     try {
       const snapshot = page === 'settings' ? await lazyTester.settings() : await lazyTester.inspect();
@@ -98,7 +100,8 @@
           if (page === 'workspace' && queuedPage === null) queued = requested;
           requested = null;
         }
-        else if (profile?.state === 'ATTENTION' || profile?.state === 'STOPPED') {
+        else if (profile?.state === 'ATTENTION' || profile?.state === 'STOPPED'
+          || (profile?.state === 'NOT_RESPONDING' && profile.issue)) {
           issue = profile.issue ?? ('Minecraft - ' + requested + ' stopped before its window became available.'); requested = null;
         }
       } else if (active === null && !detached && page === 'workspace' && queued === null) {
@@ -109,7 +112,7 @@
     finally { refreshing = false; }
   }
   async function launch(slot: ProfileSlot) {
-    if (busy || !binding?.configured) return;
+    if (closeInProgress || busy || !binding?.configured) return;
     if(refreshing||resizing){queuedLaunch=slot;return;}
     busy = true; issue = ''; requested = slot;
     try {
@@ -227,7 +230,7 @@
     finally { busy = false; }
   }
   async function syncLayout() {
-    if (busy || refreshing || resizing || !mounted) return;
+    if (closeInProgress || busy || refreshing || resizing || !mounted) return;
     dirty = false; resizing = true;
     try {
       if (page !== 'workspace' || detached || !available || document.hidden) {
@@ -376,7 +379,7 @@
   onMount(() => {
     mounted = true; void initializeLaunchers();
     // Keep a review stable while the user decides; the backend rechecks admission on action.
-    const interval = setInterval(() => { if (!document.hidden && binding?.configured && clearSlot===null && recovery===null && fullReview===null) void refresh(); }, 2000);
+    const interval = setInterval(() => { if (!closeInProgress && !document.hidden && binding?.configured && clearSlot===null && recovery===null && fullReview===null) void refresh(); }, 2000);
     observer = new ResizeObserver(() => { dirty = true; }); observer.observe(viewport, {box: 'device-pixel-content-box'});
     observer.observe(stageSpace);
     for (const node of images.values()) observer.observe(node);
@@ -384,6 +387,19 @@
     window.addEventListener('resize', changed); document.addEventListener('visibilitychange', changed);
     const stops: (() => void)[] = [];
     const retain = (stop: () => void) => { if (disposed) stop(); else stops.push(stop); };
+    void listen<boolean>('lazy-tester-closing', event => {
+      closeInProgress = event.payload;
+    }).then(retain).catch(error => { issue = String(error); });
+    void listen<string>('lazy-tester-close-error', event => {
+      // The native close attempt already released/restored workspace leases.
+      // Never imply the game is still embedded or automatically reacquire it.
+      closeInProgress = false;
+      closeFailure = event.payload;
+      active = null; selectedIdentity = ''; requested = null; queued = null; queuedLaunch = null;
+      separateSlots = new Set<ProfileSlot>();
+      previewStatuses = []; detached = true; page = 'workspace'; dirty = true;
+      void refresh(); // Observation only; does not start or capture Minecraft.
+    }).then(retain).catch(error => { issue = String(error); });
     void listen<string>('workspace-surface-error', event => { issue = event.payload; }).then(retain).catch(error => { issue = String(error); });
     void listen<number>('lazy-tester-preview-select', event => {
       if ([1,2,3,4,5].includes(event.payload)) select(event.payload as ProfileSlot);
@@ -400,10 +416,10 @@
   <WindowTitlebar />
   <header class="lt-topbar">
     <a class="lt-brand" href="#play" on:click|preventDefault={() => navigate('workspace')}><span>LT</span>Lazy Tester</a>
-    <nav aria-label="Main navigation"><button class:chosen={page==='workspace'} aria-current={page==='workspace'?'page':undefined} on:click={()=>navigate('workspace')}>Play</button><button class:chosen={page!=='workspace'} aria-current={page!=='workspace'?'page':undefined} on:click={()=>navigate('settings')}>Settings</button></nav>
+    <nav aria-label="Main navigation"><button disabled={closeInProgress} class:chosen={page==='workspace'} aria-current={page==='workspace'?'page':undefined} on:click={()=>navigate('workspace')}>Play</button><button disabled={closeInProgress} class:chosen={page!=='workspace'} aria-current={page!=='workspace'?'page':undefined} on:click={()=>navigate('settings')}>Settings</button></nav>
     <span class="lt-connection" role="status"><span class="lt-dot" class:waiting={!available||!binding?.configured}></span>{initializing?'Preparing launchers…':!binding?.configured?'Connection unavailable':available?'Connected':'Unavailable'}</span>
   </header>
-  <div class="lt-layout" class:lt-settings-layout={page!=='workspace'}>
+  <div class="lt-layout" class:lt-settings-layout={page!=='workspace'} inert={closeInProgress}>
     {#if page!=='workspace'}<aside class="lt-sidebar"><h2>Settings</h2><nav aria-label="Settings navigation"><button class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}
     <main>
       <header class="lt-page-header" class:lt-play-header={page==='workspace'}>
@@ -411,11 +427,20 @@
         <div class="lt-header-actions"><button class="lt-secondary" disabled={busy||manualRefreshing||manualRefreshRequested} on:click={()=>manualRefreshRequested=true}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'&&active!==null}<button class="lt-secondary" disabled={busy||refreshing||resizing} title={'Open only Minecraft - '+active+' in its own window'} on:click={release}>Open Minecraft - {active} in a window</button>{/if}</div>
       </header>
       {#if issue||connectionIssue}<div class="lt-alert" role="alert">{#if issue}<p>{issue}</p>{/if}{#if connectionIssue}<p>{connectionIssue}</p>{/if}</div>{/if}
+      {#if closeFailure}
+        <section class="lt-exit-recovery" role="status" aria-label="Exit recovery">
+          <h2>Exit was not completed</h2>
+          <p>Some Minecraft sessions may still be running. Your remaining sessions were preserved. Choose a responsive Minecraft below to return to Play, or finish an open game dialog normally.</p>
+          <div class="lt-actions"><button class="lt-secondary" on:click={()=>{closeFailure='';void refresh();}}>Dismiss and refresh</button></div>
+          <details><summary>Technical details</summary><p>{closeFailure}</p></details>
+        </section>
+      {/if}
+
       {#if !binding?.configured&&!initializing}<section class="lt-binding" aria-label="Launcher recovery"><div><strong>Existing launcher connection could not be verified</strong><p>{bindingIssue||binding?.issue||'Automatic preparation could not finish. Existing data is preserved.'}</p></div><div class="lt-actions"><button disabled={busy||manualRefreshing||manualRefreshRequested} on:click={()=>manualRefreshRequested=true}>Retry connection</button><button class="lt-secondary" on:click={()=>navigate('storage')}>Data Storage</button></div></section>{/if}
       <section class="lt-workspace" hidden={page!=='workspace'} aria-label="Minecraft play area">
         <div class="lt-stage-space" bind:this={stageSpace}>
         <div class="lt-viewport" class:lt-desktop={detached} bind:this={viewport}>
-          {#if detached}<div class="lt-empty"><h2>Games are in separate windows</h2><p>Use the Windows taskbar, or choose a game below to open it in Play.</p><p>{runningCount} of 5 running</p></div>{:else if !active}<div class="lt-empty"><span>LT</span><h2>{initializing?'Preparing launchers…':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Reconnecting saved data automatically. No setup is needed.':!binding?.configured?'Retry the connection. Your existing accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
+          {#if detached}<div class="lt-empty"><h2>{closeFailure?'Exit incomplete — sessions preserved':'Games are in separate windows'}</h2><p>{closeFailure?'Some games may still be running or need attention. Select a responsive game below to resume Play.':'Use the Windows taskbar, or choose a game below to open it in Play.'}</p><p>{runningCount} of 5 running</p></div>{:else if !active}<div class="lt-empty"><span>LT</span><h2>{initializing?'Preparing launchers…':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Reconnecting saved data automatically. No setup is needed.':!binding?.configured?'Retry the connection. Your existing accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
         </div>
         </div>
         <div class="lt-games-heading"><span>Your games</span><span>{runningCount} of 5 running</span></div>
@@ -423,7 +448,7 @@
           {#each profiles as profile (profile.slot)}
             <button class="lt-card" class:selected={active===profile.slot&&!detached} aria-pressed={active===profile.slot&&!detached} aria-label={(profile.state==='RUNNING'?'Open ':'Launch ')+'Minecraft - '+profile.slot} disabled={busy||!available||!binding?.configured||['STARTING','NOT_RESPONDING'].includes(profile.state)} on:click={()=>profile.state==='RUNNING'?select(profile.slot):launch(profile.slot)}>
               <strong>Minecraft - {profile.slot}{active===profile.slot&&!detached?' ✓':''}</strong>
-              <span class="lt-card-picture" use:image={profile.slot} aria-hidden="true">{profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':'▷ Launch'}</span>
+              <span class="lt-card-picture" use:image={profile.slot} aria-hidden="true">{profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':profile.state==='NOT_RESPONDING'?'Unavailable':profile.state==='ATTENTION'?'Needs attention':'▷ Launch'}</span>
               <small>{active===profile.slot&&!detached?'Playing here':profile.state==='RUNNING'&&separateSlots.has(profile.slot)?'Separate window':profile.state==='RUNNING'?'Running in background':labels[profile.state]}</small>
               {#if profile.issue}<small class="lt-error">{profile.issue}</small>{/if}
             </button>

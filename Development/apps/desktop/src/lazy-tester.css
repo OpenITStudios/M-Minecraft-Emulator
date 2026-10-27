@@ -444,3 +444,10 @@
 .lt-delete-confirm button.lt-danger {background:#943641;color:#fff;border-color:#b34a56}
 .lt-audio-toggle { display:flex; align-items:center; gap:8px; white-space:nowrap; cursor:pointer; }
 .lt-audio-toggle input { width:18px; height:18px; accent-color:#bfc3ff; }
+
+/* Normal-exit failure is a session-recovery state, not a second launcher manager. */
+.lt-exit-recovery{flex:none;border:1px solid var(--lt-line);border-radius:8px;background:#242a36;padding:11px 14px;margin-bottom:12px;font-size:13px}
+.lt-exit-recovery h2{font-size:14px;margin:0 0 5px}
+.lt-exit-recovery p{margin:4px 0 8px;line-height:1.45}
+.lt-exit-recovery details{margin-top:6px;color:var(--lt-muted);max-height:140px;overflow:auto;overflow-wrap:anywhere}
+.lt-exit-recovery summary{cursor:pointer;color:var(--lt-accent)}
