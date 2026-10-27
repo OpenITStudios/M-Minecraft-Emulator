@@ -34,6 +34,23 @@ mutation case. This reuses ONE lock and the ONE game lifecycle actor,
 not another coordinator or new state store. No local PC, Rust, Windows
 or Minecraft tests were executed; normal MC02 exit remains UNKNOWN.
 
+## P0 close admission rejection is not a released game — 27 October 2026
+
+After serializing global Exit with CloseOne, one new consequence required
+explicit handling: a competing operation can reject Exit before any native
+window restoration, while the previous UI handled every Close failure as
+if the game had been detached. The existing close_all_managed wrapper now
+returns whether native release was **attempted**, with the canonical
+resource gate remaining the only admission owner. A pre-admission
+failure emits `lazy-tester-close-rejected`: the UI stops its Closing
+indicator and retains the current verified Play selection. Once
+workspace release is attempted, failures continue on the established
+`lazy-tester-close-error` path, which drops stale embedded-window claims
+and re-inspects the controller. The custom titlebar consumes both
+events and unregisters listeners during teardown. No new lifecycle
+manager or fallback process mutation was introduced. Svelte, Rust,
+Windows and Minecraft checks are NOT_EXECUTED.
+
 ## P0 source audit — 27 October 2026 (no Local PC testing)
 
 The operator explicitly requires ChatGPT + GitHub-only work. Windows, installer,

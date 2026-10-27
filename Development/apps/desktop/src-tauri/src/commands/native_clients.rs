@@ -476,8 +476,14 @@ fn run_manager_operation<T>(operation: impl FnOnce() -> io::Result<T>) -> io::Re
 // another action cannot mutate presentation between release and CloseAll.
 // On contention we fail before modifying windows or game processes; the
 // existing window-event error path preserves the open manager for retry.
-pub(crate) fn close_all_managed() -> io::Result<()> {
-    run_manager_operation(|| {
+pub(crate) fn close_all_managed() -> Result<(), (bool, io::Error)> {
+    // Only one existing resource admission gate governs both Exit and
+    // CloseOne. Record whether workspace release was ATTEMPTED (not whether
+    // it succeeded): a failed release may already have moved native windows.
+    // A gate refusal, by contrast, makes no game/window changes at all.
+    let mut release_attempted = false;
+    let outcome = run_manager_operation(|| {
+        release_attempted = true;
         crate::engine::workspace_surface::release_for_close()?;
         #[cfg(feature = "lazy-tester-package")]
         {
@@ -489,7 +495,8 @@ pub(crate) fn close_all_managed() -> io::Result<()> {
         {
             Ok(())
         }
-    })
+    });
+    outcome.map_err(|error| (release_attempted, error))
 }
 
 // Explicit inspection of all four stable IDs. The two existing Windows

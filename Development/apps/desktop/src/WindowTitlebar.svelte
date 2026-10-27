@@ -12,14 +12,15 @@
     } catch(reason) {error=String(reason);closing=false;}
   }
   onMount(()=>{
-    let disposed=false,stop:(()=>void)|undefined,stopError:(()=>void)|undefined,stopClosing:(()=>void)|undefined;
+    let disposed=false,stop:(()=>void)|undefined,stopError:(()=>void)|undefined,stopClosing:(()=>void)|undefined,stopRejected:(()=>void)|undefined;
     const window=getCurrentWindow();
     const update=()=>void window.isMaximized().then(value=>{if(!disposed)maximized=value;}).catch(reason=>{error=String(reason);});
     update();
     void window.onResized(update).then(unlisten=>{if(disposed)unlisten();else stop=unlisten;}).catch(reason=>{error=String(reason);});
     void listen<string>('lazy-tester-close-error',event=>{closing=false;error='Exit did not finish. Review the remaining Minecraft sessions in Play.';}).then(unlisten=>{if(disposed)unlisten();else stopError=unlisten;}).catch(reason=>{error=String(reason);});
+    void listen<string>('lazy-tester-close-rejected',event=>{closing=false;error='Exit did not start. Another desktop operation is still running.';}).then(unlisten=>{if(disposed)unlisten();else stopRejected=unlisten;}).catch(reason=>{error=String(reason);});
     void listen<boolean>('lazy-tester-closing',event=>{closing=event.payload;}).then(unlisten=>{if(disposed)unlisten();else stopClosing=unlisten;}).catch(reason=>{error=String(reason);});
-    return ()=>{disposed=true;stop?.();stopError?.();stopClosing?.();};
+    return ()=>{disposed=true;stop?.();stopError?.();stopRejected?.();stopClosing?.();};
   });
 </script>
 <div class="lt-window-bar">

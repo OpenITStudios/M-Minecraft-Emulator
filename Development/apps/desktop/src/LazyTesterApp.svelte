@@ -441,6 +441,12 @@
       closeInProgress = event.payload;
       if (closeInProgress) closeOneSlot=null;
     }).then(retain).catch(error => { issue = String(error); });
+    void listen<string>('lazy-tester-close-rejected', event => {
+      // Resource admission refused before restoring or closing any game.
+      // Keep the verified embedded selection, previews and queued work.
+      closeInProgress = false;
+      issue = event.payload;
+    }).then(retain).catch(error => { issue = String(error); });
     void listen<string>('lazy-tester-close-error', event => {
       // The native close attempt already released/restored workspace leases.
       // Never imply the game is still embedded or automatically reacquire it.

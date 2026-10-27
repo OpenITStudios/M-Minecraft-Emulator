@@ -141,11 +141,19 @@ pub fn run() {
                             let result=commands::native_clients::close_all_managed();
                             match result{
                                 Ok(())=>{let _=window.destroy();},
-                                Err(error)=>{
-                                    crate::engine::workspace_surface::cancel_close();
-                                    use tauri::Emitter;
-                                    let _=window.emit("lazy-tester-close-error",format!("Exit was not completed. {error}"));
-                                    let _=MessageDialog::new().set_parent(&window).set_title("Lazy Tester is still closing").set_description(format!("Lazy Tester will stay open. {error}")).set_level(MessageLevel::Info).show();
+                                Err((release_attempted,error))=>{
+                                    if release_attempted {
+                                        // Native leases may have been restored. The
+                                        // Svelte side must stop claiming they remain
+                                        // embedded, then inspect retained sessions.
+                                        crate::engine::workspace_surface::cancel_close();
+                                        let _=window.emit("lazy-tester-close-error",format!("Exit was not completed. {error}"));
+                                    } else {
+                                        // Admission failed before touching the
+                                        // workspace. Preserve the active Play view.
+                                        let _=window.emit("lazy-tester-close-rejected",format!("Exit was not started. {error}"));
+                                    }
+                                    let _=MessageDialog::new().set_parent(&window).set_title("Lazy Tester remains open").set_description(format!("Exit did not complete. {error}")).set_level(MessageLevel::Info).show();
                                 }
                             }
                             CONFIRMING.store(false,Ordering::SeqCst);
