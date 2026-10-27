@@ -256,6 +256,13 @@ impl Sessions {
             let child=&started.children[0];
             let outcome=(||{
                 child.identity()?;
+                // Stop only this retained game's FPS pacing BEFORE WM_CLOSE or
+                // dialog acknowledgement. Otherwise the controller would wait
+                // for process exit while PolicyChannel::Drop (which signals
+                // STOP) could only run *after* that same process exit.
+                if let Some(policy)=child.policy.as_ref() {
+                    policy.begin_normal_close();
+                }
                 // A posted dialog command is NOT an exit acknowledgement. Always
                 // retain the game process until its original HANDLE is signaled.
                 if progress[index].submit_exit_dialog(child)? { return Ok(()); }

@@ -285,6 +285,16 @@ mod windows {
         alive: Arc<AtomicBool>,
     }
     impl PolicyChannel {
+        // A normal Minecraft close has been approved while its original
+        // process is still alive. Wake render Present waiters *before* waiting
+        // for the process to exit; Drop only runs after that exit and is too
+        // late to break a shutdown dependency on the FPS pacer. This is a
+        // sticky one-way stop: if the game declines Exit, it remains playable
+        // without FPS limits until its next separately owned launch.
+        pub(crate) fn begin_normal_close(&self) {
+            self.binding.finish();
+        }
+
         // Order: foreground level, change notification, sticky stop, manager process.
         pub(crate) fn reader_handles(&self) -> io::Result<[OwnedHandle; 4]> {
             if self.binding.stopped.load(Ordering::Acquire) || !self.binding.live() {
@@ -761,6 +771,23 @@ mod windows {
                 .iter()
                 .map(|c| c.reader_handles().unwrap())
                 .collect();
+            // A single owned launcher begins normal close. Its render
+            // waiters see STOP immediately, *while the child is still
+            // alive*, and all four other channels keep their own policy.
+            assert!(readers.iter().all(|handles| !state(&handles[2])));
+            channels[1].begin_normal_close();
+            assert!(state(&readers[1][2]));
+            assert!(!state(&readers[1][0]));
+            assert!(channels[1].reader_handles().is_err());
+            for (index,handles) in readers.iter().enumerate() {
+                if index!=1 {
+                    assert!(!state(&handles[2]), "CloseOne must not stop another game's pacing");
+                }
+            }
+            // Double close request is idempotent. Original process pins and
+            // all other launcher stop/changed handles remain unchanged.
+            channels[1].begin_normal_close();
+            assert!(state(&readers[1][2]));
             let stop_result = stop();
             assert!(
                 stop_result.is_ok()

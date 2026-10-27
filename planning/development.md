@@ -1,5 +1,41 @@
 # Current Development Handoff — v0.1
 
+## P0 MC02 exact shutdown dependency: FPS policy STOP emitted after process exit — 27 October 2026
+
+A source-level causal path was traced through three existing owners:
+`session_controller::close_selected_sessions` retains each game's
+`PendingEducationBootstrap` while waiting for its original process
+HANDLE; the child owns an `instance_focus_events::PolicyChannel`.
+Before this change, the policy's `Binding::finish()` (which sets
+its sticky manual-reset STOP event and wakes its change event)
+was called only on PolicyChannel Drop, after the retained child
+had been reaped. The native game-side FPS Pacer waits on that
+STOP event during Present. This was a definite **shutdown ordering
+defect**: an event intended to release native pacing waits was
+not signaled until after the game had already exited.
+
+Now, once a CloseOne/CloseAll user action is admitted, the single
+retained controller marks the *selected* child's existing policy
+stopped BEFORE sending WM_CLOSE or checking its native exit prompt.
+The original Binding::finish() sends the same sticky stop/changed
+events, and game-side Pacer already handles them without additional
+threads, DLL changes or altered wire/JSON formats. Nonselected games
+do not receive STOP. No process is force-killed or newly adopted.
+If the game keeps running after an unconfirmed normal Exit, its
+render FPS policy remains intentionally disabled (no unsafe reset
+or speculative game restart) until the next independent launch.
+This safety consequence is preferable to an exit waiter depending
+on a post-exit STOP. Repeated begin_normal_close is idempotent.
+
+An existing synthetic 5-lease Windows test now verifies, while
+the original fixture child remains alive, that STOP is signaled
+only for the targeted policy, all peers remain un-stopped,
+and the request is idempotent. Tests are AUTHORed NOT_EXECUTED.
+This establishes and repairs a definite source defect; it does
+NOT prove that this defect alone caused the historical MC02
+stuck process. Real Windows/Minecraft evidence remains unavailable
+under the operator's no-Local-PC-testing instruction.
+
 ## P0 MC02 close-only hidden OGLES HWND path — 27 October 2026
 
 The ordinary game-window selector calls a visible/unowned-top-level
