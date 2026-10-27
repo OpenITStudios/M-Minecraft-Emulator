@@ -90,7 +90,7 @@ and keeps manager open on pending dialog/timeout; first attempt failed as above.
 Preserve migrated Data/Launchers/Minecraft-1..5, Data/Settings and Data/Cache; external
 originals remain recovery only. Keep file-backed hives/ACLs/DLL pins; no account/world
 content reads. App/build-info.json records reviewed payloads; no repeat migration.
-Submoduleabd4c240031cfb46666daa74ca47ed4e48b561e4; second worktree detached47a45f9c7d4a8ce6799d56997fd38e4b4df49ce7 unchanged.
+Submodule and second worktree preserved.
 Four-client, gameplay, network, migration and installer acceptance NOT_EXECUTED.
 
 Latest e735b7e runtime: two launches, six switches and drag PASS (geometry only).
@@ -101,7 +101,8 @@ is missing; identity rechecked before posting. Cargo check and refusal test PASS
 actual dialog without window NOT_EXECUTED. Exit wait also checks the retained child
 after window loss. Starting games are polled for a verified window until the existing
 exit deadline; cargo check and idle test PASS, startup transition NOT_EXECUTED.
-Other stuck states still require diagnosis.
+Suspect: HUD worker waits indefinitely after unbind and may retain process after
+game window loss. Causation unproven; create isolated process-exit fixture.
 FPS foreground sampling retries transient instability; unit test PASS, actual FPS
 response and sustained instability NOT_EXECUTED.
 Next: inspect FPS focus policy and process grouping;
