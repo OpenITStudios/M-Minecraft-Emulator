@@ -62,6 +62,10 @@ fn foreground_surface_covered(foreground: u64, game: u64, manager: u64, point_ro
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct Saved {
     target: OwnedProcess,
+    // Original native HWND identity at capture. A reused numeric HWND must
+    // never silently receive frame/geometry from a different game surface.
+    window_thread_id: u32,
+    window_class_name: String,
     style: i64,
     extended_style: i64,
     rect: Rectangle,
@@ -383,8 +387,32 @@ mod native {
         Ok(())
     }
 
+    fn window_fingerprint(window: HWND, expected_pid:u32) -> io::Result<(u32,String)> {
+        let mut pid=0;
+        let thread=unsafe { GetWindowThreadProcessId(window,&mut pid) };
+        if thread==0 || pid!=expected_pid {
+            return Err(io::Error::other("Game HWND owner changed during window recovery"));
+        }
+        let mut class=[0u16;128];
+        let count=unsafe { GetClassNameW(window,class.as_mut_ptr(),class.len() as i32) };
+        if count<=0 || count as usize>=class.len()-1 {
+            return Err(io::Error::other("Game HWND class is unavailable or too long"));
+        }
+        let name=String::from_utf16(&class[..count as usize])
+            .map_err(|_|io::Error::other("Invalid game HWND class name"))?;
+        Ok((thread,name))
+    }
+    fn verify_saved_window(saved:&Saved, window:HWND)->io::Result<()> {
+        let (thread,class)=window_fingerprint(window,saved.target.pid)?;
+        if thread!=saved.window_thread_id || class!=saved.window_class_name {
+            return Err(io::Error::new(io::ErrorKind::WouldBlock,
+                "Native window recovery unconfirmed: saved game HWND was replaced by a different window/thread"));
+        }
+        Ok(())
+    }
     pub(super) fn capture(target: OwnedProcess) -> io::Result<Saved> {
         let (_process, window) = hwnd(&target)?;
+        let (window_thread_id,window_class_name)=window_fingerprint(window,target.pid)?;
         unsafe {
             if IsIconic(window) != 0 {
                 return Err(io::Error::other(
@@ -397,6 +425,8 @@ mod native {
             }
             Ok(Saved {
                 target,
+                window_thread_id,
+                window_class_name,
                 style: GetWindowLongPtrW(window, GWL_STYLE) as i64,
                 extended_style: GetWindowLongPtrW(window, GWL_EXSTYLE) as i64,
                 rect: Rectangle {
@@ -726,12 +756,14 @@ mod native {
                 Err(error)
             }
         };
+        verify_saved_window(saved,window)?;
         unsafe {
             let frame_mask = (WS_CAPTION | WS_THICKFRAME | WS_MAXIMIZE) as i64;
             let shell_mask = (WS_EX_APPWINDOW | WS_EX_TOOLWINDOW) as i64;
             let shell = GetWindowLongPtrW(window, GWL_EXSTYLE) as i64;
             let restored_shell = (shell & !shell_mask) | (saved.extended_style & shell_mask);
             if shell != restored_shell {
+                verify_saved_window(saved,window)?;
                 progress("restore/hide-for-shell")?;
                 ShowWindow(window, SW_HIDE);
                 progress("restore/shell-style")?;
@@ -745,6 +777,7 @@ mod native {
                 }
             }
             let current_style = GetWindowLongPtrW(window, GWL_STYLE) as i64;
+            verify_saved_window(saved,window)?;
             progress("restore/frame-style")?;
             style(
                 window,
@@ -768,6 +801,7 @@ mod native {
                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS,
                 );
             }
+            verify_saved_window(saved,window)?;
             progress("restore/position")?;
             if SetWindowPos(
                 window,
@@ -810,7 +844,8 @@ mod native {
                 responding:false,
             };
             let saved=Saved {
-                target,style:0,extended_style:0,
+                target,window_thread_id:1,window_class_name:"SyntheticFixture".into(),
+                style:0,extended_style:0,
                 rect:Rectangle{x:0,y:0,width:1,height:1},
                 manager_pid:pid,
             };
@@ -819,6 +854,51 @@ mod native {
             let error=restore(&saved).unwrap_err();
             assert_eq!(error.kind(),io::ErrorKind::WouldBlock);
             assert!(error.to_string().contains("original Minecraft process is still alive"));
+        }
+    }
+    #[test]
+    fn recovery_never_applies_saved_frame_to_a_different_window_fingerprint() {
+        use windows_sys::Win32::System::Threading::{GetCurrentProcess,GetCurrentProcessId,GetProcessTimes};
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            CreateWindowExW,DestroyWindow,GetWindowLongPtrW,GWL_STYLE,WS_OVERLAPPEDWINDOW
+        };
+        unsafe {
+            let class=windows_sys::w!("STATIC");
+            let window=CreateWindowExW(0,class,class,WS_OVERLAPPEDWINDOW,
+                0,0,250,150,std::ptr::null_mut(),std::ptr::null_mut(),
+                std::ptr::null_mut(),std::ptr::null());
+            assert!(!window.is_null());
+            let result=std::panic::catch_unwind(||{
+                let mut birth:FILETIME=std::mem::zeroed();
+                let mut exit:FILETIME=std::mem::zeroed();
+                let mut kernel:FILETIME=std::mem::zeroed();
+                let mut user:FILETIME=std::mem::zeroed();
+                assert_ne!(GetProcessTimes(GetCurrentProcess(),&mut birth,&mut exit,&mut kernel,&mut user),0);
+                let pid=GetCurrentProcessId();
+                let mut session=0;
+                assert_ne!(ProcessIdToSessionId(pid,&mut session),0);
+                let target=OwnedProcess {
+                    pid,
+                    created_file_time:(((birth.dwHighDateTime as u64)<<32)|birth.dwLowDateTime as u64).to_string(),
+                    session_id:session,
+                    window_handle:format!("0x{:x}",window as usize),
+                    responding:true,
+                };
+                let saved=capture(target).unwrap();
+                assert_eq!(saved.window_class_name,"Static");
+                assert_ne!(saved.window_thread_id,0);
+                let original=GetWindowLongPtrW(window,GWL_STYLE);
+                let mut different=saved.clone();
+                different.window_thread_id=different.window_thread_id.wrapping_add(1);
+                assert!(restore(&different).unwrap_err().to_string().contains("saved game HWND was replaced"));
+                assert_eq!(GetWindowLongPtrW(window,GWL_STYLE),original);
+                different=saved.clone();
+                different.window_class_name="WrongClass".into();
+                assert!(restore(&different).unwrap_err().to_string().contains("saved game HWND was replaced"));
+                assert_eq!(GetWindowLongPtrW(window,GWL_STYLE),original);
+            });
+            DestroyWindow(window);
+            if let Err(error)=result {std::panic::resume_unwind(error);}
         }
     }
     #[test]

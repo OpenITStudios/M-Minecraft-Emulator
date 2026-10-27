@@ -1,5 +1,30 @@
 # Current Development Handoff — v0.1
 
+## P0 checkpoint HWND fingerprint before restoration — 27 October 2026
+
+The native recovery checkpoint previously retained only the numerical
+HWND plus process PID/birth/session, original styles and rectangle. It
+could not refuse a different *window within the same living PID* that
+reused the numeric HWND, particularly a modal dialog. The existing
+Saved checkpoint now records the HWND owner thread ID and registered
+window class at capture time. Before shell, frame and position mutations,
+the native recovery owner rechecks this saved pair against the current
+HWND. A differing owner thread or class returns explicit unconfirmed
+recovery without mutating the replacement window. Both the native
+helper and the manager's EOF fallback use that same Saved checkpoint.
+The private helper wire stays internal to the same executable; no
+new session controller, broad process collector, or external game
+hook was added.
+
+This is a defense-in-depth check; a new window recreated on the same
+still-live GUI thread using the same class cannot be distinguished
+without additional in-process lifetime proof. We preserve that
+limitation rather than inventing a perfect HWND authority. Source
+regression uses a synthetic self-owned window with deliberately
+wrong saved thread/class, and asserts no frame mutation. The code
+and fixtures are authored, NOT_EXECUTED. No local PC testing is
+requested until the operator separately authorizes it.
+
 ## P0 windowless-game restoration must remain unconfirmed — 27 October 2026
 
 The recovery-helper's original `restore_traced` allowed a stale or
