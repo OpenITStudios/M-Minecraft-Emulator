@@ -1,4 +1,5 @@
 use crate::commands;
+#[cfg(windows)]
 use crate::engine::app_instance;
 use rfd::{MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
 
@@ -42,6 +43,12 @@ pub fn run() {
         return;
     }
 
+    // This lease resolves LOCALAPPDATA/APPDATA and verifies the original
+    // Windows manager instance. Running it on macOS would reject ordinary
+    // startup before the unsupported-game UI could be shown.
+    // The non-Windows shell owns no Minecraft process, window or profiles;
+    // add an OS-native single-window guard only with a reviewed Mac backend.
+    #[cfg(windows)]
     let _instance_lease = match app_instance::acquire() {
         Ok(lease) => lease,
         Err(error) => {

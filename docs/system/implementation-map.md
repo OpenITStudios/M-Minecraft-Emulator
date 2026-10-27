@@ -19,6 +19,21 @@ lifecycle: ACTIVE
 
 This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build tooling in [Isolation Source Tooling](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md) is retired product history, not the native engine. The only active goal, blocker and next action are in [planning/development.md](../../planning/development.md). Treat historical `Next` here as superseded; inspect owning source and consumers.
 
+## Windows instance lease boundary — 28 October 2026
+
+`engine/app_instance.rs` uses a Windows `LOCALAPPDATA`/`APPDATA`
+instance marker, with exclusive file ownership of the desktop manager.
+This must not run during unsupported-platform startup: macOS does not
+promise those Windows environment variables, so calling `acquire`
+could prevent Tauri from even showing the honest `Unsupported` UI.
+The module import, declaration and startup lease are now `cfg(windows)`;
+the Windows installed-product single-instance behavior remains byte-for-byte
+unchanged. Non-Windows is currently a diagnostic shell with **no Minecraft
+game/profile/window authority**, not a supported multi-instance manager.
+A future macOS single-window contract must use reviewed platform app-data
+and process ownership, not an invented Windows path. The repository
+verifier checks these guards; no compiler or runtime proof was executed.
+
 ## Tauri startup platform capability — 28 October 2026
 
 One read-only `lazy_tester_backend_support` Tauri IPC reports an enum

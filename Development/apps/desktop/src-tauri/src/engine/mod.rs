@@ -1,6 +1,9 @@
 // Only the active native pilot belongs to the current desktop compile graph.
 // Retired VMware/layout/overlay modules were removed after confirming they
 // were absent from this compile graph; native session/window owners remain.
+// The retained single-instance lease relies on Windows-owned app-data and
+// exclusive file semantics. Non-Windows has no Minecraft lifecycle to lock.
+#[cfg(windows)]
 pub mod app_instance;
 #[cfg(windows)]
 pub(crate) mod process_roles;

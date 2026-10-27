@@ -128,8 +128,18 @@ the default `main` window; Windows-only product packaging is rejected on
 other OS targets. IPC allowlist, source guard and synthetic frontend/native
 regressions updated. Build, tests, gameplay and macOS support NOT_EXECUTED.
 
+## Desktop instance lease boundary — 28 October 2026
+
+Non-Windows startup no longer executes the Windows desktop instance lease,
+which otherwise requires `LOCALAPPDATA` or `APPDATA` before opening the
+Tauri window. The entire `app_instance` module remains Windows-only; its
+single-instance file/ownership rules, profile paths and release contracts
+are unchanged. Non-Windows is a read-only unsupported-game UI, not a
+native game host. Repository guard authored; no Rust builds/tests or OS
+runtime acceptance executed.
+
 ## Next bounded action
 
-Review the remaining desktop non-Windows compile path and its native
-process/OS assumptions; fix only verified source barriers. Do not implement
-an unproven Mac five-account launcher or run Local PC tests.
+Review remaining non-Windows compile assumptions in game/window observation,
+and inventory any proof still needed before declaring a diagnostic macOS
+binary feasible. Keep tests/builds/CI and Local PC work NOT_EXECUTED.

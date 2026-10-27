@@ -155,6 +155,13 @@ export function verifyRepository(root,g0=false) {
     'Development/tooling/acceptance/windows/collect-virtual-boxes.ps1'
   ]) assert.ok(!existsSync(resolve(root,path)), 'Retired Sandboxie runtime returned: '+path);
   const ownerModules=read('Development/apps/desktop/src-tauri/src/engine/mod.rs');
+  // Source-only guard: the retained Windows single-instance marker requires
+  // LOCALAPPDATA/APPDATA. An unsupported OS must reach the Tauri diagnostic
+  // window without touching that Windows path or adopting game authority.
+  assert.ok(/#\[cfg\(windows\)\]\s*pub mod app_instance;/.test(ownerModules)
+    && /#\[cfg\(windows\)\]\s*use crate::engine::app_instance;/.test(bootstrap)
+    && /#\[cfg\(windows\)\]\s*let _instance_lease = match app_instance::acquire\(\)/.test(bootstrap),
+    'Windows instance lease must not block unsupported-platform startup');
   const surface=read('Development/apps/desktop/src-tauri/src/engine/workspace_surface.rs');
   const unavailableSurface=read('Development/apps/desktop/src-tauri/src/engine/workspace_surface/unsupported_controller.rs');
   assert.ok(/#\[cfg\(windows\)\]\s*mod controller \{/.test(surface)
