@@ -64,10 +64,11 @@ move; synthetic race and stalled-drag fixtures PASS, but actual issue persisted.
 Installed change wakes the ordered geometry worker for foreground transitions as well;
 focus event fixture failed before and passes after (black-screen-focus-*.log). Clean
 Windows build and App staging PASS; live stability and user-visible proof pending.
-Current source additionally keeps the primary preview until the focused game is
+Source9d5ec16 additionally keeps the primary preview until the focused game is
 visible at its viewport, refreshes after repositioning, and rechecks focus after
 parking. Five surface logic regressions PASS; real pixels/input remain unverified.
-Interactive testing deferred; do not control the user's desktop during source work.
+Clean candidate workspace/packages/lazy-tester/0.1.0-9d5ec163726b-20261027T033405938Z
+built, not staged. Interactive testing deferred; do not control the user's desktop.
 
 FPS120/5, saves5..1000/background<=active, explicit legacy1..4/144/10 preserved.
 V3 applies next launch, V2 unchanged. Rust policy fixtures PASS; game pacing untested.
