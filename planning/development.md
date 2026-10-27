@@ -2,11 +2,12 @@
 
 ## Single active goal — user revised27October2026
 
-Priority: fix and prove the reported black screen and lost game interaction.
-Then verify stable Play/Settings frame, preview/drag, per-slot focus and full exit
-with two owned sessions; optimize measured Launch/switch, finish functional
-Settings/Data Storage, clear process roles and honest Windows acceptance. Defaults
-120/5, minimum5FPS, background<=active. Work remains incomplete.
+Priority: fix and prove the black screen and lost game interaction. Next make one
+normal app exit close its two owned sessions, then verify preview/drag/focus and
+Play/Settings frames. Measure Launch/switch and finish functional Settings/Data
+Storage and clear process roles. Defaults120/5, minimum5FPS, background<=active.
+Work remains incomplete. Keep the user's desktop undisturbed; interactive testing
+is deferred until the end.
 
 Local only; main/publication untouched; CI OFF. VM/Sandboxie and RAM/renderer work
 PAUSED. Compiler caches explicitly RETAINED. No incidental cleanup or actual profile
@@ -15,24 +16,19 @@ requires selected-launcher review/confirmation.
 
 ## Acceptance — preserve all outcomes
 
-1. Same Play/Settings frame without drag snag/desktop exposure through drag end/
-   cancel, resize, maximize/restore, focus, DPI/monitor changes. Main game16:9;
-   persistent larger monitoring previews. No parenting, binary patch or input relay.
-2. Fast switch/Launch: measure focus/bounds and controller/validation/enrollment/
-   window-ready phases. Reuse original leases/image pins without weakening identity,
-   inventing readiness or busy polling.
-3. Actual Task Manager roles/grouping: UI/starter/controller/recovery/Minecraft/
-   WebView. No hiding, official binary renames, sandbox disable or weaker peer gates.
-   Role/PID pages do not prove grouping; explain proven upstream limitations.
+1. Same Play/Settings frame; stable drag/resize/focus/DPI, 16:9 main game and
+   persistent monitoring previews. No parenting, binary patch or input relay.
+2. Measure Launch/switch; reuse original leases and pins without weakening identity.
+3. Task Manager UI/starter/controller/recovery/Minecraft/WebView roles and grouping;
+   do not hide processes, alter official binaries or weaken peer gates.
 4. General: High/Low only; truthful valid whole5..1000 FPS saves with120/5 defaults.
    Preserve explicit older preferences; new defaults do not overwrite user choices.
    Keep/Mute background audio must actually scope original game audio sessions,
    never other apps. No ignored selections or placeholder controls as features.
 5. Per-launcher Data Storage: real sizes/path, cache cleanup, settings reset/backup/
    restore, full selected account/world/cache/settings/backup clear to empty launcher.
-   Preserve installation/peers; allow unrelated verified managed games. Explain
-   Windows identity limits. Verify confirmation, recovery/catalog identities,
-   interruption, active profiles, malformed paths, links, cancel and peer isolation.
+   Preserve installation/peers; verify confirmation, recovery, interruption,
+   active profiles, malformed paths, links, cancel and peer isolation.
 6. Clean exact Local Windows candidate/checks/receipts, App/root EXE/shortcuts,
    Data preserved. Verify Explorer startup and all requested UX/runtime flows;
    compilation never substitutes for usability acceptance.
@@ -53,7 +49,11 @@ the background preview aligned, and Play/Settings native frame styles matched.
 These checks did not prove visible pixels or usable gameplay; the user then reported
 a black primary viewport and inaccessible game. First full-exit attempt timed out
 with both games retained; a subsequent request exited the owned games and manager.
-One-click full exit remains unproven. Logs workspace/runs/two-session-*.log.
+Both games showed the exact native "Exit Minecraft Education?" OK/Cancel prompt.
+Working controller change confirms only this exact prompt for the pinned original
+game; unknown prompts are preserved. Six controller fixtures PASS, including exact
+dialog and unrelated/unknown refusal. Real one-click exit remains unproven.
+Logs workspace/runs/two-session-*.log and full-exit-dialog-fixture.log.
 Earlier audio toggle/persistence, Clear/Reset review/Cancel PASS; logs audio-ui-smoke,
 full-clear-ui-smoke, settings-recovery-ui-smoke in workspace/runs. No real deletion.
 ## Implemented corrections and executed evidence

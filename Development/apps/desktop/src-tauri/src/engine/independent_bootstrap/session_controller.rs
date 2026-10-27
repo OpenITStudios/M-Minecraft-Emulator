@@ -208,6 +208,7 @@ impl Sessions {
         self.reap();
         let snapshot=self.snapshot();
         let mut issues=Vec::new();
+        let mut confirmed = [false; 5];
         for profile in snapshot.profiles {
             let index=profile.slot as usize-1;
             let Some(started)=&self.running[index] else {continue;};
@@ -216,6 +217,7 @@ impl Sessions {
                 child.identity()?;
                 let target=profile.process.ok_or_else(||invalid("Game window is not ready; wait for it to finish starting"))?;
                 if target.pid!=child.pid || target.created_file_time!=child.created.to_string(){return Err(invalid("Game identity changed"));}
+                if confirm_education_exit(&target)? {confirmed[index]=true;return Ok(());}
                 close_verified_window(&target)
             })();
             if let Err(error)=outcome {issues.push(format!("Minecraft - {}: {error}",profile.slot));}
@@ -225,6 +227,16 @@ impl Sessions {
             self.reap();
             if self.running.iter().all(Option::is_none){return Ok(());}
             if !issues.is_empty(){self.exiting=false;return Err(io::Error::other(issues.join("; ")));}
+            for index in 0..5 {
+                if confirmed[index] { continue; }
+                let (Some(started),Some(target))=(&self.running[index],&self.windows[index]) else {continue;};
+                // Only an original, still-live game may receive its exact exit confirmation.
+                let result=started.children[0].identity().and_then(|_|confirm_education_exit(target));
+                match result {
+                    Ok(value)=>confirmed[index]=value,
+                    Err(error)=>{self.exiting=false;return Err(error);}
+                }
+            }
             if std::time::Instant::now()>=deadline {
                 self.exiting=false;
                 return Err(io::Error::new(io::ErrorKind::TimedOut,"Minecraft is still closing or waiting for a dialog. Finish in its game window, then close Lazy Tester again. No game was force-terminated."));
@@ -454,6 +466,41 @@ fn close_verified_window(target:&OwnedProcess)->io::Result<()> {
     if unsafe{GetWindowLongPtrW(window,GWL_STYLE)} & WS_DISABLED as isize != 0 {return Err(invalid("Finish the open Minecraft dialog, then try exiting again"));}
     if unsafe{PostMessageW(window,WM_CLOSE,0,0)}==0 {return Err(io::Error::last_os_error());}
     Ok(())
+}
+
+// Minecraft Education's standard English exit prompt is an unowned native dialog.
+// Unknown/localized prompts remain for the user; never click arbitrary dialogs.
+fn confirm_education_exit(target:&OwnedProcess)->io::Result<bool> {
+    use windows_sys::Win32::{Foundation::HWND,UI::{Input::KeyboardAndMouse::IsWindowEnabled,WindowsAndMessaging::*}};
+    if !valid_retained_window(target) { return Ok(false); }
+    struct Search { pid:u32, matches:Vec<isize> }
+    unsafe fn text(window:HWND)->Option<String> {
+        let mut buffer=[0u16;256];let mut count=0usize;
+        if SendMessageTimeoutW(window,WM_GETTEXT,buffer.len(),buffer.as_mut_ptr() as isize,
+            SMTO_ABORTIFHUNG|SMTO_BLOCK|SMTO_ERRORONEXIT,100,&mut count)==0 {return None;}
+        Some(String::from_utf16_lossy(&buffer[..count.min(buffer.len()-1)]))
+    }
+    unsafe extern "system" fn find(window:HWND,parameter:isize)->i32 {
+        let search=&mut *(parameter as *mut Search);let mut pid=0;
+        if GetWindowThreadProcessId(window,&mut pid)==0 || pid!=search.pid || IsWindowVisible(window)==0 || IsWindowEnabled(window)==0 {return 1;}
+        let mut class=[0u16;32];let length=GetClassNameW(window,class.as_mut_ptr(),class.len() as i32);
+        if length<=0 || String::from_utf16_lossy(&class[..length as usize])!="#32770" {return 1;}
+        let mut title=[0u16;64];let length=GetWindowTextW(window,title.as_mut_ptr(),title.len() as i32);
+        if length<=0 || String::from_utf16_lossy(&title[..length as usize])!="Minecraft Education" {return 1;}
+        let message=GetDlgItem(window,65535);let ok=GetDlgItem(window,1);let cancel=GetDlgItem(window,2);
+        if message.is_null() || ok.is_null() || cancel.is_null() {return 1;}
+        if text(message).as_deref()==Some("Exit Minecraft Education?") && text(ok).as_deref()==Some("OK") && text(cancel).as_deref()==Some("Cancel") {
+            search.matches.push(window as isize);
+        }
+        1
+    }
+    let mut search=Search{pid:target.pid,matches:Vec::new()};
+    if unsafe {EnumWindows(Some(find),&mut search as *mut Search as isize)}==0 {return Err(io::Error::last_os_error());}
+    if search.matches.len()!=1 || !valid_retained_window(target) {return Ok(false);}
+    let dialog=search.matches[0] as HWND;let mut pid=0;
+    if unsafe {GetWindowThreadProcessId(dialog,&mut pid)}==0 || pid!=target.pid {return Ok(false);}
+    if unsafe {PostMessageW(dialog,WM_COMMAND,1,0)}==0 {return Err(io::Error::last_os_error());}
+    Ok(true)
 }
 
 fn window(child: &PendingEducationBootstrap) -> Option<OwnedProcess> {
@@ -717,6 +764,39 @@ mod tests {
                 assert_ne!(IsWindow(other),0);
             });
             if IsWindow(own)!=0{DestroyWindow(own);}DestroyWindow(other);
+            if let Err(error)=result{std::panic::resume_unwind(error);}
+        }
+    }
+
+    #[test]
+    fn exit_confirmation_is_limited_to_the_exact_owned_prompt() {
+        use windows_sys::Win32::{Foundation::FILETIME,System::Threading::*,UI::WindowsAndMessaging::*};
+        unsafe {
+            let make=|class,caption,style,parent,id|CreateWindowExW(WS_EX_NOACTIVATE,class,caption,style,
+                -30000,-30000,200,100,parent,id as _,std::ptr::null_mut(),std::ptr::null());
+            let game=make(windows_sys::w!("STATIC"),windows_sys::w!("Fixture"),WS_OVERLAPPEDWINDOW,
+                std::ptr::null_mut(),0usize);
+            let dialog=make(windows_sys::w!("#32770"),windows_sys::w!("Minecraft Education"),WS_POPUP|WS_VISIBLE,
+                std::ptr::null_mut(),0usize);
+            assert!(!game.is_null()&&!dialog.is_null());
+            let result=std::panic::catch_unwind(||{
+                let message=make(windows_sys::w!("STATIC"),windows_sys::w!("Unknown question"),WS_CHILD|WS_VISIBLE,dialog,65535);
+                let ok=make(windows_sys::w!("BUTTON"),windows_sys::w!("OK"),WS_CHILD|WS_VISIBLE,dialog,1);
+                let cancel=make(windows_sys::w!("BUTTON"),windows_sys::w!("Cancel"),WS_CHILD|WS_VISIBLE,dialog,2);
+                assert!(!message.is_null()&&!ok.is_null()&&!cancel.is_null());
+                let mut birth:FILETIME=std::mem::zeroed();let mut exited=birth;let mut kernel=birth;let mut user=birth;
+                assert_ne!(GetProcessTimes(GetCurrentProcess(),&mut birth,&mut exited,&mut kernel,&mut user),0);
+                let target=OwnedProcess{pid:std::process::id(),created_file_time:(((birth.dwHighDateTime as u64)<<32)|birth.dwLowDateTime as u64).to_string(),session_id:interactive_session(std::process::id()).unwrap(),window_handle:format!("0x{:x}",game as usize),responding:true};
+                assert!(!confirm_education_exit(&target).unwrap());
+                assert_ne!(SetWindowTextW(message,windows_sys::w!("Exit Minecraft Education?")),0);
+                assert!(confirm_education_exit(&target).unwrap());
+                let mut received:MSG=std::mem::zeroed();
+                assert_ne!(PeekMessageW(&mut received,dialog,WM_COMMAND,WM_COMMAND,PM_REMOVE),0);
+                assert_eq!(received.wParam,1);
+                let mut forged=target.clone();forged.pid=forged.pid.wrapping_add(1);
+                assert!(!confirm_education_exit(&forged).unwrap());
+            });
+            DestroyWindow(dialog);DestroyWindow(game);
             if let Err(error)=result{std::panic::resume_unwind(error);}
         }
     }

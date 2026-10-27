@@ -31,6 +31,9 @@ session controller: identity-checked WM_CLOSE to its own original game windows,
 normal process-exit/reap wait, no force termination. Absent controller never starts
 one for exit. Failure keeps the manager open, restores controls and reports the
 pending game/dialog. Idle controller exits after the manager peer disappears.
+The controller confirms only the exact English "Exit Minecraft Education?" native
+prompt belonging to its original pinned game process; unknown prompts remain for
+the user. No other application's dialog or account prompt is accepted.
 Frontend separate-slot state releases only the selected
 process; preview adoption receives only requested monitoring tiles. DWM destinations
 follow manager visibility rather than foreground input; they retain ordinary owned
