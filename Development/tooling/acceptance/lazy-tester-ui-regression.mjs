@@ -40,6 +40,9 @@ try {
       async invoke(command, args) {
         window.__calls.push({command, args});
         if(command==='startup_diagnostic_result')return null;
+        if(command==='lazy_tester_backend_support') {
+          return new URL(location.href).searchParams.has('unsupported-platform') ? 'Unsupported' : 'WindowsNative';
+        }
         if (command === 'plugin:event|listen') return callback;
         if (command === 'plugin:event|unlisten') return null;
         if (command === 'lazy_tester_profile_binding') {
@@ -100,6 +103,18 @@ try {
     assert.equal(await page.getByRole('button',{name:'Set up launchers',exact:true}).count(),0);
     assert.equal(await page.evaluate(()=>window.__calls.some(c=>c.args?.import===true||['Choose','Locate'].includes(c.args?.action)||c.args?.request?.operation==='Launch')),false);
   }
+  // Host capability must suppress unsupported platform startup without
+  // probing private Windows data or retrying profile/game session commands.
+  await page.goto('http://lazy-tester.test/?unsupported-platform=1');
+  await page.getByRole('region',{name:'Unsupported platform'}).waitFor();
+  await heading('Minecraft backend unavailable').first().waitFor();
+  assert.equal(await page.getByRole('button',{name:'Retry connection'}).count(),0);
+  assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
+    ['lazy_tester_profile_binding','lazy_tester_data_location','lazy_tester_session','lazy_tester_present'].includes(call.command)).length),0);
+  assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
+    call.command==='lazy_tester_backend_support').length),1);
+  assert.equal(await page.locator('.lt-card:not(:disabled)').count(),0);
+
   await page.goto('http://lazy-tester.test/');
   await page.waitForFunction(()=>!!window.__finishBinding);await page.evaluate(()=>window.__finishBinding());
   await heading('Ready when you are').waitFor();

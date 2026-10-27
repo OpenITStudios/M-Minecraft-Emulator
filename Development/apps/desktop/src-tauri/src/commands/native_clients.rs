@@ -7,6 +7,13 @@ use std::{io, sync::Mutex};
 // This limits manager-created CPU/RAM peaks, not Minecraft CPU or GPU usage.
 static MANAGER_RESOURCE_LOCK: Mutex<()> = Mutex::new(());
 
+// Compile-time OS backend presence, not game readiness or installation proof.
+// No lifecycle lock, worker, disk access, process discovery or credentials.
+#[tauri::command]
+pub fn lazy_tester_backend_support() -> native_clients::NativeBackendSupport {
+    native_clients::native_backend_support()
+}
+
 #[tauri::command]
 pub async fn lazy_tester_data_location(action:native_clients::DataLocationAction) -> Result<native_clients::DataLocation,String> {
     if crate::app_bootstrap::startup_diagnostic_mode() && !matches!(action,native_clients::DataLocationAction::Inspect) {return Err("Startup diagnostic permits inspection only".into());}

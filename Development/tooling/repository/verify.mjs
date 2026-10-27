@@ -95,12 +95,23 @@ export function verifyRepository(root,g0=false) {
   assert.equal(manifest.engines.npm,app.engines.npm);
   if(existsSync(resolve(root,'.github/workflows')))assert.equal(filesBelow(root,'.github/workflows').filter(path=>/\.ya?ml$/i.test(path)).length,0,'CI must remain off');
   const bootstrap=read('Development/apps/desktop/src-tauri/src/app_bootstrap.rs');
-  for(const name of ['lazy_tester_session','lazy_tester_profile_binding','lazy_tester_present','lazy_tester_previews'])assert.ok(bootstrap.includes('commands::native_clients::'+name+','),name);
+  for(const name of ['lazy_tester_backend_support','lazy_tester_session','lazy_tester_profile_binding','lazy_tester_present','lazy_tester_previews'])assert.ok(bootstrap.includes('commands::native_clients::'+name+','),name);
   assert.ok(!/commands::virtual_clients::|commands::setup_tools::|commands::window_arrangement::/.test(bootstrap),'Legacy handlers must remain unregistered');
+  assert.ok(/#\[cfg\(not\(windows\)\)\][\s\S]*?app\.get_webview_window\("main"\)\.is_none\(\)/.test(bootstrap),
+    'Non-Windows startup must verify the Tauri-created main window');
+  assert.ok(bootstrap.includes('cfg(all(windows, feature="lazy-tester-package"))'),
+    'Windows product data/WebView override must not disable non-Windows main window creation');
+  const buildScript=read('Development/apps/desktop/src-tauri/build.rs');
+  assert.ok(buildScript.includes('CARGO_CFG_TARGET_OS') && buildScript.includes('CARGO_FEATURE_LAZY_TESTER_PACKAGE'),
+    'Native Windows-only product packaging must reject unsupported OS targets');
+  const nativeSource=read('Development/apps/desktop/src-tauri/src/engine/native_clients.rs');
+  assert.ok(nativeSource.includes('pub enum NativeBackendSupport') &&
+    nativeSource.includes('cfg!(all(windows, target_arch = "x86_64"))'),
+    'Native backend support must be an implementation capability, not a game readiness claim');
   const invoked=bootstrap.split('.invoke_handler(tauri::generate_handler![')[1]?.split('])')[0]??'';
   const exposed=[...invoked.matchAll(/commands::native_clients::([a-z_]+),/g)].map(m=>m[1]);
   assert.deepEqual(exposed,[
-    'lazy_tester_session','lazy_tester_close_one','lazy_tester_profile_binding',
+    'lazy_tester_backend_support','lazy_tester_session','lazy_tester_close_one','lazy_tester_profile_binding',
     'lazy_tester_data_location','lazy_tester_present','lazy_tester_previews',
     'lazy_tester_clear_previews','desktop_update_workspace',
     'desktop_release_workspace','desktop_suspend_workspace',

@@ -17,6 +17,14 @@ export interface ProfileStorage {
   gameSettings?: {hasSettings:boolean; backupAvailable:boolean; canReset:boolean; canRestore:boolean; issue:string|null};
   fullClear?: {canClear:boolean; pending:boolean; confirmationToken:string|null; issue:string|null};
 }
+// Backend implementation availability, never game sign-in or profile readiness.
+export type NativeBackendSupport = 'WindowsNative' | 'Unsupported';
+export function parseNativeBackendSupport(value: unknown): NativeBackendSupport {
+  if (value !== 'WindowsNative' && value !== 'Unsupported') {
+    throw new TypeError('Invalid native backend capability');
+  }
+  return value;
+}
 export type GraphicsPreset = 'High' | 'Low';
 export type BackgroundAudio = 'Keep'|'Mute';
 export interface SettingsReport {backgroundAudio?:BackgroundAudio; audioIssue?:string; graphicsPresets?:GraphicsPreset[]; activeFps:number; backgroundFps:number; renderDistanceChunks:number; canApplyPreset:boolean; changedProfiles:number|null}
@@ -173,6 +181,7 @@ export const lazyTester = {
     return settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'SaveAudio',mode}}));
   },
   reportStartup:(report:{connection:string;issue:string;cards:number;enabled:number})=>invokeRuntime<void>('startup_diagnostic_result',report),
+  backendSupport:async()=>parseNativeBackendSupport(await invokeRuntime<unknown>('lazy_tester_backend_support')),
   applyGraphics:async(slot:ProfileSlot,preset:GraphicsPreset)=>{
     if(!profileSlots.includes(slot)||!['High','Low'].includes(preset))throw new TypeError('Invalid graphics preset');
     return settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ApplyGraphicsPreset',slot,preset}}));

@@ -1,3 +1,19 @@
+// Read-only compile-time capability. This means the reviewed Win64 native
+// control path is compiled, NOT that a game is installed, signed in, playable,
+// or that five Minecraft instances have passed acceptance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub enum NativeBackendSupport {
+    WindowsNative,
+    Unsupported,
+}
+pub fn native_backend_support() -> NativeBackendSupport {
+    if cfg!(all(windows, target_arch = "x86_64")) {
+        NativeBackendSupport::WindowsNative
+    } else {
+        NativeBackendSupport::Unsupported
+    }
+}
+
 // Explicit private startup experiment; ordinary product admission remains unchanged.
 #[cfg(all(windows, target_arch = "x86_64"))]
 #[path = "independent_bootstrap.rs"]
@@ -912,6 +928,17 @@ pub fn inspect_native_workspace() -> io::Result<NativeWorkspaceObservation> {
 #[cfg(test)]
 mod native_workspace_tests {
     use super::*;
+
+    #[test]
+    fn backend_report_is_compiled_support_only_never_an_account_or_game_check() {
+        let expected = if cfg!(all(windows, target_arch = "x86_64")) {
+            "WindowsNative"
+        } else {
+            "Unsupported"
+        };
+        let actual = serde_json::to_value(native_backend_support()).unwrap();
+        assert_eq!(actual, expected);
+    }
 
     #[cfg(not(windows))]
     #[test]

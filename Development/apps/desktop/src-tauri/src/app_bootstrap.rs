@@ -9,7 +9,9 @@ pub fn run() {
     }
 
     let mut context = tauri::generate_context!();
-    #[cfg(feature="lazy-tester-package")]
+    // The native Lazy Tester data/WebView override is reviewed for Windows
+    // only. Other OS targets retain the standard Tauri-created main window.
+    #[cfg(all(windows, feature="lazy-tester-package"))]
     {
         let storage=(||->std::io::Result<_>{
             let cache=crate::engine::manager_settings::product_cache()?;
@@ -55,6 +57,18 @@ pub fn run() {
                 fit_initial_window(&window)?;
                 workspace_foreground::start(window.as_ref().window())?;
             }
+            #[cfg(not(windows))]
+            {
+                use tauri::Manager;
+                // The base Tauri configuration creates this window itself.
+                // Reject a headless startup; never create a second window or
+                // pretend that a native game/preview backend is available.
+                if app.get_webview_window("main").is_none() {
+                    return Err(std::io::Error::other(
+                        "Configured Lazy Tester main window was not created",
+                    ).into());
+                }
+            }
             Ok(())
         })
         // Only the mounted Lazy Tester UI's current IPC commands are exposed.
@@ -62,6 +76,7 @@ pub fn run() {
         // reachable through Tauri until independently reviewed and reauthorized.
         .invoke_handler(tauri::generate_handler![
             startup_diagnostic_result,
+            commands::native_clients::lazy_tester_backend_support,
             commands::native_clients::lazy_tester_session,
             commands::native_clients::lazy_tester_close_one,
             commands::native_clients::lazy_tester_profile_binding,
@@ -186,6 +201,7 @@ fn check_webview_binding(mut context: tauri::Context<tauri::Wry>) {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::native_clients::lazy_tester_backend_support,
             commands::native_clients::lazy_tester_profile_binding,
             commands::native_clients::lazy_tester_data_location,
             commands::native_clients::lazy_tester_session,

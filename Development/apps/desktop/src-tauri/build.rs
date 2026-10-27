@@ -1,4 +1,11 @@
 fn main() {
+    // Do not accidentally package Windows-only DLLs, process roles and NSIS
+    // hooks as a macOS release. A future Mac product needs a reviewed payload.
+    if std::env::var_os("CARGO_FEATURE_LAZY_TESTER_PACKAGE").is_some()
+        && std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows")
+    {
+        panic!("Lazy Tester native product packaging is Windows-only until a macOS backend and package contract are reviewed");
+    }
     // Direct "tauri build" must not package legacy VMware resources under the
     // retired installed product identity, even if someone bypasses npm scripts.
     if std::env::var("PROFILE").as_deref() == Ok("release")

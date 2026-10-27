@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {lazyTester, parseSelectedClose, firstEmbeddedProfile, nextProfile, parseSession, parsePreviewReport, parseProfileBinding, parseDataLocation, validFpsLimits, type ProfileSession} from '../src/app/bridge/lazyTester.js';
+import {lazyTester, parseSelectedClose, firstEmbeddedProfile, nextProfile, parseSession, parsePreviewReport, parseProfileBinding, parseDataLocation, validFpsLimits, parseNativeBackendSupport, type ProfileSession} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {closeReviewActive, observationStillCurrent, type CloseReview} from '../src/app/inspectionScheduling.js';
 
@@ -8,6 +8,13 @@ const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process
   pid: slot + 100, createdFileTime: String(slot + 200), sessionId: 1, windowHandle: `0x${slot}`, responding: true,
 }});
 describe('Lazy Tester profile contract', () => {
+  it('accepts only compiled-backend support, never user agent or gameplay guesses',()=>{
+    expect(parseNativeBackendSupport('WindowsNative')).toBe('WindowsNative');
+    expect(parseNativeBackendSupport('Unsupported')).toBe('Unsupported');
+    for (const forged of [true,false,null,undefined,0,'macos','MacNative','Ready',{},['WindowsNative']]) {
+      expect(()=>parseNativeBackendSupport(forged)).toThrow('Invalid native backend capability');
+    }
+  });
   it('suspends automatic inspection through every close review and drops stale results', () => {
     const idle: CloseReview = {
       nativeExitReview:false, closeAllRunning:false,

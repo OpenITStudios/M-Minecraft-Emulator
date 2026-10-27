@@ -19,31 +19,13 @@ all original per-launcher Roaming/Local/HKCU data ownership stay unchanged.
 
 ## Retirement and dependency audit
 
-- Full vendored Sandboxie candidate/owned trees and historical upstream
-  gitlink removed from `Local` (earlier 1fd4bdad).
-- VMware/Guest Agent/App Sandbox runtime modules and old CLI removed from
-  `engine/runtime-core`; platform-independent `independent_engine`
-  contracts and bounded subprocess helper retained (earlier b1daa1ec).
-- Retired guest scripts, fork compiler/provision scripts, VM installer
-  resources and standalone service prototype removed. Common Tauri package
-  base is resource-free; the old VM packager remains a hard refusal
-  (earlier faef0a84).
-- Unmounted Tauri VM/setup/window modules, inaccessible legacy IPC handlers,
-  fork candidate and box inventory inspectors removed (earlier a83d6bcf,
-  d054b446, 4d790401).
-- Final desktop source cleanup removes unregistered Sandboxie Client02
-  inspection/launch/focus, boxed process adapters, obsolete four-slot catalog,
-  owned-provider helper roles and their scripts. `OwnedProcess` moves to
-  `engine/process_identity.rs` preserving the exact JSON schema and field
-  names used by the current native controller/workspace.
-- The registered Education path resolver is moved byte-for-byte to
-  `tooling/acceptance/windows/education-target.ps1`; existing two native
-  embeds and the MC01 observer use the same source. Historical docs are
-  linked to pinned Git revisions rather than retaining obsolete provider
-  folders. Source admission now rejects reintroduced legacy paths.
-- Source verifier and frontend routing tests are updated for the current
-  package resources and native-only IPC. These are **authored/static reviewed
-  only**; no source/runtime test has been executed in this ChatGPT session.
+Sandboxie vendor/fork, VMware Guest Agent, obsolete setup/IPC/runtime owners,
+guest scripts and legacy packaging paths were retired from `Local` in
+earlier commits. No alternative provider or old installer is a fallback.
+The native Education source/controller, verified five-slot profiles, DWM,
+FPS DLL, process roles, original data and release safeguards remain current.
+Git history retains provenance. Source verifiers were updated without CI,
+build or game execution.
 
 ## Current owners
 
@@ -136,8 +118,18 @@ OS, binding/data-location explicitly return `Unsupported`, never a false
 path. Windows product behavior and IPC schema are unchanged. Native refusal
 regression and static repository guard authored; none executed.
 
+## Tauri startup capability gate — 28 October 2026
+
+A read-only native enum now reports compiled Windows x64 backend presence,
+not game readiness. The Svelte startup checks it once before profile/binding
+IPC, displays `Unsupported` explicitly without retries or native work,
+and preserves existing Windows initialization. Non-Windows Tauri verifies
+the default `main` window; Windows-only product packaging is rejected on
+other OS targets. IPC allowlist, source guard and synthetic frontend/native
+regressions updated. Build, tests, gameplay and macOS support NOT_EXECUTED.
+
 ## Next bounded action
 
-Audit non-Windows Tauri startup and remaining OS-specific source barriers,
-retaining an explicit unsupported-game state rather than simulated readiness.
-No build, CI, Local PC, or gameplay tests authorized.
+Review the remaining desktop non-Windows compile path and its native
+process/OS assumptions; fix only verified source barriers. Do not implement
+an unproven Mac five-account launcher or run Local PC tests.

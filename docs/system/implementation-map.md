@@ -19,6 +19,25 @@ lifecycle: ACTIVE
 
 This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build tooling in [Isolation Source Tooling](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md) is retired product history, not the native engine. The only active goal, blocker and next action are in [planning/development.md](../../planning/development.md). Treat historical `Next` here as superseded; inspect owning source and consumers.
 
+## Tauri startup platform capability — 28 October 2026
+
+One read-only `lazy_tester_backend_support` Tauri IPC reports an enum
+`WindowsNative` only for a compiled Windows x64 controller, or
+`Unsupported` otherwise. This is **compiled backend presence**, never
+installation, authentication, gameplay or five-session acceptance.
+The mounted frontend checks it before binding, location or session IPC:
+unsupported builds do not retry Windows profile discovery, never enable
+launchers, and show an explicit platform support message rather than a
+misleading connection-recovery prompt. Windows retains the original
+binding/location retry and startup diagnostics. The native Windows-only
+product WebView override cannot disable window creation on other OS targets;
+a non-Windows Tauri setup verifies its automatically created `main` window
+instead of starting another. Existing Windows package identifiers/payload
+contracts remain unchanged, and attempted `lazy-tester-package` builds for
+other OS targets refuse in `build.rs`. No macOS native/game backend is
+implemented or proved to compile. Frontend/Rust/browser tests are authored
+only; source/runtime and UI acceptance remain NOT_EXECUTED.
+
 ## Native profile readiness boundary — 28 October 2026
 
 The native profile owner now distinguishes the reviewed installed Windows
