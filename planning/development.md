@@ -2,13 +2,13 @@
 
 ## Current source initiative — 27 October 2026
 
-**Goal:** retire unused Sandboxie and VMware implementations from the
-`Local` source tree, without damaging the active five-profile Minecraft
-Education Windows manager. Prepare later efficiency and Windows/macOS
-architecture work only after the native implementation graph is clean.
+**Goal:** optimize the existing five-profile Minecraft Education Windows
+runtime after the completed Sandboxie/VMware source retirement. Protect the
+one authoritative controller, native presentation, account/world data and
+normal-exit contracts. Defer multiplatform changes until this audit is bounded.
 
-**State:** ACTIVE (source retirement complete for the known desktop/runtime/
-vendor/Guest Agent/legacy-package paths; actual build/gameplay NOT_EXECUTED).
+**State:** ACTIVE (retirement source audit complete; runtime-efficiency review
+underway; current build/gameplay and performance measurements NOT_EXECUTED).
 
 The current mounted product uses Svelte/Tauri 2 and a retained Rust session
 controller for MC01–MC05. Minecraft owns sign-in, network, worlds, rendering
@@ -80,9 +80,38 @@ publication or local-PC testing is authorized in this task.
 - No new Windows/macOS adapter, new game hook, renderer modification, cloned
   login, token read or unofficial game installation as a cleanup side effect.
 
+## Efficiency source review — 27 October 2026
+
+At retirement baseline `01b4807e3321ed4077eb73d468e25b7a90070549`, the 28 desktop Rust source/build
+owners outside the six research fixture modules were inspected for imports
+of `independent_job`, `independent_private_hive`, `independent_private_files`,
+`independent_root_access`, `independent_pipe_peer` and
+`independent_pipe_server`. There were no production consumers. These six
+modules (2,866 source lines combined) are now declared only under
+`#[cfg(all(windows, test))]`; their existing Windows unit-test coverage stays
+reachable. This is a production compile-graph reduction, **not** verified
+runtime CPU/RAM savings. Actual compiler/tests/bundles NOT_EXECUTED.
+
+Review identified three separate scheduling concerns, not yet changed:
+- `session_controller.rs` serializes all lifecycle operations with
+  `InspectStorage`; metadata directory scanning can take up to two seconds
+  per profile, making unprioritized read-only inspection a source-level
+  head-of-line blocking candidate. Never allow parallel game authorities.
+- Idle controller receive polling is 250 ms; normal-close observation polls
+  every 50 ms for up to 20 seconds. Both are bounded, and neither is proof of
+  a meaningful CPU bottleneck. Preserve exact dialog/progress/exit semantics.
+- Mounted Svelte status refresh runs every two seconds while visible;
+  native DWM previews and focus events already use one owned worker each.
+  Avoid adding a second observer or an unverified periodic optimizer.
+
+This phase is source-only. Do not claim five-session gameplay, MC02 normal
+exit, power/RAM improvement, Windows build, native DLL/installer acceptance,
+or macOS support from these changes. No tests, CI, games, or user PC operations
+were run.
+
 ## Next bounded action
 
-Perform exact-HEAD static consumer and package-contract verification of the
-retirement commit and record remaining unknown compiler/Windows/gameplay
-proof; afterwards proceed to source-only lifecycle scheduling and performance
-architecture work. No Local PC testing until explicitly authorized.
+Review read-only storage inspection scheduling/latency against CloseOne and
+CloseAll admission, and identify the smallest source-only improvement that
+does not add another lifecycle owner or change public wire schemas. Keep
+unmeasured runtime performance claims UNKNOWN and defer local PC testing.
