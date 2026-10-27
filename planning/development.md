@@ -2,10 +2,12 @@
 
 ## State and operator request — 27 October 2026
 
-PAUSED IN CODEX at the user's request: save all source and continuation notes to
-GitHub Local and tag v0.1 so development can continue outside Codex. Do not resume
-runtime tests or close remaining processes from historical Next entries. This is
-an incomplete development checkpoint, not a release or a usable-product claim.
+The v0.1 checkpoint was saved and paused in Codex. The operator subsequently
+resumed source development on GitHub Local, with the first priority explicitly
+limited to diagnosing and correcting the MC02 normal-exit failure. The v0.1 tag
+and backup branch remain untouched. Do not resume past runtime tests or close
+existing processes from historical Next entries. This is still an incomplete
+development checkpoint, not a release or a usable-product claim.
 main remains untouched; GitHub Actions OFF; no release/installer publication.
 
 Tag v0.1 points to this handoff; preceding implementation:
@@ -18,7 +20,17 @@ Diagnose the code before another runtime repetition.
 P0: one normal Lazy Tester exit must close every original managed Minecraft session.
 Observed failure: with two launched sessions, MC01 exits but MC02 loses its main
 window and stays alive; manager/controller consequently remain open. Reproduced
-before and AFTER the HUD lifetime change. Root cause remains UNKNOWN.
+before and AFTER the HUD lifetime change. Root cause remains UNKNOWN. At v0.1, the normal-close loop sent WM_CLOSE
+only once per slot even if its verified main HWND changed, and a still-live
+game without a unique HWND was represented as STARTING. The post-checkpoint
+source correction tracks verified HWNDs per session, permits a bounded
+WM_CLOSE request only for a newly verified window, and records the original
+window thread's signaled/alive state together with whether a dialog was
+submitted. Normal-close timeout evidence is attached to the affected session
+for subsequent Inspect, which now reports ATTENTION rather than STARTING.
+No force termination, account/world reads, new provider or background probe
+is introduced. This is a diagnostic/close-retry correction, not proof that
+the original MC02 hang is fixed; Windows and Minecraft tests are NOT_EXECUTED.
 
 Other outstanding requirements:
 - Active game should promptly reach the saved FPS limit; background games use the
@@ -99,11 +111,18 @@ Settings/Data Storage: queued saves, stable review dialogs, admission checks. 39
 
 ## Continuation, build and preservation
 
-Next: trace why the LAST/active session loses its HWND but not its process during
-normal close. Compare active vs parked restoration, WM_CLOSE/dialog lifecycle and
-native presentation/HUD thread lifetime. Establish a new discriminating code-level
-signal; do not repeat identical two-launcher tests as the diagnosis.
-Only after a justified source change, test two owned sessions; no login/world access.
+Next: after this bounded source correction is built in an authorized Windows
+environment, perform one discriminating normal-exit check with two already
+approved owned sessions. Read only the controller's new per-session close
+evidence: verified main HWND present/absent, original window-thread alive/exited,
+number of distinct WM_CLOSE requests and whether the exact exit dialog was
+submitted. A surviving game with an exited original window thread implicates
+remaining process threads; an alive window thread with no HWND implicates
+an incomplete game/window shutdown path. Compare active versus parked release
+before selecting a further source change. Do not rerun the old undifferentiated
+two-launcher test, force-close retained games or read login/world data.
+Source/regression tests here are authored, not executed; Minecraft acceptance
+remains NOT_EXECUTED.
 Keep every remaining requirement above open until its own actual evidence exists.
 
 Build: source Development/tooling/windows-toolchain/local-env.ps1 and call Set-LocalDeveloperEnvironment -Root <checkout>. Use pinned native CMake/Detours assets. Rust --locked --offline, feature lazy-tester-package; existing GetSecurityInfo declaration warnings remain. Candidate: npm --prefix Development run package:windows -- --export-only, with workspace CARGO_TARGET_DIR and reviewed LAZY_TESTER_NATIVE_PAYLOAD_DIR. Without --export-only it stages and opens startup verification. Source/structure checks: node Development/tooling/repository/verify.mjs --g0 and node Development/tooling/repository/check-structure.mjs.

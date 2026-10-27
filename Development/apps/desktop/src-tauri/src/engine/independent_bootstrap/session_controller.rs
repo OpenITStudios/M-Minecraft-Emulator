@@ -180,6 +180,7 @@ impl Sessions {
                     match process.as_ref() {
                         Some(p) if p.responding => "RUNNING",
                         Some(_) => "NOT_RESPONDING",
+                        None if issue.is_some() => "ATTENTION",
                         None => "STARTING",
                     }
                 } else if issue.is_some() || self.stores[index].is_none() {
@@ -209,7 +210,7 @@ impl Sessions {
         let snapshot=self.snapshot();
         let mut issues=Vec::new();
         let mut confirmed = [false; 5];
-        let mut requested = [false; 5];
+        let mut progress: [NormalCloseProgress; 5] = std::array::from_fn(|_| NormalCloseProgress::default());
         for profile in snapshot.profiles {
             let index=profile.slot as usize-1;
             let Some(started)=&self.running[index] else {continue;};
@@ -219,8 +220,7 @@ impl Sessions {
                 let Some(target)=profile.process else { if confirm_owned_exit(child)? {confirmed[index]=true;} return Ok(()); };
                 if target.pid!=child.pid || target.created_file_time!=child.created.to_string(){return Err(invalid("Game identity changed"));}
                 if confirm_education_exit(&target)? {confirmed[index]=true;return Ok(());}
-                close_verified_window(&target)?;
-                requested[index]=true;
+                progress[index].request_window(&target)?;
                 Ok(())
             })();
             if let Err(error)=outcome {
@@ -241,10 +241,9 @@ impl Sessions {
                 // The main HWND can disappear while its owned exit dialog remains.
                 let child=&started.children[0];
                 let result=confirm_owned_exit(child).and_then(|confirmed| {
-                    if !confirmed && !requested[index] {
+                    if !confirmed {
                         if let Some(target)=window(child) {
-                            close_verified_window(&target)?;
-                            requested[index]=true;
+                            progress[index].request_window(&target)?;
                         }
                     }
                     Ok(confirmed)
@@ -257,8 +256,17 @@ impl Sessions {
                 }
             }
             if std::time::Instant::now()>=deadline {
+                let pending = (0..5).filter_map(|index| {
+                    let started = self.running[index].as_ref()?;
+                    let evidence = progress[index].describe_pending(&started.children[0], confirmed[index]);
+                    self.issues[index] = Some(format!("Normal exit pending: {evidence}"));
+                    Some(format!("Minecraft - {}: {evidence}", index + 1))
+                }).collect::<Vec<_>>();
                 self.exiting=false;
-                return Err(io::Error::new(io::ErrorKind::TimedOut,"Minecraft is still closing or waiting for a dialog. Finish in its game window, then close Lazy Tester again. No game was force-terminated."));
+                return Err(io::Error::new(io::ErrorKind::TimedOut,format!(
+                    "Normal Minecraft exit is still pending. {}. Finish a remaining game prompt normally and retry; no game was force-terminated.",
+                    pending.join("; ")
+                )));
             }
             std::thread::sleep(Duration::from_millis(50));
         }
@@ -467,6 +475,91 @@ fn valid_retained_window(target: &OwnedProcess) -> bool {
             && GetWindow(hwnd, GW_OWNER).is_null()
     }
 }
+
+#[derive(Default)]
+struct NormalCloseProgress {
+    requested_windows: Vec<String>,
+    original_window_thread: Option<OwnedHandle>,
+}
+
+impl NormalCloseProgress {
+    // A posted WM_CLOSE is only a request, not proof that the game consumed it.
+    // Permit another request only for a different, freshly verified game HWND.
+    fn request_window(&mut self, target: &OwnedProcess) -> io::Result<()> {
+        if self.requested_windows.contains(&target.window_handle) {
+            return Ok(());
+        }
+        if self.requested_windows.len() >= 4 {
+            return Err(invalid("Minecraft replaced its main window repeatedly during normal close"));
+        }
+        let thread = if self.requested_windows.is_empty() {
+            pin_window_thread(target)
+        } else {
+            None
+        };
+        close_verified_window(target)?;
+        if self.requested_windows.is_empty() {
+            self.original_window_thread = thread;
+        }
+        self.requested_windows.push(target.window_handle.clone());
+        Ok(())
+    }
+
+    fn original_thread_state(&self) -> &'static str {
+        let Some(thread) = self.original_window_thread.as_ref() else {
+            return "not captured";
+        };
+        match unsafe { WaitForSingleObject(thread.as_raw_handle() as _, 0) } {
+            WAIT_OBJECT_0 => "exited",
+            WAIT_TIMEOUT => "alive",
+            _ => "unavailable",
+        }
+    }
+
+    fn describe_pending(&self, child: &PendingEducationBootstrap, dialog_confirmed: bool) -> String {
+        // Never inspect account, world, dialog text or arbitrary process memory.
+        let main_window = if window(child).is_some() { "present" } else { "absent or ambiguous" };
+        format!(
+            "game process still running; unique verified main HWND: {main_window}; original window thread: {}; distinct WM_CLOSE requests: {}; exact exit confirmation submitted: {dialog_confirmed}",
+            self.original_thread_state(),
+            self.requested_windows.len(),
+        )
+    }
+}
+
+// Read-only, original-window-thread evidence for a pinned managed game. Failure to
+// obtain a thread handle must not prevent its ordinary WM_CLOSE/normal shutdown.
+fn pin_window_thread(target: &OwnedProcess) -> Option<OwnedHandle> {
+    use windows_sys::Win32::{
+        System::Threading::{
+            GetProcessIdOfThread, OpenThread, SYNCHRONIZATION_SYNCHRONIZE,
+            THREAD_QUERY_LIMITED_INFORMATION,
+        },
+        UI::WindowsAndMessaging::GetWindowThreadProcessId,
+    };
+    let hwnd = usize::from_str_radix(target.window_handle.strip_prefix("0x")?, 16).ok()?;
+    let mut pid = 0;
+    let thread_id = unsafe { GetWindowThreadProcessId(hwnd as _, &mut pid) };
+    if thread_id == 0 || pid != target.pid {
+        return None;
+    }
+    let raw = unsafe {
+        OpenThread(
+            SYNCHRONIZATION_SYNCHRONIZE | THREAD_QUERY_LIMITED_INFORMATION,
+            0,
+            thread_id,
+        )
+    };
+    if raw.is_null() {
+        return None;
+    }
+    let thread = unsafe { OwnedHandle::from_raw_handle(raw as _) };
+    if unsafe { GetProcessIdOfThread(thread.as_raw_handle() as _) } != target.pid {
+        return None;
+    }
+    Some(thread)
+}
+
 fn close_verified_window(target:&OwnedProcess)->io::Result<()> {
     use windows_sys::Win32::{Foundation::FILETIME,System::Threading::*,UI::WindowsAndMessaging::*};
     let handle=unsafe{OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZATION_SYNCHRONIZE,0,target.pid)};
@@ -793,6 +886,49 @@ mod tests {
                 assert_ne!(IsWindow(other),0);
             });
             if IsWindow(own)!=0{DestroyWindow(own);}DestroyWindow(other);
+            if let Err(error)=result{std::panic::resume_unwind(error);}
+        }
+    }
+
+
+    #[test]
+    fn normal_close_posts_once_per_window_and_tracks_original_window_thread() {
+        use windows_sys::Win32::{Foundation::FILETIME, System::Threading::*, UI::WindowsAndMessaging::*};
+        unsafe {
+            let class=windows_sys::w!("STATIC");
+            let make=||CreateWindowExW(0,class,class,WS_OVERLAPPEDWINDOW,0,0,200,150,ptr::null_mut(),ptr::null_mut(),ptr::null_mut(),ptr::null());
+            let first=make();let successor=make();
+            assert!(!first.is_null()&&!successor.is_null()&&first!=successor);
+            let result=std::panic::catch_unwind(||{
+                let mut birth:FILETIME=std::mem::zeroed();let mut exited=birth;let mut kernel=birth;let mut user=birth;
+                assert_ne!(GetProcessTimes(GetCurrentProcess(),&mut birth,&mut exited,&mut kernel,&mut user),0);
+                let target=OwnedProcess{
+                    pid:std::process::id(),
+                    created_file_time:(((birth.dwHighDateTime as u64)<<32)|birth.dwLowDateTime as u64).to_string(),
+                    session_id:interactive_session(std::process::id()).unwrap(),
+                    window_handle:format!("0x{:x}",first as usize),
+                    responding:true,
+                };
+                let mut progress=NormalCloseProgress::default();
+                progress.request_window(&target).unwrap();
+                progress.request_window(&target).unwrap();
+                assert_eq!(progress.requested_windows.len(),1);
+                assert_eq!(progress.original_thread_state(),"alive");
+                let mut message:MSG=std::mem::zeroed();
+                assert_ne!(PeekMessageW(&mut message,first,WM_CLOSE,WM_CLOSE,PM_REMOVE),0);
+                assert_eq!(PeekMessageW(&mut message,first,WM_CLOSE,WM_CLOSE,PM_REMOVE),0);
+
+                // A new, uniquely verified top-level HWND receives its own request.
+                let new_target=OwnedProcess{window_handle:format!("0x{:x}",successor as usize),..target};
+                progress.request_window(&new_target).unwrap();
+                progress.request_window(&new_target).unwrap();
+                assert_eq!(progress.requested_windows.len(),2);
+                assert_ne!(PeekMessageW(&mut message,successor,WM_CLOSE,WM_CLOSE,PM_REMOVE),0);
+                assert_eq!(PeekMessageW(&mut message,successor,WM_CLOSE,WM_CLOSE,PM_REMOVE),0);
+                assert_ne!(IsWindow(successor),0);
+            });
+            if IsWindow(first)!=0{DestroyWindow(first);}
+            if IsWindow(successor)!=0{DestroyWindow(successor);}
             if let Err(error)=result{std::panic::resume_unwind(error);}
         }
     }
