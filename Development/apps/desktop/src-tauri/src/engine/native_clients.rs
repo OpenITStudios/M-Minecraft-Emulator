@@ -23,17 +23,51 @@ pub struct DataLocation {
     pub schema:u32, pub default_path:String, pub path:Option<String>,
     pub profiles:Vec<ProfilePath>, pub can_locate:bool,
 }
-pub fn data_location(action:DataLocationAction) -> io::Result<DataLocation> {
-    #[cfg(all(windows,target_arch="x86_64",feature="lazy-tester-package"))]
-    { independent_bootstrap::product_profiles::location(action) }
-    #[cfg(not(all(windows,target_arch="x86_64",feature="lazy-tester-package")))]
-    { let _=action; Err(io::Error::new(io::ErrorKind::Unsupported,"Data locations require the Lazy Tester product build")) }
+// Only the reviewed Windows package may inspect/modify its five saved profile
+// identities. Keep the existing Windows source/preview fallback unchanged.
+#[cfg(all(windows, target_arch = "x86_64", feature = "lazy-tester-package"))]
+pub fn data_location(action: DataLocationAction) -> io::Result<DataLocation> {
+    independent_bootstrap::product_profiles::location(action)
 }
+
+#[cfg(all(windows, not(all(target_arch = "x86_64", feature = "lazy-tester-package"))))]
+pub fn data_location(action: DataLocationAction) -> io::Result<DataLocation> {
+    let _ = action;
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "Data locations require the Lazy Tester product build",
+    ))
+}
+
+#[cfg(not(windows))]
+fn unsupported_native_profiles() -> io::Error {
+    io::Error::new(
+        io::ErrorKind::Unsupported,
+        "Minecraft Education profile management is not implemented on this operating system",
+    )
+}
+
+#[cfg(not(windows))]
+pub fn data_location(_: DataLocationAction) -> io::Result<DataLocation> {
+    Err(unsupported_native_profiles())
+}
+
+#[cfg(all(windows, target_arch = "x86_64", feature = "lazy-tester-package"))]
 pub fn profile_binding(import: bool) -> io::Result<ProfileBinding> {
-    #[cfg(all(windows, target_arch = "x86_64", feature = "lazy-tester-package"))]
-    { independent_bootstrap::profile_binding::run(import) }
-    #[cfg(not(all(windows, target_arch = "x86_64", feature = "lazy-tester-package")))]
-    { let _ = import; Ok(ProfileBinding { schema: 1, required: false, configured: true, issue: None }) }
+    independent_bootstrap::profile_binding::run(import)
+}
+
+#[cfg(all(windows, not(all(target_arch = "x86_64", feature = "lazy-tester-package"))))]
+pub fn profile_binding(import: bool) -> io::Result<ProfileBinding> {
+    let _ = import;
+    Ok(ProfileBinding { schema: 1, required: false, configured: true, issue: None })
+}
+
+// A non-Windows GUI must never show five profiles as ready merely because no
+// profile binder exists. No account/world mutation or simulated readiness.
+#[cfg(not(windows))]
+pub fn profile_binding(_: bool) -> io::Result<ProfileBinding> {
+    Err(unsupported_native_profiles())
 }
 
 // Internal same-executable mode, never a Tauri command or Launch admission.
@@ -878,6 +912,29 @@ pub fn inspect_native_workspace() -> io::Result<NativeWorkspaceObservation> {
 #[cfg(test)]
 mod native_workspace_tests {
     use super::*;
+
+    #[cfg(not(windows))]
+    #[test]
+    fn unsupported_platform_never_claims_profile_or_data_readiness() {
+        for import in [false, true] {
+            assert_eq!(
+                profile_binding(import).unwrap_err().kind(),
+                io::ErrorKind::Unsupported,
+            );
+        }
+        for action in [
+            DataLocationAction::Inspect,
+            DataLocationAction::Open,
+            DataLocationAction::Locate,
+            DataLocationAction::Choose,
+        ] {
+            assert_eq!(
+                data_location(action).unwrap_err().kind(),
+                io::ErrorKind::Unsupported,
+            );
+        }
+        assert!(!maybe_run_education_startup_observation());
+    }
 
     #[test]
     fn registered_native_candidate_requires_a_fresh_live_window() {

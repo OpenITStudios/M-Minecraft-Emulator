@@ -159,6 +159,15 @@ export function verifyRepository(root,g0=false) {
   const gameSource=read('Development/apps/desktop/src-tauri/src/engine/native_clients.rs');
   assert.ok(!/OfficialSandboxieBackend|request_sandbox_client_02|collect-sandboxie-feasibility/.test(gameSource),
     'Legacy Sandboxie Client02 source must remain retired');
+  // Windows developer preview status must never become a non-Windows
+  // Minecraft profile-ready signal before a real backend is implemented.
+  const nonWindowsBinding = gameSource.match(/#\[cfg\(not\(windows\)\)\]\s*pub fn profile_binding\([^)]*\) -> io::Result<ProfileBinding> \{([^}]*)\}/)?.[1];
+  const nonWindowsLocation = gameSource.match(/#\[cfg\(not\(windows\)\)\]\s*pub fn data_location\([^)]*\) -> io::Result<DataLocation> \{([^}]*)\}/)?.[1];
+  assert.ok(nonWindowsBinding && nonWindowsLocation &&
+    /Err\(unsupported_native_profiles\(\)\)/.test(nonWindowsBinding) &&
+    /Err\(unsupported_native_profiles\(\)\)/.test(nonWindowsLocation) &&
+    /#\[cfg\(not\(windows\)\)\]\s*fn unsupported_native_profiles\(\) -> io::Error \{[\s\S]*?io::ErrorKind::Unsupported/.test(gameSource),
+    'Non-Windows profile binding and storage must fail closed, never claim Ready');
   const launcher=read('Development/apps/desktop/src-tauri/src/main.rs');
   assert.ok(!launcher.includes('maybe_run_profile_helper'), 'Retired fork helper role must not start');
   assert.ok(read('Development/apps/desktop/scripts/prepare-package-binaries.mjs').includes('const LEGACY_PACKAGE_RELEASE_APPROVED = false;'),'Legacy package hold must remain');

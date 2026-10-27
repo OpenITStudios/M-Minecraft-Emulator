@@ -19,6 +19,20 @@ lifecycle: ACTIVE
 
 This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build tooling in [Isolation Source Tooling](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md) is retired product history, not the native engine. The only active goal, blocker and next action are in [planning/development.md](../../planning/development.md). Treat historical `Next` here as superseded; inspect owning source and consumers.
 
+## Native profile readiness boundary — 28 October 2026
+
+The native profile owner now distinguishes the reviewed installed Windows
+product, the existing Windows source/preview fallback, and unsupported
+non-Windows targets using mutually exclusive Rust `cfg` declarations.
+`profile_binding` and `data_location` return `Unsupported` on non-Windows,
+rather than returning a false `configured: true` report. Existing Svelte
+binding-error UI already treats this as unavailable and disables launch;
+the public profile-binding JSON schema, Windows behavior, session IPC and
+installed data remain unchanged. The native session and workspace owners
+already refuse unsupported game operations. No Mac account, game process,
+window or profile backend is introduced; unit-test and source guards are
+authored but NOT_EXECUTED.
+
 ## Native presentation target boundary — 28 October 2026
 
 `workspace_surface.rs` now compiles its existing native HWND/DWM

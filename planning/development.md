@@ -127,8 +127,17 @@ non-Windows Rust regression and source guard have not executed; Mac build,
 account/profile isolation, game playback and actual optimizations remain
 NOT_EXECUTED.
 
+## Unsupported-platform profile readiness — 28 October 2026
+
+Source-only: `native_clients` now separates installed Windows, existing
+Windows developer fallback, and non-Windows profile admission. On unsupported
+OS, binding/data-location explicitly return `Unsupported`, never a false
+`configured: true`; the existing UI cannot enable five launchers from this
+path. Windows product behavior and IPC schema are unchanged. Native refusal
+regression and static repository guard authored; none executed.
+
 ## Next bounded action
 
-Inspect any remaining unguarded Windows-only source imports in the Tauri
-entrypoint and live owner graph; correct one verified barrier at a time.
-Do not introduce an unproven macOS game provider or run local PC tests.
+Audit non-Windows Tauri startup and remaining OS-specific source barriers,
+retaining an explicit unsupported-game state rather than simulated readiness.
+No build, CI, Local PC, or gameplay tests authorized.
