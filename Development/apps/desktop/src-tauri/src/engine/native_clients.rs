@@ -95,18 +95,22 @@ pub fn maybe_run_education_startup_observation() -> bool {
 }
 
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashSet,
-    io,
-    sync::{Mutex, MutexGuard},
-    time::{Duration, Instant},
-};
+use std::{collections::HashSet, io};
 
-// One native launch request at a time. A registered game candidate already
-// running must be selected, never launched again as if it were absent.
+// Windows Explorer launch admission is not part of the portable observation
+// contract. Keep its lock and clock out of unsupported-platform builds.
+#[cfg(windows)]
+use std::{sync::{Mutex, MutexGuard}, time::{Duration, Instant}};
+
+// One Windows-native launch request at a time. A registered game candidate
+// already running must be selected, never launched again as if absent.
+// No mutex, cooldown, or game launch owner is compiled for macOS/Linux.
+#[cfg(windows)]
 const NATIVE_LAUNCH_RETRY_GAP: Duration = Duration::from_secs(10);
+#[cfg(windows)]
 static NATIVE_LAUNCH: Mutex<Option<Instant>> = Mutex::new(None);
 
+#[cfg(windows)]
 fn acquire_native_launch() -> io::Result<MutexGuard<'static, Option<Instant>>> {
     let guard = NATIVE_LAUNCH.try_lock().map_err(|_| {
         io::Error::new(io::ErrorKind::WouldBlock, "Minecraft launch request already in progress")

@@ -118,28 +118,28 @@ OS, binding/data-location explicitly return `Unsupported`, never a false
 path. Windows product behavior and IPC schema are unchanged. Native refusal
 regression and static repository guard authored; none executed.
 
-## Tauri startup capability gate — 28 October 2026
+## Tauri startup and instance boundaries — 28 October 2026
 
-A read-only native enum now reports compiled Windows x64 backend presence,
-not game readiness. The Svelte startup checks it once before profile/binding
-IPC, displays `Unsupported` explicitly without retries or native work,
-and preserves existing Windows initialization. Non-Windows Tauri verifies
-the default `main` window; Windows-only product packaging is rejected on
-other OS targets. IPC allowlist, source guard and synthetic frontend/native
-regressions updated. Build, tests, gameplay and macOS support NOT_EXECUTED.
+Read-only `WindowsNative` / `Unsupported` capability gates Svelte
+profile requests and honest UI messaging before Windows binding retries.
+The default non-Windows Tauri main window is observed, not recreated.
+Windows product WebView overrides, `LOCALAPPDATA` instance lease,
+release guards and IPC schema are preserved behind Windows-only gates.
+Mac product packaging is prohibited; no shell compilation or gameplay
+has been executed.
 
-## Desktop instance lease boundary — 28 October 2026
+## Native observation compile boundary — 28 October 2026
 
-Non-Windows startup no longer executes the Windows desktop instance lease,
-which otherwise requires `LOCALAPPDATA` or `APPDATA` before opening the
-Tauri window. The entire `app_instance` module remains Windows-only; its
-single-instance file/ownership rules, profile paths and release contracts
-are unchanged. Non-Windows is a read-only unsupported-game UI, not a
-native game host. Repository guard authored; no Rust builds/tests or OS
-runtime acceptance executed.
+The mounted Win32 process/window/pipe observers are already target-gated.
+`native_clients` now also keeps the unused non-Windows Explorer-launch
+mutex, cooldown and admission function Windows-only, without altering
+Windows behavior or public IPC. This is source compilation hygiene, not
+a demonstrated runtime CPU/RAM improvement. Mac diagnostic shell readiness
+requires its own compile, main WebView, capability IPC, exit policy and
+separate package contract. All remain NOT_EXECUTED.
 
 ## Next bounded action
 
-Review remaining non-Windows compile assumptions in game/window observation,
-and inventory any proof still needed before declaring a diagnostic macOS
-binary feasible. Keep tests/builds/CI and Local PC work NOT_EXECUTED.
+Audit one remaining Mac diagnostic-shell lifecycle boundary: unsupported
+platform shutdown and absence of native game/helper work. Do not add a Mac
+game controller, run build/tests, or publish an unsupported package.

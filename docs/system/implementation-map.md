@@ -19,6 +19,30 @@ lifecycle: ACTIVE
 
 This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build tooling in [Isolation Source Tooling](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md) is retired product history, not the native engine. The only active goal, blocker and next action are in [planning/development.md](../../planning/development.md). Treat historical `Next` here as superseded; inspect owning source and consumers.
 
+## Native process observation compile boundary — 28 October 2026
+
+A source-graph audit of mounted `native_clients.rs`,
+`native_clients_session.rs`, `instance_identity.rs`,
+`workspace_surface.rs` and `previews.rs` found their Win32 process,
+window and pipe implementations already target-gated; unsupported OS
+calls return explicit `Unsupported` or `NotImplemented`. The only
+remaining unconditional Windows-launch resource in the observer owner
+was the Explorer launch mutex / 10-second cooldown. Its imports, state
+and admission function are now `cfg(windows)` without changing the
+actual Windows launch function or timeout. No Mac game process or
+observation authority has been added.
+
+Before claiming a macOS **diagnostic shell**, separately obtain a real
+macOS Rust/Tauri compile with exact target configuration, verify the
+`main` WebView plus the native capability IPC/error UI, and inspect
+exit behavior and app-instance policy. Windows NSIS, DLLs, hard-linked
+process roles and `lazy-tester-package` must remain blocked from Mac
+packaging; any Mac artifact needs its own reviewed identifier/resources.
+Actual multi-account Minecraft Education launch, world isolation,
+window presentation, sign-in and gameplay require independent Mac
+feasibility/acceptance and are explicitly **not** implied by a shell
+compile. All these execution gates remain NOT_EXECUTED.
+
 ## Windows instance lease boundary — 28 October 2026
 
 `engine/app_instance.rs` uses a Windows `LOCALAPPDATA`/`APPDATA`
