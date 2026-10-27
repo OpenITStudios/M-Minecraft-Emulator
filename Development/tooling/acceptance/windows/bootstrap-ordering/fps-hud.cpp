@@ -244,8 +244,15 @@ bool Hud::bind(HWND owner, DWORD thread) noexcept {
         || GetAncestor(owner, GA_ROOT) != owner) return false;
     auto& s = *state_;
     try {
-        HANDLE life = OpenThread(SYNCHRONIZE, FALSE, thread);
+        HANDLE life = OpenThread(SYNCHRONIZE | THREAD_QUERY_LIMITED_INFORMATION, FALSE, thread);
         if (!life) return false;
+        DWORD confirmedPid = 0;
+        if (GetProcessIdOfThread(life) != GetCurrentProcessId()
+            || GetWindowThreadProcessId(owner, &confirmedPid) != thread
+            || confirmedPid != GetCurrentProcessId()
+            || WaitForSingleObject(life, 0) != WAIT_TIMEOUT) {
+            CloseHandle(life); return false;
+        }
         AcquireSRWLockExclusive(&s.gate);
         const bool finished = s.workerFinished.load(std::memory_order_acquire);
         if (s.ownerLife) CloseHandle(s.ownerLife);
