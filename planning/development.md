@@ -1,5 +1,38 @@
 # Current Development Handoff — v0.1
 
+## P0 MC02 normal Exit blocked by missing-HWND workspace restore — 27 October 2026
+
+A concrete circular dependency was found at the manager/desktop boundary.
+`close_all_managed` first called `release_for_close()?`, and only on
+successful native window restoration sent the retained controller's
+`SessionRequest::CloseAll`. However a game whose original HWND was
+destroyed while its original process remained alive has deliberately
+unconfirmed restoration in the workspace owner. That error prevented
+**any** normal CloseAll, including the game's newly corrected FPS STOP
+handoff. The exact "window gone / process alive" condition could thus
+block the normal-exit request before it was ever delivered.
+
+The canonical manager resource admission still owns both operations.
+After a failed release, the workspace owner now checks **all**
+original presentation helper children and their reader terminal End
+events. Only when every helper process has exited AND its reader
+completed terminal native-restore/fallback work does it restore the
+`closing` gate and allow the existing controller to attempt
+normal CloseAll. This does NOT report native restoration success:
+if the controller still cannot exit the original pinned Minecraft
+process, the UI retains the combined native-recovery/normal-exit
+failure instead of destroying the manager. An active, unresponsive,
+timed-out or unconfirmed helper blocks that fallback to avoid
+racing its window writes. No helper/game is adopted or force-killed,
+no new lifecycle actor is introduced, and non-Lazy Tester builds
+retain their existing strict release behavior.
+
+A pure source test covers the four terminal-End/child-exit
+combinations. The actual helper quiescence, Windows restoration,
+Minecraft MC02 shutdown and complete integration remain
+NOT_EXECUTED; this fixes a source-confirmed control-flow blocker,
+not proof of historical runtime root cause.
+
 ## P0 MC02 native HUD message-queue starvation — 27 October 2026
 
 The HUD worker used `while(PeekMessageW(...PM_REMOVE))` to drain

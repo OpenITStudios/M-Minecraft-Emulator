@@ -497,16 +497,34 @@ pub(crate) fn close_all_managed() -> Result<(), (bool, io::Error)> {
     let mut release_attempted = false;
     let outcome = run_manager_operation(|| {
         release_attempted = true;
-        crate::engine::workspace_surface::release_for_close()?;
+        let release=crate::engine::workspace_surface::release_for_close();
         #[cfg(feature = "lazy-tester-package")]
         {
-            crate::engine::native_clients_session::request(
+            let recovery_issue=release.err();
+            if let Some(ref error)=recovery_issue {
+                // The previous strict `?` created a circular dependency:
+                // a live game with its HWND already gone made Restore fail,
+                // which prevented us ever asking that game to close.
+                // Never race a helper still performing native window writes.
+                if !crate::engine::workspace_surface::allow_game_close_after_failed_restore()? {
+                    return Err(io::Error::other(format!(
+                        "Window restoration unconfirmed and recovery helper still active or unverified: {error}. Minecraft normal close was not requested."
+                    )));
+                }
+            }
+            let close=crate::engine::native_clients_session::request(
                 crate::engine::native_clients_session::SessionRequest::CloseAll,
-            ).map(|_| ())
+            ).map(|_| ());
+            match (recovery_issue,close) {
+                (Some(recovery),Err(error))=>Err(io::Error::other(format!(
+                    "Window restoration unconfirmed: {recovery}. Minecraft normal close is also pending: {error}"
+                ))),
+                (_,result)=>result,
+            }
         }
         #[cfg(not(feature = "lazy-tester-package"))]
         {
-            Ok(())
+            release
         }
     });
     outcome.map_err(|error| (release_attempted, error))

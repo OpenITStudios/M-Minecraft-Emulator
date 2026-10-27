@@ -1154,6 +1154,13 @@ mod controller {
         }
 
         #[test]
+        fn failed_restoration_may_close_games_only_after_helper_and_reader_are_done() {
+            assert!(!close_only_if_helpers_quiesced(false,false));
+            assert!(!close_only_if_helpers_quiesced(false,true));
+            assert!(!close_only_if_helpers_quiesced(true,false));
+            assert!(close_only_if_helpers_quiesced(true,true));
+        }
+        #[test]
         fn incomplete_recovery_reports_each_failed_step() {
             let ok = Ok(());
             let parking = Err(io::Error::other("park failed"));
@@ -1350,6 +1357,31 @@ mod controller {
             if let Ok(mut state)=SURFACE.lock(){state.closing=false;}
         }
         result
+    }
+    // A failed Restore is not permission to skip the user's normal game
+    // Exit forever. It is safe to *request* that exit only after every
+    // original native presentation helper has completed and the manager
+    // reader has received its terminal End result. A failed End is still
+    // unconfirmed window recovery, never a successful restoration.
+    fn close_only_if_helpers_quiesced(ended:bool, child_exited:bool)->bool {
+        ended && child_exited
+    }
+    pub fn allow_game_close_after_failed_restore()->io::Result<bool> {
+        let mut state=SURFACE.lock().map_err(|_|io::Error::other("Workspace state unavailable"))?;
+        if let Some(lease)=state.active.as_mut() {
+            if !close_only_if_helpers_quiesced(lease.ended.is_some(),lease.child.try_wait()?.is_some()) {
+                return Ok(false);
+            }
+        }
+        for lease in &mut state.parked {
+            if !close_only_if_helpers_quiesced(lease.ended.is_some(),lease.child.try_wait()?.is_some()) {
+                return Ok(false);
+            }
+        }
+        // Prevent foreground/resize native surface updates while the
+        // existing controller is servicing normal WM_CLOSE and dialog IDOK.
+        state.closing=true;
+        Ok(true)
     }
     pub fn cancel_close() {if let Ok(mut state)=SURFACE.lock(){state.closing=false;}}
     pub fn release() -> io::Result<()> {
@@ -2518,7 +2550,7 @@ mod controller {
     }
 }
 pub use controller::{
-    is_active, present_retained, present_verified, release, release_for_close, cancel_close, release_target, release_managed_slot, suspend, update,
+    is_active, present_retained, present_verified, release, release_for_close, allow_game_close_after_failed_restore, cancel_close, release_target, release_managed_slot, suspend, update,
 };
 #[cfg(windows)]
 pub use controller::follow_manager;
