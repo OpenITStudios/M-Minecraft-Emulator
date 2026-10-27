@@ -410,6 +410,16 @@ mod native {
         }
         Ok(())
     }
+    // A successful OS call is not proof that a game's window retained the
+    // requested checkpoint geometry/frame. Compare only fields that this
+    // recovery owner actually changes, not gameplay-owned modal flags.
+    fn restored_checkpoint_matches(saved:&Saved,style:i64,shell:i64,bounds:Rectangle)->bool {
+        let frame_mask=(WS_CAPTION | WS_THICKFRAME | WS_MAXIMIZE) as i64;
+        let shell_mask=(WS_EX_APPWINDOW | WS_EX_TOOLWINDOW) as i64;
+        bounds==saved.rect
+            && (style & frame_mask)==(saved.style & frame_mask)
+            && (shell & shell_mask)==(saved.extended_style & shell_mask)
+    }
     pub(super) fn capture(target: OwnedProcess) -> io::Result<Saved> {
         let (_process, window) = hwnd(&target)?;
         let (window_thread_id,window_class_name)=window_fingerprint(window,target.pid)?;
@@ -822,6 +832,24 @@ mod native {
             {
                 return Err(io::Error::last_os_error());
             }
+            // Restore acknowledgement requires readback; game or Windows may
+            // have changed its HWND/geometry during the native placement.
+            verify_saved_window(saved,window)?;
+            progress("restore/verify")?;
+            let mut current:RECT=std::mem::zeroed();
+            if GetWindowRect(window,&mut current)==0 {
+                return Err(io::Error::last_os_error());
+            }
+            let bounds=Rectangle {
+                x:current.left,y:current.top,
+                width:current.right-current.left,
+                height:current.bottom-current.top,
+            };
+            if !restored_checkpoint_matches(saved,GetWindowLongPtrW(window,GWL_STYLE) as i64,
+                GetWindowLongPtrW(window,GWL_EXSTYLE) as i64,bounds) {
+                return Err(io::Error::new(io::ErrorKind::WouldBlock,
+                    "Window recovery unconfirmed: game frame or geometry differs from its saved checkpoint"));
+            }
         }
         Ok(())
     }
@@ -857,6 +885,29 @@ mod native {
         }
     }
     #[test]
+    fn restore_requires_saved_frame_shell_and_exact_geometry() {
+        let saved=Saved {
+            target:OwnedProcess {
+                pid:100,created_file_time:"123".into(),session_id:1,
+                window_handle:"0x999".into(),responding:true,
+            },
+            window_thread_id:2,window_class_name:"Synthetic".into(),
+            style:(WS_CAPTION | WS_THICKFRAME) as i64,
+            extended_style:WS_EX_APPWINDOW as i64,
+            rect:Rectangle{x:30,y:75,width:800,height:450},manager_pid:200,
+        };
+        assert!(restored_checkpoint_matches(&saved,saved.style,
+            saved.extended_style,saved.rect));
+        assert!(!restored_checkpoint_matches(&saved,0,
+            saved.extended_style,saved.rect));
+        assert!(!restored_checkpoint_matches(&saved,saved.style,
+            WS_EX_TOOLWINDOW as i64,saved.rect));
+        assert!(!restored_checkpoint_matches(&saved,saved.style,
+            saved.extended_style,Rectangle{x:31,..saved.rect}));
+        assert!(restored_checkpoint_matches(&saved,saved.style | WS_DISABLED as i64,
+            saved.extended_style,saved.rect));
+    }
+    #[test]
     fn recovery_never_applies_saved_frame_to_a_different_window_fingerprint() {
         use windows_sys::Win32::System::Threading::{GetCurrentProcess,GetCurrentProcessId,GetProcessTimes};
         use windows_sys::Win32::UI::WindowsAndMessaging::{
@@ -885,7 +936,7 @@ mod native {
                     responding:true,
                 };
                 let saved=capture(target).unwrap();
-                assert_eq!(saved.window_class_name,"Static");
+                assert!(saved.window_class_name.eq_ignore_ascii_case("static"));
                 assert_ne!(saved.window_thread_id,0);
                 let original=GetWindowLongPtrW(window,GWL_STYLE);
                 let mut different=saved.clone();

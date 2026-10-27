@@ -1,5 +1,21 @@
 # Current Development Handoff — v0.1
 
+## P0 native restoration completion uses readback — 27 October 2026
+
+The native restore path previously accepted SetWindowPos's success
+return as completed recovery without reobserving the game frame,
+app/toolwindow shell bits and original checkpoint rectangle.
+It now checks the saved HWND fingerprint again after placement,
+calls GetWindowRect and reads back only the exact frame/shell fields
+managed by the recovery owner. If any required field differs, it
+returns explicit recovery-unconfirmed instead of acknowledging
+Restored. Gameplay-owned flags such as modal WS_DISABLED are
+not overwritten or compared. A synthetic pure fixture checks
+the positive and mismatched frame/shell/geometry cases.
+These defensive checks are not a transactional Windows operation
+or a guarantee against same-thread, same-class HWND recycling.
+Runtime/Svelte/Rust/Windows/Minecraft tests remain NOT_EXECUTED.
+
 ## P0 checkpoint HWND fingerprint before restoration — 27 October 2026
 
 The native recovery checkpoint previously retained only the numerical
