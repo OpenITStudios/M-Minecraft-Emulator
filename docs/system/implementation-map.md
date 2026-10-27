@@ -19,6 +19,33 @@ lifecycle: ACTIVE
 
 This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build tooling in [Isolation Source Tooling](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md) is retired product history, not the native engine. The only active goal, blocker and next action are in [planning/development.md](../../planning/development.md). Treat historical `Next` here as superseded; inspect owning source and consumers.
 
+## macOS diagnostic shell feasibility inventory — 28 October 2026
+
+| Boundary | Exact source finding | Proof ceiling |
+| --- | --- | --- |
+| Rust target | Desktop Win32 crates and session/window/process implementations use `cfg(windows)`; portable core is retained | Mac Rust/Tauri compilation NOT_EXECUTED |
+| Startup/IPC | Tauri base config declares one `main` window; frontend asks `lazy_tester_backend_support` before profile IPC | Actual Mac WebView, native invoke and error UI NOT_EXECUTED |
+| Game isolation | Profile binding, named-pipe sessions, DWM and close authority are unsupported on Mac | No Mac login/world/process/five-client capability |
+| Window/exit | Default Tauri close is used; no native game-helper startup or Windows recovery cleanup | Mac event-loop exit/reopen behavior NOT_EXECUTED |
+| WebView permissions | Existing inline Tauri capability is scoped to `main` with event listen/unlisten plus drag, maximize, minimize and close | No macOS privacy/Accessibility/Screen Recording entitlement approved |
+| App instance | Windows `LOCALAPPDATA` exclusive marker is not compiled for non-Windows | Mac single-instance/second-window admission NOT_IMPLEMENTED |
+| Packaging | Base is Windows NSIS with PNG/ICO icons; preview and product overlays contain Windows identities/hooks/DLLs | Mac app/dmg, icns, identifier, signing/notarization NOT_REVIEWED |
+
+Source hardening: `build.rs` now refuses **both**
+`native-workspace-preview` and `lazy-tester-package` Cargo features on
+non-Windows targets, including debug builds. The original Windows release
+identity and NSIS gates remain intact; no-feature diagnostic shell source
+is still eligible for future compilation inspection, **not** distribution.
+The existing native preview source verifier now pins the main-window
+capability scope and Windows-only bundle targets. These checks are authored,
+NOT_EXECUTED. Tauri's official configuration lists `nsis` for Windows and
+`app`/`dmg` for Mac:
+https://v2.tauri.app/reference/config/
+
+Do not introduce a Mac packaging overlay, permissions, profile provider,
+new instance coordinator or game helper until the separate host feasibility
+and security review are authorized.
+
 ## Unsupported-platform shutdown boundary — 28 October 2026
 
 The Windows `CloseRequested` confirmation, managed `CloseAll`,

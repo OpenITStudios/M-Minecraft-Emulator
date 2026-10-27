@@ -125,18 +125,20 @@ release guards and IPC schema are preserved behind Windows-only gates.
 Mac product packaging is prohibited; no shell compilation or gameplay
 has been executed.
 
-## Native observation and exit boundaries — 28 October 2026
+## Native exit and macOS feasibility — 28 October 2026
 
-Win32 process/window/pipe observers and Windows Explorer launch admission
-are target-gated. The Windows `CloseRequested` recovery handshake and
-post-Tauri native cleanup are now also `cfg(windows)`. Non-Windows uses
-ordinary Tauri window close; reserved `--workspace-surface` arguments
-exit without starting a game/window helper. Windows lifecycle and IPC
-remain unchanged. Static checks authored; Rust builds, macOS window/exit
-and Windows gameplay NOT_EXECUTED.
+The Windows process/window/pipe observers and native close/cleanup remain
+target-gated; non-Windows retains default Tauri close and no native helper.
+Mac source inventory is recorded in `docs/system/implementation-map.md`:
+compile/window/capability IPC, permission scope, single-instance, OS close
+and Mac package/signing remain unverified or absent. The existing
+`native-workspace-preview` feature, not just the Lazy Tester product
+feature, is now refused by `build.rs` on all non-Windows targets. Source
+package verifier pins NSIS-only base and main-window event/window permissions.
+No package, CI, tests or Mac/Windows gameplay has been executed.
 
 ## Next bounded action
 
-Finish a bounded source-only feasibility inventory for the diagnostic
-macOS shell, including remaining compile, packaging and permission gates;
-do not claim Mac game support or run Local PC/CI tests.
+Audit the non-Windows frontend/window UX for unsupported controls or
+misleading exit/recovery text; change only proven UI defects without
+introducing Mac gameplay or running Local PC tests.

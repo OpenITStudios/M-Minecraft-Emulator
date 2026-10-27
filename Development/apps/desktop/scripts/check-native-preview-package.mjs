@@ -45,6 +45,10 @@ export function verifyNativePreviewPackage() {
     "Native preview identifier must be fixed and independently reviewable.");
   fail(current.productName === "Minecraft Instance Manager Preview",
     "Native preview product name is unexpected.");
+  // This is a Windows NSIS product, not a macOS diagnostic release recipe.
+  // A Mac artifact needs a separately reviewed identity, icons and bundle.
+  fail(JSON.stringify(base.bundle?.targets) === JSON.stringify(["nsis"]),
+    "Base release target must remain Windows NSIS; no implicit macOS packaging.");
   fail(current.mainBinaryName === "minecraft-instance-manager-preview",
     "Native preview must have an executable filename distinct from the old VM binary.");
   fail(current.bundle?.windows?.nsis?.installMode === "currentUser",
@@ -62,6 +66,19 @@ export function verifyNativePreviewPackage() {
     "Preview configuration must explicitly delete legacy installer hooks.");
   fail(!Object.hasOwn(native, "plugins") && current.app?.security?.csp === base.app?.security?.csp,
     "Preview must not silently broaden desktop security permissions.");
+  const capabilities = base.app?.security?.capabilities;
+  const limited = capabilities?.length === 1 && capabilities[0];
+  fail(limited && limited.identifier === "workspace-events" &&
+    JSON.stringify(limited.windows) === JSON.stringify(["main"]) &&
+    JSON.stringify([...limited.permissions].sort()) === JSON.stringify([
+      "core:event:allow-listen",
+      "core:event:allow-unlisten",
+      "core:window:allow-start-dragging",
+      "core:window:allow-is-maximized",
+      "core:window:allow-minimize",
+      "core:window:allow-toggle-maximize",
+      "core:window:allow-close",
+    ].sort()), "Base Tauri WebView permissions must stay main-window-only and explicitly reviewed.");
   fail(scripts["build:app"] === "npm run build:lazy-tester" &&
       legacy.includes("PACKAGE_BLOCKED_NATIVE_FEASIBILITY") &&
       legacy.includes("LEGACY_PACKAGE_RELEASE_APPROVED = false"),
@@ -79,6 +96,11 @@ export function verifyNativePreviewPackage() {
   fail(cargo.includes("native-workspace-preview = []") &&
       !cargo.includes('default = ["custom-protocol", "native-workspace-preview"]'),
     "Preview helper feature must be opt-in, never default.");
+  fail(build.includes('let native_preview = std::env::var_os("CARGO_FEATURE_NATIVE_WORKSPACE_PREVIEW").is_some();') &&
+      build.includes('let lazy_package = std::env::var_os("CARGO_FEATURE_LAZY_TESTER_PACKAGE").is_some();') &&
+      build.includes('if (native_preview || lazy_package)') &&
+      build.includes('std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows")'),
+    "Both Windows-native features must fail closed for all unsupported OS targets.");
   fail(build.includes('CARGO_FEATURE_NATIVE_WORKSPACE_PREVIEW') &&
       build.includes('Some("com.mivubi.minecraft.instancemanager.preview")') &&
       build.includes('Some("minecraft-instance-manager-preview")') &&
