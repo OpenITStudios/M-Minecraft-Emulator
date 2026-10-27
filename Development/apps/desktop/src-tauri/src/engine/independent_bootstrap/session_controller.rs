@@ -261,7 +261,7 @@ impl Sessions {
                 // for process exit while PolicyChannel::Drop (which signals
                 // STOP) could only run *after* that same process exit.
                 if let Some(policy)=child.policy.as_ref() {
-                    policy.begin_normal_close();
+                    policy.begin_normal_close()?;
                 }
                 // A posted dialog command is NOT an exit acknowledgement. Always
                 // retain the game process until its original HANDLE is signaled.

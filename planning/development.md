@@ -1,5 +1,20 @@
 # Current Development Handoff — v0.1
 
+## P0 MC02 STOP signal acknowledgement before WM_CLOSE — 27 October 2026
+
+The controller now rejects a selected game's normal-exit request if
+its OWN sticky pacing STOP event cannot be observed signaled after
+`PolicyChannel::begin_normal_close()`. Previously `Binding::finish()`
+signaled STOP and CHANGED without checking Win32 outcomes; the
+corrected ordering could silently proceed despite a failed STOP.
+The owner now probes its original manual-reset event with zero wait,
+before posting WM_CLOSE/IDOK. A signaled event confirms only the
+kernel event state, not render-thread consumption, game exit or
+recovery success. Failure is explicit and does not touch other
+launcher policies. Five-policy synthetic fixtures now assert the
+stop result and idempotence. No new IPC, worker, process targeting
+or force-kill. Tests remain authored NOT_EXECUTED.
+
 ## P0 MC02 exact shutdown dependency: FPS policy STOP emitted after process exit — 27 October 2026
 
 A source-level causal path was traced through three existing owners:

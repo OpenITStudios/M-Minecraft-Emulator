@@ -39,7 +39,7 @@ mod windows {
     };
     use windows_sys::Win32::System::Threading::SYNCHRONIZATION_SYNCHRONIZE as SYNCHRONIZE;
     use windows_sys::Win32::{
-        Foundation::{DuplicateHandle, FILETIME, HANDLE, HWND, WAIT_TIMEOUT},
+        Foundation::{DuplicateHandle, FILETIME, HANDLE, HWND, WAIT_OBJECT_0, WAIT_TIMEOUT},
         System::{
             RemoteDesktop::ProcessIdToSessionId,
             Threading::{
@@ -291,8 +291,17 @@ mod windows {
         // late to break a shutdown dependency on the FPS pacer. This is a
         // sticky one-way stop: if the game declines Exit, it remains playable
         // without FPS limits until its next separately owned launch.
-        pub(crate) fn begin_normal_close(&self) {
+        pub(crate) fn begin_normal_close(&self) -> io::Result<()> {
             self.binding.finish();
+            // A failure to signal STOP must not be mistaken for an
+            // acknowledged render-wait release. Read back our original
+            // manual-reset kernel event without waiting for Minecraft.
+            match unsafe { WaitForSingleObject(self.binding.stop.as_raw_handle() as _, 0) } {
+                WAIT_OBJECT_0 => Ok(()),
+                WAIT_TIMEOUT => Err(io::Error::new(io::ErrorKind::WouldBlock,
+                    "Game FPS pacing STOP event is not signaled; normal exit not confirmed")),
+                _ => Err(io::Error::last_os_error()),
+            }
         }
 
         // Order: foreground level, change notification, sticky stop, manager process.
@@ -775,7 +784,7 @@ mod windows {
             // waiters see STOP immediately, *while the child is still
             // alive*, and all four other channels keep their own policy.
             assert!(readers.iter().all(|handles| !state(&handles[2])));
-            channels[1].begin_normal_close();
+            channels[1].begin_normal_close().unwrap();
             assert!(state(&readers[1][2]));
             assert!(!state(&readers[1][0]));
             assert!(channels[1].reader_handles().is_err());
@@ -786,7 +795,7 @@ mod windows {
             }
             // Double close request is idempotent. Original process pins and
             // all other launcher stop/changed handles remain unchanged.
-            channels[1].begin_normal_close();
+            channels[1].begin_normal_close().unwrap();
             assert!(state(&readers[1][2]));
             let stop_result = stop();
             assert!(
