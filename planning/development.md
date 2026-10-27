@@ -101,7 +101,10 @@ Latest 6dff3d1 runtime: launch two sessions PASS; first switch test failed becau
 Minecraft 2 was covered, retry six switches/drag PASS. Pixels/input NOT_PROVEN.
 Full exit timed out: MC1 exited, MC2 and manager remain. No force termination.
 Logs workspace/runs/current-two-session-{launch,presentation,presentation-retry,exit}.log.
-Next: inspect lost game window during close, FPS focus policy and process grouping;
+Source: full exit can confirm the exact owned exit dialog even if its main window
+is missing; identity rechecked before posting. Cargo check and refusal test PASS;
+actual dialog without window NOT_EXECUTED. Other stuck states still require diagnosis.
+Next: inspect FPS focus policy and process grouping;
 source tests first without PC control. Then verify two real sessions,
 including visible output, interaction, drag, preview, switching and one-click exit.
 User explicitly AUTHORIZED2sessions started by Lazy Tester for Launch/switch/drag/

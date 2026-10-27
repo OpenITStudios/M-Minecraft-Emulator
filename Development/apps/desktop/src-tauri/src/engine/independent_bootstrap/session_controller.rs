@@ -215,7 +215,7 @@ impl Sessions {
             let child=&started.children[0];
             let outcome=(||{
                 child.identity()?;
-                let target=profile.process.ok_or_else(||invalid("Game window is not ready; wait for it to finish starting"))?;
+                let Some(target)=profile.process else { if confirm_owned_exit(child)? {confirmed[index]=true;return Ok(());} return Err(invalid("Game window is not ready; wait for it to finish starting")); };
                 if target.pid!=child.pid || target.created_file_time!=child.created.to_string(){return Err(invalid("Game identity changed"));}
                 if confirm_education_exit(&target)? {confirmed[index]=true;return Ok(());}
                 close_verified_window(&target)
@@ -471,8 +471,18 @@ fn close_verified_window(target:&OwnedProcess)->io::Result<()> {
 // Minecraft Education's standard English exit prompt is an unowned native dialog.
 // Unknown/localized prompts remain for the user; never click arbitrary dialogs.
 fn confirm_education_exit(target:&OwnedProcess)->io::Result<bool> {
-    use windows_sys::Win32::{Foundation::HWND,UI::{Input::KeyboardAndMouse::IsWindowEnabled,WindowsAndMessaging::*}};
     if !valid_retained_window(target) { return Ok(false); }
+    confirm_exit_dialog(target.pid, || valid_retained_window(target))
+}
+
+fn confirm_owned_exit(child:&PendingEducationBootstrap)->io::Result<bool> {
+    let (pid, birth)=child.identity()?;
+    confirm_exit_dialog(pid, || child.identity().ok()==Some((pid,birth)))
+}
+
+fn confirm_exit_dialog(owned_pid:u32, verify:impl Fn()->bool)->io::Result<bool> {
+    use windows_sys::Win32::{Foundation::HWND,UI::{Input::KeyboardAndMouse::IsWindowEnabled,WindowsAndMessaging::*}};
+    if !verify() { return Ok(false); }
     struct Search { pid:u32, matches:Vec<isize> }
     unsafe fn text(window:HWND)->Option<String> {
         let mut buffer=[0u16;256];let mut count=0usize;
@@ -494,11 +504,11 @@ fn confirm_education_exit(target:&OwnedProcess)->io::Result<bool> {
         }
         1
     }
-    let mut search=Search{pid:target.pid,matches:Vec::new()};
+    let mut search=Search{pid:owned_pid,matches:Vec::new()};
     if unsafe {EnumWindows(Some(find),&mut search as *mut Search as isize)}==0 {return Err(io::Error::last_os_error());}
-    if search.matches.len()!=1 || !valid_retained_window(target) {return Ok(false);}
+    if search.matches.len()!=1 || !verify() {return Ok(false);}
     let dialog=search.matches[0] as HWND;let mut pid=0;
-    if unsafe {GetWindowThreadProcessId(dialog,&mut pid)}==0 || pid!=target.pid {return Ok(false);}
+    if unsafe {GetWindowThreadProcessId(dialog,&mut pid)}==0 || pid!=owned_pid || !verify() {return Ok(false);}
     if unsafe {PostMessageW(dialog,WM_COMMAND,1,0)}==0 {return Err(io::Error::last_os_error());}
     Ok(true)
 }
@@ -766,6 +776,11 @@ mod tests {
             if IsWindow(own)!=0{DestroyWindow(own);}DestroyWindow(other);
             if let Err(error)=result{std::panic::resume_unwind(error);}
         }
+    }
+
+    #[test]
+    fn exit_dialog_refuses_unverified_process_without_enumerating_windows() {
+        assert!(!confirm_exit_dialog(std::process::id(), || false).unwrap());
     }
 
     #[test]
