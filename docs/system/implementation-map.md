@@ -19,6 +19,21 @@ lifecycle: ACTIVE
 
 This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build tooling in [Isolation Source Tooling](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md) is retired product history, not the native engine. The only active goal, blocker and next action are in [planning/development.md](../../planning/development.md). Treat historical `Next` here as superseded; inspect owning source and consumers.
 
+## Windows-only Cargo dependencies — 28 October 2026
+
+The desktop crate declares the same `windows` and `windows-sys` versions and
+Win32 feature sets exclusively under `[target.'cfg(windows)'.dependencies]`,
+matching the already target-scoped runtime-core manifest. Common Rust/Tauri
+dependencies remain unchanged; the existing Windows controller, HWND/DWM,
+named-pipe transport, Authenticode, audio, DLL and installer contracts are
+unchanged. Cargo still resolves cross-target packages into its lockfile, so
+this move does not require removing Windows packages from `Cargo.lock`.
+`tooling/repository/verify.mjs` rejects unscoped/absent native bindings
+and missing critical Win32 features; its negative regression fixtures are
+authored, not executed. This is dependency hygiene, **not** a macOS build
+claim: current `workspace_surface` controller and profile bootstrap remain
+Windows-specific, and no Mac game/session backend exists.
+
 ## Read-only storage inspection policy — 27 October 2026
 
 `runtime-core/src/inspection_budget.rs` owns the portable monotonic,

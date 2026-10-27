@@ -83,32 +83,13 @@ publication or local-PC testing is authorized in this task.
 
 ## Efficiency source review — 27 October 2026
 
-At retirement baseline `01b4807e3321ed4077eb73d468e25b7a90070549`, the 28 desktop Rust source/build
-owners outside the six research fixture modules were inspected for imports
-of `independent_job`, `independent_private_hive`, `independent_private_files`,
-`independent_root_access`, `independent_pipe_peer` and
-`independent_pipe_server`. There were no production consumers. These six
-modules (2,866 source lines combined) are now declared only under
-`#[cfg(all(windows, test))]`; their existing Windows unit-test coverage stays
-reachable. This is a production compile-graph reduction, **not** verified
-runtime CPU/RAM savings. Actual compiler/tests/bundles NOT_EXECUTED.
-
-Review identified three separate scheduling concerns, not yet changed:
-- `session_controller.rs` serializes lifecycle operations with
-  `InspectStorage`; repeated directory/cache time budgets have now been
-  consolidated, but native inspection and settings/clear metadata may still
-  block. Never allow parallel game authorities.
-- Idle controller receive polling is 250 ms; normal-close observation polls
-  every 50 ms for up to 20 seconds. Both are bounded, and neither is proof of
-  a meaningful CPU bottleneck. Preserve exact dialog/progress/exit semantics.
-- Mounted Svelte status refresh runs every two seconds while visible;
-  native DWM previews and focus events already use one owned worker each.
-  Avoid adding a second observer or an unverified periodic optimizer.
-
-This phase is source-only. Do not claim five-session gameplay, MC02 normal
-exit, power/RAM improvement, Windows build, native DLL/installer acceptance,
-or macOS support from these changes. No tests, CI, games, or user PC operations
-were run.
+Six unused Windows research fixture modules (2,866 source lines; no active
+consumers) are compiled only for Rust unit tests, not the production graph.
+The single session controller, exact native authority, five-profile storage,
+DWM and FPS owners remain unchanged. Review identified polling (250 ms idle,
+50 ms close, two-second UI) and potential storage head-of-line blocking;
+these observations do not prove CPU or RAM savings. No code execution,
+installer, Windows or game acceptance has been performed.
 
 ## Shared inspection budget — 27 October 2026
 
@@ -129,9 +110,15 @@ second controller, priority queue, game mutation or IPC wire change. The
 existing admission gate still refuses concurrent operations, including
 an already-active native read; no performance or CloseOne acceptance claim.
 
+## Cargo target boundary — 28 October 2026
+
+Desktop Win32 bindings now use Cargo `cfg(windows)`, keeping versions/features
+unchanged; static repository guard and negative fixtures are added. Windows
+packaging, Tauri IPC, lifecycle and installed data were not changed. This is
+source-only; Mac compilation and native backend remain NOT_EXECUTED.
+
 ## Next bounded action
 
-Audit the Windows-only Rust compile boundaries and existing portable core;
-identify a small, compatible dependency/adapter boundary before macOS work.
-Keep Windows/TypeScript tests, packages, gameplay, and macOS feasibility
-NOT_EXECUTED until separately permitted.
+Inspect and isolate the first actual Windows-only source compilation barrier
+without copying lifecycle authority or creating a speculative macOS adapter.
+Keep build, tests, package and Minecraft acceptance NOT_EXECUTED.

@@ -9,6 +9,36 @@ import {checkDependencyLock} from './check-dependency-lock.mjs';
 import {verifyLazyTesterPackage} from '../../apps/desktop/scripts/check-lazy-tester-package.mjs';
 import {verifyNativePreviewPackage} from '../../apps/desktop/scripts/check-native-preview-package.mjs';
 
+// Static Cargo manifest boundary only. This does not compile the Mac target:
+// Win32 session/window code still requires its own future platform adapter.
+export function verifyDesktopWindowsDeps(manifest) {
+  const lines = manifest.split(/\r?\n/);
+  const entries = heading => {
+    const start = lines.indexOf('[' + heading + ']');
+    assert.ok(start >= 0, 'Missing Cargo manifest section: ' + heading);
+    const block = [];
+    for (let i = start + 1; i < lines.length && !/^\[[^\]]+\]$/.test(lines[i].trim()); i++) {
+      const row = lines[i].trim();
+      if (/^[a-zA-Z][\w-]*\s*=/.test(row)) block.push(row);
+    }
+    return block;
+  };
+  const common = entries('dependencies');
+  const native = entries("target.'cfg(windows)'.dependencies");
+  const key = entry => entry.split('=', 1)[0].trim();
+  for (const name of ['windows', 'windows-sys']) {
+    assert.ok(!common.some(entry => key(entry) === name),
+      'Windows-only desktop dependency must not be unconditional: ' + name);
+    assert.equal(native.filter(entry => key(entry) === name).length, 1,
+      'Windows desktop dependency must be declared once under cfg(windows): ' + name);
+  }
+  assert.ok(native.some(entry => key(entry) === 'windows' && entry.includes('Win32_Media_Audio')),
+    'Native audio COM binding must remain available on Windows');
+  assert.ok(native.some(entry => key(entry) === 'windows-sys' &&
+    entry.includes('Win32_Graphics_Dwm') && entry.includes('Win32_System_Registry')),
+    'Existing DWM and registry features must remain available on Windows');
+}
+
 export function traceFrontend(sources,entry='main.ts') {
   const reached=new Set();
   function visit(path) {
@@ -55,6 +85,7 @@ export function verifyRepository(root,g0=false) {
     /^version\s*=\s*"([^"]+)"/m.exec(read('Development/apps/desktop/src-tauri/Cargo.toml'))?.[1],
     /^version\s*=\s*"([^"]+)"/m.exec(read('Development/engine/runtime-core/Cargo.toml'))?.[1]])assert.equal(actual,version,'Version parity');
   checkDependencyLock(app,json('Development/apps/desktop/package-lock.json'));
+  verifyDesktopWindowsDeps(read('Development/apps/desktop/src-tauri/Cargo.toml'));
   const toolchain=json('Development/toolchain.json');
   assert.equal(toolchain.node.version,read('Development/.node-version').trim());
   assert.equal(toolchain.policy.ciPolicy,'disabled');
