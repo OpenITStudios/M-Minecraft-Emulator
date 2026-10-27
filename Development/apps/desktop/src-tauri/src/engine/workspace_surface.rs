@@ -1537,7 +1537,13 @@ mod controller {
         }
         let client=format!("{slot:02}");
         let owned=|lease:&Lease|slot_lease(lease,&client);
-        previews::clear().map_err(|error|(false,error))?;
+        // DWM thumbnails are observation only. A busy preview worker must
+        // not prevent a user's confirmed *game* CloseOne. Remove only this
+        // slot's preview, leaving MC01–MC05 peers intact.
+        if let Err(error)=previews::clear_slot(slot) {
+            eprintln!("Minecraft - {slot} preview refresh pending during normal close: {error}");
+            previews::refresh();
+        }
         let mut state=SURFACE.lock().map_err(|_|(false,io::Error::other("Workspace state unavailable")))?;
         if state.closing {return Err((false,io::Error::new(io::ErrorKind::WouldBlock,"Workspace is closing")));}
         if state.active.as_ref().is_some_and(&owned) {

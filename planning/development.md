@@ -1,5 +1,24 @@
 # Current Development Handoff — v0.1
 
+## P0 CloseOne preview cleanup must not impact other launchers — 27 October 2026
+
+One additional source-level blocker affected ALL five slots: selected
+CloseOne called the global DWM `previews::clear()?` before restoring a
+game or requesting the retained controller's normal exit. A busy
+read-only preview worker could therefore reject the game close even
+though no native Minecraft window or helper was unsafe. It also
+removed all four other Minecraft preview tiles on every CloseOne.
+The same preview worker now accepts a narrow ClearSlot job that
+removes only the requested slot's owned thumbnail, optional primary
+image and registered preview source. Every peer slot's DWM thumbnails
+and process/session state remain untouched. A failed or backlogged
+preview-only cleanup is recorded as a diagnostic and requests a
+refresh; it does not block the independently authorized game's normal
+exit. No new worker/thread/presenter was introduced. Global CloseAll
+keeps its original whole-scene clear and strict helper quiescence.
+A pure five-slot test asserts every selected preview removal leaves
+four peers; all testing remains AUTHORED NOT_EXECUTED.
+
 ## P0 all-five Minecraft shutdown recovery parity — 27 October 2026
 
 The operator explicitly required the MC02 normal-shutdown fix to apply to

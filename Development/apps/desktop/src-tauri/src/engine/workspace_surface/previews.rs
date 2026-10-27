@@ -24,6 +24,11 @@ pub struct PreviewReport {
     pub tiles: Vec<TileStatus>,
 }
 
+// A per-launcher close must never discard the remaining Minecraft tiles.
+fn retain_other_preview_slot(observed:u32,closing:u32)->bool {
+    observed!=closing
+}
+
 fn overlaps(a: Rectangle, b: Rectangle) -> bool {
     a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
 }
@@ -117,6 +122,7 @@ mod windows {
             reply: mpsc::SyncSender<io::Result<PreviewReport>>,
         },
         Clear(mpsc::SyncSender<io::Result<()>>),
+        ClearSlot {slot:u32,reply:mpsc::SyncSender<io::Result<()>>},
         ClearPrimary(mpsc::SyncSender<io::Result<()>>),
     }
     struct Worker {
@@ -497,6 +503,19 @@ mod windows {
                                 scene.profiles.clear();
                                 let _ = reply.send(Ok(()));
                             }
+                            Job::ClearSlot {slot,reply} => {
+                                // This executes on the existing sole DWM owner
+                                // thread, never on a game or launcher thread.
+                                scene.thumbnails.retain(|thumbnail|
+                                    retain_other_preview_slot(thumbnail.slot,slot));
+                                if scene.primary.as_ref().is_some_and(|image|
+                                    !retain_other_preview_slot(image.slot,slot)) {
+                                    scene.primary=None;
+                                }
+                                scene.profiles.retain(|(profile,_)|
+                                    retain_other_preview_slot(*profile,slot));
+                                let _ = reply.send(Ok(()));
+                            }
                             Job::ClearPrimary(reply) => {
                                 scene.primary = None;
                                 let _ = reply.send(Ok(()));
@@ -609,6 +628,9 @@ mod windows {
     }
     pub(super) fn clear() -> io::Result<()> {
         send(Job::Clear, false).map(|_| ())
+    }
+    pub(super) fn clear_slot(slot:u32)->io::Result<()> {
+        send(|reply|Job::ClearSlot {slot,reply},false).map(|_| ())
     }
     pub(super) fn clear_primary() -> io::Result<()> {
         send(Job::ClearPrimary, false).map(|_| ())
@@ -774,6 +796,15 @@ pub(super) fn clear() -> io::Result<()> {
         Ok(())
     }
 }
+pub(super) fn clear_slot(slot:u32)->io::Result<()> {
+    if !(1..=5).contains(&slot) {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput,"Unknown Minecraft preview slot"));
+    }
+    #[cfg(windows)]
+    { windows::clear_slot(slot) }
+    #[cfg(not(windows))]
+    { Ok(()) }
+}
 pub(super) fn clear_primary() -> io::Result<()> {
     #[cfg(windows)]
     { windows::clear_primary() }
@@ -788,6 +819,19 @@ pub(super) fn refresh() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn closing_one_of_five_minecraft_slots_preserves_four_peer_previews() {
+        for closing in 1..=5 {
+            let visible=(1..=5)
+                .filter(|observed|retain_other_preview_slot(*observed,closing))
+                .collect::<Vec<_>>();
+            assert_eq!(visible.len(),4);
+            assert!(!visible.contains(&closing));
+            for other in 1..=5 {
+                assert_eq!(retain_other_preview_slot(other,closing),other!=closing);
+            }
+        }
+    }
     fn tile(slot: u32, x: f64) -> PreviewTile {
         PreviewTile {
             slot,
