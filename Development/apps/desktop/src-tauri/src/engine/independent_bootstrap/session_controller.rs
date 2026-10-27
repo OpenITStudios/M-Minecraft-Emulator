@@ -229,9 +229,9 @@ impl Sessions {
             if !issues.is_empty(){self.exiting=false;return Err(io::Error::other(issues.join("; ")));}
             for index in 0..5 {
                 if confirmed[index] { continue; }
-                let (Some(started),Some(target))=(&self.running[index],&self.windows[index]) else {continue;};
-                // Only an original, still-live game may receive its exact exit confirmation.
-                let result=started.children[0].identity().and_then(|_|confirm_education_exit(target));
+                let Some(started)=&self.running[index] else {continue;};
+                // The main HWND can disappear while its owned exit dialog remains.
+                let result=confirm_owned_exit(&started.children[0]);
                 match result {
                     Ok(value)=>confirmed[index]=value,
                     Err(error)=>{self.exiting=false;return Err(error);}
