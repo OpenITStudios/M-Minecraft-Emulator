@@ -21,6 +21,7 @@
   $: graphicsDirty=!!settings?.graphicsPresets&&graphicsPreset!==settings.graphicsPresets[selectedSlot-1];
   function chooseSlot(slot:ProfileSlot){selectedSlot=slot;clearSlot=null;recovery=null;fullReview=null;settingsNotice='';graphicsPreset=settings?.graphicsPresets?.[slot-1]??'Low';}
   let savingPerformance=false;
+  let queuedPerformance:{active:number;background:number}|null=null;
   let activeFps:number|undefined=120,backgroundFps:number|undefined=5,performanceNotice='';
   $: performanceDirty=settings!==null&&(activeFps!==settings.activeFps||backgroundFps!==settings.backgroundFps);
   $: performanceValid=validFpsLimits(activeFps,backgroundFps);
@@ -49,11 +50,12 @@
   $: runningCount = profiles.filter(profile => ['STARTING', 'RUNNING', 'NOT_RESPONDING'].includes(profile.state)).length;
   $: playableCount = profiles.filter(profile => profile.state === 'RUNNING').length;
   $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedAudio!==null) {const mode=queuedAudio;queuedAudio=null;void saveAudio(mode);}
-  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPage !== null) void consumeNavigation();
-  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedPage===null && manualRefreshRequested) {manualRefreshRequested=false;void refreshPage();}
-  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedPage===null && queuedLaunch!==null) {const slot=queuedLaunch;queuedLaunch=null;void launch(slot);}
-  $: if (mounted && !busy && !refreshing && !resizing && queuedPage === null && queued !== null) void consumeSelection();
-  $: if (mounted && !busy && !refreshing && !resizing && queuedPage === null && queued === null && dirty) void syncLayout();
+  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance!==null) {const limits=queuedPerformance;queuedPerformance=null;void savePerformance(limits);}
+  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPage !== null) void consumeNavigation();
+  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPage===null && manualRefreshRequested) {manualRefreshRequested=false;void refreshPage();}
+  $: if (mounted && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPage===null && queuedLaunch!==null) {const slot=queuedLaunch;queuedLaunch=null;void launch(slot);}
+  $: if (mounted && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPage === null && queued !== null) void consumeSelection();
+  $: if (mounted && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPage === null && queued === null && dirty) void syncLayout();
 
   function image(node: HTMLElement, slot: ProfileSlot) {
     images.set(slot, node); observer?.observe(node); dirty = true;
@@ -188,11 +190,15 @@
     }catch(error){issue=String(error);settings=null;}
     finally{applyingPreset=false;busy=false;}
   }
-  async function savePerformance() {
-    if(busy||refreshing||resizing||!available||!settings||!performanceValid||!performanceDirty)return;
+  function requestPerformanceSave() {
+    if(busy||queuedPerformance!==null||!available||!settings||!performanceValid||!performanceDirty)return;
+    queuedPerformance={active:activeFps!,background:backgroundFps!};
+  }
+  async function savePerformance(limits:{active:number;background:number}) {
+    if(!available||!settings){issue='Frame limits could not be saved. Refresh and try again.';return;}
     busy=true;savingPerformance=true;issue='';performanceNotice='';
     try{
-      const snapshot=await lazyTester.savePerformance(activeFps!,backgroundFps!);
+      const snapshot=await lazyTester.savePerformance(limits.active,limits.background);
       profiles=snapshot.profiles;settings=snapshot.settings;
       activeFps=settings.activeFps;backgroundFps=settings.backgroundFps;
       performanceNotice='Saved. New limits apply when each Minecraft profile next starts.';
@@ -426,11 +432,11 @@
             <div class="lt-actions"><button disabled={busy||refreshing||resizing||!available||!binding?.configured||!settings?.canApplyPreset||!graphicsDirty||runningCount>0} on:click={applyPreset}>{applyingPreset?'Applying…':'Apply preset'}</button></div>
             <p class="lt-help">Close all Minecraft sessions before applying. The saved preset is reapplied when this launcher starts.</p>{#if settings&&!settings.graphicsPresets}<p class="lt-error">The running controller needs an update before High/Low can be selected. Existing games are preserved.</p>{/if}{#if settingsNotice}<p role="status">{settingsNotice}</p>{/if}
           </section>
-          <section class="lt-group"><h2>Frame Limits <small>All launchers</small></h2>{#if settings}<form on:submit|preventDefault={savePerformance}>
-            <div class="lt-setting"><div><h3><label for="active-fps">While playing</label></h3><p>The game receiving keyboard and mouse input.</p></div><div class="lt-fps"><input id="active-fps" type="number" min="5" max="1000" required bind:value={activeFps} disabled={busy}/> FPS</div></div>
-            <div class="lt-setting"><div><h3><label for="background-fps">In the background</label></h3><p>Other games keep running at this limit.</p></div><div class="lt-fps"><input id="background-fps" type="number" min="5" max={activeFps??1000} required bind:value={backgroundFps} disabled={busy}/> FPS</div></div>
+          <section class="lt-group"><h2>Frame Limits <small>All launchers</small></h2>{#if settings}<form on:submit|preventDefault={requestPerformanceSave}>
+            <div class="lt-setting"><div><h3><label for="active-fps">While playing</label></h3><p>The game receiving keyboard and mouse input.</p></div><div class="lt-fps"><input id="active-fps" type="number" min="5" max="1000" required bind:value={activeFps} disabled={busy||queuedPerformance!==null}/> FPS</div></div>
+            <div class="lt-setting"><div><h3><label for="background-fps">In the background</label></h3><p>Other games keep running at this limit.</p></div><div class="lt-fps"><input id="background-fps" type="number" min="5" max={activeFps??1000} required bind:value={backgroundFps} disabled={busy||queuedPerformance!==null}/> FPS</div></div>
             <p class="lt-help">Saved limits apply at the next launch. Running games keep their current limits.</p>{#if !performanceValid}<p class="lt-error" role="alert">Use whole numbers from 5 to 1000. Background FPS cannot exceed active FPS.</p>{/if}
-            <div class="lt-actions"><button type="submit" disabled={busy||refreshing||resizing||!available||!performanceDirty||!performanceValid}>{savingPerformance?'Saving…':'Save changes'}</button>{#if performanceDirty}<button type="button" class="lt-secondary" disabled={busy} on:click={()=>{activeFps=settings!.activeFps;backgroundFps=settings!.backgroundFps;}}>Discard</button>{/if}<button type="button" class="lt-secondary" disabled={busy} on:click={()=>{activeFps=120;backgroundFps=5;}}>Use 120 / 5</button></div>{#if performanceNotice}<p role="status">{performanceNotice}</p>{/if}
+            <div class="lt-actions"><button type="submit" disabled={busy||queuedPerformance!==null||!available||!performanceDirty||!performanceValid}>{savingPerformance||queuedPerformance!==null?'Saving…':'Save changes'}</button>{#if performanceDirty}<button type="button" class="lt-secondary" disabled={busy||queuedPerformance!==null} on:click={()=>{activeFps=settings!.activeFps;backgroundFps=settings!.backgroundFps;}}>Discard</button>{/if}<button type="button" class="lt-secondary" disabled={busy||queuedPerformance!==null} on:click={()=>{activeFps=120;backgroundFps=5;}}>Use 120 / 5</button></div>{#if performanceNotice}<p role="status">{performanceNotice}</p>{/if}
           </form>{:else}<p>Settings unavailable. Refresh to try again.</p>{/if}</section>
           <section class="lt-group"><h2>App behavior</h2><div class="lt-setting"><div><h3>When Lazy Tester closes</h3><p>All Minecraft sessions started by Lazy Tester close normally first. Lazy Tester waits for them to finish before exiting.</p></div></div><p class="lt-help">If Minecraft is waiting for a dialog or has not finished closing, Lazy Tester stays open. Other Minecraft applications are left alone.</p><div class="lt-setting"><div><h3>Background game audio</h3><p>Mute games that are not receiving keyboard and mouse input. Existing user mute and volume settings are kept.</p>{#if settings?.audioIssue}<p class="lt-error" role="status">{settings.audioIssue}</p>{/if}{#if !settings?.backgroundAudio}<p>Update the running controller to enable audio control.</p>{/if}</div><label class="lt-audio-toggle"><input type="checkbox" checked={settings?.backgroundAudio==='Mute'} disabled={busy||queuedAudio!==null||!settings?.backgroundAudio} aria-label="Mute background games" on:change={event=>saveAudio(event.currentTarget.checked?'Mute':'Keep')}/>Mute background games</label></div></section>
           <section class="lt-group"><h2>Installation & data</h2><h3>Minecraft Education</h3><p>The controller verifies the registered game executable before launch. Moving data does not move Minecraft.</p><h3>Launcher data location</h3><p class="lt-data-path">{dataLocation?.path??'No data folder connected.'}</p>{#if locationIssue}<p class="lt-error">{locationIssue}</p>{/if}<div class="lt-actions"><button class="lt-secondary" disabled={busy||!dataLocation?.path} on:click={()=>loadLocation('Open')}>Open data folder</button><button class="lt-secondary" on:click={()=>navigate('storage')}>Data Storage →</button></div></section>

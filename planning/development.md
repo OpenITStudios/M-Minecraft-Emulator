@@ -72,8 +72,10 @@ transition;39 frontend tests and typecheck PASS. Real failure recovery is unveri
 Clean candidate workspace/packages/lazy-tester/0.1.0-9d5ec163726b-20261027T033405938Z
 built, not staged. Interactive testing deferred; do not control the user's desktop.
 
-FPS120/5, saves5..1000/background<=active, explicit legacy1..4/144/10 preserved.
-V3 applies next launch, V2 unchanged. Rust policy fixtures PASS; game pacing untested.
+FPS120/5, saves5..1000/background<=active, legacy preferences preserved. V3 applies
+next launch. FPS save now queues during polling: headless synthetic UI passed success,
+invalid limits and refresh-failure cases; previous source disabled Save. Logs
+workspace/runs/fps-queue-headless-*.log. Real WebView/game pacing still unverified.
 
 Cache: selected profile stopped, other exact managed games allowed, unknown external
 games block. Four lock/link/admission/peer fixtures PASS. No real data deleted.
@@ -87,11 +89,9 @@ and6 settings fixtures PASS; logs workspace/runs/audio-*. Checkbox queues saves.
 Abrupt controller-crash mixer recovery, long-launch audio response and actual
 Minecraft audio remain unverified. Continue in these owners, no second lifecycle.
 Launch preflight retains the original EXE pin and rechecks registration/identity/hash.
-Release3sample validation median2280->1176ms; identity and5 controller tests PASS.
-Logs workspace/runs/launch-preflight-release-*.log; actual timings are above.
-Process roles (installed at 8c0d171): same-file pinned hard links for Sessions/Window
-Recovery, copies rejected. MUI descriptions verified via Windows and live processes.
-39 frontend tests/typecheck and clean NSIS build PASS; installer execution NOT_EXECUTED.
+Validation median2280->1176ms; identity and5 controller tests PASS. Actual timings above.
+Process roles: pinned hard links for Sessions/Window Recovery, copies rejected;
+MUI descriptions verified. Installer execution NOT_EXECUTED.
 WebView2 grouping matches OPEN upstream reports; metadata alone insufficient.
 Actual previous process graph: browser/controller parented toUI; browser owns
 renderer/GPU/network/storage/crash children. No LazyDesigner attribution.
