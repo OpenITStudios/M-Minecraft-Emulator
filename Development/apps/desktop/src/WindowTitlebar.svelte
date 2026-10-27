@@ -6,7 +6,8 @@
   async function action(operation:'minimize'|'toggleMaximize'|'close') {
     error='';
     try {
-      if(operation==='close')closing=true;
+      // Native CloseRequested decides whether an exit is confirmed; a
+      // cancelled dialog must not leave this control stuck on Closing.
       await getCurrentWindow()[operation]();
     } catch(reason) {error=String(reason);closing=false;}
   }

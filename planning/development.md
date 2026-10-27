@@ -95,6 +95,20 @@ or timeout extension is introduced. Synthetic in-memory event-ordering tests
 were authored, not executed. All real Windows/Minecraft recovery results
 remain NOT_EXECUTED.
 
+## P0 user-facing Exit confirmation — 27 October 2026
+
+The Tauri CloseRequested owner now checks whether a retained controller
+mutex or native workspace is present, and asks for explicit confirmation
+before altering presentation or requesting CloseAll. The single native
+boundary covers the titlebar X and Windows close shortcuts, not just a
+Svelte click. Cancel returns without releasing/restoring a game window or
+signaling Minecraft; the already-present concurrency gate resets. With no
+controller/workspace, the manager closes without an unnecessary prompt.
+The titlebar no longer sets its Closing state until it receives the
+confirmed `lazy-tester-closing` event. rfd 0.17.2's OkCancel result
+is compared explicitly against Ok; all other results preserve games.
+These are source changes only, not a runtime UI acceptance claim.
+
 ## State and operator request — 27 October 2026
 
 The v0.1 checkpoint was saved and paused in Codex. The operator subsequently

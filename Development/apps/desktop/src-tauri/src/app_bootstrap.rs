@@ -1,6 +1,6 @@
 use crate::commands;
 use crate::engine::app_instance;
-use rfd::{MessageButtons, MessageDialog, MessageLevel};
+use rfd::{MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
 
 pub fn run() {
     if let Err(error) = crate::engine::dpi::configure() {
@@ -107,9 +107,33 @@ pub fn run() {
                     api.prevent_close();
                     if !CONFIRMING.swap(true,Ordering::SeqCst) {
                         use tauri::Emitter;
-                        let _=window.emit("lazy-tester-closing",true);
                         let window=window.clone();
                         tauri::async_runtime::spawn_blocking(move || {
+                            // Windows CloseRequested (including Alt+F4 and the custom X)
+                            // is the single confirmation boundary. Merely showing
+                            // the prompt must not park, close or relabel any game.
+                            let controller_present = {
+                                #[cfg(windows)]
+                                {crate::engine::native_clients_session::existing_controller_gate(
+                                    "Local\\MivubiEducationStartupObservation").unwrap_or(true)}
+                                #[cfg(not(windows))]
+                                {false}
+                            };
+                            let confirmation_required = controller_present
+                                || crate::engine::workspace_surface::is_active();
+                            if confirmation_required
+                                && MessageDialog::new()
+                                    .set_parent(&window)
+                                    .set_title("Exit Lazy Tester?")
+                                    .set_description("Any Minecraft sessions managed by Lazy Tester will be asked to close normally. Other applications remain untouched. Continue?")
+                                    .set_buttons(MessageButtons::OkCancel)
+                                    .set_level(MessageLevel::Warning)
+                                    .show() != MessageDialogResult::Ok
+                            {
+                                CONFIRMING.store(false,Ordering::SeqCst);
+                                return;
+                            }
+                            let _=window.emit("lazy-tester-closing",true);
                             let result=crate::engine::workspace_surface::release_for_close().and_then(|_|{
                                 #[cfg(feature="lazy-tester-package")]
                                 {crate::engine::native_clients_session::request(crate::engine::native_clients_session::SessionRequest::CloseAll).map(|_|())}
