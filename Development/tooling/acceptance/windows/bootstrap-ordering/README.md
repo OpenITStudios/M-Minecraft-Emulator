@@ -79,8 +79,11 @@ The HUD uses a small 128×32 DIP owned layered window, 12 DIP inside the game's
 client top-right, with 17 DIP white text on a dark panel. A dedicated PMv2
 thread observes only own-process owner-window location events and checks
 geometry at most every 250 ms when otherwise idle. Bind/unbind reuses that
-worker and retains no native renderer object. The unbound worker waits without
-a periodic timeout. Surface drawing happens only when displayed text/DPI
+worker and retains no native renderer object. Once the final swap-chain
+unbinds, a one-second grace period allows fast recreation; the HUD worker
+then retires even if the original game GUI thread/window remains alive.
+The private message loop processes at most 64 queued messages per wake so
+continuous location notifications cannot starve its STOP/retirement checks. Surface drawing happens only when displayed text/DPI
 changes; moving the panel reuses its pixels. The HUD's per-present addition is only a
 QPC/counter update; its GDI/window work stays on the worker.
 

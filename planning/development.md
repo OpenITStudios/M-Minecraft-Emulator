@@ -1,5 +1,24 @@
 # Current Development Handoff — v0.1
 
+## P0 MC02 native HUD message-queue starvation — 27 October 2026
+
+The HUD worker used `while(PeekMessageW(...PM_REMOVE))` to drain
+its entire Win32 message queue without a message budget. A continuous
+stream of WinEvent/location notifications could therefore keep that
+loop active indefinitely, preventing the outer loop from observing the
+STOP event, destroyed owner HWND or one-second post-unbind retirement.
+The existing worker now processes at most 64 messages per wake,
+returns to its ownership/stop checks between batches, and respects
+its own WM_QUIT message instead of dispatching it like ordinary input.
+This changes no game's message queue, native FPS pacing ceiling, window
+adoption, process ownership, or account/world data.
+
+An existing synthetic-only HUD control now posts sustained WM_NULL
+messages to its own worker while the original owner HWND and GUI thread
+remain alive. It asserts bounded worker retirement and joins its
+producer before any throwing assertion. This control is authored but
+NOT_EXECUTED; the historical MC02 case is still not runtime-proven.
+
 ## P0 MC02 STOP signal acknowledgement before WM_CLOSE — 27 October 2026
 
 The controller now rejects a selected game's normal-exit request if

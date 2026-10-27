@@ -250,8 +250,20 @@ struct Hud::State {
                 const DWORD result = MsgWaitForMultipleObjectsEx(2, waits, 250, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
                 if (result == WAIT_OBJECT_0) break;
                 if (result == WAIT_FAILED) throw std::runtime_error("HUD wait failed");
+                // In-process location updates can keep this thread's queue
+                // populated continuously. Draining it without a bound would
+                // starve the owner-thread/STOP/unbind checks above precisely
+                // when Minecraft is removing or rearranging its game HWND.
+                constexpr unsigned MaxMessagesPerWake = 64;
+                bool quit = false;
                 MSG message{};
-                while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) { TranslateMessage(&message); DispatchMessageW(&message); }
+                for (unsigned handled = 0; handled < MaxMessagesPerWake
+                    && PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE); ++handled) {
+                    if (message.message == WM_QUIT) { quit = true; break; }
+                    TranslateMessage(&message);
+                    DispatchMessageW(&message);
+                }
+                if (quit) break;
             }
         } catch (...) { fail(); }
         if (hud && IsWindow(hud)) DestroyWindow(hud);

@@ -1,5 +1,6 @@
 #include "fps-hud.h"
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <fstream>
 #include <stdexcept>
@@ -193,6 +194,40 @@ int run() {
         closing.unbind();
         until([&] {return !closing.snapshot().workerActive;});
         check(DestroyWindow(stillAlive));
+    }
+    // Flood only this process's synthetic HUD message queue. A native
+    // worker that drains the queue until empty can starve forever while
+    // GetTickCount64() and the STOP/unbind checks never run again.
+    // Bounded pumping must retire even while WM_NULL traffic continues.
+    {
+        fps_hud::Hud flooded;
+        HWND window=CreateWindowExW(WS_EX_NOACTIVATE|WS_EX_TOOLWINDOW,type.lpszClassName,L"",
+            WS_POPUP,100,100,850,550,nullptr,nullptr,type.hInstance,nullptr);
+        check(window && flooded.bind(window,GetCurrentThreadId()));
+        until([&] {auto state=flooded.snapshot();return state.workerActive && state.window!=nullptr;});
+        const DWORD thread=GetWindowThreadProcessId(flooded.snapshot().window,nullptr);
+        check(thread && thread!=GetCurrentThreadId());
+        std::atomic<bool> producing{true};
+        std::thread producer([&] {
+            while (producing.load(std::memory_order_acquire)) {
+                for (unsigned i=0;i<128;++i) {
+                    if (!PostThreadMessageW(thread,WM_NULL,0,0)) break;
+                }
+                Sleep(1);
+            }
+        });
+        flooded.unbind();
+        bool retired=false;
+        const auto started=GetTickCount64();
+        while (GetTickCount64()-started < 2900) {
+            if (!flooded.snapshot().workerActive) {retired=true;break;}
+            pump(); Sleep(5);
+        }
+        producing.store(false,std::memory_order_release);
+        producer.join(); // Joined before any throwing assertion can unwind.
+        check(retired);
+        check(IsWindow(window)); // No game HWND/thread destruction shortcut.
+        check(DestroyWindow(window));
     }
     check(GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS) == baseGdi);
     check(DestroyWindow(owner)); check(SetThreadDpiAwarenessContext(oldDpi));
