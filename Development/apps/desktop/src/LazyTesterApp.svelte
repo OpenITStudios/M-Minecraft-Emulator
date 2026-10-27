@@ -226,23 +226,25 @@
     if (slot===null || closeInProgress || busy || closingOneSlot!==null) return;
     closeOneSlot=null; closingOneSlot=slot; busy=true; issue='';
     try {
-      const snapshot=await lazyTester.closeOne(slot);
-      profiles=snapshot.profiles; available=true; connectionIssue=''; storage=null;
-      if (active===slot) {
+      const report=await lazyTester.closeOne(slot);
+      // Only this successful native restoration receipt permits us to mark
+      // the selected game no longer embedded, even if its process remains.
+      if (active===slot && report.presentationReleased) {
         active=null;selectedIdentity='';requested=null;queued=null;
         separateSlots=new Set([...separateSlots].filter(value=>value!==slot));
-        queued=firstEmbeddedProfile(profiles,separateSlots);
-        detached=queued===null;
+        detached=true;
+      }
+      if (report.snapshot) {
+        profiles=report.snapshot.profiles;available=true;connectionIssue='';storage=null;
+      } else {
+        issue=`Minecraft - ${slot} has not finished closing normally. ${report.issue??'Refresh to inspect the current session.'}`;
+        try {profiles=(await lazyTester.inspect()).profiles;available=true;connectionIssue='';}
+        catch(refreshError){available=false;connectionIssue=String(refreshError);}
       }
     } catch (error) {
-      // Native workspace release may have succeeded before a game-exit timeout;
-      // do not claim the selected game remains embedded in Play.
-      issue=`Minecraft - ${slot} did not finish closing normally. ${String(error)}`;
-      if(active===slot) {
-        active=null;selectedIdentity='';requested=null;queued=null;detached=true;
-      }
-      try {profiles=(await lazyTester.inspect()).profiles;available=true;connectionIssue='';}
-      catch(refreshError){available=false;connectionIssue=String(refreshError);}
+      // The command did not acknowledge releasing the target presentation.
+      // Preserve current Play selection; do not invent a separate window.
+      issue=`Could not begin closing Minecraft - ${slot}. ${String(error)}`;
     } finally {
       closingOneSlot=null;busy=false;dirty=true;
     }

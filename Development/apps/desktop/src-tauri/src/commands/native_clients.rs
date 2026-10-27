@@ -40,12 +40,24 @@ pub async fn lazy_tester_session(
     })).await.map_err(|_| "Session task failed".to_string())?.map_err(|error| error.to_string())
 }
 
+// This receipt distinguishes a preflight failure (returned as Err before
+// presentation mutation) from a still-running game AFTER its workspace was
+// successfully released. It records no additional game ownership.
+#[derive(serde::Serialize)]
+#[serde(rename_all="camelCase")]
+pub struct SelectedCloseReport {
+    schema: u32,
+    presentation_released: bool,
+    snapshot: Option<crate::engine::native_clients_session::SessionSnapshot>,
+    issue: Option<String>,
+}
+
 // This one command admits the entire selected-close sequence under the
 // existing manager lock. The retained session controller owns lifecycle.
 #[tauri::command]
 pub async fn lazy_tester_close_one(
     slot:u32,
-) -> Result<crate::engine::native_clients_session::SessionSnapshot,String> {
+) -> Result<SelectedCloseReport,String> {
     if crate::app_bootstrap::startup_diagnostic_mode() {return Err("Startup diagnostic cannot close games".into());}
     if !(1..=5).contains(&slot) {return Err("Unknown Minecraft profile".into());}
     tauri::async_runtime::spawn_blocking(move||run_manager_operation(||{
@@ -57,7 +69,15 @@ pub async fn lazy_tester_close_one(
             return Err(io::Error::new(io::ErrorKind::InvalidInput,"Minecraft session is not running"));
         }
         crate::engine::workspace_surface::release_managed_slot(slot)?;
-        request(SessionRequest::CloseOne {slot})
+        // Once native restoration has succeeded, an uncertain game exit
+        // must not be disguised as an entirely failed/pre-release action.
+        let result=request(SessionRequest::CloseOne {slot});
+        Ok(SelectedCloseReport {
+            schema:1,
+            presentation_released:true,
+            snapshot:result.as_ref().ok().cloned(),
+            issue:result.err().map(|error|error.to_string()),
+        })
     })).await.map_err(|_|"Selected Minecraft close task failed".to_string())?
         .map_err(|error|error.to_string())
 }

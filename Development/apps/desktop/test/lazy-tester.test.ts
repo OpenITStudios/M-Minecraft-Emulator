@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {lazyTester, firstEmbeddedProfile, nextProfile, parseSession, parsePreviewReport, parseProfileBinding, parseDataLocation, validFpsLimits, type ProfileSession} from '../src/app/bridge/lazyTester.js';
+import {lazyTester, parseSelectedClose, firstEmbeddedProfile, nextProfile, parseSession, parsePreviewReport, parseProfileBinding, parseDataLocation, validFpsLimits, type ProfileSession} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
@@ -136,6 +136,18 @@ describe('Lazy Tester profile contract', () => {
   it('allows small preview viewports but refuses offscreen and invalid coordinate payloads',()=>{
     expect(previewViewport({x:10,y:450,width:145,height:80},1.5)).toEqual({x:10,y:450,width:145,height:80,pixelRatio:1.5});
     for(const rect of [{x:-1,y:450,width:145,height:80},{x:10,y:450,width:31,height:80},{x:10,y:450,width:145,height:NaN}])expect(()=>previewViewport(rect)).toThrow();
+  });
+  it('distinguishes post-restoration pending exit from preflight failures',()=>{
+    const snapshot=stopped();
+    expect(parseSelectedClose({schema:1,presentationReleased:true,snapshot,issue:null}).snapshot?.profiles).toHaveLength(5);
+    expect(parseSelectedClose({schema:1,presentationReleased:true,snapshot:null,issue:'Minecraft - 2 still running'}).issue).toContain('still running');
+    for(const invalid of [
+      {schema:1,presentationReleased:false,snapshot,issue:null},
+      {schema:1,presentationReleased:true,snapshot:null,issue:null},
+      {schema:1,presentationReleased:true,snapshot,issue:'contradictory'},
+      {schema:1,presentationReleased:true,snapshot:null,issue:''},
+      {schema:1,presentationReleased:true,snapshot,issue:null,process:123},
+    ])expect(()=>parseSelectedClose(invalid)).toThrow();
   });
   it('refuses a forged per-launcher close slot before invoking Tauri', async()=>{
     for (const slot of [0,6,-1,10] as number[]) {

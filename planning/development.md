@@ -144,6 +144,21 @@ Unresponsive/starting slots may request normal close, but no process is ever
 force-killed. Frontend slot validation and a negative regression fixture
 were authored; no source runner, Windows or Minecraft test was executed.
 
+## P0 close-one outcome safety — 27 October 2026
+
+The dedicated `lazy_tester_close_one` command now emits a strict bounded
+`SelectedCloseReport`: a preflight or native-restore error is still an
+ordinary Err, while a subsequent session-close error returns a typed receipt
+with `presentationReleased=true`, null snapshot and an issue. The Svelte
+bridge strictly parses this receipt and rejects contradictory or forged
+states. The frontend only clears its embedded active-window claim after the
+backend has acknowledged restoration. A pre-release failure preserves
+the original Play selection instead of inventing a detached window.
+A post-release normal-exit timeout preserves games and reconciles status
+through read-only Inspect. This corrects an identified misleading-UI path
+without a new native lifecycle authority. Tests are authored but not
+executed; runtime success remains NOT_EXECUTED.
+
 ## State and operator request — 27 October 2026
 
 The v0.1 checkpoint was saved and paused in Codex. The operator subsequently

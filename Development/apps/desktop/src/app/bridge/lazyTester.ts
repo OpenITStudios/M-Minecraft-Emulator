@@ -151,6 +151,21 @@ export function parsePreviewReport(value:unknown,slots:readonly ProfileSlot[]):P
   return value as unknown as PreviewReport;
 }
 
+export interface SelectedCloseReport {
+  schema:1;
+  presentationReleased:true;
+  snapshot:SessionSnapshot|null;
+  issue:string|null;
+}
+export function parseSelectedClose(value:unknown):SelectedCloseReport {
+  if(!record(value)||!exact(value,['schema','presentationReleased','snapshot','issue'])||
+     value.schema!==1||value.presentationReleased!==true||
+     !(value.issue===null||typeof value.issue==='string'&&value.issue.length>0&&value.issue.length<=8192)||
+     (value.snapshot===null)!==(value.issue!==null)) throw new TypeError('Invalid selected close receipt');
+  const snapshot=value.snapshot===null?null:parseSession(value.snapshot);
+  return {schema:1,presentationReleased:true,snapshot,issue:value.issue as string|null};
+}
+
 export const lazyTester = {
   saveAudio:async(mode:BackgroundAudio)=>{
     if(!['Keep','Mute'].includes(mode))throw new TypeError('Invalid background audio preference');
@@ -173,7 +188,7 @@ export const lazyTester = {
   launch: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'Launch', slot}})),
   closeOne: async (slot: ProfileSlot) => {
     if (!profileSlots.includes(slot)) throw new TypeError('Unknown Minecraft profile');
-    return parseSession(await invokeRuntime<unknown>('lazy_tester_close_one', {slot}));
+    return parseSelectedClose(await invokeRuntime<unknown>('lazy_tester_close_one', {slot}));
   },
   storage: async () => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'InspectStorage'}})),
   openFolder: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'OpenProfileFolder', slot}})),
