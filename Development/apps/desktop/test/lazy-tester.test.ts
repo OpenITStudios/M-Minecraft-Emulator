@@ -1,12 +1,29 @@
 import {describe, expect, it} from 'vitest';
 import {lazyTester, parseSelectedClose, firstEmbeddedProfile, nextProfile, parseSession, parsePreviewReport, parseProfileBinding, parseDataLocation, validFpsLimits, type ProfileSession} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
+import {closeReviewActive, observationStillCurrent, type CloseReview} from '../src/app/inspectionScheduling.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
 const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process: {
   pid: slot + 100, createdFileTime: String(slot + 200), sessionId: 1, windowHandle: `0x${slot}`, responding: true,
 }});
 describe('Lazy Tester profile contract', () => {
+  it('suspends automatic inspection through every close review and drops stale results', () => {
+    const idle: CloseReview = {
+      nativeExitReview:false, closeAllRunning:false,
+      selectedReview:false, selectedCloseRunning:false,
+    };
+    expect(closeReviewActive(idle)).toBe(false);
+    expect(observationStillCurrent(12,12,idle)).toBe(true);
+    expect(observationStillCurrent(12,13,idle)).toBe(false);
+    for (const phase of Object.keys(idle) as (keyof CloseReview)[]) {
+      const review = {...idle,[phase]:true};
+      expect(closeReviewActive(review)).toBe(true);
+      expect(observationStillCurrent(12,12,review)).toBe(false);
+    }
+    // Canceling the dialog does not resurrect the old in-flight inspection.
+    expect(observationStillCurrent(12,13,idle)).toBe(false);
+  });
   it('validates optional background audio support and reports native failures',()=>{
     const settings={activeFps:120,backgroundFps:5,renderDistanceChunks:12,canApplyPreset:true,changedProfiles:null};
     expect(parseSession({...stopped(),settings}).settings?.backgroundAudio).toBeUndefined();

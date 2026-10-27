@@ -33,6 +33,20 @@ mutations, Windows handle checks, account/world data, session lifecycle and
 the user-visible wire schema are unchanged. A different OS can reuse the
 budget policy without reusing Win32 filesystem code.
 
+## Close-review inspection admission — 27 October 2026
+
+A native titlebar CloseRequested now emits a UI-only
+`lazy-tester-close-review` event when confirmation begins and when it
+is canceled or a close attempt fails. The mounted Svelte view suppresses
+background observation and preview layout while either full-exit review or
+a selected game's CloseOne review/operation is pending. An epoch invalidates
+any in-flight inspect result that predates the review; a selected close waits
+for the previous refresh/resize task to finish before requesting native
+closure. Existing `MANAGER_RESOURCE_LOCK` and the retained single
+session controller remain the exclusive mutation authorities. This is
+best-effort UI scheduling, **not** preemption of an already-running
+native operation, a priority queue, or evidence of runtime improvement.
+
 ## Current Lazy Tester route — 26 October 2026
 
 WindowTitlebar.svelte owns the shared product frame controls; main-window-only

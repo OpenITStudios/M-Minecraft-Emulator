@@ -112,22 +112,26 @@ were run.
 
 ## Shared inspection budget — 27 October 2026
 
-Source-only: `runtime-core/inspection_budget.rs` now holds the reusable,
-OS-neutral monotonic deadline. One cooperative two-second budget spans all
-five read-only cache classifiers and profile metadata walks per
-`InspectStorage`; expired work becomes partial, never deletion permission.
-Each storage report reuses one read-only admission observation per slot.
-Mutating cache clears retain their independent fresh two-second safety plan.
-Existing controller, IPC wire, profiles, DLL, normal-close and Win32
-authority are unchanged; no new worker, queue or macOS backend is added.
-Added source regression cases for expired budget and incomplete cache.
-Compiler/tests/Windows/gameplay/performance remain NOT_EXECUTED. OS calls and
-clear-confirmation inspection are not preempted, so a hard latency cap is not
-claimed.
+The portable `InspectionBudget` applies one cooperative two-second deadline
+to five read-only cache/metadata walks. Expired scans are partial and never
+authorize cache clear; mutating cleanup still uses fresh admission and its
+independent plan. Native I/O/other metadata remain unpreemptible. Regression
+sources were authored; builds, tests and performance were NOT_EXECUTED.
+
+## Close-review scheduling — 27 October 2026
+
+Native titlebar confirmation emits `lazy-tester-close-review` before the
+dialog and clears it on cancel/error. The Svelte view pauses automatic
+inspect/layout during native and selected-game close review, tracks an
+observation epoch to discard stale in-flight reads, and delays CloseOne
+confirmation until earlier refresh/preview work settles. No new worker,
+second controller, priority queue, game mutation or IPC wire change. The
+existing admission gate still refuses concurrent operations, including
+an already-active native read; no performance or CloseOne acceptance claim.
 
 ## Next bounded action
 
-Review controller request scheduling and read-only inspect coalescing versus
-CloseOne/CloseAll while preserving exact process authority, then evaluate the
-existing Tauri/Rust Windows-only compile boundary before macOS adapter work.
-No Local PC testing without explicit approval.
+Audit the Windows-only Rust compile boundaries and existing portable core;
+identify a small, compatible dependency/adapter boundary before macOS work.
+Keep Windows/TypeScript tests, packages, gameplay, and macOS feasibility
+NOT_EXECUTED until separately permitted.

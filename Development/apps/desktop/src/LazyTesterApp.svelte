@@ -5,6 +5,7 @@
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazy-tester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
+  import {closeReviewActive, observationStillCurrent, type CloseReview} from './app/inspectionScheduling.js';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
   let binding: ProfileBinding | null = null;
@@ -43,10 +44,28 @@
   let issue = '', connectionIssue = '', previewIssue = '', selectedIdentity = '';
   // Display state only; the retained Rust controller still owns game lifetime.
   let closeInProgress = false, closeFailure = '';
+  // Presentation-only close reviews; never another process or session owner.
+  let nativeExitReview = false, observationEpoch = 0;
   let closeOneSlot: ProfileSlot | null = null, closingOneSlot: ProfileSlot | null = null;
   // UI warning only; native presentation authority remains in workspace_surface.
   let uncertainWindowSlot: ProfileSlot | null = null;
   let previewStatuses: PreviewStatus[] = [];
+  let closeReviewPending = false;
+  function reviewState(): CloseReview {
+    return {
+      nativeExitReview,
+      closeAllRunning: closeInProgress,
+      selectedReview: closeOneSlot !== null,
+      selectedCloseRunning: closingOneSlot !== null,
+    };
+  }
+  // Explicit Svelte dependencies so any close review suspends queued
+  // background UI work; it resumes only after a cancel or terminal receipt.
+  $: closeReviewPending = closeReviewActive({
+    nativeExitReview, closeAllRunning: closeInProgress,
+    selectedReview: closeOneSlot !== null,
+    selectedCloseRunning: closingOneSlot !== null,
+  });
   const images = new Map<ProfileSlot, HTMLElement>();
   const labels = {STOPPED: 'Not running', STARTING: 'Starting', RUNNING: 'Running', NOT_RESPONDING: 'Not responding', ATTENTION: 'Needs attention'};
   const identity = (profile?: ProfileSession) => profile?.process ? [profile.process.pid, profile.process.createdFileTime, profile.process.sessionId, profile.process.windowHandle].join('/') : '';
@@ -55,14 +74,14 @@
   $: others = profiles.filter(profile => profile.slot !== primary);
   $: runningCount = profiles.filter(profile => ['STARTING', 'RUNNING', 'NOT_RESPONDING'].includes(profile.state)).length;
   $: playableCount = profiles.filter(profile => profile.state === 'RUNNING').length;
-  $: if (mounted && !closeInProgress && !initializing && !busy && !refreshing && !resizing && queuedAudio!==null) {const mode=queuedAudio;queuedAudio=null;void saveAudio(mode);}
-  $: if (mounted && !closeInProgress && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance!==null) {const limits=queuedPerformance;queuedPerformance=null;void savePerformance(limits);}
-  $: if (mounted && !closeInProgress && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset!==null) {const request=queuedPreset;queuedPreset=null;void applyPreset(request);}
-  $: if (mounted && !closeInProgress && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage !== null) void consumeNavigation();
-  $: if (mounted && !closeInProgress && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPreset===null && queuedPage===null && manualRefreshRequested) {manualRefreshRequested=false;void refreshPage();}
-  $: if (mounted && !closeInProgress && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPreset===null && queuedPage===null && queuedLaunch!==null) {const slot=queuedLaunch;queuedLaunch=null;void launch(slot);}
-  $: if (mounted && !closeInProgress && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage === null && queued !== null) void consumeSelection();
-  $: if (mounted && !closeInProgress && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage === null && queued === null && dirty) void syncLayout();
+  $: if (mounted && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio!==null) {const mode=queuedAudio;queuedAudio=null;void saveAudio(mode);}
+  $: if (mounted && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance!==null) {const limits=queuedPerformance;queuedPerformance=null;void savePerformance(limits);}
+  $: if (mounted && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset!==null) {const request=queuedPreset;queuedPreset=null;void applyPreset(request);}
+  $: if (mounted && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage !== null) void consumeNavigation();
+  $: if (mounted && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPreset===null && queuedPage===null && manualRefreshRequested) {manualRefreshRequested=false;void refreshPage();}
+  $: if (mounted && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPreset===null && queuedPage===null && queuedLaunch!==null) {const slot=queuedLaunch;queuedLaunch=null;void launch(slot);}
+  $: if (mounted && !closeInProgress && !closeReviewPending && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage === null && queued !== null) void consumeSelection();
+  $: if (mounted && !closeInProgress && !closeReviewPending && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage === null && queued === null && dirty) void syncLayout();
 
   function image(node: HTMLElement, slot: ProfileSlot) {
     images.set(slot, node); observer?.observe(node); dirty = true;
@@ -83,11 +102,13 @@
     finally { busy = false; }
   }
   async function refresh() {
-    if (closeInProgress || busy || refreshing || resizing || disposed) return;
+    if (closeReviewActive(reviewState()) || busy || refreshing || resizing || disposed) return;
+    const issued = observationEpoch;
     refreshing = true;
     try {
       const snapshot = page === 'settings' ? await lazyTester.settings() : await lazyTester.inspect();
-      if (disposed) return;
+      // A close review starting mid-request invalidates this old snapshot.
+      if (disposed || !observationStillCurrent(issued, observationEpoch, reviewState())) return;
       const layoutChanged=!available||layoutIdentity(profiles)!==layoutIdentity(snapshot.profiles);
       profiles = snapshot.profiles; available = true; connectionIssue = '';
       if (uncertainWindowSlot !== null
@@ -99,7 +120,9 @@
         settings=snapshot.settings;
       }
       if (active !== null && selectedIdentity !== identity(profiles.find(profile => profile.slot === active))) {
-        await workspaceSurface.release(); active = null; selectedIdentity = '';
+        await workspaceSurface.release();
+        if (!observationStillCurrent(issued, observationEpoch, reviewState())) return;
+        active = null; selectedIdentity = '';
       }
       if (requested !== null) {
         const profile = profiles.find(profile => profile.slot === requested);
@@ -115,8 +138,13 @@
         queued = firstEmbeddedProfile(profiles,separateSlots);
       }
       if(layoutChanged)dirty=true;
-    } catch (error) { if (!disposed) { if(available)dirty=true;available = false; connectionIssue = String(error); } }
-    finally { refreshing = false; }
+    } catch (error) {
+      if (!disposed && observationStillCurrent(issued, observationEpoch, reviewState())) {
+        if (available) dirty = true;
+        available = false;
+        connectionIssue = String(error);
+      }
+    } finally { refreshing = false; }
   }
   async function launch(slot: ProfileSlot) {
     if (closeInProgress || busy || !binding?.configured) return;
@@ -222,14 +250,20 @@
     finally{savingPerformance=false;busy=false;}
   }
   function requestCloseOne(slot: ProfileSlot) {
-    if (closeInProgress || busy || closingOneSlot !== null) return;
+    if (closeInProgress || nativeExitReview || busy || closingOneSlot !== null) return;
     const profile=profiles.find(item=>item.slot===slot);
     if (!profile || !['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)) return;
+    // Keep the user's confirmation available while an old Inspect finishes,
+    // but never allow that result to overwrite state after review began.
+    observationEpoch++;
+    if (queuedLaunch===slot) queuedLaunch=null;
+    if (queued===slot) queued=null;
     closeOneSlot=slot;
   }
   async function confirmCloseOne() {
     const slot=closeOneSlot;
-    if (slot===null || closeInProgress || busy || closingOneSlot!==null) return;
+    if (slot===null || closeInProgress || nativeExitReview || busy ||
+        refreshing || resizing || closingOneSlot!==null) return;
     closeOneSlot=null; closingOneSlot=slot; busy=true; issue='';
     try {
       const report=await lazyTester.closeOne(slot);
@@ -300,7 +334,7 @@
     finally { busy = false; }
   }
   async function syncLayout() {
-    if (closeInProgress || busy || refreshing || resizing || !mounted) return;
+    if (closeReviewActive(reviewState()) || busy || refreshing || resizing || !mounted) return;
     dirty = false; resizing = true;
     try {
       if (page !== 'workspace' || detached || !available || document.hidden) {
@@ -449,7 +483,10 @@
   onMount(() => {
     mounted = true; void initializeLaunchers();
     // Keep a review stable while the user decides; the backend rechecks admission on action.
-    const interval = setInterval(() => { if (!closeInProgress && !document.hidden && binding?.configured && clearSlot===null && recovery===null && fullReview===null) void refresh(); }, 2000);
+    const interval = setInterval(() => {
+      if (!closeReviewActive(reviewState()) && !document.hidden && binding?.configured &&
+          clearSlot===null && recovery===null && fullReview===null) void refresh();
+    }, 2000);
     observer = new ResizeObserver(() => { dirty = true; }); observer.observe(viewport, {box: 'device-pixel-content-box'});
     observer.observe(stageSpace);
     for (const node of images.values()) observer.observe(node);
@@ -457,20 +494,33 @@
     window.addEventListener('resize', changed); document.addEventListener('visibilitychange', changed);
     const stops: (() => void)[] = [];
     const retain = (stop: () => void) => { if (disposed) stop(); else stops.push(stop); };
+    void listen<boolean>('lazy-tester-close-review', event => {
+      // UI scheduling hint only; OS confirmation still owns the exit decision.
+      if (event.payload && !nativeExitReview) observationEpoch++;
+      nativeExitReview = event.payload;
+      if (!nativeExitReview) dirty = true;
+    }).then(retain).catch(error => { issue = String(error); });
     void listen<boolean>('lazy-tester-closing', event => {
       closeInProgress = event.payload;
-      if (closeInProgress) closeOneSlot=null;
+      if (closeInProgress) {
+        observationEpoch++;
+        closeOneSlot=null;
+        queuedLaunch=null;
+        queued=null;
+      }
     }).then(retain).catch(error => { issue = String(error); });
     void listen<string>('lazy-tester-close-rejected', event => {
       // Resource admission refused before restoring or closing any game.
       // Keep the verified embedded selection, previews and queued work.
       closeInProgress = false;
+      nativeExitReview = false;
       issue = event.payload;
     }).then(retain).catch(error => { issue = String(error); });
     void listen<string>('lazy-tester-close-error', event => {
       // The native close attempt already released/restored workspace leases.
       // Never imply the game is still embedded or automatically reacquire it.
       closeInProgress = false;
+      nativeExitReview = false;
       closeFailure = event.payload;
       active = null; selectedIdentity = ''; requested = null; queued = null; queuedLaunch = null;
       separateSlots = new Set<ProfileSlot>();
@@ -531,7 +581,7 @@
                 {#if profile.issue}<small class="lt-error">{profile.issue}</small>{/if}
               </button>
               {#if ['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)}
-                <button class="lt-secondary lt-close-launcher" aria-label={'Close Minecraft - '+profile.slot+' normally'} disabled={busy||closeInProgress||!available||!binding?.configured} on:click={()=>requestCloseOne(profile.slot)}>Close game</button>
+                <button class="lt-secondary lt-close-launcher" aria-label={'Close Minecraft - '+profile.slot+' normally'} disabled={busy||closeInProgress||nativeExitReview||!available||!binding?.configured} on:click={()=>requestCloseOne(profile.slot)}>Close game</button>
               {/if}
             </div>
           {/each}
@@ -541,8 +591,8 @@
             <h3>Close Minecraft - {closeOneSlot}?</h3>
             <p>Only this Minecraft session will be asked to exit normally. Other games will keep running. Save any work in Minecraft before continuing.</p>
             <div class="lt-actions">
-              <button disabled={busy||closeInProgress} on:click={()=>void confirmCloseOne()}>Close Minecraft - {closeOneSlot}</button>
-              <button class="lt-secondary" disabled={busy||closeInProgress} on:click={()=>closeOneSlot=null}>Cancel</button>
+              <button disabled={busy||refreshing||resizing||closeInProgress||nativeExitReview} on:click={()=>void confirmCloseOne()}>Close Minecraft - {closeOneSlot}</button>
+              <button class="lt-secondary" disabled={busy||closeInProgress||nativeExitReview} on:click={()=>closeOneSlot=null}>Cancel</button>
             </div>
           </section>
         {/if}

@@ -82,6 +82,10 @@ pub fn run() {
                     if !CONFIRMING.swap(true,Ordering::SeqCst) {
                         use tauri::Emitter;
                         let window=window.clone();
+                        // Suspend automatic UI inspection as soon as the
+                        // native close review begins, before user confirmation.
+                        // This never grants permission to close a game.
+                        let _=window.emit("lazy-tester-close-review",true);
                         tauri::async_runtime::spawn_blocking(move || {
                             // Windows CloseRequested (including Alt+F4 and the custom X)
                             // is the single confirmation boundary. Merely showing
@@ -104,6 +108,7 @@ pub fn run() {
                                     .set_level(MessageLevel::Warning)
                                     .show() != MessageDialogResult::Ok
                             {
+                                let _=window.emit("lazy-tester-close-review",false);
                                 CONFIRMING.store(false,Ordering::SeqCst);
                                 return;
                             }
@@ -115,6 +120,9 @@ pub fn run() {
                             match result{
                                 Ok(())=>{let _=window.destroy();},
                                 Err((release_attempted,error))=>{
+                                    // Resume only after the close operation has
+                                    // returned; the source gate remains authoritative.
+                                    let _=window.emit("lazy-tester-close-review",false);
                                     if release_attempted {
                                         // Native leases may have been restored. The
                                         // Svelte side must stop claiming they remain
