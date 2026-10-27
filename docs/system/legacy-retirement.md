@@ -9,6 +9,15 @@ lifecycle: ACTIVE
 
 # Selected Windows isolation pilot and inactive legacy inventory
 
+## Unmounted desktop VM route deletion — 27 October 2026
+
+All three unregistered Tauri VM/setup/window command files and their three
+unused backend window/layout/overlay sources were deleted from `Local` after
+checking `commands/mod.rs` and `engine/mod.rs` for live imports. The mounted
+Lazy Tester Tauri handlers and Windows native workspace remain unchanged.
+The old source is recoverable from the preceding Git revision; no running game,
+VM disk, profile or installed application is altered.
+
 ## Repository VM/legacy package retirement — 27 October 2026
 
 The `runtime-core` VMX/VMware/Guest Agent modules were retired from the active

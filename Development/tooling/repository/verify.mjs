@@ -66,6 +66,15 @@ export function verifyRepository(root,g0=false) {
   const bootstrap=read('Development/apps/desktop/src-tauri/src/app_bootstrap.rs');
   for(const name of ['lazy_tester_session','lazy_tester_profile_binding','lazy_tester_present','lazy_tester_previews'])assert.ok(bootstrap.includes('commands::native_clients::'+name+','),name);
   assert.ok(!/commands::virtual_clients::|commands::setup_tools::|commands::window_arrangement::/.test(bootstrap),'Legacy handlers must remain unregistered');
+  for(const path of [
+    'Development/apps/desktop/src-tauri/src/commands/virtual_clients.rs',
+    'Development/apps/desktop/src-tauri/src/commands/setup_tools.rs',
+    'Development/apps/desktop/src-tauri/src/commands/window_arrangement.rs',
+    'Development/apps/desktop/src-tauri/src/engine/screen_overlay.rs',
+    'Development/apps/desktop/src-tauri/src/engine/setup_tools.rs',
+    'Development/apps/desktop/src-tauri/src/engine/window_arrangement.rs']) {
+    assert.ok(!existsSync(resolve(root,path)),'Unreachable VM desktop source returned: '+path);
+  }
   const commands=read('Development/apps/desktop/src-tauri/src/commands/mod.rs');
   assert.ok(!/^\s*pub mod (virtual_clients|setup_tools|window_arrangement);/m.test(commands));
   const core=read('Development/engine/runtime-core/src/lib.rs');

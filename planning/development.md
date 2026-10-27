@@ -14,6 +14,16 @@ Proof: REMOTE_GITHUB exact-tree/source review only; all source execution,
 Windows package and Minecraft gameplay NOT_EXECUTED.
 
 
+## Source-retirement phase 4 — remove unmounted desktop VM/overlay source
+
+Deleted the unregistered legacy Tauri commands (virtual clients, setup tools,
+window arrangement) and the unmounted backend setup, legacy arrangement and
+screen overlay files. `commands/mod.rs` and `engine/mod.rs` source graph
+confirmed those modules were not compiled or exposed by Lazy Tester.
+Remaining Sandboxie-era adapters still compile indirectly; do not remove their
+`include_str!` scripts until the owned-process metadata owner is extracted.
+Evidence REMOTE_GITHUB static only; execution NOT_EXECUTED.
+
 ## Source-retirement phase 3 — deactivate historical build and guest resources
 
 `Local` now removes VMware guest scripts, old standalone VM distribution assets,

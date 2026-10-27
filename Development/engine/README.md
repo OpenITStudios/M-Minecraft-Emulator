@@ -32,8 +32,8 @@ provider. Installed systems, guest disks, worlds, accounts and registry profiles
 were not touched by this source-only change.
 
 The VMware Guest Agent scripts, fork-only build tree and legacy distribution
-resources have now been retired from the active source checkout. Some historical
-Sandboxie observation adapters and three embedded helper scripts remain compiled
+resources have now been retired from the active source checkout. Unreachable legacy VM/setup/window modules were also deleted from desktop.
+Some historical Sandboxie observation adapters and three embedded helper scripts remain compiled
 until their callers are safely disconnected. Trace their remaining desktop/runtime/tooling
 consumers before deleting them. This work cannot by itself establish gameplay,
 packaging or cross-platform acceptance.
