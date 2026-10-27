@@ -1,5 +1,27 @@
 # Current Development Handoff — v0.1
 
+## P0 source audit — 27 October 2026 (no Local PC testing)
+
+The operator explicitly requires ChatGPT + GitHub-only work. Windows, installer,
+Minecraft and Local PC tests are not requested, authorized or executed. Exact
+runtime completion remains UNKNOWN.
+
+The source audit identified an actual unsafe window-attribution path: the
+controller used a generic visible, unowned top-level HWND as a game's main window.
+After OGLES disappeared, an unowned #32770 Minecraft Education exit dialog could
+be selected, renamed to Minecraft - N by label_slot_window (WM_SETTEXT), then fail
+the exact native-dialog title check or receive WM_CLOSE meant for OGLES.
+This is now blocked by the reviewed OGLES window-class filter, including retained
+HWND rechecks. Full exit also skips automatic caption labeling, and the exit
+prompt is revalidated in full just before submitting IDOK. A disabled OGLES
+window while its modal dialog is in transition is now deferred within the
+existing deadline rather than aborting all sessions immediately.
+
+Source-level correctness and fixture cases were authored, not run. The
+original MC02 hang is NOT_ACCEPTED and no universal thread/process termination
+fallback was introduced. Remaining work: source-only lifecycle/HUD ownership
+review until the operator separately authorizes runtime acceptance.
+
 ## State and operator request — 27 October 2026
 
 The v0.1 checkpoint was saved and paused in Codex. The operator subsequently
@@ -114,18 +136,12 @@ Settings/Data Storage: queued saves, stable review dialogs, admission checks. 39
 
 ## Continuation, build and preservation
 
-Next: after this bounded source correction is built in an authorized Windows
-environment, perform one discriminating normal-exit check with two already
-approved owned sessions. Read only the controller's new per-session close
-evidence: verified main HWND present/absent, original window-thread alive/exited,
-number of distinct WM_CLOSE requests and whether the exact exit dialog was
-submitted. A surviving game with an exited original window thread implicates
-remaining process threads; an alive window thread with no HWND implicates
-an incomplete game/window shutdown path. Compare active versus parked release
-before selecting a further source change. Do not rerun the old undifferentiated
-two-launcher test, force-close retained games or read login/world data.
-Source/regression tests here are authored, not executed; Minecraft acceptance
-remains NOT_EXECUTED.
+Next: continue source-only audit of normal-exit ownership, including HUD
+worker lifetime, native dialog handling and verified game HWND changes.
+No request to use a Local PC, no Windows or Minecraft execution and no
+installer publication until the operator explicitly authorizes them.
+The detailed game process/thread/dialog evidence remains an unexecuted
+acceptance obligation, not a reason to stop source work.
 Keep every remaining requirement above open until its own actual evidence exists.
 
 Build: source Development/tooling/windows-toolchain/local-env.ps1 and call Set-LocalDeveloperEnvironment -Root <checkout>. Use pinned native CMake/Detours assets. Rust --locked --offline, feature lazy-tester-package; existing GetSecurityInfo declaration warnings remain. Candidate: npm --prefix Development run package:windows -- --export-only, with workspace CARGO_TARGET_DIR and reviewed LAZY_TESTER_NATIVE_PAYLOAD_DIR. Without --export-only it stages and opens startup verification. Source/structure checks: node Development/tooling/repository/verify.mjs --g0 and node Development/tooling/repository/check-structure.mjs.

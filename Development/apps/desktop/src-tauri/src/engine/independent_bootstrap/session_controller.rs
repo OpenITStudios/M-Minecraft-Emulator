@@ -151,7 +151,10 @@ impl Sessions {
                         if valid_retained_window(previous) {
                             // The game can reset its caption after a desktop/workspace transition.
                             let hwnd = usize::from_str_radix(&previous.window_handle[2..], 16).ok()?;
-                            let _ = label_slot_window(hwnd as _, child.pid, index as u32 + 1);
+                            // Do not mutate game or dialog titles once full exit begins.
+                            if !self.exiting {
+                                let _ = label_slot_window(hwnd as _, child.pid, index as u32 + 1);
+                            }
                             let mut process = previous.clone();
                             process.responding = unsafe {
                                 windows_sys::Win32::UI::WindowsAndMessaging::IsHungAppWindow(
@@ -162,7 +165,7 @@ impl Sessions {
                             return Some(process);
                         }
                     }
-                    window(child)
+                    window(child, !self.exiting)
                 });
                 self.windows[index] = process.clone();
                 let mut issue=self.issues[index].clone();
@@ -245,7 +248,7 @@ impl Sessions {
                 let child=&started.children[0];
                 let result=confirm_owned_exit(child).and_then(|confirmed| {
                     if !confirmed {
-                        if let Some(target)=window(child) {
+                        if let Some(target)=window(child, false) {
                             progress[index].request_window(&target)?;
                         }
                     }
@@ -463,6 +466,16 @@ fn scan(path: &Path, result: &mut ProfileStorage, started: std::time::Instant, d
     }
 }
 
+// Only the reviewed Minecraft Education main game surface (OGLES) is
+// a normal-close target. A native exit dialog (#32770) can outlive that surface
+// and must be handled exclusively by the exact-dialog verifier below.
+fn game_window_class(hwnd: windows_sys::Win32::Foundation::HWND) -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetClassNameW;
+    let mut class = [0u16; 32];
+    let count = unsafe { GetClassNameW(hwnd, class.as_mut_ptr(), class.len() as i32) };
+    count == 5 && class[..5] == ['O' as u16, 'G' as u16, 'L' as u16, 'E' as u16, 'S' as u16]
+}
+
 fn valid_retained_window(target: &OwnedProcess) -> bool {
     use windows_sys::Win32::UI::WindowsAndMessaging::*;
     let Ok(number) = usize::from_str_radix(&target.window_handle[2..], 16) else {
@@ -472,6 +485,7 @@ fn valid_retained_window(target: &OwnedProcess) -> bool {
     let mut pid = 0;
     unsafe {
         IsWindow(hwnd) != 0
+            && game_window_class(hwnd)
             && GetWindowThreadProcessId(hwnd, &mut pid) != 0
             && pid == target.pid
             && GetAncestor(hwnd, GA_ROOT) == hwnd
@@ -483,6 +497,7 @@ fn valid_retained_window(target: &OwnedProcess) -> bool {
 struct NormalCloseProgress {
     requested_windows: Vec<String>,
     original_window_thread: Option<OwnedHandle>,
+    blocked_by_modal: bool,
 }
 
 impl NormalCloseProgress {
@@ -500,7 +515,16 @@ impl NormalCloseProgress {
         } else {
             None
         };
-        close_verified_window(target)?;
+        match close_verified_window(target) {
+            // A native modal prompt disables its game owner. Wait for the
+            // verified prompt or a re-enabled main window; do not abort early.
+            Ok(()) => self.blocked_by_modal = false,
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                self.blocked_by_modal = true;
+                return Ok(());
+            }
+            Err(error) => return Err(error),
+        }
         if self.requested_windows.is_empty() {
             self.original_window_thread = thread;
         }
@@ -521,11 +545,12 @@ impl NormalCloseProgress {
 
     fn describe_pending(&self, child: &PendingEducationBootstrap, dialog_confirmed: bool) -> String {
         // Never inspect account, world, dialog text or arbitrary process memory.
-        let main_window = if window(child).is_some() { "present" } else { "absent or ambiguous" };
+        let main_window = if window(child, false).is_some() { "present" } else { "absent or ambiguous" };
         format!(
-            "game process still running; unique verified main HWND: {main_window}; original window thread: {}; distinct WM_CLOSE requests: {}; exact exit confirmation submitted: {dialog_confirmed}",
+            "game process still running; unique verified main HWND: {main_window}; original window thread: {}; distinct WM_CLOSE requests: {}; disabled main window encountered: {}; exact exit confirmation submitted: {dialog_confirmed}",
             self.original_thread_state(),
             self.requested_windows.len(),
+            self.blocked_by_modal,
         )
     }
 }
@@ -578,7 +603,9 @@ fn close_verified_window(target:&OwnedProcess)->io::Result<()> {
         return Err(invalid("Game window identity changed; close it normally"));
     }
     let window=usize::from_str_radix(&target.window_handle[2..],16).map_err(|_|invalid("Invalid game window"))? as windows_sys::Win32::Foundation::HWND;
-    if unsafe{GetWindowLongPtrW(window,GWL_STYLE)} & WS_DISABLED as isize != 0 {return Err(invalid("Finish the open Minecraft dialog, then try exiting again"));}
+    if unsafe{GetWindowLongPtrW(window,GWL_STYLE)} & WS_DISABLED as isize != 0 {
+        return Err(io::Error::new(io::ErrorKind::WouldBlock, "Minecraft game window has a modal dialog"));
+    }
     if unsafe{PostMessageW(window,WM_CLOSE,0,0)}==0 {return Err(io::Error::last_os_error());}
     Ok(())
 }
@@ -605,30 +632,37 @@ fn confirm_exit_dialog(owned_pid:u32, verify:impl Fn()->bool)->io::Result<bool> 
             SMTO_ABORTIFHUNG|SMTO_BLOCK|SMTO_ERRORONEXIT,100,&mut count)==0 {return None;}
         Some(String::from_utf16_lossy(&buffer[..count.min(buffer.len()-1)]))
     }
-    unsafe extern "system" fn find(window:HWND,parameter:isize)->i32 {
-        let search=&mut *(parameter as *mut Search);let mut pid=0;
-        if GetWindowThreadProcessId(window,&mut pid)==0 || pid!=search.pid || IsWindowVisible(window)==0 || IsWindowEnabled(window)==0 {return 1;}
+    unsafe fn matches_exact_prompt(window:HWND, expected_pid:u32)->bool {
+        let mut pid=0;
+        if GetWindowThreadProcessId(window,&mut pid)==0 || pid!=expected_pid
+            || IsWindowVisible(window)==0 || IsWindowEnabled(window)==0 {return false;}
         let mut class=[0u16;32];let length=GetClassNameW(window,class.as_mut_ptr(),class.len() as i32);
-        if length<=0 || String::from_utf16_lossy(&class[..length as usize])!="#32770" {return 1;}
+        if length<=0 || String::from_utf16_lossy(&class[..length as usize])!="#32770" {return false;}
         let mut title=[0u16;64];let length=GetWindowTextW(window,title.as_mut_ptr(),title.len() as i32);
-        if length<=0 || String::from_utf16_lossy(&title[..length as usize])!="Minecraft Education" {return 1;}
+        if length<=0 || String::from_utf16_lossy(&title[..length as usize])!="Minecraft Education" {return false;}
         let message=GetDlgItem(window,65535);let ok=GetDlgItem(window,1);let cancel=GetDlgItem(window,2);
-        if message.is_null() || ok.is_null() || cancel.is_null() {return 1;}
-        if text(message).as_deref()==Some("Exit Minecraft Education?") && text(ok).as_deref()==Some("OK") && text(cancel).as_deref()==Some("Cancel") {
-            search.matches.push(window as isize);
-        }
+        if message.is_null() || ok.is_null() || cancel.is_null() {return false;}
+        text(message).as_deref()==Some("Exit Minecraft Education?")
+            && text(ok).as_deref()==Some("OK")
+            && text(cancel).as_deref()==Some("Cancel")
+    }
+    unsafe extern "system" fn find(window:HWND,parameter:isize)->i32 {
+        let search=&mut *(parameter as *mut Search);
+        if matches_exact_prompt(window,search.pid) {search.matches.push(window as isize);}
         1
     }
     let mut search=Search{pid:owned_pid,matches:Vec::new()};
     if unsafe {EnumWindows(Some(find),&mut search as *mut Search as isize)}==0 {return Err(io::Error::last_os_error());}
     if search.matches.len()!=1 || !verify() {return Ok(false);}
-    let dialog=search.matches[0] as HWND;let mut pid=0;
-    if unsafe {GetWindowThreadProcessId(dialog,&mut pid)}==0 || pid!=owned_pid || !verify() {return Ok(false);}
+    let dialog=search.matches[0] as HWND;
+    // HWNDs can be destroyed/reused after EnumWindows. Revalidate ALL dialog
+    // properties immediately before posting IDOK, not merely its owning PID.
+    if !unsafe {matches_exact_prompt(dialog,owned_pid)} || !verify() {return Ok(false);}
     if unsafe {PostMessageW(dialog,WM_COMMAND,1,0)}==0 {return Err(io::Error::last_os_error());}
     Ok(true)
 }
 
-fn window(child: &PendingEducationBootstrap) -> Option<OwnedProcess> {
+fn window(child: &PendingEducationBootstrap, label: bool) -> Option<OwnedProcess> {
     use windows_sys::Win32::{
         Foundation::HWND,
         UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId},
@@ -642,7 +676,9 @@ fn window(child: &PendingEducationBootstrap) -> Option<OwnedProcess> {
         let selection = &mut *(data as *mut Selection);
         let mut pid = 0;
         GetWindowThreadProcessId(hwnd, &mut pid);
-        if pid == selection.pid && super::super::verify_live_client_02_window(hwnd, pid).is_ok() {
+        if pid == selection.pid
+            && game_window_class(hwnd)
+            && super::super::verify_live_client_02_window(hwnd, pid).is_ok() {
             selection.hwnd = hwnd;
             selection.count += 1;
         }
@@ -661,7 +697,9 @@ fn window(child: &PendingEducationBootstrap) -> Option<OwnedProcess> {
     }
     child.identity().ok()?;
     let slot = child.storage.as_ref()?.slot;
-    let _ = label_slot_window(selected.hwnd, child.pid, slot);
+    if label {
+        let _ = label_slot_window(selected.hwnd, child.pid, slot);
+    }
     Some(OwnedProcess {
         pid: child.pid,
         created_file_time: child.created.to_string(),
@@ -845,6 +883,29 @@ pub(super) fn maybe_run() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Private synthetic OGLES class, not Minecraft. Shared registration is
+    // initialized once because Rust test cases can execute concurrently.
+    fn fixture_game_window() -> windows_sys::Win32::Foundation::HWND {
+        use windows_sys::Win32::{
+            System::LibraryLoader::GetModuleHandleW,
+            UI::WindowsAndMessaging::{CreateWindowExW, DefWindowProcW, RegisterClassW, WNDCLASSW, WS_OVERLAPPEDWINDOW},
+        };
+        static REGISTERED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+        REGISTERED.get_or_init(|| unsafe {
+            let mut class: WNDCLASSW = std::mem::zeroed();
+            class.hInstance = GetModuleHandleW(std::ptr::null());
+            class.lpszClassName = windows_sys::w!("OGLES");
+            class.lpfnWndProc = Some(DefWindowProcW);
+            assert_ne!(RegisterClassW(&class), 0);
+        });
+        unsafe {
+            CreateWindowExW(0, windows_sys::w!("OGLES"), windows_sys::w!("Fixture"),
+                WS_OVERLAPPEDWINDOW, 0, 0, 200, 150,
+                std::ptr::null_mut(), std::ptr::null_mut(),
+                GetModuleHandleW(std::ptr::null()), std::ptr::null())
+        }
+    }
+
     #[test]
     fn stopped_profile_cache_allows_other_owned_games_but_rejects_unknown_or_reused_processes() {
         let other = OwnedProcess { pid:42, created_file_time:"123456".into(), session_id:1,
@@ -869,10 +930,8 @@ mod tests {
     #[test]
     fn normal_close_checks_exact_window_identity_and_leaves_another_window_alone() {
         use windows_sys::Win32::{Foundation::FILETIME,System::Threading::*,UI::WindowsAndMessaging::*};
-        let class=windows_sys::w!("STATIC");
         unsafe {
-            let make=||CreateWindowExW(0,class,class,WS_OVERLAPPEDWINDOW,0,0,200,150,ptr::null_mut(),ptr::null_mut(),ptr::null_mut(),ptr::null());
-            let own=make();let other=make();assert!(!own.is_null()&&!other.is_null());
+            let own=fixture_game_window();let other=fixture_game_window();assert!(!own.is_null()&&!other.is_null());
             let result=std::panic::catch_unwind(||{
                 let mut birth:FILETIME=std::mem::zeroed();let mut exited=birth;let mut kernel=birth;let mut user=birth;
                 assert_ne!(GetProcessTimes(GetCurrentProcess(),&mut birth,&mut exited,&mut kernel,&mut user),0);
@@ -898,9 +957,7 @@ mod tests {
     fn normal_close_posts_once_per_window_and_tracks_original_window_thread() {
         use windows_sys::Win32::{Foundation::FILETIME, System::Threading::*, UI::WindowsAndMessaging::*};
         unsafe {
-            let class=windows_sys::w!("STATIC");
-            let make=||CreateWindowExW(0,class,class,WS_OVERLAPPEDWINDOW,0,0,200,150,ptr::null_mut(),ptr::null_mut(),ptr::null_mut(),ptr::null());
-            let first=make();let successor=make();
+            let first=fixture_game_window();let successor=fixture_game_window();
             assert!(!first.is_null()&&!successor.is_null()&&first!=successor);
             let result=std::panic::catch_unwind(||{
                 let mut birth:FILETIME=std::mem::zeroed();let mut exited=birth;let mut kernel=birth;let mut user=birth;
@@ -913,8 +970,17 @@ mod tests {
                     responding:true,
                 };
                 let mut progress=NormalCloseProgress::default();
+                let style=GetWindowLongPtrW(first,GWL_STYLE);
+                SetWindowLongPtrW(first,GWL_STYLE,style|WS_DISABLED as isize);
+                progress.request_window(&target).unwrap();
+                assert!(progress.blocked_by_modal);
+                assert!(progress.requested_windows.is_empty());
+                let mut none:MSG=std::mem::zeroed();
+                assert_eq!(PeekMessageW(&mut none,first,WM_CLOSE,WM_CLOSE,PM_NOREMOVE),0);
+                SetWindowLongPtrW(first,GWL_STYLE,style);
                 progress.request_window(&target).unwrap();
                 progress.request_window(&target).unwrap();
+                assert!(!progress.blocked_by_modal);
                 assert_eq!(progress.requested_windows.len(),1);
                 assert_eq!(progress.original_thread_state(),"alive");
                 let mut message:MSG=std::mem::zeroed();
@@ -933,6 +999,36 @@ mod tests {
             if IsWindow(first)!=0{DestroyWindow(first);}
             if IsWindow(successor)!=0{DestroyWindow(successor);}
             if let Err(error)=result{std::panic::resume_unwind(error);}
+        }
+    }
+
+
+    #[test]
+    fn exit_dialog_is_not_accepted_as_an_ogles_game_window() {
+        use windows_sys::Win32::{Foundation::FILETIME,System::Threading::*,UI::WindowsAndMessaging::*};
+        unsafe {
+            let dialog=CreateWindowExW(0,windows_sys::w!("#32770"),windows_sys::w!("Minecraft Education"),
+                WS_POPUP|WS_VISIBLE,0,0,250,140,ptr::null_mut(),ptr::null_mut(),ptr::null_mut(),ptr::null());
+            assert!(!dialog.is_null());
+            let outcome=std::panic::catch_unwind(||{
+                let mut birth:FILETIME=std::mem::zeroed();let mut exit=birth;let mut kernel=birth;let mut user=birth;
+                assert_ne!(GetProcessTimes(GetCurrentProcess(),&mut birth,&mut exit,&mut kernel,&mut user),0);
+                let target=OwnedProcess{
+                    pid:std::process::id(),
+                    created_file_time:(((birth.dwHighDateTime as u64)<<32)|birth.dwLowDateTime as u64).to_string(),
+                    session_id:interactive_session(std::process::id()).unwrap(),
+                    window_handle:format!("0x{:x}",dialog as usize),
+                    responding:true,
+                };
+                assert!(!game_window_class(dialog));
+                assert!(!valid_retained_window(&target));
+                assert!(close_verified_window(&target).is_err());
+                let mut posted:MSG=std::mem::zeroed();
+                assert_eq!(PeekMessageW(&mut posted,dialog,WM_CLOSE,WM_CLOSE,PM_NOREMOVE),0);
+                assert_ne!(IsWindow(dialog),0);
+            });
+            DestroyWindow(dialog);
+            if let Err(error)=outcome{std::panic::resume_unwind(error);}
         }
     }
 
