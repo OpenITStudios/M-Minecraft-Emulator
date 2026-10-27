@@ -41,9 +41,8 @@ Root starter/DLL hashes: App/build-info.json, verified during Explorer startup.
 Candidate workspace/packages/lazy-tester/0.1.0-e4be7ed4c7b7-20261027T033008416Z;
 installer hash is recorded in its SHA256SUMS.txt.
 Signing NOT_VERIFIED; installer execution/publication NOT_EXECUTED/DISABLED.
-Previous startup: Connected/five enabled/local cache; process role metadata verified.
-Two games opened in 7977/6587ms, six switches took 481–581ms. One drag kept preview
-aligned; Play/Settings frame styles matched. Logs workspace/runs/two-session-*.log.
+Previous startup and process metadata verified. Two games opened in 7977/6587ms,
+six switches took 481–581ms; one drag and frame-style check passed (two-session logs).
 These checks did not prove visible pixels or usable gameplay; the user then reported
 a black primary viewport and inaccessible game. First full-exit attempt timed out
 with both games retained; a subsequent request exited the owned games and manager.
@@ -66,7 +65,8 @@ after repositioning and rechecks focus after parking. Five surface regressions P
 Frontend schedules preview reconstruction after failed selection, launch or page
 transition. Headless synthetic failed-switch test reproduced the missing refresh on
 prior source and passed after the fix; previous session and error remain visible.
-Logs workspace/runs/preview-recovery-{red,green}.log. Real recovery is unverified.
+Switch rollback now reports failed parking/restoration and suspends automatic
+updates on incomplete recovery. Logic test PASS; actual recovery remains unverified.
 Clean candidate workspace/packages/lazy-tester/0.1.0-9d5ec163726b-20261027T033405938Z
 built, not staged. Interactive testing deferred; do not control the user's desktop.
 

@@ -897,6 +897,27 @@ mod controller {
         sync::{mpsc, Mutex},
         time::{Duration, Instant},
     };
+    fn rollback_error(parked: &io::Result<()>, restored: &io::Result<()>) -> Option<String> {
+        let mut problems = Vec::new();
+        if let Err(error) = parked { problems.push(format!("Could not park the new game: {error}")); }
+        if let Err(error) = restored { problems.push(format!("Could not restore the previous view: {error}")); }
+        if problems.is_empty() { None } else { Some(problems.join("; ")) }
+    }
+    #[cfg(test)]
+    mod rollback_tests {
+        use super::*;
+        #[test]
+        fn incomplete_recovery_reports_each_failed_step() {
+            let ok = Ok(());
+            let parking = Err(io::Error::other("park failed"));
+            let restore = Err(io::Error::other("restore failed"));
+            assert!(rollback_error(&ok, &ok).is_none());
+            assert!(rollback_error(&parking, &ok).unwrap().contains("park failed"));
+            assert!(rollback_error(&ok, &restore).unwrap().contains("restore failed"));
+            let both = rollback_error(&parking, &restore).unwrap();
+            assert!(both.contains("park failed") && both.contains("restore failed"));
+        }
+    }
     enum Event {
         Reply(Reply),
         End(Result<(), String>),
@@ -1417,25 +1438,35 @@ mod controller {
                 .err()
                 .map(|e| e.to_string())
                 .unwrap_or_else(|| "Invalid surface acknowledgement".into());
-            let _ = replacement.background(rect, live_previews);
+            let parked = replacement.background(rect, live_previews);
             state.parked.push(replacement);
-            if let Some(old) = state.active.as_mut() {
-                old.place(rect, false)?;
-                state.suspended = false;
+            let had_previous = state.active.is_some();
+            let restored = if let Some(old) = state.active.as_mut() {
+                old.place(rect, false)
             } else {
-                native::clear_aperture(manager)?;
+                native::clear_aperture(manager)
+            };
+            let recovery = rollback_error(&parked, &restored);
+            state.suspended = recovery.is_some();
+            if let Some(recovery) = recovery {
+                return Err(io::Error::other(format!("Workspace placement failed: {detail}. Recovery was not confirmed: {recovery}.")));
             }
+            let status = if had_previous { "Previous view position restored; select it to play." }
+                else { "No game was selected; try again." };
             return Err(io::Error::other(format!(
-                "Workspace placement failed: {detail}. Previous session preserved."
+                "Workspace placement failed: {detail}. {status}"
             )));
         }
         if let Some(old) = state.active.as_mut() {
-            if old.background(rect, live_previews).is_err() {
-                let _ = replacement.background(rect, live_previews);
+            if let Err(error) = old.background(rect, live_previews) {
+                let parked = replacement.background(rect, live_previews);
+                let restored = old.place(rect, false);
                 state.parked.push(replacement);
-                return Err(io::Error::other(
-                    "Previous surface could not suspend; restore windows before continuing",
-                ));
+                let recovery = rollback_error(&parked, &restored);
+                state.suspended = recovery.is_some();
+                let status = recovery.map_or_else(|| "Previous view position restored; select it to play.".to_string(),
+                    |detail| format!("Recovery was not confirmed: {detail}."));
+                return Err(io::Error::other(format!("Previous surface could not suspend: {error}. {status}")));
             }
         }
         if let Some(old) = state.active.take() {

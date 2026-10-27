@@ -28,6 +28,8 @@ current focus and geometry, including when a parked game receives foreground foc
 The primary preview is hidden only after the foreground game is visible at the
 expected viewport; the worker refreshes previews after reconciling geometry.
 Parking rechecks focus on completion to recover a concurrent focus change.
+Failed switches attempt both parking the replacement and restoring the previous
+view; incomplete recovery is reported and automatic surface updates are suspended.
 release_for_close rejects reacquisition
 while restoring games. Product CloseRequested then sends CloseAll to the retained
 session controller: identity-checked WM_CLOSE to its own original game windows,
