@@ -223,7 +223,12 @@ impl Sessions {
                 requested[index]=true;
                 Ok(())
             })();
-            if let Err(error)=outcome {issues.push(format!("Minecraft - {}: {error}",profile.slot));}
+            if let Err(error)=outcome {
+                // A normal exit can race the identity/window checks; reap it on the next pass.
+                if child.exit_code_after_exit().is_err() {
+                    issues.push(format!("Minecraft - {}: {error}",profile.slot));
+                }
+            }
         }
         let deadline=std::time::Instant::now()+Duration::from_secs(20);
         loop {
@@ -246,7 +251,9 @@ impl Sessions {
                 });
                 match result {
                     Ok(value)=>confirmed[index]=value,
-                    Err(error)=>{self.exiting=false;return Err(error);}
+                    Err(error)=>{
+                        if child.exit_code_after_exit().is_err() {self.exiting=false;return Err(error);}
+                    }
                 }
             }
             if std::time::Instant::now()>=deadline {
