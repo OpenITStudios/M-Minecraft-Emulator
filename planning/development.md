@@ -67,8 +67,10 @@ Windows build and App staging PASS; live stability and user-visible proof pendin
 Source9d5ec16 additionally keeps the primary preview until the focused game is
 visible at its viewport, refreshes after repositioning, and rechecks focus after
 parking. Five surface logic regressions PASS; real pixels/input remain unverified.
-Frontend schedules preview reconstruction after a failed selection, launch or page
-transition;39 frontend tests and typecheck PASS. Real failure recovery is unverified.
+Frontend schedules preview reconstruction after failed selection, launch or page
+transition. Headless synthetic failed-switch test reproduced the missing refresh on
+prior source and passed after the fix; previous session and error remain visible.
+Logs workspace/runs/preview-recovery-{red,green}.log. Real recovery is unverified.
 Clean candidate workspace/packages/lazy-tester/0.1.0-9d5ec163726b-20261027T033405938Z
 built, not staged. Interactive testing deferred; do not control the user's desktop.
 
@@ -92,10 +94,8 @@ Launch preflight retains the original EXE pin and rechecks registration/identity
 Validation median2280->1176ms; identity and5 controller tests PASS. Actual timings above.
 Process roles: pinned hard links for Sessions/Window Recovery, copies rejected;
 MUI descriptions verified. Installer execution NOT_EXECUTED.
-WebView2 grouping matches OPEN upstream reports; metadata alone insufficient.
-Actual previous process graph: browser/controller parented toUI; browser owns
-renderer/GPU/network/storage/crash children. No LazyDesigner attribution.
-Log workspace/runs/process-role-observation.log/.ps1; Task Manager GUI NOT_OBSERVED.
+WebView2 grouping matches OPEN upstream reports. Browser/controller parented toUI;
+Task Manager GUI NOT_OBSERVED. Log workspace/runs/process-role-observation.log.
 https://github.com/MicrosoftEdge/WebView2Feedback/issues/5628
 https://github.com/tauri-apps/tauri/issues/15567
 No one-group Task Manager success claim. Full-exit closes only managed games normally
