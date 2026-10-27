@@ -19,6 +19,21 @@ lifecycle: ACTIVE
 
 This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build tooling in [Isolation Source Tooling](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md) is retired product history, not the native engine. The only active goal, blocker and next action are in [planning/development.md](../../planning/development.md). Treat historical `Next` here as superseded; inspect owning source and consumers.
 
+## Unsupported-platform shutdown boundary — 28 October 2026
+
+The Windows `CloseRequested` confirmation, managed `CloseAll`,
+native surface restoration and foreground hook cleanup remain available
+only under `cfg(windows)`. Unsupported platforms leave `CloseRequested`
+to normal Tauri window handling and do not claim to restore a Minecraft
+window or terminate a managed game. The reserved `--workspace-surface`
+helper argument is consumed immediately on non-Windows without starting
+a helper, reading IPC, or opening a Tauri game view. Windows uses its
+original verified helper and close handshake unchanged. This adds no
+background worker, OS emulation, process manager, file mutation or native
+Mac backend. Repository source checks are authored but NOT_EXECUTED;
+actual Mac window close, process teardown and compiled availability still
+require authorized target-environment evidence.
+
 ## Native process observation compile boundary — 28 October 2026
 
 A source-graph audit of mounted `native_clients.rs`,

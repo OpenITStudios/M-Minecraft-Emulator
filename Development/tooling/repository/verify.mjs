@@ -95,6 +95,12 @@ export function verifyRepository(root,g0=false) {
   assert.equal(manifest.engines.npm,app.engines.npm);
   if(existsSync(resolve(root,'.github/workflows')))assert.equal(filesBelow(root,'.github/workflows').filter(path=>/\.ya?ml$/i.test(path)).length,0,'CI must remain off');
   const bootstrap=read('Development/apps/desktop/src-tauri/src/app_bootstrap.rs');
+  assert.ok(bootstrap.includes('.on_window_event(|window, event| {\n            // The close/restore handshake is Windows game authority only.')
+    && /#\[cfg\(windows\)\]\s*\{\s*if let tauri::WindowEvent::CloseRequested/.test(bootstrap)
+    && /#\[cfg\(not\(windows\)\)\]\s*let _ = \(window, event\);/.test(bootstrap)
+    && /#\[cfg\(windows\)\]\s*let _ = crate::engine::workspace_surface::release\(\);/.test(bootstrap)
+    && /#\[cfg\(windows\)\]\s*crate::engine::instance_focus_events::shutdown\(\);/.test(bootstrap),
+    'Non-Windows Tauri exit must not send CloseAll or invoke native workspace recovery');
   for(const name of ['lazy_tester_backend_support','lazy_tester_session','lazy_tester_profile_binding','lazy_tester_present','lazy_tester_previews'])assert.ok(bootstrap.includes('commands::native_clients::'+name+','),name);
   assert.ok(!/commands::virtual_clients::|commands::setup_tools::|commands::window_arrangement::/.test(bootstrap),'Legacy handlers must remain unregistered');
   assert.ok(/#\[cfg\(not\(windows\)\)\][\s\S]*?app\.get_webview_window\("main"\)\.is_none\(\)/.test(bootstrap),
@@ -163,6 +169,13 @@ export function verifyRepository(root,g0=false) {
     && /#\[cfg\(windows\)\]\s*let _instance_lease = match app_instance::acquire\(\)/.test(bootstrap),
     'Windows instance lease must not block unsupported-platform startup');
   const surface=read('Development/apps/desktop/src-tauri/src/engine/workspace_surface.rs');
+  const unsupportedRole=surface.match(/#\[cfg\(not\(windows\)\)\]\s*pub fn maybe_run_helper\(\) -> bool \{([^}]*)\}/)?.[1];
+  assert.ok(/#\[cfg\(windows\)\]\s*pub fn maybe_run_helper\(\) -> bool/.test(surface)
+    && unsupportedRole
+    && unsupportedRole.includes('args_os().nth(1).as_deref()')
+    && unsupportedRole.includes('Some(std::ffi::OsStr::new("--workspace-surface"))')
+    && !/native::|process_roles|Command::|read_line|spawn\(/.test(unsupportedRole),
+    'Unsupported helper role must not start recovery, process, IPC or UI fallback');
   const unavailableSurface=read('Development/apps/desktop/src-tauri/src/engine/workspace_surface/unsupported_controller.rs');
   assert.ok(/#\[cfg\(windows\)\]\s*mod controller \{/.test(surface)
     && /#\[cfg\(not\(windows\)\)\]\s*#\[path = "workspace_surface\/unsupported_controller\.rs"\]\s*mod controller;/.test(surface),

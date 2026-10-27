@@ -113,6 +113,7 @@ fn workspace_enabled() -> bool {
     cfg!(debug_assertions) || cfg!(feature = "native-workspace-preview")
 }
 
+#[cfg(windows)]
 pub fn maybe_run_helper() -> bool {
     if std::env::args().nth(1).as_deref() != Some("--workspace-surface") {
         return false;
@@ -197,6 +198,15 @@ pub fn maybe_run_helper() -> bool {
         let _ = line(&Reply::Error(error.to_string()), &mut output);
     }
     true
+}
+
+// Preserve the reserved internal role spelling without starting a worker,
+// reading helper IPC or inspecting any process on unsupported platforms.
+// A command bearing this Windows-only role must not fall through into the
+// ordinary Tauri window startup.
+#[cfg(not(windows))]
+pub fn maybe_run_helper() -> bool {
+    std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("--workspace-surface"))
 }
 
 #[cfg(windows)]

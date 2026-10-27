@@ -101,13 +101,10 @@ source-only; Mac compilation and native backend remain NOT_EXECUTED.
 
 ## Native presentation boundary — 28 October 2026
 
-`workspace_surface` now compiles its existing window recovery/controller
-only on Windows. The non-Windows compilation path has a fail-closed,
-side-effect-free contract with no process/helper ownership. The public
-presentation API and Windows implementation stay unchanged. Authored
-non-Windows Rust regression and source guard have not executed; Mac build,
-account/profile isolation, game playback and actual optimizations remain
-NOT_EXECUTED.
+`workspace_surface` retains its original Windows controller/DWM/recovery
+owner. Unsupported OS contracts return `Unsupported` without launching
+helpers or owning windows. Rust source guards authored only; native
+tests, gameplay and macOS compilation remain NOT_EXECUTED.
 
 ## Unsupported-platform profile readiness — 28 October 2026
 
@@ -128,18 +125,18 @@ release guards and IPC schema are preserved behind Windows-only gates.
 Mac product packaging is prohibited; no shell compilation or gameplay
 has been executed.
 
-## Native observation compile boundary — 28 October 2026
+## Native observation and exit boundaries — 28 October 2026
 
-The mounted Win32 process/window/pipe observers are already target-gated.
-`native_clients` now also keeps the unused non-Windows Explorer-launch
-mutex, cooldown and admission function Windows-only, without altering
-Windows behavior or public IPC. This is source compilation hygiene, not
-a demonstrated runtime CPU/RAM improvement. Mac diagnostic shell readiness
-requires its own compile, main WebView, capability IPC, exit policy and
-separate package contract. All remain NOT_EXECUTED.
+Win32 process/window/pipe observers and Windows Explorer launch admission
+are target-gated. The Windows `CloseRequested` recovery handshake and
+post-Tauri native cleanup are now also `cfg(windows)`. Non-Windows uses
+ordinary Tauri window close; reserved `--workspace-surface` arguments
+exit without starting a game/window helper. Windows lifecycle and IPC
+remain unchanged. Static checks authored; Rust builds, macOS window/exit
+and Windows gameplay NOT_EXECUTED.
 
 ## Next bounded action
 
-Audit one remaining Mac diagnostic-shell lifecycle boundary: unsupported
-platform shutdown and absence of native game/helper work. Do not add a Mac
-game controller, run build/tests, or publish an unsupported package.
+Finish a bounded source-only feasibility inventory for the diagnostic
+macOS shell, including remaining compile, packaging and permission gates;
+do not claim Mac game support or run Local PC/CI tests.

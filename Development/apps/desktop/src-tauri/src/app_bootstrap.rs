@@ -96,7 +96,12 @@ pub fn run() {
             commands::native_clients::desktop_suspend_workspace,
         ])
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested{api,..}=event {
+            // The close/restore handshake is Windows game authority only.
+            // On unsupported OS, Tauri must handle ordinary window close;
+            // never send a fictitious CloseAll or consume its CloseRequested.
+            #[cfg(windows)]
+            {
+                if let tauri::WindowEvent::CloseRequested{api,..}=event {
                 if cfg!(feature="lazy-tester-package") || crate::engine::workspace_surface::is_active() {
                     use std::sync::atomic::{AtomicBool,Ordering};
                     static CONFIRMING:AtomicBool=AtomicBool::new(false);
@@ -164,6 +169,7 @@ pub fn run() {
                     }
                 }
             }
+            }
             #[cfg(windows)]
             if matches!(event, tauri::WindowEvent::Moved(_)) {
                 // Pure translation must not wait for the game's message loop/helper pipe.
@@ -183,12 +189,17 @@ pub fn run() {
                 crate::engine::workspace_surface::refresh_previews();
                 queue_workspace_update(window.clone());
             }
+            #[cfg(not(windows))]
+            let _ = (window, event);
         })
         .run(context);
     #[cfg(windows)]
     workspace_foreground::shutdown();
+    #[cfg(windows)]
     let _ = crate::engine::workspace_surface::release();
-    // Unhook from the worker's installation thread before exit.
+    // Only Windows installs native focus hooks. Unsupported shells have
+    // neither a retained Minecraft workspace nor a foreground observer.
+    #[cfg(windows)]
     crate::engine::instance_focus_events::shutdown();
     result.expect("failed to run Minecraft Instance Manager desktop runtime");
 }
