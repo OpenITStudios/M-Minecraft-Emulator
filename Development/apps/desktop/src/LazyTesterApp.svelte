@@ -43,6 +43,7 @@
   let issue = '', connectionIssue = '', previewIssue = '', selectedIdentity = '';
   // Display state only; the retained Rust controller still owns game lifetime.
   let closeInProgress = false, closeFailure = '';
+  let closeOneSlot: ProfileSlot | null = null, closingOneSlot: ProfileSlot | null = null;
   let previewStatuses: PreviewStatus[] = [];
   const images = new Map<ProfileSlot, HTMLElement>();
   const labels = {STOPPED: 'Not running', STARTING: 'Starting', RUNNING: 'Running', NOT_RESPONDING: 'Not responding', ATTENTION: 'Needs attention'};
@@ -65,7 +66,7 @@
     images.set(slot, node); observer?.observe(node); dirty = true;
     return {destroy() { observer?.unobserve(node); if (images.get(slot) === node) images.delete(slot); dirty = true; }};
   }
-  function select(slot: ProfileSlot) { requested = null; queued = slot; }
+  function select(slot: ProfileSlot) { closeOneSlot=null; requested = null; queued = slot; }
   async function consumeSelection() {
     const slot = queued; queued = null;
     if (slot === null || !available || profiles.find(profile => profile.slot === slot)?.state !== 'RUNNING') return;
@@ -127,7 +128,7 @@
     finally { busy = false; }
   }
   function navigate(next: typeof page) {
-    recovery=null;clearSlot=null;fullReview=null;
+    closeOneSlot=null;recovery=null;clearSlot=null;fullReview=null;
     if(next==='launchers')next='workspace';
     queuedPage = next; queued = null;queuedLaunch=null;
   }
@@ -214,6 +215,39 @@
     }catch(error){issue=String(error);}
     finally{savingPerformance=false;busy=false;}
   }
+  function requestCloseOne(slot: ProfileSlot) {
+    if (closeInProgress || busy || closingOneSlot !== null) return;
+    const profile=profiles.find(item=>item.slot===slot);
+    if (!profile || !['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)) return;
+    closeOneSlot=slot;
+  }
+  async function confirmCloseOne() {
+    const slot=closeOneSlot;
+    if (slot===null || closeInProgress || busy || closingOneSlot!==null) return;
+    closeOneSlot=null; closingOneSlot=slot; busy=true; issue='';
+    try {
+      const snapshot=await lazyTester.closeOne(slot);
+      profiles=snapshot.profiles; available=true; connectionIssue=''; storage=null;
+      if (active===slot) {
+        active=null;selectedIdentity='';requested=null;queued=null;
+        separateSlots=new Set([...separateSlots].filter(value=>value!==slot));
+        queued=firstEmbeddedProfile(profiles,separateSlots);
+        detached=queued===null;
+      }
+    } catch (error) {
+      // Native workspace release may have succeeded before a game-exit timeout;
+      // do not claim the selected game remains embedded in Play.
+      issue=`Minecraft - ${slot} did not finish closing normally. ${String(error)}`;
+      if(active===slot) {
+        active=null;selectedIdentity='';requested=null;queued=null;detached=true;
+      }
+      try {profiles=(await lazyTester.inspect()).profiles;available=true;connectionIssue='';}
+      catch(refreshError){available=false;connectionIssue=String(refreshError);}
+    } finally {
+      closingOneSlot=null;busy=false;dirty=true;
+    }
+  }
+
   async function release() {
     if (busy || refreshing || resizing) return;
     const slot=active;
@@ -389,6 +423,7 @@
     const retain = (stop: () => void) => { if (disposed) stop(); else stops.push(stop); };
     void listen<boolean>('lazy-tester-closing', event => {
       closeInProgress = event.payload;
+      if (closeInProgress) closeOneSlot=null;
     }).then(retain).catch(error => { issue = String(error); });
     void listen<string>('lazy-tester-close-error', event => {
       // The native close attempt already released/restored workspace leases.
@@ -446,14 +481,30 @@
         <div class="lt-games-heading"><span>Your games</span><span>{runningCount} of 5 running</span></div>
         <div class="lt-filmstrip" aria-label="Minecraft launchers">
           {#each profiles as profile (profile.slot)}
-            <button class="lt-card" class:selected={active===profile.slot&&!detached} aria-pressed={active===profile.slot&&!detached} aria-label={(profile.state==='RUNNING'?'Open ':'Launch ')+'Minecraft - '+profile.slot} disabled={busy||!available||!binding?.configured||['STARTING','NOT_RESPONDING'].includes(profile.state)} on:click={()=>profile.state==='RUNNING'?select(profile.slot):launch(profile.slot)}>
-              <strong>Minecraft - {profile.slot}{active===profile.slot&&!detached?' ✓':''}</strong>
-              <span class="lt-card-picture" use:image={profile.slot} aria-hidden="true">{profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':profile.state==='NOT_RESPONDING'?'Unavailable':profile.state==='ATTENTION'?'Needs attention':'▷ Launch'}</span>
-              <small>{active===profile.slot&&!detached?'Playing here':profile.state==='RUNNING'&&separateSlots.has(profile.slot)?'Separate window':profile.state==='RUNNING'?'Running in background':labels[profile.state]}</small>
-              {#if profile.issue}<small class="lt-error">{profile.issue}</small>{/if}
-            </button>
+            <div class="lt-launcher-entry">
+              <button class="lt-card" class:selected={active===profile.slot&&!detached} aria-pressed={active===profile.slot&&!detached} aria-label={(profile.state==='RUNNING'?'Open ':'Launch ')+'Minecraft - '+profile.slot} disabled={busy||!available||!binding?.configured||['STARTING','NOT_RESPONDING'].includes(profile.state)} on:click={()=>profile.state==='RUNNING'?select(profile.slot):launch(profile.slot)}>
+                <strong>Minecraft - {profile.slot}{active===profile.slot&&!detached?' ✓':''}</strong>
+                <span class="lt-card-picture" use:image={profile.slot} aria-hidden="true">{profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':profile.state==='NOT_RESPONDING'?'Unavailable':profile.state==='ATTENTION'?'Needs attention':'▷ Launch'}</span>
+                <small>{active===profile.slot&&!detached?'Playing here':profile.state==='RUNNING'&&separateSlots.has(profile.slot)?'Separate window':profile.state==='RUNNING'?'Running in background':labels[profile.state]}</small>
+                {#if profile.issue}<small class="lt-error">{profile.issue}</small>{/if}
+              </button>
+              {#if ['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)}
+                <button class="lt-secondary lt-close-launcher" aria-label={'Close Minecraft - '+profile.slot+' normally'} disabled={busy||closeInProgress||!available||!binding?.configured} on:click={()=>requestCloseOne(profile.slot)}>Close game</button>
+              {/if}
+            </div>
           {/each}
         </div>
+        {#if closeOneSlot!==null}
+          <section class="lt-single-close-confirm" aria-label="Confirm one Minecraft close">
+            <h3>Close Minecraft - {closeOneSlot}?</h3>
+            <p>Only this Minecraft session will be asked to exit normally. Other games will keep running. Save any work in Minecraft before continuing.</p>
+            <div class="lt-actions">
+              <button disabled={busy||closeInProgress} on:click={()=>void confirmCloseOne()}>Close Minecraft - {closeOneSlot}</button>
+              <button class="lt-secondary" disabled={busy||closeInProgress} on:click={()=>closeOneSlot=null}>Cancel</button>
+            </div>
+          </section>
+        {/if}
+        {#if closingOneSlot!==null}<p role="status">Waiting for Minecraft - {closingOneSlot} to close normally…</p>{/if}
         <p class="lt-help">{!binding?.configured?'Saved launcher data is checked automatically.':detached?'Select a running game to bring it into Play.':'Click a game to switch. Other games keep running.'}</p>
         {#if previewIssue}<details class="lt-preview-details"><summary>Preview unavailable</summary><p>{previewIssue}</p></details>{/if}
       </section>

@@ -129,6 +129,21 @@ authored but not executed. This source change is not proof of MC02 exit.
 All local PC tests and Minecraft acceptance remain prohibited pending
 explicit operator authorization.
 
+## P0 per-launcher close UI and safe retry status — 27 October 2026
+
+Play now exposes a separate Close game control under each existing active
+Minecraft card, not a nested button and not the global application Exit.
+A one-slot review explicitly describes the target and preservation of peers;
+Cancel issues no IPC. Confirmation calls the dedicated `lazy_tester_close_one`
+Tauri action, which reuses the existing session actor and selective native
+window lease release. A successful reply refreshes the canonical five-slot
+snapshot, preserves unrelated sessions and changes Play selection only if
+the closed slot was the selected one. A failed close reconciles the snapshot
+and does not falsely claim the target still appears inside the viewport.
+Unresponsive/starting slots may request normal close, but no process is ever
+force-killed. Frontend slot validation and a negative regression fixture
+were authored; no source runner, Windows or Minecraft test was executed.
+
 ## State and operator request — 27 October 2026
 
 The v0.1 checkpoint was saved and paused in Codex. The operator subsequently
