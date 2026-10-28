@@ -26,9 +26,14 @@ powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-native-perf
 powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-native-performance.ps1 -NativeProfileBaseline -MemoryComposition -ProfilePids <MC01_PID>,<MC02_PID>,<MC03_PID>,<MC04_PID>,<MC05_PID> -DurationSeconds 600 -SampleIntervalSeconds 5
 ~~~
 
-New schema **7** contains ordered slot labels, permanently pinned process
-identity/loss flags, CPU and memory samples, whole-system memory and optional
-direct-child aggregate measurements. Its native process readings also include
+Native-profile schema **7** remains supported for historical captures.
+New native-profile captures use **schema 8**, which adds a read-only hash of
+the game executable found at each selected process's image path. Identical
+path-file fingerprints are a comparison prerequisite, **not** proof of the
+loaded image, Microsoft publisher, Education build identity or gameplay.
+Both schemas contain ordered slot labels, pinned process identity/loss flags,
+CPU and memory samples, whole-system memory and optional direct-child
+aggregate measurements. Its native process readings also include
 the cumulative Win32 `PageFaultCount` from the **same process-memory query**;
 this is a count, not MiB, not a hard-fault/disk-I/O counter, and is never
 interpreted as proof of reclaimed RAM. The reviewer accepts older schema-7
@@ -36,8 +41,8 @@ reports without this field and withholds numeric comparisons when coverage
 differs. Decreasing/wrapped counters report an unknown endpoint delta. No PID, login, world or account data is
 written into the JSON. Keep the historical two/four/five-client command modes
 and schemas 1–6 for comparisons with older diagnostic files; they are not the
-preferred current native five-profile capture. This new path is source-prepared
-only; Windows execution and RAM claims remain NOT_EXECUTED.
+preferred current native five-profile capture. These new capture/evaluator revisions are source-prepared only; their Windows
+execution and RAM savings remain NOT_EXECUTED.
 
 Schema-7 reports may be reviewed and compared with the existing Node
 evaluator. Comparisons are descriptive numeric differences only; they
@@ -48,6 +53,21 @@ or the safety of a proposed internal allocator.
 node Development/tooling/acceptance/evaluate-native-performance.mjs native-memory-baseline-before.json
 node Development/tooling/acceptance/evaluate-native-performance.mjs native-memory-baseline-before.json native-memory-baseline-after.json
 ~~~
+
+**Current reviewer output:** for schema 7/8, \`aspirationalRamGoal\` describes
+each selected process's private-residency distance from the unproven
+<1 GiB goal. \`simultaneousSelectedRootTotals\` separately sums the private
+working set and private commitment of operator-selected client roots at
+**each identical sample time**, and optionally the separately selected
+manager. It never adds per-client peaks or direct-child groups. Incomplete
+selection, process identity loss or unavailable memory readings withhold
+all numerical aggregate statistics for the affected metric; zero selected
+client roots does **not** mean zero Minecraft RAM. The new output does not
+include shared image pages, unselected brokers, children, VRAM or complete
+system-memory ownership. \`memoryDifferences.simultaneousSelectedRootTotals\`
+uses the existing strict A/B admission and remains descriptive, without
+assuming equal world workloads, game versions, FPS or actual savings. No
+extra sampler, controller, disk read, game setting or Windows action is added.
 
 The older `performance-contract.json` describes the retired VMware-era
 performance gate; it does not override the current native schema 7.

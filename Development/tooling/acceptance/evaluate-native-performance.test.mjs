@@ -1084,6 +1084,100 @@ test('native RAM schema-7 handles zero, sparse, and five selected slots without 
   assert.equal(withManager.processTreeMeasured, false);
 });
 
+test('native selected-root sums use simultaneous samples, never independent peaks or unverified helpers', () => {
+  const fixture = nativeBaselineFixture(['01','05'], true, true);
+  fixture.samples[0].clients['01'].memory.privateWorkingSetMb = memoryMetric(100);
+  fixture.samples[0].clients['05'].memory.privateWorkingSetMb = memoryMetric(300);
+  fixture.samples[1].clients['01'].memory.privateWorkingSetMb = memoryMetric(300);
+  fixture.samples[1].clients['05'].memory.privateWorkingSetMb = memoryMetric(100);
+  for (const row of fixture.samples) row.manager.memory.privateWorkingSetMb = memoryMetric(50);
+  const review = evaluateNativePerformance(fixture);
+  const selected = review.simultaneousSelectedRootTotals;
+  assert.equal(selected.selectedProcessRolesVerified, false);
+  assert.equal(selected.fullProcessTreeMeasured, false);
+  assert.equal(selected.sharedPagesOrGpuMemoryIncluded, false);
+  assert.equal(selected.gameMemorySavingVerified, false);
+  assert.equal(selected.selectedClients.selectedRootCount, 2);
+  assert.equal(selected.selectedClients.privateWorkingSetMb.completeSampleCoverage, true);
+  assert.equal(selected.selectedClients.privateWorkingSetMb.peakMb, 400,
+    'Summing 300 + 300 per-client peaks would be a non-simultaneous false 600 MiB');
+  assert.equal(selected.selectedClients.privateWorkingSetMb.medianMb, 400);
+  assert.equal(selected.selectedClientsAndManager.selectedRootCount, 3);
+  assert.equal(selected.selectedClientsAndManager.privateWorkingSetMb.peakMb, 450);
+  assert.equal(selected.selectedClients.privateCommitMb.peakMb, 1040);
+  assert.equal(review.directChildren['01'].privateWorkingSetMb.peakMb, 0,
+    'Direct-child attribution remains separate and uncombined');
+
+  const candidate = structuredClone(fixture);
+  for (const row of candidate.samples) row.clients['05'].memory.privateWorkingSetMb.valueMb -= 20;
+  const compared = compareNativePerformance(fixture,candidate);
+  assert.equal(compared.memoryDifferences.simultaneousSelectedRootTotals.selectedClients
+    .privateWorkingSetMb.medianMbDifference, -20);
+  assert.equal(compared.memoryDifferences.simultaneousSelectedRootTotals.selectedClientsAndManager
+    .privateWorkingSetMb.medianMbDifference, -20);
+  assert.equal(compared.improvementVerified, false);
+  assert.equal(compared.sameWorkloadVerified, false);
+});
+
+test('native aggregate withholds misleading totals on incomplete samples without hiding independent metrics', () => {
+  const report = nativeBaselineFixture(['01','05'], true);
+  report.samples[1].clients['05'].memory.privateWorkingSetMb = memoryMetric(null,'EXTENDED_COUNTER_UNAVAILABLE');
+  let totals = evaluateNativePerformance(report).simultaneousSelectedRootTotals;
+  assert.equal(totals.selectedClients.privateWorkingSetMb.completeSampleCoverage, false);
+  assert.equal(totals.selectedClients.privateWorkingSetMb.observedSamples, 1);
+  assert.equal(totals.selectedClients.privateWorkingSetMb.missingSamples, 1);
+  assert.equal(totals.selectedClients.privateWorkingSetMb.firstIncompleteAtSeconds, 10);
+  assert.equal(totals.selectedClients.privateWorkingSetMb.medianMb, null);
+  assert.equal(totals.selectedClients.privateWorkingSetMb.peakMb, null);
+  assert.deepEqual(totals.selectedClients.privateWorkingSetMb.unavailableReasons,['EXTENDED_COUNTER_UNAVAILABLE']);
+  assert.equal(totals.selectedClients.privateCommitMb.medianMb, 1020,
+    'Private commitment remains usable when EX2 residency is unavailable');
+  assert.equal(totals.selectedClientsAndManager.privateWorkingSetMb.medianMb, null);
+  assert.equal(compareNativePerformance(report,report).memoryDifferences
+    .simultaneousSelectedRootTotals.selectedClients.privateWorkingSetMb, null);
+
+  const idle = evaluateNativePerformance(nativeBaselineFixture([])).simultaneousSelectedRootTotals;
+  assert.equal(idle.selectedClients.selectedRootCount,0);
+  assert.equal(idle.selectedClients.privateWorkingSetMb.medianMb,null);
+  assert.equal(idle.selectedClients.privateWorkingSetMb.completeSampleCoverage,false);
+  assert.deepEqual(idle.selectedClients.privateWorkingSetMb.unavailableReasons,['NO_SELECTED_ROOTS']);
+  assert.equal(idle.selectedClientsAndManager,null);
+  const managerOnly = evaluateNativePerformance(nativeBaselineFixture([],true)).simultaneousSelectedRootTotals;
+  assert.equal(managerOnly.selectedClients.privateWorkingSetMb.medianMb,null);
+  assert.equal(managerOnly.selectedClientsAndManager.privateWorkingSetMb.medianMb,255);
+  assert.equal(managerOnly.selectedClientsAndManager.selectedRootCount,1);
+
+  const lost = nativeBaselineFixture(['01','05'],true);
+  lost.samples[1].clients['05'].process =
+    {status:'UNKNOWN',cpuPercentOfHost:null,workingSetMb:null};
+  lost.samples[1].clients['05'].memory = {
+    privateCommitMb:memoryMetric(null,'IDENTITY_UNAVAILABLE'),
+    privateWorkingSetMb:memoryMetric(null,'IDENTITY_UNAVAILABLE'),
+  };
+  lost.profileIdentityLost['05']=true;
+  const summary = evaluateNativePerformance(lost).simultaneousSelectedRootTotals.selectedClients;
+  assert.equal(summary.privateWorkingSetMb.medianMb,null);
+  assert.deepEqual(summary.privateWorkingSetMb.unavailableReasons,['IDENTITY_UNAVAILABLE']);
+  assert.equal(summary.privateCommitMb.peakMb,null);
+
+  const mgrLost = nativeBaselineFixture(['01','05'],true);
+  mgrLost.samples[1].manager.process =
+    {status:'UNKNOWN',cpuPercentOfHost:null,workingSetMb:null};
+  mgrLost.samples[1].manager.memory = {
+    privateCommitMb:memoryMetric(null,'IDENTITY_UNAVAILABLE'),
+    privateWorkingSetMb:memoryMetric(null,'IDENTITY_UNAVAILABLE'),
+  };
+  mgrLost.managerProcessIdentityLost=true;
+  totals = evaluateNativePerformance(mgrLost).simultaneousSelectedRootTotals;
+  assert.equal(totals.selectedClients.privateWorkingSetMb.medianMb,510);
+  assert.equal(totals.selectedClientsAndManager.privateWorkingSetMb.medianMb,null);
+
+  const schema8 = nativeBuildFixture(['01','05']);
+  const root8 = evaluateNativePerformance(schema8).simultaneousSelectedRootTotals;
+  assert.equal(root8.selectedClients.privateWorkingSetMb.medianMb,510);
+  assert.equal(root8.selectedClientsAndManager,null);
+});
+
 test('native per-profile RAM goal distance is numeric only with full residency and identity coverage', () => {
   assert.deepEqual(evaluateNativePerformance(nativeBaselineFixture([])).aspirationalRamGoal, {});
   const baseline = nativeBaselineFixture(['01', '05']);

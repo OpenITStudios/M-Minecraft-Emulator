@@ -388,6 +388,71 @@ function nativeResidentGoalDistance(client) {
   };
 }
 
+// Sum only the *same observation row* across selected root processes.
+// Summing independent per-process peaks exaggerates simultaneous demand.
+// A partial row does not become a smaller apparent workload; all aggregate
+// numeric summaries are withheld if any sample cannot be fully attributed.
+// These manually selected PIDs are not verified game identities, and the
+// sums exclude child processes, shared image pages, GPU memory and brokers.
+function nativeSynchronousRootMetric(report, roots, field) {
+  const missingReasons = new Set();
+  const samples = report.samples.map(row => {
+    if (roots.length === 0) {
+      missingReasons.add('NO_SELECTED_ROOTS');
+      return {status:'UNKNOWN', valueMb:null, reason:'NO_SELECTED_ROOTS'};
+    }
+    let sum = 0, complete = true;
+    for (const root of roots) {
+      const selected = root === 'manager' ? row.manager : row.clients[root];
+      if (selected.process.status !== 'OBSERVED') {
+        complete = false;
+        missingReasons.add('IDENTITY_UNAVAILABLE');
+      } else if (selected.memory[field].status !== 'OBSERVED') {
+        complete = false;
+        missingReasons.add(selected.memory[field].reason);
+      } else {
+        sum += selected.memory[field].valueMb;
+      }
+    }
+    return complete
+      ? {status:'OBSERVED', valueMb:Number(sum.toFixed(3)), reason:null}
+      : {status:'UNKNOWN', valueMb:null, reason:'INCOMPLETE_SELECTED_ROOTS'};
+  });
+  const summary = memorySummary(samples);
+  const complete = roots.length > 0 && summary.missingSamples === 0;
+  const firstMissing = samples.findIndex(sample => sample.status === 'UNKNOWN');
+  return {
+    completeSampleCoverage: complete,
+    observedSamples: summary.observedSamples,
+    missingSamples: summary.missingSamples,
+    firstIncompleteAtSeconds: firstMissing < 0 ? null : report.samples[firstMissing].elapsedSeconds,
+    meanMb: complete ? summary.meanMb : null,
+    medianMb: complete ? summary.medianMb : null,
+    peakMb: complete ? summary.peakMb : null,
+    firstMb: complete ? summary.firstMb : null,
+    lastMb: complete ? summary.lastMb : null,
+    endpointDifferenceMb: complete ? summary.endpointDifferenceMb : null,
+    unavailableReasons: [...missingReasons].sort(),
+  };
+}
+function nativeSynchronousRootTotals(report, slots) {
+  const summarize = roots => ({
+    selectedRootCount: roots.length,
+    ...Object.fromEntries(processMemoryFields.map(field =>
+      [field, nativeSynchronousRootMetric(report, roots, field)])),
+  });
+  return {
+    interpretation: 'SUM_OF_SAME_SAMPLE_SELECTED_ROOT_PRIVATE_MEMORY_ONLY',
+    selectedProcessRolesVerified: false,
+    fullProcessTreeMeasured: false,
+    sharedPagesOrGpuMemoryIncluded: false,
+    gameMemorySavingVerified: false,
+    selectedClients: summarize(slots),
+    selectedClientsAndManager: report.managerSelected
+      ? summarize([...slots, 'manager']) : null,
+  };
+}
+
 // Schemas 7 (historical) and 8 (file-path fingerprint) keep the same
 // 0-5 profile samples; 8 adds untrusted-but-useful build provenance.
 function evaluateNativeProfileBaseline(report) {
@@ -548,6 +613,7 @@ function evaluateNativeProfileBaseline(report) {
     pageFaultCountCollected: faultCountCollected,
     ...(imageBound ? {imageEvidence} : {}),
     clients,
+    simultaneousSelectedRootTotals: nativeSynchronousRootTotals(report, slots),
     aspirationalRamGoal: Object.fromEntries(slots.map(slot =>
       [slot, nativeResidentGoalDistance(clients[slot])])),
     manager: report.managerSelected ? selectedProcess(row => row.manager) : null,
@@ -624,6 +690,14 @@ function compareNativeProfileBaseline(baseline, candidate) {
       clients: Object.fromEntries(before.selectedSlots.map(slot =>
         [slot, perFields(before.clients[slot], after.clients[slot], processMemoryFields)])),
       manager: baseline.managerSelected ? perFields(before.manager, after.manager, processMemoryFields) : null,
+      simultaneousSelectedRootTotals: {
+        selectedClients: perFields(
+          before.simultaneousSelectedRootTotals.selectedClients,
+          after.simultaneousSelectedRootTotals.selectedClients, processMemoryFields),
+        selectedClientsAndManager: baseline.managerSelected ? perFields(
+          before.simultaneousSelectedRootTotals.selectedClientsAndManager,
+          after.simultaneousSelectedRootTotals.selectedClientsAndManager, processMemoryFields) : null,
+      },
       system: perFields(before.system, after.system, systemMemoryFields),
       directChildren: baseline.directChildrenRequested ? Object.fromEntries(
         [...before.selectedSlots, ...(baseline.managerSelected ? ['manager'] : [])].map(key =>

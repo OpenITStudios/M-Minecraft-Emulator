@@ -90,6 +90,15 @@ authorization to perform Windows/game acceptance.
   This extends reviewer output only, not collector schema, Minecraft,
   profiles, the launcher lifecycle or resource policy. Focused Node
   regression fixtures are AUTHORED, NOT_EXECUTED.
+- The existing schema-7/8 offline evaluator now derives **synchronous
+  selected-root memory totals** (private commitment and private working set),
+  separately for selected MC roots and the optional manager. It never sums
+  per-profile maxima across timestamps or adds direct children/shared pages.
+  Incomplete rows, missing EX2 residency, identity loss and zero selected
+  clients cannot produce misleading numeric total/aggregate A/B differences.
+  The retained comparer remains descriptive and explicitly lacks workload,
+  gameplay and system-memory proof. Focused regression fixtures are authored;
+  isolated JS logic and full Node/Windows execution are separately reported.
 - CI stays OFF. No install, release, Windows game process or user PC touched.
 
 ## Evidence and preservation
@@ -135,6 +144,16 @@ process's descriptive median private-residency gap against the historical
 Minecraft 26.32 world, that its helper tree was measured, or that FPS/host
 continuity passed. Missing or identity-lost readings never receive a numeric
 gap. No RAM saving is claimed; Node fixtures AUTHORED, NOT_EXECUTED.
+
+**New source boundary:** no authoritative Education-26.32 graphics/CPU
+allocation ownership, synchronized 220.488/144 MiB residency/free-state
+mapping or 67 MiB object-release/reconstruction contract is present in
+this revision. Microsoft PIX/DxTimingCaptureLibrary can interpret sufficiently
+covered DirectX ETW, but raw provider-complete target ETW and comparable
+private-residency evidence are absent from this GitHub-only source context.
+No speculative renderer patch, working-set trim or experimental hook
+promotion is justified. The reviewer improvement concerns *measurement
+honesty*, not reclaimed game RAM.
 
 **Next source action:** find authoritative Education-26.32 allocator or
 renderer ownership and comparable resident data. Do not claim the old
