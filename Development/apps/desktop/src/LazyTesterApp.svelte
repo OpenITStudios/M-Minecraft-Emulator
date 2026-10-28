@@ -112,10 +112,9 @@
       if (disposed || !observationStillCurrent(issued, observationEpoch, reviewState())) return;
       const layoutChanged=!available||layoutIdentity(profiles)!==layoutIdentity(snapshot.profiles);
       profiles = snapshot.profiles; available = true; connectionIssue = '';
-      if (uncertainWindowSlot !== null
-        && profiles.find(profile => profile.slot===uncertainWindowSlot)?.state === 'STOPPED') {
-        uncertainWindowSlot = null;
-      }
+      // STOPPED only confirms a session observation, not restoration of
+      // the original HWND/helper checkpoint. Only a positive selected-close
+      // presentation receipt below may clear the uncertainty warning.
       if(snapshot.settings){
         if(!performanceDirty){activeFps=snapshot.settings.activeFps;backgroundFps=snapshot.settings.backgroundFps;}
         settings=snapshot.settings;
@@ -313,9 +312,19 @@
         }
       }
     } catch (error) {
-      // The command did not acknowledge releasing the target presentation.
-      // Preserve current Play selection; do not invent a separate window.
-      issue=`Could not begin closing Minecraft - ${slot}. ${String(error)}`;
+      // A transport failure or invalid receipt cannot establish whether the
+      // Rust command reached native window restoration. The UI must stop
+      // claiming an embedded selected HWND; no extra close/retry is sent.
+      uncertainWindowSlot = slot;
+      issue=`Minecraft - ${slot}: Close outcome and window restoration were not confirmed. ${String(error)}`;
+      if (active===slot) {
+        active=null;selectedIdentity='';requested=null;queued=null;detached=true;
+        previewStatuses=[];
+      }
+      // Read-only reconciliation cannot certify window restoration and must
+      // not clear uncertainWindowSlot, even when the game has stopped.
+      try {profiles=(await lazyTester.inspect()).profiles;available=true;connectionIssue='';}
+      catch(refreshError){available=false;connectionIssue=String(refreshError);}
     } finally {
       closingOneSlot=null;busy=false;dirty=true;
     }
@@ -572,10 +581,16 @@
     {#if page!=='workspace'}<aside class="lt-sidebar"><h2>Settings</h2><nav aria-label="Settings navigation"><button class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}
     <main>
       <header class="lt-page-header" class:lt-play-header={page==='workspace'}>
-        <div><h1>{page==='workspace'?(detached?(uncertainWindowSlot!==null?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p>{detached?'Your games keep running on the desktop.':active?'Click the game to play.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
+        <div><h1>{page==='workspace'?(detached?(uncertainWindowSlot!==null?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p>{detached?(uncertainWindowSlot!==null?'Session state and native window restoration must be verified separately.':'Your games keep running on the desktop.'):active?'Click the game to play.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
         <div class="lt-header-actions"><button class="lt-secondary" disabled={busy||manualRefreshing||manualRefreshRequested||nativeBackend!=='WindowsNative'} on:click={()=>manualRefreshRequested=true}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'&&active!==null}<button class="lt-secondary" disabled={busy||refreshing||resizing} title={'Open only Minecraft - '+active+' in its own window'} on:click={release}>Open Minecraft - {active} in a window</button>{/if}</div>
       </header>
       {#if issue||connectionIssue}<div class="lt-alert" role="alert">{#if issue}<p>{issue}</p>{/if}{#if connectionIssue}<p>{connectionIssue}</p>{/if}</div>{/if}
+      {#if uncertainWindowSlot!==null}
+        <section class="lt-exit-recovery" role="status" aria-label="Window recovery unconfirmed">
+          <h2>Minecraft - {uncertainWindowSlot} window recovery is unverified</h2>
+          <p>A STOPPED game process does not prove its original native window checkpoint was restored. Refresh updates session observations only; do not assume this window is available. Other verified games are preserved.</p>
+        </section>
+      {/if}
       {#if closeFailure}
         <section class="lt-exit-recovery" role="status" aria-label="Exit recovery">
           <h2>Exit was not completed</h2>
@@ -598,7 +613,7 @@
       <section class="lt-workspace" hidden={page!=='workspace'} aria-label="Minecraft play area">
         <div class="lt-stage-space" bind:this={stageSpace}>
         <div class="lt-viewport" class:lt-desktop={detached} bind:this={viewport}>
-          {#if detached}<div class="lt-empty"><h2>{uncertainWindowSlot!==null?'Window restoration not verified':closeFailure?'Exit incomplete — sessions preserved':'Games are in separate windows'}</h2><p>{uncertainWindowSlot!==null?'Minecraft - '+uncertainWindowSlot+' may still have a native window that was not restored. Its process was preserved. Review the error and Refresh; do not assume its window is accessible.':closeFailure?'Some Minecraft sessions may still be running and native window recovery is not guaranteed. Review each session before returning to Play.':'Use the Windows taskbar, or choose a game below to open it in Play.'}</p><p>{runningCount} of 5 running</p></div>{:else if !active}<div class="lt-empty"><span>LT</span><h2>{initializing?'Preparing launchers…':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Reconnecting saved data automatically. No setup is needed.':nativeBackend==='Unsupported'?'Native Minecraft sessions are not supported by this application build on this OS.':!binding?.configured?'Retry the connection. Your existing accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
+          {#if detached}<div class="lt-empty"><h2>{uncertainWindowSlot!==null?'Window restoration not verified':closeFailure?'Exit incomplete — sessions preserved':'Games are in separate windows'}</h2><p>{uncertainWindowSlot!==null?'Minecraft - '+uncertainWindowSlot+' has an unverified native recovery checkpoint. Refresh checks game process state, not whether window restoration succeeded.':closeFailure?'Some Minecraft sessions may still be running and native window recovery is not guaranteed. Review each session before returning to Play.':'Use the Windows taskbar, or choose a game below to open it in Play.'}</p><p>{runningCount} of 5 running</p></div>{:else if !active}<div class="lt-empty"><span>LT</span><h2>{initializing?'Preparing launchers…':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Reconnecting saved data automatically. No setup is needed.':nativeBackend==='Unsupported'?'Native Minecraft sessions are not supported by this application build on this OS.':!binding?.configured?'Retry the connection. Your existing accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
         </div>
         </div>
         {#if nativeBackend === 'WindowsNative'}

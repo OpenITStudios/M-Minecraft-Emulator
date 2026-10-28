@@ -135,19 +135,20 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability source hardening — 28 October 2026
 
-Windows transport fails fast on contention (WouldBlock) and checks queued
-requests ahead of idle reaping/audio (250ms). CloseOne persists only its
-confirmed selected-slot journal and skips a second global reply reap; CloseAll
-and ordinary Inspect still reap all slots. Selected CloseOne no longer issues
-a preliminary Inspect with possible unrelated journal I/O. After exact
-workspace restoration, the same retained session controller now refuses idle
-slots, while a missing controller refuses CloseOne even when no game is seen.
-CloseAll's idle-host fallback remains intact. The IPC wire, credentials,
-worlds, native identity and recovery owners are unchanged. Synthetic tests
-authored, NOT_EXECUTED. Disk/COM work already started may still block.
-MC02 normal exit and Windows/macOS runtime remain unverified.
+The Windows transport fails fast on contention and admits queued requests
+before idle reaping/audio (250ms). CloseOne persists only its selected-slot
+journal, skips second global response reap and preliminary Inspect. Its
+retained controller refuses idle slots and missing-controller CloseOne; idle
+CloseAll remains supported. The Svelte UI now retains an unconfirmed native
+window checkpoint warning after STOPPED or an ambiguous IPC failure. It
+does not claim embedded Play after a lost receipt; only a positive selected
+close presentation receipt clears that warning. Existing process/window
+owners, IPC schema and account/world data are unchanged. Browser synthetic
+regressions authored, NOT_EXECUTED; no tests/builds or gameplay executed.
+Already-started disk/COM work, MC02 normal exit and Windows/Mac gameplay
+remain unverified.
 
 ## Next bounded action
 
-Source-review selected-window release failure receipts and UI close recovery
-without introducing a second session authority or running local/CI tests.
+Audit native selected-close helper checkpoint retirement and ambiguous
+restore receipts while preserving strict handle identity and game ownership.

@@ -23,7 +23,11 @@ try {
     window.__calls = [];
     window.__offline = false;
     window.__holdInspect = false;
-    const brokenSetup = new URL(location.href).searchParams.has('broken');
+    const fixture = new URL(location.href).searchParams;
+    window.__runningSlots = fixture.has('close-recovery') || fixture.has('close-ipc-error') ? [2] : undefined;
+    window.__closeOutcome = fixture.has('close-recovery') ? 'unconfirmed' :
+      fixture.has('close-ipc-error') ? 'transport-error' : null;
+    const brokenSetup = fixture.has('broken');
     window.__bindingFailure = brokenSetup ? 'Saved profiles could not be verified.' : '';
     window.__locationFailure = brokenSetup ? 'The saved data folder is unavailable.' : '';
     window.__dataPath = null;
@@ -71,6 +75,19 @@ try {
           if (window.__locationFailure) throw window.__locationFailure;
           return {schema: 1, defaultPath: 'D:\\Lazy Tester\\Data', path: window.__dataPath,
             profiles: window.__dataPath ? profiles.map(profile => ({slot: profile.slot, path: window.__dataPath + '\\Profiles\\Minecraft-' + profile.slot})) : [], canLocate: true};
+        }
+        if (command === 'lazy_tester_close_one') {
+          if (window.__closeOutcome === 'unconfirmed') {
+            return {schema:1,presentationReleased:false,snapshot:null,issue:'Native restore is not confirmed'};
+          }
+          if (window.__closeOutcome === 'transport-error') {
+            throw 'Selected close reply was lost before receipt';
+          }
+          if (window.__closeOutcome === 'confirmed') {
+            window.__runningSlots = [];
+            return {schema:1,presentationReleased:true,snapshot:snapshot(),issue:null};
+          }
+          throw new Error('Unexpected selected close in synthetic fixture');
         }
         if (command === 'lazy_tester_present' || command === 'lazy_tester_clear_previews' || command.startsWith('desktop_')) return null;
         if (command === 'lazy_tester_previews') return {schema: 1, tiles: args.tiles.map(tile => ({slot: tile.slot, registered: false, reason: null}))};
@@ -244,6 +261,42 @@ try {
   await page.evaluate(()=>{window.__offline=true;});await page.getByRole('button',{name:'Refresh',exact:true}).click();await page.getByRole('alert').waitFor();
   await page.evaluate(()=>{window.__offline=false;});await nav('Play').click();await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('.lt-connection').textContent==='Connected');
+  // Synthetic CloseOne: a failed native recovery receipt remains unconfirmed
+  // even when a later read-only session observation reports STOPPED.
+  await page.goto('http://lazy-tester.test/?close-recovery=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  await heading('Minecraft - 2').waitFor();
+  await page.getByRole('button',{name:'Close Minecraft - 2 normally'}).click();
+  await page.getByRole('region',{name:'Confirm one Minecraft close'}).getByRole('button',{name:'Close Minecraft - 2',exact:true}).click();
+  await page.getByRole('status',{name:'Window recovery unconfirmed'}).waitFor();
+  assert.equal(await page.getByRole('heading',{name:'Window restoration not verified'}).count(),1);
+  await page.evaluate(()=>{window.__runningSlots=[];});
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('.lt-card')?.textContent?.includes('Launch'));
+  assert.equal(await page.getByRole('status',{name:'Window recovery unconfirmed'}).count(),1,
+    'STOPPED observations cannot clear an unacknowledged native checkpoint');
+  assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.command==='lazy_tester_close_one').length),1,
+    'a read-only refresh must not retry CloseOne');
+
+  // A lost IPC receipt is likewise ambiguous: the UI must not keep claiming
+  // the old embedded HWND; an explicit confirmed receipt can later clear it.
+  await page.goto('http://lazy-tester.test/?close-ipc-error=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  await heading('Minecraft - 2').waitFor();
+  await page.getByRole('button',{name:'Close Minecraft - 2 normally'}).click();
+  await page.getByRole('region',{name:'Confirm one Minecraft close'}).getByRole('button',{name:'Close Minecraft - 2',exact:true}).click();
+  await page.getByRole('status',{name:'Window recovery unconfirmed'}).waitFor();
+  assert.equal(await page.getByRole('heading',{name:'Window restoration not verified'}).count(),1,
+    'missing IPC receipt cannot retain an assumed embedded Play surface');
+  await page.evaluate(()=>{window.__closeOutcome='confirmed';});
+  await page.getByRole('button',{name:'Close Minecraft - 2 normally'}).click();
+  await page.getByRole('region',{name:'Confirm one Minecraft close'}).getByRole('button',{name:'Close Minecraft - 2',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('[aria-label="Window recovery unconfirmed"]')===null);
+  assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.command==='lazy_tester_close_one').length),2,
+    'only an explicit operator retry may request a second selected close');
+
   // Existing-data recovery is still available without launching or deleting profiles.
   await page.goto('http://lazy-tester.test/?broken=1');await page.getByText('Saved profiles could not be verified.',{exact:true}).waitFor();
   assert.equal(await heading('Ready when you are').count(),0);
@@ -263,5 +316,5 @@ try {
   await page.evaluate(()=>{window.__locateOutcome='valid';});await locate.click();await page.getByText('D:\\Recovered Data',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>window.__calls.some(c=>c.args?.action==='Choose'||['Launch','ClearProfileCache'].includes(c.args?.request?.operation))),false);
   assert.deepEqual(errors,[]);
-  console.log('PASS: automatic startup reconnect across reloads and transient binding/location failures without setup/import/launch; largest-fit 16:9 at seven window sizes; matching native IPC at 100/125/150% browser DPI; 30 seconds stable polling; queued launch/navigation; High/Low/FPS; desktop return; offline/data recovery. Mocked Tauri, no real game/data mutations.');
+  console.log('PASS: automatic startup reconnect; native capability refusal; layout/DPI; stable polling; settings and offline recovery; synthetic CloseOne recovery uncertainty persists through STOPPED and transport failure until a confirmed native receipt. Mocked Tauri only; no real game/data mutations.');
 } finally { await browser.close(); }
