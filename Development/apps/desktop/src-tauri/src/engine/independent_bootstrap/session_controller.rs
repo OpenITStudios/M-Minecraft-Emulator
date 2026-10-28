@@ -1180,7 +1180,7 @@ fn run() -> io::Result<()> {
                         .map_err(|error| error.to_string())?;
                     storage = Some(sessions.storage().map_err(|error| error.to_string())?);
                 }
-                SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } => {
+                SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } => {
                     sessions.reap();
                     let observed=super::super::inspect_native_workspace().map_err(|error|error.to_string())?.processes;
                     sessions.data_admission(slot,&observed).map_err(|error|error.to_string())?;
@@ -1189,6 +1189,8 @@ fn run() -> io::Result<()> {
                         game_preset::reset_settings(&store.private)
                     } else if matches!(envelope.request,SessionRequest::DisableImprovedInputResponse {..}) {
                         game_preset::disable_input_response(&store.private)
+                    } else if matches!(envelope.request,SessionRequest::EnableTextureStreaming {..}) {
+                        game_preset::enable_texture_streaming(&store.private)
                     } else {
                         game_preset::restore_settings(&store.private)
                     }.map_err(|error|error.to_string())?;

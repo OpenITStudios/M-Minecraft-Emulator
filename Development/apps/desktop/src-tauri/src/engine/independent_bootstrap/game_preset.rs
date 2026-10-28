@@ -72,9 +72,10 @@ fn options_path(private: &File, create: bool) -> io::Result<(PathBuf, Vec<File>)
 
 pub(super) fn inspect_settings(private: &File, admission: io::Result<()>) -> crate::engine::native_clients_session::GameSettingsStorage {
     use crate::engine::native_clients_session::GameSettingsStorage;
-    let mut status = GameSettingsStorage {has_settings:false, backup_available:false, can_reset:false, can_restore:false, improved_input_response_enabled:None, issue:None};
+    let mut status = GameSettingsStorage {has_settings:false, backup_available:false, can_reset:false, can_restore:false, improved_input_response_enabled:None, texture_streaming_enabled:None, issue:None};
     let mut resettable=false;
     let mut input_response=None;
+    let mut texture_streaming=None;
     let inspected = (|| -> io::Result<()> {
         let (path,_directories) = match options_path(private,false) {
             Ok(value) => value,
@@ -87,6 +88,7 @@ pub(super) fn inspect_settings(private: &File, admission: io::Result<()>) -> cra
                 // A historical Education leak report makes this one optional
                 // video key worth observing; inspection never changes it.
                 input_response = observed_input_response(&bytes);
+                texture_streaming = observed_texture_streaming(&bytes);
                 status.has_settings = true;
                 resettable=!bytes.is_empty();
             }
@@ -97,7 +99,7 @@ pub(super) fn inspect_settings(private: &File, admission: io::Result<()>) -> cra
         Ok(())
     })();
     match inspected.and(admission) {
-        Ok(()) => {status.can_reset=resettable;status.can_restore=status.backup_available;status.improved_input_response_enabled=input_response;}
+        Ok(()) => {status.can_reset=resettable;status.can_restore=status.backup_available;status.improved_input_response_enabled=input_response;status.texture_streaming_enabled=texture_streaming;}
         Err(error) => status.issue=Some(error.to_string()),
     }
     status
@@ -115,37 +117,48 @@ pub(super) fn restore_settings(private: &File) -> io::Result<bool> {
     prepared.commit_with_backup(true)
 }
 
-// The corresponding Bedrock option name is publicly documented, but
-// current Education 26.32 semantics are NOT yet verified. Report only an
-// explicit, unambiguous saved 0/1. Missing/malformed/conflicting values
-// are unknown; never infer a default, leak, or mitigation from this flag.
-fn observed_input_response(bytes: &[u8]) -> Option<bool> {
-    let text=std::str::from_utf8(bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(bytes)).ok()?;
-    let mut observed=None;
+// Observe only unique, explicit 0/1 settings. A repeated same-value key
+// is still ambiguous for any editor and must not appear actionable in UI.
+fn observed_binary_option(bytes: &[u8], wanted: &str) -> Option<bool> {
+    let text = std::str::from_utf8(bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(bytes)).ok()?;
+    let mut observed = None;
     for raw in text.split('\n') {
-        let line=raw.strip_suffix('\r').unwrap_or(raw);
-        let Some((key,value))=line.split_once(':') else { continue; };
-        if key != "ctrl_improvedInputResponse" { continue; }
-        let enabled=match value { "0"=>false, "1"=>true, _=>return None };
-        if observed.is_some_and(|previous| previous != enabled) { return None; }
-        observed=Some(enabled);
+        let line = raw.strip_suffix('\r').unwrap_or(raw);
+        let Some((name, value)) = line.split_once(':') else { continue; };
+        if name != wanted { continue; }
+        if observed.is_some() { return None; }
+        observed = Some(match value {
+            "0" => false,
+            "1" => true,
+            _ => return None,
+        });
     }
     observed
 }
+fn observed_input_response(bytes: &[u8]) -> Option<bool> {
+    observed_binary_option(bytes, "ctrl_improvedInputResponse")
+}
+fn observed_texture_streaming(bytes: &[u8]) -> Option<bool> {
+    observed_binary_option(bytes, "gfx_texture_streaming")
+}
 
-// Opt-in mitigation for a reported older Education RAM leak. Never add an
-// unknown option, infer a default, modify other game settings, or run while
-// Minecraft is active. Its impact on Education 26.32 is NOT proven.
-fn render_input_response_disabled(original: &[u8]) -> io::Result<Vec<u8>> {
+// Operate on a user-confirmed existing setting, never seed a new key or
+// alter another profile. Preserve BOM, mixed line endings and all other
+// lines byte-for-byte; reject duplicates, invalid bytes and stray CR.
+fn render_existing_binary_option(
+    original: &[u8], wanted: &str, from: u8, to: u8,
+) -> io::Result<Vec<u8>> {
     if original.len() > LIMIT || original.contains(&0) {
         return Err(invalid("Unsupported Minecraft options file"));
     }
     let bom = original.starts_with(b"\xef\xbb\xbf");
     let content = &original[if bom { 3 } else { 0 }..];
     std::str::from_utf8(content).map_err(|_| invalid("Minecraft options must be UTF-8"))?;
+    let mut prefix = wanted.as_bytes().to_vec();
+    prefix.push(b':');
     let mut output = Vec::with_capacity(original.len());
     if bom { output.extend_from_slice(&original[..3]); }
-    let mut count = 0;
+    let mut found = false;
     for raw in content.split_inclusive(|byte| *byte == b'\n') {
         let (line, ending): (&[u8], &[u8]) = if raw.ends_with(b"\r\n") {
             (&raw[..raw.len() - 2], b"\r\n")
@@ -155,27 +168,34 @@ fn render_input_response_disabled(original: &[u8]) -> io::Result<Vec<u8>> {
         if line.contains(&b'\r') {
             return Err(invalid("Unsupported Minecraft options newline"));
         }
-        if line.starts_with(b"ctrl_improvedInputResponse:") {
-            // Missing, disabled, duplicate or ambiguous keys are not authority
-            // for changing an unrecognized Education version/configuration.
-            if line != b"ctrl_improvedInputResponse:1" || count != 0 {
-                return Err(invalid("Improved Input Response option is not uniquely enabled"));
+        if line.starts_with(&prefix) {
+            if found || line.get(prefix.len()..) != Some(&[from][..]) {
+                return Err(invalid("Minecraft option is not uniquely in its expected state"));
             }
-            count += 1;
-            output.extend_from_slice(b"ctrl_improvedInputResponse:0");
+            found = true;
+            output.extend_from_slice(&prefix);
+            output.push(to);
             output.extend_from_slice(ending);
         } else {
             output.extend_from_slice(raw);
         }
     }
-    if count != 1 {
-        return Err(invalid("Improved Input Response is absent or not explicitly enabled"));
+    if !found {
+        return Err(invalid("Minecraft option is absent or not explicitly in its expected state"));
     }
     Ok(output)
 }
-
+fn render_input_response_disabled(original: &[u8]) -> io::Result<Vec<u8>> {
+    render_existing_binary_option(original, "ctrl_improvedInputResponse", b'1', b'0')
+}
+fn render_texture_streaming_enabled(original: &[u8]) -> io::Result<Vec<u8>> {
+    render_existing_binary_option(original, "gfx_texture_streaming", b'0', b'1')
+}
 pub(super) fn disable_input_response(private: &File) -> io::Result<bool> {
-    Prepared::read_input_response(private)?.commit_with_backup(true)
+    Prepared::read_existing_option(private, render_input_response_disabled)?.commit_with_backup(true)
+}
+pub(super) fn enable_texture_streaming(private: &File) -> io::Result<bool> {
+    Prepared::read_existing_option(private, render_texture_streaming_enabled)?.commit_with_backup(true)
 }
 
 const LIMIT: usize = 1024 * 1024;
@@ -305,16 +325,18 @@ impl Prepared {
         })
     }
 
-    // This optional workaround must never create options.txt or missing
-    // profile directories. The pinned original also refuses linked files.
-    fn read_input_response(private: &File) -> io::Result<Self> {
+    // Both opt-in choices require an existing reviewed options.txt and
+    // pinned directories. No missing setting, game profile or file is created.
+    fn read_existing_option(
+        private: &File, render: fn(&[u8]) -> io::Result<Vec<u8>>,
+    ) -> io::Result<Self> {
         let (path, directories) = options_path(private, false)?;
         let mut original = options_file(&path)?;
         let mut before = Vec::new();
         Read::by_ref(&mut original)
             .take((LIMIT + 1) as u64)
             .read_to_end(&mut before)?;
-        let after = render_input_response_disabled(&before)?;
+        let after = render(&before)?;
         Ok(Self {
             path,
             _directories: directories,
@@ -442,7 +464,7 @@ mod tests {
     fn input_response_receipt_never_assumes_disabled_or_edits_saved_options() {
         assert_eq!(observed_input_response(b"ctrl_improvedInputResponse:1\n"),Some(true));
         assert_eq!(observed_input_response(b"\xef\xbb\xbfctrl_improvedInputResponse:0\r\n"),Some(false));
-        assert_eq!(observed_input_response(b"ctrl_improvedInputResponse:1\nctrl_improvedInputResponse:1\n"),Some(true));
+        assert_eq!(observed_input_response(b"ctrl_improvedInputResponse:1\nctrl_improvedInputResponse:1\n"),None);
         for unknown in [
             &b""[..], &b"ctrl_improvedInputResponse:"[..],
             &b"ctrl_improvedInputResponse:2"[..], &b"ctrl_improvedInputResponse:off"[..],
@@ -497,6 +519,57 @@ mod tests {
         }
         assert_eq!(render_input_response_disabled(b"ctrl_improvedInputResponse:1").unwrap(),
             b"ctrl_improvedInputResponse:0");
+    }
+
+    #[test]
+    fn texture_streaming_opt_in_requires_unique_off_flag_and_preserves_other_options() {
+        let before = b"\xef\xbb\xbfgfx_texture_streaming:0\r\nvolume:0.75\nctrl_improvedInputResponse:1\r\n";
+        let after = b"\xef\xbb\xbfgfx_texture_streaming:1\r\nvolume:0.75\nctrl_improvedInputResponse:1\r\n";
+        assert_eq!(observed_texture_streaming(before), Some(false));
+        assert_eq!(render_texture_streaming_enabled(before).unwrap(), after);
+        assert_eq!(observed_texture_streaming(after), Some(true));
+        assert_eq!(render_input_response_disabled(before).unwrap(),
+            b"\xef\xbb\xbfgfx_texture_streaming:0\r\nvolume:0.75\nctrl_improvedInputResponse:0\r\n");
+        for ambiguous in [
+            &b""[..], &b"other:0\n"[..], &b"gfx_texture_streaming:1\n"[..],
+            &b"gfx_texture_streaming:2\n"[..],
+            &b"gfx_texture_streaming:0\ngfx_texture_streaming:0\n"[..],
+            &b"gfx_texture_streaming:0\ngfx_texture_streaming:1\n"[..],
+            &b"gfx_texture_streaming:0\0"[..],
+            &b"gfx_texture_streaming:0\nother:bad\rvalue"[..],
+            &b"gfx_texture_streaming:0\n\xff"[..],
+        ] {
+            assert!(render_texture_streaming_enabled(ambiguous).is_err());
+        }
+        assert_eq!(observed_texture_streaming(b"gfx_texture_streaming:0\ngfx_texture_streaming:0\n"), None);
+        assert_eq!(observed_texture_streaming(b"unknown:1\n"), None);
+    }
+
+    #[test]
+    fn texture_streaming_opt_in_preserves_world_and_can_restore_old_setting() {
+        let root = super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let private = open_directory(&root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap();
+        // This explicit choice must not populate missing Minecraft folders.
+        assert!(enable_texture_streaming(&private).is_err());
+        assert!(!root.join("Roaming").exists());
+        let path = Prepared::read(&private).unwrap().path;
+        let before = b"gfx_texture_streaming:0\naccount:kept\n";
+        fs::write(&path, before).unwrap();
+        fs::write(root.join("world-fixture"), b"untouched").unwrap();
+        let inspected = inspect_settings(&private, Ok(()));
+        assert_eq!(inspected.texture_streaming_enabled, Some(false));
+        assert!(inspected.can_reset);
+        assert!(enable_texture_streaming(&private).unwrap());
+        assert_eq!(fs::read(&path).unwrap(), b"gfx_texture_streaming:1\naccount:kept\n");
+        assert_eq!(backup_bytes(&path).unwrap().unwrap(), before);
+        assert_eq!(inspect_settings(&private, Ok(())).texture_streaming_enabled, Some(true));
+        assert!(enable_texture_streaming(&private).is_err());
+        assert!(restore_settings(&private).unwrap());
+        assert_eq!(fs::read(&path).unwrap(), before);
+        assert_eq!(fs::read(root.join("world-fixture")).unwrap(), b"untouched");
+        drop(private);
+        assert_eq!(root.parent(), Some(std::env::temp_dir().as_path()));
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

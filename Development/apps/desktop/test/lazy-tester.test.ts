@@ -100,10 +100,19 @@ describe('Lazy Tester profile contract', () => {
     const withDisabled={...snapshot,storage:storage.map(item=>({...item,gameSettings:{...gameSettings,improvedInputResponseEnabled:false}}))};
     expect(parseSession(withDisabled).storage![0]!.gameSettings?.improvedInputResponseEnabled).toBe(false);
     expect(parseSession(snapshot).storage![0]!.gameSettings?.improvedInputResponseEnabled).toBeUndefined();
+    const textureOff={...snapshot,storage:storage.map(item=>({...item,gameSettings:{...gameSettings,textureStreamingEnabled:false}}))};
+    const textureOn={...snapshot,storage:storage.map(item=>({...item,gameSettings:{...gameSettings,textureStreamingEnabled:true}}))};
+    expect(parseSession(textureOff).storage![0]!.gameSettings?.textureStreamingEnabled).toBe(false);
+    expect(parseSession(textureOn).storage![0]!.gameSettings?.textureStreamingEnabled).toBe(true);
+    expect(parseSession(snapshot).storage![0]!.gameSettings?.textureStreamingEnabled).toBeUndefined();
     for(const invalid of [{...gameSettings,hasSettings:false},{...gameSettings,backupAvailable:false},
       {...gameSettings,issue:'Locked'},{...gameSettings,canReset:'yes'},{...gameSettings,path:'../outside'},
       {...gameSettings,improvedInputResponseEnabled:'yes'},
       {...gameSettings,improvedInputResponseEnabled:null},
+      {...gameSettings,textureStreamingEnabled:null},
+      {...gameSettings,textureStreamingEnabled:'yes'},
+      {...gameSettings,hasSettings:false,canReset:false,textureStreamingEnabled:true},
+      {...gameSettings,canReset:false,canRestore:false,issue:'Profile running',textureStreamingEnabled:false},
       {...gameSettings,hasSettings:false,canReset:false,improvedInputResponseEnabled:true},
       {...gameSettings,canReset:false,canRestore:false,issue:'Profile running',improvedInputResponseEnabled:true},
       null]) {
@@ -241,6 +250,11 @@ describe('Lazy Tester profile contract', () => {
       {schema:1,presentationReleased:true,snapshot:null,issue:''},
       {schema:1,presentationReleased:true,snapshot,issue:null,process:123},
     ])expect(()=>parseSelectedClose(invalid)).toThrow();
+  });
+  it('rejects a forged texture-streaming profile before game IPC',async()=>{
+    for(const slot of [0,-1,6,99] as number[]) {
+      await expect(lazyTester.enableTextureStreaming(slot as 1)).rejects.toThrow('Unknown Minecraft profile');
+    }
   });
   it('refuses a forged RAM workaround slot without contacting the native controller', async()=>{
     for (const slot of [0,6,-1,10] as number[]) {

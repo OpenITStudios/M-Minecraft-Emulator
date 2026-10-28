@@ -14,7 +14,7 @@ export interface ProfileStorage {
   slot: ProfileSlot; bytes: number; files: number; partial: boolean;
   disk: {availableBytes: number; totalBytes: number} | null;
   cache: {bytes: number; files: number; partial: boolean; canClear: boolean; issue: string | null};
-  gameSettings?: {hasSettings:boolean; backupAvailable:boolean; canReset:boolean; canRestore:boolean; issue:string|null; improvedInputResponseEnabled?:boolean};
+  gameSettings?: {hasSettings:boolean; backupAvailable:boolean; canReset:boolean; canRestore:boolean; issue:string|null; improvedInputResponseEnabled?:boolean; textureStreamingEnabled?:boolean};
   fullClear?: {canClear:boolean; pending:boolean; confirmationToken:string|null; issue:string|null};
 }
 // Backend implementation availability, never game sign-in or profile readiness.
@@ -123,10 +123,13 @@ export function parseSession(value: unknown): SessionSnapshot {
         const game=storage.gameSettings;
         const active=(value.profiles as ProfileSession[]).some(profile=>profile.slot===storage.slot&&['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state));
         if(!record(game)||!exact(game,['hasSettings','backupAvailable','canReset','canRestore','issue',
-          ...(Object.hasOwn(game,'improvedInputResponseEnabled')?['improvedInputResponseEnabled']:[])])||
+          ...(Object.hasOwn(game,'improvedInputResponseEnabled')?['improvedInputResponseEnabled']:[]),
+          ...(Object.hasOwn(game,'textureStreamingEnabled')?['textureStreamingEnabled']:[])])||
           ['hasSettings','backupAvailable','canReset','canRestore'].some(key=>typeof game[key]!=='boolean')||
           (Object.hasOwn(game,'improvedInputResponseEnabled')&&
             (typeof game.improvedInputResponseEnabled!=='boolean'||!game.hasSettings||game.issue!==null))||
+          (Object.hasOwn(game,'textureStreamingEnabled')&&
+            (typeof game.textureStreamingEnabled!=='boolean'||!game.hasSettings||game.issue!==null))||
           !(game.issue===null||typeof game.issue==='string'&&game.issue.length<=8192)||
           game.canReset&&(!game.hasSettings||game.issue!==null||active)||
           game.canRestore&&(!game.backupAvailable||game.issue!==null||active))throw new TypeError('Invalid settings recovery metadata');
@@ -230,6 +233,10 @@ export const lazyTester = {
   storage: async () => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'InspectStorage'}})),
   openFolder: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'OpenProfileFolder', slot}})),
   clearCache: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'ClearProfileCache', slot}})),
+  enableTextureStreaming: async (slot: ProfileSlot) => {
+    if(!profileSlots.includes(slot))throw new TypeError('Unknown Minecraft profile');
+    return parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request:{operation:'EnableTextureStreaming',slot}}));
+  },
   disableImprovedInputResponse: async (slot: ProfileSlot) => {
     if(!profileSlots.includes(slot))throw new TypeError('Unknown Minecraft profile');
     return parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request:{operation:'DisableImprovedInputResponse',slot}}));

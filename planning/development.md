@@ -143,6 +143,21 @@ authorization to perform Windows/game acceptance.
   tradeoff and unverified Education 26.32 RAM effect. Rust/TS fixtures
   AUTHORED, NOT_EXECUTED; no product, game, profile or Windows changes
   were applied in the GitHub-only context.
+- Native **Texture Streaming opt-in** is now available for a stopped
+  launcher with an existing uniquely disabled `gfx_texture_streaming:0`
+  option. Mojang's Bedrock 26.30 notes identify texture streaming as a
+  built-in GPU texture-memory reduction on supported PC devices; Education
+  26.32 carries some 26.30 features but exact feature support in its
+  installed executable is NOT verified. The original settings owner now
+  reports existing 0/1 status and, only after explicit UI confirmation
+  and original controller process/slot admission, updates 0 to 1 using
+  the existing verified backup and restore path. It refuses missing,
+  duplicate, malformed or ambiguous settings; never adds a game option,
+  changes profiles/worlds/accounts or enables unsupported graphics hacks.
+  Texture residency and total RAM reductions are NOT_EXECUTED/UNKNOWN.
+  Technical references:
+  https://www.minecraft.net/en-us/article/minecraft-26-30-bedrock-changelog
+  https://minecraft.wiki/w/Options.txt_(Bedrock_Edition)
 - CI stays OFF. No install, release, Windows game process or user PC touched.
 
 ## Evidence and preservation
@@ -199,7 +214,6 @@ No speculative renderer patch, working-set trim or experimental hook
 promotion is justified. The reviewer improvement concerns *measurement
 honesty*, not reclaimed game RAM.
 
-**Next source action:** find authoritative Education-26.32 allocator or
-renderer ownership and comparable resident data. Do not claim the old
+**Next source action:** seek native Education-26.32 evidence of Texture Streaming support and allocator ownership, with comparable resident data. Do not claim the old
 67 MiB CPU allocation, 220/144 MiB graphics route, or input-response
 leak as a verified saving for the selected build. Runtime remains deferred.
