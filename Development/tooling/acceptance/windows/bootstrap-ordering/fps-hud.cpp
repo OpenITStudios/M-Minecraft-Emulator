@@ -65,20 +65,70 @@ struct Canvas {
     HFONT font = nullptr;
     HGDIOBJ oldBitmap = nullptr, oldFont = nullptr;
     DWORD* pixels = nullptr;
-    ~Canvas() {
-        if (oldFont) SelectObject(dc, oldFont);
-        if (oldBitmap) SelectObject(dc, oldBitmap);
+    SIZE extent{};
+    UINT fontDpi = 0;
+    Canvas() = default;
+    Canvas(const Canvas&) = delete;
+    Canvas& operator=(const Canvas&) = delete;
+    // The owner is either one scoped diagnostic raster() call or exactly one
+    // native HUD worker thread. Nothing survives the worker's normal exit.
+    void release() noexcept {
+        if (dc && oldFont) SelectObject(dc, oldFont);
+        if (dc && oldBitmap) SelectObject(dc, oldBitmap);
         if (font) DeleteObject(font);
         if (bitmap) DeleteObject(bitmap);
+        font = nullptr; bitmap = nullptr;
+        oldBitmap = nullptr; oldFont = nullptr;
+        pixels = nullptr; extent = {}; fontDpi = 0;
+    }
+    ~Canvas() {
+        release();
         if (dc) DeleteDC(dc);
     }
-    bool allocate(SIZE size) {
+    bool allocate(SIZE requested) {
+        if (dc && bitmap && pixels && extent.cx == requested.cx && extent.cy == requested.cy)
+            return true;
+        // DPI/size changed: deselect before destroying GDI resources; never
+        // leave the previous DIB selected or retain multiple pixel buffers.
+        release();
+        if (!dc || requested.cx <= 0 || requested.cy <= 0) return false;
         BITMAPINFO info{}; info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        info.bmiHeader.biWidth = size.cx; info.bmiHeader.biHeight = -size.cy;
+        info.bmiHeader.biWidth = requested.cx; info.bmiHeader.biHeight = -requested.cy;
         info.bmiHeader.biPlanes = 1; info.bmiHeader.biBitCount = 32; info.bmiHeader.biCompression = BI_RGB;
-        bitmap = CreateDIBSection(dc, &info, DIB_RGB_COLORS, reinterpret_cast<void**>(&pixels), nullptr, 0);
-        if (!dc || !bitmap) return false;
-        oldBitmap = SelectObject(dc, bitmap); return oldBitmap && oldBitmap != HGDI_ERROR;
+        void* mapped = nullptr;
+        const HBITMAP created = CreateDIBSection(dc, &info, DIB_RGB_COLORS, &mapped, nullptr, 0);
+        if (!created || !mapped) {
+            if (created) DeleteObject(created);
+            return false;
+        }
+        const HGDIOBJ previouslySelected = SelectObject(dc, created);
+        if (!previouslySelected || previouslySelected == HGDI_ERROR) {
+            DeleteObject(created);
+            return false;
+        }
+        bitmap = created; pixels = static_cast<DWORD*>(mapped);
+        oldBitmap = previouslySelected; extent = requested;
+        return true;
+    }
+    bool selectFont(UINT dpi) {
+        if (dc && font && fontDpi == dpi) return true;
+        if (!dc) return false;
+        if (font) {
+            const HGDIOBJ previous = SelectObject(dc, oldFont);
+            if (!previous || previous == HGDI_ERROR || !DeleteObject(font)) return false;
+            font = nullptr; oldFont = nullptr; fontDpi = 0;
+        }
+        const HFONT created = CreateFontW(-MulDiv(17, static_cast<int>(dpi), 96), 0, 0, 0, FW_BOLD, FALSE, FALSE,
+            FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
+            DEFAULT_PITCH, L"Segoe UI");
+        if (!created) return false;
+        const HGDIOBJ previouslySelected = SelectObject(dc, created);
+        if (!previouslySelected || previouslySelected == HGDI_ERROR) {
+            DeleteObject(created);
+            return false;
+        }
+        font = created; oldFont = previouslySelected; fontDpi = dpi;
+        return true;
     }
 };
 LONGLONG now() noexcept { LARGE_INTEGER value{}; return QueryPerformanceCounter(&value) ? value.QuadPart : 0; }
@@ -95,12 +145,7 @@ void paint(Canvas& canvas, Reading value, UINT dpi, SIZE& size) {
     size = {MulDiv(128, static_cast<int>(dpi), 96), MulDiv(32, static_cast<int>(dpi), 96)};
     if (!canvas.allocate(size)) throw std::runtime_error("HUD bitmap unavailable");
     std::fill_n(canvas.pixels, static_cast<size_t>(size.cx) * size.cy, 0xff182026UL);
-    canvas.font = CreateFontW(-MulDiv(17, static_cast<int>(dpi), 96), 0, 0, 0, FW_BOLD, FALSE, FALSE,
-        FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
-        DEFAULT_PITCH, L"Segoe UI");
-    if (!canvas.font) throw std::runtime_error("HUD font unavailable");
-    canvas.oldFont = SelectObject(canvas.dc, canvas.font);
-    if (!canvas.oldFont || canvas.oldFont == HGDI_ERROR) throw std::runtime_error("HUD font selection failed");
+    if (!canvas.selectFont(dpi)) throw std::runtime_error("HUD font selection failed");
     wchar_t text[32]{};
     if (value.valid) swprintf_s(text, L"%.1f FPS", value.milliFps / 1000.0);
     else wcscpy_s(text, L"-- FPS");
@@ -175,6 +220,9 @@ struct Hud::State {
             hook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
                 location, GetCurrentProcessId(), 0, WINEVENT_OUTOFCONTEXT);
             if (!hook) throw std::runtime_error("HUD location hook unavailable");
+            // A single worker-owned DIB/font is repainted in place; size or
+            // DPI changes rebuild it, and worker exit releases every GDI handle.
+            Canvas upload;
             unsigned previousGeneration = 0, previousRate = ~0U;
             bool previousValid = false;
             RECT previousBounds{}; UINT previousDpi = 0;
@@ -225,8 +273,9 @@ struct Hud::State {
                         const unsigned shownRate = (value.milliFps + 50) / 100;
                         const bool redraw = dpi != previousDpi || value.valid != previousValid || shownRate != previousRate;
                         if (redraw) {
-                            // Draw directly into the upload DIB; no copied pixel vector or second bitmap.
-                            SIZE size{}; Canvas upload; paint(upload, value, dpi, size);
+                            // Repaint the worker's existing upload DIB; no second
+                            // pixel vector, per-redraw GDI allocation or global cache.
+                            SIZE size{}; paint(upload, value, dpi, size);
                             POINT position{bounds.left, bounds.top}, origin{};
                             BLENDFUNCTION blend{AC_SRC_OVER, 0, 240, AC_SRC_ALPHA};
                             if (!UpdateLayeredWindow(hud, nullptr, &position, &size, upload.dc, &origin, 0, &blend, ULW_ALPHA))
