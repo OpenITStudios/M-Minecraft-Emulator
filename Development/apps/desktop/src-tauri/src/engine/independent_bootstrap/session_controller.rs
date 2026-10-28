@@ -45,7 +45,18 @@ impl Sessions {
     }
 
     fn reap(&mut self) {
+        self.reap_selected(&[true; 5]);
+    }
+
+    // Only the already-exited target of CloseOne needs journal persistence
+    // before its acknowledgement. Other slots retain their original handles
+    // and journals for the next ordinary idle/Inspect maintenance cycle.
+    // CloseAll supplies all five slots and retains its full cleanup contract.
+    fn reap_selected(&mut self, selected: &[bool; 5]) {
         for index in 0..5 {
+            if !selected[index] {
+                continue;
+            }
             let Some(started) = self.running[index].as_ref() else {
                 continue;
             };
@@ -146,9 +157,8 @@ impl Sessions {
         self.snapshot_without_reaping()
     }
 
-    // During a coordinated normal CloseAll/CloseOne, the game process
-    // observation must not synchronously flush another game's startup
-    // journal before WM_CLOSE and exact dialog processing can proceed.
+    // During a coordinated normal CloseAll/CloseOne, avoid unrelated journal
+    // persistence both before the close request and in its response snapshot.
     // The ordinary Inspect route continues to reap/persist as before.
     fn snapshot_without_reaping(&mut self) -> SessionSnapshot {
         let profiles = (0..5)
@@ -291,7 +301,9 @@ impl Sessions {
             // remains alive. Reaping would invoke blocking disk sync_all for
             // an already-exited peer, starving the still-live game's dialog.
             if self.selected_processes_exited(&mask)? {
-                self.reap(); // Only after selected game exits, persist journals.
+                // Persist only the selected, confirmed exited processes.
+                // A single CloseOne must not wait for another slot's sync_all.
+                self.reap_selected(&mask);
                 if (0..5).all(|index|!mask[index]||self.running[index].is_none()) {
                     return Ok(());
                 }
@@ -941,6 +953,13 @@ fn receive_before_maintenance<T>(
     result
 }
 
+// Only a successful coordinated close has already reaped its selected slots.
+// The reply must not re-enter global journal persistence for unrelated games.
+// Ordinary Inspect and other operations retain their existing full reaping.
+fn response_reaps_all(request: &SessionRequest) -> bool {
+    !matches!(request, SessionRequest::CloseOne { .. } | SessionRequest::CloseAll)
+}
+
 fn run() -> io::Result<()> {
     use windows_sys::Win32::{
         Foundation::{GetLastError, ERROR_ALREADY_EXISTS},
@@ -1017,6 +1036,7 @@ fn run() -> io::Result<()> {
         let reply = (|| {
             let mut storage = None;
             let mut settings = None;
+            let reap_all_for_reply = response_reaps_all(&envelope.request);
             match envelope.request {
                 SessionRequest::Inspect => {}
                 SessionRequest::InspectSettings => {
@@ -1083,7 +1103,13 @@ fn run() -> io::Result<()> {
                     .open_folder(slot)
                     .map_err(|error| error.to_string())?,
             }
-            let mut snapshot = sessions.snapshot();
+            let mut snapshot = if reap_all_for_reply {
+                sessions.snapshot()
+            } else {
+                // CloseOne has already persisted its selected journal; CloseAll
+                // has already persisted all five. Never flush a peer again here.
+                sessions.snapshot_without_reaping()
+            };
             if let Some(report)=settings.as_mut(){report.audio_issue=audio_issue.clone();}
             snapshot.storage = storage;
             snapshot.settings = settings;
@@ -1115,6 +1141,33 @@ pub(super) fn maybe_run() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn close_replies_do_not_trigger_unrelated_journal_reap() {
+        // Pure routing assertions; do not launch a game or touch profile data.
+        for request in [
+            SessionRequest::CloseOne { slot: 1 },
+            SessionRequest::CloseOne { slot: 5 },
+            SessionRequest::CloseAll,
+        ] {
+            assert!(!response_reaps_all(&request));
+        }
+        for request in [
+            SessionRequest::Inspect,
+            SessionRequest::InspectSettings,
+            SessionRequest::InspectStorage,
+            SessionRequest::Launch { slot: 2 },
+        ] {
+            assert!(response_reaps_all(&request));
+        }
+        // CloseOne reaps one verified slot; CloseAll still reaps all five.
+        for slot in 1..=5 {
+            let selected = normal_close_mask(Some(slot)).unwrap();
+            assert_eq!(selected.iter().filter(|&&enabled| enabled).count(), 1);
+            assert!(selected[(slot - 1) as usize]);
+        }
+        assert_eq!(normal_close_mask(None).unwrap(), [true; 5]);
+    }
+
     #[test]
     fn queued_close_admission_precedes_idle_journal_maintenance() {
         use std::sync::mpsc::{self, RecvTimeoutError};

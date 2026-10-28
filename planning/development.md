@@ -69,11 +69,10 @@ not CPU/RAM improvements. No local execution or game acceptance.
 
 ## Shared inspection budget — 27 October 2026
 
-The portable `InspectionBudget` applies one cooperative two-second deadline
-to five read-only cache/metadata walks. Expired scans are partial and never
-authorize cache clear; mutating cleanup still uses fresh admission and its
-independent plan. Native I/O/other metadata remain unpreemptible. Regression
-sources were authored; builds, tests and performance were NOT_EXECUTED.
+The portable two-second `InspectionBudget` spans five read-only metadata
+walks. Expired results are partial and cannot authorize cache clear; mutating
+cleanup uses fresh admission. Native I/O remains unpreemptible; tests and
+performance NOT_EXECUTED.
 
 ## Close-review scheduling — 27 October 2026
 
@@ -136,15 +135,18 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability source hardening — 28 October 2026
 
-Windows session transport refuses a second request immediately (WouldBlock)
-instead of waiting behind its 45-second IPC lock. Its retained controller now
-admits queued pipe requests before idle/disconnected reaping and audio work;
-250ms idle cadence, snapshots, journal persistence and one-authority admission
-remain unchanged. Synthetic channel regression authored, NOT_EXECUTED.
-Already-started disk/COM calls remain unpreemptible; MC02 normal exit, Windows
-latency/performance and macOS game support remain unverified.
+The Windows transport now fails fast on contention (WouldBlock); queued
+requests precede idle controller reaping/audio synchronization (250ms).
+CloseOne now reaps/persists only the verified selected slot after process
+exit and replies without a second global reap. CloseAll still reaps all
+five; normal Inspect/other responses and idle maintenance retain full
+cleanup. Unrelated exited slots stay owned until subsequent maintenance.
+No new worker, IPC schema, game owner, Mac backend or profile mutation.
+Pure close-reply and channel tests authored, NOT_EXECUTED.
+Already-started journal/COM I/O and CloseOne's preliminary Inspect can
+still delay admission. MC02 Windows exit/performance remain NOT_EXECUTED.
 
 ## Next bounded action
 
-Review selected CloseOne journal/reap scope without new worker, lifecycle
-authority, IPC schema, profile mutation or CI/local machine execution.
+Audit CloseOne preflight Inspect latency and journal scope without weakening
+verified process/window identity, recovery or single lifecycle ownership.
