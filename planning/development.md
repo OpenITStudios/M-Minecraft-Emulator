@@ -1,11 +1,14 @@
 # Current Development Handoff — v0.1
 
-## Current intent — 28 October 2026
+## Current intent — 29 October 2026
 
-**Goal:** Restore maintainable, resource-efficient Windows Lazy Tester
-source, then identify legitimate, material RAM savings for 0–5 Minecraft
-Education clients. The operator explicitly requested CODE-FIRST development
-without Windows localtest and asked not to repeat the previous P0 close loop.
+**Goal:** Optimize real private-resident RAM and committed memory for 0–5
+Minecraft Education Windows clients as far as safely possible. The previous
+<1024 MiB per-client figure is an **aspirational reference, not a required
+success threshold**; smaller confirmed savings are useful if FPS, gameplay,
+multiplayer hosting, world saves and profile isolation remain intact.
+The operator explicitly requested CODE-FIRST development without Windows
+localtest and no repeated P0/checker/documentation loops.
 
 **State:** ACTIVE, source-only. Original MC01–MC05 CloseOne/CloseAll code
 and native recovery guards remain intact. The last historical MC02 >35 s
@@ -160,6 +163,27 @@ authorization to perform Windows/game acceptance.
   https://minecraft.wiki/w/Options.txt_(Bedrock_Edition)
 - CI stays OFF. No install, release, Windows game process or user PC touched.
 
+## Deferred candidate — visual resource pack (not active)
+
+- User-supplied `Memory Reduce [Ram].mcpack`, retained in the originating
+  conversation; **metadata only** is recorded here, not redistributed as
+  third-party asset content or included in the application. File SHA-256:
+  `b3d4abd6a453171f85715bfa956303635a7dfb54f891c9fee1ff71cee92779db`;
+  1,556,587 bytes, 1,463 ZIP entries. This fingerprint allows an exact
+  later match if the original is supplied again.
+- Static archive inspection: 317 images at 1x1 pixels, 285 at 8x8,
+  121 disabled main particle definitions, and 69 static flipbook entries.
+  The pack trades away block texture detail, animations and gameplay/
+  Education particle cues; its "2chunks" fog presentation is not proof
+  that the game actually loads fewer chunks. Its "Normal" subpack does
+  not undo root-level visual overrides.
+- **DEFERRED / NOT_APPROVED for implementation.** Possible benefits are
+  reduced texture/particle workload and GPU memory, not verified private
+  working-set reclamation. No pack installation, repository import, game
+  changes, benchmark, or addon rollout is authorized by this note.
+  Revisit only on explicit user reprioritization, with selective
+  gameplay-safe treatment rather than blind full-pack adoption.
+
 ## Evidence and preservation
 
 Only REMOTE_GITHUB source changes and isolated evaluator logic checks are
@@ -214,6 +238,14 @@ No speculative renderer patch, working-set trim or experimental hook
 promotion is justified. The reviewer improvement concerns *measurement
 honesty*, not reclaimed game RAM.
 
-**Next source action:** seek native Education-26.32 evidence of Texture Streaming support and allocator ownership, with comparable resident data. Do not claim the old
-67 MiB CPU allocation, 220/144 MiB graphics route, or input-response
-leak as a verified saving for the selected build. Runtime remains deferred.
+**Primary next source action:** continue the existing, default-OFF
+`UploadBufferHeap` native retention candidate (historical 4->1 reserve
+policy, 80 MiB lower heap capacity, about 59.953 MiB lower private WS
+median in a short sequential comparison). Seek exact Education 26.32
+executable/allocator ownership and comparable live resident data before
+any promotion. Do not confuse sequential observations with repeatable
+savings, force foreign heap release, or make <1 GiB mandatory. Texture
+Streaming and Improved Input Response remain conditional game-settings
+options; the visual pack above is deferred. The old 67 MiB CPU object
+and 220/144 MiB graphics routes remain unproven and must not be freed
+speculatively. Runtime acceptance stays deferred; no PC test requested.
