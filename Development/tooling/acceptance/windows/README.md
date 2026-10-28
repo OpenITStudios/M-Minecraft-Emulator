@@ -6,8 +6,9 @@ The existing read-only collector now has a native-profile mode that reuses its
 process identity, private commit/private working set, total-system memory,
 optional direct-child observation and atomic file writer. It **does not**
 start, stop, suspend or modify Minecraft. The mode samples 0–5 already-running
-licensed clients, in increasing MC01–MC05 slot order; do not supply a process
-ID for an absent profile. A baseline with no clients can still observe the
+licensed clients, in increasing MC01–MC05 slot order. Default labels are
+MC01 through MC0N; use matching -ProfileSlots 1,4 for sparse MC01 and MC04,
+for example. Do not supply a process ID for an absent profile. A baseline with no clients can still observe the
 system and optionally an existing manager. It deliberately does not infer
 gameplay, host health, GPU physical usage, memory ownership or RAM savings.
 
@@ -17,6 +18,8 @@ powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-native-perf
 
 # 2 existing clients + manager; no new game processes are started.
 powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-native-performance.ps1 -NativeProfileBaseline -MemoryComposition -ProfilePids <MC01_PID>,<MC02_PID> -ManagerPid <MANAGER_PID> -DirectChildren -DurationSeconds 600 -SampleIntervalSeconds 5
+
+# Sparse MC01 and MC04 only: -ProfilePids <MC01_PID>,<MC04_PID> -ProfileSlots 1,4.
 
 # 5 selected clients; IDs must be unique and supplied in slot order.
 powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-native-performance.ps1 -NativeProfileBaseline -MemoryComposition -ProfilePids <MC01_PID>,<MC02_PID>,<MC03_PID>,<MC04_PID>,<MC05_PID> -DurationSeconds 600 -SampleIntervalSeconds 5

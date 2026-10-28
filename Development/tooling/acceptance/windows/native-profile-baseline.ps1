@@ -5,6 +5,7 @@
 function Invoke-NativeProfileBaseline {
   param(
     [int[]]$ProfilePids,
+    [int[]]$ProfileSlots,
     [int]$ManagerPid,
     [int]$DurationSeconds,
     [int]$SampleIntervalSeconds,
@@ -14,7 +15,8 @@ function Invoke-NativeProfileBaseline {
 
   $selected = [ordered]@{}
   for ($index = 0; $index -lt $ProfilePids.Count; $index++) {
-    $slot = '{0:D2}' -f ($index + 1)
+    $slotNumber = if ($ProfileSlots.Count -eq 0) { $index + 1 } else { $ProfileSlots[$index] }
+    $slot = '{0:D2}' -f $slotNumber
     $processId = [int]$ProfilePids[$index]
     $baseline = Read-Target -ProcessId $processId
     if ($null -eq $baseline) {

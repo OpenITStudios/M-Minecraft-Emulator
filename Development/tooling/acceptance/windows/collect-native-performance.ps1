@@ -22,7 +22,8 @@ param(
   [switch]$DirectChildren,
   # Current native profile-only baseline. Legacy PID flags remain supported separately.
   [switch]$NativeProfileBaseline,
-  [int[]]$ProfilePids = @()
+  [int[]]$ProfilePids = @(),
+  [int[]]$ProfileSlots = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -43,6 +44,17 @@ if ($NativeProfileBaseline) {
   if (@($ProfilePids | Select-Object -Unique).Count -ne $ProfilePids.Count) {
     throw 'Each native profile must have a distinct process ID.'
   }
+  if ($ProfileSlots.Count -ne 0) {
+    if ($ProfileSlots.Count -ne $ProfilePids.Count) {
+      throw 'Each explicit slot requires exactly one matching existing process ID.'
+    }
+    for ($index = 0; $index -lt $ProfileSlots.Count; $index++) {
+      if ($ProfileSlots[$index] -lt 1 -or $ProfileSlots[$index] -gt 5 -or
+          ($index -gt 0 -and $ProfileSlots[$index] -le $ProfileSlots[$index - 1])) {
+        throw 'Explicit native profile slots must be unique, 1..5, and strictly increasing.'
+      }
+    }
+  }
   if ($ManagerPid -ne 0 -and $ManagerPid -in $ProfilePids) {
     throw 'The selected manager must not be one of the game processes.'
   }
@@ -50,8 +62,8 @@ if ($NativeProfileBaseline) {
     throw 'Direct-child attribution needs at least one selected process.'
   }
 } else {
-  if ($ProfilePids.Count -gt 0) {
-    throw 'Use -NativeProfileBaseline -MemoryComposition with -ProfilePids.'
+  if ($ProfilePids.Count -gt 0 -or $ProfileSlots.Count -gt 0) {
+    throw 'Use -NativeProfileBaseline -MemoryComposition with -ProfilePids/-ProfileSlots.'
   }
   if ($NativePid -eq 0 -or $IsolatedPid -eq 0) {
     throw 'Historical capture requires both -NativePid and -IsolatedPid.'
@@ -501,7 +513,7 @@ function Write-ReportArtifact {
 if ($NativeProfileBaseline) {
   # Reuse the same guarded Windows process/memory readers; no second monitor.
   . (Join-Path $PSScriptRoot 'native-profile-baseline.ps1')
-  Invoke-NativeProfileBaseline -ProfilePids $ProfilePids -ManagerPid $ManagerPid -DurationSeconds $DurationSeconds -SampleIntervalSeconds $SampleIntervalSeconds -OutputDirectory $OutputDirectory -DirectChildren:$DirectChildren
+  Invoke-NativeProfileBaseline -ProfilePids $ProfilePids -ProfileSlots $ProfileSlots -ManagerPid $ManagerPid -DurationSeconds $DurationSeconds -SampleIntervalSeconds $SampleIntervalSeconds -OutputDirectory $OutputDirectory -DirectChildren:$DirectChildren
   return
 }
 
