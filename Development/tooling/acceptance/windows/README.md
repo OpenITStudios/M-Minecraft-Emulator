@@ -19,7 +19,8 @@ powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-native-perf
 # 2 existing clients + manager; no new game processes are started.
 powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-native-performance.ps1 -NativeProfileBaseline -MemoryComposition -ProfilePids <MC01_PID>,<MC02_PID> -ManagerPid <MANAGER_PID> -DirectChildren -DurationSeconds 600 -SampleIntervalSeconds 5
 
-# Sparse MC01 and MC04 only: -ProfilePids <MC01_PID>,<MC04_PID> -ProfileSlots 1,4.
+# Sparse MC01 and MC04; labels must be explicit when MC02/MC03 are absent.
+powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-native-performance.ps1 -NativeProfileBaseline -MemoryComposition -ProfilePids <MC01_PID>,<MC04_PID> -ProfileSlots 1,4 -DurationSeconds 60 -SampleIntervalSeconds 5
 
 # 5 selected clients; IDs must be unique and supplied in slot order.
 powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-native-performance.ps1 -NativeProfileBaseline -MemoryComposition -ProfilePids <MC01_PID>,<MC02_PID>,<MC03_PID>,<MC04_PID>,<MC05_PID> -DurationSeconds 600 -SampleIntervalSeconds 5
@@ -32,6 +33,20 @@ written into the JSON. Keep the historical two/four/five-client command modes
 and schemas 1–6 for comparisons with older diagnostic files; they are not the
 preferred current native five-profile capture. This new path is source-prepared
 only; Windows execution and RAM claims remain NOT_EXECUTED.
+
+Schema-7 reports may be reviewed and compared with the existing Node
+evaluator. Comparisons are descriptive numeric differences only; they
+never prove a matched workload, physical RAM savings, game readiness,
+or the safety of a proposed internal allocator.
+
+~~~sh
+node Development/tooling/acceptance/evaluate-native-performance.mjs native-memory-baseline-before.json
+node Development/tooling/acceptance/evaluate-native-performance.mjs native-memory-baseline-before.json native-memory-baseline-after.json
+~~~
+
+The older `performance-contract.json` describes the retired VMware-era
+performance gate; it does not override the current native schema 7.
+This source change does not enable CI, scheduled sampling or runtime tests.
 
 ## Existing MC01 reactivation/lifecycle diagnostics (explicit opt-in)
 

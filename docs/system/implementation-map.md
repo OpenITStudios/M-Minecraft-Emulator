@@ -19,6 +19,25 @@ lifecycle: ACTIVE
 
 This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build tooling in [Isolation Source Tooling](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md) is retired product history, not the native engine. The only active goal, blocker and next action are in [planning/development.md](../../planning/development.md). Treat historical `Next` here as superseded; inspect owning source and consumers.
 
+## Current source ownership — 28 October 2026
+
+The Windows presentation facade is `Development/apps/desktop/src-tauri/src/engine/workspace_surface.rs`.
+Its existing native Win32 adapter and retained recovery controller now live in
+`workspace_surface/native.rs` and `workspace_surface/controller.rs`, with
+rollback and Win32 test fixtures under `workspace_surface/controller/`.
+The DWM facade remains `workspace_surface/previews.rs`; its single
+capacity-one worker is `workspace_surface/previews/windows.rs`, with separate
+native/portable fixture modules. These are mechanical module extractions,
+not measured runtime optimization.
+
+Native RAM samples belong to the existing `Development/tooling/acceptance/windows/collect-native-performance.ps1`
+plus its optional `native-profile-baseline.ps1` helper and
+`Development/tooling/acceptance/evaluate-native-performance.mjs`. Current
+schema 7 supports explicitly mapped sparse MC01–MC05 slots and 0–5 profiles.
+Historical virtual-machine performance-contract.json is not this contract.
+The one active priority and deferred Windows P0 acceptance are in
+`planning/development.md`.
+
 ## Final mounted frontend IPC ownership audit — 28 October 2026
 
 At the pinned source snapshot, all eight mounted `.ts`/`.svelte`
