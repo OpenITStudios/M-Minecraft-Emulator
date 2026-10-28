@@ -11,6 +11,109 @@ lifecycle: ACTIVE
 
 Status: RESEARCH WITH BOUNDED IMPLEMENTATION AND RUNTIME OBSERVATIONS. Initial research was pinned to `5eaa49ed41c5c455f1b783d3a7c659bbba40e2d5`; subsequent diagnostics, HUD work and the approved Education graphics intervention are identified below. A substantive Minecraft-internal optimization seam and repeatable whole-game gains remain UNKNOWN. Current operator intent is owned by planning/development.md.
 
+## 28 October 2026: high-impact RAM decision — source/primary-source audit
+
+**Outcome:** An aggressive <1 GiB/client goal is still UNPROVEN. This is
+target selection, not a canary promotion, a new trace, or game acceptance.
+The exact source branch parent is
+`587dbed34ab63114daea5a2c7a6434e6784ef02c`.
+No game, accounts, worlds, installed image, settings, CI or Windows capture
+were accessed. The one approved native Upload candidate remains default OFF.
+
+### Distinguish system RAM, VRAM and the needed reduction
+
+The historical stationary world baseline's guest private working-set median
+is 1393.730 MiB. Under the explicit <1024 MiB aspirational threshold, the
+*arithmetic gap* is 369.730 MiB (26.53%); the short, unreplicated Upload
+candidate median difference was 59.953 MiB, about 16.22% of that gap. Neither
+is a forecast for five clients. Never combine the menu categories below with
+the world median or add L0 and L1 residency as disjoint savings.
+
+For the **historical menu snapshot only**, Private WS was 1030.367 MiB.
+WriteCombined private leaves: 381.488 MiB; general Heap leaves:
+296.758 MiB; image-private pages: 286.441 MiB; other private data:
+56.988 MiB. In the 50 WriteCombined leaves, the uniform synchronous
+growth route correlates with 144 MiB Private WS; 12 mixed-owner leaves
+account for 220.488 MiB. Initial-heap correlation was only 8 MiB
+Private WS despite 360 MiB private commitment. A 65-second trace/snapshot
+gap prevents current-liveness or reclaimable-byte claims. The separate
+B05B30E 67.4375 MiB CPU object correlates with 58.457 MiB Private WS,
+but saved code uses high offsets and there is no safe resize contract.
+
+### Five native graphics pools: what the repository actually establishes
+
+| Game pool | Observed source evidence | Decision for >hundreds-MiB RAM target |
+| --- | --- | --- |
+| DefaultBufferHeap | Exact initial tuple 16 * 16 MiB, CUSTOM / CPU NOT_AVAILABLE / L1, 64 KiB alignment. Previous 16->4 candidate lowered commitment but not meaningful resident RAM. | Treat primarily as VRAM/budget investigation, NOT a system-RAM saving. Remains OFF. |
+| UploadBufferHeap | Exact 8 MiB allocation unit, initial 2, reserve threshold 4->1 in version-bound canary. Historical allocator retained 168->88 MiB capacity; private WS median difference 59.953 MiB in one sequential comparison. | Best *existing* native retirement candidate, but GPU completion, refill and durable residency are NOT proved. Remains OFF. Do not assert L0/type from the pool name alone. |
+| TextureBufferHeap | Name found in loaded native initializer; no checked exact tuple, per-heap occupancy or residency census. | INTEGRATION_NOT_ESTABLISHED. |
+| ReadBackBufferHeap | Name found; no checked exact tuple or lifetime census. | INTEGRATION_NOT_ESTABLISHED. |
+| AccelerationStructureBufferHeap | Name found; activity and backing unverified for Education Simple mode. | INTEGRATION_NOT_ESTABLISHED. |
+
+Microsoft documents discrete-GPU L0 vs L1, and warns that D3D12 heaps cannot
+generally be made partially resident. These categories must not be pooled into
+a fictitious RAM-reclamation budget:
+https://microsoft.github.io/DirectX-Specs/d3d/D3D12GPUUploadHeaps.html
+https://learn.microsoft.com/en-us/windows/win32/direct3d12/residency
+
+### Texture-streaming feature gate: no Education admission yet
+
+Bedrock 26.30 enables texture streaming by default **on supported PC/mobile
+platforms**; the 26.10 Preview announcement specifically describes reduction
+of *GPU memory*, especially with multiple packs. Education 26.32's official
+release note includes Bedrock gameplay features but does not establish the
+equivalent renderer feature or toggle. The currently source-owned
+`game_preset.rs` knows only eight approved Simple/Fancy option keys
+and no texture-streaming control. Its absence is NOT proof the engine lacks
+streaming. Education support also explicitly says some Bedrock graphics
+settings are excluded. Do not add a guessed option key, force a native hook,
+change assets or infer physical RAM savings.
+- https://www.minecraft.net/en-us/article/minecraft-26-30-bedrock-changelog
+- https://feedback.minecraft.net/hc/en-us/articles/44418129038733-Minecraft-Bedrock-Edition-26-10-Tiny-Takeover
+- https://edusupport.minecraft.net/hc/en-us/articles/52137260012692-What-s-New-in-the-Learning-Cubed-Update-v26-32-0
+- https://edusupport.minecraft.net/hc/en-us/community/posts/50216080035604
+
+### Public BGFX comparison is not an Education binary patch
+
+Pinned upstream BGFX commits
+[35a98dd](https://github.com/bkaradzic/bgfx/commit/35a98dd6453cf25dc75c68e233abb400836d5920)
+(2026-08-17: demand-grown frame data),
+[01e69a6](https://github.com/bkaradzic/bgfx/commit/01e69a63074d4c103573ef8bc684ceec7e00b22e)
+(2026-10-04: blockwise resource tables) and
+[e13b87c](https://github.com/bkaradzic/bgfx/commit/e13b87cdd9f169565fb2fefd0413890bcbafbb7d)
+(2026-10-05: demand-sized handle queues) are genuine owned
+allocation/access/release redesigns. They do not establish which revision or
+object layout is embedded in Education. The stored Education PE timestamp
+`0x6a63e832` predates those upstream changes if interpreted as a
+build-time timestamp; the PE field alone is not a dependency/version proof.
+Do not lower the 67 MiB object's malloc size: saved high-offset writes exist.
+
+### One discriminating next evidence step — no speculative optimizer
+
+Before any new intervention, classify the historically unassigned
+**220.488 MiB mixed WriteCombined private residency** and the
+**144 MiB synchronous-growth route** into their *actual* D3D12 allocation
+family, local/non-local segment, per-heap active/empty capacity, fence/retire
+owner and private resident contribution **at the same workload/time**.
+Reuse only relevant saved original ETW/VMMap/heap inventories where
+available. Their raw private captures exist outside GitHub and are not
+available to this audit: do not manufacture classifications from a summary.
+If synchronized owner evidence requires a Windows session, mark it
+NOT_EXECUTED until separately authorized; do not ask to reactivate P0.
+
+PIX Timing Captures can inspect D3D heaps/resources, allocation/migration and
+residency without making a raw native allocator patch, subject to actual
+compatibility and symbol/capture limits:
+https://learn.microsoft.com/en-us/windows/win32/direct3dtools/pix/articles/timing-captures/pix-timing-captures
+A DXGI video-memory query measures the querying PROCESS, not all five Minecraft
+processes when invoked in Lazy Tester manager:
+https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_4/nf-dxgi1_4-idxgiadapter3-queryvideomemoryinfo
+A valid prototype requires materially idle owned bytes plus original
+release/rebuild/fence path, measured private residency and no regression in
+frame-time, 144/10 pacing, 12-chunk minimum, host, network or world saves.
+No new collection service, manager cache, DLL hook, forced trim, CI, package or
+main-branch change is authorized by this audit.
+
 ## Active RAM goal: offline ownership and residency reconciliation — 25 October 2026
 
 The operator resumed A/B/C implementation work with **no PC control while they

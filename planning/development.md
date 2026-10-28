@@ -101,10 +101,21 @@ publication. The Mac build remains a diagnostic shell without game backend.
 
 ## Next bounded source action
 
-Check any remaining source-owned memory retention that has material allocation
-volume AND a complete release/rebuild owner. Prioritize true Minecraft RAM
-efficiency only where the Education-native lifecycle is established;
-otherwise stop speculative changes, and defer measured 0–5 client RAM,
-page-fault, HUD and gaming validation to the explicitly authorized Windows
-localtest stage. Do not revive P0 as a code gate.
+The operator now prioritizes **substantial game-side RAM efficiency** over
+micro-optimizing Lazy Tester. The 28 October native-memory research decision
+separates confirmed Education evidence from Bedrock/modern BGFX analogies.
+Texture streaming is NOT verified available in Education and primarily targets
+GPU memory. Only Default/Upload native pools have version-bound tuples; three
+named graphics pools have UNKNOWN occupancy/backing. The highest-value
+unresolved owner evidence is 220.488 MiB MIXED WriteCombined resident pages
+and the separate 144 MiB synchronous-growth route in the historical menu
+capture, plus the distinct 58.457 MiB resident CPU object. These are
+NOT reclaimable-byte estimates and must never be added to the world baseline.
+
+Next: when actually available, reconcile the existing private allocation
+artifacts into a same-workload owner/liveness map before selecting a new
+native optimization. Raw ETW/VMMap and game binary are not in the repository,
+so this source-only audit stops at the evidence boundary. Do not invent an
+allocator plugin, repeat P0 or request Windows testing as a code gate;
+Windows/game runtime remains explicitly deferred.
 
