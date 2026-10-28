@@ -182,6 +182,16 @@ mod windows {
     fn refresh_after_wake(native_event: bool, layout_applied: bool) -> bool {
         native_event && !layout_applied
     }
+    // A successfully received Windows message is sufficient to drain jobs
+    // admitted before a failed PostThreadMessageW. No timer or retry thread
+    // is needed; the same bounded worker owns each queued operation.
+    fn drain_ready_jobs<T>(
+        receiver: &mpsc::Receiver<T>, mut process: impl FnMut(T),
+    ) {
+        while let Ok(job) = receiver.try_recv() {
+            process(job);
+        }
+    }
     fn layout_expired(deadline: Instant, now: Instant) -> bool {
         now >= deadline
     }
@@ -856,6 +866,25 @@ mod windows {
                 true
             }
         }
+        fn selection_is_verified(&self, slot: u32) -> bool {
+            // A SELECT from a queued click on an already-closed thumbnail
+            // is not authority to activate another Minecraft process.
+            if !(1..=5).contains(&slot)
+                || !slot_epoch_matches(
+                    &self.issued_epochs, &snapshot_epochs(), slot,
+                )
+                || !self.visibility() {
+                return false;
+            }
+            self.thumbnails.iter().chain(self.primary.iter()).any(|image| {
+                image.slot == slot
+                    && image.manager == self.manager
+                    && unsafe { IsWindowVisible(image.window) != 0 }
+                    && self.profiles.iter().any(|(profile, target)|
+                        *profile == slot && image.matches(*profile, target))
+                    && image.source_and_destination_valid()
+            })
+        }
         fn refresh(&mut self) {
             // A WAKE without any native observers needs no Win32 probe.
             if self.thumbnails.is_empty() && self.primary.is_none() {
@@ -1122,22 +1151,20 @@ mod windows {
                 layout_in_progress: false,
             };
             while GetMessageW(&mut message, ptr::null_mut(), 0, 0) > 0 {
-                if message.message == SELECT {
-                    if let Some(window) = &scene.window {
-                        let _ = window.emit("lazy-tester-preview-select", message.wParam as u32);
-                    }
-                } else if message.message == WAKE {
-                    // Clear pending BEFORE sampling intent: a native event
-                    // arriving during the job drain posts another WAKE.
+                let is_wake = message.message == WAKE;
+                if is_wake {
+                    // A delivered WAKE releases coalescing admission BEFORE
+                    // draining jobs. A concurrent new request can post again.
                     REFRESH_PENDING.store(false, Ordering::Release);
-                    let native_event =
-                        NATIVE_REFRESH_REQUESTED.swap(false, Ordering::AcqRel);
-                    // ClearSlot is best effort on the bounded channel.
-                    // Its atomic cancellation still removes stale images
-                    // even if that channel was full at CloseOne admission.
-                    scene.prune_cancelled_slots();
-                    let mut laid_out = false;
-                    while let Ok(job) = receiver.try_recv() {
+                }
+                // A failed PostThreadMessageW can leave an admitted job on
+                // the bounded channel. SELECT, WM_PAINT or ANY later valid
+                // worker message must reconcile it, not only WAKE.
+                let native_event =
+                    NATIVE_REFRESH_REQUESTED.swap(false, Ordering::AcqRel);
+                scene.prune_cancelled_slots();
+                let mut laid_out = false;
+                drain_ready_jobs(&receiver, |job| {
                         match job {
                             Job::Layout {
                                 window,
@@ -1212,14 +1239,26 @@ mod windows {
                                 let _ = reply.send(Ok(()));
                             }
                         }
+                });
+                // A cleanup epoch may have changed during a long Layout.
+                // Reconcile it before a SELECT can escape the DWM worker.
+                scene.prune_cancelled_slots();
+                if refresh_after_wake(native_event, laid_out) {
+                    scene.refresh();
+                }
+                if message.message == SELECT {
+                    // Validate wParam BEFORE narrowing it to a slot ID.
+                    // A stale or recycled destination must not select a
+                    // different live game after CloseOne/Clear.
+                    if (1..=5).contains(&message.wParam) {
+                        let slot = message.wParam as u32;
+                        if scene.selection_is_verified(slot) {
+                            if let Some(window) = &scene.window {
+                                let _ = window.emit("lazy-tester-preview-select", slot);
+                            }
+                        }
                     }
-                    // A native cancellation may happen during a slow
-                    // Layout. Prune again before dispatching another wake.
-                    scene.prune_cancelled_slots();
-                    if refresh_after_wake(native_event, laid_out) {
-                        scene.refresh();
-                    }
-                } else {
+                } else if !is_wake {
                     TranslateMessage(&message);
                     DispatchMessageW(&message);
                 }
@@ -1378,6 +1417,24 @@ mod windows {
     #[cfg(test)]
     mod tests {
         use super::*;
+        #[test]
+        fn failed_wake_reconciles_admitted_job_on_next_received_message() {
+            // Simulate PostThreadMessageW returning an error AFTER bounded
+            // try_send. The next worker message may be SELECT or WM_PAINT,
+            // not a WAKE; the production drain helper is message-agnostic.
+            for next in [SELECT, WM_PAINT, WM_NULL] {
+                let (sender, receiver) = mpsc::sync_channel(1);
+                sender.try_send(2u32).unwrap(); // ClearSlot MC02
+                assert!(sender.try_send(3).is_err(),
+                    "The same DWM command queue remains capacity one");
+                let mut processed = Vec::new();
+                drain_ready_jobs(&receiver, |slot| processed.push(slot));
+                assert_eq!(processed, vec![2], "Lost wake retained job on message {next}");
+                drain_ready_jobs(&receiver, |_| panic!("Job replayed twice"));
+            }
+            assert!(!refresh_after_wake(false, false),
+                "Control-only cleanup never requires peer DWM rechecks");
+        }
         #[test]
         fn unconfirmed_control_cleanup_wakes_once_without_masking_the_error() {
             let mut wakes = 0;
@@ -1825,6 +1882,8 @@ mod windows {
                 assert!(scene.visibility(),"Restored manager remains a valid DWM destination");
                 scene.refresh();
                 assert_ne!(IsWindowVisible(scene.primary.as_ref().unwrap().window),0);
+                assert!(scene.selection_is_verified(tile.slot),
+                    "A current owner/source must permit native thumbnail select");
                 thumbnail.refresh_verified(scene.visibility()).unwrap();
                 assert_ne!(IsWindowVisible(thumbnail.window),0);
                 // An abandoned layout changed an ALREADY REGISTERED tile.
@@ -1891,6 +1950,8 @@ mod windows {
                 scene.thumbnails.push(retired);
                 let pinned = PreviousImage::capture(&scene.thumbnails[0]);
                 scene.profiles.clear();
+                assert!(!scene.selection_is_verified(tile.slot),
+                    "Retired source must not emit a queued SELECT after cancellation");
                 scene.discard_unacknowledged_new(&mut LayoutCreated {
                     reused_secondary: vec![pinned],
                     ..LayoutCreated::default()

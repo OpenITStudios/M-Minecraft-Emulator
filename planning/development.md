@@ -129,26 +129,27 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability & efficiency — 28 October 2026
 
-Game exit reap stays 250 ms, stable COM audio at 1 s. DWM retains
-one worker, capacity-one channel, 3 s Layout deadline and five native
-preview-only CloseOne/Full Clear cancellation epochs. Primary+secondary
-DWM removals remain staged until delivered reply; obsolete configure()
-requests are rejected before and after source adoption. Failed Clear or
-ClearSlot now posts ONLY the existing coalesced control WAKE, not a
-native move/focus refresh. The worker prunes canceled thumbnails before
-jobs; healthy peer DWM checks are not rerun solely due to failed cleanup.
-CloseOne no longer posts a redundant second refresh. Original control
-errors still reach callers, while independent Minecraft close proceeds.
-No new worker, retry, queue, IPC, timer or lifecycle/game-data owner.
-Rust regression authored NOT_EXECUTED. Windows DWM, normal MC02 exit,
-CPU/RAM and installed package acceptance remain unverified.
+Game exit reap remains 250 ms, stable COM audio 1 s. DWM has one worker
+with capacity-one job queue, 3-second Layout deadline, and CloseOne/Clear
+preview-only epochs. Primary/secondary removal stays staged until an
+acknowledged Layout; obsolete source adoption fails closed. Failed Clear
+and ClearSlot use a control-only coalesced WAKE; CloseOne no longer sends
+a duplicate refresh. If PostThreadMessageW fails after job admission,
+the worker now prunes canceled epochs AND drains queued jobs on ANY next
+received Win32 message, including SELECT/WM_PAINT, without polling or
+new retry logic. It validates exact original source and current epoch
+before emitting a thumbnail SELECT; a closed/replaced slot is refused.
+No new worker, queue, timer, IPC, game/data owner or account mutation.
+Rust/offscreen Win32 fixtures authored NOT_EXECUTED. Delivery cannot
+recover without a later valid worker message. Windows DWM, MC02 exit,
+CPU/RAM and package remain unverified.
 
 ## Debug timing — NOT_EXECUTED
 
-`MIVUBI_DEBUG_WORKSPACE_TIMING=1` remains a default-off Windows debug
+`MIVUBI_DEBUG_WORKSPACE_TIMING=1` remains default-off Windows debug
 aperture/foreground aggregate on existing workspace release.
 
 ## Next bounded action
 
-Audit control wake delivery failures and ensure one pending cancellation
-is reconciled on the next valid worker event without continuous retry.
+Audit concurrent notify() coalescing when PostThreadMessageW fails and
+a second caller observes the in-progress WAKE before failure is known.
