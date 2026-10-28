@@ -177,6 +177,13 @@ mod windows {
     fn layout_expired(deadline: Instant, now: Instant) -> bool {
         now >= deadline
     }
+    fn require_live_layout(deadline: Instant) -> io::Result<()> {
+        if layout_expired(deadline, Instant::now()) {
+            return Err(io::Error::new(io::ErrorKind::TimedOut,
+                "DWM layout exceeded its original reply deadline"));
+        }
+        Ok(())
+    }
     // Observation-only slot generations cancel old DWM layouts, never
     // Minecraft sessions or their native recovery checkpoints. No worker,
     // queue or polling owner is introduced; only five atomic counters.
@@ -512,6 +519,20 @@ mod windows {
         }
     }
 
+    // At most four new monitoring images and one primary observer can be
+    // created by a Layout. Failed or undelivered receipts must not retain
+    // those new DWM windows; established peer previews stay untouched.
+    #[derive(Default)]
+    struct LayoutCreated {
+        secondary_slots: Vec<u32>,
+        primary_changed: bool,
+    }
+    fn retain_previous_preview(created: &LayoutCreated, slot: u32) -> bool {
+        !created.secondary_slots.contains(&slot)
+    }
+    fn layout_acknowledged(verified: bool, delivered: bool) -> bool {
+        verified && delivered
+    }
     struct Scene {
         window: Option<tauri::Window>,
         manager: u64,
@@ -523,6 +544,19 @@ mod windows {
         issued_epochs: [u64; 5],
     }
     impl Scene {
+        fn discard_unacknowledged_new(&mut self, created: &LayoutCreated) {
+            // Only thumbnails created BY THIS job are disposable. Do not
+            // discard a previously confirmed MC03 image because MC02 took
+            // too long or its frontend request was abandoned.
+            if created.primary_changed {
+                self.primary = None;
+            }
+            if !created.secondary_slots.is_empty() {
+                self.thumbnails.retain(|thumbnail|
+                    retain_previous_preview(created, thumbnail.slot));
+            }
+            self.prune_cancelled_slots();
+        }
         fn prune_cancelled_slots(&mut self) {
             let now = snapshot_epochs();
             let issued = self.issued_epochs;
@@ -612,11 +646,13 @@ mod windows {
             self.prune_cancelled_slots();
         }
         fn update_primary_observation(&mut self, manager: u64,
-            tile: &PreviewTile, visible: bool) -> io::Result<()> {
+            tile: &PreviewTile, visible: bool) -> io::Result<bool> {
             let target = self.profiles.iter().find(|(slot, _)| *slot == tile.slot)
                 .map(|(_, target)| target.clone())
                 .ok_or_else(|| io::Error::other("Active game preview source is unavailable"))?;
-            if self.primary.as_ref().is_none_or(|image| !image.matches(tile.slot, &target)) {
+            let created = self.primary.as_ref().is_none_or(|image|
+                !image.matches(tile.slot, &target));
+            if created {
                 self.primary = None;
                 self.primary = Some(Thumbnail::create(manager, tile, target.clone())?);
             }
@@ -624,7 +660,8 @@ mod windows {
             image.viewport = tile.viewport;
             // DWM observation only; never touch original game lifecycle.
             image.refresh_verified(visible &&
-                !native::interactive_at(&target, manager, tile.viewport))
+                !native::interactive_at(&target, manager, tile.viewport))?;
+            Ok(created)
         }
         fn layout(
             &mut self,
@@ -634,7 +671,12 @@ mod windows {
             profiles: Vec<(u32, OwnedProcess)>,
             unavailable: Vec<(u32, String)>,
             issued_epochs: [u64; 5],
+            deadline: Instant,
+            created: &mut LayoutCreated,
         ) -> io::Result<PreviewReport> {
+            // The original caller may already have timed out while the
+            // worker was busy. Expired Layout is not a native game action.
+            require_live_layout(deadline)?;
             // The caller may have begun native adoption before CloseOne.
             // Do not create/position thumbnails for an invalidated layout.
             if !epochs_current(&issued_epochs) {
@@ -660,21 +702,29 @@ mod windows {
                     && !unavailable.iter().any(|(slot, _)| *slot == thumbnail.slot)
             });
             let visible = self.visibility();
+            require_live_layout(deadline)?;
             match primary {
                 Some(tile) if slot_epoch_matches(
                     &issued_epochs, &snapshot_epochs(), tile.slot,
                 ) => {
-                    if let Err(error) = self.update_primary_observation(manager, &tile, visible) {
-                        // A failed primary observer cannot suppress any peer
-                        // tile receipt or alter the original game process.
-                        self.primary = None;
-                        eprintln!("Minecraft - {} primary DWM preview unavailable: {error}", tile.slot);
+                    match self.update_primary_observation(manager, &tile, visible) {
+                        Ok(new_primary) => created.primary_changed = new_primary,
+                        Err(error) => {
+                            // A failed primary observer cannot suppress any peer
+                            // receipt or alter the original Minecraft game.
+                            self.primary = None;
+                            eprintln!("Minecraft - {} primary DWM preview unavailable: {error}", tile.slot);
+                        }
                     }
                 }
                 _ => self.primary = None,
             }
+            // A slow primary HWND operation may consume the entire budget;
+            // avoid creating secondary DWM windows from that stale request.
+            require_live_layout(deadline)?;
             let mut statuses = Vec::with_capacity(tiles.len());
             for tile in tiles {
+                require_live_layout(deadline)?;
                 let mut status = initial_tile_status(&tile, &self.profiles, &unavailable);
                 if !slot_epoch_matches(&issued_epochs, &snapshot_epochs(), tile.slot) {
                     status.reason = Some("Preview canceled by original profile close".into());
@@ -699,6 +749,9 @@ mod windows {
                     None => match Thumbnail::create(manager, &tile, target.clone()) {
                         Ok(thumbnail) => {
                             self.thumbnails.push(thumbnail);
+                            // On timeout/dropped reply, destroy only this
+                            // unacknowledged native image, never old peers.
+                            created.secondary_slots.push(tile.slot);
                             self.thumbnails.len() - 1
                         }
                         Err(error) => {
@@ -728,6 +781,9 @@ mod windows {
                         }
                     }
                 }
+                // An individual Win32 update may block past the original
+                // deadline. Stop before processing any further peer tiles.
+                require_live_layout(deadline)?;
                 statuses.push(status);
             }
             // A CloseOne may begin while an in-flight native update is
@@ -738,6 +794,9 @@ mod windows {
                 return Err(io::Error::new(io::ErrorKind::WouldBlock,
                     "DWM layout invalidated during native profile close"));
             }
+            // A successful native update is not a receipt if the caller
+            // has already abandoned its timed operation.
+            require_live_layout(deadline)?;
             Ok(PreviewReport {
                 schema: 1,
                 tiles: statuses,
@@ -809,11 +868,28 @@ mod windows {
                                         "Expired queued preview layout skipped",
                                     )));
                                 } else {
+                                    let mut created = LayoutCreated::default();
                                     let result = scene.layout(
-                                        window, tiles, primary, profiles, unavailable, issued_epochs,
+                                        window, tiles, primary, profiles,
+                                        unavailable, issued_epochs, deadline, &mut created,
                                     );
-                                    laid_out |= result.is_ok();
-                                    let _ = reply.send(result);
+                                    // The last native update can consume
+                                    // the remaining time before reply.send.
+                                    let result = if result.is_ok()
+                                        && layout_expired(deadline, Instant::now()) {
+                                        Err(io::Error::new(io::ErrorKind::TimedOut,
+                                            "DWM layout finished after reply deadline"))
+                                    } else { result };
+                                    let verified = result.is_ok();
+                                    // std::sync::mpsc::SyncSender reports a
+                                    // dropped receiver. No new DWM image may
+                                    // be retained from such a lost receipt.
+                                    let delivered = reply.send(result).is_ok();
+                                    if !layout_acknowledged(verified, delivered) {
+                                        scene.discard_unacknowledged_new(&created);
+                                    } else {
+                                        laid_out = true;
+                                    }
                                 }
                             }
                             Job::Clear(reply) => {
@@ -1006,6 +1082,34 @@ mod windows {
             }, receive, Instant::now() + Duration::from_secs(3)).unwrap();
             assert_eq!(result, 7);
             assert!(owner.try_lock().is_ok());
+        }
+        #[test]
+        fn unacknowledged_layout_only_discards_newly_created_thumbnails() {
+            let new = LayoutCreated {
+                secondary_slots: vec![2, 4], primary_changed: true,
+            };
+            assert!(!retain_previous_preview(&new, 2));
+            assert!(!retain_previous_preview(&new, 4));
+            for peer in [1, 3, 5] {
+                assert!(retain_previous_preview(&new, peer),
+                    "Slow MC02 layout must not drop already registered peers");
+            }
+            assert!(!layout_acknowledged(true, false),
+                "Dropped frontend receiver cannot acknowledge new native images");
+            assert!(!layout_acknowledged(false, true),
+                "An expired/error reply cannot acknowledge new DWM images");
+            assert!(layout_acknowledged(true, true));
+        }
+        #[test]
+        fn in_flight_deadline_expiry_is_fail_closed_before_next_tile() {
+            let start = Instant::now();
+            let deadline = start + Duration::from_secs(3);
+            assert!(!layout_expired(deadline, start + Duration::from_millis(1)));
+            assert!(!layout_expired(deadline, deadline - Duration::from_millis(1)));
+            assert!(layout_expired(deadline, deadline));
+            assert!(layout_expired(deadline, deadline + Duration::from_millis(1)));
+            // The same production guard is checked before the primary,
+            // every secondary and after each native Win32 update.
         }
         #[test]
         fn closing_one_slot_cancels_stale_layout_without_changing_peer_epochs() {
@@ -1300,7 +1404,15 @@ mod windows {
                 assert_ne!(IsWindowVisible(scene.primary.as_ref().unwrap().window),0);
                 thumbnail.refresh_verified(scene.visibility()).unwrap();
                 assert_ne!(IsWindowVisible(thumbnail.window),0);
-                drop(thumbnail);
+                // A lost Layout reply must release only its newly created
+                // secondary image. The verified primary observer survives.
+                scene.thumbnails.push(thumbnail);
+                scene.discard_unacknowledged_new(&LayoutCreated {
+                    secondary_slots: vec![tile.slot], primary_changed: false,
+                });
+                assert!(scene.thumbnails.is_empty());
+                assert!(scene.primary.is_some(),
+                    "Dropping an unacknowledged secondary cannot remove primary");
                 drop(scene);
                 DestroyWindow(source);
                 DestroyWindow(manager);
