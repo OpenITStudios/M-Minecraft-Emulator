@@ -29,7 +29,7 @@
   $: performanceDirty=settings!==null&&(activeFps!==settings.activeFps||backgroundFps!==settings.backgroundFps);
   $: performanceValid=validFpsLimits(activeFps,backgroundFps);
   let clearSlot: ProfileSlot | null = null, storageNotice = '';
-  let recovery:{slot:ProfileSlot;action:'Reset'|'Restore'}|null=null;
+  let recovery:{slot:ProfileSlot;action:'Reset'|'Restore'|'DisableInputResponse'}|null=null;
   let fullReview:{slot:ProfileSlot;token:string;pending:boolean}|null=null,fullName='',fullAck=false,clearingData=false;
   type Page = 'workspace' | 'launchers' | 'storage' | 'settings';
   let page: Page = 'workspace';
@@ -536,13 +536,20 @@
     const pending=recovery;
     if(!pending||busy||refreshing||resizing||pending.slot!==selectedSlot)return;
     const status=selectedStorage?.gameSettings;
-    if(!(pending.action==='Reset'?status?.canReset:status?.canRestore))return;
+    const allowed=pending.action==='DisableInputResponse'
+      ? status?.canReset===true&&status?.improvedInputResponseEnabled===true&&selectedProfile?.state==='STOPPED'
+      : pending.action==='Reset'?status?.canReset:status?.canRestore;
+    if(!allowed)return;
     busy=true;issue='';storageNotice='';recovery=null;
     try {
-      const snapshot=await lazyTester.recoverSettings(pending.slot,pending.action);
+      const snapshot=pending.action==='DisableInputResponse'
+        ? await lazyTester.disableImprovedInputResponse(pending.slot)
+        : await lazyTester.recoverSettings(pending.slot,pending.action);
       profiles=snapshot.profiles;storage=snapshot.storage;
       storageCheckedAt=new Date().toLocaleTimeString('en-US');
-      storageNotice=`Minecraft - ${pending.slot}: settings ${pending.action==='Reset'?'reset':'restored'}. Changes apply at the next launch; your saved graphics preset is reapplied. Previous settings are available through Restore settings.`;
+      storageNotice=pending.action==='DisableInputResponse'
+        ? 'Minecraft - '+pending.slot+': Improved Input Response disabled in saved options. The previous settings are backed up for Restore. Restart this Minecraft normally to apply; RAM savings on Education 26.32 are unverified.'
+        : `Minecraft - ${pending.slot}: settings ${pending.action==='Reset'?'reset':'restored'}. Changes apply at the next launch; your saved graphics preset is reapplied. Previous settings are available through Restore settings.`;
     } catch(error) {issue=String(error);storage=null;}
     finally {busy=false;}
   }
@@ -553,7 +560,7 @@
     fullReview={slot:selectedSlot,token:status.confirmationToken,pending:status.pending};
     void tick().then(()=>document.getElementById('full-clear-name')?.focus());
   }
-  function reviewSettings(action:'Reset'|'Restore') {
+  function reviewSettings(action:'Reset'|'Restore'|'DisableInputResponse') {
     fullReview=null;clearSlot=null;recovery={slot:selectedSlot,action};
   }
   async function clearAllData() {
@@ -769,7 +776,8 @@
             <summary><span><strong>Advanced options</strong><small>Reset and recovery for this launcher</small></span><span aria-hidden="true">{advanced?'−':'+'}</span></summary>
             <div class="lt-advanced-body">
               {#if selectedStorage?.gameSettings?.improvedInputResponseEnabled===true}
-                <p class="lt-help" role="status">Improved Input Response is recorded as enabled in this launcher's saved options. Some older Minecraft Education versions were reported to use excessive RAM with this feature enabled. Impact on Education 26.32 is unverified. Lazy Tester has not changed the setting; review it in Minecraft Video Settings if needed.</p>
+                <p class="lt-help" role="status">Improved Input Response is enabled in this launcher's saved options. Older Minecraft Education versions had reports of excessive RAM with it enabled. Impact on Education 26.32 is unverified; no setting changes automatically.</p>
+                <div class="lt-setting"><div><h3>Potential RAM leak workaround</h3><p>Review disabling this saved setting for this launcher only. It may change input latency. Minecraft must be stopped; the existing settings backup and Restore action can undo it.</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.gameSettings?.canReset||selectedProfile?.state!=='STOPPED'} on:click={()=>reviewSettings('DisableInputResponse')}>Review workaround…</button></div>
               {:else if selectedStorage?.gameSettings?.improvedInputResponseEnabled===false}
                 <p class="lt-help">Improved Input Response is recorded as disabled. This does not establish RAM savings or rule out other leaks.</p>
               {:else}
@@ -779,7 +787,7 @@
               <div class="lt-setting"><div><h3>Restore settings</h3><p>{selectedStorage?.gameSettings?.backupAvailable?'Restore the latest verified settings backup for this launcher. Current settings are backed up first.':'No verified settings backup yet. Reset creates one.'}</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.gameSettings?.canRestore} on:click={()=>reviewSettings('Restore')}>Restore settings…</button></div>
               {#if selectedStorage?.gameSettings?.issue}<p class="lt-help">{selectedStorage.gameSettings.issue}</p>{:else if !selectedStorage?.gameSettings}<p class="lt-help">Refresh storage to check settings recovery availability.</p>{/if}
               {#if recovery?.slot===selectedSlot}
-                <section class="lt-cache-confirm" aria-label="Confirm game settings change"><h3>{recovery.action} settings for Minecraft - {recovery.slot}?</h3><p>Only this launcher's game settings change. Accounts, worlds, cache and other launchers are kept. A backup is saved first.</p><div class="lt-actions"><button disabled={busy||refreshing||resizing||!(recovery.action==='Reset'?selectedStorage?.gameSettings?.canReset:selectedStorage?.gameSettings?.canRestore)} on:click={recoverSettings}>{recovery.action} settings</button><button class="lt-secondary" disabled={busy} on:click={()=>recovery=null}>Cancel</button></div></section>
+                <section class="lt-cache-confirm" aria-label="Confirm game settings change"><h3>{recovery.action==='DisableInputResponse'?'Disable Improved Input Response':recovery.action+' settings'} for Minecraft - {recovery.slot}?</h3><p>{recovery.action==='DisableInputResponse'?'Only this launcher’s explicitly enabled option is changed. Input latency may change and RAM savings on Education 26.32 are unverified. The existing Restore backup point will be replaced with a backup of current settings. Restart Minecraft normally after applying. Accounts, worlds, and other launchers are kept.':'Only this launcher’s game settings change. Accounts, worlds, cache and other launchers are kept. A backup is saved first.'}</p><div class="lt-actions"><button disabled={busy||refreshing||resizing||!(recovery.action==='DisableInputResponse'?selectedStorage?.gameSettings?.canReset&&selectedStorage?.gameSettings?.improvedInputResponseEnabled===true&&selectedProfile?.state==='STOPPED':recovery.action==='Reset'?selectedStorage?.gameSettings?.canReset:selectedStorage?.gameSettings?.canRestore)} on:click={recoverSettings}>{recovery.action==='DisableInputResponse'?'Disable saved option':recovery.action+' settings'}</button><button class="lt-secondary" disabled={busy} on:click={()=>recovery=null}>Cancel</button></div></section>
               {/if}
             </div>
           </details>

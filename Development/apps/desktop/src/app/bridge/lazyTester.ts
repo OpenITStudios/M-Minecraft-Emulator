@@ -230,6 +230,10 @@ export const lazyTester = {
   storage: async () => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'InspectStorage'}})),
   openFolder: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'OpenProfileFolder', slot}})),
   clearCache: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'ClearProfileCache', slot}})),
+  disableImprovedInputResponse: async (slot: ProfileSlot) => {
+    if(!profileSlots.includes(slot))throw new TypeError('Unknown Minecraft profile');
+    return parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request:{operation:'DisableImprovedInputResponse',slot}}));
+  },
   recoverSettings: async (slot: ProfileSlot, action:'Reset'|'Restore') => {
     if(!profileSlots.includes(slot)||!['Reset','Restore'].includes(action))throw new TypeError('Invalid settings recovery request');
     return parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request:{operation:action==='Reset'?'ResetGameSettings':'RestoreGameSettings',slot}}));

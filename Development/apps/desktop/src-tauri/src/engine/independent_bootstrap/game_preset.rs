@@ -133,6 +133,51 @@ fn observed_input_response(bytes: &[u8]) -> Option<bool> {
     observed
 }
 
+// Opt-in mitigation for a reported older Education RAM leak. Never add an
+// unknown option, infer a default, modify other game settings, or run while
+// Minecraft is active. Its impact on Education 26.32 is NOT proven.
+fn render_input_response_disabled(original: &[u8]) -> io::Result<Vec<u8>> {
+    if original.len() > LIMIT || original.contains(&0) {
+        return Err(invalid("Unsupported Minecraft options file"));
+    }
+    let bom = original.starts_with(b"\xef\xbb\xbf");
+    let content = &original[if bom { 3 } else { 0 }..];
+    std::str::from_utf8(content).map_err(|_| invalid("Minecraft options must be UTF-8"))?;
+    let mut output = Vec::with_capacity(original.len());
+    if bom { output.extend_from_slice(&original[..3]); }
+    let mut count = 0;
+    for raw in content.split_inclusive(|byte| *byte == b'\n') {
+        let (line, ending): (&[u8], &[u8]) = if raw.ends_with(b"\r\n") {
+            (&raw[..raw.len() - 2], b"\r\n")
+        } else if raw.ends_with(b"\n") {
+            (&raw[..raw.len() - 1], b"\n")
+        } else { (raw, b"") };
+        if line.contains(&b'\r') {
+            return Err(invalid("Unsupported Minecraft options newline"));
+        }
+        if line.starts_with(b"ctrl_improvedInputResponse:") {
+            // Missing, disabled, duplicate or ambiguous keys are not authority
+            // for changing an unrecognized Education version/configuration.
+            if line != b"ctrl_improvedInputResponse:1" || count != 0 {
+                return Err(invalid("Improved Input Response option is not uniquely enabled"));
+            }
+            count += 1;
+            output.extend_from_slice(b"ctrl_improvedInputResponse:0");
+            output.extend_from_slice(ending);
+        } else {
+            output.extend_from_slice(raw);
+        }
+    }
+    if count != 1 {
+        return Err(invalid("Improved Input Response is absent or not explicitly enabled"));
+    }
+    Ok(output)
+}
+
+pub(super) fn disable_input_response(private: &File) -> io::Result<bool> {
+    Prepared::read_input_response(private)?.commit_with_backup(true)
+}
+
 const LIMIT: usize = 1024 * 1024;
 // Observed Education version: Simple, 12 chunks, MSAA1, five decorative effects off.
 // The caller pins the reviewed game image before using these option names/units.
@@ -255,6 +300,25 @@ impl Prepared {
             path,
             _directories: directories,
             original,
+            before,
+            after,
+        })
+    }
+
+    // This optional workaround must never create options.txt or missing
+    // profile directories. The pinned original also refuses linked files.
+    fn read_input_response(private: &File) -> io::Result<Self> {
+        let (path, directories) = options_path(private, false)?;
+        let mut original = options_file(&path)?;
+        let mut before = Vec::new();
+        Read::by_ref(&mut original)
+            .take((LIMIT + 1) as u64)
+            .read_to_end(&mut before)?;
+        let after = render_input_response_disabled(&before)?;
+        Ok(Self {
+            path,
+            _directories: directories,
+            original: Some(original),
             before,
             after,
         })
@@ -388,6 +452,51 @@ mod tests {
         ] { assert_eq!(observed_input_response(unknown), None); }
         let original=b"ctrl_improvedInputResponse:1\nvolume:0.7\n";
         assert!(render(original).unwrap().starts_with(original));
+    }
+
+    #[test]
+    fn input_response_workaround_changes_one_existing_key_and_restores_backup() {
+        let root = super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let private = open_directory(&root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap();
+        // Missing directories/options are never created by the workaround.
+        assert!(disable_input_response(&private).is_err());
+        assert!(!root.join("Roaming").exists());
+        let path = Prepared::read(&private).unwrap().path;
+        let before = b"\xef\xbb\xbfvolume:0.75\r\nctrl_improvedInputResponse:1\r\nkey_jump:32\r\n";
+        let after = b"\xef\xbb\xbfvolume:0.75\r\nctrl_improvedInputResponse:0\r\nkey_jump:32\r\n";
+        fs::write(&path, before).unwrap();
+        fs::write(root.join("world-fixture"), b"untouched").unwrap();
+        assert_eq!(render_input_response_disabled(before).unwrap(), after);
+        assert!(disable_input_response(&private).unwrap());
+        assert_eq!(fs::read(&path).unwrap(), after);
+        assert_eq!(backup_bytes(&path).unwrap().unwrap(), before);
+        assert_eq!(inspect_settings(&private, Ok(())).improved_input_response_enabled, Some(false));
+        assert!(restore_settings(&private).unwrap());
+        assert_eq!(fs::read(&path).unwrap(), before);
+        assert_eq!(fs::read(root.join("world-fixture")).unwrap(), b"untouched");
+        drop(private);
+        assert_eq!(root.parent(), Some(std::env::temp_dir().as_path()));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn input_response_workaround_rejects_missing_disabled_ambiguous_or_invalid_settings() {
+        for value in [
+            &b""[..],
+            &b"account:kept\n"[..],
+            &b"ctrl_improvedInputResponse:0\n"[..],
+            &b"ctrl_improvedInputResponse:2\n"[..],
+            &b"ctrl_improvedInputResponse:off\n"[..],
+            &b"ctrl_improvedInputResponse:1\nctrl_improvedInputResponse:1\n"[..],
+            &b"ctrl_improvedInputResponse:1\nctrl_improvedInputResponse:0\n"[..],
+            &b"ctrl_improvedInputResponse:1\nother:bad\rvalue"[..],
+            &b"ctrl_improvedInputResponse:1\n\0"[..],
+            &b"ctrl_improvedInputResponse:1\n\xff"[..],
+        ] {
+            assert!(render_input_response_disabled(value).is_err());
+        }
+        assert_eq!(render_input_response_disabled(b"ctrl_improvedInputResponse:1").unwrap(),
+            b"ctrl_improvedInputResponse:0");
     }
 
     #[test]

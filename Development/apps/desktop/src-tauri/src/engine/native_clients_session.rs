@@ -131,6 +131,7 @@ pub enum SessionRequest {
     ClearProfileCache { slot: u32 },
     ResetGameSettings { slot: u32 },
     RestoreGameSettings { slot: u32 },
+    DisableImprovedInputResponse { slot: u32 },
     ClearProfileData {slot:u32, #[serde(rename="confirmationToken")] confirmation_token:String, #[serde(rename="confirmationName")] confirmation_name:String},
     Launch { slot: u32 },
     CloseOne { slot: u32 },
@@ -187,7 +188,7 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     if let SessionRequest::SavePerformance {active_fps,background_fps}=request {
         super::manager_settings::PerformanceSettings {active_fps,background_fps}.validate()?;
     }
-    if matches!(request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } | SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } if !(1..=5).contains(&slot))
+    if matches!(request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } | SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } if !(1..=5).contains(&slot))
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -397,7 +398,7 @@ mod tests {
     #[test]
     fn recovery_rejects_out_of_range_slots_before_controller_or_storage_access() {
         for slot in [0,6,u32::MAX] {
-            for operation in [SessionRequest::ResetGameSettings {slot},SessionRequest::RestoreGameSettings {slot},SessionRequest::CloseOne {slot}] {
+            for operation in [SessionRequest::ResetGameSettings {slot},SessionRequest::RestoreGameSettings {slot},SessionRequest::DisableImprovedInputResponse {slot},SessionRequest::CloseOne {slot}] {
                 assert_eq!(request(operation).unwrap_err().kind(),io::ErrorKind::InvalidInput);
             }
         }
@@ -469,9 +470,11 @@ mod tests {
             r#"{"operation":"Delete","slot":1}"#,
             r#"{"operation":"SavePerformance","activeFps":60,"backgroundFps":5,"path":"other.json"}"#,
             r#"{"operation":"SavePerformance","activeFps":60.5,"backgroundFps":5}"#,
+            r#"{"operation":"DisableImprovedInputResponse","slot":1,"enabled":false}"#,
         ] {
             assert!(serde_json::from_str::<SessionRequest>(input).is_err());
         }
+        assert!(matches!(serde_json::from_str::<SessionRequest>(r#"{"operation":"DisableImprovedInputResponse","slot":2}"#), Ok(SessionRequest::DisableImprovedInputResponse {slot:2})));
         assert!(read_message(&mut io::Cursor::new(vec![b'x'; 32769])).is_err());
         assert!(read_message(&mut io::Cursor::new(b"{}".to_vec())).is_err());
         assert_eq!(

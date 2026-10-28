@@ -1180,13 +1180,15 @@ fn run() -> io::Result<()> {
                         .map_err(|error| error.to_string())?;
                     storage = Some(sessions.storage().map_err(|error| error.to_string())?);
                 }
-                SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } => {
+                SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } => {
                     sessions.reap();
                     let observed=super::super::inspect_native_workspace().map_err(|error|error.to_string())?.processes;
                     sessions.data_admission(slot,&observed).map_err(|error|error.to_string())?;
                     let store=sessions.store(slot).map_err(|error|error.to_string())?;
                     if matches!(envelope.request,SessionRequest::ResetGameSettings {..}) {
                         game_preset::reset_settings(&store.private)
+                    } else if matches!(envelope.request,SessionRequest::DisableImprovedInputResponse {..}) {
+                        game_preset::disable_input_response(&store.private)
                     } else {
                         game_preset::restore_settings(&store.private)
                     }.map_err(|error|error.to_string())?;

@@ -129,6 +129,20 @@ authorization to perform Windows/game acceptance.
   in source, not proven MiB of resident RAM, faster startup, or game
   allocator savings. Focused Svelte source regression fixture
   AUTHORED, NOT_EXECUTED; no native binary or profile mutation.
+- **Material code-first mitigation prepared:** the existing native session
+  controller accepts an explicit per-slot `DisableImprovedInputResponse`
+  operation through the original serialized authenticated transport.
+  It rechecks fresh game/process admission, requires that selected profile
+  is stopped and a single exact saved `ctrl_improvedInputResponse:1`
+  exists, edits that existing key to 0 only, keeps BOM/line endings and
+  unrelated bytes, and publishes the existing verified backup before
+  the atomic options replacement. It refuses missing, disabled, duplicated,
+  malformed or linked settings, never seeds a new options file, and can
+  be undone using the existing Restore Settings workflow. The mounted
+  Storage UI requires an explicit confirmation and discloses input-latency
+  tradeoff and unverified Education 26.32 RAM effect. Rust/TS fixtures
+  AUTHORED, NOT_EXECUTED; no product, game, profile or Windows changes
+  were applied in the GitHub-only context.
 - CI stays OFF. No install, release, Windows game process or user PC touched.
 
 ## Evidence and preservation
@@ -158,11 +172,11 @@ native GPU memory canaries remain unchanged. P0/localtest/CI remain off.
 large RAM growth with Improved Input Response enabled and relief after
 disabling/restarting. Related Windows Bedrock issues continued in
 later versions; no causal RAM effect is proven for Education 26.32.
-Source-only implementation now reads the existing bounded options.txt
+Source-only implementation initially reads the existing bounded options.txt
 during already-authorized storage inspection and optionally exposes
 a single boolean for the explicit `ctrl_improvedInputResponse` 0/1
 entry. Missing, malformed, contradictory or unauthorized observations
-stay UNKNOWN; no automatic toggle, game I/O, account/world changes or
+stay UNKNOWN; no automatic toggle, unauthorized game I/O, account/world changes or
 modified graphics preset. The existing strict typed UI shows this as a
 non-authoritative diagnostic, with no promise of savings. Optional wire
 field preserves older session response compatibility. Rust/Vite fixtures
