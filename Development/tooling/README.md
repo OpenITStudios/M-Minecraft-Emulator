@@ -12,6 +12,7 @@ a second live game process/session owner.
 | `dependencies/` | Dependency consistency review and maintenance |
 | `acceptance/windows/bootstrap-ordering/` | **Active native DLL source** used by the five-session game bootstrap |
 | `acceptance/` | Native and historical acceptance collectors; older Sandboxie/VM results are not current gameplay proof |
+| `lazytester-particles/` | Optional, source-pinned LazyTester Particle Tuning .mcpack builder; never auto-installs or modifies Minecraft |
 | `acceptance/windows/education-target.ps1` | **Active** registered Minecraft Education executable resolver, moved from the retired isolation-source tree |
 | `local-test/` | Optional source acceptance bookkeeping, not runtime evidence until executed |
 

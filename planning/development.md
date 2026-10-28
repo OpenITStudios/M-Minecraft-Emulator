@@ -16,6 +16,37 @@ normal-exit incident is **RUNTIME ACCEPTANCE DEFERRED**, not a new P0 source
 gate. Reopen only for a confirmed new source defect or explicit operator
 authorization to perform Windows/game acceptance.
 
+## Active implementation — LazyTester Particle Tuning (29 October 2026)
+
+**User-approved focus change:** priority has moved from Minecraft's native
+UploadBufferHeap experiments to a small, separately built **LazyTester Particle
+Tuning** resource-pack preview. Product-facing name is LazyTester, not MIVUBI;
+existing on-disk/registry compatibility names are NOT renamed.
+
+- Canonical source: `Development/tooling/lazytester-particles/` only.
+  `catalog.mjs` pins three ambient Minecraft Bedrock sample effect identities
+  and Git blob hashes from Mojang `v1.26.30.5`. `tune.mjs` preserves full
+  source definitions and changes only the steady `spawn_rate` expression.
+  `archive.mjs` emits a deterministic tiny resource ZIP and `build.mjs`
+  requires explicit source/output and refuses mismatched/missing inputs.
+- The 0–16-block near field retains vanilla emission; at 16–48 blocks the
+  coefficient interpolates smoothly to 80%. No new texture files, altered
+  pixels/UV/animations, lifetime, physics, `max_particles`, combat feedback
+  or Education particle definitions. More distant particles are **less dense**,
+  not bitwise identical; no measured FPS/RAM/VRAM benefit is claimed.
+- Mojang's sample files are **not vendored** because their LICENSE is EULA
+  governed, not permissive. Output is generated privately only on an explicit
+  developer invocation; never staged, automatically enabled in profiles,
+  loaded into an original multiplayer world, or packaged as a game DLL.
+  Education 26.32 support for these Bedrock sample particle definitions and
+  the MoLang camera-distance query remains NOT_EXECUTED/UNKNOWN.
+- This is independent of the previously uploaded `Memory Reduce [Ram].mcpack`
+  (still DEFERRED) and existing default-OFF native heap experiments.
+  MC01–MC05 accounts, world files, game executable, 144/10 FPS and render
+  distance >=12 remain untouched. Synthetic Node source/ZIP tests were
+  executed separately in ChatGPT's Node 22.16.0 sandbox; Windows/Minecraft
+  runtime remains NOT_EXECUTED. No CI or local user PC.
+
 ## Active owners
 
 - Mounted Tauri 2/Svelte UI: `Development/apps/desktop/src/LazyTesterApp.svelte`
@@ -238,14 +269,10 @@ No speculative renderer patch, working-set trim or experimental hook
 promotion is justified. The reviewer improvement concerns *measurement
 honesty*, not reclaimed game RAM.
 
-**Primary next source action:** continue the existing, default-OFF
-`UploadBufferHeap` native retention candidate (historical 4->1 reserve
-policy, 80 MiB lower heap capacity, about 59.953 MiB lower private WS
-median in a short sequential comparison). Seek exact Education 26.32
-executable/allocator ownership and comparable live resident data before
-any promotion. Do not confuse sequential observations with repeatable
-savings, force foreign heap release, or make <1 GiB mandatory. Texture
-Streaming and Improved Input Response remain conditional game-settings
-options; the visual pack above is deferred. The old 67 MiB CPU object
-and 220/144 MiB graphics routes remain unproven and must not be freed
-speculatively. Runtime acceptance stays deferred; no PC test requested.
+**Primary next source action:** maintain the opted-in LazyTester Particle
+Tuning preview, pinned to Mojang's Bedrock samples and preserving all original
+textures/animations. Do not equate Bedrock sample compatibility to verified
+Education 26.32 support. Any later activation or runtime comparison requires a
+separately approved disposable world and host/join check; none is authorized
+by this source commit. Native `UploadBufferHeap` remains an independent,
+default-OFF historical ~59.953 MiB candidate, not this workstream.
