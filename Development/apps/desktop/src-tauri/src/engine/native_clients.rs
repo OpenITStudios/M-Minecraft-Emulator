@@ -433,6 +433,15 @@ const MAX_NATIVE_WORKSPACE_PROCESSES: usize = 5;
 fn parse_native_workspace_observation(raw: &str) -> io::Result<NativeWorkspaceObservation> {
     let result: NativeWorkspaceObservation = serde_json::from_str(raw)
         .map_err(|_| invalid_evidence("Malformed native workspace observation"))?;
+    validate_native_workspace_observation(result)
+}
+
+// The same strict identity/duplicate validator applies to native Win32
+// snapshots and imported JSON fixtures. OS-collected data is already typed:
+// never serialize and deserialize it merely to reuse these invariants.
+fn validate_native_workspace_observation(
+    result: NativeWorkspaceObservation,
+) -> io::Result<NativeWorkspaceObservation> {
     if result.schema != 1
         || result.evidence_class != "REGISTERED_IMAGE_PATH_CANDIDATE_ONLY"
         || result.processes.len() > MAX_NATIVE_WORKSPACE_PROCESSES
@@ -770,10 +779,9 @@ mod native_workspace_windows {
             evidence_class: "REGISTERED_IMAGE_PATH_CANDIDATE_ONLY".into(),
             processes,
         };
-        // Keep one canonical invariant validator for the native OS collector
-        // and previously authored malformed/duplicate process regressions.
-        let raw = serde_json::to_string(&observation).map_err(io::Error::other)?;
-        parse_native_workspace_observation(&raw)
+        // Preserve the same validator as the JSON input path without
+        // allocating and parsing an unnecessary intermediate JSON string.
+        validate_native_workspace_observation(observation)
     }
 
     pub(super) fn inspect() -> io::Result<NativeWorkspaceObservation> {
@@ -997,6 +1005,22 @@ mod native_workspace_tests {
             r#"{"schema":1,"evidenceClass":"REGISTERED_IMAGE_PATH_CANDIDATE_ONLY","processes":[]}"#,
         ).unwrap();
         assert!(!matches_native_workspace_target(&empty, &target));
+    }
+
+    #[test]
+    fn typed_native_observation_reuses_the_exact_strict_json_identity_rules() {
+        let raw = r#"{"schema":1,"evidenceClass":"REGISTERED_IMAGE_PATH_CANDIDATE_ONLY","processes":[{"pid":41,"createdFileTime":"134000000000000001","sessionId":1,"windowHandle":"0x0","responding":false}]}"#;
+        let typed: NativeWorkspaceObservation = serde_json::from_str(raw).unwrap();
+        assert_eq!(
+            validate_native_workspace_observation(typed.clone()).unwrap().processes.len(),
+            parse_native_workspace_observation(raw).unwrap().processes.len()
+        );
+        let mut bad = typed.clone();
+        bad.processes.push(bad.processes[0].clone());
+        assert!(validate_native_workspace_observation(bad).is_err());
+        let mut invalid = typed;
+        invalid.processes[0].pid = 0;
+        assert!(validate_native_workspace_observation(invalid).is_err());
     }
 
     #[test]

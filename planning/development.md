@@ -76,6 +76,11 @@ authorization to perform Windows/game acceptance.
   `canApplyPreset` flag is only a UI hint, never write authority.
   This reduces temporary Windows process/registry work; memory savings and
   build/runtime behavior are NOT_EXECUTED.
+- Native Win32 process observations now feed the existing strict duplicate
+  PID/HWND/schema validator directly, rather than allocating temporary JSON
+  and parsing it back on every scan. Raw JSON inputs still deserialize and
+  pass through that same validator; the five-profile cap and identity checks
+  are unchanged. Rust fixture authored, NOT_EXECUTED.
 - CI stays OFF. No install, release, Windows game process or user PC touched.
 
 ## Evidence and preservation

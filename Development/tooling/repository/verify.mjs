@@ -246,6 +246,8 @@ export function verifyRepository(root,g0=false) {
   // lookup. All state-mutating paths MUST retain the original fresh gate.
   assert.ok(gameSource.includes('fn inspect_native_workspace_for_pinned_settings(')
     && gameSource.includes('native_workspace_windows::inspect_for_registered_target(validated_image)')
+    && gameSource.includes('validate_native_workspace_observation(observation)')
+    && !gameSource.includes('serde_json::to_string(&observation)')
     && gameSessions.includes('fn settings_observation(&mut self) -> io::Result<SettingsReport>')
     && gameSessions.includes('inspect_native_workspace_for_pinned_settings(&self.path)')
     && /SessionRequest::InspectSettings\s*=>\s*\{[\s\S]*?settings_observation\(\)/.test(gameSessions)
