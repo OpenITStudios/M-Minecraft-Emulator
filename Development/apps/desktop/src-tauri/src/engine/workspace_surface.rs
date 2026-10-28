@@ -1211,11 +1211,32 @@ mod controller {
             Ok(()) => pipe_issue.map_or(Ok(()), Err),
         }
     }
+    // Compare exact pinned process + native window identity, never transient
+    // responsiveness. Failed MC01 recovery cannot authorize or block MC02
+    // merely because both belong to the same desktop window.
+    fn same_native_target(a: &OwnedProcess, b: &OwnedProcess) -> bool {
+        a.pid == b.pid
+            && a.created_file_time == b.created_file_time
+            && a.session_id == b.session_id
+            && a.window_handle == b.window_handle
+    }
     fn ready_matches_start(ready: &Saved, requested: &OwnedProcess) -> bool {
-        ready.target.pid == requested.pid
-            && ready.target.created_file_time == requested.created_file_time
-            && ready.target.session_id == requested.session_id
-            && ready.target.window_handle == requested.window_handle
+        same_native_target(&ready.target, requested)
+    }
+    // A stale *managed* lease for the same launcher is not an invitation to
+    // re-capture a new PID/window while its previous checkpoint is uncertain.
+    // Exact same-window identity also protects unlabelled test/legacy leases.
+    fn checkpoint_conflicts(
+        pinned: &OwnedProcess,
+        pinned_authority: Option<&(String, String)>,
+        requested: &OwnedProcess,
+        requested_authority: Option<&(String, String)>,
+    ) -> bool {
+        same_native_target(pinned, requested)
+            || matches!((pinned_authority, requested_authority),
+                (Some((name, slot)), Some((other_name, other_slot)))
+                    if name == "LAZY_TESTER_MANAGED_SESSION"
+                        && other_name == name && slot == other_slot)
     }
 
     // Keep a failed startup lease inside the existing SURFACE owner whenever
@@ -1315,6 +1336,40 @@ mod controller {
             assert!(read_line(&mut io::Cursor::new(Vec::<u8>::new()))
                 .unwrap().is_none());
         }
+        #[test]
+        fn failed_peer_checkpoint_blocks_only_same_game_or_managed_slot() {
+            let first = OwnedProcess {
+                pid: 101, created_file_time: "12345".into(),
+                session_id: 1, window_handle: "0x101".into(), responding: true,
+            };
+            let second = OwnedProcess {
+                pid: 102, created_file_time: "12346".into(),
+                session_id: 1, window_handle: "0x102".into(), responding: true,
+            };
+            let first_slot = ("LAZY_TESTER_MANAGED_SESSION".to_owned(), "01".to_owned());
+            let second_slot = ("LAZY_TESTER_MANAGED_SESSION".to_owned(), "02".to_owned());
+            assert!(!checkpoint_conflicts(&first, Some(&first_slot),
+                &second, Some(&second_slot)), "An MC01 failure must not block MC02");
+            assert!(checkpoint_conflicts(&first, Some(&first_slot),
+                &first, Some(&first_slot)));
+            let mut newer_first = first.clone();
+            newer_first.created_file_time = "12347".into();
+            newer_first.pid = 110;
+            assert!(checkpoint_conflicts(&first, Some(&first_slot),
+                &newer_first, Some(&first_slot)),
+                "A new game cannot bypass its unresolved old launcher checkpoint");
+            assert!(!checkpoint_conflicts(&first, None, &newer_first, None));
+            let mut same_target = first.clone();
+            same_target.responding = false;
+            assert!(checkpoint_conflicts(&first, None, &same_target, None));
+            let foreign = ("EXTERNAL_SESSION".to_owned(), "01".to_owned());
+            assert!(!checkpoint_conflicts(&first, Some(&foreign),
+                &newer_first, Some(&first_slot)));
+            assert!(checkpoint_conflicts(&first, Some(&foreign),
+                &first, Some(&second_slot)),
+                "Exact window identity cannot be bypassed by a mismatched label");
+        }
+
         #[test]
         fn start_ready_must_match_exact_retained_process_and_window() {
             let requested = OwnedProcess {
@@ -1678,12 +1733,11 @@ mod controller {
     });
     fn same(lease: &Lease, target: &OwnedProcess) -> bool {
         // Never promote the pre-Ready request to an acknowledged Play surface.
-        lease.saved.as_ref().is_some_and(|s| {
-            s.target.pid == target.pid
-                && s.target.created_file_time == target.created_file_time
-                && s.target.session_id == target.session_id
-                && s.target.window_handle == target.window_handle
-        })
+        lease.saved.as_ref().is_some_and(|saved| same_native_target(&saved.target, target))
+    }
+    fn parked_cleanup_due(lease: &mut Lease) -> io::Result<bool> {
+        Ok(lease.child.try_wait()?.is_some()
+            || lease.saved.as_ref().is_some_and(|saved| native::retired(&saved.target)))
     }
     pub fn is_active() -> bool {
         SURFACE
@@ -1834,12 +1888,16 @@ mod controller {
             .map_err(|_| io::Error::other("Workspace state unavailable"))?;
         let mut error = preview_error;
         if let Some(lease) = state.active.iter().chain(state.parked.iter()).next() {
-            native::clear_aperture(lease.manager)?;
+            // An aperture error must not skip independent per-profile Restore.
+            // Preserve the failure receipt but attempt every original helper.
+            if let Err(aperture) = native::clear_aperture(lease.manager) {
+                if error.is_none() { error = Some(aperture); }
+            }
         }
         if let Some(active) = state.active.as_mut() {
             match active.stop() {
                 Ok(()) => state.active = None,
-                Err(e) => error = Some(e),
+                Err(e) => { if error.is_none() { error = Some(e); } }
             }
         }
         state.parked.retain_mut(|lease| match lease.stop() {
@@ -2132,19 +2190,56 @@ mod controller {
         if state.closing { return Err(io::Error::other("Lazy Tester is closing")); }
         state.live_previews = true;
         let mut unavailable = Vec::new();
+        // These are only diagnostics for the original, retained checkpoints.
+        // Never drop a failed lease or globally abort preview for a peer.
+        let mut cleanup_failures: Vec<(OwnedProcess, Option<(String, String)>, String)> = Vec::new();
         for index in (0..state.parked.len()).rev() {
-            if state.parked[index].saved.as_ref().is_some_and(|s| native::retired(&s.target)) {
-                state.parked[index].stop()?; state.parked.remove(index);
+            let due = match parked_cleanup_due(&mut state.parked[index]) {
+                Ok(due) => due,
+                Err(error) => {
+                    let lease = &state.parked[index];
+                    cleanup_failures.push((
+                        lease.requested.clone(), lease.authority.clone(), error.to_string()));
+                    continue;
+                }
+            };
+            if due {
+                match state.parked[index].stop() {
+                    Ok(()) => { state.parked.remove(index); }
+                    Err(error) => {
+                        let lease = &state.parked[index];
+                        cleanup_failures.push((
+                            lease.requested.clone(), lease.authority.clone(), error.to_string()));
+                    }
+                }
             }
         }
         for (slot, target) in sources {
+            let requested_authority = (
+                "LAZY_TESTER_MANAGED_SESSION".to_owned(), format!("{slot:02}"));
+            if let Some((_, _, detail)) = cleanup_failures.iter().find(|(pinned, owner, _)| {
+                checkpoint_conflicts(pinned, owner.as_ref(),
+                    target, Some(&requested_authority))
+            }) {
+                unavailable.push((*slot, format!(
+                    "Minecraft - {slot} native recovery remains unconfirmed: {detail}")));
+                continue;
+            }
+            if state.parked.iter().any(|lease| lease.saved.is_none()
+                && checkpoint_conflicts(&lease.requested, lease.authority.as_ref(),
+                    target, Some(&requested_authority))) {
+                unavailable.push((*slot,
+                    "Previous Minecraft window capture is not confirmed; original recovery checkpoint retained".into()));
+                continue;
+            }
             if state.active.as_ref().is_some_and(|active| same(active, target)) { continue; }
             if !target.responding || !native::can_park(target).unwrap_or(false) {
                 unavailable.push((*slot, "Jendela belum tersedia atau dialog Minecraft sedang terbuka".into())); continue;
             }
             let existing = state.parked.iter().position(|lease| same(lease, target));
             if existing.is_none() && state.parked.len() + usize::from(state.active.is_some()) >= 5 {
-                return Err(io::Error::other("Workspace already manages five clients"));
+                unavailable.push((*slot, "Workspace already manages five clients".into()));
+                continue;
             }
             let mut lease = match existing {
                 Some(index) => state.parked.remove(index),
@@ -2225,16 +2320,41 @@ mod controller {
                 state.active = None;
             }
         }
+        // A failed parked MC01 recovery is not an MC02 Play failure.
+        // Retain its exact lease/gate and continue, but reject the requested
+        // target if the error is on the same process/window or managed slot.
         for index in (0..state.parked.len()).rev() {
-            if state.parked[index].child.try_wait()?.is_some()
-                || state.parked[index]
-                    .saved
-                    .as_ref()
-                    .is_some_and(|s| native::retired(&s.target))
-            {
-                state.parked[index].stop()?;
-                state.parked.remove(index);
+            let due = match parked_cleanup_due(&mut state.parked[index]) {
+                Ok(due) => due,
+                Err(error) => {
+                    let lease = &state.parked[index];
+                    if checkpoint_conflicts(&lease.requested, lease.authority.as_ref(),
+                        &target, authority.as_ref()) {
+                        return Err(error);
+                    }
+                    continue;
+                }
+            };
+            if due {
+                match state.parked[index].stop() {
+                    Ok(()) => { state.parked.remove(index); }
+                    Err(error) => {
+                        let lease = &state.parked[index];
+                        if checkpoint_conflicts(&lease.requested, lease.authority.as_ref(),
+                            &target, authority.as_ref()) {
+                            return Err(io::Error::new(error.kind(), format!(
+                                "Selected Minecraft checkpoint recovery is unconfirmed: {error}")));
+                        }
+                        // Unrelated failure: never drop or mutate this lease.
+                    }
+                }
             }
+        }
+        if state.parked.iter().any(|lease| lease.saved.is_none()
+            && checkpoint_conflicts(&lease.requested, lease.authority.as_ref(),
+                &target, authority.as_ref())) {
+            return Err(io::Error::new(io::ErrorKind::WouldBlock,
+                "Selected Minecraft checkpoint is missing a confirmed Ready; original helper and recovery gate retained"));
         }
         if retained_only
             && !state.active.iter().chain(state.parked.iter()).any(|lease| {

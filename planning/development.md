@@ -132,20 +132,21 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability source hardening — 28 October 2026
 
-Transport refuses contention; CloseOne avoids unrelated journals while the
-single native controller validates game identity. UI preserves uncertain
-recovery after STOPPED/IPC failure. Failed helper Start/pipe retains child,
-reader and recovery gate in SURFACE. Terminal End(Err) with Saved permits
-one identity-checked restore after helper exit. For pre-Ready End(Err) without
-Saved, the original Start PID/birth/session/HWND is pinned as metadata only;
-a helper+reader terminal and helper exit AND exact original Minecraft exit
-are needed before retirement. A quiescent helper still permits controller-
-verified normal CloseOne; no missing Ready becomes a captured Play window.
-No new worker/helper, wire, Mac backend, process kill or data mutation.
-Rust regressions authored, NOT_EXECUTED. Windows MC02 exit, native timing,
-builds, gameplay and performance remain unverified.
+Windows transport refuses contention; CloseOne avoids peer journals and
+validates retained game ownership. Svelte preserves uncertain native window
+recovery. Helper Start/pipe failure retains its child/reader/gate; terminal
+End and actual helper exit are needed for checkpoint retirement. End(Err)
+with Saved can use exact HWND native restore; without Saved, retirement needs
+verified exit of the original requested Minecraft process. Parked recovery
+cleanup now keeps failing leases while allowing unrelated profile preview/Play
+to continue; any same-game or same-managed-slot checkpoint still blocks
+reuse. Full workspace release attempts other game helpers even after an
+aperture failure, returning the original error. Active checkpoint failure
+continues to block unsafe Play reconfiguration. IPC, private data and
+Mac-native constraints unchanged. Synthetic tests authored, NOT_EXECUTED.
+MC02 normal exit, Windows performance and gameplay remain unverified.
 
 ## Next bounded action
 
-Review multi-slot terminal disconnect cleanup to preserve independent
-peer checkpoints and refuse ambiguous native ownership.
+Audit recovery error propagation for individual preview tiles and retained
+stale checkpoints before Windows runtime acceptance.
