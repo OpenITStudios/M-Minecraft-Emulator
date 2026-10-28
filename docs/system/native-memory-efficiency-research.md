@@ -141,6 +141,71 @@ bounds, element strides, field offsets and *all* reader/writer/release paths
 to a specific version's actual data structure, with observed live occupancy.
 Without that bridge, the integration status is NOT_ESTABLISHED.
 
+### 28 October 2026: Microsoft offline DirectX ETW ownership candidate
+
+Microsoft released [DxTimingCaptureLibrary](https://devblogs.microsoft.com/directx/introducing-dxtimingcapturelibrary/)
+on 30 September 2026. Pin its official MIT-licensed source at
+[72bd2b18553493aa9850e434caf71bfa18952aac](https://github.com/microsoft/DxTimingCaptureLibrary/tree/72bd2b18553493aa9850e434caf71bfa18952aac),
+merged 12 October 2026. The merge specifically repairs missing
+non-local/local segment-group residency callbacks under **VRAM overcommitment**;
+relevant to five clients sharing an 8 GiB-class GPU. No Minecraft native
+hook or alternate game memory owner is required to **analyze** existing ETW.
+
+Pinned code provides two offline entry points:
+- `samples/memorymap` supports `--etl <path> --pid <id> --dump`;
+  `ApiObjectCallbacks` expose D3D12 device, heap, committed/placed/reserved
+  resources, object size/placement/name and creation/destruction. Residency
+  callbacks expose segment-group changes. Placed resources are *children*
+  of a heap, never additive heap commitment.
+- `samples/etlprocessor` can `dumppids` and `dumpallocations` from ETL.
+  The latter **only** follows DXGK allocation events with the flag
+  `0x4000`, NOT every graphics allocation.
+- The official Memory Map README calls its visualization unfinished:
+  it can miss resources and can misplace migrating resources. Its totals,
+  missing or unknown groups are NOT reliable whole-process RAM totals.
+  Do not equate zero shown with zero used.
+
+**Capture coverage gate.** The official ETW config requires D3D12
+`DEVICES`, `OBJECT_LIFETIME` and `RESOURCES` event keywords, plus DXGK
+`RESOURCE` and `ALLOCATIONS_REFERENCES` for rich lifetime/residency
+analysis. It also requires QPC timestamp compatibility. Our historical WPR
+`VirtualAllocation` ETL contains allocation callstacks, but the repository
+does NOT prove that D3D12/DXGK provider keywords were enabled. ETL
+decoding cannot recover events that were not captured. Raw ETW/VMMap
+artifacts are not present in accessible GitHub or file-library sources,
+so provider/event coverage has **not** been checked and offline replay is
+**NOT_EXECUTED**.
+
+**Critical address boundary.** The library's
+`ObjectPlacementInfo::GpuVirtualAddress` and sample `BaseAddress` are
+GPU virtual addresses. VMMap WriteCombined leaf addresses are CPU virtual
+addresses. Equal numeric addresses cannot serve as an allocation join.
+`ID3D12Resource::Map` can expose CPU pointers, but these callbacks do not
+establish that CPUVA-to-GPUVA mapping. Compare API-object IDs, process
+birth/device/adapter, time and explicit native mapping evidence instead.
+Resource destruction does not by itself prove GPU fence completion,
+empty allocator occupancy or safe release:
+https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12resource-map
+
+**Single decisive next analysis, no new hook/collector:**
+1. Inspect available original ETL's provider/keyword inventory, QPC clock,
+   events lost and original PID plus birth identity. Incomplete capture
+   => `NO_SUFFICIENT_EVENT_COVERAGE`, not zero allocations.
+2. Only with sufficient source data, use pinned Microsoft's offline samples
+   for a bounded heap/resource lifetime/segment report. Preserve UNKNOWN
+   for unresolved mappings, migrations, missing pre-capture creations,
+   aliased placed resources and absent retirement evidence.
+3. Reconcile with a **simultaneous** CPU private-residency observation and
+   native allocator free/retire/fence evidence before ranking reclaimable
+   bytes. Never add private WS, non-local GPU budget and heap capacity.
+4. Prioritize the historic 220.488 MiB mixed WriteCombined category and
+   144 MiB synchronous growth correlation, but neither is a verified
+   amount that can be freed. The 67 MiB CPU object remains a secondary lead.
+
+This is a **new feasibility route, not a demonstrated Minecraft
+optimization**. Keep old native experiments OFF, CI OFF, original game data
+unchanged, no PC operations and no re-entry to deferred P0.
+
 ### One discriminating next evidence step — no speculative optimizer
 
 Before any new intervention, classify the historically unassigned

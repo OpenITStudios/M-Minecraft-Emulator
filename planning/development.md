@@ -101,27 +101,23 @@ publication. The Mac build remains a diagnostic shell without game backend.
 
 ## Next bounded source action
 
-The operator now prioritizes **substantial game-side RAM efficiency** over
-micro-optimizing Lazy Tester. The 28 October native-memory research decision
-separates confirmed Education evidence from Bedrock/modern BGFX analogies.
-Texture streaming is NOT verified available in Education and primarily targets
-GPU memory. Only Default/Upload native pools have version-bound tuples; three
-named graphics pools have UNKNOWN occupancy/backing. The highest-value
-unresolved owner evidence is 220.488 MiB MIXED WriteCombined resident pages
-and the separate 144 MiB synchronous-growth route in the historical menu
-capture, plus the distinct 58.457 MiB resident CPU object. These are
-NOT reclaimable-byte estimates and must never be added to the world baseline.
+Research goal: substantial game-side resident RAM saving, not manager
+micro-optimizations. Latest source-backed route: Microsoft
+DxTimingCaptureLibrary @ `72bd2b1` (12 Oct 2026) can analyze
+D3D12 heap/resource lifetime and GPU residency from compatible ETL
+**without injecting Minecraft**. The existing Windows WPR
+VirtualAllocation ETL may not contain D3D12/DXGK provider events;
+raw captures are not accessible and their provider coverage remains UNKNOWN.
+Microsoft's Memory Map sample misses some resources and handles migrations
+incompletely. Its GPU virtual addresses must NOT be numerically joined to
+VMMap CPU virtual addresses.
 
-New public-source proof: pre-June 2026 BGFX Context/Frame keeps two
-frames with fixed draw, render and matrix arrays, unlike later dynamic
-upstream storage. The public default accounts for >=9.875 MiB in only
-certain inline arrays; it does NOT identify the saved Education 67 MiB object,
-whose private residency was ~58.457 MiB. This remains a secondary lead.
-
-Next: recover actual **synchronized owner and live/empty capacity** evidence
-for the large graphics residency classes. If original raw ETW/VMMap or
-Education native code slices become available, use them for exact matching;
-none are accessible via GitHub or the searched file library. Do not build
-new injectors/collectors, resurrect P0, enable CI or demand a PC test;
-Windows/game runtime remains explicitly deferred.
-
+Next: if saved raw ETL becomes accessible, inspect provider keywords,
+timestamp clock, PID/birth and event loss FIRST; only then perform
+bounded offline lifetime attribution for the historical 220.488 MiB
+mixed WriteCombined and 144 MiB synchronous-growth candidates.
+Those numbers are *observed residency correlations*, not reclaimed bytes.
+The distinct 67 MiB Education CPU allocation remains a secondary lead:
+pre-2026 BGFX fixed arrays are not a verified Education ABI.
+No new collector/hook, P0 revisit, CI, Windows/game test or payload change;
+runtime acceptance remains deferred and native canaries remain OFF.
