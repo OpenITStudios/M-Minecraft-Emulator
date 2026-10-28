@@ -127,31 +127,33 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 `invokeRuntime.ts`; typed IPC remains in `lazyTester.ts` and
 `workspaceSurface.ts`. Static/browser regressions authored, NOT_EXECUTED.
 
-## Windows reliability — 28 October 2026
+## Windows reliability & efficiency — 28 October 2026
 
-Game exit remains checked at 250 ms; stable audio sync at one second.
-DWM skips duplicate writes after HWND checks, while native Place/Park/Hide
-no-ops require exact process/window evidence. Play, RedrawWindow and
-foreground recovery checks remain intact. Failed secondary DWM thumbnails
-can no longer reappear on passive WAKE without a fresh verified layout
-receipt. Explicit user Refresh retries only failed preview observations
-through existing dirty/layout admission, not periodic Inspect or new IPC.
+Game exit remains checked at 250 ms; stable audio at 1 s. DWM omits
+duplicate writes after HWND verification; native Place/Park/Hide no-ops
+require original process/window proof. A failed tile stays hidden until
+a verified new layout; manual Refresh uses existing admission. DWM
+WORKER mutex now protects only worker startup and bounded try_send,
+then unlocks BEFORE notify/reply wait (up to 3 s), allowing peer clears
+to enter the one ordered worker queue. After Clear, last ClearSlot/
+ClearPrimary, or last lost thumbnail, the scene drops its strong Tauri
+Window, manager and process metadata. Empty WAKE skips Win32 calls.
+No new worker, scheduler, IPC, game process or account/world mutation.
+Synthetic Rust tests authored, NOT_EXECUTED.
 
 ## Debug timing — NOT_EXECUTED
 
-`MIVUBI_DEBUG_WORKSPACE_TIMING=1` enables Windows debug counters for
-aperture/foreground call count, errors, average/max us and >=5/50ms.
-Prints aggregates at workspace release only; disabled by default, with
-no PID/HWND output, added worker/timer or account/world modification.
-Rust, offscreen Win32 and browser regressions authored NOT_EXECUTED.
-Windows DWM, MC02 exit, CPU/RAM and packaged gameplay unverified.
+`MIVUBI_DEBUG_WORKSPACE_TIMING=1` enables optional Windows debug
+aperture/foreground counters, errors, avg/max us and >=5/50ms.
+Aggregate stderr only on release, default off, no PID/HWND output.
+Windows build, MC02 exit, DWM, CPU/RAM and gameplay unverified.
 
 ## Resource scenarios — NOT_EXECUTED
 
-Pinned Windows comparison: idle 0/5 games, Keep/Mute, previews,
-move/resize/minimize, CloseOne and peer Play. Measure CPU/memory,
-DWM operations, HWND identity and actual normal exit.
+Compare pinned 0/5-game, Keep/Mute, preview, resize/minimize, CloseOne
+and peer Play. Measure CPU/memory, IPC latency and exact game identity.
 
 ## Next bounded action
 
-Audit source-level preview recovery/release cleanup without user PC.
+Audit overlapping DWM Layout/ClearSlot/CloseOne admission and recovery
+source paths without needing the user PC.

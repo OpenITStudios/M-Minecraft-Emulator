@@ -489,6 +489,16 @@ mod windows {
         primary: Option<Thumbnail>,
     }
     impl Scene {
+        fn release_unused_observation(&mut self) {
+            // Retained DWM state is presentation-only. With no thumbnail,
+            // drop the strong Tauri Window and stale native process metadata.
+            // This never changes an original Minecraft process or lease.
+            if self.thumbnails.is_empty() && self.primary.is_none() {
+                self.window = None;
+                self.manager = 0;
+                self.profiles.clear();
+            }
+        }
         fn visibility(&self) -> bool {
             unsafe {
                 let manager = self.manager as usize as HWND;
@@ -505,6 +515,11 @@ mod windows {
             }
         }
         fn refresh(&mut self) {
+            // A WAKE without any native observers needs no Win32 probe.
+            if self.thumbnails.is_empty() && self.primary.is_none() {
+                self.release_unused_observation();
+                return;
+            }
             let visible = self.visibility();
             // The DWM worker alone observes asynchronous refresh failures.
             // Do not re-run layout or inspect Minecraft. Send a single
@@ -545,6 +560,7 @@ mod windows {
                     && !primary.source_and_destination_valid()
             } else { false };
             if discard_primary { self.primary = None; }
+            self.release_unused_observation();
         }
         fn update_primary_observation(&mut self, manager: u64,
             tile: &PreviewTile, visible: bool) -> io::Result<()> {
@@ -649,6 +665,9 @@ mod windows {
                 }
                 statuses.push(status);
             }
+            // Failed layout still returns its own independent TileStatus
+            // receipts, without retaining the now-unused manager reference.
+            self.release_unused_observation();
             Ok(PreviewReport {
                 schema: 1,
                 tiles: statuses,
@@ -707,7 +726,7 @@ mod windows {
                             Job::Clear(reply) => {
                                 scene.thumbnails.clear();
                                 scene.primary = None;
-                                scene.profiles.clear();
+                                scene.release_unused_observation();
                                 let _ = reply.send(Ok(()));
                             }
                             Job::ClearSlot {slot,reply} => {
@@ -721,10 +740,13 @@ mod windows {
                                 }
                                 scene.profiles.retain(|(profile,_)|
                                     retain_other_preview_slot(*profile,slot));
+                                // Keep peers; release only an entirely idle scene.
+                                scene.release_unused_observation();
                                 let _ = reply.send(Ok(()));
                             }
                             Job::ClearPrimary(reply) => {
                                 scene.primary = None;
+                                scene.release_unused_observation();
                                 let _ = reply.send(Ok(()));
                             }
                         }
@@ -741,6 +763,23 @@ mod windows {
             THREAD.store(0, Ordering::Release);
         });
         Worker { sender, id, join }
+    }
+    // WORKER protects only startup and bounded channel admission. Waiting
+    // for a result while holding that global mutex can block an unrelated
+    // CloseOne preview-clear caller for the full 3-second timeout.
+    fn finish_after_admission<T, S>(
+        admission: std::sync::MutexGuard<'_, S>,
+        notify_worker: impl FnOnce() -> io::Result<()>,
+        receive: mpsc::Receiver<io::Result<T>>,
+    ) -> io::Result<T> {
+        drop(admission);
+        notify_worker()?;
+        receive.recv_timeout(Duration::from_secs(3)).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::TimedOut,
+                "Preview update is pending; worker retained",
+            )
+        })?
     }
     fn send<T>(
         make: impl FnOnce(mpsc::SyncSender<io::Result<T>>) -> Job,
@@ -781,16 +820,9 @@ mod windows {
                 "Previous preview update is still pending",
             )
         })?;
-        notify(id)?;
-        receive
-            .recv_timeout(Duration::from_secs(3))
-            .map_err(|_| {
-                io::Error::new(
-                    io::ErrorKind::TimedOut,
-                    "Preview update is pending; worker retained",
-                )
-            })?
-            .map(Some)
+        // The existing single DWM worker keeps job ordering. A clear may
+        // now be admitted while this caller waits for its own reply.
+        finish_after_admission(owner, || notify(id), receive).map(Some)
     }
     pub(super) fn apply(
         window: tauri::Window,
@@ -845,6 +877,37 @@ mod windows {
     #[cfg(test)]
     mod tests {
         use super::*;
+        #[test]
+        fn queued_preview_reply_releases_owner_before_notification() {
+            // The exact production helper, exercised with synthetic channels
+            // and a Mutex, never requires a Tauri window or game process.
+            let owner = Mutex::new(());
+            let (reply, receive) = mpsc::sync_channel(1);
+            let result = finish_after_admission(owner.lock().unwrap(), || {
+                assert!(owner.try_lock().is_ok(),
+                    "Another preview caller must access WORKER during reply wait");
+                reply.send(Ok(7u32)).unwrap();
+                Ok(())
+            }, receive).unwrap();
+            assert_eq!(result, 7);
+            assert!(owner.try_lock().is_ok());
+        }
+        #[test]
+        fn empty_dwm_scene_releases_manager_and_profile_metadata() {
+            let game = OwnedProcess {
+                pid: 101, created_file_time: "12345".into(),
+                session_id: 1, window_handle: "0x101".into(), responding: true,
+            };
+            let mut scene = Scene {
+                window: None, manager: 77,
+                profiles: vec![(2, game)],
+                thumbnails: Vec::new(), primary: None,
+            };
+            scene.refresh();
+            assert_eq!(scene.manager, 0);
+            assert!(scene.profiles.is_empty());
+            assert!(scene.window.is_none());
+        }
         #[test]
         fn redundant_dwm_writes_skip_stable_bursts_but_refresh_real_changes() {
             let now = Instant::now();
