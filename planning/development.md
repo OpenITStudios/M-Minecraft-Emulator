@@ -129,26 +129,26 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability & efficiency — 28 October 2026
 
-Game exits reap at 250 ms, stable audio at 1 s. One DWM worker retains
-bounded channel, source-pinned per-slot cancellation and a 3 s Layout
-deadline. Rejected Layouts already discard new images and restore reused
-geometry. Rollback now pins old native DWM registration, destination HWND,
-manager and prior applied visibility (not slot/viewport alone). It verifies
-the manager still belongs to Lazy Tester and matches its Tauri window,
-the same registered thumbnail remains, and its original PID/birth/HWND is
-still the current profile source. Missing/replaced sources are discarded,
-not reanimated. Failed restoration emits the existing source-pinned
-preview error. Prior hidden/invalidated tiles stay hidden; verified peers
-remain intact. No new worker, timer, IPC, game owner or data migration.
-Synthetic Rust/Win32 regressions authored, NOT_EXECUTED. Real Windows
-DWM, normal MC02 exit, CPU/RAM and installer remain unverified.
+Original game reap stays 250 ms; stable audio sync 1 s. The sole DWM
+worker retains capacity-one queue, 3s Layout expiry and per-slot CloseOne
+cancellation. Primary DWM observer replacement now uses a two-stage
+native commit: verify the new image FIRST, keep the old DWM registration
+owned and hidden until a Layout reply is delivered. An expired, failed
+or dropped reply discards the unacknowledged candidate and restores the
+old primary only after exact manager, registration, source HWND/PID and
+slot-epoch checks. Failed candidate registration cannot destroy a still-
+valid original primary. Removing a primary also requires a verified
+receipt. Secondary rollback preserves valid peer previews and prior
+visibility. No extra worker, timer, IPC or game/data mutation. Pure Rust
+and offscreen Win32 regressions authored NOT_EXECUTED. Actual Windows
+DWM, MC02 normal exit, CPU/RAM and installed package remain unverified.
 
 ## Debug timing — NOT_EXECUTED
 
-`MIVUBI_DEBUG_WORKSPACE_TIMING=1` remains default-off Windows debug
-aperture/foreground timing reported at workspace release without IDs.
+`MIVUBI_DEBUG_WORKSPACE_TIMING=1` retains default-off Windows debug
+aperture/foreground timing emitted on existing workspace release.
 
 ## Next bounded action
 
-Audit primary observer replacement and failed Layout rollback for
-undelivered receipts, keeping only verified current source identities.
+Audit partial Layout failures involving both primary and secondary
+observers; preserve only still-current native identity and peer previews.

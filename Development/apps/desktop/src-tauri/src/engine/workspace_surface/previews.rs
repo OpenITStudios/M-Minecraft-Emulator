@@ -563,8 +563,17 @@ mod windows {
     struct LayoutCreated {
         secondary_slots: Vec<u32>,
         primary_changed: bool,
+        // The former observer remains owned by this single Layout until
+        // the replacement's verified reply is delivered or rolled back.
+        replaced_primary: Option<(Thumbnail, PreviousImage)>,
         reused_secondary: Vec<PreviousImage>,
         reused_primary: Option<PreviousImage>,
+    }
+    fn previous_primary_can_restore(
+        old: PreviousImage, manager: u64,
+        source_current: bool, slot_current: bool,
+    ) -> bool {
+        old.manager == manager && source_current && slot_current
     }
     fn viewport_changed(a: Viewport, b: Viewport) -> bool {
         a.x != b.x || a.y != b.y || a.width != b.width
@@ -604,7 +613,7 @@ mod windows {
                 window.hwnd().ok().is_some_and(|hwnd|
                     hwnd.0 as usize as u64 == self.manager))
         }
-        fn discard_unacknowledged_new(&mut self, created: &LayoutCreated) {
+        fn discard_unacknowledged_new(&mut self, created: &mut LayoutCreated) {
             // Manager replacement or HWND reuse makes old preview rollback
             // unsafe. Fail closed instead of moving old DWM registrations
             // into another host. This does not touch the original game.
@@ -615,7 +624,33 @@ mod windows {
                 return;
             }
             if created.primary_changed {
+                // New primary never had a valid delivered receipt.
                 self.primary = None;
+                if let Some((mut old, saved)) = created.replaced_primary.take() {
+                    let current_source = saved.same_registration(&old)
+                        && old.source_and_destination_valid()
+                        && self.profiles.iter().any(|(slot, process)|
+                            old.matches(*slot, process));
+                    let current_epoch = slot_epoch_matches(
+                        &self.issued_epochs, &snapshot_epochs(), old.slot,
+                    );
+                    if previous_primary_can_restore(
+                        saved, self.manager, current_source, current_epoch,
+                    ) {
+                        old.viewport = saved.viewport;
+                        let playing = native::interactive_at(
+                            &old.target, old.manager, saved.viewport);
+                        // The previous observer can return only through its
+                        // original exact source/HWND/DWM verification path.
+                        let show = saved.previously_visible(self.visibility()) && !playing;
+                        if let Err(error) = old.refresh_verified(show) {
+                            eprintln!("Minecraft - {} displaced primary DWM recovery unverified: {error}",
+                                old.slot);
+                        } else {
+                            self.primary = Some(old);
+                        }
+                    }
+                }
             }
             if !created.secondary_slots.is_empty() {
                 self.thumbnails.retain(|thumbnail|
@@ -793,22 +828,36 @@ mod windows {
             self.prune_cancelled_slots();
         }
         fn update_primary_observation(&mut self, manager: u64,
-            tile: &PreviewTile, visible: bool) -> io::Result<bool> {
+            tile: &PreviewTile, visible: bool,
+            transaction: &mut LayoutCreated,
+        ) -> io::Result<()> {
             let target = self.profiles.iter().find(|(slot, _)| *slot == tile.slot)
                 .map(|(_, target)| target.clone())
                 .ok_or_else(|| io::Error::other("Active game preview source is unavailable"))?;
-            let created = self.primary.as_ref().is_none_or(|image|
+            let replacing = self.primary.as_ref().is_none_or(|image|
                 !image.matches(tile.slot, &target));
-            if created {
-                self.primary = None;
-                self.primary = Some(Thumbnail::create(manager, tile, target.clone())?);
+            if replacing {
+                // The candidate can fail to register or be updated. Until
+                // both steps succeed, do not mutate the previous primary.
+                let mut candidate = Thumbnail::create(manager, tile, target.clone())?;
+                candidate.refresh_verified(visible &&
+                    !native::interactive_at(&target, manager, tile.viewport))?;
+                if let Some(old) = self.primary.take() {
+                    let proof = PreviousImage::capture(&old);
+                    old.hide();
+                    transaction.replaced_primary = Some((old, proof));
+                }
+                self.primary = Some(candidate);
+                transaction.primary_changed = true;
+                return Ok(());
             }
             let image = self.primary.as_mut().unwrap();
+            transaction.reused_primary = Some(PreviousImage::capture(image));
             image.viewport = tile.viewport;
-            // DWM observation only; never touch original game lifecycle.
+            // Reused thumbnails keep their old snapshot even if this update
+            // fails partway through and hides the image.
             image.refresh_verified(visible &&
-                !native::interactive_at(&target, manager, tile.viewport))?;
-            Ok(created)
+                !native::interactive_at(&target, manager, tile.viewport))
         }
         fn layout(
             &mut self,
@@ -854,25 +903,29 @@ mod windows {
                 Some(tile) if slot_epoch_matches(
                     &issued_epochs, &snapshot_epochs(), tile.slot,
                 ) => {
-                    let previous = self.primary.as_ref().map(PreviousImage::capture);
-                    match self.update_primary_observation(manager, &tile, visible) {
-                        Ok(new_primary) => {
-                            created.primary_changed = new_primary;
-                            if !new_primary {
-                                // Visibility may change even if geometry
-                                // stays identical during a failed layout.
-                                created.reused_primary = previous;
-                            }
-                        }
-                        Err(error) => {
-                            // A failed primary observer cannot suppress any peer
-                            // receipt or alter the original Minecraft game.
+                    if let Err(error) =
+                        self.update_primary_observation(manager, &tile, visible, created) {
+                        // A failed NEW candidate cannot delete an earlier
+                        // verified primary. A retired source still fails closed.
+                        if self.primary.as_ref().is_some_and(|image|
+                            !self.profiles.iter().any(|(slot, target)|
+                                image.matches(*slot, target))
+                            || !image.source_and_destination_valid()) {
                             self.primary = None;
-                            eprintln!("Minecraft - {} primary DWM preview unavailable: {error}", tile.slot);
                         }
+                        eprintln!("Minecraft - {} primary DWM preview unavailable: {error}", tile.slot);
                     }
                 }
-                _ => self.primary = None,
+                _ => {
+                    // Removal also needs a delivered Layout; a dropped reply
+                    // can restore the old observer only if still current.
+                    if let Some(old) = self.primary.take() {
+                        let proof = PreviousImage::capture(&old);
+                        old.hide();
+                        created.replaced_primary = Some((old, proof));
+                        created.primary_changed = true;
+                    }
+                },
             }
             // A slow primary HWND operation may consume the entire budget;
             // avoid creating secondary DWM windows from that stale request.
@@ -1048,7 +1101,7 @@ mod windows {
                                     // be retained from such a lost receipt.
                                     let delivered = reply.send(result).is_ok();
                                     if !layout_acknowledged(verified, delivered) {
-                                        scene.discard_unacknowledged_new(&created);
+                                        scene.discard_unacknowledged_new(&mut created);
                                     } else {
                                         laid_out = true;
                                     }
@@ -1262,6 +1315,20 @@ mod windows {
             assert!(!layout_acknowledged(false, true),
                 "An expired/error reply cannot acknowledge new DWM images");
             assert!(layout_acknowledged(true, true));
+        }
+        #[test]
+        fn primary_replacement_admission_rejects_stale_manager_source_and_close() {
+            let prior = PreviousImage {
+                slot: 5, manager: 51, destination: 0x901, registration: 99,
+                viewport: Viewport {x:0.0,y:0.0,width:640.0,height:360.0,pixel_ratio:1.0},
+                invalidated: false, applied: None,
+            };
+            assert!(previous_primary_can_restore(prior, 51, true, true));
+            assert!(!previous_primary_can_restore(prior, 52, true, true));
+            assert!(!previous_primary_can_restore(prior, 51, false, true),
+                "Superseded Minecraft HWND must not be restored");
+            assert!(!previous_primary_can_restore(prior, 51, true, false),
+                "CloseOne epoch cannot restore its retired primary image");
         }
         #[test]
         fn reused_preview_geometry_and_failed_state_are_rollback_evidence() {
@@ -1631,7 +1698,7 @@ mod windows {
                 assert!(!wrong_manager.same_registration(&scene.thumbnails[0]));
                 let wrong_registration = PreviousImage {registration: previous.registration + 1, ..previous};
                 assert!(!wrong_registration.same_registration(&scene.thumbnails[0]));
-                scene.discard_unacknowledged_new(&LayoutCreated {
+                scene.discard_unacknowledged_new(&mut LayoutCreated {
                     reused_secondary: vec![previous],
                     ..LayoutCreated::default()
                 });
@@ -1649,7 +1716,7 @@ mod windows {
                 // A failed tile must not be resurrected by an abandoned
                 // layout, even when its requested viewport is unchanged.
                 scene.thumbnails[0].invalidation_notified = false;
-                scene.discard_unacknowledged_new(&LayoutCreated {
+                scene.discard_unacknowledged_new(&mut LayoutCreated {
                     reused_secondary: vec![PreviousImage {
                         invalidated: true,
                         applied: Some(DwmAppliedState::Hidden),
@@ -1660,7 +1727,7 @@ mod windows {
                 assert!(scene.thumbnails[0].invalidation_notified);
                 assert_eq!(IsWindowVisible(scene.thumbnails[0].window), 0);
                 // A newly registered, unacknowledged tile is still removed.
-                scene.discard_unacknowledged_new(&LayoutCreated {
+                scene.discard_unacknowledged_new(&mut LayoutCreated {
                     secondary_slots: vec![tile.slot],
                     ..LayoutCreated::default()
                 });
@@ -1677,7 +1744,7 @@ mod windows {
                 scene.thumbnails.push(retired);
                 let pinned = PreviousImage::capture(&scene.thumbnails[0]);
                 scene.profiles.clear();
-                scene.discard_unacknowledged_new(&LayoutCreated {
+                scene.discard_unacknowledged_new(&mut LayoutCreated {
                     reused_secondary: vec![pinned],
                     ..LayoutCreated::default()
                 });
@@ -1685,10 +1752,56 @@ mod windows {
                     "Retired source must not survive a rejected Layout");
                 assert!(scene.primary.is_some(),
                     "Retiring one secondary observer must not kill its primary peer");
-                // A replaced/missing manager is fail-closed as well.
+                // A new primary must be registered and verified before
+                // the previous DWM registration is relinquished.
+                let owned_target = scene.primary.as_ref().unwrap().target.clone();
+                scene.profiles = vec![(tile.slot, owned_target.clone()),
+                    (4, owned_target.clone())];
+                let candidate_tile = PreviewTile {slot:4,viewport:primary_tile.viewport};
+                let original_registration = scene.primary.as_ref().unwrap().thumbnail;
+                let visible = scene.visibility();
+                let mut replaced = LayoutCreated::default();
+                scene.update_primary_observation(
+                    manager as usize as u64, &candidate_tile, visible, &mut replaced,
+                ).unwrap();
+                assert!(replaced.primary_changed);
+                assert!(replaced.replaced_primary.is_some());
+                assert_eq!(scene.primary.as_ref().unwrap().slot, 4);
+                scene.discard_unacknowledged_new(&mut replaced);
+                assert_eq!(scene.primary.as_ref().unwrap().slot, tile.slot);
+                assert_eq!(scene.primary.as_ref().unwrap().thumbnail, original_registration);
+                assert!(scene.primary.as_ref().unwrap().destination_owned());
+
+                // A candidate source without a real HWND cannot destroy
+                // its old verified primary observer.
+                let invalid = OwnedProcess {
+                    pid: 0, window_handle: "0x0".into(), ..owned_target.clone()
+                };
+                scene.profiles.push((3, invalid));
+                let existing_window = scene.primary.as_ref().unwrap().window;
+                let visible = scene.visibility();
+                let mut refused = LayoutCreated::default();
+                assert!(scene.update_primary_observation(
+                    manager as usize as u64,
+                    &PreviewTile {slot:3,viewport:primary_tile.viewport},
+                    visible, &mut refused,
+                ).is_err());
+                assert_eq!(scene.primary.as_ref().unwrap().window, existing_window);
+                scene.profiles.retain(|(slot,_)| *slot != 3);
+
+                // A source replaced during the pending reply cannot revive
+                // the previous observer, even if its native HWND still exists.
+                let visible = scene.visibility();
+                let mut superseded = LayoutCreated::default();
+                scene.update_primary_observation(
+                    manager as usize as u64, &candidate_tile, visible, &mut superseded,
+                ).unwrap();
+                scene.profiles.retain(|(slot,_)| *slot != tile.slot);
+                scene.discard_unacknowledged_new(&mut superseded);
+                assert!(scene.primary.is_none(),
+                    "A retired primary source cannot survive a lost reply");
                 scene.manager = 0;
-                scene.discard_unacknowledged_new(&LayoutCreated::default());
-                assert!(scene.primary.is_none());
+                scene.discard_unacknowledged_new(&mut LayoutCreated::default());
                 assert!(scene.window.is_none());
                 drop(scene);
                 DestroyWindow(source);
