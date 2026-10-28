@@ -1329,23 +1329,40 @@ mod windows {
         )?
         .ok_or_else(|| io::Error::other("Preview worker missing"))
     }
+    // Native event refresh and cleanup admission are different wake causes.
+    // The latter only needs the worker to prune canceled epochs; do not
+    // mark its four still-current peers for an extra HWND/DWM refresh.
+    fn control_cleanup_receipt<T>(
+        result: io::Result<T>, wake: impl FnOnce(),
+    ) -> io::Result<T> {
+        if result.is_err() { wake(); }
+        result
+    }
+    fn notify_control_cleanup() {
+        let id = THREAD.load(Ordering::Acquire);
+        if id != 0 {
+            let _ = notify(id); // Existing coalesced WAKE; no native-refresh bit.
+        }
+    }
     pub(super) fn clear() -> io::Result<()> {
-        // A full scene clear also invalidates every in-flight old Layout.
+        // Invalidating these epochs remains authoritative even when the
+        // bounded channel is full or a queued control reply times out.
         for generation in &SLOT_CANCEL_EPOCHS {
             generation.fetch_add(1, Ordering::AcqRel);
         }
-        let result = send(|reply, _| Job::Clear(reply), false).map(|_| ());
-        if result.is_err() { refresh(); }
-        result
+        control_cleanup_receipt(
+            send(|reply, _| Job::Clear(reply), false).map(|_| ()),
+            notify_control_cleanup,
+        )
     }
     pub(super) fn clear_slot(slot:u32)->io::Result<()> {
-        // Called at CloseOne admission, BEFORE waiting for the worker.
-        // Even queue-full/timeout cannot let an older Layout re-create
-        // this slot; unrelated MC01–MC05 generations stay unchanged.
+        // CloseOne owns the original game; DWM only invalidates its
+        // presentation, without any other slot's native refresh.
         SLOT_CANCEL_EPOCHS[(slot - 1) as usize].fetch_add(1, Ordering::AcqRel);
-        let result = send(|reply, _|Job::ClearSlot {slot,reply},false).map(|_| ());
-        if result.is_err() { refresh(); }
-        result
+        control_cleanup_receipt(
+            send(|reply, _|Job::ClearSlot {slot,reply},false).map(|_| ()),
+            notify_control_cleanup,
+        )
     }
     pub(super) fn clear_primary() -> io::Result<()> {
         send(|reply, _| Job::ClearPrimary(reply), false).map(|_| ())
@@ -1361,6 +1378,32 @@ mod windows {
     #[cfg(test)]
     mod tests {
         use super::*;
+        #[test]
+        fn unconfirmed_control_cleanup_wakes_once_without_masking_the_error() {
+            let mut wakes = 0;
+            let failure = control_cleanup_receipt::<()>(
+                Err(io::Error::new(io::ErrorKind::WouldBlock,
+                    "Existing bounded DWM queue is full")),
+                || wakes += 1,
+            ).unwrap_err();
+            assert_eq!(failure.kind(), io::ErrorKind::WouldBlock);
+            assert_eq!(wakes, 1,
+                "A failed admission must ask the existing worker to inspect cancellation");
+            assert!(!refresh_after_wake(false, false),
+                "A cleanup-only WAKE never revalidates all surviving DWM peers");
+            let accepted = control_cleanup_receipt(Ok(11usize), || wakes += 1).unwrap();
+            assert_eq!(accepted, 11);
+            assert_eq!(wakes, 1,
+                "An acknowledged control job must not post a second WAKE");
+            let timeout = control_cleanup_receipt::<()>(
+                Err(io::Error::new(io::ErrorKind::TimedOut,
+                    "Worker still owns its original queued Clear")),
+                || wakes += 1,
+            ).unwrap_err();
+            assert_eq!(timeout.kind(), io::ErrorKind::TimedOut);
+            assert_eq!(wakes, 2,
+                "A reply timeout keeps its error and still signals epoch cleanup");
+        }
         #[test]
         fn clear_and_closeone_invalidate_native_source_admission_before_dwm_queue() {
             // Pure policy used by configure() both before and after native

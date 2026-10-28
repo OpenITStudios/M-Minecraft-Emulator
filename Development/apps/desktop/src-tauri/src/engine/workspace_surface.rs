@@ -2135,8 +2135,11 @@ mod controller {
         // not prevent a user's confirmed *game* CloseOne. Remove only this
         // slot's preview, leaving MC01–MC05 peers intact.
         if let Err(error)=previews::clear_slot(slot) {
-            eprintln!("Minecraft - {slot} preview refresh pending during normal close: {error}");
-            previews::refresh();
+            // clear_slot() already invalidated this slot and posted the
+            // existing control-only WAKE if admission/reply failed.
+            // A second native refresh would needlessly check healthy peers.
+            // Preview uncertainty must never block original game CloseOne.
+            eprintln!("Minecraft - {slot} preview cleanup pending during normal close: {error}");
         }
         let mut state=SURFACE.lock().map_err(|_|(false,io::Error::other("Workspace state unavailable")))?;
         if state.closing {return Err((false,io::Error::new(io::ErrorKind::WouldBlock,"Workspace is closing")));}

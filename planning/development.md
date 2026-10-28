@@ -129,26 +129,26 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability & efficiency — 28 October 2026
 
-Game exit reap stays 250 ms, stable COM audio resync 1 s. DWM retains
-one worker, capacity-one queue, 3 s Layout deadline, and atomic per-slot
-CloseOne/Full Clear epochs. Primary and secondary observers displaced by
-an unacknowledged Layout remain within its single native transaction;
-only exact current source/HWND/manager/slot identity can be restored.
-Staging reuses the existing Vec; its manager reference is released after
-reply commit/rollback. Full Clear/CloseOne now also reject canceled
-configure() observations BEFORE expensive native source adoption and
-AGAIN immediately afterward, preventing obsolete DWM Layout admission.
-Existing SURFACE controller still owns native Park/Place recovery; it
-cannot be interrupted mid-helper call. No new worker, queue, retry,
-IPC, poll, game account/world change. Source regression authored
-NOT_EXECUTED; Windows DWM, normal MC02 exit and CPU/RAM unverified.
+Game exit reap stays 250 ms, stable COM audio at 1 s. DWM retains
+one worker, capacity-one channel, 3 s Layout deadline and five native
+preview-only CloseOne/Full Clear cancellation epochs. Primary+secondary
+DWM removals remain staged until delivered reply; obsolete configure()
+requests are rejected before and after source adoption. Failed Clear or
+ClearSlot now posts ONLY the existing coalesced control WAKE, not a
+native move/focus refresh. The worker prunes canceled thumbnails before
+jobs; healthy peer DWM checks are not rerun solely due to failed cleanup.
+CloseOne no longer posts a redundant second refresh. Original control
+errors still reach callers, while independent Minecraft close proceeds.
+No new worker, retry, queue, IPC, timer or lifecycle/game-data owner.
+Rust regression authored NOT_EXECUTED. Windows DWM, normal MC02 exit,
+CPU/RAM and installed package acceptance remain unverified.
 
 ## Debug timing — NOT_EXECUTED
 
-`MIVUBI_DEBUG_WORKSPACE_TIMING=1` remains default-off Windows debug
-aperture/foreground aggregate at workspace release.
+`MIVUBI_DEBUG_WORKSPACE_TIMING=1` remains a default-off Windows debug
+aperture/foreground aggregate on existing workspace release.
 
 ## Next bounded action
 
-Audit queue-full CloseOne/Clear reply handling and check that control
-errors never cause stale preview success or unnecessary retry loops.
+Audit control wake delivery failures and ensure one pending cancellation
+is reconciled on the next valid worker event without continuous retry.
