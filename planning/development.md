@@ -46,6 +46,15 @@ authorization to perform Windows/game acceptance.
   memory descriptively. Three schema-7 pure logic fixtures were run in a
   sandboxed JS review environment; repository Node/Rust/PowerShell tests
   were NOT_EXECUTED. Updated source verifier owns the new file boundaries.
+- Exact Win32 process-image reads now share one bounded Windows-only owner
+  (`src-tauri/src/engine/windows_process_image.rs`) in five existing
+  callsites: native observation, authenticated IPC, signer verification,
+  workspace parent validation and launch bootstrap. Typical image paths
+  now start with a 512 UTF-16-character buffer (1 KiB) instead of 32,768
+  characters (64 KiB), expanding only when Win32 reports insufficient
+  space. This removes repeated temporary heap allocations and one large
+  bootstrap stack buffer; it is **not** a measured Minecraft RAM reduction.
+  Windows-only fixture authored, NOT_EXECUTED.
 - CI stays OFF. No install, release, Windows game process or user PC touched.
 
 ## Evidence and preservation
@@ -66,9 +75,9 @@ publication. The Mac build remains a diagnostic shell without game backend.
 
 ## Next bounded source action
 
-Investigate actually OWNED high-volume allocations and redundant memory
-retention before changing code. If a safe, material optimization is not
-proven from source, record that evidence limit rather than adding another
-cache or micro fix. For game-owned multi-GiB memory see
-`docs/system/native-memory-efficiency-research.md`; do not invent an internal
-allocator/renderer lifecycle. Do not reopen P0 until runtime is requested.
+Review remaining Windows source for demonstrably retained, owner-controlled
+memory or concrete regressions in the current schema-7 collector and module
+wiring. Stop if only small bounded buffers remain: no invented optimizer,
+automatic heap trimming or another round of DWM micro-fixes. Keep the
+original MC02 runtime close acceptance deferred until explicitly requested.
+

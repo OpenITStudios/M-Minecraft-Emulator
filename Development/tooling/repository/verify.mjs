@@ -235,6 +235,24 @@ export function verifyRepository(root,g0=false) {
   assert.ok(ownerModules.includes('pub mod process_identity;') &&
     !ownerModules.includes('pub mod owned_provider;'), 'Native process identity must be standalone');
   const gameSource=read('Development/apps/desktop/src-tauri/src/engine/native_clients.rs');
+  // One verified Win32 image-path reader, bounded at the original MAX_PATH
+  // extension ceiling, replaces five previously repeated 64-KiB buffers.
+  // This checks source wiring only; it is NOT a Windows performance result.
+  const imageReader=read('Development/apps/desktop/src-tauri/src/engine/windows_process_image.rs');
+  const imageOwners=[
+    gameSource,
+    read('Development/apps/desktop/src-tauri/src/engine/native_clients_session/pipe.rs'),
+    read('Development/apps/desktop/src-tauri/src/engine/instance_identity.rs'),
+    windowsAdapter,
+    read('Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs')
+  ];
+  assert.ok(ownerModules.includes('#[cfg(windows)]\npub(crate) mod windows_process_image;')
+    && imageReader.includes('const INITIAL_CHARACTERS: usize = 512;')
+    && imageReader.includes('const MAX_CHARACTERS: usize = 32_768;')
+    && imageReader.includes('ERROR_INSUFFICIENT_BUFFER as i32')
+    && imageReader.includes('path[..written].contains(&0)')
+    && imageOwners.every(owner=>owner.includes('crate::engine::windows_process_image::query(')),
+    'Native image-path process identity must use one bounded Win32 reader, not independent large buffers');
   assert.ok(!/OfficialSandboxieBackend|request_sandbox_client_02|collect-sandboxie-feasibility/.test(gameSource),
     'Legacy Sandboxie Client02 source must remain retired');
   // Windows developer preview status must never become a non-Windows
