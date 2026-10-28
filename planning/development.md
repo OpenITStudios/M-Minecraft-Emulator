@@ -129,30 +129,29 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability — 28 October 2026
 
-Game exit checks remain every 250 ms; stable COM audio is gated at 1 s.
-DWM skips duplicate writes after HWND verification. Native Place/Park/Hide
-shortcuts require original HWND identity and current-state proof; explicit
-Play and recovery remain authoritative. RedrawWindow remains essential
-for child WebView repaint even with no region; foreground coverage checks
-cannot be removed without real runtime evidence.
+Game exit remains checked at 250 ms; stable audio sync at one second.
+DWM skips duplicate writes after HWND checks, while native Place/Park/Hide
+no-ops require exact process/window evidence. Play, RedrawWindow and
+foreground recovery checks remain intact. Failed secondary DWM thumbnails
+can no longer reappear on passive WAKE without a fresh verified layout
+receipt. Explicit user Refresh retries only failed preview observations
+through existing dirty/layout admission, not periodic Inspect or new IPC.
 
-## Opt-in Windows debug timing — NOT_EXECUTED
+## Debug timing — NOT_EXECUTED
 
-`MIVUBI_DEBUG_WORKSPACE_TIMING=1` enables counters in debug builds only.
-At the existing workspace release, stderr reports aggregate
-`LAZY_TESTER_NATIVE_TIMING`: aperture/foreground calls, failures,
-average/max wall-time (us), and counts >=5/50ms. Default disabled;
-no worker, timer, IPC, PID/HWND output, account/world data or game mutation.
-A pure Rust counter regression is authored NOT_EXECUTED. Windows DWM,
-MC02 normal exit, CPU/RAM and package acceptance remain unverified.
+`MIVUBI_DEBUG_WORKSPACE_TIMING=1` enables Windows debug counters for
+aperture/foreground call count, errors, average/max us and >=5/50ms.
+Prints aggregates at workspace release only; disabled by default, with
+no PID/HWND output, added worker/timer or account/world modification.
+Rust, offscreen Win32 and browser regressions authored NOT_EXECUTED.
+Windows DWM, MC02 exit, CPU/RAM and packaged gameplay unverified.
 
 ## Resource scenarios — NOT_EXECUTED
 
-Compare pinned Windows builds: 0/5 games, audio Keep/Mute, five previews,
-drag/resize/minimize/restore, CloseOne and peer Play. Record CPU/private
-bytes, timed native paths, DWM writes, window identity and normal exit.
+Pinned Windows comparison: idle 0/5 games, Keep/Mute, previews,
+move/resize/minimize, CloseOne and peer Play. Measure CPU/memory,
+DWM operations, HWND identity and actual normal exit.
 
 ## Next bounded action
 
-Inspect actual Windows timing/CPU/RAM evidence before changing native
-repaint, foreground stacking or restoration safety checks.
+Audit source-level preview recovery/release cleanup without user PC.

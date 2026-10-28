@@ -29,6 +29,7 @@ try {
     window.__runningSlots = fixture.has('preview-recovery') || fixture.has('preview-async') || fixture.has('preview-late') ? [1,2,3] :
       fixture.has('close-recovery') || fixture.has('close-ipc-error') ? [2] : undefined;
     window.__previewIssueSlot = fixture.has('preview-recovery') ? 2 : null;
+    window.__previewRecovered = false;
     window.__closeOutcome = fixture.has('close-recovery') ? 'unconfirmed' :
       fixture.has('close-ipc-error') ? 'transport-error' : null;
     const brokenSetup = fixture.has('broken');
@@ -111,7 +112,8 @@ try {
           return {schema: 1, tiles: args.tiles.map(tile => {
             const failed = window.__previewIssueSlot === tile.slot;
             return {slot: tile.slot, registered:
-              (fixture.has('preview-recovery') || fixture.has('preview-late')) && !failed,
+              (fixture.has('preview-recovery') || fixture.has('preview-late') ||
+               (fixture.has('preview-async') && window.__previewRecovered)) && !failed,
               reason: failed ? 'Native recovery checkpoint is unconfirmed' : null};
           })};
         }
@@ -340,6 +342,14 @@ try {
   assert.equal(await page.evaluate(()=>window.__calls.filter(
     call=>call.command==='lazy_tester_previews').length),baseline,
     'Native invalidation must not schedule another PreviewReport request');
+  // Explicit user Refresh can request a NEW layout after MC02 failure.
+  // Passive events must not; only the verified report removes its warning.
+  await page.evaluate(()=>{window.__previewRecovered=true;});
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.waitForFunction(previous=>window.__calls.filter(
+    call=>call.command==='lazy_tester_previews').length>previous,baseline);
+  await asyncPreviewIssue.waitFor({state:'detached'});
+  assert.equal(await page.getByRole('status',{name:'Minecraft - 3 preview unavailable'}).count(),0);
 
   // A failed MC02 DWM observation is visible on MC02 only. MC03 is not
   // mislabeled and MC02 still has its normal native Play admission.

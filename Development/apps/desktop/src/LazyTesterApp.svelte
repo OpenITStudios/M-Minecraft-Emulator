@@ -215,8 +215,16 @@
       }catch(error){issue=String(error);storage=null;}
       finally{checkingStorage=false;busy=false;}
     } else {
+      // Only explicit Refresh of a known preview failure requests another
+      // DWM layout. Periodic session inspection and worker errors never
+      // schedule additional native preview IPC.
+      const previewFailed = previewIssue !== '' ||
+        pendingPreviewInvalidations.size > 0 ||
+        previewStatuses.some(status => !status.registered && status.reason !== null);
       if (!binding?.configured) await loadBinding();
       await refresh();
+      if (previewFailed && page === 'workspace' && available &&
+          !detached && !disposed) dirty = true;
     }
     }finally{manualRefreshing=false;}
   }

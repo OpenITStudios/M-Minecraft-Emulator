@@ -159,6 +159,14 @@ mod windows {
         *already_sent = true;
         true
     }
+    // A reported DWM error must remain the visible UI truth. An ordinary
+    // native WAKE does not supply a fresh successful PreviewReport; keep
+    // this secondary image hidden until layout verifies it explicitly.
+    fn display_with_current_preview_receipt(
+        manager_visible: bool, invalidation_notified: bool,
+    ) -> bool {
+        manager_visible && !invalidation_notified
+    }
     enum Job {
         Layout {
             window: tauri::Window,
@@ -504,7 +512,12 @@ mod windows {
             // previously reported image becomes unverified.
             let mut invalidated = Vec::new();
             self.thumbnails.retain_mut(|thumbnail| {
-                if let Err(error) = thumbnail.refresh_verified(visible) {
+                // A passive refresh cannot silently restore a thumbnail
+                // whose latest per-slot report still says unavailable.
+                let show = display_with_current_preview_receipt(
+                    visible, thumbnail.invalidation_notified,
+                );
+                if let Err(error) = thumbnail.refresh_verified(show) {
                     if take_invalidation_notice(&mut thumbnail.invalidation_notified) {
                         invalidated.push((
                             thumbnail.slot, thumbnail.target.clone(),
@@ -873,6 +886,19 @@ mod windows {
                 hidden,visible,now+Duration::from_millis(5)));
         }
         #[test]
+        fn failed_tile_stays_hidden_until_verified_layout_result() {
+            assert!(display_with_current_preview_receipt(true, false));
+            assert!(!display_with_current_preview_receipt(true, true));
+            assert!(!display_with_current_preview_receipt(false, false));
+            assert!(!display_with_current_preview_receipt(false, true));
+            let mut invalidated = false;
+            assert!(take_invalidation_notice(&mut invalidated));
+            assert!(!display_with_current_preview_receipt(true, invalidated),
+                "A native update is not a fresh success receipt");
+            invalidated = false; // Only a successful layout may rearm.
+            assert!(display_with_current_preview_receipt(true, invalidated));
+        }
+        #[test]
         fn async_invalidation_is_source_pinned_and_coalesced_per_layout() {
             let target = OwnedProcess {
                 pid: 102, created_file_time: "134000000000000001".into(),
@@ -1010,6 +1036,21 @@ mod windows {
                 assert_ne!(GetForegroundWindow(),manager);
                 assert!(scene.visibility(),"Visible monitoring must survive focus moving elsewhere");
                 thumbnail.update(scene.visibility()).unwrap();
+                assert_ne!(IsWindowVisible(thumbnail.window),0);
+                // Offscreen DWM fixture: a reported failure does not
+                // re-show its thumbnail after ordinary native WAKE events.
+                thumbnail.invalidation_notified = true;
+                for _ in 0..2 {
+                    thumbnail.refresh_verified(display_with_current_preview_receipt(
+                        scene.visibility(), thumbnail.invalidation_notified,
+                    )).unwrap();
+                    assert_eq!(IsWindowVisible(thumbnail.window),0,
+                        "Invalidated tile reappeared without a fresh layout receipt");
+                }
+                thumbnail.invalidation_notified = false;
+                thumbnail.refresh_verified(display_with_current_preview_receipt(
+                    scene.visibility(), thumbnail.invalidation_notified,
+                )).unwrap();
                 assert_ne!(IsWindowVisible(thumbnail.window),0);
                 for (x,y) in [(-31000,-31500),(-31500,-31000),(-32000,-32000)] {
                     assert_ne!(SetWindowPos(manager,ptr::null_mut(),x,y,0,0,
