@@ -6,8 +6,8 @@ pub(super) enum Operation { Aperture, Foreground }
 
 #[cfg(debug_assertions)]
 mod debug {
-    use super::Operation;
-    use std::{sync::{OnceLock, atomic::{AtomicU64, Ordering}}, time::{Duration, Instant}};
+    use super::{io, Operation};
+    use std::{sync::{OnceLock, atomic::{AtomicU64, Ordering}}, time::Instant};
     struct Counters {
         calls: AtomicU64, errors: AtomicU64, total_us: AtomicU64,
         max_us: AtomicU64, slow_5ms: AtomicU64, slow_50ms: AtomicU64,
