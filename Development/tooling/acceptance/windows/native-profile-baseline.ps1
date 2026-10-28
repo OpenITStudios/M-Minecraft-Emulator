@@ -34,6 +34,14 @@ function Invoke-NativeProfileBaseline {
     $manager = @{ processId=$ManagerPid; baseline=$baseline;
       previous=$baseline; lost=$false }
   }
+  # Optional evidence becomes schema 8; hash shared paths once and keep this
+  # file I/O outside Stopwatch. A selected PID is still NOT a verified game.
+  $imageHashes = @{}
+  $imageSlots = [ordered]@{}
+  foreach ($slot in $selected.Keys) {
+    $target = $selected[$slot]
+    $imageSlots[$slot] = Read-ProfileImageEvidence -ProcessId $target.processId -ExpectedStartTicks $target.baseline.startTicks -HashByPath $imageHashes
+  }
   $logicalCpus = [Environment]::ProcessorCount
   if ($logicalCpus -lt 1) { throw 'Host logical CPU count is invalid.' }
 
@@ -118,7 +126,7 @@ function Invoke-NativeProfileBaseline {
     $lost[$slot] = [bool]$selected[$slot].lost
   }
   $report = [ordered]@{
-    schema = 7
+    schema = 8
     scope = 'NATIVE_PROFILE_MEMORY_BASELINE'
     evidenceOrigin = 'WINDOWS_HOST'
     attribution = 'OPERATOR_SELECTED_UNVERIFIED_PIDS'
@@ -131,6 +139,10 @@ function Invoke-NativeProfileBaseline {
     sampleCount = $rows.Count
     selectedSlots = $slots
     profileIdentityLost = $lost
+    imageEvidence = [ordered]@{
+      evidenceClass = 'PROCESS_IMAGE_PATH_FILE_SHA256_NOT_LOADED_IMAGE_PROOF'
+      slots = $imageSlots
+    }
     managerSelected = ($null -ne $manager)
     managerProcessIdentityLost = $(if ($null -ne $manager) { [bool]$manager.lost } else { $null })
     directChildrenRequested = [bool]$DirectChildren

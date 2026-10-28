@@ -226,6 +226,7 @@ if ($MemoryComposition) {
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Text;
 namespace Mivubi {
   public static class PerformanceMemory {
     [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
@@ -290,6 +291,9 @@ namespace Mivubi {
     [DllImport("kernel32.dll", SetLastError=true)]
     static extern bool GetProcessTimes(IntPtr handle, out long creation,
       out long exit, out long kernel, out long user);
+    [DllImport("kernel32.dll", EntryPoint="QueryFullProcessImageNameW",
+      CharSet=CharSet.Unicode, SetLastError=true)]
+    static extern bool QueryImagePath(IntPtr handle, uint flags, StringBuilder image, ref uint length);
     [DllImport("psapi.dll", EntryPoint="GetProcessMemoryInfo", SetLastError=true)]
     static extern bool GetMemory(IntPtr handle, ref Counters data, uint size);
     [DllImport("psapi.dll", EntryPoint="GetProcessMemoryInfo", SetLastError=true)]
@@ -303,6 +307,20 @@ namespace Mivubi {
       long birth, exit, kernel, user;
       return GetProcessTimes(handle, out birth, out exit, out kernel, out user)
         && DateTime.FromFileTimeUtc(birth).Ticks == expectedTicks && exit == 0;
+    }
+    // Read-only path identity from the same process handle. This is NOT
+    // evidence that the file currently at the path is the mapped image bytes.
+    public static string ImagePath(int pid, long expectedTicks) {
+      IntPtr handle = OpenProcess(0x1000, false, pid);
+      if (handle == IntPtr.Zero) return null;
+      try {
+        if (!SameProcess(handle, expectedTicks)) return null;
+        var image = new StringBuilder(32768);
+        uint length = (uint)image.Capacity;
+        if (!QueryImagePath(handle, 0, image, ref length) ||
+            length == 0 || length >= image.Capacity) return null;
+        return SameProcess(handle, expectedTicks) ? image.ToString() : null;
+      } finally { CloseHandle(handle); }
     }
     public static ProcessValues Read(int pid, long expectedTicks) {
       IntPtr handle = OpenProcess(0x1000, false, pid);
@@ -389,6 +407,49 @@ function Read-ProcessMemory {
     $memory['pageFaultCount'] = Fault-Metric -Value $values.PageFaultCount -Reason $reason
   }
   return $memory
+}
+
+# Schema 8: one bounded on-disk EXE fingerprint per original game image path,
+# BEFORE the timed interval. No raw paths, tokens or world data in the report.
+# A path-file digest does not prove the mapped process image or its signature.
+function Unknown-ProfileImageEvidence {
+  param([string]$Reason)
+  [ordered]@{status='UNKNOWN';sha256=$null;reason=$Reason}
+}
+function Read-ProfileImageEvidence {
+  param([int]$ProcessId,[long]$ExpectedStartTicks,[hashtable]$HashByPath)
+  if (-not $memoryApiAvailable) { return Unknown-ProfileImageEvidence 'API_UNAVAILABLE' }
+  try {
+    $path = [Mivubi.PerformanceMemory]::ImagePath($ProcessId,$ExpectedStartTicks)
+    if ([string]::IsNullOrWhiteSpace($path)) {
+      return Unknown-ProfileImageEvidence 'IMAGE_PATH_UNAVAILABLE'
+    }
+    if ([IO.Path]::GetFileName($path) -ine 'Minecraft.Windows.exe') {
+      return Unknown-ProfileImageEvidence 'IMAGE_NAME_MISMATCH'
+    }
+    if (-not $HashByPath.ContainsKey($path)) {
+      $file = Get-Item -LiteralPath $path -ErrorAction Stop
+      if ($file -isnot [IO.FileInfo] -or
+          (([int]$file.Attributes -band [int][IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        return Unknown-ProfileImageEvidence 'IMAGE_FILE_UNAVAILABLE'
+      }
+      if ($file.Length -le 0 -or $file.Length -gt 268435456) {
+        return Unknown-ProfileImageEvidence 'IMAGE_FILE_TOO_LARGE'
+      }
+      $digest = (Get-FileHash -LiteralPath $path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+      if ($digest -cnotmatch '^[0-9a-f]{64}$') {
+        return Unknown-ProfileImageEvidence 'IMAGE_FILE_UNAVAILABLE'
+      }
+      $HashByPath[$path] = $digest
+    }
+    if ($null -eq (Read-Target -ProcessId $ProcessId -ExpectedStartTicks $ExpectedStartTicks)) {
+      return Unknown-ProfileImageEvidence 'PROCESS_IDENTITY_UNAVAILABLE'
+    }
+    [ordered]@{status='OBSERVED';sha256=$HashByPath[$path];reason=$null}
+  } catch {
+    # A path/file access problem cannot be confused with a proven different build.
+    return Unknown-ProfileImageEvidence 'IMAGE_FILE_UNAVAILABLE'
+  }
 }
 function Read-SystemMemory {
   $values = $null

@@ -1189,3 +1189,57 @@ test('schema-7 rejects forged, inconsistent or identity-lost page-fault counters
   assert.equal(status.clients['01'].pageFaultCount.endpointDeltaCount,null);
   assert.equal(status.clients['01'].pageFaultCount.missingSamples,1);
 });
+
+
+const nativeBuildFixture = (slots = ['01', '04']) => {
+  const report = nativeBaselineFixture(slots);
+  report.schema = 8;
+  report.imageEvidence = {
+    evidenceClass: 'PROCESS_IMAGE_PATH_FILE_SHA256_NOT_LOADED_IMAGE_PROOF',
+    slots: Object.fromEntries(slots.map(slot => [slot, {
+      status: 'OBSERVED', sha256: 'a'.repeat(64), reason: null,
+    }])),
+  };
+  return report;
+};
+
+test('schema-8 compares only matching complete path-file fingerprints; no loaded-image claim', () => {
+  const baseline = nativeBuildFixture();
+  const candidate = structuredClone(baseline);
+  const report = evaluateNativePerformance(baseline);
+  assert.equal(report.imageEvidence.complete, true);
+  assert.equal(report.imageEvidence.provesLoadedGameImage, false);
+  assert.equal(compareNativePerformance(baseline, candidate).comparableForNumericDifference, true);
+  candidate.imageEvidence.slots['04'].sha256 = 'b'.repeat(64);
+  const changed = compareNativePerformance(baseline, candidate);
+  assert.equal(changed.conditions.sameGameImageEvidence, false);
+  assert.equal(changed.comparableForNumericDifference, false);
+  assert.equal(changed.memoryDifferences, null);
+  candidate.imageEvidence.slots['04'] = {
+    status: 'UNKNOWN', sha256: null, reason: 'IMAGE_FILE_UNAVAILABLE',
+  };
+  assert.equal(evaluateNativePerformance(candidate).imageEvidence.complete, false);
+  assert.equal(compareNativePerformance(baseline, candidate).comparableForNumericDifference, false);
+  assert.throws(() => compareNativePerformance(nativeBaselineFixture(), baseline), /matching schema-7 or schema-8/);
+  assert.equal(evaluateNativePerformance(nativeBaselineFixture()).imageEvidence, undefined);
+  assert.equal(compareNativePerformance(nativeBaselineFixture(), nativeBaselineFixture()).comparableForNumericDifference, true);
+  assert.equal(compareNativePerformance(nativeBuildFixture([]), nativeBuildFixture([])).comparableForNumericDifference, false);
+});
+
+test('schema-8 rejects invented, malformed, or incorrectly attributed image identities', () => {
+  for (const mutate of [
+    r => delete r.imageEvidence,
+    r => r.imageEvidence.evidenceClass = 'VERIFIED_MINECRAFT_EDUCATION_BINARY',
+    r => r.imageEvidence.slots['03'] = {status:'OBSERVED',sha256:'a'.repeat(64),reason:null},
+    r => r.imageEvidence.slots['01'].sha256 = 'A'.repeat(64),
+    r => r.imageEvidence.slots['01'].sha256 = 'a'.repeat(63),
+    r => r.imageEvidence.slots['01'].reason = 'verified',
+    r => r.imageEvidence.slots['04'] = {status:'UNKNOWN',sha256:'a'.repeat(64),reason:'QUERY_FAILED'},
+    r => r.imageEvidence.slots['04'] = {status:'UNKNOWN',sha256:null,reason:'NOT_FOUND'},
+    r => r.imageEvidence.slots['01'].filePath = 'C:/Users/secret',
+  ]) {
+    const report = nativeBuildFixture();
+    mutate(report);
+    assert.throws(() => evaluateNativePerformance(report));
+  }
+});

@@ -318,11 +318,50 @@ function nativePageFaultSummary(values) {
   };
 }
 
-// Schema 7: current native MC01-MC05 memory baseline, including empty/sparse
-// slot rosters. Legacy schemas 1-6 remain intentionally unchanged.
+
+const imageEvidenceClass = 'PROCESS_IMAGE_PATH_FILE_SHA256_NOT_LOADED_IMAGE_PROOF';
+const imageEvidenceReasons = [
+  'API_UNAVAILABLE', 'IMAGE_PATH_UNAVAILABLE', 'IMAGE_NAME_MISMATCH',
+  'IMAGE_FILE_UNAVAILABLE', 'IMAGE_FILE_TOO_LARGE',
+  'PROCESS_IDENTITY_UNAVAILABLE',
+];
+function nativeImageEvidence(value, slots) {
+  if (!exactly(value, ['evidenceClass', 'slots']) ||
+      value.evidenceClass !== imageEvidenceClass || !exactly(value.slots, slots)) {
+    throw new TypeError('Invalid native process-path image evidence.');
+  }
+  const hashes = {};
+  for (const slot of slots) {
+    const record = value.slots[slot];
+    if (!exactly(record, ['status', 'sha256', 'reason']) ||
+        !['OBSERVED', 'UNKNOWN'].includes(record.status)) {
+      throw new TypeError('Invalid per-profile image evidence.');
+    }
+    if (record.status === 'OBSERVED') {
+      if (typeof record.sha256 !== 'string' ||
+          !/^[0-9a-f]{64}$/.test(record.sha256) || record.reason !== null) {
+        throw new TypeError('Observed path hash must be 64 lowercase SHA-256 hex digits.');
+      }
+    } else if (record.sha256 !== null ||
+        !imageEvidenceReasons.includes(record.reason)) {
+      throw new TypeError('Unavailable path hash requires null and a reason.');
+    }
+    hashes[slot] = {status: record.status, sha256: record.sha256, reason: record.reason};
+  }
+  return {
+    evidenceClass: value.evidenceClass,
+    slots: hashes,
+    complete: slots.length > 0 && slots.every(slot => hashes[slot].status === 'OBSERVED'),
+    provesLoadedGameImage: false,
+  };
+}
+
+// Schemas 7 (historical) and 8 (file-path fingerprint) keep the same
+// 0-5 profile samples; 8 adds untrusted-but-useful build provenance.
 function evaluateNativeProfileBaseline(report) {
   const slots = report?.selectedSlots;
   const validSlots = ['01', '02', '03', '04', '05'];
+  const imageBound = report?.schema === 8;
   if (!Array.isArray(slots) || slots.length > 5 ||
       !slots.every((slot, i) => validSlots.includes(slot) &&
         (i === 0 || validSlots.indexOf(slot) > validSlots.indexOf(slots[i - 1]))) ||
@@ -331,8 +370,8 @@ function evaluateNativeProfileBaseline(report) {
         'durationObservedSeconds', 'sampleIntervalSeconds', 'hostLogicalCpus',
         'sampleCount', 'selectedSlots', 'profileIdentityLost', 'managerSelected',
         'managerProcessIdentityLost', 'directChildrenRequested', 'samples',
-        'missingEvidence']) ||
-      report.schema !== 7 || report.scope !== 'NATIVE_PROFILE_MEMORY_BASELINE' ||
+        'missingEvidence', ...(imageBound ? ['imageEvidence'] : [])]) ||
+      ![7, 8].includes(report.schema) || report.scope !== 'NATIVE_PROFILE_MEMORY_BASELINE' ||
       report.evidenceOrigin !== 'WINDOWS_HOST' ||
       report.attribution !== 'OPERATOR_SELECTED_UNVERIFIED_PIDS' ||
       report.automaticVerdict !== 'NOT_PROVIDED' ||
@@ -361,6 +400,7 @@ function evaluateNativeProfileBaseline(report) {
       !missing.every((flag, i) => report.missingEvidence[i] === flag)) {
     throw new TypeError('Invalid native profile RAM capture or selected slot identities.');
   }
+  const imageEvidence = imageBound ? nativeImageEvidence(report.imageEvidence, slots) : null;
   const lost = Object.fromEntries(slots.map(slot => [slot, false]));
   let managerLost = false;
   let faultMode = null;
@@ -472,6 +512,7 @@ function evaluateNativeProfileBaseline(report) {
     sampleCount: report.sampleCount,
     selectedSlots: [...slots],
     pageFaultCountCollected: faultCountCollected,
+    ...(imageBound ? {imageEvidence} : {}),
     clients: Object.fromEntries(slots.map(slot =>
       [slot, selectedProcess(row => row.clients[slot])])),
     manager: report.managerSelected ? selectedProcess(row => row.manager) : null,
@@ -492,14 +533,21 @@ function evaluateNativeProfileBaseline(report) {
 }
 
 function compareNativeProfileBaseline(baseline, candidate) {
-  if (baseline?.schema !== 7 || candidate?.schema !== 7) {
-    throw new TypeError('Native memory comparison requires two schema-7 captures.');
+  if (![7, 8].includes(baseline?.schema) || baseline.schema !== candidate?.schema) {
+    throw new TypeError('Native memory comparison requires matching schema-7 or schema-8 captures.');
   }
   const before = evaluateNativeProfileBaseline(baseline);
   const after = evaluateNativeProfileBaseline(candidate);
   const selected = before.selectedSlots.join(',') === after.selectedSlots.join(',');
   const conditions = {
     sameSelectedSlots: selected,
+    // Schema 7 stays descriptive for historical reports; schema 8 refuses
+    // differences across unknown/mismatched on-disk image fingerprints.
+    sameGameImageEvidence: baseline.schema === 7 || (
+      selected && before.imageEvidence.complete && after.imageEvidence.complete &&
+      before.selectedSlots.every(slot =>
+        before.imageEvidence.slots[slot].sha256 === after.imageEvidence.slots[slot].sha256)
+    ),
     sameManagerSelection: (baseline.managerSelected === candidate.managerSelected),
     sameDirectChildrenSelection: (baseline.directChildrenRequested === candidate.directChildrenRequested),
     samePageFaultCoverage: before.pageFaultCountCollected === after.pageFaultCountCollected,
@@ -549,7 +597,7 @@ function compareNativeProfileBaseline(baseline, candidate) {
 }
 
 export function evaluateNativePerformance(report) {
-  if (report?.schema === 7) return evaluateNativeProfileBaseline(report);
+  if ([7, 8].includes(report?.schema)) return evaluateNativeProfileBaseline(report);
   if ([5, 6].includes(report?.schema)) return evaluateMemoryComposition(report);
   if ([3, 4].includes(report?.schema)) return evaluateMultiClientPerformance(report);
   const fields = ["schema", "scope", "evidenceOrigin", "attribution",
@@ -708,7 +756,7 @@ function evaluateMultiClientPerformance(report) {
  * Results are withheld for mismatched captures or any lost process identity.
  */
 export function compareNativePerformance(baseline, candidate) {
-  if (baseline?.schema === 7 || candidate?.schema === 7) {
+  if ([7, 8].includes(baseline?.schema) || [7, 8].includes(candidate?.schema)) {
     return compareNativeProfileBaseline(baseline, candidate);
   }
   if ([5, 6].includes(baseline?.schema) || [5, 6].includes(candidate?.schema)) {

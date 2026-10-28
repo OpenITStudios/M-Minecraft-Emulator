@@ -270,6 +270,13 @@ export function verifyRepository(root,g0=false) {
     && hudSource.includes('SIZE size{}; paint(upload, value, dpi, size);')
     && !hudSource.includes('SIZE size{}; Canvas upload; paint('),
     'FPS HUD must reuse a single scoped GDI canvas in its existing native worker');
+  assert.ok(memoryCollector.includes('QueryFullProcessImageNameW')
+    && memoryCollector.includes('function Read-ProfileImageEvidence')
+    && nativeMemoryCollector.includes('schema = 8')
+    && nativeMemoryCollector.includes('PROCESS_IMAGE_PATH_FILE_SHA256_NOT_LOADED_IMAGE_PROOF')
+    && nativeMemoryReviewer.includes('sameGameImageEvidence: baseline.schema === 7 ||')
+    && nativeMemoryReviewer.includes('provesLoadedGameImage: false'),
+    'Build-scoped native RAM reports must hash once before sampling and never claim loaded image identity');
   assert.ok(memoryCollector.includes('result.PageFaultCount = extended.Base.PageFaultCount;')
     && memoryCollector.includes('result.PageFaultCount = basic.PageFaultCount;')
     && memoryCollector.includes('if ($IncludePageFaultCount)')
