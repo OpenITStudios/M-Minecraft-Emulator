@@ -206,6 +206,75 @@ This is a **new feasibility route, not a demonstrated Minecraft
 optimization**. Keep old native experiments OFF, CI OFF, original game data
 unchanged, no PC operations and no re-entry to deferred P0.
 
+### Bedrock renderer metadata: fixed RenderBind to VirtualArray (28 October 2026)
+
+This is a new **game-derived comparative lead**, not an Education ABI or
+proof of reclaimed RAM. The community-generated, versioned **client**
+headers in [LeviLamina](https://github.com/LiteLDev/LeviLamina)
+supply a closer Bedrock comparator than generic upstream BGFX.
+The version manifests pin 26.32.3 to
+`bedrock-runtime-data 26.32.2-client.6` and 26.51.0 to
+`26.51.1-client.2`. Immutable source refs:
+- [Bedrock 26.32.3 commit c8c430e](https://github.com/LiteLDev/LeviLamina/commit/c8c430e614b13b378a6add4a86cf6d5128f0418c)
+  `Frame.h` blob `779a655c240b9295e6c94836d4349e591455d1f0` and
+  `Context.h` blob `ef1b00feba8409f113a9e27905e4cf8b28497c8d`.
+- [Bedrock 26.51.0 commit f5f9397](https://github.com/LiteLDev/LeviLamina/commit/f5f9397a63f1b32bcf402a36d90b835de45ea9ec)
+  `Frame.h` blob `3ac84469437c382b1e6cef5b415121e158cb62ce`
+  and `Context.h` blob `a6a43260be00b40aa19bfc5ae1bc2ca377925d20`.
+- 26.40.0 still had the same **fixed** 84 MiB per-frame RenderBind
+  array, so the observed representation transition occurred between
+  those versions in this community header corpus.
+
+| Typed storage inside Bedrock client | 26.32.3 | 26.51.0 |
+| --- | ---: | ---: |
+| `Context::m_frame` (two `Frame` objects), bytes | 206,541,568 (196.973 MiB) | 30,413,696 (29.005 MiB) |
+| Each `Frame::m_renderItemBind` | `RenderBind[65536]`, 88,080,384 bytes (84 MiB) | `VirtualArray<RenderBind>` wrapper, 120 bytes |
+| Fixed per-entry legacy RenderBind stride | 1,344 bytes | Not applicable to virtual wrapper |
+| Inline two-frame size change | — | -176,127,872 bytes (-167.969 MiB) |
+
+**Crucial distinction:** this is a drop in **static inline object
+representation**, NOT a measured reduction in committed memory, Private WS,
+VRAM or GPU resource demand. The public generated `VirtualArray.h` is only
+a placeholder class with no implementation of storage growth, paging,
+free/retirement or frame reset; the actual dynamic backing and peak
+occupancy remain UNKNOWN. No gain can be extrapolated into the
+Education workload or multiplied by five.
+
+This allows an unusually strong *negative* ABI comparison: the historical
+Education `B05B2C0` factory requested **70,709,392 bytes / 67.434 MiB**
+and accessed high object-relative offsets. Bedrock 26.32.3's
+**two Frame objects alone require 206,541,568 bytes**, about 2.92 times
+larger than that entire Education allocation. Therefore the Education
+object **cannot have that exact 26.32.3 inline Context layout**.
+It may use a different version/configuration, or be a different class.
+Identical private field offsets or a drop-in Bedrock `VirtualArray`
+cannot be justified.
+
+A separate upstream BGFX parent
+[ea0cf65](https://github.com/bkaradzic/bgfx/blob/ea0cf65d088c26569019945504bf0cdfedbda0a8/src/bgfx_p.h)
+supports an **older, smaller** fixed-capacity design. Its source-default
+multithreaded arrays include:
+`RenderItem` = 2 * 65536 * 128 bytes = 16 MiB,
+`RenderBind` = 2 * 65536 * (16 samplers * 16 bytes) = 32 MiB,
+`MatrixCache` = 2 * 65536 * 64 bytes = 8 MiB,
+`Frame` sort keys/values = 1.25 MiB, and `Context` temp sort
+keys/values = 655,350 bytes (~0.625 MiB).
+Those **selected** inline arrays total 60,686,326 bytes (~57.875 MiB);
+the Education object has a ~9.559 MiB numerical gap to this
+partial sum. This is **size consistency only**, not proof that its
+type is BGFX Context, that its renderer build matches source-default
+configuration, or that any of its 58.457 MiB historical Private WS is
+unused.
+
+**Actionability gate:** a real Education-specific demand representation
+requires proving the actual class, all direct fixed-offset array readers
+and writers, maximum draw capacity, frame concurrency, creation/release
+and renderer reconstruction. Merely intercepting malloc, changing the
+67 MiB request size, installing LeviLamina or copying its header would
+violate the preserved ABI/game boundary. The original private Education
+code slices and synchronized live allocation evidence were not available
+during this GitHub-only audit. No native runtime change is justified yet.
+
 ### One discriminating next evidence step — no speculative optimizer
 
 Before any new intervention, classify the historically unassigned

@@ -101,23 +101,22 @@ publication. The Mac build remains a diagnostic shell without game backend.
 
 ## Next bounded source action
 
-Research goal: substantial game-side resident RAM saving, not manager
-micro-optimizations. Latest source-backed route: Microsoft
-DxTimingCaptureLibrary @ `72bd2b1` (12 Oct 2026) can analyze
-D3D12 heap/resource lifetime and GPU residency from compatible ETL
-**without injecting Minecraft**. The existing Windows WPR
-VirtualAllocation ETL may not contain D3D12/DXGK provider events;
-raw captures are not accessible and their provider coverage remains UNKNOWN.
-Microsoft's Memory Map sample misses some resources and handles migrations
-incompletely. Its GPU virtual addresses must NOT be numerically joined to
-VMMap CPU virtual addresses.
+Material RAM goal remains ACTIVE, source-only, without P0 or Windows localtest.
+Version-pinned community Bedrock client headers yield a stronger **renderer
+representation** lead: between 26.32.3 and 26.51.0, two inlined Frame
+objects shrink 196.973 -> 29.005 MiB when a fixed 84 MiB-per-frame
+RenderBind array becomes a 120-byte VirtualArray wrapper. This is a
+167.969 MiB *inline structure* difference, NOT physical RAM saved.
+Education's historical 67.434 MiB allocation is smaller than the old
+Bedrock two-frame field alone: exact Bedrock 26.32.3 Context ABI is ruled
+out. Upstream pre-June BGFX has ~57.875 MiB of selected static arrays,
+but class identity/consumers in Education remain UNKNOWN.
 
-Next: if saved raw ETL becomes accessible, inspect provider keywords,
-timestamp clock, PID/birth and event loss FIRST; only then perform
-bounded offline lifetime attribution for the historical 220.488 MiB
-mixed WriteCombined and 144 MiB synchronous-growth candidates.
-Those numbers are *observed residency correlations*, not reclaimed bytes.
-The distinct 67 MiB Education CPU allocation remains a secondary lead:
-pre-2026 BGFX fixed arrays are not a verified Education ABI.
-No new collector/hook, P0 revisit, CI, Windows/game test or payload change;
-runtime acceptance remains deferred and native canaries remain OFF.
+Next: identify original Education 67 MiB object's type, array layout
+and every reader/writer and release path using previously authorized
+private code evidence **only if it becomes available**. In parallel,
+the existing ETL/D3D12 owner attribution remains blocked on original
+raw captures and provider coverage. No speculative source patch,
+instrumentation, installation, game process access, memory trimming,
+CI or P0 re-entry; keep reviewed payload, original MC01–MC05 identities,
+144/10 FPS, >=12 chunks, simulation, networking and saves intact.
