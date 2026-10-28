@@ -72,7 +72,7 @@ function Invoke-NativeProfileBaseline {
       if ($process.status -eq 'UNKNOWN') { $target.lost = $true }
       $row.clients[$slot] = [ordered]@{
         process = $process
-        memory = (Read-ProcessMemory -ProcessId $target.processId -ExpectedStartTicks $target.baseline.startTicks -IdentityLost $target.lost)
+        memory = (Read-ProcessMemory -ProcessId $target.processId -ExpectedStartTicks $target.baseline.startTicks -IdentityLost $target.lost -IncludePageFaultCount)
       }
       $target.previous = $current
     }
@@ -84,7 +84,7 @@ function Invoke-NativeProfileBaseline {
       if ($process.status -eq 'UNKNOWN') { $manager.lost = $true }
       $row.manager = [ordered]@{
         process = $process
-        memory = (Read-ProcessMemory -ProcessId $manager.processId -ExpectedStartTicks $manager.baseline.startTicks -IdentityLost $manager.lost)
+        memory = (Read-ProcessMemory -ProcessId $manager.processId -ExpectedStartTicks $manager.baseline.startTicks -IdentityLost $manager.lost -IncludePageFaultCount)
       }
       $manager.previous = $current
     }

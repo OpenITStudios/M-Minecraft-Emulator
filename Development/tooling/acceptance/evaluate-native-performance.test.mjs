@@ -1123,3 +1123,69 @@ test('schema-7 rejects misleading slot names, unrequested descendants, invented 
     assert.throws(()=>evaluateNativePerformance(report));
   }
 });
+
+
+const faultCount = (count = 0, reason = null) => ({
+  status: reason === null ? 'OBSERVED' : 'UNKNOWN',
+  count: reason === null ? count : null, reason,
+});
+
+test('schema-7 page-fault counts are optional, cumulative and not disk/page-in proof', () => {
+  const previous = nativeBaselineFixture(['01','04'], true);
+  assert.equal(evaluateNativePerformance(previous).pageFaultCountCollected, false);
+  const current = structuredClone(previous);
+  for (const [i,row] of current.samples.entries()) {
+    for (const slot of ['01','04']) row.clients[slot].memory.pageFaultCount =
+      faultCount(100 + 20 * i);
+    row.manager.memory.pageFaultCount = faultCount(300 + 5 * i);
+  }
+  const result = evaluateNativePerformance(current);
+  assert.equal(result.pageFaultCountCollected, true);
+  assert.equal(result.clients['04'].pageFaultCount.endpointDeltaCount, 20);
+  assert.equal(result.manager.pageFaultCount.endpointDeltaCount, 5);
+  assert.equal(result.clients['01'].privateWorkingSetMb.medianMb, 255);
+  assert.equal(compareNativePerformance(previous,current).comparableForNumericDifference,false);
+  assert.equal(compareNativePerformance(current,structuredClone(current)).comparableForNumericDifference,true);
+  current.samples[1].clients['01'].memory.pageFaultCount.count = 50;
+  const wrap = evaluateNativePerformance(current);
+  assert.equal(wrap.clients['01'].pageFaultCount.endpointDeltaCount, null);
+  assert.equal(wrap.clients['01'].pageFaultCount.counterDecreaseObserved, true);
+});
+
+test('schema-7 rejects forged, inconsistent or identity-lost page-fault counters', () => {
+  const full = () => {
+    const report = nativeBaselineFixture(['01','03']);
+    for (const row of report.samples) {
+      row.clients['01'].memory.pageFaultCount = faultCount(100);
+      row.clients['03'].memory.pageFaultCount = faultCount(100);
+    }
+    return report;
+  };
+  for (const mutate of [
+    r=>r.samples[1].clients['01'].memory.pageFaultCount.count = -1,
+    r=>r.samples[1].clients['01'].memory.pageFaultCount.count = 4294967296,
+    r=>r.samples[1].clients['01'].memory.pageFaultCount.count = 3.5,
+    r=>r.samples[1].clients['03'].memory.pageFaultCount.reason = 'QUERY_FAILED',
+    r=>r.samples[0].clients['01'].memory.pageFaultCount = faultCount(null,'IDENTITY_UNAVAILABLE'),
+    r=>r.samples[0].clients['01'].memory.pageFaultCount = faultCount(null,'EXTENDED_COUNTER_UNAVAILABLE'),
+    r=>delete r.samples[1].clients['03'].memory.pageFaultCount,
+    r=>r.samples[0].clients['01'].memory.pageFaultCount.pid = 42,
+  ]) {
+    const report = full();
+    mutate(report);
+    assert.throws(()=>evaluateNativePerformance(report));
+  }
+  const lost=full();
+  lost.samples[1].clients['01'].process = {
+    status:'UNKNOWN',cpuPercentOfHost:null,workingSetMb:null,
+  };
+  lost.samples[1].clients['01'].memory = {
+    privateCommitMb:memoryMetric(null,'IDENTITY_UNAVAILABLE'),
+    privateWorkingSetMb:memoryMetric(null,'IDENTITY_UNAVAILABLE'),
+    pageFaultCount:faultCount(null,'IDENTITY_UNAVAILABLE'),
+  };
+  lost.profileIdentityLost['01']=true;
+  const status=evaluateNativePerformance(lost);
+  assert.equal(status.clients['01'].pageFaultCount.endpointDeltaCount,null);
+  assert.equal(status.clients['01'].pageFaultCount.missingSamples,1);
+});

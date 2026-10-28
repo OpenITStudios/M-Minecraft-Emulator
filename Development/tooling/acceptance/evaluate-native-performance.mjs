@@ -273,6 +273,51 @@ function evaluateMemoryComposition(report) {
   }};
 }
 
+
+function nativePageFaultMetric(value, lost) {
+  if (!exactly(value, ['status', 'count', 'reason']) ||
+      !['OBSERVED', 'UNKNOWN'].includes(value.status)) {
+    throw new TypeError('Invalid native cumulative page-fault reading.');
+  }
+  if (value.status === 'OBSERVED') {
+    if (!integer(value.count) || value.count < 0 || value.count > 4294967295 ||
+        value.reason !== null || lost) {
+      throw new TypeError('Invalid observed page-fault counter or process identity.');
+    }
+  } else if (value.count !== null ||
+      !['API_UNAVAILABLE', 'QUERY_FAILED', 'IDENTITY_UNAVAILABLE'].includes(value.reason) ||
+      (lost ? value.reason !== 'IDENTITY_UNAVAILABLE' :
+        value.reason === 'IDENTITY_UNAVAILABLE')) {
+    throw new TypeError('Unknown page faults must not be converted into zero.');
+  }
+}
+function nativePrivateMetrics(value, lost) {
+  const included = isObject(value) && Object.hasOwn(value, 'pageFaultCount');
+  if (!exactly(value, [...processMemoryFields, ...(included ? ['pageFaultCount'] : [])])) {
+    throw new TypeError('Unexpected schema-7 private memory fields.');
+  }
+  privateMetrics(Object.fromEntries(processMemoryFields.map(key => [key, value[key]])), lost);
+  if (included) nativePageFaultMetric(value.pageFaultCount, lost);
+  return included;
+}
+function nativePageFaultSummary(values) {
+  const valid = values.filter(value => value.status === 'OBSERVED');
+  const decreased = values.some((value, i) => i > 0 &&
+    value.status === 'OBSERVED' && values[i - 1].status === 'OBSERVED' &&
+    value.count < values[i - 1].count);
+  const complete = valid.length === values.length;
+  return {
+    observedSamples: valid.length,
+    missingSamples: values.length - valid.length,
+    firstCount: values[0].status === 'OBSERVED' ? values[0].count : null,
+    lastCount: values.at(-1).status === 'OBSERVED' ? values.at(-1).count : null,
+    endpointDeltaCount: complete && !decreased
+      ? values.at(-1).count - values[0].count : null,
+    counterDecreaseObserved: decreased,
+    unavailableReasons: [...new Set(values.filter(v => v.status === 'UNKNOWN').map(v => v.reason))],
+  };
+}
+
 // Schema 7: current native MC01-MC05 memory baseline, including empty/sparse
 // slot rosters. Legacy schemas 1-6 remain intentionally unchanged.
 function evaluateNativeProfileBaseline(report) {
@@ -318,6 +363,13 @@ function evaluateNativeProfileBaseline(report) {
   }
   const lost = Object.fromEntries(slots.map(slot => [slot, false]));
   let managerLost = false;
+  let faultMode = null;
+  const requireConsistentFaultCapture = included => {
+    if (faultMode !== null && faultMode !== included) {
+      throw new TypeError('Native page-fault coverage must match all selected processes and samples.');
+    }
+    faultMode = included;
+  };
   let last = -1;
   for (const row of report.samples) {
     if (!exactly(row, ['elapsedSeconds', 'clients', 'manager', 'system',
@@ -343,7 +395,7 @@ function evaluateNativeProfileBaseline(report) {
         throw new TypeError('A lost Minecraft profile identity cannot resume.');
       }
       lost[slot] ||= missingNow;
-      privateMetrics(item.memory, missingNow);
+      requireConsistentFaultCapture(nativePrivateMetrics(item.memory, missingNow));
     }
     if (report.managerSelected) {
       if (!exactly(row.manager, ['process', 'memory'])) {
@@ -355,7 +407,7 @@ function evaluateNativeProfileBaseline(report) {
         throw new TypeError('A lost manager process identity cannot resume.');
       }
       managerLost ||= missingNow;
-      privateMetrics(row.manager.memory, missingNow);
+      requireConsistentFaultCapture(nativePrivateMetrics(row.manager.memory, missingNow));
     } else if (row.manager !== null) {
       throw new TypeError('Unrequested manager cannot be included in RAM samples.');
     }
@@ -386,12 +438,17 @@ function evaluateNativeProfileBaseline(report) {
     throw new TypeError('Native profile identity-loss flags contradict samples.');
   }
 
+  const faultCountCollected = faultMode === true;
   const summarize = (fieldNames, get) => Object.fromEntries(fieldNames.map(field =>
     [field, memorySummary(report.samples.map(row => get(row)[field]))]));
   const selectedProcess = get => ({
     process: metrics(report.samples.map(row =>
       ({elapsedSeconds: row.elapsedSeconds, current: get(row).process})), 'current'),
     ...summarize(processMemoryFields, row => get(row).memory),
+    ...(faultCountCollected ? {
+      pageFaultCount: nativePageFaultSummary(report.samples.map(row =>
+        get(row).memory.pageFaultCount)),
+    } : {}),
   });
   const childSummary = key => {
     const groups = report.samples.map(row => row.directChildren[key]);
@@ -414,6 +471,7 @@ function evaluateNativeProfileBaseline(report) {
     durationObservedSeconds: report.durationObservedSeconds,
     sampleCount: report.sampleCount,
     selectedSlots: [...slots],
+    pageFaultCountCollected: faultCountCollected,
     clients: Object.fromEntries(slots.map(slot =>
       [slot, selectedProcess(row => row.clients[slot])])),
     manager: report.managerSelected ? selectedProcess(row => row.manager) : null,
@@ -444,6 +502,7 @@ function compareNativeProfileBaseline(baseline, candidate) {
     sameSelectedSlots: selected,
     sameManagerSelection: (baseline.managerSelected === candidate.managerSelected),
     sameDirectChildrenSelection: (baseline.directChildrenRequested === candidate.directChildrenRequested),
+    samePageFaultCoverage: before.pageFaultCountCollected === after.pageFaultCountCollected,
     equalRequestedDuration: baseline.durationRequestedSeconds === candidate.durationRequestedSeconds,
     equalSampleInterval: baseline.sampleIntervalSeconds === candidate.sampleIntervalSeconds,
     equalLogicalCpus: baseline.hostLogicalCpus === candidate.hostLogicalCpus,

@@ -28,7 +28,12 @@ powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-native-perf
 
 New schema **7** contains ordered slot labels, permanently pinned process
 identity/loss flags, CPU and memory samples, whole-system memory and optional
-direct-child aggregate measurements. No PID, login, world or account data is
+direct-child aggregate measurements. Its native process readings also include
+the cumulative Win32 `PageFaultCount` from the **same process-memory query**;
+this is a count, not MiB, not a hard-fault/disk-I/O counter, and is never
+interpreted as proof of reclaimed RAM. The reviewer accepts older schema-7
+reports without this field and withholds numeric comparisons when coverage
+differs. Decreasing/wrapped counters report an unknown endpoint delta. No PID, login, world or account data is
 written into the JSON. Keep the historical two/four/five-client command modes
 and schemas 1–6 for comparisons with older diagnostic files; they are not the
 preferred current native five-profile capture. This new path is source-prepared

@@ -297,7 +297,7 @@ namespace Mivubi {
     [DllImport("psapi.dll", SetLastError=true)]
     static extern bool GetPerformanceInfo(ref PerformanceInfo data, uint size);
     public sealed class ProcessValues {
-      public double? PrivateCommitMb, PrivateWorkingSetMb;
+      public double? PrivateCommitMb, PrivateWorkingSetMb, PageFaultCount;
     }
     static bool SameProcess(IntPtr handle, long expectedTicks) {
       long birth, exit, kernel, user;
@@ -317,13 +317,16 @@ namespace Mivubi {
         extended.PrivateWorkingSetSize = new UIntPtr(sentinel);
         if (GetMemory2(handle, ref extended, extended.Base.cb)) {
           result.PrivateCommitMb = extended.Base.PrivateUsage.ToUInt64() / 1048576.0;
+          result.PageFaultCount = extended.Base.PageFaultCount;
           if (extended.PrivateWorkingSetSize.ToUInt64() != sentinel)
             result.PrivateWorkingSetMb = extended.PrivateWorkingSetSize.ToUInt64() / 1048576.0;
         } else {
           var basic = new Counters();
           basic.cb = (uint)Marshal.SizeOf(typeof(Counters));
-          if (GetMemory(handle, ref basic, basic.cb))
+          if (GetMemory(handle, ref basic, basic.cb)) {
             result.PrivateCommitMb = basic.PrivateUsage.ToUInt64() / 1048576.0;
+            result.PageFaultCount = basic.PageFaultCount;
+          }
         }
         return SameProcess(handle, expectedTicks) ? result : null;
       } finally { CloseHandle(handle); }
@@ -355,8 +358,20 @@ function Memory-Metric {
   }
   return [ordered]@{ status='OBSERVED'; valueMb=[math]::Round([double]$Value, 3); reason=$null }
 }
+# Cumulative Win32 PROCESS_MEMORY_COUNTERS.PageFaultCount, not MiB, not
+# hard page faults or physical disk reads. No extra process/heap query.
+function Fault-Metric {
+  param($Value, [string]$Reason)
+  if ($null -eq $Value -or [double]::IsNaN([double]$Value) -or
+      [double]::IsInfinity([double]$Value) -or [double]$Value -lt 0 -or
+      [double]$Value -gt 4294967295 -or [math]::Truncate([double]$Value) -ne [double]$Value) {
+    return [ordered]@{ status='UNKNOWN'; count=$null; reason=$Reason }
+  }
+  return [ordered]@{ status='OBSERVED'; count=[long]$Value; reason=$null }
+}
 function Read-ProcessMemory {
-  param([int]$ProcessId, [long]$ExpectedStartTicks, [bool]$IdentityLost)
+  param([int]$ProcessId, [long]$ExpectedStartTicks, [bool]$IdentityLost,
+    [switch]$IncludePageFaultCount)
   $values = $null
   $reason = 'API_UNAVAILABLE'
   if ($IdentityLost) { $reason = 'IDENTITY_UNAVAILABLE' }
@@ -364,10 +379,16 @@ function Read-ProcessMemory {
     $reason = 'QUERY_FAILED'
     try { $values = [Mivubi.PerformanceMemory]::Read($ProcessId, $ExpectedStartTicks) } catch { }
   }
-  return [ordered]@{
+  $memory = [ordered]@{
     privateCommitMb = (Memory-Metric -Value $values.PrivateCommitMb -Reason $reason)
     privateWorkingSetMb = (Memory-Metric -Value $values.PrivateWorkingSetMb -Reason $(if ($null -ne $values) { 'EXTENDED_COUNTER_UNAVAILABLE' } else { $reason }))
   }
+  # Historical schemas 5/6 stay byte-for-byte shape-compatible. Only native
+  # schema 7 opts in; the C# reader returns this counter from the SAME call.
+  if ($IncludePageFaultCount) {
+    $memory['pageFaultCount'] = Fault-Metric -Value $values.PageFaultCount -Reason $reason
+  }
+  return $memory
 }
 function Read-SystemMemory {
   $values = $null
