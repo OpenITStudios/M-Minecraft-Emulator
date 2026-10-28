@@ -24,6 +24,17 @@ pub struct PreviewReport {
     pub tiles: Vec<TileStatus>,
 }
 
+// DWM registration is observation, not permission to play or launch.
+fn preview_tile_reason(
+    slot: u32,
+    profiles: &[(u32, OwnedProcess)],
+    unavailable: &[(u32, String)],
+) -> Option<String> {
+    unavailable.iter().find(|(item, _)| *item == slot)
+        .map(|(_, reason)| reason.clone())
+        .or_else(|| (!profiles.iter().any(|(item, _)| *item == slot))
+            .then(|| "No verified Minecraft preview source for this profile".into()))
+}
 // A per-launcher close must never discard the remaining Minecraft tiles.
 fn retain_other_preview_slot(observed:u32,closing:u32)->bool {
     observed!=closing
@@ -402,10 +413,9 @@ mod windows {
                 let mut status = TileStatus {
                     slot: tile.slot,
                     registered: false,
-                    reason: None,
+                    reason: preview_tile_reason(tile.slot, &self.profiles, &unavailable),
                 };
-                if let Some((_, reason)) = unavailable.iter().find(|(slot, _)| *slot == tile.slot) {
-                    status.reason = Some(reason.clone());
+                if status.reason.is_some() {
                     statuses.push(status);
                     continue;
                 }
@@ -599,10 +609,7 @@ mod windows {
                 .map(|tile| TileStatus {
                     slot: tile.slot,
                     registered: false,
-                    reason: unavailable
-                        .iter()
-                        .find(|(slot, _)| *slot == tile.slot)
-                        .map(|(_, reason)| reason.clone()),
+                    reason: preview_tile_reason(tile.slot, &profiles, &unavailable),
                 })
                 .collect(),
         };
@@ -819,6 +826,24 @@ pub(super) fn refresh() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn preview_recovery_reason_is_scoped_to_only_the_failed_slot() {
+        let target = OwnedProcess {
+            pid: 101, created_file_time: "12345".into(), session_id: 1,
+            window_handle: "0x101".into(), responding: true,
+        };
+        let sources = vec![(1, target.clone()), (2, OwnedProcess {
+            pid: 102, created_file_time: "12346".into(),
+            window_handle: "0x102".into(), ..target
+        })];
+        let unavailable = vec![(1, "Original native recovery unconfirmed".to_owned())];
+        assert_eq!(preview_tile_reason(1, &sources, &unavailable),
+            Some("Original native recovery unconfirmed".into()));
+        assert_eq!(preview_tile_reason(2, &sources, &unavailable), None,
+            "MC01 recovery must not mark MC02 unavailable");
+        assert_eq!(preview_tile_reason(3, &sources, &unavailable),
+            Some("No verified Minecraft preview source for this profile".into()));
+    }
     #[test]
     fn closing_one_of_five_minecraft_slots_preserves_four_peer_previews() {
         for closing in 1..=5 {

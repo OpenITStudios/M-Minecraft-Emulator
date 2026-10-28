@@ -132,21 +132,20 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability source hardening — 28 October 2026
 
-Windows transport refuses contention; CloseOne avoids peer journals and
-validates retained game ownership. Svelte preserves uncertain native window
-recovery. Helper Start/pipe failure retains its child/reader/gate; terminal
-End and actual helper exit are needed for checkpoint retirement. End(Err)
-with Saved can use exact HWND native restore; without Saved, retirement needs
-verified exit of the original requested Minecraft process. Parked recovery
-cleanup now keeps failing leases while allowing unrelated profile preview/Play
-to continue; any same-game or same-managed-slot checkpoint still blocks
-reuse. Full workspace release attempts other game helpers even after an
-aperture failure, returning the original error. Active checkpoint failure
-continues to block unsafe Play reconfiguration. IPC, private data and
-Mac-native constraints unchanged. Synthetic tests authored, NOT_EXECUTED.
-MC02 normal exit, Windows performance and gameplay remain unverified.
+Transport refuses contention; CloseOne skips peer journals, retaining native
+controller/process authority. Svelte preserves unconfirmed window recovery.
+Helper Start/pipe failures keep original child/reader/gate in SURFACE.
+Terminal End+helper exit gate release; with Saved, identity-checked restore;
+without Saved, original game exit must be proven. Parked MC01 recovery
+failures do not abort independent MC02–MC05 preview/Play; same-slot gate held.
+Unconfirmed Ready OR terminal End now refuses preview/Play registration for
+its original profile, not unrelated peers. DWM PreviewReport provides explicit
+per-tile missing-source/recovery reasons, shown on the affected launcher
+without disabling game Play; stale status cleared on source change/IPC error.
+No worker, controller, protocol, game or data mutation. Rust/browser tests
+authored NOT_EXECUTED; Windows build, MC02 exit, DWM and CPU/RAM unverified.
 
 ## Next bounded action
 
-Audit recovery error propagation for individual preview tiles and retained
-stale checkpoints before Windows runtime acceptance.
+Audit primary DWM observer errors and tile report completeness without
+losing peer preview statuses, before real Windows runtime acceptance.

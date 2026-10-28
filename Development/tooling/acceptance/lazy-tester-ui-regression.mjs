@@ -24,7 +24,9 @@ try {
     window.__offline = false;
     window.__holdInspect = false;
     const fixture = new URL(location.href).searchParams;
-    window.__runningSlots = fixture.has('close-recovery') || fixture.has('close-ipc-error') ? [2] : undefined;
+    window.__runningSlots = fixture.has('preview-recovery') ? [1,2,3] :
+      fixture.has('close-recovery') || fixture.has('close-ipc-error') ? [2] : undefined;
+    window.__previewIssueSlot = fixture.has('preview-recovery') ? 2 : null;
     window.__closeOutcome = fixture.has('close-recovery') ? 'unconfirmed' :
       fixture.has('close-ipc-error') ? 'transport-error' : null;
     const brokenSetup = fixture.has('broken');
@@ -90,7 +92,11 @@ try {
           throw new Error('Unexpected selected close in synthetic fixture');
         }
         if (command === 'lazy_tester_present' || command === 'lazy_tester_clear_previews' || command.startsWith('desktop_')) return null;
-        if (command === 'lazy_tester_previews') return {schema: 1, tiles: args.tiles.map(tile => ({slot: tile.slot, registered: false, reason: null}))};
+        if (command === 'lazy_tester_previews') return {schema: 1, tiles: args.tiles.map(tile => {
+          const failed = window.__previewIssueSlot === tile.slot;
+          return {slot: tile.slot, registered: fixture.has('preview-recovery') && !failed,
+            reason: failed ? 'Native recovery checkpoint is unconfirmed' : null};
+        })};
         if (command !== 'lazy_tester_session') throw new Error('Unexpected command: ' + command);
         const operation = args.request.operation;
         if (operation === 'Inspect' && window.__holdInspect) await new Promise(resolve => { window.__finishInspect = resolve; });
@@ -261,6 +267,23 @@ try {
   await page.evaluate(()=>{window.__offline=true;});await page.getByRole('button',{name:'Refresh',exact:true}).click();await page.getByRole('alert').waitFor();
   await page.evaluate(()=>{window.__offline=false;});await nav('Play').click();await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('.lt-connection').textContent==='Connected');
+  // A failed MC02 DWM observation is visible on MC02 only. MC03 is not
+  // mislabeled and MC02 still has its normal native Play admission.
+  await page.goto('http://lazy-tester.test/?preview-recovery=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  const nativePreviewIssue = page.getByRole('status',{name:'Minecraft - 2 preview unavailable'});
+  await nativePreviewIssue.waitFor();
+  assert.match(await nativePreviewIssue.textContent(),/Native recovery checkpoint is unconfirmed/);
+  assert.equal(await page.getByRole('status',{name:'Minecraft - 3 preview unavailable'}).count(),0);
+  assert.equal(await page.getByRole('button',{name:'Open Minecraft - 2',exact:true}).isEnabled(),true,
+    'DWM preview failure is not game-process or Play admission');
+  await page.evaluate(()=>{window.__runningSlots=[1,3];});
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.getByRole('button',{name:'Launch Minecraft - 2',exact:true}).waitFor();
+  assert.equal(await page.getByRole('status',{name:'Minecraft - 2 preview unavailable'}).count(),0);
+  assert.equal(await page.getByRole('status',{name:'Minecraft - 3 preview unavailable'}).count(),0);
+
   // Synthetic CloseOne: a failed native recovery receipt remains unconfirmed
   // even when a later read-only session observation reports STOPPED.
   await page.goto('http://lazy-tester.test/?close-recovery=1');

@@ -70,7 +70,7 @@
   const images = new Map<ProfileSlot, HTMLElement>();
   const labels = {STOPPED: 'Not running', STARTING: 'Starting', RUNNING: 'Running', NOT_RESPONDING: 'Not responding', ATTENTION: 'Needs attention'};
   const identity = (profile?: ProfileSession) => profile?.process ? [profile.process.pid, profile.process.createdFileTime, profile.process.sessionId, profile.process.windowHandle].join('/') : '';
-  const layoutIdentity=(items:ProfileSession[])=>items.map(p=>p.slot+':'+p.state+':'+identity(p)).join('|');
+  const layoutIdentity=(items:ProfileSession[])=>items.map(p=>p.slot+':'+p.state+':'+identity(p)+':'+(p.process?.responding??false)).join('|');
   $: primary = active ?? requested ?? profiles.find(profile => profile.state === 'RUNNING')?.slot ?? 1;
   $: others = profiles.filter(profile => profile.slot !== primary);
   $: runningCount = profiles.filter(profile => ['STARTING', 'RUNNING', 'NOT_RESPONDING'].includes(profile.state)).length;
@@ -137,11 +137,11 @@
       } else if (active === null && !detached && page === 'workspace' && queued === null) {
         queued = firstEmbeddedProfile(profiles,separateSlots);
       }
-      if(layoutChanged)dirty=true;
+      if(layoutChanged) {previewStatuses=[];dirty=true;}
     } catch (error) {
       if (!disposed && observationStillCurrent(issued, observationEpoch, reviewState())) {
         if (available) dirty = true;
-        available = false;
+        available = false;previewStatuses=[];
         connectionIssue = String(error);
       }
     } finally { refreshing = false; }
@@ -350,11 +350,13 @@
     dirty = false; resizing = true;
     try {
       if (page !== 'workspace' || detached || !available || document.hidden) {
-        await lazyTester.clearPreviews(); previewStatuses = []; return;
+        await lazyTester.clearPreviews(); previewStatuses = [];previewIssue=''; return;
       }
       await tick();
       if (active !== null) await workspaceSurface.update(viewport.getBoundingClientRect());
-      const tiles = others.filter(profile=>!separateSlots.has(profile.slot)).flatMap(profile => {
+      // DWM monitoring tiles require an observed RUNNING process, not
+      // merely an existing launcher profile or stale session state.
+      const tiles = others.filter(profile=>profile.state==='RUNNING'&&!!profile.process&&!separateSlots.has(profile.slot)).flatMap(profile => {
         const element = images.get(profile.slot); if (!element) return [];
         const rect = element.getBoundingClientRect();
         return rect.x >= 0 && rect.y >= 0 && rect.width >= 32 && rect.height >= 24 &&
@@ -362,7 +364,7 @@
       });
       previewStatuses = (await lazyTester.previews(viewport.getBoundingClientRect(), tiles)).tiles;
       previewIssue = '';
-    } catch (error) { previewIssue = String(error); }
+    } catch (error) { previewStatuses = [];previewIssue = String(error); }
     finally { resizing = false; }
   }
   function step(direction: 1 | -1) {
@@ -620,6 +622,7 @@
         <div class="lt-games-heading"><span>Your games</span><span>{runningCount} of 5 running</span></div>
         <div class="lt-filmstrip" aria-label="Minecraft launchers">
           {#each profiles as profile (profile.slot)}
+            {@const previewFailure = previewStatuses.find(status => status.slot === profile.slot && !status.registered && status.reason !== null)}
             <div class="lt-launcher-entry">
               <button class="lt-card" class:selected={active===profile.slot&&!detached} aria-pressed={active===profile.slot&&!detached} aria-label={(profile.state==='RUNNING'?'Open ':'Launch ')+'Minecraft - '+profile.slot} disabled={busy||!available||!binding?.configured||['STARTING','NOT_RESPONDING'].includes(profile.state)} on:click={()=>profile.state==='RUNNING'?select(profile.slot):launch(profile.slot)}>
                 <strong>Minecraft - {profile.slot}{active===profile.slot&&!detached?' ✓':''}</strong>
@@ -627,6 +630,9 @@
                 <small>{active===profile.slot&&!detached?'Playing here':profile.state==='RUNNING'&&separateSlots.has(profile.slot)?'Separate window':profile.state==='RUNNING'?'Running in background':labels[profile.state]}</small>
                 {#if profile.issue}<small class="lt-error">{profile.issue}</small>{/if}
               </button>
+              {#if profile.state==='RUNNING' && !detached && profile.slot!==primary && !separateSlots.has(profile.slot) && previewFailure}
+                <small class="lt-error lt-preview-slot-issue" role="status" aria-label={'Minecraft - '+profile.slot+' preview unavailable'}>Preview unavailable: {previewFailure.reason}</small>
+              {/if}
               {#if ['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)}
                 <button class="lt-secondary lt-close-launcher" aria-label={'Close Minecraft - '+profile.slot+' normally'} disabled={busy||closeInProgress||nativeExitReview||!available||!binding?.configured} on:click={()=>requestCloseOne(profile.slot)}>Close game</button>
               {/if}

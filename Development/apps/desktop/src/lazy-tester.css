@@ -456,6 +456,7 @@
 .lt-launcher-entry{display:flex;flex-direction:column;min-width:0;gap:6px}
 .lt-filmstrip .lt-launcher-entry>.lt-card{flex:1;width:100%}
 .lt-app .lt-close-launcher{width:100%;padding:6px 8px;font-size:12px;font-weight:500}
+.lt-app .lt-preview-slot-issue{display:block;min-width:0;max-height:38px;overflow:auto;overflow-wrap:anywhere;font-size:12px;line-height:1.35}
 .lt-single-close-confirm{flex:none;background:var(--lt-panel);border:1px solid var(--lt-line);border-radius:8px;padding:10px 14px;margin-top:10px;font-size:13px}
 .lt-single-close-confirm h3,.lt-single-close-confirm p{margin:0 0 6px}
 .lt-single-close-confirm .lt-actions{display:flex;flex-wrap:wrap;gap:8px}

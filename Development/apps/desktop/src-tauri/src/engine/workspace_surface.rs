@@ -1226,6 +1226,11 @@ mod controller {
     // A stale *managed* lease for the same launcher is not an invitation to
     // re-capture a new PID/window while its previous checkpoint is uncertain.
     // Exact same-window identity also protects unlabelled test/legacy leases.
+    // Only a confirmed, nonterminal Ready lease may provide DWM/Play
+    // presentation. This cannot decide Minecraft gameplay availability.
+    fn presentation_checkpoint_unverified(ready: bool, terminal_seen: bool) -> bool {
+        !ready || terminal_seen
+    }
     fn checkpoint_conflicts(
         pinned: &OwnedProcess,
         pinned_authority: Option<&(String, String)>,
@@ -1335,6 +1340,15 @@ mod controller {
             assert!(serde_json::from_str::<Reply>("not-json\\n").is_err());
             assert!(read_line(&mut io::Cursor::new(Vec::<u8>::new()))
                 .unwrap().is_none());
+        }
+        #[test]
+        fn preview_and_play_refuse_pre_ready_or_terminal_checkpoint() {
+            assert!(presentation_checkpoint_unverified(false, false));
+            assert!(presentation_checkpoint_unverified(false, true));
+            assert!(presentation_checkpoint_unverified(true, true),
+                "Terminal helper is not a live preview source");
+            assert!(!presentation_checkpoint_unverified(true, false),
+                "Nonterminal Ready can still be observed");
         }
         #[test]
         fn failed_peer_checkpoint_blocks_only_same_game_or_managed_slot() {
@@ -2225,11 +2239,14 @@ mod controller {
                     "Minecraft - {slot} native recovery remains unconfirmed: {detail}")));
                 continue;
             }
-            if state.parked.iter().any(|lease| lease.saved.is_none()
+            // A terminal helper is no longer a live native preview even
+            // when its previous Ready/Saved receipt was valid.
+            if state.parked.iter().any(|lease|
+                presentation_checkpoint_unverified(lease.saved.is_some(), lease.ended.is_some())
                 && checkpoint_conflicts(&lease.requested, lease.authority.as_ref(),
                     target, Some(&requested_authority))) {
                 unavailable.push((*slot,
-                    "Previous Minecraft window capture is not confirmed; original recovery checkpoint retained".into()));
+                    "Original Minecraft native recovery checkpoint is unconfirmed; preview unavailable".into()));
                 continue;
             }
             if state.active.as_ref().is_some_and(|active| same(active, target)) { continue; }
@@ -2350,11 +2367,12 @@ mod controller {
                 }
             }
         }
-        if state.parked.iter().any(|lease| lease.saved.is_none()
+        if state.parked.iter().any(|lease|
+            presentation_checkpoint_unverified(lease.saved.is_some(), lease.ended.is_some())
             && checkpoint_conflicts(&lease.requested, lease.authority.as_ref(),
                 &target, authority.as_ref())) {
             return Err(io::Error::new(io::ErrorKind::WouldBlock,
-                "Selected Minecraft checkpoint is missing a confirmed Ready; original helper and recovery gate retained"));
+                "Selected Minecraft native checkpoint is unconfirmed; original helper and recovery gate retained"));
         }
         if retained_only
             && !state.active.iter().chain(state.parked.iter()).any(|lease| {
