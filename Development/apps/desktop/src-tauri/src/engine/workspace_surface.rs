@@ -1156,6 +1156,36 @@ mod controller {
             None => Err(io::Error::other("Final window recovery acknowledgement unavailable")),
         }
     }
+    // The same owned game/window that opened the recovery gate must be the
+    // one described by the helper's first Ready receipt. Responding is a
+    // transient observation, not process or HWND identity.
+    fn ready_matches_start(ready: &Saved, requested: &OwnedProcess) -> bool {
+        ready.target.pid == requested.pid
+            && ready.target.created_file_time == requested.created_file_time
+            && ready.target.session_id == requested.session_id
+            && ready.target.window_handle == requested.window_handle
+    }
+
+    // Keep a failed startup lease inside the existing SURFACE owner whenever
+    // native shutdown has not been verified. The retained lease pins the
+    // exact window recovery gate, child and reader against another capture.
+    struct PrepareFailure {
+        error: io::Error,
+        retained: Option<Lease>,
+    }
+    impl From<io::Error> for PrepareFailure {
+        fn from(error: io::Error) -> Self {
+            Self { error, retained: None }
+        }
+    }
+    impl std::fmt::Debug for PrepareFailure {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("PrepareFailure")
+                .field("error", &self.error)
+                .field("retained_checkpoint", &self.retained.is_some())
+                .finish()
+        }
+    }
     fn rollback_error(parked: &io::Result<()>, restored: &io::Result<()>) -> Option<String> {
         let mut problems = Vec::new();
         if let Err(error) = parked { problems.push(format!("Could not park the new game: {error}")); }
@@ -1211,6 +1241,41 @@ mod controller {
             }
             assert!(!selected_helper_quiesced(&[]));
             assert!(!selected_helper_quiesced(&[(false,true),(false,false)]));
+        }
+        #[test]
+        fn start_ready_must_match_exact_retained_process_and_window() {
+            let requested = OwnedProcess {
+                pid: 101,
+                created_file_time: "134000000000000001".into(),
+                session_id: 1,
+                window_handle: "0x123".into(),
+                responding: true,
+            };
+            let ready = Saved {
+                target: requested.clone(),
+                window_thread_id: 17,
+                window_class_name: "OGLES".into(),
+                style: 0,
+                extended_style: 0,
+                rect: Rectangle { x: 0, y: 0, width: 640, height: 360 },
+                manager_pid: 5,
+            };
+            assert!(ready_matches_start(&ready, &requested));
+            let mut changed = ready.clone();
+            changed.target.responding = false;
+            assert!(ready_matches_start(&changed, &requested),
+                "Responsive state is not a stable identity key");
+            changed.target.pid += 1;
+            assert!(!ready_matches_start(&changed, &requested));
+            let mut changed = ready.clone();
+            changed.target.created_file_time = "1".into();
+            assert!(!ready_matches_start(&changed, &requested));
+            let mut changed = ready.clone();
+            changed.target.session_id += 1;
+            assert!(!ready_matches_start(&changed, &requested));
+            let mut changed = ready.clone();
+            changed.target.window_handle = "0x124".into();
+            assert!(!ready_matches_start(&changed, &requested));
         }
         #[test]
         fn terminal_end_alone_does_not_retire_a_live_helper() {
@@ -1690,11 +1755,11 @@ mod controller {
         }
         Err(io::Error::other("Workspace target no longer managed"))
     }
-    fn prepare(manager: u64, viewport: Viewport, target: OwnedProcess) -> io::Result<Lease> {
+    fn prepare(manager: u64, viewport: Viewport, target: OwnedProcess) -> Result<Lease, PrepareFailure> {
         if !workspace_enabled() {
             return Err(io::Error::other(
                 "Native workspace disabled outside authorized preview or developer build",
-            ));
+            ).into());
         }
         let viewport = viewport.validate()?;
         native::rectangle(manager, viewport)?;
@@ -1722,14 +1787,25 @@ mod controller {
             command.creation_flags(0x08000000);
         }
         let mut child = command.spawn()?;
-        let input = child
-            .stdin
-            .take()
-            .ok_or_else(|| io::Error::other("Surface stdin unavailable"))?;
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| io::Error::other("Surface stdout unavailable"))?;
+        // No Start/capture request has been sent yet. Missing piped handles
+        // are an invalid helper bootstrap; stop only this helper before the
+        // parent checkpoint lease can be released, never the Minecraft game.
+        let input = match child.stdin.take() {
+            Some(input) => input,
+            None => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(io::Error::other("Surface stdin unavailable").into());
+            }
+        };
+        let stdout = match child.stdout.take() {
+            Some(stdout) => stdout,
+            None => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(io::Error::other("Surface stdout unavailable").into());
+            }
+        };
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
             let mut saved = None;
@@ -1780,16 +1856,36 @@ mod controller {
             saved: None,
             _recovery_gate: recovery_gate,
         };
-        match lease.send(Command::Start(target)) {
-            Ok(Reply::Ready(saved)) => lease.saved = Some(saved),
-            _ => {
-                let _ = lease.stop();
-                return Err(io::Error::other(
-                    "Surface recovery helper could not prepare",
-                ));
+        let start = lease.send(Command::Start(target.clone()));
+        match start {
+            Ok(Reply::Ready(saved)) if ready_matches_start(&saved, &target) => {
+                lease.saved = Some(saved);
+                Ok(lease)
+            }
+            other => {
+                let detail = match other {
+                    Ok(Reply::Ready(_)) =>
+                        "Surface helper Ready identity differed from the requested process/window".to_owned(),
+                    Ok(_) => "Surface helper returned an unexpected Start acknowledgement".to_owned(),
+                    Err(error) => format!("Surface recovery helper could not prepare: {error}"),
+                };
+                // Do not silently discard a possibly active Start/Restore
+                // helper. A failed native cleanup must return its pinned
+                // lease to this same SURFACE owner; no retry/capture follows.
+                match lease.stop() {
+                    Ok(()) => Err(PrepareFailure {
+                        error: io::Error::other(detail),
+                        retained: None,
+                    }),
+                    Err(cleanup) => Err(PrepareFailure {
+                        error: io::Error::other(format!(
+                            "{detail}. Native recovery cleanup unconfirmed; original checkpoint retained: {cleanup}"
+                        )),
+                        retained: Some(lease),
+                    }),
+                }
             }
         }
-        Ok(lease)
     }
     pub fn present_verified(
         manager: u64,
@@ -1838,7 +1934,20 @@ mod controller {
                 Some(index) => state.parked.remove(index),
                 None => match prepare(manager, viewport, target.clone()) {
                     Ok(lease) => lease,
-                    Err(error) => { unavailable.push((*slot,error.to_string())); continue; }
+                    Err(mut failed) => {
+                        if let Some(mut pending) = failed.retained.take() {
+                            // Reuse the one existing SURFACE lease list. An
+                            // unknown Start outcome never authorizes a fresh
+                            // helper or changes another slot's presentation.
+                            pending.authority = Some((
+                                "LAZY_TESTER_MANAGED_SESSION".into(),
+                                format!("{slot:02}"),
+                            ));
+                            state.parked.push(pending);
+                        }
+                        unavailable.push((*slot, failed.error.to_string()));
+                        continue;
+                    }
                 },
             };
             lease.authority = Some(("LAZY_TESTER_MANAGED_SESSION".into(), format!("{slot:02}")));
@@ -1947,7 +2056,19 @@ mod controller {
         let mut replacement = if let Some(index) = parked {
             state.parked.remove(index)
         } else {
-            prepare(manager, viewport, target)?
+            match prepare(manager, viewport, target) {
+                Ok(lease) => lease,
+                Err(mut failed) => {
+                    if let Some(mut pending) = failed.retained.take() {
+                        // The lease is still owned here even if no Ready was
+                        // acknowledged; its native checkpoint cannot be
+                        // recaptured while early Restore remains uncertain.
+                        pending.authority = authority.clone();
+                        state.parked.push(pending);
+                    }
+                    return Err(failed.error);
+                }
+            }
         };
         replacement.authority = authority;
         if replacement.manager != manager {

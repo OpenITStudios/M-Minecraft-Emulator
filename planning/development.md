@@ -132,20 +132,20 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability source hardening — 28 October 2026
 
-Session transport refuses lock contention and admits queued work before
-idle audio/reap (250ms). CloseOne skips preliminary/global journal reaping,
-persists its selected slot after observed exit, and validates ownership in
-the one retained controller. The UI preserves unconfirmed recovery across
-STOPPED/IPC failures until a positive native release receipt. Native
-workspace `Lease::stop` now requires BOTH a successful terminal reader End
-and actual helper-process exit before releasing its recovery checkpoint.
-After failed Restore + confirmed game exit, checkpoint retirement requires
-exactly one matching managed slot; missing/duplicate leases fail closed.
-CloseAll, IPC schemas, private data and Mac source boundaries are unchanged.
-Synthetic Rust/browser tests authored, NOT_EXECUTED; builds/runtime absent.
-Windows MC02 normal exit, helper timing and CPU/RAM remain unverified.
+Transport refuses contention and admits queued requests before idle work.
+CloseOne skips global preflight/reply reaping, persists only the selected
+journal and verifies original game authority. Svelte preserves recovery
+uncertainty through STOPPED or a lost IPC receipt. A native helper's terminal
+End and actual process exit are both needed before checkpoint release;
+missing/duplicate CloseOne checkpoints fail closed. Failed Start/Ready
+handshakes now verify exact PID/birth/session/HWND; if helper cleanup is
+unconfirmed, its child/reader/gate lease remains in the existing SURFACE
+owner instead of silently dropping it. The five-slot lifecycle, restore
+fallback, IPC wire, game/process identity and account/world data are not
+migrated. Source/regressions authored, NOT_EXECUTED. MC02 normal exit, helper
+timing, Windows build and performance remain unverified.
 
 ## Next bounded action
 
-Review native helper startup failure and checkpoint ownership on early
-capture/handshake errors, without additional game lifecycle authority.
+Review failed pre-Ready helper cleanup and orphaned pipe/readback evidence
+without changing the single native window authority or enabling CI.
