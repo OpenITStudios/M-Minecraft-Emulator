@@ -376,24 +376,17 @@ mod tests {
 
     #[test]
     fn input_response_receipt_never_assumes_disabled_or_edits_saved_options() {
-        assert_eq!(observed_input_response(b"ctrl_improvedInputResponse:1
-"),Some(true));
-        assert_eq!(observed_input_response(b"ï»¿ctrl_improvedInputResponse:0
-"),Some(false));
-        assert_eq!(observed_input_response(b"ctrl_improvedInputResponse:1
-ctrl_improvedInputResponse:1
-"),Some(true));
+        assert_eq!(observed_input_response(b"ctrl_improvedInputResponse:1\n"),Some(true));
+        assert_eq!(observed_input_response(b"\xef\xbb\xbfctrl_improvedInputResponse:0\r\n"),Some(false));
+        assert_eq!(observed_input_response(b"ctrl_improvedInputResponse:1\nctrl_improvedInputResponse:1\n"),Some(true));
         for unknown in [
             &b""[..], &b"ctrl_improvedInputResponse:"[..],
             &b"ctrl_improvedInputResponse:2"[..], &b"ctrl_improvedInputResponse:off"[..],
-            &b"ctrl_improvedInputResponse:1
-ctrl_improvedInputResponse:0"[..],
+            &b"ctrl_improvedInputResponse:1\nctrl_improvedInputResponse:0"[..],
             &b"CTRL_improvedInputResponse:1"[..],
-            &b"ÿctrl_improvedInputResponse:1"[..],
+            &b"\xffctrl_improvedInputResponse:1"[..],
         ] { assert_eq!(observed_input_response(unknown), None); }
-        let original=b"ctrl_improvedInputResponse:1
-volume:0.7
-";
+        let original=b"ctrl_improvedInputResponse:1\nvolume:0.7\n";
         assert!(render(original).unwrap().starts_with(original));
     }
 
