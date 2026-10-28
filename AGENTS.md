@@ -20,9 +20,11 @@ For material writes read `GITHUB_RULES.md`, pin exact `Local` HEAD, and consult 
 ## Current product goal and handoff
 
 The active product is **Lazy Tester**, with five independently managed
-Minecraft Education Windows profiles. The current source initiative is
-retiring the superseded Sandboxie/VMware implementation without changing the
-native session, original game, account data or normal-close contracts.
+Minecraft Education Windows profiles. The retired Sandboxie/VMware runtime
+has already been removed from Local. Current source work prioritizes lean
+Windows module ownership and native RAM evidence while preserving original
+session, game, account data and normal-close contracts. MC02 exit source is
+not an ongoing P0 blocker; Windows runtime acceptance remains deferred.
 `planning/development.md` owns the current blocker and next source action.
 Target Windows/macOS platform-neutral adapters remain future work; a build
 alone cannot claim multi-account Mac compatibility.

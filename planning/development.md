@@ -1,159 +1,74 @@
 # Current Development Handoff — v0.1
 
-## Current source initiative — 28 October 2026
+## Current intent — 28 October 2026
 
-**Goal:** stabilize MC01–MC05 original normal exit, verify Windows native
-presentation/recovery source, then benchmark CPU/RAM and latency BEFORE
-further optimization. Preserve one controller and account/world data.
-Portable policy remains; Mac game backend is future feasibility.
+**Goal:** Restore maintainable, resource-efficient Windows Lazy Tester
+source, then identify legitimate, material RAM savings for 0–5 Minecraft
+Education clients. The operator explicitly requested CODE-FIRST development
+without Windows localtest and asked not to repeat the previous P0 close loop.
 
-**State:** ACTIVE (P0 original close audit; unmeasured DWM micro changes
-deferred until build/runtime evidence; all current tests NOT_EXECUTED).
+**State:** ACTIVE, source-only. Original MC01–MC05 CloseOne/CloseAll code
+and native recovery guards remain intact. The last historical MC02 >35 s
+normal-exit incident is **RUNTIME ACCEPTANCE DEFERRED**, not a new P0 source
+gate. Reopen only for a confirmed new source defect or explicit operator
+authorization to perform Windows/game acceptance.
 
-The current mounted product uses Svelte/Tauri 2 and a retained Rust session
-controller for MC01–MC05. Minecraft owns sign-in, network, worlds, rendering
-and licensing. Native `bootstrap-ordering/` C++ DLLs, `workspace_surface.rs`,
-DWM thumbnails, native FPS/HUD, exact PID/birth/process handle checks, and
-all original per-launcher Roaming/Local/HKCU data ownership stay unchanged.
+## Active owners
 
-## Retirement and dependency audit
+- Mounted Tauri 2/Svelte UI: `Development/apps/desktop/src/LazyTesterApp.svelte`
+  and typed bridges; the WindowsNative capability gates unsupported OS.
+- Original game/session/profile storage and normal close:
+  `src-tauri/src/engine/independent_bootstrap/session_controller.rs`.
+  Exactly one authoritative controller and no new account manager.
+- Presentation facade: `src-tauri/src/engine/workspace_surface.rs`.
+  Win32 adapter: `workspace_surface/native.rs`. Retained recovery controller:
+  `workspace_surface/controller.rs`; tests are extracted into submodules.
+- DWM facade: `workspace_surface/previews.rs`. Sole capacity-one Win32
+  worker: `workspace_surface/previews/windows.rs`; fixtures are separate.
+- Existing native compatibility/FPS/HUD DLLs:
+  `Development/tooling/acceptance/windows/bootstrap-ordering/`.
+- RAM observation only: `Development/tooling/acceptance/windows/collect-native-performance.ps1`
+  with its opt-in `native-profile-baseline.ps1` helper, reviewed by existing
+  `Development/tooling/acceptance/evaluate-native-performance.mjs`.
 
-Sandboxie vendor/fork, VMware Guest Agent, obsolete setup/IPC/runtime owners,
-guest scripts and legacy packaging paths were retired from `Local` in
-earlier commits. No alternative provider or old installer is a fallback.
-The native Education source/controller, verified five-slot profiles, DWM,
-FPS DLL, process roles, original data and release safeguards remain current.
-Git history retains provenance. Source verifiers were updated without CI,
-build or game execution.
+## Completed bounded source work
 
-## Current owners
+- Separated the original Win32 preview/recovery API, implementations and
+  tests mechanically. Retained DWM, Win32 handle checks, original lifecycle,
+  one worker, IPC and unsupported-platform refusal without runtime claims.
+- Existing read-only memory sampler supports zero to five current native
+  clients, explicit sparse MC slot labels, manager and whole-system metrics,
+  with optional bounded direct-child attribution. Schema 7 retains exact
+  process birth pins and UNKNOWN on identity loss. Schemas 1–6 remain
+  historical diagnostic compatibility only.
+- Existing evaluator accepts schema 7, rejects false identity/attribution
+  and compares matched A/B private commitment, private working set and system
+  memory descriptively. Three schema-7 pure logic fixtures were run in a
+  sandboxed JS review environment; repository Node/Rust/PowerShell tests
+  were NOT_EXECUTED. Updated source verifier owns the new file boundaries.
+- CI stays OFF. No install, release, Windows game process or user PC touched.
 
-`apps/desktop/src/LazyTesterApp.svelte` → typed Lazy Tester Tauri commands
-→ `engine/native_clients_session.rs` authenticated transport →
-`engine/independent_bootstrap/session_controller.rs` retained one-authority
-five-slot game owner. `engine/process_identity.rs` is a data-only type;
-`engine/workspace_surface.rs` owns presentation/recovery; the native DLL
-under `tooling/acceptance/windows/bootstrap-ordering/` owns the retained
-compatibility/pacing code. `engine/runtime-core` contains portable domain
-contracts and the bounded subprocess runner, not VM providers.
+## Evidence and preservation
 
-## Evidence ceiling and known runtime issue
+Only REMOTE_GITHUB source changes and isolated evaluator logic checks are
+supported. Rust/Windows compilation, Minecraft preview and normal exit,
+CPU/RAM benchmarks, concurrent five-client gameplay, account/multiplayer
+continuity and macOS support are NOT_EXECUTED or unsupported.
+Historical ~2.49/2.68 GiB client private commit is not a current
+revision's measurement. No verified RAM/CPU improvement percentage exists.
 
-The last recorded two-session Windows run (a788a06) closed MC01, but MC02
-did not exit within 35 seconds. Subsequent source fixes, five-client normal
-close, performance, packaging and macOS gameplay remain NOT_EXECUTED.
+Preserve all original MC01–MC05 Roaming/Local/HKCU data, accounts, worlds,
+process identity, normal exit/recovery, DLL admission, 144/10 FPS limits,
+12-chunk minimum render distance, host simulation/network/save continuity.
+No force-close, blind working-set trims, foreign heap releases, speculative
+game hooks, new monitoring service, test bypass, CI, installer or main branch
+publication. The Mac build remains a diagnostic shell without game backend.
 
-Neither removing Sandboxie source nor completing a Rust module refactor is
-evidence that the original MC02 exit issue is solved. No forced game close,
-account sign-out, profile mutation, disk/snapshot cleanup, installer
-publication or local-PC testing is authorized in this task.
+## Next bounded source action
 
-## Product and preservation boundaries
-
-- Do not run GitHub Actions, enable CI, sign/publish a release or modify
-  `main`. `Local` is the only active development branch.
-- Old installed app identifiers, existing account/world/registry state and
-  VM disks/snapshots remain untouched. Git history preserves retired source.
-- Do not replace the retained controller with a second lifecycle manager.
-  Unknown process/HWND, failed recovery or uncertain request must fail closed.
-- No new Windows/macOS adapter, new game hook, renderer modification, cloned
-  login, token read or unofficial game installation as a cleanup side effect.
-
-## Efficiency source review — 27 October 2026
-
-Six unused Windows fixture modules (2,866 lines) are test-only, not in
-production. Native controller and five-profile owners remain intact.
-Polling and storage head-of-line concerns are source observations only,
-not CPU/RAM improvements. No local execution or game acceptance.
-
-## Shared inspection budget — 27 October 2026
-
-The portable two-second `InspectionBudget` spans five read-only metadata
-walks. Expired results are partial and cannot authorize cache clear; mutating
-cleanup uses fresh admission. Native I/O remains unpreemptible; tests and
-performance NOT_EXECUTED.
-
-## Close-review scheduling — 27 October 2026
-
-Native titlebar confirmation emits `lazy-tester-close-review` before the
-dialog and clears it on cancel/error. The Svelte view pauses automatic
-inspect/layout during native and selected-game close review, tracks an
-observation epoch to discard stale in-flight reads, and delays CloseOne
-confirmation until earlier refresh/preview work settles. No new worker,
-second controller, priority queue, game mutation or IPC wire change. The
-existing admission gate still refuses concurrent operations, including
-an already-active native read; no performance or CloseOne acceptance claim.
-
-## Cargo target boundary — 28 October 2026
-
-Desktop Win32 bindings now use Cargo `cfg(windows)`, keeping versions/features
-unchanged; static repository guard and negative fixtures are added. Windows
-packaging, Tauri IPC, lifecycle and installed data were not changed. This is
-source-only; Mac compilation and native backend remain NOT_EXECUTED.
-
-## Native presentation boundary — 28 October 2026
-
-`workspace_surface` retains its original Windows controller/DWM/recovery
-owner. Unsupported OS contracts return `Unsupported` without launching
-helpers or owning windows. Rust source guards authored only; native
-tests, gameplay and macOS compilation remain NOT_EXECUTED.
-
-## Unsupported-platform profile readiness — 28 October 2026
-
-Windows binding/data-location paths remain unchanged. Non-Windows returns
-`Unsupported`, not `configured: true`, and cannot enable five launchers.
-Source guard and refusal regressions authored, NOT_EXECUTED.
-
-## Tauri startup and instance boundaries — 28 October 2026
-
-Read-only `WindowsNative` / `Unsupported` capability gates Svelte
-profile requests and honest UI messaging before Windows binding retries.
-Non-Windows uses the default Tauri window; Windows WebView, IPC and
-instance lease remain Windows-only. Mac gameplay NOT_EXECUTED.
-
-## Native exit and macOS feasibility — 28 October 2026
-
-Win32 process/pipe/window and CloseAll/recovery stay `cfg(windows)`.
-Non-Windows keeps default Tauri close, no native helper or instance lease.
-Both native package features refuse non-Windows targets. Mac compile,
-single-instance, WebView, signing and gameplay remain NOT_EXECUTED or absent.
-
-## Unsupported-platform UI admission — 28 October 2026
-
-All mounted Svelte startup, queued work, previews, polling and unmount
-operations require Rust-confirmed `WindowsNative`; unsupported hosts offer
-read-only recheck and no game controls. The sole raw Tauri invoke owner is
-`invokeRuntime.ts`; typed IPC remains in `lazyTester.ts` and
-`workspaceSurface.ts`. Static/browser regressions authored, NOT_EXECUTED.
-
-## Windows evidence checkpoint — 28 October 2026
-
-11 DWM commits since fed3806: `previews.rs` +957/-53 lines, source grew
-57,964 to 107,316 characters (+85.1%); 540 new lines precede its test
-module. This is added complexity, NOT a measured performance gain.
-Tests/build, actual Windows DWM, MC02 exit and CPU/RAM NOT_EXECUTED.
-Stop unmeasured DWM micro-fixes until a proven P0/P1 defect or executable
-evidence; do not weaken native source/HWND/cleanup checks.
-
-Existing DWM: one capacity-one worker, 3s Layout timeout, CloseOne/Clear
-epochs, verified source-pinned rollback, no new IPC. Original session
-controller owns process HANDLE, normal WM_CLOSE and exact exit prompts.
-Game exit reap is 250 ms; stable audio resync is 1 s.
-
-## Acceptance priorities — NOT_EXECUTED
-
-P0: Original MC02 normal CloseOne/CloseAll exit HANDLE and native Restore;
-preserve other MC01–MC05 sessions and original data.
-P1: Focused Windows Rust/Tauri source build and tests; Actions remain OFF.
-P2: 0/5-game CPU/RAM, preview, audio, CloseOne latency baseline.
-P3: Remove redundant DWM code ONLY with behavior proof; Mac game backend
-still NOT_IMPLEMENTED. No user-PC gate for source-level work.
-
-## Debug timing — NOT_EXECUTED
-
-`MIVUBI_DEBUG_WORKSPACE_TIMING=1` stays default-off on release.
-
-## Next bounded action
-
-Audit `session_controller.rs` normal CloseOne/CloseAll and recorded MC02
-exit failure; change only demonstrated P0 defects, not DWM micro-cases.
+Investigate actually OWNED high-volume allocations and redundant memory
+retention before changing code. If a safe, material optimization is not
+proven from source, record that evidence limit rather than adding another
+cache or micro fix. For game-owned multi-GiB memory see
+`docs/system/native-memory-efficiency-research.md`; do not invent an internal
+allocator/renderer lifecycle. Do not reopen P0 until runtime is requested.

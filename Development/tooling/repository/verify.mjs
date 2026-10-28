@@ -214,9 +214,19 @@ export function verifyRepository(root,g0=false) {
     && !/native::|process_roles|Command::|read_line|spawn\(/.test(unsupportedRole),
     'Unsupported helper role must not start recovery, process, IPC or UI fallback');
   const unavailableSurface=read('Development/apps/desktop/src-tauri/src/engine/workspace_surface/unsupported_controller.rs');
-  assert.ok(/#\[cfg\(windows\)\]\s*mod controller \{/.test(surface)
-    && /#\[cfg\(not\(windows\)\)\]\s*#\[path = "workspace_surface\/unsupported_controller\.rs"\]\s*mod controller;/.test(surface),
-    'Native Win32 recovery controller must not be compiled on other OS targets');
+  const windowsController=read('Development/apps/desktop/src-tauri/src/engine/workspace_surface/controller.rs');
+  const windowsAdapter=read('Development/apps/desktop/src-tauri/src/engine/workspace_surface/native.rs');
+  const previewApi=read('Development/apps/desktop/src-tauri/src/engine/workspace_surface/previews.rs');
+  const windowsPreview=read('Development/apps/desktop/src-tauri/src/engine/workspace_surface/previews/windows.rs');
+  assert.ok(/#\[cfg\(windows\)\]\s*#\[path = "workspace_surface\/controller\.rs"\]\s*mod controller;/.test(surface)
+    && /#\[cfg\(not\(windows\)\)\]\s*#\[path = "workspace_surface\/unsupported_controller\.rs"\]\s*mod controller;/.test(surface)
+    && windowsController.includes('pub fn release_for_close() -> io::Result<()>')
+    && /#\[cfg\(windows\)\]\s*#\[path = "workspace_surface\/native\.rs"\]\s*mod native;/.test(surface)
+    && windowsAdapter.includes('pub(super) struct ProcessHandle')
+    && /#\[cfg\(windows\)\]\s*mod windows;/.test(previewApi)
+    && windowsPreview.includes('DwmRegisterThumbnail')
+    && windowsPreview.includes('mpsc::sync_channel(1)'),
+    'Windows controller, adapter and bounded DWM worker must stay behind Win32-only module boundaries');
   assert.ok(unavailableSurface.includes('io::ErrorKind::Unsupported')
     && unavailableSurface.includes('pub fn is_active() -> bool')
     && unavailableSurface.includes('false // No native workspace lease')
