@@ -129,27 +129,26 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability & efficiency — 28 October 2026
 
-Original game reap remains 250 ms; stable audio resync 1 s. DWM keeps
-one capacity-one worker, 3s deadline, and CloseOne slot epochs.
-Primary DWM replacement is staged until delivered Layout receipt.
-Secondary previews excluded by a proposed Layout are now retained as
-owned DWM registrations until the SAME reply succeeds or fails. When a
-partial primary+secondary Layout aborts, the worker restores only old
-registrations whose manager, source PID/birth/HWND and slot epoch remain
-current; retired sources fail closed. On valid delivery the displaced
-images are released without rollback. Stage uses the existing thumbnail
-Vec to avoid per-layout reallocation, and empty-scene manager metadata
-is retained only until that Layout completes. No new worker, IPC, timer,
-polling, original game/data owner or private-data migration.
-Synthetic Win32 regression authored NOT_EXECUTED. Real Windows DWM,
-normal MC02 exit, CPU/RAM and package validation remain unverified.
+Game exit reap stays 250 ms, stable COM audio resync 1 s. DWM retains
+one worker, capacity-one queue, 3 s Layout deadline, and atomic per-slot
+CloseOne/Full Clear epochs. Primary and secondary observers displaced by
+an unacknowledged Layout remain within its single native transaction;
+only exact current source/HWND/manager/slot identity can be restored.
+Staging reuses the existing Vec; its manager reference is released after
+reply commit/rollback. Full Clear/CloseOne now also reject canceled
+configure() observations BEFORE expensive native source adoption and
+AGAIN immediately afterward, preventing obsolete DWM Layout admission.
+Existing SURFACE controller still owns native Park/Place recovery; it
+cannot be interrupted mid-helper call. No new worker, queue, retry,
+IPC, poll, game account/world change. Source regression authored
+NOT_EXECUTED; Windows DWM, normal MC02 exit and CPU/RAM unverified.
 
 ## Debug timing — NOT_EXECUTED
 
 `MIVUBI_DEBUG_WORKSPACE_TIMING=1` remains default-off Windows debug
-aperture/foreground timing on workspace release, without PID/HWND.
+aperture/foreground aggregate at workspace release.
 
 ## Next bounded action
 
-Audit full Clear and CloseOne overlapping a staged Layout, including
-queue-full commands and source-pinned deferred disposal.
+Audit queue-full CloseOne/Clear reply handling and check that control
+errors never cause stale preview success or unnecessary retry loops.

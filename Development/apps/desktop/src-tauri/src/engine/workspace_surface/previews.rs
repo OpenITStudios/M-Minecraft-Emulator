@@ -97,8 +97,16 @@ pub(super) fn configure(
                 ));
             }
         }
+        // Full Clear or CloseOne may cancel this observation while we
+        // validate manager geometry. Do not allocate a source roster or
+        // admit native Park/Place work for a request already invalidated.
+        windows::require_current_admission(&issued_epochs)?;
         let monitored=profiles.iter().filter(|(slot,_)|tiles.iter().any(|tile|tile.slot==*slot)).cloned().collect::<Vec<_>>();
         let unavailable = controller::adopt_preview_sources(manager, viewport, &monitored)?;
+        // Adoption is owned by the existing native recovery controller and
+        // may take time. Its returned report must not enqueue stale DWM
+        // work if a CloseOne/Clear canceled this snapshot in the meantime.
+        windows::require_current_admission(&issued_epochs)?;
         let primary = active.map(|slot| PreviewTile { slot, viewport });
         windows::apply(window, tiles, primary, profiles, unavailable, issued_epochs)
     }
@@ -198,8 +206,18 @@ mod windows {
     fn slot_epoch_matches(issued: &[u64; 5], current: &[u64; 5], slot: u32) -> bool {
         (1..=5).contains(&slot) && issued[(slot - 1) as usize] == current[(slot - 1) as usize]
     }
+    fn epoch_snapshot_matches(issued: &[u64; 5], current: &[u64; 5]) -> bool {
+        issued == current
+    }
     fn epochs_current(issued: &[u64; 5]) -> bool {
-        *issued == snapshot_epochs()
+        epoch_snapshot_matches(issued, &snapshot_epochs())
+    }
+    pub(super) fn require_current_admission(issued: &[u64; 5]) -> io::Result<()> {
+        if !epochs_current(issued) {
+            return Err(io::Error::new(io::ErrorKind::WouldBlock,
+                "DWM preview source adoption canceled by Clear or CloseOne"));
+        }
+        Ok(())
     }
     enum Job {
         Layout {
@@ -1343,6 +1361,27 @@ mod windows {
     #[cfg(test)]
     mod tests {
         use super::*;
+        #[test]
+        fn clear_and_closeone_invalidate_native_source_admission_before_dwm_queue() {
+            // Pure policy used by configure() both before and after native
+            // adoption: no original game/helper/Win32 calls are required.
+            let issued = [1, 4, 8, 2, 7];
+            assert!(epoch_snapshot_matches(&issued, &issued));
+            let mut after_closeone = issued;
+            after_closeone[1] += 1;
+            assert!(!epoch_snapshot_matches(&issued, &after_closeone),
+                "CloseOne during adoption must reject the old whole Layout");
+            assert!(slot_epoch_matches(&issued, &after_closeone, 3),
+                "MC03 peer epoch is unaffected by a canceled MC02 preview");
+            assert!(!slot_epoch_matches(&issued, &after_closeone, 2));
+            let after_clear = issued.map(|epoch| epoch + 1);
+            assert!(!epoch_snapshot_matches(&issued, &after_clear),
+                "Full Clear must reject every earlier source admission");
+            assert!((1..=5).all(|slot|
+                !slot_epoch_matches(&issued, &after_clear, slot)));
+            assert!(epoch_snapshot_matches(&after_clear, &after_clear),
+                "A newly issued verified Layout may use the current epoch");
+        }
         #[test]
         fn queued_preview_reply_releases_owner_before_notification() {
             // The exact production helper, exercised with synthetic channels
