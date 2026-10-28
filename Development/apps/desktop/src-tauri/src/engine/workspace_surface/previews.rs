@@ -35,6 +35,16 @@ fn preview_tile_reason(
         .or_else(|| (!profiles.iter().any(|(item, _)| *item == slot))
             .then(|| "No verified Minecraft preview source for this profile".into()))
 }
+// The primary DWM observer is separate from the requested secondary tiles.
+// Share initial status evidence between the live and no-worker paths.
+fn initial_tile_status(tile: &PreviewTile, profiles: &[(u32, OwnedProcess)],
+    unavailable: &[(u32, String)]) -> TileStatus {
+    TileStatus {
+        slot: tile.slot,
+        registered: false,
+        reason: preview_tile_reason(tile.slot, profiles, unavailable),
+    }
+}
 // A per-launcher close must never discard the remaining Minecraft tiles.
 fn retain_other_preview_slot(observed:u32,closing:u32)->bool {
     observed!=closing
@@ -369,6 +379,23 @@ mod windows {
                 }
             }
         }
+        fn update_primary_observation(&mut self, manager: u64,
+            tile: &PreviewTile, visible: bool) -> io::Result<()> {
+            let target = self.profiles.iter().find(|(slot, _)| *slot == tile.slot)
+                .map(|(_, target)| target.clone())
+                .ok_or_else(|| io::Error::other("Active game preview source is unavailable"))?;
+            if self.primary.as_ref().is_none_or(|image| !image.matches(tile.slot, &target)) {
+                self.primary = None;
+                self.primary = Some(Thumbnail::create(manager, tile, target.clone())?);
+            }
+            let image = self.primary.as_mut().unwrap();
+            image.viewport = tile.viewport;
+            // DWM observation only; never touch original game lifecycle.
+            let outcome = image.update(visible &&
+                !native::interactive_at(&target, manager, tile.viewport));
+            if outcome.is_err() { image.hide(); }
+            outcome
+        }
         fn layout(
             &mut self,
             window: tauri::Window,
@@ -396,25 +423,18 @@ mod windows {
             let visible = self.visibility();
             match primary {
                 Some(tile) => {
-                    let target = self.profiles.iter().find(|(slot,_)| *slot == tile.slot)
-                        .map(|(_,target)|target).ok_or_else(||io::Error::other("Active game preview source is unavailable"))?;
-                    if self.primary.as_ref().is_none_or(|image| !image.matches(tile.slot,target)) {
+                    if let Err(error) = self.update_primary_observation(manager, &tile, visible) {
+                        // A failed primary observer cannot suppress any peer
+                        // tile receipt or alter the original game process.
                         self.primary = None;
-                        self.primary = Some(Thumbnail::create(manager, &tile, target.clone())?);
+                        eprintln!("Minecraft - {} primary DWM preview unavailable: {error}", tile.slot);
                     }
-                    let image = self.primary.as_mut().unwrap();
-                    image.viewport = tile.viewport;
-                    image.update(visible && !native::interactive_at(target, manager, tile.viewport))?;
                 }
                 None => self.primary = None,
             }
             let mut statuses = Vec::with_capacity(tiles.len());
             for tile in tiles {
-                let mut status = TileStatus {
-                    slot: tile.slot,
-                    registered: false,
-                    reason: preview_tile_reason(tile.slot, &self.profiles, &unavailable),
-                };
+                let mut status = initial_tile_status(&tile, &self.profiles, &unavailable);
                 if status.reason.is_some() {
                     statuses.push(status);
                     continue;
@@ -606,11 +626,7 @@ mod windows {
             schema: 1,
             tiles: tiles
                 .iter()
-                .map(|tile| TileStatus {
-                    slot: tile.slot,
-                    registered: false,
-                    reason: preview_tile_reason(tile.slot, &profiles, &unavailable),
-                })
+                .map(|tile| initial_tile_status(tile, &profiles, &unavailable))
                 .collect(),
         };
         if primary.is_none() && !tiles.iter().any(|tile| {
@@ -826,6 +842,40 @@ pub(super) fn refresh() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn primary_failure_does_not_change_four_secondary_tile_receipts() {
+        let tiles = (2..=5).map(|slot| PreviewTile {
+            slot,
+            viewport: Viewport {
+                x: (slot * 160) as f64, y: 450.0,
+                width: 150.0, height: 85.0, pixel_ratio: 1.0,
+            },
+        }).collect::<Vec<_>>();
+        assert!(validate_tiles(&tiles, Some(1)).is_ok());
+        let game = OwnedProcess {
+            pid: 102, created_file_time: "12346".into(),
+            session_id: 1, window_handle: "0x102".into(), responding: true,
+        };
+        let sources = vec![(2, game.clone()), (3, OwnedProcess {
+            pid: 103, created_file_time: "12347".into(),
+            window_handle: "0x103".into(), ..game
+        })];
+        let unavailable = vec![(3, "MC03 recovery unconfirmed".to_owned())];
+        // A synthetic MC01 primary observer error has no slot in PreviewReport.
+        let primary_error = io::Error::other("MC01 primary DWM unavailable");
+        assert!(primary_error.to_string().contains("primary DWM"));
+        let statuses = tiles.iter().map(|tile|
+            initial_tile_status(tile, &sources, &unavailable)).collect::<Vec<_>>();
+        assert_eq!(statuses.iter().map(|tile| tile.slot).collect::<Vec<_>>(),
+            vec![2,3,4,5]);
+        assert!(statuses.iter().all(|tile| !tile.registered));
+        assert_eq!(statuses[0].reason, None);
+        assert_eq!(statuses[1].reason.as_deref(), Some("MC03 recovery unconfirmed"));
+        assert_eq!(statuses[2].reason.as_deref(),
+            Some("No verified Minecraft preview source for this profile"));
+        assert_eq!(statuses[3].reason.as_deref(),
+            Some("No verified Minecraft preview source for this profile"));
+    }
     #[test]
     fn preview_recovery_reason_is_scoped_to_only_the_failed_slot() {
         let target = OwnedProcess {

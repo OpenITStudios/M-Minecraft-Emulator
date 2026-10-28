@@ -132,20 +132,19 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability source hardening — 28 October 2026
 
-Transport refuses contention; CloseOne skips peer journals, retaining native
-controller/process authority. Svelte preserves unconfirmed window recovery.
-Helper Start/pipe failures keep original child/reader/gate in SURFACE.
-Terminal End+helper exit gate release; with Saved, identity-checked restore;
-without Saved, original game exit must be proven. Parked MC01 recovery
-failures do not abort independent MC02–MC05 preview/Play; same-slot gate held.
-Unconfirmed Ready OR terminal End now refuses preview/Play registration for
-its original profile, not unrelated peers. DWM PreviewReport provides explicit
-per-tile missing-source/recovery reasons, shown on the affected launcher
-without disabling game Play; stale status cleared on source change/IPC error.
-No worker, controller, protocol, game or data mutation. Rust/browser tests
-authored NOT_EXECUTED; Windows build, MC02 exit, DWM and CPU/RAM unverified.
+Windows transport refuses contention; CloseOne skips peer journals and
+validates original game ownership. Failed helper Start/pipe retains child,
+reader and recovery gate; terminal+exit and native identity evidence gate
+checkpoint retirement. Parked MC01 failure does not abort peer MC02–MC05
+preview/Play. The existing DWM worker reports missing-source/recovery
+failures per requested secondary tile. Primary thumbnail creation/update
+failure now removes/logs only the primary DWM observer, never cancels
+secondary statuses or touches Minecraft gameplay. Live/no-worker reports
+share one initial per-tile reason rule. No IPC schema change, extra worker
+or account/world mutation. Rust/browser regressions authored, NOT_EXECUTED.
+Windows build, normal MC02 exit, DWM and CPU/RAM remain unverified.
 
 ## Next bounded action
 
-Audit primary DWM observer errors and tile report completeness without
-losing peer preview statuses, before real Windows runtime acceptance.
+Audit DWM worker refresh stale thumbnails and monitoring failure visibility,
+without treating DWM monitoring as native game lifecycle authority.
