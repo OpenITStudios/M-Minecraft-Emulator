@@ -2,14 +2,13 @@
 
 ## Current source initiative — 28 October 2026
 
-**Goal:** optimize the existing five-profile Minecraft Education Windows
-runtime after the completed Sandboxie/VMware source retirement. Protect the
-one authoritative controller, native presentation, account/world data and
-normal-exit contracts. Extract only genuinely portable policies in preparation
-for Windows/macOS; a macOS game backend remains future feasibility work.
+**Goal:** stabilize MC01–MC05 original normal exit, verify Windows native
+presentation/recovery source, then benchmark CPU/RAM and latency BEFORE
+further optimization. Preserve one controller and account/world data.
+Portable policy remains; Mac game backend is future feasibility.
 
-**State:** ACTIVE (Windows reliability source hardening underway; current
-build/gameplay and performance measurements NOT_EXECUTED).
+**State:** ACTIVE (P0 original close audit; unmeasured DWM micro changes
+deferred until build/runtime evidence; all current tests NOT_EXECUTED).
 
 The current mounted product uses Svelte/Tauri 2 and a retained Rust session
 controller for MC01–MC05. Minecraft owns sign-in, network, worlds, rendering
@@ -127,29 +126,34 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 `invokeRuntime.ts`; typed IPC remains in `lazyTester.ts` and
 `workspaceSurface.ts`. Static/browser regressions authored, NOT_EXECUTED.
 
-## Windows reliability & efficiency — 28 October 2026
+## Windows evidence checkpoint — 28 October 2026
 
-Game exit reap remains 250 ms, stable COM audio 1 s. DWM has one worker
-with capacity-one job queue, 3-second Layout deadline, and CloseOne/Clear
-preview-only epochs. Primary/secondary removal stays staged until an
-acknowledged Layout; obsolete source adoption fails closed. Failed Clear
-and ClearSlot use a control-only coalesced WAKE; CloseOne no longer sends
-a duplicate refresh. If PostThreadMessageW fails after job admission,
-the worker now prunes canceled epochs AND drains queued jobs on ANY next
-received Win32 message, including SELECT/WM_PAINT, without polling or
-new retry logic. It validates exact original source and current epoch
-before emitting a thumbnail SELECT; a closed/replaced slot is refused.
-No new worker, queue, timer, IPC, game/data owner or account mutation.
-Rust/offscreen Win32 fixtures authored NOT_EXECUTED. Delivery cannot
-recover without a later valid worker message. Windows DWM, MC02 exit,
-CPU/RAM and package remain unverified.
+11 DWM commits since fed3806: `previews.rs` +957/-53 lines, source grew
+57,964 to 107,316 characters (+85.1%); 540 new lines precede its test
+module. This is added complexity, NOT a measured performance gain.
+Tests/build, actual Windows DWM, MC02 exit and CPU/RAM NOT_EXECUTED.
+Stop unmeasured DWM micro-fixes until a proven P0/P1 defect or executable
+evidence; do not weaken native source/HWND/cleanup checks.
+
+Existing DWM: one capacity-one worker, 3s Layout timeout, CloseOne/Clear
+epochs, verified source-pinned rollback, no new IPC. Original session
+controller owns process HANDLE, normal WM_CLOSE and exact exit prompts.
+Game exit reap is 250 ms; stable audio resync is 1 s.
+
+## Acceptance priorities — NOT_EXECUTED
+
+P0: Original MC02 normal CloseOne/CloseAll exit HANDLE and native Restore;
+preserve other MC01–MC05 sessions and original data.
+P1: Focused Windows Rust/Tauri source build and tests; Actions remain OFF.
+P2: 0/5-game CPU/RAM, preview, audio, CloseOne latency baseline.
+P3: Remove redundant DWM code ONLY with behavior proof; Mac game backend
+still NOT_IMPLEMENTED. No user-PC gate for source-level work.
 
 ## Debug timing — NOT_EXECUTED
 
-`MIVUBI_DEBUG_WORKSPACE_TIMING=1` remains default-off Windows debug
-aperture/foreground aggregate on existing workspace release.
+`MIVUBI_DEBUG_WORKSPACE_TIMING=1` stays default-off on release.
 
 ## Next bounded action
 
-Audit concurrent notify() coalescing when PostThreadMessageW fails and
-a second caller observes the in-progress WAKE before failure is known.
+Audit `session_controller.rs` normal CloseOne/CloseAll and recorded MC02
+exit failure; change only demonstrated P0 defects, not DWM micro-cases.
