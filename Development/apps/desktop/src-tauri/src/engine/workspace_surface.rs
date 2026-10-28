@@ -7,6 +7,9 @@ use std::io::{self, BufRead, Write};
 mod previews;
 #[path = "workspace_surface/recovery_gate.rs"]
 mod recovery_gate;
+#[cfg(windows)]
+#[path = "workspace_surface/native_timing.rs"]
+mod native_timing;
 pub use previews::{PreviewTile, PreviewReport};
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
@@ -557,6 +560,7 @@ mod native {
         }
     }
     pub(super) fn clear_aperture(manager: u64) -> io::Result<()> {
+        super::native_timing::measure(super::native_timing::Operation::Aperture, || {
         use windows_sys::Win32::Graphics::Gdi::*;
         let manager = manager as usize as HWND;
         unsafe {
@@ -578,6 +582,7 @@ mod native {
             }
             Ok(())
         }
+        })
     }
     pub(super) fn confirm_foreground(
         saved: &Saved,
@@ -585,6 +590,7 @@ mod native {
         manager: u64,
         activate: bool,
     ) -> io::Result<()> {
+        super::native_timing::measure(super::native_timing::Operation::Foreground, || {
         let (_process, window) = hwnd(&saved.target)?;
         let manager = manager as usize as HWND;
         unsafe {
@@ -652,6 +658,7 @@ mod native {
                 std::thread::sleep(std::time::Duration::from_millis(10));
             }
         }
+        })
     }
     // A Hidden receipt must describe the same original game window,
     // including its PID/birth/session/HWND and saved thread/class.
@@ -2102,10 +2109,15 @@ mod controller {
             }
         });
         if let Some(error) = error {
+            drop(state);
+            super::native_timing::report();
             return Err(error);
         }
         state.suspended = false;
         state.live_previews = false;
+        drop(state);
+        // Aggregates only on explicit release, outside native lease lock.
+        super::native_timing::report();
         Ok(())
     }
     // Restore only the slot's previously admitted native presentation; do

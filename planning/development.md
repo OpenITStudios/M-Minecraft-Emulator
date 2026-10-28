@@ -127,29 +127,32 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 `invokeRuntime.ts`; typed IPC remains in `lazyTester.ts` and
 `workspaceSurface.ts`. Static/browser regressions authored, NOT_EXECUTED.
 
-## Windows reliability source hardening — 28 October 2026
+## Windows reliability — 28 October 2026
 
-Controller reaps games every 250 ms; stable COM mute checks use focus/
-roster changes or one-second resync. Native DWM avoids duplicate writes
-while verifying HWND. SURFACE skips passive Place only after bounded
-receipt, live helper and exact original window/style/geometry readback.
-Park retains full native readback. Duplicate Hide is skipped only after a
-recent verified Hidden reply, nonterminal/live helper and fresh exact
-PID/birth/session/HWND/thread/class/visibility proof. Place/Park/Restore
-revoke hide proof. Explicit Play remains unchanged. Aperture RedrawWindow
-is NOT removed: the existing Win32 test requires child WebView repaint
-even with no manager region. Foreground coverage/stacking also remains
-mandatory. No new worker/timer/IPC/game/data mutation. Rust regression
-authored, NOT_EXECUTED; Windows MC02, DWM, CPU/RAM remain unverified.
+Game exit checks remain every 250 ms; stable COM audio is gated at 1 s.
+DWM skips duplicate writes after HWND verification. Native Place/Park/Hide
+shortcuts require original HWND identity and current-state proof; explicit
+Play and recovery remain authoritative. RedrawWindow remains essential
+for child WebView repaint even with no region; foreground coverage checks
+cannot be removed without real runtime evidence.
 
-## Resource benchmarks — NOT_EXECUTED
+## Opt-in Windows debug timing — NOT_EXECUTED
 
-Before/after Windows builds: idle 0/5 games, Keep/Mute, stable previews,
-drag/resize/minimize/restore, CloseOne with surviving peers. Record CPU,
-private bytes, helper Place/Park/Hide counts, DWM/redraw/foreground costs,
-original game identity and normal exit. No gains claimed.
+`MIVUBI_DEBUG_WORKSPACE_TIMING=1` enables counters in debug builds only.
+At the existing workspace release, stderr reports aggregate
+`LAZY_TESTER_NATIVE_TIMING`: aperture/foreground calls, failures,
+average/max wall-time (us), and counts >=5/50ms. Default disabled;
+no worker, timer, IPC, PID/HWND output, account/world data or game mutation.
+A pure Rust counter regression is authored NOT_EXECUTED. Windows DWM,
+MC02 normal exit, CPU/RAM and package acceptance remain unverified.
+
+## Resource scenarios — NOT_EXECUTED
+
+Compare pinned Windows builds: 0/5 games, audio Keep/Mute, five previews,
+drag/resize/minimize/restore, CloseOne and peer Play. Record CPU/private
+bytes, timed native paths, DWM writes, window identity and normal exit.
 
 ## Next bounded action
 
-Review native repaint and foreground costs with actual Windows evidence,
-without bypassing the established safety checks.
+Inspect actual Windows timing/CPU/RAM evidence before changing native
+repaint, foreground stacking or restoration safety checks.
