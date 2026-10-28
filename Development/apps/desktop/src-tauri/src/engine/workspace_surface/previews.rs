@@ -1297,7 +1297,11 @@ mod windows {
             };
             assert!(visible.previously_visible(true));
             assert!(!visible.previously_visible(false));
-            assert!(!PreviousImage {manager: 99, ..visible}.previously_visible(false));
+            let hidden = PreviousImage {
+                applied: Some(DwmAppliedState::Hidden), ..visible
+            };
+            assert!(!hidden.previously_visible(true),
+                "A previously hidden tile cannot be shown by an unacknowledged layout");
             for peer in [1, 3, 4, 5] {
                 assert!(retain_previous_preview(&discarded, peer));
             }
@@ -1555,8 +1559,11 @@ mod windows {
                 ShowWindow(manager, SW_SHOWNOACTIVATE);
                 let primary_tile = PreviewTile { slot: 5, viewport: Viewport {
                     x: 10.0, y: 100.0, width: 640.0, height: 360.0, ..tile.viewport } };
-                let primary = Thumbnail::create(manager as usize as u64, &primary_tile, target).unwrap();
-                let mut scene=Scene{window:None,manager:manager as usize as u64,profiles:Vec::new(),thumbnails:Vec::new(),primary:Some(primary),issued_epochs:snapshot_epochs()};
+                let primary = Thumbnail::create(manager as usize as u64, &primary_tile, target.clone()).unwrap();
+                // Production Scene carries the exact source inventory. The
+                // rollback source-authority guard must be tested with it,
+                // never weakened to accommodate an empty fixture roster.
+                let mut scene=Scene{window:None,manager:manager as usize as u64,profiles:vec![(tile.slot,target)],thumbnails:Vec::new(),primary:Some(primary),issued_epochs:snapshot_epochs()};
                 assert_ne!(GetForegroundWindow(),manager);
                 assert!(scene.visibility(),"Visible monitoring must survive focus moving elsewhere");
                 thumbnail.update(scene.visibility()).unwrap();
@@ -1660,6 +1667,29 @@ mod windows {
                 assert!(scene.thumbnails.is_empty());
                 assert!(scene.primary.is_some(),
                     "Rolling back a secondary cannot discard a healthy primary");
+                // If a new session inventory replaces this source, even
+                // a still-alive old HWND cannot become the active observer.
+                // No game process is actually changed by this fixture.
+                let retired = Thumbnail::create(
+                    manager as usize as u64, &tile,
+                    scene.primary.as_ref().unwrap().target.clone(),
+                ).unwrap();
+                scene.thumbnails.push(retired);
+                let pinned = PreviousImage::capture(&scene.thumbnails[0]);
+                scene.profiles.clear();
+                scene.discard_unacknowledged_new(&LayoutCreated {
+                    reused_secondary: vec![pinned],
+                    ..LayoutCreated::default()
+                });
+                assert!(scene.thumbnails.is_empty(),
+                    "Retired source must not survive a rejected Layout");
+                assert!(scene.primary.is_some(),
+                    "Retiring one secondary observer must not kill its primary peer");
+                // A replaced/missing manager is fail-closed as well.
+                scene.manager = 0;
+                scene.discard_unacknowledged_new(&LayoutCreated::default());
+                assert!(scene.primary.is_none());
+                assert!(scene.window.is_none());
                 drop(scene);
                 DestroyWindow(source);
                 DestroyWindow(manager);
