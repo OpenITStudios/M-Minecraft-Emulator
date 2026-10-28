@@ -132,20 +132,20 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability source hardening — 28 October 2026
 
-The Windows transport fails fast on contention and admits queued requests
-before idle reaping/audio (250ms). CloseOne persists only its selected-slot
-journal, skips second global response reap and preliminary Inspect. Its
-retained controller refuses idle slots and missing-controller CloseOne; idle
-CloseAll remains supported. The Svelte UI now retains an unconfirmed native
-window checkpoint warning after STOPPED or an ambiguous IPC failure. It
-does not claim embedded Play after a lost receipt; only a positive selected
-close presentation receipt clears that warning. Existing process/window
-owners, IPC schema and account/world data are unchanged. Browser synthetic
-regressions authored, NOT_EXECUTED; no tests/builds or gameplay executed.
-Already-started disk/COM work, MC02 normal exit and Windows/Mac gameplay
-remain unverified.
+Session transport refuses lock contention and admits queued work before
+idle audio/reap (250ms). CloseOne skips preliminary/global journal reaping,
+persists its selected slot after observed exit, and validates ownership in
+the one retained controller. The UI preserves unconfirmed recovery across
+STOPPED/IPC failures until a positive native release receipt. Native
+workspace `Lease::stop` now requires BOTH a successful terminal reader End
+and actual helper-process exit before releasing its recovery checkpoint.
+After failed Restore + confirmed game exit, checkpoint retirement requires
+exactly one matching managed slot; missing/duplicate leases fail closed.
+CloseAll, IPC schemas, private data and Mac source boundaries are unchanged.
+Synthetic Rust/browser tests authored, NOT_EXECUTED; builds/runtime absent.
+Windows MC02 normal exit, helper timing and CPU/RAM remain unverified.
 
 ## Next bounded action
 
-Audit native selected-close helper checkpoint retirement and ambiguous
-restore receipts while preserving strict handle identity and game ownership.
+Review native helper startup failure and checkpoint ownership on early
+capture/handshake errors, without additional game lifecycle authority.

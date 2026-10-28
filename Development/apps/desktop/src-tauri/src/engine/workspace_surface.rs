@@ -1141,6 +1141,21 @@ mod controller {
         sync::{mpsc, Mutex},
         time::{Duration, Instant},
     };
+    // A stdout reader End(Ok) is not proof that its source process has
+    // exited. The child may have closed stdout while still holding the
+    // checkpoint or performing native HWND work. A failed End is never success.
+    fn completed_helper_status(
+        terminal: Option<&Result<(), String>>,
+        helper_exited: bool,
+    ) -> io::Result<()> {
+        match terminal {
+            Some(Ok(())) if helper_exited => Ok(()),
+            Some(Ok(())) => Err(io::Error::new(io::ErrorKind::WouldBlock,
+                "Window recovery helper has not exited; checkpoint retained")),
+            Some(Err(error)) => Err(io::Error::other(error.clone())),
+            None => Err(io::Error::other("Final window recovery acknowledgement unavailable")),
+        }
+    }
     fn rollback_error(parked: &io::Result<()>, restored: &io::Result<()>) -> Option<String> {
         let mut problems = Vec::new();
         if let Err(error) = parked { problems.push(format!("Could not park the new game: {error}")); }
@@ -1196,6 +1211,31 @@ mod controller {
             }
             assert!(!selected_helper_quiesced(&[]));
             assert!(!selected_helper_quiesced(&[(false,true),(false,false)]));
+        }
+        #[test]
+        fn terminal_end_alone_does_not_retire_a_live_helper() {
+            let success: Result<(), String> = Ok(());
+            let failed: Result<(), String> = Err("Native restore failed".into());
+            assert!(completed_helper_status(None, true).is_err());
+            assert_eq!(
+                completed_helper_status(Some(&success), false).unwrap_err().kind(),
+                io::ErrorKind::WouldBlock,
+            );
+            assert!(completed_helper_status(Some(&success), true).is_ok());
+            assert!(completed_helper_status(Some(&failed), true)
+                .unwrap_err().to_string().contains("Native restore failed"));
+            assert!(completed_helper_status(Some(&failed), false).is_err());
+        }
+
+        #[test]
+        fn checkpoint_retirement_refuses_missing_or_duplicate_selected_leases() {
+            assert_eq!(require_unique_selected_checkpoint(0).unwrap_err().kind(),
+                io::ErrorKind::NotFound);
+            assert!(require_unique_selected_checkpoint(1).is_ok());
+            assert!(require_unique_selected_checkpoint(2).unwrap_err()
+                .to_string().contains("Ambiguous Minecraft"));
+            assert!(require_unique_selected_checkpoint(5).is_err());
+            // Pure policy; no helper, process, native HWND, game or profile.
         }
         #[test]
         fn incomplete_recovery_reports_each_failed_step() {
@@ -1341,13 +1381,35 @@ mod controller {
             }
             result
         }
+        fn confirm_finished_helper(&mut self) -> io::Result<()> {
+            // The terminal reader event can precede the helper's actual
+            // process termination. Retain the original checkpoint while a
+            // still-live helper could make a late HWND change. Do not block
+            // indefinitely; an unconfirmed exit remains retryable.
+            let deadline = Instant::now() + Duration::from_secs(3);
+            loop {
+                match completed_helper_status(
+                    self.ended.as_ref(),
+                    self.child.try_wait()?.is_some(),
+                ) {
+                    Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                        if Instant::now() >= deadline {
+                            return Err(io::Error::new(io::ErrorKind::TimedOut,
+                                "Final window recovery was observed but its helper process is still running; checkpoint retained"));
+                        }
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    result => return result,
+                }
+            }
+        }
         fn stop(&mut self) -> io::Result<()> {
-            if let Some(result) = &self.ended {
-                return result.clone().map_err(io::Error::other);
+            if self.ended.is_some() {
+                return self.confirm_finished_helper();
             }
             let restored = matches!(self.send(Command::Restore), Ok(Reply::Restored));
-            if let Some(result) = &self.ended {
-                return result.clone().map_err(io::Error::other);
+            if self.ended.is_some() {
+                return self.confirm_finished_helper();
             }
             if !restored && self.child.try_wait()?.is_none() {
                 // Kill only our own recovery helper, never Minecraft. The
@@ -1355,8 +1417,8 @@ mod controller {
                 self.child.kill()?;
             }
             let result=wait_for_restoration_end(&self.events,Duration::from_secs(3))?;
-            self.ended=Some(result.clone());
-            result.map_err(io::Error::other)
+            self.ended=Some(result);
+            self.confirm_finished_helper()
         }
     }
     struct Surfaces {
@@ -1471,6 +1533,17 @@ mod controller {
     // CloseOne. A previously failed native Restore can leave a cached End(err)
     // lease. Discard it only after the ORIGINAL game process is also proven
     // exited; otherwise keep its checkpoint and do not touch another HWND.
+    // Retiring the checkpoint after a failed selected Restore is legal only
+    // for one known lease of THIS slot. No matching lease is NOT proof that
+    // restoration completed or that a foreign checkpoint can be discarded.
+    fn require_unique_selected_checkpoint(matches: usize) -> io::Result<()> {
+        match matches {
+            1 => Ok(()),
+            0 => Err(io::Error::new(io::ErrorKind::NotFound,
+                "Selected Minecraft recovery checkpoint is missing; native restoration cannot be confirmed")),
+            _ => Err(io::Error::other("Ambiguous Minecraft presentation checkpoints for one slot")),
+        }
+    }
     pub fn release_exited_managed_slot_checkpoint(slot:u32)->io::Result<()> {
         if !(1..=5).contains(&slot) {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,"Unknown Minecraft profile"));
@@ -1479,9 +1552,7 @@ mod controller {
         let mut state=SURFACE.lock().map_err(|_|io::Error::other("Workspace state unavailable"))?;
         let active_match=state.active.as_ref().is_some_and(|lease|slot_lease(lease,&client));
         let parked_matches=state.parked.iter().filter(|lease|slot_lease(lease,&client)).count();
-        if usize::from(active_match)+parked_matches>1 {
-            return Err(io::Error::other("Ambiguous Minecraft presentation checkpoints for one slot"));
-        }
+        require_unique_selected_checkpoint(usize::from(active_match)+parked_matches)?;
         if active_match {
             let lease=state.active.as_mut().unwrap();
             if !close_only_if_helpers_quiesced(lease.ended.is_some(),lease.child.try_wait()?.is_some())
