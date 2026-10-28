@@ -167,6 +167,13 @@ mod windows {
     ) -> bool {
         manager_visible && !invalidation_notified
     }
+    // Control-only WAKE does not revalidate unchanged peer thumbnails.
+    fn refresh_after_wake(native_event: bool, layout_applied: bool) -> bool {
+        native_event && !layout_applied
+    }
+    fn layout_expired(deadline: Instant, now: Instant) -> bool {
+        now >= deadline
+    }
     enum Job {
         Layout {
             window: tauri::Window,
@@ -174,6 +181,7 @@ mod windows {
             primary: Option<PreviewTile>,
             profiles: Vec<(u32, OwnedProcess)>,
             unavailable: Vec<(u32, String)>,
+            deadline: Instant,
             reply: mpsc::SyncSender<io::Result<PreviewReport>>,
         },
         Clear(mpsc::SyncSender<io::Result<()>>),
@@ -188,6 +196,8 @@ mod windows {
     static WORKER: Mutex<Option<Worker>> = Mutex::new(None);
     static THREAD: AtomicU32 = AtomicU32::new(0);
     static REFRESH_PENDING: AtomicBool = AtomicBool::new(false);
+    // Existing worker-only scheduling hint, not native game authority.
+    static NATIVE_REFRESH_REQUESTED: AtomicBool = AtomicBool::new(false);
     fn notify(id: u32) -> io::Result<()> {
         if !REFRESH_PENDING.swap(true, Ordering::AcqRel)
             && unsafe { PostThreadMessageW(id, WAKE, 0, 0) } == 0
@@ -692,6 +702,7 @@ mod windows {
                 return;
             }
             REFRESH_PENDING.store(false, Ordering::Release);
+            NATIVE_REFRESH_REQUESTED.store(false, Ordering::Release);
             thread_id.store(GetCurrentThreadId(), Ordering::Release);
             THREAD.store(GetCurrentThreadId(), Ordering::Release);
             let mut scene = Scene {
@@ -707,7 +718,11 @@ mod windows {
                         let _ = window.emit("lazy-tester-preview-select", message.wParam as u32);
                     }
                 } else if message.message == WAKE {
+                    // Clear pending BEFORE sampling intent: a native event
+                    // arriving during the job drain posts another WAKE.
                     REFRESH_PENDING.store(false, Ordering::Release);
+                    let native_event =
+                        NATIVE_REFRESH_REQUESTED.swap(false, Ordering::AcqRel);
                     let mut laid_out = false;
                     while let Ok(job) = receiver.try_recv() {
                         match job {
@@ -717,11 +732,22 @@ mod windows {
                                 primary,
                                 profiles,
                                 unavailable,
+                                deadline,
                                 reply,
                             } => {
-                                let _ =
-                                    reply.send(scene.layout(window, tiles, primary, profiles, unavailable));
-                                laid_out = true;
+                                if layout_expired(deadline, Instant::now()) {
+                                    // Only expired Layout work is disposable;
+                                    // Clear/ClearSlot/CloseOne remain mandatory.
+                                    let _ = reply.send(Err(io::Error::new(
+                                        io::ErrorKind::TimedOut,
+                                        "Expired queued preview layout skipped",
+                                    )));
+                                } else {
+                                    let _ = reply.send(scene.layout(
+                                        window, tiles, primary, profiles, unavailable,
+                                    ));
+                                    laid_out = true;
+                                }
                             }
                             Job::Clear(reply) => {
                                 scene.thumbnails.clear();
@@ -751,7 +777,7 @@ mod windows {
                             }
                         }
                     }
-                    if !laid_out {
+                    if refresh_after_wake(native_event, laid_out) {
                         scene.refresh();
                     }
                 } else {
@@ -771,10 +797,12 @@ mod windows {
         admission: std::sync::MutexGuard<'_, S>,
         notify_worker: impl FnOnce() -> io::Result<()>,
         receive: mpsc::Receiver<io::Result<T>>,
+        deadline: Instant,
     ) -> io::Result<T> {
         drop(admission);
         notify_worker()?;
-        receive.recv_timeout(Duration::from_secs(3)).map_err(|_| {
+        receive.recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            .map_err(|_| {
             io::Error::new(
                 io::ErrorKind::TimedOut,
                 "Preview update is pending; worker retained",
@@ -782,7 +810,7 @@ mod windows {
         })?
     }
     fn send<T>(
-        make: impl FnOnce(mpsc::SyncSender<io::Result<T>>) -> Job,
+        make: impl FnOnce(mpsc::SyncSender<io::Result<T>>, Instant) -> Job,
         start_if_missing: bool,
     ) -> io::Result<Option<T>> {
         let mut owner = WORKER
@@ -814,7 +842,8 @@ mod windows {
             return Err(io::Error::other("Preview worker did not start"));
         }
         let (reply, receive) = mpsc::sync_channel(1);
-        worker.sender.try_send(make(reply)).map_err(|_| {
+        let job_deadline = Instant::now() + Duration::from_secs(3);
+        worker.sender.try_send(make(reply, job_deadline)).map_err(|_| {
             io::Error::new(
                 io::ErrorKind::WouldBlock,
                 "Previous preview update is still pending",
@@ -822,7 +851,7 @@ mod windows {
         })?;
         // The existing single DWM worker keeps job ordering. A clear may
         // now be admitted while this caller waits for its own reply.
-        finish_after_admission(owner, || notify(id), receive).map(Some)
+        finish_after_admission(owner, || notify(id), receive, job_deadline).map(Some)
     }
     pub(super) fn apply(
         window: tauri::Window,
@@ -846,12 +875,13 @@ mod windows {
             return Ok(base);
         }
         send(
-            |reply| Job::Layout {
+            |reply, deadline| Job::Layout {
                 window,
                 tiles,
                 primary,
                 profiles,
                 unavailable,
+                deadline,
                 reply,
             },
             true,
@@ -859,17 +889,18 @@ mod windows {
         .ok_or_else(|| io::Error::other("Preview worker missing"))
     }
     pub(super) fn clear() -> io::Result<()> {
-        send(Job::Clear, false).map(|_| ())
+        send(|reply, _| Job::Clear(reply), false).map(|_| ())
     }
     pub(super) fn clear_slot(slot:u32)->io::Result<()> {
-        send(|reply|Job::ClearSlot {slot,reply},false).map(|_| ())
+        send(|reply, _|Job::ClearSlot {slot,reply},false).map(|_| ())
     }
     pub(super) fn clear_primary() -> io::Result<()> {
-        send(Job::ClearPrimary, false).map(|_| ())
+        send(|reply, _| Job::ClearPrimary(reply), false).map(|_| ())
     }
     pub(super) fn refresh() {
         let id = THREAD.load(Ordering::Acquire);
         if id != 0 {
+            NATIVE_REFRESH_REQUESTED.store(true, Ordering::Release);
             let _ = notify(id);
         }
     }
@@ -888,9 +919,26 @@ mod windows {
                     "Another preview caller must access WORKER during reply wait");
                 reply.send(Ok(7u32)).unwrap();
                 Ok(())
-            }, receive).unwrap();
+            }, receive, Instant::now() + Duration::from_secs(3)).unwrap();
             assert_eq!(result, 7);
             assert!(owner.try_lock().is_ok());
+        }
+        #[test]
+        fn control_jobs_do_not_waste_native_refresh_or_lose_move_events() {
+            assert!(!refresh_after_wake(false, false));
+            assert!(!refresh_after_wake(false, true));
+            assert!(refresh_after_wake(true, false));
+            assert!(!refresh_after_wake(true, true));
+        }
+        #[test]
+        fn expired_layout_cannot_reanimate_old_native_preview() {
+            let now = Instant::now();
+            let deadline = now + Duration::from_secs(3);
+            assert!(!layout_expired(deadline, now));
+            assert!(!layout_expired(deadline, deadline-Duration::from_millis(1)));
+            assert!(layout_expired(deadline, deadline));
+            assert!(layout_expired(deadline, deadline+Duration::from_millis(1)));
+            // No expiry gate is applied to ClearSlot or CloseOne.
         }
         #[test]
         fn empty_dwm_scene_releases_manager_and_profile_metadata() {

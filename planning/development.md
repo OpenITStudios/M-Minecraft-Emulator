@@ -129,31 +129,25 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability & efficiency — 28 October 2026
 
-Game exit remains checked at 250 ms; stable audio at 1 s. DWM omits
-duplicate writes after HWND verification; native Place/Park/Hide no-ops
-require original process/window proof. A failed tile stays hidden until
-a verified new layout; manual Refresh uses existing admission. DWM
-WORKER mutex now protects only worker startup and bounded try_send,
-then unlocks BEFORE notify/reply wait (up to 3 s), allowing peer clears
-to enter the one ordered worker queue. After Clear, last ClearSlot/
-ClearPrimary, or last lost thumbnail, the scene drops its strong Tauri
-Window, manager and process metadata. Empty WAKE skips Win32 calls.
-No new worker, scheduler, IPC, game process or account/world mutation.
-Synthetic Rust tests authored, NOT_EXECUTED.
+Original game reap remains 250 ms, stable COM audio 1 s. DWM omits
+redundant property writes and native Place/Park/Hide only with HWND proof.
+One DWM worker (capacity-one channel) still admits jobs without holding
+WORKER Mutex during replies. The worker now differentiates native move/
+focus refresh from control-only WAKE. Clear/ClearSlot/ClearPrimary no
+longer trigger extra peer HWND/DWM checks without a native event. Native
+refresh intent is read before job processing to avoid lost movement.
+A shared three-second deadline gates queued Layout and caller wait:
+expired Layout is discarded before native work, but ClearSlot/CloseOne
+is never discarded by timeout. Empty scenes release Window metadata.
+No new worker, timer, IPC, game authority or private-data mutations.
+Rust scheduling tests authored, NOT_EXECUTED.
 
 ## Debug timing — NOT_EXECUTED
 
-`MIVUBI_DEBUG_WORKSPACE_TIMING=1` enables optional Windows debug
-aperture/foreground counters, errors, avg/max us and >=5/50ms.
-Aggregate stderr only on release, default off, no PID/HWND output.
-Windows build, MC02 exit, DWM, CPU/RAM and gameplay unverified.
-
-## Resource scenarios — NOT_EXECUTED
-
-Compare pinned 0/5-game, Keep/Mute, preview, resize/minimize, CloseOne
-and peer Play. Measure CPU/memory, IPC latency and exact game identity.
+`MIVUBI_DEBUG_WORKSPACE_TIMING=1` enables default-off Windows debug
+aperture/foreground count/error/timing aggregates at workspace release.
+Actual Windows DWM, MC02 exit, CPU/RAM and gameplay remain unverified.
 
 ## Next bounded action
 
-Audit overlapping DWM Layout/ClearSlot/CloseOne admission and recovery
-source paths without needing the user PC.
+Audit timed-out in-flight Layout and CloseOne cancellation at source.
