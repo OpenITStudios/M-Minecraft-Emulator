@@ -7,7 +7,7 @@ use crate::engine::{
     },
     process_identity::OwnedProcess,
 };
-use std::{io::Write, time::Duration};
+use std::{io::Write, time::{Duration, Instant}};
 use virtual_clients_core::InspectionBudget;
 
 struct Sessions {
@@ -934,7 +934,52 @@ fn window(child: &PendingEducationBootstrap, label: bool) -> Option<OwnedProcess
     valid_retained_window(&process).then_some(process)
 }
 
-fn sync_audio(sessions:&Sessions,audio:&mut Option<super::session_audio::Audio>,mode:crate::engine::manager_settings::BackgroundAudio)->io::Result<()> {
+// Audio COM reads are separate from process reaping. The existing
+// controller still reaps every idle 250 ms; stable audio needs no repeated
+// COM GetMute call until its 1-second discovery deadline. Focus or an exact
+// retained game process change bypasses that interval immediately.
+const AUDIO_IDLE_RESYNC: Duration = Duration::from_secs(1);
+type AudioRoster = [Option<(u32, u64)>; 5];
+fn audio_roster(sessions: &Sessions) -> AudioRoster {
+    // Retained handles are the only source of ownership. Cheap metadata
+    // sampling neither enumerates PIDs nor authorizes any new process.
+    std::array::from_fn(|index| sessions.running[index].as_ref()
+        .map(|running| (running.children[0].pid, running.children[0].created)))
+}
+#[derive(Default)]
+struct AudioIdleGate {
+    last_success: Option<Instant>,
+    foreground: Option<Option<u32>>,
+    roster: Option<AudioRoster>,
+}
+impl AudioIdleGate {
+    fn due(&self, now: Instant, foreground: Option<u32>, roster: AudioRoster) -> bool {
+        self.last_success.is_none_or(|last|
+            now.saturating_duration_since(last) >= AUDIO_IDLE_RESYNC)
+            || self.foreground != Some(foreground)
+            || self.roster != Some(roster)
+    }
+    fn success(&mut self, now: Instant, foreground: Option<u32>, roster: AudioRoster) {
+        self.last_success = Some(now);
+        self.foreground = Some(foreground);
+        self.roster = Some(roster);
+    }
+    fn invalidate(&mut self) {
+        // A failed COM sync is retried on the next existing idle tick, not
+        // suppressed by a previously successful cadence checkpoint.
+        self.last_success = None;
+    }
+}
+fn audio_maintenance_needed(
+    mode: crate::engine::manager_settings::BackgroundAudio,
+    audio_present: bool, roster: AudioRoster,
+) -> bool {
+    use crate::engine::manager_settings::BackgroundAudio;
+    audio_present || mode == BackgroundAudio::Mute
+        && roster.iter().any(Option::is_some)
+}
+fn sync_audio(sessions:&Sessions,audio:&mut Option<super::session_audio::Audio>,
+    mode:crate::engine::manager_settings::BackgroundAudio, foreground:Option<u32>)->io::Result<()> {
     use crate::engine::manager_settings::BackgroundAudio;
     if mode==BackgroundAudio::Keep {
         if let Some(current)=audio.as_mut(){current.restore()?;}
@@ -943,7 +988,7 @@ fn sync_audio(sessions:&Sessions,audio:&mut Option<super::session_audio::Audio>,
     let targets=sessions.running.iter().flatten().filter_map(|s|s.children[0].identity().ok()).collect::<Vec<_>>();
     if targets.is_empty(){if let Some(current)=audio.as_mut(){current.restore()?;}*audio=None;return Ok(());}
     if audio.is_none(){*audio=Some(super::session_audio::Audio::new()?);}
-    audio.as_mut().unwrap().sync(&targets,super::session_audio::foreground(),|pid,born|sessions.running.iter().flatten().any(|s|s.children[0].identity().ok()==Some((pid,born))))
+    audio.as_mut().unwrap().sync(&targets,foreground,|pid,born|sessions.running.iter().flatten().any(|s|s.children[0].identity().ok()==Some((pid,born))))
 }
 
 // Admit an authenticated, queued request before optional idle maintenance on
@@ -992,6 +1037,10 @@ fn run() -> io::Result<()> {
     let mut sessions = Sessions::prepare()?;
     let mut audio=None;
     let mut audio_mode=crate::engine::manager_settings::load_audio()?;
+    // Audio's COM session enumerator already has a one-second discovery
+    // cadence. Keep 250 ms original game exit/reap checks unchanged; avoid
+    // re-running all COM mute checks while focus and owned processes are stable.
+    let mut audio_idle = AudioIdleGate::default();
     // No audio failure observed before the first idle maintenance cycle.
     let mut audio_issue: Option<String> = None;
     let server = Server::start(Endpoint::current()?)?;
@@ -1011,9 +1060,29 @@ fn run() -> io::Result<()> {
             &server.requests,
             Duration::from_millis(250),
             || {
+                // An original game exit is still observed within the same
+                // 250 ms idle policy. Audio does not gate or replace reaping.
                 sessions.reap();
-                audio_issue = sync_audio(&sessions, &mut audio, audio_mode)
-                    .err().map(|error| error.to_string());
+                let roster = audio_roster(&sessions);
+                if !audio_maintenance_needed(audio_mode, audio.is_some(), roster) {
+                    audio_issue = None;
+                    audio_idle.invalidate();
+                } else {
+                    let foreground = super::session_audio::foreground();
+                    let now = Instant::now();
+                    if audio_idle.due(now, foreground, roster) {
+                        match sync_audio(&sessions, &mut audio, audio_mode, foreground) {
+                            Ok(()) => {
+                                audio_issue = None;
+                                audio_idle.success(now, foreground, roster);
+                            }
+                            Err(error) => {
+                                audio_issue = Some(error.to_string());
+                                audio_idle.invalidate();
+                            }
+                        }
+                    }
+                }
             },
         );
         let detached = manager.as_ref().map_or_else(
@@ -1071,10 +1140,15 @@ fn run() -> io::Result<()> {
                     settings=Some(sessions.settings(false).map_err(|error|error.to_string())?);
                 }
                 SessionRequest::SaveAudio {mode}=>{
-                    // Apply before committing the preference; failed restore stays retryable.
-                    sync_audio(&sessions,&mut audio,mode).map_err(|e|e.to_string())?;
+                    // Explicit user audio changes remain immediate and are
+                    // never delayed by the idle cadence. On any failure the
+                    // old saved mode is retried at the next original tick.
+                    audio_idle.invalidate();
+                    let foreground = super::session_audio::foreground();
+                    sync_audio(&sessions,&mut audio,mode,foreground).map_err(|e|e.to_string())?;
                     crate::engine::manager_settings::save_audio(mode).map_err(|e|e.to_string())?;
                     audio_mode=mode;audio_issue=None;
+                    audio_idle.success(Instant::now(),foreground,audio_roster(&sessions));
                     settings=Some(sessions.settings(false).map_err(|e|e.to_string())?);
                 }
                 SessionRequest::Launch { slot } => {
@@ -1175,6 +1249,37 @@ mod tests {
             assert!(selected[(slot - 1) as usize]);
         }
         assert_eq!(normal_close_mask(None).unwrap(), [true; 5]);
+    }
+
+    #[test]
+    fn stable_audio_skips_redundant_com_work_but_keeps_focus_and_exit_immediate() {
+        use crate::engine::manager_settings::BackgroundAudio;
+        let start = Instant::now();
+        let roster: AudioRoster = [Some((102, 134000000000000001)), None, None, None, None];
+        let mut gate = AudioIdleGate::default();
+        assert!(gate.due(start, Some(102), roster));
+        gate.success(start, Some(102), roster);
+        for elapsed in [250, 500, 750] {
+            assert!(!gate.due(start + Duration::from_millis(elapsed), Some(102), roster),
+                "Stable mute policy must not read COM every 250 ms");
+        }
+        assert!(gate.due(start + AUDIO_IDLE_RESYNC, Some(102), roster),
+            "New audio sessions can still be discovered once per second");
+        assert!(gate.due(start + Duration::from_millis(250), Some(103), roster),
+            "A foreground change must trigger the next idle tick");
+        let mut replaced = roster;
+        replaced[0] = Some((103, 134000000000000002));
+        assert!(gate.due(start + Duration::from_millis(250), Some(102), replaced),
+            "A reused PID or new original birth must not inherit mute state");
+        gate.invalidate();
+        assert!(gate.due(start + Duration::from_millis(250), Some(102), roster),
+            "Any failed COM sync must be retryable immediately");
+        assert!(!audio_maintenance_needed(BackgroundAudio::Keep, false, roster));
+        assert!(audio_maintenance_needed(BackgroundAudio::Mute, false, roster));
+        assert!(audio_maintenance_needed(BackgroundAudio::Keep, true, [None; 5]),
+            "An outstanding mute lease must still be restored");
+        assert!(!audio_maintenance_needed(BackgroundAudio::Mute, false, [None; 5]),
+            "No owned process and no audio lease needs no COM startup");
     }
 
     #[test]

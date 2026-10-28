@@ -132,21 +132,21 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability source hardening — 28 October 2026
 
-Transport refuses contention; CloseOne retains the original game identity.
-Failed Start/pipe helper and recovery checkpoint remain pinned until native
-evidence; parked failures do not contaminate peers. DWM refresh hides all
-unverified frames, sends coalesced exact-process invalidation on the
-existing workspace-surface-error event, and never changes game lifecycle.
-The Svelte layout now refuses late PreviewReport results if process/source,
-primary slot, native-close review epoch, manager visibility or viewport
-geometry changes. A stale reply does not issue IPC; existing dirty/resize
-admission schedules any needed follow-up. Hidden/minimized clears UI preview
-observations; merely unfocused keeps DWM monitoring. Existing Win32 synthetic
-fixture covers minimize and nonactivating restore. No new worker, protocol,
-polling, or account/world mutations. Rust/TS/browser regressions authored,
-NOT_EXECUTED; Windows DWM, MC02 normal exit, CPU/RAM and package unverified.
+Windows transport refuses contention, CloseOne preserves original game
+identity and selected journals. DWM worker isolates all five preview errors,
+hides invalid frames, and emits source-pinned diagnostics via the existing
+workspace error channel. Svelte refuses stale/late preview observations
+after visibility, source, selection or close-review changes; no layout churn.
+Controller idle still polls/reaps exact game exits every 250 ms, before
+optional audio work. COM mute sync is now gated by retained process roster,
+foreground changes or its existing 1-second discovery cadence; unused
+Keep/empty modes avoid COM initialization. Explicit SaveAudio stays immediate;
+errors invalidate the cadence so recovery remains retryable on the next tick.
+No new worker, timer, IPC, forced game operations, profile/data migration or
+Mac backend. Synthetic Rust/TS/browser tests authored, NOT_EXECUTED; real
+Windows DWM/MC02 exit and CPU/RAM performance remain unverified.
 
 ## Next bounded action
 
-Source-audit Windows CPU/RAM hot paths and scheduler costs at exact HEAD,
-without claiming measured runtime improvements.
+Audit DWM refresh workload from high-frequency native window move events,
+then define resource benchmark scenarios before claiming CPU/RAM gains.
