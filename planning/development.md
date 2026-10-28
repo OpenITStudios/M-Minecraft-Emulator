@@ -101,24 +101,26 @@ publication. The Mac build remains a diagnostic shell without game backend.
 
 ## Next bounded source action
 
-**Target:** Minecraft Education stable 26.32 on Windows. Native five-profile
-product admission is still bound to its previously reviewed executable hash;
-the current target's executable identity has not been verified. Both
-game-side allocation canaries are OFF; older Education and Bedrock data
-cannot establish savings for this build.
+Target stays Minecraft Education stable 26.32 Windows (release family,
+not a verified current EXE fingerprint). Existing launcher image/DLL
+identity gates, five isolated account/world profiles and default-OFF
+native GPU memory canaries remain unchanged. P0/localtest/CI remain off.
 
-**Completed source fix:** native memory reviewer now refuses schema-8
-numeric A/B differences when hashes vary *within either capture* as well as
-when the same slot differs between captures. It reports the separate
-`uniformSelectedImageHashes` condition without claiming that a
-file-path digest proves loaded image identity, publisher or gameplay.
-Historical schema-7 descriptive comparison remains intact; the collector,
-RAM sampler, process handles and game owners are unchanged. One focused
-regression fixture is authored, and the isolated evaluator logic passed
-8/8 checks. Full Node/Windows game acceptance remains NOT_EXECUTED.
+**New material lead:** 2025 Minecraft Education users reported very
+large RAM growth with Improved Input Response enabled and relief after
+disabling/restarting. Related Windows Bedrock issues continued in
+later versions; no causal RAM effect is proven for Education 26.32.
+Source-only implementation now reads the existing bounded options.txt
+during already-authorized storage inspection and optionally exposes
+a single boolean for the explicit `ctrl_improvedInputResponse` 0/1
+entry. Missing, malformed, contradictory or unauthorized observations
+stay UNKNOWN; no automatic toggle, game I/O, account/world changes or
+modified graphics preset. The existing strict typed UI shows this as a
+non-authoritative diagnostic, with no promise of savings. Optional wire
+field preserves older session response compatibility. Rust/Vite fixtures
+are AUTHORED, NOT_EXECUTED; only exact-source guards were reviewed.
 
-**Next:** investigate actually owned and demonstrably unused Education 26.32
-renderer/graphics resident bytes before writing a native optimizer. The
-original live trace and native code owner evidence are unavailable here;
-do not guess allocator hooks or patch sizes. No P0 re-entry, user PC
-localtest, game/profile/account/world mutation, CI or main-branch work.
+**Next source action:** find authoritative Education-26.32 allocator or
+renderer ownership and comparable resident data. Do not claim the old
+67 MiB CPU allocation, 220/144 MiB graphics route, or input-response
+leak as a verified saving for the selected build. Runtime remains deferred.

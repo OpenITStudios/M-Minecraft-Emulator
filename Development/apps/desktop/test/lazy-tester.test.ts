@@ -95,8 +95,18 @@ describe('Lazy Tester profile contract', () => {
       cache:{bytes:0,files:0,partial:false,canClear:false,issue:null},gameSettings}));
     const snapshot={...stopped(),storage};
     expect(parseSession(snapshot).storage![3]!.gameSettings?.canRestore).toBe(true);
+    const withEnabled={...snapshot,storage:storage.map(item=>({...item,gameSettings:{...gameSettings,improvedInputResponseEnabled:true}}))};
+    expect(parseSession(withEnabled).storage![0]!.gameSettings?.improvedInputResponseEnabled).toBe(true);
+    const withDisabled={...snapshot,storage:storage.map(item=>({...item,gameSettings:{...gameSettings,improvedInputResponseEnabled:false}}))};
+    expect(parseSession(withDisabled).storage![0]!.gameSettings?.improvedInputResponseEnabled).toBe(false);
+    expect(parseSession(snapshot).storage![0]!.gameSettings?.improvedInputResponseEnabled).toBeUndefined();
     for(const invalid of [{...gameSettings,hasSettings:false},{...gameSettings,backupAvailable:false},
-      {...gameSettings,issue:'Locked'},{...gameSettings,canReset:'yes'},{...gameSettings,path:'../outside'},null]) {
+      {...gameSettings,issue:'Locked'},{...gameSettings,canReset:'yes'},{...gameSettings,path:'../outside'},
+      {...gameSettings,improvedInputResponseEnabled:'yes'},
+      {...gameSettings,improvedInputResponseEnabled:null},
+      {...gameSettings,hasSettings:false,canReset:false,improvedInputResponseEnabled:true},
+      {...gameSettings,canReset:false,canRestore:false,issue:'Profile running',improvedInputResponseEnabled:true},
+      null]) {
       expect(()=>parseSession({...snapshot,storage:[{...storage[0]!,gameSettings:invalid},...storage.slice(1)]})).toThrow();
     }
     const active={...snapshot,profiles:[running(1),...snapshot.profiles.slice(1)]};

@@ -79,6 +79,9 @@ pub struct GameSettingsStorage {
     pub backup_available: bool,
     pub can_reset: bool,
     pub can_restore: bool,
+    // Optional read-only profile option, no implied native version/behavior.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub improved_input_response_enabled: Option<bool>,
     pub issue: Option<String>,
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]

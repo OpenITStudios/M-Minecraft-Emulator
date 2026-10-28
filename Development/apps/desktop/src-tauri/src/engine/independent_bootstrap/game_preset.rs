@@ -72,8 +72,9 @@ fn options_path(private: &File, create: bool) -> io::Result<(PathBuf, Vec<File>)
 
 pub(super) fn inspect_settings(private: &File, admission: io::Result<()>) -> crate::engine::native_clients_session::GameSettingsStorage {
     use crate::engine::native_clients_session::GameSettingsStorage;
-    let mut status = GameSettingsStorage {has_settings:false, backup_available:false, can_reset:false, can_restore:false, issue:None};
+    let mut status = GameSettingsStorage {has_settings:false, backup_available:false, can_reset:false, can_restore:false, improved_input_response_enabled:None, issue:None};
     let mut resettable=false;
+    let mut input_response=None;
     let inspected = (|| -> io::Result<()> {
         let (path,_directories) = match options_path(private,false) {
             Ok(value) => value,
@@ -83,6 +84,9 @@ pub(super) fn inspect_settings(private: &File, admission: io::Result<()>) -> cra
         match read_bounded(&path,LIMIT) {
             Ok(bytes) => {
                 render_preset(&bytes, crate::engine::manager_settings::GraphicsPreset::Low)?;
+                // A historical Education leak report makes this one optional
+                // video key worth observing; inspection never changes it.
+                input_response = observed_input_response(&bytes);
                 status.has_settings = true;
                 resettable=!bytes.is_empty();
             }
@@ -93,7 +97,7 @@ pub(super) fn inspect_settings(private: &File, admission: io::Result<()>) -> cra
         Ok(())
     })();
     match inspected.and(admission) {
-        Ok(()) => {status.can_reset=resettable;status.can_restore=status.backup_available;}
+        Ok(()) => {status.can_reset=resettable;status.can_restore=status.backup_available;status.improved_input_response_enabled=input_response;}
         Err(error) => status.issue=Some(error.to_string()),
     }
     status
@@ -109,6 +113,24 @@ pub(super) fn restore_settings(private: &File) -> io::Result<bool> {
     let mut prepared=Prepared::read_preset(private, crate::engine::manager_settings::GraphicsPreset::Low)?;
     prepared.after=backup_bytes(&prepared.path)?.ok_or_else(||invalid("No verified settings backup is available"))?;
     prepared.commit_with_backup(true)
+}
+
+// The corresponding Bedrock option name is publicly documented, but
+// current Education 26.32 semantics are NOT yet verified. Report only an
+// explicit, unambiguous saved 0/1. Missing/malformed/conflicting values
+// are unknown; never infer a default, leak, or mitigation from this flag.
+fn observed_input_response(bytes: &[u8]) -> Option<bool> {
+    let text=std::str::from_utf8(bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(bytes)).ok()?;
+    let mut observed=None;
+    for raw in text.split('\n') {
+        let line=raw.strip_suffix('\r').unwrap_or(raw);
+        let Some((key,value))=line.split_once(':') else { continue; };
+        if key != "ctrl_improvedInputResponse" { continue; }
+        let enabled=match value { "0"=>false, "1"=>true, _=>return None };
+        if observed.is_some_and(|previous| previous != enabled) { return None; }
+        observed=Some(enabled);
+    }
+    observed
 }
 
 const LIMIT: usize = 1024 * 1024;
@@ -351,6 +373,29 @@ fn apply_directories<'a>(directories: impl Iterator<Item = &'a File>) -> io::Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn input_response_receipt_never_assumes_disabled_or_edits_saved_options() {
+        assert_eq!(observed_input_response(b"ctrl_improvedInputResponse:1
+"),Some(true));
+        assert_eq!(observed_input_response(b"ï»¿ctrl_improvedInputResponse:0
+"),Some(false));
+        assert_eq!(observed_input_response(b"ctrl_improvedInputResponse:1
+ctrl_improvedInputResponse:1
+"),Some(true));
+        for unknown in [
+            &b""[..], &b"ctrl_improvedInputResponse:"[..],
+            &b"ctrl_improvedInputResponse:2"[..], &b"ctrl_improvedInputResponse:off"[..],
+            &b"ctrl_improvedInputResponse:1
+ctrl_improvedInputResponse:0"[..],
+            &b"CTRL_improvedInputResponse:1"[..],
+            &b"ÿctrl_improvedInputResponse:1"[..],
+        ] { assert_eq!(observed_input_response(unknown), None); }
+        let original=b"ctrl_improvedInputResponse:1
+volume:0.7
+";
+        assert!(render(original).unwrap().starts_with(original));
+    }
 
     #[test]
     fn settings_reset_restore_roundtrip_and_undo_preserve_other_profile_data() {

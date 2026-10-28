@@ -14,7 +14,7 @@ export interface ProfileStorage {
   slot: ProfileSlot; bytes: number; files: number; partial: boolean;
   disk: {availableBytes: number; totalBytes: number} | null;
   cache: {bytes: number; files: number; partial: boolean; canClear: boolean; issue: string | null};
-  gameSettings?: {hasSettings:boolean; backupAvailable:boolean; canReset:boolean; canRestore:boolean; issue:string|null};
+  gameSettings?: {hasSettings:boolean; backupAvailable:boolean; canReset:boolean; canRestore:boolean; issue:string|null; improvedInputResponseEnabled?:boolean};
   fullClear?: {canClear:boolean; pending:boolean; confirmationToken:string|null; issue:string|null};
 }
 // Backend implementation availability, never game sign-in or profile readiness.
@@ -122,8 +122,11 @@ export function parseSession(value: unknown): SessionSnapshot {
       if(Object.hasOwn(storage,'gameSettings')) {
         const game=storage.gameSettings;
         const active=(value.profiles as ProfileSession[]).some(profile=>profile.slot===storage.slot&&['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state));
-        if(!record(game)||!exact(game,['hasSettings','backupAvailable','canReset','canRestore','issue'])||
+        if(!record(game)||!exact(game,['hasSettings','backupAvailable','canReset','canRestore','issue',
+          ...(Object.hasOwn(game,'improvedInputResponseEnabled')?['improvedInputResponseEnabled']:[])])||
           ['hasSettings','backupAvailable','canReset','canRestore'].some(key=>typeof game[key]!=='boolean')||
+          (Object.hasOwn(game,'improvedInputResponseEnabled')&&
+            (typeof game.improvedInputResponseEnabled!=='boolean'||!game.hasSettings||game.issue!==null))||
           !(game.issue===null||typeof game.issue==='string'&&game.issue.length<=8192)||
           game.canReset&&(!game.hasSettings||game.issue!==null||active)||
           game.canRestore&&(!game.backupAvailable||game.issue!==null||active))throw new TypeError('Invalid settings recovery metadata');

@@ -768,6 +768,13 @@
           <details class="lt-advanced" bind:open={advanced}>
             <summary><span><strong>Advanced options</strong><small>Reset and recovery for this launcher</small></span><span aria-hidden="true">{advanced?'−':'+'}</span></summary>
             <div class="lt-advanced-body">
+              {#if selectedStorage?.gameSettings?.improvedInputResponseEnabled===true}
+                <p class="lt-help" role="status">Improved Input Response is recorded as enabled in this launcher's saved options. Some older Minecraft Education versions were reported to use excessive RAM with this feature enabled. Impact on Education 26.32 is unverified. Lazy Tester has not changed the setting; review it in Minecraft Video Settings if needed.</p>
+              {:else if selectedStorage?.gameSettings?.improvedInputResponseEnabled===false}
+                <p class="lt-help">Improved Input Response is recorded as disabled. This does not establish RAM savings or rule out other leaks.</p>
+              {:else}
+                <p class="lt-help">Improved Input Response: unknown or not recorded in this profile's settings. No default is assumed.</p>
+              {/if}
               <div class="lt-setting"><div><h3>Reset game settings</h3><p>Back up this launcher's settings, then reset them for the next start. Accounts, worlds and cache are kept.</p><p class="lt-help">The saved High/Low graphics preset is reapplied at launch.</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.gameSettings?.canReset} on:click={()=>reviewSettings('Reset')}>Reset settings…</button></div>
               <div class="lt-setting"><div><h3>Restore settings</h3><p>{selectedStorage?.gameSettings?.backupAvailable?'Restore the latest verified settings backup for this launcher. Current settings are backed up first.':'No verified settings backup yet. Reset creates one.'}</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.gameSettings?.canRestore} on:click={()=>reviewSettings('Restore')}>Restore settings…</button></div>
               {#if selectedStorage?.gameSettings?.issue}<p class="lt-help">{selectedStorage.gameSettings.issue}</p>{:else if !selectedStorage?.gameSettings}<p class="lt-help">Refresh storage to check settings recovery availability.</p>{/if}
