@@ -19,6 +19,30 @@ lifecycle: ACTIVE
 
 This is a **navigation guide**, not a task queue. Sandboxie v1.18.6 source/build tooling in [Isolation Source Tooling](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md) is retired product history, not the native engine. The only active goal, blocker and next action are in [planning/development.md](../../planning/development.md). Treat historical `Next` here as superseded; inspect owning source and consumers.
 
+## Final mounted frontend IPC ownership audit — 28 October 2026
+
+At the pinned source snapshot, all eight mounted `.ts`/`.svelte`
+frontend files were reviewed. The only raw `@tauri-apps/api/core`
+invoke owner is `app/bridge/invokeRuntime.ts`; game and workspace
+commands are exposed solely through the typed `lazyTester.ts` and
+`workspaceSurface.ts` bridges. `LazyTesterApp.svelte` checks the
+Rust `WindowsNative` capability before startup profile probes,
+queued operations, layout previews, native navigation, and unmount
+release. Its two-second periodic observer now also requires
+`WindowsNative` explicitly. Window control and event subscription
+API are shell operations, not Minecraft lifecycle IPC.
+The sole non-game startup commands on unsupported platforms are the
+read-only `lazy_tester_backend_support` lookup and bounded
+`startup_diagnostic_result` report (stdout). No new game IPC
+entrypoint was found in the mounted frontend graph.
+The existing repository verifier now prevents direct Tauri core
+`invoke` or `invokeRuntime` in UI/other modules, retains the two
+reviewed typed bridge owners and rejects raw Tauri internals.
+Regression fixtures and a browser unsupported-host case covering the
+two-second observer were authored, not executed. This closes the
+**source-only** Mac diagnostic frontend audit, not its compiler,
+window, packaged distribution, or Minecraft feasibility gates.
+
 ## Unsupported-platform UI admission — 28 October 2026
 
 The mounted UI now requires Rust-reported `WindowsNative` before

@@ -123,7 +123,8 @@ try {
   assert.equal(await page.locator('.lt-filmstrip').count(),0,'unsupported host has no game inventory');
   assert.equal(await page.getByRole('button',{name:'Close Lazy Tester'}).getAttribute('title'),'Close Lazy Tester');
   await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
-  await page.waitForTimeout(180);
+  // Cross the 2-second background observer interval as well as resize.
+  await page.waitForTimeout(2150);
   assert.deepEqual(await page.evaluate(()=>window.__calls.filter(({command})=>
     command.startsWith('desktop_') || (command.startsWith('lazy_tester_') &&
     command!=='lazy_tester_backend_support')).map(({command})=>command)),[],

@@ -65,13 +65,10 @@ publication or local-PC testing is authorized in this task.
 
 ## Efficiency source review — 27 October 2026
 
-Six unused Windows research fixture modules (2,866 source lines; no active
-consumers) are compiled only for Rust unit tests, not the production graph.
-The single session controller, exact native authority, five-profile storage,
-DWM and FPS owners remain unchanged. Review identified polling (250 ms idle,
-50 ms close, two-second UI) and potential storage head-of-line blocking;
-these observations do not prove CPU or RAM savings. No code execution,
-installer, Windows or game acceptance has been performed.
+Six unused Windows fixture modules (2,866 lines) are test-only, not in
+production. Native controller and five-profile owners remain intact.
+Polling and storage head-of-line concerns are source observations only,
+not CPU/RAM improvements. No local execution or game acceptance.
 
 ## Shared inspection budget — 27 October 2026
 
@@ -134,14 +131,19 @@ single-instance, WebView, signing and gameplay remain NOT_EXECUTED or absent.
 
 ## Unsupported-platform UI admission — 28 October 2026
 
-Svelte now gates queued native work, ResizeObserver preview IPC, Settings
-navigation, game refresh and unmount recovery on Rust `WindowsNative`.
-Unsupported hosts show no game inventory/actions; unknown host support
-offers explicit capability retry. Close-window UI no longer implies
-managed Minecraft shutdown on Mac. Windows behavior after backend admission
-is preserved. Static/Browser regression authored, NOT_EXECUTED.
+Svelte gates startup/profile, queued work, navigation, previews,
+two-second observation, and unmount game-release on `WindowsNative`.
+Unsupported hosts expose no Minecraft controls; unknown capability can
+retry a read-only host check. Close-window UI uses honest wording.
+All eight mounted TypeScript/Svelte files were audited for IPC ownership:
+only `invokeRuntime.ts` calls Tauri core invoke; `lazyTester.ts` and
+`workspaceSurface.ts` are its typed game IPC consumers. No additional
+unsupported-game route was found. Source verifier and negative/browser
+fixtures authored; no checks or runtime were executed.
 
 ## Next bounded action
 
-Audit remaining unsupported-platform frontend IPC entrypoints, then stop
-expanding Mac scaffolding until compile/runtime work is explicitly authorized.
+Mac diagnostic source-only audit is complete; do not add further Mac
+scaffolding until compilation/runtime authorization. Resume a separately
+bounded Windows efficiency/source safety review when requested, preserving
+the prohibition on local tests and CI.

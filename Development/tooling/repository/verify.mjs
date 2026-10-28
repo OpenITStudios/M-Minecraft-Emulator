@@ -39,6 +39,32 @@ export function verifyDesktopWindowsDeps(manifest) {
     'Existing DWM and registry features must remain available on Windows');
 }
 
+// All mounted frontend source is already traced from main.ts. The Tauri
+// window/event APIs may be used by the shell; game, profile and presentation
+// commands must enter only through the two typed bridges and one invoke owner.
+// This is a source-policy check, not an actual macOS IPC/runtime test.
+export function verifyFrontendNativeIpcBoundary(sources) {
+  const typedBridges = new Set(['app/bridge/lazyTester.ts', 'app/bridge/workspaceSurface.ts']);
+  const runtime = sources['app/bridge/invokeRuntime.ts'];
+  assert.ok(typeof runtime === 'string' &&
+    /import\s*\{\s*invoke\s*\}\s*from\s*["']@tauri-apps\/api\/core["']/.test(runtime) &&
+    /\breturn\s+invoke(?:<[^>\n]+>)?\s*\(/.test(runtime),
+    'Tauri core invocation must be owned by invokeRuntime.ts');
+  for (const [path, source] of Object.entries(sources)) {
+    if (!/\.(?:ts|svelte)$/.test(path) || path === 'app/bridge/invokeRuntime.ts') continue;
+    assert.ok(!/@tauri-apps\/api\/core|__TAURI_INTERNALS__/.test(source),
+      'Frontend must not import raw Tauri core or reach internals: ' + path);
+    if (typedBridges.has(path)) {
+      assert.ok(/from\s*["']\.\/invokeRuntime\.js["']/.test(source),
+        'Typed native bridge must import the reviewed runtime owner: ' + path);
+    } else {
+      assert.ok(!/\b(?:invokeRuntime|invoke)(?:<[^>\n]+>)?\s*\(/.test(source) &&
+        !/\bfrom\s*["'][^"']*invokeRuntime(?:\.js)?["']/.test(source),
+        'Mounted UI must use typed native bridges, never direct game IPC: ' + path);
+    }
+  }
+}
+
 export function traceFrontend(sources,entry='main.ts') {
   const reached=new Set();
   function visit(path) {
@@ -77,6 +103,7 @@ export function verifyRepository(root,g0=false) {
   assert.ok(sourcePaths.every(path=>/\.(?:ts|svelte|css)$/.test(path)),'Unexpected binary/private frontend material');
   const sources=Object.fromEntries(sourcePaths.map(path=>[path.slice('Development/apps/desktop/src/'.length),read(path)]));
   const reached=traceFrontend(sources);
+  verifyFrontendNativeIpcBoundary(sources);
   assert.ok(sources['main.ts'].includes('mount(LazyTesterApp, { target });'),'Lazy Tester must be the mounted app');
   assert.ok(!reached.some(path=>/ownedProviderApi|nativeFeasibilityApi|virtualClientsApi/.test(path)),'Retired provider bridge must not be active');
   const app=json('Development/apps/desktop/package.json'),manifest=json('Development/package.json'),tauri=json('Development/apps/desktop/src-tauri/tauri.conf.json');
@@ -112,7 +139,8 @@ export function verifyRepository(root,g0=false) {
     'Native Windows-only product packaging must reject unsupported OS targets');
   const mountedUI=read('Development/apps/desktop/src/LazyTesterApp.svelte');
   const titlebar=read('Development/apps/desktop/src/WindowTitlebar.svelte');
-  assert.ok(mountedUI.includes('<WindowTitlebar backendSupport={nativeBackend} />') &&
+  assert.ok(mountedUI.includes("if (nativeBackend === 'WindowsNative' && !closeReviewActive(reviewState()) && !document.hidden && binding?.configured") &&
+    mountedUI.includes('<WindowTitlebar backendSupport={nativeBackend} />') &&
     mountedUI.includes("if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState())") &&
     mountedUI.includes("if (nativeBackend !== 'WindowsNative') return;") &&
     mountedUI.includes("if (nativeBackend === 'WindowsNative') void workspaceSurface.release()") &&

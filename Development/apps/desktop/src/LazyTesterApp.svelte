@@ -502,7 +502,9 @@
     mounted = true; void initializeLaunchers();
     // Keep a review stable while the user decides; the backend rechecks admission on action.
     const interval = setInterval(() => {
-      if (!closeReviewActive(reviewState()) && !document.hidden && binding?.configured &&
+      // A Mac diagnostic shell still has its WebView lifecycle, but it must
+      // never schedule Windows game inspection from the periodic observer.
+      if (nativeBackend === 'WindowsNative' && !closeReviewActive(reviewState()) && !document.hidden && binding?.configured &&
           clearSlot===null && recovery===null && fullReview===null) void refresh();
     }, 2000);
     observer = new ResizeObserver(() => { dirty = true; }); observer.observe(viewport, {box: 'device-pixel-content-box'});
