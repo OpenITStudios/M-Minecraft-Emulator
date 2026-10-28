@@ -273,7 +273,224 @@ function evaluateMemoryComposition(report) {
   }};
 }
 
+// Schema 7: current native MC01-MC05 memory baseline, including empty/sparse
+// slot rosters. Legacy schemas 1-6 remain intentionally unchanged.
+function evaluateNativeProfileBaseline(report) {
+  const slots = report?.selectedSlots;
+  const validSlots = ['01', '02', '03', '04', '05'];
+  if (!Array.isArray(slots) || slots.length > 5 ||
+      !slots.every((slot, i) => validSlots.includes(slot) &&
+        (i === 0 || validSlots.indexOf(slot) > validSlots.indexOf(slots[i - 1]))) ||
+      !exactly(report, ['schema', 'scope', 'evidenceOrigin', 'attribution',
+        'automaticVerdict', 'capturedAtUtc', 'durationRequestedSeconds',
+        'durationObservedSeconds', 'sampleIntervalSeconds', 'hostLogicalCpus',
+        'sampleCount', 'selectedSlots', 'profileIdentityLost', 'managerSelected',
+        'managerProcessIdentityLost', 'directChildrenRequested', 'samples',
+        'missingEvidence']) ||
+      report.schema !== 7 || report.scope !== 'NATIVE_PROFILE_MEMORY_BASELINE' ||
+      report.evidenceOrigin !== 'WINDOWS_HOST' ||
+      report.attribution !== 'OPERATOR_SELECTED_UNVERIFIED_PIDS' ||
+      report.automaticVerdict !== 'NOT_PROVIDED' ||
+      typeof report.capturedAtUtc !== 'string' ||
+      !Number.isFinite(Date.parse(report.capturedAtUtc)) ||
+      !integer(report.durationRequestedSeconds) ||
+      report.durationRequestedSeconds < 30 || report.durationRequestedSeconds > 7200 ||
+      !finite(report.durationObservedSeconds) || report.durationObservedSeconds < 0 ||
+      !integer(report.sampleIntervalSeconds) ||
+      report.sampleIntervalSeconds < 1 || report.sampleIntervalSeconds > 60 ||
+      !integer(report.hostLogicalCpus) || report.hostLogicalCpus < 1 ||
+      report.hostLogicalCpus > 1024 ||
+      !integer(report.sampleCount) || report.sampleCount < 1 ||
+      report.sampleCount > 7200 ||
+      !exactly(report.profileIdentityLost, slots) ||
+      slots.some(slot => typeof report.profileIdentityLost[slot] !== 'boolean') ||
+      typeof report.managerSelected !== 'boolean' ||
+      (report.managerSelected
+        ? typeof report.managerProcessIdentityLost !== 'boolean'
+        : report.managerProcessIdentityLost !== null) ||
+      typeof report.directChildrenRequested !== 'boolean' ||
+      (report.directChildrenRequested && !report.managerSelected && slots.length === 0) ||
+      !Array.isArray(report.samples) || report.samples.length !== report.sampleCount ||
+      !Array.isArray(report.missingEvidence) ||
+      report.missingEvidence.length !== missing.length ||
+      !missing.every((flag, i) => report.missingEvidence[i] === flag)) {
+    throw new TypeError('Invalid native profile RAM capture or selected slot identities.');
+  }
+  const lost = Object.fromEntries(slots.map(slot => [slot, false]));
+  let managerLost = false;
+  let last = -1;
+  for (const row of report.samples) {
+    if (!exactly(row, ['elapsedSeconds', 'clients', 'manager', 'system',
+      'directChildren', 'queryDurationMs']) ||
+        !finite(row.elapsedSeconds) || row.elapsedSeconds <= last ||
+        row.elapsedSeconds < 0 ||
+        row.elapsedSeconds > report.durationObservedSeconds + 0.1 ||
+        !finite(row.queryDurationMs) || row.queryDurationMs < 0 ||
+        row.elapsedSeconds + row.queryDurationMs / 1000 >
+          report.durationObservedSeconds + 0.1 ||
+        !exactly(row.clients, slots)) {
+      throw new TypeError('Invalid native profile RAM sample layout/timing.');
+    }
+    last = row.elapsedSeconds;
+    for (const slot of slots) {
+      const item = row.clients[slot];
+      if (!exactly(item, ['process', 'memory'])) {
+        throw new TypeError('Invalid selected native profile sample.');
+      }
+      sampleMetrics(item.process);
+      const missingNow = item.process.status === 'UNKNOWN';
+      if (lost[slot] && !missingNow) {
+        throw new TypeError('A lost Minecraft profile identity cannot resume.');
+      }
+      lost[slot] ||= missingNow;
+      privateMetrics(item.memory, missingNow);
+    }
+    if (report.managerSelected) {
+      if (!exactly(row.manager, ['process', 'memory'])) {
+        throw new TypeError('Invalid selected manager sample.');
+      }
+      sampleMetrics(row.manager.process);
+      const missingNow = row.manager.process.status === 'UNKNOWN';
+      if (managerLost && !missingNow) {
+        throw new TypeError('A lost manager process identity cannot resume.');
+      }
+      managerLost ||= missingNow;
+      privateMetrics(row.manager.memory, missingNow);
+    } else if (row.manager !== null) {
+      throw new TypeError('Unrequested manager cannot be included in RAM samples.');
+    }
+    if (!exactly(row.system, systemMemoryFields)) {
+      throw new TypeError('Invalid native whole-system memory sample.');
+    }
+    for (const field of systemMemoryFields) {
+      const value = row.system[field];
+      memoryMetric(value);
+      if (['IDENTITY_UNAVAILABLE', 'EXTENDED_COUNTER_UNAVAILABLE'].includes(value.reason)) {
+        throw new TypeError('Process-only reason cannot describe whole-system RAM.');
+      }
+    }
+    if (report.directChildrenRequested) {
+      const keys = [...slots, ...(report.managerSelected ? ['manager'] : [])];
+      if (!exactly(row.directChildren, keys)) {
+        throw new TypeError('Invalid native direct-child process roots.');
+      }
+      for (const key of keys) {
+        childGroup(row.directChildren[key], key === 'manager' ? managerLost : lost[key]);
+      }
+    } else if (row.directChildren !== null) {
+      throw new TypeError('Unrequested direct-child telemetry must be null.');
+    }
+  }
+  if (slots.some(slot => lost[slot] !== report.profileIdentityLost[slot]) ||
+      (report.managerSelected && managerLost !== report.managerProcessIdentityLost)) {
+    throw new TypeError('Native profile identity-loss flags contradict samples.');
+  }
+
+  const summarize = (fieldNames, get) => Object.fromEntries(fieldNames.map(field =>
+    [field, memorySummary(report.samples.map(row => get(row)[field]))]));
+  const selectedProcess = get => ({
+    process: metrics(report.samples.map(row =>
+      ({elapsedSeconds: row.elapsedSeconds, current: get(row).process})), 'current'),
+    ...summarize(processMemoryFields, row => get(row).memory),
+  });
+  const childSummary = key => {
+    const groups = report.samples.map(row => row.directChildren[key]);
+    return {
+      observedInventorySamples: groups.filter(group => group.status === 'OBSERVED').length,
+      unresolvedInventorySamples: groups.filter(group => group.status === 'UNKNOWN').length,
+      inventoryReasons: [...new Set(groups.filter(group => group.status === 'UNKNOWN').map(group => group.reason))],
+      verifiedCounts: groups.map(group => group.verifiedCount),
+      ...Object.fromEntries(processMemoryFields.map(field =>
+        [field, memorySummary(groups.map(group => group[field]))])),
+    };
+  };
+  return {
+    interpretation: 'NATIVE_PROFILE_MEMORY_OBSERVATION_ONLY',
+    automaticGameplayProof: false,
+    automaticPerformanceVerdict: 'NOT_PROVIDED',
+    fiveClientReady: false,
+    improvementVerified: false,
+    durationRequestedSeconds: report.durationRequestedSeconds,
+    durationObservedSeconds: report.durationObservedSeconds,
+    sampleCount: report.sampleCount,
+    selectedSlots: [...slots],
+    clients: Object.fromEntries(slots.map(slot =>
+      [slot, selectedProcess(row => row.clients[slot])])),
+    manager: report.managerSelected ? selectedProcess(row => row.manager) : null,
+    system: summarize(systemMemoryFields, row => row.system),
+    directChildren: report.directChildrenRequested ? Object.fromEntries(
+      [...slots, ...(report.managerSelected ? ['manager'] : [])].map(key =>
+        [key, childSummary(key)])) : null,
+    identityDiscontinuityObserved: slots.some(slot => lost[slot]) || managerLost,
+    processTreeMeasured: false,
+    managerRoleVerified: false,
+    exclusiveHelperOwnershipVerified: false,
+    queryMeanDurationMs: Number((report.samples.reduce((sum, row) =>
+      sum + row.queryDurationMs, 0) / report.sampleCount).toFixed(3)),
+    queryPeakDurationMs: Math.max(...report.samples.map(row => row.queryDurationMs)),
+    metricScope: 'SELECTED_PROCESSES_AND_SYSTEM_NOT_GAME_ENGINE_ALLOCATION_OWNERS',
+    missingEvidence: [...missing],
+  };
+}
+
+function compareNativeProfileBaseline(baseline, candidate) {
+  if (baseline?.schema !== 7 || candidate?.schema !== 7) {
+    throw new TypeError('Native memory comparison requires two schema-7 captures.');
+  }
+  const before = evaluateNativeProfileBaseline(baseline);
+  const after = evaluateNativeProfileBaseline(candidate);
+  const selected = before.selectedSlots.join(',') === after.selectedSlots.join(',');
+  const conditions = {
+    sameSelectedSlots: selected,
+    sameManagerSelection: (baseline.managerSelected === candidate.managerSelected),
+    sameDirectChildrenSelection: (baseline.directChildrenRequested === candidate.directChildrenRequested),
+    equalRequestedDuration: baseline.durationRequestedSeconds === candidate.durationRequestedSeconds,
+    equalSampleInterval: baseline.sampleIntervalSeconds === candidate.sampleIntervalSeconds,
+    equalLogicalCpus: baseline.hostLogicalCpus === candidate.hostLogicalCpus,
+    equalSampleCount: baseline.sampleCount === candidate.sampleCount,
+    similarObservedDuration: Math.abs(baseline.durationObservedSeconds -
+      candidate.durationObservedSeconds) <= baseline.sampleIntervalSeconds,
+    noIdentityLoss: !before.identityDiscontinuityObserved && !after.identityDiscontinuityObserved,
+    completeProcessReadings: [
+      ...Object.values(before.clients), ...Object.values(after.clients),
+      ...(before.manager ? [before.manager] : []),
+      ...(after.manager ? [after.manager] : []),
+    ].every(item => item.process.missingSamples === 0),
+  };
+  const comparable = Object.values(conditions).every(Boolean);
+  const difference = (a, b) => comparable && a && b &&
+    a.missingSamples === 0 && b.missingSamples === 0 ? {
+      meanMbDifference: Number((b.meanMb - a.meanMb).toFixed(3)),
+      medianMbDifference: Number((b.medianMb - a.medianMb).toFixed(3)),
+      peakMbDifference: Number((b.peakMb - a.peakMb).toFixed(3)),
+    } : null;
+  const perFields = (a, b, fields) => Object.fromEntries(fields.map(field =>
+    [field, difference(a?.[field], b?.[field])]));
+  return {
+    interpretation: 'NUMERIC_NATIVE_MEMORY_COMPARISON_ONLY',
+    performanceVerdict: 'NOT_PROVIDED',
+    improvementVerified: false,
+    sameHostVerified: false,
+    sameWorkloadVerified: false,
+    fullProcessTreeMeasured: false,
+    conditions,
+    comparableForNumericDifference: comparable,
+    memoryDifferences: comparable ? {
+      clients: Object.fromEntries(before.selectedSlots.map(slot =>
+        [slot, perFields(before.clients[slot], after.clients[slot], processMemoryFields)])),
+      manager: baseline.managerSelected ? perFields(before.manager, after.manager, processMemoryFields) : null,
+      system: perFields(before.system, after.system, systemMemoryFields),
+      directChildren: baseline.directChildrenRequested ? Object.fromEntries(
+        [...before.selectedSlots, ...(baseline.managerSelected ? ['manager'] : [])].map(key =>
+          [key, perFields(before.directChildren?.[key], after.directChildren?.[key], processMemoryFields)])) : null,
+    } : null,
+    baseline: before,
+    candidate: after,
+  };
+}
+
 export function evaluateNativePerformance(report) {
+  if (report?.schema === 7) return evaluateNativeProfileBaseline(report);
   if ([5, 6].includes(report?.schema)) return evaluateMemoryComposition(report);
   if ([3, 4].includes(report?.schema)) return evaluateMultiClientPerformance(report);
   const fields = ["schema", "scope", "evidenceOrigin", "attribution",
@@ -432,6 +649,9 @@ function evaluateMultiClientPerformance(report) {
  * Results are withheld for mismatched captures or any lost process identity.
  */
 export function compareNativePerformance(baseline, candidate) {
+  if (baseline?.schema === 7 || candidate?.schema === 7) {
+    return compareNativeProfileBaseline(baseline, candidate);
+  }
   if ([5, 6].includes(baseline?.schema) || [5, 6].includes(candidate?.schema)) {
     if (![5, 6].includes(baseline?.schema) || baseline.schema !== candidate?.schema) {
       throw new TypeError('Memory composition comparisons require two schema-5 or two schema-6 captures.');

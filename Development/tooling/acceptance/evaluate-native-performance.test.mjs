@@ -1028,3 +1028,98 @@ if ($script:counterCalls -ne 4) { throw 'Unexpected counter query count' }
 
 
 
+
+
+const nativeBaselineFixture = (slots = ['01', '04'], manager = false, children = false) => {
+  const system = i => ({
+    totalPhysicalMb: memoryMetric(32768),
+    availablePhysicalMb: memoryMetric(20000 - i * 30),
+    commitTotalMb: memoryMetric(16000 + i * 30),
+    commitLimitMb: memoryMetric(45000),
+  });
+  const process = i => ({
+    process: {status:'OBSERVED', cpuPercentOfHost:2+i, workingSetMb:300+i*10},
+    memory: {privateCommitMb: memoryMetric(500+i*20), privateWorkingSetMb: memoryMetric(250+i*10)},
+  });
+  const emptyChild = () => ({
+    status:'OBSERVED', reason:null, verifiedCount:0, unresolvedCount:0,
+    privateCommitMb:memoryMetric(0), privateWorkingSetMb:memoryMetric(0),
+  });
+  return {
+    schema: 7, scope:'NATIVE_PROFILE_MEMORY_BASELINE',
+    evidenceOrigin:'WINDOWS_HOST', attribution:'OPERATOR_SELECTED_UNVERIFIED_PIDS',
+    automaticVerdict:'NOT_PROVIDED', capturedAtUtc:'2026-10-28T12:00:00Z',
+    durationRequestedSeconds:30, durationObservedSeconds:10.5, sampleIntervalSeconds:5,
+    hostLogicalCpus:16, sampleCount:2, selectedSlots:[...slots],
+    profileIdentityLost:Object.fromEntries(slots.map(slot=>[slot,false])),
+    managerSelected:manager, managerProcessIdentityLost:manager ? false : null,
+    directChildrenRequested:children,
+    samples:[0,1].map(i => ({
+      elapsedSeconds:(i+1)*5,
+      clients:Object.fromEntries(slots.map(slot => [slot,process(i)])),
+      manager:manager ? process(i) : null,
+      system:system(i),
+      directChildren:children ? Object.fromEntries([...slots,...(manager?['manager']:[])]
+        .map(key => [key,emptyChild()])) : null,
+      queryDurationMs:1.25,
+    })),
+    missingEvidence:['ACCOUNT_ISOLATION','GAMEPLAY_RENDERING','FRAME_TIMES',
+      'GPU_VRAM','MULTIPLAYER','INPUT_RESPONSIVENESS'],
+  };
+};
+
+test('native RAM schema-7 handles zero, sparse, and five selected slots without inventing workload proof', () => {
+  for (const slots of [[],['03'],['01','04'],['01','02','03','04','05']]) {
+    const report = nativeBaselineFixture(slots);
+    const review = evaluateNativePerformance(report);
+    assert.deepEqual(review.selectedSlots, slots);
+    assert.equal(Object.keys(review.clients).length, slots.length);
+    assert.equal(review.fiveClientReady, false);
+    assert.equal(review.improvementVerified, false);
+    assert.equal(review.system.availablePhysicalMb.medianMb, 19985);
+  }
+  const withManager = evaluateNativePerformance(nativeBaselineFixture(['02'], true, true));
+  assert.equal(withManager.manager.privateCommitMb.medianMb, 510);
+  assert.equal(withManager.directChildren['02'].verifiedCounts.length, 2);
+  assert.equal(withManager.processTreeMeasured, false);
+});
+
+test('schema-7 numeric RAM comparisons are descriptive and require matching complete identities', () => {
+  const before = nativeBaselineFixture(['01','05']);
+  const after = structuredClone(before);
+  for (const row of after.samples) row.clients['05'].memory.privateCommitMb.valueMb -= 40;
+  const compared = compareNativePerformance(before,after);
+  assert.equal(compared.comparableForNumericDifference,true);
+  assert.equal(compared.memoryDifferences.clients['05'].privateCommitMb.meanMbDifference,-40);
+  assert.equal(compared.improvementVerified,false);
+  assert.equal(compared.sameHostVerified,false);
+  after.samples[1].clients['05'].process = {status:'UNKNOWN',cpuPercentOfHost:null,workingSetMb:null};
+  after.samples[1].clients['05'].memory = {
+    privateCommitMb:memoryMetric(null,'IDENTITY_UNAVAILABLE'),
+    privateWorkingSetMb:memoryMetric(null,'IDENTITY_UNAVAILABLE'),
+  };
+  after.profileIdentityLost['05']=true;
+  assert.equal(compareNativePerformance(before,after).comparableForNumericDifference,false);
+  after.profileIdentityLost['05']=false;
+  assert.throws(()=>evaluateNativePerformance(after),/identity-loss flags/);
+});
+
+test('schema-7 rejects misleading slot names, unrequested descendants, invented RAM and malformed timestamps', () => {
+  for (const mutate of [
+    r=>r.selectedSlots=['05','01'],
+    r=>r.selectedSlots=['01','01'],
+    r=>r.selectedSlots=['06'],
+    r=>r.profileIdentityLost['03']=false,
+    r=>r.managerProcessIdentityLost=false,
+    r=>r.samples[0].directChildren={},
+    r=>r.samples[0].clients['04'].memory.privateCommitMb=memoryMetric(null,'IDENTITY_UNAVAILABLE'),
+    r=>r.samples[1].system.availablePhysicalMb.valueMb=-20,
+    r=>r.samples[1].queryDurationMs=6000,
+    r=>r.samples[1].elapsedSeconds=5,
+    r=>r.samples[0].clients['01'].process.status='UNKNOWN',
+  ]) {
+    const report=nativeBaselineFixture();
+    mutate(report);
+    assert.throws(()=>evaluateNativePerformance(report));
+  }
+});
