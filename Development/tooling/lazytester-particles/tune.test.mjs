@@ -125,12 +125,14 @@ import {spawnSync} from 'node:child_process';
 import {mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
+import {fileURLToPath} from 'node:url';
 
 test('builder never writes output on explicit-download refusal or untrusted local source', () => {
   const root=mkdtempSync(join(tmpdir(),'lazytester-particle-'));
+  const script=fileURLToPath(new URL('./build.mjs',import.meta.url));
   try {
     const output=join(root,'opt-in.mcpack');
-    const refused=spawnSync(process.execPath,[new URL('./build.mjs',import.meta.url).pathname,
+    const refused=spawnSync(process.execPath,[script,
       '--official','no','--output',output],{encoding:'utf8'});
     assert.equal(refused.status,1);
     assert.match(refused.stderr,/explicit --official yes/);
@@ -138,7 +140,7 @@ test('builder never writes output on explicit-download refusal or untrusted loca
     const source=join(root,'resource_pack');
     mkdirSync(join(source,'particles'),{recursive:true});
     writeFileSync(join(source,'particles','portal_reverse.json'),'x'.repeat(128*1024+1));
-    const oversized=spawnSync(process.execPath,[new URL('./build.mjs',import.meta.url).pathname,
+    const oversized=spawnSync(process.execPath,[script,
       '--source',source,'--output',output],{encoding:'utf8'});
     assert.equal(oversized.status,1);
     assert.match(oversized.stderr,/Unsupported source size/);
