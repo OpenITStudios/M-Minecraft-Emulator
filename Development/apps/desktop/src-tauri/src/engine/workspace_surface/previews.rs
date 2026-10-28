@@ -519,13 +519,20 @@ mod windows {
         }
     }
 
-    // At most four new monitoring images and one primary observer can be
-    // created by a Layout. Failed or undelivered receipts must not retain
-    // those new DWM windows; established peer previews stay untouched.
+    // At most four new images and one primary can be created. A rejected
+    // Layout must also restore the original viewport and failure flag of
+    // *reused* thumbnails, rather than leaving a stale geometry/visibility
+    // change that no frontend report acknowledged.
     #[derive(Default)]
     struct LayoutCreated {
         secondary_slots: Vec<u32>,
         primary_changed: bool,
+        reused_secondary: Vec<(u32, Viewport, bool)>,
+        reused_primary: Option<Viewport>,
+    }
+    fn viewport_changed(a: Viewport, b: Viewport) -> bool {
+        a.x != b.x || a.y != b.y || a.width != b.width
+            || a.height != b.height || a.pixel_ratio != b.pixel_ratio
     }
     fn retain_previous_preview(created: &LayoutCreated, slot: u32) -> bool {
         !created.secondary_slots.contains(&slot)
@@ -545,9 +552,8 @@ mod windows {
     }
     impl Scene {
         fn discard_unacknowledged_new(&mut self, created: &LayoutCreated) {
-            // Only thumbnails created BY THIS job are disposable. Do not
-            // discard a previously confirmed MC03 image because MC02 took
-            // too long or its frontend request was abandoned.
+            // New images were never acknowledged: remove only those images,
+            // never previously confirmed MC01-MC05 peer windows.
             if created.primary_changed {
                 self.primary = None;
             }
@@ -555,6 +561,62 @@ mod windows {
                 self.thumbnails.retain(|thumbnail|
                     retain_previous_preview(created, thumbnail.slot));
             }
+            // A reused image may already have been moved/shown by the
+            // abandoned Layout. Roll back only its earlier verified geometry
+            // and invalidation flag; don't force extra Win32 writes when
+            // neither state changed. Window/source identity is rechecked
+            // by refresh_verified before any reapplication.
+            let visible = self.visibility();
+            let epochs = snapshot_epochs();
+            let issued = self.issued_epochs;
+            if let (Some(original), Some(primary)) =
+                (created.reused_primary, self.primary.as_mut()) {
+                if slot_epoch_matches(&issued, &epochs, primary.slot) {
+                    let changed = viewport_changed(primary.viewport, original);
+                    primary.viewport = original;
+                    if changed {
+                        let playing = native::interactive_at(
+                            &primary.target, primary.manager, original);
+                        if let Err(error) = primary.refresh_verified(visible && !playing) {
+                            eprintln!("Minecraft - {} primary DWM rollback unverified: {error}",
+                                primary.slot);
+                        }
+                    }
+                }
+            }
+            let mut notices = Vec::new();
+            for &(slot, original, was_invalidated) in &created.reused_secondary {
+                if !slot_epoch_matches(&issued, &epochs, slot) { continue; }
+                let Some(image) = self.thumbnails.iter_mut()
+                    .find(|image| image.slot == slot) else { continue; };
+                let needs_native_restore =
+                    viewport_changed(image.viewport, original)
+                        || image.invalidation_notified != was_invalidated;
+                image.viewport = original;
+                image.invalidation_notified = was_invalidated;
+                if !needs_native_restore { continue; }
+                let should_show = display_with_current_preview_receipt(
+                    visible, was_invalidated,
+                );
+                if let Err(error) = image.refresh_verified(should_show) {
+                    if take_invalidation_notice(&mut image.invalidation_notified) {
+                        notices.push((image.slot, image.target.clone(),
+                            format!("Previous native preview geometry could not be restored: {error}")));
+                    }
+                }
+            }
+            if let Some(window) = self.window.as_ref() {
+                for (slot, process, reason) in notices {
+                    let reason = reason.chars().take(1024).collect::<String>();
+                    if let Ok(message) = preview_invalidation_message(
+                        slot, &process, &reason,
+                    ) {
+                        let _ = window.emit("workspace-surface-error", message);
+                    }
+                }
+            }
+            // A concurrent CloseOne still wins: never restore a canceled
+            // slot, and prune again after any slow native rollback call.
             self.prune_cancelled_slots();
         }
         fn prune_cancelled_slots(&mut self) {
@@ -707,8 +769,18 @@ mod windows {
                 Some(tile) if slot_epoch_matches(
                     &issued_epochs, &snapshot_epochs(), tile.slot,
                 ) => {
+                    let previous = self.primary.as_ref().map(|image| image.viewport);
                     match self.update_primary_observation(manager, &tile, visible) {
-                        Ok(new_primary) => created.primary_changed = new_primary,
+                        Ok(new_primary) => {
+                            created.primary_changed = new_primary;
+                            if !new_primary {
+                                if let Some(old) = previous {
+                                    if viewport_changed(old, tile.viewport) {
+                                        created.reused_primary = Some(old);
+                                    }
+                                }
+                            }
+                        }
                         Err(error) => {
                             // A failed primary observer cannot suppress any peer
                             // receipt or alter the original Minecraft game.
@@ -745,7 +817,17 @@ mod windows {
                     .iter()
                     .position(|thumbnail| thumbnail.matches(tile.slot, target))
                 {
-                    Some(index) => index,
+                    Some(index) => {
+                        let previous = &self.thumbnails[index];
+                        // Capture old geometry AND its latest published
+                        // invalidation. An abandoned recovery report must
+                        // not show a previously invalidated tile again.
+                        created.reused_secondary.push((
+                            tile.slot, previous.viewport,
+                            previous.invalidation_notified,
+                        ));
+                        index
+                    }
                     None => match Thumbnail::create(manager, &tile, target.clone()) {
                         Ok(thumbnail) => {
                             self.thumbnails.push(thumbnail);
@@ -1087,6 +1169,7 @@ mod windows {
         fn unacknowledged_layout_only_discards_newly_created_thumbnails() {
             let new = LayoutCreated {
                 secondary_slots: vec![2, 4], primary_changed: true,
+                ..LayoutCreated::default()
             };
             assert!(!retain_previous_preview(&new, 2));
             assert!(!retain_previous_preview(&new, 4));
@@ -1099,6 +1182,30 @@ mod windows {
             assert!(!layout_acknowledged(false, true),
                 "An expired/error reply cannot acknowledge new DWM images");
             assert!(layout_acknowledged(true, true));
+        }
+        #[test]
+        fn reused_preview_geometry_and_failed_state_are_rollback_evidence() {
+            let original = Viewport {
+                x: 20.0, y: 30.0, width: 400.0, height: 300.0, pixel_ratio: 1.0,
+            };
+            let moved = Viewport {x:21.0, ..original};
+            let scaled = Viewport {pixel_ratio:1.5, ..original};
+            assert!(!viewport_changed(original, original),
+                "Identical geometry never needs a Win32 rollback");
+            assert!(viewport_changed(original, moved));
+            assert!(viewport_changed(original, scaled));
+            let discarded = LayoutCreated {
+                reused_secondary: vec![(2, original, true)],
+                reused_primary: Some(original),
+                ..LayoutCreated::default()
+            };
+            let (_, previous, invalidated) = discarded.reused_secondary[0];
+            assert!(!viewport_changed(previous, original));
+            assert!(invalidated,
+                "An unacknowledged recovery cannot turn a failed MC02 preview visible");
+            for peer in [1, 3, 4, 5] {
+                assert!(retain_previous_preview(&discarded, peer));
+            }
         }
         #[test]
         fn in_flight_deadline_expiry_is_fail_closed_before_next_tile() {
@@ -1404,15 +1511,49 @@ mod windows {
                 assert_ne!(IsWindowVisible(scene.primary.as_ref().unwrap().window),0);
                 thumbnail.refresh_verified(scene.visibility()).unwrap();
                 assert_ne!(IsWindowVisible(thumbnail.window),0);
-                // A lost Layout reply must release only its newly created
-                // secondary image. The verified primary observer survives.
+                // An abandoned layout changed an ALREADY REGISTERED tile.
+                // Rewind to its original live manager-relative geometry
+                // and previously reported native visibility, leaving the
+                // separately verified primary observer intact.
+                let old_viewport = thumbnail.viewport;
+                let moved_viewport = Viewport {
+                    x: old_viewport.x + 24.0, ..old_viewport
+                };
+                thumbnail.viewport = moved_viewport;
+                thumbnail.refresh_verified(true).unwrap();
                 scene.thumbnails.push(thumbnail);
                 scene.discard_unacknowledged_new(&LayoutCreated {
-                    secondary_slots: vec![tile.slot], primary_changed: false,
+                    reused_secondary: vec![(tile.slot, old_viewport, false)],
+                    ..LayoutCreated::default()
+                });
+                assert_eq!(scene.thumbnails.len(), 1);
+                let restored = &scene.thumbnails[0];
+                assert_eq!(restored.viewport.x, old_viewport.x);
+                let expected = native::rectangle(
+                    manager as usize as u64, old_viewport).unwrap();
+                let mut actual: RECT = mem::zeroed();
+                assert_ne!(GetWindowRect(restored.window, &mut actual), 0);
+                assert_eq!((actual.left,actual.top,actual.right-actual.left,
+                           actual.bottom-actual.top),
+                           (expected.x,expected.y,expected.width,expected.height));
+                assert_ne!(IsWindowVisible(restored.window), 0);
+                // A failed tile must not be resurrected by an abandoned
+                // layout, even when its requested viewport is unchanged.
+                scene.thumbnails[0].invalidation_notified = false;
+                scene.discard_unacknowledged_new(&LayoutCreated {
+                    reused_secondary: vec![(tile.slot, old_viewport, true)],
+                    ..LayoutCreated::default()
+                });
+                assert!(scene.thumbnails[0].invalidation_notified);
+                assert_eq!(IsWindowVisible(scene.thumbnails[0].window), 0);
+                // A newly registered, unacknowledged tile is still removed.
+                scene.discard_unacknowledged_new(&LayoutCreated {
+                    secondary_slots: vec![tile.slot],
+                    ..LayoutCreated::default()
                 });
                 assert!(scene.thumbnails.is_empty());
                 assert!(scene.primary.is_some(),
-                    "Dropping an unacknowledged secondary cannot remove primary");
+                    "Rolling back a secondary cannot discard a healthy primary");
                 drop(scene);
                 DestroyWindow(source);
                 DestroyWindow(manager);

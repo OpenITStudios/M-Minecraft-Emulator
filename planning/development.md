@@ -129,25 +129,27 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability & efficiency — 28 October 2026
 
-Game exit reap remains 250 ms, stable COM audio resync 1 s. The sole DWM
-worker retains a capacity-one queue, unlocked caller wait, and per-slot
-CloseOne preview cancellation. Queued Layouts expire after 3 s. The SAME
-deadline now gates primary, each secondary and final in-flight Win32
-work. Expired Layouts stop before the next tile. A lost/expired/error
-reply also removes newly created, unacknowledged DWM images, retaining
-previously confirmed peers and original game/recovery authority.
-A dropped receiver never promotes a new thumbnail. Native move/focus,
-ClearSlot and surviving worker/IPC contracts remain unchanged; no new
-thread, queue, timer, polling or account/world mutation.
-Synthetic pure Rust/offscreen Win32 regressions authored NOT_EXECUTED.
-Actual Windows DWM, MC02 exit and CPU/RAM still unverified.
+Original game exit reap stays at 250 ms, stable COM audio sync at 1 s.
+DWM uses one capacity-one worker and per-slot CloseOne cancellation.
+A shared 3 s deadline avoids expired queued/in-flight Layout work. A
+failed/undeliverable Layout deletes newly registered preview images.
+Reused thumbnails now snapshot their prior viewport AND invalidation
+flag before mutation; failed reply rolls back only changed native image
+geometry, restoring prior failure visibility. Rollback uses the existing
+exact HWND/source verification; if it fails, the tile is hidden and its
+source-pinned error uses the existing workspace-surface-error event.
+Verified unrelated previews are preserved. No extra thread, timer,
+worker, new IPC, original game/account/world mutation or recovery owner.
+Rust/offscreen Win32 tests authored NOT_EXECUTED. Windows DWM, MC02 exit,
+CPU/RAM and package acceptance remain unverified.
 
 ## Debug timing — NOT_EXECUTED
 
-`MIVUBI_DEBUG_WORKSPACE_TIMING=1` collects default-off Windows debug
-aperture/foreground aggregates on workspace release without PID/HWND.
+`MIVUBI_DEBUG_WORKSPACE_TIMING=1` remains default-off Windows debug
+aperture/foreground timing on workspace release, no PID/HWND output.
 
 ## Next bounded action
 
-Audit timed-out Layout updates to previously registered thumbnails and
-ensure UI observation/recovery remains consistent without extra workers.
+Audit failed Layout cleanup after manager/source replacement, ensuring
+no stale observer reference survives a dropped reply without removing
+healthy peer previews.
