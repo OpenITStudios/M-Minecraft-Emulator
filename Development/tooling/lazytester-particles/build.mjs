@@ -16,15 +16,21 @@ function argumentsOf(args) {
 }
 async function vanillaFile(origin, directory, file) {
   if (origin === '--source') {
-    // Refuse linked sources, not just ../ path traversal in user-supplied locations.
+    // Refuse linked sources and oversized files before loading a source into memory.
     const candidate = join(resolve(directory), 'particles', file);
     for (const path of [resolve(directory), join(resolve(directory), 'particles'), candidate]) {
-      if ((await lstat(path)).isSymbolicLink()) throw new Error(`Vanilla source must not be linked: ${file}`);
+      const state = await lstat(path);
+      if (state.isSymbolicLink()) throw new Error(`Vanilla source must not be linked: ${file}`);
+      if (path === candidate && (!state.isFile() || state.size > 128 * 1024)) {
+        throw new Error(`Unsupported source size/type: ${file}`);
+      }
     }
     return readFile(candidate);
   }
   const response = await fetch(SOURCE_URL + file, {redirect: 'error', signal: AbortSignal.timeout(15000)});
   if (!response.ok) throw new Error(`Official vanilla source unavailable (${response.status}): ${file}`);
+  const advertised = Number(response.headers.get('content-length'));
+  if (advertised > 128 * 1024) throw new Error(`Oversized vanilla source: ${file}`);
   const bytes = Buffer.from(await response.arrayBuffer());
   if (bytes.length > 128 * 1024) throw new Error(`Oversized vanilla source: ${file}`);
   return bytes;
@@ -34,7 +40,7 @@ export async function build(args = process.argv.slice(2)) {
   if (options.help) return {help: true};
   const sources = new Map();
   for (const spec of PARTICLES) sources.set(spec.file, await vanillaFile(options.origin, options.source, spec.file));
-  // Compile and verify every exact file BEFORE writing anything to output.
+  // Compile and verify every exact source BEFORE writing anything to output.
   const content = createMcpack(compileFiles(sources));
   if (basename(options.output).length > 150) throw new Error('Output basename is too long');
   await mkdir(dirname(options.output), {recursive: true});

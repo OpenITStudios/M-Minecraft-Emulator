@@ -24,16 +24,29 @@ Tuning** resource-pack preview. Product-facing name is LazyTester, not MIVUBI;
 existing on-disk/registry compatibility names are NOT renamed.
 
 - Canonical source: `Development/tooling/lazytester-particles/` only.
-  `catalog.mjs` pins three ambient Minecraft Bedrock sample effect identities
+  `catalog.mjs` pins **10 ambient Minecraft Bedrock sample effect identities**
   and Git blob hashes from Mojang `v1.26.30.5`. `tune.mjs` preserves full
-  source definitions and changes only the steady `spawn_rate` expression.
-  `archive.mjs` emits a deterministic tiny resource ZIP and `build.mjs`
-  requires explicit source/output and refuses mismatched/missing inputs.
-- The 0–16-block near field retains vanilla emission; at 16–48 blocks the
-  coefficient interpolates smoothly to 80%. No new texture files, altered
-  pixels/UV/animations, lifetime, physics, `max_particles`, combat feedback
-  or Education particle definitions. More distant particles are **less dense**,
-  not bitwise identical; no measured FPS/RAM/VRAM benefit is claimed.
+  source definitions while tuning three steady emitters' `spawn_rate` and
+  seven event-driven manual emitters' `max_particles` using the same
+  distance-relative curve. These represent **different** native semantics:
+  manual cap reductions do not guarantee fewer emissions below the cap.
+  `archive.mjs` emits a deterministic tiny resource ZIP; `build.mjs`
+  requires an explicit source/output and rejects changed/oversized sources.
+- **Operator-approved aggressive visual budget:** 0–16 blocks **75%**;
+  32 blocks **50%**; 48 blocks **25%**; >=64 blocks **0%**, interpolating
+  smoothly between thresholds. Camera distance refers to emitter distance,
+  not every individual particle. Only the two reviewed rate/cap fields may
+  change; no new texture files, altered pixels, UV/animation, color,
+  lifetime, physics, combat feedback or Education particle definitions.
+  Decorative effects are genuinely less dense even near the player;
+  no visual equivalence or measured FPS/RAM/VRAM benefit is claimed.
+- Preview pack version advanced to `[0,2,0]` with original pack UUIDs,
+  so versions remain distinct. Ten official sample metadata hashes and
+  emitter classes were independently verified through GitHub; the Node
+  22.16.0 sandbox executed seven focused regression cases and created one
+  **synthetic-only** 11-entry ZIP independently CRC-checked by Python.
+  Official-source full-pack creation, Education runtime, multiplayer
+  behavior and sustained resource benefits remain NOT_EXECUTED.
 - Mojang's sample files are **not vendored** because their LICENSE is EULA
   governed, not permissive. Output is generated privately only on an explicit
   developer invocation; never staged, automatically enabled in profiles,
@@ -269,10 +282,11 @@ No speculative renderer patch, working-set trim or experimental hook
 promotion is justified. The reviewer improvement concerns *measurement
 honesty*, not reclaimed game RAM.
 
-**Primary next source action:** maintain the opted-in LazyTester Particle
-Tuning preview, pinned to Mojang's Bedrock samples and preserving all original
-textures/animations. Do not equate Bedrock sample compatibility to verified
-Education 26.32 support. Any later activation or runtime comparison requires a
-separately approved disposable world and host/join check; none is authorized
-by this source commit. Native `UploadBufferHeap` remains an independent,
-default-OFF historical ~59.953 MiB candidate, not this workstream.
+**Primary next source action:** retain optional LazyTester Particle
+Tuning v0.2 as a **source-built-only** preview with pinned Mojang samples,
+aggressive 75/50/25/0 distance policy and no installed world/profile changes.
+Before activating it, establish Minecraft Education 26.32 support for the
+referenced vanilla effects and distance/cap Molang evaluation. Do not equate
+synthetic tests or Mojang's Bedrock source with Education runtime acceptance;
+a copied-world host/join trial requires separate operator authorization.
+Native `UploadBufferHeap` remains default OFF and outside this workstream.

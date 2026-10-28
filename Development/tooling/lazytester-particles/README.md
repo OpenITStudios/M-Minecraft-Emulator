@@ -1,81 +1,104 @@
-# LazyTester Particle Tuning — optional preview
+# LazyTester Particle Tuning — optional aggressive preview v0.2
 
-This is a **resource-pack builder**, not a game mod, installer, runtime hook or
-new Minecraft session owner. It produces an optional Bedrock-format
-`.mcpack` only when explicitly invoked. Nothing is installed or activated
-in any MC01–MC05 profile or original world.
+An **optional resource-pack builder** for a small allowlist of ambient vanilla
+particle effects. It does not install a Minecraft add-on, access original
+MC01–MC05 profiles, modify worlds, patch executable/renderer memory or spawn
+another background service. The builder is not part of the released app.
 
-## Source, rights, compatibility
+## Source and compatibility
 
-- The only source is Mojang's
-  [Bedrock sample v1.26.30.5](https://github.com/Mojang/bedrock-samples/tree/v1.26.30.5/resource_pack/particles),
-  selected by three **exact Git blob hashes** in `catalog.mjs`.
-- Mojang's [license](https://github.com/Mojang/bedrock-samples/blob/v1.26.30.5/LICENSE.md)
-  reserves rights and refers to the Minecraft EULA. No Mojang samples or
-  third-party particle/texture files are committed to this repository; the
-  builder transforms source bytes provided or explicitly fetched at build time.
-- **Bedrock samples are not authoritative Minecraft Education 26.32 assets.**
-  The Education implementation of these three identifiers and the
-  camera-distance query has not been verified at runtime.
-- No part of the previously uploaded `Memory Reduce [Ram].mcpack` is imported.
+Mojang's [Bedrock sample v1.26.30.5](https://github.com/Mojang/bedrock-samples/tree/v1.26.30.5/resource_pack/particles)
+provides the original particle definitions, fetched only by explicit request
+or supplied as a locally obtained `resource_pack` directory. Every complete
+source must match its **exact Git blob SHA** before an override is created.
+Mojang's [license](https://github.com/Mojang/bedrock-samples/blob/v1.26.30.5/LICENSE.md)
+reserves rights under the Minecraft EULA; those sample JSON files are **not
+vendored in LazyTester Git history**. The old third-party `Memory Reduce
+[Ram].mcpack` is not included.
 
-## Exactly what is modified
+**Bedrock is not Minecraft Education.** Exact effect support, distance-query
+behavior and resource pack precedence on Education 26.32 remain unverified.
+These changes are therefore an offline-build preview, **not enabled by default**.
 
-| Vanilla identifier | Source operation |
+## Four distance tiers
+
+| Camera distance to emitter | Relative budget |
+| --- | ---: |
+| 0–16 blocks (near) | **75%** |
+| 32 blocks (medium) | **50%** |
+| 48 blocks (far) | **25%** |
+| 64+ blocks (very far) | **0%** |
+
+Within 16–32, 32–48, and 48–64 blocks, the budget transitions **smoothly**.
+For example, 24 blocks = 62.5%; 40 = 37.5%; 56 = 12.5%. This is a
+per-effect **relative emitter** policy, not a global GPU particle budget.
+
+- **Three `steady` emitters:** modify only `spawn_rate` (particles/second).
+  The 75/50/25/0 percentages describe spawn-rate scaling, while unchanged
+  particle lifetimes mean existing particles may remain until expiration.
+- **Seven `manual` emitters:** modify only `max_particles`, the **simultaneous
+  per-emitter cap**. Manual particle spawning is still controlled by game
+  events; lowering its cap does *not* guarantee an equivalent percentage
+  reduction in spawn rate or actual particle counts. At 64+ blocks its cap
+  is zero for selected ambient effects, subject to Education engine behavior.
+
+### Selected vanilla effects
+
+| Steady rate tuning | Manual active-cap tuning |
 | --- | --- |
-| `minecraft:portal_reverse_particle` | Distance-adjusted steady `spawn_rate` |
-| `minecraft:nectar_drip_particle` | Distance-adjusted steady `spawn_rate` |
-| `minecraft:dolphin_move_particle` | Distance-adjusted steady `spawn_rate` |
+| `portal_reverse` | `cherry_leaves_particle` |
+| `nectar_drip` | `spore_blossom_shower` |
+| `dolphin_move_particle` | `spore_blossom_ambient_block_actor` |
+| | `campfire_smoke` |
+| | `campfire_smoke_tall` |
+| | `rain_splash` |
+| | `mycelium_dust` |
 
-- **0–16 blocks:** exactly the source emission rate.
-- **16–48 blocks:** smoothly interpolate to 80% of the source emission rate.
-- **48+ blocks:** maximum 20% reduction in particle spawning, not opacity.
-- Original effect identifier, material, texture reference, UV, particle size,
-  motion, lifetime, color, animation and `max_particles` remain unchanged.
-- No new textures, atlases, script APIs, Java mods, entity behaviors, render
-  distance changes, global particle removals or original game file edits.
-  Visual particle density far away can change; pixels are not guaranteed
-  identical in every frame. FPS and RAM benefits are not assumed.
+**Preserved:** original particle identifiers, UV, material and texture paths,
+all pixels, colors, billboard sizes, lighting, lifetime, movement, collision,
+texture animations, sound, scripts, world simulation and render distance.
+No combat, critical hit, explosion, damage, potion, redstone, navigational,
+Education lab or warning effects are overridden.
 
-## Explicit offline build or official-source retrieval
+**Visual trade-off:** Ambient particle *density* really does change, even at
+close range, and distant selected ambient effects can disappear. This is
+not pixel-identical vanilla and may reduce visible smoke/rain/leaf cues. It
+cannot be advertised as lossless visual equivalence or measured RAM savings.
 
-Using a separately obtained official `resource_pack` directory:
+## Build explicitly; never auto-install
+
+Using the pinned official Bedrock sample `resource_pack` folder:
 
 ```sh
 node Development/tooling/lazytester-particles/build.mjs \
   --source /path/to/bedrock-samples/resource_pack \
-  --output /chosen/path/LazyTester-Particle-Tuning-preview.mcpack
+  --output /chosen/path/LazyTester-Particle-Tuning-v0.2-preview.mcpack
 ```
 
-Alternatively, only on explicit command, fetch the three official sample
-files from Mojang (network required):
+Or allow the builder to fetch the **ten specific Mojang sample JSON files**:
 
 ```sh
 node Development/tooling/lazytester-particles/build.mjs \
   --official yes \
-  --output /chosen/path/LazyTester-Particle-Tuning-preview.mcpack
+  --output /chosen/path/LazyTester-Particle-Tuning-v0.2-preview.mcpack
 ```
 
-Every exact source is verified **before** output. A missing/changed source,
-invalid identifier, unsupported emitter or existing output file fails closed.
-The tiny `.mcpack` is a ZIP with only `manifest.json` and three
-particle JSON definitions. The script never reads profile directories.
+The builder refuses modified, missing, oversized, symlinked or unsupported
+sources and preexisting outputs. The resulting `.mcpack` archive contains
+**one manifest plus ten particle JSON files**, and **no new textures**.
+It is not an installer or in-app toggle. A source's Git SHA is a version
+pin, not proof of correct Education behavior or runtime performance.
 
-## Safe activation, rollback, evidence
+## Rollback and acceptance
 
-**Preview only; never auto-install.** When separate testing is authorized,
-import the pack into Minecraft Education and activate it as a Resource Pack
-in a **disposable copy** of a world, not the original Education host world.
-A world pack may affect multiplayer clients: do not enable it across five
-accounts without host/join compatibility checks. To revert, deactivate
-`LazyTester Particle Tuning (Preview)` in that copied world's Resource Packs.
+When Minecraft Education testing is separately authorized, enable this pack
+**only in a disposable copied world**, evaluate visual quality and multiplayer
+host/join behavior, then deactivate it in that copied world's Resource Packs
+to revert. Never apply to an original active host world or every MC01–MC05
+client automatically. Gameplay, Education compatibility, actual FPS/frame time,
+private working set, commit, VRAM and sustained RAM reduction are **NOT_EXECUTED**.
 
-Synthetic Node builder/ZIP tests can validate input contracts and unchanged
-JSON components; they are **not** proof of game loading, visual equivalence,
-FPS, private RAM, VRAM, multiplayer or long-session reliability.
-Minecraft Education runtime and installed-client validation are NOT_EXECUTED.
-
-References: [Molang camera-distance query](https://learn.microsoft.com/en-us/minecraft/creator/reference/content/molangreference/examples/molangconcepts/queryfunctions/query_camera_distance_range_lerp),
-[steady particle emitter](https://learn.microsoft.com/en-us/minecraft/creator/reference/content/particlesreference/particlecomponents/minecraftemitter_rate_steady),
-[vanilla asset overrides](https://learn.microsoft.com/en-us/minecraft/creator/documents/overwritingassets),
-[Minecraft Education Add-Ons](https://education.minecraft.net/en-us/resources/minecraft_education_add_ons_collection).
+References: [Camera distance interpolation](https://learn.microsoft.com/en-us/minecraft/creator/reference/content/molangreference/examples/molangconcepts/queryfunctions/query_camera_distance_range_lerp),
+[steady emitter rate](https://learn.microsoft.com/en-us/minecraft/creator/reference/content/particlesreference/particlecomponents/minecraftemitter_rate_steady),
+[manual emitter cap](https://learn.microsoft.com/en-us/minecraft/creator/reference/content/particlesreference/examples/particlecomponents/emitter_rate_manual),
+[vanilla resource overrides](https://learn.microsoft.com/en-us/minecraft/creator/documents/overwritingassets).
