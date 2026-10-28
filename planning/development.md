@@ -132,19 +132,20 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability source hardening — 28 October 2026
 
-Transport refuses contention and admits queued work before idle reaping.
-CloseOne skips global journal work and validates retained game ownership.
-Svelte keeps unknown recovery status until explicit native receipt. Native
-helper checkpoint release requires terminal End plus actual helper exit;
-failed Start retains child/reader/gate in the one SURFACE owner. The helper
-stdout reader now distinguishes real EOF from framing/JSON errors: an
-abnormal pipe cannot return End(Ok) without a verified Restored receipt or
-identity-checked native fallback. Failure diagnostics omit malformed data.
-No second controller, protocol change, game mutation or Mac backend.
-Synthetic regression sources authored, NOT_EXECUTED. Windows MC02 normal
-exit, native recovery timing, builds and gameplay remain unverified.
+Windows transport fails fast under contention, checks queued requests ahead
+of idle work; CloseOne skips unrelated journals and validates retained game
+ownership. Svelte keeps uncertain native recovery until a positive receipt.
+Helper Start failures retain child/reader/gate leases in the one SURFACE owner;
+malformed pipe/JSON cannot prove recovery. The existing native window
+controller now permits one synchronous, identity-checked restore retry
+after terminal End(Err) ONLY when its exact helper has exited and the same
+Saved checkpoint exists. A still-live helper, missing Saved, failed HWND
+verification or unsuccessful readback keeps the original lease and error.
+No second helper/controller, game process operation or IPC schema change.
+Pure Rust regressions authored, NOT_EXECUTED; Windows MC02 normal exit,
+helper recovery timing, builds and gameplay remain unverified.
 
 ## Next bounded action
 
-Inspect helper startup/restore retry behavior after an unverified terminal
-error without weakening the original recovery gate or process identity.
+Audit pre-Ready retained leases with no Saved checkpoint for terminal
+observation and safe refusal, keeping the original recovery gate authoritative.

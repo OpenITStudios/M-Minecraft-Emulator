@@ -1144,6 +1144,23 @@ mod controller {
     // A stdout reader End(Ok) is not proof that its source process has
     // exited. The child may have closed stdout while still holding the
     // checkpoint or performing native HWND work. A failed End is never success.
+    // A failed terminal End alone never permits discarding a checkpoint.
+    // A later explicit stop/release may retry restoration ONLY after the
+    // original helper process is gone and this lease still owns a Saved
+    // checkpoint. The caller's native::restore performs fresh exact PID,
+    // process birth, Windows session, HWND/thread and geometry checks.
+    // No new helper, game lifecycle request or background retry is started.
+    fn retry_failed_terminal_restore(
+        terminal: Option<&Result<(), String>>,
+        helper_exited: bool,
+        checkpoint: Option<&Saved>,
+        restore: impl FnOnce(&Saved) -> io::Result<()>,
+    ) -> Option<io::Result<()>> {
+        match (terminal, helper_exited, checkpoint) {
+            (Some(Err(_)), true, Some(saved)) => Some(restore(saved)),
+            _ => None,
+        }
+    }
     fn completed_helper_status(
         terminal: Option<&Result<(), String>>,
         helper_exited: bool,
@@ -1312,6 +1329,54 @@ mod controller {
             let mut changed = ready.clone();
             changed.target.window_handle = "0x124".into();
             assert!(!ready_matches_start(&changed, &requested));
+        }
+        #[test]
+        fn failed_terminal_retry_requires_dead_helper_and_original_saved_window() {
+            let original = OwnedProcess {
+                pid: 101, created_file_time: "134000000000000001".into(),
+                session_id: 1, window_handle: "0x123".into(), responding: true,
+            };
+            let saved = Saved {
+                target: original, window_thread_id: 17,
+                window_class_name: "OGLES".into(),
+                style: 0, extended_style: 0,
+                rect: Rectangle {x: 0, y: 0, width: 640, height: 360},
+                manager_pid: 5,
+            };
+            let failed: Result<(), String> = Err("Original restore failed".into());
+            let success: Result<(), String> = Ok(());
+            let mut attempts = 0;
+            for (terminal, exited, checkpoint) in [
+                (None, true, Some(&saved)),
+                (Some(&success), true, Some(&saved)),
+                (Some(&failed), false, Some(&saved)),
+                (Some(&failed), true, None),
+            ] {
+                assert!(retry_failed_terminal_restore(terminal, exited, checkpoint, |_| {
+                    attempts += 1;
+                    Ok(())
+                }).is_none());
+            }
+            assert_eq!(attempts, 0, "No recovery writes while helper or identity is unknown");
+            let error = retry_failed_terminal_restore(
+                Some(&failed), true, Some(&saved), |checkpoint| {
+                    attempts += 1;
+                    assert_eq!(checkpoint.target.pid, 101);
+                    Err(io::Error::new(io::ErrorKind::WouldBlock,
+                        "Original HWND readback differs"))
+                },
+            ).expect("One existing-checkpoint retry").unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
+            assert_eq!(attempts, 1);
+            assert!(completed_helper_status(Some(&failed), true).is_err(),
+                "A failed retry never promotes the original End error");
+            assert!(retry_failed_terminal_restore(Some(&failed), true, Some(&saved),
+                |checkpoint| {
+                    attempts += 1;
+                    assert_eq!(checkpoint.target.window_handle, "0x123");
+                    Ok(())
+                }).unwrap().is_ok());
+            assert_eq!(attempts, 2);
         }
         #[test]
         fn terminal_end_alone_does_not_retire_a_live_helper() {
@@ -1483,16 +1548,26 @@ mod controller {
             result
         }
         fn confirm_finished_helper(&mut self) -> io::Result<()> {
-            // The terminal reader event can precede the helper's actual
-            // process termination. Retain the original checkpoint while a
-            // still-live helper could make a late HWND change. Do not block
-            // indefinitely; an unconfirmed exit remains retryable.
+            // Terminal reader End precedes the helper's process-exit signal
+            // on some Windows schedules. Never restore while the helper can
+            // still make a later native window write.
             let deadline = Instant::now() + Duration::from_secs(3);
             loop {
-                match completed_helper_status(
+                let helper_exited = self.child.try_wait()?.is_some();
+                if let Some(retry) = retry_failed_terminal_restore(
                     self.ended.as_ref(),
-                    self.child.try_wait()?.is_some(),
+                    helper_exited,
+                    self.saved.as_ref(),
+                    native::restore,
                 ) {
+                    // The source terminal End remains Err; the verified
+                    // parent-side recovery is stronger *new* evidence.
+                    // On failure the caller keeps this exact lease/gate
+                    // for an explicit later attempt. No blind retry loop.
+                    return retry.map_err(|error| io::Error::new(error.kind(),
+                        format!("Native restoration retry failed; original recovery checkpoint retained: {error}")));
+                }
+                match completed_helper_status(self.ended.as_ref(), helper_exited) {
                     Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
                         if Instant::now() >= deadline {
                             return Err(io::Error::new(io::ErrorKind::TimedOut,
