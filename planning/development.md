@@ -112,10 +112,16 @@ and the separate 144 MiB synchronous-growth route in the historical menu
 capture, plus the distinct 58.457 MiB resident CPU object. These are
 NOT reclaimable-byte estimates and must never be added to the world baseline.
 
-Next: when actually available, reconcile the existing private allocation
-artifacts into a same-workload owner/liveness map before selecting a new
-native optimization. Raw ETW/VMMap and game binary are not in the repository,
-so this source-only audit stops at the evidence boundary. Do not invent an
-allocator plugin, repeat P0 or request Windows testing as a code gate;
+New public-source proof: pre-June 2026 BGFX Context/Frame keeps two
+frames with fixed draw, render and matrix arrays, unlike later dynamic
+upstream storage. The public default accounts for >=9.875 MiB in only
+certain inline arrays; it does NOT identify the saved Education 67 MiB object,
+whose private residency was ~58.457 MiB. This remains a secondary lead.
+
+Next: recover actual **synchronized owner and live/empty capacity** evidence
+for the large graphics residency classes. If original raw ETW/VMMap or
+Education native code slices become available, use them for exact matching;
+none are accessible via GitHub or the searched file library. Do not build
+new injectors/collectors, resurrect P0, enable CI or demand a PC test;
 Windows/game runtime remains explicitly deferred.
 

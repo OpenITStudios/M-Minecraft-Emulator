@@ -88,6 +88,59 @@ object layout is embedded in Education. The stored Education PE timestamp
 build-time timestamp; the PE field alone is not a dependency/version proof.
 Do not lower the 67 MiB object's malloc size: saved high-offset writes exist.
 
+### Public BGFX pre-June 2026 representation: one bounded CPU hypothesis
+
+The exact upstream parent of
+[BGFX 86ad82c](https://github.com/bkaradzic/bgfx/commit/86ad82cfe2f5c2b8f56db2391a5ba5859251dad9)
+is [ea0cf65](https://github.com/bkaradzic/bgfx/blob/ea0cf65d088c26569019945504bf0cdfedbda0a8/src/bgfx_p.h).
+This primary source was inspected at the actual parent (not a modern
+replacement API or a PR summary). In that public implementation,
+`Context` embeds
+`Frame m_frame[1+(BGFX_CONFIG_MULTITHREADED ? 1 : 0)]`, with two
+frames under the default multithreaded build. Each `Frame` embeds
+fixed arrays of `m_sortKeys`, `m_sortValues`,
+`m_renderItem`, `m_renderBind` and `FrameCache`. The
+`FrameCache` embeds `MatrixCache::m_cache`.
+
+For source-default maximum draw calls = 65,535, maximum cached matrices
+= 65,536, `Matrix4` contains 16 floats and aligns to 16 bytes, and
+`RenderItemCount` is `uint16_t`. Hence the public
+multithreaded `Context` embeds at least:
+- matrix caches: `2 * 65536 * 64 = 8,388,608 bytes (8 MiB)`;
+- per-frame sort keys and values:
+  `2 * 65536 * (8+2) = 1,310,720 bytes (1.25 MiB)`;
+- `Context` temp sort keys and values:
+  `65535 * (8+2) = 655,350 bytes (~0.625 MiB)`.
+
+This is **at least ~9.875 MiB of statically embedded public-source
+storage**, *excluding* the substantial `RenderItem` and
+`RenderBind` arrays and other members. This is not measured RSS,
+a true `sizeof(Context)`, nor any byte count for Minecraft
+Education. Commit
+[35a98dd](https://github.com/bkaradzic/bgfx/commit/35a98dd6453cf25dc75c68e233abb400836d5920)
+redesigned frame storage for use-based growth; the public implementation
+requires coordinated changes to allocation, indexing, shrink and producer
+lifetime. It cannot be enabled in a prebuilt Education executable by merely
+changing a compile-time define.
+
+**Education linkage remains a hypothesis only.** The saved Education
+`B05B2C0` factory allocated ~67.43 MiB, a caller used the
+`bgfx` selection literal, and high object offsets were
+written. These facts justify comparing large inline renderer tables, but do
+NOT identify the object as this public BGFX `Context`,
+establish its exact renderer revision/configuration or prove free capacity.
+Even that whole historical object's ~58.457 MiB private residency is far
+short of the world-baseline ~369.730 MiB reduction required to reach
+1024 MiB. It is a **secondary** CPU hypothesis; high-impact graphics
+residency attribution remains first. Do not resize its native allocation,
+rewrite virtual field offsets, or drop in newer BGFX code.
+
+The exact follow-up proof, if previously unavailable raw game-code artifacts
+become accessible, is to match the original Education constructor's array
+bounds, element strides, field offsets and *all* reader/writer/release paths
+to a specific version's actual data structure, with observed live occupancy.
+Without that bridge, the integration status is NOT_ESTABLISHED.
+
 ### One discriminating next evidence step — no speculative optimizer
 
 Before any new intervention, classify the historically unassigned
