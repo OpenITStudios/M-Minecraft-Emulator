@@ -244,6 +244,25 @@ export function verifyRepository(root,g0=false) {
   // One verified Win32 image-path reader, bounded at the original MAX_PATH
   // extension ceiling, replaces five previously repeated 64-KiB buffers.
   // This checks source wiring only; it is NOT a Windows performance result.
+  // Keep optimized resource ownership in the existing HUD worker and
+  // optional native RAM collector. These are source guards, not runtime proof.
+  const hudSource=read('Development/tooling/acceptance/windows/bootstrap-ordering/fps-hud.cpp');
+  const memoryCollector=read('Development/tooling/acceptance/windows/collect-native-performance.ps1');
+  const nativeMemoryCollector=read('Development/tooling/acceptance/windows/native-profile-baseline.ps1');
+  const nativeMemoryReviewer=read('Development/tooling/acceptance/evaluate-native-performance.mjs');
+  assert.ok(hudSource.includes('Canvas upload;')
+    && hudSource.includes('extent.cx == requested.cx && extent.cy == requested.cy')
+    && hudSource.includes('font && fontDpi == dpi')
+    && hudSource.includes('SIZE size{}; paint(upload, value, dpi, size);')
+    && !hudSource.includes('SIZE size{}; Canvas upload; paint('),
+    'FPS HUD must reuse a single scoped GDI canvas in its existing native worker');
+  assert.ok(memoryCollector.includes('result.PageFaultCount = extended.Base.PageFaultCount;')
+    && memoryCollector.includes('result.PageFaultCount = basic.PageFaultCount;')
+    && memoryCollector.includes('if ($IncludePageFaultCount)')
+    && nativeMemoryCollector.includes('-IncludePageFaultCount)')
+    && nativeMemoryReviewer.includes('function nativePageFaultMetric(')
+    && nativeMemoryReviewer.includes('samePageFaultCoverage: before.pageFaultCountCollected === after.pageFaultCountCollected'),
+    'Native schema-7 fault diagnostics must reuse the pinned memory read and retain legacy formats');
   const imageReader=read('Development/apps/desktop/src-tauri/src/engine/windows_process_image.rs');
   const imageOwners=[
     gameSource,

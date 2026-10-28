@@ -55,6 +55,19 @@ authorization to perform Windows/game acceptance.
   space. This removes repeated temporary heap allocations and one large
   bootstrap stack buffer; it is **not** a measured Minecraft RAM reduction.
   Windows-only fixture authored, NOT_EXECUTED.
+- Settings/Storage with no running Minecraft now skip four of five automatic
+  native refresh opportunities (10 s instead of 2 s); live games, workspace,
+  launcher views and recovery keep the existing 2 s cadence. Uses the single
+  existing timer. Only source-level scheduling logic/fixtures were authored.
+- The existing native FPS HUD worker now retains one DIB/font across redraws
+  at identical DPI/size and releases it at worker exit, eliminating repeated
+  GDI create/delete churn without introducing an extra cache, worker or
+  process owner. C++/Windows test NOT_EXECUTED.
+- The native schema-7 collector now includes opt-in cumulative process
+  PageFaultCount from its existing process-memory API call; historical
+  schema-5/6 shape and older schema-7 reports remain supported. Page fault
+  count is not a hard-fault/disk-read indicator. Five isolated evaluator
+  fixture cases passed; PowerShell/Windows NOT_EXECUTED.
 - CI stays OFF. No install, release, Windows game process or user PC touched.
 
 ## Evidence and preservation
@@ -75,9 +88,10 @@ publication. The Mac build remains a diagnostic shell without game backend.
 
 ## Next bounded source action
 
-Review remaining Windows source for demonstrably retained, owner-controlled
-memory or concrete regressions in the current schema-7 collector and module
-wiring. Stop if only small bounded buffers remain: no invented optimizer,
-automatic heap trimming or another round of DWM micro-fixes. Keep the
-original MC02 runtime close acceptance deferred until explicitly requested.
+Check any remaining source-owned memory retention that has material allocation
+volume AND a complete release/rebuild owner. Prioritize true Minecraft RAM
+efficiency only where the Education-native lifecycle is established;
+otherwise stop speculative changes, and defer measured 0–5 client RAM,
+page-fault, HUD and gaming validation to the explicitly authorized Windows
+localtest stage. Do not revive P0 as a code gate.
 
