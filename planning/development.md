@@ -105,6 +105,16 @@ authorization to perform Windows/game acceptance.
   numerical-hardening revision passes 17 additional isolated V8
   checks with synthetic schema-7/8 data. Full Node, Rust, Windows and
   Minecraft tests remain NOT_EXECUTED; this is not a RAM saving.
+- The current graphics owner audit confirms that owned DWM preview
+  registrations are unregistered through Thumbnail::drop, and native
+  workspace suspend/release clears the preview roster. The HUD worker
+  releases its GDI bitmap/font and thread when retired. This is bounded
+  overlay resource ownership, not hundreds of MiB of game heap reclamation.
+  Both game heap experiments remain default OFF and mutually exclusive.
+  The existing repository source verifier now enforces the default-OFF
+  product build, version-pinned PE/code hashes, and no-op disabled mode.
+  Focused negative regression fixtures are authored; no Windows/game
+  runtime or release payload was changed.
 - CI stays OFF. No install, release, Windows game process or user PC touched.
 
 ## Evidence and preservation

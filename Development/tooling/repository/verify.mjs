@@ -65,6 +65,55 @@ export function verifyFrontendNativeIpcBoundary(sources) {
   }
 }
 
+// Heap experiments affect the game only in reviewed opt-in builds.
+// The release-compatible default has no allocator interception.
+export function verifyNativeGraphicsExperimentBoundary(cmake, source) {
+  const flags = ['BOOTSTRAP_GRAPHICS_WARM_POOLS_EXPERIMENT',
+    'BOOTSTRAP_UPLOAD_RETENTION_EXPERIMENT'];
+  for (const flag of flags) {
+    const options = [...cmake.matchAll(new RegExp(
+      '^option\\(' + flag + '\\s+"[^"\\r\\n]+"\\s+(ON|OFF)\\s*\\)', 'gm'))];
+    assert.equal(options.length, 1, 'Missing or duplicate heap experiment option: '+flag);
+    assert.equal(options[0][1], 'OFF', 'Unverified heap canary must remain default OFF: '+flag);
+    const definition = 'target_compile_definitions(bootstrap-compat PRIVATE '+flag+'=1)';
+    assert.equal(cmake.split(definition).length - 1, 1,
+      'Product heap experiment definition must be unique: '+flag);
+    // The separate diagnostics executable can legitimately have a second
+    // CMake guard; only the bootstrap-compat DLL defines game behavior.
+    const guarded = [...cmake.matchAll(new RegExp(
+      '^if\\(' + flag + '\\)\\s*\\n([\\s\\S]*?)^endif\\(\\)', 'gm'))];
+    assert.equal(guarded.filter(match => match[1].includes(definition)).length, 1,
+      'Product heap intervention must be explicitly guarded: '+flag);
+  }
+  assert.match(cmake,
+    /^if\(BOOTSTRAP_GRAPHICS_WARM_POOLS_EXPERIMENT AND BOOTSTRAP_UPLOAD_RETENTION_EXPERIMENT\)\s*\n\s*message\(FATAL_ERROR\b[^\n]*\)\s*\nendif\(\)/m,
+    'Two heap experiments must remain mutually exclusive');
+  assert.match(source,
+    /^#if defined\(BOOTSTRAP_GRAPHICS_WARM_POOLS_EXPERIMENT\) \|\| defined\(BOOTSTRAP_UPLOAD_RETENTION_EXPERIMENT\)/m,
+    'Native graphics interception must be opt-in at compile time');
+  assert.match(source,
+    /^#if defined\(BOOTSTRAP_GRAPHICS_WARM_POOLS_EXPERIMENT\) && defined\(BOOTSTRAP_UPLOAD_RETENTION_EXPERIMENT\)\s*\n#error\b/m,
+    'Compiled heap experiments must also reject simultaneous enablement');
+  assert.match(source,
+    /TimeDateStamp\s*!=\s*0x[0-9a-f]+\s*\|\|[^;\n]*SizeOfImage\s*!=\s*0x[0-9a-f]+/i,
+    'Heap hook must verify the exact game PE metadata');
+  // Guard each existing code location; verifying just one digest would
+  // permit accidental partial removal of the version-bound compatibility gate.
+  for (const codeSite of [
+    '0xbc22120, 691,', '0xbc22490, 402,',
+    '0xbc22660, 402,', '0xbc22840, 2363,',
+    '0xbc24d10, 2905,', '0xbc24570, 172,'
+  ]) {
+    assert.ok(source.includes('digest(algorithm, '+codeSite),
+      'Pinned native allocator code digest was removed: '+codeSite);
+  }
+  assert.ok(source.includes('if (knownCode() && attach()) installed.store(true, std::memory_order_release);'),
+    'Native heap hook must refuse an unknown game before attaching');
+  assert.match(source,
+    /#else\s*\nnamespace graphics_warm_pools \{ void consider\(\) noexcept \{\} \}\s*\n#endif\s*$/,
+    'Unselected heap experiments must compile to the no-op');
+}
+
 export function traceFrontend(sources,entry='main.ts') {
   const reached=new Set();
   function visit(path) {
@@ -269,6 +318,9 @@ export function verifyRepository(root,g0=false) {
   // This checks source wiring only; it is NOT a Windows performance result.
   // Keep optimized resource ownership in the existing HUD worker and
   // optional native RAM collector. These are source guards, not runtime proof.
+  verifyNativeGraphicsExperimentBoundary(
+    read('Development/tooling/acceptance/windows/bootstrap-ordering/CMakeLists.txt'),
+    read('Development/tooling/acceptance/windows/bootstrap-ordering/graphics-warm-pools.cpp'));
   const hudSource=read('Development/tooling/acceptance/windows/bootstrap-ordering/fps-hud.cpp');
   const memoryCollector=read('Development/tooling/acceptance/windows/collect-native-performance.ps1');
   const nativeMemoryCollector=read('Development/tooling/acceptance/windows/native-profile-baseline.ps1');
