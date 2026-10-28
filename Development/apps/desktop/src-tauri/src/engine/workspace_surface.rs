@@ -1161,6 +1161,26 @@ mod controller {
             _ => None,
         }
     }
+    // An unacknowledged Start is not proof of a captured window. Only
+    // original-game exit verified AFTER helper terminal+exit can retire
+    // its failed pre-Ready recovery lease without Saved geometry.
+    fn retire_failed_pre_ready(
+        terminal: Option<&Result<(), String>>,
+        helper_exited: bool,
+        saved_present: bool,
+        original_game_exited: impl FnOnce() -> io::Result<bool>,
+    ) -> Option<io::Result<()>> {
+        if !matches!(terminal, Some(Err(_))) || !helper_exited || saved_present {
+            return None;
+        }
+        Some(match original_game_exited() {
+            Ok(true) => Ok(()),
+            Ok(false) => Err(io::Error::new(io::ErrorKind::WouldBlock,
+                "Original Minecraft game remains alive; pre-Ready checkpoint retained")),
+            Err(error) => Err(io::Error::new(error.kind(),
+                format!("Original Minecraft exit could not be verified; pre-Ready checkpoint retained: {error}"))),
+        })
+    }
     fn completed_helper_status(
         terminal: Option<&Result<(), String>>,
         helper_exited: bool,
@@ -1331,6 +1351,39 @@ mod controller {
             assert!(!ready_matches_start(&changed, &requested));
         }
         #[test]
+        fn failed_pre_ready_retirement_requires_both_exits() {
+            let failed: Result<(), String> = Err("Ready unavailable".into());
+            let passed: Result<(), String> = Ok(());
+            let mut probes = 0;
+            for (terminal, helper_exited, has_saved) in [
+                (None, true, false),
+                (Some(&passed), true, false),
+                (Some(&failed), false, false),
+                (Some(&failed), true, true),
+            ] {
+                assert!(retire_failed_pre_ready(terminal, helper_exited, has_saved, || {
+                    probes += 1;
+                    Ok(true)
+                }).is_none());
+            }
+            assert_eq!(probes, 0, "Never inspect until helper is terminal and exited");
+            let live = retire_failed_pre_ready(Some(&failed), true, false, || {
+                probes += 1;
+                Ok(false)
+            }).unwrap().unwrap_err();
+            assert_eq!(live.kind(), io::ErrorKind::WouldBlock);
+            let uncertain = retire_failed_pre_ready(Some(&failed), true, false, || {
+                probes += 1;
+                Err(io::Error::new(io::ErrorKind::PermissionDenied, "Original PID unavailable"))
+            }).unwrap().unwrap_err();
+            assert_eq!(uncertain.kind(), io::ErrorKind::PermissionDenied);
+            assert!(retire_failed_pre_ready(Some(&failed), true, false, || {
+                probes += 1;
+                Ok(true)
+            }).unwrap().is_ok());
+            assert_eq!(probes, 3);
+        }
+        #[test]
         fn failed_terminal_retry_requires_dead_helper_and_original_saved_window() {
             let original = OwnedProcess {
                 pid: 101, created_file_time: "134000000000000001".into(),
@@ -1450,6 +1503,8 @@ mod controller {
         authority: Option<(String, String)>,
         ended: Option<Result<(), String>>,
         saved: Option<Saved>,
+        // Exact requested process, pinned before Start; NOT Ready/capture proof.
+        requested: OwnedProcess,
         _recovery_gate: recovery_gate::RecoveryGate,
     }
     impl Lease {
@@ -1554,6 +1609,16 @@ mod controller {
             let deadline = Instant::now() + Duration::from_secs(3);
             loop {
                 let helper_exited = self.child.try_wait()?.is_some();
+                if let Some(retired) = retire_failed_pre_ready(
+                    self.ended.as_ref(),
+                    helper_exited,
+                    self.saved.is_some(),
+                    || native::original_game_process_exited(&self.requested),
+                ) {
+                    // No Saved means no safe HWND/frame to restore. Only
+                    // verified original process exit makes restore unnecessary.
+                    return retired;
+                }
                 if let Some(retry) = retry_failed_terminal_restore(
                     self.ended.as_ref(),
                     helper_exited,
@@ -1612,6 +1677,7 @@ mod controller {
         closing: false,
     });
     fn same(lease: &Lease, target: &OwnedProcess) -> bool {
+        // Never promote the pre-Ready request to an acknowledged Play surface.
         lease.saved.as_ref().is_some_and(|s| {
             s.target.pid == target.pid
                 && s.target.created_file_time == target.created_file_time
@@ -1691,16 +1757,20 @@ mod controller {
         let mut evidence=Vec::with_capacity(1+state.parked.len());
         if let Some(lease)=state.active.as_mut() {
             let matches=slot_lease(lease,&client);
-            let completed=matches && lease.saved.is_some()
-                && close_only_if_helpers_quiesced(
-                    lease.ended.is_some(),lease.child.try_wait()?.is_some());
+            // The helper and reader must be quiescent, including failed
+            // pre-Ready leases. The game controller separately verifies
+            // original process identity before posting normal WM_CLOSE.
+            let completed=matches && close_only_if_helpers_quiesced(
+                lease.ended.is_some(),lease.child.try_wait()?.is_some());
             evidence.push((matches,completed));
         }
         for lease in &mut state.parked {
             let matches=slot_lease(lease,&client);
-            let completed=matches && lease.saved.is_some()
-                && close_only_if_helpers_quiesced(
-                    lease.ended.is_some(),lease.child.try_wait()?.is_some());
+            // The helper and reader must be quiescent, including failed
+            // pre-Ready leases. The game controller separately verifies
+            // original process identity before posting normal WM_CLOSE.
+            let completed=matches && close_only_if_helpers_quiesced(
+                lease.ended.is_some(),lease.child.try_wait()?.is_some());
             evidence.push((matches,completed));
         }
         Ok(selected_helper_quiesced(&evidence))
@@ -1732,8 +1802,9 @@ mod controller {
         if active_match {
             let lease=state.active.as_mut().unwrap();
             if !close_only_if_helpers_quiesced(lease.ended.is_some(),lease.child.try_wait()?.is_some())
-                || !lease.saved.as_ref().is_some_and(|saved|
-                    native::original_game_process_exited(&saved.target).unwrap_or(false)) {
+                || !native::original_game_process_exited(&lease.requested).unwrap_or(false) {
+                // A missing Saved is not process-exit evidence; this exact
+                // pinned original lifetime must have ended before retirement.
                 return Err(io::Error::new(io::ErrorKind::WouldBlock,
                     "Native checkpoint still active or original Minecraft exit unverified"));
             }
@@ -1742,8 +1813,9 @@ mod controller {
         if let Some(index)=state.parked.iter().position(|lease|slot_lease(lease,&client)) {
             let lease=&mut state.parked[index];
             if !close_only_if_helpers_quiesced(lease.ended.is_some(),lease.child.try_wait()?.is_some())
-                || !lease.saved.as_ref().is_some_and(|saved|
-                    native::original_game_process_exited(&saved.target).unwrap_or(false)) {
+                || !native::original_game_process_exited(&lease.requested).unwrap_or(false) {
+                // A missing Saved is not process-exit evidence; this exact
+                // pinned original lifetime must have ended before retirement.
                 return Err(io::Error::new(io::ErrorKind::WouldBlock,
                     "Native checkpoint still active or original Minecraft exit unverified"));
             }
@@ -1997,6 +2069,7 @@ mod controller {
             authority: None,
             ended: None,
             saved: None,
+            requested: target.clone(),
             _recovery_gate: recovery_gate,
         };
         let start = lease.send(Command::Start(target.clone()));
