@@ -96,9 +96,15 @@ authorization to perform Windows/game acceptance.
   per-profile maxima across timestamps or adds direct children/shared pages.
   Incomplete rows, missing EX2 residency, identity loss and zero selected
   clients cannot produce misleading numeric total/aggregate A/B differences.
+  Numeric overflow in otherwise finite observations also fails closed.
   The retained comparer remains descriptive and explicitly lacks workload,
   gameplay and system-memory proof. Focused regression fixtures are authored;
   isolated JS logic and full Node/Windows execution are separately reported.
+  Isolated source review: the preceding aggregate commit message recorded
+  15 checks by mistake; its tool output actually recorded 14. The final
+  numerical-hardening revision passes 17 additional isolated V8
+  checks with synthetic schema-7/8 data. Full Node, Rust, Windows and
+  Minecraft tests remain NOT_EXECUTED; this is not a RAM saving.
 - CI stays OFF. No install, release, Windows game process or user PC touched.
 
 ## Evidence and preservation

@@ -414,12 +414,23 @@ function nativeSynchronousRootMetric(report, roots, field) {
         sum += selected.memory[field].valueMb;
       }
     }
+    // Even individually finite, untrusted MiB readings can overflow when
+    // combined. This must be unavailable, never an observed Infinity.
+    if (complete && !Number.isFinite(sum)) {
+      complete = false;
+      missingReasons.add('NUMERIC_OVERFLOW');
+    }
     return complete
       ? {status:'OBSERVED', valueMb:Number(sum.toFixed(3)), reason:null}
       : {status:'UNKNOWN', valueMb:null, reason:'INCOMPLETE_SELECTED_ROOTS'};
   });
   const summary = memorySummary(samples);
-  const complete = roots.length > 0 && summary.missingSamples === 0;
+  // A sum of finite row totals may still overflow the summary's mean/median.
+  // Never publish these as numbers or let A/B coerce null to a fake zero.
+  const numericallyValid = ['meanMb','medianMb','peakMb','firstMb','lastMb',
+    'endpointDifferenceMb'].every(key => summary[key] === null || Number.isFinite(summary[key]));
+  if (!numericallyValid) missingReasons.add('NUMERIC_OVERFLOW');
+  const complete = roots.length > 0 && summary.missingSamples === 0 && numericallyValid;
   const firstMissing = samples.findIndex(sample => sample.status === 'UNKNOWN');
   return {
     completeSampleCoverage: complete,
@@ -670,7 +681,9 @@ function compareNativeProfileBaseline(baseline, candidate) {
   };
   const comparable = Object.values(conditions).every(Boolean);
   const difference = (a, b) => comparable && a && b &&
-    a.missingSamples === 0 && b.missingSamples === 0 ? {
+    a.missingSamples === 0 && b.missingSamples === 0 &&
+    ['meanMb','medianMb','peakMb'].every(key =>
+      Number.isFinite(a[key]) && Number.isFinite(b[key])) ? {
       meanMbDifference: Number((b.meanMb - a.meanMb).toFixed(3)),
       medianMbDifference: Number((b.medianMb - a.medianMb).toFixed(3)),
       peakMbDifference: Number((b.peakMb - a.peakMb).toFixed(3)),

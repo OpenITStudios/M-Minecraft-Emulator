@@ -1178,6 +1178,38 @@ test('native aggregate withholds misleading totals on incomplete samples without
   assert.equal(root8.selectedClientsAndManager,null);
 });
 
+test('selected-root aggregate rejects arithmetic overflow and never converts null A/B to zero', () => {
+  const rowsOverflow = nativeBaselineFixture(['01','04']);
+  for (const row of rowsOverflow.samples) {
+    row.clients['01'].memory.privateWorkingSetMb = memoryMetric(1e308);
+    row.clients['04'].memory.privateWorkingSetMb = memoryMetric(1e308);
+  }
+  const notRepresentable = evaluateNativePerformance(rowsOverflow)
+    .simultaneousSelectedRootTotals.selectedClients.privateWorkingSetMb;
+  assert.equal(notRepresentable.completeSampleCoverage, false);
+  assert.equal(notRepresentable.observedSamples, 0);
+  assert.equal(notRepresentable.medianMb, null);
+  assert.equal(notRepresentable.peakMb, null);
+  assert.deepEqual(notRepresentable.unavailableReasons, ['NUMERIC_OVERFLOW']);
+  assert.equal(compareNativePerformance(rowsOverflow,rowsOverflow).memoryDifferences
+    .simultaneousSelectedRootTotals.selectedClients.privateWorkingSetMb, null);
+
+  // Each row remains representable, but the old generic mean/median
+  // summation could overflow from summing multiple near-maximum values.
+  const summaryOverflow = nativeBaselineFixture(['01']);
+  for (const row of summaryOverflow.samples)
+    row.clients['01'].memory.privateWorkingSetMb = memoryMetric(1e308);
+  const result = evaluateNativePerformance(summaryOverflow).simultaneousSelectedRootTotals
+    .selectedClients.privateWorkingSetMb;
+  assert.equal(result.completeSampleCoverage, false);
+  assert.equal(result.observedSamples, 2);
+  assert.equal(result.missingSamples, 0);
+  assert.equal(result.medianMb, null);
+  assert.deepEqual(result.unavailableReasons, ['NUMERIC_OVERFLOW']);
+  assert.equal(compareNativePerformance(summaryOverflow,summaryOverflow).memoryDifferences
+    .simultaneousSelectedRootTotals.selectedClients.privateWorkingSetMb, null);
+});
+
 test('native per-profile RAM goal distance is numeric only with full residency and identity coverage', () => {
   assert.deepEqual(evaluateNativePerformance(nativeBaselineFixture([])).aspirationalRamGoal, {});
   const baseline = nativeBaselineFixture(['01', '05']);
