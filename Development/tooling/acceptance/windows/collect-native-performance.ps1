@@ -1,11 +1,9 @@
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)]
-  [ValidateRange(1, 2147483647)]
-  [int]$NativePid,
-  [Parameter(Mandatory = $true)]
-  [ValidateRange(1, 2147483647)]
-  [int]$IsolatedPid,
+  [ValidateRange(0, 2147483647)]
+  [int]$NativePid = 0,
+  [ValidateRange(0, 2147483647)]
+  [int]$IsolatedPid = 0,
   [ValidateRange(30, 7200)]
   [int]$DurationSeconds = 3600,
   [ValidateRange(1, 60)]
@@ -21,12 +19,43 @@ param(
   [int]$Client05Pid = 0,
   [ValidateRange(0, 2147483647)]
   [int]$ManagerPid = 0,
-  [switch]$DirectChildren
+  [switch]$DirectChildren,
+  # Current native profile-only baseline. Legacy PID flags remain supported separately.
+  [switch]$NativeProfileBaseline,
+  [int[]]$ProfilePids = @()
 )
 
 $ErrorActionPreference = 'Stop'
 # Diagnostic-only sampler. It never starts/stops Minecraft, changes Sandboxie,
 # reads sign-in/profile/world content or infers gameplay from PID existence.
+if ($NativeProfileBaseline) {
+  # A native observation never launches a game. Slot assignment is caller supplied.
+  if ($NativePid -ne 0 -or $IsolatedPid -ne 0 -or
+      $Client03Pid -ne 0 -or $Client04Pid -ne 0 -or $Client05Pid -ne 0) {
+    throw 'Use -ProfilePids for native profiles, not historical Native/Isolated flags.'
+  }
+  if (-not $MemoryComposition -or $GpuSnapshot) {
+    throw 'Native profile baseline requires -MemoryComposition and does not accept -GpuSnapshot.'
+  }
+  if ($ProfilePids.Count -gt 5 -or @($ProfilePids | Where-Object { $_ -lt 1 }).Count -gt 0) {
+    throw 'Native baseline accepts 0 to 5 positive existing game process IDs.'
+  }
+  if (@($ProfilePids | Select-Object -Unique).Count -ne $ProfilePids.Count) {
+    throw 'Each native profile must have a distinct process ID.'
+  }
+  if ($ManagerPid -ne 0 -and $ManagerPid -in $ProfilePids) {
+    throw 'The selected manager must not be one of the game processes.'
+  }
+  if ($DirectChildren -and $ProfilePids.Count -eq 0 -and $ManagerPid -eq 0) {
+    throw 'Direct-child attribution needs at least one selected process.'
+  }
+} else {
+  if ($ProfilePids.Count -gt 0) {
+    throw 'Use -NativeProfileBaseline -MemoryComposition with -ProfilePids.'
+  }
+  if ($NativePid -eq 0 -or $IsolatedPid -eq 0) {
+    throw 'Historical capture requires both -NativePid and -IsolatedPid.'
+  }
 if ($NativePid -eq $IsolatedPid) {
   throw 'Native and isolated process IDs must be distinct.'
 }
@@ -56,6 +85,8 @@ if (($ManagerPid -ne 0 -or $DirectChildren) -and -not $MemoryComposition) {
 }
 if ($ManagerPid -ne 0 -and $ManagerPid -in @($NativePid, $IsolatedPid)) {
   throw 'The selected manager must be distinct from both selected games.'
+}
+
 }
 
 function Read-Target {
@@ -465,6 +496,13 @@ function Write-ReportArtifact {
   }
   
   return $file
+}
+
+if ($NativeProfileBaseline) {
+  # Reuse the same guarded Windows process/memory readers; no second monitor.
+  . (Join-Path $PSScriptRoot 'native-profile-baseline.ps1')
+  Invoke-NativeProfileBaseline -ProfilePids $ProfilePids -ManagerPid $ManagerPid -DurationSeconds $DurationSeconds -SampleIntervalSeconds $SampleIntervalSeconds -OutputDirectory $OutputDirectory -DirectChildren:$DirectChildren
+  return
 }
 
 $baselineNative = Read-Target -ProcessId $NativePid

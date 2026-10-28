@@ -1,5 +1,35 @@
 # Windows Acceptance Tooling
 
+## Current Windows-native RAM baseline (0–5 profiles, source prepared)
+
+The existing read-only collector now has a native-profile mode that reuses its
+process identity, private commit/private working set, total-system memory,
+optional direct-child observation and atomic file writer. It **does not**
+start, stop, suspend or modify Minecraft. The mode samples 0–5 already-running
+licensed clients, in increasing MC01–MC05 slot order; do not supply a process
+ID for an absent profile. A baseline with no clients can still observe the
+system and optionally an existing manager. It deliberately does not infer
+gameplay, host health, GPU physical usage, memory ownership or RAM savings.
+
+~~~powershell
+# 0 clients; optional manager process.
+powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-native-performance.ps1 -NativeProfileBaseline -MemoryComposition -ManagerPid <MANAGER_PID> -DurationSeconds 60 -SampleIntervalSeconds 5
+
+# 2 existing clients + manager; no new game processes are started.
+powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-native-performance.ps1 -NativeProfileBaseline -MemoryComposition -ProfilePids <MC01_PID>,<MC02_PID> -ManagerPid <MANAGER_PID> -DirectChildren -DurationSeconds 600 -SampleIntervalSeconds 5
+
+# 5 selected clients; IDs must be unique and supplied in slot order.
+powershell.exe -NoProfile -File .\tooling\acceptance\windows\collect-native-performance.ps1 -NativeProfileBaseline -MemoryComposition -ProfilePids <MC01_PID>,<MC02_PID>,<MC03_PID>,<MC04_PID>,<MC05_PID> -DurationSeconds 600 -SampleIntervalSeconds 5
+~~~
+
+New schema **7** contains ordered slot labels, permanently pinned process
+identity/loss flags, CPU and memory samples, whole-system memory and optional
+direct-child aggregate measurements. No PID, login, world or account data is
+written into the JSON. Keep the historical two/four/five-client command modes
+and schemas 1–6 for comparisons with older diagnostic files; they are not the
+preferred current native five-profile capture. This new path is source-prepared
+only; Windows execution and RAM claims remain NOT_EXECUTED.
+
 ## Existing MC01 reactivation/lifecycle diagnostics (explicit opt-in)
 
 The same [collect-mc01-startup.ps1](collect-mc01-startup.ps1) now has a separate
