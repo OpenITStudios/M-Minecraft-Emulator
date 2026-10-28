@@ -28,7 +28,7 @@ use windows_sys::Win32::{
     System::RemoteDesktop::ProcessIdToSessionId,
     System::Threading::{
         CreateProcessW, GetCurrentProcessId, GetProcessId, GetProcessIdOfThread, GetProcessTimes,
-        IsWow64Process2, QueryFullProcessImageNameW, TerminateProcess, WaitForSingleObject,
+        IsWow64Process2, TerminateProcess, WaitForSingleObject,
         CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, PROCESS_INFORMATION, STARTUPINFOW,
     },
 };
@@ -439,21 +439,11 @@ fn create_unstarted_tracked(
     if machine != 0 || native != 0x8664 {
         return Err(invalid("Only native AMD64 bootstrap is supported"));
     }
-    let mut actual = [0u16; 32768];
-    let mut count = actual.len() as u32;
-    if unsafe {
-        QueryFullProcessImageNameW(
-            child.process.as_raw_handle() as HANDLE,
-            0,
-            actual.as_mut_ptr(),
-            &mut count,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
+    let actual = crate::engine::windows_process_image::query(
+        child.process.as_raw_handle() as HANDLE,
+    )?;
     use std::{ffi::OsString, os::windows::ffi::OsStringExt};
-    let actual_path = std::path::PathBuf::from(OsString::from_wide(&actual[..count as usize]));
+    let actual_path = std::path::PathBuf::from(OsString::from_wide(&actual));
     if !same_image(&expected, &image_id(&pin_image(&actual_path)?)?) {
         return Err(invalid(
             "Created bootstrap process image does not match pinned target",

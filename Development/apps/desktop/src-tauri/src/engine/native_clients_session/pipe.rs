@@ -267,16 +267,10 @@ impl Endpoint {
                 "Controller peer user/logon/session/integrity differs",
             ));
         }
-        let mut path = vec![0u16; 32768];
-        let mut length = path.len() as u32;
-        if unsafe { QueryFullProcessImageNameW(raw(&process), 0, path.as_mut_ptr(), &mut length) }
-            == 0
-        {
-            return Err(io::Error::last_os_error());
-        }
-        let (pinned, identity) = image(std::path::Path::new(&std::ffi::OsString::from_wide(
-            &path[..length as usize],
-        )))?;
+        let path = crate::engine::windows_process_image::query(raw(&process))?;
+        let (pinned, identity) = image(std::path::Path::new(
+            &std::ffi::OsString::from_wide(&path),
+        ))?;
         if identity != self.image {
             return Err(refused("Controller peer executable differs"));
         }

@@ -7,6 +7,9 @@
 pub mod app_instance;
 #[cfg(windows)]
 pub(crate) mod process_roles;
+// One bounded, read-only Win32 image-path query shared by process identity owners.
+#[cfg(windows)]
+pub(crate) mod windows_process_image;
 pub mod native_clients_session;
 pub mod process_identity;
 pub mod dpi;

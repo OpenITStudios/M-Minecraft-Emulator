@@ -54,14 +54,9 @@ pub(super) fn trusted_parent() -> io::Result<()> {
             ));
         }
         let _parent = ProcessHandle(process);
-        let mut name = vec![0u16; 32768];
-        let mut length = name.len() as u32;
-        if QueryFullProcessImageNameW(process, 0, name.as_mut_ptr(), &mut length) == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        let image =
-            std::path::PathBuf::from(String::from_utf16_lossy(&name[..length as usize]))
-                .canonicalize()?;
+        let name = crate::engine::windows_process_image::query(process)?;
+        let image = std::path::PathBuf::from(String::from_utf16_lossy(&name))
+            .canonicalize()?;
         let current=std::env::current_exe()?.canonicalize()?;
         if !permitted_image(&image, &current) && !crate::engine::process_roles::same_main_image(&image,&current)? {
             return Err(io::Error::other(

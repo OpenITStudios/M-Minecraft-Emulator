@@ -569,7 +569,7 @@ mod native_workspace_windows {
             },
             RemoteDesktop::ProcessIdToSessionId,
             Threading::{
-                GetProcessTimes, OpenProcess, QueryFullProcessImageNameW,
+                GetProcessTimes, OpenProcess,
                 WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
             },
         },
@@ -661,12 +661,8 @@ mod native_workspace_windows {
         // Session is checked again after pinning the process HANDLE below,
         // so a PID that changed between enumeration and open is not trusted.
 
-        let mut image = vec![0u16; 32768];
-        let mut size = image.len() as u32;
-        if unsafe { QueryFullProcessImageNameW(process.0, 0, image.as_mut_ptr(), &mut size) } == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        if size == 0 || !exact_windows_path(&image[..size as usize], target_image) {
+        let image = crate::engine::windows_process_image::query(process.0)?;
+        if !exact_windows_path(&image, target_image) {
             return Ok(None);
         }
 

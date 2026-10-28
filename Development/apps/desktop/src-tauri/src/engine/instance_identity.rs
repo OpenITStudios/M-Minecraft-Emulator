@@ -931,7 +931,7 @@ mod windows {
         },
         System::Threading::{
             GetCurrentProcess, GetCurrentThread, GetProcessTimes, OpenProcess,
-            OpenProcessToken, QueryFullProcessImageNameW, WaitForSingleObject,
+            OpenProcessToken, WaitForSingleObject,
             PROCESS_QUERY_LIMITED_INFORMATION,
             PROCESS_SYNCHRONIZE,
         },
@@ -1881,24 +1881,6 @@ mod windows {
     ) -> io::Result<(bool, Option<[u8; 32]>)> {
         use std::os::windows::io::AsRawHandle;
 
-        fn image_name(process: &Handle) -> io::Result<Vec<u16>> {
-            let mut buf = vec![0u16; 32768];
-            let mut len = buf.len() as u32;
-            if unsafe {
-                QueryFullProcessImageNameW(process.0, 0, buf.as_mut_ptr(), &mut len)
-            } == 0 {
-                return Err(io::Error::last_os_error());
-            }
-            if len == 0 || len as usize >= buf.len() {
-                return Err(invalid("Windows image path is invalid or oversized"));
-            }
-            buf.truncate(len as usize);
-            if buf.iter().any(|&character| character == 0) {
-                return Err(invalid("Invalid embedded null in image path"));
-            }
-            Ok(buf)
-        }
-
         fn file_identity(file: &std::fs::File) -> io::Result<(u32, u64, u64, u64)> {
             let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
             if unsafe {
@@ -1920,7 +1902,7 @@ mod windows {
         }
 
         let process = pin(key)?;
-        let path = image_name(&process)?;
+        let path = crate::engine::windows_process_image::query(process.0)?;
         let pathname = std::path::PathBuf::from(std::ffi::OsString::from_wide(&path));
         let file = std::fs::OpenOptions::new()
             .read(true)
