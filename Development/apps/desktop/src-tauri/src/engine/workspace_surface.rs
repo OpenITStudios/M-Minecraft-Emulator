@@ -653,10 +653,24 @@ mod native {
             }
         }
     }
+    // A Hidden receipt must describe the same original game window,
+    // including its PID/birth/session/HWND and saved thread/class.
+    pub(super) fn hidden_at(saved: &Saved) -> bool {
+        let Ok((_pin, window)) = hwnd(&saved.target) else { return false; };
+        verify_saved_window(saved, window).is_ok()
+            && unsafe { IsWindowVisible(window) == 0 }
+    }
     pub(super) fn hide(saved: &Saved) -> io::Result<()> {
-        let (_process, window) = hwnd(&saved.target)?;
+        let (_pin, window) = hwnd(&saved.target)?;
+        verify_saved_window(saved, window)?;
         unsafe {
-            ShowWindow(window, SW_HIDE);
+            if IsWindowVisible(window) != 0 { ShowWindow(window, SW_HIDE); }
+        }
+        // A helper reply is NOT proof of success without a fresh OS
+        // readback: no stale or recycled HWND may be acknowledged Hidden.
+        if !hidden_at(saved) {
+            return Err(io::Error::new(io::ErrorKind::WouldBlock,
+                "Original Minecraft game Hide was not verified"));
         }
         Ok(())
     }
@@ -1097,6 +1111,7 @@ mod native {
     pub(super) fn hide(_: &Saved) -> io::Result<()> {
         unavailable()
     }
+    pub(super) fn hidden_at(_: &Saved) -> bool { false }
     pub(super) fn park(_: &Saved, _: Rectangle, _: &mut dyn FnMut(&str) -> io::Result<()>) -> io::Result<()> {
         unavailable()
     }
@@ -1172,6 +1187,18 @@ mod controller {
     // Exact native owner/window verification happens separately on every
     // candidate skip; this cache never authorizes another game/window.
     const HELPER_PASSIVE_PLACE_REASSERT: Duration = Duration::from_secs(1);
+    const HELPER_PASSIVE_HIDE_REASSERT: Duration = Duration::from_secs(1);
+    // The native readback closure is never called for an unknown, stale
+    // or terminal helper receipt; no second worker/controller is involved.
+    fn recent_hidden_receipt(
+        acknowledged: Option<Instant>, now: Instant,
+        terminal_seen: bool, helper_alive: bool,
+        still_hidden: impl FnOnce() -> bool,
+    ) -> bool {
+        acknowledged.is_some_and(|at|
+            now.saturating_duration_since(at) < HELPER_PASSIVE_HIDE_REASSERT)
+            && !terminal_seen && helper_alive && still_hidden()
+    }
     fn recent_passive_place(
         acknowledged: Option<(Rectangle, Instant)>,
         requested: Rectangle,
@@ -1423,6 +1450,33 @@ mod controller {
         }
 
         #[test]
+        fn hide_noop_requires_recent_helper_receipt_and_exact_hidden_readback() {
+            let start = Instant::now();
+            let mut probes = 0;
+            for (receipt, terminal, helper_alive, elapsed) in [
+                (None, false, true, 1),
+                (Some(start), true, true, 1),
+                (Some(start), false, false, 1),
+                (Some(start), false, true, 1000),
+            ] {
+                assert!(!recent_hidden_receipt(
+                    receipt, start + Duration::from_millis(elapsed),
+                    terminal, helper_alive, || { probes += 1; true }));
+            }
+            assert_eq!(probes, 0,
+                "Unverified or terminal helper may not probe a game HWND for fast-path");
+            assert!(!recent_hidden_receipt(Some(start),
+                start + Duration::from_millis(100), false, true,
+                || { probes += 1; false }),
+                "A visible or replaced game window requires the helper");
+            assert!(recent_hidden_receipt(Some(start),
+                start + Duration::from_millis(100), false, true,
+                || { probes += 1; true }));
+            assert_eq!(probes, 2);
+            assert!(!recent_hidden_receipt(Some(start),
+                start + HELPER_PASSIVE_HIDE_REASSERT, false, true, || true));
+        }
+        #[test]
         fn passive_helper_place_skips_only_fresh_acknowledged_same_rectangle() {
             let start = Instant::now();
             let rect = Rectangle { x: 20, y: 30, width: 700, height: 450 };
@@ -1642,16 +1696,19 @@ mod controller {
         // Cleared by Park/Hide or any failed native placement; never a
         // second HWND/controller authority or a fabricated Ready receipt.
         last_confirmed_place: Option<(Rectangle, Instant)>,
+        // Scoped to this exact Lease; only an OS-verified Hidden reply
+        // is kept as a short-lived, non-game-lifecycle optimization.
+        last_confirmed_hide: Option<Instant>,
         _recovery_gate: recovery_gate::RecoveryGate,
     }
     impl Lease {
         fn background(&mut self, rect: Rectangle, live: bool) -> io::Result<()> {
-            // A successful Park or Hide changes the only valid window
-            // presentation. On failure we cannot reuse the previous Place.
+            // Park and Hide revoke any previous active Place evidence.
             self.last_confirmed_place = None;
             if live {
-                // Preserve the existing parking no-op, but require the same
-                // full original native frame/shell/HWND evidence as Place.
+                self.last_confirmed_hide = None;
+                // The existing Park shortcut retains exact native
+                // window/thread/class/style and frame readback.
                 if self.saved.as_ref().is_some_and(|saved|native::parked_at(saved,rect)) {
                     return Ok(());
                 }
@@ -1659,12 +1716,33 @@ mod controller {
                     Reply::Parked => Ok(()), _ => Err(io::Error::other("Live preview parking failed")),
                 }
             } else {
+                let helper_alive = if self.last_confirmed_hide.is_some()
+                    && self.ended.is_none() {
+                    self.child.try_wait()?.is_none()
+                } else { false };
+                // Each skipped Hide requires a recent receipt AND a fresh
+                // readback of the original hidden game window.
+                if recent_hidden_receipt(self.last_confirmed_hide, Instant::now(),
+                    self.ended.is_some(), helper_alive,
+                    || self.saved.as_ref().is_some_and(native::hidden_at)) {
+                    return Ok(());
+                }
+                self.last_confirmed_hide = None;
                 match self.send(Command::Hide)? {
-                    Reply::Hidden => Ok(()), _ => Err(io::Error::other("Surface hide failed")),
+                    Reply::Hidden => {
+                        if !self.saved.as_ref().is_some_and(native::hidden_at) {
+                            return Err(io::Error::new(io::ErrorKind::WouldBlock,
+                                "Minecraft Hide reply did not verify its original window"));
+                        }
+                        self.last_confirmed_hide = Some(Instant::now());
+                        Ok(())
+                    }
+                    _ => Err(io::Error::other("Surface hide failed")),
                 }
             }
         }
         fn place(&mut self, rect: Rectangle, activate: bool) -> io::Result<()> {
+            self.last_confirmed_hide = None;
             if activate { super::previews::clear_primary()?; }
             // Even a successful prior Place is not enough to bypass a live
             // helper if its child exited, its reader became terminal, or
@@ -1811,6 +1889,9 @@ mod controller {
             }
         }
         fn stop(&mut self) -> io::Result<()> {
+            // A prior Place/Hide receipt is never native recovery evidence.
+            self.last_confirmed_hide = None;
+            self.last_confirmed_place = None;
             if self.ended.is_some() {
                 return self.confirm_finished_helper();
             }
@@ -2240,6 +2321,7 @@ mod controller {
             saved: None,
             requested: target.clone(),
             last_confirmed_place: None,
+            last_confirmed_hide: None,
             _recovery_gate: recovery_gate,
         };
         let start = lease.send(Command::Start(target.clone()));
