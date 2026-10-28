@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {lazyTester, parseSelectedClose, firstEmbeddedProfile, nextProfile, parseSession, parsePreviewReport, parseProfileBinding, parseDataLocation, validFpsLimits, parseNativeBackendSupport, type ProfileSession} from '../src/app/bridge/lazyTester.js';
+import {lazyTester, parseSelectedClose, firstEmbeddedProfile, nextProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, parseNativeBackendSupport, type ProfileSession} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {closeReviewActive, observationStillCurrent, type CloseReview} from '../src/app/inspectionScheduling.js';
 
@@ -156,6 +156,26 @@ describe('Lazy Tester profile contract', () => {
     expect(()=>parsePreviewReport({...report,tiles:[report.tiles[0],report.tiles[0]]},[2,5])).toThrow();
     expect(()=>parsePreviewReport({schema:1,tiles:[{slot:2,registered:true,reason:'failed'}]},[2])).toThrow();
     expect(()=>parsePreviewReport({schema:1,tiles:[{slot:2,registered:true,reason:null,path:'other'}]},[2])).toThrow();
+  });
+  it('scopes asynchronous DWM refresh invalidation to the exact original process',()=>{
+    const process=running(2).process;
+    const event='dwm-preview-invalidated:'+JSON.stringify({schema:1,slot:2,process,reason:'Native preview refresh unverified'});
+    const notice=parseDwmPreviewInvalidation(event);
+    expect(notice).not.toBeNull();
+    expect(dwmPreviewInvalidationApplies(notice!,running(2) as ProfileSession)).toBe(true);
+    expect(dwmPreviewInvalidationApplies(notice!,running(3) as ProfileSession)).toBe(false);
+    const replacement={...running(2),process:{...process!,createdFileTime:'301'}};
+    expect(dwmPreviewInvalidationApplies(notice!,replacement as ProfileSession)).toBe(false);
+    const stoppedProfile={...running(2),state:'STOPPED'};
+    expect(dwmPreviewInvalidationApplies(notice!,stoppedProfile as ProfileSession)).toBe(false);
+    expect(parseDwmPreviewInvalidation('Normal workspace failure')).toBeNull();
+    for(const malformed of [
+      'dwm-preview-invalidated:bad-json',
+      'dwm-preview-invalidated:'+JSON.stringify({schema:1,slot:0,process,reason:'bad'}),
+      'dwm-preview-invalidated:'+JSON.stringify({schema:1,slot:2,process,reason:''}),
+      'dwm-preview-invalidated:'+JSON.stringify({schema:1,slot:2,process:{...process,pid:0},reason:'bad'}),
+      'dwm-preview-invalidated:'+JSON.stringify({schema:1,slot:2,process,reason:'bad',success:true}),
+    ])expect(()=>parseDwmPreviewInvalidation(malformed)).toThrow();
   });
   it('allows small preview viewports but refuses offscreen and invalid coordinate payloads',()=>{
     expect(previewViewport({x:10,y:450,width:145,height:80},1.5)).toEqual({x:10,y:450,width:145,height:80,pixelRatio:1.5});

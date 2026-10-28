@@ -132,20 +132,21 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability source hardening — 28 October 2026
 
-Transport refuses contention; CloseOne avoids unrelated journals and
-validates original game identity. Failed Start/pipe retains its helper,
-reader and exact recovery gate; helper End/exit plus native verification or
-game exit govern checkpoint retirement. Failed parked MC01 recovery does not
-abort MC02–MC05 previews. The one DWM worker keeps primary errors separate
-from per-slot secondary receipts. On every DWM refresh error, including
-WouldBlock, the image is hidden. If its exact source or destination identity
-cannot be verified, only that thumbnail is unregistered; peer images stay.
-Destination manager/PID/slot/class are verified before updating, hiding or
-destroying any DWM window. IPC/game/account data and worker count unchanged.
-Synthetic Rust tests authored, NOT_EXECUTED; Windows DWM/MC02/CPU/RAM remain
-unverified.
+Windows transport refuses contention; CloseOne avoids peer journals and
+verifies original game ownership. Failed Start/pipe helper and recovery
+checkpoint remain pinned until terminal native evidence; MC01 parked
+failures do not block MC02–MC05. DWM refresh hides all failed images,
+including WouldBlock, discarding only invalid native source/destination
+thumbnails. The existing DWM worker now sends coalesced, source-pinned
+invalidations on the existing workspace-surface-error event; no new IPC
+command, event channel, worker, polling or layout. Svelte matches PID/birth/
+session/HWND, invalidates only the affected preview and prevents late
+PreviewReport replies from overriding a newer failure. Gameplay identity,
+Play admission, profile data and preview report wire remain unchanged.
+Synthetic Rust/TS/browser regressions authored, NOT_EXECUTED. Windows DWM,
+MC02 normal exit, CPU/RAM and package acceptance remain unverified.
 
 ## Next bounded action
 
-Audit stale frontend preview receipts after independent async DWM failures
-without new IPC, polling loops or game lifecycle ownership.
+Audit foreground/background DWM visibility transitions and late layout
+observations before measuring native Windows resource usage.

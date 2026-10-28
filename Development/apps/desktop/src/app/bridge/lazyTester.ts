@@ -32,6 +32,30 @@ export interface SessionSnapshot {schema: 1; profiles: ProfileSession[]; storage
 export interface PreviewPlacement {slot: ProfileSlot; viewport: WorkspaceViewport}
 export interface PreviewStatus {slot: ProfileSlot; registered: boolean; reason: string | null}
 export interface PreviewReport {schema: 1; tiles: PreviewStatus[]}
+// An existing workspace-surface-error string carries this observation-only
+// diagnostic. It is not game readiness, and has no authority to launch/close.
+export interface DwmPreviewInvalidation {slot: ProfileSlot; process: OwnedProcess; reason: string}
+const dwmInvalidationPrefix = 'dwm-preview-invalidated:';
+export function parseDwmPreviewInvalidation(value: unknown): DwmPreviewInvalidation | null {
+  if(typeof value !== 'string' || !value.startsWith(dwmInvalidationPrefix))return null;
+  let data:unknown;
+  try { data=JSON.parse(value.slice(dwmInvalidationPrefix.length)); }
+  catch { throw new TypeError('Invalid DWM preview diagnostic'); }
+  if(!record(data) || !exact(data,['schema','slot','process','reason']) || data.schema!==1 ||
+      !profileSlots.includes(data.slot as ProfileSlot) ||
+      typeof data.reason!=='string'||data.reason.length===0||data.reason.length>2048) {
+    throw new TypeError('Invalid DWM preview diagnostic');
+  }
+  return {slot:data.slot as ProfileSlot,process:parseObservedProcess(data.process),reason:data.reason};
+}
+export function dwmPreviewInvalidationApplies(
+  notice:DwmPreviewInvalidation, profile:ProfileSession|undefined,
+):boolean {
+  const p=profile?.process, n=notice.process;
+  return !!p && profile?.state==='RUNNING' && profile.slot===notice.slot &&
+    p.pid===n.pid && p.createdFileTime===n.createdFileTime &&
+    p.sessionId===n.sessionId && p.windowHandle===n.windowHandle;
+}
 export interface ProfileBinding {schema: 1; required: boolean; configured: boolean; issue: string | null}
 export interface DataLocation {schema:1; defaultPath:string; path:string|null; profiles:{slot:ProfileSlot;path:string}[]; canLocate:boolean}
 const record = (value: unknown): value is Record<string, unknown> =>

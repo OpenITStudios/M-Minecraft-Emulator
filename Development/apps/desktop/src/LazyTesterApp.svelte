@@ -1,7 +1,7 @@
 <script lang="ts">
   import {onMount, tick} from 'svelte';
   import {listen} from '@tauri-apps/api/event';
-  import {lazyTester, firstEmbeddedProfile, nextProfile, validFpsLimits, type GraphicsPreset, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport} from './app/bridge/lazyTester.js';
+  import {lazyTester, firstEmbeddedProfile, nextProfile, validFpsLimits, type GraphicsPreset, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport} from './app/bridge/lazyTester.js';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazy-tester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
@@ -51,6 +51,11 @@
   // UI warning only; native presentation authority remains in workspace_surface.
   let uncertainWindowSlot: ProfileSlot | null = null;
   let previewStatuses: PreviewStatus[] = [];
+  // Read-only UI observations. A DWM failure does not own the game or
+  // request an IPC/layout retry. Epochs prevent an old in-flight layout
+  // response from restoring a thumbnail after asynchronous invalidation.
+  let previewInvalidationEpoch = 0;
+  const pendingPreviewInvalidations = new Map<ProfileSlot, DwmPreviewInvalidation & {epoch:number}>();
   let closeReviewPending = false;
   function reviewState(): CloseReview {
     return {
@@ -137,11 +142,13 @@
       } else if (active === null && !detached && page === 'workspace' && queued === null) {
         queued = firstEmbeddedProfile(profiles,separateSlots);
       }
-      if(layoutChanged) {previewStatuses=[];dirty=true;}
+      if(layoutChanged) {
+        previewStatuses=[];pendingPreviewInvalidations.clear();dirty=true;
+      }
     } catch (error) {
       if (!disposed && observationStillCurrent(issued, observationEpoch, reviewState())) {
         if (available) dirty = true;
-        available = false;previewStatuses=[];
+        available = false;previewStatuses=[];pendingPreviewInvalidations.clear();
         connectionIssue = String(error);
       }
     } finally { refreshing = false; }
@@ -347,10 +354,11 @@
   }
   async function syncLayout() {
     if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) || busy || refreshing || resizing || !mounted) return;
+    const invalidationAtStart = previewInvalidationEpoch;
     dirty = false; resizing = true;
     try {
       if (page !== 'workspace' || detached || !available || document.hidden) {
-        await lazyTester.clearPreviews(); previewStatuses = [];previewIssue=''; return;
+        await lazyTester.clearPreviews(); previewStatuses = [];pendingPreviewInvalidations.clear();previewIssue=''; return;
       }
       await tick();
       if (active !== null) await workspaceSurface.update(viewport.getBoundingClientRect());
@@ -362,7 +370,25 @@
         return rect.x >= 0 && rect.y >= 0 && rect.width >= 32 && rect.height >= 24 &&
           rect.right <= window.innerWidth && rect.bottom <= window.innerHeight ? [{slot: profile.slot, rect}] : [];
       });
-      previewStatuses = (await lazyTester.previews(viewport.getBoundingClientRect(), tiles)).tiles;
+      const response = (await lazyTester.previews(viewport.getBoundingClientRect(), tiles)).tiles;
+      if (disposed || !mounted || nativeBackend !== 'WindowsNative' || page !== 'workspace' || detached) return;
+      // An invalidation received AFTER this layout began is newer evidence
+      // than its eventual PreviewReport. Never let that older response
+      // re-mark MC02 as registered. Only another genuine layout can clear it.
+      previewStatuses = response.map(status => {
+        const notice = pendingPreviewInvalidations.get(status.slot);
+        if(notice && notice.epoch > invalidationAtStart &&
+          dwmPreviewInvalidationApplies(notice,profiles.find(p=>p.slot===status.slot))) {
+          return {...status,registered:false,reason:notice.reason};
+        }
+        return status;
+      });
+      for(const [slot, notice] of pendingPreviewInvalidations) {
+        if(notice.epoch <= invalidationAtStart ||
+          !dwmPreviewInvalidationApplies(notice,profiles.find(p=>p.slot===slot))) {
+          pendingPreviewInvalidations.delete(slot);
+        }
+      }
       previewIssue = '';
     } catch (error) { previewStatuses = [];previewIssue = String(error); }
     finally { resizing = false; }
@@ -558,14 +584,26 @@
       previewStatuses = []; detached = true; page = 'workspace'; dirty = true;
       void refresh(); // Observation only; does not start or capture Minecraft.
     }).then(retain).catch(error => { issue = String(error); });
-    void listen<string>('workspace-surface-error', event => { issue = event.payload; }).then(retain).catch(error => { issue = String(error); });
+    void listen<string>('workspace-surface-error', event => {
+      try {
+        const notice=parseDwmPreviewInvalidation(event.payload);
+        if(!notice) {issue=event.payload;return;}
+        if (disposed || nativeBackend!=='WindowsNative' ||
+          !dwmPreviewInvalidationApplies(notice,profiles.find(p=>p.slot===notice.slot))) return;
+        previewInvalidationEpoch++;
+        pendingPreviewInvalidations.set(notice.slot,{...notice,epoch:previewInvalidationEpoch});
+        // Preserve peer statuses and avoid new preview RPC/layout work.
+        previewStatuses=previewStatuses.map(status=>status.slot===notice.slot?
+          {...status,registered:false,reason:notice.reason}:status);
+      } catch (error) {issue=String(error);}
+    }).then(retain).catch(error => { issue = String(error); });
     void listen<number>('lazy-tester-preview-select', event => {
       if ([1,2,3,4,5].includes(event.payload)) select(event.payload as ProfileSlot);
     }).then(retain).catch(error => { previewIssue = String(error); });
     return () => {
       mounted = false; disposed = true; clearInterval(interval); observer?.disconnect();
       window.removeEventListener('resize', changed); document.removeEventListener('visibilitychange', changed);
-      stops.forEach(stop => stop());
+      stops.forEach(stop => stop());pendingPreviewInvalidations.clear();
       // Unsupported diagnostic UI holds no native game-window lease.
       if (nativeBackend === 'WindowsNative') void workspaceSurface.release().catch(() => {});
     };

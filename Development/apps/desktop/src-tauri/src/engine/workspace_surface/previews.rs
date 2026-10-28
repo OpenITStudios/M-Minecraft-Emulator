@@ -133,6 +133,32 @@ mod windows {
     const CLASS: &[u16] = &[
         76, 97, 122, 121, 84, 101, 115, 116, 101, 114, 80, 114, 101, 118, 105, 101, 119, 0,
     ];
+    // Reuse the existing diagnostic string event; do not add an IPC
+    // command or channel. The envelope pins the exact failed source so a
+    // delayed event cannot invalidate a replacement Minecraft process.
+    const PREVIEW_INVALIDATED_PREFIX: &str = "dwm-preview-invalidated:";
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct PreviewInvalidated<'a> {
+        schema: u32,
+        slot: u32,
+        process: &'a OwnedProcess,
+        reason: &'a str,
+    }
+    fn preview_invalidation_message(
+        slot: u32, process: &OwnedProcess, reason: &str,
+    ) -> io::Result<String> {
+        let notice = PreviewInvalidated { schema: 1, slot, process, reason };
+        Ok(format!("{PREVIEW_INVALIDATED_PREFIX}{}",
+            serde_json::to_string(&notice)?))
+    }
+    // At most one asynchronous invalidation per thumbnail per successful
+    // layout report. A new validated layout, not idle refresh, rearms it.
+    fn take_invalidation_notice(already_sent: &mut bool) -> bool {
+        if *already_sent { return false; }
+        *already_sent = true;
+        true
+    }
     enum Job {
         Layout {
             window: tauri::Window,
@@ -207,6 +233,8 @@ mod windows {
         manager: u64,
         window: HWND,
         thumbnail: isize,
+        // DWM observation state only: never an original game/lifecycle owner.
+        invalidation_notified: bool,
         _process: native::ProcessHandle,
     }
     impl Thumbnail {
@@ -256,6 +284,7 @@ mod windows {
                 manager,
                 window,
                 thumbnail,
+                invalidation_notified: false,
                 _process: process,
             })
         }
@@ -400,16 +429,33 @@ mod windows {
         }
         fn refresh(&mut self) {
             let visible = self.visibility();
-            // No unverified frame remains displayed, even on WouldBlock.
-            // Only a failed exact source/destination identity check removes
-            // that particular DWM pin. A transient error remains hidden
-            // for the existing event-driven worker's next refresh.
+            // The DWM worker alone observes asynchronous refresh failures.
+            // Do not re-run layout or inspect Minecraft. Send a single
+            // source-pinned invalidation on the EXISTING error event when a
+            // previously reported image becomes unverified.
+            let mut invalidated = Vec::new();
             self.thumbnails.retain_mut(|thumbnail| {
-                if thumbnail.refresh_verified(visible).is_err() {
+                if let Err(error) = thumbnail.refresh_verified(visible) {
+                    if take_invalidation_notice(&mut thumbnail.invalidation_notified) {
+                        invalidated.push((
+                            thumbnail.slot, thumbnail.target.clone(),
+                            format!("Native preview refresh unverified: {error}"),
+                        ));
+                    }
                     return thumbnail.source_and_destination_valid();
                 }
                 true
             });
+            if let Some(window) = self.window.as_ref() {
+                for (slot, process, reason) in invalidated {
+                    let reason = reason.chars().take(1024).collect::<String>();
+                    if let Ok(message) = preview_invalidation_message(
+                        slot, &process, &reason,
+                    ) {
+                        let _ = window.emit("workspace-surface-error", message);
+                    }
+                }
+            }
             let discard_primary = if let Some(primary) = &mut self.primary {
                 let playing = native::interactive_at(
                     &primary.target, primary.manager, primary.viewport);
@@ -501,9 +547,17 @@ mod windows {
                 };
                 self.thumbnails[index].viewport = tile.viewport;
                 match self.thumbnails[index].refresh_verified(visible) {
-                    Ok(()) => status.registered = true,
+                    Ok(()) => {
+                        status.registered = true;
+                        // This synchronous response supersedes prior DWM
+                        // invalidations and rearms one future notification.
+                        self.thumbnails[index].invalidation_notified = false;
+                    },
                     Err(error) => {
                         status.reason = Some(error.to_string());
+                        // Already reported by the requested PreviewReport.
+                        // Avoid a duplicate failure event on the next wake.
+                        self.thumbnails[index].invalidation_notified = true;
                         // Unregister only the stale DWM observation. Peer
                         // thumbnails and their status receipts remain intact.
                         if !self.thumbnails[index].source_and_destination_valid() {
@@ -709,6 +763,30 @@ mod windows {
     #[cfg(test)]
     mod tests {
         use super::*;
+        #[test]
+        fn async_invalidation_is_source_pinned_and_coalesced_per_layout() {
+            let target = OwnedProcess {
+                pid: 102, created_file_time: "134000000000000001".into(),
+                session_id: 1, window_handle: "0x124".into(), responding: true,
+            };
+            let message = preview_invalidation_message(
+                2, &target, "Native preview refresh unverified",
+            ).unwrap();
+            let encoded = message.strip_prefix(PREVIEW_INVALIDATED_PREFIX).unwrap();
+            let decoded: serde_json::Value = serde_json::from_str(encoded).unwrap();
+            assert_eq!(decoded["schema"], 1);
+            assert_eq!(decoded["slot"], 2);
+            assert_eq!(decoded["process"]["pid"], target.pid);
+            assert_eq!(decoded["process"]["createdFileTime"], target.created_file_time);
+            assert_eq!(decoded["process"]["windowHandle"], target.window_handle);
+            assert_eq!(decoded["reason"], "Native preview refresh unverified");
+            let mut notified = false;
+            assert!(take_invalidation_notice(&mut notified));
+            assert!(!take_invalidation_notice(&mut notified),
+                "An idle refresh must never flood one failure per frame");
+            notified = false; // Only a new validated layout rearms.
+            assert!(take_invalidation_notice(&mut notified));
+        }
         #[test]
         fn refresh_errors_hide_stale_images_even_on_would_block() {
             let mut hidden = 0;

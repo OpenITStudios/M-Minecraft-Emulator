@@ -24,7 +24,7 @@ try {
     window.__offline = false;
     window.__holdInspect = false;
     const fixture = new URL(location.href).searchParams;
-    window.__runningSlots = fixture.has('preview-recovery') ? [1,2,3] :
+    window.__runningSlots = fixture.has('preview-recovery') || fixture.has('preview-async') ? [1,2,3] :
       fixture.has('close-recovery') || fixture.has('close-ipc-error') ? [2] : undefined;
     window.__previewIssueSlot = fixture.has('preview-recovery') ? 2 : null;
     window.__closeOutcome = fixture.has('close-recovery') ? 'unconfirmed' :
@@ -40,9 +40,16 @@ try {
       ...profile, state: 'RUNNING', process: {pid: 100 + profile.slot, createdFileTime: '134000000000000001', sessionId: 1, windowHandle: '0x' + (0x123 + profile.slot).toString(16), responding: true},
     } : profile)});
     let callback = 0;
+    const nativeCallbacks = new Map();
+    const nativeListeners = new Map();
+    window.__nativeListeners = nativeListeners;
+    window.__emitNative = (name,payload) => {
+      const id=nativeListeners.get(name);
+      if(id!==undefined)nativeCallbacks.get(id)?.({event:name,id:1,payload});
+    };
     window.__TAURI_EVENT_PLUGIN_INTERNALS__ = {unregisterListener() {}};
     window.__TAURI_INTERNALS__ = {
-      transformCallback() { return ++callback; },
+      transformCallback(handler) {const id=++callback;nativeCallbacks.set(id,handler);return id;},
       async invoke(command, args) {
         window.__calls.push({command, args});
         if(command==='startup_diagnostic_result')return null;
@@ -53,7 +60,10 @@ try {
           }
           return new URL(location.href).searchParams.has('unsupported-platform') ? 'Unsupported' : 'WindowsNative';
         }
-        if (command === 'plugin:event|listen') return callback;
+        if (command === 'plugin:event|listen') {
+          nativeListeners.set(args.event,args.handler);
+          return callback;
+        }
         if (command === 'plugin:event|unlisten') return null;
         if (command === 'lazy_tester_profile_binding') {
           if(new URL(location.href).searchParams.has('startup-retry')&&!window.__bindingCheckedOnce){
@@ -267,6 +277,37 @@ try {
   await page.evaluate(()=>{window.__offline=true;});await page.getByRole('button',{name:'Refresh',exact:true}).click();await page.getByRole('alert').waitFor();
   await page.evaluate(()=>{window.__offline=false;});await nav('Play').click();await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('.lt-connection').textContent==='Connected');
+  // DWM refresh has its own existing error event; no extra native RPC or
+  // periodic layout. A worker-side failure invalidates MC02 only. An event
+  // from another PID is ignored rather than changing MC02's current image.
+  await page.goto('http://lazy-tester.test/?preview-async=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  await page.waitForFunction(()=>window.__nativeListeners.has('workspace-surface-error') &&
+    window.__calls.some(call=>call.command==='lazy_tester_previews'));
+  const baseline = await page.evaluate(()=>window.__calls.filter(
+    call=>call.command==='lazy_tester_previews').length);
+  await page.evaluate(()=>{
+    const process={pid:102,createdFileTime:'134000000000000001',sessionId:1,windowHandle:'0x125',responding:true};
+    window.__emitNative('workspace-surface-error','dwm-preview-invalidated:'+
+      JSON.stringify({schema:1,slot:2,process:{...process,pid:902},reason:'Stale old game'}));
+  });
+  assert.equal(await page.getByRole('status',{name:'Minecraft - 2 preview unavailable'}).count(),0,
+    'A stale process event cannot corrupt the new MC02 preview');
+  await page.evaluate(()=>{
+    const process={pid:102,createdFileTime:'134000000000000001',sessionId:1,windowHandle:'0x125',responding:true};
+    window.__emitNative('workspace-surface-error','dwm-preview-invalidated:'+
+      JSON.stringify({schema:1,slot:2,process,reason:'Asynchronous HWND refresh failed'}));
+  });
+  const asyncPreviewIssue = page.getByRole('status',{name:'Minecraft - 2 preview unavailable'});
+  await asyncPreviewIssue.waitFor();
+  assert.match(await asyncPreviewIssue.textContent(),/Asynchronous HWND refresh failed/);
+  assert.equal(await page.getByRole('status',{name:'Minecraft - 3 preview unavailable'}).count(),0);
+  assert.equal(await page.getByRole('button',{name:'Open Minecraft - 2',exact:true}).isEnabled(),true);
+  assert.equal(await page.evaluate(()=>window.__calls.filter(
+    call=>call.command==='lazy_tester_previews').length),baseline,
+    'Native invalidation must not schedule another PreviewReport request');
+
   // A failed MC02 DWM observation is visible on MC02 only. MC03 is not
   // mislabeled and MC02 still has its normal native Play admission.
   await page.goto('http://lazy-tester.test/?preview-recovery=1');
