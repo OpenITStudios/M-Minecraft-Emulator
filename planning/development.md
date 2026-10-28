@@ -132,20 +132,19 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability source hardening — 28 October 2026
 
-Transport refuses contention and admits queued requests before idle work.
-CloseOne skips global preflight/reply reaping, persists only the selected
-journal and verifies original game authority. Svelte preserves recovery
-uncertainty through STOPPED or a lost IPC receipt. A native helper's terminal
-End and actual process exit are both needed before checkpoint release;
-missing/duplicate CloseOne checkpoints fail closed. Failed Start/Ready
-handshakes now verify exact PID/birth/session/HWND; if helper cleanup is
-unconfirmed, its child/reader/gate lease remains in the existing SURFACE
-owner instead of silently dropping it. The five-slot lifecycle, restore
-fallback, IPC wire, game/process identity and account/world data are not
-migrated. Source/regressions authored, NOT_EXECUTED. MC02 normal exit, helper
-timing, Windows build and performance remain unverified.
+Transport refuses contention and admits queued work before idle reaping.
+CloseOne skips global journal work and validates retained game ownership.
+Svelte keeps unknown recovery status until explicit native receipt. Native
+helper checkpoint release requires terminal End plus actual helper exit;
+failed Start retains child/reader/gate in the one SURFACE owner. The helper
+stdout reader now distinguishes real EOF from framing/JSON errors: an
+abnormal pipe cannot return End(Ok) without a verified Restored receipt or
+identity-checked native fallback. Failure diagnostics omit malformed data.
+No second controller, protocol change, game mutation or Mac backend.
+Synthetic regression sources authored, NOT_EXECUTED. Windows MC02 normal
+exit, native recovery timing, builds and gameplay remain unverified.
 
 ## Next bounded action
 
-Review failed pre-Ready helper cleanup and orphaned pipe/readback evidence
-without changing the single native window authority or enabling CI.
+Inspect helper startup/restore retry behavior after an unverified terminal
+error without weakening the original recovery gate or process identity.

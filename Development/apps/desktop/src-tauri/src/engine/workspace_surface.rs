@@ -1159,6 +1159,21 @@ mod controller {
     // The same owned game/window that opened the recovery gate must be the
     // one described by the helper's first Ready receipt. Responding is a
     // transient observation, not process or HWND identity.
+    // A corrupt/truncated helper reply is not a clean EOF. Do not turn
+    // an unreadable pre-Ready pipe into End(Ok) unless a real Restored receipt
+    // or identity-checked native fallback has proved recovery. Clean EOF
+    // before any capture remains harmless because Start only observes HWND.
+    fn reader_terminal_result(
+        pipe_issue: Option<String>,
+        native_recovery: Result<(), String>,
+        recovery_verified: bool,
+    ) -> Result<(), String> {
+        match native_recovery {
+            Err(error) => Err(error),
+            Ok(()) if recovery_verified => Ok(()),
+            Ok(()) => pipe_issue.map_or(Ok(()), Err),
+        }
+    }
     fn ready_matches_start(ready: &Saved, requested: &OwnedProcess) -> bool {
         ready.target.pid == requested.pid
             && ready.target.created_file_time == requested.created_file_time
@@ -1241,6 +1256,27 @@ mod controller {
             }
             assert!(!selected_helper_quiesced(&[]));
             assert!(!selected_helper_quiesced(&[(false,true),(false,false)]));
+        }
+        #[test]
+        fn broken_helper_pipe_cannot_claim_unobserved_recovery() {
+            let corrupted = Some("Malformed helper response before Ready".to_owned());
+            assert!(reader_terminal_result(corrupted.clone(), Ok(()), false)
+                .unwrap_err().contains("Malformed helper"));
+            // A verified Restore acknowledgement or identity-checked native
+            // fallback remains authoritative even if the earlier pipe broke.
+            assert!(reader_terminal_result(corrupted, Ok(()), true).is_ok());
+            // Clean EOF before Start/capture is not a forged window restore.
+            assert!(reader_terminal_result(None, Ok(()), false).is_ok());
+            assert!(reader_terminal_result(None,
+                Err("Original window identity changed".into()), true)
+                .unwrap_err().contains("identity changed"));
+        }
+        #[test]
+        fn reader_framing_and_json_errors_are_not_clean_eof() {
+            assert!(read_line(&mut io::Cursor::new(vec![b'x'; 4097])).is_err());
+            assert!(serde_json::from_str::<Reply>("not-json\\n").is_err());
+            assert!(read_line(&mut io::Cursor::new(Vec::<u8>::new()))
+                .unwrap().is_none());
         }
         #[test]
         fn start_ready_must_match_exact_retained_process_and_window() {
@@ -1810,27 +1846,59 @@ mod controller {
         std::thread::spawn(move || {
             let mut saved = None;
             let mut reader = io::BufReader::new(stdout);
-            while let Ok(Some(text)) = read_line(&mut reader) {
-                let Ok(mut reply) = serde_json::from_str::<Reply>(&text) else {
-                    break;
+            let mut pipe_issue: Option<String> = None;
+            let mut acknowledged_restore = false;
+            loop {
+                let text = match read_line(&mut reader) {
+                    Ok(Some(text)) => text,
+                    Ok(None) => break, // Real EOF, not an invalid/partial reply.
+                    Err(error) => {
+                        pipe_issue = Some(format!("Surface helper pipe read failed: {error}"));
+                        break;
+                    }
+                };
+                let mut reply = match serde_json::from_str::<Reply>(&text) {
+                    Ok(reply) => reply,
+                    Err(_) => {
+                        // Never put arbitrary or malformed helper text into
+                        // recovery diagnostics or treat it as a clean exit.
+                        pipe_issue = Some("Invalid surface helper JSON reply".into());
+                        break;
+                    }
                 };
                 match &mut reply {
                     Reply::Ready(state) => {
                         state.manager_pid = std::process::id();
-                        saved = Some(state.clone())
+                        saved = Some(state.clone());
                     }
-                    Reply::Restored => saved = None,
+                    Reply::Restored => {
+                        saved = None;
+                        acknowledged_restore = true;
+                    }
+                    Reply::Error(error) => {
+                        // The final outcome can still be successful if a later
+                        // valid Restored or native fallback verifies recovery.
+                        pipe_issue = Some(format!("Surface helper reported failure: {error}"));
+                    }
                     _ => {}
                 }
                 if tx.send(Event::Reply(reply)).is_err() {
                     break;
                 }
             }
-            // If the helper alone crashes, the manager still owns the checkpoint.
-            let result = saved
+            // Reader-side fallback is the existing exact-HWND/geometry
+            // recovery owner. If there was a Saved checkpoint, native::restore
+            // must actually succeed; malformed pipe input alone proves nothing.
+            let recovered_checkpoint = saved.is_some();
+            let native_recovery = saved
                 .as_ref()
                 .map_or(Ok(()), native::restore)
-                .map_err(|e| e.to_string());
+                .map_err(|error| error.to_string());
+            let result = reader_terminal_result(
+                pipe_issue,
+                native_recovery,
+                acknowledged_restore || recovered_checkpoint,
+            );
             if let Some(saved) = saved.as_ref() {
                 if let Ok(mut state) = SURFACE.try_lock() {
                     if state
