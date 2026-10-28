@@ -75,6 +75,9 @@ pub(super) fn configure(
 ) -> io::Result<PreviewReport> {
     #[cfg(windows)]
     {
+        // Snapshot BEFORE potentially slow native preview adoption. A
+        // CloseOne arriving during it invalidates this old Layout request.
+        let issued_epochs = windows::snapshot_epochs();
         let manager = window.hwnd().map_err(io::Error::other)?.0 as usize as u64;
         let active = controller::active_preview_slot(manager)?;
         validate_tiles(&tiles, active)?;
@@ -97,7 +100,7 @@ pub(super) fn configure(
         let monitored=profiles.iter().filter(|(slot,_)|tiles.iter().any(|tile|tile.slot==*slot)).cloned().collect::<Vec<_>>();
         let unavailable = controller::adopt_preview_sources(manager, viewport, &monitored)?;
         let primary = active.map(|slot| PreviewTile { slot, viewport });
-        windows::apply(window, tiles, primary, profiles, unavailable)
+        windows::apply(window, tiles, primary, profiles, unavailable, issued_epochs)
     }
     #[cfg(not(windows))]
     {
@@ -115,7 +118,7 @@ mod windows {
     use std::{
         mem, ptr,
         sync::{
-            atomic::{AtomicBool, AtomicU32, Ordering},
+            atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
             mpsc, Arc, Mutex,
         },
         thread::{self, JoinHandle},
@@ -174,6 +177,23 @@ mod windows {
     fn layout_expired(deadline: Instant, now: Instant) -> bool {
         now >= deadline
     }
+    // Observation-only slot generations cancel old DWM layouts, never
+    // Minecraft sessions or their native recovery checkpoints. No worker,
+    // queue or polling owner is introduced; only five atomic counters.
+    static SLOT_CANCEL_EPOCHS: [AtomicU64; 5] = [
+        AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0),
+        AtomicU64::new(0), AtomicU64::new(0),
+    ];
+    pub(super) fn snapshot_epochs() -> [u64; 5] {
+        std::array::from_fn(|index|
+            SLOT_CANCEL_EPOCHS[index].load(Ordering::Acquire))
+    }
+    fn slot_epoch_matches(issued: &[u64; 5], current: &[u64; 5], slot: u32) -> bool {
+        (1..=5).contains(&slot) && issued[(slot - 1) as usize] == current[(slot - 1) as usize]
+    }
+    fn epochs_current(issued: &[u64; 5]) -> bool {
+        *issued == snapshot_epochs()
+    }
     enum Job {
         Layout {
             window: tauri::Window,
@@ -181,6 +201,7 @@ mod windows {
             primary: Option<PreviewTile>,
             profiles: Vec<(u32, OwnedProcess)>,
             unavailable: Vec<(u32, String)>,
+            issued_epochs: [u64; 5],
             deadline: Instant,
             reply: mpsc::SyncSender<io::Result<PreviewReport>>,
         },
@@ -497,8 +518,24 @@ mod windows {
         profiles: Vec<(u32, OwnedProcess)>,
         thumbnails: Vec<Thumbnail>,
         primary: Option<Thumbnail>,
+        // The generation that admitted the last verified layout. No
+        // process identity is cached in an additional controller.
+        issued_epochs: [u64; 5],
     }
     impl Scene {
+        fn prune_cancelled_slots(&mut self) {
+            let now = snapshot_epochs();
+            let issued = self.issued_epochs;
+            self.thumbnails.retain(|thumb|
+                slot_epoch_matches(&issued, &now, thumb.slot));
+            if self.primary.as_ref().is_some_and(|image|
+                !slot_epoch_matches(&issued, &now, image.slot)) {
+                self.primary = None;
+            }
+            self.profiles.retain(|(slot, _)|
+                slot_epoch_matches(&issued, &now, *slot));
+            self.release_unused_observation();
+        }
         fn release_unused_observation(&mut self) {
             // Retained DWM state is presentation-only. With no thumbnail,
             // drop the strong Tauri Window and stale native process metadata.
@@ -570,7 +607,9 @@ mod windows {
                     && !primary.source_and_destination_valid()
             } else { false };
             if discard_primary { self.primary = None; }
-            self.release_unused_observation();
+            // A ClearSlot can be signalled while this worker is doing
+            // native refresh. Never leave that canceled HWND visible.
+            self.prune_cancelled_slots();
         }
         fn update_primary_observation(&mut self, manager: u64,
             tile: &PreviewTile, visible: bool) -> io::Result<()> {
@@ -594,7 +633,15 @@ mod windows {
             primary: Option<PreviewTile>,
             profiles: Vec<(u32, OwnedProcess)>,
             unavailable: Vec<(u32, String)>,
+            issued_epochs: [u64; 5],
         ) -> io::Result<PreviewReport> {
+            // The caller may have begun native adoption before CloseOne.
+            // Do not create/position thumbnails for an invalidated layout.
+            if !epochs_current(&issued_epochs) {
+                self.prune_cancelled_slots();
+                return Err(io::Error::new(io::ErrorKind::WouldBlock,
+                    "DWM layout canceled by original profile close"));
+            }
             let manager = window.hwnd().map_err(io::Error::other)?.0 as usize as u64;
             if self.manager != manager {
                 self.thumbnails.clear();
@@ -603,6 +650,7 @@ mod windows {
             self.window = Some(window);
             self.manager = manager;
             self.profiles = profiles;
+            self.issued_epochs = issued_epochs;
             self.thumbnails.retain(|thumbnail| {
                 tiles.iter().any(|tile| tile.slot == thumbnail.slot)
                     && self
@@ -613,7 +661,9 @@ mod windows {
             });
             let visible = self.visibility();
             match primary {
-                Some(tile) => {
+                Some(tile) if slot_epoch_matches(
+                    &issued_epochs, &snapshot_epochs(), tile.slot,
+                ) => {
                     if let Err(error) = self.update_primary_observation(manager, &tile, visible) {
                         // A failed primary observer cannot suppress any peer
                         // tile receipt or alter the original game process.
@@ -621,11 +671,16 @@ mod windows {
                         eprintln!("Minecraft - {} primary DWM preview unavailable: {error}", tile.slot);
                     }
                 }
-                None => self.primary = None,
+                _ => self.primary = None,
             }
             let mut statuses = Vec::with_capacity(tiles.len());
             for tile in tiles {
                 let mut status = initial_tile_status(&tile, &self.profiles, &unavailable);
+                if !slot_epoch_matches(&issued_epochs, &snapshot_epochs(), tile.slot) {
+                    status.reason = Some("Preview canceled by original profile close".into());
+                    statuses.push(status);
+                    continue;
+                }
                 if status.reason.is_some() {
                     statuses.push(status);
                     continue;
@@ -675,9 +730,14 @@ mod windows {
                 }
                 statuses.push(status);
             }
-            // Failed layout still returns its own independent TileStatus
-            // receipts, without retaining the now-unused manager reference.
-            self.release_unused_observation();
+            // A CloseOne may begin while an in-flight native update is
+            // blocked. Remove only that slot's thumbnails, retain peer DWM
+            // images, and refuse this stale success report.
+            self.prune_cancelled_slots();
+            if !epochs_current(&issued_epochs) {
+                return Err(io::Error::new(io::ErrorKind::WouldBlock,
+                    "DWM layout invalidated during native profile close"));
+            }
             Ok(PreviewReport {
                 schema: 1,
                 tiles: statuses,
@@ -711,6 +771,7 @@ mod windows {
                 profiles: Vec::new(),
                 thumbnails: Vec::new(),
                 primary: None,
+                issued_epochs: snapshot_epochs(),
             };
             while GetMessageW(&mut message, ptr::null_mut(), 0, 0) > 0 {
                 if message.message == SELECT {
@@ -723,6 +784,10 @@ mod windows {
                     REFRESH_PENDING.store(false, Ordering::Release);
                     let native_event =
                         NATIVE_REFRESH_REQUESTED.swap(false, Ordering::AcqRel);
+                    // ClearSlot is best effort on the bounded channel.
+                    // Its atomic cancellation still removes stale images
+                    // even if that channel was full at CloseOne admission.
+                    scene.prune_cancelled_slots();
                     let mut laid_out = false;
                     while let Ok(job) = receiver.try_recv() {
                         match job {
@@ -732,6 +797,7 @@ mod windows {
                                 primary,
                                 profiles,
                                 unavailable,
+                                issued_epochs,
                                 deadline,
                                 reply,
                             } => {
@@ -743,10 +809,11 @@ mod windows {
                                         "Expired queued preview layout skipped",
                                     )));
                                 } else {
-                                    let _ = reply.send(scene.layout(
-                                        window, tiles, primary, profiles, unavailable,
-                                    ));
-                                    laid_out = true;
+                                    let result = scene.layout(
+                                        window, tiles, primary, profiles, unavailable, issued_epochs,
+                                    );
+                                    laid_out |= result.is_ok();
+                                    let _ = reply.send(result);
                                 }
                             }
                             Job::Clear(reply) => {
@@ -777,6 +844,9 @@ mod windows {
                             }
                         }
                     }
+                    // A native cancellation may happen during a slow
+                    // Layout. Prune again before dispatching another wake.
+                    scene.prune_cancelled_slots();
                     if refresh_after_wake(native_event, laid_out) {
                         scene.refresh();
                     }
@@ -859,6 +929,7 @@ mod windows {
         primary: Option<PreviewTile>,
         profiles: Vec<(u32, OwnedProcess)>,
         unavailable: Vec<(u32, String)>,
+        issued_epochs: [u64; 5],
     ) -> io::Result<PreviewReport> {
         let base = PreviewReport {
             schema: 1,
@@ -881,6 +952,7 @@ mod windows {
                 primary,
                 profiles,
                 unavailable,
+                issued_epochs,
                 deadline,
                 reply,
             },
@@ -889,10 +961,22 @@ mod windows {
         .ok_or_else(|| io::Error::other("Preview worker missing"))
     }
     pub(super) fn clear() -> io::Result<()> {
-        send(|reply, _| Job::Clear(reply), false).map(|_| ())
+        // A full scene clear also invalidates every in-flight old Layout.
+        for generation in &SLOT_CANCEL_EPOCHS {
+            generation.fetch_add(1, Ordering::AcqRel);
+        }
+        let result = send(|reply, _| Job::Clear(reply), false).map(|_| ());
+        if result.is_err() { refresh(); }
+        result
     }
     pub(super) fn clear_slot(slot:u32)->io::Result<()> {
-        send(|reply, _|Job::ClearSlot {slot,reply},false).map(|_| ())
+        // Called at CloseOne admission, BEFORE waiting for the worker.
+        // Even queue-full/timeout cannot let an older Layout re-create
+        // this slot; unrelated MC01–MC05 generations stay unchanged.
+        SLOT_CANCEL_EPOCHS[(slot - 1) as usize].fetch_add(1, Ordering::AcqRel);
+        let result = send(|reply, _|Job::ClearSlot {slot,reply},false).map(|_| ());
+        if result.is_err() { refresh(); }
+        result
     }
     pub(super) fn clear_primary() -> io::Result<()> {
         send(|reply, _| Job::ClearPrimary(reply), false).map(|_| ())
@@ -924,6 +1008,28 @@ mod windows {
             assert!(owner.try_lock().is_ok());
         }
         #[test]
+        fn closing_one_slot_cancels_stale_layout_without_changing_peer_epochs() {
+            // The pure epoch comparison is the production worker policy;
+            // no real game, HWND, Tauri window, or extra actor is needed.
+            let issued = [5, 8, 3, 4, 1];
+            let mut observed = issued;
+            assert!((1..=5).all(|slot|
+                slot_epoch_matches(&issued, &observed, slot)));
+            observed[1] += 1; // CloseOne MC02, even when DWM queue is full.
+            assert!(!slot_epoch_matches(&issued, &observed, 2));
+            for peer in [1, 3, 4, 5] {
+                assert!(slot_epoch_matches(&issued, &observed, peer),
+                    "MC02 cancellation must not erase surviving peers");
+            }
+            assert!(!slot_epoch_matches(&issued, &observed, 0));
+            assert!(!slot_epoch_matches(&issued, &observed, 6));
+            // A layout issued after completion can use the newer snapshot;
+            // a layout issued before CloseOne cannot reuse the old one.
+            let current = observed;
+            assert!(slot_epoch_matches(&current, &observed, 2));
+            assert!(!slot_epoch_matches(&issued, &observed, 2));
+        }
+        #[test]
         fn control_jobs_do_not_waste_native_refresh_or_lose_move_events() {
             assert!(!refresh_after_wake(false, false));
             assert!(!refresh_after_wake(false, true));
@@ -950,6 +1056,7 @@ mod windows {
                 window: None, manager: 77,
                 profiles: vec![(2, game)],
                 thumbnails: Vec::new(), primary: None,
+                issued_epochs: snapshot_epochs(),
             };
             scene.refresh();
             assert_eq!(scene.manager, 0);
@@ -1143,7 +1250,7 @@ mod windows {
                 let primary_tile = PreviewTile { slot: 5, viewport: Viewport {
                     x: 10.0, y: 100.0, width: 640.0, height: 360.0, ..tile.viewport } };
                 let primary = Thumbnail::create(manager as usize as u64, &primary_tile, target).unwrap();
-                let mut scene=Scene{window:None,manager:manager as usize as u64,profiles:Vec::new(),thumbnails:Vec::new(),primary:Some(primary)};
+                let mut scene=Scene{window:None,manager:manager as usize as u64,profiles:Vec::new(),thumbnails:Vec::new(),primary:Some(primary),issued_epochs:snapshot_epochs()};
                 assert_ne!(GetForegroundWindow(),manager);
                 assert!(scene.visibility(),"Visible monitoring must survive focus moving elsewhere");
                 thumbnail.update(scene.visibility()).unwrap();

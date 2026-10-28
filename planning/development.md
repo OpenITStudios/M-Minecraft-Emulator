@@ -129,25 +129,26 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability & efficiency — 28 October 2026
 
-Original game reap remains 250 ms, stable COM audio 1 s. DWM omits
-redundant property writes and native Place/Park/Hide only with HWND proof.
-One DWM worker (capacity-one channel) still admits jobs without holding
-WORKER Mutex during replies. The worker now differentiates native move/
-focus refresh from control-only WAKE. Clear/ClearSlot/ClearPrimary no
-longer trigger extra peer HWND/DWM checks without a native event. Native
-refresh intent is read before job processing to avoid lost movement.
-A shared three-second deadline gates queued Layout and caller wait:
-expired Layout is discarded before native work, but ClearSlot/CloseOne
-is never discarded by timeout. Empty scenes release Window metadata.
-No new worker, timer, IPC, game authority or private-data mutations.
-Rust scheduling tests authored, NOT_EXECUTED.
+Game exit reap stays at 250 ms, stable COM audio resync at 1 s. Native
+Place/Park/Hide and DWM skip duplicate work only after exact HWND proof.
+The sole DWM worker retains bounded capacity-one queue, unlocked reply
+wait, control-only WAKE suppression and admission-time Layout deadline.
+CloseOne/ClearSlot now increments one of five preview-only atomic epochs
+BEFORE queue admission. A Layout carries the epoch snapshot acquired
+before native source adoption. The worker rejects old snapshots before
+HWND work; if CloseOne interrupts Layout, it prunes only that canceled
+slot afterward. Queue-full ClearSlot requests still signal the existing
+WAKE for eventual cleanup. Full Clear invalidates all five generations.
+Peer game leases, DWM images, close/recovery and IPC unchanged. No extra
+worker, poll, timer or game/data owner. Synthetic Rust tests NOT_EXECUTED.
+Real Windows close overlap, normal MC02 exit and CPU/RAM unverified.
 
 ## Debug timing — NOT_EXECUTED
 
 `MIVUBI_DEBUG_WORKSPACE_TIMING=1` enables default-off Windows debug
-aperture/foreground count/error/timing aggregates at workspace release.
-Actual Windows DWM, MC02 exit, CPU/RAM and gameplay remain unverified.
+aperture/foreground aggregates at workspace release; no PID/HWND output.
 
 ## Next bounded action
 
-Audit timed-out in-flight Layout and CloseOne cancellation at source.
+Audit in-flight Layout deadline expiry separately from slot cancellation
+and reduce unacknowledged DWM work, without disturbing surviving peers.
