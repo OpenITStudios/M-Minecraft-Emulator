@@ -566,6 +566,9 @@ mod windows {
         // The former observer remains owned by this single Layout until
         // the replacement's verified reply is delivered or rolled back.
         replaced_primary: Option<(Thumbnail, PreviousImage)>,
+        // At most four previous accepted secondaries stay owned until
+        // this Layout receives a valid frontend acknowledgement.
+        displaced_secondary: Vec<(Thumbnail, PreviousImage)>,
         reused_secondary: Vec<PreviousImage>,
         reused_primary: Option<PreviousImage>,
     }
@@ -594,8 +597,41 @@ mod windows {
         // The generation that admitted the last verified layout. No
         // process identity is cached in an additional controller.
         issued_epochs: [u64; 5],
+        // Keeps the native owner valid only until this Layout commits or
+        // aborts, not another source of process or game lifetime truth.
+        layout_in_progress: bool,
     }
     impl Scene {
+        fn stage_unrequested_secondary(
+            &mut self, tiles: &[PreviewTile],
+            unavailable: &[(u32, String)], created: &mut LayoutCreated,
+        ) {
+            // Reuse the existing Vec instead of re-allocating on every
+            // Layout. Four thumbnails max; remove preserves ordering.
+            let mut index = 0;
+            while index < self.thumbnails.len() {
+                let image = &self.thumbnails[index];
+                let current_source = self.profiles.iter().any(|(slot, target)|
+                    image.matches(*slot, target));
+                let unavailable_now = unavailable.iter().any(|(slot, _)|
+                    *slot == image.slot);
+                if current_source && !unavailable_now &&
+                    tiles.iter().any(|tile| tile.slot == image.slot) {
+                    index += 1;
+                    continue;
+                }
+                let image = self.thumbnails.remove(index);
+                if current_source && !unavailable_now
+                    && image.source_and_destination_valid() {
+                    // Hide, but don't unregister an accepted observer from
+                    // an unacknowledged proposed Layout.
+                    let snapshot = PreviousImage::capture(&image);
+                    image.hide();
+                    created.displaced_secondary.push((image, snapshot));
+                }
+                // Retired/invalid original HWNDs fail closed.
+            }
+        }
         fn rollback_manager_owned(&self) -> bool {
             let manager = self.manager as usize as HWND;
             if manager.is_null() { return false; }
@@ -725,6 +761,30 @@ mod windows {
             if !stale_slots.is_empty() {
                 self.thumbnails.retain(|image| !stale_slots.contains(&image.slot));
             }
+            // An unacknowledged Layout must not permanently remove the
+            // accepted secondary observations it merely proposed to omit.
+            // Reinsert only the SAME original DWM registration, source,
+            // manager and slot generation; never overwrite a new observer.
+            for (mut old, saved) in created.displaced_secondary.drain(..) {
+                if !slot_epoch_matches(&issued, &epochs, old.slot)
+                    || self.thumbnails.iter().any(|image| image.slot == old.slot)
+                    || !saved.same_registration(&old)
+                    || !self.profiles.iter().any(|(slot, target)|
+                        old.matches(*slot, target))
+                    || !old.source_and_destination_valid() {
+                    continue;
+                }
+                old.viewport = saved.viewport;
+                old.invalidation_notified = saved.invalidated;
+                if let Err(error) = old.refresh_verified(saved.previously_visible(visible)) {
+                    if take_invalidation_notice(&mut old.invalidation_notified) {
+                        notices.push((old.slot, old.target.clone(),
+                            format!("Previous secondary DWM observer unavailable: {error}")));
+                    }
+                } else {
+                    self.thumbnails.push(old);
+                }
+            }
             if let Some(window) = self.window.as_ref() {
                 for (slot, process, reason) in notices {
                     let reason = reason.chars().take(1024).collect::<String>();
@@ -756,7 +816,8 @@ mod windows {
             // Retained DWM state is presentation-only. With no thumbnail,
             // drop the strong Tauri Window and stale native process metadata.
             // This never changes an original Minecraft process or lease.
-            if self.thumbnails.is_empty() && self.primary.is_none() {
+            if !self.layout_in_progress
+                && self.thumbnails.is_empty() && self.primary.is_none() {
                 self.window = None;
                 self.manager = 0;
                 self.profiles.clear();
@@ -889,14 +950,8 @@ mod windows {
             self.manager = manager;
             self.profiles = profiles;
             self.issued_epochs = issued_epochs;
-            self.thumbnails.retain(|thumbnail| {
-                tiles.iter().any(|tile| tile.slot == thumbnail.slot)
-                    && self
-                        .profiles
-                        .iter()
-                        .any(|(slot, target)| thumbnail.matches(*slot, target))
-                    && !unavailable.iter().any(|(slot, _)| *slot == thumbnail.slot)
-            });
+            self.layout_in_progress = true;
+            self.stage_unrequested_secondary(&tiles, &unavailable, created);
             let visible = self.visibility();
             require_live_layout(deadline)?;
             match primary {
@@ -1046,6 +1101,7 @@ mod windows {
                 thumbnails: Vec::new(),
                 primary: None,
                 issued_epochs: snapshot_epochs(),
+                layout_in_progress: false,
             };
             while GetMessageW(&mut message, ptr::null_mut(), 0, 0) > 0 {
                 if message.message == SELECT {
@@ -1105,6 +1161,10 @@ mod windows {
                                     } else {
                                         laid_out = true;
                                     }
+                                    // Only this Layout may temporarily
+                                    // retain an otherwise empty Scene.
+                                    scene.layout_in_progress = false;
+                                    scene.release_unused_observation();
                                 }
                             }
                             Job::Clear(reply) => {
@@ -1434,7 +1494,12 @@ mod windows {
                 profiles: vec![(2, game)],
                 thumbnails: Vec::new(), primary: None,
                 issued_epochs: snapshot_epochs(),
+                layout_in_progress: true,
             };
+            scene.refresh();
+            assert_eq!(scene.manager, 77,
+                "Current Layout must hold context to permit secondary rollback");
+            scene.layout_in_progress = false;
             scene.refresh();
             assert_eq!(scene.manager, 0);
             assert!(scene.profiles.is_empty());
@@ -1630,7 +1695,7 @@ mod windows {
                 // Production Scene carries the exact source inventory. The
                 // rollback source-authority guard must be tested with it,
                 // never weakened to accommodate an empty fixture roster.
-                let mut scene=Scene{window:None,manager:manager as usize as u64,profiles:vec![(tile.slot,target)],thumbnails:Vec::new(),primary:Some(primary),issued_epochs:snapshot_epochs()};
+                let mut scene=Scene{window:None,manager:manager as usize as u64,profiles:vec![(tile.slot,target)],thumbnails:Vec::new(),primary:Some(primary),issued_epochs:snapshot_epochs(),layout_in_progress:false};
                 assert_ne!(GetForegroundWindow(),manager);
                 assert!(scene.visibility(),"Visible monitoring must survive focus moving elsewhere");
                 thumbnail.update(scene.visibility()).unwrap();
@@ -1752,9 +1817,48 @@ mod windows {
                     "Retired source must not survive a rejected Layout");
                 assert!(scene.primary.is_some(),
                     "Retiring one secondary observer must not kill its primary peer");
+                // Mixed partial failure: a proposed Layout removes one
+                // accepted secondary and swaps primary, but its reply is
+                // lost. The SAME transaction must restore both originals.
+                let owned_target = scene.primary.as_ref().unwrap().target.clone();
+                let previous_tile = PreviewTile {slot:4, viewport:tile.viewport};
+                scene.profiles.push((4, owned_target.clone()));
+                let mut previous_peer = Thumbnail::create(
+                    manager as usize as u64, &previous_tile, owned_target.clone(),
+                ).unwrap();
+                previous_peer.refresh_verified(true).unwrap();
+                let peer_registration = previous_peer.thumbnail;
+                scene.thumbnails.push(previous_peer);
+                let primary_registration = scene.primary.as_ref().unwrap().thumbnail;
+                let mut mixed = LayoutCreated::default();
+                scene.stage_unrequested_secondary(&[], &[], &mut mixed);
+                assert_eq!(mixed.displaced_secondary.len(), 1);
+                assert!(scene.thumbnails.is_empty());
+                assert_eq!(IsWindowVisible(mixed.displaced_secondary[0].0.window), 0);
+                scene.profiles.push((3, owned_target.clone()));
+                let next_primary = PreviewTile {slot:3, viewport:primary_tile.viewport};
+                let visible = scene.visibility();
+                scene.update_primary_observation(
+                    manager as usize as u64, &next_primary, visible, &mut mixed,
+                ).unwrap();
+                assert!(mixed.primary_changed);
+                scene.discard_unacknowledged_new(&mut mixed);
+                assert_eq!(scene.primary.as_ref().unwrap().thumbnail, primary_registration);
+                assert_eq!(scene.thumbnails.len(), 1);
+                assert_eq!(scene.thumbnails[0].thumbnail, peer_registration);
+                assert_ne!(IsWindowVisible(scene.thumbnails[0].window), 0,
+                    "Mixed rollback must restore the accepted secondary");
+                // In a successfully delivered layout, disposal commits
+                // normally by dropping its one transaction; no Win32 retry.
+                let mut accepted = LayoutCreated::default();
+                scene.stage_unrequested_secondary(&[], &[], &mut accepted);
+                assert_eq!(accepted.displaced_secondary.len(), 1);
+                drop(accepted);
+                assert!(scene.thumbnails.is_empty());
+                scene.profiles.retain(|(slot,_)| *slot == tile.slot);
+
                 // A new primary must be registered and verified before
                 // the previous DWM registration is relinquished.
-                let owned_target = scene.primary.as_ref().unwrap().target.clone();
                 scene.profiles = vec![(tile.slot, owned_target.clone()),
                     (4, owned_target.clone())];
                 let candidate_tile = PreviewTile {slot:4,viewport:primary_tile.viewport};
