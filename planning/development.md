@@ -135,18 +135,19 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability source hardening — 28 October 2026
 
-The Windows transport now fails fast on contention (WouldBlock); queued
-requests precede idle controller reaping/audio synchronization (250ms).
-CloseOne now reaps/persists only the verified selected slot after process
-exit and replies without a second global reap. CloseAll still reaps all
-five; normal Inspect/other responses and idle maintenance retain full
-cleanup. Unrelated exited slots stay owned until subsequent maintenance.
-No new worker, IPC schema, game owner, Mac backend or profile mutation.
-Pure close-reply and channel tests authored, NOT_EXECUTED.
-Already-started journal/COM I/O and CloseOne's preliminary Inspect can
-still delay admission. MC02 Windows exit/performance remain NOT_EXECUTED.
+Windows transport fails fast on contention (WouldBlock) and checks queued
+requests ahead of idle reaping/audio (250ms). CloseOne persists only its
+confirmed selected-slot journal and skips a second global reply reap; CloseAll
+and ordinary Inspect still reap all slots. Selected CloseOne no longer issues
+a preliminary Inspect with possible unrelated journal I/O. After exact
+workspace restoration, the same retained session controller now refuses idle
+slots, while a missing controller refuses CloseOne even when no game is seen.
+CloseAll's idle-host fallback remains intact. The IPC wire, credentials,
+worlds, native identity and recovery owners are unchanged. Synthetic tests
+authored, NOT_EXECUTED. Disk/COM work already started may still block.
+MC02 normal exit and Windows/macOS runtime remain unverified.
 
 ## Next bounded action
 
-Audit CloseOne preflight Inspect latency and journal scope without weakening
-verified process/window identity, recovery or single lifecycle ownership.
+Source-review selected-window release failure receipts and UI close recovery
+without introducing a second session authority or running local/CI tests.

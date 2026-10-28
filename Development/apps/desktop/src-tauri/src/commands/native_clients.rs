@@ -38,9 +38,9 @@ pub async fn lazy_tester_session(
     })).await.map_err(|_| "Session task failed".to_string())?.map_err(|error| error.to_string())
 }
 
-// This receipt distinguishes a preflight failure (returned as Err before
-// presentation mutation) from a still-running game AFTER its workspace was
-// successfully released. It records no additional game ownership.
+// This receipt distinguishes a refusal before managed-window mutation from
+// an unconfirmed close AFTER the selected workspace was released. The
+// retained session controller, never the UI, validates live game ownership.
 #[derive(serde::Serialize)]
 #[serde(rename_all="camelCase")]
 pub struct SelectedCloseReport {
@@ -60,12 +60,11 @@ pub async fn lazy_tester_close_one(
     if !(1..=5).contains(&slot) {return Err("Unknown Minecraft profile".into());}
     tauri::async_runtime::spawn_blocking(move||run_manager_operation(||{
         use crate::engine::native_clients_session::{request,SessionRequest};
-        let snapshot=request(SessionRequest::Inspect)?;
-        let selected=snapshot.profiles.iter().find(|profile|profile.slot==slot)
-            .ok_or_else(||io::Error::new(io::ErrorKind::InvalidInput,"Unknown Minecraft profile"))?;
-        if selected.state=="STOPPED" || selected.state=="ATTENTION" {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput,"Minecraft session is not running"));
-        }
+        // A preliminary Inspect would reap and sync journals from ALL slots
+        // before the selected close. The original workspace owner only
+        // releases exact, previously admitted leases for this selected slot.
+        // The retained game controller below is the sole authority that
+        // checks whether this slot is running before requesting normal exit.
         let recovery_issue=match crate::engine::workspace_surface::release_managed_slot(slot) {
             Ok(()) => None,
             Err((false,error)) => return Err(error),
@@ -95,7 +94,7 @@ pub async fn lazy_tester_close_one(
             return match result {
                 Err(close) => Ok(SelectedCloseReport {
                     schema:1,presentation_released:false,snapshot:None,
-                    issue:Some(format!("Window restoration unconfirmed: {recovery}. Normal Minecraft close was requested but remains pending: {close}")),
+                    issue:Some(format!("Window restoration unconfirmed: {recovery}. Minecraft close was not confirmed: {close}")),
                 }),
                 Ok(snapshot) => match crate::engine::workspace_surface::release_exited_managed_slot_checkpoint(slot) {
                     Ok(()) => Ok(SelectedCloseReport {

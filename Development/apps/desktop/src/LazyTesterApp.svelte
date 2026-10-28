@@ -301,7 +301,7 @@
           detached=queued===null;
         }
       } else {
-        issue=`Minecraft - ${slot} has not finished closing normally. ${report.issue??'Refresh to inspect the current session.'}`;
+        issue=`Minecraft - ${slot}: Selected close was not confirmed. ${report.issue??'Refresh to inspect the current session.'}`;
         try {profiles=(await lazyTester.inspect()).profiles;available=true;connectionIssue='';}
         catch(refreshError){available=false;connectionIssue=String(refreshError);}
         if (wasActive) {

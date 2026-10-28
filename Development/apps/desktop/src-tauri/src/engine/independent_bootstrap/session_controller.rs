@@ -233,6 +233,15 @@ impl Sessions {
     fn close_one(&mut self, slot:u32) -> io::Result<()> { self.close_sessions(Some(slot)) }
     fn close_sessions(&mut self,slot:Option<u32>)->io::Result<()> {
         let mask=normal_close_mask(slot)?;
+        // A selected close must be authorized by THIS retained game's
+        // controller, not by an earlier general Inspect response. Refuse
+        // idle/stale slots before any FPS policy, dialog or lifecycle action.
+        // normal_close_mask already validates the range 1..=5.
+        if let Some(requested) = slot {
+            if self.running[requested as usize - 1].is_none() {
+                return Err(invalid("Minecraft session is not running"));
+            }
+        }
         self.exiting=true;
         let result=self.close_selected_sessions(mask);
         // Full exit preserves its terminal gate; selected exit never blocks
@@ -1267,8 +1276,12 @@ mod tests {
     #[test]
     fn full_exit_of_idle_sessions_does_not_prepare_profiles_and_denies_new_launches() {
         let mut sessions=Sessions{stores:(0..5).map(|_|None).collect(),running:(0..5).map(|_|None).collect(),issues:vec![None;5],windows:vec![None;5],path:String::new(),image:File::open(std::env::current_exe().unwrap()).unwrap(),exiting:false};
-        sessions.close_one(3).unwrap();
-        assert!(!sessions.exiting);
+        // The selected-close owner must never report a successful exit
+        // for a stopped slot even if it has no process to wait for.
+        for slot in 1..=5 {
+            assert!(sessions.close_one(slot).unwrap_err().to_string().contains("not running"));
+            assert!(!sessions.exiting);
+        }
         sessions.close_all().unwrap();
         assert!(sessions.exiting);
         assert!(sessions.stores.iter().all(Option::is_none));

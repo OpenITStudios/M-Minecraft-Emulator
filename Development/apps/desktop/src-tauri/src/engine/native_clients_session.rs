@@ -252,10 +252,18 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
 }
 
 // A disappeared controller does not prove that its resumed game exited.
-// The existing registered-image inspector is read-only; no game is adopted.
-fn absent_controller_close_reply(registered_process_count:usize)->SessionReply {
-    if registered_process_count==0 {Ok(SessionSnapshot::stopped())}
-    else {Err("Minecraft processes remain but no compatible Lazy Tester controller is available. Games are preserved; reconnect the correct controller before retrying.".into())}
+// Without retained per-slot ownership, CloseOne MUST NOT report success even
+// when no official Minecraft process is visible. CloseAll can still confirm
+// an already-idle manager exit. This changes no wire request/response schema.
+fn absent_controller_close_reply(request:&SessionRequest,registered_process_count:usize)->SessionReply {
+    if registered_process_count!=0 {
+        return Err("Minecraft processes remain but no compatible Lazy Tester controller is available. Games are preserved; reconnect the correct controller before retrying.".into());
+    }
+    match request {
+        SessionRequest::CloseAll => Ok(SessionSnapshot::stopped()),
+        SessionRequest::CloseOne {..} => Err("No retained Minecraft controller can verify the selected profile. CloseOne was not performed; refresh session status.".into()),
+        _ => Err("Unrecognized close request without a controller".into()),
+    }
 }
 
 #[cfg(windows)]
@@ -277,12 +285,12 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
         return Err(io::Error::new(io::ErrorKind::WouldBlock,
             "An existing Minecraft controller uses another build or is still starting. Its games are preserved; no replacement was started."));
     }
-    // With no controller, even a windowless registered Minecraft process
-    // prevents us from pretending that the CloseAll/CloseOne target has exited.
-    // This does not adopt or close any unmanaged Minecraft game.
+    // No compatible controller means no per-slot attribution. Never adopt
+    // another game or infer selected CloseOne success from an empty process
+    // inventory. Only idle CloseAll preserves its original stopped response.
     if matches!(request,SessionRequest::CloseAll | SessionRequest::CloseOne {..}) {
         let observation=super::native_clients::inspect_native_workspace()?;
-        return Ok(absent_controller_close_reply(observation.processes.len()));
+        return Ok(absent_controller_close_reply(&request,observation.processes.len()));
     }
     if matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings | SessionRequest::SavePerformance { .. } | SessionRequest::SaveAudio {..}) {
         let mut snapshot = SessionSnapshot::stopped();
@@ -436,9 +444,20 @@ mod tests {
     }
     #[test]
     fn missing_controller_refuses_false_close_when_native_game_candidates_exist() {
-        assert!(absent_controller_close_reply(0).is_ok());
-        assert!(absent_controller_close_reply(1).unwrap_err().contains("no compatible Lazy Tester"));
-        assert!(absent_controller_close_reply(5).is_err());
+        // Full manager shutdown may confirm an already-idle host, but a
+        // specific slot needs its retained controller even when none is seen.
+        assert!(absent_controller_close_reply(&SessionRequest::CloseAll, 0).is_ok());
+        for slot in 1..=5 {
+            let selected = SessionRequest::CloseOne {slot};
+            assert!(absent_controller_close_reply(&selected, 0).unwrap_err().contains("No retained Minecraft controller"));
+            assert!(absent_controller_close_reply(&selected, 1).unwrap_err().contains("no compatible Lazy Tester"));
+        }
+        assert!(absent_controller_close_reply(&SessionRequest::CloseAll, 1).is_err());
+        assert!(absent_controller_close_reply(&SessionRequest::CloseAll, 5).is_err());
+        // The established serialized operation remains unchanged.
+        assert!(matches!(serde_json::from_str::<SessionRequest>(
+            r#"{"operation":"CloseOne","slot":2}"#
+        ), Ok(SessionRequest::CloseOne {slot:2})));
     }
     #[test]
     fn protocol_rejects_paths_unknown_operations_and_unbounded_input() {
