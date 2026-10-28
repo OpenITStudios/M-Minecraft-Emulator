@@ -681,14 +681,36 @@ mod native {
         }
         Ok(rect)
     }
-    pub(super) fn parked_at(target: &OwnedProcess, rect: Rectangle) -> bool {
-        let Ok((_pin, window)) = hwnd(target) else { return false; };
+    // A passive no-op is safe only after exact original process/birth/session/
+    // HWND and captured thread/class checks PLUS the live presentation style,
+    // visibility and full rectangle. This is a readback, not a new window owner.
+    pub(super) fn placed_at(saved: &Saved, expected: Rectangle) -> bool {
+        let Ok((_pin, window)) = hwnd(&saved.target) else { return false; };
+        if verify_saved_window(saved, window).is_err() { return false; }
+        unsafe {
+            if IsWindowVisible(window) == 0 || IsIconic(window) != 0 || IsZoomed(window) != 0 {
+                return false;
+            }
+            let style = GetWindowLongPtrW(window, GWL_STYLE) as i64;
+            let shell = GetWindowLongPtrW(window, GWL_EXSTYLE) as i64;
+            // Place clears exactly these frame/shell flags. If Minecraft
+            // shows a disabled modal, force the original helper path rather
+            // than treating unchanged geometry as a successful action.
+            if style & ((WS_CAPTION | WS_THICKFRAME | WS_MAXIMIZE | WS_DISABLED) as i64) != 0
+                || shell & WS_EX_APPWINDOW as i64 != 0
+                || shell & WS_EX_TOOLWINDOW as i64 == 0 {
+                return false;
+            }
+            let mut rect: RECT = std::mem::zeroed();
+            GetWindowRect(window, &mut rect) != 0
+                && rect.left == expected.x && rect.top == expected.y
+                && rect.right - rect.left == expected.width
+                && rect.bottom - rect.top == expected.height
+        }
+    }
+    pub(super) fn parked_at(saved: &Saved, rect: Rectangle) -> bool {
         let Ok(expected) = parking_rectangle(rect) else { return false; };
-        let mut actual: RECT = unsafe { std::mem::zeroed() };
-        unsafe { GetWindowRect(window,&mut actual)!=0 && IsWindowVisible(window)!=0 &&
-            GetWindowLongPtrW(window,GWL_EXSTYLE) & WS_EX_TOOLWINDOW as isize != 0 &&
-            actual.left==expected.x && actual.top==expected.y &&
-            actual.right-actual.left==expected.width && actual.bottom-actual.top==expected.height }
+        placed_at(saved, expected)
     }
     pub(super) fn can_park(target: &OwnedProcess) -> io::Result<bool> {
         let (_pin, window) = hwnd(target)?;
@@ -1079,7 +1101,7 @@ mod native {
         unavailable()
     }
     pub(super) fn can_park(_: &OwnedProcess) -> io::Result<bool> { unavailable() }
-    pub(super) fn parked_at(_: &OwnedProcess, _: Rectangle) -> bool { false }
+    pub(super) fn parked_at(_: &Saved, _: Rectangle) -> bool { false }
     pub(super) fn receiving_input(_: &OwnedProcess) -> bool { false }
     pub(super) fn clear_aperture(_: u64) -> io::Result<()> {
         unavailable()
@@ -1144,6 +1166,22 @@ mod controller {
     // A stdout reader End(Ok) is not proof that its source process has
     // exited. The child may have closed stdout while still holding the
     // checkpoint or performing native HWND work. A failed End is never success.
+    // A passive layout may omit the identical helper Place round trip only
+    // within a bounded acknowledgement age. Activation, unknown checkpoint,
+    // actual geometry change or age expiry always uses the original helper.
+    // Exact native owner/window verification happens separately on every
+    // candidate skip; this cache never authorizes another game/window.
+    const HELPER_PASSIVE_PLACE_REASSERT: Duration = Duration::from_secs(1);
+    fn recent_passive_place(
+        acknowledged: Option<(Rectangle, Instant)>,
+        requested: Rectangle,
+        now: Instant,
+        activate: bool,
+    ) -> bool {
+        !activate && acknowledged.is_some_and(|(previous, at)|
+            previous == requested
+                && now.saturating_duration_since(at) < HELPER_PASSIVE_PLACE_REASSERT)
+    }
     // A failed terminal End alone never permits discarding a checkpoint.
     // A later explicit stop/release may retry restoration ONLY after the
     // original helper process is gone and this lease still owns a Saved
@@ -1385,6 +1423,32 @@ mod controller {
         }
 
         #[test]
+        fn passive_helper_place_skips_only_fresh_acknowledged_same_rectangle() {
+            let start = Instant::now();
+            let rect = Rectangle { x: 20, y: 30, width: 700, height: 450 };
+            assert!(!recent_passive_place(None, rect, start, false));
+            let ack = Some((rect, start));
+            assert!(recent_passive_place(ack, rect,
+                start + Duration::from_millis(10), false));
+            for elapsed in [100, 250, 500, 999] {
+                assert!(recent_passive_place(ack, rect,
+                    start + Duration::from_millis(elapsed), false));
+            }
+            assert!(!recent_passive_place(ack, rect, start, true),
+                "An explicit Play activation never skips the helper");
+            assert!(!recent_passive_place(ack,
+                Rectangle { x: 21, ..rect }, start, false),
+                "Even a one-pixel move needs a new ordered Place");
+            assert!(!recent_passive_place(ack,
+                Rectangle { width: 701, ..rect }, start, false));
+            assert!(!recent_passive_place(ack, rect,
+                start + HELPER_PASSIVE_PLACE_REASSERT, false),
+                "A retained helper must be contacted again after the bounded reassertion");
+            // This pure policy alone cannot authorize a no-op. The live
+            // parent also verifies child state and exact native HWND/style
+            // readback before actually bypassing the helper pipe.
+        }
+        #[test]
         fn start_ready_must_match_exact_retained_process_and_window() {
             let requested = OwnedProcess {
                 pid: 101,
@@ -1574,12 +1638,23 @@ mod controller {
         saved: Option<Saved>,
         // Exact requested process, pinned before Start; NOT Ready/capture proof.
         requested: OwnedProcess,
+        // Last fully acknowledged and foreground-checked helper Place.
+        // Cleared by Park/Hide or any failed native placement; never a
+        // second HWND/controller authority or a fabricated Ready receipt.
+        last_confirmed_place: Option<(Rectangle, Instant)>,
         _recovery_gate: recovery_gate::RecoveryGate,
     }
     impl Lease {
         fn background(&mut self, rect: Rectangle, live: bool) -> io::Result<()> {
+            // A successful Park or Hide changes the only valid window
+            // presentation. On failure we cannot reuse the previous Place.
+            self.last_confirmed_place = None;
             if live {
-                if self.saved.as_ref().is_some_and(|saved|native::parked_at(&saved.target,rect)) { return Ok(()); }
+                // Preserve the existing parking no-op, but require the same
+                // full original native frame/shell/HWND evidence as Place.
+                if self.saved.as_ref().is_some_and(|saved|native::parked_at(saved,rect)) {
+                    return Ok(());
+                }
                 match self.send(Command::Park { rect, manager_pid: std::process::id() })? {
                     Reply::Parked => Ok(()), _ => Err(io::Error::other("Live preview parking failed")),
                 }
@@ -1591,25 +1666,47 @@ mod controller {
         }
         fn place(&mut self, rect: Rectangle, activate: bool) -> io::Result<()> {
             if activate { super::previews::clear_primary()?; }
-            if !matches!(
-                self.send(Command::Place {
-                    rect,
-                    manager_pid: std::process::id(),
-                })?,
-                Reply::Placed
-            ) {
-                return Err(io::Error::other("Surface presentation failed"));
+            // Even a successful prior Place is not enough to bypass a live
+            // helper if its child exited, its reader became terminal, or
+            // Windows changed the actual process/window/style/geometry.
+            let skip_helper = recent_passive_place(
+                self.last_confirmed_place, rect, Instant::now(), activate,
+            ) && self.ended.is_none()
+                && self.child.try_wait()?.is_none()
+                && self.saved.as_ref().is_some_and(|saved| native::placed_at(saved, rect));
+            if !skip_helper {
+                // Clear the previous proof BEFORE any new helper write;
+                // a timed-out Place may have mutated HWND asynchronously.
+                self.last_confirmed_place = None;
+                if !matches!(
+                    self.send(Command::Place {
+                        rect,
+                        manager_pid: std::process::id(),
+                    })?,
+                    Reply::Placed
+                ) {
+                    return Err(io::Error::other("Surface presentation failed"));
+                }
             }
-            // Keep the host opaque; unfocused presentation is a DWM image, not a window hole.
-            native::clear_aperture(self.manager)?;
-            native::confirm_foreground(
-                self.saved
-                    .as_ref()
-                    .ok_or_else(|| io::Error::other("Surface checkpoint missing"))?,
-                rect,
-                self.manager,
-                activate,
-            )
+            // Preserve the original safety postconditions even on a no-op.
+            // Do not bypass aperture cleanup or foreground/stacking readback.
+            let result = (|| {
+                native::clear_aperture(self.manager)?;
+                native::confirm_foreground(
+                    self.saved
+                        .as_ref()
+                        .ok_or_else(|| io::Error::other("Surface checkpoint missing"))?,
+                    rect, self.manager, activate,
+                )
+            })();
+            if result.is_err() {
+                self.last_confirmed_place = None;
+            } else if !skip_helper {
+                // A skip does NOT move this timestamp; continuous event
+                // bursts cannot postpone the mandatory helper reassertion.
+                self.last_confirmed_place = Some((rect, Instant::now()));
+            }
+            result
         }
         fn receive(&mut self) -> io::Result<Reply> {
             // Progress must never extend the command's original deadline.
@@ -2142,6 +2239,7 @@ mod controller {
             ended: None,
             saved: None,
             requested: target.clone(),
+            last_confirmed_place: None,
             _recovery_gate: recovery_gate,
         };
         let start = lease.send(Command::Start(target.clone()));

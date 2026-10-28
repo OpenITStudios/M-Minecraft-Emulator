@@ -129,26 +129,27 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability source hardening — 28 October 2026
 
-Windows still reaps games every 250 ms; stable COM audio sync is gated by
-foreground/process changes or its one-second discovery deadline. DWM worker
-coalesces queued wakes and omits duplicate DwmUpdateThumbnailProperties and
-SetWindowPos writes when destination, fitted source and visibility agree.
-Every visible wake still verifies game PID/birth/session/HWND and DWM owner.
-Actual geometry/visibility changes, destination drift, failed writes and
-an event after one second all force native property reapplication. No new
-timer, worker, IPC, game lifecycle or private-data migration. Rust/TS/browser
-regressions authored, NOT_EXECUTED. Actual Windows DWM/MC02 and CPU/RAM
-remain unverified.
+Windows controller reaps games every 250 ms; stable COM mute work is gated
+by process/focus changes or its one-second cadence. Native DWM worker skips
+duplicate property writes, revalidating HWND and geometry every visible
+refresh. The single SURFACE Lease now skips redundant PASSIVE Place helper
+IPC only after a full prior Place+foreground receipt, live helper check and
+exact PID/birth/session/HWND/thread/class/frame/shell/geometry readback.
+Explicit Play, unknown/failed Place, moved window or age >=1 second still
+uses ordered native helper. Park's existing no-op also requires full native
+readback; Park/Hide invalidate Place cache. No second worker, timer, IPC
+protocol, game lifecycle or data migration. Source regressions NOT_EXECUTED.
+MC02 exit, Windows DWM/helper and CPU/RAM performance unverified.
 
 ## Resource benchmarks — NOT_EXECUTED
 
-Compare pinned Windows before/after builds at idle 0/5 games, Keep/Mute,
-five stable previews, rapid drag/resize/minimize/restore, CloseOne and
-four-survivor Play. Record per-process CPU, private bytes/working set, DWM
-write count, responsiveness, game process/window identity and normal exit.
-No performance improvement claimed without measured evidence.
+Before/after Windows builds: idle 0/5 games, audio Keep/Mute, stable
+previews, rapid drag/resize/minimize/restore, CloseOne with four survivors.
+Measure per-process CPU/private bytes/working set, helper Place/Park IPC
+counts and timings, DWM writes, native identity and actual normal exit.
+No performance gain claimed without measured evidence.
 
 ## Next bounded action
 
-Audit repeated native helper Place/Park requests separately from DWM writes,
-preserving exact recovery and native game ownership.
+Audit repeated native helper Hide, manager aperture and foreground
+confirmation under stable event bursts without weakening game recovery.
