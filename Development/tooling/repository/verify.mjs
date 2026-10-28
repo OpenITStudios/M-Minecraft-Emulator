@@ -137,9 +137,15 @@ export function verifyRepository(root,g0=false) {
   const buildScript=read('Development/apps/desktop/src-tauri/build.rs');
   assert.ok(buildScript.includes('CARGO_CFG_TARGET_OS') && buildScript.includes('CARGO_FEATURE_LAZY_TESTER_PACKAGE'),
     'Native Windows-only product packaging must reject unsupported OS targets');
+  const inspectionPolicy=read('Development/apps/desktop/src/app/inspectionScheduling.ts');
+  assert.ok(inspectionPolicy.includes('export function periodicInspectionDue(') &&
+    inspectionPolicy.includes('runningCount > 0 || !available || elapsedMs >= 10_000;'),
+    'Idle settings/storage observer must throttle without delaying live sessions or recovery');
   const mountedUI=read('Development/apps/desktop/src/LazyTesterApp.svelte');
   const titlebar=read('Development/apps/desktop/src/WindowTitlebar.svelte');
   assert.ok(mountedUI.includes("if (nativeBackend === 'WindowsNative' && !closeReviewActive(reviewState()) && !document.hidden && binding?.configured") &&
+    mountedUI.includes('periodicInspectionDue(page, runningCount, available, now - lastAutomaticInspectionAt)') &&
+    mountedUI.includes('!busy && !refreshing && !resizing && !initializing') &&
     mountedUI.includes('<WindowTitlebar backendSupport={nativeBackend} />') &&
     mountedUI.includes("if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState())") &&
     mountedUI.includes("if (nativeBackend !== 'WindowsNative') return;") &&

@@ -5,7 +5,7 @@
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazy-tester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
-  import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, type CloseReview} from './app/inspectionScheduling.js';
+  import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, periodicInspectionDue, type CloseReview} from './app/inspectionScheduling.js';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
   let binding: ProfileBinding | null = null;
@@ -572,11 +572,19 @@
   onMount(() => {
     mounted = true; void initializeLaunchers();
     // Keep a review stable while the user decides; the backend rechecks admission on action.
+    // Reuse this observer rather than adding another interval or process watcher.
+    let lastAutomaticInspectionAt = Number.NEGATIVE_INFINITY;
     const interval = setInterval(() => {
-      // A Mac diagnostic shell still has its WebView lifecycle, but it must
-      // never schedule Windows game inspection from the periodic observer.
+      // Unsupported, hidden and closing views never schedule Minecraft IPC.
       if (nativeBackend === 'WindowsNative' && !closeReviewActive(reviewState()) && !document.hidden && binding?.configured &&
-          clearSlot===null && recovery===null && fullReview===null) void refresh();
+          clearSlot===null && recovery===null && fullReview===null &&
+          !busy && !refreshing && !resizing && !initializing) {
+        const now = performance.now();
+        if (periodicInspectionDue(page, runningCount, available, now - lastAutomaticInspectionAt)) {
+          lastAutomaticInspectionAt = now;
+          void refresh();
+        }
+      }
     }, 2000);
     observer = new ResizeObserver(() => { dirty = true; }); observer.observe(viewport, {box: 'device-pixel-content-box'});
     observer.observe(stageSpace);

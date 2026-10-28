@@ -43,3 +43,17 @@ export function previewLayoutStillCurrent(
     issued.primarySlot === current.primarySlot &&
     !current.dirty && current.managerVisible && current.workspaceAvailable;
 }
+
+// The existing 2s observer remains immediate for live games, launcher and
+ // workspace views, and connection recovery. Settings/storage with no active
+ // game use a bounded 10s read-only cadence; user actions still refresh
+ // immediately and Rust rechecks all admissions before mutations.
+export function periodicInspectionDue(
+  page: 'workspace' | 'launchers' | 'storage' | 'settings',
+  runningCount: number,
+  available: boolean,
+  elapsedMs: number,
+): boolean {
+  return page === 'workspace' || page === 'launchers' ||
+    runningCount > 0 || !available || elapsedMs >= 10_000;
+}
