@@ -275,6 +275,8 @@ export function verifyRepository(root,g0=false) {
     && nativeMemoryCollector.includes('schema = 8')
     && nativeMemoryCollector.includes('PROCESS_IMAGE_PATH_FILE_SHA256_NOT_LOADED_IMAGE_PROOF')
     && nativeMemoryReviewer.includes('sameGameImageEvidence: baseline.schema === 7 ||')
+    && nativeMemoryReviewer.includes('uniformSelectedImageHashes: complete &&')
+    && nativeMemoryReviewer.includes('uniformSelectedGameBuilds: baseline.schema === 7 ||')
     && nativeMemoryReviewer.includes('provesLoadedGameImage: false'),
     'Build-scoped native RAM reports must hash once before sampling and never claim loaded image identity');
   assert.ok(memoryCollector.includes('result.PageFaultCount = extended.Base.PageFaultCount;')

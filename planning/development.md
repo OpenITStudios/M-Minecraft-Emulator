@@ -101,26 +101,24 @@ publication. The Mac build remains a diagnostic shell without game backend.
 
 ## Next bounded source action
 
-**Target** Minecraft Education 26.32 Windows. Current product launch/DLL
-admission still uses historical reviewed executable digest and refuses a
-mismatch; no new binary has been admitted. Old 26.30.2 measurements and
-Bedrock 26.32/26.51 frame layouts cannot prove current RAM savings.
+**Target:** Minecraft Education stable 26.32 on Windows. Native five-profile
+product admission is still bound to its previously reviewed executable hash;
+the current target's executable identity has not been verified. Both
+game-side allocation canaries are OFF; older Education and Bedrock data
+cannot establish savings for this build.
 
-**New bounded source work:** native RAM diagnostic schema 8 adds a one-time
-read-only SHA-256 of the on-disk file at each selected Minecraft process
-image path before the existing timed 0–5-profile sampler. It uses pinned
-process birth, hashes at most 256 MiB per distinct path, never serializes
-raw paths/accounts/worlds, and preserves unknown evidence. This is
-explicitly **NOT** proof that the bytes of a running mapped image match
-the file currently at that path, nor proof of official publisher/sign-in.
-The reviewer refuses schema-8 numeric A/B diffs if any image evidence
-is missing or hashes differ. Historical schema-7 input and descriptive
-comparisons remain supported. All RAM/performance success fields still
-report NOT_VERIFIED. No extra monitor, recurring hash or game hook.
+**Completed source fix:** native memory reviewer now refuses schema-8
+numeric A/B differences when hashes vary *within either capture* as well as
+when the same slot differs between captures. It reports the separate
+`uniformSelectedImageHashes` condition without claiming that a
+file-path digest proves loaded image identity, publisher or gameplay.
+Historical schema-7 descriptive comparison remains intact; the collector,
+RAM sampler, process handles and game owners are unchanged. One focused
+regression fixture is authored, and the isolated evaluator logic passed
+8/8 checks. Full Node/Windows game acceptance remains NOT_EXECUTED.
 
-Next: find actually verified Education 26.32 native allocator ownership
-and read-only resident resource evidence before selecting a game-side
-optimizer. Source-only implementation is not Windows gameplay/benchmark
-acceptance: Windows PowerShell, Rust/Windows and 5-client tests remain
-NOT_EXECUTED. Do not restart P0, request localtest, change original
-MC01–MC05 profiles, activate canaries, CI or publish to main.
+**Next:** investigate actually owned and demonstrably unused Education 26.32
+renderer/graphics resident bytes before writing a native optimizer. The
+original live trace and native code owner evidence are unavailable here;
+do not guess allocator hooks or patch sizes. No P0 re-entry, user PC
+localtest, game/profile/account/world mutation, CI or main-branch work.

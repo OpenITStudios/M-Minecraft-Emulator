@@ -1226,6 +1226,29 @@ test('schema-8 compares only matching complete path-file fingerprints; no loaded
   assert.equal(compareNativePerformance(nativeBuildFixture([]), nativeBuildFixture([])).comparableForNumericDifference, false);
 });
 
+
+test('schema-8 rejects mixed file hashes inside one capture even when A/B matches per-slot', () => {
+  const baseline = nativeBuildFixture(['01','04','05']);
+  baseline.imageEvidence.slots['04'].sha256 = 'b'.repeat(64);
+  const candidate = structuredClone(baseline);
+  const result = compareNativePerformance(baseline,candidate);
+  assert.equal(result.conditions.sameGameImageEvidence, true,
+    'The old per-slot A/B check alone would have accepted this mixed-build roster');
+  assert.equal(result.conditions.uniformSelectedGameBuilds, false);
+  assert.equal(result.comparableForNumericDifference, false);
+  assert.equal(result.memoryDifferences, null);
+  const inspected = evaluateNativePerformance(baseline);
+  assert.equal(inspected.imageEvidence.complete, true);
+  assert.equal(inspected.imageEvidence.uniformSelectedImageHashes, false);
+  assert.equal(inspected.imageEvidence.provesLoadedGameImage, false);
+  assert.equal(evaluateNativePerformance(nativeBuildFixture(['03']))
+    .imageEvidence.uniformSelectedImageHashes, true);
+  assert.equal(evaluateNativePerformance(nativeBuildFixture([]))
+    .imageEvidence.uniformSelectedImageHashes, false);
+  assert.equal(compareNativePerformance(nativeBaselineFixture(['01','04']),
+    nativeBaselineFixture(['01','04'])).comparableForNumericDifference, true);
+});
+
 test('schema-8 rejects invented, malformed, or incorrectly attributed image identities', () => {
   for (const mutate of [
     r => delete r.imageEvidence,

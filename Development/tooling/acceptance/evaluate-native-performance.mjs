@@ -348,10 +348,15 @@ function nativeImageEvidence(value, slots) {
     }
     hashes[slot] = {status: record.status, sha256: record.sha256, reason: record.reason};
   }
+  const complete = slots.length > 0 && slots.every(slot => hashes[slot].status === 'OBSERVED');
   return {
     evidenceClass: value.evidenceClass,
     slots: hashes,
-    complete: slots.length > 0 && slots.every(slot => hashes[slot].status === 'OBSERVED'),
+    complete,
+    // All five slots represent the same game release; matching each slot
+    // between captures does not make a mixed-build roster comparable.
+    uniformSelectedImageHashes: complete &&
+      new Set(slots.map(slot => hashes[slot].sha256)).size === 1,
     provesLoadedGameImage: false,
   };
 }
@@ -541,6 +546,9 @@ function compareNativeProfileBaseline(baseline, candidate) {
   const selected = before.selectedSlots.join(',') === after.selectedSlots.join(',');
   const conditions = {
     sameSelectedSlots: selected,
+    uniformSelectedGameBuilds: baseline.schema === 7 ||
+      (before.imageEvidence.uniformSelectedImageHashes &&
+       after.imageEvidence.uniformSelectedImageHashes),
     // Schema 7 stays descriptive for historical reports; schema 8 refuses
     // differences across unknown/mismatched on-disk image fingerprints.
     sameGameImageEvidence: baseline.schema === 7 || (
