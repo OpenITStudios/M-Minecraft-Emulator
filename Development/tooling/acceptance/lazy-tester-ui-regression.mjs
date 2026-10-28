@@ -23,8 +23,10 @@ try {
     window.__calls = [];
     window.__offline = false;
     window.__holdInspect = false;
+    window.__holdPreview = false;
+    window.__finishPreview = null;
     const fixture = new URL(location.href).searchParams;
-    window.__runningSlots = fixture.has('preview-recovery') || fixture.has('preview-async') ? [1,2,3] :
+    window.__runningSlots = fixture.has('preview-recovery') || fixture.has('preview-async') || fixture.has('preview-late') ? [1,2,3] :
       fixture.has('close-recovery') || fixture.has('close-ipc-error') ? [2] : undefined;
     window.__previewIssueSlot = fixture.has('preview-recovery') ? 2 : null;
     window.__closeOutcome = fixture.has('close-recovery') ? 'unconfirmed' :
@@ -102,11 +104,17 @@ try {
           throw new Error('Unexpected selected close in synthetic fixture');
         }
         if (command === 'lazy_tester_present' || command === 'lazy_tester_clear_previews' || command.startsWith('desktop_')) return null;
-        if (command === 'lazy_tester_previews') return {schema: 1, tiles: args.tiles.map(tile => {
-          const failed = window.__previewIssueSlot === tile.slot;
-          return {slot: tile.slot, registered: fixture.has('preview-recovery') && !failed,
-            reason: failed ? 'Native recovery checkpoint is unconfirmed' : null};
-        })};
+        if (command === 'lazy_tester_previews') {
+          if (window.__holdPreview) await new Promise(resolve => {
+            window.__finishPreview = () => {window.__finishPreview=null;resolve();};
+          });
+          return {schema: 1, tiles: args.tiles.map(tile => {
+            const failed = window.__previewIssueSlot === tile.slot;
+            return {slot: tile.slot, registered:
+              (fixture.has('preview-recovery') || fixture.has('preview-late')) && !failed,
+              reason: failed ? 'Native recovery checkpoint is unconfirmed' : null};
+          })};
+        }
         if (command !== 'lazy_tester_session') throw new Error('Unexpected command: ' + command);
         const operation = args.request.operation;
         if (operation === 'Inspect' && window.__holdInspect) await new Promise(resolve => { window.__finishInspect = resolve; });
@@ -277,6 +285,31 @@ try {
   await page.evaluate(()=>{window.__offline=true;});await page.getByRole('button',{name:'Refresh',exact:true}).click();await page.getByRole('alert').waitFor();
   await page.evaluate(()=>{window.__offline=false;});await nav('Play').click();await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('.lt-connection').textContent==='Connected');
+  // A PreviewReport started before an OS close review must never be
+  // applied after the native review begins, even if the worker replies late.
+  await page.goto('http://lazy-tester.test/?preview-late=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  await page.waitForFunction(()=>window.__calls.some(call=>call.command==='lazy_tester_previews'));
+  await page.evaluate(()=>{
+    window.__holdPreview=true;
+    window.dispatchEvent(new Event('resize'));
+  });
+  await page.waitForFunction(()=>typeof window.__finishPreview==='function');
+  await page.evaluate(()=>{
+    window.__previewIssueSlot=2; // Old pre-review tile result.
+    window.__emitNative('lazy-tester-close-review',true);
+    window.__holdPreview=false;
+    window.__finishPreview();
+  });
+  await page.waitForFunction(()=>window.__finishPreview===null);
+  await page.waitForTimeout(100);
+  assert.equal(await page.getByRole('status',{name:'Minecraft - 2 preview unavailable'}).count(),0,
+    'A delayed PreviewReport cannot mark a tile during close review');
+  await page.evaluate(()=>window.__emitNative('lazy-tester-close-review',false));
+  await page.getByRole('status',{name:'Minecraft - 2 preview unavailable'}).waitFor();
+  assert.equal(await page.getByRole('status',{name:'Minecraft - 3 preview unavailable'}).count(),0);
+
   // DWM refresh has its own existing error event; no extra native RPC or
   // periodic layout. A worker-side failure invalidates MC02 only. An event
   // from another PID is ignored rather than changing MC02's current image.

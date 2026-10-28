@@ -924,6 +924,14 @@ mod windows {
                 assert_eq!(IsWindowVisible(scene.primary.as_ref().unwrap().window),0);
                 thumbnail.update(scene.visibility()).unwrap();
                 assert_eq!(IsWindowVisible(thumbnail.window),0);
+                // A nonactivating restore should show the same verified
+                // observer again. Losing input focus is not source failure.
+                ShowWindow(manager, SW_SHOWNOACTIVATE);
+                assert!(scene.visibility(),"Restored manager remains a valid DWM destination");
+                scene.refresh();
+                assert_ne!(IsWindowVisible(scene.primary.as_ref().unwrap().window),0);
+                thumbnail.refresh_verified(scene.visibility()).unwrap();
+                assert_ne!(IsWindowVisible(thumbnail.window),0);
                 drop(thumbnail);
                 drop(scene);
                 DestroyWindow(source);

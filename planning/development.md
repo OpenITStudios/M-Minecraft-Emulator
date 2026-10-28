@@ -132,21 +132,21 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability source hardening — 28 October 2026
 
-Windows transport refuses contention; CloseOne avoids peer journals and
-verifies original game ownership. Failed Start/pipe helper and recovery
-checkpoint remain pinned until terminal native evidence; MC01 parked
-failures do not block MC02–MC05. DWM refresh hides all failed images,
-including WouldBlock, discarding only invalid native source/destination
-thumbnails. The existing DWM worker now sends coalesced, source-pinned
-invalidations on the existing workspace-surface-error event; no new IPC
-command, event channel, worker, polling or layout. Svelte matches PID/birth/
-session/HWND, invalidates only the affected preview and prevents late
-PreviewReport replies from overriding a newer failure. Gameplay identity,
-Play admission, profile data and preview report wire remain unchanged.
-Synthetic Rust/TS/browser regressions authored, NOT_EXECUTED. Windows DWM,
-MC02 normal exit, CPU/RAM and package acceptance remain unverified.
+Transport refuses contention; CloseOne retains the original game identity.
+Failed Start/pipe helper and recovery checkpoint remain pinned until native
+evidence; parked failures do not contaminate peers. DWM refresh hides all
+unverified frames, sends coalesced exact-process invalidation on the
+existing workspace-surface-error event, and never changes game lifecycle.
+The Svelte layout now refuses late PreviewReport results if process/source,
+primary slot, native-close review epoch, manager visibility or viewport
+geometry changes. A stale reply does not issue IPC; existing dirty/resize
+admission schedules any needed follow-up. Hidden/minimized clears UI preview
+observations; merely unfocused keeps DWM monitoring. Existing Win32 synthetic
+fixture covers minimize and nonactivating restore. No new worker, protocol,
+polling, or account/world mutations. Rust/TS/browser regressions authored,
+NOT_EXECUTED; Windows DWM, MC02 normal exit, CPU/RAM and package unverified.
 
 ## Next bounded action
 
-Audit foreground/background DWM visibility transitions and late layout
-observations before measuring native Windows resource usage.
+Source-audit Windows CPU/RAM hot paths and scheduler costs at exact HEAD,
+without claiming measured runtime improvements.

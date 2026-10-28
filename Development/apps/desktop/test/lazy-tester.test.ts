@@ -1,7 +1,7 @@
 import {describe, expect, it} from 'vitest';
 import {lazyTester, parseSelectedClose, firstEmbeddedProfile, nextProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, parseNativeBackendSupport, type ProfileSession} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
-import {closeReviewActive, observationStillCurrent, type CloseReview} from '../src/app/inspectionScheduling.js';
+import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, type CloseReview} from '../src/app/inspectionScheduling.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
 const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process: {
@@ -30,6 +30,27 @@ describe('Lazy Tester profile contract', () => {
     }
     // Canceling the dialog does not resurrect the old in-flight inspection.
     expect(observationStillCurrent(12,13,idle)).toBe(false);
+  });
+  it('drops late preview layout observations on minimize, source swap or close review',()=>{
+    const idle: CloseReview = {
+      nativeExitReview:false,closeAllRunning:false,selectedReview:false,selectedCloseRunning:false,
+    };
+    const issued={observationEpoch:5,processIdentity:'2:RUNNING:pid100/windowA',primarySlot:1};
+    const current={...issued,dirty:false,managerVisible:true,workspaceAvailable:true};
+    expect(previewLayoutStillCurrent(issued,current,idle)).toBe(true);
+    for(const changed of [
+      {...current,observationEpoch:6},
+      {...current,processIdentity:'2:RUNNING:pid101/windowB'},
+      {...current,primarySlot:2},
+      {...current,dirty:true},
+      {...current,managerVisible:false},
+      {...current,workspaceAvailable:false},
+    ])expect(previewLayoutStillCurrent(issued,changed,idle)).toBe(false);
+    for(const phase of Object.keys(idle) as (keyof CloseReview)[]) {
+      expect(previewLayoutStillCurrent(issued,current,{...idle,[phase]:true})).toBe(false);
+    }
+    // A merely unfocused but still-visible manager retains DWM observation.
+    expect(previewLayoutStillCurrent(issued,{...current,managerVisible:true},idle)).toBe(true);
   });
   it('validates optional background audio support and reports native failures',()=>{
     const settings={activeFps:120,backgroundFps:5,renderDistanceChunks:12,canApplyPreset:true,changedProfiles:null};

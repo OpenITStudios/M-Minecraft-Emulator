@@ -19,3 +19,27 @@ export function observationStillCurrent(
 ): boolean {
   return issued === current && !closeReviewActive(state);
 }
+
+// A PreviewReport is only an observation about one particular process set,
+// selected primary, and manager viewport. Never let a late native report
+// promote an obsolete DWM thumbnail after review, minimize or geometry change.
+export interface PreviewLayoutIdentity {
+  readonly observationEpoch: number;
+  readonly processIdentity: string;
+  readonly primarySlot: number;
+}
+export interface PreviewLayoutObservation extends PreviewLayoutIdentity {
+  readonly dirty: boolean;
+  readonly managerVisible: boolean;
+  readonly workspaceAvailable: boolean;
+}
+export function previewLayoutStillCurrent(
+  issued: PreviewLayoutIdentity,
+  current: PreviewLayoutObservation,
+  review: CloseReview,
+): boolean {
+  return observationStillCurrent(issued.observationEpoch, current.observationEpoch, review) &&
+    issued.processIdentity === current.processIdentity &&
+    issued.primarySlot === current.primarySlot &&
+    !current.dirty && current.managerVisible && current.workspaceAvailable;
+}

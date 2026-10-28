@@ -5,7 +5,7 @@
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazy-tester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
-  import {closeReviewActive, observationStillCurrent, type CloseReview} from './app/inspectionScheduling.js';
+  import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, type CloseReview} from './app/inspectionScheduling.js';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
   let binding: ProfileBinding | null = null;
@@ -354,6 +354,29 @@
   }
   async function syncLayout() {
     if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) || busy || refreshing || resizing || !mounted) return;
+    // This UI snapshot grants no native process/window authority. The
+    // original selected slot and process set must still match on return.
+    const issued = {
+      observationEpoch,
+      processIdentity: layoutIdentity(profiles),
+      primarySlot: primary,
+    };
+    const layoutCurrent = () => previewLayoutStillCurrent(issued,{
+      observationEpoch,
+      processIdentity: layoutIdentity(profiles),
+      primarySlot: primary,
+      dirty,
+      managerVisible: !document.hidden,
+      workspaceAvailable: mounted && !disposed && nativeBackend === 'WindowsNative' &&
+        available && page === 'workspace' && !detached,
+    },reviewState());
+    const discardOutdated = () => {
+      previewStatuses = [];
+      // Only the existing dirty/ResizeObserver admission may schedule a
+      // later valid layout. No direct retry/IPC from a stale response.
+      if (mounted && !disposed && nativeBackend === 'WindowsNative' &&
+          page === 'workspace' && !detached) dirty = true;
+    };
     const invalidationAtStart = previewInvalidationEpoch;
     dirty = false; resizing = true;
     try {
@@ -361,7 +384,9 @@
         await lazyTester.clearPreviews(); previewStatuses = [];pendingPreviewInvalidations.clear();previewIssue=''; return;
       }
       await tick();
+      if (!layoutCurrent()) {discardOutdated();return;}
       if (active !== null) await workspaceSurface.update(viewport.getBoundingClientRect());
+      if (!layoutCurrent()) {discardOutdated();return;}
       // DWM monitoring tiles require an observed RUNNING process, not
       // merely an existing launcher profile or stale session state.
       const tiles = others.filter(profile=>profile.state==='RUNNING'&&!!profile.process&&!separateSlots.has(profile.slot)).flatMap(profile => {
@@ -370,8 +395,9 @@
         return rect.x >= 0 && rect.y >= 0 && rect.width >= 32 && rect.height >= 24 &&
           rect.right <= window.innerWidth && rect.bottom <= window.innerHeight ? [{slot: profile.slot, rect}] : [];
       });
+      if (!layoutCurrent()) {discardOutdated();return;}
       const response = (await lazyTester.previews(viewport.getBoundingClientRect(), tiles)).tiles;
-      if (disposed || !mounted || nativeBackend !== 'WindowsNative' || page !== 'workspace' || detached) return;
+      if (!layoutCurrent()) {discardOutdated();return;}
       // An invalidation received AFTER this layout began is newer evidence
       // than its eventual PreviewReport. Never let that older response
       // re-mark MC02 as registered. Only another genuine layout can clear it.
@@ -547,7 +573,14 @@
     observer = new ResizeObserver(() => { dirty = true; }); observer.observe(viewport, {box: 'device-pixel-content-box'});
     observer.observe(stageSpace);
     for (const node of images.values()) observer.observe(node);
-    const changed = () => { dirty = true; };
+    const changed = () => {
+      // Hidden/minimized WebViews cannot claim current DWM visibility.
+      // Losing focus while the manager remains shown is not a hide.
+      if (document.hidden) {
+        previewStatuses=[];pendingPreviewInvalidations.clear();
+      }
+      dirty = true;
+    };
     window.addEventListener('resize', changed); document.addEventListener('visibilitychange', changed);
     const stops: (() => void)[] = [];
     const retain = (stop: () => void) => { if (disposed) stop(); else stops.push(stop); };
