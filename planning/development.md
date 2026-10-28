@@ -1,6 +1,6 @@
 # Current Development Handoff — v0.1
 
-## Current source initiative — 27 October 2026
+## Current source initiative — 28 October 2026
 
 **Goal:** optimize the existing five-profile Minecraft Education Windows
 runtime after the completed Sandboxie/VMware source retirement. Protect the
@@ -8,8 +8,8 @@ one authoritative controller, native presentation, account/world data and
 normal-exit contracts. Extract only genuinely portable policies in preparation
 for Windows/macOS; a macOS game backend remains future feasibility work.
 
-**State:** ACTIVE (retirement source audit complete; runtime-efficiency review
-underway; current build/gameplay and performance measurements NOT_EXECUTED).
+**State:** ACTIVE (Windows reliability source hardening underway; current
+build/gameplay and performance measurements NOT_EXECUTED).
 
 The current mounted product uses Svelte/Tauri 2 and a retained Rust session
 controller for MC01–MC05. Minecraft owns sign-in, network, worlds, rendering
@@ -40,12 +40,9 @@ contracts and the bounded subprocess runner, not VM providers.
 
 ## Evidence ceiling and known runtime issue
 
-The last recorded real two-session Windows run was on source a788a06:
-MC01 exited, MC02 did **not** complete normal exit within the observer's
-35-second bound, and its process/controller remained. Many exact-source
-shutdown fixes followed, but five actual normal exits, input/black-screen
-stability, five-client performance, installed package operations, and macOS
-multi-account/profile behavior remain **NOT_EXECUTED** for the current source.
+The last recorded two-session Windows run (a788a06) closed MC01, but MC02
+did not exit within 35 seconds. Subsequent source fixes, five-client normal
+close, performance, packaging and macOS gameplay remain NOT_EXECUTED.
 
 Neither removing Sandboxie source nor completing a Rust module refactor is
 evidence that the original MC02 exit issue is solved. No forced game close,
@@ -141,9 +138,16 @@ only `invokeRuntime.ts` calls Tauri core invoke; `lazyTester.ts` and
 unsupported-game route was found. Source verifier and negative/browser
 fixtures authored; no checks or runtime were executed.
 
+## Windows IPC admission — 28 October 2026
+
+The existing Windows session transport now uses nonblocking mutex admission:
+a second caller receives WouldBlock rather than waiting behind a prior
+45-second IPC wait. Its single retained worker, uncertain-result reconciliation,
+manager gate, CloseOne/CloseAll authority, IPC schema, data and Mac refusal
+are unchanged. Synthetic gate regression authored, NOT_EXECUTED. This does
+not prove MC02 normal exit or Windows performance.
+
 ## Next bounded action
 
-Mac diagnostic source-only audit is complete; do not add further Mac
-scaffolding until compilation/runtime authorization. Resume a separately
-bounded Windows efficiency/source safety review when requested, preserving
-the prohibition on local tests and CI.
+Source-review Windows controller maintenance/journal head-of-line during
+CloseOne/CloseAll; retain existing single owner and prohibit CI/local tests.

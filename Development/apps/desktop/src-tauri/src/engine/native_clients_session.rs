@@ -155,6 +155,26 @@ static CONTROLLER: Mutex<Controller> = Mutex::new(Controller {
 });
 
 #[cfg(windows)]
+fn admit_controller(
+    controller: &Mutex<Controller>,
+) -> io::Result<std::sync::MutexGuard<'_, Controller>> {
+    // The existing request owns this gate for the entire bounded IPC wait.
+    // A second caller must never queue behind that wait (up to 45 seconds)
+    // when Windows is trying to review a close or another manager action.
+    // Refusal preserves the original worker and all retained game handles.
+    match controller.try_lock() {
+        Ok(owner) => Ok(owner),
+        Err(std::sync::TryLockError::WouldBlock) => Err(io::Error::new(
+            io::ErrorKind::WouldBlock,
+            "Another session request is still in progress; games are preserved",
+        )),
+        Err(std::sync::TryLockError::Poisoned(_)) => {
+            Err(io::Error::other("Session transport unavailable"))
+        }
+    }
+}
+
+#[cfg(windows)]
 pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     if let SessionRequest::ClearProfileData {slot,ref confirmation_token,ref confirmation_name}=request {
         if !(1..=5).contains(&slot) || confirmation_token.len()!=64 || !confirmation_token.bytes().all(|byte|byte.is_ascii_hexdigit()) || *confirmation_name!=format!("Minecraft - {slot}") {
@@ -172,9 +192,7 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
         ));
     }
     let inspecting = matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings);
-    let mut owner = CONTROLLER
-        .lock()
-        .map_err(|_| io::Error::other("Session transport unavailable"))?;
+    let mut owner = admit_controller(&CONTROLLER)?;
     if let Some(pending) = &owner.pending {
         match pending.replies.try_recv() {
             Err(std::sync::mpsc::TryRecvError::Empty) => {
@@ -349,6 +367,21 @@ pub(super) fn read_message(input: &mut impl io::BufRead) -> io::Result<Option<St
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn contended_transport_gate_refuses_a_second_request_without_waiting() {
+        // Synthetic gate only: no Minecraft process, profile or controller IPC.
+        let gate = Mutex::new(Controller { pending: None, uncertain: false });
+        let retained = gate.lock().unwrap();
+        let refusal = match admit_controller(&gate) {
+            Ok(_) => panic!("Contended transport must never admit another request"),
+            Err(error) => error,
+        };
+        assert_eq!(refusal.kind(), io::ErrorKind::WouldBlock);
+        drop(retained);
+        assert!(admit_controller(&gate).is_ok());
+    }
+
     #[cfg(windows)]
     #[test]
     fn recovery_rejects_out_of_range_slots_before_controller_or_storage_access() {
