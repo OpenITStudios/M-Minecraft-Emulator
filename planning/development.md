@@ -68,6 +68,14 @@ authorization to perform Windows/game acceptance.
   schema-5/6 shape and older schema-7 reports remain supported. Page fault
   count is not a hard-fault/disk-read indicator. Five isolated evaluator
   fixture cases passed; PowerShell/Windows NOT_EXECUTED.
+- Read-only `InspectSettings` now uses the original exact image path
+  pinned during controller preparation for process discovery, avoiding a
+  repeated registered-app PowerShell resolution while showing idle status.
+  `ApplyPreset`, `ApplyGraphicsPreset`, data-clear/reset and other writes
+  still use their existing fresh registration/identity checks. The passive
+  `canApplyPreset` flag is only a UI hint, never write authority.
+  This reduces temporary Windows process/registry work; memory savings and
+  build/runtime behavior are NOT_EXECUTED.
 - CI stays OFF. No install, release, Windows game process or user PC touched.
 
 ## Evidence and preservation

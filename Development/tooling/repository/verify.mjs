@@ -241,6 +241,18 @@ export function verifyRepository(root,g0=false) {
   assert.ok(ownerModules.includes('pub mod process_identity;') &&
     !ownerModules.includes('pub mod owned_provider;'), 'Native process identity must be standalone');
   const gameSource=read('Development/apps/desktop/src-tauri/src/engine/native_clients.rs');
+  const gameSessions=read('Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs');
+  // Only InspectSettings may skip a second full registered-app PowerShell
+  // lookup. All state-mutating paths MUST retain the original fresh gate.
+  assert.ok(gameSource.includes('fn inspect_native_workspace_for_pinned_settings(')
+    && gameSource.includes('native_workspace_windows::inspect_for_registered_target(validated_image)')
+    && gameSessions.includes('fn settings_observation(&mut self) -> io::Result<SettingsReport>')
+    && gameSessions.includes('inspect_native_workspace_for_pinned_settings(&self.path)')
+    && /SessionRequest::InspectSettings\s*=>\s*\{[\s\S]*?settings_observation\(\)/.test(gameSessions)
+    && /SessionRequest::ApplyPreset\s*=>\s*\{[\s\S]*?sessions\.settings\(true\)/.test(gameSessions)
+    && /SessionRequest::ApplyGraphicsPreset\s*\{[^}]*\}\s*=>\s*\{[\s\S]*?sessions\.settings\(false\)/.test(gameSessions)
+    && gameSessions.includes('super::super::inspect_native_workspace()?.processes.is_empty()'),
+    'Read-only Settings may reuse pinned image but all mutation admission must still perform fresh registration checks');
   // One verified Win32 image-path reader, bounded at the original MAX_PATH
   // extension ceiling, replaces five previously repeated 64-KiB buffers.
   // This checks source wiring only; it is NOT a Windows performance result.

@@ -725,7 +725,7 @@ mod native_workspace_windows {
         }))
     }
 
-    fn inspect_for_registered_target(target: &str) -> io::Result<NativeWorkspaceObservation> {
+    pub(super) fn inspect_for_registered_target(target: &str) -> io::Result<NativeWorkspaceObservation> {
         // The caller first resolved the single signed registered Education
         // image. This loop performs no PowerShell, WAM or account-file I/O.
         let target_wide: Vec<u16> = target.encode_utf16().collect();
@@ -918,6 +918,21 @@ pub fn inspect_native_auth_family() -> io::Result<NativeAuthFamilyObservation> {
 #[cfg(target_os = "windows")]
 pub fn inspect_native_workspace() -> io::Result<NativeWorkspaceObservation> {
     native_workspace_windows::inspect()
+}
+
+// Internal read-only Settings receipt: this path was already resolved and
+// image-pinned by Sessions::prepare(). Skip a new PowerShell registered-app
+// preflight for an observation only. All mutations still use the normal
+// registered_education_target/inspect_native_workspace admission and the
+// original OS process checks; this hint never authorizes a settings write.
+#[cfg(target_os = "windows")]
+fn inspect_native_workspace_for_pinned_settings(
+    validated_image: &str,
+) -> io::Result<NativeWorkspaceObservation> {
+    if validated_image.is_empty() || validated_image.contains('\0') {
+        return Err(invalid_evidence("Pinned Education image path unavailable"));
+    }
+    native_workspace_windows::inspect_for_registered_target(validated_image)
 }
 
 #[cfg(not(target_os = "windows"))]

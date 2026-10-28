@@ -489,6 +489,20 @@ impl Sessions {
         result.map_err(|error|io::Error::new(error.kind(),format!("Full clear did not finish. Refresh Data Storage to review its recovery status. {error}")))
     }
 
+    // Read-only UI settings observation. The exact registered image path was
+    // validated and its file HANDLE pinned at controller preparation; reusing
+    // that path avoids launching the full PowerShell registration preflight
+    // on every idle Settings refresh. It is a DISPLAY HINT, not permission
+    // to alter profiles. settings() below keeps the original fresh check.
+    fn settings_observation(&mut self) -> io::Result<SettingsReport> {
+        self.reap();
+        let idle = self.running.iter().all(Option::is_none)
+            && self.stores.iter().all(Option::is_some)
+            && super::super::inspect_native_workspace_for_pinned_settings(&self.path)?
+                .processes.is_empty();
+        SettingsReport::policy(idle, None)
+    }
+
     fn settings(&mut self, apply: bool) -> io::Result<SettingsReport> {
         self.reap();
         let idle = self.running.iter().all(Option::is_none)
@@ -1118,7 +1132,8 @@ fn run() -> io::Result<()> {
             match envelope.request {
                 SessionRequest::Inspect => {}
                 SessionRequest::InspectSettings => {
-                    settings = Some(sessions.settings(false).map_err(|error| error.to_string())?);
+                    // This is a read-only UI status, not mutation admission.
+                    settings = Some(sessions.settings_observation().map_err(|error| error.to_string())?);
                 }
                 SessionRequest::ApplyPreset => {
                     settings = Some(sessions.settings(true).map_err(|error| error.to_string())?);
