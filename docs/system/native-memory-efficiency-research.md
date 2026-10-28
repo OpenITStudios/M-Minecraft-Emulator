@@ -11,6 +11,45 @@ lifecycle: ACTIVE
 
 Status: RESEARCH WITH BOUNDED IMPLEMENTATION AND RUNTIME OBSERVATIONS. Initial research was pinned to `5eaa49ed41c5c455f1b783d3a7c659bbba40e2d5`; subsequent diagnostics, HUD work and the approved Education graphics intervention are identified below. A substantive Minecraft-internal optimization seam and repeatable whole-game gains remain UNKNOWN. Current operator intent is owned by planning/development.md.
 
+## Active target selected — Minecraft Education 26.32 (Windows Desktop)
+
+**Operator direction, 28 October 2026:** use the current Minecraft
+Education release shown in the user's screenshot as the priority research
+target. The independently verified official Windows stable release family
+is **Minecraft Education 26.32**, named *Learning Cubed Update*;
+Microsoft refers to it as **v26.32.0** in release notes and **1.26.32**
+on its download page. This is a VERSION-FAMILY target, not an observed
+SHA-256 of the installed executable:
+- https://edusupport.minecraft.net/hc/en-us/articles/52137260012692-What-s-New-in-the-Learning-Cubed-Update-v26-32-0
+- https://edusupport.minecraft.net/hc/en-us/articles/360047556451-Minecraft-Education-Change-Log/
+- https://education.minecraft.net/en-us/get-started/download
+
+**Do not conflate editions or binaries.** Education 26.32 is not
+Bedrock 26.32.3/26.40/26.51. The version-pinned LeviLamina client
+headers are Bedrock comparators only, with no verified Education ABI.
+The previous Education native evidence records image SHA-256
+`04164c1c64458a5d984dbc1687d0e8023d1808c44ee7be03519cdf8355233eaa`,
+PE timestamp `0x6a63e832`, and image size `0x1255c000`.
+None has been rechecked against the executable behind the current
+screenshot. Do not assert that the earlier binary matches or differs
+from the selected release just from the version name or timestamp.
+
+**Existing interventions remain OFF.** The private C++ canaries require
+matching code hashes/RVAs/image metadata and are disabled in the default
+CMake build. A chosen target release does not authorize a new hook,
+installer, replacement graphics allocator, Windows localtest, game
+launch, account/world mutation or CI. Exactly the original five
+profile identities, 144/10 FPS pacing, render distance >=12 chunks,
+multiplayer host/save continuity and deferred P0 policy are preserved.
+
+**Next research:** map current Education 26.32 feature support, real
+renderer allocation/retirement and CPU object ownership from compatible
+source evidence; determine exact executable fingerprint only when
+read-only native evidence is available. Public Bedrock frame-size
+differences and historical VMMap allocations are NOT verified
+current-build physical RAM savings. Research target selected; any
+new Windows/game validation remains NOT_EXECUTED.
+
 ## 28 October 2026: high-impact RAM decision — source/primary-source audit
 
 **Outcome:** An aggressive <1 GiB/client goal is still UNPROVEN. This is

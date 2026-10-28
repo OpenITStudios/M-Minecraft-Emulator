@@ -101,22 +101,18 @@ publication. The Mac build remains a diagnostic shell without game backend.
 
 ## Next bounded source action
 
-Material RAM goal remains ACTIVE, source-only, without P0 or Windows localtest.
-Version-pinned community Bedrock client headers yield a stronger **renderer
-representation** lead: between 26.32.3 and 26.51.0, two inlined Frame
-objects shrink 196.973 -> 29.005 MiB when a fixed 84 MiB-per-frame
-RenderBind array becomes a 120-byte VirtualArray wrapper. This is a
-167.969 MiB *inline structure* difference, NOT physical RAM saved.
-Education's historical 67.434 MiB allocation is smaller than the old
-Bedrock two-frame field alone: exact Bedrock 26.32.3 Context ABI is ruled
-out. Upstream pre-June BGFX has ~57.875 MiB of selected static arrays,
-but class identity/consumers in Education remain UNKNOWN.
+**Pinned research target: Minecraft Education stable 26.32
+(Learning Cubed, official v26.32.0 / 1.26.32), Windows Desktop.**
+This is the operator-selected release family, NOT an exact installed
+EXE fingerprint. Legacy native code hashes/PE metadata and historical
+VMMap measurements have NOT been reconciled with the current screenshot
+binary. Bedrock 26.32.3/26.51 reconstructed frame headers are only
+cross-edition architectural comparators; the ~168 MiB fixed-to-virtual
+inline field reduction is not proven Education RAM savings. Native
+Default/Upload canaries remain disabled.
 
-Next: identify original Education 67 MiB object's type, array layout
-and every reader/writer and release path using previously authorized
-private code evidence **only if it becomes available**. In parallel,
-the existing ETL/D3D12 owner attribution remains blocked on original
-raw captures and provider coverage. No speculative source patch,
-instrumentation, installation, game process access, memory trimming,
-CI or P0 re-entry; keep reviewed payload, original MC01–MC05 identities,
-144/10 FPS, >=12 chunks, simulation, networking and saves intact.
+Next: source-only compatibility mapping of this Education 26.32 release,
+with exact game allocator ownership required before any code optimizer.
+Do not rerun P0, request Windows localtest, access game/accounts/worlds,
+enable GitHub Actions CI, modify installation or publish main. Runtime
+RAM benchmarks/verified executable hash remain NOT_EXECUTED.
