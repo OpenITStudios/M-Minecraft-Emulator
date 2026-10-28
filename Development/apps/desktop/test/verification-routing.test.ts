@@ -6,6 +6,28 @@ const app = JSON.parse(readFileSync(new URL("../package.json", import.meta.url),
 const router = readFileSync(new URL("../../../tooling/windows-toolchain/dev.ps1", import.meta.url), "utf8");
 
 describe("Emulator source verification routing", () => {
+
+  it("defers redundant five-hive DataLocation inspection until Settings/Storage navigation", () => {
+    const ui = readFileSync(new URL("../src/LazyTesterApp.svelte", import.meta.url), "utf8");
+    const startup = ui.split("async function initializeLaunchers() {")[1]
+      ?.split("  async function checkBinding(")[0] ?? "";
+    const navigate = ui.split("async function consumeNavigation() {")[1]
+      ?.split("  async function refreshPage() {")[0] ?? "";
+    const explicitStorage = ui.split("async function refreshPage() {")[1]
+      ?.split("  async function saveAudio(")[0] ?? "";
+    expect(startup).toContain("await loadBinding()");
+    expect(startup).toContain("if(binding?.configured){await refresh();return;}");
+    expect(startup).not.toMatch(/\b(?:loadLocation|lazyTester\.dataLocation)\s*\(/);
+    // The canonical binding retains full product profile/hive verification.
+    // Only the redundant *location display* inspection is deferred.
+    expect(navigate).toContain("if(next==='storage'||next==='settings')");
+    expect(navigate).toContain("dataLocation=await lazyTester.dataLocation()");
+    expect(explicitStorage).toContain("dataLocation=await lazyTester.dataLocation()");
+    expect(ui).toContain("dataLocation=await lazyTester.dataLocation(action)");
+    expect(ui).toContain("if(action==='Inspect')");
+    expect(ui).toContain("binding=null;if(!bindingIssue)bindingIssue=locationIssue");
+  });
+
   it("has exactly one repository-to-desktop-to-runtime verification route", () => {
     expect(root.scripts["verify:source"].split(" && ")).toEqual([
       "npm run verify:repository -- --g0",

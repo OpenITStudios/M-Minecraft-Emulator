@@ -475,10 +475,10 @@
         if(attempt)await new Promise(resolve=>setTimeout(resolve,attempt*1000));
         if(disposed)return;
         await loadBinding();
-        if(binding?.configured){
-          await loadLocation();
-          if(binding?.configured){await refresh();return;}
-        }
+        // Binding already verifies every existing profile and registry hive.
+        // Data-location Inspect would open all five stores a second time
+        // before Play needs them. Settings/Storage inspect on navigation.
+        if(binding?.configured){await refresh();return;}
       }
       if(!disposed)await refresh();
     }finally{

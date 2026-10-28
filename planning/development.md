@@ -115,6 +115,20 @@ authorization to perform Windows/game acceptance.
   product build, version-pinned PE/code hashes, and no-op disabled mode.
   Focused negative regression fixtures are authored; no Windows/game
   runtime or release payload was changed.
+- Verified a redundant startup resource path in the mounted Play
+  initializer: \`profile_binding::run(false)\` calls
+  \`product_profiles::open()\`, which validates all five profile
+  directories/registry hives. The immediately following startup
+  \`loadLocation()\` called \`product_profiles::location(Inspect)\`
+  and \`open()\` again before Play displayed any location data.
+  Removed only that second read-only location request from successful
+  Play initialization; Settings/Storage navigation, explicit Refresh,
+  Locate/Choose, and all fresh mutation/launch checks retain their
+  original owners and failure handling. This saves one repeated
+  five-profile open/RegLoadAppKey cycle on the successful startup path
+  in source, not proven MiB of resident RAM, faster startup, or game
+  allocator savings. Focused Svelte source regression fixture
+  AUTHORED, NOT_EXECUTED; no native binary or profile mutation.
 - CI stays OFF. No install, release, Windows game process or user PC touched.
 
 ## Evidence and preservation
