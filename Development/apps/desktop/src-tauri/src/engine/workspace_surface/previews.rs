@@ -194,6 +194,12 @@ mod windows {
             _ => DefWindowProcW(hwnd, message, w, l),
         }
     }
+    // WouldBlock also means the old native game frame is unverified.
+    // Hide on every failed observation; this never changes game lifecycle.
+    fn hide_on_failed_update(result: io::Result<()>, hide: impl FnOnce()) -> io::Result<()> {
+        if result.is_err() { hide(); }
+        result
+    }
     struct Thumbnail {
         slot: u32,
         target: OwnedProcess,
@@ -253,15 +259,40 @@ mod windows {
                 _process: process,
             })
         }
+        fn destination_owned(&self) -> bool {
+            unsafe {
+                let mut pid = 0;
+                let thread = GetWindowThreadProcessId(self.window, &mut pid);
+                if thread == 0 || pid != std::process::id()
+                    || GetWindow(self.window, GW_OWNER) != self.manager as usize as HWND
+                    || GetWindowLongPtrW(self.window, GWLP_USERDATA) != self.slot as isize {
+                    return false;
+                }
+                let mut class = [0u16; 32];
+                let length = GetClassNameW(self.window, class.as_mut_ptr(), class.len() as i32);
+                length > 0 && class[..length as usize] == CLASS[..CLASS.len()-1]
+            }
+        }
+        fn source_and_destination_valid(&self) -> bool {
+            self.destination_owned() && native::hwnd(&self.target).is_ok()
+        }
         fn matches(&self, slot: u32, target: &OwnedProcess) -> bool {
             self.slot == slot
                 && self.target.pid == target.pid
                 && self.target.created_file_time == target.created_file_time
                 && self.target.session_id == target.session_id
                 && self.target.window_handle == target.window_handle
-                && unsafe { IsWindow(self.window) != 0 }
+                && self.destination_owned()
+        }
+        fn refresh_verified(&mut self, visible: bool) -> io::Result<()> {
+            let result = self.update(visible);
+            hide_on_failed_update(result, || self.hide())
         }
         fn update(&mut self, visible: bool) -> io::Result<()> {
+            if !self.destination_owned() {
+                return Err(io::Error::new(io::ErrorKind::NotFound,
+                    "Native DWM preview destination is no longer owned by this worker"));
+            }
             if !visible {
                 self.hide();
                 let props=DWM_THUMBNAIL_PROPERTIES{dwFlags:DWM_TNP_VISIBLE,fVisible:0,..unsafe{mem::zeroed()}};
@@ -325,8 +356,9 @@ mod windows {
             Ok(())
         }
         fn hide(&self) {
-            unsafe {
-                ShowWindow(self.window, SW_HIDE);
+            // A reused HWND can belong to another window; never hide it.
+            if self.destination_owned() {
+                unsafe { ShowWindow(self.window, SW_HIDE); }
             }
         }
     }
@@ -334,7 +366,11 @@ mod windows {
         fn drop(&mut self) {
             unsafe {
                 DwmUnregisterThumbnail(self.thumbnail);
-                DestroyWindow(self.window);
+                // The DWM registration is owned, but the numeric HWND can
+                // be reused. Never destroy an unverified destination.
+                if self.destination_owned() {
+                    DestroyWindow(self.window);
+                }
             }
         }
     }
@@ -364,20 +400,23 @@ mod windows {
         }
         fn refresh(&mut self) {
             let visible = self.visibility();
-            for thumbnail in &mut self.thumbnails {
-                if thumbnail.update(visible).is_err_and(|error|error.kind()!=io::ErrorKind::WouldBlock) {
-                    thumbnail.hide();
+            // No unverified frame remains displayed, even on WouldBlock.
+            // Only a failed exact source/destination identity check removes
+            // that particular DWM pin. A transient error remains hidden
+            // for the existing event-driven worker's next refresh.
+            self.thumbnails.retain_mut(|thumbnail| {
+                if thumbnail.refresh_verified(visible).is_err() {
+                    return thumbnail.source_and_destination_valid();
                 }
-            }
-            if let Some(primary) = &mut self.primary {
-                // Never overlay the interactive game. Its native HWND receives all input.
-                let playing = native::interactive_at(&primary.target, primary.manager, primary.viewport);
-                if let Err(error) = primary.update(visible && !playing) {
-                    if error.kind() != io::ErrorKind::WouldBlock {
-                        primary.hide();
-                    }
-                }
-            }
+                true
+            });
+            let discard_primary = if let Some(primary) = &mut self.primary {
+                let playing = native::interactive_at(
+                    &primary.target, primary.manager, primary.viewport);
+                primary.refresh_verified(visible && !playing).is_err()
+                    && !primary.source_and_destination_valid()
+            } else { false };
+            if discard_primary { self.primary = None; }
         }
         fn update_primary_observation(&mut self, manager: u64,
             tile: &PreviewTile, visible: bool) -> io::Result<()> {
@@ -391,10 +430,8 @@ mod windows {
             let image = self.primary.as_mut().unwrap();
             image.viewport = tile.viewport;
             // DWM observation only; never touch original game lifecycle.
-            let outcome = image.update(visible &&
-                !native::interactive_at(&target, manager, tile.viewport));
-            if outcome.is_err() { image.hide(); }
-            outcome
+            image.refresh_verified(visible &&
+                !native::interactive_at(&target, manager, tile.viewport))
         }
         fn layout(
             &mut self,
@@ -463,11 +500,15 @@ mod windows {
                     },
                 };
                 self.thumbnails[index].viewport = tile.viewport;
-                match self.thumbnails[index].update(visible) {
+                match self.thumbnails[index].refresh_verified(visible) {
                     Ok(()) => status.registered = true,
                     Err(error) => {
-                        self.thumbnails[index].hide();
                         status.reason = Some(error.to_string());
+                        // Unregister only the stale DWM observation. Peer
+                        // thumbnails and their status receipts remain intact.
+                        if !self.thumbnails[index].source_and_destination_valid() {
+                            self.thumbnails.remove(index);
+                        }
                     }
                 }
                 statuses.push(status);
@@ -669,6 +710,20 @@ mod windows {
     mod tests {
         use super::*;
         #[test]
+        fn refresh_errors_hide_stale_images_even_on_would_block() {
+            let mut hidden = 0;
+            for kind in [io::ErrorKind::WouldBlock, io::ErrorKind::TimedOut,
+                         io::ErrorKind::NotFound, io::ErrorKind::Other] {
+                let failure = hide_on_failed_update(
+                    Err(io::Error::new(kind, "Native preview is unverified")),
+                    || hidden += 1);
+                assert_eq!(failure.unwrap_err().kind(), kind);
+            }
+            assert_eq!(hidden, 4);
+            assert!(hide_on_failed_update(Ok(()), || hidden += 1).is_ok());
+            assert_eq!(hidden, 4, "Verified preview must not be hidden");
+        }
+        #[test]
         fn hidden_own_windows_register_update_and_release_dwm_without_desktop_capture() {
             // Fixtures remain offscreen and are never focused. This proves DWM interop only,
             // not live pixels, Minecraft rendering, gameplay or background-host behavior.
@@ -745,11 +800,21 @@ mod windows {
                 };
                 let mut thumbnail =
                     Thumbnail::create(manager as usize as u64, &tile, target.clone()).unwrap();
-                thumbnail.update(false).unwrap();
+                assert!(thumbnail.destination_owned());
+                thumbnail.refresh_verified(false).unwrap();
                 let mut size: SIZE = mem::zeroed();
                 assert!(DwmQueryThumbnailSourceSize(thumbnail.thumbnail, &mut size) >= 0);
                 assert!(size.cx > 0 && size.cy > 0);
                 assert_eq!(IsWindowVisible(thumbnail.window), 0);
+                // A changed slot identity invalidates the original HWND
+                // for all DWM updates, even before the worker sees a new
+                // manager layout. Restore this synthetic fixture thereafter.
+                SetWindowLongPtrW(thumbnail.window, GWLP_USERDATA, 0);
+                assert!(!thumbnail.destination_owned());
+                assert_eq!(thumbnail.refresh_verified(true).unwrap_err().kind(),
+                    io::ErrorKind::NotFound);
+                SetWindowLongPtrW(thumbnail.window, GWLP_USERDATA, tile.slot as isize);
+                assert!(thumbnail.destination_owned());
                 ShowWindow(manager, SW_SHOWNOACTIVATE);
                 let primary_tile = PreviewTile { slot: 5, viewport: Viewport {
                     x: 10.0, y: 100.0, width: 640.0, height: 360.0, ..tile.viewport } };

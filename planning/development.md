@@ -132,19 +132,20 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability source hardening — 28 October 2026
 
-Windows transport refuses contention; CloseOne skips peer journals and
-validates original game ownership. Failed helper Start/pipe retains child,
-reader and recovery gate; terminal+exit and native identity evidence gate
-checkpoint retirement. Parked MC01 failure does not abort peer MC02–MC05
-preview/Play. The existing DWM worker reports missing-source/recovery
-failures per requested secondary tile. Primary thumbnail creation/update
-failure now removes/logs only the primary DWM observer, never cancels
-secondary statuses or touches Minecraft gameplay. Live/no-worker reports
-share one initial per-tile reason rule. No IPC schema change, extra worker
-or account/world mutation. Rust/browser regressions authored, NOT_EXECUTED.
-Windows build, normal MC02 exit, DWM and CPU/RAM remain unverified.
+Transport refuses contention; CloseOne avoids unrelated journals and
+validates original game identity. Failed Start/pipe retains its helper,
+reader and exact recovery gate; helper End/exit plus native verification or
+game exit govern checkpoint retirement. Failed parked MC01 recovery does not
+abort MC02–MC05 previews. The one DWM worker keeps primary errors separate
+from per-slot secondary receipts. On every DWM refresh error, including
+WouldBlock, the image is hidden. If its exact source or destination identity
+cannot be verified, only that thumbnail is unregistered; peer images stay.
+Destination manager/PID/slot/class are verified before updating, hiding or
+destroying any DWM window. IPC/game/account data and worker count unchanged.
+Synthetic Rust tests authored, NOT_EXECUTED; Windows DWM/MC02/CPU/RAM remain
+unverified.
 
 ## Next bounded action
 
-Audit DWM worker refresh stale thumbnails and monitoring failure visibility,
-without treating DWM monitoring as native game lifecycle authority.
+Audit stale frontend preview receipts after independent async DWM failures
+without new IPC, polling loops or game lifecycle ownership.
