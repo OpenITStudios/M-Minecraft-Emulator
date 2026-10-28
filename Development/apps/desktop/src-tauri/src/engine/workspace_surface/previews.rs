@@ -119,7 +119,7 @@ mod windows {
             mpsc, Arc, Mutex,
         },
         thread::{self, JoinHandle},
-        time::Duration,
+        time::{Duration, Instant},
     };
     use tauri::Emitter;
     use windows_sys::Win32::{
@@ -226,6 +226,31 @@ mod windows {
         if result.is_err() { hide(); }
         result
     }
+    // DWM composites game pixels after successful registration. Identical
+    // property/position writes are redundant during bursts of native events;
+    // a future existing event periodically reasserts Win32/DWM state.
+    const DWM_PROPERTY_REASSERT: Duration = Duration::from_secs(1);
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    struct DwmGeometry {
+        destination: Rectangle,
+        fitted: Rectangle,
+        source_width: i32,
+        source_height: i32,
+    }
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum DwmAppliedState {
+        Hidden,
+        Visible(DwmGeometry),
+    }
+    fn dwm_property_write_due(
+        previous: Option<(DwmAppliedState, Instant)>,
+        next: DwmAppliedState,
+        now: Instant,
+    ) -> bool {
+        previous.is_none_or(|(previous_state, at)|
+            previous_state != next ||
+            now.saturating_duration_since(at) >= DWM_PROPERTY_REASSERT)
+    }
     struct Thumbnail {
         slot: u32,
         target: OwnedProcess,
@@ -235,6 +260,9 @@ mod windows {
         thumbnail: isize,
         // DWM observation state only: never an original game/lifecycle owner.
         invalidation_notified: bool,
+        // Only successful native property writes are cached. Exact game HWND
+        // and worker-owned DWM destination are still checked on every wake.
+        last_applied: Option<(DwmAppliedState, Instant)>,
         _process: native::ProcessHandle,
     }
     impl Thumbnail {
@@ -285,6 +313,7 @@ mod windows {
                 window,
                 thumbnail,
                 invalidation_notified: false,
+                last_applied: None,
                 _process: process,
             })
         }
@@ -315,6 +344,12 @@ mod windows {
         }
         fn refresh_verified(&mut self, visible: bool) -> io::Result<()> {
             let result = self.update(visible);
+            if result.is_err() {
+                // An error invalidates cached success even if the prior
+                // frame's dimensions are unchanged. Next success MUST write
+                // DWM properties again before showing the image.
+                self.last_applied = None;
+            }
             hide_on_failed_update(result, || self.hide())
         }
         fn update(&mut self, visible: bool) -> io::Result<()> {
@@ -322,24 +357,55 @@ mod windows {
                 return Err(io::Error::new(io::ErrorKind::NotFound,
                     "Native DWM preview destination is no longer owned by this worker"));
             }
+            let now = Instant::now();
             if !visible {
+                let requested = DwmAppliedState::Hidden;
+                if !dwm_property_write_due(self.last_applied, requested, now)
+                    && unsafe { IsWindowVisible(self.window) == 0 } {
+                    return Ok(());
+                }
                 self.hide();
-                let props=DWM_THUMBNAIL_PROPERTIES{dwFlags:DWM_TNP_VISIBLE,fVisible:0,..unsafe{mem::zeroed()}};
-                let result=unsafe{DwmUpdateThumbnailProperties(self.thumbnail,&props)};
-                return if result<0 {Err(io::Error::other("Native preview hide failed"))}else{Ok(())};
+                let props = DWM_THUMBNAIL_PROPERTIES {
+                    dwFlags: DWM_TNP_VISIBLE,
+                    fVisible: 0,
+                    ..unsafe { mem::zeroed() }
+                };
+                let result = unsafe { DwmUpdateThumbnailProperties(self.thumbnail, &props) };
+                if result < 0 {
+                    return Err(io::Error::other("Native preview hide failed"));
+                }
+                self.last_applied = Some((requested, now));
+                return Ok(());
             }
+            // Do not cache native game identity. Every visible refresh must
+            // reverify original PID, process birth, session, HWND and owner.
             let (_pin, source) = native::hwnd(&self.target)?;
             let rect = native::rectangle(self.manager, self.viewport)?;
             let mut client: RECT = unsafe { mem::zeroed() };
             if unsafe { GetClientRect(source, &mut client) } == 0 {
                 return Err(io::Error::last_os_error());
             }
+            let source_width = client.right - client.left;
+            let source_height = client.bottom - client.top;
             let fit = super::fit_rectangle(
-                rect.width,
-                rect.height,
-                client.right - client.left,
-                client.bottom - client.top,
+                rect.width, rect.height, source_width, source_height,
             )?;
+            let requested = DwmAppliedState::Visible(DwmGeometry {
+                destination: rect, fitted: fit, source_width, source_height,
+            });
+            if !dwm_property_write_due(self.last_applied, requested, now)
+                && unsafe { IsWindowVisible(self.window) != 0 } {
+                // The destination may be moved by Windows independently of
+                // the manager. Confirm its live rectangle before skipping
+                // expensive DWM/property writes on a duplicate wake.
+                let mut actual: RECT = unsafe { mem::zeroed() };
+                if unsafe { GetWindowRect(self.window, &mut actual) } != 0
+                    && actual.left == rect.x && actual.top == rect.y
+                    && actual.right - actual.left == rect.width
+                    && actual.bottom - actual.top == rect.height {
+                    return Ok(());
+                }
+            }
             let props = DWM_THUMBNAIL_PROPERTIES {
                 dwFlags: DWM_TNP_RECTDESTINATION
                     | DWM_TNP_VISIBLE
@@ -382,6 +448,9 @@ mod windows {
             {
                 return Err(io::Error::last_os_error());
             }
+            // No cache entry is committed until BOTH DWM and SetWindowPos
+            // succeed for this exact native source/window destination.
+            self.last_applied = Some((requested, now));
             Ok(())
         }
         fn hide(&self) {
@@ -763,6 +832,46 @@ mod windows {
     #[cfg(test)]
     mod tests {
         use super::*;
+        #[test]
+        fn redundant_dwm_writes_skip_stable_bursts_but_refresh_real_changes() {
+            let now = Instant::now();
+            let geometry = DwmGeometry {
+                destination: Rectangle {x:10,y:20,width:640,height:360},
+                fitted: Rectangle {x:0,y:0,width:640,height:360},
+                source_width:1920,source_height:1080,
+            };
+            let visible = DwmAppliedState::Visible(geometry);
+            assert!(dwm_property_write_due(None,visible,now));
+            let last = Some((visible,now));
+            for millis in [1,8,16,100,750,999] {
+                assert!(!dwm_property_write_due(
+                    last,visible,now+Duration::from_millis(millis)),
+                    "Identical move/focus bursts need no additional DWM writes");
+            }
+            assert!(dwm_property_write_due(last,visible,now+DWM_PROPERTY_REASSERT));
+            let moved = DwmAppliedState::Visible(DwmGeometry {
+                destination: Rectangle {x:11,..geometry.destination},..geometry
+            });
+            assert!(dwm_property_write_due(
+                last,moved,now+Duration::from_millis(5)));
+            let resized = DwmAppliedState::Visible(DwmGeometry {
+                destination: Rectangle {width:700,..geometry.destination},..geometry
+            });
+            assert!(dwm_property_write_due(
+                last,resized,now+Duration::from_millis(5)));
+            let source_resized = DwmAppliedState::Visible(DwmGeometry {
+                source_width:1600,..geometry
+            });
+            assert!(dwm_property_write_due(
+                last,source_resized,now+Duration::from_millis(5)));
+            assert!(dwm_property_write_due(
+                last,DwmAppliedState::Hidden,now+Duration::from_millis(5)));
+            let hidden = Some((DwmAppliedState::Hidden,now));
+            assert!(!dwm_property_write_due(
+                hidden,DwmAppliedState::Hidden,now+Duration::from_millis(5)));
+            assert!(dwm_property_write_due(
+                hidden,visible,now+Duration::from_millis(5)));
+        }
         #[test]
         fn async_invalidation_is_source_pinned_and_coalesced_per_layout() {
             let target = OwnedProcess {

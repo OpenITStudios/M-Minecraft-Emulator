@@ -109,11 +109,8 @@ Source guard and refusal regressions authored, NOT_EXECUTED.
 
 Read-only `WindowsNative` / `Unsupported` capability gates Svelte
 profile requests and honest UI messaging before Windows binding retries.
-The default non-Windows Tauri main window is observed, not recreated.
-Windows product WebView overrides, `LOCALAPPDATA` instance lease,
-release guards and IPC schema are preserved behind Windows-only gates.
-Mac product packaging is prohibited; no shell compilation or gameplay
-has been executed.
+Non-Windows uses the default Tauri window; Windows WebView, IPC and
+instance lease remain Windows-only. Mac gameplay NOT_EXECUTED.
 
 ## Native exit and macOS feasibility — 28 October 2026
 
@@ -132,21 +129,26 @@ read-only recheck and no game controls. The sole raw Tauri invoke owner is
 
 ## Windows reliability source hardening — 28 October 2026
 
-Windows transport refuses contention, CloseOne preserves original game
-identity and selected journals. DWM worker isolates all five preview errors,
-hides invalid frames, and emits source-pinned diagnostics via the existing
-workspace error channel. Svelte refuses stale/late preview observations
-after visibility, source, selection or close-review changes; no layout churn.
-Controller idle still polls/reaps exact game exits every 250 ms, before
-optional audio work. COM mute sync is now gated by retained process roster,
-foreground changes or its existing 1-second discovery cadence; unused
-Keep/empty modes avoid COM initialization. Explicit SaveAudio stays immediate;
-errors invalidate the cadence so recovery remains retryable on the next tick.
-No new worker, timer, IPC, forced game operations, profile/data migration or
-Mac backend. Synthetic Rust/TS/browser tests authored, NOT_EXECUTED; real
-Windows DWM/MC02 exit and CPU/RAM performance remain unverified.
+Windows still reaps games every 250 ms; stable COM audio sync is gated by
+foreground/process changes or its one-second discovery deadline. DWM worker
+coalesces queued wakes and omits duplicate DwmUpdateThumbnailProperties and
+SetWindowPos writes when destination, fitted source and visibility agree.
+Every visible wake still verifies game PID/birth/session/HWND and DWM owner.
+Actual geometry/visibility changes, destination drift, failed writes and
+an event after one second all force native property reapplication. No new
+timer, worker, IPC, game lifecycle or private-data migration. Rust/TS/browser
+regressions authored, NOT_EXECUTED. Actual Windows DWM/MC02 and CPU/RAM
+remain unverified.
+
+## Resource benchmarks — NOT_EXECUTED
+
+Compare pinned Windows before/after builds at idle 0/5 games, Keep/Mute,
+five stable previews, rapid drag/resize/minimize/restore, CloseOne and
+four-survivor Play. Record per-process CPU, private bytes/working set, DWM
+write count, responsiveness, game process/window identity and normal exit.
+No performance improvement claimed without measured evidence.
 
 ## Next bounded action
 
-Audit DWM refresh workload from high-frequency native window move events,
-then define resource benchmark scenarios before claiming CPU/RAM gains.
+Audit repeated native helper Place/Park requests separately from DWM writes,
+preserving exact recovery and native game ownership.
