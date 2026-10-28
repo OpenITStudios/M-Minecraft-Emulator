@@ -81,6 +81,15 @@ authorization to perform Windows/game acceptance.
   and parsing it back on every scan. Raw JSON inputs still deserialize and
   pass through that same validator; the five-profile cap and identity checks
   are unchanged. Rust fixture authored, NOT_EXECUTED.
+- The existing offline native schema-7/8 RAM reviewer now returns a
+  **per-selected-profile aspirational <1 GiB distance** using the complete
+  private-working-set median. It reports a signed median gap and descriptive
+  percentage only with full process/private-residency sample coverage; any
+  lost identity or unavailable reading returns null. It never converts a
+  threshold crossing into game/world/host readiness or measured savings.
+  This extends reviewer output only, not collector schema, Minecraft,
+  profiles, the launcher lifecycle or resource policy. Focused Node
+  regression fixtures are AUTHORED, NOT_EXECUTED.
 - CI stays OFF. No install, release, Windows game process or user PC touched.
 
 ## Evidence and preservation
@@ -119,6 +128,13 @@ modified graphics preset. The existing strict typed UI shows this as a
 non-authoritative diagnostic, with no promise of savings. Optional wire
 field preserves older session response compatibility. Rust/Vite fixtures
 are AUTHORED, NOT_EXECUTED; only exact-source guards were reviewed.
+
+**New reviewer-only progress metric:** schema-7/8 now reports each selected
+process's descriptive median private-residency gap against the historical
+<1024 MiB aspirational target, without assuming that a PID is a verified
+Minecraft 26.32 world, that its helper tree was measured, or that FPS/host
+continuity passed. Missing or identity-lost readings never receive a numeric
+gap. No RAM saving is claimed; Node fixtures AUTHORED, NOT_EXECUTED.
 
 **Next source action:** find authoritative Education-26.32 allocator or
 renderer ownership and comparable resident data. Do not claim the old

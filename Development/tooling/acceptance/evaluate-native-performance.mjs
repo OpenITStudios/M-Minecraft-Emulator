@@ -361,6 +361,33 @@ function nativeImageEvidence(value, slots) {
   };
 }
 
+// A numeric distance to an aspirational <1 GiB per selected process is
+// useful for RAM research, but the collector does not verify game readiness,
+// the captured workload, child processes, shared memory, or Education version.
+// Incomplete private-residency coverage must never yield a numeric gap.
+const nativePrivateResidencyGoalMb = 1024;
+function nativeResidentGoalDistance(client) {
+  const resident = client.privateWorkingSetMb;
+  const complete = client.process.observedSamples > 0 &&
+    client.process.missingSamples === 0 &&
+    resident.missingSamples === 0 &&
+    resident.observedSamples === client.process.observedSamples;
+  const median = complete ? resident.medianMb : null;
+  return {
+    interpretation: 'SELECTED_PROCESS_PRIVATE_RESIDENCY_DISTANCE_ONLY',
+    exclusiveUpperBoundMb: nativePrivateResidencyGoalMb,
+    fullSampleCoverage: complete,
+    medianPrivateWorkingSetMb: median,
+    medianMinusTargetMb: median === null ? null :
+      Number((median - nativePrivateResidencyGoalMb).toFixed(3)),
+    reductionToTargetPercent: median === null ? null : median <= nativePrivateResidencyGoalMb ? 0 :
+      Number((100 * (median - nativePrivateResidencyGoalMb) / median).toFixed(2)),
+    verifiedGameWorkload: false,
+    verifiedFullProcessTree: false,
+    verifiedGoalAchievement: false,
+  };
+}
+
 // Schemas 7 (historical) and 8 (file-path fingerprint) keep the same
 // 0-5 profile samples; 8 adds untrusted-but-useful build provenance.
 function evaluateNativeProfileBaseline(report) {
@@ -506,6 +533,8 @@ function evaluateNativeProfileBaseline(report) {
         [field, memorySummary(groups.map(group => group[field]))])),
     };
   };
+  const clients = Object.fromEntries(slots.map(slot =>
+    [slot, selectedProcess(row => row.clients[slot])]));
   return {
     interpretation: 'NATIVE_PROFILE_MEMORY_OBSERVATION_ONLY',
     automaticGameplayProof: false,
@@ -518,8 +547,9 @@ function evaluateNativeProfileBaseline(report) {
     selectedSlots: [...slots],
     pageFaultCountCollected: faultCountCollected,
     ...(imageBound ? {imageEvidence} : {}),
-    clients: Object.fromEntries(slots.map(slot =>
-      [slot, selectedProcess(row => row.clients[slot])])),
+    clients,
+    aspirationalRamGoal: Object.fromEntries(slots.map(slot =>
+      [slot, nativeResidentGoalDistance(clients[slot])])),
     manager: report.managerSelected ? selectedProcess(row => row.manager) : null,
     system: summarize(systemMemoryFields, row => row.system),
     directChildren: report.directChildrenRequested ? Object.fromEntries(

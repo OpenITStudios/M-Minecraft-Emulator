@@ -1084,6 +1084,53 @@ test('native RAM schema-7 handles zero, sparse, and five selected slots without 
   assert.equal(withManager.processTreeMeasured, false);
 });
 
+test('native per-profile RAM goal distance is numeric only with full residency and identity coverage', () => {
+  assert.deepEqual(evaluateNativePerformance(nativeBaselineFixture([])).aspirationalRamGoal, {});
+  const baseline = nativeBaselineFixture(['01', '05']);
+  for (const row of baseline.samples) {
+    row.clients['01'].memory.privateWorkingSetMb = memoryMetric(1000);
+    row.clients['05'].memory.privateWorkingSetMb = memoryMetric(1400);
+  }
+  const report = evaluateNativePerformance(baseline);
+  assert.equal(report.aspirationalRamGoal['01'].medianMinusTargetMb, -24);
+  assert.equal(report.aspirationalRamGoal['01'].reductionToTargetPercent, 0);
+  assert.equal(report.aspirationalRamGoal['05'].medianPrivateWorkingSetMb, 1400);
+  assert.equal(report.aspirationalRamGoal['05'].medianMinusTargetMb, 376);
+  assert.equal(report.aspirationalRamGoal['05'].reductionToTargetPercent, 26.86);
+  assert.equal(report.aspirationalRamGoal['05'].fullSampleCoverage, true);
+  assert.equal(report.aspirationalRamGoal['05'].verifiedGoalAchievement, false);
+  assert.equal(report.aspirationalRamGoal['05'].verifiedGameWorkload, false);
+  assert.equal(report.fiveClientReady, false);
+
+  const partial = structuredClone(baseline);
+  partial.samples[1].clients['05'].memory.privateWorkingSetMb =
+    memoryMetric(null, 'QUERY_FAILED');
+  const unknown = evaluateNativePerformance(partial).aspirationalRamGoal['05'];
+  assert.equal(unknown.fullSampleCoverage, false);
+  assert.equal(unknown.medianPrivateWorkingSetMb, null);
+  assert.equal(unknown.medianMinusTargetMb, null);
+  assert.equal(unknown.reductionToTargetPercent, null);
+
+  const lost = structuredClone(baseline);
+  lost.samples[1].clients['05'].process = {
+    status:'UNKNOWN', cpuPercentOfHost:null, workingSetMb:null,
+  };
+  lost.samples[1].clients['05'].memory = {
+    privateCommitMb:memoryMetric(null, 'IDENTITY_UNAVAILABLE'),
+    privateWorkingSetMb:memoryMetric(null, 'IDENTITY_UNAVAILABLE'),
+  };
+  lost.profileIdentityLost['05'] = true;
+  assert.equal(evaluateNativePerformance(lost).aspirationalRamGoal['05'].medianMinusTargetMb, null);
+
+  const exactlyAtThreshold = structuredClone(baseline);
+  for (const row of exactlyAtThreshold.samples) {
+    row.clients['05'].memory.privateWorkingSetMb = memoryMetric(1024);
+  }
+  const exact = evaluateNativePerformance(exactlyAtThreshold).aspirationalRamGoal['05'];
+  assert.equal(exact.medianMinusTargetMb, 0);
+  assert.equal(exact.verifiedGoalAchievement, false, 'Strict <1 GiB target is never auto-certified');
+});
+
 test('schema-7 numeric RAM comparisons are descriptive and require matching complete identities', () => {
   const before = nativeBaselineFixture(['01','05']);
   const after = structuredClone(before);
