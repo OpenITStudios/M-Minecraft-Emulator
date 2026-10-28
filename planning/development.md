@@ -128,26 +128,23 @@ single-instance, WebView, signing and gameplay remain NOT_EXECUTED or absent.
 
 ## Unsupported-platform UI admission — 28 October 2026
 
-Svelte gates startup/profile, queued work, navigation, previews,
-two-second observation, and unmount game-release on `WindowsNative`.
-Unsupported hosts expose no Minecraft controls; unknown capability can
-retry a read-only host check. Close-window UI uses honest wording.
-All eight mounted TypeScript/Svelte files were audited for IPC ownership:
-only `invokeRuntime.ts` calls Tauri core invoke; `lazyTester.ts` and
-`workspaceSurface.ts` are its typed game IPC consumers. No additional
-unsupported-game route was found. Source verifier and negative/browser
-fixtures authored; no checks or runtime were executed.
+All mounted Svelte startup, queued work, previews, polling and unmount
+operations require Rust-confirmed `WindowsNative`; unsupported hosts offer
+read-only recheck and no game controls. The sole raw Tauri invoke owner is
+`invokeRuntime.ts`; typed IPC remains in `lazyTester.ts` and
+`workspaceSurface.ts`. Static/browser regressions authored, NOT_EXECUTED.
 
-## Windows IPC admission — 28 October 2026
+## Windows reliability source hardening — 28 October 2026
 
-The existing Windows session transport now uses nonblocking mutex admission:
-a second caller receives WouldBlock rather than waiting behind a prior
-45-second IPC wait. Its single retained worker, uncertain-result reconciliation,
-manager gate, CloseOne/CloseAll authority, IPC schema, data and Mac refusal
-are unchanged. Synthetic gate regression authored, NOT_EXECUTED. This does
-not prove MC02 normal exit or Windows performance.
+Windows session transport refuses a second request immediately (WouldBlock)
+instead of waiting behind its 45-second IPC lock. Its retained controller now
+admits queued pipe requests before idle/disconnected reaping and audio work;
+250ms idle cadence, snapshots, journal persistence and one-authority admission
+remain unchanged. Synthetic channel regression authored, NOT_EXECUTED.
+Already-started disk/COM calls remain unpreemptible; MC02 normal exit, Windows
+latency/performance and macOS game support remain unverified.
 
 ## Next bounded action
 
-Source-review Windows controller maintenance/journal head-of-line during
-CloseOne/CloseAll; retain existing single owner and prohibit CI/local tests.
+Review selected CloseOne journal/reap scope without new worker, lifecycle
+authority, IPC schema, profile mutation or CI/local machine execution.

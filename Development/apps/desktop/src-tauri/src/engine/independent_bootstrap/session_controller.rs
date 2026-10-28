@@ -925,6 +925,22 @@ fn sync_audio(sessions:&Sessions,audio:&mut Option<super::session_audio::Audio>,
     audio.as_mut().unwrap().sync(&targets,super::session_audio::foreground(),|pid,born|sessions.running.iter().flatten().any(|s|s.children[0].identity().ok()==Some((pid,born))))
 }
 
+// Admit an authenticated, queued request before optional idle maintenance on
+// this SAME controller actor. It introduces no additional worker or game owner.
+fn receive_before_maintenance<T>(
+    receiver: &std::sync::mpsc::Receiver<T>,
+    timeout: Duration,
+    on_idle: impl FnOnce(),
+) -> Result<T, std::sync::mpsc::RecvTimeoutError> {
+    let result = receiver.recv_timeout(timeout);
+    if result.is_err() {
+        // Include transport disconnect: retain and reap exact game handles
+        // rather than mistaking a disconnected manager for game exit.
+        on_idle();
+    }
+    result
+}
+
 fn run() -> io::Result<()> {
     use windows_sys::Win32::{
         Foundation::{GetLastError, ERROR_ALREADY_EXISTS},
@@ -948,7 +964,8 @@ fn run() -> io::Result<()> {
     let mut sessions = Sessions::prepare()?;
     let mut audio=None;
     let mut audio_mode=crate::engine::manager_settings::load_audio()?;
-    let mut audio_issue;
+    // No audio failure observed before the first idle maintenance cycle.
+    let mut audio_issue: Option<String> = None;
     let server = Server::start(Endpoint::current()?)?;
     let mut manager: Option<Peer> = None;
     let startup = std::time::Instant::now();
@@ -959,8 +976,18 @@ fn run() -> io::Result<()> {
         output.flush()?;
     }
     loop {
-        sessions.reap();
-        audio_issue=sync_audio(&sessions,&mut audio,audio_mode).err().map(|e|e.to_string());
+        // A queued CloseOne/CloseAll should not wait behind journal sync_all
+        // or COM audio discovery for an unrelated, already-exited game.
+        // Native I/O is still unpreemptible once idle maintenance begins.
+        let pending = receive_before_maintenance(
+            &server.requests,
+            Duration::from_millis(250),
+            || {
+                sessions.reap();
+                audio_issue = sync_audio(&sessions, &mut audio, audio_mode)
+                    .err().map(|error| error.to_string());
+            },
+        );
         let detached = manager.as_ref().map_or_else(
             || startup.elapsed() > Duration::from_secs(45),
             |peer| !peer.alive(),
@@ -968,7 +995,7 @@ fn run() -> io::Result<()> {
         if detached && sessions.running.iter().all(Option::is_none) {
             return Ok(());
         }
-        let envelope = match server.requests.recv_timeout(Duration::from_millis(250)) {
+        let envelope = match pending {
             Ok(envelope) => envelope,
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
             Err(_) => {
@@ -1088,6 +1115,33 @@ pub(super) fn maybe_run() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn queued_close_admission_precedes_idle_journal_maintenance() {
+        use std::sync::mpsc::{self, RecvTimeoutError};
+        // Pure channel fixture: no native process, journal, helper or game.
+        let (sender, receiver) = mpsc::sync_channel(1);
+        sender.send(SessionRequest::CloseOne { slot: 2 }).unwrap();
+        let mut maintenance = 0;
+        let queued = receive_before_maintenance(&receiver, Duration::ZERO, || {
+            maintenance += 1;
+        }).unwrap();
+        assert!(matches!(queued, SessionRequest::CloseOne { slot: 2 }));
+        assert_eq!(maintenance, 0, "queued close must precede idle I/O");
+
+        let idle = receive_before_maintenance(&receiver, Duration::ZERO, || {
+            maintenance += 1;
+        });
+        assert!(matches!(idle, Err(RecvTimeoutError::Timeout)));
+        assert_eq!(maintenance, 1, "idle maintenance remains scheduled");
+
+        drop(sender);
+        let disconnected = receive_before_maintenance(&receiver, Duration::ZERO, || {
+            maintenance += 1;
+        });
+        assert!(matches!(disconnected, Err(RecvTimeoutError::Disconnected)));
+        assert_eq!(maintenance, 2, "disconnection retains cleanup");
+    }
+
     // Private synthetic OGLES class, not Minecraft. Shared registration is
     // initialized once because Rust test cases can execute concurrently.
     fn fixture_game_window() -> windows_sys::Win32::Foundation::HWND {
