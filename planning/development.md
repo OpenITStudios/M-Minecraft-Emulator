@@ -101,12 +101,9 @@ tests, gameplay and macOS compilation remain NOT_EXECUTED.
 
 ## Unsupported-platform profile readiness — 28 October 2026
 
-Source-only: `native_clients` now separates installed Windows, existing
-Windows developer fallback, and non-Windows profile admission. On unsupported
-OS, binding/data-location explicitly return `Unsupported`, never a false
-`configured: true`; the existing UI cannot enable five launchers from this
-path. Windows product behavior and IPC schema are unchanged. Native refusal
-regression and static repository guard authored; none executed.
+Windows binding/data-location paths remain unchanged. Non-Windows returns
+`Unsupported`, not `configured: true`, and cannot enable five launchers.
+Source guard and refusal regressions authored, NOT_EXECUTED.
 
 ## Tauri startup and instance boundaries — 28 October 2026
 

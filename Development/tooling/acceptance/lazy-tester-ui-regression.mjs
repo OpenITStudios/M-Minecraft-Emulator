@@ -273,7 +273,9 @@ try {
   assert.equal(await page.getByRole('heading',{name:'Window restoration not verified'}).count(),1);
   await page.evaluate(()=>{window.__runningSlots=[];});
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
-  await page.waitForFunction(()=>document.querySelector('.lt-card')?.textContent?.includes('Launch'));
+  // Wait specifically for MC02 to change from Open to Launch, proving
+  // STOPPED reached Svelte before checking whether recovery was retained.
+  await page.getByRole('button',{name:'Launch Minecraft - 2',exact:true}).waitFor();
   assert.equal(await page.getByRole('status',{name:'Window recovery unconfirmed'}).count(),1,
     'STOPPED observations cannot clear an unacknowledged native checkpoint');
   assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.command==='lazy_tester_close_one').length),1,
