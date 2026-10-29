@@ -1,5 +1,15 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — Close review / Refresh scheduling alignment (29 October 2026)
+
+**State:** DONE for bounded frontend source hardening; complete pinned Svelte/Vitest/Playwright and Windows/Minecraft acceptance NOT_EXECUTED.
+**Decision:** A real UI inconsistency was found: the global header Refresh was enabled while a selected Minecraft close confirmation or native close review was in progress, even though the existing queue selector refuses work until review finishes. Disable header Refresh during the existing closeReviewPending state and guard the click with the original closeReviewActive read-only check; no new state, action, IPC, worker, timer or native lifecycle. Update the existing synthetic browser fixture for native review and selected CloseOne cancel/confirm, and the current source-routing contract.
+**Proof:** REMOTE_GITHUB exact-head current UI/scheduling owner inspection and source consumer preservation checks. SOURCE_EXECUTION isolated exact-source closeReviewActive truth table 16/16 PASS and updated browser ESM syntax parse PASS; existing Vitest and synthetic Playwright scenarios AUTHORED, NOT_EXECUTED.
+**Unresolved:** Full pinned Node24/Svelte5.57/Vitest/Playwright, Tauri Windows, Minecraft Education five-client and package acceptance NOT_EXECUTED; this is not a claim of integrated gameplay readiness.
+**Next:** Verify complete pinned frontend and synthetic browser interactions in an actually compatible environment before adding more features.
+
+---
+
 ## Current product work — native Play journey and browser regression synchronization (29 October 2026)
 
 **State:** DONE for source-only browser contract correction; pinned frontend/Playwright and Windows/Minecraft acceptance NOT_EXECUTED.

@@ -516,8 +516,12 @@ try {
   await page.evaluate(()=>window.__emitNative('lazy-tester-close-review',true));
   assert.equal(await checkHealth.isDisabled(),true,
     'Guided action must be disabled during a native close review');
+  assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true,
+    'Header Refresh must not queue a misleading deferred action during native close review');
   await page.evaluate(()=>window.__emitNative('lazy-tester-close-review',false));
   await page.waitForFunction(()=>!document.querySelector('[aria-label="Check status for Minecraft - 2"]')?.disabled);
+  assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isEnabled(),true,
+    'Header Refresh should return after native close review ends');
   const oldInspectCount=await page.evaluate(()=>window.__calls.filter(call=>
     call.command==='lazy_tester_session' && call.args?.request?.operation==='Inspect').length);
   await checkHealth.click();
@@ -567,6 +571,17 @@ try {
   const affectedCard=page.locator('.lt-launcher-entry').nth(1);
   assert.match(await affectedCard.getAttribute('title')??'',/Check status/);
   await page.getByRole('button',{name:'Close Minecraft - 2 normally'}).click();
+  const closeReview=page.getByRole('region',{name:'Confirm one Minecraft close'});
+  assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true,
+    'Manual Refresh is unavailable while the selected-game confirmation is open');
+  await closeReview.getByRole('button',{name:'Cancel',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isEnabled(),true,
+    'Cancel restores Refresh without sending a game-close request');
+  assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
+    call.command==='lazy_tester_close_one').length),0,
+    'Canceling CloseOne must not close any Minecraft session');
+  await page.getByRole('button',{name:'Close Minecraft - 2 normally'}).click();
+  assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true);
   await page.getByRole('region',{name:'Confirm one Minecraft close'})
     .getByRole('button',{name:'Close Minecraft - 2',exact:true}).click();
   await page.getByRole('status',{name:'Window recovery unconfirmed'}).waitFor();
