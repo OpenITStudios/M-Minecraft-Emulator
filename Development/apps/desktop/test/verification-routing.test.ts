@@ -111,6 +111,21 @@ describe("Emulator source verification routing", () => {
     expect(ui).not.toMatch(/(?<![\w.])issue\s*=\s*userMessage\(/);
   });
 
+  it("keeps the synthetic browser journey in sync with current Play and Storage controls", () => {
+    const play=readFileSync(new URL("../src/LazyTesterApp.svelte",import.meta.url),"utf8");
+    const storage=readFileSync(new URL("../src/DataStorage.svelte",import.meta.url),"utf8");
+    const browser=readFileSync(new URL("../../../tooling/acceptance/lazy-tester-ui-regression.mjs",import.meta.url),"utf8");
+    expect(play).toContain("Open Minecraft - {active} in a window");
+    expect(play).toContain("on:click={release}");
+    expect(play).toContain("onSelect={select} onLaunch={launch}");
+    expect(storage).toContain(">Restore settings…</button>");
+    expect(browser).toContain("Open Minecraft - 1 in a window");
+    expect(browser).toContain("Open Minecraft - 2 in a window");
+    expect(browser).toContain("Restore settings…");
+    expect(browser).toContain("desktop_release_workspace");
+    expect(browser).not.toMatch(/Open in separate windows|Back to Play|name:'Restore…'/);
+  });
+
   it("keeps window errors authored and launcher card guidance passive", () => {
     const bar=readFileSync(new URL("../src/WindowTitlebar.svelte",import.meta.url),"utf8");
     const cards=readFileSync(new URL("../src/LauncherRail.svelte",import.meta.url),"utf8");

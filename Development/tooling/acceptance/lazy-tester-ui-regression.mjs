@@ -265,7 +265,7 @@ try {
   assert.equal(await page.getByLabel('Graphics preset',{exact:true}).count(),0);
   const advanced=page.locator('.lt-advanced');await advanced.locator('summary').click();
   assert.equal(await page.getByRole('button',{name:'Clear all data…',exact:true}).isDisabled(),true);
-  assert.equal(await page.getByRole('button',{name:'Restore…',exact:true}).isDisabled(),true);
+  assert.equal(await page.getByRole('button',{name:'Restore settings…',exact:true}).isDisabled(),true);
   assert.match(await advanced.getAttribute('open')??'',/^$/);
   for(const size of [{width:920,height:620},{width:1280,height:900},{width:1366,height:728},{width:1920,height:1080},{width:2560,height:1378},{width:3440,height:1440},{width:1000,height:1200}]){
     await page.setViewportSize(size);
@@ -301,9 +301,28 @@ try {
   await heading('Starting Minecraft - 1').first().waitFor();await nav('Settings').click();
   await page.evaluate(()=>{window.__runningSlots=[1,2];});await page.getByRole('button',{name:'Refresh',exact:true}).click();
   assert.equal(await page.getByRole('button',{name:'Apply preset',exact:true}).isDisabled(),true);
-  await nav('Play').click();await page.getByRole('button',{name:'Open in separate windows',exact:true}).click();
-  await heading('Games are in separate windows').waitFor();assert.equal(await page.locator('.lt-card').count(),5);
-  await page.getByRole('button',{name:'Back to Play',exact:true}).click();await page.getByRole('button',{name:'Open in separate windows',exact:true}).waitFor();
+  // Current Play contract: release ONE selected Minecraft window, preserving
+  // the other running peer. The next verified game becomes the selected view.
+  await nav('Play').click();
+  await page.getByRole('button',{name:'Open Minecraft - 1',exact:true}).click();
+  await heading('Minecraft - 1').waitFor();
+  await page.getByRole('button',{name:'Open Minecraft - 1 in a window',exact:true}).click();
+  await heading('Minecraft - 2').waitFor();
+  assert.equal(await page.getByRole('button',{name:'Open Minecraft - 2 in a window',exact:true}).isEnabled(),true,
+    'Releasing one game must keep the other Minecraft usable');
+  await page.getByRole('button',{name:'Open Minecraft - 2 in a window',exact:true}).click();
+  await heading('Games are in separate windows').waitFor();
+  assert.equal(await page.locator('.lt-card').count(),5);
+  assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
+    call.command==='desktop_release_workspace' && call.args?.target!==null).length),2,
+    'Only the two explicitly selected Minecraft windows may be released');
+  assert.equal(await page.evaluate(()=>window.__calls.some(call=>
+    ['CloseOne','CloseAll'].includes(call.args?.request?.operation))),false,
+    'Opening separate windows must not close Minecraft sessions');
+  // Return to the existing Play viewport through the running launcher card.
+  await page.getByRole('button',{name:'Open Minecraft - 1',exact:true}).click();
+  await heading('Minecraft - 1').waitFor();
+  await page.getByRole('button',{name:'Open Minecraft - 1 in a window',exact:true}).waitFor();
   await page.waitForTimeout(200);
   const placement=await page.evaluate(()=>{
     const rect=document.querySelector('.lt-viewport').getBoundingClientRect();

@@ -1,5 +1,15 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — native Play journey and browser regression synchronization (29 October 2026)
+
+**State:** DONE for source-only browser contract correction; pinned frontend/Playwright and Windows/Minecraft acceptance NOT_EXECUTED.
+**Decision:** Current Play has per-selected-game "Open Minecraft - N in a window" and selection by running launcher card, not retired "Open in separate windows" / "Back to Play" buttons. Existing browser regression referenced these absent controls and the retired short "Restore…" label. Replace these stale selectors with the present two-running-game journey: choose MC01 → release MC01 → MC02 stays selected → release MC02 → choose MC01 to return; verify two exact targeted desktop_release_workspace calls and no CloseOne/CloseAll. Match Data Storage's actual "Restore settings…" text. Add one focused source contract guard to the existing verification suite; no runtime application changes, new UI, IPC, timers, data migrations, CI or release.
+**Proof:** REMOTE_GITHUB exact-head UI/Storage/bridge and test-owner comparison; verified missing old labels and current supported control paths. Isolated V8 exact-source firstEmbeddedProfile selection proof and ESM browser syntax check PASS. Vitest and Playwright acceptance AUTHORED/UPDATED, NOT_EXECUTED.
+**Unresolved:** Pinned Svelte/Vitest/Playwright, Node24/npm12, Tauri Windows, real Minecraft Education five-client runtime and packaging remain NOT_EXECUTED. This prevents claiming full end-to-end product acceptance.
+**Next:** Run complete pinned frontend compiler and browser regression in a genuinely compatible environment; fix only observed failures before further feature expansion.
+
+---
+
 ## Current product work — Svelte launcher accessibility warning correction (29 October 2026)
 
 **State:** DONE for bounded source correction; pinned frontend/browser and Windows/Minecraft acceptance NOT_EXECUTED.
