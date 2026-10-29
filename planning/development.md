@@ -1,5 +1,14 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — General Settings presentation extraction (29 October 2026)
+
+**State:** DONE in source; pinned Svelte/Vitest/Playwright and live Windows/Minecraft NOT_EXECUTED.
+**Decision:** Extract all four existing General Settings sections to one passive GeneralSettings.svelte view. Three input bindings (graphicsPreset, activeFps, backgroundFps) propagate to single parent state. Graphics, FPS, audio, data location and navigation actions still invoke only original LazyTesterApp callbacks; preserve DOM classes, control IDs and user feedback. No state ownership duplication, native IPC, timer, credential or world mutation.
+**Proof:** REMOTE_GITHUB exact-parent markup/action audit with structural and native-call parity checks; focused source ownership and browser 120/5→Discard regression authored, NOT_EXECUTED.
+**Next:** Review compiler acceptance when compatible dependencies are present; then consider a single bounded Data Storage presentation extraction, retaining destructive confirmation/admission with the original owner.
+
+---
+
 ## Current product work — UI queue scheduling policy extraction (29 October 2026)
 
 **State:** DONE in source; exact-head Svelte compiler and Minecraft/Windows acceptance NOT_EXECUTED.

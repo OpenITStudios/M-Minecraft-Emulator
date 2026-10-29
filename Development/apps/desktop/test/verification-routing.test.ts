@@ -56,6 +56,24 @@ describe("Emulator source verification routing", () => {
     expect(policy).not.toMatch(/invokeRuntime\s*\(|lazyTester\s*\.|setInterval\s*\(/);
   });
 
+  it("delegates General Settings rendering without duplicating form state or native authority", () => {
+    const parent = readFileSync(new URL("../src/LazyTesterApp.svelte", import.meta.url), "utf8");
+    const child = readFileSync(new URL("../src/GeneralSettings.svelte", import.meta.url), "utf8");
+    expect(parent).toContain("<GeneralSettings {profiles} {selectedSlot} {settings}");
+    expect(parent).toContain("bind:graphicsPreset bind:activeFps bind:backgroundFps");
+    expect(parent).toContain("onRequestPerformanceSave={requestPerformanceSave} onSaveAudio={saveAudio}");
+    expect(parent).toContain("onOpenDataFolder={() => loadLocation('Open')}");
+    expect(parent).not.toContain('id="graphics-preset"');
+    for(const control of ['graphics-preset','active-fps','background-fps'])
+      expect(child).toContain('id="'+control+'"');
+    for(const bound of ['graphicsPreset','activeFps','backgroundFps'])
+      expect(child).toContain('bind:value={'+bound+'}');
+    expect(child).toContain("on:submit|preventDefault={onRequestPerformanceSave}");
+    expect(child).toContain("on:click={onOpenDataFolder}");
+    expect(child).toContain("on:click={onShowDataStorage}");
+    expect(child).not.toMatch(/\binvokeRuntime\s*\(|\blazyTester\s*\.\w+\(|\bworkspaceSurface\s*\.\w+\(|\bsetInterval\s*\(/);
+  });
+
   it("has exactly one repository-to-desktop-to-runtime verification route", () => {
     expect(root.scripts["verify:source"].split(" && ")).toEqual([
       "npm run verify:repository -- --g0",

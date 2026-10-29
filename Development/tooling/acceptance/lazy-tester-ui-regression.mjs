@@ -223,6 +223,13 @@ try {
   await section('General').click();assert.equal(await page.getByLabel('While playing',{exact:true}).inputValue(),'60');
   await page.getByRole('button',{name:'Save changes',exact:true}).click();
   await page.getByText('Saved. New limits apply when each Minecraft profile next starts.').waitFor();
+  // Component-to-parent bindings: draft preset and Discard share one state owner.
+  await page.getByRole('button',{name:'Use 120 / 5',exact:true}).click();
+  assert.equal(await page.getByLabel('While playing',{exact:true}).inputValue(),'120');
+  assert.equal(await page.getByLabel('In the background',{exact:true}).inputValue(),'5');
+  await page.getByRole('button',{name:'Discard',exact:true}).click();
+  assert.equal(await page.getByLabel('While playing',{exact:true}).inputValue(),'60');
+  assert.equal(await page.getByLabel('In the background',{exact:true}).inputValue(),'5');
   await page.getByLabel('Graphics preset',{exact:true}).selectOption('High');
   await page.getByRole('button',{name:'Apply preset',exact:true}).click();
   await page.getByText(/High saved and applied/).waitFor();
