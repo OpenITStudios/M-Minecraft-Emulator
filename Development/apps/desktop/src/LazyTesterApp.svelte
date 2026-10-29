@@ -6,7 +6,7 @@
   import './lazy-tester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
   import SessionHealthNotice from './SessionHealthNotice.svelte';
-  import {projectSessionHealth} from './app/presentation/sessionHealth.js';
+  import {projectSessionHealth, type SessionHealthAction} from './app/presentation/sessionHealth.js';
   import {userMessage, sessionConnectionLabel, updateRecoverySlots, recoveryLabels} from './app/presentation/sessionFeedback.js';
   import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, periodicInspectionDue, type CloseReview} from './app/inspectionScheduling.js';
 
@@ -104,6 +104,25 @@
   function image(node: HTMLElement, slot: ProfileSlot) {
     images.set(slot, node); observer?.observe(node); dirty = true;
     return {destroy() { observer?.unobserve(node); if (images.get(slot) === node) images.delete(slot); dirty = true; }};
+  }
+  // Suggested actions reuse the original explicit Refresh and Play selection.
+  // They are not permissions to alter a game: native identity and lifecycle
+  // remain under the verified Rust controller.
+  function requestGuidedRecovery(slot: ProfileSlot, action: SessionHealthAction) {
+    if (nativeBackend !== 'WindowsNative' || page !== 'workspace' || disposed ||
+        initializing || !available || !binding?.configured || closeReviewActive(reviewState()) ||
+        busy || refreshing || resizing || manualRefreshing || manualRefreshRequested ||
+        queuedPage !== null || queuedLaunch !== null || uncertainWindowSlots.has(slot)) return;
+    const recommended = healthIssues.find(item => item.slot === slot);
+    if (!recommended || recommended.action !== action) return;
+    if (action === 'open') {
+      const profile = profiles.find(item => item.slot === slot);
+      if (profile?.state !== 'RUNNING' || !profile.process?.responding ||
+          separateSlots.has(slot) || primary === slot) return;
+      select(slot); // Reuse existing verified native Play presentation; never Launch.
+    } else {
+      manualRefreshRequested = true; // Reuse existing explicit Refresh scheduling.
+    }
   }
   function select(slot: ProfileSlot) { closeOneSlot=null; requested = null; queued = slot; }
   async function consumeSelection() {
@@ -751,7 +770,10 @@
 
               </button>
               {#if healthItem}
-                <SessionHealthNotice item={healthItem}/>
+                <SessionHealthNotice item={healthItem} onAction={requestGuidedRecovery}
+                  disabled={busy||refreshing||resizing||manualRefreshing||manualRefreshRequested||
+                    closeInProgress||nativeExitReview||closeReviewPending||initializing||
+                    queuedPage!==null||queuedLaunch!==null||!available||!binding?.configured}/>
               {/if}
               {#if ['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)}
                 <button class="lt-secondary lt-close-launcher" aria-label={'Close Minecraft - '+profile.slot+' normally'} disabled={busy||closeInProgress||nativeExitReview||!available||!binding?.configured} on:click={()=>requestCloseOne(profile.slot)}>Close game</button>

@@ -443,3 +443,47 @@ describe('Lazy Tester minimal session health projection',()=>{
     });
   });
 });
+
+describe('Lazy Tester guided recovery recommendation contract',()=>{
+  const base=[1,2,3,4,5].map(slot=>({
+    slot,state:'STOPPED',issue:null,process:null,
+  })) as ProfileSession[];
+  const observe=(overrides:Partial<Parameters<typeof projectSessionHealth>[0]>={})=>({
+    profiles:base,previewStatuses:[],
+    unresolvedRecovery:new Set<1|2|3|4|5>(),
+    separateWindows:new Set<1|2|3|4|5>(),
+    primarySlot:1 as const,observed:true,previewsVisible:true,
+    ...overrides,
+  });
+  it('offers only read-only refresh for unresponsive, uncertain or attention states',()=>{
+    const profiles:ProfileSession[]=base.map(p=>{
+      if(p.slot===1)return {...running(1),state:'NOT_RESPONDING',
+        process:{...running(1).process!,responding:false}} as ProfileSession;
+      if(p.slot===2)return {...p,state:'NOT_RESPONDING',issue:'Process still owned'} as ProfileSession;
+      if(p.slot===3)return {...p,state:'STARTING',issue:'Resume not confirmed'} as ProfileSession;
+      if(p.slot===4)return {...p,state:'ATTENTION',issue:'Saved data mismatch'} as ProfileSession;
+      return p;
+    });
+    const items=projectSessionHealth(observe({profiles}));
+    expect(items.map(item=>[item.slot,item.kind,item.action])).toEqual([
+      [1,'window','refresh'],[2,'window','refresh'],
+      [3,'launch','refresh'],[4,'launcher','refresh'],
+    ]);
+    expect(items.every(item=>!/(?:PID|registry|Resume not confirmed|Saved data mismatch)/.test(item.guidance))).toBe(true);
+  });
+  it('offers Open only for a responding background window with failed preview',()=>{
+    const profiles=base.map(p=>p.slot===2?running(2) as ProfileSession:p);
+    const previewStatuses=[{slot:2 as const,registered:false,reason:'internal path: C:\\\\private'}];
+    expect(projectSessionHealth(observe({profiles,previewStatuses}))).toMatchObject([
+      {slot:2,kind:'preview',action:'open'},
+    ]);
+    expect(projectSessionHealth(observe({profiles,previewStatuses,primarySlot:2}))).toEqual([]);
+    expect(projectSessionHealth(observe({profiles,previewStatuses,previewsVisible:false}))).toEqual([]);
+    expect(projectSessionHealth(observe({profiles,previewStatuses,separateWindows:new Set([2])}))).toEqual([]);
+    const unresponsive=profiles.map(p=>p.slot===2?
+      {...p,state:'NOT_RESPONDING' as const,process:{...p.process!,responding:false}}:p);
+    expect(projectSessionHealth(observe({profiles:unresponsive,previewStatuses}))[0]?.action).toBe('refresh');
+    expect(projectSessionHealth(observe({profiles,previewStatuses,unresolvedRecovery:new Set([2])}))).toEqual([]);
+    expect(projectSessionHealth(observe({profiles,previewStatuses,observed:false}))).toEqual([]);
+  });
+});

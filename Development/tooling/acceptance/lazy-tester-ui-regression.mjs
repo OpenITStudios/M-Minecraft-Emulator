@@ -372,6 +372,11 @@ try {
   assert.equal(await page.getByRole('status',{name:'Minecraft - 3 preview unavailable'}).count(),0);
   assert.equal(await page.getByRole('button',{name:'Open Minecraft - 2',exact:true}).isEnabled(),true,
     'DWM preview failure is not game-process or Play admission');
+  await page.getByRole('button',{name:'Open game for Minecraft - 2'}).click();
+  await page.waitForFunction(()=>window.__calls.some(call=>
+    call.command==='lazy_tester_present' && call.args?.slot===2));
+  assert.equal(await page.evaluate(()=>window.__calls.some(call=>['Launch','CloseOne','CloseAll'].includes(
+    call.args?.request?.operation))),false,'Guided Open must not invoke Launch or Close');
   await page.evaluate(()=>{window.__runningSlots=[1,3];});
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await page.getByRole('button',{name:'Launch Minecraft - 2',exact:true}).waitFor();
@@ -398,8 +403,23 @@ try {
     'Health UI must not override the existing unresponsive-game admission');
   assert.equal(await page.evaluate(()=>window.__calls.some(call=>call.args?.request?.operation==='Launch')),false,
     'Health inspection must not start a Minecraft instance');
+  const checkHealth=page.getByRole('button',{name:'Check status for Minecraft - 2'});
+  await checkHealth.waitFor();
+  await page.evaluate(()=>window.__emitNative('lazy-tester-close-review',true));
+  assert.equal(await checkHealth.isDisabled(),true,
+    'Guided action must be disabled during a native close review');
+  await page.evaluate(()=>window.__emitNative('lazy-tester-close-review',false));
+  await page.waitForFunction(()=>!document.querySelector('[aria-label="Check status for Minecraft - 2"]')?.disabled);
+  const oldInspectCount=await page.evaluate(()=>window.__calls.filter(call=>
+    call.command==='lazy_tester_session' && call.args?.request?.operation==='Inspect').length);
+  await checkHealth.click();
+  await page.waitForFunction(before=>window.__calls.filter(call=>
+    call.command==='lazy_tester_session' && call.args?.request?.operation==='Inspect').length>before,oldInspectCount);
+  assert.equal(await page.evaluate(()=>window.__calls.some(call=>
+    ['Launch','CloseOne','CloseAll','ClearProfileData'].includes(call.args?.request?.operation))),false,
+    'Guided Check status must issue Inspect only');
   await page.evaluate(()=>{window.__healthFixture=false;});
-  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.getByRole('button',{name:'Check status for Minecraft - 3'}).click();
   await windowHealth.waitFor({state:'detached'});
   await launcherHealth.waitFor({state:'detached'});
 

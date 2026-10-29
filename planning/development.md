@@ -1,5 +1,14 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — Guided Recovery v0.1 (29 October 2026)
+
+**State:** DONE in source; compiled frontend, Windows and Minecraft runtime acceptance NOT_EXECUTED.
+**Decision:** Give each contextual health warning one explicit safe action: **Check status** uses the original manual Refresh, while **Open game** uses the existing verified Play selection only for a responding background game with a failed preview. Recheck live UI status when clicked; the original native controller independently verifies game/window identity. No restart, force-close, auto-retry, new IPC, monitoring, account/world mutation or secondary lifecycle authority. Native restoration uncertainty retains its separate warning without a misleading fix button.
+**Proof:** REMOTE_GITHUB exact-source review and V8 static caller/projection checks. Existing Vitest source cases and synthetic browser cases extended for Refresh/Present-only paths and disabled controls during close review; AUTHORED, NOT_EXECUTED.
+**Next:** Evaluate compiled frontend and browser interactions in a compatible environment, then consider only user-evidenced remaining recovery gaps.
+
+---
+
 ## Current product work — contextual Session Health MVP (29 October 2026)
 
 **State:** DONE in source; manual frontend, Windows and Minecraft runtime acceptance NOT_EXECUTED.
