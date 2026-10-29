@@ -73,6 +73,12 @@ fn options_path(private: &File, create: bool) -> io::Result<(PathBuf, Vec<File>)
 pub(super) fn inspect_settings(private: &File, admission: io::Result<()>) -> crate::engine::native_clients_session::GameSettingsStorage {
     use crate::engine::native_clients_session::GameSettingsStorage;
     let mut status = GameSettingsStorage {has_settings:false, backup_available:false, can_reset:false, can_restore:false, improved_input_response_enabled:None, texture_streaming_enabled:None, issue:None};
+    // An unadmitted slot's options and backups cannot be acted upon.
+    // Refuse before any reads to avoid redundant work on active/foreign games.
+    if let Err(error) = admission {
+        status.issue = Some(error.to_string());
+        return status;
+    }
     let mut resettable=false;
     let mut input_response=None;
     let mut texture_streaming=None;
@@ -98,7 +104,7 @@ pub(super) fn inspect_settings(private: &File, admission: io::Result<()>) -> cra
         status.backup_available = backup_bytes(&path)?.is_some();
         Ok(())
     })();
-    match inspected.and(admission) {
+    match inspected {
         Ok(()) => {status.can_reset=resettable;status.can_restore=status.backup_available;status.improved_input_response_enabled=input_response;status.texture_streaming_enabled=texture_streaming;}
         Err(error) => status.issue=Some(error.to_string()),
     }
@@ -477,6 +483,27 @@ fn apply_directories<'a>(directories: impl Iterator<Item = &'a File>) -> io::Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn denied_settings_inspection_returns_unknown_before_opening_options() {
+        let root = super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let private = open_directory(&root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap();
+        // An old inspection would report this invalid file instead of admission refusal.
+        let path = Prepared::read(&private).unwrap().path;
+        let original = b"gfx_texture_streaming:1\nctrl_improvedInputResponse:1\ninvalid:\xff\n";
+        fs::write(&path, original).unwrap();
+        let blocked = inspect_settings(&private, Err(invalid("Profile is running")));
+        assert_eq!(blocked.issue.as_deref(), Some("Profile is running"));
+        assert!(!blocked.has_settings && !blocked.backup_available);
+        assert!(!blocked.can_reset && !blocked.can_restore);
+        assert_eq!(blocked.texture_streaming_enabled, None);
+        assert_eq!(blocked.improved_input_response_enabled, None);
+        assert_eq!(fs::read(&path).unwrap(), original);
+        assert!(inspect_settings(&private, Ok(())).issue.is_some(),
+            "Admitted inspection must still reject malformed options");
+        drop(private);
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn input_response_receipt_never_assumes_disabled_or_edits_saved_options() {

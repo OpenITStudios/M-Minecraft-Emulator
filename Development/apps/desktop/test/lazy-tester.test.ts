@@ -85,7 +85,8 @@ describe('Lazy Tester profile contract', () => {
     }
     const active={...snapshot,profiles:[running(1),...snapshot.profiles.slice(1)]};
     expect(()=>parseSession(active)).toThrow();
-    const gated={...active,storage:storage.map(item=>item.slot===1?{...item,fullClear:{...fullClear,canClear:false,issue:'Close this Minecraft'}}:item)};
+    const gated={...active,storage:storage.map(item=>item.slot===1?{...item,fullClear:{...fullClear,canClear:false,confirmationToken:null,issue:'Close this Minecraft'}}:item)};
+    expect(parseSession(gated).storage![0]!.fullClear?.confirmationToken).toBeNull();
     expect(parseSession(gated).storage![3]!.fullClear?.canClear).toBe(true);
     expect(parseSession({...snapshot,storage:storage.map(item=>({...item,fullClear:{...fullClear,pending:true}}))}).storage![0]!.fullClear?.pending).toBe(true);
   });

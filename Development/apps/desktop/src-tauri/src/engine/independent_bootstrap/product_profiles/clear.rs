@@ -146,9 +146,12 @@ pub(in super::super) fn inspect(
         issue: None,
     };
     let result = (|| {
-        report.confirmation_token = Some(confirmation(store)?);
+        // Preserve visible recovery status even if blocked, but do not open
+        // the catalog and hive merely to create an unusable clear token.
+        // The mutation path separately rechecks its full admission.
         report.pending = pending(store)?;
         admission?;
+        report.confirmation_token = Some(confirmation(store)?);
         report.can_clear = true;
         Ok::<_, io::Error>(())
     })();
@@ -802,7 +805,12 @@ mod tests {
         let mut reopened = fixture.stores();
         assert!(pending(&reopened[0]).unwrap());
         assert!(inspect(&reopened[0], Ok(())).pending);
-        assert!(!inspect(&reopened[0], Err(invalid("Running launcher"))).can_clear);
+        let blocked = inspect(&reopened[0], Err(invalid("Running launcher")));
+        assert!(blocked.pending, "Recovery stays visible when mutation is refused");
+        assert!(!blocked.can_clear);
+        assert_eq!(blocked.issue.as_deref(), Some("Running launcher"));
+        assert!(blocked.confirmation_token.is_none(),
+            "Do not build or expose a full-clear token for a blocked profile");
         let current_token = confirmation(&reopened[0]).unwrap();
         assert_ne!(old_token, current_token);
         assert!(run(reopened.remove(0), &old_token).is_err());

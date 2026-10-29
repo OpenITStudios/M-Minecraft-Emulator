@@ -127,6 +127,27 @@ existing on-disk/registry compatibility names are NOT renamed.
   executed separately in ChatGPT's Node 22.16.0 sandbox; Windows/Minecraft
   runtime remains NOT_EXECUTED. No CI or local user PC.
 
+## Latest source-integrity and blocked-profile inspection correction (29 October 2026)
+
+- The existing source verifier had an obsolete Improved Input Response parser
+  literal and could falsely refuse today's shared `observed_binary_option`.
+  Its existing ownership check now covers the current unique 0/1 parser for
+  Improved Input Response and Texture Streaming, both typed receipts and
+  mounted UI. It also guards current admission order rather than adding a
+  parallel verification system.
+- The settings inspector now refuses unadmitted active/foreign/uncertain
+  profiles **before reading** `options.txt` or its backup. The refusal remains
+  visible and key values stay UNKNOWN; admitted stopped profiles retain their
+  original options validation and recovery semantics.
+- Full-clear status still checks the journal for pending recovery even for
+  blocked profiles but postpones full catalog/hive token computation until
+  successful admission. A blocked slot receives no confirmation token;
+  actual deletion still needs its original fresh independent gate.
+- Focused Rust/TypeScript regression fixtures and the existing source guard
+  were authored and reviewed by exact GitHub source only, NOT_EXECUTED.
+  No Windows, Minecraft, installer, FPS or RAM claim. The Settings page's
+  DataLocation read remains active because the UI displays/opens that path.
+
 ## Active owners
 
 - Mounted Tauri 2/Svelte UI: `Development/apps/desktop/src/LazyTesterApp.svelte`

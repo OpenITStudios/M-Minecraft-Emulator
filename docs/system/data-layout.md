@@ -91,7 +91,10 @@ Minecraft options.txt at launch. Previously saved High/Low arrays remain valid
 and retain their original explicit 12-chunk/MSAA1 behavior. Choosing Preserve
 stops future overrides; it does not reconstruct earlier visual values.
 Atomic preference writes, next-launch FPS application and all-games-stopped
-graphics/cache admission keep their owners.
+graphics/cache admission keep their owners. Read-only options.txt and backup
+inspection first checks the selected profile's existing admission: active,
+unmanaged or uncertain sessions receive an UNKNOWN/blocked settings report
+without opening their saved options. This grants no new write permission.
 
 Texture Streaming is an **explicit, reversible existing-key option**:
 0→1 can be enabled, 1→0 disabled, only with a stopped profile and the
@@ -117,6 +120,9 @@ referenced pack exists, accounts for global pack activation, proves that
 the engine loaded the pack, or estimates RAM/VRAM. The inventory has no
 delete/disable/activation authority. Minecraft Education is the only owner
 of applying packs.
+The read-only full-clear report retains recovery-journal visibility even when
+the slot is blocked, but only creates a full catalog/hive confirmation token
+after admission succeeds. Mutation separately rechecks its fresh authority.
 Full clear replaces the selected verified local profile and hive after confirmation;
 its recovery and isolation have synthetic fixture evidence only. Windows-managed
 sign-in data is outside that operation, and a fresh account sign-in is not yet

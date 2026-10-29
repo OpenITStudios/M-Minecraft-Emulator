@@ -306,13 +306,42 @@ export function verifyRepository(root,g0=false) {
     && /SessionRequest::ApplyGraphicsPreset\s*\{[^}]*\}\s*=>\s*\{[\s\S]*?sessions\.settings\(false\)/.test(gameSessions)
     && gameSessions.includes('super::super::inspect_native_workspace()?.processes.is_empty()'),
     'Read-only Settings may reuse pinned image but all mutation admission must still perform fresh registration checks');
-  assert.ok(gamePreset.includes('fn observed_input_response(bytes: &[u8]) -> Option<bool>')
-    && gamePreset.includes('let enabled=match value { "0"=>false, "1"=>true, _=>return None };')
+  // Inspect the live shared 0/1 parser, not the retired one-off parser:
+  // the old guard falsely failed after the two options were consolidated.
+  assert.ok(gamePreset.includes('fn observed_binary_option(bytes: &[u8], wanted: &str) -> Option<bool>')
+    && gamePreset.includes('if observed.is_some() { return None; }')
+    && gamePreset.includes('observed = Some(match value {')
+    && gamePreset.includes('"0" => false,')
+    && gamePreset.includes('"1" => true,')
+    && gamePreset.includes('fn observed_input_response(bytes: &[u8]) -> Option<bool>')
+    && gamePreset.includes('fn observed_texture_streaming(bytes: &[u8]) -> Option<bool>')
     && gamePreset.includes('status.improved_input_response_enabled=input_response')
-    && !/const PRESET:[^;]*ctrl_improvedInputResponse/s.test(gamePreset)
+    && gamePreset.includes('status.texture_streaming_enabled=texture_streaming')
+    && !/const PRESET:[^;]*(?:ctrl_improvedInputResponse|gfx_texture_streaming)/s.test(gamePreset)
     && gameWire.includes('pub improved_input_response_enabled: Option<bool>')
+    && gameWire.includes('pub texture_streaming_enabled: Option<bool>')
     && mountedUI.includes('Improved Input Response: unknown or not recorded'),
-    'Potential input-response RAM leak is a conservative read-only settings hint, never a preset write');
+    'Optional settings must share strict 0/1 parsing with no forced graphics preset');
+  const settingsRead = gamePreset.slice(
+    gamePreset.indexOf('pub(super) fn inspect_settings('),
+    gamePreset.indexOf('pub(super) fn reset_settings('));
+  const deniedBeforeRead = settingsRead.indexOf('if let Err(error) = admission {');
+  assert.ok(deniedBeforeRead >= 0 &&
+    deniedBeforeRead < settingsRead.indexOf('options_path(private,false)') &&
+    settingsRead.includes('status.issue = Some(error.to_string());') &&
+    settingsRead.includes('return status;') &&
+    !settingsRead.includes('inspected.and(admission)'),
+    'Inactive profile admission must precede any settings or backup reads');
+  const fullClear = read('Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/product_profiles/clear.rs');
+  const fullClearRead = fullClear.slice(
+    fullClear.indexOf('pub(in super::super) fn inspect('),
+    fullClear.indexOf('pub(in super::super) fn run('));
+  const pendingAt = fullClearRead.indexOf('report.pending = pending(store)?;');
+  const admissionAt = fullClearRead.indexOf('admission?;');
+  const tokenAt = fullClearRead.indexOf('report.confirmation_token = Some(confirmation(store)?);');
+  assert.ok(pendingAt >= 0 && admissionAt > pendingAt && tokenAt > admissionAt &&
+    fullClearRead.includes('report.can_clear = true;'),
+    'Full-clear status must preserve pending recovery but defer token until admission');
   // One verified Win32 image-path reader, bounded at the original MAX_PATH
   // extension ceiling, replaces five previously repeated 64-KiB buffers.
   // This checks source wiring only; it is NOT a Windows performance result.
