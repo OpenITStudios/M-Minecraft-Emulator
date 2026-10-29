@@ -12,7 +12,6 @@ import sys
 import zipfile
 
 from PIL import Image, UnidentifiedImageError
-from entity_preview import IMAGES as GHAST_IMAGES, compile_ghast
 
 SOURCE_TAG = "v1.26.30.5"
 # Git tree SHA of Mojang/bedrock-samples resource_pack/textures/blocks at SOURCE_TAG.
@@ -119,8 +118,7 @@ def downsample_png(raw: bytes) -> bytes | None:
         raise ValueError("Invalid PNG in pinned source") from error
 
 
-def compile_preview(source: Path, expected_tree: str = SOURCE_BLOCK_TREE,
-                    entity_overrides: dict[str, bytes] | None = None) -> tuple[bytes, dict]:
+def compile_preview(source: Path, expected_tree: str = SOURCE_BLOCK_TREE) -> tuple[bytes, dict]:
     found, images = pinned_tree(source)
     if found != expected_tree:
         raise ValueError(f"Vanilla block texture source tree mismatch: {found}")
@@ -131,22 +129,11 @@ def compile_preview(source: Path, expected_tree: str = SOURCE_BLOCK_TREE,
             converted.append((f"textures/blocks/{name}", data))
     if not converted or len(converted) > MAX_TEXTURES:
         raise ValueError("No eligible vanilla 16x16 block textures, or too many")
-    # A single combined pack avoids stacking multiple texture pack UUIDs.
-    # Only the independently validated Ghast paths are permitted as extras.
-    if entity_overrides and set(entity_overrides) != set(GHAST_IMAGES):
-        raise ValueError("Only the pinned Ghast texture set may accompany block textures")
-    manifest = json.loads(json.dumps(MANIFEST))
-    if entity_overrides:
-        manifest["header"]["version"] = [0, 2, 0]
-        manifest["modules"][0]["version"] = [0, 2, 0]
-        manifest["header"]["description"] += " Verified Ghast 128x64 -> 64x32 skin/PBR preview."
     sink = io.BytesIO()
     with zipfile.ZipFile(sink, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9,
                          allowZip64=False) as archive:
-        entries = [("manifest.json", (json.dumps(manifest, indent=2) + "\n").encode())]
+        entries = [("manifest.json", (json.dumps(MANIFEST, indent=2) + "\n").encode())]
         entries.extend(converted)
-        if entity_overrides:
-            entries.extend(sorted(entity_overrides.items()))
         for name, data in entries:
             # Fixed ZIP timestamp/attrs and ordinal ordering for reproducibility.
             item = zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0))
@@ -167,8 +154,6 @@ def build(args: list[str] | None = None) -> dict:
     parser = argparse.ArgumentParser(description="Offline LazyTester Idle Texture 8x preview")
     parser.add_argument("--source", required=True, help="Official Bedrock Samples resource_pack folder")
     parser.add_argument("--output", required=True, help="New .mcpack file, never overwritten")
-    parser.add_argument("--with-ghast-entity", action="store_true",
-                        help="Opt-in pinned Ghast skin+PBR half-resolution preview")
     parsed = parser.parse_args(args)
     if not parsed.output.lower().endswith(".mcpack"):
         raise ValueError("Output must use .mcpack extension")
@@ -181,13 +166,7 @@ def build(args: list[str] | None = None) -> dict:
         raise ValueError("Output must be outside vanilla source tree")
     if destination.exists() or destination.is_symlink():
         raise FileExistsError("Refusing to replace an existing .mcpack")
-    entity_overrides, entity_receipt = ({}, None)
-    if parsed.with_ghast_entity:
-        entity_overrides, entity_receipt = compile_ghast(source)
-    pack, receipt = compile_preview(source / "textures" / "blocks",
-                                    entity_overrides=entity_overrides)
-    if entity_receipt is not None:
-        receipt["entity_ghast"] = entity_receipt
+    pack, receipt = compile_preview(source / "textures" / "blocks")
     destination.parent.mkdir(parents=True, exist_ok=True)
     with destination.open("xb") as output:
         output.write(pack)

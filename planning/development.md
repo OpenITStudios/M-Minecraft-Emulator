@@ -2,13 +2,13 @@
 
 ## Current intent — 29 October 2026
 
-**Goal (operator reprioritized 29 October 2026):** test **selective
-Texture Lite 8×8** for **three mostly-idle profiles** while keeping **two
-controlled profiles on normal vanilla textures**. The operator now explicitly
-accepts lower 8×8 visual detail for those experimental idle profiles; this
-supersedes the previous universal no-downscale rule **for this opt-in trial
-only**, not the requirement to preserve gameplay/account/world data.
-Retain optional Particle Tuning v0.3 separately. **STOP adding runtime
+**Final resource-efficiency decision (29 October 2026):** keep only the
+**optional block-only Texture Lite 8×8** source preview for up to three
+mostly-idle profiles; the two controlled profiles stay on vanilla textures.
+8×8 detail loss is accepted only for this manual experimental option, not
+as an automatic runtime policy. Keep all entity textures/model/UV/PBR
+untouched and retain Particle Tuning v0.3 as a separate offline preview.
+This is a finished **source-preview** scope, not verified RAM savings. **STOP adding runtime
 monitors, polling services, collectors, telemetry, or benchmark micro-systems.** Keep
 existing product observation/admission necessary for safe operation; do not
 remove functional owners merely because they inspect existing state. Native
@@ -25,55 +25,44 @@ Keep all five sessions, gameplay, multiplayer, world data, original 144/10
 FPS policy, and profile isolation unchanged. No user-PC testing, CI,
 automatic pack installation or background monitoring.
 
-**State:** ACTIVE, source-only. Original MC01–MC05 CloseOne/CloseAll code
+**State:** DONE for this bounded source-preview implementation; actual
+Minecraft Education pack support, per-profile isolation, runtime benefit,
+five-client acceptance and compiled desktop behavior remain NOT_EXECUTED. Original MC01–MC05 CloseOne/CloseAll code
 and native recovery guards remain intact. The last historical MC02 >35 s
 normal-exit incident is **RUNTIME ACCEPTANCE DEFERRED**, not a new P0 source
 gate. Reopen only for a confirmed new source defect or explicit operator
 authorization to perform Windows/game acceptance.
 
-## Optional follow-up — reference-verified Ghast skins (29 October 2026)
+## Finalized temporary efficiency scope — block-only (29 October 2026)
 
-**Added to the existing offline Texture Lite builder, not the runtime app:**
-`--with-ghast-entity` enables a pinned `entity_preview.py` owner.
-Mojang `bedrock-samples/v1.26.30.5` provides two Ghast skin PNGs and three
-related color/MERS TGA files at 128×64. The pinned original Ghast geometry
-declares 64×32, with **60 UV faces within bounds**. Its pinned
-`entity/ghast.entity.json`, `models/entity/ghast.geo.json`,
-`render_controllers/ghast.render_controllers.json`, two texture-set
-metadata files and five images are checked by **ten exact Git blob SHA
-pins**. Fail closed if any content, selected skin mapping, PBR link,
-geometry UV or image dimension differs.
+**Operator decision:** vanilla entities are infrequently used in the target
+world, and the small hypothetical Ghast pixel saving cannot justify keeping
+an additional entity/PBR conversion path. Remove `--with-ghast-entity`,
+`entity_preview.py`, the Ghast-only tests and combined v0.2 pack support.
+Retain the exact original block-only `build.py` blob
+`4821d85710b3b4a0849e1a1f3d2ea80d51de5be6` and its v0.1 manifest UUID
+and version. The prior Ghast source experiment remains accessible in Git
+history; it is not an active or auto-applied feature.
 
-With explicit selection, the builder reduces the five color/material
-textures to 64×32 and includes them in the **existing block pack**
-with the same UUID and an upgrade manifest version `[0,2,0]`. It
-does not create a second always-on pack or a game process, does not
-replace original game geometry or adjust its UVs, and does not touch
-MC01–MC05, world save files or the installed game. The original
-block-only invocation retains v0.1 byte semantics. The two controlled
-clients still use unchanged vanilla textures; the three mostly idle
-client roles require separate manual, **not yet verified** Education
-Global Resources/import behavior.
+**Final retained features:** Particle Tuning v0.3 (20 selected ambient
+effects with approved 75/50/25/0 distance policy), independent block-only
+Texture Lite 8×8 builder v0.1, existing native 144 foreground / 10
+background FPS defaults, existing graphics Preserve/preset and explicit
+Texture Streaming controls, read-only resource inventory and memory
+diagnostics. No extra manager, monitor, network task, CI workflow, automatic
+pack installation, profile mutation, or renderer/heap intervention is added.
+Native experimental GPU heap changes remain OFF.
 
-**Evidence:** five new synthetic Python/Pillow tests plus the five
-existing block tests actually executed in the isolated ChatGPT
-environment, **10/10 passed**. Exact committed `build.py`,
-`entity_preview.py` and test blobs are pinned to the locally
-executed bytes. The real Mojang source was checked through pinned
-GitHub metadata, client/geometry/controller/PBR content, PNG/TGA
-dimensions and 60 UV faces, but a complete private Mojang-derived
-`.mcpack` was **NOT built** in this turn, and no Minecraft
-Education game or user PC was opened.
+**Evidence boundary:** original block-only synthetic tests (5/5) were run
+on the prior exact source blob in isolated ChatGPT Python/Pillow; this final
+cleanup restores that exact blob. Complete Mojang-derived packs, Minecraft
+Education 26.32 pack import/priority, per-client resource isolation,
+RAM/VRAM/FPS savings, native Windows and five-profile gameplay are
+NOT_EXECUTED in this finalization. The 75% texel figure is not a game-RAM
+reduction measurement. Scope closed; all runtime checks remain separately
+deferred rather than being reported as PASS.
 
-**Magnitude:** five 128×64 images to 64×32 each = 40,960 to 10,240
-source texels, a hypothetical `122,880` RGBA8 bytes (`0.117 MiB`)
-less across all five images if all are resident; three idle clients
-would at most triple that hypothetical figure, not save gigabytes.
-Loaded content, PBR/texture-set resolution behavior, runtime RAM,
-VRAM and FPS remain `UNKNOWN`. Do not present a source-texel delta
-as measured memory benefit.
-
-## Active experiment — selective Idle Texture Lite 8×8 (29 October 2026)
+## Retained source preview — selective Idle Texture Lite 8×8 (29 October 2026)
 
 **User-approved test case:** up to two actively controlled Minecraft
 Education profiles keep ordinary original 16×16 vanilla textures, while
@@ -92,11 +81,9 @@ source object before conversion and reject missing/added/replaced files,
 links, unsupported paths and size overflow. Apply Pillow BOX downsampling
 to only single-frame non-interlaced static **16×16 PNGs**, preserving
 alpha and relative texture paths in a standalone preview `.mcpack`.
-Leave 16×N animation strips, UI, unrelated entity/PBR textures,
-particles and installed Minecraft unchanged. Only the explicit
-reference-pinned Ghast option above also reduces its two color PNG
-skins and three related PBR TGA images; model/UV/control JSON stays
-unchanged and is used strictly as read-only input proof.
+Leave 16×N animation strips, UI, all vanilla entity/PBR textures,
+particles and installed Minecraft unchanged. There is no entity
+downscaling, geometry/UV or render-controller edit path.
 Do not vendor Mojang or third-party image content into GitHub.
 
 **Evidence:** exactly five synthetic local Python/Pillow unit tests
@@ -121,38 +108,32 @@ host resource pack may propagate to other players; never edit the
 host world or original world settings, and do not enable globally
 as part of a launcher operation.
 
-**Next:** supply or securely retrieve the complete pinned Mojang
-source during an explicit offline build before publishing any private
-preview pack, then independently verify resource-pack import on a
-disposable copied Minecraft Education world if acceptance is authorized.
+**Disposition:** retained as an offline, individually selected source
+preview only; original Mojang-derived pack build and Education import
+remain deferred. Neither Minecraft nor profiles are changed automatically.
 Do not add monitors, native hooks, background pack installers, new IPC,
 asset downloads at ordinary game launch, CI or user-PC dependencies.
 
-## Active direction — offline texture/particle .mcpack optimization (29 October 2026)
+## Retained source policy — offline texture/particle .mcpack previews (29 October 2026)
 
-**Scope:** asset/build-time changes only. Reuse the existing
-`Development/tooling/lazytester-particles/` source owner and its explicit
-developer invocation; add a small sibling asset function only after a
-version-matched source and genuinely memory-reducing transformation are
-identified. No second game runtime, new IPC setting, service, profiler,
-monitor, repeated benchmark loop or automatic MC01–MC05 profile changes.
+**Scope:** retain only the existing independent offline builders:
+`Development/tooling/lazytester-particles/` (v0.3) and
+`Development/tooling/lazytester-textures/` (block-only v0.1).
+No new texture categories, second game runtime, IPC setting, service,
+profiler, monitor, repeated benchmark loop or automatic MC01–MC05
+profile changes are part of this finalized scope.
 
 - **Particle:** retain opt-in v0.3 as a strict 20-effect preview. Only three
   `steady` effects currently scale true spawn rate; 17 `manual` effects
   constrain active caps conditionally. Preserve the existing 75/50/25/0
   camera-distance curve and all vanilla pixels/UV/motion/lifetime; do not
   relabel a pack-size reduction as resident RAM saving.
-- **Texture:** first examine exact *authorized/owned* asset references and
-  dimensions. Promote a change only if it demonstrably lowers decoded texels,
-  safely consolidates entity texture handles with all UV/geometry references
-  updated, or removes truly unused content from an owned source pack.
-  Minecraft already atlases ordinary block textures. Recompressing PNG/ZIP
-  or blindly replacing vanilla assets does not establish resident RAM savings.
-  **Exception newly approved for experimentation:** downscale validated
-  *static* vanilla 16×16 block albedo to 8×8 on selected idle clients only.
-  This deliberately loses pixel detail and is not quality-preserving. Other
-  texture sizes, animated strips, UI, entity, PBR, mipmapping or UV changes
-  still require their own review; no automatic quality switching.
+- **Texture:** retain only the existing opt-in 16×16 to 8×8 transform for
+  verified static vanilla block albedo. All entity, item, GUI, PBR, animation,
+  model/UV and render-controller content stays default. Vanilla block
+  textures are atlas-managed, and reducing PNG/ZIP bytes or source texels
+  does not establish resident RAM savings. 8×8 explicitly reduces visual
+  detail; no automatic quality switching.
 - **Edition gate:** Bedrock creator documentation covers pack mechanisms, but
   Minecraft Education's official support continued to identify custom
   texture/resource packs as **unsupported** in 2026. A custom pack is thus
@@ -558,7 +539,7 @@ No force-close, blind working-set trims, foreign heap releases, speculative
 game hooks, new monitoring service, test bypass, CI, installer or main branch
 publication. The Mac build remains a diagnostic shell without game backend.
 
-## Next bounded source action
+## Closed resource-efficiency source scope; deferred evidence
 
 Target stays Minecraft Education stable 26.32 Windows (release family,
 not a verified current EXE fingerprint). Existing launcher image/DLL
@@ -596,15 +577,18 @@ No speculative renderer patch, working-set trim or experimental hook
 promotion is justified. The reviewer improvement concerns *measurement
 honesty*, not reclaimed game RAM.
 
-**Primary next source action:** use the original offline Texture
-Lite builder and its opt-in `--with-ghast-entity` preflight for the
-three idle-profile experiment, but do not install or activate it
-automatically. Official Ghast original source and all UV references
-are pinned, with **10/10 synthetic source tests passed**, but the
-full source-derived pack and Education 26.32 gameplay remain
-`NOT_EXECUTED`. This Ghast candidate saves only `0.117 MiB`
-of hypothetical RGBA8 image payload per client, not meaningful
-measured system RAM. Larger texture candidates must earn their
-place through a complete model + render-controller + PBR dependency
-audit and real usage relevance. No monitoring, hooks, extra managers,
-CI, world edits or user-PC testing.
+**Final resource-efficiency outcome:** the block-only v0.1 builder and Particle
+Tuning v0.3 are retained as opt-in offline previews, never automatically
+enabled. Ghast entity downscaling and its v0.2 builder path are removed
+from the active `Local` tree by explicit operator decision. No further
+entity optimization, RAM-patch experiment or new monitoring is scheduled.
+Original game data/credentials/worlds, native 144/10 FPS pacing, graphics
+controls and session lifecycle remain unchanged.
+
+**Remaining proof — deferred, not a task gate:** edition-matched full-source
+`.mcpack` construction; Minecraft Education 26.32 resource-pack import,
+pack precedence, per-client isolation and visible quality; Windows
+RAM/VRAM/FPS/host/network/five-client acceptance. The committed source
+cleanup alone cannot claim those results. Resume only on a new explicit
+operator request; no local PC, CI, game/world mutation or background work
+was required for source closure.
