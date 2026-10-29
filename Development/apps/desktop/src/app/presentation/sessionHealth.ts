@@ -69,3 +69,20 @@ export function projectSessionHealth(observation: SessionHealthObservation): Ses
   }
   return issues;
 }
+
+/**
+ * Concise launcher-card hints, not a second launch gate. Connection failures
+ * have one common notice in Play; untrusted native issue text is never shown.
+ */
+export function launcherCardGuidance(profile: ProfileSession, observed: boolean): string | null {
+  if (!observed) return null;
+  switch (profile.state) {
+    case 'STARTING': return 'Minecraft is starting. Wait for its window before trying again.';
+    case 'NOT_RESPONDING': return 'Minecraft may still be running. Check its window, then choose Check status.';
+    case 'ATTENTION': return 'Review this launcher with Check status before trying Launch again.';
+    case 'STOPPED': return profile.process !== null || profile.issue !== null
+      ? 'The previous session is not fully verified. Refresh before trying again.'
+      : null;
+    default: return null;
+  }
+}

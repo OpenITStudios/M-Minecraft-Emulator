@@ -33,6 +33,11 @@ const feedback = {
   event: {code:'LT-APP-03',area:'Application',message:'The latest session update is unavailable. Refresh to check your games.'},
   graphicsBlocked: {code:'LT-SET-05',area:'Settings',message:'Graphics preset could not be applied. Close Minecraft sessions and refresh, then try again.'},
   performanceBlocked: {code:'LT-SET-06',area:'Settings',message:'Frame limits could not be saved. Refresh and try again.'},
+  windowControl: {code:'LT-DIS-05',area:'Display',message:'The window action could not be completed. Try again.'},
+  windowStatus: {code:'LT-DIS-06',area:'Display',message:'Window status is unavailable. You can continue using Lazy Tester.'},
+  windowClose: {code:'LT-APP-04',area:'Application',message:'Lazy Tester could not close. Review your games and try again.'},
+  closeIncomplete: {code:'LT-GAM-04',area:'Game',message:'Exit did not finish. Review the remaining Minecraft sessions in Play.'},
+  closeRejected: {code:'LT-APP-05',area:'Application',message:'Exit did not start. Another desktop operation is still running.'},
 } as const satisfies Record<string, {
   readonly code: `LT-${string}`;
   readonly area: FeedbackArea;

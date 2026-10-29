@@ -2,6 +2,7 @@
   // Presentation only; native game/session ownership and scheduling stay in LazyTesterApp.
   import {canRequestLaunch, type ProfileSession, type ProfileSlot} from './app/bridge/lazyTester.js';
   import {guidedRecoveryAllowed} from './app/presentation/guidedRecovery.js';
+  import {launcherCardGuidance} from './app/presentation/sessionHealth.js';
   import type {SessionHealthIssue, SessionHealthAction} from './app/presentation/sessionHealth.js';
   import SessionHealthNotice from './SessionHealthNotice.svelte';
 
@@ -29,10 +30,12 @@
 <div class="lt-filmstrip" aria-label="Minecraft launchers">
   {#each profiles as profile (profile.slot)}
     {@const healthItem = healthIssues.find(item => item.slot === profile.slot)}
-    <div class="lt-launcher-entry">
+    {@const guidance = launcherCardGuidance(profile, available && bindingConfigured)}
+    <div class="lt-launcher-entry" title={guidance??undefined}>
       <button class="lt-card" class:selected={active===profile.slot&&!detached}
         aria-pressed={active===profile.slot&&!detached}
         aria-label={(profile.state==='RUNNING'?'Open ':'Launch ')+'Minecraft - '+profile.slot}
+        aria-description={guidance??undefined}
         disabled={busy||!available||!bindingConfigured||
           (profile.state!=='RUNNING'&&!canRequestLaunch(profile))}
         on:click={()=>profile.state==='RUNNING'?onSelect(profile.slot):canRequestLaunch(profile)&&onLaunch(profile.slot)}>

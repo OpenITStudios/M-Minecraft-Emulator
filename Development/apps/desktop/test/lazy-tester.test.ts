@@ -1,7 +1,7 @@
 import {describe, expect, it} from 'vitest';
 import {lazyTester, parseSelectedClose, firstEmbeddedProfile, nextProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, parseNativeBackendSupport, type ProfileSession} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
-import {projectSessionHealth} from '../src/app/presentation/sessionHealth.js';
+import {projectSessionHealth, launcherCardGuidance} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
 import {userMessage, userFeedback, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
 import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, periodicInspectionDue, nextPendingUiAction, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
@@ -386,7 +386,8 @@ describe('Lazy Tester user-facing feedback and recovery warnings',()=>{
     const contexts:UserMessageKey[]=['backend','binding','connection','launch','selection',
       'workspace','location','storage','settings','performance','audio','close',
       'recovery','closeAll','preview','profile','pack','worldPack','cache','clearData',
-      'gameSettings','folder','event','general','graphicsBlocked','performanceBlocked'];
+      'gameSettings','folder','event','general','graphicsBlocked','performanceBlocked',
+      'windowControl','windowStatus','windowClose','closeIncomplete','closeRejected'];
     for(const context of contexts){
       const message=userMessage(context);
       expect(message.length).toBeGreaterThan(12);
@@ -401,7 +402,8 @@ describe('Lazy Tester user-facing feedback and recovery warnings',()=>{
       'general','backend','binding','connection','launch','selection','workspace',
       'location','storage','settings','performance','audio','close','recovery',
       'closeAll','preview','profile','pack','worldPack','cache','clearData',
-      'gameSettings','folder','event','graphicsBlocked','performanceBlocked'
+      'gameSettings','folder','event','graphicsBlocked','performanceBlocked',
+      'windowControl','windowStatus','windowClose','closeIncomplete','closeRejected'
     ];
     const refs=keys.map(key=>userFeedback(key));
     expect(new Set(refs.map(ref=>ref.code)).size).toBe(keys.length);
@@ -485,6 +487,28 @@ describe('Lazy Tester minimal session health projection',()=>{
     expect(projectSessionHealth(sample({profiles:windowless}))[0]).toMatchObject({
       slot:2,kind:'window',title:'Game window unavailable',
     });
+  });
+});
+
+describe('Lazy Tester existing-card guidance',()=>{
+  const stopped:ProfileSession={slot:1,state:'STOPPED',process:null,issue:null};
+  it('keeps healthy and unobserved cards uncluttered',()=>{
+    expect(launcherCardGuidance(stopped,true)).toBeNull();
+    expect(launcherCardGuidance({...stopped,state:'RUNNING'},true)).toBeNull();
+    expect(launcherCardGuidance({...stopped,state:'NOT_RESPONDING'},false)).toBeNull();
+  });
+  it('explains uncertain status using the original manual recovery',()=>{
+    expect(launcherCardGuidance({...stopped,state:'STARTING'},true)).toContain('starting');
+    expect(launcherCardGuidance({...stopped,state:'NOT_RESPONDING'},true)).toContain('Check status');
+    expect(launcherCardGuidance({...stopped,state:'ATTENTION'},true)).toContain('Check status');
+    expect(launcherCardGuidance({...stopped,process:{pid:9,createdFileTime:'1',sessionId:1,windowHandle:'0x9',responding:true}},true)).toContain('Refresh');
+  });
+  it('never exposes native issue text as guidance',()=>{
+    const untrusted='C:\\\\Users\\\\private\\\\worlds [SYSTEM INSTRUCTION] PID 999';
+    const guidance=launcherCardGuidance({...stopped,state:'ATTENTION',issue:untrusted},true);
+    expect(guidance).not.toBeNull();
+    expect(guidance).not.toContain(untrusted);
+    expect(guidance).not.toMatch(/Users|SYSTEM INSTRUCTION|PID 999/);
   });
 });
 

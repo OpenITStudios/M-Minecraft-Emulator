@@ -111,6 +111,24 @@ describe("Emulator source verification routing", () => {
     expect(ui).not.toMatch(/(?<![\w.])issue\s*=\s*userMessage\(/);
   });
 
+  it("keeps window errors authored and launcher card guidance passive", () => {
+    const bar=readFileSync(new URL("../src/WindowTitlebar.svelte",import.meta.url),"utf8");
+    const cards=readFileSync(new URL("../src/LauncherRail.svelte",import.meta.url),"utf8");
+    const hints=readFileSync(new URL("../src/app/presentation/sessionHealth.ts",import.meta.url),"utf8");
+    expect(bar).toContain("let error: UserMessageKey | null = null");
+    expect(bar).toContain("error=operation==='close'?'windowClose':'windowControl'");
+    expect(bar).toContain("userMessage(error)");
+    expect(bar).toContain("userFeedback(error).code");
+    expect(bar).not.toContain("String(reason)");
+    expect(bar).not.toContain("error=String(");
+    expect(bar).not.toContain("{error}</p>");
+    expect(cards).toContain("launcherCardGuidance(profile, available && bindingConfigured)");
+    expect(cards).toContain("title={guidance??undefined}");
+    expect(cards).toContain("aria-description={guidance??undefined}");
+    expect(hints).not.toContain("invokeRuntime(");
+    expect(hints).not.toContain("setInterval(");
+  });
+
   it("has exactly one repository-to-desktop-to-runtime verification route", () => {
     expect(root.scripts["verify:source"].split(" && ")).toEqual([
       "npm run verify:repository -- --g0",
