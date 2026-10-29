@@ -83,7 +83,8 @@ New data selections stay under the project's Data subtree. Same-volume moves can
 retain identities; arbitrary cross-volume copies are rejected. The explicit
 reviewed migration creates and records new identities without mixing profiles.
 
-Missing FPS settings default to 120/5; Save validates whole limits 5..1000,
+Missing FPS settings default to **144 active / 10 background** (matching the
+native pacer); Save validates whole limits 5..1000,
 background no higher than active. An absent graphics.json now defaults to
 **Preserve Visuals** for each launcher: LazyTester does not create or rewrite
 Minecraft options.txt at launch. Previously saved High/Low arrays remain valid

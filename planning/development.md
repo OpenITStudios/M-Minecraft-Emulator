@@ -48,6 +48,14 @@ Education 26.32 support or claim measured MiB from Bedrock patch notes.
   world metadata is independent from the valid on-disk pack folder count,
   and old wire responses without this optional field still parse. No
   world/pack mutation, CI or extra worker was added.
+- First-run FPS consistency correction: when `performance.json` does not
+  exist, the original manager now uses the same **144 active / 10 background**
+  ceilings as the native pacer; the Svelte pre-observation placeholder agrees.
+  Already saved FPS preferences (including older 120/5 or background 1..4)
+  are preserved unchanged. The existing Rust settings-policy fixture now
+  compares the fresh default with the native pacing header instead of
+  duplicating literal values. This is a source-only consistency correction;
+  no measured FPS or game-runtime proof is claimed.
 - Code owner updates: `manager_settings.rs`, `game_preset.rs`,
   `native_clients_session.rs`, `session_controller.rs`, typed bridge/UI,
   and one small `resource_pack_inventory.rs` read-only owner. Native RAM

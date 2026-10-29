@@ -72,9 +72,10 @@ pub struct PerformanceSettings {
 }
 impl Default for PerformanceSettings {
     fn default() -> Self {
+        // First-run only: match the reviewed native frame pacer. Saved values win.
         Self {
-            active_fps: 120,
-            background_fps: 5,
+            active_fps: 144,
+            background_fps: 10,
         }
     }
 }
@@ -218,7 +219,7 @@ mod tests {
         let root=std::env::temp_dir().join(format!("lazy-performance-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
         fs::create_dir(&root).unwrap();let path=root.join("performance.json");
         assert_eq!(read_performance(&path).unwrap(),PerformanceSettings::default());
-        assert_eq!(PerformanceSettings::default(),PerformanceSettings {active_fps:120,background_fps:5});
+        assert_eq!(PerformanceSettings::default(),PerformanceSettings {active_fps:144,background_fps:10});
         assert!(!path.exists());
         let custom=PerformanceSettings {active_fps:60,background_fps:5};
         write_performance(&path,custom).unwrap();assert_eq!(read_performance(&path).unwrap(),custom);

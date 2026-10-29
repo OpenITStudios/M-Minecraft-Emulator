@@ -445,7 +445,10 @@ mod tests {
         let saved = super::super::manager_settings::load_performance().unwrap();
         assert_eq!((policy.active_fps, policy.background_fps, policy.render_distance_chunks), (saved.active_fps, saved.background_fps, 12));
         let pacing = include_str!("../../../../../tooling/acceptance/windows/bootstrap-ordering/frame-pacing.h");
-        assert!(pacing.contains("activeFps = 144, backgroundFps = 10"));
+        let initial = super::super::manager_settings::PerformanceSettings::default();
+        assert!(pacing.contains(&format!(
+            "activeFps = {}, backgroundFps = {}", initial.active_fps, initial.background_fps
+        )), "The first-run manager FPS limits must match the reviewed native pacer");
         let snapshot = SessionSnapshot::stopped();
         assert!(!serde_json::to_value(&snapshot).unwrap().as_object().unwrap().contains_key("settings"));
         assert!(serde_json::from_str::<SessionRequest>(r#"{"operation":"ApplyPreset"}"#).is_ok());

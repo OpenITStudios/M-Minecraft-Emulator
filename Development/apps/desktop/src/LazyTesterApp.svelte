@@ -25,7 +25,7 @@
   function chooseSlot(slot:ProfileSlot){selectedSlot=slot;clearSlot=null;recovery=null;fullReview=null;settingsNotice='';graphicsPreset=settings?.graphicsPresets?.[slot-1]??'Preserve';}
   let savingPerformance=false;
   let queuedPerformance:{active:number;background:number}|null=null;
-  let activeFps:number|undefined=120,backgroundFps:number|undefined=5,performanceNotice='';
+  let activeFps:number|undefined=144,backgroundFps:number|undefined=10,performanceNotice='';
   $: performanceDirty=settings!==null&&(activeFps!==settings.activeFps||backgroundFps!==settings.backgroundFps);
   $: performanceValid=validFpsLimits(activeFps,backgroundFps);
   let clearSlot: ProfileSlot | null = null, storageNotice = '';
