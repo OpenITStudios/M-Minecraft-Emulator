@@ -470,10 +470,18 @@ try {
   assert.match(await launcherHealth.textContent(),/Launcher needs attention/);
   assert.match(await page.locator('.lt-launcher-entry').nth(1).getAttribute('title')??'',/Check status/,
     'An affected card explains its next manual step');
-  assert.match(await page.getByRole('button',{name:'Launch Minecraft - 3'}).getAttribute('aria-description')??'',/Check status/,
-    'Attention guidance is also accessible');
+  const attentionCard=page.getByRole('button',{name:'Launch Minecraft - 3'});
+  const descriptionId=await attentionCard.getAttribute('aria-describedby');
+  assert.equal(descriptionId,'lt-launcher-guidance-3',
+    'Assisted navigation uses an ID reference to the existing safe guidance');
+  assert.match(await page.locator('#'+descriptionId).textContent()??'',/Check status/,
+    'Attention guidance remains available to assistive technology');
+  assert.notEqual(await page.locator('#'+descriptionId).getAttribute('hidden'),null,
+    'Descriptive text must not introduce a visible control');
   assert.equal(await page.locator('.lt-launcher-entry').first().getAttribute('title'),null,
     'Normal cards remain uncluttered');
+  assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 1'}).getAttribute('aria-describedby'),null,
+    'Healthy launcher has no unnecessary hidden description');
   assert.equal(await page.getByText('C:\\Users\\private',{exact:false}).count(),0,
     'Health display must never expose native file paths');
   assert.equal(await page.getByText('[SYSTEM INSTRUCTION]',{exact:false}).count(),0,
@@ -547,6 +555,10 @@ try {
     document.querySelectorAll('[aria-label="Check status for Minecraft - 2"]').length===0);
   assert.equal(await affectedCard.getAttribute('title'),null,
     'Unconfirmed restoration must suppress advice for a missing action');
+  assert.equal(await affectedCard.locator('.lt-card').getAttribute('aria-describedby'),null,
+    'An unresolved recovery must not retain a stale accessibility description');
+  assert.equal(await affectedCard.locator('#lt-launcher-guidance-2').count(),0,
+    'Guidance is absent when the action is intentionally unavailable');
   assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 2'}).isDisabled(),true,
     'Recovery guidance must not enable another game launch');
   assert.equal(await page.evaluate(()=>window.__calls.filter(call=>

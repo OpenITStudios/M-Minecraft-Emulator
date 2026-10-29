@@ -1,5 +1,15 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — Svelte launcher accessibility warning correction (29 October 2026)
+
+**State:** DONE for bounded source correction; pinned frontend/browser and Windows/Minecraft acceptance NOT_EXECUTED.
+**Decision:** A genuine Svelte 5.48.0 compiler check on exact checked-in WindowTitlebar, LauncherRail, SessionHealthNotice and GeneralSettings Git blobs revealed one accessibility warning: aria-description was not supported for the implicit button role. Replace only that LauncherRail attribute with aria-describedby pointing to a conditional hidden span containing the same preexisting authored guidance; retain the existing hover title and status/Launch/Close admission. No additional visible UI, storage, worker, IPC, lifecycle or CI.
+**Proof:** SOURCE_EXECUTION: exact git blob SHA matched for all four Svelte components; Svelte 5.48.0 compiled them with only the one LauncherRail warning, and the edited LauncherRail candidate compiled with zero warnings; TypeScript 5.8.3 script syntax inspection was clean. REMOTE_GITHUB pinned source, checked consumer/source invariants; Vitest/source and synthetic Playwright assertion updates AUTHORED, NOT_EXECUTED.
+**Unresolved:** The repository pins Svelte 5.57.2, Node 24.22.0 and npm 12.2.0; current scratch environment only has Svelte 5.48.0, Node 22.16.0, npm 10.9.2. Exact pinned frontend typecheck/build, Vitest/Playwright and Windows/Minecraft gameplay/packaging remain NOT_EXECUTED. Only four small UI components were compiled, not the complete desktop app.
+**Next:** Run exact-head pinned Svelte/Vitest and synthetic browser checks when the repository's compatible dependencies can actually execute; correct observed failures only.
+
+---
+
 ## Current product work — frontend guidance integration verification (29 October 2026)
 
 **State:** DONE for a bounded source correction; full pinned Svelte/Vitest/Playwright and Windows/Minecraft acceptance NOT_EXECUTED.

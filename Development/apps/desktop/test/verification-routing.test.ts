@@ -125,7 +125,9 @@ describe("Emulator source verification routing", () => {
     expect(cards).toContain("profile, available && bindingConfigured && !unresolvedRecovery.has(profile.slot)");
     expect(cards).toContain("unresolvedRecovery: ReadonlySet<ProfileSlot>");
     expect(cards).toContain("title={guidance??undefined}");
-    expect(cards).toContain("aria-description={guidance??undefined}");
+    expect(cards).toContain("aria-describedby={guidance ? 'lt-launcher-guidance-'+profile.slot : undefined}");
+    expect(cards).toContain("id={'lt-launcher-guidance-'+profile.slot} hidden");
+    expect(cards).not.toContain("aria-description={guidance??undefined}");
     expect(hints).not.toContain("invokeRuntime(");
     expect(hints).not.toContain("setInterval(");
   });

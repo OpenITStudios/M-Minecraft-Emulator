@@ -37,7 +37,7 @@
       <button class="lt-card" class:selected={active===profile.slot&&!detached}
         aria-pressed={active===profile.slot&&!detached}
         aria-label={(profile.state==='RUNNING'?'Open ':'Launch ')+'Minecraft - '+profile.slot}
-        aria-description={guidance??undefined}
+        aria-describedby={guidance ? 'lt-launcher-guidance-'+profile.slot : undefined}
         disabled={busy||!available||!bindingConfigured||
           (profile.state!=='RUNNING'&&!canRequestLaunch(profile))}
         on:click={()=>profile.state==='RUNNING'?onSelect(profile.slot):canRequestLaunch(profile)&&onLaunch(profile.slot)}>
@@ -45,6 +45,7 @@
         <span class="lt-card-picture" use:observePreview={profile.slot} aria-hidden="true">{profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':profile.state==='NOT_RESPONDING'?'Unavailable':profile.state==='ATTENTION'?'Needs attention':'▷ Launch'}</span>
         <small>{active===profile.slot&&!detached?'Playing here':profile.state==='RUNNING'&&separateSlots.has(profile.slot)?'Separate window':profile.state==='RUNNING'?'Running in background':labels[profile.state]}</small>
       </button>
+      {#if guidance}<span id={'lt-launcher-guidance-'+profile.slot} hidden>{guidance}</span>{/if}
       {#if healthItem}
         <SessionHealthNotice item={healthItem} onAction={onGuidedRecovery}
           disabled={!guidedRecoveryAllowed(healthItem, profile, profile.slot,
