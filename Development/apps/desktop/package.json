@@ -29,7 +29,9 @@
     "build:preview": "npm run prepare:icons && npm run check:preview-package && tauri build --target x86_64-pc-windows-msvc --bundles nsis --config src-tauri/tauri.native-preview.conf.json --features native-workspace-preview -- --locked",
     "prepare:lazy-payload": "node scripts/prepare-native-payload.mjs",
     "check:lazy-package": "node scripts/check-lazy-tester-package.mjs",
-    "build:lazy-tester": "npm run prepare:icons && npm run check:lazy-package && npm run prepare:lazy-payload && tauri build --target x86_64-pc-windows-msvc --bundles nsis --config src-tauri/tauri.lazy-tester.conf.json --features lazy-tester-package -- --locked"
+    "build:lazy-tester": "npm run prepare:icons && npm run check:lazy-package && npm run prepare:lazy-payload && tauri build --target x86_64-pc-windows-msvc --bundles nsis --config src-tauri/tauri.lazy-tester.conf.json --features lazy-tester-package -- --locked",
+    "check:frontend": "npm run typecheck && npm run test",
+    "check:rust:target": "npm run prepare:icons && cargo check --locked --target x86_64-pc-windows-msvc --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.4"

@@ -53,6 +53,8 @@ With genuine dependencies and a compatible developer environment:
 npm ci
 npm run typecheck
 npm test
+npm run check:frontend    # typecheck + Vitest only; no Cargo
+npm run check:rust:target # Windows-target Cargo check without all-targets
 npm run build:frontend
 npm run check:lazy-package
 npm run verify:source

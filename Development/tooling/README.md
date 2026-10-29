@@ -8,7 +8,7 @@ a second live game process/session owner.
 | Path | Status |
 | --- | --- |
 | `repository/` | Active Git-tree, dependency, route, CI-disabled and documentation-link checks |
-| `windows-toolchain/` | Source/build/package helpers when explicitly requested; no automatic local test |
+| `windows-toolchain/` | Source/build/package helpers, targeted frontend/Rust checks and opt-in two-pass timing; no automatic local test |
 | `storage/` | Read-only artifact inventory plus fail-closed retention planning for reviewed developer outputs; no deletion |
 | `dependencies/` | Dependency consistency review and maintenance |
 | `acceptance/windows/bootstrap-ordering/` | **Active native DLL source** used by the five-session game bootstrap |

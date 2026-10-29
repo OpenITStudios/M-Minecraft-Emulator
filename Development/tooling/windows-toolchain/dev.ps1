@@ -1,6 +1,6 @@
 param(
     [Parameter(Position=0)]
-    [ValidateSet("setup", "doctor", "lock", "g0", "preflight", "check", "test", "dev", "package", "storage", "help")]
+    [ValidateSet("setup", "doctor", "lock", "g0", "preflight", "check", "check:frontend", "check:rust", "bench:frontend", "bench:rust", "test", "dev", "package", "storage", "help")]
     [string]$Command = "help",
     [Parameter(Position=1)]
     [ValidateSet("report", "explain", "plan")]
@@ -328,11 +328,44 @@ function Invoke-G0SourcePackage {
     Write-Host "Do not use account-bearing VM disks for the first guest feasibility test."
 }
 
+# Manual opt-in timing of two identical, cache-preserving source checks.
+# Pass 1 is NOT a cold build; no target directory is cleared or recreated.
+# Do not record stdout, private machine data, passwords, or game state.
+function Invoke-SourceBenchmark {
+    param([Parameter(Mandatory=$true)][ValidateSet("frontend", "rust")][string]$Scope)
+
+    $sha = Assert-LocalCheckout
+    Assert-CleanSourceAtHead -ExpectedSha $sha
+    $scriptName = if ($Scope -eq "frontend") { "check:frontend" } else { "check:rust" }
+    Write-Host "Developer benchmark: $scriptName at Local HEAD $sha"
+    Write-Host "Two consecutive passes using existing caches; neither pass is a verified cold build."
+    Write-Host "No compiler cache cleanup, fresh target, installer, runtime process, or persistent log."
+    $seconds = [System.Collections.Generic.List[double]]::new()
+    foreach ($pass in 1..2) {
+        $watch = [System.Diagnostics.Stopwatch]::StartNew()
+        Write-Host "[$pass/2] Starting $scriptName..."
+        try {
+            Invoke-RepositoryNpm -NpmArguments @("run", $scriptName)
+        } catch {
+            $watch.Stop()
+            Write-Host ("[$pass/2] FAILED after {0:N2} s; no PASS recorded." -f $watch.Elapsed.TotalSeconds)
+            throw
+        }
+        $watch.Stop()
+        Assert-CleanSourceAtHead -ExpectedSha $sha
+        $duration = [math]::Round($watch.Elapsed.TotalSeconds, 2)
+        $seconds.Add($duration)
+        Write-Host ("[$pass/2] PASS: {0:N2} s" -f $duration)
+    }
+    Write-Host ("Build-check timing (s): first={0:N2}; second={1:N2}. No cold/warm classification or savings claimed." -f $seconds[0], $seconds[1])
+    Write-Host "Source-only checks are not Windows game, installer, or five-client acceptance."
+}
+
 Push-Location $DevelopmentRoot
 try {
     # Any command that may install dependencies, build or launch the desktop
     # must prove pinned local binaries first; "doctor" is not an optional guard.
-    if ($Command -in @("setup", "check", "test", "dev")) {
+    if ($Command -in @("setup", "check", "check:frontend", "check:rust", "bench:frontend", "bench:rust", "test", "dev")) {
         Test-DeveloperToolchain
     }
     switch ($Command) {
@@ -342,6 +375,10 @@ try {
         "g0"      { Invoke-G0SourcePackage }
         "preflight" { Invoke-NativeSourcePreflight }
         "check"   { Invoke-RepositoryNpm -NpmArguments @("run", "verify:source") }
+        "check:frontend" { Invoke-RepositoryNpm -NpmArguments @("run", "check:frontend") }
+        "check:rust"     { Invoke-RepositoryNpm -NpmArguments @("run", "check:rust") }
+        "bench:frontend" { Invoke-SourceBenchmark -Scope "frontend" }
+        "bench:rust"     { Invoke-SourceBenchmark -Scope "rust" }
         "test"    {
             Invoke-RepositoryNpm -NpmArguments @("run", "test")
             Invoke-RepositoryNpm -NpmArguments @("run", "test:runtime")
@@ -357,6 +394,10 @@ try {
             Write-Host "  DEV.cmd g0       # LEGACY VMware packaging, BLOCKED for native pilot"
             Write-Host "  DEV.cmd setup    # install pinned npm dependencies"
             Write-Host "  DEV.cmd check    # full source verification"
+            Write-Host "  DEV.cmd check:frontend  # Svelte/TypeScript and Vitest, no Rust compile"
+            Write-Host "  DEV.cmd check:rust      # existing desktop and runtime-core Cargo checks"
+            Write-Host "  DEV.cmd bench:frontend  # two opt-in frontend check timings; reuse cache"
+            Write-Host "  DEV.cmd bench:rust      # two opt-in Rust check timings; reuse cache"
             Write-Host "  DEV.cmd test     # desktop and runtime tests"
             Write-Host "  DEV.cmd dev      # Tauri desktop development"
             Write-Host "  DEV.cmd package  # build and stage a Lazy Tester development candidate"

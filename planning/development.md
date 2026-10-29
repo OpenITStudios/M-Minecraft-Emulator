@@ -1,5 +1,16 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — Scoped developer checks and cache-reuse benchmark (30 October 2026)
+
+**State:** DONE for bounded source routing and benchmark authoring; pinned Windows toolchain, compilation, actual timing and disk savings NOT_EXECUTED.
+**Decision:** Preserve existing `DEV.cmd check`, `DEV.cmd preflight` and native packaging paths. Add `check:frontend` (Svelte/TypeScript + Vitest only, no Rust) and `check:rust` (quick desktop + standalone runtime-core Cargo checks with explicit Windows MSVC target, no `--all-targets` or Rust tests). Target alignment matches the existing Tauri dev target layout but does not promise cache sharing across feature sets. Add manually invoked `bench:frontend` and `bench:rust` that pin a clean `Local` SHA, run scoped checks twice using the current cache, print timings to console only, and fail closed on errors. No cold build claim, new compiler target, cache clearing, scheduler, GitHub Actions, extra executable, game lifecycle change, installer, account/world access or background worker.
+**Proof:** REMOTE_GITHUB pinned source and package-script routing review plus authored, static regression contracts for scoped paths and failure handling; code-level source-policy checks. The repository-pinned Node/Svelte/Vitest/Rust/Tauri and Windows PowerShell execution have NOT_EXECUTED proof at this revision.
+**Unresolved:** Measured Windows check times, cache reuse, actual 60 GB distribution and cold vs. warm comparison remain UNKNOWN; the first target-aligned check could create additional artifacts. Full frontend, Rust, native DLL, package and Minecraft five-client acceptance remain NOT_EXECUTED.
+**Next:** Obtain read-only Windows storage report/plan and two-pass scoped benchmark observations, then compare exact build revisions before any additional cache policy or cleanup changes.
+
+---
+
+
 ## Current product work — Developer artifact retention dry-run (30 October 2026)
 
 **State:** DONE for bounded read-only retention planning; destructive cleanup deliberately NOT_IMPLEMENTED. Pinned Windows/Powershell and actual storage measurements NOT_EXECUTED.

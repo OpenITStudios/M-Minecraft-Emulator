@@ -95,6 +95,26 @@ components remain external prerequisites and are never relocated by `DEV.cmd`.
 GitHub Actions remains disabled. Historical debug downloads belong in
 `workspace/downloads/`; they are not inputs to the active Lazy Tester installer.
 
+## Scoped checks and optional timing
+
+`DEV.cmd check:frontend` runs only Svelte/TypeScript typecheck and
+Vitest. `DEV.cmd check:rust` uses explicit Windows MSVC-target Cargo
+checks for desktop and runtime-core; it does not run Rust tests or
+build the installer. The complete `DEV.cmd check` / `DEV.cmd preflight`
+routes remain unchanged. The quick Rust route aligns target-directory
+layout with Tauri development, but feature/profile differences can still
+duplicate artifact caches and the first run can temporarily increase disk
+usage.
+
+`DEV.cmd bench:frontend` and `DEV.cmd bench:rust` each run the
+corresponding targeted check twice, only with a clean, pinned `Local`
+revision and the portable toolchain. Both passes **reuse whatever cache
+exists**. The first is not verified cold; the second is not guaranteed
+warm. Durations appear on the console only. No cache reset, extra
+target directory, automatic report log, installer or Minecraft launch
+is performed. The benchmark may compile and grow the existing target;
+use the read-only `storage report` separately when storage is constrained.
+
 ## Preserved local history
 
 workspace/archive contains explicitly reviewed local archives. The stale generated

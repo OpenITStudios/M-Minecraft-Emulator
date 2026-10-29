@@ -36,6 +36,8 @@ npm --prefix Development run setup
 npm --prefix Development run verify:repository
 npm --prefix Development run test
 npm --prefix Development run check:desktop
+npm --prefix Development run check:frontend
+npm --prefix Development run check:rust
 npm --prefix Development run check:runtime
 npm --prefix Development run test:runtime
 npm --prefix Development run format:runtime
@@ -53,6 +55,10 @@ DEV.cmd setup
 DEV.cmd doctor
 DEV.cmd preflight
 DEV.cmd check
+DEV.cmd check:frontend
+DEV.cmd check:rust
+DEV.cmd bench:frontend
+DEV.cmd bench:rust
 DEV.cmd test
 DEV.cmd dev
 DEV.cmd package
@@ -60,27 +66,61 @@ DEV.cmd package
 
 `doctor` checks developer toolchain only. `preflight` checks a clean committed `Local` SHA, installed tool versions and committed lockfiles, performs `npm --prefix Development run setup` and `npm --prefix Development run verify:source`, then confirms the checkout remains unchanged. It does **not** test Microsoft licensing, Sandboxie, Windows gameplay, VM state or installer preservation.
 
+## Scoped developer checks and timing
+
+Daily UI/TypeScript changes can use `DEV.cmd check:frontend`, which delegates
+to the existing Svelte typecheck and Vitest suites. It **does not** run Rust
+checks, Tauri, Vite release build, installer packaging or Minecraft. The
+original full `DEV.cmd check` and `DEV.cmd preflight` are unchanged and
+still required when claiming a complete source checkpoint.
+
+Rust changes can use `DEV.cmd check:rust`; it delegates to the
+desktop `check:rust:target` and standalone `runtime-core` Cargo check
+using the explicit Windows MSVC target `x86_64-pc-windows-msvc`, pinned
+lockfiles and the existing `CARGO_TARGET_DIR`. This aligns the
+**target output layout** with the existing `tauri dev --target` command.
+It does not guarantee artifact reuse across different feature sets,
+Cargo profiles or build-script configurations and can require a one-time
+new compilation. The quick route deliberately skips `--all-targets` and
+Rust tests. The original full `verify:source` commands remain unchanged.
+This check is **not** a Windows game test, DLL build or packaging approval.
+No native Tauri feature/config policy is bypassed.
+
+Manual opt-in `DEV.cmd bench:frontend` or `DEV.cmd bench:rust` runs the
+corresponding scoped check twice on the **same cache**, after verifying the
+pinned portable toolchain and clean `Local` SHA. Stopwatch durations for
+pass 1 and pass 2 are printed to the console only; a failed pass aborts,
+and source is checked again after each pass. Neither pass is a proven
+**cold** or **warm** build: there is no clean, new target directory,
+cache deletion, log collection, runner, automation, installer or Minecraft
+launch. The second pass may have greater reuse but a faster time is not
+guaranteed. Actual cold-build and disk comparisons remain separate
+opt-in experiments requiring sufficient disk and new evidence.
+
+Existing `DEV.cmd dev` retains Tauri's frontend hot reload / Rust rebuild
+behavior, the reviewed compatibility DLL staging and native identity. The
+new scoped routes do not modify game/session/process authority.
+
 ## Package and release boundary
 
-`npm --prefix Development run package:windows` is **intentionally blocked** in the active native feasibility pilot: the old NSIS configuration still carries VMware resources and installed identity. Its retained source describes historical packaging only, not an installable native prototype. Do not bypass this release hold to obtain a local-test installer. A future approved native package needs separate identity, contents and preservation review. Packaging resources come from `Development/engine/guest/windows/`, `Development/tooling/acceptance/windows/` and `Development/engine/distribution/`. Resource destination paths inside the installed application remain stable.
+The current product is **Lazy Tester**, with Windows-native independently
+managed Minecraft Education profiles. VMware/Sandboxie runtime providers and
+the legacy VMware package path are retired and remain blocked. The
+`npm --prefix Development run package:windows` command is the dedicated
+native Lazy Tester candidate packager; it requires clean committed `Local`
+source, reviewed DLL payload, pinned toolchain and its original safety
+gates. Its export is **unsigned, unaccepted and not published**. The
+`--export-only` option leaves the local `App/` candidate unchanged;
+the normal local candidate refresh retains protected `Data/` and
+archives the previous `App/` under the protected private backup owner.
 
-GitHub Actions on `Local` now operate in **full CI** mode by explicit user authorization. The `verify.yml` source accepts `push` events scoped to branch `Local` and still supports three manual `workflow_dispatch` scopes. Every `Local` commit automatically runs all **12 canonical source verification stages on a Windows runner**, including Svelte/Vitest/frontend/Rust tests. The final aggregate gate fails the run if any source stage fails or is skipped. When all twelve stages succeed, the same Windows job also performs `cargo build --locked --target x86_64-pc-windows-msvc` (compile only, no installer). If any source stage fails, automatic compilation does not run. Superseded push runs may be cancelled; manual operator runs are not cancelled by this policy.
-
-**Manual scopes remain available:** `quick` (small Windows Node tests), `full-source` (the same twelve source stages, without the automatic final compile), and `windows-build` (Windows frontend + Tauri compilation only). The previously approved default-branch `main` file is still a *registration-only* `workflow_dispatch` shell with a permanently skipped job and no checkout. Real verification remains restricted to `Local`; `main` is not merged, deployed or tested.
-
-**Optional CI debug artifact:** after automatic `Local` Full Source and the Windows `cargo build --locked` step are successful, the same Windows job stages exactly one unsigned debug EXE, an exact-SHA/SHA-256 manifest and a copy of [CI Debug Candidate](../validation/ci-debug-candidate.md), then uploads them as a 30-day GitHub Actions artifact. Earlier artifacts keep their original expiry. The staging step also checks the copied PE32+ AMD64 Windows GUI header before upload; this is binary-structure evidence only, not proof of execution or signature trust. This is evidence and an optional UI smoke candidate, **not** an installer, signed package, deployed release or proof of game runtime. No Minecraft, account, Sandboxie, driver or legacy VMware payload is copied into the artifact. Manual CI scopes do not upload the artifact.
-
-**Safety boundary:** the historical `package-smoke.yml` remains manual-only and is **not** part of automatic CI. Neither the source workflow nor automatic Tauri build may install/sign/start kernel drivers, deploy installers, launch Minecraft Education, authenticate accounts, mutate Sandboxie data or claim real Windows gameplay. Standard GitHub-hosted Windows builds do not substitute for target machine acceptance.
-
-### Interpreting CI results
-
-Read the exact SHA, event, source-stage summary, and final job conclusion. A green source stage with `continue-on-error` is diagnostic only; the final aggregate gate must succeed before Full Source counts as PASS. A successful compile job still does not prove a functioning installed app, gameplay or four-client stability. Do not combine PASS results across different commits. The manual workflow UI is optional after this change; `Local` pushes trigger verification automatically.
-
-## Single guest renderer compatibility pilot
-
-Before registering/finalizing a production Base, read [Client Feasibility](../validation/client-feasibility.md). The Windows guest collector is in `../../tooling/acceptance/windows/collect-client-feasibility.ps1`; it inspects a real interactive guest's video adapter/OpenGL context and captures separately attributed manual Minecraft menu, scene and input observations. The pure reviewer (`npm --prefix Development run feasibility:review -- <path-to-report.json>`) and its `npm --prefix Development run test:feasibility` regression tests do **not** launch Minecraft or assert official VM-client support.
-
-Source-only changes may be completed on GitHub `Local`, but guest graphics and gameplay remain `NOT_EXECUTED` without real machine evidence. Avoid asking for local PC access to close GitHub-only work. No changes to `main`.
+GitHub Actions is **disabled entirely** on `Local` and `main`.
+No push, manual, scheduled, PR, package or deployment workflows are allowed
+without new explicit operator approval. The existing checks are only run
+when manually invoked in an actually available environment. Do not infer
+Windows/Minecraft runtime acceptance or release readiness from source
+inspection, authored tests, compiler success, a package manifest or an
+unsigned candidate. Historic VMware/CI reports remain provenance only.
 
 ## Real-machine evidence
 
@@ -96,6 +136,6 @@ Use `DEV.cmd bootstrap` once, then `DEV.cmd doctor`, then
 lockfile presence before proceeding; they do not assume that the operator
 remembered to run `doctor`. `bootstrap` uses a process-only local
 TEMP/TMP before network downloads, and the Rustup sidecar has bounded plain-file
-admission. This is a source/CI contract, not a completed Windows installed-PC
-smoke test. Debug artifact output is a separate compile-only candidate and does
-not install the system dependencies.
+admission. This is a source contract, not completed Windows installed-PC or Minecraft
+acceptance. No GitHub Actions runners are active and no package may be
+published without separate review.

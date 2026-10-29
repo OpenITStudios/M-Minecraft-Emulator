@@ -34,6 +34,8 @@
     "audit:dependencies": "node tooling/dependencies/audit.mjs",
     "storage:report": "node tooling/storage/inventory.mjs report",
     "storage:explain": "node tooling/storage/inventory.mjs explain",
-    "storage:plan": "node tooling/storage/retention.mjs"
+    "storage:plan": "node tooling/storage/retention.mjs",
+    "check:frontend": "npm --prefix apps/desktop run check:frontend",
+    "check:rust": "npm --prefix apps/desktop run check:rust:target && cargo check --locked --target x86_64-pc-windows-msvc --manifest-path engine/runtime-core/Cargo.toml"
   }
 }

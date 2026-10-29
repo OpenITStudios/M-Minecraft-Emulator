@@ -57,7 +57,7 @@ test('developer commands isolate HOME/cache/temp, require local runtime and pres
   assert.match(developer,/workspace\/toolchains\/node\/npm\.cmd/);
   assert.match(developer, /resolves outside workspace\/toolchains/);
   assert.match(developer,/& \$LocalNpm @NpmArguments/);
-  assert.match(developer,/if \(\$Command -in @\("setup", "check", "test", "dev"\)\)/);
+  assert.match(developer,/if \(\$Command -in @\("setup", "check", "check:frontend", "check:rust", "bench:frontend", "bench:rust", "test", "dev"\)\)/);
   assert.match(developer,/if \(\$Command -in @[\s\S]*?Test-DeveloperToolchain[\s\S]*?switch \(\$Command\)/);
   for(const snippet of [
     '$env:CARGO_HOME', '$env:RUSTUP_HOME', '$env:NPM_CONFIG_CACHE',
@@ -85,6 +85,45 @@ test('developer storage route supports report, explain, and non-destructive rete
   assert.match(planner,/destructiveCapability:false/);
   assert.match(planner,/no --apply mode/);
   assert.doesNotMatch(planner,/\b(?:rmSync|unlinkSync|renameSync|writeFileSync|execFileSync|spawnSync)\b/);
+});
+
+test('scoped frontend and native source checks avoid accidental full verification', () => {
+  const rootManifest=JSON.parse(read('package.json'));
+  const desktopManifest=JSON.parse(read('apps/desktop/package.json'));
+  const rootScripts=rootManifest.scripts, desktopScripts=desktopManifest.scripts;
+  assert.equal(rootScripts['check:frontend'], 'npm --prefix apps/desktop run check:frontend');
+  assert.equal(desktopScripts['check:frontend'], 'npm run typecheck && npm run test');
+  assert.doesNotMatch(desktopScripts['check:frontend'], /cargo|tauri|build:frontend|verify:source/i);
+  assert.equal(rootScripts['check:rust'],
+    'npm --prefix apps/desktop run check:rust:target && cargo check --locked --target x86_64-pc-windows-msvc --manifest-path engine/runtime-core/Cargo.toml');
+  assert.ok(desktopScripts['check:rust:target'].includes('cargo check --locked --target x86_64-pc-windows-msvc'));
+  assert.ok(desktopScripts['check:rust:target'].includes('prepare:icons'));
+  assert.ok(!desktopScripts['check:rust:target'].includes('--all-targets'));
+  assert.ok(desktopScripts['check:rust'].includes('cargo check --all-targets --locked'));
+  assert.ok(rootScripts['verify:source'].includes('npm run check:desktop'));
+  assert.ok(desktopScripts['verify:source'].includes('npm run build:frontend'));
+  assert.ok(desktopScripts['verify:source'].includes('npm run test:rust'));
+  assert.ok(rootScripts['verify:source'].includes('npm run test:runtime'));
+});
+
+test('benchmark uses exact Local checkout and two cache-preserving passes', () => {
+  const section=developer.slice(developer.indexOf('function Invoke-SourceBenchmark {'),
+    developer.indexOf('Push-Location $DevelopmentRoot'));
+  assert.ok(section.startsWith('function Invoke-SourceBenchmark {'));
+  assert.match(section,/Assert-LocalCheckout/);
+  assert.match(section,/Assert-CleanSourceAtHead -ExpectedSha \$sha/);
+  assert.match(section,/foreach \(\$pass in 1\.\.2\)/);
+  assert.match(section,/Stopwatch\]::StartNew\(\)/);
+  assert.match(section,/Invoke-RepositoryNpm -NpmArguments @\("run", \$scriptName\)/);
+  assert.match(section,/no PASS recorded/);
+  assert.match(section,/No cold\/warm classification/);
+  assert.doesNotMatch(section,/\b(?:Remove-Item|Clear-Content|cargo clean|rm -rf|Start-Process)\b/i);
+  for (const cmd of ['check:frontend','check:rust','bench:frontend','bench:rust']) {
+    assert.ok(developer.includes('"'+cmd+'"'), 'missing developer route: '+cmd);
+  }
+  assert.match(developer,/Test-DeveloperToolchain/);
+  assert.match(launcher,/DEV\.cmd bench:frontend/);
+  assert.match(launcher,/DEV\.cmd bench:rust/);
 });
 
 test('portable setup scripts parse in Windows PowerShell without running downloads', {

@@ -5,7 +5,9 @@ The only product source tree: `apps/desktop` owns the desktop integration,
 and verification. Retained legacy code stays with its consumers; moving it here
 does not enable VMware or Sandboxie operations.
 
-From the checkout root, use `DEV.cmd doctor`, `DEV.cmd check`, `DEV.cmd test`, or
+From the checkout root, use `DEV.cmd doctor`, `DEV.cmd check:frontend`,
+`DEV.cmd check:rust`, `DEV.cmd bench:frontend`, `DEV.cmd bench:rust`,
+`DEV.cmd check`, `DEV.cmd test`, or
 `DEV.cmd package`. Direct npm commands use `npm --prefix Development run <script>`.
 `DEV.cmd dev` launches the development GUI and requires an appropriate session.
 
