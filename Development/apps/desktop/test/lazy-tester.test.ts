@@ -4,7 +4,7 @@ import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {projectSessionHealth} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
 import {userMessage, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
-import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, periodicInspectionDue, type CloseReview} from '../src/app/inspectionScheduling.js';
+import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, periodicInspectionDue, nextPendingUiAction, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
 const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process: {
@@ -546,5 +546,60 @@ describe('Guided Recovery pending-work and stale-action hardening',()=>{
     expect(guidedRecoveryAllowed(check,blockedProfile,2,'refresh',
       {...gate,unresolvedRecovery:new Set([2])})).toBe(false);
     expect(guidedRecoveryAllowed(check,blockedProfile,2,'open',gate)).toBe(false);
+  });
+});
+
+describe('Lazy Tester queue scheduling parity',()=>{
+  const idle:PendingUiQueueState={
+    mounted:true,nativeBackend:'WindowsNative',closeInProgress:false,
+    closeReviewPending:false,initializing:false,busy:false,refreshing:false,
+    resizing:false,queuedAudio:false,queuedPerformance:false,
+    queuedPreset:false,queuedPage:false,manualRefreshRequested:false,
+    queuedLaunch:false,queuedSelection:false,dirty:false,
+  };
+  // The former eight Svelte reactive admission clauses, preserved here as
+  // independent regression truth, not as a second runtime dispatcher.
+  function previousFirst(s:PendingUiQueueState):PendingUiAction|null {
+    const common=s.mounted&&s.nativeBackend==='WindowsNative'&&!s.closeInProgress&&
+      !s.closeReviewPending&&!s.busy&&!s.refreshing&&!s.resizing;
+    const strict=common&&!s.initializing;
+    const eligible=[
+      strict&&s.queuedAudio?'audio':null,
+      strict&&!s.queuedAudio&&s.queuedPerformance?'performance':null,
+      strict&&!s.queuedAudio&&!s.queuedPerformance&&s.queuedPreset?'preset':null,
+      strict&&!s.queuedAudio&&!s.queuedPerformance&&!s.queuedPreset&&s.queuedPage?'navigation':null,
+      strict&&!s.queuedPerformance&&!s.queuedPreset&&!s.queuedPage&&s.manualRefreshRequested?'manualRefresh':null,
+      strict&&!s.queuedPerformance&&!s.queuedPreset&&!s.queuedPage&&s.queuedLaunch?'launch':null,
+      common&&!s.queuedAudio&&!s.queuedPerformance&&!s.queuedPreset&&!s.queuedPage&&s.queuedSelection?'selection':null,
+      common&&!s.queuedAudio&&!s.queuedPerformance&&!s.queuedPreset&&!s.queuedPage&&!s.queuedSelection&&s.dirty?'layout':null,
+    ];
+    return (eligible.find((item):item is PendingUiAction=>item!==null)??null);
+  }
+
+  it('preserves first-eligible lane and priority for all 256 queue combinations',()=>{
+    const queueKeys=[
+      'queuedAudio','queuedPerformance','queuedPreset','queuedPage',
+      'manualRefreshRequested','queuedLaunch','queuedSelection','dirty',
+    ] as const;
+    for(let flags=0;flags<256;flags++){
+      const mask=Object.fromEntries(queueKeys.map((key,index)=>[key,!!(flags&(1<<index))]));
+      for(const variants of [
+        {},{initializing:true},{busy:true},{refreshing:true},
+        {closeReviewPending:true},{closeInProgress:true},{resizing:true},
+        {nativeBackend:'Unsupported' as const},{mounted:false},
+      ]){
+        const state={...idle,...mask,...variants};
+        expect(nextPendingUiAction(state)).toBe(previousFirst(state));
+      }
+    }
+  });
+  it('cannot dispatch during close review; Refresh precedes Launch, and initialization retains passive lanes',()=>{
+    expect(nextPendingUiAction({...idle,manualRefreshRequested:true,queuedLaunch:true})).toBe('manualRefresh');
+    expect(nextPendingUiAction({...idle,queuedAudio:true,manualRefreshRequested:true})).toBe('audio');
+    expect(nextPendingUiAction({...idle,queuedSelection:true,dirty:true})).toBe('selection');
+    expect(nextPendingUiAction({...idle,initializing:true,queuedSelection:true})).toBe('selection');
+    expect(nextPendingUiAction({...idle,initializing:true,dirty:true})).toBe('layout');
+    expect(nextPendingUiAction({...idle,initializing:true,queuedAudio:true})).toBeNull();
+    expect(nextPendingUiAction({...idle,queuedAudio:true,closeReviewPending:true,queuedSelection:true})).toBeNull();
   });
 });

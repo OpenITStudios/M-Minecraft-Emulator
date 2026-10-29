@@ -10,7 +10,8 @@ Sandboxie/VMware provider route is retired.
 
 | Area | Owner |
 | --- | --- |
-| Play/Settings/Data Storage and UI action scheduling | `src/LazyTesterApp.svelte` |
+| Play/Settings/Data Storage and UI action dispatch | `src/LazyTesterApp.svelte` |
+| Pure pending-action eligibility and inspection scheduling | `src/app/inspectionScheduling.ts` |
 | Fixed five-launcher rail, visual actions only | `src/LauncherRail.svelte` |
 | Health, recovery guidance and authored user messages | `src/SessionHealthNotice.svelte`, `src/app/presentation/` |
 | Validated desktop protocol | `src/app/bridge/lazyTester.ts`, `workspaceSurface.ts` |

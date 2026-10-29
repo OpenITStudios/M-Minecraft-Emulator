@@ -43,6 +43,19 @@ describe("Emulator source verification routing", () => {
     expect(rail).not.toMatch(/\binvokeRuntime\s*\(|\blazyTester\s*\.|\bworkspaceSurface\s*\.|\bsetInterval\s*\(/);
   });
 
+  it("keeps one UI action dispatcher and one native scheduling owner", () => {
+    const ui = readFileSync(new URL("../src/LazyTesterApp.svelte", import.meta.url), "utf8");
+    const policy = readFileSync(new URL("../src/app/inspectionScheduling.ts", import.meta.url), "utf8");
+    expect(policy).toContain("export function nextPendingUiAction(");
+    expect(ui).toContain("const nextAction = nextPendingUiAction({");
+    expect(ui).toContain("case 'manualRefresh':");
+    expect(ui).toContain("case 'selection':");
+    expect(ui).toContain("case 'layout':");
+    expect(ui).not.toContain("$: if (mounted && nativeBackend === 'WindowsNative'");
+    expect((ui.match(/setInterval\(/g)??[])).toHaveLength(1);
+    expect(policy).not.toMatch(/invokeRuntime\s*\(|lazyTester\s*\.|setInterval\s*\(/);
+  });
+
   it("has exactly one repository-to-desktop-to-runtime verification route", () => {
     expect(root.scripts["verify:source"].split(" && ")).toEqual([
       "npm run verify:repository -- --g0",

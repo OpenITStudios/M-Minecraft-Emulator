@@ -57,3 +57,59 @@ export function periodicInspectionDue(
   return page === 'workspace' || page === 'launchers' ||
     runningCount > 0 || !available || elapsedMs >= 10_000;
 }
+
+
+// The mounted Svelte UI still owns queue payloads and executes all actions.
+// This read-only selector reproduces the *first eligible* legacy reactive
+// dispatch rule without creating a queue worker or second state authority.
+// In particular, explicit refresh has precedence over deferred Launch and
+// STARTING does not block legacy selection/layout scheduling.
+export interface PendingUiQueueState {
+  readonly mounted: boolean;
+  readonly nativeBackend: 'WindowsNative' | 'Unsupported' | null;
+  readonly closeInProgress: boolean;
+  readonly closeReviewPending: boolean;
+  readonly initializing: boolean;
+  readonly busy: boolean;
+  readonly refreshing: boolean;
+  readonly resizing: boolean;
+  readonly queuedAudio: boolean;
+  readonly queuedPerformance: boolean;
+  readonly queuedPreset: boolean;
+  readonly queuedPage: boolean;
+  readonly manualRefreshRequested: boolean;
+  readonly queuedLaunch: boolean;
+  readonly queuedSelection: boolean;
+  readonly dirty: boolean;
+}
+
+export type PendingUiAction =
+  | 'audio' | 'performance' | 'preset' | 'navigation'
+  | 'manualRefresh' | 'launch' | 'selection' | 'layout';
+
+export function nextPendingUiAction(state: PendingUiQueueState): PendingUiAction | null {
+  if (!state.mounted || state.nativeBackend !== 'WindowsNative' ||
+      state.closeInProgress || state.closeReviewPending ||
+      state.busy || state.refreshing || state.resizing) return null;
+
+  if (!state.initializing) {
+    if (state.queuedAudio) return 'audio';
+    if (!state.queuedAudio && state.queuedPerformance) return 'performance';
+    if (!state.queuedAudio && !state.queuedPerformance && state.queuedPreset) return 'preset';
+    if (!state.queuedAudio && !state.queuedPerformance &&
+        !state.queuedPreset && state.queuedPage) return 'navigation';
+    // The original read-only refresh and Launch lanes do not separately
+    // require queuedAudio to be empty; the audio lane already runs first.
+    if (!state.queuedPerformance && !state.queuedPreset && !state.queuedPage) {
+      if (state.manualRefreshRequested) return 'manualRefresh';
+      if (state.queuedLaunch) return 'launch';
+    }
+  }
+
+  if (!state.queuedAudio && !state.queuedPerformance &&
+      !state.queuedPreset && !state.queuedPage) {
+    if (state.queuedSelection) return 'selection';
+    if (state.dirty) return 'layout';
+  }
+  return null;
+}

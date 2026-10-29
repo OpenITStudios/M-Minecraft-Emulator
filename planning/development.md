@@ -1,5 +1,14 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — UI queue scheduling policy extraction (29 October 2026)
+
+**State:** DONE in source; exact-head Svelte compiler and Minecraft/Windows acceptance NOT_EXECUTED.
+**Decision:** Extract only the pure first-eligible queue decision into the existing UI scheduling owner \`inspectionScheduling.ts\` and replace eight inline reactive action blocks with one Svelte dispatcher. Preserve the original audio → FPS → graphics → navigation → explicit Refresh → deferred Launch → selection → layout precedence, with the legacy exception that initial selection/layout may run during preparation. All queue payloads, state mutation, native IPC, preview ResizeObserver, process identity and close review stay in \`LazyTesterApp.svelte\` and the original native owners. No worker, background monitor, new scheduler timer or state database.
+**Proof:** REMOTE_GITHUB pinned exact code/consumer review and structural parity checks. Unit coverage added comparing the pure selector against all 256 combinations of the eight original queue flags across nine gate conditions (2,304 cases) plus focused precedence. Source-only tests AUTHORED; pinned Svelte/Vitest/Playwright/Windows execution NOT_EXECUTED.
+**Next:** Examine the current frontend compiler/test evidence when available; next source-only modular work can isolate General Settings presentation without moving lifecycle/state.
+
+---
+
 ## Current product work — launcher rail presentation extraction (29 October 2026)
 
 **State:** DONE in source; Svelte compile/browser/Windows gameplay NOT_EXECUTED.

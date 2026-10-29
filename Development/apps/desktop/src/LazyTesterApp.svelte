@@ -8,7 +8,7 @@
   import LauncherRail from './LauncherRail.svelte';
   import {projectSessionHealth, type SessionHealthAction} from './app/presentation/sessionHealth.js';
     import {userMessage, sessionConnectionLabel, updateRecoverySlots, recoveryLabels} from './app/presentation/sessionFeedback.js';
-  import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, periodicInspectionDue, type CloseReview} from './app/inspectionScheduling.js';
+  import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, periodicInspectionDue, nextPendingUiAction, type CloseReview} from './app/inspectionScheduling.js';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
   let binding: ProfileBinding | null = null;
@@ -99,14 +99,58 @@
     busy || refreshing || resizing || manualRefreshing || manualRefreshRequested ||
     closeReviewPending || queuedPage !== null || queuedLaunch !== null ||
     queued !== null || requested !== null;
-  $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio!==null) {const mode=queuedAudio;queuedAudio=null;void saveAudio(mode);}
-  $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance!==null) {const limits=queuedPerformance;queuedPerformance=null;void savePerformance(limits);}
-  $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset!==null) {const request=queuedPreset;queuedPreset=null;void applyPreset(request);}
-  $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage !== null) void consumeNavigation();
-  $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPreset===null && queuedPage===null && manualRefreshRequested) {manualRefreshRequested=false;void refreshPage();}
-  $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedPerformance===null && queuedPreset===null && queuedPage===null && queuedLaunch!==null) {const slot=queuedLaunch;queuedLaunch=null;void launch(slot);}
-  $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage === null && queued !== null) void consumeSelection();
-  $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset===null && queuedPage === null && queued === null && dirty) void syncLayout();
+  // One passive scheduling decision per Svelte update. All payloads,
+  // mutations and native operations remain owned by this component.
+  // Re-evaluate the current queue instead of caching a decision in state.
+  $: {
+    const nextAction = nextPendingUiAction({
+      mounted, nativeBackend, closeInProgress, closeReviewPending,
+      initializing, busy, refreshing, resizing,
+      queuedAudio: queuedAudio !== null,
+      queuedPerformance: queuedPerformance !== null,
+      queuedPreset: queuedPreset !== null,
+      queuedPage: queuedPage !== null,
+      manualRefreshRequested,
+      queuedLaunch: queuedLaunch !== null,
+      queuedSelection: queued !== null,
+      dirty,
+    });
+    switch (nextAction) {
+      case 'audio': {
+        const mode = queuedAudio;
+        if (mode !== null) {queuedAudio = null; void saveAudio(mode);}
+        break;
+      }
+      case 'performance': {
+        const limits = queuedPerformance;
+        if (limits !== null) {queuedPerformance = null; void savePerformance(limits);}
+        break;
+      }
+      case 'preset': {
+        const request = queuedPreset;
+        if (request !== null) {queuedPreset = null; void applyPreset(request);}
+        break;
+      }
+      case 'navigation':
+        void consumeNavigation();
+        break;
+      case 'manualRefresh':
+        manualRefreshRequested = false;
+        void refreshPage();
+        break;
+      case 'launch': {
+        const slot = queuedLaunch;
+        if (slot !== null) {queuedLaunch = null; void launch(slot);}
+        break;
+      }
+      case 'selection':
+        void consumeSelection();
+        break;
+      case 'layout':
+        void syncLayout();
+        break;
+    }
+  }
 
   function image(node: HTMLElement, slot: ProfileSlot) {
     images.set(slot, node); observer?.observe(node); dirty = true;
