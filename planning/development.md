@@ -2,13 +2,15 @@
 
 ## Current intent — 29 October 2026
 
-**Goal:** Optimize real private-resident RAM and committed memory for 0–5
-Minecraft Education Windows clients as far as safely possible. The previous
-<1024 MiB per-client figure is an **aspirational reference, not a required
-success threshold**; smaller confirmed savings are useful if FPS, gameplay,
-multiplayer hosting, world saves and profile isolation remain intact.
-The operator explicitly requested CODE-FIRST development without Windows
-localtest and no repeated P0/checker/documentation loops.
+**Goal:** Advance the **optional LazyTester Particle Tuning** vanilla
+environmental-performance preview while retaining the 75/50/25/0
+distance-emission policy and original textures/animations. Native RAM
+allocator work is currently deprioritized by explicit user direction.
+Whole-game RAM savings remain unverified: the earlier <1024 MiB per-client
+figure is an aspiration, not a required success threshold. Protect all five
+Minecraft Education sessions, FPS, gameplay, multiplayer hosting, world saves
+and profile isolation. Development remains CODE-FIRST, no user-PC localtest,
+no extra repository checker loops.
 
 **State:** ACTIVE, source-only. Original MC01–MC05 CloseOne/CloseAll code
 and native recovery guards remain intact. The last historical MC02 >35 s
@@ -24,29 +26,38 @@ Tuning** resource-pack preview. Product-facing name is LazyTester, not MIVUBI;
 existing on-disk/registry compatibility names are NOT renamed.
 
 - Canonical source: `Development/tooling/lazytester-particles/` only.
-  `catalog.mjs` pins **10 ambient Minecraft Bedrock sample effect identities**
-  and Git blob hashes from Mojang `v1.26.30.5`. `tune.mjs` preserves full
-  source definitions while tuning three steady emitters' `spawn_rate` and
-  seven event-driven manual emitters' `max_particles` using the same
-  distance-relative curve. These represent **different** native semantics:
-  manual cap reductions do not guarantee fewer emissions below the cap.
-  `archive.mjs` emits a deterministic tiny resource ZIP; `build.mjs`
-  requires an explicit source/output and rejects changed/oversized sources.
+  `catalog.mjs` pins **20 ambient Minecraft Bedrock sample effect identities**
+  and exact Git blob hashes from Mojang `v1.26.30.5`. `tune.mjs`
+  preserves full vanilla definitions, tuning **three steady emitters'**
+  `spawn_rate` **and** `max_particles`, plus **17 event-driven manual
+  emitters'** `max_particles` only. Manual cap reductions do not directly
+  control per-event spawn rate and may not save anything below saturation.
+  `archive.mjs` emits a deterministic compressed ZIP; `build.mjs`
+  requires explicit source/output, rejects stale sources as encountered and
+  bounds streamed official downloads. Compression saves pack bytes, not RAM.
 - **Operator-approved aggressive visual budget:** 0–16 blocks **75%**;
   32 blocks **50%**; 48 blocks **25%**; >=64 blocks **0%**, interpolating
   smoothly between thresholds. Camera distance refers to emitter distance,
   not every individual particle. Only the two reviewed rate/cap fields may
   change; no new texture files, altered pixels, UV/animation, color,
   lifetime, physics, combat feedback or Education particle definitions.
-  Decorative effects are genuinely less dense even near the player;
-  no visual equivalence or measured FPS/RAM/VRAM benefit is claimed.
-- Preview pack version advanced to `[0,2,0]` with original pack UUIDs,
-  so versions remain distinct. Ten official sample metadata hashes and
-  emitter classes were independently verified through GitHub; the Node
-  22.16.0 sandbox executed seven focused regression cases and created one
-  **synthetic-only** 11-entry ZIP independently CRC-checked by Python.
-  Official-source full-pack creation, Education runtime, multiplayer
-  behavior and sustained resource benefits remain NOT_EXECUTED.
+  The selected four thresholds are collinear: the default generated
+  MoLang uses **one clamped camera-distance query per edited field**, down
+  from three for the prior piecewise expression, with exactly the same
+  mathematical 75/50/25/0 curve. Cap reevaluation timing on Education and
+  actual live particle counts remain UNKNOWN. Decorative effects can be less
+  dense even near the player; no pixel-for-pixel equivalence or measured
+  FPS/RAM/VRAM benefit is claimed.
+- Preview pack version advanced to `[0,3,0]` retaining pack UUIDs
+  for explicit version upgrades. **All 20** official sample blob hashes,
+  effect identifiers, formats and emitter classes were independently
+  checked through GitHub. The isolated Node 22.16.0 candidate source passed
+  **14 staged regression checks**; an independently parsed **synthetic-only**
+  21-entry ZIP passed Python ZIP/CRC checks. The final committed suite has
+  12 cases; exact-HEAD Node/Windows/Education execution was NOT_EXECUTED.
+  No source-retrieved official `.mcpack` has been published or installed.
+  Minecraft Education runtime, multiplayer behavior and real RAM/FPS impact
+  remain NOT_EXECUTED.
 - Mojang's sample files are **not vendored** because their LICENSE is EULA
   governed, not permissive. Output is generated privately only on an explicit
   developer invocation; never staged, automatically enabled in profiles,
@@ -282,11 +293,11 @@ No speculative renderer patch, working-set trim or experimental hook
 promotion is justified. The reviewer improvement concerns *measurement
 honesty*, not reclaimed game RAM.
 
-**Primary next source action:** retain optional LazyTester Particle
-Tuning v0.2 as a **source-built-only** preview with pinned Mojang samples,
-aggressive 75/50/25/0 distance policy and no installed world/profile changes.
-Before activating it, establish Minecraft Education 26.32 support for the
-referenced vanilla effects and distance/cap Molang evaluation. Do not equate
-synthetic tests or Mojang's Bedrock source with Education runtime acceptance;
-a copied-world host/join trial requires separate operator authorization.
+**Primary next source action:** preserve optional LazyTester Particle
+Tuning v0.3 as a **source-built-only** preview with 20 fingerprinted Mojang
+samples, constant-quality textures and aggressive 75/50/25/0 LOD.
+Confirm Education 26.32 behavior of steady and manual emitter MoLang,
+especially cap reevaluation and particle/source identifier availability,
+before any activation. An explicit copied-world host/join test requires
+separate permission; source/synthetic evidence is not runtime acceptance.
 Native `UploadBufferHeap` remains default OFF and outside this workstream.

@@ -1,5 +1,6 @@
 // Only ambient vanilla effects are included. Mojang source is not vendored;
 // every file must match the exact Git blob recorded against the sample tag.
+// The approved 75/50/25/0 curve is linear and can use one distance query.
 export const SOURCE_TAG = 'v1.26.30.5';
 export const SOURCE_URL = `https://raw.githubusercontent.com/Mojang/bedrock-samples/${SOURCE_TAG}/resource_pack/particles/`;
 
@@ -10,8 +11,8 @@ export const LOD = Object.freeze({
   rates: Object.freeze([0.75, 0.50, 0.25, 0.00]),
 });
 
-// "steady" adjusts particles/second; "manual" adjusts the per-emitter active
-// particle ceiling, NOT the rate of event-driven/manual emissions.
+// "steady" scales particles/second AND their active ceiling; "manual" adjusts
+// only the per-emitter active ceiling, NOT event-driven emission frequency.
 export const PARTICLES = Object.freeze([
   Object.freeze({file: 'portal_reverse.json', identifier: 'minecraft:portal_reverse_particle',
     blob: 'a9d69a82d65e8b8afdf58b408370b833328954ff', format: '1.26.10', mode: 'steady'}),
@@ -33,16 +34,36 @@ export const PARTICLES = Object.freeze([
     blob: '268432249fef793e2dee9ffb3a33d68f43aae4a7', format: '1.26.10', mode: 'manual'}),
   Object.freeze({file: 'mycelium_dust.json', identifier: 'minecraft:mycelium_dust_particle',
     blob: 'e0ab0f8541c61ff7dd6fac702772634f7f726a1d', format: '1.26.10', mode: 'manual'}),
+  Object.freeze({file: 'pale_oak_leaves_particle.json', identifier: 'minecraft:pale_oak_leaves_particle',
+    blob: '1f70fa805d0852207575de7004231294b5dd11e2', format: '1.26.10', mode: 'manual'}),
+  Object.freeze({file: 'biome_tinted_leaves_particle.json', identifier: 'minecraft:biome_tinted_leaves_particle',
+    blob: '115de7836e6d2906f421a554c250894d73776864', format: '1.26.10', mode: 'manual'}),
+  Object.freeze({file: 'water_drip.json', identifier: 'minecraft:water_drip_particle',
+    blob: '7a53662c96a4f58604c577e58530c6a725b2dc52', format: '1.26.10', mode: 'manual'}),
+  Object.freeze({file: 'lava_drip.json', identifier: 'minecraft:lava_drip_particle',
+    blob: 'afa0b83897a0bcfa37aa6e12888815415e807112', format: '1.26.10', mode: 'manual'}),
+  Object.freeze({file: 'dripstone_water_drip.json', identifier: 'minecraft:stalactite_water_drip_particle',
+    blob: '9ea3d6598b11f2cd8d0c632c5347404e970e4169', format: '1.26.10', mode: 'manual'}),
+  Object.freeze({file: 'dripstone_lava_drip.json', identifier: 'minecraft:stalactite_lava_drip_particle',
+    blob: '751e078980b833bd09172255f9d9325ab9fa9d1d', format: '1.26.10', mode: 'manual'}),
+  Object.freeze({file: 'honey_drip.json', identifier: 'minecraft:honey_drip_particle',
+    blob: '7f4727aac744995563ccccc81685911e0749bdce', format: '1.26.10', mode: 'manual'}),
+  Object.freeze({file: 'obsidian_tear.json', identifier: 'minecraft:obsidian_tear_particle',
+    blob: 'b27941513b6c4645eadaad0ef0ae16618bfa72e3', format: '1.26.10', mode: 'manual'}),
+  Object.freeze({file: 'snowflake.json', identifier: 'minecraft:snowflake_particle',
+    blob: 'fa29c6597077b7d99726931076b1efec67da62f6', format: '1.26.10', mode: 'manual'}),
+  Object.freeze({file: 'endrod.json', identifier: 'minecraft:endrod',
+    blob: '2806b68c02f2e4dc9d385874f88fc50e77a8ae69', format: '1.26.10', mode: 'manual'}),
 ]);
 
 export const MANIFEST = Object.freeze({
   format_version: 2,
   header: {
     name: 'LazyTester Particle Tuning (Preview)',
-    description: 'Optional 75/50/25/0 distant ambient particle LOD; original textures and animations.',
+    description: 'Optional ambient particle LOD 75/50/25/0; untouched vanilla textures.',
     uuid: '9b0a78e3-5272-4fcb-9283-802d94ce1ddb',
-    version: [0, 2, 0],
+    version: [0, 3, 0],
     min_engine_version: [1, 26, 10],
   },
-  modules: [{type: 'resources', uuid: '48627918-8d1c-4505-a1c5-cfb5013d4331', version: [0, 2, 0]}],
+  modules: [{type: 'resources', uuid: '48627918-8d1c-4505-a1c5-cfb5013d4331', version: [0, 3, 0]}],
 });

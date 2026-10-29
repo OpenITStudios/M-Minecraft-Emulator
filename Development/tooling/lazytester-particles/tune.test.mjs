@@ -1,7 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {inflateRawSync} from 'node:zlib';
 import {createMcpack} from './archive.mjs';
-import {compileFiles, emissionAtDistance, gitBlobSha, tuneParticle} from './tune.mjs';
+import {compileFiles, emissionAtDistance, gitBlobSha, molangLod, tuneParticle} from './tune.mjs';
 import {LOD, MANIFEST, PARTICLES} from './catalog.mjs';
 
 function example(mode = 'steady') {
@@ -27,8 +28,8 @@ function fixture(mode='steady', data=example(mode)) {
 }
 function withoutEmissionFields(data, mode) {
   const copy=structuredClone(data);
-  const field=mode==='steady'?'spawn_rate':'max_particles';
-  delete copy.particle_effect.components[`minecraft:emitter_rate_${mode}`][field];
+  const fields=mode==='steady'?['spawn_rate','max_particles']:['max_particles'];
+  for(const field of fields) delete copy.particle_effect.components[`minecraft:emitter_rate_${mode}`][field];
   return copy;
 }
 
@@ -49,24 +50,24 @@ test('near/medium/far/very-far tiers and continuous interpolation are exact', ()
   ]) assert.throws(()=>emissionAtDistance(16,invalid),/profile/);
 });
 
-test('steady particle tuning edits only spawn rate and preserves all visual fields', () => {
+test('steady particle tuning adjusts spawn rate AND live cap, preserving appearance', () => {
   const {raw,spec}=fixture();
   const before=JSON.parse(raw.toString());
   const after=tuneParticle(raw,spec);
   const rate=after.particle_effect.components['minecraft:emitter_rate_steady'].spawn_rate;
   assert.equal(rate.version,0);
-  assert.ok(rate.expression.startsWith('(Math.random(1, 4)) * (math.max(0.0, 0.75'));
-  for(const [start,end] of [[16,32],[32,48],[48,64]])
-    assert.ok(rate.expression.includes(`0.25 * query.camera_distance_range_lerp(${start}, ${end})`));
+  assert.equal(rate.expression, '(Math.random(1, 4)) * (0.75 * (1.0 - query.camera_distance_range_lerp(16, 64)))');
+  assert.equal((rate.expression.match(/query\.camera_distance_range_lerp/g)||[]).length,1);
   assert.deepEqual(withoutEmissionFields(before,'steady'), withoutEmissionFields(after,'steady'));
-  assert.equal(after.particle_effect.components['minecraft:emitter_rate_steady'].max_particles,20);
+  assert.equal(after.particle_effect.components['minecraft:emitter_rate_steady'].max_particles,
+    '(20) * (0.75 * (1.0 - query.camera_distance_range_lerp(16, 64)))');
 });
 
 test('numeric steady source is transformed without creating textures or extra components', () => {
   const data=example();data.particle_effect.components['minecraft:emitter_rate_steady'].spawn_rate=3;
   const {raw,spec}=fixture('steady',data);
   const after=tuneParticle(raw,spec);
-  assert.match(after.particle_effect.components['minecraft:emitter_rate_steady'].spawn_rate,/^\(3\) \* \(math\.max/);
+  assert.match(after.particle_effect.components['minecraft:emitter_rate_steady'].spawn_rate,/^\(3\) \* \(0\.75/);
   assert.deepEqual(withoutEmissionFields(data,'steady'),withoutEmissionFields(after,'steady'));
 });
 
@@ -75,7 +76,7 @@ test('manual ambient tuning scales only active particle cap, not event emission 
   const before=JSON.parse(raw.toString());
   const after=tuneParticle(raw,spec);
   const cap=after.particle_effect.components['minecraft:emitter_rate_manual'].max_particles;
-  assert.ok(cap.startsWith('(2000) * (math.max(0.0, 0.75'));
+  assert.equal(cap,'(2000) * (0.75 * (1.0 - query.camera_distance_range_lerp(16, 64)))');
   assert.deepEqual(withoutEmissionFields(before,'manual'), withoutEmissionFields(after,'manual'));
   assert.equal(after.particle_effect.components['minecraft:emitter_rate_steady'],undefined);
   assert.equal(after.particle_effect.components['minecraft:emitter_rate_manual'].spawn_rate,undefined);
@@ -107,8 +108,8 @@ test('compiles a mix of steady/manual without unknown paths or Mojang texture fi
   ]),[steady.spec,otherSpec]);
   assert.deepEqual([...files.keys()],['manifest.json','particles/test_ambient.json','particles/manual_ambient.json']);
   assert.equal(JSON.parse(files.get('manifest.json')).header.name,MANIFEST.header.name);
-  assert.deepEqual(JSON.parse(files.get('manifest.json')).header.version,[0,2,0]);
-  assert.deepEqual(PARTICLES.reduce((n,p)=>{n[p.mode]=(n[p.mode]??0)+1;return n;},{}),{steady:3,manual:7});
+  assert.deepEqual(JSON.parse(files.get('manifest.json')).header.version,[0,3,0]);
+  assert.deepEqual(PARTICLES.reduce((n,p)=>{n[p.mode]=(n[p.mode]??0)+1;return n;},{}),{steady:3,manual:17});
   for(const path of files.keys()) assert.ok(path.endsWith('.json'));
   const zip=createMcpack(files);
   assert.equal(zip.readUInt32LE(0),0x04034b50);
@@ -118,7 +119,7 @@ test('compiles a mix of steady/manual without unknown paths or Mojang texture fi
   assert.throws(()=>createMcpack(new Map([['manifest.json','x'],['../outside.json','x']])),/path/);
   assert.throws(()=>compileFiles(new Map(),[steady.spec]),/Missing pinned/);
   assert.throws(()=>compileFiles(new Map([[steady.spec.file,steady.raw]]),[steady.spec,steady.spec]),/Duplicate/);
-  assert.throws(()=>compileFiles(new Map(),Array(16).fill(steady.spec)),/size/);
+  assert.throws(()=>compileFiles(new Map(),Array(32).fill(steady.spec)),/size/);
 });
 
 import {spawnSync} from 'node:child_process';
@@ -146,4 +147,83 @@ test('builder never writes output on explicit-download refusal or untrusted loca
     assert.match(oversized.stderr,/Unsupported source size/);
     assert.equal(existsSync(output),false);
   } finally {rmSync(root,{recursive:true,force:true});}
+});
+
+test('one camera-distance query replaces three while preserving all four tier values', () => {
+  assert.equal(LOD.near,16);
+  assert.equal(LOD.veryFar,64);
+  assert.deepEqual(LOD.rates,[0.75,0.5,0.25,0]);
+  assert.equal(PARTICLES.length,20);
+  const expression=molangLod();
+  assert.equal(expression, '0.75 * (1.0 - query.camera_distance_range_lerp(16, 64))');
+  assert.equal((expression.match(/query\.camera_distance_range_lerp/g)||[]).length,1);
+  for (let d=0;d<100;d+=0.25) {
+    const clamp = Math.min(1,Math.max(0,(d-16)/48));
+    assert.ok(Math.abs(emissionAtDistance(d)-.75*(1-clamp))<1e-12, String(d));
+  }
+  const custom={near:16,medium:24,far:40,veryFar:80,rates:[.75,.55,.27,0]};
+  assert.equal((molangLod(custom).match(/query\.camera_distance_range_lerp/g)||[]).length,3);
+});
+test('all 20 catalog entries produce a deterministic, compressed 21-entry .mcpack', () => {
+  const catalog=[],sources=new Map();
+  for (const spec of PARTICLES) {
+    const v=example(spec.mode);
+    v.particle_effect.description.identifier=spec.identifier;
+    const raw=Buffer.from(JSON.stringify(v));
+    sources.set(spec.file,raw);
+    catalog.push({...spec,blob:gitBlobSha(raw)});
+  }
+  const files=compileFiles(sources,catalog);
+  assert.equal(files.size,21);
+  assert.equal(new Set(PARTICLES.map(s=>s.identifier)).size,20);
+  const zip=createMcpack(files);
+  assert.deepEqual(zip,createMcpack(files));
+  assert.equal(zip.readUInt16LE(zip.length-14),21);
+  // All large JSON entries should use ZIP DEFLATE method 8, preserving bytes.
+  assert.equal(zip.readUInt32LE(0),0x04034b50);
+  assert.equal(zip.readUInt16LE(8),8);
+  const nameLen=zip.readUInt16LE(26),packedLen=zip.readUInt32LE(18);
+  const decoded=inflateRawSync(zip.subarray(30+nameLen,30+nameLen+packedLen));
+  const filename=zip.subarray(30,30+nameLen).toString();
+  assert.deepEqual(decoded,files.get(filename));
+});
+test('first unrecognized local source aborts before output even if later sources are missing',()=>{
+  const root=mkdtempSync(join(tmpdir(),'lazytester-particle-sha-'));
+  const script=fileURLToPath(new URL('./build.mjs',import.meta.url));
+  try {
+    const output=join(root,'no-output.mcpack'),source=join(root,'source');
+    mkdirSync(join(source,'particles'),{recursive:true});
+    writeFileSync(join(source,'particles','portal_reverse.json'),'{}');
+    const result=spawnSync(process.execPath,[script,'--source',source,'--output',output],{encoding:'utf8'});
+    assert.equal(result.status,1);
+    assert.match(result.stderr,/fingerprint/);
+    assert.equal(existsSync(output),false);
+  }finally{rmSync(root,{recursive:true,force:true});}
+});
+
+test('builder bounds streamed official response even without Content-Length', async()=>{
+  const original=globalThis.fetch;
+  const root=mkdtempSync(join(tmpdir(),'lazytester-stream-'));
+  try {
+    let requested=0;
+    globalThis.fetch=async()=>{
+      requested++;
+      return new Response(new ReadableStream({start(ctrl){
+        ctrl.enqueue(new Uint8Array(100_000));
+        ctrl.enqueue(new Uint8Array(100_000));
+        ctrl.close();
+      }}),{status:200});
+    };
+    const {build}=await import('./build.mjs');
+    await assert.rejects(build(['--official','yes','--output',join(root,'rejected.mcpack')]),/Oversized vanilla source/);
+    assert.equal(requested,1);
+    assert.equal(existsSync(join(root,'rejected.mcpack')),false);
+  }finally{globalThis.fetch=original;rmSync(root,{recursive:true,force:true});}
+});
+
+test('ZIP output refuses path traversal and all output entries are compressed JSON',()=>{
+  const source=fixture(),data=compileFiles(new Map([[source.spec.file,source.raw]]),[source.spec]);
+  const zip=createMcpack(data);
+  assert.equal(zip.readUInt16LE(8),8);
+  assert.throws(()=>createMcpack(new Map([['manifest.json','{}'],['../bad.json','{}']])),/Unsafe pack path/);
 });

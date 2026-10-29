@@ -30,8 +30,17 @@ export function emissionAtDistance(distance, lod = LOD) {
   return Math.max(0, result);
 }
 
-function molangLod(lod) {
+// The approved tiers are collinear: one clamped camera-distance query is
+// equivalent to three lerps + max. Custom non-linear curves retain the
+// original safe piecewise expression.
+export function molangLod(lod = LOD) {
   const {stops, rates} = validatedLod(lod);
+  const slope = rates[0] / (stops[3] - stops[0]);
+  const affine = rates.every((v, i) =>
+    Math.abs(v - (rates[0] - slope * (stops[i] - stops[0]))) < 1e-12);
+  if (affine) {
+    return `${rates[0].toFixed(2)} * (1.0 - query.camera_distance_range_lerp(${stops[0]}, ${stops[3]}))`;
+  }
   let expression = rates[0].toFixed(2);
   for (let i = 1; i < stops.length; i++) {
     const delta = (rates[i - 1] - rates[i]).toFixed(2);
@@ -53,6 +62,13 @@ function validOriginalRate(value, field) {
 
 // Fail closed on any changed file/hash, identifier, format or emission family.
 // Preserve every vanilla appearance, lifetime, motion and texture property.
+function scaledField(family, field, multiplier) {
+  const original = family[field];
+  const expression = `(${validOriginalRate(original, field)}) * (${multiplier})`;
+  family[field] = typeof original === 'number' ? expression : {...original, expression};
+}
+
+// Steady: adjust both spawn rate and live count. Manual: live count only.
 export function tuneParticle(raw, spec, lod = LOD) {
   if (gitBlobSha(raw) !== spec?.blob) throw new Error(`Vanilla source fingerprint mismatch: ${spec?.file}`);
   let original;
@@ -74,25 +90,23 @@ export function tuneParticle(raw, spec, lod = LOD) {
     throw new Error(`Unsupported vanilla emitter family: ${spec.file}`);
   }
   const family = parts[keys[0]];
-  const field = spec.mode === 'steady' ? 'spawn_rate' : 'max_particles';
-  const originalRate = validOriginalRate(family?.[field], field);
-  if (spec.mode === 'steady' && !Object.hasOwn(family, 'max_particles')) {
-    throw new Error(`Missing steady emitter cap: ${spec.file}`);
+  if (!family || typeof family !== 'object' || Array.isArray(family)) {
+    throw new Error(`Invalid vanilla emitter: ${spec.file}`);
   }
-  const updated = `(${originalRate}) * (${molangLod(lod)})`;
-  family[field] = typeof family[field] === 'number'
-    ? updated : {...family[field], expression: updated};
+  const multiplier = molangLod(lod);
+  if (spec.mode === 'steady') scaledField(family, 'spawn_rate', multiplier);
+  scaledField(family, 'max_particles', multiplier);
   return original;
 }
 
 export function compileFiles(sources, catalog = PARTICLES) {
-  if (!Array.isArray(catalog) || catalog.length === 0 || catalog.length > 15) {
+  if (!(sources instanceof Map) || !Array.isArray(catalog) || catalog.length === 0 || catalog.length > 31) {
     throw new Error('Unsupported particle catalog size');
   }
   const files = new Map([['manifest.json', Buffer.from(JSON.stringify(MANIFEST, null, 2) + '\n')]]);
   const names = new Set(), identifiers = new Set();
   for (const spec of catalog) {
-    if (!/^[a-z0-9_]+\.json$/.test(spec.file) || names.has(spec.file)
+    if (!spec || !/^[a-z0-9_]+\.json$/.test(spec.file) || typeof spec.identifier !== 'string' || names.has(spec.file)
       || identifiers.has(spec.identifier)) throw new Error('Duplicate or unsafe vanilla particle identity');
     names.add(spec.file); identifiers.add(spec.identifier);
     const raw = sources.get(spec.file);

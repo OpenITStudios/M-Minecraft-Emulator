@@ -2,7 +2,7 @@ import {readFile, lstat, writeFile, mkdir} from 'node:fs/promises';
 import {basename, dirname, resolve, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {PARTICLES, SOURCE_URL} from './catalog.mjs';
-import {compileFiles} from './tune.mjs';
+import {compileFiles, gitBlobSha} from './tune.mjs';
 import {createMcpack} from './archive.mjs';
 
 function argumentsOf(args) {
@@ -31,15 +31,35 @@ async function vanillaFile(origin, directory, file) {
   if (!response.ok) throw new Error(`Official vanilla source unavailable (${response.status}): ${file}`);
   const advertised = Number(response.headers.get('content-length'));
   if (advertised > 128 * 1024) throw new Error(`Oversized vanilla source: ${file}`);
-  const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.length > 128 * 1024) throw new Error(`Oversized vanilla source: ${file}`);
-  return bytes;
+  // Missing Content-Length must not permit an unbounded arrayBuffer.
+  if (!response.body) throw new Error(`Official vanilla source has no body: ${file}`);
+  const reader = response.body.getReader();
+  const parts = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > 128 * 1024) throw new Error(`Oversized vanilla source: ${file}`);
+      parts.push(value);
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => {});
+    throw error;
+  } finally {reader.releaseLock();}
+  return Buffer.concat(parts, total);
 }
 export async function build(args = process.argv.slice(2)) {
   const options = argumentsOf(args);
   if (options.help) return {help: true};
   const sources = new Map();
-  for (const spec of PARTICLES) sources.set(spec.file, await vanillaFile(options.origin, options.source, spec.file));
+  for (const spec of PARTICLES) {
+    const raw = await vanillaFile(options.origin, options.source, spec.file);
+    // Reject the first stale source before fetching/reading remaining files.
+    if (gitBlobSha(raw) !== spec.blob) throw new Error(`Vanilla source fingerprint mismatch: ${spec.file}`);
+    sources.set(spec.file, raw);
+  }
   // Compile and verify every exact source BEFORE writing anything to output.
   const content = createMcpack(compileFiles(sources));
   if (basename(options.output).length > 150) throw new Error('Output basename is too long');
