@@ -2,11 +2,14 @@
 
 ## Current intent — 29 October 2026
 
-**Goal (operator reprioritized 29 October 2026):** focus on **offline,
-resource-pack-based memory efficiency** using carefully selected texture and
-ambient particle optimizations, building on the existing LazyTester Particle
-Tuning v0.3 (75/50/25/0 distance policy). **STOP adding runtime monitors,
-polling services, collectors, telemetry, or benchmark micro-systems.** Keep
+**Goal (operator reprioritized 29 October 2026):** test **selective
+Texture Lite 8×8** for **three mostly-idle profiles** while keeping **two
+controlled profiles on normal vanilla textures**. The operator now explicitly
+accepts lower 8×8 visual detail for those experimental idle profiles; this
+supersedes the previous universal no-downscale rule **for this opt-in trial
+only**, not the requirement to preserve gameplay/account/world data.
+Retain optional Particle Tuning v0.3 separately. **STOP adding runtime
+monitors, polling services, collectors, telemetry, or benchmark micro-systems.** Keep
 existing product observation/admission necessary for safe operation; do not
 remove functional owners merely because they inspect existing state. Native
 heap interventions remain default OFF and are not the present work.
@@ -28,6 +31,58 @@ normal-exit incident is **RUNTIME ACCEPTANCE DEFERRED**, not a new P0 source
 gate. Reopen only for a confirmed new source defect or explicit operator
 authorization to perform Windows/game acceptance.
 
+## Active experiment — selective Idle Texture Lite 8×8 (29 October 2026)
+
+**User-approved test case:** up to two actively controlled Minecraft
+Education profiles keep ordinary original 16×16 vanilla textures, while
+three predominantly idle profiles **may** use a low-fidelity 8×8 resource
+pack. The MC01/MC02-main and MC03–MC05-idle examples in the new README
+are **not hardcoded assignments**: roles can change, but no runtime pack
+switch or automatic per-client injection is implemented.
+
+**Bounded implementation:** a new opt-in offline owner
+`Development/tooling/lazytester-textures/build.py` uses only
+unaltered Mojang `bedrock-samples` tag `v1.26.30.5` supplied explicitly
+at build time. The exact `resource_pack/textures/blocks` Git tree SHA
+is pinned to `6a811ec148ce4af37981f1055e8b678f7d11905e`
+(3,818 files, 1,227 PNGs, ~4.96 MiB original subtree). Hash every
+source object before conversion and reject missing/added/replaced files,
+links, unsupported paths and size overflow. Apply Pillow BOX downsampling
+to only single-frame non-interlaced static **16×16 PNGs**, preserving
+alpha and relative texture paths in a standalone preview `.mcpack`.
+Leave 16×N animation strips, JSON metadata, TGA PBR textures, GUI,
+entities, particles and the installed Minecraft game unchanged.
+Do not vendor Mojang or third-party image content into GitHub.
+
+**Evidence:** exactly five synthetic local Python/Pillow unit tests
+were executed successfully in the isolated ChatGPT environment, including
+independent Git `write-tree` comparison, palette/RGBA 8×8 processing,
+animated-strip skipping, deterministic ZIP/manifest and stale/symlink
+refusal. Exact committed builder and tests use the same source bytes
+as the executed fixtures (Git blob hashes pinned on commit).
+**Full official source conversion and actual .mcpack installation were
+NOT_EXECUTED**: the complete 3,818-file upstream source tree was verified
+by GitHub metadata, not materialized into a build environment.
+
+**Proof limit:** each original 16×16 tile contains 256 texels versus
+64 texels in its 8×8 replacement, a theoretical 75% per-tile
+source-texel reduction, **not 75% client RAM reduction**. Even a
+theoretical 1,200 eligible static tiles would save just **~0.88 MiB**
+of isolated RGBA8 pixel payload per client, before block atlasing,
+mipmaps, PBR, caching, decoding and residency. Minecraft Education
+26.32 custom packs remain officially unsupported; pack activation
+and isolation to only three clients are NOT_VERIFIED. A world-scoped
+host resource pack may propagate to other players; never edit the
+host world or original world settings, and do not enable globally
+as part of a launcher operation.
+
+**Next:** supply or securely retrieve the complete pinned Mojang
+source during an explicit offline build before publishing any private
+preview pack, then independently verify resource-pack import on a
+disposable copied Minecraft Education world if acceptance is authorized.
+Do not add monitors, native hooks, background pack installers, new IPC,
+asset downloads at ordinary game launch, CI or user-PC dependencies.
+
 ## Active direction — offline texture/particle .mcpack optimization (29 October 2026)
 
 **Scope:** asset/build-time changes only. Reuse the existing
@@ -46,11 +101,13 @@ monitor, repeated benchmark loop or automatic MC01–MC05 profile changes.
   dimensions. Promote a change only if it demonstrably lowers decoded texels,
   safely consolidates entity texture handles with all UV/geometry references
   updated, or removes truly unused content from an owned source pack.
-  Minecraft already atlases ordinary block textures. Recompressing PNG/ZIP,
-  blindly duplicating or replacing vanilla assets, or downscaling default
-  16-pixel art cannot be called quality-preserving RAM optimization.
-  Any lower resolution, altered mipmapping, atlas or animation timing needs
-  explicit fidelity/compatibility review and is not automatically accepted.
+  Minecraft already atlases ordinary block textures. Recompressing PNG/ZIP
+  or blindly replacing vanilla assets does not establish resident RAM savings.
+  **Exception newly approved for experimentation:** downscale validated
+  *static* vanilla 16×16 block albedo to 8×8 on selected idle clients only.
+  This deliberately loses pixel detail and is not quality-preserving. Other
+  texture sizes, animated strips, UI, entity, PBR, mipmapping or UV changes
+  still require their own review; no automatic quality switching.
 - **Edition gate:** Bedrock creator documentation covers pack mechanisms, but
   Minecraft Education's official support continued to identify custom
   texture/resource packs as **unsupported** in 2026. A custom pack is thus
@@ -494,14 +551,16 @@ No speculative renderer patch, working-set trim or experimental hook
 promotion is justified. The reviewer improvement concerns *measurement
 honesty*, not reclaimed game RAM.
 
-**Primary next source action:** keep the current offline
-particle preview unchanged. The actual prior `Memory Reduce [Ram].mcpack`
-archive was inspected and assigned `NO_SAFE_TEXTURE_TRANSFORM`:
-aggressive block downscaling, 121 disabled root particles,
-69 one-frame animations and unresolved GUI/particle reference collisions
-are not quality-preserving texture savings. No full asset graph,
-Education 26.32 compatibility, or resident-memory proof exists.
-Only revisit texture source modification when one authorized, truly
-reference-safe original texture asset set becomes available.
-Do not add monitors, extra pack checkers, speculative conversions,
-auto-activation, CI, user-PC localtest or game hooks.
+**Primary next source action:** the operator has now explicitly authorized
+selective 16×16→8×8 block-albedo fidelity loss for three predominantly
+idle clients. An **offline, exact-tree-pinned texture preview builder**
+and five successful synthetic unit tests are now present. This does **not**
+reverse the `NO_SAFE_TEXTURE_TRANSFORM` disposition of the separate
+third-party `Memory Reduce [Ram].mcpack`: it remains an unsafe source
+for blind reuse. No official full-source archive is in the ChatGPT
+working container yet, so an actual Mojang-derived `.mcpack`,
+Education 26.32 import, per-client Global Resources behavior,
+texture atlas memory and real RAM savings remain NOT_EXECUTED/UNKNOWN.
+Keep both controlled clients normal by default and do not automatically
+assign or activate packs for any profile. Do not add monitors, CI,
+background activity, native hooks or user-PC tasks.
