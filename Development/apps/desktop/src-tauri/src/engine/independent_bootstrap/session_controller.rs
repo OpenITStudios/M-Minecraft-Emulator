@@ -579,6 +579,9 @@ fn scan(path: &Path, result: &mut ProfileStorage, budget: InspectionBudget, dept
             result.files += 1;
         }
     }
+    // The last file observation may cross the budget without another loop
+    // iteration. Such a five-profile size estimate remains incomplete.
+    if budget.exhausted() { result.partial = true; }
 }
 
 fn normal_close_mask(slot:Option<u32>)->io::Result<[bool;5]> {

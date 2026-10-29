@@ -111,9 +111,15 @@ directory, counting declared resource-pack references and worlds with
 declarations. The world database, level.dat, accounts, and assets are never
 opened. Directories and metadata are checked against reparse points; each
 source has an entry/time/size limit, and an incomplete result is UNKNOWN
-rather than a false zero. A failed world-declaration census does not erase
-a valid manifest-folder count; older IPC responses without the optional
-world metadata remain valid.
+rather than a false zero. One cooperative two-second deadline is shared
+across all five profiles' storage scans. When it is exhausted, resource-pack
+inspection skips additional directory opens and returns partial/UNKNOWN,
+not an authoritative zero. Final directory operations and missing-root probes
+also recheck the deadline before claiming completion. The profile-size scan
+marks an exhausted final traversal partial as well; OS calls are not preempted,
+so this is not a hard time bound or measured memory/latency optimization.
+A failed world-declaration census does not erase a valid manifest-folder count;
+older IPC responses without the optional world metadata remain valid.
 
 Neither observation identifies the currently open world, validates that a
 referenced pack exists, accounts for global pack activation, proves that

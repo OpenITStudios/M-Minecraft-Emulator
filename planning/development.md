@@ -148,6 +148,27 @@ existing on-disk/registry compatibility names are NOT renamed.
   No Windows, Minecraft, installer, FPS or RAM claim. The Settings page's
   DataLocation read remains active because the UI displays/opens that path.
 
+## Latest five-profile resource-metadata deadline correction (29 October 2026)
+
+- Repaired the original read-only `resource_pack_inventory.rs` owner's
+  deadline semantics. Previously a shared two-second budget was checked
+  only while enumerating entries; when another profile used the budget,
+  later roots and missing/empty inventories could still be opened or
+  reported as complete zero. The owner now refuses before extra opens,
+  after ancestor probes, at each leaf scanner's completion and after
+  a missing-world directory probe. The response remains `partial=true`
+  with an issue, not false absence or proven reclaimable memory.
+- The existing `session_controller.rs` profile-size scanner marks a
+  traversal incomplete when its final filesystem operation consumes the
+  budget, even if no next loop iteration exists. Original account/world,
+  gameplay, profile/registry, cached-data delete and session mutation
+  admissions, five-profile budget, and wire contracts stay unchanged.
+- One focused Rust fixture for missing and populated roots verifies
+  fail-closed zero-budget responses and the admitted complete path.
+  It was AUTHORED, NOT_EXECUTED; GitHub source checks alone do not
+  establish a Windows speed, RAM, FPS or game-runtime improvement.
+  CI remains disabled; the user's computer was not accessed.
+
 ## Active owners
 
 - Mounted Tauri 2/Svelte UI: `Development/apps/desktop/src/LazyTesterApp.svelte`

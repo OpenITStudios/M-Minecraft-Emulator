@@ -35,6 +35,11 @@ fn count_manifested(base: &Path, budget: InspectionBudget) -> io::Result<u32> {
     let mut manifested = 0;
     let mut visited = 0;
     for name in ["resource_packs", "development_resource_packs"] {
+        // Five profiles share this deadline: do not open another root after
+        // another storage scan has already consumed the remaining budget.
+        if budget.exhausted() {
+            return Err(io::Error::other("Resource pack inventory exceeded its time limit"));
+        }
         let root = base.join(name);
         match open_directory(&root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY) {
             Ok(_directory) => {}
@@ -63,6 +68,11 @@ fn count_manifested(base: &Path, budget: InspectionBudget) -> io::Result<u32> {
                 Err(error) => return Err(error),
             }
         }
+    }
+    // A final filesystem call can cross the deadline after the last entry.
+    // Refuse a misleading complete count even if the directory is empty.
+    if budget.exhausted() {
+        return Err(io::Error::other("Resource pack inventory exceeded its time limit"));
     }
     Ok(manifested)
 }
@@ -110,13 +120,22 @@ fn read_world_declarations(path: &Path) -> io::Result<Option<u32>> {
 }
 
 fn scan_world_declarations(base: &Path, budget: InspectionBudget) -> io::Result<WorldPackDeclarations> {
+    if budget.exhausted() {
+        return Err(io::Error::other("World resource-pack inventory exceeded its time limit"));
+    }
     let root = base.join("minecraftWorlds");
     match open_directory(&root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY) {
         Ok(_root) => {}
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(WorldPackDeclarations {
-            worlds_scanned: 0, worlds_with_references: 0, pack_references: 0,
-            partial: false, issue: None,
-        }),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            // Missing root means zero only if this OS probe stayed in budget.
+            if budget.exhausted() {
+                return Err(io::Error::other("World resource-pack inventory exceeded its time limit"));
+            }
+            return Ok(WorldPackDeclarations {
+                worlds_scanned: 0, worlds_with_references: 0, pack_references: 0,
+                partial: false, issue: None,
+            });
+        },
         Err(error) => return Err(error),
     }
     let mut scanned = 0;
@@ -144,6 +163,9 @@ fn scan_world_declarations(base: &Path, budget: InspectionBudget) -> io::Result<
             if count > 0 { with_references += 1; }
         }
     }
+    if budget.exhausted() {
+        return Err(io::Error::other("World resource-pack inventory exceeded its time limit"));
+    }
     Ok(WorldPackDeclarations {
         worlds_scanned: scanned, worlds_with_references: with_references,
         pack_references: references, partial: false, issue: None,
@@ -158,7 +180,18 @@ fn unavailable(error: io::Error) -> WorldPackDeclarations {
     }
 }
 
+fn exhausted_report() -> ResourcePackStorage {
+    let issue = "Resource pack inventory exceeded its shared inspection time budget";
+    ResourcePackStorage {
+        manifested: 0, partial: true, issue: Some(issue.into()),
+        world_declarations: Some(unavailable(io::Error::other(issue))),
+    }
+}
+
 pub(super) fn inspect(private: &File, budget: InspectionBudget) -> ResourcePackStorage {
+    // Do not open resource-pack paths when the shared five-slot budget is
+    // already exhausted. UNKNOWN is not evidence of zero installed packs.
+    if budget.exhausted() { return exhausted_report(); }
     let base = match base_path(private) {
         Ok(base) => base,
         Err(error) => return ResourcePackStorage {
@@ -166,6 +199,9 @@ pub(super) fn inspect(private: &File, budget: InspectionBudget) -> ResourcePackS
             world_declarations: None,
         },
     };
+    // Ancestor probing may itself consume the remaining time. A missing
+    // root after that point cannot be confidently reported as zero.
+    if budget.exhausted() { return exhausted_report(); }
     let Some(base) = base else {
         return ResourcePackStorage {
             manifested: 0, partial: false, issue: None,
@@ -192,6 +228,52 @@ pub(super) fn inspect(private: &File, budget: InspectionBudget) -> ResourcePackS
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn exhausted_shared_budget_skips_resource_disk_work_and_reports_unknown_not_zero() {
+        let parent = super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let private = open_directory(&parent, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap();
+
+        // No amount of missing directory metadata establishes zero once
+        // another slot has exhausted the shared inspection deadline.
+        let empty = inspect(&private, InspectionBudget::new(Duration::ZERO));
+        assert_eq!(empty.manifested, 0);
+        assert!(empty.partial);
+        let world = empty.world_declarations.unwrap();
+        assert_eq!(world.pack_references, 0);
+        assert!(world.partial && world.issue.is_some());
+        assert!(!parent.join("Roaming").exists());
+
+        let base = parent.join("Roaming").join("Minecraft Education Edition")
+            .join("games").join("com.mojang");
+        let pack = base.join("resource_packs/installed");
+        fs::create_dir_all(&pack).unwrap();
+        fs::write(pack.join("manifest.json"), b"{}").unwrap();
+        let saved_world = base.join("minecraftWorlds/one");
+        fs::create_dir_all(&saved_world).unwrap();
+        fs::write(saved_world.join("world_resource_packs.json"),
+            br#"[{"pack_id":"11111111-2222-3333-4444-555555555555","version":[1,2,3]}]"#).unwrap();
+
+        // A valid populated folder must not be read under an expired
+        // deadline, nor advertised as an authoritative zero.
+        let expired = InspectionBudget::new(Duration::ZERO);
+        assert!(count_manifested(&base, expired).is_err());
+        assert!(scan_world_declarations(&base, expired).is_err());
+        let blocked = inspect(&private, expired);
+        assert!(blocked.partial && blocked.issue.is_some());
+        assert_eq!(blocked.manifested, 0);
+        let world = blocked.world_declarations.unwrap();
+        assert!(world.partial && world.issue.is_some());
+        assert_eq!(world.pack_references, 0);
+
+        let completed = inspect(&private, InspectionBudget::new(Duration::from_secs(2)));
+        assert!(!completed.partial);
+        assert_eq!(completed.manifested, 1);
+        assert!(!completed.world_declarations.as_ref().unwrap().partial);
+        assert_eq!(completed.world_declarations.unwrap().pack_references, 1);
+        drop(private);
+        fs::remove_dir_all(parent).unwrap();
+    }
 
     #[test]
     fn report_declarations_without_reading_world_database_or_modifying_any_assets() {
