@@ -7,9 +7,16 @@ authority: WORKING
 lifecycle: ACTIVE
 ---
 
-# Minecraft Education native efficiency — implementation playbook for Codex
+# Minecraft Education native efficiency — inactive technical reference
 
-**Status (2026-10-25):** REVIEW / DESIGN ONLY. Concrete optimization approaches, not instructions to deploy or change running Minecraft. This playbook is a supporting engineering reference; `planning/development.md` alone determines the current active goal, blocker, and next action. Inspect a fresh `Local` HEAD and owner before implementing anything.
+**Status (2026-10-29): DORMANT / REFERENCE ONLY.** The temporary
+RAM/resource-efficiency source stage is closed and no item in this playbook
+is an active development request. Entries, historical priorities and
+"current" claims below reflect earlier review dates only. The one
+authoritative decision and future evidence gates are in
+[planning/development.md](../../planning/development.md). Do not start
+native optimizer work, test runs, local-PC access, CI, or a second task queue
+without a new explicit user request.
 
 **Reviewed source baseline:** `Local` at `99fee8e4ebe859958cf0517f7dfb65a89a4db6d6`. Later commits override source descriptions here. Original live two-client measurements and their limits are in `planning/development.md` and [the research report](native-memory-efficiency-research.md); neither proves any proposed optimization.
 
@@ -279,9 +286,11 @@ Concrete interventions:
 
 ## 16. Minimal development/check procedure for each selected optimization
 
-This document **is not a request to run PC tests or a second project plan**. Once the operator/Codex chooses an approved candidate, use the repository's original procedure:
+This document **is not a request to run PC tests or a second project plan**.
+Only after the operator explicitly reopens one candidate, use the repository's
+original procedure:
 
-1. Pin current `Local` HEAD, read `AGENTS.md` + `GITHUB_RULES.md` + `planning/development.md` + `docs/system/implementation-map.md`. Keep **A/B/C current goal** intact; do not automatically promote this list into multiple active tasks.
+1. Pin current `Local` HEAD, read `AGENTS.md` + `GITHUB_RULES.md` + `planning/development.md` + `docs/system/implementation-map.md`. Respect the **latest explicit operator goal**; the earlier A/B/C proposal below is historical, not an active task queue.
 2. Choose **ONE** mechanism ID and find the first wrong owner/actual wasted computation. Write down source entry, existing consumers and exact invariant. Check whether current source already solved it.
 3. Implement smallest coherent change within that owner. Avoid parallel abstractions. For a candidate requiring a missing game API, record an explicit NO-GO with the missing prerequisite and stop—do not fabricate source integration.
 4. Verify *functionality* narrowly: native MSVC Release `/W4 /WX` and existing CMake controls for C++; focused Rust source/unit checks for manager changes; only the smallest existing tests affected. Existing `fps-hud-control` and `frame-pacing-control` cover graphics control semantics; a hidden WARP control is not Minecraft acceptance.
@@ -297,12 +306,12 @@ This document **is not a request to run PC tests or a second project plan**. Onc
 - Intel PresentMon and Microsoft VMMap/WPR/WPA: optional one-off diagnostics for a specific supported regression or unknown allocation owner; NOT a justification to build another tracking product.
 - No GitHub Actions CI; not even a manual workflow. Do not operate a remote PC or game merely because this playbook was committed.
 
-## 17. Codex handoff contract (use after operator explicitly chooses a mechanism)
+## 17. Dormant handoff example (only after explicit operator approval)
 
 ~~~text
 Repository: OpenITStudios/M-Minecraft-Emulator
 Branch: Local only (pin fresh SHA; never main)
-Goal: A/B/C as defined NOW in planning/development.md
+Goal: one newly operator-approved RAM hypothesis, if and only if reopened
 Reference: docs/system/native-efficiency-implementation-playbook.md
 Task: choose a single N01/N02/N03/N04/R01/R02/M02 mechanism only if its exact
       current source still contains an independently justified redundant operation.
@@ -314,7 +323,7 @@ Report: exact source diff + mechanism of fewer calls/copies/wakeups/allocations,
         relevant focused checks genuinely executed, unresolved runtime effects.
 Do not claim B (internal game RAM optimization) without a real Education mesh/
 resource ownership, rebuild, and invalidation seam.
-Do not alter planning's single active Next unless operator authorizes that work.
+Do not create or alter planning's single active scope without explicit operator authorization.
 ~~~
 
 ## 18. Primary sources and source-to-technique map

@@ -9,7 +9,23 @@ lifecycle: ACTIVE
 
 # Native client memory and rendering efficiency research
 
-Status: RESEARCH WITH BOUNDED IMPLEMENTATION AND RUNTIME OBSERVATIONS. Initial research was pinned to `5eaa49ed41c5c455f1b783d3a7c659bbba40e2d5`; subsequent diagnostics, HUD work and the approved Education graphics intervention are identified below. A substantive Minecraft-internal optimization seam and repeatable whole-game gains remain UNKNOWN. Current operator intent is owned by planning/development.md.
+**Status as of 29 October 2026: HISTORICAL RESEARCH / REFERENCE ONLY.**
+The operator closed the temporary RAM/resource-efficiency source scope; no
+native RAM optimization or measurement run is currently scheduled. The sole
+current handoff and decision table are in
+[planning/development.md](../../planning/development.md). Headings such as
+"Active", "Current" or "Next" **below** describe their historical date, not
+current authorization. The measurements are from earlier revisions/workloads,
+not a fresh Minecraft Education 26.32 five-client benchmark.
+
+This document preserves source-pinned experiments and negative findings.
+The historical menu Private WS, stationary-world median, UploadBufferHeap
+comparison and GPU allocation correlations are **not additive savings**.
+Release of game-owned memory, D3D12 fences, synchronized residency,
+Education native renderer ownership and persistent RAM/FPS gains remain
+unproven. All experimental native canaries stay default OFF; no monitoring,
+automatic pack activation, Windows/PC tests, CI or renderer modifications
+are implied by reading this report.
 
 ## Active target selected — Minecraft Education 26.32 (Windows Desktop)
 

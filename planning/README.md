@@ -1,13 +1,22 @@
 # Planning — Current vs Historical
 
-- [`development.md`](development.md) — **one active** P0 goal, evidence ceiling, blocker and next action; no append-only history.
-- `operations.md` and `projects.md` — narrow future scopes, not competing
-  implementation authorities.
-- [`history/`](history/development-through-2026-10-19.md) —
-  **non-authoritative archives** of prior CI, v1.18.5 source research and
-  imported source checkpoints. Never follow an archived `Next` or
-  an old Windows build command as the current plan. The superseded October diary remains available [in Git](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/d239a299e04c23d2324b52325714600c00c34498/planning/development.md).
+- [`development.md`](development.md) is the **single current source of
+  operator intent, evidence boundary and stop/reopen decision**. As of
+  29 October 2026, the temporary LazyTester RAM/resource-efficiency source
+  stage is **DONE**, with **no active next action** for that stage; runtime
+  RAM/FPS/VRAM and five-client acceptance are deferred, not marked PASS.
+- [Historical RAM research](../docs/system/native-memory-efficiency-research.md)
+  and the [inactive implementation reference](../docs/system/native-efficiency-implementation-playbook.md)
+  provide context only. Their older "Active", "Current" and "Next" language
+  is not current authorization.
+- `operations.md` and `projects.md` describe distinct scopes; neither
+  overrides the active branch's source or the current development decision.
+- [`history/`](history/development-through-2026-10-19.md) contains non-authoritative
+  archived context. The full prior 29 October handoff is available
+  [in Git history](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/5b59c5d693c151428cd15424c3daee30fb63e631/planning/development.md).
+  Do not follow historical plans, launch commands or archived `Next` fields.
 
-One current work owner, one actual implementation owner, one outcome with
-exact-SHA evidence. The latest GitHub `Local` source and any actually executed manual evidence
-take precedence over all historical notes.
+Only `Local` is development-authoritative; `main` remains release-reserved.
+Current source, root `AGENTS.md` and `GITHUB_RULES.md` win over stale prose.
+No CI, local-PC test or automatic monitoring was authorized by this
+documentation cleanup.

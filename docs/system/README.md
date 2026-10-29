@@ -20,7 +20,9 @@ Choose one document based on the requested concern:
 | Locate Rust/Tauri/Guest Agent owner from an issue | [Implementation Map](implementation-map.md) |
 | VM states, provenance, parity, readiness and resource policies | [Runtime Core](runtime-core.md) |
 | Naming, source path and installed compatibility contracts | [Canonical Naming](canonical-naming.md) |
-| Concrete native efficiency algorithms, Windows APIs, Sodium/FerriteCore feasibility and Codex review | [Native Efficiency Implementation Playbook](native-efficiency-implementation-playbook.md) — design/reference, not a second active task list |
+| Current RAM/resource-efficiency decision, closed source scope, deferred evidence and reopen gates | [Current Development Handoff](../../planning/development.md) — sole current decision owner |
+| Historical RAM measurements, graphics-heap experiments and attribution limits | [Native Memory Efficiency Research](native-memory-efficiency-research.md) — evidence only, not an active task list |
+| Optional historical native-efficiency mechanisms and Windows API feasibility | [Native Efficiency Technical Reference](native-efficiency-implementation-playbook.md) — dormant, not an active task list |
 | Smallest correct change and evidence discipline | [Development Discipline](development-discipline.md) |
 | Source verification, optional local commands, CI and release boundaries | [Development Operations](development-operations.md) |
 | Installer downloads, build outputs, local-test evidence and Git hygiene | [Artifact and Local-Test Storage](artifact-storage.md) |
