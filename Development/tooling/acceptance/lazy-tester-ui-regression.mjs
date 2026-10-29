@@ -33,6 +33,7 @@ try {
     window.__closeOutcome = fixture.has('close-recovery') ? 'unconfirmed' :
       fixture.has('close-ipc-error') ? 'transport-error' : null;
     window.__healthFixture = fixture.has('health-state');
+    window.__dataReviewFixture = fixture.has('storage-review');
     const brokenSetup = fixture.has('broken');
     window.__bindingFailure = brokenSetup ? 'Saved profiles could not be verified.' : '';
     window.__locationFailure = brokenSetup ? 'The saved data folder is unavailable.' : '';
@@ -140,7 +141,15 @@ try {
         }
         if (operation === 'InspectStorage') return {...snapshot(), storage: profiles.map(profile => ({
           slot: profile.slot, bytes: 1048576, files: 1, partial: true, disk: null,
-          cache: {bytes: 0, files: 0, partial: false, canClear: false, issue: null},
+          cache: {
+            bytes: window.__dataReviewFixture && profile.slot === 1 ? 512 : 0,
+            files: window.__dataReviewFixture && profile.slot === 1 ? 1 : 0,
+            partial: false, canClear: window.__dataReviewFixture && profile.slot === 1,
+            issue: null,
+          },
+          ...(window.__dataReviewFixture && profile.slot === 1 ? {
+            fullClear: {canClear:true,pending:false,confirmationToken:'a'.repeat(64),issue:null},
+          } : {}),
         }))};
         if (operation === 'Inspect') { await new Promise(resolve=>setTimeout(resolve,window.__inspectDelay||0));return snapshot(); }
         throw new Error('Unexpected operation: ' + operation);
@@ -304,6 +313,38 @@ try {
   await page.evaluate(()=>{window.__offline=true;});await page.getByRole('button',{name:'Refresh',exact:true}).click();await page.getByRole('alert').waitFor();
   await page.evaluate(()=>{window.__offline=false;});await nav('Play').click();await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('.lt-connection').textContent==='Profiles verified');
+  // Exercise storage review/cancel without requesting destructive native IPC.
+  await page.goto('http://lazy-tester.test/?storage-review=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  await nav('Settings').click();
+  await section('Data Storage').click();
+  await page.getByRole('button',{name:'Clear cache…',exact:true}).click();
+  const cacheReview=page.getByRole('region',{name:'Confirm cache cleanup'});
+  await cacheReview.waitFor();
+  await cacheReview.getByRole('button',{name:'Cancel'}).click();
+  await cacheReview.waitFor({state:'detached'});
+  await page.locator('.lt-advanced summary').click();
+  await section('General').click();
+  await section('Data Storage').click();
+  assert.equal(await page.locator('.lt-advanced').getAttribute('open'),'',
+    'Advanced details still bind to the parent on page navigation');
+  await page.getByRole('button',{name:'Clear all data…',exact:true}).click();
+  const fullReview=page.getByRole('form',{name:'Confirm full launcher data deletion'});
+  await fullReview.waitFor();
+  const submit=fullReview.getByRole('button',{name:'Permanently clear data'});
+  assert.equal(await submit.isDisabled(),true);
+  await fullReview.getByLabel('Type Minecraft - 1 to confirm').fill('Minecraft - 1');
+  assert.equal(await submit.isDisabled(),true,'A typed name alone cannot delete data');
+  await fullReview.getByRole('checkbox').check();
+  assert.equal(await submit.isEnabled(),true);
+  await fullReview.getByRole('button',{name:'Cancel'}).click();
+  await fullReview.waitFor({state:'detached'});
+  assert.equal(await page.evaluate(()=>window.__calls.some(call=>
+    ['ClearProfileData','ClearProfileCache','ResetGameSettings','RestoreGameSettings']
+      .includes(call.args?.request?.operation))),false,
+    'Canceled reviews must not mutate cache, settings, or account/world data');
+
   // A PreviewReport started before an OS close review must never be
   // applied after the native review begins, even if the worker replies late.
   await page.goto('http://lazy-tester.test/?preview-late=1');

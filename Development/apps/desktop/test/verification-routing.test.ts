@@ -74,6 +74,30 @@ describe("Emulator source verification routing", () => {
     expect(child).not.toMatch(/\binvokeRuntime\s*\(|\blazyTester\s*\.\w+\(|\bworkspaceSurface\s*\.\w+\(|\bsetInterval\s*\(/);
   });
 
+  it("isolates Data Storage markup while preserving guarded native mutations", () => {
+    const ui=readFileSync(new URL("../src/LazyTesterApp.svelte",import.meta.url),"utf8");
+    const view=readFileSync(new URL("../src/DataStorage.svelte",import.meta.url),"utf8");
+    expect(ui).toContain("<DataStorage {profiles} {selectedSlot} {selectedProfile} {selectedStorage}");
+    expect(ui).toContain("bind:advanced bind:fullName bind:fullAck");
+    expect(ui).toContain("onClearCache={clearCache}");
+    expect(ui).toContain("onRecoverSettings={recoverSettings}");
+    expect(ui).toContain("onReviewFullClear={reviewFullClear} onClearAllData={clearAllData}");
+    for(const owner of ["async function clearCache(","async function recoverSettings()",
+      "async function clearAllData()","function reviewFullClear()"])expect(ui).toContain(owner);
+    expect(ui).not.toContain('class="lt-danger-zone"');
+    expect(ui).not.toContain('id="full-clear-name"');
+    for(const name of ["Confirm cache cleanup","Confirm game settings change",
+      "Confirm full launcher data deletion"])expect(view).toContain('aria-label="'+name+'"');
+    expect(view).toContain("bind:value={fullName}");
+    expect(view).toContain("bind:checked={fullAck}");
+    expect(view).toContain("bind:open={advanced}");
+    expect(view).toContain("on:submit|preventDefault={onClearAllData}");
+    expect(view).toContain("on:click={onCancelFullReview}");
+    expect(view).toContain("on:click={onCancelCacheReview}");
+    expect(view).toContain("on:click={onCancelSettingsReview}");
+    expect(view).not.toMatch(/\binvokeRuntime\s*\(|\blazyTester\s*\.\w+\(|\bworkspaceSurface\s*\.\w+\(|\bsetInterval\s*\(/);
+  });
+
   it("has exactly one repository-to-desktop-to-runtime verification route", () => {
     expect(root.scripts["verify:source"].split(" && ")).toEqual([
       "npm run verify:repository -- --g0",

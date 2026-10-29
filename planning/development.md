@@ -1,5 +1,14 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — Data Storage presentation extraction (29 October 2026)
+
+**State:** DONE in source; Svelte/Vitest/Playwright and Windows/Minecraft acceptance NOT_EXECUTED.
+**Decision:** Extract the original Data Storage view into DataStorage.svelte. Metadata, cache review, game settings recovery review, full-clear confirmation and location controls become passive markup. All review records, typed-name/checkbox confirmation values, selection and native mutation admissions stay in LazyTesterApp.svelte, with advanced/fullName/fullAck bound to that original state. Preserve action guards, CSS classes, copy and original IPC. No new store, monitor, migration or automatic deletion.
+**Proof:** REMOTE_GITHUB pinned source and consumer inspection; exact markup/callback/IPC parity guards. Focused source test and browser storage review/cancel fixture AUTHORED, NOT_EXECUTED.
+**Next:** Verify compiler and browser with genuinely compatible pinned dependencies before claiming interactive acceptance; then continue source work only where clearly justified.
+
+---
+
 ## Current product work — General Settings presentation extraction (29 October 2026)
 
 **State:** DONE in source; pinned Svelte/Vitest/Playwright and live Windows/Minecraft NOT_EXECUTED.
