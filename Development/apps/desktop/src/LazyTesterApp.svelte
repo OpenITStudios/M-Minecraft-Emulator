@@ -5,10 +5,9 @@
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazy-tester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
-  import SessionHealthNotice from './SessionHealthNotice.svelte';
+  import LauncherRail from './LauncherRail.svelte';
   import {projectSessionHealth, type SessionHealthAction} from './app/presentation/sessionHealth.js';
-  import {guidedRecoveryAllowed} from './app/presentation/guidedRecovery.js';
-  import {userMessage, sessionConnectionLabel, updateRecoverySlots, recoveryLabels} from './app/presentation/sessionFeedback.js';
+    import {userMessage, sessionConnectionLabel, updateRecoverySlots, recoveryLabels} from './app/presentation/sessionFeedback.js';
   import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, periodicInspectionDue, type CloseReview} from './app/inspectionScheduling.js';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
@@ -774,34 +773,12 @@
         </div>
         {#if nativeBackend === 'WindowsNative'}
         <div class="lt-games-heading"><span>Your games</span><span>{runningCount} of 5 running{#if attentionCount > 0} · {attentionCount} need attention{/if}</span></div>
-        <div class="lt-filmstrip" aria-label="Minecraft launchers">
-          {#each profiles as profile (profile.slot)}
-            {@const healthItem = healthIssues.find(item => item.slot === profile.slot)}
-            <div class="lt-launcher-entry">
-              <button class="lt-card" class:selected={active===profile.slot&&!detached} aria-pressed={active===profile.slot&&!detached} aria-label={(profile.state==='RUNNING'?'Open ':'Launch ')+'Minecraft - '+profile.slot} disabled={busy||!available||!binding?.configured||
-                  (profile.state!=='RUNNING'&&!canRequestLaunch(profile))}
-                on:click={()=>profile.state==='RUNNING'?select(profile.slot):canRequestLaunch(profile)&&launch(profile.slot)}>
-                <strong>Minecraft - {profile.slot}{active===profile.slot&&!detached?' ✓':''}</strong>
-                <span class="lt-card-picture" use:image={profile.slot} aria-hidden="true">{profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':profile.state==='NOT_RESPONDING'?'Unavailable':profile.state==='ATTENTION'?'Needs attention':'▷ Launch'}</span>
-                <small>{active===profile.slot&&!detached?'Playing here':profile.state==='RUNNING'&&separateSlots.has(profile.slot)?'Separate window':profile.state==='RUNNING'?'Running in background':labels[profile.state]}</small>
-
-              </button>
-              {#if healthItem}
-                <SessionHealthNotice item={healthItem} onAction={requestGuidedRecovery}
-                  disabled={!guidedRecoveryAllowed(healthItem, profile, profile.slot,
-                    healthItem.action, {
-                      blocked: guidedRecoveryBlocked,
-                      unresolvedRecovery: uncertainWindowSlots,
-                      separateWindows: separateSlots,
-                      primarySlot: primary,
-                    })}/>
-              {/if}
-              {#if ['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)}
-                <button class="lt-secondary lt-close-launcher" aria-label={'Close Minecraft - '+profile.slot+' normally'} disabled={busy||closeInProgress||nativeExitReview||!available||!binding?.configured} on:click={()=>requestCloseOne(profile.slot)}>Close game</button>
-              {/if}
-            </div>
-          {/each}
-        </div>
+        <LauncherRail {profiles} {labels} {healthIssues} {active} {primary} {detached}
+          {separateSlots} unresolvedRecovery={uncertainWindowSlots}
+          {available} bindingConfigured={!!binding?.configured} {busy}
+          {closeInProgress} {nativeExitReview} {guidedRecoveryBlocked}
+          observePreview={image} onSelect={select} onLaunch={launch}
+          onRequestClose={requestCloseOne} onGuidedRecovery={requestGuidedRecovery}/>
         {#if closeOneSlot!==null}
           <section class="lt-single-close-confirm" aria-label="Confirm one Minecraft close">
             <h3>Close Minecraft - {closeOneSlot}?</h3>

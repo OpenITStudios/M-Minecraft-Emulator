@@ -11,6 +11,7 @@ Sandboxie/VMware provider route is retired.
 | Area | Owner |
 | --- | --- |
 | Play/Settings/Data Storage and UI action scheduling | `src/LazyTesterApp.svelte` |
+| Fixed five-launcher rail, visual actions only | `src/LauncherRail.svelte` |
 | Health, recovery guidance and authored user messages | `src/SessionHealthNotice.svelte`, `src/app/presentation/` |
 | Validated desktop protocol | `src/app/bridge/lazyTester.ts`, `workspaceSurface.ts` |
 | Only raw Tauri invoke boundary | `src/app/bridge/invokeRuntime.ts` |

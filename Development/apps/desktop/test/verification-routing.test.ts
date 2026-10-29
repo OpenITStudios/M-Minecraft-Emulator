@@ -28,6 +28,21 @@ describe("Emulator source verification routing", () => {
     expect(ui).toContain("binding=null;if(!bindingIssue)bindingIssue=locationIssue");
   });
 
+  it("delegates five-launcher rail presentation without moving game authority", () => {
+    const ui = readFileSync(new URL("../src/LazyTesterApp.svelte", import.meta.url), "utf8");
+    const rail = readFileSync(new URL("../src/LauncherRail.svelte", import.meta.url), "utf8");
+    expect(ui).toContain("<LauncherRail {profiles} {labels} {healthIssues}");
+    expect(ui).toContain("observePreview={image} onSelect={select} onLaunch={launch}");
+    expect(ui).toContain("onRequestClose={requestCloseOne} onGuidedRecovery={requestGuidedRecovery}");
+    expect(ui).not.toContain('<div class="lt-filmstrip"');
+    expect(rail).toContain('<div class="lt-filmstrip" aria-label="Minecraft launchers">');
+    expect(rail).toContain("use:observePreview={profile.slot}");
+    expect(rail).toContain("canRequestLaunch(profile)&&onLaunch(profile.slot)");
+    expect(rail).toContain("guidedRecoveryAllowed(healthItem, profile, profile.slot,");
+    expect(rail).toContain("onRequestClose(profile.slot)");
+    expect(rail).not.toMatch(/\binvokeRuntime\s*\(|\blazyTester\s*\.|\bworkspaceSurface\s*\.|\bsetInterval\s*\(/);
+  });
+
   it("has exactly one repository-to-desktop-to-runtime verification route", () => {
     expect(root.scripts["verify:source"].split(" && ")).toEqual([
       "npm run verify:repository -- --g0",

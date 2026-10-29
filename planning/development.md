@@ -1,5 +1,14 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — launcher rail presentation extraction (29 October 2026)
+
+**State:** DONE in source; Svelte compile/browser/Windows gameplay NOT_EXECUTED.
+**Decision:** Extract the five-card rail to `LauncherRail.svelte` as a presentation-only child. Maintain exactly one state, manual lifecycle owner, native preview ResizeObserver, data admission and recovery click gate in `LazyTesterApp.svelte` and existing bridges. Keep HTML classes, accessible names and global CSS selectors unchanged, with callback delegation and no new IPC/timers. Do not alter game process/window behavior.
+**Proof:** REMOTE_GITHUB parent UI, CSS and consumer audit plus bounded static preservation checks; focused source ownership test authored, NOT_EXECUTED.
+**Next:** Review source compiler evidence and plan a second small settings/pure scheduling extraction only where it preserves existing reactive order.
+
+---
+
 ## Current product work — canonical versus legacy contract cleanup (29 October 2026)
 
 **State:** DONE in source; integrated Windows/package/Minecraft acceptance NOT_EXECUTED.
