@@ -30,7 +30,9 @@
 <div class="lt-filmstrip" aria-label="Minecraft launchers">
   {#each profiles as profile (profile.slot)}
     {@const healthItem = healthIssues.find(item => item.slot === profile.slot)}
-    {@const guidance = launcherCardGuidance(profile, available && bindingConfigured)}
+    {@const guidance = launcherCardGuidance(
+      profile, available && bindingConfigured && !unresolvedRecovery.has(profile.slot)
+    )}
     <div class="lt-launcher-entry" title={guidance??undefined}>
       <button class="lt-card" class:selected={active===profile.slot&&!detached}
         aria-pressed={active===profile.slot&&!detached}

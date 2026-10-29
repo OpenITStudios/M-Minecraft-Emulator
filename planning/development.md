@@ -1,3 +1,15 @@
+# Current Development Handoff — LazyTester
+
+## Current product work — launcher recovery guidance consistency (29 October 2026)
+
+**State:** DONE for the source correction; pinned Svelte/Vitest/Playwright and Windows/Minecraft runtime remain NOT_EXECUTED.
+**Decision:** Align the existing passive launcher tooltip and accessibility description with the original higher-priority unconfirmed window-restoration warning. When that slot has unresolved restoration, hide the hint to use Check status because that card's action is intentionally not rendered. Normal starting and genuinely actionable cards retain their previous hints. Reuse existing unresolvedRecovery Set; no new state owner, UI control, IPC, timer, runtime mutation or CI.
+**Proof:** REMOTE_GITHUB pinned source/consumer inspection and isolated exact-source V8 regression cases PASS. Focused synthetic Playwright unconfirmed CloseOne card assertions AUTHORED, NOT_EXECUTED.
+**Unresolved:** Full pinned frontend/Svelte/Vitest/Playwright, Windows DWM/native close and Minecraft Education multi-client acceptance NOT_EXECUTED.
+**Next:** Execute exact-head compiled frontend and synthetic browser regression with compatible pinned dependencies; fix actual failures before feature expansion.
+
+---
+
 ## Current product work — minimal launcher guidance and private window feedback (29 October 2026)
 
 **State:** DONE in source; complete pinned Svelte/Vitest/Playwright and Windows/Minecraft acceptance NOT_EXECUTED.
@@ -7,8 +19,6 @@
 **Next:** Execute pinned frontend compilation and synthetic browser checks in a compatible environment; fix observed failures before another user-facing feature.
 
 ---
-
-# Current Development Handoff — LazyTester
 
 ## Current product work — typed Diagnostic & Error Contract v1 (29 October 2026)
 

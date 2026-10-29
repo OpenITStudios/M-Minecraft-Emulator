@@ -122,7 +122,8 @@ describe("Emulator source verification routing", () => {
     expect(bar).not.toContain("String(reason)");
     expect(bar).not.toContain("error=String(");
     expect(bar).not.toContain("{error}</p>");
-    expect(cards).toContain("launcherCardGuidance(profile, available && bindingConfigured)");
+    expect(cards).toContain("profile, available && bindingConfigured && !unresolvedRecovery.has(profile.slot)");
+    expect(cards).toContain("unresolvedRecovery: ReadonlySet<ProfileSlot>");
     expect(cards).toContain("title={guidance??undefined}");
     expect(cards).toContain("aria-description={guidance??undefined}");
     expect(hints).not.toContain("invokeRuntime(");

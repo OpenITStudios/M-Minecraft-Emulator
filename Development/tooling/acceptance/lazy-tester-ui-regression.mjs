@@ -516,6 +516,28 @@ try {
   assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 3'}).isEnabled(),true,
     'Only a subsequent clean STOPPED observation may enable Launch');
 
+  // An unconfirmed native window restoration owns its Play warning. The
+  // per-card Check status control is intentionally absent, so the card
+  // cannot continue recommending that unavailable action.
+  await page.goto('http://lazy-tester.test/?health-state=1&close-recovery=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  const affectedCard=page.locator('.lt-launcher-entry').nth(1);
+  assert.match(await affectedCard.getAttribute('title')??'',/Check status/);
+  await page.getByRole('button',{name:'Close Minecraft - 2 normally'}).click();
+  await page.getByRole('region',{name:'Confirm one Minecraft close'})
+    .getByRole('button',{name:'Close Minecraft - 2',exact:true}).click();
+  await page.getByRole('status',{name:'Window recovery unconfirmed'}).waitFor();
+  await page.waitForFunction(()=>
+    document.querySelectorAll('[aria-label="Check status for Minecraft - 2"]').length===0);
+  assert.equal(await affectedCard.getAttribute('title'),null,
+    'Unconfirmed restoration must suppress advice for a missing action');
+  assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 2'}).isDisabled(),true,
+    'Recovery guidance must not enable another game launch');
+  assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
+    call.args?.request?.operation==='Launch').length),0,
+    'Explaining an unresolved recovery must never start Minecraft');
+
   // Synthetic CloseOne: a failed native recovery receipt remains unconfirmed
   // even when a later read-only session observation reports STOPPED.
   await page.goto('http://lazy-tester.test/?close-recovery=1');
