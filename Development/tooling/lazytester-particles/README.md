@@ -24,27 +24,24 @@ third-party resource/texture packs are not officially supported; even a
 valid Bedrock pack may fail or affect a world. Always use a disposable
 copied world for separately authorized compatibility verification.
 
-## Texture memory scope (offline source decision)
+## Final temporary scope — source preview only (29 October 2026)
 
-The present builder produces **particle JSON only** and does not claim to
-reduce the game's built-in vanilla texture memory. The next authorized focus
-is quality-preserving optimization of owned texture resources, **only when**
-an actual source asset and its references can prove a reduction in decoded
-pixel count, removable duplicate variants, or safely consolidated entity
-texture handles. Minecraft already atlases regular block textures.
+This builder generates **particle JSON overrides only**: no block/entity
+textures, PBR, item/UI assets or geometry are changed. The previously
+proposed entity-texture expansion is **cancelled**, not a pending next step.
+The separate [block-only Texture Lite v0.1](../lazytester-textures/README.md)
+builder is retained independently. The [single closed development
+handoff](../../../planning/development.md) defines any future reopen gate.
 
-Smaller PNG, ZIP/DEFLATE, or mcpack transfer bytes do **not** by themselves
-reduce the decoded pixel buffer, loaded GPU textures, or private working set.
-A texture resolution change can alter detail, filtering and mipmaps even
-when source pixels look similar, and requires separate quality review.
-Blind asset deletion or renaming may break world/pack references.
-No texture files are currently added or rewritten by this builder.
+Fewer ZIP bytes or modified particle caps do **not** prove lower RAM/VRAM.
+Manual emitter caps may not reduce observed particle emission below the
+original cap. Mojang samples cannot be assumed interchangeable with
+Minecraft Education 26.32. No derived source images/JSON are committed.
 
-**No runtime monitors:** all pack preparation remains an explicit finite,
-offline developer operation. Do not add game startup hooks, periodic
-sampling, background workers, auto-installation, pack activation, or
-launcher/profile file changes as part of this optimization.
-Existing manual source/acceptance tools remain separate.
+**No runtime monitors:** pack preparation remains an explicit finite
+offline developer operation. Do not add game startup hooks, polling,
+background workers, automatic pack installation/activation, or launcher
+profile mutations. Keep all existing source and runtime boundaries intact.
 
 References: [Minecraft Creator resource guidance](https://learn.microsoft.com/en-us/minecraft/creator/documents/practices/improvingperformanceandresourceusage),
 [texture budget accounting](https://learn.microsoft.com/en-us/minecraft/creator/documents/texturebudgets),

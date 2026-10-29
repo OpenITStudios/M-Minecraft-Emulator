@@ -12,8 +12,37 @@ a second live game process/session owner.
 | `dependencies/` | Dependency consistency review and maintenance |
 | `acceptance/windows/bootstrap-ordering/` | **Active native DLL source** used by the five-session game bootstrap |
 | `acceptance/` | Native and historical acceptance collectors; older Sandboxie/VM results are not current gameplay proof |
-| `lazytester-particles/` | Optional, source-pinned LazyTester Particle Tuning .mcpack builder; never auto-installs or modifies Minecraft |
+| [`lazytester-particles/`](lazytester-particles/README.md) | Optional Particle Tuning v0.3 offline .mcpack builder; no automatic installation |
+| [`lazytester-textures/`](lazytester-textures/README.md) | Optional block-only Texture Lite v0.1 offline .mcpack builder; entity/PBR extension retired |
 | `acceptance/windows/education-target.ps1` | **Active** registered Minecraft Education executable resolver, moved from the retired isolation-source tree |
 | `local-test/` | Optional source acceptance bookkeeping, not runtime evidence until executed |
 
 Retired Sandboxie/VMware build and runtime source has left the active tree. The native process and per-profile controller remain the only active Minecraft launch authority. Historical notes remain in Git revisions.
+
+## Resource-efficiency source previews — closed decision, reusable code
+
+These **separate, explicit build tools are retained** for possible future
+operator-approved testing; they are not runtime services and neither is
+installed or activated by LazyTester. The [current closed scope, proof limits,
+and reopen gates](../../planning/development.md) override historical research.
+
+From the repository root, optional **source-only synthetic checks** are:
+
+```sh
+python -m unittest discover -s Development/tooling/lazytester-textures -p 'test_*.py'
+node --test Development/tooling/lazytester-particles/tune.test.mjs
+```
+
+The block checks require Python 3.12+, Pillow 10+ and Git; the particle checks
+use Node.js. Follow each linked builder README for the exact explicit
+`--source`/`--output` or `--official yes` procedure and original Mojang
+sample version pins. Do not commit Mojang-derived output assets, merge the
+separate packs, install packs in the original hosted world, or assume
+individual Education profiles can enable them independently.
+
+For a future request, **first pin the latest GitHub `Local` HEAD, read
+`AGENTS.md`/`GITHUB_RULES.md` and the single planning handoff, then review
+the existing builder owner and relevant tests**. Historical Git commits and
+RAM studies remain references, not authorization to restart optimization.
+Actual Minecraft/Windows compatibility and savings require new separate
+approval and runtime evidence. No CI or monitoring is introduced here.

@@ -75,11 +75,33 @@ Minecraft still owns authentication, worlds, rendering, and Education Host World
 multiplayer. Lazy Tester does not store passwords or copy tokens. The native
 compatibility layer is not a general Windows security sandbox.
 
+## Resource-efficiency previews (source-only; closed)
+
+The temporary RAM/resource-efficiency development stage was closed on
+29 October 2026. [Current decision and future evidence gates](planning/development.md)
+are owned by one handoff; no optimization or measurement task is currently active.
+
+| Retained independent preview | Source owner | Boundaries |
+| --- | --- | --- |
+| **Block Texture Lite v0.1** | [`lazytester-textures/`](Development/tooling/lazytester-textures/README.md) | Static pinned vanilla block albedo 16×16 → 8×8; entities, UI, animations, geometry and PBR unchanged. |
+| **Particle Tuning v0.3** | [`lazytester-particles/`](Development/tooling/lazytester-particles/README.md) | Twenty selected ambient definitions; optional 75/50/25/0 relative distance budget. Manual emitter caps do not guarantee spawn-rate reductions. |
+
+Both are **offline builders**, not launched game features, installers or a
+background texture/FPS switch. No `.mcpack` is bundled or applied to any
+Minecraft account/world. Minecraft Education 26.32 pack compatibility,
+independent per-client activation, and real RAM/VRAM/FPS improvement remain
+**NOT_VERIFIED**. See [tooling navigation and source-only checks](Development/tooling/README.md)
+for a future explicitly requested review; historical native heap candidates
+stay OFF.
+
 ## Product and evidence
 
 Settings includes editable Active/Background FPS limits, Save and Restore
-defaults (144/10). Limits are shared across five profiles and take effect on each
-profile's next launch. New profiles with no saved graphics preference use
+defaults (144/10 on first run). Saved values override these defaults on each
+profile's next launch: for example, 120/10 means a **120 FPS foreground ceiling**
+and **10 FPS background ceiling**, and foreground focus restores 120, not
+a permanent 10 FPS limit. A ceiling is not a guaranteed achieved frame rate.
+New profiles with no saved graphics preference use
 **Preserve Visuals**, leaving Minecraft's own texture quality, lighting,
 MSAA and render distance unchanged; existing explicitly saved Low/High presets
 keep their historical 12-chunk behavior. A change to these preferences requires
