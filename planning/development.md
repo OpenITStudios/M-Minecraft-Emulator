@@ -1,5 +1,16 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — session feedback and per-slot recovery (29 October 2026)
+
+**State:** DONE in source; compiled desktop, Windows and Minecraft runtime acceptance NOT_EXECUTED.
+**Decision:** Keep original five-profile native controller and DWM owners unchanged. Render only authored user-facing messages for native errors; status says "Profiles verified", not "Connected" from an idle Inspect. Track unresolved window restoration separately by slot in UI; only that slot's positive selected-close presentation receipt clears its warning. Refresh/STOPPED must not clear native recovery uncertainty. No new worker, monitor, IPC, account/world change, background retry, or CI.
+**Proof:** REMOTE_GITHUB exact-source consistency and static privacy/recovery invariants reviewed. TypeScript/Vitest and browser regression scenarios authored for public copy, accurate indicator, two recovery slots, explicit per-slot resolution and raw backend error suppression; execution on Node/Windows/browser/Minecraft NOT_EXECUTED.
+**Next:** Source-level Session Health projection should reuse the same typed snapshot and authored user feedback without adding a second session authority. Require real Windows/gameplay evidence for stronger status claims.
+
+---
+
+## Closed RAM/resource-efficiency stage (retained)
+
 **Decision date:** 29 October 2026  
 **Work:** Temporary Minecraft Education RAM/resource efficiency  
 **State:** **DONE — source and documentation scope only; runtime gains NOT_VERIFIED**  

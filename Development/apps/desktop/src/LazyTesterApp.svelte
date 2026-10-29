@@ -5,6 +5,7 @@
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazy-tester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
+  import {userMessage, sessionConnectionLabel, updateRecoverySlots, recoveryLabels} from './app/presentation/sessionFeedback.js';
   import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, periodicInspectionDue, type CloseReview} from './app/inspectionScheduling.js';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
@@ -49,7 +50,7 @@
   let nativeExitReview = false, observationEpoch = 0;
   let closeOneSlot: ProfileSlot | null = null, closingOneSlot: ProfileSlot | null = null;
   // UI warning only; native presentation authority remains in workspace_surface.
-  let uncertainWindowSlot: ProfileSlot | null = null;
+  let uncertainWindowSlots = new Set<ProfileSlot>();
   let previewStatuses: PreviewStatus[] = [];
   // Read-only UI observations. A DWM failure does not own the game or
   // request an IPC/layout retry. Epochs prevent an old in-flight layout
@@ -104,7 +105,7 @@
       active = slot; selectedIdentity = identity(profiles.find(profile => profile.slot === slot));
       detached = false; requested = null; dirty = true;
       separateSlots = new Set([...separateSlots].filter(value=>value!==slot));
-    } catch (error) { issue = String(error); dirty = true; }
+    } catch (error) { issue = userMessage('selection'); dirty = true; }
     finally { busy = false; }
   }
   async function refresh() {
@@ -137,7 +138,7 @@
         }
         else if (profile?.state === 'ATTENTION' || profile?.state === 'STOPPED'
           || (profile?.state === 'NOT_RESPONDING' && profile.issue)) {
-          issue = profile.issue ?? ('Minecraft - ' + requested + ' stopped before its window became available.'); requested = null;
+          issue = userMessage('launch'); requested = null;
         }
       } else if (active === null && !detached && page === 'workspace' && queued === null) {
         queued = firstEmbeddedProfile(profiles,separateSlots);
@@ -149,7 +150,7 @@
       if (!disposed && observationStillCurrent(issued, observationEpoch, reviewState())) {
         if (available) dirty = true;
         available = false;previewStatuses=[];pendingPreviewInvalidations.clear();
-        connectionIssue = String(error);
+        connectionIssue = userMessage('connection');
       }
     } finally { refreshing = false; }
   }
@@ -165,7 +166,7 @@
         await tick();
         await lazyTester.present(active, viewport.getBoundingClientRect());
       }
-    } catch (error) { issue = String(error); requested = null; dirty = true; }
+    } catch (error) { issue = userMessage('launch'); requested = null; dirty = true; }
     finally { busy = false; }
   }
   function navigate(next: typeof page) {
@@ -190,14 +191,14 @@
       }
       if(next==='storage'||next==='settings') {
         try {dataLocation=await lazyTester.dataLocation();locationIssue='';}
-        catch(error){locationIssue=String(error);dataLocation=null;storage=null;binding=null;}
+        catch(error){locationIssue=userMessage('location');dataLocation=null;storage=null;binding=null;}
       }
       if(next==='storage'&&binding?.configured) {
         const snapshot=await lazyTester.storage();profiles=snapshot.profiles;storage=snapshot.storage;
         storageCheckedAt=new Date().toLocaleTimeString('en-US');
       }
       dirty = true;
-    } catch (error) { issue = String(error); dirty = true; }
+    } catch (error) { issue = userMessage('workspace'); dirty = true; }
     finally { busy = false; }
   }
   async function refreshPage() {
@@ -210,9 +211,9 @@
       try {
         if(!binding?.configured)await checkBinding();
         try{dataLocation=await lazyTester.dataLocation();locationIssue='';}
-        catch(error){locationIssue=String(error);dataLocation=null;storage=null;binding=null;throw error;}
+        catch(error){locationIssue=userMessage('location');dataLocation=null;storage=null;binding=null;throw error;}
         if(binding?.configured){const snapshot=await lazyTester.storage();profiles=snapshot.profiles;storage=snapshot.storage;storageCheckedAt=new Date().toLocaleTimeString('en-US');available=true;connectionIssue='';}
-      }catch(error){issue=String(error);storage=null;}
+      }catch(error){issue=userMessage('storage');storage=null;}
       finally{checkingStorage=false;busy=false;}
     } else {
       // Only explicit Refresh of a known preview failure requests another
@@ -233,7 +234,7 @@
     if(refreshing||resizing){queuedAudio=mode;return;}
     busy=true;issue='';settingsNotice='';
     try {const snapshot=await lazyTester.saveAudio(mode);settings=snapshot.settings;profiles=snapshot.profiles;settingsNotice='Background audio saved. Applies to managed Minecraft sessions immediately.';}
-    catch(error){issue=String(error);}
+    catch(error){issue=userMessage('audio');}
     finally{busy=false;}
   }
   function requestPreset() {
@@ -250,7 +251,7 @@
       settingsNotice=request.preset==='Preserve'
         ? 'Minecraft - '+request.slot+': Preserve Visuals saved. LazyTester will leave Minecraft graphics options unchanged on future launches; existing edits are not automatically undone.'
         : 'Minecraft - '+request.slot+': '+request.preset+' saved and applied. This preset is reapplied at launch.';
-    }catch(error){issue=String(error);settings=null;}
+    }catch(error){issue=userMessage('settings');settings=null;}
     finally{applyingPreset=false;busy=false;}
   }
   function requestPerformanceSave() {
@@ -265,7 +266,7 @@
       profiles=snapshot.profiles;settings=snapshot.settings;
       activeFps=settings.activeFps;backgroundFps=settings.backgroundFps;
       performanceNotice='Saved. New limits apply when each Minecraft profile next starts.';
-    }catch(error){issue=String(error);}
+    }catch(error){issue=userMessage('performance');}
     finally{savingPerformance=false;busy=false;}
   }
   function requestCloseOne(slot: ProfileSlot) {
@@ -289,17 +290,17 @@
       if (!report.presentationReleased) {
         // Release was attempted but did not confirm restoration. Do not
         // pretend the previous Play surface still owns the original HWND.
-        uncertainWindowSlot = slot;
-        issue = `Minecraft - ${slot}: ${report.issue??'Window recovery or game exit has not been confirmed.'}`;
+        uncertainWindowSlots = updateRecoverySlots(uncertainWindowSlots, slot, false);
+        issue = userMessage('recovery');
         if (active===slot) {
           active=null;selectedIdentity='';requested=null;queued=null;detached=true;
           previewStatuses=[];
         }
         try {profiles=(await lazyTester.inspect()).profiles;available=true;connectionIssue='';}
-        catch(refreshError){available=false;connectionIssue=String(refreshError);}
+        catch(refreshError){available=false;connectionIssue=userMessage('connection');}
         return;
       }
-      if (uncertainWindowSlot===slot) uncertainWindowSlot=null;
+      uncertainWindowSlots = updateRecoverySlots(uncertainWindowSlots, slot, true);
       // Only a confirmed native restoration receipt permits a normal
       // selected close transition and automatic selection of another peer.
       const wasActive=active===slot;
@@ -317,9 +318,9 @@
           detached=queued===null;
         }
       } else {
-        issue=`Minecraft - ${slot}: Selected close was not confirmed. ${report.issue??'Refresh to inspect the current session.'}`;
+        issue=userMessage('close');
         try {profiles=(await lazyTester.inspect()).profiles;available=true;connectionIssue='';}
-        catch(refreshError){available=false;connectionIssue=String(refreshError);}
+        catch(refreshError){available=false;connectionIssue=userMessage('connection');}
         if (wasActive) {
           // Never automatically reselect the game whose exit outcome is
           // uncertain; a different responding peer can still be presented.
@@ -332,16 +333,16 @@
       // A transport failure or invalid receipt cannot establish whether the
       // Rust command reached native window restoration. The UI must stop
       // claiming an embedded selected HWND; no extra close/retry is sent.
-      uncertainWindowSlot = slot;
-      issue=`Minecraft - ${slot}: Close outcome and window restoration were not confirmed. ${String(error)}`;
+      uncertainWindowSlots = updateRecoverySlots(uncertainWindowSlots, slot, false);
+      issue=userMessage('recovery');
       if (active===slot) {
         active=null;selectedIdentity='';requested=null;queued=null;detached=true;
         previewStatuses=[];
       }
       // Read-only reconciliation cannot certify window restoration and must
-      // not clear uncertainWindowSlot, even when the game has stopped.
+      // not clear uncertainWindowSlots, even when the game has stopped.
       try {profiles=(await lazyTester.inspect()).profiles;available=true;connectionIssue='';}
-      catch(refreshError){available=false;connectionIssue=String(refreshError);}
+      catch(refreshError){available=false;connectionIssue=userMessage('connection');}
     } finally {
       closingOneSlot=null;busy=false;dirty=true;
     }
@@ -359,7 +360,7 @@
       separateSlots=new Set([...separateSlots,slot]);
       queued=firstEmbeddedProfile(profiles,separateSlots);
       detached = queued===null; previewStatuses = []; dirty = true;
-    } catch (error) { issue = String(error); }
+    } catch (error) { issue = userMessage('workspace'); }
     finally { busy = false; }
   }
   async function syncLayout() {
@@ -426,7 +427,7 @@
         }
       }
       previewIssue = '';
-    } catch (error) { previewStatuses = [];previewIssue = String(error); }
+    } catch (error) { previewStatuses = [];previewIssue = userMessage('preview'); }
     finally { resizing = false; }
   }
   function step(direction: 1 | -1) {
@@ -445,7 +446,7 @@
       available = true; connectionIssue = '';
       storageCheckedAt = new Date().toLocaleTimeString('en-US');
     }
-    catch (error) { issue = String(error); storage = null; }
+    catch (error) { issue = userMessage('storage'); storage = null; }
     finally { checkingStorage = false; busy = false; }
   }
   async function loadBinding(importProfiles = false) {
@@ -462,7 +463,7 @@
       try {
         nativeBackend = await lazyTester.backendSupport();
       } catch (error) {
-        if (!disposed) {binding=null;bindingIssue='Native backend capability could not be verified: '+String(error);}
+        if (!disposed) {binding=null;bindingIssue=userMessage('backend');}
         return;
       }
       if (disposed) return;
@@ -491,13 +492,13 @@
           issue:document.querySelector('.lt-binding p')?.textContent??'',
           cards:document.querySelectorAll('.lt-card').length,
           enabled:document.querySelectorAll('.lt-card:not(:disabled)').length,
-        }).catch(error=>console.warn('Startup observation unavailable:',String(error)));
+        }).catch(error=>console.warn('Startup observation unavailable'));
       }
     }
   }
   async function checkBinding(importProfiles = false) {
     try { binding = await lazyTester.binding(importProfiles); bindingIssue = ''; }
-    catch (error) { binding = null; bindingIssue = String(error); }
+    catch (error) { binding = null; bindingIssue = userMessage('binding'); }
   }
   async function loadLocation(action:'Inspect'|'Open'|'Locate'|'Choose'='Inspect') {
     if(busy||refreshing||resizing||disposed)return;
@@ -508,7 +509,7 @@
       if (dataLocation.path !== previousPath) { storage = null; clearSlot = null; storageNotice = ''; }
       if((action==='Locate'||action==='Choose')&&dataLocation.path!==null)await checkBinding();
     } catch(error){
-      locationIssue=String(error);
+      locationIssue=userMessage('location');
       if(action==='Inspect'){
         dataLocation=null;storage=null;clearSlot=null;storageNotice='';
         binding=null;if(!bindingIssue)bindingIssue=locationIssue;
@@ -519,7 +520,7 @@
     if (busy || refreshing || resizing) return;
     busy = true; issue = '';
     try { await lazyTester.openFolder(slot); }
-    catch (error) { issue = String(error); }
+    catch (error) { issue = userMessage('folder'); }
     finally { busy = false; }
   }
   async function clearCache(slot: ProfileSlot) {
@@ -531,7 +532,7 @@
       storageCheckedAt = new Date().toLocaleTimeString('en-US');
       storageNotice = 'Web cache for Minecraft - ' + slot + ' cleared.';
     } catch (error) {
-      issue = String(error); storage = null;
+      issue = userMessage('cache'); storage = null;
     } finally { busy = false; }
   }
   async function recoverSettings() {
@@ -564,7 +565,7 @@
         : pending.action==='DisableInputResponse'
           ? 'Minecraft - '+pending.slot+': Improved Input Response disabled in saved options. The previous settings are backed up for Restore. Restart this Minecraft normally to apply; RAM savings on Education 26.32 are unverified.'
           : `Minecraft - ${pending.slot}: settings ${pending.action==='Reset'?'reset':'restored'}. Changes apply at the next launch; your saved graphics preset is reapplied. Previous settings are available through Restore settings.`;
-    } catch(error) {issue=String(error);storage=null;}
+    } catch(error) {issue=userMessage('settings');storage=null;}
     finally {busy=false;}
   }
   function reviewFullClear() {
@@ -587,7 +588,7 @@
       profiles=snapshot.profiles;storage=snapshot.storage;
       storageCheckedAt=new Date().toLocaleTimeString('en-US');
       storageNotice=`Minecraft - ${pending.slot}: local data cleared. Its next launch uses an empty profile. Other launchers, the Minecraft installation and app preferences are kept.`;
-    } catch(error) {issue=String(error);storage=null;}
+    } catch(error) {issue=userMessage('clearData');storage=null;}
     finally {busy=false;clearingData=false;}
   }
   onMount(() => {
@@ -626,7 +627,7 @@
       if (event.payload && !nativeExitReview) observationEpoch++;
       nativeExitReview = event.payload;
       if (!nativeExitReview) dirty = true;
-    }).then(retain).catch(error => { issue = String(error); });
+    }).then(retain).catch(error => { issue = userMessage('event'); });
     void listen<boolean>('lazy-tester-closing', event => {
       closeInProgress = event.payload;
       if (closeInProgress) {
@@ -635,29 +636,29 @@
         queuedLaunch=null;
         queued=null;
       }
-    }).then(retain).catch(error => { issue = String(error); });
+    }).then(retain).catch(error => { issue = userMessage('event'); });
     void listen<string>('lazy-tester-close-rejected', event => {
       // Resource admission refused before restoring or closing any game.
       // Keep the verified embedded selection, previews and queued work.
       closeInProgress = false;
       nativeExitReview = false;
-      issue = event.payload;
-    }).then(retain).catch(error => { issue = String(error); });
+      issue = userMessage('closeAll');
+    }).then(retain).catch(error => { issue = userMessage('event'); });
     void listen<string>('lazy-tester-close-error', event => {
       // The native close attempt already released/restored workspace leases.
       // Never imply the game is still embedded or automatically reacquire it.
       closeInProgress = false;
       nativeExitReview = false;
-      closeFailure = event.payload;
+      closeFailure = userMessage('closeAll');
       active = null; selectedIdentity = ''; requested = null; queued = null; queuedLaunch = null;
       separateSlots = new Set<ProfileSlot>();
       previewStatuses = []; detached = true; page = 'workspace'; dirty = true;
       void refresh(); // Observation only; does not start or capture Minecraft.
-    }).then(retain).catch(error => { issue = String(error); });
+    }).then(retain).catch(error => { issue = userMessage('event'); });
     void listen<string>('workspace-surface-error', event => {
       try {
         const notice=parseDwmPreviewInvalidation(event.payload);
-        if(!notice) {issue=event.payload;return;}
+        if(!notice) {issue=userMessage('preview');return;}
         if (disposed || nativeBackend!=='WindowsNative' ||
           !dwmPreviewInvalidationApplies(notice,profiles.find(p=>p.slot===notice.slot))) return;
         previewInvalidationEpoch++;
@@ -665,11 +666,11 @@
         // Preserve peer statuses and avoid new preview RPC/layout work.
         previewStatuses=previewStatuses.map(status=>status.slot===notice.slot?
           {...status,registered:false,reason:notice.reason}:status);
-      } catch (error) {issue=String(error);}
-    }).then(retain).catch(error => { issue = String(error); });
+      } catch (error) {issue=userMessage('preview');}
+    }).then(retain).catch(error => { issue = userMessage('event'); });
     void listen<number>('lazy-tester-preview-select', event => {
       if ([1,2,3,4,5].includes(event.payload)) select(event.payload as ProfileSlot);
-    }).then(retain).catch(error => { previewIssue = String(error); });
+    }).then(retain).catch(error => { previewIssue = userMessage('preview'); });
     return () => {
       mounted = false; disposed = true; clearInterval(interval); observer?.disconnect();
       window.removeEventListener('resize', changed); document.removeEventListener('visibilitychange', changed);
@@ -685,20 +686,20 @@
   <header class="lt-topbar">
     <a class="lt-brand" href="#play" on:click|preventDefault={() => navigate('workspace')}><span>LT</span>Lazy Tester</a>
     <nav aria-label="Main navigation"><button disabled={closeInProgress} class:chosen={page==='workspace'} aria-current={page==='workspace'?'page':undefined} on:click={()=>navigate('workspace')}>Play</button><button disabled={closeInProgress||nativeBackend!=='WindowsNative'} class:chosen={page!=='workspace'} aria-current={page!=='workspace'?'page':undefined} on:click={()=>navigate('settings')}>Settings</button></nav>
-    <span class="lt-connection" role="status"><span class="lt-dot" class:waiting={!available||!binding?.configured}></span>{initializing?'Preparing launchers…':nativeBackend==='Unsupported'?'Game backend unavailable':!binding?.configured?'Connection unavailable':available?'Connected':'Unavailable'}</span>
+    <span class="lt-connection" role="status"><span class="lt-dot" class:waiting={!available||!binding?.configured}></span>{sessionConnectionLabel(initializing,nativeBackend,!!binding?.configured,available)}</span>
   </header>
   <div class="lt-layout" class:lt-settings-layout={page!=='workspace'} inert={closeInProgress}>
     {#if page!=='workspace'}<aside class="lt-sidebar"><h2>Settings</h2><nav aria-label="Settings navigation"><button class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}
     <main>
       <header class="lt-page-header" class:lt-play-header={page==='workspace'}>
-        <div><h1>{page==='workspace'?(detached?(uncertainWindowSlot!==null?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p>{detached?(uncertainWindowSlot!==null?'Session state and native window restoration must be verified separately.':'Your games keep running on the desktop.'):active?'Click the game to play.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
+        <div><h1>{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Your games keep running on the desktop.'):active?'Click the game to play.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
         <div class="lt-header-actions"><button class="lt-secondary" disabled={busy||manualRefreshing||manualRefreshRequested||nativeBackend!=='WindowsNative'} on:click={()=>manualRefreshRequested=true}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'&&active!==null}<button class="lt-secondary" disabled={busy||refreshing||resizing} title={'Open only Minecraft - '+active+' in its own window'} on:click={release}>Open Minecraft - {active} in a window</button>{/if}</div>
       </header>
       {#if issue||connectionIssue}<div class="lt-alert" role="alert">{#if issue}<p>{issue}</p>{/if}{#if connectionIssue}<p>{connectionIssue}</p>{/if}</div>{/if}
-      {#if uncertainWindowSlot!==null}
+      {#if uncertainWindowSlots.size > 0}
         <section class="lt-exit-recovery" role="status" aria-label="Window recovery unconfirmed">
-          <h2>Minecraft - {uncertainWindowSlot} window recovery is unverified</h2>
-          <p>A STOPPED game process does not prove its original native window checkpoint was restored. Refresh updates session observations only; do not assume this window is available. Other verified games are preserved.</p>
+          <h2>Window recovery needs attention</h2>
+          <p>{recoveryLabels(uncertainWindowSlots)}: Window restoration has not been confirmed. Refresh checks game status only. Other games are preserved.</p>
         </section>
       {/if}
       {#if closeFailure}
@@ -706,7 +707,7 @@
           <h2>Exit was not completed</h2>
           <p>Some Minecraft sessions may still be running. Your remaining sessions were preserved. Choose a responsive Minecraft below to return to Play, or finish an open game dialog normally.</p>
           <div class="lt-actions"><button class="lt-secondary" on:click={()=>{closeFailure='';void refresh();}}>Dismiss and refresh</button></div>
-          <details><summary>Technical details</summary><p>{closeFailure}</p></details>
+          
         </section>
       {/if}
 
@@ -719,11 +720,11 @@
         <section class="lt-binding" aria-label="Unsupported platform">
           <div><strong>Minecraft backend unavailable</strong><p>{bindingIssue}</p></div>
         </section>
-      {:else if !binding?.configured&&!initializing}<section class="lt-binding" aria-label="Launcher recovery"><div><strong>Existing launcher connection could not be verified</strong><p>{bindingIssue||binding?.issue||'Automatic preparation could not finish. Existing data is preserved.'}</p></div><div class="lt-actions"><button disabled={busy||manualRefreshing||manualRefreshRequested} on:click={()=>manualRefreshRequested=true}>Retry connection</button><button class="lt-secondary" on:click={()=>navigate('storage')}>Data Storage</button></div></section>{/if}
+      {:else if !binding?.configured&&!initializing}<section class="lt-binding" aria-label="Launcher recovery"><div><strong>Existing launcher connection could not be verified</strong><p>{bindingIssue||userMessage('binding')}</p></div><div class="lt-actions"><button disabled={busy||manualRefreshing||manualRefreshRequested} on:click={()=>manualRefreshRequested=true}>Retry connection</button><button class="lt-secondary" on:click={()=>navigate('storage')}>Data Storage</button></div></section>{/if}
       <section class="lt-workspace" hidden={page!=='workspace'} aria-label="Minecraft play area">
         <div class="lt-stage-space" bind:this={stageSpace}>
         <div class="lt-viewport" class:lt-desktop={detached} bind:this={viewport}>
-          {#if detached}<div class="lt-empty"><h2>{uncertainWindowSlot!==null?'Window restoration not verified':closeFailure?'Exit incomplete — sessions preserved':'Games are in separate windows'}</h2><p>{uncertainWindowSlot!==null?'Minecraft - '+uncertainWindowSlot+' has an unverified native recovery checkpoint. Refresh checks game process state, not whether window restoration succeeded.':closeFailure?'Some Minecraft sessions may still be running and native window recovery is not guaranteed. Review each session before returning to Play.':'Use the Windows taskbar, or choose a game below to open it in Play.'}</p><p>{runningCount} of 5 running</p></div>{:else if !active}<div class="lt-empty"><span>LT</span><h2>{initializing?'Preparing launchers…':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Reconnecting saved data automatically. No setup is needed.':nativeBackend==='Unsupported'?'Native Minecraft sessions are not supported by this application build on this OS.':!binding?.configured?'Retry the connection. Your existing accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
+          {#if detached}<div class="lt-empty"><h2>{uncertainWindowSlots.size > 0?'Window restoration not verified':closeFailure?'Exit incomplete — sessions preserved':'Games are in separate windows'}</h2><p>{uncertainWindowSlots.size > 0?'Affected launchers: '+recoveryLabels(uncertainWindowSlots)+'. Refresh checks game status, not window restoration.':closeFailure?'Some Minecraft sessions may still be running and native window recovery is not guaranteed. Review each session before returning to Play.':'Use the Windows taskbar, or choose a game below to open it in Play.'}</p><p>{runningCount} of 5 running</p></div>{:else if !active}<div class="lt-empty"><span>LT</span><h2>{initializing?'Preparing launchers…':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Reconnecting saved data automatically. No setup is needed.':nativeBackend==='Unsupported'?'Native Minecraft sessions are not supported by this application build on this OS.':!binding?.configured?'Retry the connection. Your existing accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
         </div>
         </div>
         {#if nativeBackend === 'WindowsNative'}
@@ -736,10 +737,10 @@
                 <strong>Minecraft - {profile.slot}{active===profile.slot&&!detached?' ✓':''}</strong>
                 <span class="lt-card-picture" use:image={profile.slot} aria-hidden="true">{profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':profile.state==='NOT_RESPONDING'?'Unavailable':profile.state==='ATTENTION'?'Needs attention':'▷ Launch'}</span>
                 <small>{active===profile.slot&&!detached?'Playing here':profile.state==='RUNNING'&&separateSlots.has(profile.slot)?'Separate window':profile.state==='RUNNING'?'Running in background':labels[profile.state]}</small>
-                {#if profile.issue}<small class="lt-error">{profile.issue}</small>{/if}
+                {#if profile.issue}<small class="lt-error">{userMessage('profile')}</small>{/if}
               </button>
               {#if profile.state==='RUNNING' && !detached && profile.slot!==primary && !separateSlots.has(profile.slot) && previewFailure}
-                <small class="lt-error lt-preview-slot-issue" role="status" aria-label={'Minecraft - '+profile.slot+' preview unavailable'}>Preview unavailable: {previewFailure.reason}</small>
+                <small class="lt-error lt-preview-slot-issue" role="status" aria-label={'Minecraft - '+profile.slot+' preview unavailable'}>{userMessage('preview')}</small>
               {/if}
               {#if ['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)}
                 <button class="lt-secondary lt-close-launcher" aria-label={'Close Minecraft - '+profile.slot+' normally'} disabled={busy||closeInProgress||nativeExitReview||!available||!binding?.configured} on:click={()=>requestCloseOne(profile.slot)}>Close game</button>
@@ -775,7 +776,7 @@
             <p class="lt-help">Saved limits apply at the next launch. Running games keep their current limits.</p>{#if !performanceValid}<p class="lt-error" role="alert">Use whole numbers from 5 to 1000. Background FPS cannot exceed active FPS.</p>{/if}
             <div class="lt-actions"><button type="submit" disabled={busy||queuedPerformance!==null||!available||!performanceDirty||!performanceValid}>{savingPerformance||queuedPerformance!==null?'Saving…':'Save changes'}</button>{#if performanceDirty}<button type="button" class="lt-secondary" disabled={busy||queuedPerformance!==null} on:click={()=>{activeFps=settings!.activeFps;backgroundFps=settings!.backgroundFps;}}>Discard</button>{/if}<button type="button" class="lt-secondary" disabled={busy||queuedPerformance!==null} on:click={()=>{activeFps=120;backgroundFps=5;}}>Use 120 / 5</button></div>{#if performanceNotice}<p role="status">{performanceNotice}</p>{/if}
           </form>{:else}<p>Settings unavailable. Refresh to try again.</p>{/if}</section>
-          <section class="lt-group"><h2>App behavior</h2><div class="lt-setting"><div><h3>When Lazy Tester closes</h3><p>All Minecraft sessions started by Lazy Tester close normally first. Lazy Tester waits for them to finish before exiting.</p></div></div><p class="lt-help">If Minecraft is waiting for a dialog or has not finished closing, Lazy Tester stays open. Other Minecraft applications are left alone.</p><div class="lt-setting"><div><h3>Background game audio</h3><p>Mute games that are not receiving keyboard and mouse input. Existing user mute and volume settings are kept.</p>{#if settings?.audioIssue}<p class="lt-error" role="status">{settings.audioIssue}</p>{/if}{#if !settings?.backgroundAudio}<p>Update the running controller to enable audio control.</p>{/if}</div><label class="lt-audio-toggle"><input type="checkbox" checked={settings?.backgroundAudio==='Mute'} disabled={busy||queuedAudio!==null||!settings?.backgroundAudio} aria-label="Mute background games" on:change={event=>saveAudio(event.currentTarget.checked?'Mute':'Keep')}/>Mute background games</label></div></section>
+          <section class="lt-group"><h2>App behavior</h2><div class="lt-setting"><div><h3>When Lazy Tester closes</h3><p>All Minecraft sessions started by Lazy Tester close normally first. Lazy Tester waits for them to finish before exiting.</p></div></div><p class="lt-help">If Minecraft is waiting for a dialog or has not finished closing, Lazy Tester stays open. Other Minecraft applications are left alone.</p><div class="lt-setting"><div><h3>Background game audio</h3><p>Mute games that are not receiving keyboard and mouse input. Existing user mute and volume settings are kept.</p>{#if settings?.audioIssue}<p class="lt-error" role="status">{userMessage('audio')}</p>{/if}{#if !settings?.backgroundAudio}<p>Update the running controller to enable audio control.</p>{/if}</div><label class="lt-audio-toggle"><input type="checkbox" checked={settings?.backgroundAudio==='Mute'} disabled={busy||queuedAudio!==null||!settings?.backgroundAudio} aria-label="Mute background games" on:change={event=>saveAudio(event.currentTarget.checked?'Mute':'Keep')}/>Mute background games</label></div></section>
           <section class="lt-group"><h2>Installation & data</h2><h3>Minecraft Education</h3><p>The controller verifies the registered game executable before launch. Moving data does not move Minecraft.</p><h3>Launcher data location</h3><p class="lt-data-path">{dataLocation?.path??'No data folder connected.'}</p>{#if locationIssue}<p class="lt-error">{locationIssue}</p>{/if}<div class="lt-actions"><button class="lt-secondary" disabled={busy||refreshing||resizing||!dataLocation?.path} on:click={()=>loadLocation('Open')}>Open data folder</button><button class="lt-secondary" on:click={()=>navigate('storage')}>Data Storage →</button></div></section>
         </div>
       {:else if page==='storage'}
@@ -783,15 +784,15 @@
           <p>Worlds, cache and settings for each launcher.</p><div class="lt-launcher-heading"><select value={selectedSlot} disabled={busy} aria-label="Choose Minecraft launcher" on:change={event=>chooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft - {p.slot}</option>{/each}</select><span>{selectedProfile?labels[selectedProfile.state]:'Unavailable'}</span></div>
           {#if storageNotice}<p role="status">{storageNotice}</p>{/if}
           <section class="lt-group"><div class="lt-setting"><h3>Profile data</h3><strong>{selectedStorage?(selectedStorage.partial?'At least ':'')+(selectedStorage.bytes/1048576).toFixed(1)+' MB':'Not measured'}</strong></div><div class="lt-setting"><h3>Web cache</h3><span>{selectedStorage&&!selectedStorage.cache.partial?(selectedStorage.cache.bytes/1048576).toFixed(1)+' MB':'Unavailable'}</span></div><div class="lt-setting"><div><h3>Resource pack inventory</h3><p>Manifest-containing folders under resource_packs and development_resource_packs. This is not a list of loaded or active textures.</p></div><span>{selectedStorage?.resourcePacks?(selectedStorage.resourcePacks.partial?'Incomplete':selectedStorage.resourcePacks.manifested+' on disk'):'Not inspected'}</span></div>
-          {#if selectedStorage?.resourcePacks?.issue}<p class="lt-help" role="status">{selectedStorage.resourcePacks.issue}</p>{/if}
+          {#if selectedStorage?.resourcePacks?.issue}<p class="lt-help" role="status">{userMessage('pack')}</p>{/if}
           {#if selectedStorage?.resourcePacks?.worldDeclarations}
             <div class="lt-setting"><div><h3>Saved world pack declarations</h3><p>Read-only counts from world_resource_packs.json in this launcher's saved worlds. They show declared references, not which packs loaded in the running game.</p></div><span>{selectedStorage.resourcePacks.worldDeclarations.partial?'Incomplete':selectedStorage.resourcePacks.worldDeclarations.packReferences+' references · '+selectedStorage.resourcePacks.worldDeclarations.worldsWithReferences+' of '+selectedStorage.resourcePacks.worldDeclarations.worldsScanned+' saved worlds'}</span></div>
-            {#if selectedStorage.resourcePacks.worldDeclarations.issue}<p class="lt-help" role="status">{selectedStorage.resourcePacks.worldDeclarations.issue}</p>{/if}
+            {#if selectedStorage.resourcePacks.worldDeclarations.issue}<p class="lt-help" role="status">{userMessage('worldPack')}</p>{/if}
           {:else if selectedProfile?.state!=='STOPPED'}
             <p class="lt-help">Resource-pack inspection is deferred while the selected game is active or its profile access cannot be verified.</p>
           {/if}
           <p class="lt-help">No packs are automatically disabled or removed. Global packs, currently loaded textures, GPU memory and reclaimable RAM remain unknown. Manage resource packs through Minecraft Education.</p><div class="lt-setting"><h3>Available disk space</h3><span>{selectedStorage?.disk?(selectedStorage.disk.availableBytes/1073741824).toFixed(1)+' GB':'Unavailable'}</span></div><p class="lt-help">{storage?'Last measured at '+storageCheckedAt+'. Web cache is included in profile data.':'Use Refresh to measure storage. World sizes are not separately classified.'}</p></section>
-          <section class="lt-setting"><div><h3>Clear cache</h3><p>Remove recognized web cache. Accounts, worlds and game settings are kept.</p>{#if selectedStorage?.cache.issue}<p>{selectedStorage.cache.issue}</p>{/if}</div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.cache.canClear} on:click={()=>{fullReview=null;recovery=null;clearSlot=selectedSlot;}}>Clear cache…</button></section>
+          <section class="lt-setting"><div><h3>Clear cache</h3><p>Remove recognized web cache. Accounts, worlds and game settings are kept.</p>{#if selectedStorage?.cache.issue}<p>{userMessage('cache')}</p>{/if}</div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.cache.canClear} on:click={()=>{fullReview=null;recovery=null;clearSlot=selectedSlot;}}>Clear cache…</button></section>
           {#if clearSlot===selectedSlot}<section class="lt-cache-confirm" aria-label="Confirm cache cleanup"><h3>Clear web cache for Minecraft - {selectedSlot}?</h3><p>Worlds, accounts and settings are kept. Other launchers are unchanged.</p><div class="lt-actions"><button disabled={busy||refreshing||resizing||!selectedStorage?.cache.canClear} on:click={()=>clearCache(selectedSlot)}>Clear web cache</button><button class="lt-secondary" on:click={()=>clearSlot=null}>Cancel</button></div></section>{/if}
           <section class="lt-setting"><div><h3>Data folder</h3><p class="lt-data-path">{selectedPath??'Location unavailable.'}</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!binding?.configured} on:click={()=>openFolder(selectedSlot)}>Open folder</button></section>
           <details class="lt-advanced" bind:open={advanced}>
@@ -816,14 +817,14 @@
               {/if}
               <div class="lt-setting"><div><h3>Reset game settings</h3><p>Back up this launcher's settings, then reset them for the next start. Accounts, worlds and cache are kept.</p><p class="lt-help">The saved graphics preference applies at launch; Preserve Visuals never overwrites Minecraft graphics options.</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.gameSettings?.canReset} on:click={()=>reviewSettings('Reset')}>Reset settings…</button></div>
               <div class="lt-setting"><div><h3>Restore settings</h3><p>{selectedStorage?.gameSettings?.backupAvailable?'Restore the latest verified settings backup for this launcher. Current settings are backed up first.':'No verified settings backup yet. Reset creates one.'}</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.gameSettings?.canRestore} on:click={()=>reviewSettings('Restore')}>Restore settings…</button></div>
-              {#if selectedStorage?.gameSettings?.issue}<p class="lt-help">{selectedStorage.gameSettings.issue}</p>{:else if !selectedStorage?.gameSettings}<p class="lt-help">Refresh storage to check settings recovery availability.</p>{/if}
+              {#if selectedStorage?.gameSettings?.issue}<p class="lt-help">{userMessage('gameSettings')}</p>{:else if !selectedStorage?.gameSettings}<p class="lt-help">Refresh storage to check settings recovery availability.</p>{/if}
               {#if recovery?.slot===selectedSlot}
                 <section class="lt-cache-confirm" aria-label="Confirm game settings change"><h3>{recovery.action==='EnableTextureStreaming'?'Enable Texture Streaming':recovery.action==='DisableTextureStreaming'?'Disable Texture Streaming':recovery.action==='DisableInputResponse'?'Disable Improved Input Response':recovery.action+' settings'} for Minecraft - {recovery.slot}?</h3><p>{recovery.action==='EnableTextureStreaming'?'Only this launcher’s explicitly disabled Texture Streaming option will be enabled. This may reduce GPU texture memory on supported builds, but actual Education 26.32 and system RAM effects are unknown. The most recent Restore backup point will be replaced with a backup of current settings. Restart Minecraft normally after applying; accounts, worlds and other launchers are unchanged.':recovery.action==='DisableTextureStreaming'?'Only this launcher’s explicitly enabled Texture Streaming option will be disabled. This may increase GPU memory consumption, and no performance improvement is assumed. Current settings are backed up before changing this one key; a normal Minecraft restart is required. Accounts, worlds, and other launchers are preserved.':recovery.action==='DisableInputResponse'?'Only this launcher’s explicitly enabled option is changed. Input latency may change and RAM savings on Education 26.32 are unverified. The existing Restore backup point will be replaced with a backup of current settings. Restart Minecraft normally after applying. Accounts, worlds, and other launchers are kept.':'Only this launcher’s game settings change. Accounts, worlds, cache and other launchers are kept. A backup is saved first.'}</p><div class="lt-actions"><button disabled={busy||refreshing||resizing||!(recovery.action==='EnableTextureStreaming'?selectedStorage?.gameSettings?.canReset&&selectedStorage?.gameSettings?.textureStreamingEnabled===false&&selectedProfile?.state==='STOPPED':recovery.action==='DisableTextureStreaming'?selectedStorage?.gameSettings?.canReset&&selectedStorage?.gameSettings?.textureStreamingEnabled===true&&selectedProfile?.state==='STOPPED':recovery.action==='DisableInputResponse'?selectedStorage?.gameSettings?.canReset&&selectedStorage?.gameSettings?.improvedInputResponseEnabled===true&&selectedProfile?.state==='STOPPED':recovery.action==='Reset'?selectedStorage?.gameSettings?.canReset:selectedStorage?.gameSettings?.canRestore)} on:click={recoverSettings}>{recovery.action==='EnableTextureStreaming'?'Enable saved option':recovery.action==='DisableTextureStreaming'?'Disable saved option':recovery.action==='DisableInputResponse'?'Disable saved option':recovery.action+' settings'}</button><button class="lt-secondary" disabled={busy} on:click={()=>recovery=null}>Cancel</button></div></section>
               {/if}
             </div>
           </details>
           {#if clearingData}<p class="lt-alert" role="status">Clearing launcher data… Keep Lazy Tester open while the verified cleanup finishes.</p>{/if}
-          <section class="lt-danger-zone"><div><h3>Clear all data</h3><p>Permanently remove this launcher's stored account data, worlds, cache, game settings and backups. Keep the Minecraft installation and app preferences.</p><p>Windows-managed sign-in data is not cleared, so a previous account may still be offered. Export any worlds you want to keep before continuing; no recovery backup is created. Exported or external backups are kept.</p>{#if selectedStorage?.fullClear?.pending}<p>A previous clear needs to finish. This launcher cannot start until its old data is removed.</p>{/if}{#if selectedStorage?.fullClear?.issue}<p>{selectedStorage.fullClear.issue}</p>{:else if !selectedStorage?.fullClear}<p>Refresh storage to check availability.</p>{/if}</div><button class="lt-secondary lt-danger" disabled={busy||refreshing||resizing||!available||!selectedStorage?.fullClear?.canClear} on:click={reviewFullClear}>{selectedStorage?.fullClear?.pending?'Finish clearing data…':'Clear all data…'}</button></section>
+          <section class="lt-danger-zone"><div><h3>Clear all data</h3><p>Permanently remove this launcher's stored account data, worlds, cache, game settings and backups. Keep the Minecraft installation and app preferences.</p><p>Windows-managed sign-in data is not cleared, so a previous account may still be offered. Export any worlds you want to keep before continuing; no recovery backup is created. Exported or external backups are kept.</p>{#if selectedStorage?.fullClear?.pending}<p>A previous clear needs to finish. This launcher cannot start until its old data is removed.</p>{/if}{#if selectedStorage?.fullClear?.issue}<p>{userMessage('clearData')}</p>{:else if !selectedStorage?.fullClear}<p>Refresh storage to check availability.</p>{/if}</div><button class="lt-secondary lt-danger" disabled={busy||refreshing||resizing||!available||!selectedStorage?.fullClear?.canClear} on:click={reviewFullClear}>{selectedStorage?.fullClear?.pending?'Finish clearing data…':'Clear all data…'}</button></section>
           {#if fullReview?.slot===selectedSlot}
             <form class="lt-cache-confirm lt-delete-confirm" aria-label="Confirm full launcher data deletion" on:submit|preventDefault={clearAllData}>
               <h3>{fullReview.pending?'Finish clearing':'Clear all data for'} Minecraft - {fullReview.slot}?</h3>

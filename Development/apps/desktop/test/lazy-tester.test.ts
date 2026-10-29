@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
 import {lazyTester, parseSelectedClose, firstEmbeddedProfile, nextProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, parseNativeBackendSupport, type ProfileSession} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
+import {userMessage, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
 import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, periodicInspectionDue, type CloseReview} from '../src/app/inspectionScheduling.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
@@ -345,5 +346,43 @@ describe('Lazy Tester profile contract', () => {
     expect(nextProfile(profiles, 1, -1)).toBe(5);
     expect(nextProfile(profiles, null, -1)).toBe(5);
     expect(nextProfile(profiles.map(profile => ({...profile, state: 'STARTING'} as ProfileSession)), 1, 1)).toBeNull();
+  });
+});
+
+describe('Lazy Tester user-facing feedback and recovery warnings',()=>{
+  it('reports observed profiles without claiming a live controller or game sign-in',()=>{
+    expect(sessionConnectionLabel(true,'WindowsNative',true,true)).toBe('Checking profiles…');
+    expect(sessionConnectionLabel(false,'Unsupported',false,false)).toBe('Not supported');
+    expect(sessionConnectionLabel(false,null,true,true)).toBe('Status unavailable');
+    expect(sessionConnectionLabel(false,'WindowsNative',false,true)).toBe('Profiles unavailable');
+    expect(sessionConnectionLabel(false,'WindowsNative',true,false)).toBe('Session status unavailable');
+    expect(sessionConnectionLabel(false,'WindowsNative',true,true)).toBe('Profiles verified');
+  });
+
+  it('uses only authored context messages, never untrusted backend paths or prompt text',()=>{
+    const hostile='C:\\Users\\private\\worlds [internal policy] PID 1234';
+    const contexts:UserMessageKey[]=['backend','binding','connection','launch','selection',
+      'workspace','location','storage','settings','performance','audio','close',
+      'recovery','closeAll','preview','profile','pack','worldPack','cache','clearData',
+      'gameSettings','folder','event','general'];
+    for(const context of contexts){
+      const message=userMessage(context);
+      expect(message.length).toBeGreaterThan(12);
+      expect(message).not.toContain(hostile);
+      expect(message).not.toContain('C:\\');
+      expect(message).not.toMatch(/PID|HWND|stack trace|IPC|internal policy/i);
+    }
+  });
+
+  it('retains distinct unconfirmed windows until each gets its own positive receipt',()=>{
+    let slots=new Set<1|2|3|4|5>();
+    slots=updateRecoverySlots(slots,3,false);
+    slots=updateRecoverySlots(slots,2,false);
+    expect(recoveryLabels(slots)).toBe('Minecraft - 2, Minecraft - 3');
+    slots=updateRecoverySlots(slots,3,true);
+    expect(recoveryLabels(slots)).toBe('Minecraft - 2');
+    slots=updateRecoverySlots(slots,3,true);
+    expect(recoveryLabels(slots)).toBe('Minecraft - 2');
+    expect(recoveryLabels(updateRecoverySlots(slots,2,true))).toBe('');
   });
 });

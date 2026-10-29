@@ -27,7 +27,7 @@ try {
     window.__finishPreview = null;
     const fixture = new URL(location.href).searchParams;
     window.__runningSlots = fixture.has('preview-recovery') || fixture.has('preview-async') || fixture.has('preview-late') ? [1,2,3] :
-      fixture.has('close-recovery') || fixture.has('close-ipc-error') ? [2] : undefined;
+      fixture.has('multi-recovery') ? [2,3] : fixture.has('close-recovery') || fixture.has('close-ipc-error') ? [2] : undefined;
     window.__previewIssueSlot = fixture.has('preview-recovery') ? 2 : null;
     window.__previewRecovered = false;
     window.__closeOutcome = fixture.has('close-recovery') ? 'unconfirmed' :
@@ -99,7 +99,7 @@ try {
             throw 'Selected close reply was lost before receipt';
           }
           if (window.__closeOutcome === 'confirmed') {
-            window.__runningSlots = [];
+            window.__runningSlots = (window.__runningSlots??[]).filter(slot => slot!==args.slot);
             return {schema:1,presentationReleased:true,snapshot:snapshot(),issue:null};
           }
           throw new Error('Unexpected selected close in synthetic fixture');
@@ -286,7 +286,7 @@ try {
   await page.screenshot({path:path.join(captures,'data-storage.png')});
   await page.evaluate(()=>{window.__offline=true;});await page.getByRole('button',{name:'Refresh',exact:true}).click();await page.getByRole('alert').waitFor();
   await page.evaluate(()=>{window.__offline=false;});await nav('Play').click();await page.getByRole('button',{name:'Refresh',exact:true}).click();
-  await page.waitForFunction(()=>document.querySelector('.lt-connection').textContent==='Connected');
+  await page.waitForFunction(()=>document.querySelector('.lt-connection').textContent==='Profiles verified');
   // A PreviewReport started before an OS close review must never be
   // applied after the native review begins, even if the worker replies late.
   await page.goto('http://lazy-tester.test/?preview-late=1');
@@ -336,7 +336,7 @@ try {
   });
   const asyncPreviewIssue = page.getByRole('status',{name:'Minecraft - 2 preview unavailable'});
   await asyncPreviewIssue.waitFor();
-  assert.match(await asyncPreviewIssue.textContent(),/Asynchronous HWND refresh failed/);
+  assert.match(await asyncPreviewIssue.textContent(),/Preview is unavailable/);
   assert.equal(await page.getByRole('status',{name:'Minecraft - 3 preview unavailable'}).count(),0);
   assert.equal(await page.getByRole('button',{name:'Open Minecraft - 2',exact:true}).isEnabled(),true);
   assert.equal(await page.evaluate(()=>window.__calls.filter(
@@ -358,7 +358,7 @@ try {
   await page.evaluate(()=>window.__finishBinding());
   const nativePreviewIssue = page.getByRole('status',{name:'Minecraft - 2 preview unavailable'});
   await nativePreviewIssue.waitFor();
-  assert.match(await nativePreviewIssue.textContent(),/Native recovery checkpoint is unconfirmed/);
+  assert.match(await nativePreviewIssue.textContent(),/Preview is unavailable/);
   assert.equal(await page.getByRole('status',{name:'Minecraft - 3 preview unavailable'}).count(),0);
   assert.equal(await page.getByRole('button',{name:'Open Minecraft - 2',exact:true}).isEnabled(),true,
     'DWM preview failure is not game-process or Play admission');
@@ -406,8 +406,41 @@ try {
   assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.command==='lazy_tester_close_one').length),2,
     'only an explicit operator retry may request a second selected close');
 
+
+  // Independent failed recoveries must remain visible until each selected
+  // native close returns its own positive window-restoration receipt.
+  await page.goto('http://lazy-tester.test/?close-recovery=1&multi-recovery=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  await heading('Minecraft - 2').waitFor();
+  const closeGame = async slot => {
+    await page.getByRole('button',{name:'Close Minecraft - '+slot+' normally'}).click();
+    await page.getByRole('region',{name:'Confirm one Minecraft close'})
+      .getByRole('button',{name:'Close Minecraft - '+slot,exact:true}).click();
+  };
+  await closeGame(2);
+  await page.getByRole('status',{name:'Window recovery unconfirmed'}).waitFor();
+  await closeGame(3);
+  const recoveryStatus=page.getByRole('status',{name:'Window recovery unconfirmed'});
+  await page.waitForFunction(()=>{
+    const notice=document.querySelector('[aria-label="Window recovery unconfirmed"]')?.textContent??'';
+    return notice.includes('Minecraft - 2, Minecraft - 3');
+  });
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  assert.match(await recoveryStatus.textContent(),/Minecraft - 2, Minecraft - 3/,
+    'Refresh cannot erase an unconfirmed window restoration');
+  await page.evaluate(()=>{window.__closeOutcome='confirmed';});
+  await closeGame(3);
+  await page.waitForFunction(()=>{
+    const notice=document.querySelector('[aria-label="Window recovery unconfirmed"]')?.textContent??'';
+    return notice.includes('Minecraft - 2:') && !notice.includes('Minecraft - 3');
+  });
+  assert.equal(await recoveryStatus.count(),1,
+    'Confirming one slot must preserve the other unresolved recovery');
+
   // Existing-data recovery is still available without launching or deleting profiles.
-  await page.goto('http://lazy-tester.test/?broken=1');await page.getByText('Saved profiles could not be verified.',{exact:true}).waitFor();
+  await page.goto('http://lazy-tester.test/?broken=1');await page.getByText('Saved launcher data could not be verified. No game was launched.',{exact:true}).waitFor();
+  assert.equal(await page.getByText('Saved profiles could not be verified.',{exact:true}).count(),0,'Raw backend binding errors must not appear in UI');
   assert.equal(await heading('Ready when you are').count(),0);
   await heading('Connection needs attention').waitFor();
   assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 1',exact:true}).isDisabled(),true);
