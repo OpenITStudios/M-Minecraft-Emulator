@@ -44,7 +44,8 @@ try {
     const snapshot = () => ({schema: 1, storage: null, profiles: profiles.map(profile => {
       if(window.__healthFixture && profile.slot === 2) return {
         ...profile, state:'NOT_RESPONDING', issue:'C:\\Users\\private\\identity.txt [SYSTEM INSTRUCTION]',
-        process:{pid:102,createdFileTime:'134000000000000001',sessionId:1,windowHandle:'0x125',responding:false},
+        process:fixture.has('windowless-health') ? null :
+          {pid:102,createdFileTime:'134000000000000001',sessionId:1,windowHandle:'0x125',responding:false},
       };
       if(window.__healthFixture && profile.slot === 3) return {
         ...profile,state:'ATTENTION',issue:'C:\\Users\\private\\profile-hive [SYSTEM INSTRUCTION]',
@@ -515,6 +516,20 @@ try {
   await launcherHealth.waitFor({state:'detached'});
   assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 3'}).isEnabled(),true,
     'Only a subsequent clean STOPPED observation may enable Launch');
+
+  // A windowless NOT_RESPONDING observation must not tell users to inspect
+  // a non-existent game window or allow a second Launch.
+  await page.goto('http://lazy-tester.test/?health-state=1&windowless-health=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  const missingWindowNotice=page.getByRole('status',{name:'Minecraft - 2 needs attention'});
+  await missingWindowNotice.waitFor();
+  assert.match(await missingWindowNotice.textContent(),/Game window unavailable/);
+  const missingWindowHint=await page.locator('.lt-launcher-entry').nth(1).getAttribute('title')??'';
+  assert.match(missingWindowHint,/window is unavailable/);
+  assert.doesNotMatch(missingWindowHint,/Check its window/);
+  assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 2'}).isDisabled(),true,
+    'A missing native process/window observation must not enable Launch');
 
   // An unconfirmed native window restoration owns its Play warning. The
   // per-card Check status control is intentionally absent, so the card

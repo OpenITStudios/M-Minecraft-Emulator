@@ -1,5 +1,15 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — frontend guidance integration verification (29 October 2026)
+
+**State:** DONE for a bounded source correction; full pinned Svelte/Vitest/Playwright and Windows/Minecraft acceptance NOT_EXECUTED.
+**Decision:** Source review found that a NOT_RESPONDING slot without a verified game window was still told to inspect that window, and STARTING with an unconfirmed issue was described as a normal start. Adjust only passive existing-card help copy using the existing typed process/issue fields. Do not add controls or state, change Launch admission, reveal native issue strings or create IPC, timers, CI or Windows/game mutations.
+**Proof:** REMOTE_GITHUB exact-parent component input/output parity (5 component edges, 90 supplied/declared properties), reviewed existing native/UI authority; isolated V8 execution of the exact new source function and browser-script syntax inspection PASS. Focused Vitest and Playwright regressions AUTHORED, NOT_EXECUTED.
+**Unresolved:** Repository-pinned Node 24/npm12/Svelte/Vitest/Playwright dependencies not available in the isolated ChatGPT environment; complete frontend compile/build and synthetic browser execution NOT_EXECUTED. Windows/Tauri, five client gameplay and distribution acceptance NOT_EXECUTED.
+**Next:** Run the current source's pinned frontend typecheck/build and browser regressions when compatible dependencies can genuinely be used; fix concrete failures only.
+
+---
+
 ## Current product work — launcher recovery guidance consistency (29 October 2026)
 
 **State:** DONE for the source correction; pinned Svelte/Vitest/Playwright and Windows/Minecraft runtime remain NOT_EXECUTED.

@@ -77,8 +77,12 @@ export function projectSessionHealth(observation: SessionHealthObservation): Ses
 export function launcherCardGuidance(profile: ProfileSession, observed: boolean): string | null {
   if (!observed) return null;
   switch (profile.state) {
-    case 'STARTING': return 'Minecraft is starting. Wait for its window before trying again.';
-    case 'NOT_RESPONDING': return 'Minecraft may still be running. Check its window, then choose Check status.';
+    case 'STARTING': return profile.issue === null
+      ? 'Minecraft is starting. Wait for its window before trying again.'
+      : 'Minecraft start is not confirmed. Use Check status before another attempt.';
+    case 'NOT_RESPONDING': return profile.process === null
+      ? 'Game window is unavailable. Use Check status before trying another launch.'
+      : 'Minecraft is not responding. Check its window, then choose Check status.';
     case 'ATTENTION': return 'Review this launcher with Check status before trying Launch again.';
     case 'STOPPED': return profile.process !== null || profile.issue !== null
       ? 'The previous session is not fully verified. Refresh before trying again.'

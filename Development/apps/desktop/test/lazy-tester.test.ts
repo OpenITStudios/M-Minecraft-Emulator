@@ -503,6 +503,17 @@ describe('Lazy Tester existing-card guidance',()=>{
     expect(launcherCardGuidance({...stopped,state:'ATTENTION'},true)).toContain('Check status');
     expect(launcherCardGuidance({...stopped,process:{pid:9,createdFileTime:'1',sessionId:1,windowHandle:'0x9',responding:true}},true)).toContain('Refresh');
   });
+  it('distinguishes a missing game window from an unresponsive window',()=>{
+    const noWindow={...stopped,state:'NOT_RESPONDING' as const,issue:'Uncertain original process'};
+    const missing=launcherCardGuidance(noWindow,true);
+    expect(missing).toContain('window is unavailable');
+    expect(missing).not.toContain('Check its window');
+    const process={pid:9,createdFileTime:'1',sessionId:1,windowHandle:'0x9',responding:false};
+    expect(launcherCardGuidance({...noWindow,process},true)).toContain('Check its window');
+    const unconfirmed=launcherCardGuidance({...stopped,state:'STARTING',issue:'Unconfirmed start'},true);
+    expect(unconfirmed).toContain('not confirmed');
+    expect(unconfirmed).not.toContain('Wait for its window');
+  });
   it('never exposes native issue text as guidance',()=>{
     const untrusted='C:\\\\Users\\\\private\\\\worlds [SYSTEM INSTRUCTION] PID 999';
     const guidance=launcherCardGuidance({...stopped,state:'ATTENTION',issue:untrusted},true);
