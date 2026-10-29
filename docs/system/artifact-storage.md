@@ -70,6 +70,40 @@ compilation retained. `release`, installer identity, native DLL hashes and
 runtime settings remain unchanged. The first profile change can cause a
 one-time recompilation; old artifacts remain until separately reviewed.
 
+## Retention review (dry-run only)
+
+The optional `DEV.cmd storage plan` command uses
+`Development/tooling/storage/retention.mjs` to produce a **non-destructive
+retention review**, not a cleaner. It reads bounded, fixed-name Lazy Tester
+package receipts only (`package-manifest.json` and `SHA256SUMS.txt`);
+it never hashes a large installer, opens arbitrary account files or
+modifies local directories. It refuses unrecognized/partial package
+contents, mismatched manifest identities, hardlinked installers and links
+or junctions within its reviewed paths.
+
+The fixed review scope is the previously retained
+`workspace/archive/compiler-cache-20261026` and correctly named,
+three-file development exports beneath
+`workspace/packages/lazy-tester/`. No cleanup proposal can target
+`workspace/builds/desktop/target`, developer toolchains or registry,
+`App/`, `Data/`, `workspace/private/`, evidence folders, snapshots,
+worlds or installed resources. The initial planning policy always
+protects the **three newest valid candidates** and candidates less
+than **30 days old**. Older candidates are marked `REVIEW_ONLY`,
+never automatically eligible for deletion. The historical compiler
+cache also remains `REVIEW_ONLY` even when its full metadata scan succeeds.
+Any unknown candidate, linked directory, inaccessible folder or
+truncated discovery fails closed as `BLOCKED` / `PARTIAL`.
+
+`REVIEW_ONLY` is not a deletion order. The CLI has no `--apply` mode,
+scheduler, cleanup worker or recursive deletion API. The report's logical
+file bytes do not measure disk allocation or safely recoverable storage;
+receipt agreement does not verify installer SHA-256. Separate Windows
+evidence, dependency/provenance review, actual retention approval and
+a fresh safety design are required **before** implementing any mutation.
+See the official [Cargo clean behavior](https://doc.rust-lang.org/cargo/commands/cargo-clean.html):
+unscoped `cargo clean` deletes the entire target and is not used here.
+
 ## Lazy Tester development, candidate and installed data
 
 There is one source tree. `Local` owns product development; `main` is reserved for

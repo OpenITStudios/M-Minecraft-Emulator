@@ -1,5 +1,16 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — Developer artifact retention dry-run (30 October 2026)
+
+**State:** DONE for bounded read-only retention planning; destructive cleanup deliberately NOT_IMPLEMENTED. Pinned Windows/Powershell and actual storage measurements NOT_EXECUTED.
+**Decision:** Extend the existing `Development/tooling/storage/` owner with `retention.mjs` and `DEV.cmd storage plan` only. Classify precisely versioned Lazy Tester package receipts and the retained compiler-cache archive without deleting or modifying anything. Preserve the newest three valid packages, all packages under 30 days, existing App/Data/private backups, active Cargo target, toolchains, installer payload and Minecraft worlds. Fail closed on unrecognized packages, mismatched receipts, incomplete scans, symlinks and hardlinks; `REVIEW_ONLY` is not deletion approval. No `--apply` or cleanup handler exists.
+**Proof:** SOURCE_EXECUTION Node.js 22.16.0 isolated synthetic storage inventory + retention suite 22/22 PASS, including corrupt/incomplete candidates, links and hardlinks, ranking boundaries and `--apply` refusal; exact checked-in candidate blobs must match the executed local sources. REMOTE_GITHUB pinned source/caller/static policy review. Windows/PowerShell parsing, pinned Node24/Rust1.99.1, real 60 GB inventory, cold/warm build, installer and Minecraft acceptance NOT_EXECUTED.
+**Unresolved:** No actionable Windows source-of-disk breakdown or authenticated evidence that historical archived paths can be removed; contents may contain retained provenance. Receipt metadata does not authenticate installer bytes, and a logical-size estimate is not reclaimable disk.
+**Next:** Collect non-destructive Windows `storage report` and `storage plan` observations plus comparable cold/warm Cargo timings, then determine separately which exact historical outputs merit a requested deletion design.
+
+---
+
+
 ## Current product work — Developer storage inventory / lean Cargo build profiles (30 October 2026)
 
 **State:** DONE for bounded source implementation; Windows disk inventory, pinned Rust/Tauri compilation and real storage-savings measurements NOT_EXECUTED.

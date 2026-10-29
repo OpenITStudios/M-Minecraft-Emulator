@@ -56,6 +56,15 @@ rebuild, temporarily leaving old and new artifacts side by side.
 No automatic pruning is provided. The archived 2026-10-26 compiler cache is
 preserved until an explicit, safe retention review and approval.
 
+`DEV.cmd storage plan` is a read-only retention **dry-run** for the historical
+compiler-cache archive and versioned, three-file Lazy Tester installer
+candidates. It protects the newest three valid candidates and anything
+younger than 30 days; older exports are `REVIEW_ONLY` (not deletion-ready).
+Unknown or incomplete candidates, untrusted receipts, links, hardlinks,
+partial scans and ambiguous directories fail closed. It never scans account
+data, app backups, active Cargo targets, or toolchain caches. No `--apply`
+exists; no disk space will be reclaimed by running this command.
+
 ## Setup on Windows x64 (workspace-only)
 
 Run `DEV.cmd bootstrap` **once** from this checkout root. The existing

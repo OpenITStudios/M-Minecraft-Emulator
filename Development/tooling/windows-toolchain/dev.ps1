@@ -3,7 +3,7 @@ param(
     [ValidateSet("setup", "doctor", "lock", "g0", "preflight", "check", "test", "dev", "package", "storage", "help")]
     [string]$Command = "help",
     [Parameter(Position=1)]
-    [ValidateSet("report", "explain")]
+    [ValidateSet("report", "explain", "plan")]
     [string]$StorageMode = "report"
 )
 
@@ -24,7 +24,11 @@ if ($Command -eq "storage") {
     if ($LASTEXITCODE -ne 0 -or $actualVersion -ne [string]$manifest.node.version) {
         throw "Storage inventory Node version does not match the pinned local toolchain."
     }
-    & $localNode (Join-Path $DevelopmentRoot 'tooling/storage/inventory.mjs') $StorageMode
+    if ($StorageMode -eq "plan") {
+        & $localNode (Join-Path $DevelopmentRoot 'tooling/storage/retention.mjs')
+    } else {
+        & $localNode (Join-Path $DevelopmentRoot 'tooling/storage/inventory.mjs') $StorageMode
+    }
     if ($LASTEXITCODE -ne 0) {
         throw "Storage inventory was partial or failed (exit $LASTEXITCODE); review the read-only report above."
     }
@@ -358,6 +362,7 @@ try {
             Write-Host "  DEV.cmd package  # build and stage a Lazy Tester development candidate"
             Write-Host "  DEV.cmd storage report  # read-only developer file-size inventory"
             Write-Host "  DEV.cmd storage explain # top measured categories; no deletion"
+            Write-Host "  DEV.cmd storage plan    # dry-run retention review; no deletion"
         }
     }
 }

@@ -9,7 +9,7 @@ a second live game process/session owner.
 | --- | --- |
 | `repository/` | Active Git-tree, dependency, route, CI-disabled and documentation-link checks |
 | `windows-toolchain/` | Source/build/package helpers when explicitly requested; no automatic local test |
-| `storage/` | Read-only bounded inventory of developer build/cache artifacts; never inspects Minecraft data |
+| `storage/` | Read-only artifact inventory plus fail-closed retention planning for reviewed developer outputs; no deletion |
 | `dependencies/` | Dependency consistency review and maintenance |
 | `acceptance/windows/bootstrap-ordering/` | **Active native DLL source** used by the five-session game bootstrap |
 | `acceptance/` | Native and historical acceptance collectors; older Sandboxie/VM results are not current gameplay proof |
@@ -29,6 +29,16 @@ The Node CLI is `node tooling/storage/inventory.mjs report` from inside
 It does not delete or compact caches; first-time Rust profile changes may
 temporarily increase target size before any separate retention review.
 Synthetic tests: `node --test tooling/storage/inventory.test.mjs`.
+
+`DEV.cmd storage plan` runs `storage/retention.mjs`, a second **read-only**
+metadata review. It checks only the historical compiler-cache archive and
+versioned Lazy Tester export candidates, preserving the newest three and
+anything under 30 days. `REVIEW_ONLY` is never deletion permission;
+malformed receipts and incomplete scans are `BLOCKED`. The planner does
+not verify installer file hashes, perform cleanup or support `--apply`.
+It is also available without PowerShell as
+`node tooling/storage/retention.mjs` from `Development/`.
+Synthetic tests: `node --test tooling/storage/retention.test.mjs`.
 
 ## Resource-efficiency source previews — closed decision, reusable code
 

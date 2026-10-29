@@ -67,11 +67,14 @@ test('developer commands isolate HOME/cache/temp, require local runtime and pres
   assert.match(environment,/Do not override USERPROFILE\/APPDATA\/LOCALAPPDATA/);
   assert.doesNotMatch(environment,/\[Environment\]::SetEnvironmentVariable\([^)]*,\s*'Machine'/);
 });
-test('developer storage route admits only read-only report and explain modes', () => {
+test('developer storage route supports report, explain, and non-destructive retention plan', () => {
   const inventory=read('tooling/storage/inventory.mjs');
+  const planner=read('tooling/storage/retention.mjs');
   assert.match(developer,/\[string\]\$StorageMode = "report"/);
+  assert.match(developer,/ValidateSet\("report", "explain", "plan"\)/);
   assert.match(developer,/if \(\$Command -eq "storage"\)/);
   assert.match(developer,/tooling\/storage\/inventory\.mjs/);
+  assert.match(developer,/tooling\/storage\/retention\.mjs/);
   assert.ok(developer.indexOf('if ($Command -eq "storage")') <
     developer.indexOf('Set-LocalDeveloperEnvironment -Root $Root'),
     'read-only inventory must bypass developer cache initialization');
@@ -79,6 +82,9 @@ test('developer storage route admits only read-only report and explain modes', (
   assert.match(inventory,/lstatSync/);
   assert.match(inventory,/opendirSync/);
   assert.doesNotMatch(inventory,/\b(?:rmSync|unlinkSync|writeFileSync|readFileSync|execFileSync|spawnSync)\b/);
+  assert.match(planner,/destructiveCapability:false/);
+  assert.match(planner,/no --apply mode/);
+  assert.doesNotMatch(planner,/\b(?:rmSync|unlinkSync|renameSync|writeFileSync|execFileSync|spawnSync)\b/);
 });
 
 test('portable setup scripts parse in Windows PowerShell without running downloads', {
