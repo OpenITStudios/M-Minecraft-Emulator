@@ -308,18 +308,22 @@ describe('Lazy Tester profile contract', () => {
       await expect(lazyTester.closeOne(slot as 1)).rejects.toThrow('Unknown Minecraft profile');
     }
   });
-  it('admits Launch only for a clean STOPPED profile, never ATTENTION or uncertain startup',()=>{
+  it('preserves manual retry for stopped ATTENTION but blocks active or uncertain owners',()=>{
     const clean=parseSession(stopped()).profiles[0]!;
     expect(canRequestLaunch(clean)).toBe(true);
+    // Native may retain a stopped slot after a nonzero game exit. A manual
+    // retry is valid only if its original controller admits the attempt.
+    expect(canRequestLaunch({...clean,state:'ATTENTION',issue:'Minecraft exited with code 1'})).toBe(true);
+    expect(canRequestLaunch({...clean,state:'ATTENTION',issue:'Profile storage unavailable'})).toBe(true);
+    expect(canRequestLaunch({...clean,state:'ATTENTION',issue:null})).toBe(true);
     for(const invalid of [
       undefined,
-      {...clean,state:'ATTENTION',issue:'Profile binding needs review'},
-      {...clean,state:'ATTENTION',issue:null},
       {...clean,state:'STOPPED',issue:'Saved profile may be incomplete'},
       {...clean,state:'STARTING',issue:null},
       {...clean,state:'NOT_RESPONDING',issue:'Previous exit still pending'},
       {...clean,state:'RUNNING',process:running(1).process},
       {...clean,state:'STOPPED',process:running(1).process},
+      {...clean,state:'ATTENTION',process:running(1).process},
     ]){
       expect(canRequestLaunch(invalid as ProfileSession|undefined)).toBe(false);
     }

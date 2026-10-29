@@ -200,10 +200,14 @@ function settingsSession(value:unknown):SessionSnapshot & {settings:SettingsRepo
   return snapshot as SessionSnapshot & {settings:SettingsReport};
 }
 
-// A failed/stale profile observation must never offer Launch. Rust owns
-// final admission; this is a strict UI precondition only.
+// UI preflight only. ATTENTION can mean a previously exited game that is
+// safe to retry manually; it can also mean a missing store. Never infer native
+// permission from the issue text. The Rust controller reaps, checks retained
+// storage, and refuses unsafe retries. STARTING/NOT_RESPONDING stay blocked.
 export function canRequestLaunch(profile:ProfileSession|undefined):boolean {
-  return profile?.state==='STOPPED' && profile.process===null && profile.issue===null;
+  return !!profile && profile.process===null &&
+    (profile.state==='ATTENTION' ||
+      (profile.state==='STOPPED' && profile.issue===null));
 }
 
 export function firstEmbeddedProfile(profiles:ProfileSession[],separate:ReadonlySet<ProfileSlot>):ProfileSlot|null {

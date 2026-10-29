@@ -401,8 +401,8 @@ try {
     'Health display must never echo native prompt-like content');
   assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 2'}).isDisabled(),true,
     'Health UI must not override the existing unresponsive-game admission');
-  assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 3'}).isDisabled(),true,
-    'An ATTENTION profile must not offer Launch before recovery is verified');
+  assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 3'}).isEnabled(),true,
+    'An ATTENTION profile may be a stopped, retryable game; the native controller retains final admission');
   assert.equal(await page.evaluate(()=>window.__calls.some(call=>call.args?.request?.operation==='Launch')),false,
     'Health inspection must not start a Minecraft instance');
   const checkHealth=page.getByRole('button',{name:'Check status for Minecraft - 2'});
