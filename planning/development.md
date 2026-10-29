@@ -68,6 +68,58 @@ Sources for this decision: official Minecraft Creator
 [texture budgets](https://learn.microsoft.com/en-us/minecraft/creator/documents/texturebudgets),
 and [Minecraft Education support](https://edusupport.minecraft.net/hc/en-us/community/posts/27603741486228-How-to-get-a-transparent-picture-frame).
 
+## Evidence — existing Memory Reduce .mcpack is NOT a safe lossless texture source (29 October 2026)
+
+**Artifact reviewed:** prior user-uploaded `Memory Reduce [Ram].mcpack`,
+SHA-256 `b3d4abd6a453171f85715bfa956303635a7dfb54f891c9fee1ff71cee92779db`
+(1,556,587 compressed bytes; 1,463 ZIP entries). This is a private
+metadata-only inspection; no third-party PNG/JSON was copied to GitHub,
+rebuilt, distributed, installed, or applied to MC01–MC05.
+
+One-off ChatGPT sandbox archive inspection found **1,109 PNGs** and 563
+root block PNGs, including **310 at 1×1** and **234 at 8×8**. Root
+particle files: **121** with disabled activation/zero active cap.
+Root flipbook declarations: **69**, each set to the single frame
+`[0]` (the two other subpack copies are identical). These directly
+trade visual detail, atmospheric cues and animation for fewer source
+pixels/particles, contrary to the quality-preserving goal; the
+`Normal` subpack does not remove root overrides.
+
+The archive contains **98 groups of byte-identical PNGs** (148 excess
+filenames), including six pairs of 256×256 panorama images in distinct
+GUI paths. Identical bytes do **not** prove both paths are loaded,
+deduplicated by the renderer, or safe to alias: GUI paths, atlas
+references, fixed filenames and unknown Education behavior have not
+been fully demonstrated. Never delete/repoint them based solely on
+SHA-256 collisions. **11 of the 20** current LazyTester particle
+filenames overlap root overrides in this pack, and eight overlap its
+subpacks. Activation order and winner are unverified; never stack
+these packs and assert all 20 tuning effects are active.
+
+For perspective only, summing source dimensions of all 1,109 PNGs
+gives **4,053,196 texels**, or **15.46 MiB as hypothetical RGBA8
+pixel buffers**. GUI images alone account for approximately 14.16 MiB;
+block images approximately 0.20 MiB. These are not resident Minecraft
+RAM, loaded GPU memory, eliminated textures, atlas residency, or
+achievable savings, and may include files not used by Education.
+
+**Disposition: `NO_SAFE_TEXTURE_TRANSFORM` for this candidate.**
+There is no quality-preserving, Education-version-matched, fully
+referenced texture transformation that can be implemented safely from
+this archive alone. Do not import its root/subpack content, disable
+ambient/gameplay effects, downscale vanilla pixels, or create a new
+texture conversion/monitoring component to mask the missing proof.
+Retain the separately source-pinned 20-effect LazyTester Particle
+Tuning v0.3 offline preview unchanged.
+
+**Next material source requirement:** an authorized original
+texture/geometry/render-controller asset set with its complete
+references and dimensions. Only then consider a bounded
+reference-safe atlas, empty-space crop or exact reuse of a
+truly duplicated loaded texture, and evaluate decoded texel/handle
+budgets separately from any runtime RAM claim. No user PC, CI,
+host-game changes or new monitoring are required for this audit.
+
 ## Active implementation — Preserve Visuals and texture memory configuration (29 October 2026)
 
 **User-approved continuation after particle v0.3:** prefer supported game
@@ -442,12 +494,14 @@ No speculative renderer patch, working-set trim or experimental hook
 promotion is justified. The reviewer improvement concerns *measurement
 honesty*, not reclaimed game RAM.
 
-**Primary next source action (supersedes preceding RAM/monitor research
-leads):** inspect the actual owned texture and pack definitions for **one**
-quality-preserving, decoded-texel/loaded-handle reduction candidate. If no
-original authorized asset and reference graph establish safe transform
-semantics, record `NO_SAFE_TEXTURE_TRANSFORM` and retain the existing
-particle-only offline preview instead of creating a speculative new
-texturepack. Keep 144/10 FPS, five-profile isolation, Texture Streaming
-opt-in and existing functionality unchanged. Do not introduce monitors,
-new periodic polling, GPU hooks, Java mods, CI or user-PC tests.
+**Primary next source action:** keep the current offline
+particle preview unchanged. The actual prior `Memory Reduce [Ram].mcpack`
+archive was inspected and assigned `NO_SAFE_TEXTURE_TRANSFORM`:
+aggressive block downscaling, 121 disabled root particles,
+69 one-frame animations and unresolved GUI/particle reference collisions
+are not quality-preserving texture savings. No full asset graph,
+Education 26.32 compatibility, or resident-memory proof exists.
+Only revisit texture source modification when one authorized, truly
+reference-safe original texture asset set becomes available.
+Do not add monitors, extra pack checkers, speculative conversions,
+auto-activation, CI, user-PC localtest or game hooks.

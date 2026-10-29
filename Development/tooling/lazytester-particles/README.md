@@ -50,6 +50,33 @@ References: [Minecraft Creator resource guidance](https://learn.microsoft.com/en
 [texture budget accounting](https://learn.microsoft.com/en-us/minecraft/creator/documents/texturebudgets),
 [Minecraft Education resource-pack support notice](https://edusupport.minecraft.net/hc/en-us/community/posts/27603741486228-How-to-get-a-transparent-picture-frame).
 
+## Compatibility with other memory-reduction packs
+
+A one-off metadata audit of a separately provided third-party
+`Memory Reduce [Ram].mcpack` archive (SHA-256
+`b3d4abd6a453171f85715bfa956303635a7dfb54f891c9fee1ff71cee92779db`)
+found **11 particle filenames** that also appear in LazyTester v0.3:
+`portal_reverse`, `nectar_drip`, `campfire_smoke`,
+`campfire_smoke_tall`, `rain_splash`, `mycelium_dust`,
+`water_drip`, `lava_drip`, `honey_drip`, `obsidian_tear`,
+and `endrod`. The other pack turns off 121 root particle definitions;
+simultaneous activation would have unresolved override priority and
+would not prove that the LazyTester curves are in effect.
+
+That archive also includes 310 block textures reduced to 1×1,
+234 reduced to 8×8, and 69 static one-frame flipbook entries.
+These are real visual changes, not quality-preserving lossless
+texture memory optimization. Its 98 groups of byte-identical PNGs
+do not authorize removing paths without a complete consumer graph.
+No files or source bytes from that third-party archive are copied,
+vendored, merged or automatically installed by LazyTester.
+
+**Do not layer this particle preview with overlapping pack overrides**
+in the original world or all five profiles. On any future independently
+authorized copied-world trial, compare pack precedence and restore the
+original world if conflicts appear. Minecraft Education custom packs
+remain unsupported; any actual GPU/private-RAM benefit is UNKNOWN.
+
 ## Four distance tiers
 
 | Camera distance to emitter | Relative budget |
