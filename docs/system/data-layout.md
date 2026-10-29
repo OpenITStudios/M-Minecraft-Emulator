@@ -98,12 +98,24 @@ existing settings backup/restore owner. Missing/duplicate/ambiguous keys are
 never synthesized or guessed. Minecraft Education 26.32 runtime support
 and private-RAM/VRAM benefit have not been measured.
 
-Data Storage displays a bounded, read-only count of manifest-containing
-directories under each profile's canonical Roaming resource_packs and
-development_resource_packs roots. This number does **not** establish which
-packs are activated globally or in worlds, nor any loaded/retained texture
-memory. The inventory has no delete/disable/activation authority and skips
-world content. Links or inspection limits result in an incomplete report.
+Data Storage displays **two separately qualified read-only observations**
+for an authorized *stopped* profile. First it counts ordinary directories
+containing a manifest in the canonical Roaming resource_packs and
+development_resource_packs roots. Second it checks **only the bounded
+world_resource_packs.json metadata file** in each immediate saved-world
+directory, counting declared resource-pack references and worlds with
+declarations. The world database, level.dat, accounts, and assets are never
+opened. Directories and metadata are checked against reparse points; each
+source has an entry/time/size limit, and an incomplete result is UNKNOWN
+rather than a false zero. A failed world-declaration census does not erase
+a valid manifest-folder count; older IPC responses without the optional
+world metadata remain valid.
+
+Neither observation identifies the currently open world, validates that a
+referenced pack exists, accounts for global pack activation, proves that
+the engine loaded the pack, or estimates RAM/VRAM. The inventory has no
+delete/disable/activation authority. Minecraft Education is the only owner
+of applying packs.
 Full clear replaces the selected verified local profile and hive after confirmation;
 its recovery and isolation have synthetic fixture evidence only. Windows-managed
 sign-in data is outside that operation, and a fresh account sign-in is not yet

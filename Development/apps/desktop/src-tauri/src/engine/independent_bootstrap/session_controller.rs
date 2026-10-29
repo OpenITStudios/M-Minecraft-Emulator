@@ -408,7 +408,11 @@ impl Sessions {
                         }
                         cache
                     },
-                    resource_packs: Some(resource_pack_inventory::inspect(&store.private, budget)),
+                    // The inventory reads saved world *pack declaration metadata*.
+                    // Do not inspect a selected profile while its own Minecraft
+                    // session is active or the admission result is uncertain.
+                    resource_packs: admission.is_ok().then(||
+                        resource_pack_inventory::inspect(&store.private, budget)),
                     game_settings: Some(game_preset::inspect_settings(&store.private, replay_admission())),
                     full_clear: Some(product_profiles::clear::inspect(store, replay_admission())),
                 };

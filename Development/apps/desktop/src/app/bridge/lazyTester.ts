@@ -14,7 +14,13 @@ export interface ProfileStorage {
   slot: ProfileSlot; bytes: number; files: number; partial: boolean;
   disk: {availableBytes: number; totalBytes: number} | null;
   cache: {bytes: number; files: number; partial: boolean; canClear: boolean; issue: string | null};
-  resourcePacks?: {manifested:number; partial:boolean; issue:string|null};
+  resourcePacks?: {
+    manifested:number; partial:boolean; issue:string|null;
+    worldDeclarations?: {
+      worldsScanned:number; worldsWithReferences:number; packReferences:number;
+      partial:boolean; issue:string|null;
+    };
+  };
   gameSettings?: {hasSettings:boolean; backupAvailable:boolean; canReset:boolean; canRestore:boolean; issue:string|null; improvedInputResponseEnabled?:boolean; textureStreamingEnabled?:boolean};
   fullClear?: {canClear:boolean; pending:boolean; confirmationToken:string|null; issue:string|null};
 }
@@ -124,11 +130,28 @@ export function parseSession(value: unknown): SessionSnapshot {
       // has activated any of them or that game RAM can be reclaimed.
       if(Object.hasOwn(storage,'resourcePacks')) {
         const packs=storage.resourcePacks;
-        if(!record(packs)||!exact(packs,['manifested','partial','issue'])||
+        if(!record(packs)||!exact(packs,['manifested','partial','issue',
+          ...(Object.hasOwn(packs,'worldDeclarations')?['worldDeclarations']:[])])||
           !Number.isInteger(packs.manifested)||Number(packs.manifested)<0||Number(packs.manifested)>128||
           typeof packs.partial!=='boolean'||!(packs.issue===null||typeof packs.issue==='string'&&packs.issue.length<=8192)||
           packs.partial!== (packs.issue!==null) || packs.partial&&packs.manifested!==0)
           throw new TypeError('Invalid resource pack inventory');
+        if(Object.hasOwn(packs,'worldDeclarations')) {
+          const worlds=packs.worldDeclarations;
+          if(!record(worlds)||!exact(worlds,['worldsScanned','worldsWithReferences','packReferences','partial','issue'])||
+            !Number.isInteger(worlds.worldsScanned)||Number(worlds.worldsScanned)<0||Number(worlds.worldsScanned)>128||
+            !Number.isInteger(worlds.worldsWithReferences)||Number(worlds.worldsWithReferences)<0||
+            Number(worlds.worldsWithReferences)>Number(worlds.worldsScanned)||
+            !Number.isInteger(worlds.packReferences)||Number(worlds.packReferences)<0||Number(worlds.packReferences)>256||
+            typeof worlds.partial!=='boolean'||
+            !(worlds.issue===null||typeof worlds.issue==='string'&&worlds.issue.length<=8192)||
+            worlds.partial!==(worlds.issue!==null)||
+            (worlds.partial&&(worlds.worldsScanned!==0||worlds.worldsWithReferences!==0||worlds.packReferences!==0))||
+            (!worlds.partial&&worlds.worldsWithReferences===0&&worlds.packReferences!==0)||
+            (!worlds.partial&&Number(worlds.worldsWithReferences)>Number(worlds.packReferences))) {
+            throw new TypeError('Invalid resource pack declarations');
+          }
+        }
       }
       if(Object.hasOwn(storage,'gameSettings')) {
         const game=storage.gameSettings;

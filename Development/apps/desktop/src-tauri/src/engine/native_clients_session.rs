@@ -70,8 +70,21 @@ pub struct ProfileStorage {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResourcePackStorage {
-    // Manifest-containing local directories only. No read of world activation.
+    // Manifest-containing local directories; no assumption of activation.
     pub manifested: u32,
+    pub partial: bool,
+    pub issue: Option<String>,
+    // Optional for backward-compatible older session replies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_declarations: Option<WorldPackDeclarations>,
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorldPackDeclarations {
+    // Counts only world_resource_packs.json metadata, not loaded resources.
+    pub worlds_scanned: u32,
+    pub worlds_with_references: u32,
+    pub pack_references: u32,
     pub partial: bool,
     pub issue: Option<String>,
 }

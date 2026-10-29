@@ -85,8 +85,9 @@ MSAA and render distance unchanged; existing explicitly saved Low/High presets
 keep their historical 12-chunk behavior. A change to these preferences requires
 the original all-sessions-stopped gate. Data Storage exposes an explicit,
 backed-up Texture Streaming 0/1 switch only when the key exists on a stopped
-profile, plus a read-only count of local resource-pack manifest folders
-(**not** proof of world activation or RAM savings). These controls do not launch
+profile, plus bounded read-only counts of on-disk pack folders and saved
+world_resource_packs.json references. The latter are declarations, **not**
+proof of current world activation, actual loaded textures or RAM savings. These controls do not launch
 or stop Minecraft. See [data layout](docs/system/data-layout.md) for persistence
 and validation. Native pacer fixtures are not fresh Minecraft gameplay acceptance.
 

@@ -36,14 +36,18 @@ Education 26.32 support or claim measured MiB from Bedrock patch notes.
   settings fail closed. No graphics option is auto-created or automatically
   switched. It may affect GPU memory but Education 26.32 support/system RAM
   effects and visual texture-loading behavior remain UNKNOWN.
-- The original Data Storage response now contains an optional bounded,
-  **read-only** resource pack directory census from canonical per-profile
-  `Roaming/.../games/com.mojang/resource_packs` and
-  `development_resource_packs`. It counts ordinary manifest-containing
-  directories up to a fixed bound without reading worlds, textures or
-  credential files, following junctions, disabling packs or claiming
-  any pack is active. Partial/linked inventories report UNKNOWN, not
-  reliable savings. Existing Refresh and Open folder are reused.
+- The original Data Storage response retains the optional bounded pack
+  folder inventory and now adds **optional world pack declarations** from
+  each saved world's `world_resource_packs.json` only. The resource
+  inventory is suppressed for the selected running/unadmitted profile.
+  The bounded stopped-profile scan reads neither `db` nor `level.dat`,
+  asset bytes, credentials, player data, pack textures or behavior packs;
+  link/junction/oversize/invalid JSON and time limits fail closed. Counts
+  declare per-world references, NOT confirmed active packs, the current
+  world, global pack activation or loaded/reclaimable RAM/VRAM. Partial
+  world metadata is independent from the valid on-disk pack folder count,
+  and old wire responses without this optional field still parse. No
+  world/pack mutation, CI or extra worker was added.
 - Code owner updates: `manager_settings.rs`, `game_preset.rs`,
   `native_clients_session.rs`, `session_controller.rs`, typed bridge/UI,
   and one small `resource_pack_inventory.rs` read-only owner. Native RAM
@@ -330,13 +334,14 @@ No speculative renderer patch, working-set trim or experimental hook
 promotion is justified. The reviewer improvement concerns *measurement
 honesty*, not reclaimed game RAM.
 
-**Primary next source action:** retain Preserve Visuals as the non-destructive
-default, Texture Streaming as a backed-up explicitly reversible existing-key
-choice, and resource-pack inventory as read-only visibility. Further
-optimizations must be grounded in actual Education 26.32 option/pack
-compatibility and a plausible resident-memory effect; do not invent
-`gfx_particleviewdistance` values, disable any world/resource pack
-automatically, or claim Bedrock-only features as Education-tested.
-LazyTester Particle Tuning v0.3 remains a separate source-built-only
-preview. Any real Education gameplay/host test needs independent operator
-permission. UploadBufferHeap remains default OFF.
+**Primary next source action:** keep Texture Streaming opt-in. The official
+Bedrock 26.30 changelog confirms PC support, but Minecraft Education's
+26.32 changelog does not explicitly confirm this renderer feature; no
+native game/VRAM/private-memory evidence is available. Use the existing
+native performance collector only when game acceptance is independently
+authorized, comparing identical world/pack settings before and after one
+change. The stopped-profile resource-pack census distinguishes disk
+manifests from saved-world **declarations**; do not infer loaded textures
+or disable content based on those counts. The 20-effect LazyTester Particle
+Tuning v0.3 remains an uninstalled preview; native UploadBufferHeap stays
+default OFF. Do not start CI or user-PC localtest.

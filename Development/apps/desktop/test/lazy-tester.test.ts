@@ -133,6 +133,21 @@ describe('Lazy Tester profile contract', () => {
     }));
     const profile={...stopped(),storage:row(resourcePacks)};
     expect(parseSession(profile).storage![0]?.resourcePacks?.manifested).toBe(2);
+    const declarations={worldsScanned:4,worldsWithReferences:2,packReferences:3,partial:false,issue:null};
+    const withWorlds={...resourcePacks,worldDeclarations:declarations};
+    expect(parseSession({...stopped(),storage:row(withWorlds)}).storage![0]?.resourcePacks?.worldDeclarations).toEqual(declarations);
+    // Source-inspection uncertainty is not an authoritative zero-reference claim.
+    const uncertain={worldsScanned:0,worldsWithReferences:0,packReferences:0,
+      partial:true,issue:'World metadata not readable'};
+    expect(parseSession({...stopped(),storage:row({...resourcePacks,worldDeclarations:uncertain})})
+      .storage![0]?.resourcePacks?.worldDeclarations?.partial).toBe(true);
+    for(const invalidWorlds of [
+      {...declarations,worldsScanned:129}, {...declarations,worldsScanned:-1},
+      {...declarations,packReferences:257}, {...declarations,packReferences:0},
+      {...declarations,worldsWithReferences:5}, {...declarations,worldsScanned:1},
+      {...declarations,partial:true}, {...declarations,issue:'Mismatch'},
+      {...uncertain,packReferences:1}, {...declarations,activeInGame:true}, null,
+    ]) expect(()=>parseSession({...stopped(),storage:row({...resourcePacks,worldDeclarations:invalidWorlds})})).toThrow();
     const partial={manifested:0,partial:true,issue:'Resource pack inventory is partial'};
     expect(parseSession({...stopped(),storage:row(partial)}).storage![0]?.resourcePacks?.partial).toBe(true);
     const older={...stopped(),storage:row(resourcePacks).map(({resourcePacks,...rest})=>rest)};
