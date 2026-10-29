@@ -17,7 +17,11 @@ describe('Lazy Tester native package',()=>{
     expect([...packaged,'lazy-tester.exe',...processRoles.map(r=>r.file)].sort()).toEqual([...policy.requiredFiles].sort());
     expect(policy.migration.installerMayDeleteData).toBe(false);
     expect(policy.runtime.defaultDataRelativePath).toBe('Data');
-    expect(policy.runtime.dataLocatorRelativePath).toBe('App/data-location.json');
+    expect(policy.runtime.dataLocatorRelativePath).toBe('Data/Settings/data-location.json');
+    expect(policy.runtime.legacyDataLocatorRelativePath).toBe('App/data-location.json');
+    expect(policy.runtime.newProfileDirectories).toBe('Data/Launchers/Minecraft-1..5');
+    expect(policy.runtime.legacyProfileDirectories).toBe('Data/Profiles/Minecraft-1..5');
+    expect(policy.runtime.profileCatalogRelativePath).toBe('Data/profiles.json');
     const hooks=readFileSync(new URL('../src-tauri/windows/lazy-tester-hooks.nsh',import.meta.url),'utf8');
     expect(hooks).toContain('MUI_CUSTOMFUNCTION_GUIINIT');
     expect(hooks).toContain('$PROFILE\\Lazy Tester\\App');

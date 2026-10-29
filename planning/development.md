@@ -1,5 +1,14 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — canonical versus legacy contract cleanup (29 October 2026)
+
+**State:** DONE in source; integrated Windows/package/Minecraft acceptance NOT_EXECUTED.
+**Decision:** Match the current native schema 2 data layout (`Data/Launchers/Minecraft-1..5` and `Data/Settings/data-location.json`) in manifest/test/checker, while preserving explicit legacy schema 1/flat-install paths (`Data/Profiles/` and `App/data-location.json`). Keep installer NSIS migration/refusal and data untouched. Rewrite the outdated desktop README, and correct historical FPS default documentation.
+**Proof:** REMOTE_GITHUB pinned current Rust owner, existing NSIS hooks and package consumer structural review; tests authored, not executed. No installed app, private data, lifecycle or game operation changed.
+**Next:** Phase B — one bounded UI presentation/scheduling extraction without adding a new state owner, worker or IPC.
+
+---
+
 ## Current product work — Guided Recovery integration / isolated source verification (29 October 2026)
 
 **State:** DONE for bounded source hardening and isolated module execution; full desktop, browser and Minecraft runtime acceptance NOT_EXECUTED.

@@ -384,8 +384,10 @@ Functional Settings uses the same lazy_tester_session adapter and retained
 session actor: InspectSettings, SavePerformance and ApplyPreset. Existing
 manager_settings.rs owns Data/Settings/performance.json; the original
 game_preset.rs owns all graphics-option writes. Private presentation v3 passes
-validated immutable FPS limits to the existing pacer at startup. New preferences default to120/5 with a5FPS minimum for saves; explicit older
-preferences remain readable. Historical V2 payload defaults stay144/10. No parallel
+validated immutable FPS limits to the existing pacer at startup. First-run
+preferences default to **144 active / 10 background** FPS. Saved values
+take precedence at next launch; new saves require a minimum of 5 FPS,
+while valid old saved limits below that minimum remain readable. No parallel
 limiter, live update worker or profile-state owner is added.
 
 The mounted desktop is `Development/apps/desktop/src/LazyTesterApp.svelte`, consuming

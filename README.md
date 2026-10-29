@@ -56,10 +56,13 @@ Signing, installed/gameplay acceptance and publication remain separate. See the
 [storage policy](docs/system/artifact-storage.md) for the source/build/runtime split.
 
 For this checkout, start the prepared candidate with `RUN.cmd`. Packaging does
-not start the app or any game. A refresh preserves `App/data-location.json`,
-archives the previous app under `workspace/private/local-app-backups/`, and
-leaves all existing data untouched. `Data/` starts empty; existing pilot accounts
-and worlds remain in their original profiles. An empty folder is not a migration.
+not start the app or any game. A refresh preserves the complete `Data/` tree
+including `Data/Settings/data-location.json`, and copies any historical
+`App/data-location.json` pointer for backward compatibility. The previous app
+is archived under `workspace/private/local-app-backups/`. A fresh installation
+does not automatically migrate old pilot accounts or worlds. The preserved
+original stores require the separate reviewed migration; an empty folder is
+not a migration.
 
 ## Active architecture
 

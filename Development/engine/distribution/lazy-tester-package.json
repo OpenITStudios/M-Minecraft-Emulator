@@ -34,13 +34,15 @@
     "portableProfileProvisioning": "FIVE_FRESH_STORES_SOURCE_IMPLEMENTED_RUNTIME_NOT_EXECUTED",
     "applicationSubdirectory": "App",
     "defaultDataRelativePath": "Data",
-    "dataLocatorRelativePath": "App/data-location.json",
+    "dataLocatorRelativePath": "Data/Settings/data-location.json",
     "profileCatalogRelativePath": "Data/profiles.json",
-    "newProfileDirectories": "Data/Profiles/Minecraft-1..5",
+    "newProfileDirectories": "Data/Launchers/Minecraft-1..5",
     "existingDataMigration": "PRESERVE_IN_PLACE",
     "manualRelocation": "SAME_VOLUME_AND_WINDOWS_USER_IDENTITIES_REQUIRED",
     "crossVolumeRelocation": "NOT_IMPLEMENTED",
-    "crossBinaryControllerHandoff": "UNSUPPORTED"
+    "crossBinaryControllerHandoff": "UNSUPPORTED",
+    "legacyDataLocatorRelativePath": "App/data-location.json",
+    "legacyProfileDirectories": "Data/Profiles/Minecraft-1..5"
   },
   "excludedPayloads": [
     "VMware",

@@ -25,9 +25,27 @@ export function verifyLazyTesterPackage(patch=JSON.parse(read('src-tauri/tauri.l
   fail(Object.keys(base.bundle.resources).length===0&&Object.values(patch.bundle.resources).every(value=>value!==null),'Shared bundle must remain payload-free; overlay may contain only native assets');
   fail(Array.isArray(config.bundle.externalBin)&&config.bundle.externalBin.length===0,'Legacy sidecars forbidden');
   fail(JSON.stringify(config.app.security)===JSON.stringify(base.app.security)&&!Object.hasOwn(config,'plugins'),'Desktop security must remain unchanged');
+  // Canonical schema 2 and historical flat/schema 1 paths must stay distinct.
+  // This gate observes source only; it never migrates or recreates user data.
+  const runtime=policy.runtime;
+  fail(runtime.dataLocatorRelativePath==='Data/Settings/data-location.json' &&
+    runtime.legacyDataLocatorRelativePath==='App/data-location.json' &&
+    runtime.profileCatalogRelativePath==='Data/profiles.json' &&
+    runtime.newProfileDirectories==='Data/Launchers/Minecraft-1..5' &&
+    runtime.legacyProfileDirectories==='Data/Profiles/Minecraft-1..5',
+    'Canonical and legacy data paths must stay distinct');
+  const profiles=read('src-tauri/src/engine/independent_bootstrap/product_profiles.rs');
+  fail(profiles.includes('home()?.join("Data/Settings").join(LOCATOR)') &&
+    profiles.includes('let legacy = home.join("App").join(LOCATOR);') &&
+    profiles.includes('root.join(format!("Launchers/Minecraft-{slot}"))') &&
+    profiles.includes('let profiles = if catalog.schema == 2 {') &&
+    profiles.includes('"Launchers"') && profiles.includes('"Profiles"'),
+    'Native private profile owner differs from package policy');
   const hooks=read('src-tauri/windows/lazy-tester-hooks.nsh');
   fail(hooks.includes('OpenMutexW')&&hooks.includes('Local\\MivubiEducationStartupObservation')&&hooks.includes('NSIS_HOOK_PREINSTALL')&&hooks.includes('NSIS_HOOK_PREUNINSTALL')&&hooks.includes('StrCpy $DeleteAppDataCheckboxState 0'),'Idle/data preservation hooks missing');
-  fail(hooks.includes('MUI_CUSTOMFUNCTION_GUIINIT')&&hooks.includes('$PROFILE\\Lazy Tester\\App')&&hooks.includes('!insertmacro LAZY_TESTER_APP_LAYOUT')&&policy.runtime.defaultDataRelativePath==='Data'&&policy.runtime.applicationSubdirectory==='App','Visible App/Data installation layout required');
+  fail(hooks.includes('MUI_CUSTOMFUNCTION_GUIINIT')&&hooks.includes('$PROFILE\\Lazy Tester\\App')&&hooks.includes('!insertmacro LAZY_TESTER_APP_LAYOUT')&&runtime.defaultDataRelativePath==='Data'&&runtime.applicationSubdirectory==='App'&&
+    hooks.includes('IfFileExists "$INSTDIR\\data-location.json" lazy_tester_layout_done 0'),
+    'Visible App/Data and historical flat-install preservation hooks required');
   fail(!/^\s*(Exec|ExecWait|RMDir|Delete|DeleteRegKey|DeleteRegValue)\b/im.test(hooks),'Installer may not run tools or delete data');
   const scripts=JSON.parse(read('package.json')).scripts;
   fail(scripts['build:app']==='npm run build:lazy-tester'&&scripts['build:lazy-tester'].includes('prepare:lazy-payload')&&scripts['build:lazy-tester'].includes('check:lazy-package')&&scripts['build:lazy-tester'].includes('--features lazy-tester-package')&&scripts['build:lazy-tester'].includes('--config src-tauri/tauri.lazy-tester.conf.json')&&scripts['build:lazy-tester'].includes('-- --locked'),'Native build route required');

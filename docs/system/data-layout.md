@@ -36,6 +36,15 @@ Minecraft-Emulator/
   workspace/                     developer builds, tools, cache and archives
 ```
 
+The canonical pointer is `Data/Settings/data-location.json`.
+`App/data-location.json` is a historical flat-install pointer; the native
+owner only reads it when the canonical pointer is missing and publishes the
+canonical location after valid stores reopen. Installer layout detection and
+local App refresh preserve the legacy pointer. Catalog schema 1 uses
+`Data/Profiles/`; new schema 2 profiles use `Data/Launchers/`.
+This compatibility route never grants permission to move, overwrite, copy
+or recreate private account/world data.
+
 All runtime files are ignored and never bundled or tracked. App refresh preserves
 Data and the previous app/starter. project_profiles remains the existing
 product_profiles.rs owner; manager_settings.rs owns root/preferences and the
