@@ -3,7 +3,7 @@ import {lazyTester, parseSelectedClose, firstEmbeddedProfile, nextProfile, parse
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {projectSessionHealth} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
-import {userMessage, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
+import {userMessage, userFeedback, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
 import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, periodicInspectionDue, nextPendingUiAction, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
@@ -386,7 +386,7 @@ describe('Lazy Tester user-facing feedback and recovery warnings',()=>{
     const contexts:UserMessageKey[]=['backend','binding','connection','launch','selection',
       'workspace','location','storage','settings','performance','audio','close',
       'recovery','closeAll','preview','profile','pack','worldPack','cache','clearData',
-      'gameSettings','folder','event','general'];
+      'gameSettings','folder','event','general','graphicsBlocked','performanceBlocked'];
     for(const context of contexts){
       const message=userMessage(context);
       expect(message.length).toBeGreaterThan(12);
@@ -394,6 +394,29 @@ describe('Lazy Tester user-facing feedback and recovery warnings',()=>{
       expect(message).not.toContain('C:\\');
       expect(message).not.toMatch(/PID|HWND|stack trace|IPC|internal policy/i);
     }
+  });
+
+  it('assigns unique, authored support references only from explicit operation keys',()=>{
+    const keys: UserMessageKey[]=[
+      'general','backend','binding','connection','launch','selection','workspace',
+      'location','storage','settings','performance','audio','close','recovery',
+      'closeAll','preview','profile','pack','worldPack','cache','clearData',
+      'gameSettings','folder','event','graphicsBlocked','performanceBlocked'
+    ];
+    const refs=keys.map(key=>userFeedback(key));
+    expect(new Set(refs.map(ref=>ref.code)).size).toBe(keys.length);
+    for(let i=0;i<keys.length;i++){
+      const ref=refs[i]!;
+      expect(ref.message).toBe(userMessage(keys[i]!));
+      expect(ref.code).toMatch(/^LT-(APP|CON|PRO|GAM|DIS|SET|STO)-[0-9]{2}$/);
+      expect(['Application','Connection','Launcher','Game','Display','Settings','Storage']).toContain(ref.area);
+      expect(JSON.stringify(ref)).not.toMatch(/C:\\\\|PID|HWND|stack trace|internal policy/i);
+    }
+    expect(userFeedback('connection')).toMatchObject({area:'Connection',code:'LT-CON-01'});
+    expect(userFeedback('graphicsBlocked').message).toBe(
+      'Graphics preset could not be applied. Close Minecraft sessions and refresh, then try again.');
+    expect(userFeedback('performanceBlocked').message).toBe(
+      'Frame limits could not be saved. Refresh and try again.');
   });
 
   it('retains distinct unconfirmed windows until each gets its own positive receipt',()=>{

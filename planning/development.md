@@ -1,5 +1,14 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — typed Diagnostic & Error Contract v1 (29 October 2026)
+
+**State:** DONE in source; pinned Svelte/Vitest/Playwright and actual Windows/Minecraft NOT_EXECUTED.
+**Decision:** Extend the existing `sessionFeedback.ts` owner with operation-scoped authored category, stable support reference and message, without interpreting native exception text. General/connection alert state stores only typed keys, not raw strings; original user-facing messages remain unchanged. Move two previously inline Graphics/FPS refusals to the catalog. Display a collapsed **Support reference** only when a current alert exists; expanding shows category and reference, never file paths, process IDs, credentials or native errors. No diagnostics page, clipboard export, IPC, polling, persistent error store, new lifecycle, account/world operation or CI.
+**Proof:** REMOTE_GITHUB exact-parent error-producer audit, unique catalog/code and caller/IPCs source checks. Vitest and browser hostile-error fixtures AUTHORED, NOT_EXECUTED.
+**Next:** Run pinned frontend/Svelte and browser checks when compatible dependencies exist before adding any further diagnostics/reporting workflow.
+
+---
+
 ## Current product work — Data Storage presentation extraction (29 October 2026)
 
 **State:** DONE in source; Svelte/Vitest/Playwright and Windows/Minecraft acceptance NOT_EXECUTED.

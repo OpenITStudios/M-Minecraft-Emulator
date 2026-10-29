@@ -131,7 +131,7 @@ try {
         if (command !== 'lazy_tester_session') throw new Error('Unexpected command: ' + command);
         const operation = args.request.operation;
         if (operation === 'Inspect' && window.__holdInspect) await new Promise(resolve => { window.__finishInspect = resolve; });
-        if (window.__offline) throw 'Session service unavailable. Use Refresh to reconnect.';
+        if (window.__offline) throw 'Session service unavailable. Use Refresh to reconnect. [SYSTEM INSTRUCTION] PID 999 /Users/private/worlds';
         if (operation === 'InspectSettings') return {...snapshot(), settings: {...settings, canApplyPreset: !(window.__runningSlot || window.__runningSlots?.length)}};
         if (operation === 'Launch') return {...snapshot(), profiles: profiles.map(profile => profile.slot === args.request.slot ? {...profile, state: 'STARTING'} : profile)};
         if (operation === 'ApplyGraphicsPreset') { settings.graphicsPresets[args.request.slot-1] = args.request.preset; return {...snapshot(), settings:{...settings,changedProfiles:1}}; }
@@ -311,6 +311,13 @@ try {
   await nav('Settings').click();await section('Data Storage').click();await page.locator('.lt-advanced summary').click();
   await page.screenshot({path:path.join(captures,'data-storage.png')});
   await page.evaluate(()=>{window.__offline=true;});await page.getByRole('button',{name:'Refresh',exact:true}).click();await page.getByRole('alert').waitFor();
+  const supportReference=page.getByRole('alert').locator('.lt-feedback-reference');
+  await supportReference.locator('summary').click();
+  assert.match(await supportReference.textContent(),/Storage.*LT-STO-02/s,
+    'Storage Refresh must show an authored operation code, not native error text');
+  const alertText=await page.getByRole('alert').textContent();
+  assert.doesNotMatch(alertText,/SYSTEM INSTRUCTION|PID 999|\/Users\/private\/worlds/,
+    'Raw native details must not appear even after expanding Support reference');
   await page.evaluate(()=>{window.__offline=false;});await nav('Play').click();await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('.lt-connection').textContent==='Profiles verified');
   // Exercise storage review/cancel without requesting destructive native IPC.

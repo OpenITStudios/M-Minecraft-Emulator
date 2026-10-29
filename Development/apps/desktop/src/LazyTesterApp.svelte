@@ -9,7 +9,7 @@
   import GeneralSettings from './GeneralSettings.svelte';
   import DataStorage from './DataStorage.svelte';
   import {projectSessionHealth, type SessionHealthAction} from './app/presentation/sessionHealth.js';
-    import {userMessage, sessionConnectionLabel, updateRecoverySlots, recoveryLabels} from './app/presentation/sessionFeedback.js';
+    import {userMessage, userFeedback, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from './app/presentation/sessionFeedback.js';
   import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, periodicInspectionDue, nextPendingUiAction, type CloseReview} from './app/inspectionScheduling.js';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
@@ -47,7 +47,9 @@
   let queuedLaunch:ProfileSlot|null=null;
   let mounted = false, disposed = false, dirty = false, detached = false;
   let separateSlots = new Set<ProfileSlot>();
-  let issue = '', connectionIssue = '', previewIssue = '', selectedIdentity = '';
+  // Alert context is authored, not a retained raw backend exception.
+  let issueKey: UserMessageKey | null = null, connectionIssueKey: UserMessageKey | null = null;
+  let previewIssue = '', selectedIdentity = '';
   // Display state only; the retained Rust controller still owns game lifetime.
   let closeInProgress = false, closeFailure = '';
   // Presentation-only close reviews; never another process or session owner.
@@ -185,14 +187,14 @@
   async function consumeSelection() {
     const slot = queued; queued = null;
     if (slot === null || !available || profiles.find(profile => profile.slot === slot)?.state !== 'RUNNING') return;
-    busy = true; issue = '';
+    busy = true; issueKey=null;
     try {
       page = 'workspace'; await tick();
       await lazyTester.present(slot, viewport.getBoundingClientRect());
       active = slot; selectedIdentity = identity(profiles.find(profile => profile.slot === slot));
       detached = false; requested = null; dirty = true;
       separateSlots = new Set([...separateSlots].filter(value=>value!==slot));
-    } catch (error) { issue = userMessage('selection'); dirty = true; }
+    } catch (error) { issueKey='selection'; dirty = true; }
     finally { busy = false; }
   }
   async function refresh() {
@@ -204,7 +206,7 @@
       // A close review starting mid-request invalidates this old snapshot.
       if (disposed || !observationStillCurrent(issued, observationEpoch, reviewState())) return;
       const layoutChanged=!available||layoutIdentity(profiles)!==layoutIdentity(snapshot.profiles);
-      profiles = snapshot.profiles; available = true; connectionIssue = '';
+      profiles = snapshot.profiles; available = true; connectionIssueKey=null;
       // STOPPED only confirms a session observation, not restoration of
       // the original HWND/helper checkpoint. Only a positive selected-close
       // presentation receipt below may clear the uncertainty warning.
@@ -225,7 +227,7 @@
         }
         else if (profile?.state === 'ATTENTION' || profile?.state === 'STOPPED'
           || (profile?.state === 'NOT_RESPONDING' && profile.issue)) {
-          issue = userMessage('launch'); requested = null;
+          issueKey='launch'; requested = null;
         }
       } else if (active === null && !detached && page === 'workspace' && queued === null) {
         queued = firstEmbeddedProfile(profiles,separateSlots);
@@ -237,7 +239,7 @@
       if (!disposed && observationStillCurrent(issued, observationEpoch, reviewState())) {
         if (available) dirty = true;
         available = false;previewStatuses=[];pendingPreviewInvalidations.clear();
-        connectionIssue = userMessage('connection');
+        connectionIssueKey='connection';
       }
     } finally { refreshing = false; }
   }
@@ -247,7 +249,7 @@
     if (closeInProgress || busy || !binding?.configured ||
         !canRequestLaunch(profiles.find(profile => profile.slot === slot))) return;
     if(refreshing||resizing){queuedLaunch=slot;return;}
-    busy = true; issue = ''; requested = slot;
+    busy = true; issueKey=null; requested = slot;
     try {
       profiles = (await lazyTester.launch(slot)).profiles; storage = null; available = true;
       detached = false; page = 'workspace'; dirty = true;
@@ -256,7 +258,7 @@
         await tick();
         await lazyTester.present(active, viewport.getBoundingClientRect());
       }
-    } catch (error) { issue = userMessage('launch'); requested = null; dirty = true; }
+    } catch (error) { issueKey='launch'; requested = null; dirty = true; }
     finally { busy = false; }
   }
   function navigate(next: typeof page) {
@@ -269,7 +271,7 @@
   async function consumeNavigation() {
     const next = queuedPage; queuedPage = null;
     if (next === null || page === next) return;
-    busy = true; issue = '';
+    busy = true; issueKey=null;
     try {
       if (next !== 'workspace') await workspaceSurface.suspend();
       page = next; await tick();
@@ -288,22 +290,22 @@
         storageCheckedAt=new Date().toLocaleTimeString('en-US');
       }
       dirty = true;
-    } catch (error) { issue = userMessage('workspace'); dirty = true; }
+    } catch (error) { issueKey='workspace'; dirty = true; }
     finally { busy = false; }
   }
   async function refreshPage() {
     if (nativeBackend !== 'WindowsNative' || busy || refreshing || resizing) return;
     manualRefreshing=true;
     try {
-    issue = '';
+    issueKey=null;
     if (page === 'storage') {
       busy=true;checkingStorage=true;
       try {
         if(!binding?.configured)await checkBinding();
         try{dataLocation=await lazyTester.dataLocation();locationIssue='';}
         catch(error){locationIssue=userMessage('location');dataLocation=null;storage=null;binding=null;throw error;}
-        if(binding?.configured){const snapshot=await lazyTester.storage();profiles=snapshot.profiles;storage=snapshot.storage;storageCheckedAt=new Date().toLocaleTimeString('en-US');available=true;connectionIssue='';}
-      }catch(error){issue=userMessage('storage');storage=null;}
+        if(binding?.configured){const snapshot=await lazyTester.storage();profiles=snapshot.profiles;storage=snapshot.storage;storageCheckedAt=new Date().toLocaleTimeString('en-US');available=true;connectionIssueKey=null;}
+      }catch(error){issueKey='storage';storage=null;}
       finally{checkingStorage=false;busy=false;}
     } else {
       // Only explicit Refresh of a known preview failure requests another
@@ -322,9 +324,9 @@
   async function saveAudio(mode:'Keep'|'Mute') {
     if(busy||!settings?.backgroundAudio)return;
     if(refreshing||resizing){queuedAudio=mode;return;}
-    busy=true;issue='';settingsNotice='';
+    busy=true;issueKey=null;settingsNotice='';
     try {const snapshot=await lazyTester.saveAudio(mode);settings=snapshot.settings;profiles=snapshot.profiles;settingsNotice='Background audio saved. Applies to managed Minecraft sessions immediately.';}
-    catch(error){issue=userMessage('audio');}
+    catch(error){issueKey='audio';}
     finally{busy=false;}
   }
   function requestPreset() {
@@ -332,8 +334,8 @@
     queuedPreset={slot:selectedSlot,preset:graphicsPreset};
   }
   async function applyPreset(request:{slot:ProfileSlot;preset:GraphicsPreset}) {
-    if(!available||!binding?.configured||!settings?.canApplyPreset||runningCount>0){issue='Graphics preset could not be applied. Close Minecraft sessions and refresh, then try again.';return;}
-    busy=true;applyingPreset=true;issue='';settingsNotice='';
+    if(!available||!binding?.configured||!settings?.canApplyPreset||runningCount>0){issueKey='graphicsBlocked';return;}
+    busy=true;applyingPreset=true;issueKey=null;settingsNotice='';
     try {
       const snapshot=await lazyTester.applyGraphics(request.slot,request.preset);
       profiles=snapshot.profiles;settings=snapshot.settings;
@@ -341,7 +343,7 @@
       settingsNotice=request.preset==='Preserve'
         ? 'Minecraft - '+request.slot+': Preserve Visuals saved. LazyTester will leave Minecraft graphics options unchanged on future launches; existing edits are not automatically undone.'
         : 'Minecraft - '+request.slot+': '+request.preset+' saved and applied. This preset is reapplied at launch.';
-    }catch(error){issue=userMessage('settings');settings=null;}
+    }catch(error){issueKey='settings';settings=null;}
     finally{applyingPreset=false;busy=false;}
   }
   function requestPerformanceSave() {
@@ -349,14 +351,14 @@
     queuedPerformance={active:activeFps!,background:backgroundFps!};
   }
   async function savePerformance(limits:{active:number;background:number}) {
-    if(!available||!settings){issue='Frame limits could not be saved. Refresh and try again.';return;}
-    busy=true;savingPerformance=true;issue='';performanceNotice='';
+    if(!available||!settings){issueKey='performanceBlocked';return;}
+    busy=true;savingPerformance=true;issueKey=null;performanceNotice='';
     try{
       const snapshot=await lazyTester.savePerformance(limits.active,limits.background);
       profiles=snapshot.profiles;settings=snapshot.settings;
       activeFps=settings.activeFps;backgroundFps=settings.backgroundFps;
       performanceNotice='Saved. New limits apply when each Minecraft profile next starts.';
-    }catch(error){issue=userMessage('performance');}
+    }catch(error){issueKey='performance';}
     finally{savingPerformance=false;busy=false;}
   }
   function requestCloseOne(slot: ProfileSlot) {
@@ -374,20 +376,20 @@
     const slot=closeOneSlot;
     if (slot===null || closeInProgress || nativeExitReview || busy ||
         refreshing || resizing || closingOneSlot!==null) return;
-    closeOneSlot=null; closingOneSlot=slot; busy=true; issue='';
+    closeOneSlot=null; closingOneSlot=slot; busy=true; issueKey=null;
     try {
       const report=await lazyTester.closeOne(slot);
       if (!report.presentationReleased) {
         // Release was attempted but did not confirm restoration. Do not
         // pretend the previous Play surface still owns the original HWND.
         uncertainWindowSlots = updateRecoverySlots(uncertainWindowSlots, slot, false);
-        issue = userMessage('recovery');
+        issueKey='recovery';
         if (active===slot) {
           active=null;selectedIdentity='';requested=null;queued=null;detached=true;
           previewStatuses=[];
         }
-        try {profiles=(await lazyTester.inspect()).profiles;available=true;connectionIssue='';}
-        catch(refreshError){available=false;connectionIssue=userMessage('connection');}
+        try {profiles=(await lazyTester.inspect()).profiles;available=true;connectionIssueKey=null;}
+        catch(refreshError){available=false;connectionIssueKey='connection';}
         return;
       }
       uncertainWindowSlots = updateRecoverySlots(uncertainWindowSlots, slot, true);
@@ -399,7 +401,7 @@
         separateSlots=new Set([...separateSlots].filter(value=>value!==slot));
       }
       if (report.snapshot) {
-        profiles=report.snapshot.profiles;available=true;connectionIssue='';storage=null;
+        profiles=report.snapshot.profiles;available=true;connectionIssueKey=null;storage=null;
         if (wasActive) {
           // Existing background games may still be parked offscreen with
           // WS_EX_TOOLWINDOW. Promote another verified responsive peer into
@@ -408,9 +410,9 @@
           detached=queued===null;
         }
       } else {
-        issue=userMessage('close');
-        try {profiles=(await lazyTester.inspect()).profiles;available=true;connectionIssue='';}
-        catch(refreshError){available=false;connectionIssue=userMessage('connection');}
+        issueKey='close';
+        try {profiles=(await lazyTester.inspect()).profiles;available=true;connectionIssueKey=null;}
+        catch(refreshError){available=false;connectionIssueKey='connection';}
         if (wasActive) {
           // Never automatically reselect the game whose exit outcome is
           // uncertain; a different responding peer can still be presented.
@@ -424,15 +426,15 @@
       // Rust command reached native window restoration. The UI must stop
       // claiming an embedded selected HWND; no extra close/retry is sent.
       uncertainWindowSlots = updateRecoverySlots(uncertainWindowSlots, slot, false);
-      issue=userMessage('recovery');
+      issueKey='recovery';
       if (active===slot) {
         active=null;selectedIdentity='';requested=null;queued=null;detached=true;
         previewStatuses=[];
       }
       // Read-only reconciliation cannot certify window restoration and must
       // not clear uncertainWindowSlots, even when the game has stopped.
-      try {profiles=(await lazyTester.inspect()).profiles;available=true;connectionIssue='';}
-      catch(refreshError){available=false;connectionIssue=userMessage('connection');}
+      try {profiles=(await lazyTester.inspect()).profiles;available=true;connectionIssueKey=null;}
+      catch(refreshError){available=false;connectionIssueKey='connection';}
     } finally {
       closingOneSlot=null;busy=false;dirty=true;
     }
@@ -450,7 +452,7 @@
       separateSlots=new Set([...separateSlots,slot]);
       queued=firstEmbeddedProfile(profiles,separateSlots);
       detached = queued===null; previewStatuses = []; dirty = true;
-    } catch (error) { issue = userMessage('workspace'); }
+    } catch (error) { issueKey='workspace'; }
     finally { busy = false; }
   }
   async function syncLayout() {
@@ -530,18 +532,18 @@
   }
   async function inspectStorage() {
     if (busy || refreshing || resizing) return;
-    busy = true; checkingStorage = true; issue = ''; clearSlot = null; recovery=null; fullReview=null; storageNotice = '';
+    busy = true; checkingStorage = true; issueKey=null; clearSlot = null; recovery=null; fullReview=null; storageNotice = '';
     try {
       const snapshot = await lazyTester.storage(); profiles = snapshot.profiles; storage = snapshot.storage;
-      available = true; connectionIssue = '';
+      available = true; connectionIssueKey=null;
       storageCheckedAt = new Date().toLocaleTimeString('en-US');
     }
-    catch (error) { issue = userMessage('storage'); storage = null; }
+    catch (error) { issueKey='storage'; storage = null; }
     finally { checkingStorage = false; busy = false; }
   }
   async function loadBinding(importProfiles = false) {
     if (nativeBackend !== 'WindowsNative' || busy || refreshing || resizing || disposed) return;
-    busy = true; issue = '';
+    busy = true; issueKey=null;
     try { await checkBinding(importProfiles); }
     finally { busy = false; }
   }
@@ -592,7 +594,7 @@
   }
   async function loadLocation(action:'Inspect'|'Open'|'Locate'|'Choose'='Inspect') {
     if(busy||refreshing||resizing||disposed)return;
-    busy=true;issue='';locationIssue='';
+    busy=true;issueKey=null;locationIssue='';
     try {
       const previousPath = dataLocation?.path;
       dataLocation=await lazyTester.dataLocation(action);
@@ -608,21 +610,21 @@
   }
   async function openFolder(slot: ProfileSlot) {
     if (busy || refreshing || resizing) return;
-    busy = true; issue = '';
+    busy = true; issueKey=null;
     try { await lazyTester.openFolder(slot); }
-    catch (error) { issue = userMessage('folder'); }
+    catch (error) { issueKey='folder'; }
     finally { busy = false; }
   }
   async function clearCache(slot: ProfileSlot) {
     if (busy || refreshing || resizing || clearSlot !== slot || !storage?.find(item=>item.slot===slot)?.cache.canClear) return;
-    busy = true; issue = ''; storageNotice = ''; clearSlot = null;
+    busy = true; issueKey=null; storageNotice = ''; clearSlot = null;
     try {
       const snapshot = await lazyTester.clearCache(slot);
       profiles = snapshot.profiles; storage = snapshot.storage;
       storageCheckedAt = new Date().toLocaleTimeString('en-US');
       storageNotice = 'Web cache for Minecraft - ' + slot + ' cleared.';
     } catch (error) {
-      issue = userMessage('cache'); storage = null;
+      issueKey='cache'; storage = null;
     } finally { busy = false; }
   }
   async function recoverSettings() {
@@ -637,7 +639,7 @@
         ? status?.canReset===true&&status?.improvedInputResponseEnabled===true&&selectedProfile?.state==='STOPPED'
         : pending.action==='Reset'?status?.canReset:status?.canRestore;
     if(!allowed)return;
-    busy=true;issue='';storageNotice='';recovery=null;
+    busy=true;issueKey=null;storageNotice='';recovery=null;
     try {
       const snapshot=pending.action==='EnableTextureStreaming'
         ? await lazyTester.enableTextureStreaming(pending.slot)
@@ -655,7 +657,7 @@
         : pending.action==='DisableInputResponse'
           ? 'Minecraft - '+pending.slot+': Improved Input Response disabled in saved options. The previous settings are backed up for Restore. Restart this Minecraft normally to apply; RAM savings on Education 26.32 are unverified.'
           : `Minecraft - ${pending.slot}: settings ${pending.action==='Reset'?'reset':'restored'}. Changes apply at the next launch; your saved graphics preset is reapplied. Previous settings are available through Restore settings.`;
-    } catch(error) {issue=userMessage('settings');storage=null;}
+    } catch(error) {issueKey='settings';storage=null;}
     finally {busy=false;}
   }
   function reviewFullClear() {
@@ -672,13 +674,13 @@
     const pending=fullReview,status=selectedStorage?.fullClear;
     if(!pending||busy||refreshing||resizing||!fullAck||pending.slot!==selectedSlot||fullName!==`Minecraft - ${pending.slot}`||
       !status?.canClear||status.confirmationToken!==pending.token)return;
-    busy=true;clearingData=true;issue='';storageNotice='';fullReview=null;
+    busy=true;clearingData=true;issueKey=null;storageNotice='';fullReview=null;
     try {
       const snapshot=await lazyTester.clearData(pending.slot,pending.token,fullName);
       profiles=snapshot.profiles;storage=snapshot.storage;
       storageCheckedAt=new Date().toLocaleTimeString('en-US');
       storageNotice=`Minecraft - ${pending.slot}: local data cleared. Its next launch uses an empty profile. Other launchers, the Minecraft installation and app preferences are kept.`;
-    } catch(error) {issue=userMessage('clearData');storage=null;}
+    } catch(error) {issueKey='clearData';storage=null;}
     finally {busy=false;clearingData=false;}
   }
   onMount(() => {
@@ -717,7 +719,7 @@
       if (event.payload && !nativeExitReview) observationEpoch++;
       nativeExitReview = event.payload;
       if (!nativeExitReview) dirty = true;
-    }).then(retain).catch(error => { issue = userMessage('event'); });
+    }).then(retain).catch(error => { issueKey='event'; });
     void listen<boolean>('lazy-tester-closing', event => {
       closeInProgress = event.payload;
       if (closeInProgress) {
@@ -726,14 +728,14 @@
         queuedLaunch=null;
         queued=null;
       }
-    }).then(retain).catch(error => { issue = userMessage('event'); });
+    }).then(retain).catch(error => { issueKey='event'; });
     void listen<string>('lazy-tester-close-rejected', event => {
       // Resource admission refused before restoring or closing any game.
       // Keep the verified embedded selection, previews and queued work.
       closeInProgress = false;
       nativeExitReview = false;
-      issue = userMessage('closeAll');
-    }).then(retain).catch(error => { issue = userMessage('event'); });
+      issueKey='closeAll';
+    }).then(retain).catch(error => { issueKey='event'; });
     void listen<string>('lazy-tester-close-error', event => {
       // The native close attempt already released/restored workspace leases.
       // Never imply the game is still embedded or automatically reacquire it.
@@ -744,11 +746,11 @@
       separateSlots = new Set<ProfileSlot>();
       previewStatuses = []; detached = true; page = 'workspace'; dirty = true;
       void refresh(); // Observation only; does not start or capture Minecraft.
-    }).then(retain).catch(error => { issue = userMessage('event'); });
+    }).then(retain).catch(error => { issueKey='event'; });
     void listen<string>('workspace-surface-error', event => {
       try {
         const notice=parseDwmPreviewInvalidation(event.payload);
-        if(!notice) {issue=userMessage('preview');return;}
+        if(!notice) {issueKey='preview';return;}
         if (disposed || nativeBackend!=='WindowsNative' ||
           !dwmPreviewInvalidationApplies(notice,profiles.find(p=>p.slot===notice.slot))) return;
         previewInvalidationEpoch++;
@@ -756,8 +758,8 @@
         // Preserve peer statuses and avoid new preview RPC/layout work.
         previewStatuses=previewStatuses.map(status=>status.slot===notice.slot?
           {...status,registered:false,reason:notice.reason}:status);
-      } catch (error) {issue=userMessage('preview');}
-    }).then(retain).catch(error => { issue = userMessage('event'); });
+      } catch (error) {issueKey='preview';}
+    }).then(retain).catch(error => { issueKey='event'; });
     void listen<number>('lazy-tester-preview-select', event => {
       if ([1,2,3,4,5].includes(event.payload)) select(event.payload as ProfileSlot);
     }).then(retain).catch(error => { previewIssue = userMessage('preview'); });
@@ -785,7 +787,17 @@
         <div><h1>{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Your games keep running on the desktop.'):active?'Click the game to play.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
         <div class="lt-header-actions"><button class="lt-secondary" disabled={busy||manualRefreshing||manualRefreshRequested||nativeBackend!=='WindowsNative'} on:click={()=>manualRefreshRequested=true}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'&&active!==null}<button class="lt-secondary" disabled={busy||refreshing||resizing} title={'Open only Minecraft - '+active+' in its own window'} on:click={release}>Open Minecraft - {active} in a window</button>{/if}</div>
       </header>
-      {#if issue||connectionIssue}<div class="lt-alert" role="alert">{#if issue}<p>{issue}</p>{/if}{#if connectionIssue}<p>{connectionIssue}</p>{/if}</div>{/if}
+      {#if issueKey!==null||connectionIssueKey!==null}
+        <div class="lt-alert" role="alert">
+          {#if issueKey!==null}<p>{userMessage(issueKey)}</p>{/if}
+          {#if connectionIssueKey!==null}<p>{userMessage(connectionIssueKey)}</p>{/if}
+          <details class="lt-feedback-reference">
+            <summary>Support reference</summary>
+            {#if issueKey!==null}<p>{userFeedback(issueKey).area} · {userFeedback(issueKey).code}</p>{/if}
+            {#if connectionIssueKey!==null}<p>{userFeedback(connectionIssueKey).area} · {userFeedback(connectionIssueKey).code}</p>{/if}
+          </details>
+        </div>
+      {/if}
       {#if uncertainWindowSlots.size > 0}
         <section class="lt-exit-recovery" role="status" aria-label="Window recovery unconfirmed">
           <h2>Window recovery needs attention</h2>

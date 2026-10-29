@@ -98,6 +98,19 @@ describe("Emulator source verification routing", () => {
     expect(view).not.toMatch(/\binvokeRuntime\s*\(|\blazyTester\s*\.\w+\(|\bworkspaceSurface\s*\.\w+\(|\bsetInterval\s*\(/);
   });
 
+  it("shows typed support references only for authored, operation-scoped errors", () => {
+    const feedback=readFileSync(new URL("../src/app/presentation/sessionFeedback.ts",import.meta.url),"utf8");
+    const ui=readFileSync(new URL("../src/LazyTesterApp.svelte",import.meta.url),"utf8");
+    expect(feedback).toContain("export type UserMessageKey = keyof typeof feedback;");
+    expect(feedback).toContain("export function userFeedback(key: UserMessageKey)");
+    expect(ui).toContain("let issueKey: UserMessageKey | null = null");
+    expect(ui).toContain("connectionIssueKey: UserMessageKey | null = null");
+    expect(ui).toContain("<summary>Support reference</summary>");
+    expect(ui).toContain("userFeedback(issueKey).code");
+    expect(ui).toContain("userFeedback(connectionIssueKey).code");
+    expect(ui).not.toMatch(/(?<![\w.])issue\s*=\s*userMessage\(/);
+  });
+
   it("has exactly one repository-to-desktop-to-runtime verification route", () => {
     expect(root.scripts["verify:source"].split(" && ")).toEqual([
       "npm run verify:repository -- --g0",

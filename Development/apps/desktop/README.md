@@ -15,7 +15,8 @@ Sandboxie/VMware provider route is retired.
 | Data Storage, inventory and confirmation presentation only | `src/DataStorage.svelte` |
 | Pure pending-action eligibility and inspection scheduling | `src/app/inspectionScheduling.ts` |
 | Fixed five-launcher rail, visual actions only | `src/LauncherRail.svelte` |
-| Health, recovery guidance and authored user messages | `src/SessionHealthNotice.svelte`, `src/app/presentation/` |
+| Health and recovery guidance | `src/SessionHealthNotice.svelte`, `src/app/presentation/` |
+| Authored diagnostic categories, stable support codes and user error messages | `src/app/presentation/sessionFeedback.ts` |
 | Validated desktop protocol | `src/app/bridge/lazyTester.ts`, `workspaceSurface.ts` |
 | Only raw Tauri invoke boundary | `src/app/bridge/invokeRuntime.ts` |
 | Game lifecycle / retained process identity | `src-tauri/src/engine/independent_bootstrap/session_controller.rs` |
