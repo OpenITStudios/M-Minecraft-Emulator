@@ -2,7 +2,7 @@
 
 **State:** DONE in source; complete pinned Svelte/Vitest/Playwright and Windows/Minecraft acceptance NOT_EXECUTED.
 **Decision:** Reuse the five existing launcher cards; nonintrusive hover/accessibility hints for STARTING, NOT_RESPONDING and ATTENTION use only typed, observed status. Normal cards stay unchanged. WindowTitlebar now uses existing sessionFeedback for authored window failures, preserving the old event messages and showing collapsed Support references only for real alerts. No extra buttons, page, timer, IPC, credentials/world actions, auto-retry, settings, monitor, installer or CI.
-**Proof:** REMOTE_GITHUB source/consumer and content-contract checks. Focused Vitest pure-guidance and source tests AUTHORED, NOT_EXECUTED.
+**Proof:** REMOTE_GITHUB source/consumer and content-contract checks. Focused Vitest pure-guidance/source tests and synthetic Playwright hostile-window-error and launcher accessibility regressions AUTHORED, NOT_EXECUTED.
 **Unresolved:** Pinned frontend/Svelte/Vitest/Playwright; Windows window controls, installer and Minecraft Education multi-client acceptance NOT_EXECUTED.
 **Next:** Execute pinned frontend compilation and synthetic browser checks in a compatible environment; fix observed failures before another user-facing feature.
 

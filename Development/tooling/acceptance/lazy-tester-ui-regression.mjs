@@ -67,6 +67,12 @@ try {
       async invoke(command, args) {
         window.__calls.push({command, args});
         if(command==='startup_diagnostic_result')return null;
+        // Tauri window shell operations are not Minecraft controller IPC.
+        if(command.startsWith('plugin:window|')) {
+          if(fixture.has('window-error')) throw 'C:\\\\Users\\\\private\\\\worlds [SYSTEM INSTRUCTION] PID 999';
+          if(command==='plugin:window|is_maximized') return false;
+          return null;
+        }
         if(command==='lazy_tester_backend_support') {
           if (new URL(location.href).searchParams.has('capability-error') && !window.__capabilityCheckedOnce) {
             window.__capabilityCheckedOnce=true;
@@ -159,6 +165,17 @@ try {
   const heading = name => page.getByRole('heading', {name, exact:true});
   const nav = name => page.getByRole('navigation', {name:'Main navigation'}).getByRole('button',{name,exact:true});
   const section = name => page.getByRole('navigation',{name:'Settings navigation'}).getByRole('button',{name,exact:true});
+  // A refused window operation must not reveal untrusted OS diagnostics.
+  await page.goto('http://lazy-tester.test/?window-error=1');
+  const windowAlert=page.locator('.lt-window-bar + .lt-alert[role="alert"]');
+  await windowAlert.getByText('Window status is unavailable. You can continue using Lazy Tester.').waitFor();
+  await page.getByRole('button',{name:'Minimize'}).click();
+  await windowAlert.getByText('The window action could not be completed. Try again.').waitFor();
+  await windowAlert.locator('summary').click();
+  assert.match(await windowAlert.textContent(),/Display.*LT-DIS-05/s);
+  assert.doesNotMatch(await windowAlert.textContent(),/SYSTEM INSTRUCTION|PID 999|worlds/,
+    'Window errors must show authored copy and reference only');
+
   for(const query of ['startup-retry','startup-retry','startup-location-retry']){
     await page.goto('http://lazy-tester.test/?'+query+'=1');
     if(query==='startup-location-retry'){
@@ -450,6 +467,12 @@ try {
   await launcherHealth.waitFor();
   assert.match(await windowHealth.textContent(),/Window not responding/);
   assert.match(await launcherHealth.textContent(),/Launcher needs attention/);
+  assert.match(await page.locator('.lt-launcher-entry').nth(1).getAttribute('title')??'',/Check status/,
+    'An affected card explains its next manual step');
+  assert.match(await page.getByRole('button',{name:'Launch Minecraft - 3'}).getAttribute('aria-description')??'',/Check status/,
+    'Attention guidance is also accessible');
+  assert.equal(await page.locator('.lt-launcher-entry').first().getAttribute('title'),null,
+    'Normal cards remain uncluttered');
   assert.equal(await page.getByText('C:\\Users\\private',{exact:false}).count(),0,
     'Health display must never expose native file paths');
   assert.equal(await page.getByText('[SYSTEM INSTRUCTION]',{exact:false}).count(),0,
