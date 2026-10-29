@@ -2,6 +2,7 @@ import {describe, expect, it} from 'vitest';
 import {lazyTester, parseSelectedClose, firstEmbeddedProfile, nextProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, parseNativeBackendSupport, type ProfileSession} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {projectSessionHealth} from '../src/app/presentation/sessionHealth.js';
+import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
 import {userMessage, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
 import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, periodicInspectionDue, type CloseReview} from '../src/app/inspectionScheduling.js';
 
@@ -485,5 +486,45 @@ describe('Lazy Tester guided recovery recommendation contract',()=>{
     expect(projectSessionHealth(observe({profiles:unresponsive,previewStatuses}))[0]?.action).toBe('refresh');
     expect(projectSessionHealth(observe({profiles,previewStatuses,unresolvedRecovery:new Set([2])}))).toEqual([]);
     expect(projectSessionHealth(observe({profiles,previewStatuses,observed:false}))).toEqual([]);
+  });
+});
+
+describe('Guided Recovery pending-work and stale-action hardening',()=>{
+  const profile:ProfileSession={
+    slot:2,state:'RUNNING',issue:null,
+    process:{pid:102,createdFileTime:'1302',sessionId:1,windowHandle:'0x22',responding:true},
+  };
+  const issue={
+    slot:2 as const,kind:'preview' as const,title:'Preview unavailable',
+    guidance:'The preview failed.',action:'open' as const,
+  };
+  const gate={
+    blocked:false,unresolvedRecovery:new Set<1|2|3|4|5>(),
+    separateWindows:new Set<1|2|3|4|5>(),primarySlot:1 as const,
+  };
+  it('admits only a current matching slot and action, never an obsolete suggestion',()=>{
+    expect(guidedRecoveryAllowed(issue,profile,2,'open',gate)).toBe(true);
+    expect(guidedRecoveryAllowed(issue,profile,2,'refresh',gate)).toBe(false);
+    expect(guidedRecoveryAllowed(issue,{...profile,slot:3},2,'open',gate)).toBe(false);
+    expect(guidedRecoveryAllowed(undefined,profile,2,'open',gate)).toBe(false);
+    expect(guidedRecoveryAllowed(issue,profile,2,'open',{...gate,blocked:true})).toBe(false);
+    expect(guidedRecoveryAllowed(issue,profile,2,'open',
+      {...gate,unresolvedRecovery:new Set([2])})).toBe(false);
+    expect(guidedRecoveryAllowed(issue,profile,2,'open',
+      {...gate,separateWindows:new Set([2])})).toBe(false);
+    expect(guidedRecoveryAllowed(issue,profile,2,'open',
+      {...gate,primarySlot:2})).toBe(false);
+    expect(guidedRecoveryAllowed(issue,{...profile,state:'NOT_RESPONDING'},2,'open',gate)).toBe(false);
+    expect(guidedRecoveryAllowed(issue,{...profile,process:{...profile.process!,responding:false}},2,'open',gate)).toBe(false);
+    expect(guidedRecoveryAllowed(issue,{...profile,process:null},2,'open',gate)).toBe(false);
+  });
+  it('keeps Check status as a read-only recommendation with the same pending-work guard',()=>{
+    const check={...issue,kind:'window' as const,action:'refresh' as const};
+    const blockedProfile={...profile,state:'NOT_RESPONDING' as const,process:null};
+    expect(guidedRecoveryAllowed(check,blockedProfile,2,'refresh',gate)).toBe(true);
+    expect(guidedRecoveryAllowed(check,blockedProfile,2,'refresh',{...gate,blocked:true})).toBe(false);
+    expect(guidedRecoveryAllowed(check,blockedProfile,2,'refresh',
+      {...gate,unresolvedRecovery:new Set([2])})).toBe(false);
+    expect(guidedRecoveryAllowed(check,blockedProfile,2,'open',gate)).toBe(false);
   });
 });

@@ -1,5 +1,14 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — Guided Recovery integration/UX hardening (29 October 2026)
+
+**State:** DONE in source; real browser/desktop and Minecraft gameplay verification NOT_EXECUTED.
+**Decision:** Make the manual recovery gate a pure tested projection so the same action eligibility drives both the enabled button and click-time revalidation. Block Guided Recovery while a user selection or launch is queued, not just while native IPC is busy. Reproject the current issue at click to avoid acting on stale Svelte render data. Repair the synthetic browser scenario that clicked an issue after its first Refresh could remove it. Preserve the original Refresh/Play dispatch, per-slot recovery uncertainty and no raw backend error display.
+**Proof:** REMOTE_GITHUB pinned owner/consumer inspection, source equality and static gate/IPC/cadence checks. New pure gate regression tests and a corrected browser sequence AUTHORED. No Node/Vitest/Svelte/Playwright/Windows/Minecraft execution claimed.
+**Next:** Execute frontend and browser checks when compatible execution is available; only then consider UX changes grounded in observed layout/runtime behavior.
+
+---
+
 ## Current product work — Guided Recovery v0.1 (29 October 2026)
 
 **State:** DONE in source; compiled frontend, Windows and Minecraft runtime acceptance NOT_EXECUTED.

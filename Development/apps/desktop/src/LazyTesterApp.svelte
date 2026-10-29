@@ -7,6 +7,7 @@
   import WindowTitlebar from './WindowTitlebar.svelte';
   import SessionHealthNotice from './SessionHealthNotice.svelte';
   import {projectSessionHealth, type SessionHealthAction} from './app/presentation/sessionHealth.js';
+  import {guidedRecoveryAllowed} from './app/presentation/guidedRecovery.js';
   import {userMessage, sessionConnectionLabel, updateRecoverySlots, recoveryLabels} from './app/presentation/sessionFeedback.js';
   import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, periodicInspectionDue, type CloseReview} from './app/inspectionScheduling.js';
 
@@ -92,6 +93,13 @@
     previewsVisible: page === 'workspace' && !detached,
   });
   $: attentionCount = healthIssues.length + uncertainWindowSlots.size;
+  // UI-only admission: pending selections and launches must finish before
+  // another manual recovery action can replace their queued destination.
+  $: guidedRecoveryBlocked = nativeBackend !== 'WindowsNative' || page !== 'workspace' ||
+    disposed || !mounted || initializing || !available || !binding?.configured ||
+    busy || refreshing || resizing || manualRefreshing || manualRefreshRequested ||
+    closeReviewPending || queuedPage !== null || queuedLaunch !== null ||
+    queued !== null || requested !== null;
   $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio!==null) {const mode=queuedAudio;queuedAudio=null;void saveAudio(mode);}
   $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance!==null) {const limits=queuedPerformance;queuedPerformance=null;void savePerformance(limits);}
   $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset!==null) {const request=queuedPreset;queuedPreset=null;void applyPreset(request);}
@@ -105,23 +113,27 @@
     images.set(slot, node); observer?.observe(node); dirty = true;
     return {destroy() { observer?.unobserve(node); if (images.get(slot) === node) images.delete(slot); dirty = true; }};
   }
-  // Suggested actions reuse the original explicit Refresh and Play selection.
-  // They are not permissions to alter a game: native identity and lifecycle
-  // remain under the verified Rust controller.
+  // Rebuild the same read-only projection at click time: reactive UI rendering
+  // can lag a just-observed process change by one microtask. No new IPC or
+  // process authority is introduced here.
   function requestGuidedRecovery(slot: ProfileSlot, action: SessionHealthAction) {
-    if (nativeBackend !== 'WindowsNative' || page !== 'workspace' || disposed ||
-        initializing || !available || !binding?.configured || closeReviewActive(reviewState()) ||
-        busy || refreshing || resizing || manualRefreshing || manualRefreshRequested ||
-        queuedPage !== null || queuedLaunch !== null || uncertainWindowSlots.has(slot)) return;
-    const recommended = healthIssues.find(item => item.slot === slot);
-    if (!recommended || recommended.action !== action) return;
+    const recommended = projectSessionHealth({
+      profiles, previewStatuses, unresolvedRecovery: uncertainWindowSlots,
+      separateWindows: separateSlots, primarySlot: primary,
+      observed: nativeBackend === 'WindowsNative' && !initializing &&
+        available && !!binding?.configured,
+      previewsVisible: page === 'workspace' && !detached,
+    }).find(item => item.slot === slot);
+    if (!guidedRecoveryAllowed(recommended, profiles.find(item => item.slot === slot),
+      slot, action, {
+        blocked: guidedRecoveryBlocked || closeReviewActive(reviewState()),
+        unresolvedRecovery: uncertainWindowSlots, separateWindows: separateSlots,
+        primarySlot: primary,
+      })) return;
     if (action === 'open') {
-      const profile = profiles.find(item => item.slot === slot);
-      if (profile?.state !== 'RUNNING' || !profile.process?.responding ||
-          separateSlots.has(slot) || primary === slot) return;
-      select(slot); // Reuse existing verified native Play presentation; never Launch.
+      select(slot); // Original manual Play path; Rust rechecks the HWND.
     } else {
-      manualRefreshRequested = true; // Reuse existing explicit Refresh scheduling.
+      manualRefreshRequested = true; // Original manual Refresh path.
     }
   }
   function select(slot: ProfileSlot) { closeOneSlot=null; requested = null; queued = slot; }
@@ -771,9 +783,13 @@
               </button>
               {#if healthItem}
                 <SessionHealthNotice item={healthItem} onAction={requestGuidedRecovery}
-                  disabled={busy||refreshing||resizing||manualRefreshing||manualRefreshRequested||
-                    closeInProgress||nativeExitReview||closeReviewPending||initializing||
-                    queuedPage!==null||queuedLaunch!==null||!available||!binding?.configured}/>
+                  disabled={!guidedRecoveryAllowed(healthItem, profile, profile.slot,
+                    healthItem.action, {
+                      blocked: guidedRecoveryBlocked,
+                      unresolvedRecovery: uncertainWindowSlots,
+                      separateWindows: separateSlots,
+                      primarySlot: primary,
+                    })}/>
               {/if}
               {#if ['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)}
                 <button class="lt-secondary lt-close-launcher" aria-label={'Close Minecraft - '+profile.slot+' normally'} disabled={busy||closeInProgress||nativeExitReview||!available||!binding?.configured} on:click={()=>requestCloseOne(profile.slot)}>Close game</button>

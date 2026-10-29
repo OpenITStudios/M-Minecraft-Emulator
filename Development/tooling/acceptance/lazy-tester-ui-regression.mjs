@@ -415,11 +415,22 @@ try {
   await checkHealth.click();
   await page.waitForFunction(before=>window.__calls.filter(call=>
     call.command==='lazy_tester_session' && call.args?.request?.operation==='Inspect').length>before,oldInspectCount);
+  // Finish the first requested refresh before selecting a second action.
+  const checkOther=page.getByRole('button',{name:'Check status for Minecraft - 3'});
+  await page.waitForFunction(()=>document.querySelector('[aria-label="Check status for Minecraft - 3"]')?.disabled===false);
+  const secondInspectCount=await page.evaluate(()=>window.__calls.filter(call=>
+    call.command==='lazy_tester_session' && call.args?.request?.operation==='Inspect').length);
+  await checkOther.click();
+  await page.waitForFunction(before=>window.__calls.filter(call=>
+    call.command==='lazy_tester_session' && call.args?.request?.operation==='Inspect').length>before,secondInspectCount);
   assert.equal(await page.evaluate(()=>window.__calls.some(call=>
     ['Launch','CloseOne','CloseAll','ClearProfileData'].includes(call.args?.request?.operation))),false,
     'Guided Check status must issue Inspect only');
+  // Reset the synthetic issue AFTER both actions complete. Clicking the
+  // disappearing warning would race the first successful Refresh.
+  await page.waitForFunction(()=>document.querySelector('[aria-label="Check status for Minecraft - 3"]')?.disabled===false);
   await page.evaluate(()=>{window.__healthFixture=false;});
-  await page.getByRole('button',{name:'Check status for Minecraft - 3'}).click();
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await windowHealth.waitFor({state:'detached'});
   await launcherHealth.waitFor({state:'detached'});
 
