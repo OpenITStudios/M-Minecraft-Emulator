@@ -23,7 +23,7 @@ Minecraft-Emulator/
     Settings/
       data-location.json         project-local location pointer
       performance.json           saved FPS limits
-      graphics.json              five High/Low choices
+      graphics.json              five Preserve/High/Low choices (absent = Preserve)
       desktop-instance.json      exclusive manager marker
     profiles.json                private user/directory/hive file identities
     Launchers/
@@ -84,8 +84,26 @@ retain identities; arbitrary cross-volume copies are rejected. The explicit
 reviewed migration creates and records new identities without mixing profiles.
 
 Missing FPS settings default to 120/5; Save validates whole limits 5..1000,
-background no higher than active. High/Low, atomic preference writes, next-launch
-FPS application and all-games-stopped graphics/cache admission keep their owners.
+background no higher than active. An absent graphics.json now defaults to
+**Preserve Visuals** for each launcher: LazyTester does not create or rewrite
+Minecraft options.txt at launch. Previously saved High/Low arrays remain valid
+and retain their original explicit 12-chunk/MSAA1 behavior. Choosing Preserve
+stops future overrides; it does not reconstruct earlier visual values.
+Atomic preference writes, next-launch FPS application and all-games-stopped
+graphics/cache admission keep their owners.
+
+Texture Streaming is an **explicit, reversible existing-key option**:
+0→1 can be enabled, 1→0 disabled, only with a stopped profile and the
+existing settings backup/restore owner. Missing/duplicate/ambiguous keys are
+never synthesized or guessed. Minecraft Education 26.32 runtime support
+and private-RAM/VRAM benefit have not been measured.
+
+Data Storage displays a bounded, read-only count of manifest-containing
+directories under each profile's canonical Roaming resource_packs and
+development_resource_packs roots. This number does **not** establish which
+packs are activated globally or in worlds, nor any loaded/retained texture
+memory. The inventory has no delete/disable/activation authority and skips
+world content. Links or inspection limits result in an incomplete report.
 Full clear replaces the selected verified local profile and hive after confirmation;
 its recovery and isolation have synthetic fixture evidence only. Windows-managed
 sign-in data is outside that operation, and a fresh account sign-in is not yet

@@ -27,8 +27,11 @@ fn write_audio(path:&std::path::Path,value:BackgroundAudio)->io::Result<()> {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 pub enum GraphicsPreset {
-    High,
+    // Newly unconfigured profiles retain every Minecraft graphics option.
+    // Previously saved Low and High values keep their original meaning.
     #[default]
+    Preserve,
+    High,
     Low,
 }
 
@@ -37,7 +40,7 @@ pub fn load_graphics() -> io::Result<[GraphicsPreset; 5]> {
 }
 fn read_graphics(path: &std::path::Path) -> io::Result<[GraphicsPreset; 5]> {
     match fs::symlink_metadata(&path) {
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok([GraphicsPreset::Low; 5]),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok([GraphicsPreset::Preserve; 5]),
         Err(error) => return Err(error),
         Ok(metadata) if !metadata.is_file() || metadata.file_type().is_symlink() => return Err(io::Error::other("Graphics settings must be an ordinary file")),
         Ok(_) => {}
@@ -198,9 +201,13 @@ mod tests {
     fn graphics_preferences_are_bounded_atomic_and_preserve_bad_inputs() {
         let root=std::env::temp_dir().join(format!("lazy-graphics-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
         fs::create_dir(&root).unwrap();let path=root.join("graphics.json");
-        assert_eq!(read_graphics(&path).unwrap(),[GraphicsPreset::Low;5]);
-        let values=[GraphicsPreset::High,GraphicsPreset::Low,GraphicsPreset::High,GraphicsPreset::Low,GraphicsPreset::Low];
+        assert_eq!(read_graphics(&path).unwrap(),[GraphicsPreset::Preserve;5]);
+        assert!(!path.exists(), "Unconfigured profiles must not write graphics.json");
+        let values=[GraphicsPreset::High,GraphicsPreset::Low,GraphicsPreset::Preserve,GraphicsPreset::Low,GraphicsPreset::High];
         write_graphics(&path,values).unwrap();assert_eq!(read_graphics(&path).unwrap(),values);
+        // Existing five-choice files from older LazyTester remain valid and unchanged.
+        fs::write(&path,b"[\"Low\",\"High\",\"Low\",\"Low\",\"High\"]").unwrap();
+        assert_eq!(read_graphics(&path).unwrap(),[GraphicsPreset::Low,GraphicsPreset::High,GraphicsPreset::Low,GraphicsPreset::Low,GraphicsPreset::High]);
         for bytes in [b"[]".as_slice(),b"[\"Auto\",\"Low\",\"Low\",\"Low\",\"Low\"]",b"invalid"] {
             fs::write(&path,bytes).unwrap();assert!(write_graphics(&path,values).is_err());assert_eq!(fs::read(&path).unwrap(),bytes);
         }

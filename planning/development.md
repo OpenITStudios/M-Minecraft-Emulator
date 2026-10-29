@@ -2,21 +2,58 @@
 
 ## Current intent — 29 October 2026
 
-**Goal:** Advance the **optional LazyTester Particle Tuning** vanilla
-environmental-performance preview while retaining the 75/50/25/0
-distance-emission policy and original textures/animations. Native RAM
-allocator work is currently deprioritized by explicit user direction.
-Whole-game RAM savings remain unverified: the earlier <1024 MiB per-client
-figure is an aspiration, not a required success threshold. Protect all five
-Minecraft Education sessions, FPS, gameplay, multiplayer hosting, world saves
-and profile isolation. Development remains CODE-FIRST, no user-PC localtest,
-no extra repository checker loops.
+**Goal:** Improve **quality-preserving Minecraft Education configuration**
+and optional LazyTester Particle Tuning v0.3 (75/50/25/0 distance curve).
+Native allocator interventions remain separately default OFF and no longer
+the current focus. Neither texture streaming nor pack inventory is a
+demonstrated private-RAM saving. The prior <1024 MiB per-client target is
+aspirational, not mandatory. Protect all five sessions, gameplay, multiplayer
+hosting, world saves and profile isolation. Code-first GitHub development,
+no user-PC localtest, CI or repeated checker loops.
 
 **State:** ACTIVE, source-only. Original MC01–MC05 CloseOne/CloseAll code
 and native recovery guards remain intact. The last historical MC02 >35 s
 normal-exit incident is **RUNTIME ACCEPTANCE DEFERRED**, not a new P0 source
 gate. Reopen only for a confirmed new source defect or explicit operator
 authorization to perform Windows/game acceptance.
+
+## Active implementation — Preserve Visuals and texture memory configuration (29 October 2026)
+
+**User-approved continuation after particle v0.3:** prefer supported game
+configuration mechanisms before more native heap interventions. Do not infer
+Education 26.32 support or claim measured MiB from Bedrock patch notes.
+
+- For profiles without `graphics.json`, `GraphicsPreset::Preserve` is now
+  the default. The original per-slot graphics owner skips all Minecraft
+  options-directory reads/creation/writes for Preserve. Existing saved Low/High
+  arrays retain their historical visual overrides and replay behavior;
+  switching to Preserve **prevents future rewrites**, not restoration of
+  previously reduced Minecraft settings. The typed UI exposes and explains it.
+- The already existing confirmed `gfx_texture_streaming:0→1` setting now has
+  a symmetric **explicit** `1→0` operation through the same retained session
+  controller, slot/process admission, unique-key parser, verified backup and
+  atomic replacement. Missing, malformed, duplicated, running or foreign
+  settings fail closed. No graphics option is auto-created or automatically
+  switched. It may affect GPU memory but Education 26.32 support/system RAM
+  effects and visual texture-loading behavior remain UNKNOWN.
+- The original Data Storage response now contains an optional bounded,
+  **read-only** resource pack directory census from canonical per-profile
+  `Roaming/.../games/com.mojang/resource_packs` and
+  `development_resource_packs`. It counts ordinary manifest-containing
+  directories up to a fixed bound without reading worlds, textures or
+  credential files, following junctions, disabling packs or claiming
+  any pack is active. Partial/linked inventories report UNKNOWN, not
+  reliable savings. Existing Refresh and Open folder are reused.
+- Code owner updates: `manager_settings.rs`, `game_preset.rs`,
+  `native_clients_session.rs`, `session_controller.rs`, typed bridge/UI,
+  and one small `resource_pack_inventory.rs` read-only owner. Native RAM
+  canaries, executable admission, accounts/worlds, 144/10 FPS policy,
+  render distance >=12 and original session architecture stay unchanged.
+- **Evidence ceiling:** exact-GitHub-source contract and fixture review;
+  Rust/Windows/Svelte/Vitest compilation, Minecraft Education runtime,
+  Texture Streaming GPU/private-memory performance, five-client acceptance
+  and resource pack activation are NOT_EXECUTED. No CI, package, main commit
+  or user PC access.
 
 ## Active implementation — LazyTester Particle Tuning (29 October 2026)
 
@@ -293,11 +330,13 @@ No speculative renderer patch, working-set trim or experimental hook
 promotion is justified. The reviewer improvement concerns *measurement
 honesty*, not reclaimed game RAM.
 
-**Primary next source action:** preserve optional LazyTester Particle
-Tuning v0.3 as a **source-built-only** preview with 20 fingerprinted Mojang
-samples, constant-quality textures and aggressive 75/50/25/0 LOD.
-Confirm Education 26.32 behavior of steady and manual emitter MoLang,
-especially cap reevaluation and particle/source identifier availability,
-before any activation. An explicit copied-world host/join test requires
-separate permission; source/synthetic evidence is not runtime acceptance.
-Native `UploadBufferHeap` remains default OFF and outside this workstream.
+**Primary next source action:** retain Preserve Visuals as the non-destructive
+default, Texture Streaming as a backed-up explicitly reversible existing-key
+choice, and resource-pack inventory as read-only visibility. Further
+optimizations must be grounded in actual Education 26.32 option/pack
+compatibility and a plausible resident-memory effect; do not invent
+`gfx_particleviewdistance` values, disable any world/resource pack
+automatically, or claim Bedrock-only features as Education-tested.
+LazyTester Particle Tuning v0.3 remains a separate source-built-only
+preview. Any real Education gameplay/host test needs independent operator
+permission. UploadBufferHeap remains default OFF.

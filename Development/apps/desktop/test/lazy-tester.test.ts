@@ -124,6 +124,28 @@ describe('Lazy Tester profile contract', () => {
     expect(parseSession(gated).storage![3]!.gameSettings?.canReset).toBe(true);
     expect(parseSession(gated).storage![0]!.gameSettings?.canRestore).toBe(false);
   });
+  it('accepts optional bounded read-only resource pack inventory without claiming activation',()=>{
+    const resourcePacks={manifested:2,partial:false,issue:null};
+    const row=(status:unknown)=>[1,2,3,4,5].map(slot=>({
+      slot,bytes:100,files:2,partial:false,disk:null,
+      cache:{bytes:0,files:0,partial:false,canClear:false,issue:null},
+      resourcePacks:status,
+    }));
+    const profile={...stopped(),storage:row(resourcePacks)};
+    expect(parseSession(profile).storage![0]?.resourcePacks?.manifested).toBe(2);
+    const partial={manifested:0,partial:true,issue:'Resource pack inventory is partial'};
+    expect(parseSession({...stopped(),storage:row(partial)}).storage![0]?.resourcePacks?.partial).toBe(true);
+    const older={...stopped(),storage:row(resourcePacks).map(({resourcePacks,...rest})=>rest)};
+    expect(parseSession(older).storage![0]?.resourcePacks).toBeUndefined();
+    for(const bad of [
+      {...resourcePacks,manifested:-1}, {...resourcePacks,manifested:129},
+      {...resourcePacks,manifested:1.5}, {...resourcePacks,partial:'yes'},
+      {...resourcePacks,issue:'Unexpected warning'},
+      {manifested:1,partial:true,issue:'Uncertain'},
+      {manifested:0,partial:true,issue:null},
+      {...resourcePacks,activeInWorld:true},null,
+    ]) expect(()=>parseSession({...stopped(),storage:row(bad)})).toThrow();
+  });
   it('leaves separately opened games alone while another game remains playable here',()=>{
     const snapshot=stopped();
     for(const slot of [1,2])Object.assign(snapshot.profiles[slot-1]!,running(slot));
@@ -133,9 +155,10 @@ describe('Lazy Tester profile contract', () => {
     expect(firstEmbeddedProfile(profiles,new Set([2]))).toBe(1);
     expect(profiles.filter(profile=>profile.state==='RUNNING')).toHaveLength(2);
   });
-  it('accepts exactly five High/Low selections and rejects invented graphics states',()=>{
-    const settings={activeFps:144,backgroundFps:10,renderDistanceChunks:12,canApplyPreset:true,changedProfiles:null,graphicsPresets:['High','Low','High','Low','Low']};
+  it('accepts Preserve Visuals and legacy five-profile High/Low preferences, rejects invented states',()=>{
+    const settings={activeFps:144,backgroundFps:10,renderDistanceChunks:12,canApplyPreset:true,changedProfiles:null,graphicsPresets:['Preserve','Low','High','Preserve','Low']};
     expect(parseSession({...stopped(),settings}).settings!.graphicsPresets).toEqual(settings.graphicsPresets);
+    expect(parseSession({...stopped(),settings:{...settings,graphicsPresets:['High','Low','High','Low','Low']}}).settings!.graphicsPresets).toEqual(['High','Low','High','Low','Low']);
     for(const graphicsPresets of [['High'],['High','Low','Low','Low','Auto'],null])expect(()=>parseSession({...stopped(),settings:{...settings,graphicsPresets}})).toThrow();
   });
   it('validates configured Settings policy and refuses a successful preset update while games are active',()=>{

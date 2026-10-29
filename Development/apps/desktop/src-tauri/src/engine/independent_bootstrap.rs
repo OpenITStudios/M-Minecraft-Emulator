@@ -486,6 +486,8 @@ mod session_controller;
 mod session_audio;
 #[path = "independent_bootstrap/profile_storage.rs"]
 mod profile_storage;
+#[path = "independent_bootstrap/resource_pack_inventory.rs"]
+mod resource_pack_inventory;
 #[path = "independent_bootstrap/profile_binding.rs"]
 pub(super) mod profile_binding;
 #[path = "independent_bootstrap/product_profiles.rs"]

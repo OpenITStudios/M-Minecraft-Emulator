@@ -59,11 +59,23 @@ pub struct ProfileStorage {
     pub partial: bool,
     pub disk: Option<DiskSpace>,
     pub cache: CacheStorage,
+    // Read-only on-disk pack directory census; NOT world activation or resident RAM.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_packs: Option<ResourcePackStorage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub game_settings: Option<GameSettingsStorage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub full_clear: Option<FullClearStorage>,
 }
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ResourcePackStorage {
+    // Manifest-containing local directories only. No read of world activation.
+    pub manifested: u32,
+    pub partial: bool,
+    pub issue: Option<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct FullClearStorage {
@@ -136,6 +148,7 @@ pub enum SessionRequest {
     RestoreGameSettings { slot: u32 },
     DisableImprovedInputResponse { slot: u32 },
     EnableTextureStreaming { slot: u32 },
+    DisableTextureStreaming { slot: u32 },
     ClearProfileData {slot:u32, #[serde(rename="confirmationToken")] confirmation_token:String, #[serde(rename="confirmationName")] confirmation_name:String},
     Launch { slot: u32 },
     CloseOne { slot: u32 },
@@ -192,7 +205,7 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     if let SessionRequest::SavePerformance {active_fps,background_fps}=request {
         super::manager_settings::PerformanceSettings {active_fps,background_fps}.validate()?;
     }
-    if matches!(request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } | SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } if !(1..=5).contains(&slot))
+    if matches!(request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } | SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } if !(1..=5).contains(&slot))
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -402,7 +415,7 @@ mod tests {
     #[test]
     fn recovery_rejects_out_of_range_slots_before_controller_or_storage_access() {
         for slot in [0,6,u32::MAX] {
-            for operation in [SessionRequest::ResetGameSettings {slot},SessionRequest::RestoreGameSettings {slot},SessionRequest::DisableImprovedInputResponse {slot},SessionRequest::EnableTextureStreaming {slot},SessionRequest::CloseOne {slot}] {
+            for operation in [SessionRequest::ResetGameSettings {slot},SessionRequest::RestoreGameSettings {slot},SessionRequest::DisableImprovedInputResponse {slot},SessionRequest::EnableTextureStreaming {slot},SessionRequest::DisableTextureStreaming {slot},SessionRequest::CloseOne {slot}] {
                 assert_eq!(request(operation).unwrap_err().kind(),io::ErrorKind::InvalidInput);
             }
         }
@@ -481,6 +494,7 @@ mod tests {
         }
         assert!(matches!(serde_json::from_str::<SessionRequest>(r#"{"operation":"DisableImprovedInputResponse","slot":2}"#), Ok(SessionRequest::DisableImprovedInputResponse {slot:2})));
         assert!(matches!(serde_json::from_str::<SessionRequest>(r#"{"operation":"EnableTextureStreaming","slot":4}"#), Ok(SessionRequest::EnableTextureStreaming {slot:4})));
+        assert!(matches!(serde_json::from_str::<SessionRequest>(r#"{"operation":"DisableTextureStreaming","slot":4}"#), Ok(SessionRequest::DisableTextureStreaming {slot:4})));
         assert!(read_message(&mut io::Cursor::new(vec![b'x'; 32769])).is_err());
         assert!(read_message(&mut io::Cursor::new(b"{}".to_vec())).is_err());
         assert_eq!(

@@ -408,6 +408,7 @@ impl Sessions {
                         }
                         cache
                     },
+                    resource_packs: Some(resource_pack_inventory::inspect(&store.private, budget)),
                     game_settings: Some(game_preset::inspect_settings(&store.private, replay_admission())),
                     full_clear: Some(product_profiles::clear::inspect(store, replay_admission())),
                 };
@@ -1180,7 +1181,7 @@ fn run() -> io::Result<()> {
                         .map_err(|error| error.to_string())?;
                     storage = Some(sessions.storage().map_err(|error| error.to_string())?);
                 }
-                SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } => {
+                SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } => {
                     sessions.reap();
                     let observed=super::super::inspect_native_workspace().map_err(|error|error.to_string())?.processes;
                     sessions.data_admission(slot,&observed).map_err(|error|error.to_string())?;
@@ -1191,6 +1192,8 @@ fn run() -> io::Result<()> {
                         game_preset::disable_input_response(&store.private)
                     } else if matches!(envelope.request,SessionRequest::EnableTextureStreaming {..}) {
                         game_preset::enable_texture_streaming(&store.private)
+                    } else if matches!(envelope.request,SessionRequest::DisableTextureStreaming {..}) {
+                        game_preset::disable_texture_streaming(&store.private)
                     } else {
                         game_preset::restore_settings(&store.private)
                     }.map_err(|error|error.to_string())?;

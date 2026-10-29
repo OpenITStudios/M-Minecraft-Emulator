@@ -14,6 +14,7 @@ export interface ProfileStorage {
   slot: ProfileSlot; bytes: number; files: number; partial: boolean;
   disk: {availableBytes: number; totalBytes: number} | null;
   cache: {bytes: number; files: number; partial: boolean; canClear: boolean; issue: string | null};
+  resourcePacks?: {manifested:number; partial:boolean; issue:string|null};
   gameSettings?: {hasSettings:boolean; backupAvailable:boolean; canReset:boolean; canRestore:boolean; issue:string|null; improvedInputResponseEnabled?:boolean; textureStreamingEnabled?:boolean};
   fullClear?: {canClear:boolean; pending:boolean; confirmationToken:string|null; issue:string|null};
 }
@@ -25,7 +26,7 @@ export function parseNativeBackendSupport(value: unknown): NativeBackendSupport 
   }
   return value;
 }
-export type GraphicsPreset = 'High' | 'Low';
+export type GraphicsPreset = 'Preserve' | 'High' | 'Low';
 export type BackgroundAudio = 'Keep'|'Mute';
 export interface SettingsReport {backgroundAudio?:BackgroundAudio; audioIssue?:string; graphicsPresets?:GraphicsPreset[]; activeFps:number; backgroundFps:number; renderDistanceChunks:number; canApplyPreset:boolean; changedProfiles:number|null}
 export interface SessionSnapshot {schema: 1; profiles: ProfileSession[]; storage: ProfileStorage[] | null; settings?:SettingsReport}
@@ -105,7 +106,7 @@ export function parseSession(value: unknown): SessionSnapshot {
   if (value.storage !== null) {
     if (!Array.isArray(value.storage) || value.storage.length !== 5) throw new TypeError('Invalid storage response');
     value.storage.forEach((storage: unknown, index: number) => {
-      if (!record(storage) || !exact(storage, ['slot','bytes','files','partial','disk','cache',...(Object.hasOwn(storage,'gameSettings')?['gameSettings']:[]),...(Object.hasOwn(storage,'fullClear')?['fullClear']:[])]) || storage.slot !== index + 1 ||
+      if (!record(storage) || !exact(storage, ['slot','bytes','files','partial','disk','cache',...(Object.hasOwn(storage,'gameSettings')?['gameSettings']:[]),...(Object.hasOwn(storage,'resourcePacks')?['resourcePacks']:[]),...(Object.hasOwn(storage,'fullClear')?['fullClear']:[])]) || storage.slot !== index + 1 ||
           !Number.isSafeInteger(storage.bytes) || Number(storage.bytes) < 0 || !Number.isInteger(storage.files) ||
           Number(storage.files) < 0 || Number(storage.files) > 100000 || typeof storage.partial !== 'boolean') throw new TypeError('Invalid storage metadata');
       const {disk, cache} = storage;
@@ -119,6 +120,16 @@ export function parseSession(value: unknown): SessionSnapshot {
           typeof cache.canClear !== 'boolean' || !(cache.issue === null || typeof cache.issue === 'string' && cache.issue.length <= 8192) ||
           cache.canClear && (cache.partial || cache.files === 0 || cache.issue !== null ||
             (value.profiles as ProfileSession[]).some(profile => profile.slot === storage.slot && ['STARTING', 'RUNNING', 'NOT_RESPONDING'].includes(profile.state)))) throw new TypeError('Invalid cache metadata');
+      // Pack folders are a read-only inventory, never evidence that a world
+      // has activated any of them or that game RAM can be reclaimed.
+      if(Object.hasOwn(storage,'resourcePacks')) {
+        const packs=storage.resourcePacks;
+        if(!record(packs)||!exact(packs,['manifested','partial','issue'])||
+          !Number.isInteger(packs.manifested)||Number(packs.manifested)<0||Number(packs.manifested)>128||
+          typeof packs.partial!=='boolean'||!(packs.issue===null||typeof packs.issue==='string'&&packs.issue.length<=8192)||
+          packs.partial!== (packs.issue!==null) || packs.partial&&packs.manifested!==0)
+          throw new TypeError('Invalid resource pack inventory');
+      }
       if(Object.hasOwn(storage,'gameSettings')) {
         const game=storage.gameSettings;
         const active=(value.profiles as ProfileSession[]).some(profile=>profile.slot===storage.slot&&['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state));
@@ -149,7 +160,7 @@ export function parseSession(value: unknown): SessionSnapshot {
     if(!record(settings)||!exact(settings,['activeFps','backgroundFps','renderDistanceChunks','canApplyPreset','changedProfiles',...['graphicsPresets','backgroundAudio','audioIssue'].filter(key=>Object.hasOwn(settings,key))])||
       Object.hasOwn(settings,'backgroundAudio')&&!['Keep','Mute'].includes(String(settings.backgroundAudio))||
       Object.hasOwn(settings,'audioIssue')&&(!Object.hasOwn(settings,'backgroundAudio')||typeof settings.audioIssue!=='string'||settings.audioIssue.length>8192)||
-      Object.hasOwn(settings,'graphicsPresets')&&(!Array.isArray(settings.graphicsPresets)||settings.graphicsPresets.length!==5||settings.graphicsPresets.some(p=>p!=='High'&&p!=='Low'))||
+      Object.hasOwn(settings,'graphicsPresets')&&(!Array.isArray(settings.graphicsPresets)||settings.graphicsPresets.length!==5||settings.graphicsPresets.some(p=>p!=='Preserve'&&p!=='High'&&p!=='Low'))||
       !Number.isInteger(settings.activeFps)||Number(settings.activeFps)<1||Number(settings.activeFps)>1000||
       !Number.isInteger(settings.backgroundFps)||Number(settings.backgroundFps)<1||Number(settings.backgroundFps)>Number(settings.activeFps)||
       settings.renderDistanceChunks!==12||typeof settings.canApplyPreset!=='boolean'||
@@ -213,7 +224,7 @@ export const lazyTester = {
   reportStartup:(report:{connection:string;issue:string;cards:number;enabled:number})=>invokeRuntime<void>('startup_diagnostic_result',report),
   backendSupport:async()=>parseNativeBackendSupport(await invokeRuntime<unknown>('lazy_tester_backend_support')),
   applyGraphics:async(slot:ProfileSlot,preset:GraphicsPreset)=>{
-    if(!profileSlots.includes(slot)||!['High','Low'].includes(preset))throw new TypeError('Invalid graphics preset');
+    if(!profileSlots.includes(slot)||!['Preserve','High','Low'].includes(preset))throw new TypeError('Invalid graphics preset');
     return settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ApplyGraphicsPreset',slot,preset}}));
   },
   settings:async()=>settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'InspectSettings'}})),
@@ -236,6 +247,10 @@ export const lazyTester = {
   enableTextureStreaming: async (slot: ProfileSlot) => {
     if(!profileSlots.includes(slot))throw new TypeError('Unknown Minecraft profile');
     return parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request:{operation:'EnableTextureStreaming',slot}}));
+  },
+  disableTextureStreaming: async (slot: ProfileSlot) => {
+    if(!profileSlots.includes(slot))throw new TypeError('Unknown Minecraft profile');
+    return parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request:{operation:'DisableTextureStreaming',slot}}));
   },
   disableImprovedInputResponse: async (slot: ProfileSlot) => {
     if(!profileSlots.includes(slot))throw new TypeError('Unknown Minecraft profile');

@@ -191,11 +191,17 @@ fn render_input_response_disabled(original: &[u8]) -> io::Result<Vec<u8>> {
 fn render_texture_streaming_enabled(original: &[u8]) -> io::Result<Vec<u8>> {
     render_existing_binary_option(original, "gfx_texture_streaming", b'0', b'1')
 }
+fn render_texture_streaming_disabled(original: &[u8]) -> io::Result<Vec<u8>> {
+    render_existing_binary_option(original, "gfx_texture_streaming", b'1', b'0')
+}
 pub(super) fn disable_input_response(private: &File) -> io::Result<bool> {
     Prepared::read_existing_option(private, render_input_response_disabled)?.commit_with_backup(true)
 }
 pub(super) fn enable_texture_streaming(private: &File) -> io::Result<bool> {
     Prepared::read_existing_option(private, render_texture_streaming_enabled)?.commit_with_backup(true)
+}
+pub(super) fn disable_texture_streaming(private: &File) -> io::Result<bool> {
+    Prepared::read_existing_option(private, render_texture_streaming_disabled)?.commit_with_backup(true)
 }
 
 const LIMIT: usize = 1024 * 1024;
@@ -218,6 +224,10 @@ fn render(original: &[u8]) -> io::Result<Vec<u8>> {
 }
 
 fn render_preset(original: &[u8], preset: crate::engine::manager_settings::GraphicsPreset) -> io::Result<Vec<u8>> {
+    if preset == crate::engine::manager_settings::GraphicsPreset::Preserve {
+        // Do not create/alter an options.txt, including an absent one.
+        return Ok(original.to_vec());
+    }
     let mut entries = PRESET;
     if preset == crate::engine::manager_settings::GraphicsPreset::High {
         // Keep the reviewed distance/MSAA units; enable the known visual-effect options.
@@ -433,13 +443,21 @@ pub(super) fn apply(stores: &[SlotStorage]) -> io::Result<usize> {
 // Other profiles may be running; never pass their stores here.
 pub(super) fn apply_inactive(stores: &[SlotStorage]) -> io::Result<usize> {
     let values = crate::engine::manager_settings::load_graphics()?;
-    let prepared = stores.iter().map(|store| Prepared::read_preset(&store.private, values[store.slot as usize - 1])).collect::<io::Result<Vec<_>>>()?;
+    // Preserve never resolves, creates, or rewrites a game's options directory.
+    // Existing explicit High/Low selections retain their legacy behavior.
+    let prepared = stores.iter().filter(|store| values[store.slot as usize - 1]
+        != crate::engine::manager_settings::GraphicsPreset::Preserve)
+        .map(|store| Prepared::read_preset(&store.private, values[store.slot as usize - 1]))
+        .collect::<io::Result<Vec<_>>>()?;
     let mut changed = 0;
     for preset in prepared { changed += usize::from(preset.commit()?); }
     Ok(changed)
 }
 
 pub(super) fn apply_selected(store: &SlotStorage, preset: crate::engine::manager_settings::GraphicsPreset) -> io::Result<usize> {
+    if preset == crate::engine::manager_settings::GraphicsPreset::Preserve {
+        return Ok(0); // Only save the preference; never rewrite Minecraft graphics options.
+    }
     Ok(usize::from(Prepared::read_preset(&store.private, preset)?.commit()?))
 }
 
@@ -528,6 +546,7 @@ mod tests {
         assert_eq!(observed_texture_streaming(before), Some(false));
         assert_eq!(render_texture_streaming_enabled(before).unwrap(), after);
         assert_eq!(observed_texture_streaming(after), Some(true));
+        assert_eq!(render_texture_streaming_disabled(after).unwrap(), before);
         assert_eq!(render_input_response_disabled(before).unwrap(),
             b"\xef\xbb\xbfgfx_texture_streaming:0\r\nvolume:0.75\nctrl_improvedInputResponse:0\r\n");
         for ambiguous in [
@@ -543,6 +562,62 @@ mod tests {
         }
         assert_eq!(observed_texture_streaming(b"gfx_texture_streaming:0\ngfx_texture_streaming:0\n"), None);
         assert_eq!(observed_texture_streaming(b"unknown:1\n"), None);
+    }
+
+    #[test]
+    fn preserve_visuals_keeps_exact_options_bytes_and_creates_no_graphics_override() {
+        use crate::engine::manager_settings::GraphicsPreset::{Preserve, High, Low};
+        let original=b"gfx_viewdistance:720\r\ngfx_msaa:4\r\ngfx_smoothlighting:1\r\nvolume:0.8\r\n";
+        assert_eq!(render_preset(original, Preserve).unwrap(), original);
+        assert!(render_preset(&[], Preserve).unwrap().is_empty());
+        assert_ne!(render_preset(original, Low).unwrap(), original);
+        assert_ne!(render_preset(original, High).unwrap(), original);
+        let root=super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let private=open_directory(&root,FILE_READ_ATTRIBUTES|FILE_LIST_DIRECTORY).unwrap();
+        assert!(!root.join("Roaming").exists());
+        // A Preserve selection does not create any Minecraft options directories.
+        let unchanged = render_preset(original, Preserve).unwrap();
+        assert_eq!(unchanged, original);
+        drop(private);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn reversible_texture_streaming_changes_only_existing_unique_binary_key() {
+        let initial=b"\xef\xbb\xbfgfx_texture_streaming:0\r\nvolume:0.75\nkey_jump:32\r\n";
+        let enabled=b"\xef\xbb\xbfgfx_texture_streaming:1\r\nvolume:0.75\nkey_jump:32\r\n";
+        assert_eq!(render_texture_streaming_enabled(initial).unwrap(), enabled);
+        assert_eq!(render_texture_streaming_disabled(enabled).unwrap(), initial);
+        for invalid in [
+            &b""[..], &b"gfx_texture_streaming:0\n"[..],
+            &b"gfx_texture_streaming:1\ngfx_texture_streaming:1\n"[..],
+            &b"gfx_texture_streaming:1\ngfx_texture_streaming:0\n"[..],
+            &b"gfx_texture_streaming:2\n"[..], &b"gfx_texture_streaming:1\0"[..],
+            &b"gfx_texture_streaming:1\rstray"[..], &b"gfx_texture_streaming:1\n\xff"[..],
+        ] { assert!(render_texture_streaming_disabled(invalid).is_err()); }
+    }
+
+    #[test]
+    fn texture_streaming_disable_is_reversible_and_keeps_world_unchanged() {
+        let root=super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let private=open_directory(&root,FILE_READ_ATTRIBUTES|FILE_LIST_DIRECTORY).unwrap();
+        assert!(disable_texture_streaming(&private).is_err());
+        assert!(!root.join("Roaming").exists());
+        let path=Prepared::read(&private).unwrap().path;
+        let before=b"gfx_texture_streaming:1\r\naccount:kept\n";
+        let after=b"gfx_texture_streaming:0\r\naccount:kept\n";
+        fs::write(&path,before).unwrap();
+        fs::write(root.join("world-fixture"),b"untouched").unwrap();
+        assert!(disable_texture_streaming(&private).unwrap());
+        assert_eq!(fs::read(&path).unwrap(),after);
+        assert_eq!(backup_bytes(&path).unwrap().unwrap(),before);
+        assert_eq!(inspect_settings(&private,Ok(())).texture_streaming_enabled,Some(false));
+        assert!(disable_texture_streaming(&private).is_err());
+        assert!(restore_settings(&private).unwrap());
+        assert_eq!(fs::read(&path).unwrap(),before);
+        assert_eq!(fs::read(root.join("world-fixture")).unwrap(),b"untouched");
+        drop(private);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

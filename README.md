@@ -77,10 +77,16 @@ compatibility layer is not a general Windows security sandbox.
 
 ## Product and evidence
 
-Settings now includes editable Active/Background FPS limits, Save and Restore
+Settings includes editable Active/Background FPS limits, Save and Restore
 defaults (144/10). Limits are shared across five profiles and take effect on each
-profile's next launch. Apply to all profiles saves the existing Simple/12-chunk
-graphics preset only while all sessions are closed. These controls do not launch
+profile's next launch. New profiles with no saved graphics preference use
+**Preserve Visuals**, leaving Minecraft's own texture quality, lighting,
+MSAA and render distance unchanged; existing explicitly saved Low/High presets
+keep their historical 12-chunk behavior. A change to these preferences requires
+the original all-sessions-stopped gate. Data Storage exposes an explicit,
+backed-up Texture Streaming 0/1 switch only when the key exists on a stopped
+profile, plus a read-only count of local resource-pack manifest folders
+(**not** proof of world activation or RAM savings). These controls do not launch
 or stop Minecraft. See [data layout](docs/system/data-layout.md) for persistence
 and validation. Native pacer fixtures are not fresh Minecraft gameplay acceptance.
 

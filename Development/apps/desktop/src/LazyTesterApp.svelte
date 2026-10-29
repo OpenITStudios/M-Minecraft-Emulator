@@ -16,20 +16,20 @@
   let applyingPreset=false;
   let queuedPreset:{slot:ProfileSlot;preset:GraphicsPreset}|null=null;
   let queuedAudio:'Keep'|'Mute'|null=null;
-  let selectedSlot:ProfileSlot=1, graphicsPreset:GraphicsPreset='Low';
+  let selectedSlot:ProfileSlot=1, graphicsPreset:GraphicsPreset='Preserve';
   let advanced=false;
   $: selectedStorage=storage?.find(item=>item.slot===selectedSlot);
   $: selectedProfile=profiles.find(item=>item.slot===selectedSlot);
   $: selectedPath=dataLocation?.profiles.find(item=>item.slot===selectedSlot)?.path;
   $: graphicsDirty=!!settings?.graphicsPresets&&graphicsPreset!==settings.graphicsPresets[selectedSlot-1];
-  function chooseSlot(slot:ProfileSlot){selectedSlot=slot;clearSlot=null;recovery=null;fullReview=null;settingsNotice='';graphicsPreset=settings?.graphicsPresets?.[slot-1]??'Low';}
+  function chooseSlot(slot:ProfileSlot){selectedSlot=slot;clearSlot=null;recovery=null;fullReview=null;settingsNotice='';graphicsPreset=settings?.graphicsPresets?.[slot-1]??'Preserve';}
   let savingPerformance=false;
   let queuedPerformance:{active:number;background:number}|null=null;
   let activeFps:number|undefined=120,backgroundFps:number|undefined=5,performanceNotice='';
   $: performanceDirty=settings!==null&&(activeFps!==settings.activeFps||backgroundFps!==settings.backgroundFps);
   $: performanceValid=validFpsLimits(activeFps,backgroundFps);
   let clearSlot: ProfileSlot | null = null, storageNotice = '';
-  let recovery:{slot:ProfileSlot;action:'Reset'|'Restore'|'DisableInputResponse'|'EnableTextureStreaming'}|null=null;
+  let recovery:{slot:ProfileSlot;action:'Reset'|'Restore'|'DisableInputResponse'|'EnableTextureStreaming'|'DisableTextureStreaming'}|null=null;
   let fullReview:{slot:ProfileSlot;token:string;pending:boolean}|null=null,fullName='',fullAck=false,clearingData=false;
   type Page = 'workspace' | 'launchers' | 'storage' | 'settings';
   let page: Page = 'workspace';
@@ -186,7 +186,7 @@
       if(next==='settings') {
         const snapshot=await lazyTester.settings();profiles=snapshot.profiles;settings=snapshot.settings;available=true;
         if(!performanceDirty){activeFps=settings.activeFps;backgroundFps=settings.backgroundFps;}
-        graphicsPreset=settings.graphicsPresets?.[selectedSlot-1]??'Low';
+        graphicsPreset=settings.graphicsPresets?.[selectedSlot-1]??'Preserve';
       }
       if(next==='storage'||next==='settings') {
         try {dataLocation=await lazyTester.dataLocation();locationIssue='';}
@@ -247,7 +247,9 @@
       const snapshot=await lazyTester.applyGraphics(request.slot,request.preset);
       profiles=snapshot.profiles;settings=snapshot.settings;
       if(settings.changedProfiles===null)throw new Error('The preset update was not confirmed. Refresh settings before trying again.');
-      settingsNotice='Minecraft - '+request.slot+': '+request.preset+' saved and applied. This preset is reapplied at launch.';
+      settingsNotice=request.preset==='Preserve'
+        ? 'Minecraft - '+request.slot+': Preserve Visuals saved. LazyTester will leave Minecraft graphics options unchanged on future launches; existing edits are not automatically undone.'
+        : 'Minecraft - '+request.slot+': '+request.preset+' saved and applied. This preset is reapplied at launch.';
     }catch(error){issue=String(error);settings=null;}
     finally{applyingPreset=false;busy=false;}
   }
@@ -538,6 +540,8 @@
     const status=selectedStorage?.gameSettings;
     const allowed=pending.action==='EnableTextureStreaming'
       ? status?.canReset===true&&status?.textureStreamingEnabled===false&&selectedProfile?.state==='STOPPED'
+      : pending.action==='DisableTextureStreaming'
+        ? status?.canReset===true&&status?.textureStreamingEnabled===true&&selectedProfile?.state==='STOPPED'
       : pending.action==='DisableInputResponse'
         ? status?.canReset===true&&status?.improvedInputResponseEnabled===true&&selectedProfile?.state==='STOPPED'
         : pending.action==='Reset'?status?.canReset:status?.canRestore;
@@ -546,13 +550,17 @@
     try {
       const snapshot=pending.action==='EnableTextureStreaming'
         ? await lazyTester.enableTextureStreaming(pending.slot)
+        : pending.action==='DisableTextureStreaming'
+          ? await lazyTester.disableTextureStreaming(pending.slot)
         : pending.action==='DisableInputResponse'
           ? await lazyTester.disableImprovedInputResponse(pending.slot)
           : await lazyTester.recoverSettings(pending.slot,pending.action);
       profiles=snapshot.profiles;storage=snapshot.storage;
       storageCheckedAt=new Date().toLocaleTimeString('en-US');
       storageNotice=pending.action==='EnableTextureStreaming'
-        ? 'Minecraft - '+pending.slot+': saved Texture Streaming enabled. Restart Minecraft normally to apply. This may reduce GPU texture memory on supported builds; Education 26.32 and system RAM savings remain unverified. Prior settings are available through Restore.'
+        ? 'Minecraft - '+pending.slot+': Texture Streaming enabled in saved options. Restart normally; GPU and system RAM benefits remain unverified. The previous settings are backed up.'
+        : pending.action==='DisableTextureStreaming'
+          ? 'Minecraft - '+pending.slot+': Texture Streaming disabled in saved options. Restart normally; this may increase GPU memory use. The previous settings are backed up.'
         : pending.action==='DisableInputResponse'
           ? 'Minecraft - '+pending.slot+': Improved Input Response disabled in saved options. The previous settings are backed up for Restore. Restart this Minecraft normally to apply; RAM savings on Education 26.32 are unverified.'
           : `Minecraft - ${pending.slot}: settings ${pending.action==='Reset'?'reset':'restored'}. Changes apply at the next launch; your saved graphics preset is reapplied. Previous settings are available through Restore settings.`;
@@ -566,7 +574,7 @@
     fullReview={slot:selectedSlot,token:status.confirmationToken,pending:status.pending};
     void tick().then(()=>document.getElementById('full-clear-name')?.focus());
   }
-  function reviewSettings(action:'Reset'|'Restore'|'DisableInputResponse'|'EnableTextureStreaming') {
+  function reviewSettings(action:'Reset'|'Restore'|'DisableInputResponse'|'EnableTextureStreaming'|'DisableTextureStreaming') {
     fullReview=null;clearSlot=null;recovery={slot:selectedSlot,action};
   }
   async function clearAllData() {
@@ -757,9 +765,9 @@
       {#if page==='settings'}
         <div class="lt-settings-content">
           <section class="lt-group"><h2>Graphics</h2><label class="lt-target">Applies to <select value={selectedSlot} disabled={busy||queuedPreset!==null} on:change={event=>chooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft - {p.slot}</option>{/each}</select></label>
-            <div class="lt-setting"><div><h3><label for="graphics-preset">Graphics preset</label></h3><p>High enables visual effects. Low reduces them. Both use 12 chunks; simulation distance is unchanged.</p></div><select id="graphics-preset" bind:value={graphicsPreset} disabled={busy||queuedPreset!==null||!settings?.graphicsPresets}><option>High</option><option>Low</option></select></div>
-            <div class="lt-actions"><button disabled={busy||queuedPreset!==null||!available||!binding?.configured||!settings?.canApplyPreset||!graphicsDirty||runningCount>0} on:click={requestPreset}>{applyingPreset||queuedPreset!==null?'Applying…':'Apply preset'}</button></div>
-            <p class="lt-help">Close all Minecraft sessions before applying. The saved preset is reapplied when this launcher starts.</p>{#if settings&&!settings.graphicsPresets}<p class="lt-error">The running controller needs an update before High/Low can be selected. Existing games are preserved.</p>{/if}{#if settingsNotice}<p role="status">{settingsNotice}</p>{/if}
+            <div class="lt-setting"><div><h3><label for="graphics-preset">Graphics preset</label></h3><p>Preserve Visuals does not modify Minecraft's graphics options or create new options.txt. High/Low are legacy visual presets that apply 12 chunks and MSAA 1. Simulation distance is unchanged.</p></div><select id="graphics-preset" bind:value={graphicsPreset} disabled={busy||queuedPreset!==null||!settings?.graphicsPresets}><option value="Preserve">Preserve Visuals</option><option value="High">High (legacy)</option><option value="Low">Low (legacy)</option></select></div>
+            <div class="lt-actions"><button disabled={busy||queuedPreset!==null||!available||!binding?.configured||!settings?.canApplyPreset||!graphicsDirty||runningCount>0} on:click={requestPreset}>{applyingPreset||queuedPreset!==null?'Applying…':graphicsPreset==='Preserve'?'Save preference':'Apply preset'}</button></div>
+            <p class="lt-help">Close all Minecraft sessions before saving. Preserve Visuals stops future automatic overrides but does not restore graphics values previously changed by Low/High. Existing explicit High/Low preferences are retained.</p>{#if settings&&!settings.graphicsPresets}<p class="lt-error">Update the running controller before changing graphics presets. Existing games are preserved.</p>{/if}{#if settingsNotice}<p role="status">{settingsNotice}</p>{/if}
           </section>
           <section class="lt-group"><h2>Frame Limits <small>All launchers</small></h2>{#if settings}<form on:submit|preventDefault={requestPerformanceSave}>
             <div class="lt-setting"><div><h3><label for="active-fps">While playing</label></h3><p>The game receiving keyboard and mouse input.</p></div><div class="lt-fps"><input id="active-fps" type="number" min="5" max="1000" required bind:value={activeFps} disabled={busy||queuedPerformance!==null}/> FPS</div></div>
@@ -774,7 +782,7 @@
         <div class="lt-settings-content">
           <p>Worlds, cache and settings for each launcher.</p><div class="lt-launcher-heading"><select value={selectedSlot} disabled={busy} aria-label="Choose Minecraft launcher" on:change={event=>chooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft - {p.slot}</option>{/each}</select><span>{selectedProfile?labels[selectedProfile.state]:'Unavailable'}</span></div>
           {#if storageNotice}<p role="status">{storageNotice}</p>{/if}
-          <section class="lt-group"><div class="lt-setting"><h3>Profile data</h3><strong>{selectedStorage?(selectedStorage.partial?'At least ':'')+(selectedStorage.bytes/1048576).toFixed(1)+' MB':'Not measured'}</strong></div><div class="lt-setting"><h3>Web cache</h3><span>{selectedStorage&&!selectedStorage.cache.partial?(selectedStorage.cache.bytes/1048576).toFixed(1)+' MB':'Unavailable'}</span></div><div class="lt-setting"><h3>Available disk space</h3><span>{selectedStorage?.disk?(selectedStorage.disk.availableBytes/1073741824).toFixed(1)+' GB':'Unavailable'}</span></div><p class="lt-help">{storage?'Last measured at '+storageCheckedAt+'. Web cache is included in profile data.':'Use Refresh to measure storage. World sizes are not separately classified.'}</p></section>
+          <section class="lt-group"><div class="lt-setting"><h3>Profile data</h3><strong>{selectedStorage?(selectedStorage.partial?'At least ':'')+(selectedStorage.bytes/1048576).toFixed(1)+' MB':'Not measured'}</strong></div><div class="lt-setting"><h3>Web cache</h3><span>{selectedStorage&&!selectedStorage.cache.partial?(selectedStorage.cache.bytes/1048576).toFixed(1)+' MB':'Unavailable'}</span></div><div class="lt-setting"><div><h3>Resource pack inventory</h3><p>Manifest-containing folders in this launcher's Roaming resource_packs and development_resource_packs only. Installed does not mean enabled in any world.</p></div><span>{selectedStorage?.resourcePacks?(selectedStorage.resourcePacks.partial?'Incomplete':selectedStorage.resourcePacks.manifested+' on disk'):'Not inspected'}</span></div>{#if selectedStorage?.resourcePacks?.issue}<p class="lt-help" role="status">{selectedStorage.resourcePacks.issue}</p>{/if}<p class="lt-help">No packs are automatically disabled or removed. World/global activation and resident texture RAM are not measured. Manage activation inside Minecraft Education; use the existing Open folder button to inspect profile files manually.</p><div class="lt-setting"><h3>Available disk space</h3><span>{selectedStorage?.disk?(selectedStorage.disk.availableBytes/1073741824).toFixed(1)+' GB':'Unavailable'}</span></div><p class="lt-help">{storage?'Last measured at '+storageCheckedAt+'. Web cache is included in profile data.':'Use Refresh to measure storage. World sizes are not separately classified.'}</p></section>
           <section class="lt-setting"><div><h3>Clear cache</h3><p>Remove recognized web cache. Accounts, worlds and game settings are kept.</p>{#if selectedStorage?.cache.issue}<p>{selectedStorage.cache.issue}</p>{/if}</div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.cache.canClear} on:click={()=>{fullReview=null;recovery=null;clearSlot=selectedSlot;}}>Clear cache…</button></section>
           {#if clearSlot===selectedSlot}<section class="lt-cache-confirm" aria-label="Confirm cache cleanup"><h3>Clear web cache for Minecraft - {selectedSlot}?</h3><p>Worlds, accounts and settings are kept. Other launchers are unchanged.</p><div class="lt-actions"><button disabled={busy||refreshing||resizing||!selectedStorage?.cache.canClear} on:click={()=>clearCache(selectedSlot)}>Clear web cache</button><button class="lt-secondary" on:click={()=>clearSlot=null}>Cancel</button></div></section>{/if}
           <section class="lt-setting"><div><h3>Data folder</h3><p class="lt-data-path">{selectedPath??'Location unavailable.'}</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!binding?.configured} on:click={()=>openFolder(selectedSlot)}>Open folder</button></section>
@@ -786,6 +794,7 @@
                 <div class="lt-setting"><div><h3>Reduce texture memory</h3><p>Enable the existing saved Texture Streaming setting for this stopped launcher only. This may change when textures are loaded; a normal Minecraft restart is required. Current options are backed up for Restore.</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.gameSettings?.canReset||selectedProfile?.state!=='STOPPED'} on:click={()=>reviewSettings('EnableTextureStreaming')}>Review texture streaming…</button></div>
               {:else if selectedStorage?.gameSettings?.textureStreamingEnabled===true}
                 <p class="lt-help">Texture Streaming is recorded as enabled. Actual GPU/system memory savings are not measured, and Education 26.32 runtime support has not been confirmed.</p>
+                <div class="lt-setting"><div><h3>Disable Texture Streaming</h3><p>Disable only this existing saved Texture Streaming option for the stopped launcher. This may increase GPU texture memory use. The previous options are backed up, and Minecraft must restart normally.</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.gameSettings?.canReset||selectedProfile?.state!=='STOPPED'} on:click={()=>reviewSettings('DisableTextureStreaming')}>Review disable Texture Streaming…</button></div>
               {:else}
                 <p class="lt-help">Texture Streaming: unavailable or unknown for this profile. Lazy Tester will not invent or force an unsupported option.</p>
               {/if}
@@ -797,11 +806,11 @@
               {:else}
                 <p class="lt-help">Improved Input Response: unknown or not recorded in this profile's settings. No default is assumed.</p>
               {/if}
-              <div class="lt-setting"><div><h3>Reset game settings</h3><p>Back up this launcher's settings, then reset them for the next start. Accounts, worlds and cache are kept.</p><p class="lt-help">The saved High/Low graphics preset is reapplied at launch.</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.gameSettings?.canReset} on:click={()=>reviewSettings('Reset')}>Reset settings…</button></div>
+              <div class="lt-setting"><div><h3>Reset game settings</h3><p>Back up this launcher's settings, then reset them for the next start. Accounts, worlds and cache are kept.</p><p class="lt-help">The saved graphics preference applies at launch; Preserve Visuals never overwrites Minecraft graphics options.</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.gameSettings?.canReset} on:click={()=>reviewSettings('Reset')}>Reset settings…</button></div>
               <div class="lt-setting"><div><h3>Restore settings</h3><p>{selectedStorage?.gameSettings?.backupAvailable?'Restore the latest verified settings backup for this launcher. Current settings are backed up first.':'No verified settings backup yet. Reset creates one.'}</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.gameSettings?.canRestore} on:click={()=>reviewSettings('Restore')}>Restore settings…</button></div>
               {#if selectedStorage?.gameSettings?.issue}<p class="lt-help">{selectedStorage.gameSettings.issue}</p>{:else if !selectedStorage?.gameSettings}<p class="lt-help">Refresh storage to check settings recovery availability.</p>{/if}
               {#if recovery?.slot===selectedSlot}
-                <section class="lt-cache-confirm" aria-label="Confirm game settings change"><h3>{recovery.action==='EnableTextureStreaming'?'Enable Texture Streaming':recovery.action==='DisableInputResponse'?'Disable Improved Input Response':recovery.action+' settings'} for Minecraft - {recovery.slot}?</h3><p>{recovery.action==='EnableTextureStreaming'?'Only this launcher’s explicitly disabled Texture Streaming option will be enabled. This may reduce GPU texture memory on supported builds, but actual Education 26.32 and system RAM effects are unknown. The most recent Restore backup point will be replaced with a backup of current settings. Restart Minecraft normally after applying; accounts, worlds and other launchers are unchanged.':recovery.action==='DisableInputResponse'?'Only this launcher’s explicitly enabled option is changed. Input latency may change and RAM savings on Education 26.32 are unverified. The existing Restore backup point will be replaced with a backup of current settings. Restart Minecraft normally after applying. Accounts, worlds, and other launchers are kept.':'Only this launcher’s game settings change. Accounts, worlds, cache and other launchers are kept. A backup is saved first.'}</p><div class="lt-actions"><button disabled={busy||refreshing||resizing||!(recovery.action==='EnableTextureStreaming'?selectedStorage?.gameSettings?.canReset&&selectedStorage?.gameSettings?.textureStreamingEnabled===false&&selectedProfile?.state==='STOPPED':recovery.action==='DisableInputResponse'?selectedStorage?.gameSettings?.canReset&&selectedStorage?.gameSettings?.improvedInputResponseEnabled===true&&selectedProfile?.state==='STOPPED':recovery.action==='Reset'?selectedStorage?.gameSettings?.canReset:selectedStorage?.gameSettings?.canRestore)} on:click={recoverSettings}>{recovery.action==='EnableTextureStreaming'?'Enable saved option':recovery.action==='DisableInputResponse'?'Disable saved option':recovery.action+' settings'}</button><button class="lt-secondary" disabled={busy} on:click={()=>recovery=null}>Cancel</button></div></section>
+                <section class="lt-cache-confirm" aria-label="Confirm game settings change"><h3>{recovery.action==='EnableTextureStreaming'?'Enable Texture Streaming':recovery.action==='DisableTextureStreaming'?'Disable Texture Streaming':recovery.action==='DisableInputResponse'?'Disable Improved Input Response':recovery.action+' settings'} for Minecraft - {recovery.slot}?</h3><p>{recovery.action==='EnableTextureStreaming'?'Only this launcher’s explicitly disabled Texture Streaming option will be enabled. This may reduce GPU texture memory on supported builds, but actual Education 26.32 and system RAM effects are unknown. The most recent Restore backup point will be replaced with a backup of current settings. Restart Minecraft normally after applying; accounts, worlds and other launchers are unchanged.':recovery.action==='DisableTextureStreaming'?'Only this launcher’s explicitly enabled Texture Streaming option will be disabled. This may increase GPU memory consumption, and no performance improvement is assumed. Current settings are backed up before changing this one key; a normal Minecraft restart is required. Accounts, worlds, and other launchers are preserved.':recovery.action==='DisableInputResponse'?'Only this launcher’s explicitly enabled option is changed. Input latency may change and RAM savings on Education 26.32 are unverified. The existing Restore backup point will be replaced with a backup of current settings. Restart Minecraft normally after applying. Accounts, worlds, and other launchers are kept.':'Only this launcher’s game settings change. Accounts, worlds, cache and other launchers are kept. A backup is saved first.'}</p><div class="lt-actions"><button disabled={busy||refreshing||resizing||!(recovery.action==='EnableTextureStreaming'?selectedStorage?.gameSettings?.canReset&&selectedStorage?.gameSettings?.textureStreamingEnabled===false&&selectedProfile?.state==='STOPPED':recovery.action==='DisableTextureStreaming'?selectedStorage?.gameSettings?.canReset&&selectedStorage?.gameSettings?.textureStreamingEnabled===true&&selectedProfile?.state==='STOPPED':recovery.action==='DisableInputResponse'?selectedStorage?.gameSettings?.canReset&&selectedStorage?.gameSettings?.improvedInputResponseEnabled===true&&selectedProfile?.state==='STOPPED':recovery.action==='Reset'?selectedStorage?.gameSettings?.canReset:selectedStorage?.gameSettings?.canRestore)} on:click={recoverSettings}>{recovery.action==='EnableTextureStreaming'?'Enable saved option':recovery.action==='DisableTextureStreaming'?'Disable saved option':recovery.action==='DisableInputResponse'?'Disable saved option':recovery.action+' settings'}</button><button class="lt-secondary" disabled={busy} on:click={()=>recovery=null}>Cancel</button></div></section>
               {/if}
             </div>
           </details>
