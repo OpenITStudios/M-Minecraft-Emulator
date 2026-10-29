@@ -97,6 +97,13 @@ existing on-disk/registry compatibility names are NOT renamed.
   actual live particle counts remain UNKNOWN. Decorative effects can be less
   dense even near the player; no pixel-for-pixel equivalence or measured
   FPS/RAM/VRAM benefit is claimed.
+- Source-only effectiveness disclosure: the generated manifest and optional
+  builder success receipt now distinguish the three direct `spawn_rate`
+  controls from 17 conditional `max_particles` ceilings. No new emission
+  interception, event suppression, game hook, world import or runtime claim
+  was introduced. An unchanged manual emitter below its cap may show no
+  reduction at any distance. The reviewed original rate/cap transform is
+  otherwise untouched; exact-head Node/Minecraft execution is NOT_EXECUTED.
 - Preview pack version advanced to `[0,3,0]` retaining pack UUIDs
   for explicit version upgrades. **All 20** official sample blob hashes,
   effect identifiers, formats and emitter classes were independently

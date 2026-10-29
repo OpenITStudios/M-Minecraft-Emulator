@@ -110,6 +110,11 @@ size; this only reduces the build artifact's disk/transfer bytes, not
 the decoded texture or game RAM. A mismatched source is rejected as soon
 as encountered, before later sources are fetched or the output is written.
 Remote responses are read with a strict 128 KiB per-source byte limit.
+On successful output, the CLI identifies **3 steady-rate controls** and
+**17 conditional manual-population caps** separately. The generated pack
+manifest also identifies this distinction. These are *source transformations*,
+not a measurement that 20 effects reduced their live spawn frequency or that
+Minecraft reclaimed CPU/GPU memory.
 It is not an installer or in-app toggle. A source's Git SHA is a version
 pin, not proof of correct Education behavior or runtime performance.
 

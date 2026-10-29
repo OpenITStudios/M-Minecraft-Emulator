@@ -65,13 +65,17 @@ export async function build(args = process.argv.slice(2)) {
   if (basename(options.output).length > 150) throw new Error('Output basename is too long');
   await mkdir(dirname(options.output), {recursive: true});
   await writeFile(options.output, content, {flag: 'wx'});
-  return {output: options.output, bytes: content.length, particleCount: PARTICLES.length};
+  // A changed manual cap is not a guaranteed change in live spawn frequency.
+  const steadyRateCount = PARTICLES.filter(spec => spec.mode === 'steady').length;
+  const manualCapCount = PARTICLES.filter(spec => spec.mode === 'manual').length;
+  return {output: options.output, bytes: content.length, particleCount: PARTICLES.length,
+    steadyRateCount, manualCapCount};
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const result = await build();
     if (result.help) console.log('LazyTester Particle Tuning: --official yes --output <file.mcpack> | --source <resource_pack> --output <file.mcpack>');
-    else console.log(`LazyTester Particle Tuning: ${result.particleCount} ambient effects -> ${result.output} (${result.bytes} bytes); NOT installed`);
+    else console.log(`LazyTester Particle Tuning: ${result.particleCount} ambient definitions (${result.steadyRateCount} steady-rate controls, ${result.manualCapCount} conditional manual caps) -> ${result.output} (${result.bytes} bytes); NOT installed; FPS/RAM not measured`);
   } catch (error) {
     console.error(`LazyTester Particle Tuning: ${error.message}`);
     process.exitCode = 1;

@@ -175,6 +175,7 @@ test('all 20 catalog entries produce a deterministic, compressed 21-entry .mcpac
   }
   const files=compileFiles(sources,catalog);
   assert.equal(files.size,21);
+  assert.match(MANIFEST.header.description, /3 steady rates; 17 conditional manual caps/);
   assert.equal(new Set(PARTICLES.map(s=>s.identifier)).size,20);
   const zip=createMcpack(files);
   assert.deepEqual(zip,createMcpack(files));

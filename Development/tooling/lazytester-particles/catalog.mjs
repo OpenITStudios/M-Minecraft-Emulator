@@ -60,7 +60,7 @@ export const MANIFEST = Object.freeze({
   format_version: 2,
   header: {
     name: 'LazyTester Particle Tuning (Preview)',
-    description: 'Optional ambient particle LOD 75/50/25/0; untouched vanilla textures.',
+    description: 'Optional ambient LOD 75/50/25/0: 3 steady rates; 17 conditional manual caps; vanilla textures.',
     uuid: '9b0a78e3-5272-4fcb-9283-802d94ce1ddb',
     version: [0, 3, 0],
     min_engine_version: [1, 26, 10],
