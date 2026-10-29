@@ -31,6 +31,48 @@ normal-exit incident is **RUNTIME ACCEPTANCE DEFERRED**, not a new P0 source
 gate. Reopen only for a confirmed new source defect or explicit operator
 authorization to perform Windows/game acceptance.
 
+## Optional follow-up — reference-verified Ghast skins (29 October 2026)
+
+**Added to the existing offline Texture Lite builder, not the runtime app:**
+`--with-ghast-entity` enables a pinned `entity_preview.py` owner.
+Mojang `bedrock-samples/v1.26.30.5` provides two Ghast skin PNGs and three
+related color/MERS TGA files at 128×64. The pinned original Ghast geometry
+declares 64×32, with **60 UV faces within bounds**. Its pinned
+`entity/ghast.entity.json`, `models/entity/ghast.geo.json`,
+`render_controllers/ghast.render_controllers.json`, two texture-set
+metadata files and five images are checked by **ten exact Git blob SHA
+pins**. Fail closed if any content, selected skin mapping, PBR link,
+geometry UV or image dimension differs.
+
+With explicit selection, the builder reduces the five color/material
+textures to 64×32 and includes them in the **existing block pack**
+with the same UUID and an upgrade manifest version `[0,2,0]`. It
+does not create a second always-on pack or a game process, does not
+replace original game geometry or adjust its UVs, and does not touch
+MC01–MC05, world save files or the installed game. The original
+block-only invocation retains v0.1 byte semantics. The two controlled
+clients still use unchanged vanilla textures; the three mostly idle
+client roles require separate manual, **not yet verified** Education
+Global Resources/import behavior.
+
+**Evidence:** five new synthetic Python/Pillow tests plus the five
+existing block tests actually executed in the isolated ChatGPT
+environment, **10/10 passed**. Exact committed `build.py`,
+`entity_preview.py` and test blobs are pinned to the locally
+executed bytes. The real Mojang source was checked through pinned
+GitHub metadata, client/geometry/controller/PBR content, PNG/TGA
+dimensions and 60 UV faces, but a complete private Mojang-derived
+`.mcpack` was **NOT built** in this turn, and no Minecraft
+Education game or user PC was opened.
+
+**Magnitude:** five 128×64 images to 64×32 each = 40,960 to 10,240
+source texels, a hypothetical `122,880` RGBA8 bytes (`0.117 MiB`)
+less across all five images if all are resident; three idle clients
+would at most triple that hypothetical figure, not save gigabytes.
+Loaded content, PBR/texture-set resolution behavior, runtime RAM,
+VRAM and FPS remain `UNKNOWN`. Do not present a source-texel delta
+as measured memory benefit.
+
 ## Active experiment — selective Idle Texture Lite 8×8 (29 October 2026)
 
 **User-approved test case:** up to two actively controlled Minecraft
@@ -50,8 +92,11 @@ source object before conversion and reject missing/added/replaced files,
 links, unsupported paths and size overflow. Apply Pillow BOX downsampling
 to only single-frame non-interlaced static **16×16 PNGs**, preserving
 alpha and relative texture paths in a standalone preview `.mcpack`.
-Leave 16×N animation strips, JSON metadata, TGA PBR textures, GUI,
-entities, particles and the installed Minecraft game unchanged.
+Leave 16×N animation strips, UI, unrelated entity/PBR textures,
+particles and installed Minecraft unchanged. Only the explicit
+reference-pinned Ghast option above also reduces its two color PNG
+skins and three related PBR TGA images; model/UV/control JSON stays
+unchanged and is used strictly as read-only input proof.
 Do not vendor Mojang or third-party image content into GitHub.
 
 **Evidence:** exactly five synthetic local Python/Pillow unit tests
@@ -551,16 +596,15 @@ No speculative renderer patch, working-set trim or experimental hook
 promotion is justified. The reviewer improvement concerns *measurement
 honesty*, not reclaimed game RAM.
 
-**Primary next source action:** the operator has now explicitly authorized
-selective 16×16→8×8 block-albedo fidelity loss for three predominantly
-idle clients. An **offline, exact-tree-pinned texture preview builder**
-and five successful synthetic unit tests are now present. This does **not**
-reverse the `NO_SAFE_TEXTURE_TRANSFORM` disposition of the separate
-third-party `Memory Reduce [Ram].mcpack`: it remains an unsafe source
-for blind reuse. No official full-source archive is in the ChatGPT
-working container yet, so an actual Mojang-derived `.mcpack`,
-Education 26.32 import, per-client Global Resources behavior,
-texture atlas memory and real RAM savings remain NOT_EXECUTED/UNKNOWN.
-Keep both controlled clients normal by default and do not automatically
-assign or activate packs for any profile. Do not add monitors, CI,
-background activity, native hooks or user-PC tasks.
+**Primary next source action:** use the original offline Texture
+Lite builder and its opt-in `--with-ghast-entity` preflight for the
+three idle-profile experiment, but do not install or activate it
+automatically. Official Ghast original source and all UV references
+are pinned, with **10/10 synthetic source tests passed**, but the
+full source-derived pack and Education 26.32 gameplay remain
+`NOT_EXECUTED`. This Ghast candidate saves only `0.117 MiB`
+of hypothetical RGBA8 image payload per client, not meaningful
+measured system RAM. Larger texture candidates must earn their
+place through a complete model + render-controller + PBR dependency
+audit and real usage relevance. No monitoring, hooks, extra managers,
+CI, world edits or user-PC testing.
