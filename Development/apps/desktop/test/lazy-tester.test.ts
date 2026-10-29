@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {lazyTester, parseSelectedClose, firstEmbeddedProfile, nextProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, parseNativeBackendSupport, type ProfileSession} from '../src/app/bridge/lazyTester.js';
+import {lazyTester, parseSelectedClose, firstEmbeddedProfile, nextProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, parseNativeBackendSupport, type ProfileSession} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {projectSessionHealth} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
@@ -306,6 +306,22 @@ describe('Lazy Tester profile contract', () => {
   it('refuses a forged per-launcher close slot before invoking Tauri', async()=>{
     for (const slot of [0,6,-1,10] as number[]) {
       await expect(lazyTester.closeOne(slot as 1)).rejects.toThrow('Unknown Minecraft profile');
+    }
+  });
+  it('admits Launch only for a clean STOPPED profile, never ATTENTION or uncertain startup',()=>{
+    const clean=parseSession(stopped()).profiles[0]!;
+    expect(canRequestLaunch(clean)).toBe(true);
+    for(const invalid of [
+      undefined,
+      {...clean,state:'ATTENTION',issue:'Profile binding needs review'},
+      {...clean,state:'ATTENTION',issue:null},
+      {...clean,state:'STOPPED',issue:'Saved profile may be incomplete'},
+      {...clean,state:'STARTING',issue:null},
+      {...clean,state:'NOT_RESPONDING',issue:'Previous exit still pending'},
+      {...clean,state:'RUNNING',process:running(1).process},
+      {...clean,state:'STOPPED',process:running(1).process},
+    ]){
+      expect(canRequestLaunch(invalid as ProfileSession|undefined)).toBe(false);
     }
   });
   it('keeps a windowless normal-exit survivor non-launchable in the existing protocol', () => {

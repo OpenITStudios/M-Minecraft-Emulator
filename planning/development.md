@@ -2,10 +2,10 @@
 
 ## Current product work — Guided Recovery integration/UX hardening (29 October 2026)
 
-**State:** DONE in source; real browser/desktop and Minecraft gameplay verification NOT_EXECUTED.
-**Decision:** Make the manual recovery gate a pure tested projection so the same action eligibility drives both the enabled button and click-time revalidation. Block Guided Recovery while a user selection or launch is queued, not just while native IPC is busy. Reproject the current issue at click to avoid acting on stale Svelte render data. Repair the synthetic browser scenario that clicked an issue after its first Refresh could remove it. Preserve the original Refresh/Play dispatch, per-slot recovery uncertainty and no raw backend error display.
-**Proof:** REMOTE_GITHUB pinned owner/consumer inspection, source equality and static gate/IPC/cadence checks. New pure gate regression tests and a corrected browser sequence AUTHORED. No Node/Vitest/Svelte/Playwright/Windows/Minecraft execution claimed.
-**Next:** Execute frontend and browser checks when compatible execution is available; only then consider UX changes grounded in observed layout/runtime behavior.
+**State:** DONE for bounded source hardening; integrated desktop, browser and Minecraft runtime acceptance NOT_EXECUTED.
+**Decision:** Reuse one pure Guided Recovery gate for button state and click-time validation, including queued selection/launch checks. A later source-level audit also found that an ATTENTION profile still accepted the UI Launch click; a strict clean STOPPED-only frontend gate now blocks it both on the card and at the launch handler. Read-only Refresh remains available. Preserve original Rust native admission, IPC, scheduler, worlds and data.
+**Proof:** REMOTE_GITHUB exact-HEAD owner/consumer checks and focused source regression fixtures AUTHORED. Existing isolated Guided Recovery Node 22 tests 5/5 PASS on Git blob 44ff67122e7efe2a9e902713648008ed31740b05, before this change; this does not validate Svelte or Minecraft. Full repository dependency installation unavailable in this isolated environment; exact-HEAD Svelte/Vitest/Playwright/Windows checks remain NOT_EXECUTED.
+**Next:** Run the complete pinned-toolchain frontend/browser checks when a compatible execution context is available, then address only evidenced failures.
 
 ---
 

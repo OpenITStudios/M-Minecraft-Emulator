@@ -401,6 +401,8 @@ try {
     'Health display must never echo native prompt-like content');
   assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 2'}).isDisabled(),true,
     'Health UI must not override the existing unresponsive-game admission');
+  assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 3'}).isDisabled(),true,
+    'An ATTENTION profile must not offer Launch before recovery is verified');
   assert.equal(await page.evaluate(()=>window.__calls.some(call=>call.args?.request?.operation==='Launch')),false,
     'Health inspection must not start a Minecraft instance');
   const checkHealth=page.getByRole('button',{name:'Check status for Minecraft - 2'});
@@ -433,6 +435,8 @@ try {
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await windowHealth.waitFor({state:'detached'});
   await launcherHealth.waitFor({state:'detached'});
+  assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 3'}).isEnabled(),true,
+    'Only a subsequent clean STOPPED observation may enable Launch');
 
   // Synthetic CloseOne: a failed native recovery receipt remains unconfirmed
   // even when a later read-only session observation reports STOPPED.

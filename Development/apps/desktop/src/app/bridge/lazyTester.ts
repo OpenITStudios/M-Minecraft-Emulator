@@ -200,6 +200,12 @@ function settingsSession(value:unknown):SessionSnapshot & {settings:SettingsRepo
   return snapshot as SessionSnapshot & {settings:SettingsReport};
 }
 
+// A failed/stale profile observation must never offer Launch. Rust owns
+// final admission; this is a strict UI precondition only.
+export function canRequestLaunch(profile:ProfileSession|undefined):boolean {
+  return profile?.state==='STOPPED' && profile.process===null && profile.issue===null;
+}
+
 export function firstEmbeddedProfile(profiles:ProfileSession[],separate:ReadonlySet<ProfileSlot>):ProfileSlot|null {
   return profiles.find(profile=>profile.state==='RUNNING'&&!separate.has(profile.slot))?.slot??null;
 }

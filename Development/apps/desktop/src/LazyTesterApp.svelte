@@ -1,7 +1,7 @@
 <script lang="ts">
   import {onMount, tick} from 'svelte';
   import {listen} from '@tauri-apps/api/event';
-  import {lazyTester, firstEmbeddedProfile, nextProfile, validFpsLimits, type GraphicsPreset, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport} from './app/bridge/lazyTester.js';
+  import {lazyTester, firstEmbeddedProfile, nextProfile, canRequestLaunch, validFpsLimits, type GraphicsPreset, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport} from './app/bridge/lazyTester.js';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazy-tester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
@@ -197,7 +197,10 @@
     } finally { refreshing = false; }
   }
   async function launch(slot: ProfileSlot) {
-    if (closeInProgress || busy || !binding?.configured) return;
+    // Read the current observed slot again; queued or stale card clicks do
+    // not grant permission to launch an ATTENTION/uncertain profile.
+    if (closeInProgress || busy || !binding?.configured ||
+        !canRequestLaunch(profiles.find(profile => profile.slot === slot))) return;
     if(refreshing||resizing){queuedLaunch=slot;return;}
     busy = true; issue = ''; requested = slot;
     try {
@@ -775,7 +778,9 @@
           {#each profiles as profile (profile.slot)}
             {@const healthItem = healthIssues.find(item => item.slot === profile.slot)}
             <div class="lt-launcher-entry">
-              <button class="lt-card" class:selected={active===profile.slot&&!detached} aria-pressed={active===profile.slot&&!detached} aria-label={(profile.state==='RUNNING'?'Open ':'Launch ')+'Minecraft - '+profile.slot} disabled={busy||!available||!binding?.configured||['STARTING','NOT_RESPONDING'].includes(profile.state)} on:click={()=>profile.state==='RUNNING'?select(profile.slot):launch(profile.slot)}>
+              <button class="lt-card" class:selected={active===profile.slot&&!detached} aria-pressed={active===profile.slot&&!detached} aria-label={(profile.state==='RUNNING'?'Open ':'Launch ')+'Minecraft - '+profile.slot} disabled={busy||!available||!binding?.configured||
+                  (profile.state!=='RUNNING'&&!canRequestLaunch(profile))}
+                on:click={()=>profile.state==='RUNNING'?select(profile.slot):canRequestLaunch(profile)&&launch(profile.slot)}>
                 <strong>Minecraft - {profile.slot}{active===profile.slot&&!detached?' ✓':''}</strong>
                 <span class="lt-card-picture" use:image={profile.slot} aria-hidden="true">{profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':profile.state==='NOT_RESPONDING'?'Unavailable':profile.state==='ATTENTION'?'Needs attention':'▷ Launch'}</span>
                 <small>{active===profile.slot&&!detached?'Playing here':profile.state==='RUNNING'&&separateSlots.has(profile.slot)?'Separate window':profile.state==='RUNNING'?'Running in background':labels[profile.state]}</small>
