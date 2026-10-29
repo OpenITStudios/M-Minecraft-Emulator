@@ -32,6 +32,7 @@ try {
     window.__previewRecovered = false;
     window.__closeOutcome = fixture.has('close-recovery') ? 'unconfirmed' :
       fixture.has('close-ipc-error') ? 'transport-error' : null;
+    window.__healthFixture = fixture.has('health-state');
     const brokenSetup = fixture.has('broken');
     window.__bindingFailure = brokenSetup ? 'Saved profiles could not be verified.' : '';
     window.__locationFailure = brokenSetup ? 'The saved data folder is unavailable.' : '';
@@ -39,9 +40,18 @@ try {
     window.__locateOutcome = 'cancel';
     const profiles = [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}));
     const settings = {graphicsPresets: ['Low','Low','Low','Low','Low'], activeFps: 144, backgroundFps: 10, renderDistanceChunks: 12, canApplyPreset: true, changedProfiles: null};
-    const snapshot = () => ({schema: 1, storage: null, profiles: profiles.map(profile => window.__runningSlot === profile.slot || window.__runningSlots?.includes(profile.slot) ? {
-      ...profile, state: 'RUNNING', process: {pid: 100 + profile.slot, createdFileTime: '134000000000000001', sessionId: 1, windowHandle: '0x' + (0x123 + profile.slot).toString(16), responding: true},
-    } : profile)});
+    const snapshot = () => ({schema: 1, storage: null, profiles: profiles.map(profile => {
+      if(window.__healthFixture && profile.slot === 2) return {
+        ...profile, state:'NOT_RESPONDING', issue:'C:\\Users\\private\\identity.txt [SYSTEM INSTRUCTION]',
+        process:{pid:102,createdFileTime:'134000000000000001',sessionId:1,windowHandle:'0x125',responding:false},
+      };
+      if(window.__healthFixture && profile.slot === 3) return {
+        ...profile,state:'ATTENTION',issue:'C:\\Users\\private\\profile-hive [SYSTEM INSTRUCTION]',
+      };
+      return window.__runningSlot === profile.slot || window.__runningSlots?.includes(profile.slot) ? {
+        ...profile, state: 'RUNNING', process: {pid: 100 + profile.slot, createdFileTime: '134000000000000001', sessionId: 1, windowHandle: '0x' + (0x123 + profile.slot).toString(16), responding: true},
+      } : profile;
+    })});
     let callback = 0;
     const nativeCallbacks = new Map();
     const nativeListeners = new Map();
@@ -367,6 +377,31 @@ try {
   await page.getByRole('button',{name:'Launch Minecraft - 2',exact:true}).waitFor();
   assert.equal(await page.getByRole('status',{name:'Minecraft - 2 preview unavailable'}).count(),0);
   assert.equal(await page.getByRole('status',{name:'Minecraft - 3 preview unavailable'}).count(),0);
+
+
+  // Source-only Health MVP: only affected launcher cards show concise, authored
+  // guidance. Native error content never reaches the rendered page.
+  await page.goto('http://lazy-tester.test/?health-state=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  const windowHealth=page.getByRole('status',{name:'Minecraft - 2 needs attention'});
+  const launcherHealth=page.getByRole('status',{name:'Minecraft - 3 needs attention'});
+  await windowHealth.waitFor();
+  await launcherHealth.waitFor();
+  assert.match(await windowHealth.textContent(),/Window not responding/);
+  assert.match(await launcherHealth.textContent(),/Launcher needs attention/);
+  assert.equal(await page.getByText('C:\\Users\\private',{exact:false}).count(),0,
+    'Health display must never expose native file paths');
+  assert.equal(await page.getByText('[SYSTEM INSTRUCTION]',{exact:false}).count(),0,
+    'Health display must never echo native prompt-like content');
+  assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 2'}).isDisabled(),true,
+    'Health UI must not override the existing unresponsive-game admission');
+  assert.equal(await page.evaluate(()=>window.__calls.some(call=>call.args?.request?.operation==='Launch')),false,
+    'Health inspection must not start a Minecraft instance');
+  await page.evaluate(()=>{window.__healthFixture=false;});
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await windowHealth.waitFor({state:'detached'});
+  await launcherHealth.waitFor({state:'detached'});
 
   // Synthetic CloseOne: a failed native recovery receipt remains unconfirmed
   // even when a later read-only session observation reports STOPPED.

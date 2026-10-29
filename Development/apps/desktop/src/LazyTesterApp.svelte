@@ -5,6 +5,8 @@
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazy-tester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
+  import SessionHealthNotice from './SessionHealthNotice.svelte';
+  import {projectSessionHealth} from './app/presentation/sessionHealth.js';
   import {userMessage, sessionConnectionLabel, updateRecoverySlots, recoveryLabels} from './app/presentation/sessionFeedback.js';
   import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, periodicInspectionDue, type CloseReview} from './app/inspectionScheduling.js';
 
@@ -81,6 +83,15 @@
   $: others = profiles.filter(profile => profile.slot !== primary);
   $: runningCount = profiles.filter(profile => ['STARTING', 'RUNNING', 'NOT_RESPONDING'].includes(profile.state)).length;
   $: playableCount = profiles.filter(profile => profile.state === 'RUNNING').length;
+  // Display-only health projection from the existing verified observations.
+  // No new monitoring timer, native request or admission state.
+  $: healthIssues = projectSessionHealth({
+    profiles, previewStatuses, unresolvedRecovery: uncertainWindowSlots,
+    separateWindows: separateSlots, primarySlot: primary,
+    observed: nativeBackend === 'WindowsNative' && !initializing && available && !!binding?.configured,
+    previewsVisible: page === 'workspace' && !detached,
+  });
+  $: attentionCount = healthIssues.length + uncertainWindowSlots.size;
   $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio!==null) {const mode=queuedAudio;queuedAudio=null;void saveAudio(mode);}
   $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance!==null) {const limits=queuedPerformance;queuedPerformance=null;void savePerformance(limits);}
   $: if (mounted && nativeBackend === 'WindowsNative' && !closeInProgress && !closeReviewPending && !initializing && !busy && !refreshing && !resizing && queuedAudio===null && queuedPerformance===null && queuedPreset!==null) {const request=queuedPreset;queuedPreset=null;void applyPreset(request);}
@@ -728,19 +739,19 @@
         </div>
         </div>
         {#if nativeBackend === 'WindowsNative'}
-        <div class="lt-games-heading"><span>Your games</span><span>{runningCount} of 5 running</span></div>
+        <div class="lt-games-heading"><span>Your games</span><span>{runningCount} of 5 running{#if attentionCount > 0} · {attentionCount} need attention{/if}</span></div>
         <div class="lt-filmstrip" aria-label="Minecraft launchers">
           {#each profiles as profile (profile.slot)}
-            {@const previewFailure = previewStatuses.find(status => status.slot === profile.slot && !status.registered && status.reason !== null)}
+            {@const healthItem = healthIssues.find(item => item.slot === profile.slot)}
             <div class="lt-launcher-entry">
               <button class="lt-card" class:selected={active===profile.slot&&!detached} aria-pressed={active===profile.slot&&!detached} aria-label={(profile.state==='RUNNING'?'Open ':'Launch ')+'Minecraft - '+profile.slot} disabled={busy||!available||!binding?.configured||['STARTING','NOT_RESPONDING'].includes(profile.state)} on:click={()=>profile.state==='RUNNING'?select(profile.slot):launch(profile.slot)}>
                 <strong>Minecraft - {profile.slot}{active===profile.slot&&!detached?' ✓':''}</strong>
                 <span class="lt-card-picture" use:image={profile.slot} aria-hidden="true">{profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':profile.state==='NOT_RESPONDING'?'Unavailable':profile.state==='ATTENTION'?'Needs attention':'▷ Launch'}</span>
                 <small>{active===profile.slot&&!detached?'Playing here':profile.state==='RUNNING'&&separateSlots.has(profile.slot)?'Separate window':profile.state==='RUNNING'?'Running in background':labels[profile.state]}</small>
-                {#if profile.issue}<small class="lt-error">{userMessage('profile')}</small>{/if}
+
               </button>
-              {#if profile.state==='RUNNING' && !detached && profile.slot!==primary && !separateSlots.has(profile.slot) && previewFailure}
-                <small class="lt-error lt-preview-slot-issue" role="status" aria-label={'Minecraft - '+profile.slot+' preview unavailable'}>{userMessage('preview')}</small>
+              {#if healthItem}
+                <SessionHealthNotice item={healthItem}/>
               {/if}
               {#if ['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)}
                 <button class="lt-secondary lt-close-launcher" aria-label={'Close Minecraft - '+profile.slot+' normally'} disabled={busy||closeInProgress||nativeExitReview||!available||!binding?.configured} on:click={()=>requestCloseOne(profile.slot)}>Close game</button>

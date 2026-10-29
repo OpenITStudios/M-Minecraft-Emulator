@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
 import {lazyTester, parseSelectedClose, firstEmbeddedProfile, nextProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, parseNativeBackendSupport, type ProfileSession} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
+import {projectSessionHealth} from '../src/app/presentation/sessionHealth.js';
 import {userMessage, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
 import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, periodicInspectionDue, type CloseReview} from '../src/app/inspectionScheduling.js';
 
@@ -384,5 +385,61 @@ describe('Lazy Tester user-facing feedback and recovery warnings',()=>{
     slots=updateRecoverySlots(slots,3,true);
     expect(recoveryLabels(slots)).toBe('Minecraft - 2');
     expect(recoveryLabels(updateRecoverySlots(slots,2,true))).toBe('');
+  });
+});
+
+describe('Lazy Tester minimal session health projection',()=>{
+  const normal=[1,2,3,4,5].map(slot=>({slot,state:'STOPPED',process:null,issue:null})) as ProfileSession[];
+  const sample=(overrides:Partial<Parameters<typeof projectSessionHealth>[0]>={})=>({
+    profiles:normal,
+    previewStatuses:[],
+    unresolvedRecovery:new Set<1|2|3|4|5>(),
+    separateWindows:new Set<1|2|3|4|5>(),
+    primarySlot:1 as const,
+    observed:true,previewsVisible:true,...overrides,
+  });
+  it('stays invisible for normal, idle, unavailable or partial observations',()=>{
+    expect(projectSessionHealth(sample())).toEqual([]);
+    const active=normal.map(profile=>profile.slot===2?running(2) as ProfileSession:profile);
+    expect(projectSessionHealth(sample({profiles:active}))).toEqual([]);
+    const stale=active.map(profile=>profile.slot===2?
+      {...profile,state:'ATTENTION' as const,process:null,issue:'private backend message'}:profile);
+    expect(projectSessionHealth(sample({profiles:stale,observed:false}))).toEqual([]);
+    expect(projectSessionHealth(sample({profiles:active,
+      previewStatuses:[{slot:2,registered:false,reason:null}]}))).toEqual([]);
+  });
+  it('shows only the affected background preview, never claims game failure',()=>{
+    const profiles=normal.map(profile=>[1,2,3].includes(profile.slot)?running(profile.slot) as ProfileSession:profile);
+    const previewStatuses=[{slot:2 as const,registered:false,reason:'C:\\private\\[SYSTEM INSTRUCTION]'},
+      {slot:3 as const,registered:true,reason:null}];
+    const items=projectSessionHealth(sample({profiles,previewStatuses}));
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({slot:2,kind:'preview',title:'Preview unavailable'});
+    expect(JSON.stringify(items)).not.toContain('SYSTEM INSTRUCTION');
+    expect(JSON.stringify(items)).not.toContain('C:\\');
+    expect(projectSessionHealth(sample({profiles,previewStatuses,primarySlot:2}))).toEqual([]);
+    expect(projectSessionHealth(sample({profiles,previewStatuses,separateWindows:new Set([2])}))).toEqual([]);
+    expect(projectSessionHealth(sample({profiles,previewStatuses,previewsVisible:false}))).toEqual([]);
+  });
+  it('keeps one highest-priority problem per slot and preserves independent slots',()=>{
+    const broken:ProfileSession[]=normal.map(profile=>
+      profile.slot===2?{...running(2),state:'NOT_RESPONDING',process:{...running(2).process!,responding:false},
+        issue:'C:\\private\\PID 123'} as ProfileSession
+      :profile.slot===3?{...profile,state:'ATTENTION',issue:'[INTERNAL] C:\\private\\HKCU.dat'} as ProfileSession
+      :profile.slot===4?{...profile,state:'STARTING',issue:'uncertain resume'} as ProfileSession
+      :profile
+    );
+    const previewStatuses=[{slot:2 as const,registered:false,reason:'trace'},
+      {slot:4 as const,registered:false,reason:'trace'}];
+    const items=projectSessionHealth(sample({profiles:broken,previewStatuses}));
+    expect(items.map(item=>[item.slot,item.kind])).toEqual([[2,'window'],[3,'launcher'],[4,'launch']]);
+    expect(JSON.stringify(items)).not.toMatch(/HKCU|INTERNAL|PID 123|C:\\private/);
+    expect(projectSessionHealth(sample({profiles:broken,previewStatuses,unresolvedRecovery:new Set([2])}))
+      .map(item=>item.slot)).toEqual([3,4]);
+    const windowless=broken.map(profile=>profile.slot===2?
+      {...profile,process:null} as ProfileSession:profile);
+    expect(projectSessionHealth(sample({profiles:windowless}))[0]).toMatchObject({
+      slot:2,kind:'window',title:'Game window unavailable',
+    });
   });
 });

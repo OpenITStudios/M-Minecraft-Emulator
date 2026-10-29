@@ -1,5 +1,14 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — contextual Session Health MVP (29 October 2026)
+
+**State:** DONE in source; manual frontend, Windows and Minecraft runtime acceptance NOT_EXECUTED.
+**Decision:** Project one concise authored issue per affected Minecraft profile from the existing five-profile snapshot and DWM preview report. Show nothing extra for healthy/stopped profiles. Give priority to unavailable or unresponsive windows and uncertain startup; preview failure never means gameplay failure. The existing independent native window-recovery banner remains authoritative and is not duplicated on cards. No new IPC, polling, gameplay/launcher control, profiling or automatic recovery.
+**Proof:** REMOTE_GITHUB pinned-code review and static UI/bridge/owner checks; pure projection unit fixtures and synthetic browser scenarios AUTHORED, NOT_EXECUTED. No app installer, real Minecraft window or five-client acceptance was tested.
+**Next:** Review a lightweight guided-recovery experience using only already admitted manual actions, without adding new lifecycle authority or prompt-like technical detail.
+
+---
+
 ## Current product work — session feedback and per-slot recovery (29 October 2026)
 
 **State:** DONE in source; compiled desktop, Windows and Minecraft runtime acceptance NOT_EXECUTED.
