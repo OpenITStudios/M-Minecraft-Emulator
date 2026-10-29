@@ -19,6 +19,36 @@ vendored in LazyTester Git history**. The old third-party `Memory Reduce
 **Bedrock is not Minecraft Education.** Exact effect support, distance-query
 behavior and resource pack precedence on Education 26.32 remain unverified.
 These changes are therefore an offline-build preview, **not enabled by default**.
+Minecraft Education support specifically continues to warn that custom
+third-party resource/texture packs are not officially supported; even a
+valid Bedrock pack may fail or affect a world. Always use a disposable
+copied world for separately authorized compatibility verification.
+
+## Texture memory scope (offline source decision)
+
+The present builder produces **particle JSON only** and does not claim to
+reduce the game's built-in vanilla texture memory. The next authorized focus
+is quality-preserving optimization of owned texture resources, **only when**
+an actual source asset and its references can prove a reduction in decoded
+pixel count, removable duplicate variants, or safely consolidated entity
+texture handles. Minecraft already atlases regular block textures.
+
+Smaller PNG, ZIP/DEFLATE, or mcpack transfer bytes do **not** by themselves
+reduce the decoded pixel buffer, loaded GPU textures, or private working set.
+A texture resolution change can alter detail, filtering and mipmaps even
+when source pixels look similar, and requires separate quality review.
+Blind asset deletion or renaming may break world/pack references.
+No texture files are currently added or rewritten by this builder.
+
+**No runtime monitors:** all pack preparation remains an explicit finite,
+offline developer operation. Do not add game startup hooks, periodic
+sampling, background workers, auto-installation, pack activation, or
+launcher/profile file changes as part of this optimization.
+Existing manual source/acceptance tools remain separate.
+
+References: [Minecraft Creator resource guidance](https://learn.microsoft.com/en-us/minecraft/creator/documents/practices/improvingperformanceandresourceusage),
+[texture budget accounting](https://learn.microsoft.com/en-us/minecraft/creator/documents/texturebudgets),
+[Minecraft Education resource-pack support notice](https://edusupport.minecraft.net/hc/en-us/community/posts/27603741486228-How-to-get-a-transparent-picture-frame).
 
 ## Four distance tiers
 

@@ -2,20 +2,71 @@
 
 ## Current intent — 29 October 2026
 
-**Goal:** Improve **quality-preserving Minecraft Education configuration**
-and optional LazyTester Particle Tuning v0.3 (75/50/25/0 distance curve).
-Native allocator interventions remain separately default OFF and no longer
-the current focus. Neither texture streaming nor pack inventory is a
-demonstrated private-RAM saving. The prior <1024 MiB per-client target is
-aspirational, not mandatory. Protect all five sessions, gameplay, multiplayer
-hosting, world saves and profile isolation. Code-first GitHub development,
-no user-PC localtest, CI or repeated checker loops.
+**Goal (operator reprioritized 29 October 2026):** focus on **offline,
+resource-pack-based memory efficiency** using carefully selected texture and
+ambient particle optimizations, building on the existing LazyTester Particle
+Tuning v0.3 (75/50/25/0 distance policy). **STOP adding runtime monitors,
+polling services, collectors, telemetry, or benchmark micro-systems.** Keep
+existing product observation/admission necessary for safe operation; do not
+remove functional owners merely because they inspect existing state. Native
+heap interventions remain default OFF and are not the present work.
+
+A smaller .mcpack/PNG compressed file is **not** proof of smaller in-game
+RAM: meaningful texture-memory candidates require fewer decoded texels,
+fewer genuinely distinct loaded texture handles, or removal of redundant
+loaded asset variants with all references proven. Vanilla block textures are
+already atlas-managed in Minecraft Bedrock; merging by filenames alone is
+not a valid optimization. Texture effects primarily concern potential
+texture/GPU residency, not proven Windows private resident savings.
+Keep all five sessions, gameplay, multiplayer, world data, original 144/10
+FPS policy, and profile isolation unchanged. No user-PC testing, CI,
+automatic pack installation or background monitoring.
 
 **State:** ACTIVE, source-only. Original MC01–MC05 CloseOne/CloseAll code
 and native recovery guards remain intact. The last historical MC02 >35 s
 normal-exit incident is **RUNTIME ACCEPTANCE DEFERRED**, not a new P0 source
 gate. Reopen only for a confirmed new source defect or explicit operator
 authorization to perform Windows/game acceptance.
+
+## Active direction — offline texture/particle .mcpack optimization (29 October 2026)
+
+**Scope:** asset/build-time changes only. Reuse the existing
+`Development/tooling/lazytester-particles/` source owner and its explicit
+developer invocation; add a small sibling asset function only after a
+version-matched source and genuinely memory-reducing transformation are
+identified. No second game runtime, new IPC setting, service, profiler,
+monitor, repeated benchmark loop or automatic MC01–MC05 profile changes.
+
+- **Particle:** retain opt-in v0.3 as a strict 20-effect preview. Only three
+  `steady` effects currently scale true spawn rate; 17 `manual` effects
+  constrain active caps conditionally. Preserve the existing 75/50/25/0
+  camera-distance curve and all vanilla pixels/UV/motion/lifetime; do not
+  relabel a pack-size reduction as resident RAM saving.
+- **Texture:** first examine exact *authorized/owned* asset references and
+  dimensions. Promote a change only if it demonstrably lowers decoded texels,
+  safely consolidates entity texture handles with all UV/geometry references
+  updated, or removes truly unused content from an owned source pack.
+  Minecraft already atlases ordinary block textures. Recompressing PNG/ZIP,
+  blindly duplicating or replacing vanilla assets, or downscaling default
+  16-pixel art cannot be called quality-preserving RAM optimization.
+  Any lower resolution, altered mipmapping, atlas or animation timing needs
+  explicit fidelity/compatibility review and is not automatically accepted.
+- **Edition gate:** Bedrock creator documentation covers pack mechanisms, but
+  Minecraft Education's official support continued to identify custom
+  texture/resource packs as **unsupported** in 2026. A custom pack is thus
+  an experimental optional copied-world artifact, not a supported Education
+  deployment claim. Nothing is installed, enabled, injected, applied globally
+  or imported into original host worlds on this source-only track.
+- **Evidence:** a byte size/estimated texel count is a *static resource
+  budget*, not observed loaded allocations, Windows RAM, VRAM, FPS or
+  multiplayer acceptance. Real saving is UNKNOWN without an independently
+  authorized edition-matched runtime comparison. Do not build another
+  tracking product to address that unknown.
+
+Sources for this decision: official Minecraft Creator
+[performance and texture guidance](https://learn.microsoft.com/en-us/minecraft/creator/documents/practices/improvingperformanceandresourceusage),
+[texture budgets](https://learn.microsoft.com/en-us/minecraft/creator/documents/texturebudgets),
+and [Minecraft Education support](https://edusupport.minecraft.net/hc/en-us/community/posts/27603741486228-How-to-get-a-transparent-picture-frame).
 
 ## Active implementation — Preserve Visuals and texture memory configuration (29 October 2026)
 
@@ -391,14 +442,12 @@ No speculative renderer patch, working-set trim or experimental hook
 promotion is justified. The reviewer improvement concerns *measurement
 honesty*, not reclaimed game RAM.
 
-**Primary next source action:** keep Texture Streaming opt-in. The official
-Bedrock 26.30 changelog confirms PC support, but Minecraft Education's
-26.32 changelog does not explicitly confirm this renderer feature; no
-native game/VRAM/private-memory evidence is available. Use the existing
-native performance collector only when game acceptance is independently
-authorized, comparing identical world/pack settings before and after one
-change. The stopped-profile resource-pack census distinguishes disk
-manifests from saved-world **declarations**; do not infer loaded textures
-or disable content based on those counts. The 20-effect LazyTester Particle
-Tuning v0.3 remains an uninstalled preview; native UploadBufferHeap stays
-default OFF. Do not start CI or user-PC localtest.
+**Primary next source action (supersedes preceding RAM/monitor research
+leads):** inspect the actual owned texture and pack definitions for **one**
+quality-preserving, decoded-texel/loaded-handle reduction candidate. If no
+original authorized asset and reference graph establish safe transform
+semantics, record `NO_SAFE_TEXTURE_TRANSFORM` and retain the existing
+particle-only offline preview instead of creating a speculative new
+texturepack. Keep 144/10 FPS, five-profile isolation, Texture Streaming
+opt-in and existing functionality unchanged. Do not introduce monitors,
+new periodic polling, GPU hooks, Java mods, CI or user-PC tests.
