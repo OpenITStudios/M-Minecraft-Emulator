@@ -19,6 +19,8 @@ exit /b %ERRORLEVEL%
 echo M-Minecraft-Emulator ^(Windows x64, one local checkout^)
 echo   DEV.cmd bootstrap   - download portable tools into workspace
 echo   DEV.cmd doctor      - show and verify all local toolchain paths
+echo   DEV.cmd storage report - read-only developer disk inventory
+echo   DEV.cmd storage explain - identify largest measured categories
 echo   DEV.cmd preflight   - full source checks, no game/installer
 echo   DEV.cmd dev         - launch the desktop in developer mode
 echo All project downloads and toolchains belong inside workspace.

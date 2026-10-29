@@ -9,6 +9,7 @@ a second live game process/session owner.
 | --- | --- |
 | `repository/` | Active Git-tree, dependency, route, CI-disabled and documentation-link checks |
 | `windows-toolchain/` | Source/build/package helpers when explicitly requested; no automatic local test |
+| `storage/` | Read-only bounded inventory of developer build/cache artifacts; never inspects Minecraft data |
 | `dependencies/` | Dependency consistency review and maintenance |
 | `acceptance/windows/bootstrap-ordering/` | **Active native DLL source** used by the five-session game bootstrap |
 | `acceptance/` | Native and historical acceptance collectors; older Sandboxie/VM results are not current gameplay proof |
@@ -18,6 +19,16 @@ a second live game process/session owner.
 | `local-test/` | Optional source acceptance bookkeeping, not runtime evidence until executed |
 
 Retired Sandboxie/VMware build and runtime source has left the active tree. The native process and per-profile controller remain the only active Minecraft launch authority. Historical notes remain in Git revisions.
+
+## Developer disk inventory (read-only)
+
+Use `DEV.cmd storage report` or `DEV.cmd storage explain` after bootstrap.
+The Node CLI is `node tooling/storage/inventory.mjs report` from inside
+`Development/`. It reports disjoint logical-byte categories with
+`ABSENT`/`PARTIAL` markers and scans no profile/world/runtime data.
+It does not delete or compact caches; first-time Rust profile changes may
+temporarily increase target size before any separate retention review.
+Synthetic tests: `node --test tooling/storage/inventory.test.mjs`.
 
 ## Resource-efficiency source previews — closed decision, reusable code
 

@@ -1,5 +1,15 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — Developer storage inventory / lean Cargo build profiles (30 October 2026)
+
+**State:** DONE for bounded source implementation; Windows disk inventory, pinned Rust/Tauri compilation and real storage-savings measurements NOT_EXECUTED.
+**Decision:** Add read-only, non-overlapping, bounded developer artifact accounting under the existing `Development/tooling/` owner, exposed through `DEV.cmd storage report|explain`. Do not traverse account/world/private/VM data, delete files, modify application storage or add CI. Configure desktop and standalone runtime-core `dev`/`test` Cargo profiles for line-table debug information, dependency debug disabled and incremental retained. Leave release profile, DLLs, installer contracts and application behavior unchanged.
+**Proof:** SOURCE_EXECUTION isolated Node.js 22 synthetic inventory fixtures: six tests PASS (category partitioning, missing paths, junction/symlink refusal, limit reporting and protected exclusions); REMOTE_GITHUB exact baseline source and caller review. Pinned Node 24 / Windows PowerShell, Rust 1.99.1 builds and real disk accounting are NOT_EXECUTED.
+**Unresolved:** Actual distribution of reported 60 GB among active Cargo, retained compiler caches, toolchains, packages and excluded private runtime data remains UNKNOWN. Reduced debug metadata does not by itself reclaim existing artifacts.
+**Next:** Obtain a read-only Windows inventory and measured cold/warm Cargo build comparisons before proposing a separately approved cleanup.
+
+---
+
 ## Current product work — Close review / Refresh scheduling alignment (29 October 2026)
 
 **State:** DONE for bounded frontend source hardening; complete pinned Svelte/Vitest/Playwright and Windows/Minecraft acceptance NOT_EXECUTED.

@@ -1,12 +1,38 @@
 param(
     [Parameter(Position=0)]
-    [ValidateSet("setup", "doctor", "lock", "g0", "preflight", "check", "test", "dev", "package", "help")]
-    [string]$Command = "help"
+    [ValidateSet("setup", "doctor", "lock", "g0", "preflight", "check", "test", "dev", "package", "storage", "help")]
+    [string]$Command = "help",
+    [Parameter(Position=1)]
+    [ValidateSet("report", "explain")]
+    [string]$StorageMode = "report"
 )
 
 $ErrorActionPreference = "Stop"
 $DevelopmentRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $Root = Split-Path -Parent $DevelopmentRoot
+
+# The inventory route must not initialize environment directories or Cargo
+# caches. Use the pinned portable Node directly; no global fallback or writes.
+if ($Command -eq "storage") {
+    $localNode = Join-Path $Root 'workspace/toolchains/node/node.exe'
+    if (-not (Test-Path -LiteralPath $localNode -PathType Leaf) -or
+        ((Get-Item -LiteralPath $localNode -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw "Storage inventory requires the ordinary workspace-local Node executable."
+    }
+    $manifest = Get-Content -LiteralPath (Join-Path $DevelopmentRoot 'toolchain.json') -Raw | ConvertFrom-Json
+    $actualVersion = (& $localNode --version).Trim().TrimStart('v')
+    if ($LASTEXITCODE -ne 0 -or $actualVersion -ne [string]$manifest.node.version) {
+        throw "Storage inventory Node version does not match the pinned local toolchain."
+    }
+    & $localNode (Join-Path $DevelopmentRoot 'tooling/storage/inventory.mjs') $StorageMode
+    if ($LASTEXITCODE -ne 0) {
+        throw "Storage inventory was partial or failed (exit $LASTEXITCODE); review the read-only report above."
+    }
+    return
+}
+if ($PSBoundParameters.ContainsKey('StorageMode')) {
+    throw "Extra arguments are supported only for DEV.cmd storage."
+}
 . (Join-Path $PSScriptRoot 'local-env.ps1')
 Set-LocalDeveloperEnvironment -Root $Root
 $LocalNpm = Join-Path $Root 'workspace/toolchains/node/npm.cmd'
@@ -330,6 +356,8 @@ try {
             Write-Host "  DEV.cmd test     # desktop and runtime tests"
             Write-Host "  DEV.cmd dev      # Tauri desktop development"
             Write-Host "  DEV.cmd package  # build and stage a Lazy Tester development candidate"
+            Write-Host "  DEV.cmd storage report  # read-only developer file-size inventory"
+            Write-Host "  DEV.cmd storage explain # top measured categories; no deletion"
         }
     }
 }

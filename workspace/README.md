@@ -42,6 +42,20 @@ do not unblock the old VMware NSIS package. Never commit Minecraft game binaries
 account profiles/tokens, Windows machine identifiers, guest disks, private
 worlds, signing keys, or unredacted logs. Git ignore is not encryption.
 
+## Read-only developer storage inventory
+
+`DEV.cmd storage report` measures developer output and caches without deleting
+anything; `DEV.cmd storage explain` also lists the five largest measured
+categories. The tool uses only metadata, excludes Minecraft `Data/` and
+protected runtime/backup paths, refuses symlink/junction traversal and stops
+at finite entry/time limits. A `PARTIAL` report is a lower bound.
+Logical file bytes are not physical occupied space or bytes safe to reclaim.
+The initial Cargo `dev`/`test` profile change may trigger a one-time full
+rebuild, temporarily leaving old and new artifacts side by side.
+
+No automatic pruning is provided. The archived 2026-10-26 compiler cache is
+preserved until an explicit, safe retention review and approval.
+
 ## Setup on Windows x64 (workspace-only)
 
 Run `DEV.cmd bootstrap` **once** from this checkout root. The existing

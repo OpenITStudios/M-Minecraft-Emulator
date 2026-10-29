@@ -29,3 +29,21 @@ windows-sys = { version = "0.61", features = [
   "Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem",
   "Win32_System_Threading"
 ] }
+
+# Lean daily Rust builds: retain panic backtrace line tables, not full symbols.
+# Incremental compilation remains enabled for fast source iteration.
+# Packaging uses profile.release and is intentionally unaffected.
+[profile.dev]
+debug = "line-tables-only"
+incremental = true
+
+[profile.dev.package."*"]
+debug = 0
+
+# Cargo tests have their own profile; avoid restoring full dependency symbols.
+[profile.test]
+debug = "line-tables-only"
+incremental = true
+
+[profile.test.package."*"]
+debug = 0

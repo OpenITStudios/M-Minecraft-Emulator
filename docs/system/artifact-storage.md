@@ -42,6 +42,34 @@ in this change. Do not describe source inspection as REA runtime proof.
 
 Only `workspace/README.md` may be Git-tracked under `workspace/`.
 
+## Read-only developer disk inventory
+
+Use `DEV.cmd storage report` (or `DEV.cmd storage explain`) after the pinned
+portable toolchain is present. The command is owned by
+`Development/tooling/storage/inventory.mjs` and runs in the existing developer
+launcher. It scans **metadata only** under a fixed developer-output allowlist,
+with a finite entry/time budget, bounded directory traversal and no junction/
+symlink following. Separate categories partition the current Cargo target,
+historical compiler archives, registry/download caches, packages, toolchains,
+Node output, and the locally prepared `App/`. Source-local legacy Cargo targets
+are measured separately, not merged with the active target.
+
+`Data/`, `workspace/private/`, `workspace/runs/`, runtime/VM/profile
+material, Git history and user/system stores are outside this inventory.
+`ABSENT` means a category directory does not exist; `PARTIAL` means that a
+link, inaccessible entry or traversal limit prevented a complete count.
+Partial output is a **lower bound**, never a measured full-disk total.
+Even complete totals are logical file bytes; compression, sparse files and
+hardlinks mean they are **not physical used space or reclaimable savings**.
+The inventory does not save raw filenames, delete, move, clear, open file
+contents, alter the Cargo target, or modify app/profile data.
+
+Both Cargo roots use a lean `dev`/`test` profile: line-table debug metadata
+for workspace code, zero debug information for dependencies, and incremental
+compilation retained. `release`, installer identity, native DLL hashes and
+runtime settings remain unchanged. The first profile change can cause a
+one-time recompilation; old artifacts remain until separately reviewed.
+
 ## Lazy Tester development, candidate and installed data
 
 There is one source tree. `Local` owns product development; `main` is reserved for
@@ -151,10 +179,10 @@ Only an actual REA invocation can produce REA-native evidence identifiers.
 
 ## Installer, protected runtime and cleanup boundaries
 
-The **active** experiment is official Native Client 01 plus Sandboxie Plus
-Client 02. Packaging with the older VMware NSIS resources remains blocked by
-`PACKAGE_BLOCKED_NATIVE_FEASIBILITY`. `DEV.cmd preflight` and `DEV.cmd dev`
-are not installer validation. This policy does not authorize lifting that
+The active product is Lazy Tester with independently managed Windows-native
+Minecraft Education profiles; Sandboxie and VMware runtime paths are retired.
+The old VMware/legacy installer remains blocked. `DEV.cmd preflight` and
+`DEV.cmd dev` are not installer validation. This policy does not authorize lifting that
 guard, modifying Windows installed identity, touching `M-Bedrock/VirtualClients`,
 or deleting account-bearing guest/sandbox data.
 

@@ -67,6 +67,20 @@ test('developer commands isolate HOME/cache/temp, require local runtime and pres
   assert.match(environment,/Do not override USERPROFILE\/APPDATA\/LOCALAPPDATA/);
   assert.doesNotMatch(environment,/\[Environment\]::SetEnvironmentVariable\([^)]*,\s*'Machine'/);
 });
+test('developer storage route admits only read-only report and explain modes', () => {
+  const inventory=read('tooling/storage/inventory.mjs');
+  assert.match(developer,/\[string\]\$StorageMode = "report"/);
+  assert.match(developer,/if \(\$Command -eq "storage"\)/);
+  assert.match(developer,/tooling\/storage\/inventory\.mjs/);
+  assert.ok(developer.indexOf('if ($Command -eq "storage")') <
+    developer.indexOf('Set-LocalDeveloperEnvironment -Root $Root'),
+    'read-only inventory must bypass developer cache initialization');
+  assert.match(developer,/if \(\$PSBoundParameters\.ContainsKey\('StorageMode'\)\)/);
+  assert.match(inventory,/lstatSync/);
+  assert.match(inventory,/opendirSync/);
+  assert.doesNotMatch(inventory,/\b(?:rmSync|unlinkSync|writeFileSync|readFileSync|execFileSync|spawnSync)\b/);
+});
+
 test('portable setup scripts parse in Windows PowerShell without running downloads', {
   skip: process.platform !== 'win32',
 }, () => {
