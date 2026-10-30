@@ -28,8 +28,12 @@ from that ancestor to `Local` HEAD **plus current tracked/untracked edits**.
 A missing/non-ancestor base refuses the plan; the SHA cannot select another
 branch, process, command or release. `--base-sha` is allowed only for `plan`
 and `run auto`, never an explicit named task or `plan --paths`.
-Unknown, native and mixed sources escalate to full verification. Planning
-never executes a recommendation. Scoped checks are iteration evidence only;
+Markdown under `docs/`, `planning/`, and `Archive/`, along with agent
+`SKILL.md`, nested `README.md` and `AGENTS.md`, takes the existing
+repository-structure check even when stored near native source. Executable or
+unknown extensions under those folders still escalate to full verification.
+Build manifests/locks, native source and mixed/unknown changes remain guarded.
+Planning never executes a recommendation. Scoped checks are iteration evidence only;
 final candidate verification must still use the existing full source/Windows
 gates.
 `run auto` runs **only one** recommended validation task and skips execution

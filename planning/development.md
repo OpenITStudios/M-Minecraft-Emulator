@@ -70,6 +70,20 @@ identity, game package or native preview behavior is changed in this stage.
 checks only. Current Windows toolchain, source suites, installer and five-client
 Minecraft runtime acceptance remain NOT_EXECUTED.
 
+## Documentation-only DEV.cmd selection (30 October 2026)
+
+- Correct the existing source-path classifier: Markdown skill instructions and
+  README/AGENTS documents inside otherwise native folders should select the
+  existing repository-structure check, not unnecessary Rust/native compilation.
+- Unknown executable extensions under `docs/`, `planning/`, `Archive/` and
+  `.agents/` now conservatively require full source verification, rather than
+  being misidentified as documentation. Protected `App/`, `Data/` and
+  `workspace/` paths remain blocked.
+- Extend the existing controller regression suite only; no new runner, task,
+  database, automation or version introduced. Full source/package acceptance
+  is unchanged, and Windows Node 24 / Cargo / Minecraft acceptance remains
+  `NOT_EXECUTED` at this revision.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,

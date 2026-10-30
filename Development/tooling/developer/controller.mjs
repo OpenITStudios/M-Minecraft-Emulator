@@ -64,6 +64,13 @@ export function classifyPath(path) {
   const clean=posix.normalize(path);
   if(clean!==path || clean==='..' || clean.startsWith('../') || path.startsWith('-')) return 'unknown';
   if(/^(?:Data|App|workspace|\.git)(?:\/|$)/i.test(path)) return 'protected';
+  // Markdown guides and skill instructions are not compiled inputs, even when
+  // stored beside native source. Do not downgrade executable or unknown files
+  // simply because they live beneath docs/, planning/, or Archive/.
+  if(/^(?:docs|planning|Archive)\/.*\.md$/.test(path) ||
+     /^(?:README|CONTRIBUTING|SECURITY|CONTEXT|GITHUB_RULES|AGENTS)\.md$/.test(path) ||
+     /(?:^|\/)(?:README|AGENTS)\.md$/.test(path) ||
+     /^\.agents\/skills\/[^/]+\/SKILL\.md$/.test(path)) return 'docs';
   // Build configuration and dependency graph edits can invalidate artifacts
   // across both manifests and profiles; do not classify them as Rust-only.
   if(/(?:^|\/)(?:Cargo\.toml|Cargo\.lock|build\.rs|rust-toolchain(?:\.toml)?)$/.test(path) ||
@@ -73,9 +80,6 @@ export function classifyPath(path) {
      path.startsWith('Development/engine/runtime-core/src/')) return 'rust';
   if(path.startsWith('Development/apps/desktop/src/') ||
      path.startsWith('Development/apps/desktop/test/')) return 'frontend';
-  if(path.startsWith('docs/') || path.startsWith('planning/') ||
-     /^(?:README|CONTRIBUTING|SECURITY|CONTEXT|GITHUB_RULES|AGENTS)\.md$/.test(path) ||
-     path.endsWith('/README.md')) return 'docs';
   return 'unknown';
 }
 

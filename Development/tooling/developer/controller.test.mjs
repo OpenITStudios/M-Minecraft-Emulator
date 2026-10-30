@@ -68,6 +68,35 @@ test('docs accompanying frontend or Rust source do not force redundant full chec
   assert.deepEqual(planForPaths(['planning/development.md','Development/apps/desktop/src/App.svelte','Development/engine/runtime-core/src/lib.rs'],SHA).taskIds,['source.validate']);
 });
 
+test('documentation and agent skill edits avoid native builds without hiding executable changes',()=>{
+  const guides=[
+    'docs/system/architecture.md',
+    'planning/development.md',
+    'Archive/experiments/minecraft-education-platform-research.md',
+    '.agents/skills/emulator-development/SKILL.md',
+    'Development/apps/desktop/AGENTS.md',
+    'Development/tooling/acceptance/windows/bootstrap-ordering/README.md',
+  ];
+  for(const file of guides) assert.equal(classifyPath(file),'docs',file);
+  assert.deepEqual(planForPaths(guides,SHA).taskIds,['repository.validate']);
+  assert.deepEqual(planForPaths([...guides,'Development/apps/desktop/src/LazyTesterApp.svelte'],SHA).taskIds,['frontend.validate']);
+  assert.deepEqual(planForPaths([...guides,'Development/engine/runtime-core/src/lib.rs'],SHA).taskIds,['rust.validate']);
+
+  for(const file of [
+    'docs/validation/helper.mjs',
+    'planning/generator.js',
+    'Archive/experiments/helper.ps1',
+    '.agents/skills/emulator-development/tools.mjs',
+    'Development/tooling/acceptance/windows/bootstrap-ordering/compat.cpp',
+    'Development/toolchain.json',
+  ]){
+    assert.notEqual(classifyPath(file),'docs',file);
+    assert.deepEqual(planForPaths([file],SHA).taskIds,['source.validate'],file);
+  }
+  assert.equal(classifyPath('Data/README.md'),'protected');
+  assert.equal(planForPaths(['Data/README.md'],SHA).status,'BLOCKED');
+});
+
 test('Cargo manifests, locks and native build scripts always require full verification',()=>{
   for(const path of [
     'Development/apps/desktop/src-tauri/Cargo.toml',
