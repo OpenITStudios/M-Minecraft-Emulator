@@ -36,13 +36,15 @@ DEV.cmd inspect --json
 DEV.cmd catalog --json
 DEV.cmd plan --json
 DEV.cmd run frontend.validate --expect-sha <exact-Local-HEAD> --json
+DEV.cmd run auto --expect-sha <exact-Local-HEAD> --json
 ```
 
 The registry and bounded Node controller live at
 [Developer Controller](../../Development/tooling/developer/README.md).
 The default planning action reads changed tracked/untracked *source path
-metadata* and proposes either a documentation, frontend, Rust, or full
-source check. It does not execute its own recommendation. Unknown, native,
+metadata*, or the latest committed delta on a clean checkout, and proposes
+one documentation, frontend, Rust, or full-source check. `run auto` executes
+that **single** safe validation; `plan` itself never starts a task. Unknown, native,
 mixed and configuration changes take the full-source route; native DLL
 acceptance and Windows/Minecraft tests remain separately unverified.
 No path or arbitrary command from user/AI input becomes a shell invocation.
@@ -192,6 +194,14 @@ gates. Its export is **unsigned, unaccepted and not published**. The
 `--export-only` option leaves the local `App/` candidate unchanged;
 the normal local candidate refresh retains protected `Data/` and
 archives the previous `App/` under the protected private backup owner.
+After a **successfully completed candidate** (including any local staging
+and startup verification), the packager may delete **only older verified
+three-file installer exports** beyond the latest two, bounded to eight
+candidates per build. Actual installer SHA-256, receipt agreement, ordinary
+directories and singly linked files are revalidated before removal.
+Unknown/modified files block retention. Partial cleanup is reported
+separately and never includes the active Cargo target, historical archive,
+toolchains, App/Data or private backups. `storage plan` stays read-only.
 
 GitHub Actions is **disabled entirely** on `Local` and `main`.
 No push, manual, scheduled, PR, package or deployment workflows are allowed

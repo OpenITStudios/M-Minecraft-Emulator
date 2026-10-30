@@ -2,10 +2,11 @@
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {copyFileSync, constants, existsSync, lstatSync, linkSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync} from 'node:fs';
-import {dirname, isAbsolute, relative, resolve, sep} from 'node:path';
+import {basename, dirname, isAbsolute, relative, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {verifyLazyTesterPackage} from './check-lazy-tester-package.mjs';
 import {buildRootLauncher} from './build-root-launcher.mjs';
+import {pruneSupersededCandidates} from '../../../tooling/storage/package-recycle.mjs';
 import {processRoles,roleMuiNames} from './prepare-process-roles.mjs';
 
 const developmentRoot = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
@@ -183,6 +184,23 @@ function main() {
     console.log(`Local app: ${local.app}\nOpen Lazy Tester from Desktop or Start Menu. Existing data is preserved.\n${shortcuts.trim()}`);
   }
   console.log(`Development candidate: ${result.output}\nSigning is not verified; installation and gameplay are not executed; publication is disabled.`);
+  // Successful local candidate export is the only automatic pruning trigger.
+  // Never delete Cargo incremental data, App/Data or private rollback backups.
+  // The dedicated owner validates SHA-256 of each exact receipt-owned export.
+  try {
+    const turnover=pruneSupersededCandidates(root,basename(result.output));
+    if(turnover.status==='PRUNED') {
+      console.log('Installer export retention: removed '+turnover.deleted.length+
+        ' authenticated superseded candidates; '+turnover.remaining+' older candidate(s) remain for future review.');
+    }else if(turnover.status==='BLOCKED'||turnover.status==='PARTIAL'){
+      console.warn('Installer export retention '+turnover.status+
+        ': no unverified paths intentionally removed. '+turnover.reason);
+    }else {
+      console.log('Installer export retention: latest two candidates preserved; nothing to prune.');
+    }
+  }catch{
+    console.warn('Installer export retention BLOCKED: candidate is built, automatic retention was not verified.');
+  }
 }
 
 export function verifyDesktopStartup(output,expectedSource) {

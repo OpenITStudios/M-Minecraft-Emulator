@@ -53,8 +53,11 @@ Logical file bytes are not physical occupied space or bytes safe to reclaim.
 The initial Cargo `dev`/`test` profile change may trigger a one-time full
 rebuild, temporarily leaving old and new artifacts side by side.
 
-No automatic pruning is provided. The archived 2026-10-26 compiler cache is
-preserved until an explicit, safe retention review and approval.
+The archived 2026-10-26 compiler cache and private App backups remain
+protected; they are not automatically deleted. **Only after a successful
+native candidate build**, authenticated installer export directories older
+than the newest two can be removed, in bounded batches of up to eight.
+Active Cargo build/intermediate caches remain reusable.
 
 `DEV.cmd storage plan` is a read-only retention **dry-run** for the historical
 compiler-cache archive and versioned, three-file Lazy Tester installer
@@ -62,8 +65,10 @@ candidates. It protects the newest three valid candidates and anything
 younger than 30 days; older exports are `REVIEW_ONLY` (not deletion-ready).
 Unknown or incomplete candidates, untrusted receipts, links, hardlinks,
 partial scans and ambiguous directories fail closed. It never scans account
-data, app backups, active Cargo targets, or toolchain caches. No `--apply`
-exists; no disk space will be reclaimed by running this command.
+data, app backups, active Cargo targets, or toolchain caches. No `--apply` exists; no disk space is reclaimed by this **read-only plan**.
+The successful native package path separately verifies actual installer hashes
+and applies the more focused latest-two export policy. Modified, unknown,
+linked or partial candidate directories prevent that turnover.
 
 ## Setup on Windows x64 (workspace-only)
 

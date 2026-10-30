@@ -41,6 +41,15 @@ It is also available without PowerShell as
 `node tooling/storage/retention.mjs` from `Development/`.
 Synthetic tests: `node --test tooling/storage/retention.test.mjs`.
 
+`storage/package-recycle.mjs` is the **only narrowly destructive developer
+artifact owner**. It is called only by the successful native candidate
+packager: preserve the newest two exports and, at most, delete eight older
+verified three-file installer candidates after SHA-256 and path validation.
+It never runs `cargo clean`, removes Cargo incremental artifacts, touches
+private App backups, or exposes a generic delete CLI. A blocked scan is
+reported, not bypassed. Synthetic tests:
+`node --test tooling/storage/package-recycle.test.mjs`.
+
 ## Cargo target attribution
 
 `DEV.cmd storage cargo` uses the bounded read-only

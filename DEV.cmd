@@ -36,6 +36,7 @@ echo   DEV.cmd bootstrap                      - reviewed opt-in toolchain setup
 echo   DEV.cmd inspect --json                - source state, changes, tool availability
 echo   DEV.cmd catalog --json                - safe, versioned task capabilities
 echo   DEV.cmd plan --json                   - recommended validation from changes
+echo   DEV.cmd run auto --expect-sha ^<sha^>    - run one safe validation selected from changes
 echo   DEV.cmd run ^<task-id^> --expect-sha ^<sha^> - execute registered task only
 echo   Additional legacy developer routes remain supported.
 echo   No UI, cleanup, CI, or game/session automation is started by this launcher.

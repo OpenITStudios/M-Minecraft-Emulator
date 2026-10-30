@@ -121,6 +121,15 @@ function changedPaths() {
   if(changed.length+untracked.length>4096) throw Error('Too many changes for bounded planning');
   return [...new Set([...changed,...untracked])];
 }
+// Prefer live local edits for focused checks. On a clean checkout, inspect
+// the latest committed revision so DEV.cmd can validate a just-pushed change.
+function automaticChangeSet() {
+  const pending=changedPaths();
+  if(pending.length) return {paths:pending,basis:'working-tree'};
+  const committed=git(['diff','--name-only','-z','HEAD^','HEAD','--']).split('\0').filter(Boolean);
+  if(committed.length>4096) throw Error('Too many committed changes for bounded routing');
+  return {paths:[...new Set(committed)],basis:'latest-commit'};
+}
 function ordinary(path) {
   try {const info=lstatSync(path);return info.isFile()&&!info.isSymbolicLink();}
   catch {return false;}
@@ -328,16 +337,38 @@ export async function main(argv=process.argv.slice(2)) {
   }
   if(operation==='plan') {
     if(source.branch!=='Local') return blocked(operation,'Planning requires branch Local',parsed.json);
-    let paths;
-    try {paths=parsed.paths.length?parsed.paths:changedPaths();}
+    let selection;
+    try {selection=parsed.paths.length
+      ?{paths:parsed.paths,basis:'declared-paths'}:automaticChangeSet();}
     catch(error){return blocked(operation,error.message,parsed.json);}
-    const planned=planForPaths(paths,source.sha);
-    emit(report(operation,{...planned,basis:parsed.paths.length?'declared-paths':'working-tree',
+    const planned=planForPaths(selection.paths,source.sha);
+    emit(report(operation,{...planned,basis:selection.basis,
       sourceBranch:source.branch,proof:'STATIC_RECOMMENDATION_ONLY'}),parsed.json);
     return source.branch==='Local'&&planned.status!=='BLOCKED'?0:3;
   }
-  const task=tasks.find(t=>t.id===parsed.taskId);
+  let requested=parsed.taskId;
+  if(requested==='auto') {
+    if(source.branch!=='Local')return blocked(operation,'Automatic validation requires Local',parsed.json);
+    let selection;
+    try {selection=automaticChangeSet();}
+    catch(error){return blocked(operation,error.message,parsed.json);}
+    const recommendation=planForPaths(selection.paths,source.sha);
+    if(recommendation.status!=='READY') return blocked(operation,
+      'Automatic validation blocked by protected or untrusted paths',parsed.json);
+    if(!parsed.expectSha || parsed.expectSha!==source.sha || !SHA.test(parsed.expectSha)) {
+      return blocked(operation,'Automatic validation requires the exact current Local SHA',parsed.json);
+    }
+    if(recommendation.taskIds.length===0) {
+      emit(report(operation,{status:'SKIPPED_NO_CHANGES',sourceSha:source.sha,
+        proof:'STATIC_RECOMMENDATION_ONLY',reason:'No changed source; no build required.'}),parsed.json);
+      return 0;
+    }
+    if(recommendation.taskIds.length!==1) return blocked(operation,'Invalid automatic task plan',parsed.json);
+    requested=recommendation.taskIds[0];
+  }
+  const task=tasks.find(t=>t.id===requested);
   if(!task) return blocked(operation,'Unknown task id; use catalog for available capabilities',parsed.json);
+  if(parsed.taskId==='auto' && task.requiresApproval)return blocked(operation,'Automatic mode cannot run consent-gated tasks',parsed.json);
   return await runTask(task,parsed,source);
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)) {

@@ -56,6 +56,17 @@ test('latest three and all recent candidates protected; older fourth is review-o
   assert.equal(result.destructiveCapability,false);
 }));
 
+test('post-build latest-two policy can assess superseded versions without age hold',()=>fixture(root=>{
+  const fixtures=dates.map((date,i)=>build(root,date,i+1));
+  const report=planRetention(root,{nowMs:NOW,keepNewest:2,minAgeDays:0});
+  assert.equal(report.packageStatus,'OK');
+  assert.equal(report.policy.keepNewest,2);
+  for(const f of fixtures.slice(0,2))expectStatus(report,f.folder,'REVIEW_ONLY');
+  for(const f of fixtures.slice(2))expectStatus(report,f.folder,'PRESERVE');
+  assert.equal(report.destructiveCapability,false,'planner stays strictly read-only');
+  assert.throws(()=>planRetention(root,{nowMs:NOW,keepNewest:1}),/guarded/);
+}));
+
 test('even very old exports are preserved when fewer than three exist',()=>fixture(root=>{
   for(let i=0;i<2;i++)build(root,dates[i],i+1);
   const result=planRetention(root,{nowMs:NOW});

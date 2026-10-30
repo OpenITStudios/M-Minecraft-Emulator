@@ -136,39 +136,50 @@ Cargo [build-cache](https://doc.rust-lang.org/cargo/reference/build-cache.html)
 and [configuration](https://doc.rust-lang.org/cargo/reference/config.html)
 document the separate target and intermediate build locations.
 
-## Retention review (dry-run only)
+## Retention review and verified post-build export turnover
 
-The optional `DEV.cmd storage plan` command uses
-`Development/tooling/storage/retention.mjs` to produce a **non-destructive
-retention review**, not a cleaner. It reads bounded, fixed-name Lazy Tester
-package receipts only (`package-manifest.json` and `SHA256SUMS.txt`);
-it never hashes a large installer, opens arbitrary account files or
-modifies local directories. It refuses unrecognized/partial package
-contents, mismatched manifest identities, hardlinked installers and links
-or junctions within its reviewed paths.
+The `DEV.cmd storage plan` command remains a **read-only** report based on
+`Development/tooling/storage/retention.mjs`. Its historical review default
+protects the newest **three** valid candidate exports and all candidates
+younger than **30 days**; older exports receive `REVIEW_ONLY`, not automatic
+deletion permission. The archived
+`workspace/archive/compiler-cache-20261026` remains `REVIEW_ONLY`
+regardless of size. No direct CLI `--apply` or generic deletion mode exists.
 
-The fixed review scope is the previously retained
-`workspace/archive/compiler-cache-20261026` and correctly named,
-three-file development exports beneath
-`workspace/packages/lazy-tester/`. No cleanup proposal can target
-`workspace/builds/desktop/target`, developer toolchains or registry,
-`App/`, `Data/`, `workspace/private/`, evidence folders, snapshots,
-worlds or installed resources. The initial planning policy always
-protects the **three newest valid candidates** and candidates less
-than **30 days old**. Older candidates are marked `REVIEW_ONLY`,
-never automatically eligible for deletion. The historical compiler
-cache also remains `REVIEW_ONLY` even when its full metadata scan succeeds.
-Any unknown candidate, linked directory, inaccessible folder or
-truncated discovery fails closed as `BLOCKED` / `PARTIAL`.
+The now-authorized **post-success package turnover** is a separate, bounded
+internal operation of the existing native packager:
+`Development/tooling/storage/package-recycle.mjs`. Only after a completed
+new candidate export and successful local App/startup checks (when selected),
+it requests the latest-two/no-age **candidate-only** retention plan. It may
+remove at most **eight** superseded, complete three-file installer export
+directories per build beneath `workspace/packages/lazy-tester/`. Before
+deleting anything, it validates the current export and every selected old
+candidate: exact name, version/SHA/UTC receipt identity, the three expected
+ordinary files, length-bounded manifest and checksums, actual streamed
+installer SHA-256, no extra contents, no links/hardlinks, and stable filesystem
+identities. Each deletion rechecks the directory and exact file metadata;
+only these three files and their empty parent candidate directory are removed.
 
-`REVIEW_ONLY` is not a deletion order. The CLI has no `--apply` mode,
-scheduler, cleanup worker or recursive deletion API. The report's logical
-file bytes do not measure disk allocation or safely recoverable storage;
-receipt agreement does not verify installer SHA-256. Separate Windows
-evidence, dependency/provenance review, actual retention approval and
-a fresh safety design are required **before** implementing any mutation.
-See the official [Cargo clean behavior](https://doc.rust-lang.org/cargo/commands/cargo-clean.html):
-unscoped `cargo clean` deletes the entire target and is not used here.
+Any unknown candidate, corrupt receipt, mismatched installer bytes, linked
+path, incomplete directory scan, invalid current package or future-dated
+current export **blocks** turnover. Incomplete deletion reports `PARTIAL`;
+it never claims all older artifacts were removed. A blocked cleanup does not
+turn the already successful package into a false build failure. The process
+does **not** delete `workspace/builds/desktop/target`, Cargo incremental
+artifacts, toolchains/registry, old compiler archives, `App/`, `Data/`,
+`workspace/private/`, evidence, backup folders, worlds or installed data.
+The active Cargo target is reused to preserve the incremental-build benefit.
+This is intentional: stable Cargo's global dependency GC does not
+garbage-collect Rust target artifacts by project version. See
+[Cargo build cache](https://doc.rust-lang.org/cargo/reference/build-cache.html),
+[Cargo configuration](https://doc.rust-lang.org/cargo/reference/config.html)
+and [Cargo clean](https://doc.rust-lang.org/cargo/commands/cargo-clean.html).
+
+These source policies do not establish real Windows NTFS allocation savings.
+Installer export byte counts and Cargo inventory are logical sizes, and a
+hardlinked or compressed file may use different physical disk allocation.
+Historical caches and App backups require a separately approved, evidence-led
+review before any broader cleanup.
 
 ## Lazy Tester development, candidate and installed data
 
@@ -292,7 +303,9 @@ contents. Third-party installers should originate from approved official
 sources; preserve publisher identity and file digest prior to later review.
 
 No automatic cleanup of failed evidence, VM/sandbox contents, rollback
-snapshots, user application data or old runtime data. `scratch/` is only
+snapshots, user application data or old runtime data. The tightly scoped
+post-success installer export turnover above is the only authorized exception
+for generated candidate copies. `scratch/` is only
 disposable after verifying that the operator does not need it for recovery or
 investigation. Any future cleanup command must first dry-run a strictly
 allowlisted target, avoid symlink escapes, and require explicit approval.

@@ -241,3 +241,22 @@ test('JSON-mode developer child logs go to stderr and do not corrupt the one std
   assert.match(output.stderr,/CHILD_DIAGNOSTIC/);
   assert.doesNotMatch(output.stdout,/CHILD_DIAGNOSTIC/);
 });
+
+test('auto source validation routes last committed changes only on a clean working tree',()=>{
+  const source=readFileSync(new URL('./controller.mjs',import.meta.url),'utf8');
+  assert.match(source,/const pending=changedPaths\(\)/);
+  assert.match(source,/if\(pending\.length\) return \{paths:pending,basis:'working-tree'\}/);
+  assert.match(source,/git\(\['diff','--name-only','-z','HEAD\^','HEAD','--'\]\)/);
+  assert.match(source,/requested==='auto'/);
+  assert.match(source,/if\(recommendation\.taskIds\.length!==1\)/);
+  assert.match(source,/if\(parsed\.taskId==='auto' && task\.requiresApproval\)/);
+  assert.match(source,/SKIPPED_NO_CHANGES/);
+  assert.doesNotMatch(source,/requested==='auto'[\s\S]*?runTask\([^,]+,\s*parsed,\s*source\)[\s\S]*?--approve.*automatically generated/i);
+});
+
+test('automatic plan never executes unknown or protected paths without safe admission',()=>{
+  assert.equal(planForPaths(['Data/profiles.json'],SHA).status,'BLOCKED');
+  assert.deepEqual(planForPaths(['Development/apps/desktop/src/LazyTesterApp.svelte'],SHA).taskIds,['frontend.validate']);
+  assert.deepEqual(planForPaths(['Development/engine/runtime-core/Cargo.toml'],SHA).taskIds,['rust.validate']);
+  assert.deepEqual(planForPaths(['Development/tooling/developer/tasks.json'],SHA).taskIds,['source.validate']);
+});

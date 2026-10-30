@@ -13,13 +13,18 @@ DEV.cmd catalog --json
 DEV.cmd plan --json
 DEV.cmd plan --json --paths Development/apps/desktop/src/LazyTesterApp.svelte
 DEV.cmd run frontend.validate --expect-sha <40-char-Local-SHA> --json
+DEV.cmd run auto --expect-sha <40-char-Local-SHA> --json
 ```
 
 `inspect` reports the Git revision, changed file counts/scopes and *presence*
 of portable tools, not version or gameplay proof. `catalog` lists task IDs,
 risk and approval policy without running a task. `plan` recommends the
-smallest safe check from changed paths; unknown, native and mixed sources
-escalate to the full source check. It never runs that recommendation.
+smallest safe check from changed paths; on a clean checkout, it examines
+the newest commit versus its parent. Unknown, native and mixed sources
+escalate to full verification. Planning never executes a recommendation.
+`run auto` runs **only one** recommended validation task and skips execution
+when no changes exist. It does not install dependencies, generate lockfiles,
+package releases, delete files directly, or bypass consent-gated operations.
 `run` executes **one** allowlisted task using an existing executor and
 requires a current exact Local SHA. Existing `DEV.cmd bootstrap` and legacy
 manual routes are retained unchanged.
@@ -71,12 +76,15 @@ execution is implied.
 - `windows-toolchain/dev.ps1`: unchanged backend for installed toolchain,
   checks, benchmark, Tauri development, and package staging.
 - `storage/`: existing read-only inventory, Cargo inspection and retention
-  planning; no deletion or cache-clearing task is registered.
+  planning, plus strictly bounded **post-success installer export turnover**
+  invoked by the existing package owner. No generic cleanup task exists.
 - `controller.test.mjs`: registry/plan/argument/safety contracts.
 
 Only `Local` is authorized for task execution. GitHub Actions remain fully
 disabled. No database, daemon, UI, second Cargo target, new package format,
-new test runner, account access, or developer cleanup procedure is added.
+new test runner, account access, or generic developer cleanup command is added.
+The package owner's authenticated export cleanup is described in the
+[storage policy](../../../docs/system/artifact-storage.md).
 
 ## Error model
 

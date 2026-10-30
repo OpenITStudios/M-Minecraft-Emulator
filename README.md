@@ -38,6 +38,7 @@ DEV.cmd inspect --json
 DEV.cmd catalog --json
 DEV.cmd plan --json
 DEV.cmd run frontend.validate --expect-sha <exact-40-char-Local-SHA> --json
+DEV.cmd run auto --expect-sha <exact-40-char-Local-SHA> --json
 ```
 
 Execution uses pinned portable Node and existing scripts. The `run` route
@@ -62,7 +63,12 @@ workspace/packages/lazy-tester/<version>-<commit>-<UTC>/
 ```
 
 Use `npm --prefix Development run package:windows -- --export-only` to export a
-candidate while preserving the current App. Developer configuration is inside
+candidate while preserving the current App. After a successfully completed
+build, the packager retains the latest **two verified installer exports**
+and can automatically retire up to eight older verified three-file exports
+per build. Unknown or modified receipts block pruning. This does **not**
+remove Rust incremental data, historical compiler archives, previous App
+backups, accounts or worlds. Developer configuration is inside
 [Development](Development/README.md), and retained research is in
 [Archive](Archive/README.md). The old root apps/engine/tooling directories are gone.
 Portable toolchains stay in workspace/toolchains; new Cargo output defaults to

@@ -123,6 +123,14 @@ export function planRetention(root, options={}) {
   const maxDirs=options.maxDirectories ?? MAX_PACKAGE_DIRECTORIES;
   const maxEntries=options.maxEntries ?? MAX_ENTRIES;
   const maxMs=options.maxDurationMs ?? MAX_RUN_MS;
+  // The default storage report stays conservative (3 copies / 30 days).
+  // Only a completed package export may request bounded latest-two turnover.
+  const keepNewest=options.keepNewest ?? KEEP_NEWEST;
+  const minAgeDays=options.minAgeDays ?? MIN_AGE_DAYS;
+  if(!Number.isSafeInteger(keepNewest) || keepNewest<2 || keepNewest>KEEP_NEWEST ||
+     !Number.isSafeInteger(minAgeDays) || minAgeDays<0 || minAgeDays>MIN_AGE_DAYS) {
+    throw Error('Invalid guarded package retention policy');
+  }
   if(!Number.isFinite(now) || !Number.isSafeInteger(maxDirs) || maxDirs<1 ||
      !Number.isSafeInteger(maxEntries) || maxEntries<1 ||
      !Number.isSafeInteger(maxMs) || maxMs<1) throw new Error('Invalid finite planner limits');
@@ -163,12 +171,14 @@ export function planRetention(root, options={}) {
     const valid=packages.filter(p=>p.status==='PRESERVE').sort((a,b)=>b.time-a.time);
     valid.forEach((p,i)=>{
       const ageMs=now-p.time;
-      if(ageMs<0 || i<KEEP_NEWEST || ageMs<MIN_AGE_DAYS*DAY_MS){
+      if(ageMs<0 || i<keepNewest || ageMs<minAgeDays*DAY_MS){
         p.status='PRESERVE';
-        p.reason=ageMs<0?'Future-dated candidate; preserve':i<KEEP_NEWEST?'Protected latest candidate':`Less than ${MIN_AGE_DAYS} days old`;
+        p.reason=ageMs<0?'Future-dated candidate; preserve':i<keepNewest?'Protected latest candidate':`Less than ${minAgeDays} days old`;
       }else{
         p.status='REVIEW_ONLY';
-        p.reason=`Older than ${MIN_AGE_DAYS} days and outside newest ${KEEP_NEWEST}; explicit approval required`;
+        p.reason=minAgeDays===0
+          ?`Outside newest ${keepNewest}; post-build authentication required`
+          :`Older than ${minAgeDays} days and outside newest ${keepNewest}; explicit approval required`;
       }
     });
   }else{
@@ -182,7 +192,7 @@ export function planRetention(root, options={}) {
       ?'Historical compiler output; provenance and retention not yet approved'
       :archiveState==='BLOCKED'?'Incomplete, linked or inaccessible archive':'Archive not present'},
     complete:status!=='PARTIAL'&&status!=='BLOCKED'&&archiveState!=='BLOCKED',
-    policy:{keepNewest:KEEP_NEWEST,minAgeDays:MIN_AGE_DAYS},
+    policy:{keepNewest,minAgeDays},
     destructiveCapability:false};
 }
 
