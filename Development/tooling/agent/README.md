@@ -112,6 +112,54 @@ Only code is committed; no user screenshots are collected now.
 
 Cua CLI reference: https://cua.ai/docs/cua-driver/reference/cli/serve-and-configure
 
+## Phase 12: native Windows multiseat feasibility decision (source only)
+
+**Decision: No multiseat runtime implementation is admitted yet.**
+We examined native controller ownership, official Windows/Minecraft
+platform support and a community RDP-based multiseat implementation.
+No available path currently satisfies the product's simultaneous
+MC01 human + MC02–MC05 independently controlled AI acceptance.
+
+| Windows design | Source-supported fact | Decision for Lazy Tester |
+| --- | --- | --- |
+| Extra Win32 desktops in the same session | Only one input desktop is active at a time | Does not provide four independently focused games |
+| Windows Server RDS | Multiple interactive RDS sessions, but Minecraft Education **client** explicitly does not support Windows Server | Exclude |
+| Windows Enterprise multi-session | Microsoft's licensing does not allow production deployment outside Azure Virtual Desktop | Exclude from local no-cloud/no-VM design |
+| MultiSeat/RDPWrap on Windows 10/11 | Uses RDP loopback, RDPWrap, streaming components, and privileged system modifications; its optional K/M InputHook is explicitly documented as a no-op | Research reference only, no integration/installation |
+| Windows Agent Workspace / ODR | Preview agent identity runs in separate Windows session; contained MCP must be a packaged .exe with MSIX identity and cannot directly control a human session | Most relevant first-party research candidate, NOT a validated game controller |
+
+A session-local input desktop is a **plausible** way to separate AI
+controls from the human console session, but Microsoft Agent Workspace
+does not establish either four independent agent sessions or acceptance
+of Minecraft Education game input/graphics. Microsoft's contained MCP
+server model also differs materially from Lazy Tester's unpackaged
+Node stdio MCP: no automatic packaging, ODR discovery from Codex, game
+startup or cross-session bridge exists. Do not use the existing
+`--lazy-tester-agent-cli target` process lookup to cross sessions.
+
+**Required proof order before any implementation:** (1) documented,
+license-compliant and approved way to run ONE isolated Windows agent
+interactive session under the user's target Windows edition; (2) one
+independently licensed Minecraft Education client launches/signs in,
+renders, and accepts keyboard/relative mouse entirely inside that session;
+(3) human MC01 continues to receive uninterrupted input; (4) world
+host/join, game-state evidence and native identity are attributable to
+the two respective accounts; (5) prove four independently addressable
+AI sessions and resources before promising a four-AI or five-AI mode.
+Any failure remains `BLOCKED`, not a "source test PASS".
+
+Neither package creation, new service, RDPWrap, driver, agent workspace
+activation, input injection, Minecraft nor source tests were run.
+MCP still exposes read-only route planning but no gameplay actuator.
+
+Official/maintainer references:
+- https://learn.microsoft.com/en-us/windows/win32/winstation/desktops
+- https://edusupport.minecraft.net/hc/en-us/articles/13106858087956-Windows-Installation-Guide
+- https://learn.microsoft.com/en-us/azure/virtual-desktop/windows-multisession-faq
+- https://support.microsoft.com/en-us/windows/ai/ai-features/experimental-agentic-features
+- https://learn.microsoft.com/en-us/windows/ai/mcp/servers/mcp-containment
+- https://github.com/vibesoftwarecoder/MultiSeat/blob/master/README.md
+
 ## Phase 10: Windows per-client game input feasibility (source-only)
 
 Read-only native PID/HWND identification is NOT a channel for delivering

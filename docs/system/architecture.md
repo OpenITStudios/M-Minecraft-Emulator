@@ -84,6 +84,38 @@ boundary contract, **not** a duplicate module inventory or task queue.
 8. Runtime and developer build caches are distinct from accounts, worlds
    and installer-preservation data. No unscoped cleanup is authorized.
 
+## Native AI input and Windows-session boundary
+
+The existing native controller's named-pipe admission binds the same Windows
+logon/session, user, integrity and executable at both peers. A validated
+MC01–MC05 PID/HWND is a **read-only identity**, not a separate keyboard,
+relative-mouse or gamepad input channel. AI gameplay dispatch remains blocked.
+An alternate Windows desktop within the same interactive window station is
+not independent gameplay input: Windows has only one active input desktop
+per window station at a time.
+
+No multi-session provider is currently admitted. Minecraft Education's
+Windows **client** is not supported on Windows Server; Windows Enterprise
+multi-session is not licensed for production outside Azure Virtual Desktop;
+the current operator does not use cloud or VM as a fallback. Community
+RDPWrap-based multiseat projects modify unsupported OS session behavior and
+are not an approved native dependency, driver or installer route.
+
+Windows Agent Workspace remains a **research-only** separate Windows-session
+candidate. Contained Windows ODR MCP servers require packaged .exe/MSIX
+identity and cannot directly access the human session's windows, processes,
+credentials or app data. The current unpackaged Node stdio MCP and retained
+single-session native controller cannot be reinterpreted as contained
+cross-session input. Number of independent agent desktops, Minecraft
+Education GPU rendering, authenticated gameplay, peer-to-peer networking,
+MC01 noninterference and agent-to-Codex integration are all **UNVERIFIED**.
+
+A future architecture change requires separate operator approval and an
+explicit lifecycle/security/packaging compatibility review. In particular,
+do not install RDPWrap, switch foreground desktops, weaken IPC identity,
+copy Microsoft tokens or create a second native Minecraft controller as
+a source-only shortcut. The current approach remains unchanged.
+
 ## Acceptance and engineering discipline
 
 `Local` is the only development branch; `main` is release-reserved.

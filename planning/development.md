@@ -505,6 +505,35 @@ injection and CI remain unexecuted/disabled. No input tool enabled.
 upstream documentation. Tests/builds/Windows/gameplay NOT_EXECUTED;
 native game input still BLOCKED.
 
+## Phase 12: supported Windows multiseat viability decision (31 October 2026)
+
+- Verified `native_clients_session/pipe.rs` enforces same Windows
+  logon/session, user/integrity and executable peers. The existing
+  controller cannot adopt Windows Agent Workspace / RDP session targets.
+  Win32 alternate desktops have only one active input desktop.
+- Official Minecraft Education Windows installation guidance explicitly
+  excludes **Windows Server clients**. Microsoft disallows production
+  Windows Enterprise multi-session outside Azure Virtual Desktop;
+  this project has no approved cloud/VM fallback.
+- Reviewed MultiSeat's own README: RDPWrap + RDP sessions and drivers
+  are required; its optional keyboard/mouse isolation hook is a known
+  no-op. No term-service patching, RDPWrap or external streaming/driver
+  integration is authorized.
+- Microsoft documents contained ODR MCP processes inside a separate
+  agent Windows session, with packaged .exe/MSIX requirements and no
+  direct access to human-session apps/windows. This is the strongest
+  first-party research path, but not a drop-in extension of the
+  current Node stdio MCP or native Rust session controller.
+- A one-human/one-AI foreground-in-separate-session gameplay test,
+  multiple independent workspaces, Education graphics/sign-in,
+  per-account host/join and Codex connection are all unproven.
+  Do not create another controller/daemon, Windows installer or
+  "test mode" for an unverified mechanism.
+
+**Decision:** retain existing native architecture and input BLOCKED.
+**Proof ceiling:** REMOTE_GITHUB plus official vendor/maintainer source
+review; no tests, builds, installs, gameplay, RDP or agents executed.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,
@@ -520,13 +549,13 @@ native game input still BLOCKED.
 
 ## Next — source-only continuation, testing deferred by operator
 
-Keep the existing single-session native identity and gameplay planner
-unchanged. The next practical step is an architecture decision:
-a compatible per-process input mechanism must be evidenced, or a
-separately approved true multi-session design must satisfy Windows
-licensing, input isolation, Education P2P and human desktop protection.
-Do not substitute global keyboard, device, simulated gameplay or
-Windows system patching for actual per-client input proof.
+Keep the existing single-session native controller and read-only
+Codex MCP unchanged. Next source-only decision: determine whether
+Windows Agent Workspace officially exposes an approved third-party
+interactive session/input lifecycle sufficient for ONE MC02 game client
+without weakening containment. Without that supported mechanism,
+retain the independent-input BLOCKED gate; do not add a new provider
+or claim that a desktop/session alone establishes Education gameplay.
 **Do not execute local tests, toolchain builds, package staging, native input
 probes or gameplay until explicit operator approval.** When approval arrives,
 the first separate acceptance boundary is the pinned Windows agent CLI,
