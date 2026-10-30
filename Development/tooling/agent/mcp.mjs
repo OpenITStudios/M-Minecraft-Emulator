@@ -56,7 +56,7 @@ export function validateNativeWindowTarget(value,slot) {
       !Number.isSafeInteger(value.pid) || value.pid<=0 ||
       !Number.isSafeInteger(value.windowId) || value.windowId<=0 ||
       typeof value.createdFileTime!=='string' ||
-      !/^\\d{1,20}$/.test(value.createdFileTime) ||
+      !/^\d{1,20}$/.test(value.createdFileTime) ||
       !Number.isSafeInteger(value.sessionId) || value.sessionId<0 ||
       typeof value.foreground!=='boolean' ||
       value.visible!==true || value.minimized!==false ||
@@ -202,7 +202,7 @@ export function createHandler(config,{native=runNative,evidence=readGameEvidence
           (!Number.isSafeInteger(args.pid) || args.pid<=0 ||
            !Number.isSafeInteger(args.windowId) || args.windowId<=0 ||
            typeof args.createdFileTime!=='string' ||
-           !/^\\d{1,20}$/.test(args.createdFileTime))) {
+           !/^\d{1,20}$/.test(args.createdFileTime))) {
         throw new Error('Expected window identity must be exact and numeric');
       }
       if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
