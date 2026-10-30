@@ -398,6 +398,32 @@ Actual Windows independent input, real Minecraft player movement,
 MC01 uninterrupted input and five-client gameplay are NOT_EXECUTED.
 Local tests/builds/gameplay remain prohibited until explicit permission.
 
+## Phase 8: non-production virtual XInput signal source candidate
+
+- Source audit of ProtoInput `protoloader.h` confirms its documented API
+  primarily selects physical input devices for hooked processes; it is
+  NOT an existing AI synthetic-key-to-specific-Minecraft backend.
+- Added optional independent `native-gamepad-lab/` Rust candidate using
+  `vigem-rust 0.2.0`: when separately built and explicitly approved,
+  it could produce ONE global virtual Xbox 360 input device, with bounded
+  timed reports, 350 ms neutral watchdog and ten-second hard duration.
+  No driver installation, injection or native app integration occurred.
+- Added pure `global-gamepad-candidate.mjs` mapping genuine Minecraft
+  gameplay intent into Xbox analog sticks/buttons/triggers with calibrated-
+  later camera-rate semantics, 200 ms report heartbeat, final neutral.
+  It refuses the human-plus-four-AI mode and multiple simultaneous slots
+  because a global pad cannot be proven exclusive to MC02.
+- This is an input *signal* path, NOT independent game-input routing.
+  Minecraft Education's background gamepad behavior and unique per-client
+  device assignment remain unverified. Codex MCP still reports
+  `provider:NONE`, `execution:DISABLED` for actual input.
+- Source tests authored; NOT_EXECUTED. No local commands, builds, packages,
+  Windows driver actions, Minecraft gameplay, CI or user-PC access.
+
+**Proof:** REMOTE_GITHUB pinned source/API review only. Virtual
+gamepad provider NOT_BUILT, device signal NOT_EXECUTED, and independent
+multiplayer control remains BLOCKED.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,

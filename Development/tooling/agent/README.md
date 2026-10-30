@@ -112,6 +112,50 @@ Only code is committed; no user screenshots are collected now.
 
 Cua CLI reference: https://cua.ai/docs/cua-driver/reference/cli/serve-and-configure
 
+## Phase 8: actual virtual gamepad signal candidate (NOT per-client yet)
+
+We audited ProtoInput's public C API and found it primarily assigns
+physical keyboard/mouse HID handles to hooked game processes. Its
+`protoloader.h` does NOT provide a straightforward external AI
+`press_player_key(slot, key)` interface. We will not mislabel the hook
+loader as a tested Codex gameplay actuator.
+
+A first **actual device-output** candidate is authored separately:
+- [Standalone virtual Xbox 360 worker](./native-gamepad-lab/README.md):
+  `vigem-rust 0.2.0` / ViGEmBus; one global virtual controller only,
+  strict explicit lab opt-in, bounded 10-second life, 350 ms neutral
+  watchdog, timed JSON-line reports and normal final neutral.
+- [Semantic AI gameplay-to-XInput mapping](./global-gamepad-candidate.mjs):
+  left analog stick for moving, right analog for camera rate, Xbox A/B
+  for jump/sneak and triggers for attack/use; 200 ms report heartbeats,
+  bounded source timeline and mandatory final neutral state.
+
+**This candidate is deliberately NOT a per-Minecraft native backend.**
+A Windows virtual controller is global until device→game process routing
+has been independently proven. In hybrid mode a virtual controller might
+affect human MC01 and cannot be activated. The source mapper therefore
+refuses `human-plus-four-ai`, and refuses more than one client even in
+`five-ai`. Its mode field is a pure precondition, NOT evidence of a
+running machine state. Hardware output is not wired into MCP, native
+controller, Tauri installer, or the existing input transaction runner.
+
+The standalone worker is NOT compiled, driver installed, launched or
+tested. Its manifest is not in the default cargo workspace; its new
+dependency has no approved lockfile or package validation. Do NOT install
+ViGEmBus or invoke its manual opt-in without explicit subsequent
+operator approval.
+
+Even if XInput reports can be produced, the key questions remain:
+Does Minecraft Education actually accept them while unfocused?
+Can different virtual pads be **exclusively** routed to MC02–MC05 without
+hijacking MC01? Do all clients preserve real peer-to-peer gameplay?
+Only live game evidence can answer these. No gameplay success is claimed.
+
+Source references:
+- https://github.com/arounre/vigem-rust
+- https://github.com/SplitScreen-Me/splitscreenme-protoInput
+- https://learn.microsoft.com/en-us/gaming/gdk/docs/reference/input/gameinput/interfaces/igameinput/methods/igameinput_setfocuspolicy
+
 ## Phase 7: bounded independent input transaction runner (source only)
 
 The source-only `input-delivery.mjs` is a narrow **per-client native input
