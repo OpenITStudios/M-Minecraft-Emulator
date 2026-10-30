@@ -54,8 +54,13 @@ pub(crate) fn one_forward_pulse(human: &OwnedProcess, ai: &OwnedProcess) -> io::
             thread::sleep(Duration::from_millis(80));
             // If the HWND was destroyed/reused, NEVER post to its new owner.
             // No blind retry; original vanished so key-up is inapplicable.
-            if !workspace_surface::matches_verified_native_window(ai, ai_hwnd)? {
-                return Err(uncertain("MC02 window changed after keydown"));
+            // Any failure to revalidate after keydown is an uncertain
+            // outcome; never misclassify it as an ordinary safe refusal.
+            if !matches!(
+                workspace_surface::matches_verified_native_window(ai, ai_hwnd),
+                Ok(true)
+            ) {
+                return Err(uncertain("MC02 window identity unconfirmed after keydown"));
             }
             if unsafe { PostMessageW(ai_win, WM_KEYUP, W_KEY, UP) } == 0 {
                 return Err(uncertain("MC02 keyup could not be posted"));
@@ -72,7 +77,7 @@ pub(crate) fn one_forward_pulse(human: &OwnedProcess, ai: &OwnedProcess) -> io::
 mod tests {
     use super::*;
     #[test]
-    fn short_pulse_contains_release_flag_and_never_uses_global_input() {
+    fn short_pulse_marks_keyup_release_bits() {
         assert_eq!(W_KEY, 0x57);
         assert_eq!(DOWN & (1_isize << 30), 0);
         assert_ne!(UP & (1_isize << 30), 0);
