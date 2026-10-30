@@ -99,6 +99,10 @@ test('developer Cargo target directory is canonical and refuses ambient override
   assert.match(environment,/external CARGO_TARGET_DIR overrides are refused/);
   assert.match(environment,/\[IO\.FileAttributes\]::ReparsePoint/);
   assert.match(environment,/\$env:CARGO_TARGET_DIR = \$canonicalCargoTarget/);
+  assert.match(environment,/\$env:CARGO_BUILD_TARGET_DIR = \$canonicalCargoTarget/);
+  assert.match(environment,/\$env:CARGO_BUILD_BUILD_DIR = \$canonicalCargoTarget/);
+  assert.match(environment,/GetEnvironmentVariable\(\$overrideName,'Process'\)/);
+  assert.match(environment,/CARGO_BUILD_BUILD_DIR/);
   assert.ok(environment.indexOf('$canonicalCargoTarget') <
     environment.indexOf('New-Item -ItemType Directory'),
     'invalid Cargo override should fail before cache directories are created');
@@ -147,6 +151,28 @@ test('benchmark uses exact Local checkout and two cache-preserving passes', () =
   assert.match(launcher,/DEV\.cmd bench:rust/);
 });
 
+
+test('Rust benchmark compares active-target logical bytes outside timed source passes', () => {
+  const inspector=read('tooling/storage/cargo-footprint.mjs');
+  const section=developer.slice(developer.indexOf('function Get-CargoTargetSnapshot {'),
+    developer.indexOf('Push-Location $DevelopmentRoot'));
+  assert.ok(section.startsWith('function Get-CargoTargetSnapshot {'));
+  assert.match(section,/--active-json/);
+  assert.match(section,/scope -cne 'active-cargo-target'/);
+  assert.match(section,/complete -cne \$true/);
+  assert.match(section,/ConvertFrom-Json/);
+  assert.match(section,/UNKNOWN \(read-only scan failed or was partial\)/);
+  assert.match(section,/logical-byte change after pass/);
+  assert.match(section,/Observed size change is not attributable savings/);
+  assert.match(inspector,/schema:1,scope:'active-cargo-target'/);
+  assert.match(inspector,/maxDurationMs:15000,maxEntries:250000/);
+  assert.doesNotMatch(section,/\b(?:Remove-Item|Clear-Content|cargo clean|Start-Process)\b/i);
+  const start=section.indexOf('$watch = [System.Diagnostics.Stopwatch]::StartNew()');
+  const stop=section.indexOf('$watch.Stop()',start);
+  assert.ok(start>=0&&stop>start);
+  assert.ok(!section.slice(start,stop).includes('Get-CargoTargetSnapshot'),
+    'file scans must not be included in compilation timing');
+});
 test('portable setup scripts parse in Windows PowerShell without running downloads', {
   skip: process.platform !== 'win32',
 }, () => {

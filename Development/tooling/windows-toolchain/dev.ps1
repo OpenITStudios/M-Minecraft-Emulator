@@ -330,6 +330,37 @@ function Invoke-G0SourcePackage {
     Write-Host "Do not use account-bearing VM disks for the first guest feasibility test."
 }
 
+# A bounded metadata-only sample. Failure yields UNKNOWN and never falsifies
+# the source check. Never save a file listing or read Minecraft/account content.
+function Get-CargoTargetSnapshot {
+    $node = Join-Path $Root 'workspace/toolchains/node/node.exe'
+    $script = Join-Path $DevelopmentRoot 'tooling/storage/cargo-footprint.mjs'
+    $json = (& $node $script --active-json | Out-String).Trim()
+    $scanExit = $LASTEXITCODE
+    if ($scanExit -ne 0 -or $json.Length -gt 2048) {
+        Write-Host 'Active Cargo target size: UNKNOWN (read-only scan failed or was partial).'
+        return $null
+    }
+    try {
+        $snapshot = $json | ConvertFrom-Json
+        if ($snapshot.schema -ne 1 -or
+            $snapshot.scope -cne 'active-cargo-target' -or
+            $snapshot.complete -cne $true -or
+            $snapshot.status -notin @('OK','ABSENT') -or
+            [string]$snapshot.bytes -notmatch '^[0-9]{1,24}$' -or
+            [int]$snapshot.hardlinkedFiles -lt 0) {
+            throw 'Untrusted or incomplete Cargo footprint snapshot'
+        }
+        return [pscustomobject]@{
+            Bytes = [bigint]::Parse([string]$snapshot.bytes)
+            Hardlinks = [int]$snapshot.hardlinkedFiles
+        }
+    } catch {
+        Write-Host 'Active Cargo target size: UNKNOWN (invalid summary data).'
+        return $null
+    }
+}
+
 # Manual opt-in timing of two identical, cache-preserving source checks.
 # Pass 1 is NOT a cold build; no target directory is cleared or recreated.
 # Do not record stdout, private machine data, passwords, or game state.
@@ -343,6 +374,7 @@ function Invoke-SourceBenchmark {
     Write-Host "Two consecutive passes using existing caches; neither pass is a verified cold build."
     Write-Host "No compiler cache cleanup, fresh target, installer, runtime process, or persistent log."
     $seconds = [System.Collections.Generic.List[double]]::new()
+    $previousSize = if ($Scope -eq 'rust') { Get-CargoTargetSnapshot } else { $null }
     foreach ($pass in 1..2) {
         $watch = [System.Diagnostics.Stopwatch]::StartNew()
         Write-Host "[$pass/2] Starting $scriptName..."
@@ -358,6 +390,21 @@ function Invoke-SourceBenchmark {
         $duration = [math]::Round($watch.Elapsed.TotalSeconds, 2)
         $seconds.Add($duration)
         Write-Host ("[$pass/2] PASS: {0:N2} s" -f $duration)
+        if ($Scope -eq 'rust') {
+            # Measurement is outside Stopwatch. No extra compiler invocation.
+            $currentSize = Get-CargoTargetSnapshot
+            if ($null -ne $previousSize -and $null -ne $currentSize) {
+                $delta = $currentSize.Bytes - $previousSize.Bytes
+                Write-Host ("Cargo active-target logical-byte change after pass {0}: {1} B; {2} -> {3} B." -f $pass, $delta, $previousSize.Bytes, $currentSize.Bytes)
+                if ($previousSize.Hardlinks -gt 0 -or $currentSize.Hardlinks -gt 0) {
+                    Write-Host 'Hardlinks observed; logical bytes can count shared physical storage multiple times.'
+                }
+                Write-Host 'Observed size change is not attributable savings, allocated bytes, or reclaimed space.'
+            } else {
+                Write-Host ("Cargo active-target logical-byte change after pass {0}: UNKNOWN (incomplete snapshot)." -f $pass)
+            }
+            $previousSize = $currentSize
+        }
     }
     Write-Host ("Build-check timing (s): first={0:N2}; second={1:N2}. No cold/warm classification or savings claimed." -f $seconds[0], $seconds[1])
     Write-Host "Source-only checks are not Windows game, installer, or five-client acceptance."

@@ -112,6 +112,23 @@ junctions/reparse points in the target path are refused. Direct shell
 Cargo commands bypass this launcher and may still use other targets.
 Existing archives remain preserved for explicit retention review.
 
+## Bounded per-pass compiler cache evidence
+
+`DEV.cmd bench:rust` now prints an active-target **logical-byte delta**
+around each of its two check passes. A standalone scanner provides
+`node Development/tooling/storage/cargo-footprint.mjs --active-json` for
+bounded aggregate-only snapshots; it does not expose filenames, game data
+or a general inventory of installed-user paths. The 15-second/250,000-entry
+limit yields `UNKNOWN` rather than a false full measurement. Scans occur
+**outside** the build stopwatch and do not clean or relocate any cache.
+These are not physical storage savings or an automatic retention decision.
+
+`DEV.cmd` additionally refuses ambient `CARGO_BUILD_TARGET_DIR` and
+`CARGO_BUILD_BUILD_DIR` overrides that differ from the canonical
+`workspace/builds/desktop/target`. Cargo itself also accepts such
+settings outside the launcher, so direct terminal builds can still create
+extra output roots.
+
 ## Scoped checks and optional timing
 
 `DEV.cmd check:frontend` runs only Svelte/TypeScript typecheck and

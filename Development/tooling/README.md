@@ -53,6 +53,17 @@ The portable `DEV.cmd` environment rejects an ambient
 `CARGO_TARGET_DIR` pointing outside the canonical target so new
 compiler output is not silently split across extra directories.
 
+## Build-check space evidence
+
+`DEV.cmd bench:rust` uses the same `storage/cargo-footprint.mjs` owner
+for read-only active-target measurements before and after each of its two
+checks. The `--active-json` option exposes only schema, completeness
+and aggregate bytes/counts. Partial scans make the disk delta `UNKNOWN`;
+scanning is outside the benchmark stopwatch and never invokes Cargo or
+deletes caches. `DEV.cmd` pins both Cargo target and Cargo intermediate
+build-directory environment variables to the approved output root.
+Direct Cargo from an unrelated shell is not governed by these settings.
+
 ## Resource-efficiency source previews — closed decision, reusable code
 
 These **separate, explicit build tools are retained** for possible future

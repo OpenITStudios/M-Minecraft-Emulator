@@ -106,6 +106,36 @@ alongside `target/x86_64-pc-windows-msvc/debug` only indicates two
 output layouts, **not** proof that either tree is obsolete. Keep the
 existing `storage plan` command read-only; no mutation is approved.
 
+## Build evidence with bounded per-pass Cargo snapshots
+
+The optional `DEV.cmd bench:rust` path now samples **only the active Cargo
+target** before the first check and after each of the existing two check passes,
+using `cargo-footprint.mjs --active-json`. Snapshot scanning happens **outside**
+the compilation stopwatch and has a 15-second/250,000-entry limit. The compact
+JSON schema reports only aggregate logical file bytes, file/hardlink counts,
+entry count and completion status. It never stores names, arbitrary paths,
+account material, telemetry or a persistent log. Missing or incomplete scans
+yield `UNKNOWN`, never a claimed zero or positive saving.
+
+A valid pair of snapshots prints the observed *logical byte change* around
+each pass. That delta is **not** attributable compiler cache saving,
+allocated/free NTFS bytes, verified duplicate content, or proof that a cache
+is removable: hardlinks, external writes and Cargo's build reuse can affect
+the result. A failed check still fails the benchmark; the extra sampling
+neither builds a new target nor removes old artifacts. The frontend benchmark
+does not scan Cargo.
+
+The existing portable Windows developer environment also guards the other
+Cargo 1.99 environment overrides `CARGO_BUILD_TARGET_DIR` and
+`CARGO_BUILD_BUILD_DIR`, in addition to `CARGO_TARGET_DIR`. All are pinned
+process-locally to the same approved
+`workspace/builds/desktop/target`; conflicting inherited values fail
+**before** cache initialization. These variables apply only to `DEV.cmd`;
+direct Cargo from a separate terminal remains outside this guard.
+Cargo [build-cache](https://doc.rust-lang.org/cargo/reference/build-cache.html)
+and [configuration](https://doc.rust-lang.org/cargo/reference/config.html)
+document the separate target and intermediate build locations.
+
 ## Retention review (dry-run only)
 
 The optional `DEV.cmd storage plan` command uses

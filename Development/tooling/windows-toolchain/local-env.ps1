@@ -23,10 +23,15 @@ function Set-LocalDeveloperEnvironment {
   # One canonical compiler target for DEV.cmd. An ambient override would
   # silently create another complete Rust artifact cache and exhaust disk.
   $canonicalCargoTarget = [IO.Path]::GetFullPath((Join-Path $workspace 'builds/desktop/target'))
-  if (-not [string]::IsNullOrWhiteSpace($env:CARGO_TARGET_DIR)) {
-    if (-not [IO.Path]::IsPathRooted($env:CARGO_TARGET_DIR) -or
-        [IO.Path]::GetFullPath($env:CARGO_TARGET_DIR) -ine $canonicalCargoTarget) {
-      throw 'DEV.cmd requires the canonical workspace/builds/desktop/target; external CARGO_TARGET_DIR overrides are refused.'
+  # Cargo 1.99 supports separate target and intermediate build roots.
+  # An inherited override of any of these creates untracked compiler output.
+  foreach ($overrideName in @('CARGO_TARGET_DIR','CARGO_BUILD_TARGET_DIR','CARGO_BUILD_BUILD_DIR')) {
+    $overrideValue = [Environment]::GetEnvironmentVariable($overrideName,'Process')
+    if (-not [string]::IsNullOrWhiteSpace($overrideValue)) {
+      if (-not [IO.Path]::IsPathRooted($overrideValue) -or
+          [IO.Path]::GetFullPath($overrideValue) -ine $canonicalCargoTarget) {
+        throw "DEV.cmd requires the canonical workspace/builds/desktop/target; external $overrideName overrides are refused."
+      }
     }
   }
   foreach ($path in @((Join-Path $workspace 'builds'),
@@ -40,6 +45,8 @@ function Set-LocalDeveloperEnvironment {
     }
   }
   $env:CARGO_TARGET_DIR = $canonicalCargoTarget
+  $env:CARGO_BUILD_TARGET_DIR = $canonicalCargoTarget
+  $env:CARGO_BUILD_BUILD_DIR = $canonicalCargoTarget
   foreach ($directory in @($cacheDir,$tempDir,(Join-Path $cacheDir 'npm'),
       (Join-Path $cacheDir 'nuget'))) {
     if (-not (Test-Path -LiteralPath $directory)) {

@@ -118,6 +118,25 @@ Read it alongside `DEV.cmd storage report` and
 `DEV.cmd storage plan` before considering any separate,
 explicitly authorized cleanup proposal. No automatic pruning is enabled.
 
+## Build-check cache growth evidence
+
+The optional `DEV.cmd bench:rust` samples only the active Cargo target
+before the first pass and after each pass, using a compact, bounded,
+read-only `--active-json` report from the existing Cargo footprint
+scanner. Snapshot time is excluded from the compilation stopwatch.
+An incomplete result is `UNKNOWN`; any displayed change is in
+**logical file bytes**, not observed physical disk allocation, guaranteed
+causal compiler growth or space safe to reclaim. This does not replace
+the existing read-only `storage report`, `storage cargo`, and
+`storage plan` analyses. No deletion command is enabled.
+
+The portable developer shell now refuses conflicting inherited
+`CARGO_TARGET_DIR`, `CARGO_BUILD_TARGET_DIR` and
+`CARGO_BUILD_BUILD_DIR` values, pinning all three to the approved
+`workspace/builds/desktop/target`. Direct Cargo commands outside
+`DEV.cmd` do not inherit this enforcement unless the operator sets
+up the same environment.
+
 ## Package and release boundary
 
 The current product is **Lazy Tester**, with Windows-native independently

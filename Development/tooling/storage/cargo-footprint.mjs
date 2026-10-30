@@ -109,6 +109,17 @@ export function inspectCargoFootprint(root,options={}){
   return {rows,total,complete:rows.every(row=>row.status==='OK'||row.status==='ABSENT'),
     visited:budget.visited,limited:budget.exhausted};
 }
+// Compact machine-readable snapshot for the existing optional Rust benchmark.
+// Intentionally excludes file names, absolute paths, environment and identities.
+export function activeSnapshot(report) {
+  if(report.rows.length!==1 || report.rows[0].path!==CARGO_ROOTS[0].path) {
+    throw Error('Active snapshot requires only the canonical Cargo target');
+  }
+  const row=report.rows[0];
+  return {schema:1,scope:'active-cargo-target',complete:report.complete,
+    status:row.status,bytes:row.bytes.toString(),files:row.files,
+    hardlinkedFiles:row.hardlinkedFiles,visited:report.visited};
+}
 const fmt=bytes=>`${(Number(bytes)/1048576).toFixed(2)} MiB`;
 export function renderCargoFootprint(result){
   const out=['Lazy Tester Cargo footprint — read-only logical file sizes'];
@@ -129,11 +140,17 @@ export function renderCargoFootprint(result){
   return out.join('\n');
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
-  if(process.argv.length!==2){console.error('Usage: cargo-footprint.mjs (read-only; no --apply)');process.exitCode=2;}
-  else try{
+  const mode=process.argv.length===2?'report':process.argv.length===3?process.argv[2]:null;
+  if(!['report','--active-json'].includes(mode)){
+    console.error('Usage: cargo-footprint.mjs [--active-json] (read-only; no --apply)');
+    process.exitCode=2;
+  }else try{
     const root=resolve(fileURLToPath(new URL('../../../',import.meta.url)));
-    const report=inspectCargoFootprint(root);
-    console.log(renderCargoFootprint(report));
+    const isActive=mode==='--active-json';
+    const report=isActive
+      ?inspectCargoFootprint(root,{roots:[CARGO_ROOTS[0]],maxDurationMs:15000,maxEntries:250000})
+      :inspectCargoFootprint(root);
+    console.log(isActive?JSON.stringify(activeSnapshot(report)):renderCargoFootprint(report));
     if(!report.complete)process.exitCode=3;
   }catch(error){console.error(`Cargo footprint scan failed: ${error?.code??error?.message??'unknown'}`);process.exitCode=1;}
 }

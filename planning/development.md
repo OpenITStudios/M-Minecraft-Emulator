@@ -1,5 +1,16 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — Cargo build root hardening and per-pass disk evidence (30 October 2026)
+
+**State:** DONE for bounded source implementation; pinned Windows/PowerShell, Rust/Tauri and real storage data NOT_EXECUTED.
+**Decision:** Extend the existing Cargo footprint scanner with a bounded aggregate-only `--active-json` snapshot (canonical active Cargo target only; no filenames or world/account data). Use it in the opt-in `DEV.cmd bench:rust` before and after each existing check, outside the Stopwatch; display changes in logical file bytes only for complete valid snapshots, else UNKNOWN. Refuse inherited `CARGO_BUILD_BUILD_DIR` and `CARGO_BUILD_TARGET_DIR` overrides differing from the existing canonical `CARGO_TARGET_DIR`, then pin all three to `workspace/builds/desktop/target` in the developer process. Preserve two-pass benchmark, original full verification, installer and native game owners. No cleanup, new target tree, background worker, CI, persistent telemetry, credentials or world access.
+**Proof:** SOURCE_EXECUTION: Node.js 22.16.0 exact-blob Cargo footprint scanner tests 13/13 PASS (including snapshot privacy, partial results and refusal of `--apply`); committed blob SHA verified against executed local source. REMOTE_GITHUB pinned source/caller and documentation-static review. Windows PowerShell, pinned Node24/Rust1.99, actual 60 GB breakdown, physical allocation, Tauri and Minecraft acceptance NOT_EXECUTED.
+**Unresolved:** Scanner snapshots show logical bytes only; cannot attribute a delta exclusively to Cargo or estimate bytes freed by deletion. Incomplete snapshots are UNKNOWN and direct-shell builds can bypass launcher environment. No safe cleanup is authorized.
+**Next:** Inspect real Windows `storage report`, `storage cargo`, `storage plan` and two-pass `bench:rust` results on the same Local SHA before authorizing any destructive cache lifecycle change.
+
+---
+
+
 ## Current product work — Cargo target footprint and canonical developer cache (30 October 2026)
 
 **State:** DONE for bounded source changes and an isolated synthetic Cargo scanner; actual Windows disk results, pinned PowerShell, Rust and Minecraft acceptance NOT_EXECUTED.

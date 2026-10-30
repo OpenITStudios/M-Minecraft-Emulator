@@ -5,7 +5,7 @@ import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {cargoBucket,inspectCargoFootprint,renderCargoFootprint,CARGO_ROOTS} from './cargo-footprint.mjs';
+import {cargoBucket,inspectCargoFootprint,renderCargoFootprint,CARGO_ROOTS,activeSnapshot} from './cargo-footprint.mjs';
 
 function fixture(run){const root=mkdtempSync(join(tmpdir(),'cargo-footprint-'));try{return run(root);}finally{rmSync(root,{recursive:true,force:true});}}
 function put(root,name,size){const file=resolve(root,name);mkdirSync(resolve(file,'..'),{recursive:true});writeFileSync(file,Buffer.alloc(size,1));return file;}
@@ -119,4 +119,41 @@ test('only fixed Cargo directories are inspected, never game/account paths',()=>
   assert.equal(CARGO_ROOTS.length,3);
   assert.ok(CARGO_ROOTS.every(p=>p.path.endsWith('/target')));
   assert.ok(CARGO_ROOTS.every(p=>!/(^Data\/|^App\/|workspace\/(private|runs|runtime))/.test(p.path)));
+});
+
+test('active snapshot exposes only aggregated bounded metadata without file paths',()=>fixture(root=>{
+  put(root,`${target}/debug/deps/private-token-filename`,41);
+  put(root,'Data/Launchers/one/account.json',200);
+  const r=inspectCargoFootprint(root,{roots:[CARGO_ROOTS[0]]});
+  const data=activeSnapshot(r);
+  assert.deepEqual(data,{schema:1,scope:'active-cargo-target',complete:true,
+    status:'OK',bytes:'41',files:1,hardlinkedFiles:0,visited:r.visited});
+  assert.doesNotMatch(JSON.stringify(data),/private-token|account|Data|workspace|\\|\//);
+  assert.throws(()=>activeSnapshot(inspectCargoFootprint(root)),/canonical Cargo target/);
+}));
+
+test('partial active scan reports incomplete truth without fabricated savings',()=>fixture(root=>{
+  put(root,`${target}/debug/deps/a`,13);
+  put(root,`${target}/debug/deps/b`,37);
+  const report=inspectCargoFootprint(root,{roots:[CARGO_ROOTS[0]],maxEntries:2});
+  const data=activeSnapshot(report);
+  assert.equal(data.complete,false);
+  assert.equal(data.status,'PARTIAL');
+  assert.match(data.bytes,/^\d+$/);
+}));
+
+test('active JSON CLI never accepts cleanup or arbitrary arguments',()=>{
+  const cli=fileURLToPath(new URL('./cargo-footprint.mjs',import.meta.url));
+  const snapshot=spawnSync(process.execPath,[cli,'--active-json'],{encoding:'utf8'});
+  assert.equal(snapshot.status,0);
+  const result=JSON.parse(snapshot.stdout.trim());
+  assert.equal(result.schema,1);
+  assert.equal(result.scope,'active-cargo-target');
+  assert.match(result.bytes,/^\d+$/);
+  assert.equal(Object.keys(result).includes('path'),false);
+  for(const input of ['--apply','--delete','--active-json --apply']){
+    const denied=spawnSync(process.execPath,[cli,...input.split(' ')],{encoding:'utf8'});
+    assert.equal(denied.status,2);
+    assert.match(denied.stderr,/no --apply/);
+  }
 });
