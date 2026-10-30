@@ -1,6 +1,8 @@
 import {describe,expect,it} from 'vitest';
+import fs from 'node:fs';
+import {syncBuiltinESMExports} from 'node:module';
 import {execFileSync} from 'node:child_process';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,linkSync,lstatSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,linkSync,lstatSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname,join,resolve} from 'node:path';
 import {assembleCandidate,sourceRevision,stageLocalApp,verifyDesktopStartup} from '../scripts/package-lazy-tester.mjs';
@@ -60,6 +62,58 @@ describe('Development source and distribution candidates',()=>{
       expect(readFileSync(join(next.app,'lazy-tester.exe'),'utf8')).toBe('MZupdated');
     } finally {
       expect(dirname(resolve(root))).toBe(resolve(tmpdir()));rmSync(root,{recursive:true});
+    }
+  });
+  it('restores a fresh App layout after launcher promotion fails, then permits retry',()=>{
+    const root=mkdtempSync(join(tmpdir(),'lazy-app-rollback-'));
+    const originalRename=fs.renameSync;
+    try {
+      const release=join(root,'build');
+      for(const name of [
+        'lazy-tester.exe','independent-bootstrap/bootstrap-compat.dll',
+        'independent-bootstrap/bootstrap-enroll.dll','distribution/lazy-tester-package.json',
+        ...roleMuiNames
+      ]){
+        const path=join(release,name);
+        mkdirSync(dirname(path),{recursive:true});
+        writeFileSync(path,name.endsWith('.json')?'{}':'MZfixture');
+      }
+      writeFileSync(join(release,'Lazy Tester.exe'),'MZlauncher');
+      mkdirSync(join(root,'Data'));
+      writeFileSync(join(root,'Data','world-fixture'),'preserve');
+
+      const launcher=join(root,'Lazy Tester.exe');
+      let injected=0;
+      fs.renameSync=(from,to)=>{
+        if(resolve(String(to))===launcher && String(from).endsWith('new-launcher.exe')){
+          injected++;
+          throw new Error('Synthetic launcher promotion failure');
+        }
+        return originalRename(from,to);
+      };
+      syncBuiltinESMExports();
+      expect(()=>stageLocalApp(root,release,'a'.repeat(40))).toThrow(/Synthetic launcher promotion failure/);
+      expect(injected).toBe(1);
+      expect(existsSync(join(root,'App'))).toBe(false);
+      expect(existsSync(launcher)).toBe(false);
+      expect(readFileSync(join(root,'Data','world-fixture'),'utf8')).toBe('preserve');
+      const privateBackups=join(root,'workspace/private/local-app-backups');
+      const attempts=readdirSync(privateBackups);
+      expect(attempts).toHaveLength(1);
+      expect(readFileSync(join(privateBackups,attempts[0],'failed-App','lazy-tester.exe'),'utf8')).toBe('MZfixture');
+
+      fs.renameSync=originalRename;
+      syncBuiltinESMExports();
+      const recovered=stageLocalApp(root,release,'a'.repeat(40));
+      expect(recovered.backup).toBe(null);
+      expect(readFileSync(join(recovered.app,'lazy-tester.exe'),'utf8')).toBe('MZfixture');
+      expect(readFileSync(launcher,'utf8')).toBe('MZlauncher');
+      expect(readFileSync(join(recovered.data,'world-fixture'),'utf8')).toBe('preserve');
+    }finally{
+      fs.renameSync=originalRename;
+      syncBuiltinESMExports();
+      expect(dirname(resolve(root))).toBe(resolve(tmpdir()));
+      rmSync(root,{recursive:true});
     }
   });
   it('exports only the installer and receipts, refuses reuse and never copies adjacent private data',()=>{

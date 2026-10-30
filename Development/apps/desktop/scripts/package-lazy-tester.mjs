@@ -132,16 +132,20 @@ export function stageLocalApp(cwd, release, sha) {
   const stagedLauncher=resolve(attempt,'new-launcher.exe');
   writeFileSync(stagedLauncher,launcherBytes,{flag:'wx'});
   const oldLauncher=existsSync(launcherPath)?resolve(attempt,'previous-launcher.exe'):null;
-  if(oldLauncher)renameSync(launcherPath,oldLauncher);
   const backup = existsSync(app) ? resolve(attempt,'previous-App') : null;
+  let appPromoted = false;
   try {
+    if (oldLauncher) renameSync(launcherPath,oldLauncher);
     if (backup) renameSync(app,backup);
     renameSync(staged,app);
+    appPromoted = true;
     renameSync(stagedLauncher,launcherPath);
   } catch(error) {
-    if(existsSync(app)&&backup&&existsSync(backup))renameSync(app,resolve(attempt,'failed-App'));
-    if(backup&&existsSync(backup))renameSync(backup,app);
-    if(oldLauncher)renameSync(oldLauncher,launcherPath);
+    // Roll back even on first install, when there is no previous-App backup.
+    // Preserve the failed payload inside this private attempt; never delete Data.
+    if(appPromoted) renameSync(app,resolve(attempt,'failed-App'));
+    if(backup&&existsSync(backup)) renameSync(backup,app);
+    if(oldLauncher&&existsSync(oldLauncher)) renameSync(oldLauncher,launcherPath);
     throw error;
   }
   if (!existsSync(data)) mkdirSync(data); // Keep existing profiles and all contents untouched.

@@ -87,6 +87,24 @@ Minecraft runtime acceptance remain NOT_EXECUTED.
   is unchanged, and Windows Node 24 / Cargo / Minecraft acceptance remains
   `NOT_EXECUTED` at this revision.
 
+## Fresh-install App rollback repair — source-only
+
+- `stageLocalApp()` now tracks whether its staged `App/` was actually
+  promoted. If root `Lazy Tester.exe` promotion fails on a fresh install,
+  it moves only that newly promoted App to the existing private attempt's
+  `failed-App/`, leaving `App/` and root launcher absent for a clean retry.
+- The prior-App and launcher recovery paths remain unchanged in intent; the
+  old-launcher move is now inside the same guarded rename sequence.
+- The existing `package-candidate.test.ts` gains one bounded regression
+  scenario covering injected launcher failure, preserved `Data/`, private
+  failed-payload retention and a successful explicit retry.
+- This changes no Minecraft game/session logic, installed NSIS contract,
+  profile content, runtime DLL, version, branch policy or CI setting.
+
+**Proof ceiling:** GitHub exact-source review and isolated fault-injected source
+execution where performed. Pinned Windows Node/Vitest, native NSIS package
+and live five-profile Minecraft Education remain `NOT_EXECUTED`.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,
