@@ -30,14 +30,16 @@ test('active and legacy targets measured separately with no double-counting',()=
   put(root,`${target}/something-new`,13);
   put(root,'Development/apps/desktop/src-tauri/target/debug/deps/x',19);
   put(root,'Development/engine/runtime-core/target/debug/deps/y',23);
+  put(root,'workspace/archive/compiler-cache-20261026/target/debug/deps/old',29);
   put(root,'Data/worlds/do-not-open',1000);
   put(root,'workspace/private/do-not-open',1200);
   const r=inspectCargoFootprint(root);
   assert.equal(r.complete,true);
-  assert.equal(r.total,161n);
+  assert.equal(r.total,190n);
   assert.equal(r.rows[0].bytes,119n);
   assert.equal(r.rows[1].bytes,19n);
   assert.equal(r.rows[2].bytes,23n);
+  assert.equal(r.rows[3].bytes,29n);
   assert.equal(r.rows[0].buckets.get('Windows MSVC debug / incremental').bytes,17n);
   assert.equal(r.rows[0].buckets.get('Windows MSVC debug / deps').bytes,31n);
   assert.equal(r.rows[0].buckets.get('Windows MSVC release / build').bytes,47n);
@@ -116,7 +118,7 @@ test('CLI rejects apply and leaves target unmodified',()=>fixture(root=>{
 }));
 
 test('only fixed Cargo directories are inspected, never game/account paths',()=>{
-  assert.equal(CARGO_ROOTS.length,3);
+  assert.equal(CARGO_ROOTS.length,4);
   assert.ok(CARGO_ROOTS.every(p=>p.path.endsWith('/target')));
   assert.ok(CARGO_ROOTS.every(p=>!/(^Data\/|^App\/|workspace\/(private|runs|runtime))/.test(p.path)));
 });
@@ -157,3 +159,14 @@ test('active JSON CLI never accepts cleanup or arbitrary arguments',()=>{
     assert.match(denied.stderr,/no --apply/);
   }
 });
+
+test('archived compiler target is inspected read-only and excluded from active benchmark snapshot',()=>fixture(root=>{
+  put(root,'workspace/archive/compiler-cache-20261026/target/debug/incremental/old',123);
+  put(root,'workspace/builds/desktop/target/debug/deps/live',7);
+  const report=inspectCargoFootprint(root);
+  assert.equal(report.rows.at(-1).status,'OK');
+  assert.equal(report.rows.at(-1).bytes,123n);
+  assert.equal(activeSnapshot(inspectCargoFootprint(root,{roots:[CARGO_ROOTS[0]]})).bytes,'7');
+  assert.match(renderCargoFootprint(report),/Retired compiler archive target/);
+  assert.ok(report.rows.every(row=>!row.path.startsWith('Data/')));
+}));

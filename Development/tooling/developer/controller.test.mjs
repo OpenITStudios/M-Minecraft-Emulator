@@ -16,10 +16,23 @@ test('catalog defines unique bounded fixed tasks and never exposes shell executo
   assert.ok(tasks.length>=12);
   assert.equal(new Set(tasks.map(t=>t.id)).size,tasks.length);
   assert.deepEqual(tasks.filter(t=>t.requiresApproval).map(t=>t.id).sort(),
-    ['build.candidate','cargo.lock','environment.setup','source.preflight'].sort());
+    ['build.candidate','cargo.lock','environment.setup','source.preflight','storage.retire-archive'].sort());
   assert.equal(tasks.find(t=>t.id==='storage.plan').risk,'read');
   for(const task of tasks) assert.ok(['node','pwsh'].includes(legacyArgs(task).type));
   assert.ok(!tasks.some(t=>t.command==='g0'));
+});
+
+test('retired Cargo cache cleanup is opt-in and scoped to reviewed executable',()=>{
+  const task=tasks.find(t=>t.id==='storage.retire-archive');
+  assert.ok(task);
+  assert.equal(task.risk,'archive-write');
+  assert.equal(task.requiresApproval,true);
+  const cmd=legacyArgs(task);
+  assert.equal(cmd.type,'node');
+  assert.equal(cmd.args.length,1);
+  assert.ok(cmd.args[0].endsWith('tooling/storage/archive-retire.mjs'));
+  assert.equal(parseFlags(['storage.retire-archive','--expect-sha',SHA,'--approve','storage.retire-archive'],'run').approval,'storage.retire-archive');
+  assert.deepEqual(planForPaths(['Development/tooling/storage/archive-retire.mjs'],SHA).taskIds,['source.validate']);
 });
 
 test('registry refuses injected command, duplicate identity, and unreviewed mode',()=>{
@@ -45,6 +58,29 @@ test('source routing uses minimum relevant checks, but unknown and mixed fail wi
   assert.deepEqual(planForPaths(['Development/tooling/acceptance/windows/bootstrap-ordering/compat.cpp'],SHA).taskIds,['source.validate']);
   assert.deepEqual(planForPaths(['Development/apps/desktop/src/a.ts','Development/engine/runtime-core/src/lib.rs'],SHA).taskIds,['source.validate']);
   assert.deepEqual(planForPaths(['Development/toolchain.json'],SHA).taskIds,['source.validate']);
+});
+
+test('docs accompanying frontend or Rust source do not force redundant full checks',()=>{
+  assert.deepEqual(planForPaths(['planning/development.md','Development/apps/desktop/src/App.svelte'],SHA).taskIds,['frontend.validate']);
+  assert.deepEqual(planForPaths(['docs/system/architecture.md','Development/engine/runtime-core/src/lib.rs'],SHA).taskIds,['rust.validate']);
+  assert.deepEqual(planForPaths(['planning/development.md','docs/system/architecture.md'],SHA).taskIds,['repository.validate']);
+  assert.deepEqual(planForPaths(['planning/development.md','Development/tooling/developer/tasks.json'],SHA).taskIds,['source.validate']);
+  assert.deepEqual(planForPaths(['planning/development.md','Development/apps/desktop/src/App.svelte','Development/engine/runtime-core/src/lib.rs'],SHA).taskIds,['source.validate']);
+});
+
+test('Cargo manifests, locks and native build scripts always require full verification',()=>{
+  for(const path of [
+    'Development/apps/desktop/src-tauri/Cargo.toml',
+    'Development/apps/desktop/src-tauri/Cargo.lock',
+    'Development/apps/desktop/src-tauri/build.rs',
+    'Development/engine/runtime-core/Cargo.toml',
+    'Development/engine/runtime-core/Cargo.lock',
+    'Development/engine/runtime-core/build.rs',
+    'Development/toolchain.json',
+    'Development/apps/desktop/src-tauri/tauri.lazy-tester.conf.json',
+  ]){
+    assert.deepEqual(planForPaths([path,'planning/development.md'],SHA).taskIds,['source.validate'],path);
+  }
 });
 
 test('protected or suspicious paths never produce executable routing',()=>{
@@ -257,6 +293,6 @@ test('auto source validation routes last committed changes only on a clean worki
 test('automatic plan never executes unknown or protected paths without safe admission',()=>{
   assert.equal(planForPaths(['Data/profiles.json'],SHA).status,'BLOCKED');
   assert.deepEqual(planForPaths(['Development/apps/desktop/src/LazyTesterApp.svelte'],SHA).taskIds,['frontend.validate']);
-  assert.deepEqual(planForPaths(['Development/engine/runtime-core/Cargo.toml'],SHA).taskIds,['rust.validate']);
+  assert.deepEqual(planForPaths(['Development/engine/runtime-core/Cargo.toml'],SHA).taskIds,['source.validate']);
   assert.deepEqual(planForPaths(['Development/tooling/developer/tasks.json'],SHA).taskIds,['source.validate']);
 });

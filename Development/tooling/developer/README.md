@@ -30,8 +30,8 @@ requires a current exact Local SHA. Existing `DEV.cmd bootstrap` and legacy
 manual routes are retained unchanged.
 
 High-impact tasks (`environment.setup`, `source.preflight`, `cargo.lock`,
-`build.candidate`) additionally require `--approve <exact-task-id>` **after
-explicit operator approval**. AI-generated approval arguments are not a
+`build.candidate`, and `storage.retire-archive`) additionally require
+`--approve <exact-task-id>` **after explicit operator approval**. AI-generated approval arguments are not a
 substitute for that consent. No arbitrary command, shell expansion, plugin,
 cleanup, release, workflow, or Minecraft launch feature is available.
 `build.candidate` still invokes the existing unsigned native-candidate
@@ -78,12 +78,19 @@ execution is implied.
 - `storage/`: existing read-only inventory, Cargo inspection and retention
   planning, plus strictly bounded **post-success installer export turnover**
   invoked by the existing package owner. No generic cleanup task exists.
+- `storage.retire-archive`: separately approved, one-time cleanup of the
+  exact **historical** compiler target using pinned `cargo clean --target-dir`
+  after complete metadata validation and presence of a nonempty canonical
+  Windows MSVC target. It never touches the active build cache, other
+  archives, toolchains, or protected product data. Incomplete scans, unknown
+  entries, links, and hardlinks refuse this operation.
 - `controller.test.mjs`: registry/plan/argument/safety contracts.
 
 Only `Local` is authorized for task execution. GitHub Actions remain fully
 disabled. No database, daemon, UI, second Cargo target, new package format,
 new test runner, account access, or generic developer cleanup command is added.
-The package owner's authenticated export cleanup is described in the
+The package owner's authenticated export cleanup and the separately approved
+retirement of the verified historical compiler target are described in the
 [storage policy](../../../docs/system/artifact-storage.md).
 
 ## Error model

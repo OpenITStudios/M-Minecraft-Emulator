@@ -100,6 +100,23 @@ components remain external prerequisites and are never relocated by `DEV.cmd`.
 GitHub Actions remains disabled. Historical debug downloads belong in
 `workspace/downloads/`; they are not inputs to the active Lazy Tester installer.
 
+## Approved retirement of one archived compiler cache
+
+AI may propose `DEV.cmd run storage.retire-archive --expect-sha <Local-SHA>
+--approve storage.retire-archive` **only after explicit operator approval**.
+It uses the existing Cargo footprint scanner to verify the exact old target
+`archive/compiler-cache-20261026/target`, requires nonempty replacement
+Windows MSVC build artifacts under the canonical active target, and then
+runs pinned Cargo `clean --target-dir` scoped to the retired folder only.
+Unknown files, links, hardlinks and incomplete scans block cleanup. Nothing
+in `workspace/private/`, `Data/`, `App/`, source locks or the active Cargo
+target may be removed by this task. Physical space saved remains unverified
+until measured on Windows.
+
+`DEV.cmd storage cargo` now includes a separate metadata row for the old
+archive's `target` subtree; `storage report` continues to measure the
+whole historical archive independently. Neither scan deletes data.
+
 ## Cargo target breakdown (read-only)
 
 Run `DEV.cmd storage cargo` to inspect logical bytes in the canonical

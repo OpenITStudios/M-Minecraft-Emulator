@@ -50,6 +50,19 @@ private App backups, or exposes a generic delete CLI. A blocked scan is
 reported, not bypassed. Synthetic tests:
 `node --test tooling/storage/package-recycle.test.mjs`.
 
+## Historical compiler cache retirement (explicit approval)
+
+`storage/archive-retire.mjs` is an allowlisted backend for the AI task
+`storage.retire-archive`. It uses the existing Cargo footprint inspector and
+only permits a scoped, pinned `cargo clean --target-dir` against the retired
+`workspace/archive/compiler-cache-20261026/target`, **never** the live
+`workspace/builds/desktop/target`. The archive must have only recognized
+Cargo layout, no links/hardlinks, a complete scan and an already populated
+Windows-MSVC active target. Unknown or partial contents are blocked;
+physical reclaimed bytes require Windows evidence. This task needs
+`--approve storage.retire-archive` after explicit operator consent.
+Synthetic tests: `node --test tooling/storage/archive-retire.test.mjs`.
+
 ## Cargo target attribution
 
 `DEV.cmd storage cargo` uses the bounded read-only

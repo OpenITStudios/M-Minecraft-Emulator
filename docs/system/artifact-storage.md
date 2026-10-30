@@ -181,6 +181,34 @@ hardlinked or compressed file may use different physical disk allocation.
 Historical caches and App backups require a separately approved, evidence-led
 review before any broader cleanup.
 
+### Historical compiler target retirement (separate approval)
+
+`DEV.cmd run storage.retire-archive --expect-sha <Local-SHA> --approve
+storage.retire-archive` is a separately approved one-time operation, **not**
+automatic maintenance during everyday build/check. Its only possible
+compiler-clean destination is the fixed **old archived** Cargo target:
+`workspace/archive/compiler-cache-20261026/target`.
+
+The `archive-retire.mjs` owner first requires an ordinary archive parent
+containing only `target`, a recognized Cargo output layout, and a
+complete metadata scan without symlinks, junctions, hardlinks or unknown
+entries. The canonical replacement target
+`workspace/builds/desktop/target` must separately have a complete scan
+and nonempty Windows MSVC dependency output. If any admission fails,
+no cargo clean is invoked. An approved run calls only the pinned Cargo binary
+with the explicit `clean --locked --manifest-path ... --target-dir
+<archived target>` arguments and sets all Cargo build/output paths to that
+same retired archive. This does **not** invoke unscoped `cargo clean` on
+the live developer target, and it does not clean other archive folders,
+toolchains, registry, `App/`, `Data/`, private backups, or Minecraft worlds.
+
+If Cargo reports failure or the archived target remains nonempty, the outcome
+is `FAILED` or `PARTIAL`, never false success. A completed scoped clean is
+not proof of actual physical NTFS bytes reclaimed. The real archive layout,
+local Windows toolchain state and saved data must be observed before assuming
+this approved task will be eligible on the user's machine. Normal source
+builds retain incremental compilation and do not call this operation.
+
 ## Lazy Tester development, candidate and installed data
 
 There is one source tree. `Local` owns product development; `main` is reserved for

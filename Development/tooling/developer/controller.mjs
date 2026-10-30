@@ -9,6 +9,7 @@ export const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 const REGISTRY = resolve(dirname(fileURLToPath(import.meta.url)), 'tasks.json');
 const DEV_SCRIPT = join(REPO, 'Development/tooling/windows-toolchain/dev.ps1');
 const REPOSITORY_CHECK = join(REPO, 'Development/tooling/repository/check-structure.mjs');
+const ARCHIVE_RETIRE = join(REPO, 'Development/tooling/storage/archive-retire.mjs');
 const NODE_EXE = join(REPO, 'workspace/toolchains/node/node.exe');
 const PWSH_EXE = join(REPO, 'workspace/toolchains/powershell/pwsh.exe');
 const LOCK_FILE = join(REPO, 'workspace/tmp/developer-controller.lock');
@@ -28,6 +29,7 @@ const POLICY = Object.freeze({
   'dev': {risk:'interactive', approval:false},
   'package': {risk:'package-write', approval:true},
   'storage': {risk:'read', approval:false},
+  'retire-archive': {risk:'archive-write', approval:true},
   'bench:frontend': {risk:'build', approval:false},
   'bench:rust': {risk:'build', approval:false},
 });
@@ -62,9 +64,13 @@ export function classifyPath(path) {
   const clean=posix.normalize(path);
   if(clean!==path || clean==='..' || clean.startsWith('../') || path.startsWith('-')) return 'unknown';
   if(/^(?:Data|App|workspace|\.git)(?:\/|$)/i.test(path)) return 'protected';
+  // Build configuration and dependency graph edits can invalidate artifacts
+  // across both manifests and profiles; do not classify them as Rust-only.
+  if(/(?:^|\/)(?:Cargo\.toml|Cargo\.lock|build\.rs|rust-toolchain(?:\.toml)?)$/.test(path) ||
+     path.includes('/.cargo/config') || path.startsWith('.cargo/')) return 'unknown';
   if(path.startsWith('Development/tooling/acceptance/windows/bootstrap-ordering/')) return 'native';
-  if(path.startsWith('Development/apps/desktop/src-tauri/') ||
-     path.startsWith('Development/engine/runtime-core/')) return 'rust';
+  if(path.startsWith('Development/apps/desktop/src-tauri/src/') ||
+     path.startsWith('Development/engine/runtime-core/src/')) return 'rust';
   if(path.startsWith('Development/apps/desktop/src/') ||
      path.startsWith('Development/apps/desktop/test/')) return 'frontend';
   if(path.startsWith('docs/') || path.startsWith('planning/') ||
@@ -83,11 +89,14 @@ export function planForPaths(paths,revision) {
     taskIds:[],reason:'Protected application, account or workspace paths are not eligible for source-routing.'};
   if(kinds.length===0) return {status:'READY',sourceSha:revision,changedCount:0,
     scopes:[],taskIds:[],reason:'No changed source detected; do not rebuild just to create evidence.'};
-  if(kinds.length===1 && kinds[0]==='docs') return {status:'READY',sourceSha:revision,
+  // Documentation normally accompanies code changes and must not force a
+  // second unnecessary Rust dependency graph or full test suite.
+  const executableScopes=kinds.filter(scope=>scope!=='docs');
+  if(executableScopes.length===0) return {status:'READY',sourceSha:revision,
     changedCount:paths.length,scopes:kinds,taskIds:['repository.validate'],reason:'Documentation-only structural validation.'};
-  if(kinds.length===1 && kinds[0]==='frontend') return {status:'READY',sourceSha:revision,
-    changedCount:paths.length,scopes:kinds,taskIds:['frontend.validate'],reason:'Frontend-only validation; no Rust check.'};
-  if(kinds.length===1 && kinds[0]==='rust') return {status:'READY',sourceSha:revision,
+  if(executableScopes.length===1 && executableScopes[0]==='frontend') return {status:'READY',sourceSha:revision,
+    changedCount:paths.length,scopes:kinds,taskIds:['frontend.validate'],reason:'Frontend and documentation validation; no Rust check.'};
+  if(executableScopes.length===1 && executableScopes[0]==='rust') return {status:'READY',sourceSha:revision,
     changedCount:paths.length,scopes:kinds,taskIds:['rust.validate'],reason:'Scoped Rust check; full tests still required for candidate packaging.'};
   return {status:'READY',sourceSha:revision,changedCount:paths.length,scopes:kinds,
     taskIds:['source.validate'],reason:'Mixed, native, configuration or unknown source; use full verification. Native acceptance remains separate.'};
@@ -96,6 +105,7 @@ export function planForPaths(paths,revision) {
 export function legacyArgs(task) {
   if(!task || !Object.hasOwn(POLICY,task.command)) throw Error('Unregistered executor');
   if(task.command==='repository-structure') return {type:'node',args:[REPOSITORY_CHECK]};
+  if(task.command==='retire-archive') return {type:'node',args:[ARCHIVE_RETIRE]};
   const args=['-NoLogo','-NoProfile','-NonInteractive','-File',DEV_SCRIPT,task.command];
   if(task.command==='storage') args.push(task.mode);
   return {type:'pwsh',args};

@@ -44,8 +44,10 @@ The registry and bounded Node controller live at
 The default planning action reads changed tracked/untracked *source path
 metadata*, or the latest committed delta on a clean checkout, and proposes
 one documentation, frontend, Rust, or full-source check. `run auto` executes
-that **single** safe validation; `plan` itself never starts a task. Unknown, native,
-mixed and configuration changes take the full-source route; native DLL
+that **single** safe validation; `plan` itself never starts a task.
+Documentation accompanying only frontend or Rust code does not unnecessarily
+escalate it to the full suite. Cargo manifests, lockfiles, build scripts,
+mixed/native and unknown changes take the full-source route; native DLL
 acceptance and Windows/Minecraft tests remain separately unverified.
 No path or arbitrary command from user/AI input becomes a shell invocation.
 
@@ -127,7 +129,11 @@ lockfiles and the existing `CARGO_TARGET_DIR`. This aligns the
 It does not guarantee artifact reuse across different feature sets,
 Cargo profiles or build-script configurations and can require a one-time
 new compilation. The quick route deliberately skips `--all-targets` and
-Rust tests. The original full `verify:source` commands remain unchanged.
+Rust tests. The full `verify:source` composition is unchanged, while the desktop and
+runtime-core Cargo checks and tests now use the explicit Windows MSVC target
+consistently. This avoids a second host-default output layout for the supported
+Windows developer workflow; different Cargo features/profiles can still
+produce separate artifacts.
 This check is **not** a Windows game test, DLL build or packaging approval.
 No native Tauri feature/config policy is bypassed.
 
@@ -202,6 +208,14 @@ directories and singly linked files are revalidated before removal.
 Unknown/modified files block retention. Partial cleanup is reported
 separately and never includes the active Cargo target, historical archive,
 toolchains, App/Data or private backups. `storage plan` stays read-only.
+
+Separately, `storage.retire-archive` is an **approval-gated** task which
+invokes pinned Cargo `clean --target-dir` only for
+`workspace/archive/compiler-cache-20261026/target`. It requires a complete
+read-only scan, recognized Cargo layout without links or hardlinks, and a
+populated canonical Windows MSVC replacement target. Unknown or partial
+archives are preserved. This never runs against the active target and does
+not establish physically reclaimed NTFS bytes. No generic cleaner is exposed.
 
 GitHub Actions is **disabled entirely** on `Local` and `main`.
 No push, manual, scheduled, PR, package or deployment workflows are allowed

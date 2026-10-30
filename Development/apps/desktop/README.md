@@ -61,6 +61,12 @@ npm run verify:source
 ```
 
 `npm run dev:app` uses the current Lazy Tester native configuration.
+Full Cargo checks and tests for desktop and runtime-core use the
+`x86_64-pc-windows-msvc` target, consistent with the scoped Windows developer
+check and Tauri development layout. This reduces duplicate host-default
+cache trees, but different feature sets and profiles can still have separate
+compiled artifacts; no active `cargo clean` is implied.
+
 Node/Vitest/Svelte verification does not prove Windows app integration or
 Minecraft Education playability. Installed signing, Windows desktop
 acceptance, and five-client gameplay remain separate evidence gates.

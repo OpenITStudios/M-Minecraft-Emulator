@@ -7,6 +7,9 @@ export const CARGO_ROOTS = Object.freeze([
   {name:'Active desktop Cargo target', path:'workspace/builds/desktop/target'},
   {name:'Legacy desktop Cargo target', path:'Development/apps/desktop/src-tauri/target'},
   {name:'Legacy runtime-core Cargo target', path:'Development/engine/runtime-core/target'},
+  // Archived old compiler outputs are separate from the live shared build
+  // directory. This metadata-only scan never makes them deletion-eligible.
+  {name:'Retired compiler archive target', path:'workspace/archive/compiler-cache-20261026/target'},
 ]);
 const WIN_TARGET = 'x86_64-pc-windows-msvc';
 const COMPONENTS = new Set(['deps','incremental','build','.fingerprint','examples','bundle']);

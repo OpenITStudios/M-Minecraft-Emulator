@@ -96,6 +96,12 @@
       "scope": "storage"
     },
     {
+      "id": "storage.retire-archive",
+      "description": "Retire only the reviewed historical Cargo target with scoped cargo clean (explicit approval; never active cache)",
+      "command": "retire-archive",
+      "scope": "storage"
+    },
+    {
       "id": "benchmark.frontend",
       "description": "Two cache-preserving frontend verification timings",
       "command": "bench:frontend",

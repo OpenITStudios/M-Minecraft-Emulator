@@ -154,7 +154,10 @@ test('scoped frontend and native source checks avoid accidental full verificatio
   assert.ok(desktopScripts['check:rust:target'].includes('cargo check --locked --target x86_64-pc-windows-msvc'));
   assert.ok(desktopScripts['check:rust:target'].includes('prepare:icons'));
   assert.ok(!desktopScripts['check:rust:target'].includes('--all-targets'));
-  assert.ok(desktopScripts['check:rust'].includes('cargo check --all-targets --locked'));
+  assert.ok(desktopScripts['check:rust'].includes('cargo check --all-targets --locked --target x86_64-pc-windows-msvc'));
+  assert.ok(desktopScripts['test:rust'].includes('cargo test --all-targets --locked --target x86_64-pc-windows-msvc'));
+  assert.ok(rootScripts['check:runtime'].includes('cargo check --locked --all-targets --target x86_64-pc-windows-msvc'));
+  assert.ok(rootScripts['test:runtime'].includes('cargo test --locked --all-targets --target x86_64-pc-windows-msvc'));
   assert.ok(rootScripts['verify:source'].includes('npm run check:desktop'));
   assert.ok(desktopScripts['verify:source'].includes('npm run build:frontend'));
   assert.ok(desktopScripts['verify:source'].includes('npm run test:rust'));
