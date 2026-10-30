@@ -1,5 +1,15 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — Cargo target guard regression assertions (30 October 2026)
+
+**State:** DONE for test-source correction; complete pinned Node/Windows test execution NOT_EXECUTED.
+**Decision:** After the prior Cargo build-root hardening, two existing `portable.test.mjs` assertions still searched for an obsolete single-variable `CARGO_TARGET_DIR` check and exact error text. Replace only those assertions with a contract for the existing shared loop over `CARGO_TARGET_DIR`, `CARGO_BUILD_TARGET_DIR`, and `CARGO_BUILD_BUILD_DIR`, including canonical path rejection and variable-specific refusal. Preserve the actual `local-env.ps1` behavior, source checks, packaging, active cache, accounts, worlds, and CI-disabled policy.
+**Proof:** REMOTE_GITHUB pinned HEAD `a4bf71e943bc88699e45050fceb65dc4845bda0d`: old assertion patterns both failed against the checked-in PowerShell source, new patterns match. Isolated read-only JavaScript contract checks against exact GitHub source: 15/15 PASS. The full pinned Node.js/PowerShell integration suites were NOT_EXECUTED.
+**Unresolved:** Windows execution, Cargo build performance and actual 60 GB storage distribution are still UNKNOWN. A corrected authored test is not an executed test.
+**Next:** Verify the pinned local-test suite in a compatible execution environment and obtain read-only Windows storage/benchmark evidence before any cache deletion proposal.
+
+---
+
 ## Current product work — Cargo build root hardening and per-pass disk evidence (30 October 2026)
 
 **State:** DONE for bounded source implementation; pinned Windows/PowerShell, Rust/Tauri and real storage data NOT_EXECUTED.

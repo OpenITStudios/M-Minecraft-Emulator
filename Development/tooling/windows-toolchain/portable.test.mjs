@@ -95,8 +95,12 @@ test('developer storage route supports report, explain, and non-destructive rete
 
 test('developer Cargo target directory is canonical and refuses ambient overrides', () => {
   assert.match(environment,/\$canonicalCargoTarget = \[IO\.Path\]::GetFullPath/);
-  assert.match(environment,/\$env:CARGO_TARGET_DIR\) -ine \$canonicalCargoTarget/);
-  assert.match(environment,/external CARGO_TARGET_DIR overrides are refused/);
+  // Cargo 1.99 checks three inherited path settings through one shared guard.
+  // Pin the complete set and the exact validation/error path rather than
+  // expecting the retired single-variable check.
+  assert.match(environment,/foreach \(\$overrideName in @\('CARGO_TARGET_DIR','CARGO_BUILD_TARGET_DIR','CARGO_BUILD_BUILD_DIR'\)\)/);
+  assert.match(environment,/\[IO\.Path\]::GetFullPath\(\$overrideValue\) -ine \$canonicalCargoTarget/);
+  assert.match(environment,/external \$overrideName overrides are refused/);
   assert.match(environment,/\[IO\.FileAttributes\]::ReparsePoint/);
   assert.match(environment,/\$env:CARGO_TARGET_DIR = \$canonicalCargoTarget/);
   assert.match(environment,/\$env:CARGO_BUILD_TARGET_DIR = \$canonicalCargoTarget/);
