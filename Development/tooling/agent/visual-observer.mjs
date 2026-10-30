@@ -63,8 +63,11 @@ export function createVisualObserver({
   schedule=(task,ms)=>setTimeout(task,ms),
   cancel=clearTimeout,
   sourceLabel='BOUNDED_CUA_WINDOW_SNAPSHOTS',
+  onFinish=()=>{},
 }={}) {
-  if (typeof capture!=='function') throw new TypeError('A verified capture function is required');
+  if (typeof capture!=='function' || typeof onFinish!=='function') {
+    throw new TypeError('A verified capture and cleanup callback are required');
+  }
   const sessions=new Map();
   let sampling=false;
   let closed=false;
@@ -76,6 +79,7 @@ export function createVisualObserver({
     }
   }
   function finish(state,status) {
+    if (!state.active) return;
     state.active=false;
     clearTimer(state);
     state.status=status;
@@ -83,6 +87,9 @@ export function createVisualObserver({
     state.lastHash=null;
     state.identity=null;
     state.nextDueAt=null;
+    // A native GPU producer is a separate read-only child. Revoke it as soon
+    // as the corresponding observer expires, loses HWND, or becomes unhealthy.
+    try {onFinish(state.slot,status);} catch {/* never keep stale pixels */ }
     // Keep bounded counters (not pixels), even when stopped/expired.
   }
   function arm(state,delay) {

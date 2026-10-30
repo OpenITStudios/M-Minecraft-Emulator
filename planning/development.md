@@ -304,6 +304,9 @@ explicit operator permission before any runtime test or installed changes.
   remains available; all GPU workers require an explicitly configured
   binary and a native controller verification for each selected slot.
   On partial start failure, workers from that request are stopped.
+  When a visual slot terminates (expiry, replaced HWND, repeated errors,
+  user stop), its native GPU worker is explicitly killed and its PNG cache
+  discarded; merely expiring the MCP sampler cannot leave the producer live.
 - Source-level tests authored for frame protocol, worker lifecycle and
   MCP target/MC01 protection. No new UI, internet server, game input,
   world/login automation, CI, dependency tree in the native Tauri app or

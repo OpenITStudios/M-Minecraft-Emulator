@@ -179,7 +179,7 @@ export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT)
 }
 
 export const TOOL_LIST=[
-  {name:'start_visual_observation',description:'Start a time-limited LOCAL read-only frame sampler for 1-5 AI-owned Minecraft windows. No continuous images are sent to the model and no gameplay inputs occur.',inputSchema:{type:'object',properties:{slots:{type:'array',minItems:1,maxItems:5,uniqueItems:true,items:{type:'integer',minimum:1,maximum:5}},intervalMs:{type:'integer',minimum:750,maximum:5000},durationMs:{type:'integer',minimum:5000,maximum:90000}},required:['slots'],additionalProperties:false}},
+  {name:'start_visual_observation',description:'Start a time-limited LOCAL read-only frame sampler for 1-5 AI-owned Minecraft windows. No continuous images are sent to the model and no gameplay inputs occur.',inputSchema:{type:'object',properties:{slots:{type:'array',minItems:1,maxItems:5,uniqueItems:true,items:{type:'integer',minimum:1,maximum:5}},intervalMs:{type:'integer',minimum:400,maximum:5000},durationMs:{type:'integer',minimum:5000,maximum:90000}},required:['slots'],additionalProperties:false}},
   {name:'read_visual_observation',description:'Retrieve only a NEW locally cached frame (and status), or metadata without pixels. Never triggers a screenshot itself.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},afterSequence:{type:'integer',minimum:0},includeImage:{type:'boolean'}},required:['slot'],additionalProperties:false}},
   {name:'stop_visual_observation',description:'Stop one or more bounded visual samplers and immediately drop their in-memory image caches.',inputSchema:{type:'object',properties:{slots:{type:'array',minItems:1,maxItems:5,uniqueItems:true,items:{type:'integer',minimum:1,maximum:5}}},required:['slots'],additionalProperties:false}},
   {name:'observe_client',description:'Read-only screenshot of one AI-owned native Minecraft window via an explicitly configured Cua Driver daemon; rejects a replaced or stale window, never takes foreground or sends input.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
@@ -265,6 +265,7 @@ export function createHandler(config,{
   const visualObserver=createVisualObserver({
     capture:captureVerifiedFrame,
     sourceLabel:gpuSource?'PERSISTENT_WGC_GPU_FRAME_SOURCE':'BOUNDED_CUA_WINDOW_SNAPSHOTS',
+    onFinish:(slot)=>gpuSource?.stop([slot]),
   });
   function checkedSlots(slots) {
     if (!Array.isArray(slots) || slots.length<1 || slots.length>5 ||

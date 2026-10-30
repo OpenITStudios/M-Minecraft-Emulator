@@ -27,6 +27,19 @@ function frame(slot,sha='a'.repeat(64),windowId=102) {
     imageBase64:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC' };
 }
 
+test('finishing a failed/expired visual slot calls its capture-worker cleanup once',async()=>{
+  const t=clockFixture();
+  const finished=[];
+  const observer=createVisualObserver({...t,capture:async slot=>frame(slot),
+    onFinish:(slot,reason)=>finished.push([slot,reason])});
+  observer.start([2],{durationMs:5000});
+  await t.next();
+  observer.stop([2]);
+  observer.stop([2]);
+  assert.deepEqual(finished,[[2,'STOPPED_BY_REQUEST']]);
+  observer.shutdown();
+});
+
 test('one local sampler retains a frame but only delivers it upon a read',async()=>{
   const t=clockFixture();
   const calls=[];

@@ -141,7 +141,8 @@ the standalone worker is not packaged or installed. Native graphics consent,
 Windows capture border, frame availability when Minecraft is backgrounded,
 memory/FPS cost and multi-client behavior remain UNKNOWN. No fallback to
 a desktop-wide screenshot, global SendInput, native injection, or gameplay
-script exists. The worker terminates on stop, expiry, error and MCP shutdown.
+script exists. The worker terminates on stop, expiry, changed target, repeated observer
+errors and MCP shutdown; it is not kept alive after an observer finishes.
 
 All local tests, compiler runs, packaging and game execution remain prohibited
 until separate operator approval.
