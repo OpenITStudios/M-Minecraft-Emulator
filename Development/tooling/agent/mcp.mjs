@@ -9,6 +9,7 @@ import readline from 'node:readline';
 import {promisify} from 'node:util';
 import {planPeerSession,planPlayerActions} from './control-plan.mjs';
 import {summarizeGameEvidence,normalizeEvidenceSlots} from './evidence-summary.mjs';
+import {captureCuaWindow,validateCuaExecutable} from './visual-capture.mjs';
 
 const execFileAsync = promisify(execFile);
 const REQUEST_LIMIT = 64 * 1024;
@@ -21,15 +22,17 @@ export function parseConfiguration(argv, env = process.env) {
   let mode = 'human-plus-four-ai';
   let executable = env.LAZY_TESTER_AGENT_EXE ?? '';
   let evidenceDirectory = env.LAZY_TESTER_EVIDENCE_DIR ?? '';
+  let cuaExecutable = env.LAZY_TESTER_CUA_EXE ?? '';
   for (let i=0;i<argv.length;i++) {
     const flag=argv[i];
-    if (!['--mode','--exe','--evidence-dir'].includes(flag) || i===argv.length-1) {
-      throw new Error('Accepted arguments: --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>]');
+    if (!['--mode','--exe','--evidence-dir','--cua-exe'].includes(flag) || i===argv.length-1) {
+      throw new Error('Accepted arguments: --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>] [--cua-exe <cua-driver.exe>]');
     }
     const value=argv[++i];
     if (flag==='--mode') mode=value;
     if (flag==='--exe') executable=value;
     if (flag==='--evidence-dir') evidenceDirectory=value;
+    if (flag==='--cua-exe') cuaExecutable=value;
   }
   if (!['human-plus-four-ai','five-ai'].includes(mode)) throw new Error('Unknown test mode');
   if (executable && (!path.isAbsolute(executable) || !/\.exe$/i.test(executable))) {
@@ -38,7 +41,8 @@ export function parseConfiguration(argv, env = process.env) {
   if (evidenceDirectory && !path.isAbsolute(evidenceDirectory)) {
     throw new Error('Evidence directory must be absolute');
   }
-  return Object.freeze({mode, executable, evidenceDirectory});
+  if (cuaExecutable) validateCuaExecutable(cuaExecutable);
+  return Object.freeze({mode, executable, evidenceDirectory, cuaExecutable});
 }
 
 function slotOf(value) {
@@ -169,6 +173,7 @@ export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT)
 }
 
 export const TOOL_LIST=[
+  {name:'observe_client',description:'Read-only screenshot of one AI-owned native Minecraft window via an explicitly configured Cua Driver daemon; rejects a replaced or stale window, never takes foreground or sends input.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
   {name:'get_computer_use_target',description:'Resolve one AI-owned native Minecraft PID/HWND for read-only Cua Driver window capture without switching Windows focus. Does NOT capture pixels or control game input.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
   {name:'revalidate_computer_use_target',description:'Check a previously resolved exact PID/HWND/birth identity against current retained-controller observation. Never silently retarget another game.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},pid:{type:'integer',minimum:1},windowId:{type:'integer',minimum:1},createdFileTime:{type:'string',pattern:'^[0-9]{1,20}$'}},required:['slot','pid','windowId','createdFileTime'],additionalProperties:false}},
   {name:'get_test_context',description:'One bounded read-only handoff with current five native profiles, peer-host guidance and relevant game evidence. No game control or world success is inferred.',inputSchema:{type:'object',properties:{slots:{type:'array',items:{type:'integer',minimum:1,maximum:5},minItems:1,maxItems:5,uniqueItems:true}},additionalProperties:false}},
@@ -183,13 +188,59 @@ export const TOOL_LIST=[
 
 function capabilities(mode) {return {schema:1,mode,hostSlot:1,humanSlots:mode==='human-plus-four-ai'?[1]:[],
   aiSlots:mode==='human-plus-four-ai'?[2,3,4,5]:[1,2,3,4,5],
-  available:['get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions','summarize_test_evidence'],
-  notAvailable:['parallel_independent_keyboard_mouse','automatic_world_host_join','send_minecraft_command','per_client_screen_capture'],
+  available:['observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions','summarize_test_evidence'],
+  notAvailable:['parallel_independent_keyboard_mouse','automatic_world_host_join','send_minecraft_command'],
+  visualCapture:'OPTIONAL_CUA_PROVIDER_RUNTIME_UNVERIFIED',
   note:'MCP tools control the native session owner and read evidence; they do NOT independently move multiple background Minecraft clients.'};}
 
-export function createHandler(config,{native=runNative,evidence=readGameEvidence}={}) {
+export function createHandler(config,{native=runNative,evidence=readGameEvidence,capture=captureCuaWindow}={}) {
   let inFlight=false;
   async function callTool(name,args) {
+    if (name==='observe_client') {
+      keysExactly(args,['slot']);
+      const slot=slotOf(args.slot);
+      if (config.mode==='human-plus-four-ai' && slot===1) {
+        throw new Error('MC01 human host is protected from AI computer-use observation');
+      }
+      if (!config.cuaExecutable) {
+        throw new Error('Cua visual provider is NOT_CONFIGURED; set --cua-exe explicitly');
+      }
+      if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
+      inFlight=true;
+      try {
+        const before=validateNativeWindowTarget(
+          await native(config.executable,'target',slot),slot);
+        const frame=await capture(config.cuaExecutable,before);
+        const after=validateNativeWindowTarget(
+          await native(config.executable,'target',slot),slot);
+        if (before.pid!==after.pid || before.windowId!==after.windowId ||
+            before.createdFileTime!==after.createdFileTime ||
+            before.sessionId!==after.sessionId) {
+          throw new Error('Minecraft window changed during capture; screenshot discarded');
+        }
+        if (!frame || frame.mimeType!=='image/png' ||
+            typeof frame.imageBase64!=='string' ||
+            !Number.isInteger(frame.width) || !Number.isInteger(frame.height) ||
+            frame.width<1 || frame.height<1) {
+          throw new Error('Cua did not produce a usable PNG frame');
+        }
+        return {
+          metadata:{
+            schema:1,slot,mode:config.mode,
+            provider:'CUA_DRIVER_WINDOW_CAPTURE',
+            observedWindow:{pid:after.pid,windowId:after.windowId},
+            width:frame.width,height:frame.height,
+            sha256:frame.sha256??null,
+            frameFreshness:'UNVERIFIED_SINGLE_FRAME',
+            background:!before.foreground && !after.foreground,
+            screenshotStatus:'PNG_RETURNED_NOT_GAMEPLAY_PROOF',
+            gameInput:'BACKGROUND_MINECRAFT_INPUT_UNVERIFIED',
+            note:'Pixels may be stale, blank, or unrepresentative of gameplay. Captures do not prove player login or peer-to-peer join.',
+          },
+          imageBase64:frame.imageBase64,
+        };
+      } finally {inFlight=false;}
+    }
     if (name==='get_computer_use_target' ||
         name==='revalidate_computer_use_target') {
       keysExactly(args,name==='get_computer_use_target' ?
@@ -301,6 +352,13 @@ export function createHandler(config,{native=runNative,evidence=readGameEvidence
         if (typeof name!=='string') return err(-32602,'Tool name is required');
         try {
           const data=await callTool(name,message.params?.arguments??{});
+          if (name==='observe_client') {
+            // A real MCP image block, not JSON containing arbitrary image text.
+            return result({content:[
+              {type:'text',text:JSON.stringify(data.metadata)},
+              {type:'image',mimeType:'image/png',data:data.imageBase64},
+            ],isError:false});
+          }
           return result({content:[{type:'text',text:JSON.stringify(data)}],isError:false});
         } catch(error) {
           return result({content:[{type:'text',text:error.message??'Tool unavailable'}],isError:true});

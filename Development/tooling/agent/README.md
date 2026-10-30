@@ -4,7 +4,7 @@ The bridge exists for **Minecraft Education peer-to-peer client testing** using 
 
 ## Exactly what works in source
 
-- A local **stdio MCP** server in `mcp.mjs` exposes four tools: `agent_capabilities`, `inspect_profiles`, `launch_profile`, and `read_game_evidence`.
+- A local **stdio MCP** server in `mcp.mjs` exposes profile, Computer Use target, optional read-only visual observation, peer planning, and gameplay evidence tools.
 - `inspect_profiles`/`launch_profile` delegate to the **same packaged `lazy-tester.exe`** under `--lazy-tester-agent-cli` which calls the existing authenticated native session controller. A returned `RUNNING` process observation does not prove the game is logged in, has joined a world, or accepts input.
 - Evidence tools read completed `[ANALYTICS]` and `[GAME_RESULTS]` JSON lines from the existing `minecraft-bedrock-agent-skills` debug capture script's per-client output. No new debugger listener or protocol is implemented. File-to-MC slot mapping is **manual and unverified** until connected to an observed player/world identity.
 - Two modes: `human-plus-four-ai` reserves MC01 for the human host (default); `five-ai` permits MC01 launch as an AI-controlled slot. MCP tools do not give the AI any new right to interact with the protected human's keyboard or window.
@@ -71,6 +71,46 @@ Official API basis:
 - https://cua.ai/docs/cua-driver/concepts/how-cua-driver-works
 - https://cua.ai/docs/cua-driver/reference/mcp-tools/apps-windows-and-screen
 - https://learn.microsoft.com/windows/win32/api/windows.graphics.capture.interop/nf-windows-graphics-capture-interop-igraphicscaptureiteminterop-createforwindow
+
+## Phase 2: read-only visual observation via Cua Driver (source only)
+
+An optional **`observe_client({slot})`** MCP tool produces one
+`image/png` content block and compact metadata after selecting the exact
+AI-owned Minecraft window via the retained native controller. This uses
+the already documented Cua Driver read-only CLI, avoiding a new WinRT/D3D
+capture engine and avoiding any input/control into Minecraft.
+
+To enable this *after separate operator authorization for installation and
+runtime acceptance*, add `--cua-exe` with the absolute path to an ordinary
+`cua-driver.exe`, for example `C:\\Tools\\cua-driver.exe` (example
+path only, not a claim about the installed location). A separately installed
+Cua Driver daemon must already be running; this bridge never starts it.
+
+`observe_client` performs:
+1. Resolve the current exact PID/HWND/birth/session for the AI-owned slot.
+2. Call **only** `cua-driver call get_window_state` with explicit
+   `pid` and `window_id`, screenshot enabled and accessibility walk
+   disabled; use Cua's documented `--screenshot-out-file` option.
+3. Read one PNG capped at 1280 px long edge (strict absolute limit 1536 px
+   and 6 MiB); erase the temporary file before returning the MCP image.
+4. Resolve the exact target again. Reject the frame if PID/HWND/birth/session
+   changed. Missing Cua, minimized/stale windows, missing frames and unexpected
+   image data fail closed; no desktop-wide fallback or foreground switch.
+
+MC01 remains protected in `human-plus-four-ai`; `five-ai` may observe
+MC01. One capture is **not proof of a live frame or successful gameplay**;
+stale, black or unobtainable game frames must be reported as uncertainty.
+No keyboard, mouse, cursor overlay, computer-use action, world mutation, or
+automated agent scheduler is introduced. Cua's read-only CLI must be
+reviewed and accepted on the eventual Windows installation, and capturing
+a game-specific GPU window is still `NOT_EXECUTED`.
+
+The PNG is stored only temporarily while servicing the request, not in a
+world, credential/profile folder or Git repository. An abrupt process
+termination could leave a temporary file for the operator to clean later.
+Only code is committed; no user screenshots are collected now.
+
+Cua CLI reference: https://cua.ai/docs/cua-driver/reference/cli/serve-and-configure
 
 ## One-call AI test context
 

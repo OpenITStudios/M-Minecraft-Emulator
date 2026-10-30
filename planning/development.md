@@ -242,6 +242,28 @@ authorized.
 query correctness, Cua window capture and multi-client background input
 NOT_EXECUTED / NOT_VERIFIED.
 
+## Windows Computer Use Phase 2 — read-only screenshot MCP (source only)
+
+- Added optional `observe_client` to the existing local stdio MCP. It
+  resolves the native owned Minecraft HWND for MC01–MC05, calls an explicitly
+  configured external Cua Driver **read-only** `get_window_state` CLI to
+  obtain a bounded per-window PNG, then rechecks exact process birth/window/
+  session identity before returning an MCP image content block.
+- The optional Cua daemon is never installed, started, or granted global
+  input automatically. No extra game controller, login owner, agent daemon,
+  video recorder, WinRT graphics dependency, or native game injection added.
+- Hybrid mode refuses MC01; image reads are bounded to one window. Temporary
+  capture is cleaned on normal exit. A valid PNG is *not* evidence of a fresh
+  rendered Minecraft gameplay frame, world join or functioning background
+  input; the system reports those separately as unverified.
+- Authored one visual-capture source test and extended existing MCP source
+  fixtures for human protection and screenshot rejection on changed HWND.
+  **No test, build, install, local computer or Minecraft execution** was
+  performed per current operator instruction.
+
+**Proof ceiling:** REMOTE_GITHUB source review only; Cua capture integration,
+Windows live game pixels and parallel game input NOT_EXECUTED/UNVERIFIED.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,

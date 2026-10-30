@@ -14,6 +14,9 @@ test('modes, absolute paths, no implicit native permissions',()=>{
   assert.throws(()=>parseConfiguration(['--mode','random']));
   assert.throws(()=>parseConfiguration(['--evidence-dir','relative']));
   assert.throws(()=>parseConfiguration(['--exe','./lazy-tester.exe']));
+  assert.throws(()=>parseConfiguration(['--cua-exe','./cua-driver.exe']));
+  assert.equal(parseConfiguration(['--cua-exe',path.resolve('cua-driver.exe')])
+    .cuaExecutable,path.resolve('cua-driver.exe'));
 });
 
 test('MCP handshake and tool discovery are standard JSON-RPC',async()=>{
@@ -21,7 +24,7 @@ test('MCP handshake and tool discovery are standard JSON-RPC',async()=>{
   const init=await h.handle({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-11-25'}});
   assert.equal(init.result.protocolVersion,'2025-11-25');
   const listing=await h.handle({jsonrpc:'2.0',id:2,method:'tools/list'});
-  assert.deepEqual(listing.result.tools.map(x=>x.name),['get_computer_use_target','revalidate_computer_use_target','get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','summarize_test_evidence','read_game_evidence']);
+  assert.deepEqual(listing.result.tools.map(x=>x.name),['observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','summarize_test_evidence','read_game_evidence']);
   assert.equal(await h.handle({jsonrpc:'2.0',method:'notifications/initialized'}),null);
 });
 
@@ -36,6 +39,53 @@ test('hybrid mode refuses to launch human MC01, no native request sent',async()=
   assert.deepEqual(calls.map(x=>x.slice(1)),[['launch',2]]);
   const full=createHandler(config('five-ai'),{native:async(...args)=>{calls.push(args);return snapshot(args[1]);}});
   assert.equal((await full.callTool('launch_profile',{slot:1})).operation,'launch');
+});
+
+test('observe_client emits a bounded MCP image only after exact identity recheck',async()=>{
+  const calls=[];
+  let same=true;
+  const native=async(_exe,op,slot)=>{
+    calls.push(['native',op,slot]);
+    return {schema:1,ok:true,operation:'target',slot,pid:400+slot,
+      windowId:same?1000+slot:9000+slot,
+      createdFileTime:'134000000000000001',sessionId:1,
+      foreground:false,visible:true,minimized:false,
+      verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',gameplayInput:'NOT_VERIFIED'};
+  };
+  const capture=async(exe,target)=>{
+    calls.push(['capture',exe,target.pid]);
+    return {mimeType:'image/png',imageBase64:'iVBORw0KGgo=',
+      width:800,height:600,sha256:'f'.repeat(64)};
+  };
+  const cfg={...config(),cuaExecutable:path.resolve('cua-driver.exe')};
+  const h=createHandler(cfg,{native,capture});
+  await assert.rejects(()=>h.callTool('observe_client',{slot:1}),/human host/);
+  assert.equal(calls.length,0);
+  const response=await h.handle({jsonrpc:'2.0',id:11,method:'tools/call',
+    params:{name:'observe_client',arguments:{slot:2}}});
+  assert.equal(response.result.isError,false);
+  assert.equal(response.result.content[0].type,'text');
+  assert.equal(response.result.content[1].type,'image');
+  assert.equal(response.result.content[1].mimeType,'image/png');
+  assert.equal(JSON.parse(response.result.content[0].text).background,true);
+  assert.deepEqual(calls.map(x=>x[0]),['native','capture','native']);
+  same=false;
+  // Reuse one capture stub but change the HWND on the second native check.
+  let reads=0;
+  const changed=createHandler(cfg,{native:async(...args)=>{
+    reads++;same=reads===1;return native(...args);
+  },capture});
+  const rejected=await changed.handle({jsonrpc:'2.0',id:12,method:'tools/call',
+    params:{name:'observe_client',arguments:{slot:2}}});
+  assert.equal(rejected.result.isError,true);
+  assert.equal(rejected.result.content.some(c=>c.type==='image'),false);
+});
+
+test('observe_client refuses an unconfigured provider without calling native',async()=>{
+  let called=0;
+  const h=createHandler(config(),{native:async()=>{called++;throw Error('unexpected');}});
+  await assert.rejects(()=>h.callTool('observe_client',{slot:2}),/NOT_CONFIGURED/);
+  assert.equal(called,0);
 });
 
 test('AI computer-use target resolves exact window without touching human MC01',async()=>{
