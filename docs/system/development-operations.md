@@ -111,15 +111,30 @@ DEV.cmd dev
 DEV.cmd package
 ```
 
-`doctor` checks developer toolchain only. `preflight` checks a clean committed `Local` SHA, installed tool versions and committed lockfiles, performs `npm --prefix Development run setup` and `npm --prefix Development run verify:source`, then confirms the checkout remains unchanged. It does **not** test Microsoft licensing, Sandboxie, Windows gameplay, VM state or installer preservation.
+`doctor` checks developer toolchain only. `preflight` requires a clean
+committed `Local` SHA, pinned tool versions and committed lockfiles. Before
+full `verify:source`, it checks `package.json` against the committed npm
+lockfile with the existing metadata verifier, checks the actual installed
+dependency graph using pinned `npm ls --all --offline`, and confirms the
+required CLI launchers are present. **Only when the installed dependency
+tree is missing or inconsistent** does it run the existing locked
+`npm ci` setup. This avoids deleting and reinstalling `node_modules`
+on every preflight. A linked or unexpected dependency root is refused,
+not overwritten. `DEV.cmd setup` remains the explicit unconditional
+clean-install route. Dependency reuse is not a cryptographic content audit:
+the full source checks still run, and no test is presumed successful.
+`preflight` confirms source cleanliness again afterwards; it does
+**not** test Minecraft sign-in, Windows gameplay, VMware/Sandboxie,
+installed application acceptance or installer preservation.
 
 ## Scoped developer checks and timing
 
 Daily UI/TypeScript changes can use `DEV.cmd check:frontend`, which delegates
 to the existing Svelte typecheck and Vitest suites. It **does not** run Rust
-checks, Tauri, Vite release build, installer packaging or Minecraft. The
-original full `DEV.cmd check` and `DEV.cmd preflight` are unchanged and
-still required when claiming a complete source checkpoint.
+checks, Tauri, Vite release build, installer packaging or Minecraft. The full `DEV.cmd check` verification scope remains intact, as does the
+`DEV.cmd preflight` source acceptance scope; only redundant npm dependency
+reinstallation is avoided when the existing installation passes its
+readiness checks.
 
 Rust changes can use `DEV.cmd check:rust`; it delegates to the
 desktop `check:rust:target` and standalone `runtime-core` Cargo check

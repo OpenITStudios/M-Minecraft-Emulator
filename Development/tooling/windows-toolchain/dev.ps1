@@ -242,9 +242,76 @@ function Assert-BuiltWindowsPackage {
 }
 
 
-# Active native + Sandboxie pilot: one read-only source checkpoint, not the
-# intentionally blocked legacy VMware G0 packaging route. Installs only locked
-# developer dependencies and produces ordinary ignored build artifacts.
+# Prefer an already-correct npm dependency tree to repeatedly running npm ci.
+# npm ci removes node_modules first, so preflight must only reinstall when the
+# locked installation is absent or can no longer be verified.
+# The explicit DEV.cmd setup command still always performs a clean install.
+function Ensure-DesktopNpmDependencies {
+    # An invalid npm ls tree is an expected nonzero result, not a fatal
+    # PowerShell NativeCommandExitException; inspect LASTEXITCODE explicitly.
+    $PSNativeCommandUseErrorActionPreference = $false
+    $desktop = Join-Path $DevelopmentRoot 'apps/desktop'
+    $modules = Join-Path $desktop 'node_modules'
+    $binDir = Join-Path $modules '.bin'
+    $node = Join-Path $Root 'workspace/toolchains/node/node.exe'
+    $lockCheck = Join-Path $DevelopmentRoot 'tooling/repository/check-dependency-lock.mjs'
+
+    # A linked node_modules or .bin path is not an install/cleanup candidate.
+    # Do not let npm ci replace or traverse unknown filesystem owners.
+    foreach ($directory in @($modules, $binDir)) {
+        if (Test-Path -LiteralPath $directory) {
+            $item = Get-Item -LiteralPath $directory -Force -ErrorAction Stop
+            if (-not $item.PSIsContainer -or
+                ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                throw "Desktop dependency path is not an ordinary project-local directory: $directory"
+            }
+        }
+    }
+
+    # Prove that the declared package graph matches the committed lock before
+    # considering either reuse or a potentially destructive npm ci.
+    & $node $lockCheck *> $null
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Desktop package.json and package-lock.json do not agree; refuse npm ci.'
+    }
+
+    $ready = $false
+    if (Test-Path -LiteralPath $modules -PathType Container) {
+        $ready = Test-Path -LiteralPath $binDir -PathType Container
+        if ($ready) {
+            # These actual launchers are needed by the existing source workflow.
+            foreach ($name in @('vite.cmd','vitest.cmd','svelte-check.cmd','tauri.cmd','tsc.cmd')) {
+                $file = Join-Path $binDir $name
+                if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+                    $ready = $false
+                    break
+                }
+                $info = Get-Item -LiteralPath $file -Force -ErrorAction Stop
+                if (($info.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+                    $info.PSIsContainer) {
+                    throw "Desktop dependency launcher is linked or invalid: $file"
+                }
+            }
+        }
+        if ($ready) {
+            # npm ls checks the *installed tree*; --package-lock-only is
+            # intentionally forbidden. Offline prevents registry/network work.
+            & $LocalNpm --prefix apps/desktop ls --all --offline --include=dev --include=optional --include=peer --parseable *> $null
+            $ready = ($LASTEXITCODE -eq 0)
+        }
+    }
+
+    if ($ready) {
+        Write-Host 'Desktop dependencies match the locked installed tree; reusing node_modules (no npm ci).'
+        return
+    }
+    Write-Host 'Desktop dependencies missing or inconsistent; installing from the committed lock...'
+    Invoke-RepositoryNpm -NpmArguments @('run','setup')
+}
+
+# Native Lazy Tester source preflight: preserve the blocked legacy G0 path.
+# Reuse a verified installed npm tree; reinstall only the locked dependencies
+# when missing/invalid. The full source checks are unchanged.
 function Invoke-NativeSourcePreflight {
     Write-Host "[1/4] Checking Windows x64 and clean committed Local HEAD..."
     Assert-NativePilotHost
@@ -267,8 +334,8 @@ function Invoke-NativeSourcePreflight {
     Write-Host "Local-test record: $(Join-Path $recordDir 'manifest.json')"
     $stage = "setup"
     try {
-        Write-Host "[3/4] Installing locked developer npm dependencies..."
-        Invoke-RepositoryNpm -NpmArguments @("run", "setup")
+        Write-Host "[3/4] Checking/reusing locked developer npm dependencies..."
+        Ensure-DesktopNpmDependencies
         $stage = "verify-source"
         Write-Host "[4/4] Executing all source checks, without packaging or launching games..."
         Invoke-RepositoryNpm -NpmArguments @("run", "verify:source")

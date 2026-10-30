@@ -1,5 +1,20 @@
 # Current Development Handoff — Lazy Tester
 
+## Active source implementation — reusing installed npm dependencies (30 October 2026)
+
+**State:** SOURCE UPDATED; full test execution intentionally deferred at operator request. Windows PowerShell/Node 24 source-test and real installer/Minecraft acceptance remain NOT_EXECUTED.
+
+**Decision:** Keep the one `DEV.cmd` entrypoint and existing `dev.ps1` owner. `DEV.cmd preflight` no longer unconditionally removes/reinstalls the desktop `node_modules` via `npm ci`: first verify the committed npm manifest/lock contract using the existing lock checker, ensure an ordinary unlinked dependency root and required local CLI launchers, and query the **actually installed** dependency graph with pinned `npm ls --all --offline` (including dev/optional/peer dependencies). Reuse it only when all checks succeed; missing/inconsistent modules trigger the existing frozen `npm ci` through the old `setup` script. Linked/malformed dependency roots or a contradictory manifest/lock refuse mutation. Explicit `DEV.cmd setup` still forces a clean install, and full `verify:source` remains unchanged. No new controller, cache, tool, persistent receipt, CI job or UI.
+
+**Safety and proof:** Inspection of `node_modules` metadata is a readiness check, not a cryptographic full-file audit or Rust/game test. The source changes do not touch Cargo target ownership, archive-retirement approval, installer export retention, `App/`, `Data/`, Microsoft accounts or worlds. This turn records implementation and remote source review only; **tests deliberately not run yet**.
+
+**Unresolved:** The installed npm tree and PowerShell exit-code handling on the target Windows machine have not been observed; all performance/storage savings are UNKNOWN. The pre-existing historic compiler cache remains approval-gated; active Rust incremental cache remains reusable.
+
+**Next:** After source implementation is complete, run pinned Windows dependency-reuse checks and the existing local-test/source verification suite as one final validation phase, then measure build duration and actual storage changes.
+
+---
+
+
 ## Active work: canonical Rust build outputs and approved historical cache retirement (30 October 2026)
 
 **State:** DONE for bounded source implementation and synthetic safety checks. Windows Node 24/PowerShell 7, Rust/Cargo/Tauri execution, actual cache cleanup and NTFS bytes reclaimed remain **NOT_EXECUTED**.
