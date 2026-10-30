@@ -7,16 +7,35 @@ authority: CANONICAL
 lifecycle: ACTIVE
 ---
 
-# Product and User Setup
+# Lazy Tester — current product and UX
 
-**Current product target:** four separately licensed, concurrently playable Minecraft Education **Windows Desktop** clients on one PC. The only selected engineering approach is **Client 01 native + Client 02 isolated through Sandboxie Plus** (`MinecraftClient02`) until two real game sessions are demonstrated.
+The current product is one Windows desktop workspace for **five**
+separately licensed Minecraft Education profiles (MC01–MC05).
+Users manually launch the profiles they need, select the one to
+play, and see up to four other native game windows as passive
+previews. Starting the app does not automatically start Minecraft.
 
-- [Four-account product contract](four-concurrent-accounts.md) — goal, limits and preserved historical implementation.
-- **[Compact Manager Implementation Specification — ACTIVE DESIGN](compact-manager-implementation.md)** — single English-only, no-sidebar, instance-first UX/interaction blueprint; **design frozen, not implemented**.
-- Historical only: [original UX draft](compact-manager-ux-spec.md) and [screen design draft](compact-manager-screen-design.md) (SUPERSEDED; do not use to implement).
-- [Lightweight Windows architecture](../system/architecture.md) — source ownership, one Sandboxie engine and resource-efficiency strategy.
-- [Active two-client procedure](../validation/sandboxie-two-client-feasibility.md) — official Desktop executable, sandbox evidence and manual licensed login.
+**Current source and contracts:**
 
-**Legacy-only setup:** [Base Image Setup](base-image.md) and [One Guest Feasibility](../validation/client-feasibility.md) describe the paused VMware approach. Do not treat their guest provisioning instructions as part of the active pilot.
+- [Unified workspace](unified-workspace.md) — active first section
+  defines operator actions, profile identity, native windows, recovery
+  and data preservation. Sections explicitly labeled historical
+  remain background only.
+- [Data layout](../system/data-layout.md) — current `App/`, `Data/`
+  and profile/persistence contracts.
+- [Desktop README](../../Development/apps/desktop/README.md) —
+  currently mounted UI, typed bridge, native backend and limits.
+- [Architecture](../system/architecture.md) — product/runtime ownership
+  and source-only versus real-game proof boundaries.
 
-The actual lifecycle authority resides in the relevant Rust/Tauri source, not these documents. Read [Validation](../validation/README.md) for the distinct proof levels.
+**Historical references, not active product specifications:**
+[four-client account pilot](four-concurrent-accounts.md),
+[old Compact Manager design](compact-manager-implementation.md),
+[previous UX draft](compact-manager-ux-spec.md) and
+[VM Base image](base-image.md). They must not override the
+current five-profile Lazy Tester UI or restore Sandboxie/VMware.
+
+Minecraft itself owns authentication, worlds, rendering and network.
+A process or thumbnail is not proof of an authenticated playable
+session. Installed Windows and five-client Minecraft acceptance
+remain separate from source review.

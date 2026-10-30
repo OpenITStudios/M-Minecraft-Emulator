@@ -4,10 +4,17 @@ class: DOCUMENT
 domain: validation
 role: PROCEDURE
 authority: WORKING
-lifecycle: ACTIVE
+lifecycle: HISTORICAL
 ---
 
-# Minecraft Instance Manager — Windows local test (native + Sandboxie)
+# Minecraft Instance Manager — historical Windows native/Sandboxie test record
+
+> **HISTORICAL / DO NOT RUN AS A CURRENT ACCEPTANCE PROCEDURE.**
+> This dated record is preserved for source- and machine-specific observations
+> of earlier pilots. It does not certify the current five-profile native
+> Lazy Tester implementation and does not authorize a legacy provider.
+> Current proof routing is in [validation README](README.md),
+> with actual pending work in [planning/development.md](../../planning/development.md).
 
 ## Authorized existing-MC01 reactivation — 24 October 2026 WIB
 

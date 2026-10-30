@@ -4,11 +4,11 @@ class: DOCUMENT
 domain: product
 role: SPECIFICATION
 authority: WORKING
-lifecycle: DRAFT
+lifecycle: HISTORICAL
 ---
 
 
-> **STATUS: SUPERSEDED DESIGN DRAFT.** Historical reference only; do not implement this document. The sole active design specification is [Compact Manager Implementation Specification](compact-manager-implementation.md). It supersedes older navigation, language, sidebar, setup, layout and action-label decisions. Runtime safety contracts are unchanged.
+> **STATUS: SUPERSEDED DESIGN DRAFT.** Historical reference only; do not implement this document. The active product is [Lazy Tester five-profile workspace](unified-workspace.md), not Compact Manager. All dated Compact Manager specifications, including the former implementation draft, are historical and must not control current navigation, launch or recovery. Runtime safety contracts are unchanged.
 
 # Minecraft Instance Manager — Compact Manager UX Specification
 

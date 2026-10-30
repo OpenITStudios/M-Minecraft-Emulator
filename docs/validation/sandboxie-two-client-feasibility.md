@@ -4,10 +4,16 @@ class: DOCUMENT
 domain: validation
 role: PROCEDURE
 authority: WORKING
-lifecycle: ACTIVE
+lifecycle: HISTORICAL
 ---
 
-# Sandboxie Plus — two-client application-isolation experiment
+# Sandboxie Plus — two-client application-isolation experiment (historical)
+
+> **HISTORICAL / RETIRED PROVIDER.** This dated two-client experiment
+> is not the current production route or an instruction to run Sandboxie.
+> Lazy Tester uses the five-profile native controller. Use the
+> [current validation router](README.md) and
+> [single handoff](../../planning/development.md) for current proof.
 
 **Work:** emulator/sandboxie-client02. This is the **single selected Windows
 isolation experiment**: one normal Minecraft Education Desktop game and one

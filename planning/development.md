@@ -2,7 +2,7 @@
 
 ## Current state — 30 October 2026
 
-**State:** SOURCE UPDATED / FINAL VALIDATION PENDING. The active product remains
+**State:** CANONICAL SOURCE ROUTING ALIGNED / NATIVE VALIDATION DEFERRED. The active product remains
 Lazy Tester for five independent, individually licensed Minecraft Education
 Windows profiles, using the original official game installation, reviewed
 native compatibility payload, one retained session controller and private
@@ -13,6 +13,20 @@ remotely. The pinned Windows Node 24 / PowerShell / Cargo / Tauri suites,
 installed NSIS candidate, account sign-in, live DWM previews and five-client
 Education gameplay have **NOT_EXECUTED** acceptance at the exact new revision.
 A successful static source review is not a Windows or Minecraft PASS.
+
+## Source-only authority consolidation (30 October 2026)
+
+The canonical documentation router, product and validation indexes,
+architecture, implementation ownership map and naming standard now select
+five-profile native Lazy Tester as the single active source of truth.
+Superseded four-profile Sandboxie/VMware experiments and Compact Manager
+designs are historical references only; their previous contents remain
+recoverable from immutable Git revisions. This eliminates approximately
+100 KB of stale current-route prose without touching executable code,
+installer identity or profile/world data.
+
+**Evidence:** exact GitHub source/blob/tree inspection and relative-link/
+source-path review only. No Windows runtime or Minecraft tests were run.
 
 ## Consolidated source outcome
 
@@ -54,12 +68,14 @@ identity, game package or native preview behavior is changed in this stage.
 
 ## Next — one validation boundary
 
-After the bounded source changes are frozen, perform the existing
-exact-revision Windows test:localtest and full-source/preflight validation,
-then the actual installer and Minecraft five-profile acceptance as applicable.
-Collect developer build timings and storage inventory before proposing any
-further performance or cache change. Mark each unmet proof NOT_EXECUTED,
-not PASS; do not block independent remote source work on unavailable PCs.
+Complete any remaining **GitHub-verifiable source defect** only when a
+concrete first wrong owner and affected consumer are demonstrated; otherwise
+STOP rather than extending speculative refactors. Windows test:localtest,
+full-source/preflight, installed package and Minecraft five-profile acceptance
+remain separate, deferred evidence contexts until actually available.
+Do not request local-PC work to claim remote source completion. Storage, RAM
+and build optimizations require actual before/after measurements; mark any
+unobserved proof NOT_EXECUTED, never PASS.
 
 Historical work notes and prior Next proposals remain in immutable
 Local Git history, not in a parallel current-status register.

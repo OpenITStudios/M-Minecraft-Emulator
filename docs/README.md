@@ -7,35 +7,33 @@ authority: CANONICAL
 lifecycle: ACTIVE
 ---
 
-# Emulator Documentation
+# Lazy Tester documentation router
 
-This is the **single documentation entrypoint**. Load only the domain needed for the task; GitHub source and machine-readable contracts remain implementation authority.
+**Current product:** five independent Minecraft Education Windows
+profiles, one native game installation and one Tauri/Svelte desktop
+manager. Only `Local` is active for development; `main` is reserved
+for an approved release. GitHub Actions CI is disabled.
 
-| Task | Domain route | Canonical source where applicable |
-| --- | --- | --- |
-| Product goal: four logged-in Minecraft Education clients on one PC | [Four-account definition](product/four-concurrent-accounts.md) | Implemented two-client pilot; [historical gameplay/crash report](validation/two-client-first-success-2026-10-14.md) and [current handoff](../planning/development.md) have separate proof boundaries |
-| Paused VMware, App Sandbox and Guest Agent routes | [Legacy Retirement](system/legacy-retirement.md) | Mutations blocked and account-bearing data preserved |
-| Paused VMware Base and guest setup (historical reference only) | [Base image](product/base-image.md) | `Development/engine/runtime-core/`, `Development/engine/guest/windows/` (inactive) |
-| Retired Sandboxie v1.18.6 source/build history | [Historical isolation tooling](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4d790401823e066adb9c00790ba274b560cdcde2/Development/tooling/isolation-source/README.md) | `Development/engine/isolation-owned/` and upstream files are historical, NOT an independent game-launch provider |
-| Architecture, ownership, naming, developer commands | [System](system/README.md) | `Development/apps/desktop/`, `Development/engine/runtime-core/`, `Development/tooling/` |
-| Closed RAM/resource-efficiency preview, retained builders and future reopen gates | [Single handoff](../planning/development.md) | [Block-only Texture Lite](../Development/tooling/lazytester-textures/README.md), [Particle Tuning](../Development/tooling/lazytester-particles/README.md), [tooling index](../Development/tooling/README.md); no runtime proof |
-| Source proof, Windows/VMware/ Minecraft acceptance | [Validation](validation/README.md) | `Development/tooling/acceptance/windows/` and live evidence |
-| Installer packaging, update and trust policy | [Distribution](../Development/engine/distribution/README.md) | `Development/engine/distribution/`, Tauri packaging |
-| Dependency maintenance and modernization evidence | [Dependency tooling](../Development/tooling/dependencies/README.md) / [Report](validation/dependency-modernization-2026-10-20.md) | npm/Cargo manifests and package-manager-generated locks |
-| Current tasks, blockers and continuation | [Planning](../planning/README.md) | Current branch HEAD and `planning/development.md` |
-| Working artifacts and local-test storage | [Storage Policy](system/artifact-storage.md) → [Workspace](../workspace/README.md) | Private evidence, caches and generated packages are not committed |
+Read one relevant owner, not the entire documentation tree:
 
-## Canonical navigation
+| Question | Start here |
+| --- | --- |
+| What does the user operate? | [Product](product/README.md) / [current workspace contract](product/unified-workspace.md) |
+| Where is the active source owner? | [Implementation map](system/implementation-map.md) |
+| What are the runtime safety boundaries? | [Architecture](system/architecture.md) and [data layout](system/data-layout.md) |
+| How do source changes and optional checks work? | [Development operations](system/development-operations.md) |
+| What is actually proven or still untested? | [Validation router](validation/README.md) |
+| What is the one current work status/next action? | [Development handoff](../planning/development.md) |
+| How are installer data and developer cache protected? | [Storage](system/artifact-storage.md) / [distribution](../Development/engine/distribution/README.md) |
+| Where are the retired VMware/Sandboxie studies? | [Legacy retirement](system/legacy-retirement.md) and previous Git commits |
 
 ```text
-question
-→ docs/README.md
-→ one domain README
-→ one topic owner / section
-→ source and evidence only when needed
-→ STOP
+user task -> domain README -> exact current source owner
+          -> matching evidence only if needed -> STOP
 ```
 
-All documents under `docs/` have stable `document.<domain>.<topic>` frontmatter IDs. Paths locate documents; IDs express durable roles. Do not create parallel docs under `Development/engine/`, `Development/apps/` or a legacy `virtual-clients/docs/` hierarchy. README files next to source only explain local ownership and commands; they are not second normative documentation paths.
-
-Stable implementation contract: `CONTEXT.md` + owning source. Current progress belongs only in `planning/`. Historical experiments cannot prove current VM behavior.
+Other historical, experimental and source-snapshot documents
+remain references, not alternative active implementation decisions.
+Exact current code and its real consumers outrank stale prose.
+Remote GitHub code review cannot certify Windows/native Minecraft
+runtime or an installed package.

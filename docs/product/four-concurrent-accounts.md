@@ -2,12 +2,19 @@
 id: document.product.four-concurrent-accounts
 class: DOCUMENT
 domain: product
-role: CONTRACT
-authority: CANONICAL
-lifecycle: ACTIVE
+role: REFERENCE
+authority: WORKING
+lifecycle: HISTORICAL
 ---
 
-# Four concurrent Minecraft Education Windows desktop clients
+# Four concurrent Minecraft Education Windows desktop clients (historical)
+
+> **HISTORICAL — NOT CURRENT PRODUCT AUTHORITY.** The October 2026
+> four-client/Sandboxie pilot is superseded by the native five-profile
+> Lazy Tester contract. See [current product](README.md),
+> [architecture](../system/architecture.md) and
+> [handoff](../../planning/development.md). Statements below about
+> a "current" four-client target describe only their dated source revision.
 
 **Current approved target (23 October 2026):** four concurrently playable, unchanged official Minecraft Education Windows Desktop clients with four distinct licensed accounts, private persistent worlds/registry/authentication, normal graphics/input and multiplayer on one PC. Only active near-term P0: MC01 plus one real isolated MC02. All Sandboxie, owned-fork and VMware routes described below are **superseded pilot history**, not current Launch providers. See [one current goal and next action](../../planning/development.md).
 

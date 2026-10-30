@@ -2,12 +2,19 @@
 id: document.product.compact-manager-implementation
 class: DOCUMENT
 domain: product
-role: SPECIFICATION
-authority: CANONICAL
-lifecycle: ACTIVE
+role: REFERENCE
+authority: WORKING
+lifecycle: HISTORICAL
 ---
 
-# Minecraft Instance Manager — Compact Manager Implementation Specification
+# Minecraft Instance Manager — Compact Manager Implementation Specification (historical)
+
+> **HISTORICAL / SUPERSEDED.** This 13 October design was for a
+> two-client native/Sandboxie pilot. It is not an active UX or implementation
+> specification. The currently mounted app is Lazy Tester, and its
+> [five-profile workspace contract](unified-workspace.md) and source
+> [ownership map](../system/implementation-map.md) take precedence over
+> any old "active" or "frozen" claim below.
 
 **Decision state:** UX DESIGN FROZEN for the current two-client surface, 2026-10-13. **Implementation state:** FRONTEND UI IMPLEMENTATION IN PROGRESS; source/Windows results remain unverified until run at the new exact HEAD. This document describes target behavior, not current runtime proof.
 **Source baseline:** `Local` at `0dc41fd19a93581b59143045b45a14d1dffc52c1` (reviewed source and contracts).

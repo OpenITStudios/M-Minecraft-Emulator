@@ -7,55 +7,59 @@ authority: CANONICAL
 lifecycle: ACTIVE
 ---
 
-# Canonical Naming
+# Lazy Tester — canonical naming and compatibility
 
-Name source for the **responsibility**, not the parent monorepo, developer nickname or temporary implementation phase.
+Name responsibilities by their current owner. Do not introduce
+duplicate `-new`, `-final`, `-v2`, `engine2`, `state-manager`
+or other alternate implementation trees merely to preserve history.
+Git retains the older source.
 
-## Repository and folder vocabulary
+## Current product and repository vocabulary
 
-| Name | Meaning |
+| Name/path | Meaning |
 | --- | --- |
-| `M-Minecraft-Emulator` | Dedicated repository/project identity |
-| `Development/apps/desktop/` | One Tauri/Svelte user-facing desktop application |
-| `Development/engine/runtime-core/` | Canonical Rust runtime: lifecycle, provider, guest transport and resource policy |
-| `Development/engine/guest/windows/` | Guest Windows setup and Agent lifecycle scripts |
-| `Development/engine/distribution/` | Machine-readable install/release/update policy and packaging helpers |
-| `Development/tooling/acceptance/windows/` | Test/evidence collection utilities, not live VM authority |
-| `docs/{product,system,validation}/` | Human documentation split by concern |
-| `planning/` | Current future work, blockers and handoff, never stable system facts |
-| `workspace/` | Working material; sensitive VM account evidence is untracked |
-| `Archive/experiments/` | Temporary non-authoritative research |
-| `.agents/` | Bounded AI/software work procedures, not a second VM manager |
+| `M-Minecraft-Emulator` | GitHub repository identity; **not** a separate emulation runtime |
+| **Lazy Tester** | Active Windows desktop application |
+| **Minecraft 1–5 / MC01–MC05** | Five stable separate profile **storage identities**, not window enumeration order or login proof |
+| `Development/apps/desktop/` | One Tauri 2 / Svelte 5 desktop, typed commands and native session owner |
+| `Development/engine/runtime-core/` | Platform-neutral contracts and process helpers; **not** a second game launcher, guest controller or mutable lifecycle store |
+| `Development/engine/distribution/` | Native Lazy Tester package contract and preservation rules |
+| `Development/tooling/` | Source checks, native compatibility source, scoped developer control and optional evidence collection |
+| `DEV.cmd` | Single optional Windows-local developer entrypoint, not a second build engine |
+| `docs/` | Canonical domain router, active architecture, contracts and historical references |
+| `planning/development.md` | One current development-status and next-action handoff |
+| `workspace/` | Ignored generated tools, developer caches and packages, never game account source authority |
 
-Avoid top-level `virtual-clients/` now that Virtual Clients is the sole application domain; no nested monorepo-style product root is needed.
+## Persistent product data
 
-## Active developer-pilot names
+- Current profile folders: `Data/Launchers/Minecraft-1..5`.
+- Current catalog: `Data/profiles.json`.
+- Current canonical location pointer:
+  `Data/Settings/data-location.json`.
+- Historical schema 1 and legacy App pointers are kept for
+  preservation/explicit reviewed migration only.
 
-| Canonical name | Meaning |
-| --- | --- |
-| **Minecraft Instance Manager** | Current Windows developer UI/window title |
-| **Client 01 — Native** | Official host-Windows Minecraft Education Desktop |
-| **Client 02 — Isolated** | Official Minecraft Education Desktop requested inside Sandboxie |
-| `MinecraftClient02` | Exactly one persistent Sandboxie Plus box used in the experiment |
-| `%LOCALAPPDATA%\\MinecraftInstanceManager\\NativePilot` | Experimental manager lock/state directory, not the legacy VM data root |
-| `%TEMP%\\MinecraftInstanceManager\\SandboxieFeasibility` | Optional explicit diagnostic report location; UI `-SummaryOnly` does not write a report |
+These names are actual compatibility contracts. Do **not** rename
+installed application identifiers, original Microsoft account data,
+worlds, registry hives, reviewed DLLs or paths as a cosmetic cleanup.
+Inspect [data layout](data-layout.md) and
+[native distribution contract](../../Development/engine/distribution/README.md)
+before any proposed migration.
 
-The old installed product name and identifier below are **compatibility boundaries**, not names to propagate into the new UI. Never rename existing Sandboxie boxes, VM snapshots, accounts or installed package identities as a cosmetic cleanup.
+## Historical identity boundary
 
-## Stable compatibility names
+Former `Minecraft Instance Manager`, `M-Bedrock Virtual Clients`,
+`MinecraftClient02` Sandboxie, VMware VM/Guest Agent, native-box
+pilot and legacy NSIS/wire names may exist in preserved data or Git
+history. Their mention is not authorization to reactivate a provider
+or rewrite installed state. Source retirement does not remove old
+applications, accounts, snapshots or user files.
 
-`M-Bedrock Virtual Clients` is the **existing installed product identity**, not a source folder identity. Its Tauri application identifier, NSIS asset names, `M-Bedrock/VirtualClients` data path, Guest Agent/CLI binary names, stored snapshot names, wire protocol versions and signed-release tag prefix must remain intact until a separately authorized migration with compatibility proof.
+## Version and responsibility
 
-A source rename **must not** break existing guest disks, account sessions, user installations or trusted-update origin checks. Changing GitHub release repository to this repo is separate from renaming installed artifacts.
-
-## Version suffix policy
-
-- Internal implementation: one canonical source module/folder; Git history holds revisions. Do not create `-new`, `-final`, `-v2` duplicate classes or managers.
-- Public schema, wire protocol, Minecraft version, persisted payload and historical experiment: keep explicit distinct version identifiers when they actually describe a compatibility boundary.
-- Product version: root `Development/VERSION` matches `Development/package.json`, desktop app, Tauri config, both Rust Cargo manifests. A mismatch is a repository error.
-
-## Avoid ambiguous owners
-
-Do not create parallel `runtime/`, `state-manager/`, `engine2/`, `services/` or `vm-controller/` roots. Use the established Rust owner or an appropriately scoped module. Desktop adapter and backend policy are distinct even when both mention the same operation.
-
-Use [Implementation Map](implementation-map.md) to locate semantic responsibility before renaming a file. Verify imports, installer resource keys, scripts, tests, tooling, documentation and actual user-facing compatibility before moving a consumed path.
+`Development/VERSION` must match the application and relevant
+Node/Rust/Tauri manifests. Preserve actual public schema and wire
+versioning when needed for compatibility; do not invent version-suffixed
+internal source owners. Verify the first wrong owner, consumers,
+import paths, Tauri/Cargo contract and distribution identifiers
+before a rename. See the [implementation map](implementation-map.md).
