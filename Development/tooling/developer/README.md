@@ -40,7 +40,9 @@ capture command output to files. In `run --json`, child output goes to stderr
 and stdout contains the final exit-status envelope. A successful command is
 `COMMAND_SUCCEEDED`, **not** installed-app/Minecraft acceptance.
 
-This interface requires verified portable Node 24.22.0; `run` tasks that
+This interface requires the pinned portable Node 24.22.0 **executable
+path**, not only a matching version number. Direct execution via a global
+`node` binary is refused; use `DEV.cmd`. `run` tasks that
 use the legacy script additionally require the local PowerShell executable.
 Git remains an external developer prerequisite. On a GitHub-only ChatGPT
 session, source changes can be committed remotely, but no local `DEV.cmd`
@@ -64,7 +66,13 @@ new test runner, account access, or developer cleanup procedure is added.
 ## Error model
 
 `READY` and `BLOCKED` apply to read-only inspection/planning; `run`
-returns `COMMAND_SUCCEEDED`, `FAILED` or `BLOCKED` with the source SHA
-and `COMMAND_EXIT_ONLY` evidence. Exit codes: 0 successful, 1 invoked task
+returns `COMMAND_SUCCEEDED` only after **both** a successful executor exit and
+a post-execution `Local` HEAD verification. A changed HEAD yields
+`SOURCE_CHANGED`; unavailable final Git evidence yields
+`SOURCE_UNVERIFIED`. Exit success is labeled `COMMAND_EXIT_AND_HEAD_ONLY`:
+uncommitted source edits and Windows/Minecraft acceptance are not proven.
+If a task might have run but its completion or lock release cannot be
+verified, the controller returns **one** `FAILED_UNVERIFIED` envelope,
+not a contradictory `BLOCKED` result claiming nothing started. Exit codes: 0 successful, 1 invoked task
 failed, 2 invalid CLI, 3 blocked/unsafe state. Source tests do not establish
 Windows PowerShell, Tauri, packaged-app or Minecraft Education acceptance.

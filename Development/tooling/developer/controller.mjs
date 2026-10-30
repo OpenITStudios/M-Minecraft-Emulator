@@ -2,7 +2,7 @@
 // owners remain the only command executors. No arbitrary shell execution.
 import {lstatSync, readFileSync, openSync, closeSync, unlinkSync, writeSync, constants} from 'node:fs';
 import {spawnSync} from 'node:child_process';
-import {dirname, join, resolve, isAbsolute, posix} from 'node:path';
+import {dirname, join, resolve, isAbsolute, posix, win32} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 export const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -125,6 +125,21 @@ function ordinary(path) {
   try {const info=lstatSync(path);return info.isFile()&&!info.isSymbolicLink();}
   catch {return false;}
 }
+// Node's version alone does not prove the current executable is the reviewed
+// checkout-local runtime. Compare normalized absolute paths, never PATH lookup.
+export function isPinnedNodeProcess(actual,expected,platform=process.platform) {
+  if(typeof actual!=='string' || typeof expected!=='string') return false;
+  if(platform==='win32') return win32.isAbsolute(actual) && win32.isAbsolute(expected) &&
+    win32.normalize(actual).toLowerCase()===win32.normalize(expected).toLowerCase();
+  return isAbsolute(actual) && isAbsolute(expected) && resolve(actual)===resolve(expected);
+}
+// A child process exit is not revision-scoped evidence if Local HEAD changed
+// while it ran or the final Git check failed.
+export function classifyCompletion(before,after,exitCode,spawnError=false) {
+  if(!after) return 'SOURCE_UNVERIFIED';
+  if(before.branch!=='Local' || after.branch!=='Local' || before.sha!==after.sha) return 'SOURCE_CHANGED';
+  return spawnError || exitCode!==0 ? 'FAILED' : 'COMMAND_SUCCEEDED';
+}
 function report(operation,data) {return {schema:1,operation,...data};}
 function usage() {
   return 'Usage: DEV.cmd inspect|catalog|plan [--json] [--paths <source paths>...]\n'+
@@ -162,6 +177,7 @@ function startup() {
   const pinned=JSON.parse(readFileSync(join(REPO,'Development/toolchain.json'),'utf8'));
   if(process.versions.node!==pinned.node.version) throw Error('Pinned workspace Node version required; no global fallback');
   if(!ordinary(NODE_EXE)) throw Error('Workspace-local Node executable is missing or linked');
+  if(!isPinnedNodeProcess(process.execPath,NODE_EXE)) throw Error('Controller must run through pinned DEV.cmd Node; global Node is forbidden');
   return validatedRegistry(JSON.parse(readFileSync(REGISTRY,'utf8')));
 }
 function toolPresence() {
@@ -201,24 +217,34 @@ function runTask(task,parsed,source) {
   const execution=legacyArgs(task);
   const executable=execution.type==='node'?NODE_EXE:PWSH_EXE;
   if(!ordinary(executable)) return blocked('run','Pinned workspace executor missing or linked',parsed.json);
+  let attempted=false;
   const invoke=()=>{
     const latest=sourceInfo();
     if(latest.branch!=='Local' || latest.sha!==source.sha) {
-      return blocked('run','Local HEAD changed before execution; task not started',parsed.json);
+      return {status:'BLOCKED',taskId:task.id,sourceSha:source.sha,
+        reason:'Local HEAD changed before execution; task not started',proof:'NOT_EXECUTED'};
     }
+    attempted=true;
     const child=spawnSync(executable,execution.args,{cwd:join(REPO,'Development'),shell:false,
       stdio:parsed.json?['inherit',2,2]:'inherit',windowsHide:false});
-    const status=child.error?'FAILED':child.status===0?'COMMAND_SUCCEEDED':'FAILED';
-    emit(report('run',{status,taskId:task.id,sourceSha:source.sha,
-      exitCode:child.status??null,proof:'COMMAND_EXIT_ONLY',
-      note:'Compiler/package exit status is not Minecraft, signing or installed-game acceptance.'}),parsed.json);
-    return child.status===0&&!child.error?0:1;
+    let after;
+    try {after=sourceInfo();} catch {after=null;}
+    const status=classifyCompletion(source,after,child.status,Boolean(child.error));
+    return {status,taskId:task.id,sourceSha:source.sha,exitCode:child.status??null,
+      proof:status==='COMMAND_SUCCEEDED'?'COMMAND_EXIT_AND_HEAD_ONLY':'NOT_VERIFIED',
+      note:'Only the committed HEAD was rechecked. Uncommitted source and Windows/game acceptance are not certified.'};
   };
-  if(task.risk==='read') return invoke();
-  try{return withBuildLock(task.id,invoke);}
-  catch(error){return blocked('run','Another developer task may be active or workspace lock is unsafe; no task started',parsed.json);}
+  let outcome;
+  try {outcome=task.risk==='read'?invoke():withBuildLock(task.id,invoke);}
+  catch {
+    if(!attempted) return blocked('run','Task could not start: developer lock or Git metadata is unsafe',parsed.json);
+    emit(report('run',{status:'FAILED_UNVERIFIED',taskId:task.id,sourceSha:source.sha,
+      proof:'OUTCOME_UNVERIFIED',reason:'Task may have run but completion or lock release failed. Inspect manually; no automatic lock recovery.'}),parsed.json);
+    return 1;
+  }
+  emit(report('run',outcome),parsed.json);
+  return outcome.status==='COMMAND_SUCCEEDED'?0:outcome.status==='BLOCKED'?3:1;
 }
-
 export function main(argv=process.argv.slice(2)) {
   const [operation,...arguments_]=argv;
   if(!['inspect','catalog','plan','run'].includes(operation)) {

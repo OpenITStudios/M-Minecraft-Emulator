@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {dirname,resolve} from 'node:path';
-import {validatedRegistry,classifyPath,planForPaths,legacyArgs,parseFlags} from './controller.mjs';
+import {validatedRegistry,classifyPath,planForPaths,legacyArgs,parseFlags,isPinnedNodeProcess,classifyCompletion} from './controller.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'../../..');
 const registry=JSON.parse(readFileSync(new URL('./tasks.json',import.meta.url),'utf8'));
@@ -87,4 +87,34 @@ test('existing source verifier and developer executor remain the single owners',
   assert.match(local,/Set-LocalDeveloperEnvironment -Root \$Root/);
   assert.match(local,/"package" \{ Invoke-RepositoryNpm/);
   assert.match(local,/"storage"/);
+});
+
+test('pinned Node admission verifies exact executable path, not only version',()=>{
+  assert.equal(isPinnedNodeProcess('C:\\Dev\\workspace\\toolchains\\node\\node.exe',
+    'c:\\dev\\workspace\\toolchains\\node\\node.exe','win32'),true);
+  assert.equal(isPinnedNodeProcess('C:\\Windows\\node.exe',
+    'C:\\Dev\\workspace\\toolchains\\node\\node.exe','win32'),false);
+  assert.equal(isPinnedNodeProcess('node.exe','C:\\Dev\\node.exe','win32'),false);
+  assert.equal(isPinnedNodeProcess('/repo/node','/repo/node','linux'),true);
+  assert.equal(isPinnedNodeProcess('/usr/bin/node','/repo/node','linux'),false);
+  assert.equal(isPinnedNodeProcess('node','/repo/node','linux'),false);
+});
+
+test('post-task revision check blocks false completion evidence',()=>{
+  const baseline={branch:'Local',sha:SHA};
+  assert.equal(classifyCompletion(baseline,{...baseline},0), 'COMMAND_SUCCEEDED');
+  assert.equal(classifyCompletion(baseline,{...baseline},1), 'FAILED');
+  assert.equal(classifyCompletion(baseline,{...baseline},0,true), 'FAILED');
+  assert.equal(classifyCompletion(baseline,{branch:'Local',sha:'b'.repeat(40)},0), 'SOURCE_CHANGED');
+  assert.equal(classifyCompletion(baseline,{branch:'main',sha:SHA},0), 'SOURCE_CHANGED');
+  assert.equal(classifyCompletion(baseline,null,0), 'SOURCE_UNVERIFIED');
+});
+
+test('task status is emitted after lock release, and uncertain execution is not a false BLOCKED',()=>{
+  const script=readFileSync(new URL('./controller.mjs',import.meta.url),'utf8');
+  assert.match(script,/const status=classifyCompletion\(source,after,child\.status,Boolean\(child\.error\)\)/);
+  assert.match(script,/emit\(report\('run',outcome\),parsed\.json\)/);
+  assert.match(script,/status:'FAILED_UNVERIFIED'/);
+  assert.match(script,/completion or lock release failed/);
+  assert.doesNotMatch(script,/return blocked\('run','Another developer task may be active or workspace lock is unsafe; no task started'/);
 });

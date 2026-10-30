@@ -1,5 +1,16 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — AI DEV.cmd runtime provenance and lock result safety (30 October 2026)
+
+**State:** DONE for bounded source reliability hardening; Windows PowerShell and pinned portable Node/Tauri runtime NOT_EXECUTED.
+**Decision:** Fix three confirmed controller proof-boundary gaps without adding tasks, a new CLI, UI, daemon, CI, or cleanup: verify the *running* Node executable is the canonical checkout-local Node (not just the same pinned version), verify Local HEAD again after every task to reject changed/unverifiable revision evidence, and defer the single run outcome until the existing exclusive developer-output lock has been released. A post-run SHA change is `SOURCE_CHANGED`, missing final Git proof is `SOURCE_UNVERIFIED`, and uncertain execution/lock cleanup becomes `FAILED_UNVERIFIED`, never a false claim that no task started. Successful commands report only `COMMAND_EXIT_AND_HEAD_ONLY`, explicitly not uncommitted source integrity or Minecraft acceptance. Existing 17 registry tasks and legacy executors are unchanged.
+**Proof:** SOURCE_EXECUTION Node.js 22.16.0 isolated `controller.test.mjs` 10/10 PASS, plus Node syntax check; source and fixture SHA-1 Git blob digests match the exact new blobs committed in this change. REMOTE_GITHUB pinned Local source/consumer review. Pinned Windows Node 24.22.0, PowerShell 7.6.7, real Tauri app/build and Minecraft Education acceptance NOT_EXECUTED.
+**Unresolved:** The real Windows execution of the pinned launcher, long-running task interruption and stale lock admission, and host filesystem races remain unmeasured. HEAD checks prove only committed revision stability; a dirty worktree is not certified. The 60 GB cache and physical savings remain UNKNOWN.
+**Next:** Run the complete pinned local-test suite and a safe Windows `inspect/catalog/plan` and source-validation `run` smoke before changing legacy task dispatch or storage policy.
+
+---
+
+
 ## Current product work — AI-ready single DEV.cmd task controller (30 October 2026)
 
 **State:** DONE for bounded GitHub source implementation and isolated Node controller tests. Pinned Windows portable Node/PowerShell, actual build/package and Minecraft runtime NOT_EXECUTED.
