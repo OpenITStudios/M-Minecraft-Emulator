@@ -112,6 +112,58 @@ Only code is committed; no user screenshots are collected now.
 
 Cua CLI reference: https://cua.ai/docs/cua-driver/reference/cli/serve-and-configure
 
+## Phase 7: bounded independent input transaction runner (source only)
+
+The source-only `input-delivery.mjs` is a narrow **per-client native input
+provider port**, not an installed keyboard/mouse driver and not a second
+Minecraft session controller. It is **NOT registered** as an executable MCP
+tool. Only read-only `assess_input_route` and existing planning/observation
+tools are exposed to Codex.
+
+The source harness accepts internal callbacks that a future validated native
+provider must implement: `verify(slot)`, `admit(target)`, `send(target,event)`,
+`releaseAll(target)`, and `protectHuman()`. It cannot be enabled by passing
+an MCP tool parameter. The production MCP always reports
+`provider:NONE`, `execution:DISABLED`, and
+`BLOCKED_NO_VERIFIED_PER_CLIENT_INPUT_BACKEND`.
+
+Safety properties implemented in **source**, not demonstrated on Windows:
+
+- One bounded transaction; no overlapping runs, at most 64 semantic events
+  within 35 seconds. A native route older than 1.5 seconds is refused.
+- Recheck the exact PID/HWND/birth/session identity before each timestamp
+  group. In hybrid mode a separate human-desktop protection callback is
+  mandatory. The MC01 slot is never an AI input target.
+- Parallel **between different MC slots**, ordered **within one slot**:
+  release a previous button before pressing its replacement; relative
+  camera deltas are separate events.
+- Cancellation and transport errors enter a `finally` block that calls
+  `releaseAll` for every target. Incomplete release is a hard error.
+  The provider must additionally implement its own crash watchdog:
+  JavaScript alone cannot guarantee hardware release if the process hangs.
+- Even acknowledged provider callbacks are reported as **transport only**;
+  they never establish gameplay movement, camera control or human-input
+  safety in Minecraft.
+
+**Critical remaining blocker:** An independent, non-foreground native input
+transport that works with Minecraft Education has not been found or
+accepted. Windows `SendInput` is a shared system stream; Cua Driver's
+Win32 background action does not guarantee game controls; ProtoInput's
+multigame routing uses game-process hooks. Microsoft's isolated agent
+workspaces exist but have no demonstrated five-Minecraft integration.
+
+No DLL injection, driver installation, desktop-wide `SendInput`,
+foreground-swap, MakeCode, gameplay or executable MCP input action was
+added in this phase. The test file uses internal callback fixtures to
+exercise sequencing and safety only; it is **NOT_EXECUTED**. A passing
+fixture in the future would not count as Windows or Minecraft acceptance.
+
+Relevant research:
+- https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput
+- https://www.splitscreen.me/docs/proto/
+- https://cua.ai/docs/cua-driver/concepts/how-cua-driver-works
+- https://support.microsoft.com/en-us/windows/ai/ai-features/experimental-agentic-features
+
 ## Phase 6: native-bound independent input admission (source only)
 
 **New read-only tool:** `assess_input_route({actions})` connects the

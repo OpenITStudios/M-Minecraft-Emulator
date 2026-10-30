@@ -43,6 +43,20 @@ function trustedWindow(target,slot) {
   };
 }
 
+// A read-only comparison. The future NATIVE provider must independently
+// pin and verify the process identity during real input delivery.
+export function matchesNativeInputTarget(expected,observation) {
+  if(!expected || !Number.isInteger(expected.slot) ||
+     expected.verification!=='NATIVE_PROCESS_WINDOW_AT_OBSERVATION_TIME_ONLY') {
+    throw new TypeError('Expected target was not bound by native inspection');
+  }
+  const current=trustedWindow(observation,expected.slot);
+  return current.pid===expected.pid &&
+    current.windowId===expected.windowId &&
+    current.sessionId===expected.sessionId &&
+    current.createdFileTime===expected.createdFileTime;
+}
+
 /**
  * Binds an already-validated multi-client semantic timeline to live owned
  * Windows window identities. The resulting mapping is diagnostic only and

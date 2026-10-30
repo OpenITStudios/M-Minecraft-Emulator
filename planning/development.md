@@ -372,6 +372,32 @@ UNIMPLEMENTED or UNVERIFIED.
 Real independent game-input routing remains BLOCKED pending supported
 Windows input mechanism and MC01/MC02 gameplay proof.
 
+## Phase 7: bounded input transaction port — source only
+
+- Added `input-delivery.mjs` to the existing agent tooling: time-bounded
+  semantic event scheduling across independent MC slots, event ordering
+  within a single slot, fresh exact-native target checks per timestamp
+  group, per-client admission and hybrid human-desktop protection callbacks,
+  cancellation, and mandatory per-client `releaseAll` attempts. Reports
+  transport-only acknowledgements, never gameplay acceptance.
+- Production has NO independent Windows game-input backend. The runner's
+  callback port is NOT exposed as an agent MCP execution tool. MCP
+  `agent_capabilities` and `assess_input_route` explicitly report
+  `provider:NONE` / `execution:DISABLED` / the same BLOCKED gate.
+- Future real native provider must independently guarantee release-all
+  under process crash/hang, exact target checking during input, no global
+  keyboard/mouse dispatch and MC01 human preservation; Node callbacks
+  alone cannot deliver those assurances.
+- Source fixtures (NOT_EXECUTED) cover no-backend refusal, concurrent
+  controls, target replacement, protected MC01, cancellation, and
+  missing release ACK. No new Minecraft/game owner, installer, driver,
+  DLL injection, CI, or foreground input route is introduced.
+
+**Proof ceiling:** REMOTE_GITHUB exact source and public API review only.
+Actual Windows independent input, real Minecraft player movement,
+MC01 uninterrupted input and five-client gameplay are NOT_EXECUTED.
+Local tests/builds/gameplay remain prohibited until explicit permission.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,

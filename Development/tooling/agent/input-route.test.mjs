@@ -1,7 +1,7 @@
 // Authored regression fixtures. Do not run without operator approval.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {assessInputRoute,requiredInputSlots} from './input-route.mjs';
+import {assessInputRoute,requiredInputSlots,matchesNativeInputTarget} from './input-route.mjs';
 
 const action=(slot,kind,atMs=0,durationMs=150)=>
   ({slot,kind,atMs,durationMs});
@@ -13,6 +13,20 @@ const target=(slot,patch={})=>({
   visible:true,minimized:false,
   verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',gameplayInput:'NOT_VERIFIED',
   ...patch,
+});
+
+test('runtime target comparison rejects replaced native PID, HWND or birth time',()=>{
+  const actions=[action(2,'move_forward')];
+  const plan=assessInputRoute('human-plus-four-ai',actions,
+    [target(1),target(2)],{observedAtMs:100000,elapsedMs:10});
+  const expected=plan.aiTargets[0];
+  assert.equal(matchesNativeInputTarget(expected,target(2)),true);
+  assert.equal(matchesNativeInputTarget(expected,target(2,{pid:900})),false);
+  assert.equal(matchesNativeInputTarget(expected,target(2,{windowId:900})),false);
+  assert.equal(matchesNativeInputTarget(expected,
+    target(2,{createdFileTime:'134000000000000500'})),false);
+  assert.throws(()=>matchesNativeInputTarget(expected,
+    target(2,{verification:'PID_ONLY'})),/not verified/);
 });
 
 test('hybrid route pins human window but excludes MC01 from AI actions',()=>{

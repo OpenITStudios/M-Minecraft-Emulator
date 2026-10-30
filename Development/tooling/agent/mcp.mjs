@@ -10,6 +10,7 @@ import {promisify} from 'node:util';
 import {planPeerSession,planPlayerActions} from './control-plan.mjs';
 import {compilePlayerInputTimeline} from './input-timeline.mjs';
 import {assessInputRoute,requiredInputSlots} from './input-route.mjs';
+import {inputExecutionStatus} from './input-delivery.mjs';
 import {summarizeGameEvidence,normalizeEvidenceSlots} from './evidence-summary.mjs';
 import {captureCuaWindow,validateCuaExecutable} from './visual-capture.mjs';
 import {createVisualObserver,OBSERVATION_LIMITS} from './visual-observer.mjs';
@@ -205,7 +206,8 @@ function capabilities(mode) {return {schema:1,mode,hostSlot:1,humanSlots:mode===
   visualCapture:'OPTIONAL_CUA_OR_PERSISTENT_WGC_SOURCE_NOT_RUNTIME_VERIFIED',
   independentInput:{state:'BLOCKED_NO_VERIFIED_PER_CLIENT_INPUT_BACKEND',
     simultaneousIntentChannels:true,actualInputEnabled:false,
-    requiresHumanFocusProtection:true,requiresPerClientEmergencyRelease:true},
+    requiresHumanFocusProtection:true,requiresPerClientEmergencyRelease:true,
+    transactionEngine:inputExecutionStatus()},
   note:'MCP tools control the native session owner and read evidence; they do NOT independently move multiple background Minecraft clients.'};}
 
 export function createHandler(config,{
@@ -419,9 +421,12 @@ export function createHandler(config,{
             await native(config.executable,'target',slot),slot));
         }
         const elapsed=Date.now()-started;
-        return assessInputRoute(config.mode,args.actions,observed,{
-          observedAtMs:Date.now(),elapsedMs:elapsed,
-        });
+        return {
+          ...assessInputRoute(config.mode,args.actions,observed,{
+            observedAtMs:Date.now(),elapsedMs:elapsed,
+          }),
+          transactionEngine:inputExecutionStatus(),
+        };
       } finally {inFlight=false;}
     }
     if (name==='plan_peer_session') {

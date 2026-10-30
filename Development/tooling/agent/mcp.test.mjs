@@ -243,6 +243,8 @@ test('native input route assessment only observes trusted windows and blocks del
   assert.deepEqual(result.aiTargets.map(x=>x.slot),[2,3]);
   assert.equal(result.execution,'NOT_DISPATCHED');
   assert.equal(result.gameplayInputAcceptance,'NOT_EXECUTED');
+  assert.equal(result.transactionEngine.execution,'DISABLED');
+  assert.equal(result.transactionEngine.provider,'NONE');
   assert.match(result.deliveryGate,/BLOCKED/);
   assert.equal(result.aiTargets.some(x=>x.slot===1),false);
   await assert.rejects(()=>h.callTool('assess_input_route',{actions:[
