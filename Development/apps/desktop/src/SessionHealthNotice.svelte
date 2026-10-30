@@ -9,7 +9,7 @@
   $: accessibleName = item.kind === 'preview'
     ? 'Minecraft - ' + item.slot + ' preview unavailable'
     : 'Minecraft - ' + item.slot + ' needs attention';
-  $: actionLabel = item.action === 'open' ? 'Open game' : 'Check status';
+  $: actionLabel = item.action === 'open' ? 'Select game' : 'Check status';
 </script>
 
 <div class="lt-health-notice">

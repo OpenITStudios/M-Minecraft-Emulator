@@ -27,7 +27,7 @@
   export let onGuidedRecovery: (slot: ProfileSlot, action: SessionHealthAction) => void;
 </script>
 
-<div class="lt-filmstrip" aria-label="Minecraft launchers">
+<div class="lt-filmstrip" role="group" aria-label="Minecraft profiles">
   {#each profiles as profile (profile.slot)}
     {@const healthItem = healthIssues.find(item => item.slot === profile.slot)}
     {@const guidance = launcherCardGuidance(
@@ -35,8 +35,8 @@
     )}
     <div class="lt-launcher-entry" title={guidance??undefined}>
       <button class="lt-card" class:selected={active===profile.slot&&!detached}
-        aria-pressed={active===profile.slot&&!detached}
-        aria-label={(profile.state==='RUNNING'?'Open ':'Launch ')+'Minecraft - '+profile.slot}
+        aria-pressed={profile.state==='RUNNING' ? active===profile.slot&&!detached : undefined}
+        aria-label={(profile.state==='RUNNING'?'Select ':'Launch ')+'Minecraft - '+profile.slot}
         aria-describedby={guidance ? 'lt-launcher-guidance-'+profile.slot : undefined}
         disabled={busy||!available||!bindingConfigured||
           (profile.state!=='RUNNING'&&!canRequestLaunch(profile))}

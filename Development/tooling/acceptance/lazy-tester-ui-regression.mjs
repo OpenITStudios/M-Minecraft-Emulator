@@ -223,6 +223,14 @@ try {
   await page.waitForFunction(()=>!!window.__finishBinding);await page.evaluate(()=>window.__finishBinding());
   await heading('Ready when you are').waitFor();
   assert.equal(await page.locator('.lt-card').count(),5);
+  const profileGroup = page.getByRole('group',{name:'Minecraft profiles'});
+  assert.equal(await profileGroup.getByRole('button',{name:'Launch Minecraft - 1',exact:true}).count(),1,
+    'AI navigation must find the stable profile controls by role and action');
+  assert.equal(await profileGroup.getByRole('button',{name:'Launch Minecraft - 5',exact:true}).count(),1);
+  assert.equal(await profileGroup.getByRole('button',{name:'Launch Minecraft - 1',exact:true}).getAttribute('aria-pressed'),null,
+    'Launch is an action, not a selected-state toggle');
+  assert.equal(await page.getByRole('button',{name:'Exit Lazy Tester and all managed Minecraft sessions',exact:true}).count(),1,
+    'Assistive control must state that closing the manager also closes managed games');
   assert.equal(await nav('Play').getAttribute('aria-current'),'page');
   // Unchanged background checks must not flash controls, lock cards or move native surfaces.
   await page.waitForTimeout(200);
@@ -304,8 +312,12 @@ try {
   // Current Play contract: release ONE selected Minecraft window, preserving
   // the other running peer. The next verified game becomes the selected view.
   await nav('Play').click();
-  await page.getByRole('button',{name:'Open Minecraft - 1',exact:true}).click();
+  await page.getByRole('button',{name:'Select Minecraft - 1',exact:true}).click();
   await heading('Minecraft - 1').waitFor();
+  assert.equal(await profileGroup.getByRole('button',{name:'Select Minecraft - 1',exact:true}).getAttribute('aria-pressed'),'true',
+    'The selected Minecraft profile must be explicitly exposed to AI/assistive navigation');
+  assert.equal(await profileGroup.getByRole('button',{name:'Select Minecraft - 2',exact:true}).getAttribute('aria-pressed'),'false',
+    'Other running profiles must remain explicitly unselected');
   await page.getByRole('button',{name:'Open Minecraft - 1 in a window',exact:true}).click();
   await heading('Minecraft - 2').waitFor();
   assert.equal(await page.getByRole('button',{name:'Open Minecraft - 2 in a window',exact:true}).isEnabled(),true,
@@ -320,7 +332,7 @@ try {
     ['CloseOne','CloseAll'].includes(call.args?.request?.operation))),false,
     'Opening separate windows must not close Minecraft sessions');
   // Return to the existing Play viewport through the running launcher card.
-  await page.getByRole('button',{name:'Open Minecraft - 1',exact:true}).click();
+  await page.getByRole('button',{name:'Select Minecraft - 1',exact:true}).click();
   await heading('Minecraft - 1').waitFor();
   await page.getByRole('button',{name:'Open Minecraft - 1 in a window',exact:true}).waitFor();
   await page.waitForTimeout(200);
@@ -440,7 +452,7 @@ try {
   await asyncPreviewIssue.waitFor();
   assert.match(await asyncPreviewIssue.textContent(),/Preview is unavailable/);
   assert.equal(await page.getByRole('status',{name:'Minecraft - 3 preview unavailable'}).count(),0);
-  assert.equal(await page.getByRole('button',{name:'Open Minecraft - 2',exact:true}).isEnabled(),true);
+  assert.equal(await page.getByRole('button',{name:'Select Minecraft - 2',exact:true}).isEnabled(),true);
   assert.equal(await page.evaluate(()=>window.__calls.filter(
     call=>call.command==='lazy_tester_previews').length),baseline,
     'Native invalidation must not schedule another PreviewReport request');
@@ -462,9 +474,9 @@ try {
   await nativePreviewIssue.waitFor();
   assert.match(await nativePreviewIssue.textContent(),/Preview is unavailable/);
   assert.equal(await page.getByRole('status',{name:'Minecraft - 3 preview unavailable'}).count(),0);
-  assert.equal(await page.getByRole('button',{name:'Open Minecraft - 2',exact:true}).isEnabled(),true,
+  assert.equal(await page.getByRole('button',{name:'Select Minecraft - 2',exact:true}).isEnabled(),true,
     'DWM preview failure is not game-process or Play admission');
-  await page.getByRole('button',{name:'Open game for Minecraft - 2'}).click();
+  await page.getByRole('button',{name:'Select game for Minecraft - 2'}).click();
   await page.waitForFunction(()=>window.__calls.some(call=>
     call.command==='lazy_tester_present' && call.args?.slot===2));
   assert.equal(await page.evaluate(()=>window.__calls.some(call=>['Launch','CloseOne','CloseAll'].includes(

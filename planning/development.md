@@ -105,6 +105,14 @@ Minecraft runtime acceptance remain NOT_EXECUTED.
 execution where performed. Pinned Windows Node/Vitest, native NSIS package
 and live five-profile Minecraft Education remain `NOT_EXECUTED`.
 
+## AI computer-control UI accessibility — source-only (30 October 2026)
+
+- Existing MC01–MC05 launcher buttons remain the only game-selection interface. Running profiles now expose an explicit **Select Minecraft** accessible action; stopped profiles retain **Launch Minecraft**. A named profile group and running-only selected state make the target distinguishable without exposing account credentials.
+- Existing recovery selection says **Select game**, and the native manager's Close accessible name explicitly warns that all managed Minecraft sessions are affected. No send-command feature, keyboard injector, new agent API, IPC route, timer, controller, profile authority, or UI page is added.
+- The retained browser-only UI regression fixture now asserts stable profile action names and selection state using accessibility roles. This is authored coverage, not an executed result.
+
+**Proof ceiling:** REMOTE_GITHUB source/consumer inspection. Windows WebView accessibility exposure, native game keyboard focus after selection, real Minecraft input and five-profile AI computer-control usability remain **NOT_EXECUTED**.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,
