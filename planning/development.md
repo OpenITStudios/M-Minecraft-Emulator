@@ -113,6 +113,16 @@ and live five-profile Minecraft Education remain `NOT_EXECUTED`.
 
 **Proof ceiling:** REMOTE_GITHUB source/consumer inspection. Windows WebView accessibility exposure, native game keyboard focus after selection, real Minecraft input and five-profile AI computer-control usability remain **NOT_EXECUTED**.
 
+## Windows peer-to-peer AI bridge — source-only (30 October 2026)
+
+- Added optional local stdio MCP in `Development/tooling/agent/` with capability disclosure, five-profile inspection, explicit AI-slot Launch, and bounded read-only `[ANALYTICS]`/`[GAME_RESULTS]` evidence reading from the existing external debugger capture format.
+- `--lazy-tester-agent-cli inspect|launch <slot>` is a narrowly restricted same-executable one-shot adapter to the **retained authenticated native session controller**. It is not a second game owner and never opens a Tauri UI or transmits keyboard/mouse input.
+- Default `human-plus-four-ai` reserves MC01 from the MCP launch action; `five-ai` explicitly permits launch of all five. Neither mode makes foreground computer use safe for human-plus-AI parallel gameplay.
+- The new Node tests were executed outside Windows with synthetic fixtures: MCP handshake, mode limits, serialized operations, error handling, and evidence parsing. The existing `test:localtest` includes this suite for future source checks.
+- **NOT_IMPLEMENTED / NOT_VERIFIED:** independent background WASD/mouse, auto host/join, game command injection, five simultaneous debugger transports, per-game attribution by real player identity, actual Windows native bridge integration. These cannot be asserted from static source or synthetic tests.
+
+**Evidence:** REMOTE_GITHUB source contracts + actual Node source fixture execution only. Windows native source compilation, packaged console mode, five-game gameplay and AI independent input remain `NOT_EXECUTED`.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,
@@ -128,9 +138,10 @@ and live five-profile Minecraft Education remain `NOT_EXECUTED`.
 
 ## Next — one validation boundary
 
-Next necessary proof is the existing exact-SHA Windows native preflight/package
-and the bounded five-profile installed/Minecraft acceptance described in
-`docs/validation/README.md`, when that execution context is actually available.
+Next necessary proof is an exact-SHA Windows native preflight and one-shot
+agent-CLI-to-retained-controller acceptance (Inspect/Launch). Independent input
+for MC02 while a human operates MC01 is the subsequent explicit feasibility
+gate; do not claim working parallel AI gameplay before actual game evidence.
 Do not request local-PC work to claim remote source completion, and do not
 open a speculative refactor backlog. Storage, RAM and build optimizations
 require actual before/after measurements; unobserved proof stays NOT_EXECUTED.

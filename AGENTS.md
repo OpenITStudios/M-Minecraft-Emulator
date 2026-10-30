@@ -85,7 +85,7 @@ A diagnosis does not automatically authorize code changes or a destructive VM ac
 - Stable architecture and how-to: `docs/`.
 - Current work and actual evidence handoff: `planning/`.
 
-No duplicate lifecycle authority, agent/network gateway, credentials store, or parallel setup-complete flag. Do not alter installed app identity, Windows data paths, snapshots, signed-release format, or public wire schemas as an incidental folder rename.
+No duplicate lifecycle authority, remote agent/network gateway, credentials store, or parallel setup-complete flag. The explicitly requested optional local stdio MCP adapter delegates to the same authenticated native session controller; it is not a new game owner or independent-input implementation. Do not alter installed app identity, Windows data paths, snapshots, signed-release format, or public wire schemas as an incidental folder rename.
 
 ## Completion rule
 

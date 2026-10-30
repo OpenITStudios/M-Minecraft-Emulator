@@ -11,6 +11,8 @@ pub(crate) mod process_roles;
 #[cfg(windows)]
 pub(crate) mod windows_process_image;
 pub mod native_clients_session;
+// Optional same-executable read/launch adapter for local MCP; no second game owner.
+pub(crate) mod agent_cli;
 pub mod process_identity;
 pub mod dpi;
 pub mod instance_focus_events;

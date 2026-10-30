@@ -10,6 +10,7 @@ a second live game process/session owner.
 | `repository/` | Active Git-tree, dependency, route, CI-disabled and documentation-link checks |
 | `windows-toolchain/` | Source/build/package helpers, targeted frontend/Rust checks and opt-in two-pass timing; no automatic local test |
 | [`developer/`](developer/README.md) | AI-facing `DEV.cmd` registry/inspection/planning and guarded dispatch; existing scripts remain execution owners |
+| [`agent/`](agent/README.md) | Optional local stdio MCP profile inspection/launch and bounded external debug-capture evidence; no independent game owner or keyboard injection |
 | `storage/` | Read-only artifact inventory plus fail-closed retention planning for reviewed developer outputs; no deletion |
 | `dependencies/` | Dependency consistency review and maintenance |
 | `acceptance/windows/bootstrap-ordering/` | **Active native DLL source** used by the five-session game bootstrap |

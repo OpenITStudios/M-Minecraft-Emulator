@@ -5,6 +5,9 @@ mod commands;
 mod engine;
 
 fn main() {
+    if engine::agent_cli::maybe_run() {
+        return;
+    }
     if engine::native_clients::maybe_run_education_startup_observation() {
         return;
     }
