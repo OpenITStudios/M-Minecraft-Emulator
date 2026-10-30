@@ -10,6 +10,7 @@ import {promisify} from 'node:util';
 import {planPeerSession,planPlayerActions} from './control-plan.mjs';
 import {summarizeGameEvidence,normalizeEvidenceSlots} from './evidence-summary.mjs';
 import {captureCuaWindow,validateCuaExecutable} from './visual-capture.mjs';
+import {createVisualObserver,OBSERVATION_LIMITS} from './visual-observer.mjs';
 
 const execFileAsync = promisify(execFile);
 const REQUEST_LIMIT = 64 * 1024;
@@ -173,6 +174,9 @@ export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT)
 }
 
 export const TOOL_LIST=[
+  {name:'start_visual_observation',description:'Start a time-limited LOCAL read-only frame sampler for 1-5 AI-owned Minecraft windows. No continuous images are sent to the model and no gameplay inputs occur.',inputSchema:{type:'object',properties:{slots:{type:'array',minItems:1,maxItems:5,uniqueItems:true,items:{type:'integer',minimum:1,maximum:5}},intervalMs:{type:'integer',minimum:750,maximum:5000},durationMs:{type:'integer',minimum:5000,maximum:90000}},required:['slots'],additionalProperties:false}},
+  {name:'read_visual_observation',description:'Retrieve only a NEW locally cached frame (and status), or metadata without pixels. Never triggers a screenshot itself.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},afterSequence:{type:'integer',minimum:0},includeImage:{type:'boolean'}},required:['slot'],additionalProperties:false}},
+  {name:'stop_visual_observation',description:'Stop one or more bounded visual samplers and immediately drop their in-memory image caches.',inputSchema:{type:'object',properties:{slots:{type:'array',minItems:1,maxItems:5,uniqueItems:true,items:{type:'integer',minimum:1,maximum:5}}},required:['slots'],additionalProperties:false}},
   {name:'observe_client',description:'Read-only screenshot of one AI-owned native Minecraft window via an explicitly configured Cua Driver daemon; rejects a replaced or stale window, never takes foreground or sends input.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
   {name:'get_computer_use_target',description:'Resolve one AI-owned native Minecraft PID/HWND for read-only Cua Driver window capture without switching Windows focus. Does NOT capture pixels or control game input.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
   {name:'revalidate_computer_use_target',description:'Check a previously resolved exact PID/HWND/birth identity against current retained-controller observation. Never silently retarget another game.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},pid:{type:'integer',minimum:1},windowId:{type:'integer',minimum:1},createdFileTime:{type:'string',pattern:'^[0-9]{1,20}$'}},required:['slot','pid','windowId','createdFileTime'],additionalProperties:false}},
@@ -188,58 +192,98 @@ export const TOOL_LIST=[
 
 function capabilities(mode) {return {schema:1,mode,hostSlot:1,humanSlots:mode==='human-plus-four-ai'?[1]:[],
   aiSlots:mode==='human-plus-four-ai'?[2,3,4,5]:[1,2,3,4,5],
-  available:['observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions','summarize_test_evidence'],
+  available:['start_visual_observation','read_visual_observation','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions','summarize_test_evidence'],
   notAvailable:['parallel_independent_keyboard_mouse','automatic_world_host_join','send_minecraft_command'],
   visualCapture:'OPTIONAL_CUA_PROVIDER_RUNTIME_UNVERIFIED',
   note:'MCP tools control the native session owner and read evidence; they do NOT independently move multiple background Minecraft clients.'};}
 
 export function createHandler(config,{native=runNative,evidence=readGameEvidence,capture=captureCuaWindow}={}) {
   let inFlight=false;
+  function protectedSlot(slot) {
+    if (config.mode==='human-plus-four-ai' && slot===1) {
+      throw new Error('MC01 human host is protected from AI visual observation');
+    }
+  }
+  async function captureVerifiedFrame(slot) {
+    protectedSlot(slot);
+    if (!config.cuaExecutable) {
+      throw new Error('Cua visual provider is NOT_CONFIGURED; set --cua-exe explicitly');
+    }
+    if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
+    inFlight=true;
+    try {
+      const before=validateNativeWindowTarget(
+        await native(config.executable,'target',slot),slot);
+      const frame=await capture(config.cuaExecutable,before);
+      const after=validateNativeWindowTarget(
+        await native(config.executable,'target',slot),slot);
+      if (before.pid!==after.pid || before.windowId!==after.windowId ||
+          before.createdFileTime!==after.createdFileTime ||
+          before.sessionId!==after.sessionId) {
+        throw new Error('Minecraft window changed during capture; screenshot discarded');
+      }
+      if (!frame || frame.mimeType!=='image/png' ||
+          typeof frame.imageBase64!=='string' ||
+          !Number.isInteger(frame.width) || !Number.isInteger(frame.height) ||
+          frame.width<1 || frame.height<1) {
+        throw new Error('Cua did not produce a usable PNG frame');
+      }
+      return {
+        metadata:{
+          schema:1,slot,mode:config.mode,
+          provider:'CUA_DRIVER_WINDOW_CAPTURE',
+          observedWindow:{pid:after.pid,windowId:after.windowId},
+          processIdentity:{pid:after.pid,windowId:after.windowId,
+            createdFileTime:after.createdFileTime,sessionId:after.sessionId},
+          width:frame.width,height:frame.height,
+          sha256:frame.sha256??null,
+          frameFreshness:'UNVERIFIED_SINGLE_FRAME',
+          background:!before.foreground && !after.foreground,
+          screenshotStatus:'PNG_RETURNED_NOT_GAMEPLAY_PROOF',
+          gameInput:'BACKGROUND_MINECRAFT_INPUT_UNVERIFIED',
+          note:'Pixels may be stale, blank, or unrepresentative of gameplay. Captures do not prove player login or peer-to-peer join.',
+        },
+        imageBase64:frame.imageBase64,
+      };
+    } finally {inFlight=false;}
+  }
+  const visualObserver=createVisualObserver({capture:captureVerifiedFrame});
+  function checkedSlots(slots) {
+    if (!Array.isArray(slots) || slots.length<1 || slots.length>5 ||
+        new Set(slots).size!==slots.length) {
+      throw new Error('Choose 1-5 distinct Minecraft profiles');
+    }
+    for (const slot of slots) protectedSlot(slotOf(slot));
+    return slots;
+  }
   async function callTool(name,args) {
+    if (name==='start_visual_observation') {
+      keysExactly(args,['slots','intervalMs','durationMs']);
+      const slots=checkedSlots(args.slots);
+      if (!config.cuaExecutable) {
+        throw new Error('Cua visual provider is NOT_CONFIGURED');
+      }
+      return visualObserver.start(slots,{
+        intervalMs:args.intervalMs??OBSERVATION_LIMITS.defaultIntervalMs,
+        durationMs:args.durationMs??OBSERVATION_LIMITS.defaultDurationMs,
+      });
+    }
+    if (name==='read_visual_observation') {
+      keysExactly(args,['slot','afterSequence','includeImage']);
+      const slot=slotOf(args.slot);
+      protectedSlot(slot);
+      return visualObserver.read(slot,{
+        afterSequence:args.afterSequence??0,
+        includeImage:args.includeImage??true,
+      });
+    }
+    if (name==='stop_visual_observation') {
+      keysExactly(args,['slots']);
+      return visualObserver.stop(checkedSlots(args.slots));
+    }
     if (name==='observe_client') {
       keysExactly(args,['slot']);
-      const slot=slotOf(args.slot);
-      if (config.mode==='human-plus-four-ai' && slot===1) {
-        throw new Error('MC01 human host is protected from AI computer-use observation');
-      }
-      if (!config.cuaExecutable) {
-        throw new Error('Cua visual provider is NOT_CONFIGURED; set --cua-exe explicitly');
-      }
-      if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
-      inFlight=true;
-      try {
-        const before=validateNativeWindowTarget(
-          await native(config.executable,'target',slot),slot);
-        const frame=await capture(config.cuaExecutable,before);
-        const after=validateNativeWindowTarget(
-          await native(config.executable,'target',slot),slot);
-        if (before.pid!==after.pid || before.windowId!==after.windowId ||
-            before.createdFileTime!==after.createdFileTime ||
-            before.sessionId!==after.sessionId) {
-          throw new Error('Minecraft window changed during capture; screenshot discarded');
-        }
-        if (!frame || frame.mimeType!=='image/png' ||
-            typeof frame.imageBase64!=='string' ||
-            !Number.isInteger(frame.width) || !Number.isInteger(frame.height) ||
-            frame.width<1 || frame.height<1) {
-          throw new Error('Cua did not produce a usable PNG frame');
-        }
-        return {
-          metadata:{
-            schema:1,slot,mode:config.mode,
-            provider:'CUA_DRIVER_WINDOW_CAPTURE',
-            observedWindow:{pid:after.pid,windowId:after.windowId},
-            width:frame.width,height:frame.height,
-            sha256:frame.sha256??null,
-            frameFreshness:'UNVERIFIED_SINGLE_FRAME',
-            background:!before.foreground && !after.foreground,
-            screenshotStatus:'PNG_RETURNED_NOT_GAMEPLAY_PROOF',
-            gameInput:'BACKGROUND_MINECRAFT_INPUT_UNVERIFIED',
-            note:'Pixels may be stale, blank, or unrepresentative of gameplay. Captures do not prove player login or peer-to-peer join.',
-          },
-          imageBase64:frame.imageBase64,
-        };
-      } finally {inFlight=false;}
+      return captureVerifiedFrame(slotOf(args.slot));
     }
     if (name==='get_computer_use_target' ||
         name==='revalidate_computer_use_target') {
@@ -352,12 +396,15 @@ export function createHandler(config,{native=runNative,evidence=readGameEvidence
         if (typeof name!=='string') return err(-32602,'Tool name is required');
         try {
           const data=await callTool(name,message.params?.arguments??{});
-          if (name==='observe_client') {
-            // A real MCP image block, not JSON containing arbitrary image text.
-            return result({content:[
-              {type:'text',text:JSON.stringify(data.metadata)},
-              {type:'image',mimeType:'image/png',data:data.imageBase64},
-            ],isError:false});
+          if (name==='observe_client' || name==='read_visual_observation') {
+            // Cached rolling observation returns metadata alone unless a
+            // newer frame is explicitly requested by the model.
+            const content=[{type:'text',text:JSON.stringify(data.metadata)}];
+            if (typeof data.imageBase64==='string') {
+              content.push({type:'image',mimeType:'image/png',
+                data:data.imageBase64});
+            }
+            return result({content,isError:false});
           }
           return result({content:[{type:'text',text:JSON.stringify(data)}],isError:false});
         } catch(error) {
@@ -367,12 +414,13 @@ export function createHandler(config,{native=runNative,evidence=readGameEvidence
       return err(-32601,'Method not found');
     }catch {return err(-32603,'Internal error');}
   }
-  return {handle,callTool};
+  return {handle,callTool,shutdown:()=>visualObserver.shutdown()};
 }
 
 export function serve(config) {
   const handler=createHandler(config);
   const rl=readline.createInterface({input:process.stdin,crlfDelay:Infinity,terminal:false});
+  rl.once('close',()=>handler.shutdown());
   rl.on('line',async line=>{
     if (Buffer.byteLength(line)>REQUEST_LIMIT) return;
     let message;

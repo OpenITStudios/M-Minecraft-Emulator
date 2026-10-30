@@ -112,6 +112,44 @@ Only code is committed; no user screenshots are collected now.
 
 Cua CLI reference: https://cua.ai/docs/cua-driver/reference/cli/serve-and-configure
 
+## Phase 3: bounded continuous local visual observation (source only)
+
+The existing MCP process can now run a **time-limited rolling frame sampler**
+without Codex requesting a fresh screenshot for every observation.
+`start_visual_observation` starts in-process sampling for 1–5 AI-owned
+windows (MC01 prohibited in hybrid mode). `read_visual_observation`
+returns the latest *changed* cached PNG only when Codex requests it, and
+`stop_visual_observation` immediately clears the in-memory frame cache.
+
+- Default: one read-only Cua window capture attempt every 1250 ms per slot,
+  with slower sampling while the PNG bytes remain identical. Allowed interval
+  750–5000 ms, session duration 5–90 seconds. No overlapping captures;
+  native controller operations share the existing gate.
+- One cached frame at most per client, each at most 4 MiB of encoded data.
+  Maximum five independently observed windows. Single frame copy is never
+  interpreted as verified gameplay progress, semantic motion, or a real
+  30/60-FPS video stream. PNG byte hash change only signals changed **bytes**,
+  not a detected enemy, movement or actual pixels.
+- Old or replaced PID/birth/session/HWND terminates that slot's sampler.
+  Three consecutive capture failures also stop it. Busy native operations
+  skip sampling instead of interrupting game lifecycle.
+- Timers stop on explicit stop, expiry, and MCP stdio connection closure.
+  Source images are ephemeral in memory; not written to persistent
+  account/world files or automatically forwarded to an AI model.
+- `read_visual_observation({slot,afterSequence,includeImage})` returns
+  status only if the newest sequence is unchanged, avoiding repeated model
+  image ingestion. The model can combine changes with existing analytics
+  summaries through `get_test_context` when needed.
+- No background-control keyboard, mouse, camera-rotation, inference model,
+  camera stream provider, second daemon, auto-join, or UI is created.
+  Cua CLI remains a conservative **bounded frame sampler**, not continuous
+  GPU video capture. For genuinely low-latency PvP, a later single persistent
+  Windows Graphics Capture frame source would be needed, after proof.
+
+**No local tests or Minecraft live verification are authorized yet.**
+Both Cua Windows performance and real multi-window frame freshness remain
+UNKNOWN. This code is an opt-in read-only local observation tool.
+
 ## One-call AI test context
 
 The first MCP choice for Codex/Claude analysis should be

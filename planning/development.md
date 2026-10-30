@@ -264,6 +264,31 @@ NOT_EXECUTED / NOT_VERIFIED.
 **Proof ceiling:** REMOTE_GITHUB source review only; Cua capture integration,
 Windows live game pixels and parallel game input NOT_EXECUTED/UNVERIFIED.
 
+## Phase 3: local rolling visual observation for Codex — source only
+
+- Added a bounded `visual-observer.mjs` owned by the current MCP stdio
+  process: explicit start/read/stop, five per-slot in-memory latest-frame
+  caches, timeout after at most 90 s, serialized Cua capture attempts, and
+  adaptive backoff for repeated PNG bytes. MC01 stays excluded in hybrid mode.
+- MCP now exposes `start_visual_observation`,
+  `read_visual_observation`, `stop_visual_observation`. Model receives
+  an image only when it explicitly reads a newer sequence; unchanged frames
+  return metadata only. The controller is closed with MCP stdio.
+- Reused existing exact-native-window verification before/after every local
+  Cua capture, retaining PID/HWND/process birth/session identity across
+  samples. Changed targets/failures terminate and drop cached pixels.
+- No UI, input injection, additional native controller, new long-running
+  standalone service or AI decision daemon. Underlying provider still makes
+  **bounded sequential CLI snapshots** rather than persistent high-FPS
+  Windows Graphics Capture. This is not real-time semantic game perception.
+- Authored source-level fixtures only; **no Node tests, Windows build,
+  local/installed app operations or Minecraft gameplay executed**.
+  Windows Cua behavior, game-frame freshness, latency, memory/CPU impact
+  and independent game input are NOT_VERIFIED.
+
+**Proof ceiling:** REMOTE_GITHUB source/consumer inspection only. Await
+explicit operator permission before any runtime test or installed changes.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,
