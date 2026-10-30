@@ -145,6 +145,25 @@ and live five-profile Minecraft Education remain `NOT_EXECUTED`.
 CLI, real game background input, human input preservation, auto host/join,
 and four AI/5 AI gameplay remain NOT_EXECUTED or NOT_IMPLEMENTED.
 
+## Source-only multi-player AI coordination contract — 30 October 2026
+
+- Added one stateless `control-plan.mjs` owner for both modes: MC01 human
+  host + MC02–MC05 AI, or MC01–MC05 AI with MC01 as intended host. The
+  `plan_peer_session` MCP tool reuses exact native Inspect evidence, refusing
+  to infer world creation, sign-in or peer joins from RUNNING profiles.
+- Added `plan_player_actions` to validate and sort up to 32 bounded intended
+  actions with explicit slot and timing. Hybrid mode rejects MC01; overlapping
+  actions on one slot are rejected. No actions are dispatched; every plan
+  declares `BLOCKED_NO_VERIFIED_PER_CLIENT_INPUT_BACKEND`.
+- Authored source contract tests in the existing Node test convention and
+  extended the current MCP fixture; **no tests, builds, launcher or Minecraft
+  operations executed**, following the operator's source-only instruction.
+- UI, original five-profile lifecycle, official game binaries, account/world
+  storage, and disabled GitHub Actions remain unchanged.
+
+**Proof ceiling:** exact GitHub source/blob review only. Native Minecraft
+parallel input remains UNVERIFIED, all execution NOT_EXECUTED.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,

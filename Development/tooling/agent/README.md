@@ -33,6 +33,27 @@ Use `--mode five-ai` only when **all five clients are intentionally AI-operated*
 
 `--lazy-tester-agent-cli inspect` refuses without a compatible retained controller; it never invents an empty five-client state. `launch` uses the reviewed original bootstrap to request a client launch, without silently opening or joining a Minecraft world.
 
+## Source-only five-player coordination contracts
+
+Two additional MCP tools prepare the Windows peer-to-peer workflow without
+launching a world, taking keyboard focus, or inventing player movement:
+
+- `plan_peer_session` reads the same native session inspection and assigns
+  MC01 as the intended host, MC02–MC05 as joiners. In hybrid mode MC01 remains
+  human-owned. RUNNING means **process observed**, not joined/logged-in.
+  The tool returns only next-step guidance for agent computer-use/manual setup.
+- `plan_player_actions` checks up to 32 short actions targeted by slot and
+  offset. It supports movement, jump, attack, use, look, and wait *intent*,
+  rejects overlapping actions for one slot, and refuses MC01 in hybrid mode.
+  Every result is `NOT_DISPATCHED` with
+  `BLOCKED_NO_VERIFIED_PER_CLIENT_INPUT_BACKEND`. Nothing is sent to any
+  Minecraft window.
+
+These stateless contracts prepare future independent input adapters while
+retaining the original native session owner. They do not schedule worker
+processes, create an alternative session database, or expose computer-control
+privileges. Do not mistake a prepared multi-client plan for gameplay proof.
+
 ## Evidence from an instrumented peer-to-peer world
 
 The **host MC01** creates the world as usual. Other clients join through Minecraft Education's own Join World UI. This bridge does **not** automate these steps.

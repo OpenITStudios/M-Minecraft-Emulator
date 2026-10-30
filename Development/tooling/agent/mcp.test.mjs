@@ -21,7 +21,7 @@ test('MCP handshake and tool discovery are standard JSON-RPC',async()=>{
   const init=await h.handle({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-11-25'}});
   assert.equal(init.result.protocolVersion,'2025-11-25');
   const listing=await h.handle({jsonrpc:'2.0',id:2,method:'tools/list'});
-  assert.deepEqual(listing.result.tools.map(x=>x.name),['agent_capabilities','inspect_profiles','launch_profile','read_game_evidence']);
+  assert.deepEqual(listing.result.tools.map(x=>x.name),['agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','read_game_evidence']);
   assert.equal(await h.handle({jsonrpc:'2.0',method:'notifications/initialized'}),null);
 });
 
@@ -36,6 +36,29 @@ test('hybrid mode refuses to launch human MC01, no native request sent',async()=
   assert.deepEqual(calls.map(x=>x.slice(1)),[['launch',2]]);
   const full=createHandler(config('five-ai'),{native:async(...args)=>{calls.push(args);return snapshot(args[1]);}});
   assert.equal((await full.callTool('launch_profile',{slot:1})).operation,'launch');
+});
+
+test('MCP peer-session guidance inspects once and never claims world join',async()=>{
+  const calls=[];
+  const handler=createHandler(config(),{native:async(_exe,op)=>{calls.push(op);return snapshot(op);}});
+  const plan=await handler.callTool('plan_peer_session',{});
+  assert.deepEqual(calls,['inspect']);
+  assert.equal(plan.hostWorld,'NOT_OBSERVED');
+  assert.equal(plan.independentBackgroundInput,'NOT_VERIFIED');
+});
+
+test('MCP player-action plan is nonexecuting and protects MC01',async()=>{
+  const calls=[];
+  const handler=createHandler(config(),{native:async(...args)=>{calls.push(args);return snapshot(args[1]);}});
+  const response=await handler.callTool('plan_player_actions',{actions:[
+    {slot:2,kind:'move_forward',atMs:0,durationMs:100},
+    {slot:3,kind:'jump',atMs:0,durationMs:100}
+  ]});
+  assert.equal(response.execution,'NOT_DISPATCHED');
+  assert.match(response.gate,/BLOCKED/);
+  assert.equal(calls.length,0);
+  await assert.rejects(()=>handler.callTool('plan_player_actions',{actions:[
+    {slot:1,kind:'jump',atMs:0,durationMs:100}]}),/human-owned/);
 });
 
 test('native operations serialized and malformed slot denied',async()=>{
