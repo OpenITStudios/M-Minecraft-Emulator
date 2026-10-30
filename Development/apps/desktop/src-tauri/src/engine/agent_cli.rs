@@ -1,6 +1,7 @@
 //! One-shot, same-image native adapter for the local MCP stdio bridge.
 //! The retained authenticated controller remains the only Minecraft game owner.
-//! This mode NEVER creates a Tauri window, scans accounts, injects input or manages worlds.
+//! Does not open a Tauri window or own Minecraft. An explicitly opted-in
+//! MC02-only background Win32 message experiment is NOT gameplay control.
 use std::ffi::OsStr;
 use std::io::{self, Write};
 use serde_json::{json, Value};
@@ -15,6 +16,8 @@ fn parse_operation(args: &[String]) -> Result<(&'static str, Option<u32>), &'sta
             }
             Ok(("launch", Some(slot)))
         }
+        [operation, slot] if operation == "probe-background" && slot == "2" =>
+            Ok(("probe-background", Some(2))),
         _ => Err("INVALID_ARGUMENTS"),
     }
 }
@@ -22,7 +25,7 @@ fn parse_operation(args: &[String]) -> Result<(&'static str, Option<u32>), &'sta
 fn native_error(error: io::Error) -> &'static str {
     match error.kind() {
         io::ErrorKind::WouldBlock => "NATIVE_BUSY",
-        io::ErrorKind::TimedOut => "OUTCOME_UNCERTAIN",
+        io::ErrorKind::TimedOut | io::ErrorKind::Interrupted => "OUTCOME_UNCERTAIN",
         io::ErrorKind::PermissionDenied => "NATIVE_REFUSED",
         io::ErrorKind::Unsupported => "UNSUPPORTED",
         _ => "NATIVE_UNAVAILABLE",
@@ -49,6 +52,42 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
             if !owner {
                 return Err("CONTROLLER_UNAVAILABLE");
             }
+        }
+        if operation == "probe-background" {
+            // Manual opt-in only; never an automatically advertised MCP tool.
+            if std::env::var("LAZY_TESTER_MC02_INPUT_PROBE").ok().as_deref()
+                != Some("I_ACCEPT_ONE_W_PULSE")
+            {
+                return Err("EXPERIMENT_NOT_AUTHORIZED");
+            }
+            if !native_clients_session::existing_controller_gate(
+                "Local\\MivubiEducationStartupObservation",
+            ).map_err(native_error)? {
+                return Err("CONTROLLER_UNAVAILABLE");
+            }
+            let snapshot = native_clients_session::request(SessionRequest::Inspect)
+                .map_err(native_error)?;
+            if snapshot.schema != 1 || snapshot.profiles.len() != 5 ||
+                snapshot.profiles.iter().enumerate().any(|(i,p)|p.slot as usize != i+1) {
+                return Err("INVALID_NATIVE_SNAPSHOT");
+            }
+            let human = &snapshot.profiles[0];
+            let ai = &snapshot.profiles[1];
+            if human.state != "RUNNING" || ai.state != "RUNNING" {
+                return Err("PROBE_REQUIRES_TWO_RUNNING_GAMES");
+            }
+            let human_process = human.process.as_ref().filter(|p|p.responding)
+                .ok_or("HUMAN_GAME_NOT_READY")?;
+            let ai_process = ai.process.as_ref().filter(|p|p.responding)
+                .ok_or("AI_GAME_NOT_READY")?;
+            super::background_input_probe::one_forward_pulse(human_process,ai_process)
+                .map_err(native_error)?;
+            return Ok(json!({
+                "schema":1, "ok":true, "operation":"probe-background", "slot":2,
+                "delivery":"WINDOW_MESSAGES_POSTED_ONLY",
+                "humanForegroundPreserved":true, "gameplayObserved":false,
+                "evidence":"NOT_VERIFIED_IN_MINECRAFT"
+            }));
         }
         let request = match slot {
             Some(slot) => SessionRequest::Launch { slot },
@@ -112,8 +151,12 @@ mod tests {
     fn one_shot_command_accepts_only_inspect_or_five_slots() {
         assert_eq!(parse_operation(&["inspect".into()]).unwrap(), ("inspect", None));
         assert_eq!(parse_operation(&["launch".into(), "5".into()]).unwrap(), ("launch", Some(5)));
+        assert_eq!(parse_operation(&["probe-background".into(), "2".into()]).unwrap(),
+            ("probe-background", Some(2)));
         for args in [vec!["close"], vec!["launch"], vec!["launch", "0"],
-            vec!["launch", "6"], vec!["inspect", "1"], vec!["launch", "1", "extra"]] {
+            vec!["launch", "6"], vec!["inspect", "1"], vec!["launch", "1", "extra"],
+            vec!["probe-background", "1"], vec!["probe-background", "3"],
+            vec!["probe-background"], vec!["probe-background", "2", "extra"]] {
             let args = args.into_iter().map(str::to_owned).collect::<Vec<_>>();
             assert!(parse_operation(&args).is_err());
         }

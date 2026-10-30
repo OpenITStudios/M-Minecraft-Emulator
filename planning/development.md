@@ -123,6 +123,28 @@ and live five-profile Minecraft Education remain `NOT_EXECUTED`.
 
 **Evidence:** REMOTE_GITHUB source contracts + actual Node source fixture execution only. Windows native source compilation, packaged console mode, five-game gameplay and AI independent input remain `NOT_EXECUTED`.
 
+## MC01 human + MC02 AI P0 — bounded Windows input feasibility (30 October 2026)
+
+- The same-executable native agent CLI gained a manually opted-in
+  `probe-background 2` diagnostic ONLY. The authenticated session controller
+  must confirm responsive running MC01 and MC02. The canonical HWND verifier
+  retains process identity (PID/birth/session/window) throughout the attempt.
+- The diagnostic posts only one bounded W-key down/up pair to MC02's window
+  with MC01 as the verified foreground. It never sends global SendInput,
+  activates AI windows, owns a second game controller, changes a world,
+  introduces a new daemon, or exposes an agent input tool.
+- The result `WINDOW_MESSAGES_POSTED_ONLY` with `gameplayObserved:false`
+  is NOT proof Minecraft Education accepted the input, and is NOT an
+  independent WASD/mouse implementation. If background Windows messages
+  are ignored by Minecraft, reject this approach; do not label it PASS.
+- Tests authored: argument parsing rejects every profile other than MC02,
+  source policy checks for down/up flags, MCP refuses experimental input.
+  These do not establish game movement or safe concurrent human controls.
+
+**Proof ceiling:** REMOTE_GITHUB source-only. Windows Rust build, installed
+CLI, real game background input, human input preservation, auto host/join,
+and four AI/5 AI gameplay remain NOT_EXECUTED or NOT_IMPLEMENTED.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,

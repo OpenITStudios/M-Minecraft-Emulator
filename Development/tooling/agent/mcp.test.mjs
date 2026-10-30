@@ -72,6 +72,16 @@ test('evidence reads only complete marked lines from assigned profile',async()=>
   } finally {await rm(root,{recursive:true,force:true});}
 });
 
+test('experimental background input is NOT exposed as an agent tool',async()=>{
+  const h=createHandler(config());
+  const tools=(await h.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;
+  assert.equal(tools.some(t=>t.name.includes('input')||t.name.includes('probe')),false);
+  assert.equal((await h.handle({jsonrpc:'2.0',id:2,method:'tools/call',
+    params:{name:'probe-background',arguments:{slot:2}}})).result.isError,true);
+  assert.equal((await h.callTool('agent_capabilities',{}))
+    .notAvailable.includes('parallel_independent_keyboard_mouse'),true);
+});
+
 test('never trusts incomplete or out-of-order native profiles',()=>{
   assert.throws(()=>validateNativeReport({schema:1,ok:true,operation:'inspect',profiles:snapshot('inspect').profiles.toReversed()},'inspect'));
   assert.throws(()=>validateNativeReport({schema:1,ok:true,operation:'inspect',profiles:snapshot('inspect').profiles},'launch'));

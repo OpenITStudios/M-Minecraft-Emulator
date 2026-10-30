@@ -299,6 +299,25 @@ pub fn focus_observed_native_window(target: OwnedProcess) -> io::Result<()> {
     }
 }
 
+// The experimental MC02 diagnostic reuses this identity owner. Retain the
+// verified process HANDLE during its one-shot window-scoped operation; this
+// accessor does not grant game/session lifecycle or public input authority.
+#[cfg(windows)]
+pub(crate) fn with_verified_native_window<R>(
+    target: &OwnedProcess,
+    use_window: impl FnOnce(usize) -> io::Result<R>,
+) -> io::Result<R> {
+    let (_pin, window) = native::hwnd(target)?;
+    use_window(window as usize)
+}
+
+#[cfg(windows)]
+pub(crate) fn matches_verified_native_window(
+    target: &OwnedProcess, expected: usize,
+) -> io::Result<bool> {
+    with_verified_native_window(target, |window| Ok(window == expected))
+}
+
 // Only Windows compiles the existing HWND/OGLES recovery controller. Its
 // process roles and exact native checkpoint ownership have no Mac analogue.
 #[cfg(windows)]
