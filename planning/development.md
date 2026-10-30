@@ -322,6 +322,32 @@ explicit operator permission before any runtime test or installed changes.
 **Proof ceiling:** REMOTE_GITHUB source review only. Do not claim that
 Minecraft can be observed at live gameplay speed or controlled by AI.
 
+## Phase 5: simultaneous AI input channels — source-only
+
+- Updated the canonical `control-plan.mjs` so one AI Minecraft can
+  simultaneously move, strafe, look, jump, attack and interact using
+  distinct input channels. Conflicts on the same channel and exclusive
+  waits remain rejected, as does MC01 in human-plus-four-AI mode.
+- Added bounded relative mouse-intent deltas and a pure
+  `input-timeline.mjs` compiler of timestamp-grouped PRESS/RELEASE/
+  POINTER_DELTA semantics. The existing MCP `plan_player_actions`
+  optionally includes this timeline via `includeTimeline:true`.
+  The default is unchanged; there is NO executable input command.
+- All plans remain `NOT_DISPATCHED` and gated by
+  `BLOCKED_NO_VERIFIED_PER_CLIENT_INPUT_BACKEND`. The future provider
+  must implement real isolated controls and guaranteed release-all,
+  independent of the authored emergency-release intent list.
+- Regression tests authored for per-client simultaneous channels,
+  conflicting directions, MC01 protection, delta bounds, ordering,
+  and emergency-release intent. **No Node/Rust/local tests, builds,
+  installation or Minecraft execution performed**.
+- No game DLL hooks, input driver, raw desktop SendInput, MakeCode or
+  UI changes were introduced.
+
+**Proof ceiling:** REMOTE_GITHUB source-only. Independent background
+WASD/mouse for Minecraft Education and four/five AI gameplay still
+UNIMPLEMENTED or UNVERIFIED.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,

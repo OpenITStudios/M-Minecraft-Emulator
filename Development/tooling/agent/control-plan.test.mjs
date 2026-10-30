@@ -41,14 +41,31 @@ test('concurrent actions for different AI profiles are prepared, not dispatched'
   assert.match(plan.gate,/BLOCKED/);
 });
 
-test('human keyboard and overlapping per-slot inputs are never admitted',() => {
+test('MC01 protection and conflicting input channels still refuse overlap',()=>{
   assert.throws(()=>planPlayerActions('human-plus-four-ai',[
     {slot:1,kind:'move_forward',atMs:0,durationMs:80},
   ]),/human-owned/);
   assert.throws(()=>planPlayerActions('five-ai',[
     {slot:2,kind:'move_forward',atMs:0,durationMs:300},
-    {slot:2,kind:'jump',atMs:200,durationMs:100},
-  ]),/Overlapping/);
+    {slot:2,kind:'move_backward',atMs:200,durationMs:100},
+  ]),/input channel/);
+  assert.throws(()=>planPlayerActions('five-ai',[
+    {slot:2,kind:'wait',atMs:0,durationMs:400},
+    {slot:2,kind:'attack',atMs:200,durationMs:100},
+  ]),/input channel/);
+});
+test('one AI may walk strafe jump attack and aim at the same time',()=>{
+  const p=planPlayerActions('human-plus-four-ai',[
+    {slot:2,kind:'move_forward',atMs:0,durationMs:400},
+    {slot:2,kind:'strafe_left',atMs:0,durationMs:400},
+    {slot:2,kind:'jump',atMs:0,durationMs:100},
+    {slot:2,kind:'attack',atMs:0,durationMs:100},
+    {slot:2,kind:'look_relative',atMs:0,durationMs:50,deltaX:90,deltaY:-20},
+  ]);
+  assert.equal(p.maximumConcurrentIntents,5);
+  assert.equal(new Set(p.actions.map(x=>x.channel)).size,5);
+  assert.equal(p.execution,'NOT_DISPATCHED');
+  assert.match(p.inputBackend,/UNBOUND/);
 });
 
 test('unknown, oversized and malformed actions are refused',() => {
@@ -62,6 +79,10 @@ test('unknown, oversized and malformed actions are refused',() => {
     {slot:2,kind:'jump',atMs:0,durationMs:100,command:'/op @a'},
     {slot:2,kind:'move_forward',atMs:-1,durationMs:100},
     {slot:2,kind:'attack',atMs:0,durationMs:99999},
+    {slot:2,kind:'look_relative',atMs:0,durationMs:50,deltaX:0,deltaY:0},
+    {slot:2,kind:'look_relative',atMs:0,durationMs:50,deltaX:513,deltaY:1},
+    {slot:2,kind:'look_relative',atMs:0,durationMs:50},
+    {slot:2,kind:'move_forward',atMs:0,durationMs:80,deltaX:1},
   ]) assert.throws(()=>planPlayerActions('five-ai',[action]));
   assert.throws(()=>planPeerSession('five-ai',{...snapshot(),operation:'launch'}));
 });

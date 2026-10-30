@@ -3,9 +3,17 @@
 export const TEST_MODES = Object.freeze(['human-plus-four-ai', 'five-ai']);
 export const PLAYER_ACTIONS = Object.freeze([
   'move_forward', 'move_backward', 'strafe_left', 'strafe_right',
-  'jump', 'sneak', 'attack', 'use', 'look_left', 'look_right', 'wait',
+  'jump', 'sneak', 'attack', 'use', 'look_left', 'look_right',
+  'look_relative', 'wait',
 ]);
 const ACTIONS = new Set(PLAYER_ACTIONS);
+// Independent controls may overlap on the SAME client without sharing keys.
+export const INPUT_CHANNELS=Object.freeze({
+  move_forward:'move_longitudinal',move_backward:'move_longitudinal',
+  strafe_left:'move_lateral',strafe_right:'move_lateral',
+  look_left:'camera',look_right:'camera',look_relative:'camera',
+  jump:'jump',sneak:'stance',attack:'attack',use:'use',wait:'exclusive',
+});
 const STATES = new Set(['STOPPED','STARTING','RUNNING','NOT_RESPONDING','ATTENTION']);
 const MAX_ACTIONS = 32;
 const MAX_OFFSET_MS = 30000;
@@ -91,31 +99,46 @@ export function planPlayerActions(mode,actions) {
   }
   const scheduled = [];
   for (const action of actions) {
-    record(action,['slot','kind','atMs','durationMs']);
+    record(action,['slot','kind','atMs','durationMs','deltaX','deltaY']);
     const slot = validSlot(action.slot);
     if (!ownership.aiSlots.includes(slot)) {
       throw new TypeError('The human-owned Minecraft profile cannot receive AI actions');
     }
     if (!ACTIONS.has(action.kind)) throw new TypeError('Unsupported player action');
+    const channel=INPUT_CHANNELS[action.kind];
+    if (action.kind==='look_relative') {
+      if (!Number.isInteger(action.deltaX) || !Number.isInteger(action.deltaY) ||
+          Math.abs(action.deltaX)>512 || Math.abs(action.deltaY)>512 ||
+          (action.deltaX===0 && action.deltaY===0)) {
+        throw new TypeError('Relative camera change requires nonzero integer deltas within ±512');
+      }
+    } else if (Object.hasOwn(action,'deltaX') || Object.hasOwn(action,'deltaY')) {
+      throw new TypeError('Only look_relative accepts camera deltas');
+    }
     if (!Number.isInteger(action.atMs) || action.atMs < 0 || action.atMs > MAX_OFFSET_MS) {
       throw new TypeError('Action offset must be 0-30000 ms');
     }
-    const upperDuration = action.kind === 'wait' ? 5000 : MAX_DURATION_MS;
+    const upperDuration = action.kind==='wait' ? 5000 :
+      action.kind==='look_relative' ? 250 : MAX_DURATION_MS;
     if (!Number.isInteger(action.durationMs) || action.durationMs < 50 ||
         action.durationMs > upperDuration ||
         action.atMs + action.durationMs > MAX_OFFSET_MS + 5000) {
       throw new TypeError('Action duration is unbounded or invalid');
     }
     const endMs = action.atMs + action.durationMs;
-    // No two overlapping actions can address one game slot: input providers
-    // cannot safely release keys when actions compete on the same client.
-    if (scheduled.some(previous => previous.slot === slot &&
-        action.atMs < previous.endMs && previous.atMs < endMs)) {
-      throw new TypeError('Overlapping actions for one Minecraft profile are refused');
+    // Walk + aim + jump + attack may overlap. Conflicting controls on ONE
+    // channel (or any action during an exclusive wait) are denied.
+    if (scheduled.some(previous => previous.slot===slot &&
+        action.atMs<previous.endMs && previous.startMs<endMs &&
+        (channel==='exclusive' || previous.channel==='exclusive' ||
+          channel===previous.channel))) {
+      throw new TypeError('Overlapping actions on the same client input channel are refused');
     }
     scheduled.push({
-      slot, kind: action.kind, startMs: action.atMs,
-      durationMs: action.durationMs, endMs,
+      slot,kind:action.kind,channel,startMs:action.atMs,
+      durationMs:action.durationMs,endMs,
+      ...(action.kind==='look_relative'?
+        {deltaX:action.deltaX,deltaY:action.deltaY}:{}),
     });
   }
   scheduled.sort((a,b) => a.startMs - b.startMs || a.slot - b.slot);
@@ -132,6 +155,8 @@ export function planPlayerActions(mode,actions) {
     execution: 'NOT_DISPATCHED',
     gate: 'BLOCKED_NO_VERIFIED_PER_CLIENT_INPUT_BACKEND',
     noGlobalKeyboardMouse: true,
-    note: 'This is a validated intent schedule only. It cannot move a Minecraft client.',
+    inputBackend:'UNBOUND_NO_VERIFIED_INDEPENDENT_WINDOWS_GAME_INPUT',
+    requiresPerClientEmergencyRelease:true,
+    note:'Concurrent-channel intents are validated but NOT sent to Minecraft; independent Windows input remains unverified.',
   };
 }

@@ -205,6 +205,24 @@ test('MCP peer-session guidance inspects once and never claims world join',async
   assert.equal(plan.independentBackgroundInput,'NOT_VERIFIED');
 });
 
+test('MCP compiles simultaneous controls without dispatching native input',async()=>{
+  let nativeCalls=0;
+  const h=createHandler(config(),{native:async()=>{
+    nativeCalls++;throw Error('Should never touch native');
+  }});
+  const result=await h.callTool('plan_player_actions',{includeTimeline:true,actions:[
+    {slot:2,kind:'move_forward',atMs:0,durationMs:300},
+    {slot:2,kind:'attack',atMs:0,durationMs:100},
+    {slot:2,kind:'look_relative',atMs:0,durationMs:50,deltaX:60,deltaY:-5},
+  ]});
+  assert.equal(result.execution,'NOT_DISPATCHED');
+  assert.equal(result.maximumConcurrentIntents,3);
+  assert.equal(result.inputEvents.filter(e=>e.phase==='PRESS').length,2);
+  assert.equal(result.inputEvents.filter(e=>e.phase==='POINTER_DELTA').length,1);
+  assert.match(result.deliveryGate,/BLOCKED/);
+  assert.equal(nativeCalls,0);
+});
+
 test('MCP player-action plan is nonexecuting and protects MC01',async()=>{
   const calls=[];
   const handler=createHandler(config(),{native:async(...args)=>{calls.push(args);return snapshot(args[1]);}});

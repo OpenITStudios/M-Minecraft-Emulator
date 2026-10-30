@@ -112,6 +112,35 @@ Only code is committed; no user screenshots are collected now.
 
 Cua CLI reference: https://cua.ai/docs/cua-driver/reference/cli/serve-and-configure
 
+## Phase 5: concurrent independent-input contract (source only)
+
+The previous planner refused **any** simultaneous controls for one Minecraft,
+which would prevent normal AI gameplay. `plan_player_actions` now allows
+overlapping *independent channels*: forward/back movement, lateral movement,
+camera, jump, sneak, attack, and item use. Conflicting directions on the
+same axis and exclusive waits still cannot overlap. Different MC slots may
+use different controls concurrently.
+
+A new `look_relative` action accepts integer `deltaX/deltaY` within
+±512 and a 50–250 ms scheduling window. It is **not calibrated** to Minecraft
+mouse sensitivity or an actual input device. Request
+`plan_player_actions({actions,includeTimeline:true})` to compile ordered
+PRESS/RELEASE/POINTER_DELTA events grouped by timestamp. The default
+returns only the existing concise plan. `input-timeline.mjs` can also
+prepare a per-slot emergency-release intent.
+
+**Nothing is executed.** All outputs remain `NOT_DISPATCHED`, with
+`BLOCKED_NO_VERIFIED_PER_CLIENT_INPUT_BACKEND`. The future Windows
+provider must independently route actual controls to each game, map game
+keybinds, revalidate PID/birth/session/HWND, avoid the human foreground,
+and implement physical per-client release-all on errors/disconnect.
+A sent-input ACK would not prove a Minecraft player moved.
+
+ProtoInput and Nucleus use in-process game hooks; no Minecraft Education
+compatibility proof exists. No hooks, DLL injection, device driver, global
+SendInput, MakeCode, UI, second game controller or executable MCP input
+tool was added. Tests are authored but NOT_EXECUTED by operator instruction.
+
 ## Phase 4: opt-in persistent GPU frame stream (source only)
 
 An isolated Rust worker source using Windows Graphics Capture (`wgc 3.1.0`)
