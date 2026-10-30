@@ -33,6 +33,45 @@ Use `--mode five-ai` only when **all five clients are intentionally AI-operated*
 
 `--lazy-tester-agent-cli inspect` refuses without a compatible retained controller; it never invents an empty five-client state. `launch` uses the reviewed original bootstrap to request a client launch, without silently opening or joining a Minecraft world.
 
+## Phase 1: Codex-targeted Windows Computer Use (source only)
+
+New MCP tools `get_computer_use_target({slot})` and
+`revalidate_computer_use_target({slot,pid,windowId,createdFileTime})`
+resolve one of the existing five native Minecraft windows through the same
+authenticated session controller. The native Rust adapter verifies exact
+PID, process birth FILETIME, Windows session and root HWND using the existing
+window owner, and refuses unavailable, minimized or nonresponsive windows.
+
+In `human-plus-four-ai`, MC01 is **never** offered as an AI action target;
+in `five-ai`, MC01 can be targeted. The response contains a **Cua Driver**
+window selector `{kind:"window",pid,window_id}`. No external software is
+automatically installed or started. Configure Cua Driver as a *separate*
+Codex/Claude MCP server only after explicit local-setup approval; this
+repository currently adds only reliable native target discovery.
+
+Proposed agent-side read-only workflow after installation approval:
+
+1. Resolve `get_computer_use_target({slot:2})` in Lazy Tester MCP.
+2. Call Cua Driver `get_window_state({pid,window_id})` using the returned
+   exact selector. Inspect the screenshot and accessibility state.
+3. Revalidate the same `pid/windowId/createdFileTime` after capture.
+4. If the target changed, discard the image or action; do not silently
+   follow a replacement process. In hybrid mode never escalate Cua to
+   foreground or use global SendInput, even if the background action refuses.
+
+**No screenshot is captured by Lazy Tester in this phase**. Cua Driver is
+an optional external window-capture provider, not a Minecraft game-input
+backend. The reported verification applies only at the instant of native
+inspection; it is not an authorization token for arbitrary external tools.
+Background screenshot availability, all game input, P2P host/join, and
+multiple simultaneous AI players remain NOT_EXECUTED / UNVERIFIED.
+The existing MCP controller, UI, world storage and disabled CI are unchanged.
+
+Official API basis:
+- https://cua.ai/docs/cua-driver/concepts/how-cua-driver-works
+- https://cua.ai/docs/cua-driver/reference/mcp-tools/apps-windows-and-screen
+- https://learn.microsoft.com/windows/win32/api/windows.graphics.capture.interop/nf-windows-graphics-capture-interop-igraphicscaptureiteminterop-createforwindow
+
 ## One-call AI test context
 
 The first MCP choice for Codex/Claude analysis should be

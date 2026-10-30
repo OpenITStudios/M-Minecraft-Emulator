@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,symlink,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,validateNativeReport} from './mcp.mjs';
+import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,validateNativeReport,validateNativeWindowTarget} from './mcp.mjs';
 
 const snapshot=(operation)=>({schema:1,ok:true,operation,profiles:Array.from({length:5},(_,i)=>({slot:i+1,state:i===0?'RUNNING':'STOPPED',responding:i===0,hasWindow:i===0,needsAttention:false}))});
 const config=(mode='human-plus-four-ai')=>({mode,executable:'C:\\App\\lazy-tester.exe',evidenceDirectory:''});
@@ -21,7 +21,7 @@ test('MCP handshake and tool discovery are standard JSON-RPC',async()=>{
   const init=await h.handle({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-11-25'}});
   assert.equal(init.result.protocolVersion,'2025-11-25');
   const listing=await h.handle({jsonrpc:'2.0',id:2,method:'tools/list'});
-  assert.deepEqual(listing.result.tools.map(x=>x.name),['get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','summarize_test_evidence','read_game_evidence']);
+  assert.deepEqual(listing.result.tools.map(x=>x.name),['get_computer_use_target','revalidate_computer_use_target','get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','summarize_test_evidence','read_game_evidence']);
   assert.equal(await h.handle({jsonrpc:'2.0',method:'notifications/initialized'}),null);
 });
 
@@ -36,6 +36,48 @@ test('hybrid mode refuses to launch human MC01, no native request sent',async()=
   assert.deepEqual(calls.map(x=>x.slice(1)),[['launch',2]]);
   const full=createHandler(config('five-ai'),{native:async(...args)=>{calls.push(args);return snapshot(args[1]);}});
   assert.equal((await full.callTool('launch_profile',{slot:1})).operation,'launch');
+});
+
+test('AI computer-use target resolves exact window without touching human MC01',async()=>{
+  const calls=[];
+  const native=async(_exe,op,slot)=>{
+    calls.push([op,slot]);
+    return {schema:1,ok:true,operation:'target',slot,pid:240+slot,
+      windowId:1000+slot,createdFileTime:'134000000000000001',
+      sessionId:1,foreground:false,visible:true,minimized:false,
+      verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',gameplayInput:'NOT_VERIFIED'};
+  };
+  const h=createHandler(config(),{native});
+  await assert.rejects(()=>h.callTool('get_computer_use_target',{slot:1}),
+    /human host is protected/);
+  assert.equal(calls.length,0);
+  const result=await h.callTool('get_computer_use_target',{slot:2});
+  assert.deepEqual(result.target,{kind:'window',pid:242,window_id:1002});
+  assert.equal(result.capture,'NOT_CAPTURED_BY_LAZY_TESTER');
+  assert.equal(result.gameInput,'BACKGROUND_MINECRAFT_INPUT_UNVERIFIED');
+  assert.deepEqual(calls,[['target',2]]);
+  const exact={slot:2,pid:242,windowId:1002,
+    createdFileTime:'134000000000000001'};
+  assert.equal((await h.callTool('revalidate_computer_use_target',exact)).matched,true);
+  assert.equal((await h.callTool('revalidate_computer_use_target',
+    {...exact,windowId:1003})).status,'TARGET_CHANGED_REFUSE_ACTION');
+  assert.deepEqual(calls,[['target',2],['target',2],['target',2]]);
+});
+
+test('native target contract rejects forged, stale and non-window observations',()=>{
+  const base={schema:1,ok:true,operation:'target',slot:2,
+    pid:42,windowId:1002,createdFileTime:'134000000000000001',
+    sessionId:1,foreground:false,visible:true,minimized:false,
+    verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',gameplayInput:'NOT_VERIFIED'};
+  assert.equal(validateNativeWindowTarget(base,2).windowId,1002);
+  for(const invalid of [
+    {...base,slot:1},{...base,pid:0},
+    {...base,windowId:Number.MAX_SAFE_INTEGER+1},
+    {...base,createdFileTime:'not-a-filetime'},
+    {...base,visible:false},{...base,minimized:true},
+    {...base,verification:'PID_ONLY'},
+    {...base,gameplayInput:'VERIFIED'},
+  ]) assert.throws(()=>validateNativeWindowTarget(invalid,2));
 });
 
 test('MCP peer-session guidance inspects once and never claims world join',async()=>{

@@ -50,6 +50,40 @@ function keysExactly(value, allowed) {
       Object.keys(value).some(key=>!allowed.includes(key))) throw new Error('Invalid tool arguments');
   return value;
 }
+export function validateNativeWindowTarget(value,slot) {
+  if (!value || value.schema!==1 || value.ok!==true ||
+      value.operation!=='target' || value.slot!==slot ||
+      !Number.isSafeInteger(value.pid) || value.pid<=0 ||
+      !Number.isSafeInteger(value.windowId) || value.windowId<=0 ||
+      typeof value.createdFileTime!=='string' ||
+      !/^\\d{1,20}$/.test(value.createdFileTime) ||
+      !Number.isSafeInteger(value.sessionId) || value.sessionId<0 ||
+      typeof value.foreground!=='boolean' ||
+      value.visible!==true || value.minimized!==false ||
+      value.verification!=='SAME_SESSION_PID_BIRTH_ROOT_HWND' ||
+      value.gameplayInput!=='NOT_VERIFIED') {
+    throw new Error('Native Minecraft window target is not verified');
+  }
+  return value;
+}
+
+function computerUseTarget(value,slot,mode) {
+  validateNativeWindowTarget(value,slot);
+  return {
+    schema:1,slot,mode,role:'AI',
+    target:{kind:'window',pid:value.pid,window_id:value.windowId},
+    identity:{pid:value.pid,windowId:value.windowId,
+      createdFileTime:value.createdFileTime,sessionId:value.sessionId},
+    isForeground:value.foreground,
+    verification:'NATIVE_PROCESS_AND_WINDOW_VERIFIED_AT_READ_TIME',
+    suggestedExternalTool:'cua-driver get_window_state',
+    capture:'NOT_CAPTURED_BY_LAZY_TESTER',
+    gameInput:'BACKGROUND_MINECRAFT_INPUT_UNVERIFIED',
+    noFocusSteal:true,
+    note:'Window identity expires when the game/window changes. Revalidate before and after external computer-use actions. Never escalate to foreground in hybrid mode.',
+  };
+}
+
 export function validateNativeReport(value, operation) {
   if (!value || value.schema!==1 || value.ok!==true || value.operation!==operation ||
       !Array.isArray(value.profiles) || value.profiles.length!==5) throw new Error('Native result unavailable or inconsistent');
@@ -80,7 +114,9 @@ export async function runNative(executable, operation, slot) {
   }
   if (out.stdout.length>64*1024) throw new Error('Native result exceeds limit');
   const result=JSON.parse(out.stdout.trim());
-  return validateNativeReport(result,operation);
+  return operation==='target' ?
+    validateNativeWindowTarget(result,slot) :
+    validateNativeReport(result,operation);
 }
 
 export function parseCapturedLine(line) {
@@ -133,6 +169,8 @@ export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT)
 }
 
 export const TOOL_LIST=[
+  {name:'get_computer_use_target',description:'Resolve one AI-owned native Minecraft PID/HWND for read-only Cua Driver window capture without switching Windows focus. Does NOT capture pixels or control game input.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
+  {name:'revalidate_computer_use_target',description:'Check a previously resolved exact PID/HWND/birth identity against current retained-controller observation. Never silently retarget another game.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},pid:{type:'integer',minimum:1},windowId:{type:'integer',minimum:1},createdFileTime:{type:'string',pattern:'^[0-9]{1,20}$'}},required:['slot','pid','windowId','createdFileTime'],additionalProperties:false}},
   {name:'get_test_context',description:'One bounded read-only handoff with current five native profiles, peer-host guidance and relevant game evidence. No game control or world success is inferred.',inputSchema:{type:'object',properties:{slots:{type:'array',items:{type:'integer',minimum:1,maximum:5},minItems:1,maxItems:5,uniqueItems:true}},additionalProperties:false}},
   {name:'agent_capabilities',description:'Read capabilities and limits of this Windows five-profile test bridge. Never claims independent background movement.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
   {name:'inspect_profiles',description:'Read five profile states from the authenticated native Lazy Tester controller (not game login or world readiness).',inputSchema:{type:'object',properties:{},additionalProperties:false}},
@@ -145,13 +183,47 @@ export const TOOL_LIST=[
 
 function capabilities(mode) {return {schema:1,mode,hostSlot:1,humanSlots:mode==='human-plus-four-ai'?[1]:[],
   aiSlots:mode==='human-plus-four-ai'?[2,3,4,5]:[1,2,3,4,5],
-  available:['get_test_context','inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions','summarize_test_evidence'],
+  available:['get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions','summarize_test_evidence'],
   notAvailable:['parallel_independent_keyboard_mouse','automatic_world_host_join','send_minecraft_command','per_client_screen_capture'],
   note:'MCP tools control the native session owner and read evidence; they do NOT independently move multiple background Minecraft clients.'};}
 
 export function createHandler(config,{native=runNative,evidence=readGameEvidence}={}) {
   let inFlight=false;
   async function callTool(name,args) {
+    if (name==='get_computer_use_target' ||
+        name==='revalidate_computer_use_target') {
+      keysExactly(args,name==='get_computer_use_target' ?
+        ['slot'] : ['slot','pid','windowId','createdFileTime']);
+      const slot=slotOf(args.slot);
+      if (config.mode==='human-plus-four-ai' && slot===1) {
+        throw new Error('MC01 human host is protected from AI computer-use targeting');
+      }
+      if (name==='revalidate_computer_use_target' &&
+          (!Number.isSafeInteger(args.pid) || args.pid<=0 ||
+           !Number.isSafeInteger(args.windowId) || args.windowId<=0 ||
+           typeof args.createdFileTime!=='string' ||
+           !/^\\d{1,20}$/.test(args.createdFileTime))) {
+        throw new Error('Expected window identity must be exact and numeric');
+      }
+      if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
+      inFlight=true;
+      try {
+        const current=validateNativeWindowTarget(
+          await native(config.executable,'target',slot),slot);
+        if (name==='get_computer_use_target') {
+          return computerUseTarget(current,slot,config.mode);
+        }
+        const matched=args.pid===current.pid &&
+          args.windowId===current.windowId &&
+          args.createdFileTime===current.createdFileTime;
+        return {
+          schema:1,slot,matched,
+          status:matched?'IDENTITY_VERIFIED_AT_READ_TIME':'TARGET_CHANGED_REFUSE_ACTION',
+          gameInput:'BACKGROUND_MINECRAFT_INPUT_UNVERIFIED',
+          note:'This is a fresh identity check, NOT a guarantee that an external tool will use this target or that Minecraft receives background input.',
+        };
+      } finally {inFlight=false;}
+    }
     if (name==='get_test_context') {
       keysExactly(args,['slots']);
       const slots=normalizeEvidenceSlots(args.slots ?? [1,2,3,4,5]);

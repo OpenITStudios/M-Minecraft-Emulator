@@ -16,6 +16,13 @@ fn parse_operation(args: &[String]) -> Result<(&'static str, Option<u32>), &'sta
             }
             Ok(("launch", Some(slot)))
         }
+        [one, slot] if one == "target" => {
+            let slot = slot.parse::<u32>().map_err(|_| "INVALID_ARGUMENTS")?;
+            if !(1..=5).contains(&slot) {
+                return Err("INVALID_ARGUMENTS");
+            }
+            Ok(("target", Some(slot)))
+        }
         [operation, slot] if operation == "probe-background" && slot == "2" =>
             Ok(("probe-background", Some(2))),
         _ => Err("INVALID_ARGUMENTS"),
@@ -44,7 +51,7 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
         use super::native_clients_session::{self, SessionRequest};
         // An Inspect without retained session ownership cannot truthfully label
         // five potentially unadopted games as STOPPED.
-        if operation == "inspect" {
+        if operation == "inspect" || operation == "target" {
             let owner = native_clients_session::existing_controller_gate(
                 "Local\\MivubiEducationStartupObservation",
             )
@@ -52,6 +59,57 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
             if !owner {
                 return Err("CONTROLLER_UNAVAILABLE");
             }
+        }
+        if operation == "target" {
+            use windows_sys::Win32::UI::WindowsAndMessaging::{
+                GetForegroundWindow, IsHungAppWindow, IsIconic, IsWindowVisible,
+            };
+            // Same authenticated native controller as the UI. No PID scanning
+            // or adoption of an unowned Minecraft client.
+            let slot = slot.ok_or("INVALID_ARGUMENTS")?;
+            let snapshot = native_clients_session::request(SessionRequest::Inspect)
+                .map_err(native_error)?;
+            if snapshot.schema != 1 || snapshot.profiles.len() != 5 ||
+                snapshot.profiles.iter().enumerate()
+                    .any(|(index,profile)| profile.slot as usize != index+1) {
+                return Err("INVALID_NATIVE_SNAPSHOT");
+            }
+            let profile = &snapshot.profiles[(slot - 1) as usize];
+            if profile.state != "RUNNING" || profile.issue.is_some() {
+                return Err("TARGET_NOT_RUNNING");
+            }
+            let process = profile.process.as_ref().filter(|p|p.responding)
+                .ok_or("TARGET_NOT_READY")?;
+            // Reuse the existing process HANDLE / birth FILETIME / Windows
+            // session / root HWND verifier. It pins the source process while
+            // the window is checked, rather than trusting a numeric PID.
+            let (window_id,foreground) =
+                super::workspace_surface::with_verified_native_window(
+                    process, |verified_hwnd| {
+                        let window = verified_hwnd as _;
+                        if verified_hwnd == 0 ||
+                            verified_hwnd as u64 > ((1u64 << 53) - 1) {
+                            return Err(io::Error::new(io::ErrorKind::InvalidData,
+                                "HWND cannot be represented as a safe MCP number"));
+                        }
+                        if unsafe { IsWindowVisible(window) } == 0 ||
+                            unsafe { IsIconic(window) } != 0 ||
+                            unsafe { IsHungAppWindow(window) } != 0 {
+                            return Err(io::Error::new(io::ErrorKind::PermissionDenied,
+                                "Minecraft window is unavailable for inspection"));
+                        }
+                        Ok((verified_hwnd as u64,
+                            unsafe { GetForegroundWindow() } == window))
+                    }).map_err(native_error)?;
+            return Ok(json!({
+                "schema": 1, "ok": true, "operation": "target",
+                "slot": slot, "pid": process.pid, "windowId": window_id,
+                "createdFileTime": process.created_file_time,
+                "sessionId": process.session_id, "foreground": foreground,
+                "visible": true, "minimized": false,
+                "verification": "SAME_SESSION_PID_BIRTH_ROOT_HWND",
+                "gameplayInput": "NOT_VERIFIED"
+            }));
         }
         if operation == "probe-background" {
             // Manual opt-in only; never an automatically advertised MCP tool.
@@ -151,12 +209,16 @@ mod tests {
     fn one_shot_command_accepts_only_inspect_or_five_slots() {
         assert_eq!(parse_operation(&["inspect".into()]).unwrap(), ("inspect", None));
         assert_eq!(parse_operation(&["launch".into(), "5".into()]).unwrap(), ("launch", Some(5)));
+        assert_eq!(parse_operation(&["target".into(), "2".into()]).unwrap(),
+            ("target", Some(2)));
         assert_eq!(parse_operation(&["probe-background".into(), "2".into()]).unwrap(),
             ("probe-background", Some(2)));
         for args in [vec!["close"], vec!["launch"], vec!["launch", "0"],
             vec!["launch", "6"], vec!["inspect", "1"], vec!["launch", "1", "extra"],
             vec!["probe-background", "1"], vec!["probe-background", "3"],
-            vec!["probe-background"], vec!["probe-background", "2", "extra"]] {
+            vec!["probe-background"], vec!["probe-background", "2", "extra"],
+            vec!["target"], vec!["target", "0"], vec!["target", "6"],
+            vec!["target", "2", "more"]] {
             let args = args.into_iter().map(str::to_owned).collect::<Vec<_>>();
             assert!(parse_operation(&args).is_err());
         }
