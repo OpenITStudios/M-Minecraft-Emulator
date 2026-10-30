@@ -473,6 +473,38 @@ multiplayer control remains BLOCKED.
 All source tests AUTHORED NOT_EXECUTED; native builds, Windows gameplay,
 injection and CI remain unexecuted/disabled. No input tool enabled.
 
+## Phase 11: eliminate dead-end gamepad lab; native input research (31 October 2026)
+
+- Reviewed the exact active source graph before removing dormant code.
+  The optional global virtual-gamepad mapper, test and Rust ViGEm lab
+  were not connected to Lazy Tester desktop, MCP input execution,
+  native session controller or package. Retired their five files from
+  `Local`, removed one optional test entry from `Development/package.json`,
+  and removed the obsolete `legacyVirtualGamepadLab` diagnostic object
+  plus its nonessential fixture assertions. Their exact source remains
+  in prior Git history (Phase 10 HEAD `fc4d87d9defe`).
+- A Minecraft Education support response dated 28 September 2026 says
+  computer play currently uses keyboard and mouse; older documentation
+  retains controller settings, so Xbox controller suitability is not
+  accepted without actual runtime proof. Prior Phase 8/9 records below
+  describe historical work, not files still available on `Local`.
+- Additional comparison found `openMouse` (single foreground keyboard
+  focus), `MultiSeat` (independent Windows RDP sessions but requires
+  RDPWrap, drivers and additional software), `Duo` (parallel desktops
+  via patched drivers / components), and ProtoInput (process hooks).
+  None has been validated with five Minecraft Education accounts.
+  These are NOT approved as an installer, input provider, OS-patch or
+  controller replacement. Windows session isolation would require a
+  distinct architecture and licensing/security review; the retained
+  native controller is intentionally single-session.
+- Keep `inputExecutionStatus().provider='NONE'`, all input MCP actions
+  unavailable, human MC01 protection, and route execution
+  `NOT_DISPATCHED`. No experimental system software was installed.
+
+**Proof ceiling:** REMOTE_GITHUB exact-source static inspection and
+upstream documentation. Tests/builds/Windows/gameplay NOT_EXECUTED;
+native game input still BLOCKED.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,
@@ -488,10 +520,13 @@ injection and CI remain unexecuted/disabled. No input tool enabled.
 
 ## Next — source-only continuation, testing deferred by operator
 
-Preserve the current same-session native identity and gameplay-plan
-owners. Seek a supported non-injecting, non-focus-stealing per-client
-keyboard/relative-mouse route before adding any executable input.
-If none is proven, retain BLOCKED rather than simulating success.
+Keep the existing single-session native identity and gameplay planner
+unchanged. The next practical step is an architecture decision:
+a compatible per-process input mechanism must be evidenced, or a
+separately approved true multi-session design must satisfy Windows
+licensing, input isolation, Education P2P and human desktop protection.
+Do not substitute global keyboard, device, simulated gameplay or
+Windows system patching for actual per-client input proof.
 **Do not execute local tests, toolchain builds, package staging, native input
 probes or gameplay until explicit operator approval.** When approval arrives,
 the first separate acceptance boundary is the pinned Windows agent CLI,

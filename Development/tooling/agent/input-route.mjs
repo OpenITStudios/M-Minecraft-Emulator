@@ -131,16 +131,6 @@ export function assessInputRoute(mode,actions,observations,{
     routeType:'OBSERVATION_ONLY_NOT_GAME_INPUT',
     releaseAllBackend:'NOT_IMPLEMENTED',
     gameplayInputAcceptance:'NOT_EXECUTED',
-    legacyVirtualGamepadLab:{
-      candidate:'RETIRED_VIGEMBUS_XINPUT_GLOBAL_DEVICE',
-      proposedAiPadCount:aiSlots.length,
-      xinputControllerLimit:4,
-      capacity:aiSlots.length>4?
-        'EXCEEDS_STANDARD_XINPUT_LIMIT':'CAPACITY_ONLY_NOT_ISOLATION',
-      exclusiveProcessDeviceBinding:'NOT_IMPLEMENTED',
-      backgroundMinecraftInput:'NOT_EXECUTED',
-      productionAdmissible:false,
-    },
     requiredIndependentProperties:[
       'PER_CLIENT_KEYBOARD_WITHOUT_FOREGROUND',
       'PER_CLIENT_RELATIVE_MOUSE_WITHOUT_FOREGROUND',

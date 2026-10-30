@@ -125,7 +125,7 @@ controller and Skills Probe evidence owners remain unchanged.
 | GameInput `SetFocusPolicy` | Focus policy belongs to the game API consumer | Not an external process router |
 | ProtoInput | Can reroute inputs using hooks inside game processes | Not authorized in no-injection design |
 | Windows Agent Workspace | Preview separate Windows accounts/sessions | Research only: native controller has no cross-session route |
-| ViGEmBus / XInput | Retired driver, globally visible device and four standard indices | Lab remains separate and blocked |
+| ViGEmBus / XInput | Retired driver, globally visible device and four standard indices | Historical source retired from Local in Phase 11 |
 
 **Phase 10 source correction:** `assess_input_route` rejects any
 cross-Windows-session target combination in BOTH hybrid and five-AI
@@ -156,52 +156,29 @@ Sources:
 - https://edusupport.minecraft.net/hc/en-us/articles/360047116832-Minecraft-keyboard-and-mouse-controls
 - https://edusupport.minecraft.net/hc/en-us/community/posts/53960255250324-cant-connect-ps5-controller-to-play
 
-## Phase 8: actual virtual gamepad signal candidate (NOT per-client yet)
+## Phase 8–9: retired virtual-gamepad experiment
 
-We audited ProtoInput's public C API and found it primarily assigns
-physical keyboard/mouse HID handles to hooked game processes. Its
-`protoloader.h` does NOT provide a straightforward external AI
-`press_player_key(slot, key)` interface. We will not mislabel the hook
-loader as a tested Codex gameplay actuator.
+The optional ViGEm/XInput worker and offline mapper were **removed from
+the active `Local` source during Phase 11**. They were never production
+input providers, were never built or installed, and were never connected
+to the MCP. Their exact source remains recoverable at immutable commit
+[`fc4d87d9defe`](https://github.com/OpenITStudios/M-Minecraft-Emulator/tree/fc4d87d9defe01eafd87a0abc6904f2f9d7d5807/Development/tooling/agent).
 
-A first **actual device-output** candidate is authored separately:
-- [Standalone virtual Xbox 360 worker](./native-gamepad-lab/README.md):
-  `vigem-rust 0.2.0` / retired ViGEmBus; one global virtual controller only,
-  strict explicit lab opt-in, bounded 10-second life, 350 ms neutral
-  watchdog, bounded live-paced JSON-line reports, explicit final neutral
-  and no future bulk replay. No real-time sender is implemented.
-- [Semantic AI gameplay-to-XInput mapping](./global-gamepad-candidate.mjs):
-  left analog stick for moving, right analog for camera rate, Xbox A/B
-  for jump/sneak and triggers for attack/use; 200 ms report heartbeats,
-  bounded source timeline and mandatory final neutral state.
+Retirement reason: the candidate emitted a globally visible virtual
+gamepad rather than keyboard/relative-mouse input exclusively bound
+to MC02–MC05. Standard XInput has four device indices; ViGEmBus is
+retired. Minecraft Education's 28 September 2026 support response says
+computer play currently supports keyboard and mouse. Older Education
+documentation mentioning controller settings is contradictory, so an
+XInput claim cannot be promoted without actual game acceptance.
+There is no installed component to remove from user machines.
 
-**This candidate is deliberately NOT a per-Minecraft native backend.**
-A Windows virtual controller is global until device→game process routing
-has been independently proven. In hybrid mode a virtual controller might
-affect human MC01 and cannot be activated. The source mapper therefore
-refuses `human-plus-four-ai`, and refuses more than one client even in
-`five-ai`. Its mode field is a pure precondition, NOT evidence of a
-running machine state. Hardware output is not wired into MCP, native
-controller, Tauri installer, or the existing input transaction runner.
-
-The standalone worker is NOT compiled, driver installed, launched or
-tested. Its manifest is not in the default cargo workspace; its new
-dependency has no approved lockfile or package validation. Do NOT install
-ViGEmBus or invoke its manual opt-in without explicit subsequent
-operator approval.
-
-Even if XInput reports can be produced, the key questions remain:
-Does Minecraft Education actually accept them while unfocused?
-Standard XInput supports only four controller indices, and HidHide
-does not supply a PID-to-controller router for identical executable images.
-Can different virtual pads be **exclusively** routed to MC02–MC05 without
-hijacking MC01? Do all clients preserve real peer-to-peer gameplay?
-Only live game evidence can answer these. No gameplay success is claimed.
-
-Source references:
-- https://github.com/arounre/vigem-rust
-- https://github.com/SplitScreen-Me/splitscreenme-protoInput
-- https://learn.microsoft.com/en-us/gaming/gdk/docs/reference/input/gameinput/interfaces/igameinput/methods/igameinput_setfocuspolicy
+Removing this lab also removes its experimental test from the existing
+`test:localtest` command and its irrelevant diagnostic field from
+`assess_input_route`. The tested semantic gameplay planner, read-only
+PID/HWND route, safety gate, optional MCP observation, native controller,
+profile/account/world data and all live acceptance requirements remain
+unchanged.
 
 ## Phase 7: bounded independent input transaction runner (source only)
 
