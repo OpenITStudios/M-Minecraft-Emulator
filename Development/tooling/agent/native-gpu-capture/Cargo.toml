@@ -1,0 +1,18 @@
+[package]
+name = "lazy-tester-gpu-capture"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.98"
+publish = false
+
+# Optional standalone source candidate. NOT in the Tauri workspace, installer,
+# default build, DEV.cmd, or existing session-controller graph.
+# Dependencies/lock resolution and all builds are DEFERRED by operator.
+[target.'cfg(windows)'.dependencies]
+wgc = "=3.1.0"
+windows = { version = "=0.62.2", features = ["Win32_Foundation"] }
+windows-sys = { version = "=0.61.2", features = [
+  "Win32_Foundation", "Win32_System_Threading",
+  "Win32_System_RemoteDesktop", "Win32_UI_WindowsAndMessaging"
+] }
+image = { version = "=0.25.10", default-features = false, features = ["png"] }
