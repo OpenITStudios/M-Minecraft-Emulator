@@ -50,6 +50,12 @@ test('five-AI mode may bind MC01 as an AI window without human assumptions',()=>
   assert.equal(result.aiTargets[0].slot,1);
   assert.equal(result.humanForegroundObserved,null);
   assert.equal(result.releaseAllBackend,'NOT_IMPLEMENTED');
+  assert.equal(result.legacyVirtualGamepadLab.productionAdmissible,false);
+  const five=assessInputRoute('five-ai',
+    [1,2,3,4,5].map(slot=>action(slot,'move_forward')),
+    [1,2,3,4,5].map(slot=>target(slot)),
+    {observedAtMs:100000,elapsedMs:10});
+  assert.equal(five.legacyVirtualGamepadLab.capacity,'EXCEEDS_STANDARD_XINPUT_LIMIT');
 });
 
 test('alias, missing, or stale targets are never accepted',()=>{

@@ -424,6 +424,29 @@ Local tests/builds/gameplay remain prohibited until explicit permission.
 gamepad provider NOT_BUILT, device signal NOT_EXECUTED, and independent
 multiplayer control remains BLOCKED.
 
+## Phase 9: global gamepad safety and device isolation evidence (31 October 2026)
+
+- The optional Rust experiment previously accepted future queued reports
+  without a live input producer. Source now rejects reports over 100 ms
+  early or 250 ms late, non-contiguous sequence/timestamps, unbounded
+  stdin queueing, truncated final lines and missing explicit final neutral.
+  This is NOT a verified runtime watchdog; all execution is deferred.
+- The mapper stays an offline action-to-pad compiler. No paced sender,
+  driver installation, game process hook, MCP input tool or desktop
+  production device route was added.
+- The existing read-only native input route now reports an XInput capacity
+  diagnostic separately from per-client device assignment. Standard XInput
+  covers at most four controller indices; meeting that count still does
+  NOT isolate MC02–MC05. Five AI devices exceed that API's capacity.
+- ViGEmBus is retired; HidHide's image-path application filtering and
+  global device hiding cannot independently route controllers to copies
+  of the same Minecraft executable. ProtoInput per-instance XInput index
+  redirection uses game-process hooks, outside the approved approach.
+- Background Minecraft Education gamepad response, MC01 human safety and
+  multi-AI gameplay remain NOT_EXECUTED/UNVERIFIED.
+
+**Proof:** REMOTE_GITHUB source/upstream review only; no tests/builds/driver/game.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,
@@ -440,9 +463,9 @@ multiplayer control remains BLOCKED.
 ## Next — source-only continuation, testing deferred by operator
 
 Keep the five-client AI control/observation source bounded to the current
-native controller and Skills Probe evidence contract. Prepare further safe
-source corrections and future independent-input adapter contracts only where
-they have a justified consumer; do not claim Minecraft moved in the background.
+native controller and Skills Probe evidence contract. Preserve the current native identity and gameplay-plan owners, keep
+global gamepad signals blocked, and seek a concrete acceptable Windows
+per-process input mechanism before adding any production input dispatch.
 **Do not execute local tests, toolchain builds, package staging, native input
 probes or gameplay until explicit operator approval.** When approval arrives,
 the first separate acceptance boundary is the pinned Windows agent CLI,

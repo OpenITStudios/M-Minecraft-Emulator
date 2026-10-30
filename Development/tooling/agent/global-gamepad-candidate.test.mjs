@@ -21,6 +21,7 @@ test('one AI gamepad maps genuine game controls but remains a global device',()=
   assert.equal(first.rx,5120);
   assert.equal(first.ry,1536);
   assert.equal(out.execution,'NOT_DISPATCHED');
+  assert.equal(out.playbackPolicy,'LIVE_PACED_STDIN_REQUIRED_NO_BULK_REPLAY');
   assert.match(out.gamepadRouting,/GLOBAL_DEVICE/);
   assert.deepEqual(out.frames.map(f=>f.atMs).filter(t=>t===200),[200]);
   assert.equal(out.frames.at(-1).ly,0);

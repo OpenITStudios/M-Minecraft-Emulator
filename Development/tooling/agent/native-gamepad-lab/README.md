@@ -15,7 +15,15 @@ Unlike a fake `WM_KEYDOWN` message, a virtual Xbox controller can generate
 real analog movement/looking and gamepad button states using Microsoft's
 controller input stack. The MIT/Apache-2.0
 [`vigem-rust` v0.2](https://github.com/arounre/vigem-rust)
-wraps the existing ViGEmBus kernel driver.
+wraps the existing ViGEmBus kernel driver. **ViGEmBus is retired**,
+so it remains a legacy lab, not the preferred production driver.
+Standard XInput supports only FOUR controller indices (0–3).
+
+HidHide cannot give MC01–MC05 independent pads by process PID:
+its executable-path allowlist and global visibility policy do not
+assign different controllers to copies of the same game executable.
+ProtoInput can redirect XInput indices per instance, but requires
+in-process game hooks, outside the approved no-injection route.
 
 A **real controller** does **not** imply:
 - MC02 will read it when MC02 is unfocused.
@@ -43,8 +51,10 @@ lazy-tester-global-gamepad-lab.exe --unassigned-global-pad-lab
 This is **not permission or an instruction to run it now**.
 
 The executable uses a local bounded stdin JSON-line protocol (one record
-at most 512 bytes, strictly increasing sequence and report time) and controls **one**
-virtual controller at most ten seconds. Example record:
+at most 512 bytes, contiguous sequence numbers starting at 1 and
+strictly increasing report time) and controls **one** virtual
+controller during a ten-second report window (plus setup/teardown).
+Example record:
 
 ```json
 {"seq":1,"atMs":0,"lx":0,"ly":32767,"rx":0,"ry":0,"lt":0,"rt":0,"buttons":["a"]}
@@ -52,13 +62,19 @@ virtual controller at most ten seconds. Example record:
 
 `lx/ly` = left stick, `rx/ry` = right stick, `lt/rt` = triggers;
 allowed face/shoulder buttons are `a,b,x,y,left_shoulder,right_shoulder`.
-Input reports include a monotonic `atMs` relative timestamp (0–10000 ms),
-so queued reports can be replayed with bounded timing. The associated
-pure source candidate in `../global-gamepad-candidate.mjs` emits periodic
-200 ms updates and one final neutral report; it is not connected to MCP.
+Input reports use a strictly increasing `atMs` relative timestamp
+(0–10000 ms). The native lab rejects reports more than 100 ms EARLY
+or 250 ms LATE, bounds the stdin queue to 16 frames, and rejects a
+truncated line or missing explicit final neutral report. It cannot
+replay a future 10-second queue and mistake it for fresh input.
 
-Each signal resets to neutral after 350 ms without a new input frame,
-on normal stop/EOF and when the ten-second lab window ends.
+The source mapper in `../global-gamepad-candidate.mjs` prepares a
+200 ms offline timeline and final neutral report; a real-time sender
+does NOT exist. Bulk piping its full array into the worker will fail.
+
+A 350 ms no-report watchdog requests neutral; EOF, malformed frames,
+failure and deadline require final neutralization/disconnect. Neither
+transport action proves isolation or game-level release.
 The virtual pad disconnects when the process exits. Neither timeout
 nor device disconnect is accepted as proof of Minecraft releasing input.
 
@@ -81,6 +97,9 @@ One global virtual controller cannot meet that objective alone.
 Sources:
 - https://github.com/arounre/vigem-rust
 - https://github.com/nefarius/ViGEmBus
+- https://docs.nefarius.at/projects/ViGEm/End-of-Life/
+- https://learn.microsoft.com/en-us/windows/win32/xinput/getting-started-with-xinput
+- https://docs.nefarius.at/projects/HidHide/CLI-Usage/
 - https://learn.microsoft.com/en-us/gaming/gdk/docs/reference/input/gameinput/interfaces/igameinput/methods/igameinput_setfocuspolicy
 - https://github.com/SplitScreen-Me/splitscreenme-protoInput
 

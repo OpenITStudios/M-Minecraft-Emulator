@@ -25,6 +25,9 @@ mod lab {
     const WATCHDOG: Duration = Duration::from_millis(350);
     const MAX_LINE: usize = 512;
     const MAX_SEQUENCE: u32 = 10000;
+    const INPUT_QUEUE_CAPACITY: usize = 16;
+    const MAX_EARLY_FRAME_MS: u128 = 100;
+    const MAX_LATE_FRAME_MS: u128 = 250;
 
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -68,10 +71,30 @@ mod lab {
         })
     }
 
+    // Reports must arrive near their scheduled time. Prequeued future
+    // reports cannot establish that the producer is still alive.
+    fn validate_frame_timing(
+        frame: &Frame, previous_sequence: u32,
+        previous_at_ms: u32, elapsed_ms: u128,
+    ) -> Result<(), &'static str> {
+        if frame.seq != previous_sequence + 1 ||
+            (previous_sequence > 0 && frame.at_ms <= previous_at_ms) {
+            return Err("NON_MONOTONIC_REPORT");
+        }
+        let scheduled = u128::from(frame.at_ms);
+        if scheduled > elapsed_ms.saturating_add(MAX_EARLY_FRAME_MS) {
+            return Err("FRAME_TOO_EARLY");
+        }
+        if elapsed_ms > scheduled.saturating_add(MAX_LATE_FRAME_MS) {
+            return Err("FRAME_TOO_LATE");
+        }
+        Ok(())
+    }
+
     // Stdin reader operates in a separate thread so a missing newline or
     // hung producer can NEVER extend the ten-second gamepad lifetime.
     // No filenames, network listeners or process/window access.
-    fn read_lines(sender: mpsc::Sender<Result<Vec<u8>, &'static str>>) {
+    fn read_lines(sender: mpsc::SyncSender<Result<Vec<u8>, &'static str>>) {
         let stdin = io::stdin();
         let mut input = stdin.lock();
         let mut chunk = [0u8; 128];
@@ -81,7 +104,12 @@ mod lab {
                 Ok(n) => n,
                 Err(_) => { let _ = sender.send(Err("STDIN_READ_FAILED")); return; }
             };
-            if count == 0 { return; }
+            if count == 0 {
+                if !line.is_empty() {
+                    let _ = sender.send(Err("TRUNCATED_FRAME"));
+                }
+                return;
+            }
             for byte in &chunk[..count] {
                 if *byte == b'\n' {
                     if line.is_empty() {
@@ -114,7 +142,8 @@ mod lab {
         let client = Client::connect()?; // Requires ALREADY installed ViGEmBus.
         let pad = client.new_x360_target().plug()?.wait_for_ready()?;
         pad.update(&X360Report::default())?; // Neutral from the first report.
-        let (sender,receiver) = mpsc::channel();
+        // Bounded queue even if the producer floods the worker.
+        let (sender,receiver) = mpsc::sync_channel(INPUT_QUEUE_CAPACITY);
         thread::spawn(move || read_lines(sender));
 
         let started = Instant::now();
@@ -122,6 +151,7 @@ mod lab {
         let mut previous_at_ms = 0u32;
         let mut last_input = started;
         let mut non_neutral = false;
+        let mut last_frame_neutral = false;
         let mut failure: Option<&'static str> = None;
         while started.elapsed() < LAB_DURATION {
             let remaining = LAB_DURATION.saturating_sub(started.elapsed());
@@ -132,13 +162,14 @@ mod lab {
                         Ok(value) => value,
                         Err(_) => { failure=Some("MALFORMED_FRAME"); break; }
                     };
-                    if parsed.seq <= previous_sequence ||
-                        parsed.at_ms < previous_at_ms {
-                        failure=Some("NON_MONOTONIC_REPORT");
+                    if let Err(code) = validate_frame_timing(
+                        &parsed, previous_sequence, previous_at_ms,
+                        started.elapsed().as_millis(),
+                    ) {
+                        failure=Some(code);
                         break;
                     }
-                    // Reports can be queued in advance; honor their relative
-                    // time while respecting the hard deadline and watchdog.
+                    // Only near-real-time reports may wait until due.
                     while started.elapsed().as_millis() < u128::from(parsed.at_ms) {
                         if started.elapsed() >= LAB_DURATION { break; }
                         if non_neutral && last_input.elapsed() >= WATCHDOG {
@@ -164,7 +195,8 @@ mod lab {
                     previous_sequence=parsed.seq;
                     previous_at_ms=parsed.at_ms;
                     last_input=Instant::now();
-                    non_neutral=report!=X360Report::default();
+                    last_frame_neutral=report==X360Report::default();
+                    non_neutral=!last_frame_neutral;
                 }
                 Ok(Err(code)) => { failure=Some(code); break; }
                 Err(RecvTimeoutError::Disconnected) => break,
@@ -178,6 +210,9 @@ mod lab {
                     }
                 }
             }
+        }
+        if failure.is_none() && !last_frame_neutral {
+            failure=Some("MISSING_FINAL_NEUTRAL");
         }
         // Neutralize first, THEN let the virtual controller disconnect.
         // This is still not a guarantee for game-level input release on crash.
@@ -198,6 +233,24 @@ mod lab {
             let a=Frame {buttons:vec!["a".into(),"a".into()],..f};
             assert_eq!(to_report(&a).unwrap_err(),"DUPLICATE_BUTTON");
         }
+        #[test]
+        fn timing_validation_rejects_bulk_future_replay_and_late_reports() {
+            let frame = |seq, at_ms| Frame {
+                seq, at_ms, lx:0, ly:0, rx:0, ry:0,
+                lt:0, rt:0, buttons:vec![],
+            };
+            assert!(validate_frame_timing(&frame(1,0),0,0,0).is_ok());
+            assert_eq!(validate_frame_timing(&frame(1,500),0,0,0),
+                Err("FRAME_TOO_EARLY"));
+            assert_eq!(validate_frame_timing(&frame(1,0),0,0,300),
+                Err("FRAME_TOO_LATE"));
+            assert_eq!(validate_frame_timing(&frame(3,200),1,100,190),
+                Err("NON_MONOTONIC_REPORT"));
+            assert_eq!(validate_frame_timing(&frame(2,100),1,100,190),
+                Err("NON_MONOTONIC_REPORT"));
+            assert!(validate_frame_timing(&frame(2,200),1,100,190).is_ok());
+        }
+
         #[test]
         fn arbitrary_system_or_guide_buttons_are_not_allowed() {
             let f=Frame {seq:1,at_ms:0,lx:0,ly:0,rx:0,ry:0,lt:0,rt:0,

@@ -122,9 +122,10 @@ loader as a tested Codex gameplay actuator.
 
 A first **actual device-output** candidate is authored separately:
 - [Standalone virtual Xbox 360 worker](./native-gamepad-lab/README.md):
-  `vigem-rust 0.2.0` / ViGEmBus; one global virtual controller only,
+  `vigem-rust 0.2.0` / retired ViGEmBus; one global virtual controller only,
   strict explicit lab opt-in, bounded 10-second life, 350 ms neutral
-  watchdog, timed JSON-line reports and normal final neutral.
+  watchdog, bounded live-paced JSON-line reports, explicit final neutral
+  and no future bulk replay. No real-time sender is implemented.
 - [Semantic AI gameplay-to-XInput mapping](./global-gamepad-candidate.mjs):
   left analog stick for moving, right analog for camera rate, Xbox A/B
   for jump/sneak and triggers for attack/use; 200 ms report heartbeats,
@@ -147,6 +148,8 @@ operator approval.
 
 Even if XInput reports can be produced, the key questions remain:
 Does Minecraft Education actually accept them while unfocused?
+Standard XInput supports only four controller indices, and HidHide
+does not supply a PID-to-controller router for identical executable images.
 Can different virtual pads be **exclusively** routed to MC02–MC05 without
 hijacking MC01? Do all clients preserve real peer-to-peer gameplay?
 Only live game evidence can answer these. No gameplay success is claimed.

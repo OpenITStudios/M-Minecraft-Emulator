@@ -38,7 +38,7 @@ export function compileGlobalGamepadCandidate(mode,actions) {
     markers.add(a.endMs);
   }
   for(let time=HEARTBEAT_MS;time<finishAt;time+=HEARTBEAT_MS) {
-    markers.add(time); // keep the native 350 ms fail-neutral watchdog fed
+    markers.add(time); // scheduled cadence only; NOT a live sender heartbeat
   }
   const times=[...markers].sort((a,b)=>a-b);
   if(times.length>MAX_REPORTS) {
@@ -81,12 +81,13 @@ export function compileGlobalGamepadCandidate(mode,actions) {
     schema:1,mode,labSlotLabel:slot,
     gamepadRouting:'GLOBAL_DEVICE_NOT_BOUND_TO_MINECRAFT_PROCESS',
     executor:'SEPARATE_NATIVE_GAMEPAD_LAB_ONLY',
+    playbackPolicy:'LIVE_PACED_STDIN_REQUIRED_NO_BULK_REPLAY',
     execution:'NOT_DISPATCHED',
     deliveryGate:INPUT_DELIVERY_GATE,
     gamepadSignal:'SOURCE_ONLY_NOT_SENT',
     mouseCamera:'UNVERIFIED_XINPUT_RIGHT_STICK_ANALOG_RATE',
     minecraftEducationSupport:'NOT_TESTED',
-    humanSafety:'GLOBAL_CONTROLLER_MAY_AFFECT_OTHER_GAMES',
+    humanSafety:'GLOBAL_CONTROLLER_MAY_AFFECT_OTHER_GAMES_OR_CLIENTS',
     maxDurationMs:MAX_LAB_MS,
     frames,
     note:'A bounded report timeline is not a per-client game input backend or proof of player movement.',
