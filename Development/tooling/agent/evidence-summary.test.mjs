@@ -67,3 +67,32 @@ test('bad evidence file is isolated without preventing other profile reports',as
   assert.equal(data.timeline[0].eventType,'death');
   assert.equal(JSON.stringify(data).includes('private local data'),false);
 });
+
+test('same record id from different gameplay sessions is not collapsed',()=>{
+  const recordId='reused-record';
+  const reports=[{slot:2,status:'CAPTURE_FILE_PRESENT',events:[
+    event('analytics',{type:'stage_attempt',record_id:recordId,
+      session_id:'session-A',stage:'round1'}),
+    event('analytics',{type:'stage_attempt',record_id:recordId,
+      session_id:'session-B',stage:'round2'},'2026-10-30T12:00:01.000Z'),
+  ]}];
+  const result=summarizeEvidenceReports([2],reports);
+  assert.equal(result.records,2);
+  assert.equal(result.duplicatesSuppressed,0);
+  assert.deepEqual(result.timeline.map(e=>e.sessionId),
+    ['session-A','session-B']);
+  assert.equal(result.playerToProfileIdentity,'NOT_VERIFIED');
+});
+
+test('without verified session id repeated record ids remain separate',()=>{
+  const raw={type:'stage_attempt',record_id:'unknown-session-record'};
+  const result=summarizeEvidenceReports([2],[{
+    slot:2,status:'CAPTURE_FILE_PRESENT',events:[
+      event('analytics',raw),
+      event('analytics',{...raw,stage:'later'},'2026-10-30T12:00:01.000Z'),
+    ],
+  }]);
+  assert.equal(result.records,2);
+  assert.equal(result.duplicatesSuppressed,0);
+  assert.equal(result.timeline[0].sessionId,null);
+});

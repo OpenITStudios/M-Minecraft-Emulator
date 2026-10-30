@@ -122,3 +122,45 @@ test('future-dated native frames are not delivered as recent pixels',async()=>{
   assert.equal(source.latest(2,target).workerSequence,1);
   source.shutdown();
 });
+
+test('pending GPU source reservation cancels before spawn on stop and shutdown',async()=>{
+  const target={pid:42,windowId:123,
+    createdFileTime:'134000000000000001',sessionId:1};
+  const file={isFile:()=>true,isSymbolicLink:()=>false};
+  for(const cancelVia of ['stop','shutdown']) {
+    let resolveStat;
+    const pendingFile=new Promise(resolve=>{resolveStat=resolve;});
+    let spawned=0;
+    const source=createGpuFrameSource({
+      executable:path.resolve('lazy-tester-gpu-capture.exe'),
+      platform:'win32',clock:()=>100000,
+      statFile:()=>pendingFile,
+      spawnProcess:()=>{spawned++;throw Error('unintended worker');},
+      schedule:()=>({unref(){}}),cancel:()=>{},
+    });
+    const pending=source.start(2,target);
+    await assert.rejects(()=>source.start(2,target),/already active or starting/);
+    if(cancelVia==='stop') source.stop([2]);
+    else source.shutdown();
+    resolveStat(file);
+    await assert.rejects(pending,/GPU_SOURCE_START_CANCELLED/);
+    assert.equal(spawned,0);
+    source.shutdown();
+  }
+});
+
+test('startup refuses and kills an unsupervisable GPU worker',async()=>{
+  let killed=0;
+  const source=createGpuFrameSource({
+    executable:path.resolve('lazy-tester-gpu-capture.exe'),
+    platform:'win32',clock:()=>100000,
+    statFile:async()=>({isFile:()=>true,isSymbolicLink:()=>false}),
+    spawnProcess:()=>({stdout:null,kill(){killed++;}}),
+    schedule:()=>({unref(){}}),cancel:()=>{},
+  });
+  const target={pid:42,windowId:123,
+    createdFileTime:'134000000000000001',sessionId:1};
+  await assert.rejects(()=>source.start(2,target),/bounded stdout pipe/);
+  assert.equal(killed,1);
+  source.shutdown();
+});

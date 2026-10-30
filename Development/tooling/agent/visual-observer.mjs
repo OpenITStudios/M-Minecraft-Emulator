@@ -159,6 +159,13 @@ export function createVisualObserver({
       }
     } catch(error) {
       if (!state.active || sessions.get(state.slot)!==state || closed) return;
+      if (/GPU_TARGET_IDENTITY_CHANGED|Minecraft window changed during capture/.test(
+          error?.message??'')) {
+        state.totalErrors++;
+        state.lastError='WINDOW_IDENTITY_UNCONFIRMED';
+        finish(state,'TARGET_REPLACED_REFUSE_CAPTURE');
+        return;
+      }
       if (/in progress|NATIVE_BUSY/.test(error?.message??'')) {
         state.skippedBusy++;
         delay=500;

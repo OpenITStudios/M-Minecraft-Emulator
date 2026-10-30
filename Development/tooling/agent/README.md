@@ -112,6 +112,38 @@ Only code is committed; no user screenshots are collected now.
 
 Cua CLI reference: https://cua.ai/docs/cua-driver/reference/cli/serve-and-configure
 
+## Phase 15: bounded visual-worker startup and evidence isolation
+
+The optional WGC source previously checked active workers only BEFORE its
+asynchronous executable-file inspection. Concurrent starts for a slot, Stop
+during this wait, or MCP connection shutdown could allow an untracked
+late worker. `gpu-frame-source.mjs` now reserves each slot before the
+await. Stop/shutdown revoke pending reservations; cancelled starts refuse
+to spawn a process. Failure to supervise a spawned worker triggers a
+kill attempt; failures while attaching worker handlers/timers also drop
+the worker. These actions affect **capture children only**, not Minecraft.
+
+MCP `stop_visual_observation` now cancels an overlapping, unfinished
+multi-slot WGC startup batch rather than reporting an unqualified Stop.
+The response explicitly reports
+`STARTUP_CANCELLATION_REQUESTED` with an unconfirmed outcome until
+the original Start call resolves. The existing observer immediately
+terminates on a confirmed GPU/native window identity-change error,
+clears the old frame, and runs its existing worker cleanup callback.
+
+Skills Probe record IDs are not globally unique across all Minecraft
+sessions. `evidence-summary.mjs` now scopes deduplication to the
+reported `session_id` as well as slot and source; events without a
+session ID are kept distinct rather than silently merged across
+unknown sessions. File-to-player/world attribution remains
+`OPERATOR_NAMED_UNVERIFIED`.
+
+All changes reuse existing GPU, MCP, visual sampler and evidence owners;
+only existing regression files were extended. Tests are AUTHORED
+but NOT_EXECUTED. Windows capture, real game session identity, release
+of a hung native process, account login and multi-client gameplay remain
+NOT_VERIFIED. No extra service, installer, input backend or CI added.
+
 ## Phase 14: pin GPU frames to their original native client (source only)
 
 The optional WGC worker is created for an exact, native-verified

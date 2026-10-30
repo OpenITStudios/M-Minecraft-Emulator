@@ -92,6 +92,9 @@ export function createGpuFrameSource({
 }={}) {
   validateGpuExecutable(executable);
   const slots=new Map();
+  // Reserve each slot before the asynchronous file check. Otherwise a
+  // concurrent start/stop or connection shutdown can leave an orphan worker.
+  const pendingStarts=new Map();
   let closed=false;
   function drop(state,status) {
     if (!state.active) return;
@@ -112,49 +115,68 @@ export function createGpuFrameSource({
       throw new TypeError('GPU capture requires one slot, 5-90s and 1-10 fps');
     }
     const selected=validateGpuTarget(target);
-    if (slots.get(slot)?.active) throw new Error('GPU source already active on this slot');
-    const file=await statFile(executable);
-    if (!file.isFile() || file.isSymbolicLink()) {
-      throw new Error('GPU worker executable must be an ordinary file');
+    if (slots.get(slot)?.active || pendingStarts.has(slot)) {
+      throw new Error('GPU source already active or starting on this slot');
     }
-    const args=[
-      '--pid',String(selected.pid),'--window-id',String(selected.windowId),
-      '--birth',selected.createdFileTime,'--session',String(selected.sessionId),
-      '--duration-ms',String(durationMs),'--fps',String(fps)
-    ];
-    const child=spawnProcess(executable,args,
-      {shell:false,windowsHide:true,stdio:['ignore','pipe','ignore']});
-    if (!child?.stdout?.on || typeof child.kill!=='function') {
-      throw new Error('GPU worker did not open a bounded stdout pipe');
+    const reservation={cancelled:false};
+    pendingStarts.set(slot,reservation);
+    try {
+      const file=await statFile(executable);
+      if (closed || reservation.cancelled) {
+        throw new Error('GPU_SOURCE_START_CANCELLED');
+      }
+      if (!file.isFile() || file.isSymbolicLink()) {
+        throw new Error('GPU worker executable must be an ordinary file');
+      }
+      const args=[
+        '--pid',String(selected.pid),'--window-id',String(selected.windowId),
+        '--birth',selected.createdFileTime,'--session',String(selected.sessionId),
+        '--duration-ms',String(durationMs),'--fps',String(fps)
+      ];
+      const child=spawnProcess(executable,args,
+        {shell:false,windowsHide:true,stdio:['ignore','pipe','ignore']});
+      if (!child?.stdout?.on || typeof child.on!=='function' ||
+          typeof child.kill!=='function') {
+        // A worker that cannot be supervised must not be left running.
+        try {child?.kill?.();} catch { /* retain a hard startup refusal */ }
+        throw new Error('GPU worker did not open a bounded stdout pipe');
+      }
+      const state={
+        slot,identity:selected,process:child,active:true,status:'STARTING',
+        latest:null,lastFrameAt:clock(),startedAt:clock(),
+        deadlineTimer:null,errors:0,frames:0,
+      };
+      slots.set(slot,state);
+      try {
+        const decoder=createGpuPacketDecoder(frame=>{
+          if (!state.active) return;
+          state.latest=frame; // replace: retain at most ONE complete PNG
+          state.lastFrameAt=clock();
+          state.frames++;
+          state.status='FRAME_FROM_NATIVE_WGC_NOT_GAMEPLAY_VERIFIED';
+        },{clock});
+        child.stdout.on('data',chunk=>{
+          if (!state.active) return;
+          try {decoder.push(chunk);}
+          catch {state.errors++;drop(state,'CORRUPT_GPU_FRAME_STREAM');}
+        });
+        child.stdout.on('error',()=>drop(state,'GPU_FRAME_STREAM_IO_ERROR'));
+        child.on('error',()=>drop(state,'GPU_WORKER_UNAVAILABLE'));
+        child.on('close',()=>{
+          if(state.active) drop(state,'GPU_WORKER_EXITED');
+        });
+        state.deadlineTimer=schedule(()=>drop(state,'EXPIRED'),durationMs+2000);
+        state.deadlineTimer?.unref?.();
+      } catch(error) {
+        drop(state,'GPU_START_FAILED');
+        throw error;
+      }
+      return {slot,status:'GPU_SOURCE_STARTED_NO_FRAME_PROOF',
+        provider:'NATIVE_WGC_PERSISTENT',durationMs,fps,
+        gameInput:'NOT_IMPLEMENTED'};
+    } finally {
+      if (pendingStarts.get(slot)===reservation) pendingStarts.delete(slot);
     }
-    const state={
-      slot,identity:selected,process:child,active:true,status:'STARTING',
-      latest:null,lastFrameAt:clock(),startedAt:clock(),
-      deadlineTimer:null,errors:0,frames:0,
-    };
-    slots.set(slot,state);
-    const decoder=createGpuPacketDecoder(frame=>{
-      if (!state.active) return;
-      state.latest=frame; // replace: retain at most ONE complete PNG
-      state.lastFrameAt=clock();
-      state.frames++;
-      state.status='FRAME_FROM_NATIVE_WGC_NOT_GAMEPLAY_VERIFIED';
-    },{clock});
-    child.stdout.on('data',chunk=>{
-      if (!state.active) return;
-      try {decoder.push(chunk);}
-      catch {state.errors++;drop(state,'CORRUPT_GPU_FRAME_STREAM');}
-    });
-    child.stdout.on('error',()=>drop(state,'GPU_FRAME_STREAM_IO_ERROR'));
-    child.on('error',()=>drop(state,'GPU_WORKER_UNAVAILABLE'));
-    child.on('close',()=>{
-      if(state.active) drop(state,'GPU_WORKER_EXITED');
-    });
-    state.deadlineTimer=schedule(()=>drop(state,'EXPIRED'),durationMs+2000);
-    state.deadlineTimer?.unref?.();
-    return {slot,status:'GPU_SOURCE_STARTED_NO_FRAME_PROOF',
-      provider:'NATIVE_WGC_PERSISTENT',durationMs,fps,
-      gameInput:'NOT_IMPLEMENTED'};
   }
   function latest(slot,expectedTarget) {
     if (!Number.isInteger(slot) || slot<1 || slot>MAX_SLOTS) {
@@ -196,13 +218,19 @@ export function createGpuFrameSource({
   }
   function stop(slotsToStop) {
     for(const slot of slotsToStop) {
+      const reservation=pendingStarts.get(slot);
+      if(reservation) reservation.cancelled=true;
       const state=slots.get(slot);
       if(state) drop(state,'STOPPED_BY_REQUEST');
     }
   }
   function shutdown() {
     closed=true;
+    for(const reservation of pendingStarts.values()) {
+      reservation.cancelled=true;
+    }
     stop([...slots.keys()]);
+    pendingStarts.clear();
     slots.clear();
   }
   function status(slot) {

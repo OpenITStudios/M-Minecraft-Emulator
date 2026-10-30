@@ -579,6 +579,31 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
   NOT_EXECUTED; native Windows WGC pixels, Minecraft game frames and
   agent gameplay remain UNVERIFIED.
 
+## Phase 15: bounded observation startup and evidence session isolation (31 October 2026)
+
+- The optional GPU worker's `start` waited for an asynchronous file check
+  before reserving a slot. Concurrent starts, stop, or shutdown could race
+  and leave a late child worker. The existing source now reserves pending
+  slots synchronously, cancels on stop/shutdown, and attempts termination
+  of unsupervisable/partly initialized workers. No Minecraft game process
+  is targeted by these cleanup paths.
+- MCP's unfinished multi-slot GPU startup now honours a matching Stop
+  request and reports `STARTUP_CANCELLATION_REQUESTED` until the original
+  start call settles; remaining requested workers cannot start after
+  cancellation. Known native/GPU identity replacement causes immediate
+  visual sampler stop instead of repeated stale-capture retries.
+- Skills Probe evidence dedupe was scoped only to MC slot + record ID,
+  allowing reused IDs across different game sessions to overwrite one
+  another. The existing summary now includes `session_id`, and refuses
+  dedupe when session identity is absent. File, player and world identity
+  remain UNVERIFIED, and evidence is not gameplay acceptance.
+- Existing targeted source fixtures were extended for pending startup
+  stop/shutdown, missing worker stdout, MCP cancellation, immediate
+  identity-based sampler shutdown, and cross-session record collisions.
+- **Proof ceiling:** REMOTE_GITHUB exact source and authored fixtures only.
+  Tests/builds/Windows Minecraft execution NOT_EXECUTED. Input backend
+  remains BLOCKED and MC01 protected.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,
@@ -597,10 +622,10 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
 The Windows Agent Workspace feasibility question is resolved for the
 currently documented APIs: it is NOT an admitted input implementation.
 Retain the independent-input BLOCKED gate until a concrete, supported
-per-client game-input API becomes available. Meanwhile continue bounded source-only validation of existing native
-five-profile visual observation and evidence attribution contracts;
-never add a second session controller, global keyboard fallback or
-speculative packaged MCP worker.
+per-client game-input API becomes available. Next source-only action: review evidence-log file replacement/partial-write
+handling and reader attribution without changing the native game owner.
+Retain the existing visual observation and independent-input BLOCKED
+boundaries; do not add an OS driver, second controller, or global input.
 **Do not execute local tests, toolchain builds, package staging, native input
 probes or gameplay until explicit operator approval.** When approval arrives,
 the first separate acceptance boundary is the pinned Windows agent CLI,

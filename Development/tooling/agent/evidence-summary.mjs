@@ -63,9 +63,17 @@ function toEvent(slot,event) {
   };
 }
 function dedupeKey(event) {
-  if (event.recordId) return [event.slot,event.source,event.recordId,event.part ?? 0].join('|');
-  if (event.eventType === 'analytics_summary' || event.eventType === 'export_summary') {
-    return [event.slot,event.source,event.eventType,event.sessionId ?? 'unknown'].join('|');
+  // An operator-assigned MC slot is NOT a game-session identity. Reused
+  // record IDs across restarted worlds/players must remain distinct.
+  // Without a session ID there is no safe basis for deduplication.
+  if (!event.sessionId) return null;
+  const scope=[event.slot,event.source,event.sessionId];
+  if (event.recordId) {
+    return JSON.stringify([...scope,event.recordId,event.part ?? 0]);
+  }
+  if (event.eventType === 'analytics_summary' ||
+      event.eventType === 'export_summary') {
+    return JSON.stringify([...scope,event.eventType]);
   }
   return null;
 }

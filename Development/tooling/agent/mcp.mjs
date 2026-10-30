@@ -217,6 +217,7 @@ export function createHandler(config,{
   gpuSourceFactory=createGpuFrameSource,
 }={}) {
   let inFlight=false;
+  let gpuStartup=null; // bounded request only; not game/session lifecycle
   const gpuSource=config.gpuExecutable ?
     gpuSourceFactory({executable:config.gpuExecutable}):null;
   function protectedSlot(slot) {
@@ -303,16 +304,21 @@ export function createHandler(config,{
       }
       if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
+      const startup={slots:[...slots],cancelled:false};
+      gpuStartup=startup;
       const started=[];
       try {
         // Verify every owner before starting the optional read-only workers.
         // If one fails, stop every worker started in this request. No game
         // processes, worlds or authenticated controller instances are created.
         for (const slot of slots) {
+          if (startup.cancelled) throw new Error('GPU_OBSERVATION_START_CANCELLED');
           const target=validateNativeWindowTarget(
             await native(config.executable,'target',slot),slot);
+          if (startup.cancelled) throw new Error('GPU_OBSERVATION_START_CANCELLED');
           await gpuSource.start(slot,target,{durationMs,fps:5});
           started.push(slot);
+          if (startup.cancelled) throw new Error('GPU_OBSERVATION_START_CANCELLED');
         }
         const response=visualObserver.start(slots,{intervalMs,durationMs});
         return {...response,source:'PERSISTENT_NATIVE_WGC_EXPLICIT_OPT_IN',
@@ -320,7 +326,10 @@ export function createHandler(config,{
       } catch(error) {
         gpuSource.stop(started);
         throw error;
-      } finally {inFlight=false;}
+      } finally {
+        if (gpuStartup===startup) gpuStartup=null;
+        inFlight=false;
+      }
     }
     if (name==='read_visual_observation') {
       keysExactly(args,['slot','afterSequence','includeImage']);
@@ -334,9 +343,19 @@ export function createHandler(config,{
     if (name==='stop_visual_observation') {
       keysExactly(args,['slots']);
       const slots=checkedSlots(args.slots);
+      const cancelStartup=gpuStartup!==null &&
+        slots.some(slot=>gpuStartup.slots.includes(slot));
+      if (cancelStartup) {
+        // Cancel the entire unfinished batch. Slots not yet started will
+        // fail admission after the current await instead of spawning later.
+        gpuStartup.cancelled=true;
+        gpuSource?.stop(gpuStartup.slots);
+      }
       const response=visualObserver.stop(slots);
       gpuSource?.stop(slots);
-      return response;
+      return cancelStartup ? {...response,
+        status:'STARTUP_CANCELLATION_REQUESTED',
+        startOutcome:'UNCONFIRMED_UNTIL_START_REQUEST_SETTLES'} : response;
     }
     if (name==='observe_client') {
       keysExactly(args,['slot']);
@@ -500,6 +519,7 @@ export function createHandler(config,{
     }catch {return err(-32603,'Internal error');}
   }
   return {handle,callTool,shutdown:()=>{
+    if (gpuStartup) gpuStartup.cancelled=true;
     visualObserver.shutdown();
     gpuSource?.shutdown();
   }};

@@ -383,3 +383,38 @@ test('never trusts incomplete or out-of-order native profiles',()=>{
   assert.throws(()=>validateNativeReport({schema:1,ok:true,operation:'inspect',profiles:snapshot('inspect').profiles.toReversed()},'inspect'));
   assert.throws(()=>validateNativeReport({schema:1,ok:true,operation:'inspect',profiles:snapshot('inspect').profiles},'launch'));
 });
+
+test('stop during pending GPU startup cancels batch without a false success',async()=>{
+  const calls=[];
+  let enterStart,releaseStart;
+  const entered=new Promise(resolve=>{enterStart=resolve;});
+  const stalled=new Promise(resolve=>{releaseStart=resolve;});
+  const gpuFactory=()=>({
+    async start(slot){calls.push(['start',slot]);enterStart();await stalled;return {slot};},
+    latest(){throw Error('no frame expected');},
+    stop(slots){calls.push(['stop',...slots]);},
+    shutdown(){calls.push(['shutdown']);},
+  });
+  const target=slot=>({schema:1,ok:true,operation:'target',
+    slot,pid:700+slot,windowId:4000+slot,
+    createdFileTime:'134000000000000001',sessionId:1,
+    foreground:false,visible:true,minimized:false,
+    verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',gameplayInput:'NOT_VERIFIED'});
+  const handler=createHandler({...config(),
+    gpuExecutable:path.resolve('lazy-tester-gpu-capture.exe')},{
+    gpuSourceFactory:gpuFactory,
+    native:async(_exe,_operation,slot)=>target(slot),
+  });
+  const pending=handler.callTool('start_visual_observation',
+    {slots:[2,3],durationMs:5000});
+  await entered;
+  const stopped=await handler.callTool('stop_visual_observation',{slots:[2]});
+  assert.equal(stopped.status,'STARTUP_CANCELLATION_REQUESTED');
+  assert.equal(stopped.startOutcome,'UNCONFIRMED_UNTIL_START_REQUEST_SETTLES');
+  releaseStart();
+  await assert.rejects(pending,/GPU_OBSERVATION_START_CANCELLED/);
+  assert.deepEqual(calls.filter(([op])=>op==='start').map(x=>x[1]),[2]);
+  assert.equal((await handler.callTool('read_visual_observation',{slot:2}))
+    .metadata.status,'NOT_OBSERVING');
+  handler.shutdown();
+});

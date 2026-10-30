@@ -124,3 +124,24 @@ test('rejects duplicate slots, unlimited durations and second observer session',
   assert.throws(()=>observer.start([2]),/already/);
   observer.shutdown();
 });
+
+test('known replaced native target stops observation immediately',async()=>{
+  const t=clockFixture();
+  const finished=[];
+  let captures=0;
+  const observer=createVisualObserver({...t,capture:async()=>{
+    captures++;
+    throw new Error('GPU_TARGET_IDENTITY_CHANGED');
+  },onFinish:(slot,reason)=>finished.push([slot,reason])});
+  observer.start([2],{durationMs:5000});
+  await t.next();
+  const result=observer.read(2);
+  assert.equal(result.metadata.status,'TARGET_REPLACED_REFUSE_CAPTURE');
+  assert.equal(result.metadata.active,false);
+  assert.equal(result.metadata.errorCode,'WINDOW_IDENTITY_UNCONFIRMED');
+  assert.equal(result.imageBase64,null);
+  assert.equal(captures,1);
+  observer.stop([2]);
+  observer.shutdown();
+  assert.deepEqual(finished,[[2,'TARGET_REPLACED_REFUSE_CAPTURE']]);
+});
