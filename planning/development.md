@@ -348,6 +348,30 @@ Minecraft can be observed at live gameplay speed or controlled by AI.
 WASD/mouse for Minecraft Education and four/five AI gameplay still
 UNIMPLEMENTED or UNVERIFIED.
 
+## Phase 6: native-identity-bound independent input route (source only)
+
+- Added `input-route.mjs` as a read-only binding from existing
+  `input-timeline.mjs` schedules to native PID/HWND/birth/session
+  observations; no second Minecraft session controller or input worker.
+- MCP `assess_input_route({actions})` inspects targets through the
+  retained controller. In hybrid mode it observes human MC01 solely as
+  protected reference and returns AI bindings for MC02–MC05. It rejects
+  duplicate process/window identities, missing/unresponsive targets,
+  unexpected session mixing and snapshots older than 5 seconds.
+- The route always reports `NOT_DISPATCHED` /
+  `BLOCKED_NO_VERIFIED_PER_CLIENT_INPUT_BACKEND`. It does not claim
+  a particular HWND can receive game input or that the human desktop
+  has been preserved. No background keyboard/mouse dispatch, DLL
+  injection, global SendInput, MakeCode, or OS driver is installed.
+- Source-only fixtures were added for protected MC01, five-AI mode,
+  identity conflicts, stale observation and MCP native inspection.
+  **Tests, builds, local execution and Minecraft runtime remain
+  explicitly forbidden until new operator approval.**
+
+**Proof:** REMOTE_GITHUB exact-source and consumer review only.
+Real independent game-input routing remains BLOCKED pending supported
+Windows input mechanism and MC01/MC02 gameplay proof.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,

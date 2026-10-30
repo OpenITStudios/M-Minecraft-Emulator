@@ -112,6 +112,49 @@ Only code is committed; no user screenshots are collected now.
 
 Cua CLI reference: https://cua.ai/docs/cua-driver/reference/cli/serve-and-configure
 
+## Phase 6: native-bound independent input admission (source only)
+
+**New read-only tool:** `assess_input_route({actions})` connects the
+existing concurrent input timeline to freshly observed native Minecraft
+window/process identities. In `human-plus-four-ai` it also inspects
+MC01's window **only as a protected human reference**, never as an
+AI input destination. In `five-ai`, MC01 may be an AI target.
+
+The MCP reuses its current, retained authenticated controller and
+`--lazy-tester-agent-cli target <slot>`; each target must pass the
+same PID, process creation FILETIME, session, root HWND, visible and
+responsive checks as visual observation. A route is rejected if two
+slots resolve to the same PID/HWND, any target is unavailable, or the
+overall native observation spans more than five seconds. This is an
+ephemeral diagnostic mapping, **not an input authorization token**.
+
+Every response explicitly reports:
+- `NOT_DISPATCHED` and
+  `BLOCKED_NO_VERIFIED_PER_CLIENT_INPUT_BACKEND`.
+- The AI-only PID/HWND/window identity map, plus an observational
+  (not guaranteed) human MC01 foreground indicator.
+- The independent capabilities that a future native provider must
+  demonstrate: genuine per-client keyboard, relative mouse, concurrent
+  clients, release-all, preserved human input, and actual Minecraft
+  game-state evidence.
+
+No actual keyboard, mouse or game action is delivered by this tool.
+Windows `SendInput` targets the shared system input stream, not a
+specified Minecraft process. `RIDEV_INPUTSINK` does not allow an
+external MCP to force another application to accept raw input; the
+receiving application must register. Cua's background UI input does
+not establish raw game control, while ProtoInput requires in-process
+hooks whose use with Minecraft Education has not been approved.
+
+Relevant sources:
+- https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-rawinputdevice
+- https://cua.ai/docs/cua-driver/concepts/how-cua-driver-works
+- https://www.splitscreen.me/docs/proto/
+
+Source regression fixtures were authored for hybrid/5-AI slots,
+aliasing/refusal and truthful NO-INPUT reporting. **No tests, local
+builds, game sessions, CI, or external input processes were run.**
+
 ## Phase 5: concurrent independent-input contract (source only)
 
 The previous planner refused **any** simultaneous controls for one Minecraft,

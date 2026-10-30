@@ -27,6 +27,7 @@ All desktop paths below start at `Development/apps/desktop/`.
 | Launcher rail and status guidance | `src/LauncherRail.svelte`, `src/SessionHealthNotice.svelte` | `src/app/presentation/sessionFeedback.ts` |
 | Settings and storage presentation | `src/GeneralSettings.svelte`, `src/DataStorage.svelte` | Typed `src/app/bridge/lazyTester.ts` |
 | Local agent MCP tools / bounded evidence reading | `Development/tooling/agent/mcp.mjs` | `engine/agent_cli.rs` uses the existing authenticated controller; gameplay input is NOT implemented |
+| AI input timeline / native-bound preflight (no input dispatch) | `Development/tooling/agent/input-timeline.mjs`, `input-route.mjs` | `control-plan.mjs` and MCP `assess_input_route`; actual background game input remains blocked |
 | One raw Tauri invoke boundary | `src/app/bridge/invokeRuntime.ts` | `src/app/bridge/lazyTester.ts`, `workspaceSurface.ts` |
 | Allowlisted native commands / heavy-operation admission | `src-tauri/src/commands/native_clients.rs` | Session and workspace owners |
 | App startup / normal manager exit | `src-tauri/src/app_bootstrap.rs` | `engine/app_instance.rs`, native close command |

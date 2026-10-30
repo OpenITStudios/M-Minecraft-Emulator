@@ -28,7 +28,7 @@ test('MCP handshake and tool discovery are standard JSON-RPC',async()=>{
   const init=await h.handle({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-11-25'}});
   assert.equal(init.result.protocolVersion,'2025-11-25');
   const listing=await h.handle({jsonrpc:'2.0',id:2,method:'tools/list'});
-  assert.deepEqual(listing.result.tools.map(x=>x.name),['start_visual_observation','read_visual_observation','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','summarize_test_evidence','read_game_evidence']);
+  assert.deepEqual(listing.result.tools.map(x=>x.name),['start_visual_observation','read_visual_observation','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence','read_game_evidence']);
   assert.equal(await h.handle({jsonrpc:'2.0',method:'notifications/initialized'}),null);
 });
 
@@ -221,6 +221,51 @@ test('MCP compiles simultaneous controls without dispatching native input',async
   assert.equal(result.inputEvents.filter(e=>e.phase==='POINTER_DELTA').length,1);
   assert.match(result.deliveryGate,/BLOCKED/);
   assert.equal(nativeCalls,0);
+});
+
+test('native input route assessment only observes trusted windows and blocks delivery',async()=>{
+  const calls=[];
+  const h=createHandler(config(),{native:async(_exe,op,slot)=>{
+    calls.push([op,slot]);
+    return {schema:1,ok:true,operation:'target',slot,
+      pid:500+slot,windowId:2000+slot,
+      createdFileTime:'134000000000000001',sessionId:1,
+      foreground:slot===1,visible:true,minimized:false,
+      verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',
+      gameplayInput:'NOT_VERIFIED'};
+  }});
+  const result=await h.callTool('assess_input_route',{actions:[
+    {slot:2,kind:'move_forward',atMs:0,durationMs:200},
+    {slot:3,kind:'look_relative',atMs:0,durationMs:50,
+      deltaX:20,deltaY:-5},
+  ]});
+  assert.deepEqual(calls,[['target',1],['target',2],['target',3]]);
+  assert.deepEqual(result.aiTargets.map(x=>x.slot),[2,3]);
+  assert.equal(result.execution,'NOT_DISPATCHED');
+  assert.equal(result.gameplayInputAcceptance,'NOT_EXECUTED');
+  assert.match(result.deliveryGate,/BLOCKED/);
+  assert.equal(result.aiTargets.some(x=>x.slot===1),false);
+  await assert.rejects(()=>h.callTool('assess_input_route',{actions:[
+    {slot:1,kind:'attack',atMs:0,durationMs:100}
+  ]}),/human-owned/);
+  assert.equal(calls.length,3);
+  h.shutdown();
+});
+
+test('native input route refuses aliasing between two Minecraft identities',async()=>{
+  const h=createHandler(config(),{native:async(_exe,op,slot)=>({
+    schema:1,ok:true,operation:'target',slot,
+    pid:slot===3?502:500+slot,windowId:2000+slot,
+    createdFileTime:'134000000000000001',sessionId:1,
+    foreground:slot===1,visible:true,minimized:false,
+    verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',
+    gameplayInput:'NOT_VERIFIED'
+  })});
+  await assert.rejects(()=>h.callTool('assess_input_route',{actions:[
+    {slot:2,kind:'move_forward',atMs:0,durationMs:100},
+    {slot:3,kind:'attack',atMs:0,durationMs:100},
+  ]}),/share one native/);
+  h.shutdown();
 });
 
 test('MCP player-action plan is nonexecuting and protects MC01',async()=>{
