@@ -9,6 +9,7 @@ export const OBSERVATION_LIMITS=Object.freeze({
 });
 const HASH=/^[a-f0-9]{64}$/;
 const MAX_ERRORS=3;
+const MAX_READ_FRAME_AGE_MS=3500; // Old caches cannot masquerade as recent images.
 
 function allowedSlots(slots) {
   if (!Array.isArray(slots) || slots.length===0 || slots.length>OBSERVATION_LIMITS.maximumSlots ||
@@ -127,7 +128,8 @@ export function createVisualObserver({
       state.successfulSamples++;
       state.consecutiveErrors=0;
       state.lastError=null;
-      state.lastCollectedAt=new Date(clock()).toISOString();
+      state.lastCollectedMs=clock();
+      state.lastCollectedAt=new Date(state.lastCollectedMs).toISOString();
       state.windowBackground=meta.background===true;
       if (meta.sha256!==state.lastHash) {
         state.lastHash=meta.sha256;
@@ -193,7 +195,7 @@ export function createVisualObserver({
         slot,active:true,status:'WAITING_FOR_FIRST_FRAME',sequence:0,
         startedAt,endsAt:startedAt+durationMs,intervalMs,
         timer:null,nextDueAt:null,imageBase64:null,
-        identity:null,lastHash:null,lastCollectedAt:null,
+        identity:null,lastHash:null,lastCollectedAt:null,lastCollectedMs:null,
         width:null,height:null,windowBackground:null,
         successfulSamples:0,sameBytesCount:0,
         skippedBusy:0,totalErrors:0,consecutiveErrors:0,lastError:null,
@@ -223,12 +225,18 @@ export function createVisualObserver({
       imageBase64:null,
     };
     if (state.active && clock()>=state.endsAt) finish(state,'EXPIRED');
-    const deliver=includeImage && state.active && state.imageBase64!==null &&
-      state.sequence>afterSequence;
+    const ageMs=state.lastCollectedMs===null ? null :
+      Math.max(0,clock()-state.lastCollectedMs);
+    const tooOld=ageMs===null || ageMs>MAX_READ_FRAME_AGE_MS;
+    const deliver=includeImage && state.active && !tooOld &&
+      state.imageBase64!==null && state.sequence>afterSequence;
     return {
       metadata:{
-        schema:1,slot,sequence:state.sequence,status:state.status,
+        schema:1,slot,sequence:state.sequence,
+        status:state.active && tooOld && state.imageBase64!==null ?
+          'CACHED_FRAME_AGED_OUT' : state.status,
         hasNewImage:deliver,active:state.active,
+        frameAgeMs:ageMs,maximumReadableFrameAgeMs:MAX_READ_FRAME_AGE_MS,
         intervalMs:state.intervalMs,
         startedAt:new Date(state.startedAt).toISOString(),
         endsAt:new Date(state.endsAt).toISOString(),

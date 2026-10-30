@@ -38,13 +38,25 @@ export function inspectPng(bytes) {
     sha256:createHash('sha256').update(bytes).digest('hex')};
 }
 
-export async function captureCuaWindow(cuaExecutable,target) {
-  validateCuaExecutable(cuaExecutable);
-  if (process.platform!=='win32') throw new Error('Cua Windows capture requires Windows');
+export function buildCuaWindowQuery(target) {
   if (!target || !Number.isSafeInteger(target.pid) || target.pid<1 ||
       !Number.isSafeInteger(target.windowId) || target.windowId<1) {
     throw new TypeError('Native verified PID and HWND are required');
   }
+  // display_only is the documented visual-preview route. It prevents a
+  // frame sampler from replacing the interactive Cua action snapshot.
+  return {
+    pid:target.pid,window_id:target.windowId,
+    include_accessibility_tree:false,include_screenshot:true,
+    display_only:true,screenshot_format:'png',
+    max_image_dimension:REQUESTED_LONG_EDGE,
+  };
+}
+
+export async function captureCuaWindow(cuaExecutable,target) {
+  validateCuaExecutable(cuaExecutable);
+  if (process.platform!=='win32') throw new Error('Cua Windows capture requires Windows');
+  const query=buildCuaWindowQuery(target);
   const imageStat=await lstat(cuaExecutable);
   if (!imageStat.isFile() || imageStat.isSymbolicLink()) {
     throw new Error('Cua Driver executable must be an ordinary local file');
@@ -54,11 +66,7 @@ export async function captureCuaWindow(cuaExecutable,target) {
   const temporary=await mkdtemp(path.join(tmpdir(),'lazy-tester-observe-'));
   const screenshotPath=path.join(temporary,'window.png');
   try {
-    const query={
-      pid:target.pid,window_id:target.windowId,
-      include_accessibility_tree:false,include_screenshot:true,
-      screenshot_format:'png',max_image_dimension:REQUESTED_LONG_EDGE,
-    };
+    // Query is window-specific and does not change the Cua action snapshot.
     // This is the read-only Cua CLI tool (NOT a general command runner).
     // The separate Cua daemon must already be running; never auto-start it.
     try {

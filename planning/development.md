@@ -277,6 +277,9 @@ Windows live game pixels and parallel game input NOT_EXECUTED/UNVERIFIED.
 - Reused existing exact-native-window verification before/after every local
   Cua capture, retaining PID/HWND/process birth/session identity across
   samples. Changed targets/failures terminate and drop cached pixels.
+  Cua reads now use `display_only:true` to avoid invalidating action
+  snapshots. A cached PNG older than 3500 ms cannot be delivered to Codex
+  as a current frame (even while an observation session is still open).
 - No UI, input injection, additional native controller, new long-running
   standalone service or AI decision daemon. Underlying provider still makes
   **bounded sequential CLI snapshots** rather than persistent high-FPS

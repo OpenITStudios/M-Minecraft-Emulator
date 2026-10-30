@@ -48,6 +48,20 @@ test('one local sampler retains a frame but only delivers it upon a read',async(
   observer.shutdown();
 });
 
+test('an older cached image is refused until a new local sample exists',async()=>{
+  const t=clockFixture();
+  const observer=createVisualObserver({...t,capture:async slot=>frame(slot)});
+  observer.start([2],{intervalMs:1250,durationMs:10000});
+  await t.next();
+  assert.equal(observer.read(2,{afterSequence:0}).metadata.hasNewImage,true);
+  t.advance(4000);
+  const old=observer.read(2,{afterSequence:0});
+  assert.equal(old.metadata.status,'CACHED_FRAME_AGED_OUT');
+  assert.equal(old.metadata.hasNewImage,false);
+  assert.equal(old.imageBase64,null);
+  observer.shutdown();
+});
+
 test('static PNG bytes are not reported as proof that Minecraft froze',async()=>{
   const t=clockFixture();
   const observer=createVisualObserver({...t,capture:async slot=>frame(slot)});

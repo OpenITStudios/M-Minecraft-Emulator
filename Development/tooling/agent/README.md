@@ -130,6 +130,9 @@ returns the latest *changed* cached PNG only when Codex requests it, and
   interpreted as verified gameplay progress, semantic motion, or a real
   30/60-FPS video stream. PNG byte hash change only signals changed **bytes**,
   not a detected enemy, movement or actual pixels.
+- Cua preview capture requests `display_only:true`, preserving any
+  interactive Cua action snapshot (a visual frame is not an action target).
+  A cached frame older than 3500 ms is never returned as a new image.
 - Old or replaced PID/birth/session/HWND terminates that slot's sampler.
   Three consecutive capture failures also stop it. Busy native operations
   skip sampling instead of interrupting game lifecycle.
