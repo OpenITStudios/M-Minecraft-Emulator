@@ -62,7 +62,7 @@ GitHub/ChatGPT source work is remote-first. Do not demand the user's PC, a check
 
 **Cross-chat recovery.** Recover by topic and source changes: compare `planning/development.md` with the current exact GitHub HEAD and relevant commit `Work` / `State` / `Proof` / `Unresolved` / `Next`. Historical `Next`, unrelated latest commits, chat titles, memory, and Project settings are not implementation truth or new authorization. Respect `PAUSED`/`BLOCKED` until explicitly resumed; if GitHub cannot be inspected, say the state is unverified. Project Instructions, if used, merely point to current repository rules, not duplicate them.
 
-Development uses ChatGPT + GitHub only. Do not assume or propose another execution environment, ask for a user computer, or make incremental machine tests a prerequisite for source work. Unavailable Windows, VMware, Minecraft sign-in/network and five-client proof stays `NOT_EXECUTED`; continue bounded source work when it has independently justified value.
+Development uses ChatGPT + GitHub only. **Current operator instruction: keep building source; do not run local tests, source test suites, Windows builds, packages, or Minecraft gameplay until explicit new approval.** Do not assume or propose another execution environment, ask for a user computer, or make incremental machine tests a prerequisite for source work. Unavailable Windows, VMware, Minecraft sign-in/network and five-client proof stays `NOT_EXECUTED`; continue bounded source work when it has independently justified value.
 
 ## Operator routes
 

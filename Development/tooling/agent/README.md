@@ -33,6 +33,21 @@ Use `--mode five-ai` only when **all five clients are intentionally AI-operated*
 
 `--lazy-tester-agent-cli inspect` refuses without a compatible retained controller; it never invents an empty five-client state. `launch` uses the reviewed original bootstrap to request a client launch, without silently opening or joining a Minecraft world.
 
+## One-call AI test context
+
+The first MCP choice for Codex/Claude analysis should be
+`get_test_context` (optional 1–5 slots). It obtains exactly one current
+native `Inspect` through the existing authenticated session owner, then
+combines the conservative host/join plan and compact Skills Probe evidence.
+The handoff includes five native profile statuses, selected capture summaries,
+and explicit uncertainty markers. It does not infer signed-in accounts,
+in-world players, Minecraft host/join, input acceptance, or success.
+
+This is an on-demand local tool response, not a background reporter, prompt
+injection path, event daemon or autonomous AI task scheduler. The user may
+continue to call `inspect_profiles` and `read_game_evidence` separately
+for finer investigation.
+
 ## Source-only five-player coordination contracts
 
 Two additional MCP tools prepare the Windows peer-to-peer workflow without

@@ -180,6 +180,22 @@ parallel input remains UNVERIFIED, all execution NOT_EXECUTED.
 **Proof ceiling:** GitHub source review only. In-game evidence acquisition,
 Windows MCP execution and parallel input are NOT_EXECUTED.
 
+## One-request AI observation handoff and deferred execution policy
+
+- Added `get_test_context` to the same MCP owner: one authenticated native
+  Inspect plus existing stateless peer-session plan and compact per-slot
+  analytics/results evidence. One read-only request instead of several
+  agent/tool round trips. Input backend remains NOT_VERIFIED.
+- No new agent runner, background monitor, native window command, data store
+  or UI route was added; optional capture status remains unverified.
+- **Operator restriction:** continue source-only GitHub development. Do not
+  run Node/Vitest tests, Windows Rust/Tauri builds, installer packaging, native
+  probes or Minecraft local tests until explicitly authorized in a later turn.
+  New source tests are written for future execution only.
+
+**Proof ceiling:** REMOTE_GITHUB exact-source review, no execution at this
+revision.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,
@@ -193,15 +209,17 @@ Windows MCP execution and parallel input are NOT_EXECUTED.
 - Extra RAM/FPS or graphics optimization, macOS support, new native providers,
   hosted runners and CI remain outside the active development scope.
 
-## Next — one validation boundary
+## Next — source-only continuation, testing deferred by operator
 
-Next necessary proof is an exact-SHA Windows native preflight and one-shot
-agent-CLI-to-retained-controller acceptance (Inspect/Launch). Independent input
-for MC02 while a human operates MC01 is the subsequent explicit feasibility
-gate; do not claim working parallel AI gameplay before actual game evidence.
-Do not request local-PC work to claim remote source completion, and do not
-open a speculative refactor backlog. Storage, RAM and build optimizations
-require actual before/after measurements; unobserved proof stays NOT_EXECUTED.
+Keep the five-client AI control/observation source bounded to the current
+native controller and Skills Probe evidence contract. Prepare further safe
+source corrections and future independent-input adapter contracts only where
+they have a justified consumer; do not claim Minecraft moved in the background.
+**Do not execute local tests, toolchain builds, package staging, native input
+probes or gameplay until explicit operator approval.** When approval arrives,
+the first separate acceptance boundary is the pinned Windows agent CLI,
+followed by MC01 human + MC02 AI independent input with actual game evidence.
+No VM, dedicated server, or global SendInput fallback is authorized.
 
 Historical work notes and prior Next proposals remain in immutable
 Local Git history, not in a parallel current-status register.

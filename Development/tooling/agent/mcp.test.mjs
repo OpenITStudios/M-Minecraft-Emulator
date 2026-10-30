@@ -21,7 +21,7 @@ test('MCP handshake and tool discovery are standard JSON-RPC',async()=>{
   const init=await h.handle({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-11-25'}});
   assert.equal(init.result.protocolVersion,'2025-11-25');
   const listing=await h.handle({jsonrpc:'2.0',id:2,method:'tools/list'});
-  assert.deepEqual(listing.result.tools.map(x=>x.name),['agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','summarize_test_evidence','read_game_evidence']);
+  assert.deepEqual(listing.result.tools.map(x=>x.name),['get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','summarize_test_evidence','read_game_evidence']);
   assert.equal(await h.handle({jsonrpc:'2.0',method:'notifications/initialized'}),null);
 });
 
@@ -71,6 +71,27 @@ test('native operations serialized and malformed slot denied',async()=>{
   await assert.rejects(()=>h.callTool('launch_profile',{slot:6}),/slot must/);
   assert.equal(count,1);
   release();assert.equal((await first).operation,'inspect');
+});
+
+test('one read-only context handoff combines current profiles and bounded game evidence',async()=>{
+  const calls=[];
+  const handler=createHandler(config(),{
+    native:async(_exe,op)=>{calls.push(op);return snapshot(op);},
+    evidence:async(_directory,slot)=>({
+      slot,status:slot===2?'CAPTURE_FILE_PRESENT':'NO_CAPTURE_FILE',
+      events:slot===2?[{observedAt:'2026-10-30T12:30:00Z',level:'log',
+        type:'game_results',data:{record_type:'gameplay_result',total_score:8,
+          data:{canonical:{record_id:'r1'}}}}]:[],
+    }),
+  });
+  const context=await handler.callTool('get_test_context',{slots:[2]});
+  assert.deepEqual(calls,['inspect']);
+  assert.equal(context.hostSlot,1);
+  assert.equal(context.nativeProfiles.length,5);
+  assert.equal(context.peerPlan.hostWorld,'NOT_OBSERVED');
+  assert.equal(context.gameEvidence.resultCount,1);
+  assert.equal(context.gameControl,'INDEPENDENT_BACKGROUND_INPUT_NOT_VERIFIED');
+  assert.equal(context.contextScope,'NATIVE_SESSION_AND_UNATTRIBUTED_PROBE_EVIDENCE_ONLY');
 });
 
 test('MCP summarized telemetry never interprets capture filenames as verified identity',async()=>{
