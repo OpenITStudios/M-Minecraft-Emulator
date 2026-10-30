@@ -207,6 +207,8 @@ function capabilities(mode) {return {schema:1,mode,hostSlot:1,humanSlots:mode===
   independentInput:{state:'BLOCKED_NO_VERIFIED_PER_CLIENT_INPUT_BACKEND',
     simultaneousIntentChannels:true,actualInputEnabled:false,
     requiresHumanFocusProtection:true,requiresPerClientEmergencyRelease:true,
+    nativeSessionModel:'SAME_WINDOWS_SESSION_ONLY',
+    windowsAgentWorkspace:'PREVIEW_NOT_INTEGRATED_NO_CROSS_SESSION_INPUT',
     transactionEngine:inputExecutionStatus()},
   note:'MCP tools control the native session owner and read evidence; they do NOT independently move multiple background Minecraft clients.'};}
 

@@ -447,6 +447,32 @@ multiplayer control remains BLOCKED.
 
 **Proof:** REMOTE_GITHUB source/upstream review only; no tests/builds/driver/game.
 
+## Phase 10: Windows same-session input routing and feasibility (31 October 2026)
+
+- Fixed input-route admission: mixed Windows session IDs now fail closed
+  in both `five-ai` and `human-plus-four-ai` (previously only hybrid
+  mode compared MC01 session ID against its AI targets).
+- Read-only `assess_input_route` and `agent_capabilities` now report the
+  existing single-session native controller limit. Microsoft's experimental
+  Windows Agent Workspace uses separate Windows sessions, and is therefore
+  not a drop-in backend for this controller or evidence of Minecraft input.
+- Fixed one existing MCP authored fixture incorrectly rejecting the
+  intentionally available read-only `assess_input_route` tool by substring
+  `input`. It now distinguishes nonexecuting assessment from actuation.
+  Updated the existing input-route and MCP test files only.
+- Windows research: system-wide synthetic input has no exclusive PID
+  routing; Raw Input background reception requires game registration;
+  GameInput focus policy is selected by its app; ProtoInput uses game
+  process hooks (out of approved scope). No supported non-injecting
+  per-process keyboard/relative-mouse sender has been established.
+- Minecraft Education keyboard/mouse control is supported; public
+  controller documentation/support is inconsistent, so gamepad support
+  stays UNVERIFIED, not a basis for production enablement.
+
+**Proof:** REMOTE_GITHUB sources and upstream documentation only.
+All source tests AUTHORED NOT_EXECUTED; native builds, Windows gameplay,
+injection and CI remain unexecuted/disabled. No input tool enabled.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,
@@ -462,10 +488,10 @@ multiplayer control remains BLOCKED.
 
 ## Next — source-only continuation, testing deferred by operator
 
-Keep the five-client AI control/observation source bounded to the current
-native controller and Skills Probe evidence contract. Preserve the current native identity and gameplay-plan owners, keep
-global gamepad signals blocked, and seek a concrete acceptable Windows
-per-process input mechanism before adding any production input dispatch.
+Preserve the current same-session native identity and gameplay-plan
+owners. Seek a supported non-injecting, non-focus-stealing per-client
+keyboard/relative-mouse route before adding any executable input.
+If none is proven, retain BLOCKED rather than simulating success.
 **Do not execute local tests, toolchain builds, package staging, native input
 probes or gameplay until explicit operator approval.** When approval arrives,
 the first separate acceptance boundary is the pinned Windows agent CLI,

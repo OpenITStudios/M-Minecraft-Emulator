@@ -358,11 +358,19 @@ test('evidence reads only complete marked lines from assigned profile',async()=>
 test('experimental background input is NOT exposed as an agent tool',async()=>{
   const h=createHandler(config());
   const tools=(await h.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;
-  assert.equal(tools.some(t=>t.name.includes('input')||t.name.includes('probe')),false);
+  // Read-only assessment is expected; no actuating input tool is allowed.
+  assert.equal(tools.some(t=>['send_input','inject_input',
+    'execute_game_input','probe-background'].includes(t.name)),false);
+  assert.equal(tools.some(t=>t.name==='assess_input_route'),true);
   assert.equal((await h.handle({jsonrpc:'2.0',id:2,method:'tools/call',
     params:{name:'probe-background',arguments:{slot:2}}})).result.isError,true);
-  assert.equal((await h.callTool('agent_capabilities',{}))
-    .notAvailable.includes('parallel_independent_keyboard_mouse'),true);
+  const capabilities=await h.callTool('agent_capabilities',{});
+  assert.equal(capabilities.notAvailable.includes(
+    'parallel_independent_keyboard_mouse'),true);
+  assert.equal(capabilities.independentInput.nativeSessionModel,
+    'SAME_WINDOWS_SESSION_ONLY');
+  assert.equal(capabilities.independentInput.windowsAgentWorkspace,
+    'PREVIEW_NOT_INTEGRATED_NO_CROSS_SESSION_INPUT');
 });
 
 test('never trusts incomplete or out-of-order native profiles',()=>{

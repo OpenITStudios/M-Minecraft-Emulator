@@ -40,6 +40,10 @@ test('hybrid route pins human window but excludes MC01 from AI actions',()=>{
   assert.equal(result.humanForegroundObserved,true);
   assert.deepEqual(result.aiTargets.map(t=>t.slot),[2,3]);
   assert.equal(result.aiTargets.some(t=>t.slot===1),false);
+  assert.equal(result.humanWindowBinding,'EXCLUDED_FROM_AI_ACTIONS');
+  assert.equal(result.nativeSessionModel,'SAME_WINDOWS_SESSION_ONLY');
+  assert.equal(result.windowsAgentWorkspace.productionAdmissible,false);
+  assert.equal(result.windowsAgentWorkspace.crossSessionTargetRouting,'NOT_SUPPORTED');
   assert.match(result.deliveryGate,/BLOCKED/);
   assert.equal(result.gameplayInputAcceptance,'NOT_EXECUTED');
 });
@@ -49,6 +53,7 @@ test('five-AI mode may bind MC01 as an AI window without human assumptions',()=>
     [target(1)],{observedAtMs:100000,elapsedMs:1});
   assert.equal(result.aiTargets[0].slot,1);
   assert.equal(result.humanForegroundObserved,null);
+  assert.equal(result.humanWindowBinding,'NO_HUMAN_SLOT_IN_FIVE_AI');
   assert.equal(result.releaseAllBackend,'NOT_IMPLEMENTED');
   assert.equal(result.legacyVirtualGamepadLab.productionAdmissible,false);
   const five=assessInputRoute('five-ai',
@@ -75,6 +80,8 @@ test('alias, missing, or stale targets are never accepted',()=>{
     [target(1),target(2),target(3,{verification:'PID_ONLY'})]),/not verified/);
   assert.throws(()=>assessInputRoute('human-plus-four-ai',acts,
     [target(1),target(2),target(3,{sessionId:2})]),/Cross-session/);
+  assert.throws(()=>assessInputRoute('five-ai',acts,
+    [target(2),target(3,{sessionId:2})]),/Cross-session/);
 });
 
 test('no game-input authorization can be inferred from observed foreground',()=>{

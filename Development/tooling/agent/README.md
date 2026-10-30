@@ -112,6 +112,50 @@ Only code is committed; no user screenshots are collected now.
 
 Cua CLI reference: https://cua.ai/docs/cua-driver/reference/cli/serve-and-configure
 
+## Phase 10: Windows per-client game input feasibility (source-only)
+
+Read-only native PID/HWND identification is NOT a channel for delivering
+independent Minecraft movement to that window. The existing session
+controller and Skills Probe evidence owners remain unchanged.
+
+| Candidate | Observed limitation | Decision |
+| --- | --- | --- |
+| `SendInput` / Windows `InputInjector` | Shared system input, no external exclusive game PID target | Not an independent input backend |
+| Raw Input `RIDEV_INPUTSINK` | Receiving game must register itself for background input | Not an external sender |
+| GameInput `SetFocusPolicy` | Focus policy belongs to the game API consumer | Not an external process router |
+| ProtoInput | Can reroute inputs using hooks inside game processes | Not authorized in no-injection design |
+| Windows Agent Workspace | Preview separate Windows accounts/sessions | Research only: native controller has no cross-session route |
+| ViGEmBus / XInput | Retired driver, globally visible device and four standard indices | Lab remains separate and blocked |
+
+**Phase 10 source correction:** `assess_input_route` rejects any
+cross-Windows-session target combination in BOTH hybrid and five-AI
+modes. Windows Agent Workspace cannot be used as a drop-in input provider
+for current same-session Lazy Tester. It would require a separate
+architectural decision and target-session ownership proof. Neither
+support for four independent Minecraft game sessions nor GPU rendering,
+Education sign-in or P2P connectivity has been demonstrated.
+
+Minecraft Education documents keyboard/mouse controls and a limited
+controller settings screen, while a later Education support response
+states Windows computer gameplay is keyboard/mouse only. Therefore
+controller acceptance remains **UNVERIFIED**; keyboard and relative
+mouse input are the required capabilities.
+
+**Future acceptance (not performed):** MC01 remains human-controlled
+and uninterrupted; independent MC02 moves, looks and attacks while
+unfocused, with game-frame/Skills Probe evidence attributed to MC02.
+No external driver, client injection, local tests or gameplay ran.
+
+Sources:
+- https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput
+- https://learn.microsoft.com/en-us/windows/uwp/ui-input/input-injection
+- https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-rawinputdevice
+- https://learn.microsoft.com/en-us/xbox/gdk/docs/reference/input/gameinput/interfaces/igameinput/methods/igameinput_setfocuspolicy
+- https://www.splitscreen.me/docs/proto/
+- https://support.microsoft.com/en-us/windows/ai/ai-features/experimental-agentic-features
+- https://edusupport.minecraft.net/hc/en-us/articles/360047116832-Minecraft-keyboard-and-mouse-controls
+- https://edusupport.minecraft.net/hc/en-us/community/posts/53960255250324-cant-connect-ps5-controller-to-play
+
 ## Phase 8: actual virtual gamepad signal candidate (NOT per-client yet)
 
 We audited ProtoInput's public C API and found it primarily assigns

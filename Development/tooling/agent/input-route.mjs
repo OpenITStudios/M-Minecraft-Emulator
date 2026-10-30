@@ -98,14 +98,15 @@ export function assessInputRoute(mode,actions,observations,{
     processes.add(target.pid);
     windows.add(target.windowId);
   }
-  const human=mode==='human-plus-four-ai'?bySlot.get(1):null;
-  const windowsForAI=aiSlots.map(slot=>bySlot.get(slot));
-  if (human && windowsForAI.some(target=>
-      target.sessionId!==human.sessionId)) {
-    // Existing controller is same-session only. Do not pretend a future
-    // multi-session adapter can reuse this transport without redesign.
+  // This retained native controller is single-session. In five-ai mode
+  // there is no human reference, but mixed agent sessions still cannot
+  // be silently accepted as a supported transport.
+  const sessionIds=new Set([...bySlot.values()].map(t=>t.sessionId));
+  if (sessionIds.size!==1) {
     throw new TypeError('Cross-session input routing is not supported');
   }
+  const human=mode==='human-plus-four-ai'?bySlot.get(1):null;
+  const windowsForAI=aiSlots.map(slot=>bySlot.get(slot));
   return {
     schema:1,mode,
     execution:'NOT_DISPATCHED',
@@ -117,7 +118,16 @@ export function assessInputRoute(mode,actions,observations,{
     humanForegroundObserved:human?.foreground??null,
     humanInputPreservation:'NOT_PROVEN_BY_NATIVE_WINDOW_INSPECTION',
     aiTargets:windowsForAI,
-    humanWindowBinding:'EXCLUDED_FROM_AI_ACTIONS',
+    humanWindowBinding:human?
+      'EXCLUDED_FROM_AI_ACTIONS':'NO_HUMAN_SLOT_IN_FIVE_AI',
+    nativeSessionModel:'SAME_WINDOWS_SESSION_ONLY',
+    windowsAgentWorkspace:{
+      platformCapability:'PREVIEW_SEPARATE_WINDOWS_SESSION',
+      nativeControllerIntegration:'NOT_IMPLEMENTED',
+      crossSessionTargetRouting:'NOT_SUPPORTED',
+      minecraftEducationGameplay:'NOT_EXECUTED',
+      productionAdmissible:false,
+    },
     routeType:'OBSERVATION_ONLY_NOT_GAME_INPUT',
     releaseAllBackend:'NOT_IMPLEMENTED',
     gameplayInputAcceptance:'NOT_EXECUTED',
