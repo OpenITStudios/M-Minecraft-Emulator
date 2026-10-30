@@ -3,7 +3,7 @@
 // This is NOT live 30 FPS video, semantic gameplay perception, or game input.
 // Game capture, provider latency and Minecraft Windows behavior NOT_EXECUTED.
 export const OBSERVATION_LIMITS=Object.freeze({
-  minimumIntervalMs:750,maximumIntervalMs:5000,defaultIntervalMs:1250,
+  minimumIntervalMs:400,maximumIntervalMs:5000,defaultIntervalMs:1250,
   minimumDurationMs:5000,maximumDurationMs:90000,defaultDurationMs:30000,
   maximumSlots:5,maximumEncodedFrameChars:4*1024*1024,
 });
@@ -38,7 +38,8 @@ function frameIdentity(meta) {
 }
 function boundedFrame(frame) {
   const meta=frame?.metadata;
-  if (!meta || meta.provider!=='CUA_DRIVER_WINDOW_CAPTURE' ||
+  if (!meta || !['CUA_DRIVER_WINDOW_CAPTURE','NATIVE_WGC_PERSISTENT']
+      .includes(meta.provider) ||
       typeof frame.imageBase64!=='string' ||
       frame.imageBase64.length<32 ||
       frame.imageBase64.length>OBSERVATION_LIMITS.maximumEncodedFrameChars ||
@@ -61,6 +62,7 @@ export function createVisualObserver({
   clock=()=>Date.now(),
   schedule=(task,ms)=>setTimeout(task,ms),
   cancel=clearTimeout,
+  sourceLabel='BOUNDED_CUA_WINDOW_SNAPSHOTS',
 }={}) {
   if (typeof capture!=='function') throw new TypeError('A verified capture function is required');
   const sessions=new Map();
@@ -207,7 +209,7 @@ export function createVisualObserver({
       schema:1,slots:selected,intervalMs,durationMs,
       status:'LOCAL_OBSERVATION_REQUESTED_NOT_YET_VERIFIED',
       delivery:'ON_DEMAND_CHANGED_FRAMES_ONLY',
-      localSampler:'BOUNDED_CUA_WINDOW_SNAPSHOTS',
+      localSampler:sourceLabel,
       liveVideo:false,modelAnalyzesEveryFrame:false,
       gameControl:'NOT_IMPLEMENTED',
     };

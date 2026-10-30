@@ -15,6 +15,10 @@ test('modes, absolute paths, no implicit native permissions',()=>{
   assert.throws(()=>parseConfiguration(['--evidence-dir','relative']));
   assert.throws(()=>parseConfiguration(['--exe','./lazy-tester.exe']));
   assert.throws(()=>parseConfiguration(['--cua-exe','./cua-driver.exe']));
+  assert.throws(()=>parseConfiguration(['--gpu-capture-exe','gpu.exe']));
+  assert.equal(parseConfiguration([
+    '--gpu-capture-exe',path.resolve('lazy-tester-gpu-capture.exe')])
+    .gpuExecutable,path.resolve('lazy-tester-gpu-capture.exe'));
   assert.equal(parseConfiguration(['--cua-exe',path.resolve('cua-driver.exe')])
     .cuaExecutable,path.resolve('cua-driver.exe'));
 });
@@ -104,6 +108,43 @@ test('MCP local visual sampler returns only changed cached frames on demand',asy
   const stopped=await handler.callTool('stop_visual_observation',{slots:[2]});
   assert.equal(stopped.captureFramesRetained,false);
   handler.shutdown();
+});
+
+test('opt-in persistent GPU observation reuses MCP tools and protects MC01',async()=>{
+  const calls=[];
+  const latestFrame={provider:'NATIVE_WGC_PERSISTENT',
+    mimeType:'image/png',imageBase64:'a'.repeat(64),width:960,height:540,
+    sha256:'a'.repeat(64),frameFreshness:'CAPTURE_TIMESTAMP_RECENT_GAMEPLAY_NOT_VERIFIED'};
+  const gpuFactory=()=>({
+    async start(slot){calls.push(['start',slot]);return {slot};},
+    latest(slot){calls.push(['latest',slot]);return latestFrame;},
+    stop(slots){calls.push(['stop',...slots]);},
+    shutdown(){calls.push(['shutdown']);},
+  });
+  const target=slot=>({schema:1,ok:true,operation:'target',
+    slot,pid:600+slot,windowId:3000+slot,
+    createdFileTime:'134000000000000001',sessionId:1,
+    foreground:false,visible:true,minimized:false,
+    verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',gameplayInput:'NOT_VERIFIED'});
+  const cfg={...config(),gpuExecutable:path.resolve('lazy-tester-gpu-capture.exe')};
+  const handler=createHandler(cfg,{
+    gpuSourceFactory:gpuFactory,
+    native:async(_exe,operation,slot)=>{calls.push(['native',slot]);return target(slot);},
+  });
+  await assert.rejects(()=>handler.callTool('start_visual_observation',
+    {slots:[1]}),/human host/);
+  assert.equal(calls.length,0);
+  const started=await handler.callTool('start_visual_observation',
+    {slots:[2],durationMs:5000});
+  assert.equal(started.source,'PERSISTENT_NATIVE_WGC_EXPLICIT_OPT_IN');
+  const frame=await handler.callTool('observe_client',{slot:2});
+  assert.equal(frame.metadata.provider,'NATIVE_WGC_PERSISTENT');
+  assert.equal(frame.metadata.background,true);
+  handler.callTool('stop_visual_observation',{slots:[2]});
+  handler.shutdown();
+  assert.equal(calls.some(([op])=>op==='start'),true);
+  assert.equal(calls.some(([op])=>op==='stop'),true);
+  assert.equal(calls.some(([op])=>op==='shutdown'),true);
 });
 
 test('observe_client refuses an unconfigured provider without calling native',async()=>{

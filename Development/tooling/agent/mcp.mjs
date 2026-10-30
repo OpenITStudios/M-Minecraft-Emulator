@@ -11,6 +11,7 @@ import {planPeerSession,planPlayerActions} from './control-plan.mjs';
 import {summarizeGameEvidence,normalizeEvidenceSlots} from './evidence-summary.mjs';
 import {captureCuaWindow,validateCuaExecutable} from './visual-capture.mjs';
 import {createVisualObserver,OBSERVATION_LIMITS} from './visual-observer.mjs';
+import {createGpuFrameSource,validateGpuExecutable} from './gpu-frame-source.mjs';
 
 const execFileAsync = promisify(execFile);
 const REQUEST_LIMIT = 64 * 1024;
@@ -24,16 +25,18 @@ export function parseConfiguration(argv, env = process.env) {
   let executable = env.LAZY_TESTER_AGENT_EXE ?? '';
   let evidenceDirectory = env.LAZY_TESTER_EVIDENCE_DIR ?? '';
   let cuaExecutable = env.LAZY_TESTER_CUA_EXE ?? '';
+  let gpuExecutable = env.LAZY_TESTER_GPU_CAPTURE_EXE ?? '';
   for (let i=0;i<argv.length;i++) {
     const flag=argv[i];
-    if (!['--mode','--exe','--evidence-dir','--cua-exe'].includes(flag) || i===argv.length-1) {
-      throw new Error('Accepted arguments: --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>] [--cua-exe <cua-driver.exe>]');
+    if (!['--mode','--exe','--evidence-dir','--cua-exe','--gpu-capture-exe'].includes(flag) || i===argv.length-1) {
+      throw new Error('Accepted arguments: --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>] [--cua-exe <cua-driver.exe>] [--gpu-capture-exe <lazy-tester-gpu-capture.exe>]');
     }
     const value=argv[++i];
     if (flag==='--mode') mode=value;
     if (flag==='--exe') executable=value;
     if (flag==='--evidence-dir') evidenceDirectory=value;
     if (flag==='--cua-exe') cuaExecutable=value;
+    if (flag==='--gpu-capture-exe') gpuExecutable=value;
   }
   if (!['human-plus-four-ai','five-ai'].includes(mode)) throw new Error('Unknown test mode');
   if (executable && (!path.isAbsolute(executable) || !/\.exe$/i.test(executable))) {
@@ -43,7 +46,9 @@ export function parseConfiguration(argv, env = process.env) {
     throw new Error('Evidence directory must be absolute');
   }
   if (cuaExecutable) validateCuaExecutable(cuaExecutable);
-  return Object.freeze({mode, executable, evidenceDirectory, cuaExecutable});
+  if (gpuExecutable) validateGpuExecutable(gpuExecutable);
+  return Object.freeze({mode, executable, evidenceDirectory,
+    cuaExecutable, gpuExecutable});
 }
 
 function slotOf(value) {
@@ -194,11 +199,16 @@ function capabilities(mode) {return {schema:1,mode,hostSlot:1,humanSlots:mode===
   aiSlots:mode==='human-plus-four-ai'?[2,3,4,5]:[1,2,3,4,5],
   available:['start_visual_observation','read_visual_observation','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions','summarize_test_evidence'],
   notAvailable:['parallel_independent_keyboard_mouse','automatic_world_host_join','send_minecraft_command'],
-  visualCapture:'OPTIONAL_CUA_PROVIDER_RUNTIME_UNVERIFIED',
+  visualCapture:'OPTIONAL_CUA_OR_PERSISTENT_WGC_SOURCE_NOT_RUNTIME_VERIFIED',
   note:'MCP tools control the native session owner and read evidence; they do NOT independently move multiple background Minecraft clients.'};}
 
-export function createHandler(config,{native=runNative,evidence=readGameEvidence,capture=captureCuaWindow}={}) {
+export function createHandler(config,{
+  native=runNative,evidence=readGameEvidence,capture=captureCuaWindow,
+  gpuSourceFactory=createGpuFrameSource,
+}={}) {
   let inFlight=false;
+  const gpuSource=config.gpuExecutable ?
+    gpuSourceFactory({executable:config.gpuExecutable}):null;
   function protectedSlot(slot) {
     if (config.mode==='human-plus-four-ai' && slot===1) {
       throw new Error('MC01 human host is protected from AI visual observation');
@@ -206,15 +216,18 @@ export function createHandler(config,{native=runNative,evidence=readGameEvidence
   }
   async function captureVerifiedFrame(slot) {
     protectedSlot(slot);
-    if (!config.cuaExecutable) {
-      throw new Error('Cua visual provider is NOT_CONFIGURED; set --cua-exe explicitly');
+    if (!config.cuaExecutable && !gpuSource) {
+      throw new Error('Visual provider is NOT_CONFIGURED; set --cua-exe or --gpu-capture-exe');
     }
     if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
     inFlight=true;
     try {
       const before=validateNativeWindowTarget(
         await native(config.executable,'target',slot),slot);
-      const frame=await capture(config.cuaExecutable,before);
+      // GPU provider is a persistent producer started by the same explicit
+      // visual-observation MCP action. No fallback to desktop/global capture.
+      const frame=gpuSource ? gpuSource.latest(slot) :
+        await capture(config.cuaExecutable,before);
       const after=validateNativeWindowTarget(
         await native(config.executable,'target',slot),slot);
       if (before.pid!==after.pid || before.windowId!==after.windowId ||
@@ -231,13 +244,15 @@ export function createHandler(config,{native=runNative,evidence=readGameEvidence
       return {
         metadata:{
           schema:1,slot,mode:config.mode,
-          provider:'CUA_DRIVER_WINDOW_CAPTURE',
+          provider:gpuSource?'NATIVE_WGC_PERSISTENT':'CUA_DRIVER_WINDOW_CAPTURE',
           observedWindow:{pid:after.pid,windowId:after.windowId},
           processIdentity:{pid:after.pid,windowId:after.windowId,
             createdFileTime:after.createdFileTime,sessionId:after.sessionId},
           width:frame.width,height:frame.height,
           sha256:frame.sha256??null,
-          frameFreshness:'UNVERIFIED_SINGLE_FRAME',
+          frameFreshness:gpuSource ?
+            'WGC_RECENT_TIMESTAMP_NOT_GAMEPLAY_PROOF' :
+            'UNVERIFIED_SINGLE_FRAME',
           background:!before.foreground && !after.foreground,
           screenshotStatus:'PNG_RETURNED_NOT_GAMEPLAY_PROOF',
           gameInput:'BACKGROUND_MINECRAFT_INPUT_UNVERIFIED',
@@ -247,7 +262,10 @@ export function createHandler(config,{native=runNative,evidence=readGameEvidence
       };
     } finally {inFlight=false;}
   }
-  const visualObserver=createVisualObserver({capture:captureVerifiedFrame});
+  const visualObserver=createVisualObserver({
+    capture:captureVerifiedFrame,
+    sourceLabel:gpuSource?'PERSISTENT_WGC_GPU_FRAME_SOURCE':'BOUNDED_CUA_WINDOW_SNAPSHOTS',
+  });
   function checkedSlots(slots) {
     if (!Array.isArray(slots) || slots.length<1 || slots.length>5 ||
         new Set(slots).size!==slots.length) {
@@ -260,13 +278,35 @@ export function createHandler(config,{native=runNative,evidence=readGameEvidence
     if (name==='start_visual_observation') {
       keysExactly(args,['slots','intervalMs','durationMs']);
       const slots=checkedSlots(args.slots);
-      if (!config.cuaExecutable) {
-        throw new Error('Cua visual provider is NOT_CONFIGURED');
+      if (!gpuSource && !config.cuaExecutable) {
+        throw new Error('Visual provider is NOT_CONFIGURED');
       }
-      return visualObserver.start(slots,{
-        intervalMs:args.intervalMs??OBSERVATION_LIMITS.defaultIntervalMs,
-        durationMs:args.durationMs??OBSERVATION_LIMITS.defaultDurationMs,
-      });
+      const durationMs=args.durationMs??OBSERVATION_LIMITS.defaultDurationMs;
+      const intervalMs=args.intervalMs??
+        (gpuSource?500:OBSERVATION_LIMITS.defaultIntervalMs);
+      if (!gpuSource) {
+        return visualObserver.start(slots,{intervalMs,durationMs});
+      }
+      if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
+      inFlight=true;
+      const started=[];
+      try {
+        // Verify every owner before starting the optional read-only workers.
+        // If one fails, stop every worker started in this request. No game
+        // processes, worlds or authenticated controller instances are created.
+        for (const slot of slots) {
+          const target=validateNativeWindowTarget(
+            await native(config.executable,'target',slot),slot);
+          await gpuSource.start(slot,target,{durationMs,fps:5});
+          started.push(slot);
+        }
+        const response=visualObserver.start(slots,{intervalMs,durationMs});
+        return {...response,source:'PERSISTENT_NATIVE_WGC_EXPLICIT_OPT_IN',
+          pixelsPassedToModel:'ONLY_ON_MCP_READ'};
+      } catch(error) {
+        gpuSource.stop(started);
+        throw error;
+      } finally {inFlight=false;}
     }
     if (name==='read_visual_observation') {
       keysExactly(args,['slot','afterSequence','includeImage']);
@@ -279,7 +319,10 @@ export function createHandler(config,{native=runNative,evidence=readGameEvidence
     }
     if (name==='stop_visual_observation') {
       keysExactly(args,['slots']);
-      return visualObserver.stop(checkedSlots(args.slots));
+      const slots=checkedSlots(args.slots);
+      const response=visualObserver.stop(slots);
+      gpuSource?.stop(slots);
+      return response;
     }
     if (name==='observe_client') {
       keysExactly(args,['slot']);
@@ -414,7 +457,10 @@ export function createHandler(config,{native=runNative,evidence=readGameEvidence
       return err(-32601,'Method not found');
     }catch {return err(-32603,'Internal error');}
   }
-  return {handle,callTool,shutdown:()=>visualObserver.shutdown()};
+  return {handle,callTool,shutdown:()=>{
+    visualObserver.shutdown();
+    gpuSource?.shutdown();
+  }};
 }
 
 export function serve(config) {

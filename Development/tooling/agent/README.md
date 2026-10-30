@@ -112,6 +112,40 @@ Only code is committed; no user screenshots are collected now.
 
 Cua CLI reference: https://cua.ai/docs/cua-driver/reference/cli/serve-and-configure
 
+## Phase 4: opt-in persistent GPU frame stream (source only)
+
+An isolated Rust worker source using Windows Graphics Capture (`wgc 3.1.0`)
+and a bounded Node frame reader now exist under:
+- [Native WGC worker](./native-gpu-capture/README.md)
+- [GPU frame protocol and reader](./GPU_CAPTURE.md)
+
+Existing `start_visual_observation`, `read_visual_observation`,
+`stop_visual_observation` and `observe_client` tools work with an
+**optional** persistent WGC provider once its separately reviewed binary
+exists. Opt-in configuration: `--gpu-capture-exe` pointing to an absolute
+`lazy-tester-gpu-capture.exe`. If specified, this provider takes precedence
+over Cua and requires explicit start before a frame is available. The default
+remains Cua snapshots when configured, with unchanged legacy behavior.
+
+The MCP verifies each slot via the retained native controller before
+starting one bounded worker per selected Minecraft and revalidates PID,
+process birth, session and HWND before/after reading each cached GPU frame.
+Each worker independently re-verifies the Windows process identity before
+emitting. One in-memory frame per window, rate capped at five source
+frames/second by MCP, local sampler reads approximately twice per second;
+no images sent to Codex unless it explicitly asks for a changed sequence.
+
+**This is neither full-motion video to Codex nor verified Minecraft GPU
+performance.** The WGC crate has not been dependency-resolved/built and
+the standalone worker is not packaged or installed. Native graphics consent,
+Windows capture border, frame availability when Minecraft is backgrounded,
+memory/FPS cost and multi-client behavior remain UNKNOWN. No fallback to
+a desktop-wide screenshot, global SendInput, native injection, or gameplay
+script exists. The worker terminates on stop, expiry, error and MCP shutdown.
+
+All local tests, compiler runs, packaging and game execution remain prohibited
+until separate operator approval.
+
 ## Phase 3: bounded continuous local visual observation (source only)
 
 The existing MCP process can now run a **time-limited rolling frame sampler**

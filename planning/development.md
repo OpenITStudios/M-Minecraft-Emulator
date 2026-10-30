@@ -292,6 +292,33 @@ Windows live game pixels and parallel game input NOT_EXECUTED/UNVERIFIED.
 **Proof ceiling:** REMOTE_GITHUB source/consumer inspection only. Await
 explicit operator permission before any runtime test or installed changes.
 
+## Phase 4: optional native persistent GPU capture through existing MCP — source only
+
+- Added an isolated Windows WGC 3.1.0 Rust window producer with pinned
+  process/birth/session/root-HWND checks and a bounded binary PNG stdout
+  stream. Added a Node reader to the existing MCP process: per-slot latest
+  frame only, protocol integrity/ordering, age validation, deadlines and
+  no retry. This does NOT create a new Minecraft lifecycle owner.
+- Existing MCP visual observation tools can now select the source-only
+  WGC provider via `--gpu-capture-exe`. The unchanged default Cua path
+  remains available; all GPU workers require an explicitly configured
+  binary and a native controller verification for each selected slot.
+  On partial start failure, workers from that request are stopped.
+- Source-level tests authored for frame protocol, worker lifecycle and
+  MCP target/MC01 protection. No new UI, internet server, game input,
+  world/login automation, CI, dependency tree in the native Tauri app or
+  installed package was changed.
+- **No local tests, Cargo build, Windows executable, GPU capture or
+  Minecraft operation were performed.** The standalone worker Cargo
+  dependency lock is intentionally absent pending authorized toolchain
+  resolution; this feature is NOT ready for distribution.
+- WGC may require OS permission and show a capture border; captured
+  pixels might be stale/black or absent with a background game. Five GPU
+  capture producers' performance and actual frame freshness are UNKNOWN.
+
+**Proof ceiling:** REMOTE_GITHUB source review only. Do not claim that
+Minecraft can be observed at live gameplay speed or controlled by AI.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,

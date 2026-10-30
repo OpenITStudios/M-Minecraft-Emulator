@@ -16,8 +16,10 @@ The capture exe must have the exact name
 `lazy-tester-gpu-capture.exe` and an absolute trusted local path. It is
 **not currently part of the product or installer**; there is no approved
 binary build yet. Cua Driver remains the existing optional snapshot
-provider. This transport becomes selectable through the established MCP
-observation tools only after the separate source integration is completed.
+provider. This transport is connected to the existing MCP
+`start_visual_observation` / `read_visual_observation` /
+`stop_visual_observation` / `observe_client` code when explicitly configured
+with `--gpu-capture-exe`. It is not packaged or runtime validated.
 
 See `native-gpu-capture/README.md` for the upstream WGC crate,
 frame protocol, licensing and unverified platform limitations.
