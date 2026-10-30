@@ -534,6 +534,30 @@ native game input still BLOCKED.
 **Proof ceiling:** REMOTE_GITHUB plus official vendor/maintainer source
 review; no tests, builds, installs, gameplay, RDP or agents executed.
 
+## Phase 13: on-device Windows Agent Workspace / Codex viability (31 October 2026)
+
+- Official Windows ODR contained MCP server documentation confirms that
+  packaged .exe MCP servers can run and launch other executables *inside
+  an agent's Windows session*; it does NOT supply a demonstrated local
+  per-client game keyboard/relative-mouse/screenshot provider, or proof
+  of Minecraft Education graphics, sign-in, networking or game acceptance.
+- Containment requires package identity and ODR registration; the current
+  Codex Node stdio MCP is a different connection mechanism. Generic
+  Codex MCP configuration does not create a Windows Agent Workspace,
+  and the public docs inspected do not establish a working Codex-ODR
+  lifecycle for Lazy Tester. Do NOT weaken connector containment.
+- Windows 365 for Agents offers documented computer-use actions and
+  session lifecycle, but acts on Cloud PCs. It is excluded by the
+  approved local-only, no-cloud/no-VM scope and is NOT ODR Agent Workspace.
+- **Decision:** close Windows Agent Workspace as an immediately
+  implementable independent Minecraft input backend. Do not create
+  new ODR/MSIX/agent-session/input source without a concrete supported
+  API and acceptance evidence. Existing one-session native controller,
+  read-only MCP and disabled input dispatch remain unmodified.
+
+**Proof:** REMOTE_GITHUB plus primary Microsoft/OpenAI documentation.
+No test, build, packaging, ODR, device, Windows or Minecraft execution.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,
@@ -549,13 +573,13 @@ review; no tests, builds, installs, gameplay, RDP or agents executed.
 
 ## Next — source-only continuation, testing deferred by operator
 
-Keep the existing single-session native controller and read-only
-Codex MCP unchanged. Next source-only decision: determine whether
-Windows Agent Workspace officially exposes an approved third-party
-interactive session/input lifecycle sufficient for ONE MC02 game client
-without weakening containment. Without that supported mechanism,
-retain the independent-input BLOCKED gate; do not add a new provider
-or claim that a desktop/session alone establishes Education gameplay.
+The Windows Agent Workspace feasibility question is resolved for the
+currently documented APIs: it is NOT an admitted input implementation.
+Retain the independent-input BLOCKED gate until a concrete, supported
+per-client game-input API becomes available. Meanwhile return to
+bounded source-only validation of existing native five-profile and
+visual observation paths; never add a second session controller,
+global keyboard fallback or speculative packaged MCP worker.
 **Do not execute local tests, toolchain builds, package staging, native input
 probes or gameplay until explicit operator approval.** When approval arrives,
 the first separate acceptance boundary is the pinned Windows agent CLI,

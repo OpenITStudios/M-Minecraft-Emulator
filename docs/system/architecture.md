@@ -101,14 +101,26 @@ the current operator does not use cloud or VM as a fallback. Community
 RDPWrap-based multiseat projects modify unsupported OS session behavior and
 are not an approved native dependency, driver or installer route.
 
-Windows Agent Workspace remains a **research-only** separate Windows-session
-candidate. Contained Windows ODR MCP servers require packaged .exe/MSIX
-identity and cannot directly access the human session's windows, processes,
-credentials or app data. The current unpackaged Node stdio MCP and retained
-single-session native controller cannot be reinterpreted as contained
-cross-session input. Number of independent agent desktops, Minecraft
-Education GPU rendering, authenticated gameplay, peer-to-peer networking,
-MC01 noninterference and agent-to-Codex integration are all **UNVERIFIED**.
+Windows Agent Workspace is **not an admitted gameplay backend**. Windows
+ODR can run a properly packaged executable MCP server within a separate
+agent-account session, and Microsoft's containment documentation permits
+that server to launch executables *inside its own session*. This is narrower
+than a supported per-game keyboard/relative-mouse/screenshot control API.
+The public ODR documents reviewed do not establish game input acceptance,
+four independently addressable game sessions, session-specific GPU capture,
+Minecraft Education sign-in/P2P or a Codex-to-ODR host integration.
+
+ODR containment requires an .exe with MSIX/package identity and static MCP
+tool registration. The existing unpackaged Node stdio MCP is not such a
+connector; directly connecting to a regular stdio MCP from Codex does not
+create an isolated Windows agent session. Disabling connector protections
+is not an accepted workaround. Windows 365 for Agents separately exposes
+desktop control on **cloud PCs**, which is outside this local-only design.
+
+No active native lifecycle, identity, desktop or IPC code is being replaced
+by speculative agent-session components. Revisit only when a supported
+local-session desktop input channel and the required game acceptance
+evidence are independently established.
 
 A future architecture change requires separate operator approval and an
 explicit lifecycle/security/packaging compatibility review. In particular,

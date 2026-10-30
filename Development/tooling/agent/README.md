@@ -112,6 +112,60 @@ Only code is committed; no user screenshots are collected now.
 
 Cua CLI reference: https://cua.ai/docs/cua-driver/reference/cli/serve-and-configure
 
+## Phase 13: Windows Agent Workspace + Codex interoperability verdict
+
+**Outcome: not a production input provider, no new implementation.**
+
+Microsoft's Windows On-Device Agent Registry (ODR) can run an
+MSIX/package-identified binary MCP server under a separate agent user and
+Windows session. The contained MCP server may launch executables **within
+that same agent session**, but cannot directly inspect or control the
+human's window/process/session. This is a useful official *process
+boundary*, not a documented game-oriented keyboard/mouse delivery API.
+
+There are three distinct integration paths; do not conflate them:
+
+| Integration | Actual published capability | Lazy Tester decision |
+| --- | --- | --- |
+| Current Codex + local Node stdio MCP | Invokes existing same-session controller, plans/observes clients; no native game input | **Keep**, no new tool |
+| Windows ODR + contained MCP (.exe/MSIX identity) | ODR registers packaged tools and launches them under agent-account session; may run in-session executables | **Not wired to Codex**; generic game input/capture and five-client session lifecycle unverified |
+| Windows 365 for Agents computer-use MCP | Desktop click/type/screenshot/session lifecycle against a remote Cloud PC | **Not eligible** for local/no-cloud design |
+
+ODR `odr.exe` registration is **not** evidence of a per-process keyboard
+or relative-mouse transport, and package identity alone does not turn
+Minecraft Education into a remotely controllable game. Likewise,
+Windows support for a separate agent account does not prove that four
+independent game sessions can remain concurrently playable.
+
+The following independently documented or observed conditions would be
+necessary before reopening this route: a supported third-party local
+agent-session lifecycle with a verified Codex host path; keyboard,
+relative mouse and visual capture within one agent session; the
+Minecraft Education client rendering and accepting gameplay in that
+session; preserved human MC01 input and independent account/world
+ownership; then four AI sessions and P2P gameplay. These are currently
+**UNVERIFIED/NOT_EXECUTED**. Do not build a new MSIX, ODR adapter,
+session broker, input driver, or second Minecraft controller solely
+to satisfy a hypothetical workflow. Do not turn on "Reduce protections
+for agent connectors".
+
+Windows 365 desktop computer-use documentation is a **different
+cloud product**, not a substitute for missing on-device ODR input APIs.
+The source-only decision closes Agent Workspace as an immediate coding
+task; it does not reject future supported APIs.
+
+Verified official references:
+- https://learn.microsoft.com/en-us/windows/ai/mcp/servers/mcp-containment
+- https://learn.microsoft.com/en-us/windows/ai/mcp/servers/mcp-server-overview
+- https://learn.microsoft.com/en-us/windows/ai/mcp/odr-tool
+- https://support.microsoft.com/en-us/windows/ai/ai-features/experimental-agentic-features
+- https://developers.openai.com/codex/mcp/
+- https://learn.microsoft.com/en-us/microsoft-copilot-studio/mcp-windows-365-agents
+
+**Proof ceiling:** REMOTE_GITHUB source/API review. No tests, builds,
+ODR actions, Windows installation, Codex sessions, Minecraft gameplay,
+or input were executed. Production dispatch remains disabled.
+
 ## Phase 12: native Windows multiseat feasibility decision (source only)
 
 **Decision: No multiseat runtime implementation is admitted yet.**
