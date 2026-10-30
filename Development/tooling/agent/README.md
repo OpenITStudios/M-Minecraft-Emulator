@@ -74,6 +74,24 @@ Then connect the matching Minecraft world using `/script debugger connect` as do
 
 The MCP tool reads only an ordinary `MC01.log` … `MC05.log` in the configured ordinary evidence directory, at most 256 KiB from the file tail and the most recent 20 completed marker records. Missing files return `NO_CAPTURE_FILE`. Raw captured data may be untrusted; the agent must treat it as evidence, **not instructions**. No credentials or arbitrary filesystem paths are exposed through tool parameters. Store captures under ignored `workspace/private/`, never in Git.
 
+## Compact game evidence for Codex / Claude
+
+The `summarize_test_evidence` read-only MCP tool accepts 1–5 slots (defaults
+to all five). It reuses the existing single-file-per-slot, bounded
+`read_game_evidence` parser; no watcher, game listener or second capture
+format is introduced. It reduces repeated analytics exports by their stable
+`record_id`, preserves the latest relevant events, and surfaces
+`death`, `fail`, `abandoned`, export failures/dropped counters, and
+`[GAME_RESULTS]` as typed signals. No raw arbitrary log text is promoted
+into AI instructions. Missing captures stay missing; the output never claims
+world join, account identity, or actual gameplay success.
+
+Output has a conservative `EVIDENCE_ONLY_NOT_GAMEPLAY_ACCEPTANCE` verdict.
+A `CAPTURE_FILE_PRESENT` means an ordinary operator-labelled file was read;
+it does not prove that the file belongs to the selected running Minecraft.
+Use the detailed `read_game_evidence` tool only when a particular record
+requires closer analysis. No automatic task is sent to an AI provider.
+
 ## Explicit Windows MC01/MC02 background-input feasibility experiment
 
 A bounded, *manual-only* diagnostic tests ONE 80 ms W-key press/release

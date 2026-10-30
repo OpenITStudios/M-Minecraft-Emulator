@@ -164,6 +164,22 @@ and four AI/5 AI gameplay remain NOT_EXECUTED or NOT_IMPLEMENTED.
 **Proof ceiling:** exact GitHub source/blob review only. Native Minecraft
 parallel input remains UNVERIFIED, all execution NOT_EXECUTED.
 
+## Bounded multi-client gameplay evidence summaries — source-only
+
+- Added `evidence-summary.mjs` as a pure, bounded consumer of the existing
+  per-profile Skills Probe capture reader. MCP `summarize_test_evidence`
+  provides a compact cross-slot timeline, deduplicates stable record IDs,
+  surfaces meaningful failure/result signals and reports missing captures.
+- Agent-visible data is structured, limited and explicitly untrusted. It does
+  not claim authenticated MC/profile-player mapping or infer world joins,
+  actor control, or pass/fail game acceptance from captured log markers.
+- Added source-only tests and connected them to the existing deferred
+  `test:localtest` command. **No code or tests were executed** because the
+  operator explicitly deferred all local tests until later approval.
+
+**Proof ceiling:** GitHub source review only. In-game evidence acquisition,
+Windows MCP execution and parallel input are NOT_EXECUTED.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,

@@ -21,7 +21,7 @@ test('MCP handshake and tool discovery are standard JSON-RPC',async()=>{
   const init=await h.handle({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-11-25'}});
   assert.equal(init.result.protocolVersion,'2025-11-25');
   const listing=await h.handle({jsonrpc:'2.0',id:2,method:'tools/list'});
-  assert.deepEqual(listing.result.tools.map(x=>x.name),['agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','read_game_evidence']);
+  assert.deepEqual(listing.result.tools.map(x=>x.name),['agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','summarize_test_evidence','read_game_evidence']);
   assert.equal(await h.handle({jsonrpc:'2.0',method:'notifications/initialized'}),null);
 });
 
@@ -71,6 +71,22 @@ test('native operations serialized and malformed slot denied',async()=>{
   await assert.rejects(()=>h.callTool('launch_profile',{slot:6}),/slot must/);
   assert.equal(count,1);
   release();assert.equal((await first).operation,'inspect');
+});
+
+test('MCP summarized telemetry never interprets capture filenames as verified identity',async()=>{
+  const handler=createHandler(config(),{evidence:async(_directory,slot)=>({
+    slot,status:slot===3?'CAPTURE_FILE_PRESENT':'NO_CAPTURE_FILE',
+    events:slot===3?[{observedAt:'2026-10-30T13:00:00Z',level:'log',
+      type:'analytics',data:{type:'death',session_id:'s1',record_id:'d1'}}]:[],
+    attribution:'OPERATOR_NAMED_UNVERIFIED'
+  })});
+  const report=await handler.callTool('summarize_test_evidence',{slots:[3,1]});
+  assert.deepEqual(report.requestedSlots,[1,3]);
+  assert.equal(report.worldIdentity,'NOT_VERIFIED');
+  assert.equal(report.attentionCount,1);
+  assert.deepEqual(report.missingSlots,[1]);
+  await assert.rejects(()=>handler.callTool('summarize_test_evidence',{slots:[2,2]}),
+    /distinct/);
 });
 
 test('evidence reads only complete marked lines from assigned profile',async()=>{

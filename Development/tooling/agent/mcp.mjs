@@ -8,6 +8,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import {promisify} from 'node:util';
 import {planPeerSession,planPlayerActions} from './control-plan.mjs';
+import {summarizeGameEvidence} from './evidence-summary.mjs';
 
 const execFileAsync = promisify(execFile);
 const REQUEST_LIMIT = 64 * 1024;
@@ -137,18 +138,24 @@ export const TOOL_LIST=[
   {name:'launch_profile',description:'Explicitly request native Minecraft launch for an AI-controlled profile. Human MC01 cannot be launched in hybrid mode.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
   {name:'plan_peer_session',description:'Inspect native profiles and provide conservative human/AI host-and-join guidance. No world control or join is performed.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
   {name:'plan_player_actions',description:'Validate bounded concurrent AI player-action intents. PREVIEW ONLY: no input is sent to Minecraft.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}}},required:['actions'],additionalProperties:false}},
+  {name:'summarize_test_evidence',description:'Read and condense bounded analytics/game-results capture from 1-5 profiles. No login, player mapping, host/join or gameplay result is inferred.',inputSchema:{type:'object',properties:{slots:{type:'array',items:{type:'integer',minimum:1,maximum:5},minItems:1,maxItems:5,uniqueItems:true}},additionalProperties:false}},
   {name:'read_game_evidence',description:'Read the last bounded [ANALYTICS] and [GAME_RESULTS] records from a manually attributed per-profile debugger capture file.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
 ];
 
 function capabilities(mode) {return {schema:1,mode,hostSlot:1,humanSlots:mode==='human-plus-four-ai'?[1]:[],
   aiSlots:mode==='human-plus-four-ai'?[2,3,4,5]:[1,2,3,4,5],
-  available:['inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions'],
+  available:['inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions','summarize_test_evidence'],
   notAvailable:['parallel_independent_keyboard_mouse','automatic_world_host_join','send_minecraft_command','per_client_screen_capture'],
   note:'MCP tools control the native session owner and read evidence; they do NOT independently move multiple background Minecraft clients.'};}
 
 export function createHandler(config,{native=runNative,evidence=readGameEvidence}={}) {
   let inFlight=false;
   async function callTool(name,args) {
+    if (name==='summarize_test_evidence') {
+      keysExactly(args,['slots']);
+      return summarizeGameEvidence(config.evidenceDirectory,
+        args.slots ?? [1,2,3,4,5],evidence);
+    }
     if (name==='plan_player_actions') {
       keysExactly(args,['actions']);
       return planPlayerActions(config.mode,args.actions);
