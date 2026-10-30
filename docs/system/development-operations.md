@@ -57,7 +57,14 @@ A stale lock must be inspected before any manual recovery; nothing
 automatically deletes protected data or forces a game process to close.
 
 The existing `DEV.cmd bootstrap`, underlying `dev.ps1`, pinned toolchain,
-package/retention guards and manual commands are retained. This is a bounded
+package/retention guards and manual commands are retained. The AI `run`
+dispatcher uses asynchronous, streamed child execution instead of a blocking
+process call. A lock for write-producing tasks stays held through the entire
+child lifetime; a second guarded task fails closed. In JSON mode child logs
+go to stderr and the final status is the only stdout envelope. `INTERRUPTED`
+never qualifies as `COMMAND_SUCCEEDED`. On Windows a Ctrl+C does not trigger
+programmatic child.kill of the PowerShell/Tauri tree; a stale lock requires
+manual provenance review, never forced cleanup. This is a bounded
 orchestration layer, **not** a second build engine, UI, daemon, CI workflow,
 or new compiler cache.
 

@@ -1,5 +1,16 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — Async AI developer task lifecycle and owned lock (30 October 2026)
+
+**State:** DONE for bounded GitHub source implementation; portable Windows PowerShell/Tauri integration remains NOT_EXECUTED.
+**Decision:** Replace synchronous `spawnSync` for registered task execution with asynchronous, streaming `spawn`, retaining exact `Local` SHA admission and post-task proof. Keep one exclusive developer-output lock **for the awaited child lifetime**, including long-running `dev.start`; block concurrent writers and preserve unknown/stale/replaced locks rather than taking them over. On console interrupt, mark task `INTERRUPTED`; do not send duplicate Ctrl+C to the developer child. No programmatic `child.kill` on Windows where signals forcefully terminate the child. A scoped abort on non-Windows only targets the owned developer process, never the Minecraft process tree. The final `--json` envelope is emitted once, after child close and lock release; child stdout is streamed to stderr. Existing 17 task IDs, old manual routes, toolchain pins, native/game runtime, data paths, package gates, cache and disabled GitHub Actions are unchanged.
+**Proof:** SOURCE_EXECUTION isolated Node 22.16.0 owned-child/lock harness 6/6 PASS (async responsiveness, child failures, abort, contention, stale and replaced lock) plus JSON stdout/stderr separation smoke PASS. Full source-matched regression cases have been authored for `controller.test.mjs`; pinned Node 24/PowerShell Windows integration and complete test suite NOT_EXECUTED. REMOTE_GITHUB pinned baseline review and static source/contracts.
+**Unresolved:** Windows console Ctrl+C propagation, long-running Tauri child cleanup, native process graph behavior, abrupt shutdown/SIGKILL stale-lock recovery, and physical disk/build savings are not proven. Unexpected OS termination can still leave a lock; no automatic or destructive recovery is permitted.
+**Next:** Execute the registered local tests and safe AI controller smoke (`inspect/catalog/plan`, then a read-only `run`) on a compatible Windows checkout before any retirement of legacy paths.
+
+---
+
+
 ## Current product work — AI DEV.cmd runtime provenance and lock result safety (30 October 2026)
 
 **State:** DONE for bounded source reliability hardening; Windows PowerShell and pinned portable Node/Tauri runtime NOT_EXECUTED.

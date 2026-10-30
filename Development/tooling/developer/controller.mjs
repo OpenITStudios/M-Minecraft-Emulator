@@ -1,7 +1,7 @@
 // Single AI-facing developer entrypoint. Existing PowerShell/npm/Cargo/Tauri
 // owners remain the only command executors. No arbitrary shell execution.
-import {lstatSync, readFileSync, openSync, closeSync, unlinkSync, writeSync, constants} from 'node:fs';
-import {spawnSync} from 'node:child_process';
+import {lstatSync, fstatSync, readFileSync, openSync, closeSync, unlinkSync, writeSync, constants} from 'node:fs';
+import {spawn, spawnSync} from 'node:child_process';
 import {dirname, join, resolve, isAbsolute, posix, win32} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -135,9 +135,10 @@ export function isPinnedNodeProcess(actual,expected,platform=process.platform) {
 }
 // A child process exit is not revision-scoped evidence if Local HEAD changed
 // while it ran or the final Git check failed.
-export function classifyCompletion(before,after,exitCode,spawnError=false) {
+export function classifyCompletion(before,after,exitCode,spawnError=false,interrupted=false) {
   if(!after) return 'SOURCE_UNVERIFIED';
   if(before.branch!=='Local' || after.branch!=='Local' || before.sha!==after.sha) return 'SOURCE_CHANGED';
+  if(interrupted) return 'INTERRUPTED';
   return spawnError || exitCode!==0 ? 'FAILED' : 'COMMAND_SUCCEEDED';
 }
 function report(operation,data) {return {schema:1,operation,...data};}
@@ -189,23 +190,77 @@ function blocked(operation,reason,json) {
   emit(report(operation,{status:'BLOCKED',reason,proof:'NOT_EXECUTED'}),json);
   return 3;
 }
-function withBuildLock(taskId,callback) {
-  const workspace=join(REPO,'workspace');
-  const tmp=join(workspace,'tmp');
-  for(const dir of [workspace,tmp]) {
+// Owned developer executor only. Never manage the Minecraft process tree.
+// Console Ctrl+C reaches the child independently: do not send it twice.
+// On Windows child.kill(SIGINT/TERM) is abrupt; only observe termination
+// and preserve a stale lock if the child fails to exit.
+export function runOwnedChild(executable,args,{cwd,json=false,cancellationSignal=null,forwardHostSignals=true}={}) {
+  return new Promise(resolveResult=>{
+    let child=null,childError=null,interrupted=false,closed=false;
+    const requestStop=(signalName,forwardChild=false)=>{
+      if(closed || interrupted) return;
+      interrupted=true;
+      if(!forwardChild || process.platform==='win32') return; // No duplicate Ctrl+C or forced Windows termination.
+      try {
+        if(child?.pid && child.exitCode===null && child.signalCode===null) child.kill(signalName);
+      } catch {}
+    };
+    const onInterrupt=()=>requestStop('SIGINT');
+    const onTerminate=()=>requestStop('SIGTERM',true);
+    const onAbort=()=>requestStop('SIGTERM',true);
+    const cleanup=()=>{
+      process.removeListener('SIGINT',onInterrupt);
+      process.removeListener('SIGTERM',onTerminate);
+      cancellationSignal?.removeEventListener('abort',onAbort);
+    };
+    if(forwardHostSignals){
+      process.on('SIGINT',onInterrupt);
+      process.on('SIGTERM',onTerminate);
+    }
+    cancellationSignal?.addEventListener('abort',onAbort,{once:true});
+    try {
+      child=spawn(executable,args,{cwd,shell:false,windowsHide:false,
+        stdio:json?['inherit',process.stderr,'inherit']:'inherit'});
+      child.once('error',error=>{childError=error;});
+      child.once('close',(code,signal)=>{
+        closed=true;cleanup();
+        resolveResult({code,signal,error:childError,interrupted});
+      });
+      if(cancellationSignal?.aborted) onAbort();
+    }catch(error){
+      closed=true;cleanup();
+      resolveResult({code:null,signal:null,error,interrupted});
+    }
+  });
+}
+
+// One exclusive lock across the entire awaited developer child lifetime.
+// The lock belongs to the creator; never take over an unknown stale lock.
+export async function withBuildLock(taskId,callback,lockFile=LOCK_FILE) {
+  const tmp=dirname(lockFile),workspace=dirname(tmp);
+  for(const dir of [workspace,tmp]){
     const stat=lstatSync(dir);
-    if(!stat.isDirectory()||stat.isSymbolicLink())throw Error('Developer workspace lock directory must be ordinary');
+    if(!stat.isDirectory() || stat.isSymbolicLink()) throw Error('Developer workspace lock directory must be ordinary');
   }
-  const fd=openSync(LOCK_FILE,constants.O_CREAT|constants.O_EXCL|constants.O_WRONLY,0o600);
+  const fd=openSync(lockFile,constants.O_CREAT|constants.O_EXCL|constants.O_WRONLY,0o600);
+  let original;
   try {
+    original=fstatSync(fd);
     writeSync(fd,JSON.stringify({taskId,pid:process.pid})+'\n');
-    return callback();
+    return await callback();
   }finally{
     closeSync(fd);
-    unlinkSync(LOCK_FILE); // Only this invocation's freshly created lock.
+    // If identity admission failed, preserve the lock for explicit inspection.
+    if(!original) throw Error('Developer lock identity unavailable; manual review required');
+    const current=lstatSync(lockFile);
+    if(!current.isFile() || current.isSymbolicLink() || current.nlink!==1 ||
+       current.dev!==original.dev || current.ino!==original.ino) {
+      throw Error('Developer lock identity changed: preserve it for manual review');
+    }
+    unlinkSync(lockFile);
   }
 }
-function runTask(task,parsed,source) {
+async function runTask(task,parsed,source) {
   if(source.branch!=='Local') return blocked('run','Task execution requires branch Local',parsed.json);
   if(!parsed.expectSha || !SHA.test(parsed.expectSha) || source.sha!==parsed.expectSha) {
     return blocked('run','Exact current Local SHA is required; re-inspect the checkout',parsed.json);
@@ -218,24 +273,23 @@ function runTask(task,parsed,source) {
   const executable=execution.type==='node'?NODE_EXE:PWSH_EXE;
   if(!ordinary(executable)) return blocked('run','Pinned workspace executor missing or linked',parsed.json);
   let attempted=false;
-  const invoke=()=>{
+  const invoke=async()=>{
     const latest=sourceInfo();
     if(latest.branch!=='Local' || latest.sha!==source.sha) {
       return {status:'BLOCKED',taskId:task.id,sourceSha:source.sha,
         reason:'Local HEAD changed before execution; task not started',proof:'NOT_EXECUTED'};
     }
     attempted=true;
-    const child=spawnSync(executable,execution.args,{cwd:join(REPO,'Development'),shell:false,
-      stdio:parsed.json?['inherit',2,2]:'inherit',windowsHide:false});
+    const child=await runOwnedChild(executable,execution.args,{cwd:join(REPO,'Development'),json:parsed.json});
     let after;
     try {after=sourceInfo();} catch {after=null;}
-    const status=classifyCompletion(source,after,child.status,Boolean(child.error));
-    return {status,taskId:task.id,sourceSha:source.sha,exitCode:child.status??null,
+    const status=classifyCompletion(source,after,child.code,Boolean(child.error),child.interrupted);
+    return {status,taskId:task.id,sourceSha:source.sha,exitCode:child.code??null,
       proof:status==='COMMAND_SUCCEEDED'?'COMMAND_EXIT_AND_HEAD_ONLY':'NOT_VERIFIED',
       note:'Only the committed HEAD was rechecked. Uncommitted source and Windows/game acceptance are not certified.'};
   };
   let outcome;
-  try {outcome=task.risk==='read'?invoke():withBuildLock(task.id,invoke);}
+  try {outcome=await (task.risk==='read'?invoke():withBuildLock(task.id,invoke));}
   catch {
     if(!attempted) return blocked('run','Task could not start: developer lock or Git metadata is unsafe',parsed.json);
     emit(report('run',{status:'FAILED_UNVERIFIED',taskId:task.id,sourceSha:source.sha,
@@ -245,7 +299,7 @@ function runTask(task,parsed,source) {
   emit(report('run',outcome),parsed.json);
   return outcome.status==='COMMAND_SUCCEEDED'?0:outcome.status==='BLOCKED'?3:1;
 }
-export function main(argv=process.argv.slice(2)) {
+export async function main(argv=process.argv.slice(2)) {
   const [operation,...arguments_]=argv;
   if(!['inspect','catalog','plan','run'].includes(operation)) {
     console.error(usage());return 2;
@@ -284,9 +338,9 @@ export function main(argv=process.argv.slice(2)) {
   }
   const task=tasks.find(t=>t.id===parsed.taskId);
   if(!task) return blocked(operation,'Unknown task id; use catalog for available capabilities',parsed.json);
-  return runTask(task,parsed,source);
+  return await runTask(task,parsed,source);
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
-  try {process.exitCode=main();}
+  try {process.exitCode=await main();}
   catch(error){console.error('Developer controller failed closed: '+(error?.code??error?.message??'unknown error'));process.exitCode=3;}
 }

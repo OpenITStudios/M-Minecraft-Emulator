@@ -37,11 +37,15 @@ test('AI DEV.cmd routes use pinned Node and preserve legacy PowerShell execution
   assert.equal(registry.schema,1);
   assert.ok(registry.tasks.some(task=>task.id==='frontend.validate'));
   assert.ok(registry.tasks.some(task=>task.id==='build.candidate'));
-  assert.match(script,/spawnSync\(executable,execution\.args/);
+  assert.match(script,/runOwnedChild\(executable,execution\.args/);
+  assert.match(script,/spawn\(executable,args/);
+  assert.match(script,/const child=await runOwnedChild/);
+  assert.match(script,/return await callback\(\)/);
+  assert.match(script,/withBuildLock\(task.id,invoke\)/);
   assert.match(script,/shell:false/);
   assert.match(script,/Exact current Local SHA is required/);
   assert.match(script,/Operator approval required/);
-  assert.match(script,/openSync\(LOCK_FILE,constants\.O_CREAT\|constants\.O_EXCL/);
+  assert.match(script,/openSync\(lockFile,constants\.O_CREAT\|constants\.O_EXCL/);
   assert.doesNotMatch(script,/\b(?:eval|Function)\s*\(/);
 });
 

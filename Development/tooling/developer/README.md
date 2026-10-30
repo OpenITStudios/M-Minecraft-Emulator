@@ -33,12 +33,27 @@ cleanup, release, workflow, or Minecraft launch feature is available.
 packager and its own clean-revision and data-preservation gates.
 
 One exclusive file under ignored `workspace/tmp/` serializes task invocations
-that can write developer output. A stale/unsafe lock **blocks** the next job:
-never silently remove it or kill an unrelated process. Read-only tasks and
-`inspect/catalog/plan` do not acquire that lock. The controller does not
-capture command output to files. In `run --json`, child output goes to stderr
-and stdout contains the final exit-status envelope. A successful command is
-`COMMAND_SUCCEEDED`, **not** installed-app/Minecraft acceptance.
+that can write developer output. The lock is held **until the registered child
+process closes**, including a long-running Tauri development session. Child
+output is streamed instead of buffered; in `run --json`, stdout remains
+reserved for **one final result envelope** and child output goes to stderr.
+The Node controller remains responsive while the child is running.
+
+`Ctrl+C` is observed as an interruption. On Windows, the controller does
+**not** call `child.kill()`: Node's simulated POSIX signals would abruptly
+terminate the child and might abandon a separate Tauri process. It waits for
+the console-managed developer child to exit. On other hosts, programmatic
+termination is scoped to the directly owned developer child only, never to
+a game process tree. The final result can be `INTERRUPTED`, not `PASS`.
+
+A stale/unsafe/replaced lock **blocks** the next job; it is never taken over,
+silently removed, or used as permission to kill another process. A normal
+task failure releases only this controller's verified lock. A sudden process
+termination can leave a stale lock requiring separate manual inspection.
+Read-only tasks and `inspect/catalog/plan` do not acquire that lock.
+
+A successful command is `COMMAND_SUCCEEDED`, **not**
+installed-app/Minecraft acceptance.
 
 This interface requires the pinned portable Node 24.22.0 **executable
 path**, not only a matching version number. Direct execution via a global
@@ -69,7 +84,7 @@ new test runner, account access, or developer cleanup procedure is added.
 returns `COMMAND_SUCCEEDED` only after **both** a successful executor exit and
 a post-execution `Local` HEAD verification. A changed HEAD yields
 `SOURCE_CHANGED`; unavailable final Git evidence yields
-`SOURCE_UNVERIFIED`. Exit success is labeled `COMMAND_EXIT_AND_HEAD_ONLY`:
+`SOURCE_UNVERIFIED`. A canceled developer child is `INTERRUPTED`. Exit success is labeled `COMMAND_EXIT_AND_HEAD_ONLY`:
 uncommitted source edits and Windows/Minecraft acceptance are not proven.
 If a task might have run but its completion or lock release cannot be
 verified, the controller returns **one** `FAILED_UNVERIFIED` envelope,
