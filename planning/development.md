@@ -196,6 +196,26 @@ Windows MCP execution and parallel input are NOT_EXECUTED.
 **Proof ceiling:** REMOTE_GITHUB exact-source review, no execution at this
 revision.
 
+## Focus-free in-game MakeCode File Relay experiment — source only
+
+- Research identified an official Windows/macOS MakeCode File Read & Write
+  extension and client-side MakeCode loops/player.teleport. Added an **isolated,
+  non-registered source candidate** under
+  `Development/tooling/agent/experimental/makecode-file-relay/`.
+- Four AI clients can conceptually read separate operator-created plain-text
+  mailboxes and write per-slot acknowledgements without global Windows input.
+  Hybrid mode rejects MC01. Only PING and bounded one-block **teleport**
+  actions are modeled; this does NOT simulate native WASD/attack/mouse/PvP.
+- Project template, path validation, sequence/ACK safeguards, documentation and
+  deferred source tests are authored. No input tool, native controller,
+  general command executor, game process, background daemon or UI is added.
+- **No tests, builds, local machine operations or game execution performed.**
+  MakeCode File extension reliability, four-client background execution, and
+  gameplay attribution remain UNKNOWN pending separate operator approval.
+
+**Proof ceiling:** REMOTE_GITHUB source review and official documentation
+only. Not Minecraft input/gameplay acceptance.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,
