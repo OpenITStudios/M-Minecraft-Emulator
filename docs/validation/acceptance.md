@@ -3,18 +3,17 @@ id: document.validation.acceptance
 class: DOCUMENT
 domain: validation
 role: PROCEDURE
-authority: CANONICAL
-lifecycle: ACTIVE
+authority: WORKING
+lifecycle: HISTORICAL
 ---
 
 # Virtual Clients Acceptance — historical VMware campaign
 
-> **Historical VMware-only procedure.** This document describes the preserved
-> guest-VM implementation and its G0–G4 evidence campaign, **not** the active
-> Minecraft Instance Manager + Sandboxie Plus Client 02 workflow. Do not
-> provision, start, delete or reset a VM as part of the current pilot.
-> Active procedure: [Sandboxie two-client feasibility](sandboxie-two-client-feasibility.md).
-> Its signed-in gameplay and resource measurements are still unverified.
+> **Historical VMware-only procedure.** The G0–G4 and Sandboxie references
+> below describe prior experiments, not current five-profile native Lazy Tester
+> operation. For current proof requirements see [validation routes](README.md).
+> Do not provision, reset or operate historical account-bearing guests.
+
 
 ## Historical VMware G0–G4 — five gates of the retired campaign
 

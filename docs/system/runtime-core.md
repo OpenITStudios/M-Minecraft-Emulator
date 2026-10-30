@@ -3,19 +3,17 @@ id: document.system.runtime-core
 class: DOCUMENT
 domain: system
 role: CONTRACT
-authority: CANONICAL
-lifecycle: ACTIVE
+authority: WORKING
+lifecycle: HISTORICAL
 ---
 
 # Virtual Clients Runtime Core — paused VMware implementation
 
-> **Historical implementation authority only.** This file describes the
-> preserved VMware/Guest Agent runtime in `Development/engine/runtime-core/`.
-> Its VM lifecycle mutation entrypoints are paused while the selected
-> [Minecraft Instance Manager architecture](architecture.md) uses
-> native Client 01 plus Sandboxie Plus Client 02. Do not reuse old VM
-> resource limits as native Minecraft performance policy.
-> See [Legacy Retirement](legacy-retirement.md).
+> **Historical VMware/Guest Agent design only.** The VM lifecycle code
+> described below is absent from active `Local`. The current runtime core
+> contains platform-neutral native-profile contracts and bounded helpers,
+> not a VMware or Sandboxie game provider. See [current architecture](architecture.md)
+> and [legacy retirement](legacy-retirement.md).
 
 ## Product boundary
 

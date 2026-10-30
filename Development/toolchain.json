@@ -7,8 +7,7 @@
       "Windows 11 x64"
     ],
     "backendOs": [
-      "Windows x64 / VMware Workstation",
-      "macOS / VMware Fusion (source capability)"
+      "Windows 10/11 x64 (native Minecraft Education profiles)"
     ],
     "architecture": "x86_64"
   },

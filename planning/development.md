@@ -53,6 +53,23 @@ These are source implementation decisions, not measured timing/disk savings.
 No Minecraft lifecycle, Microsoft account/world data, runtime DLL, installed
 identity, game package or native preview behavior is changed in this stage.
 
+## End-to-end source hygiene (30 October 2026)
+
+- Align `AGENTS.md` runtime-acceptance navigation, current developer discipline
+  and Windows-native toolchain metadata with the single five-profile product.
+- Reclassify explicitly retired VMware/Sandboxie/earlier two-client documents
+  as historical; keep their original evidence recoverable without treating
+  their obsolete instructions as canonical product procedures.
+- Retire the unmounted old workspace UI harness and route browser-only checks
+  to the existing Lazy Tester fixture. No new runtime, test runner, installer,
+  workflow, version or mutable profile owner is introduced.
+- The existing validation index now defines one bounded real Windows/product
+  smoke sequence. No step is recorded as executed merely by documenting it.
+
+**Proof:** REMOTE_GITHUB exact-blob/tree inspection and scoped source/consumer
+checks only. Current Windows toolchain, source suites, installer and five-client
+Minecraft runtime acceptance remain NOT_EXECUTED.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,
@@ -68,14 +85,12 @@ identity, game package or native preview behavior is changed in this stage.
 
 ## Next — one validation boundary
 
-Complete any remaining **GitHub-verifiable source defect** only when a
-concrete first wrong owner and affected consumer are demonstrated; otherwise
-STOP rather than extending speculative refactors. Windows test:localtest,
-full-source/preflight, installed package and Minecraft five-profile acceptance
-remain separate, deferred evidence contexts until actually available.
-Do not request local-PC work to claim remote source completion. Storage, RAM
-and build optimizations require actual before/after measurements; mark any
-unobserved proof NOT_EXECUTED, never PASS.
+Next necessary proof is the existing exact-SHA Windows native preflight/package
+and the bounded five-profile installed/Minecraft acceptance described in
+`docs/validation/README.md`, when that execution context is actually available.
+Do not request local-PC work to claim remote source completion, and do not
+open a speculative refactor backlog. Storage, RAM and build optimizations
+require actual before/after measurements; unobserved proof stays NOT_EXECUTED.
 
 Historical work notes and prior Next proposals remain in immutable
 Local Git history, not in a parallel current-status register.

@@ -4,16 +4,15 @@ class: DOCUMENT
 domain: validation
 role: PROCEDURE
 authority: WORKING
-lifecycle: ACTIVE
+lifecycle: HISTORICAL
 ---
 
 # Minecraft Education native two-client feasibility — prior experiment
 
-> **Historical native-only experiment, not the current active launch route.**
-> This procedure is retained for source provenance and comparison. The
-> currently selected design is [Client 01 native + Client 02 Sandboxie Plus](sandboxie-two-client-feasibility.md).
-> Do not interpret old native process candidate observations as successful
-> two-account Minecraft Education gameplay.
+> **Historical two-client experiment.** This is not the active five-profile
+> native Lazy Tester design. Old Sandboxie/VMware choices below remain only
+> as provenance; use [current validation routes](README.md) for acceptance.
+
 
 **Work:** emulator/native-multi-instance-feasibility. This experiment is not
 a replacement production provider, automatic four-client support proof, or an

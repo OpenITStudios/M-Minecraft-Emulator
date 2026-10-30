@@ -3,11 +3,15 @@ id: document.validation.pre-local-test-readiness
 class: DOCUMENT
 domain: validation
 role: PROCEDURE
-authority: CANONICAL
-lifecycle: ACTIVE
+authority: WORKING
+lifecycle: HISTORICAL
 ---
 
 # Legacy VMware G0 — Source & Package Integrity
+
+> **Superseded:** This is a historical VM gate, not the native Lazy Tester
+> packaging route. Current five-profile verification starts at
+> [validation routes](README.md); commands below are historical only.
 
 **Current selected-isolation clarification (2026-10-12):** This is the
 historical VMware NSIS release gate, **not** the current Minecraft Instance

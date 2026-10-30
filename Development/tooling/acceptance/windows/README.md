@@ -540,15 +540,18 @@ identify the caller/cause of a closure. This collector grants no provider or
 mutation authority. `npm run test:native-feasibility` includes its Windows fixture
 test for stale identity rejection, bounded timeout and known exit code.
 
-## Unified workspace feasibility (synthetic windows only)
+## Lazy Tester browser UI regression (synthetic only)
 
-Optional UI regression, from repository root with the frontend server on
-127.0.0.1:1421: `node Development/tooling/acceptance/workspace-ui-regression.mjs`.
-It requires an available Playwright installation and Edge; optionally set
-`MIVUBI_PLAYWRIGHT_MODULE` to that installation's absolute module directory.
-It mocks Tauri, creates no game or engine processes, and writes only synthetic
-UI screenshots below ignored `workspace/`. It covers resize errors retaining
-recovery controls, native error events and three viewport sizes. Not gameplay proof.
+For the current five-profile frontend, build its static output first, then run
+`node Development/tooling/acceptance/lazy-tester-ui-regression.mjs` from the
+repository root with Playwright and Edge installed. `MIVUBI_PLAYWRIGHT_MODULE`
+may point at the available Playwright module. This harness serves the built UI
+through a local browser fixture and mocks Tauri; it does not launch Minecraft,
+verify native DWM pixels or prove account/gameplay readiness.
+
+The former `workspace-ui-regression.mjs` referenced the retired
+`Development/engine/isolation-native/owned-runtime/minecraft-targets.json`;
+its implementation is retained in Git history, not the active test tree.
 
 The approved composition now has a developer product implementation in
 `Development/apps/desktop/src-tauri/src/engine/workspace_surface.rs`. Its opt-in regression

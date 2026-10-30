@@ -3,8 +3,8 @@ id: document.validation.static-readiness
 class: DOCUMENT
 domain: validation
 role: REFERENCE
-authority: CANONICAL
-lifecycle: ACTIVE
+authority: WORKING
+lifecycle: HISTORICAL
 ---
 
 # Virtual Clients — Static Readiness Freeze (legacy VMware)

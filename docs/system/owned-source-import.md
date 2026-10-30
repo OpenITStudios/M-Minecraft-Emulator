@@ -4,10 +4,14 @@ class: DOCUMENT
 domain: system
 role: PROCEDURE
 authority: WORKING
-lifecycle: ACTIVE
+lifecycle: HISTORICAL
 ---
 
 # Complete Sandboxie source in the MIVUBI repository
+
+> **Historical source inventory only.** Sandboxie fork source and commands
+> cited below are absent from active `Local`; see [legacy retirement](legacy-retirement.md)
+> and [current architecture](architecture.md). Do not run retired commands.
 
 ## Current owned v1.18.6 native source — 15 October 2026
 

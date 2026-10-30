@@ -4,7 +4,7 @@ class: DOCUMENT
 domain: validation
 role: PROCEDURE
 authority: WORKING
-lifecycle: ACTIVE
+lifecycle: HISTORICAL
 ---
 
 # App Sandbox GPU-PV: one disposable Windows guest

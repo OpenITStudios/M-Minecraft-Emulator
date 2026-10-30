@@ -3,18 +3,17 @@ id: document.validation.four-client-failure-matrix
 class: DOCUMENT
 domain: validation
 role: REFERENCE
-authority: CANONICAL
-lifecycle: ACTIVE
+authority: WORKING
+lifecycle: HISTORICAL
 ---
 
 # Virtual Clients — Four-Client Failure Matrix
 
-> **Historical VMware-only procedure.** This document describes the preserved
-> guest-VM implementation and its G0–G4 evidence campaign, **not** the active
-> Minecraft Instance Manager + Sandboxie Plus Client 02 workflow. Do not
-> provision, start, delete or reset a VM as part of the current pilot.
-> Active procedure: [Sandboxie two-client feasibility](sandboxie-two-client-feasibility.md).
-> Its signed-in gameplay and resource measurements are still unverified.
+> **Historical VMware-only procedure.** The G0–G4 and Sandboxie references
+> below describe prior experiments, not current five-profile native Lazy Tester
+> operation. For current proof requirements see [validation routes](README.md).
+> Do not provision, reset or operate historical account-bearing guests.
+
 
 Status: REMOTE_GITHUB scenario model. This is not runtime proof. These scenarios are **supporting assertions** for the [five and only five product gates G0–G4](acceptance.md), not additional micro-test milestones. Apply the first-owner and stop rules below; do not create a runner or separate scenario-status store.
 

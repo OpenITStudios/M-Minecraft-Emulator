@@ -3,8 +3,8 @@ id: document.product.base-image
 class: DOCUMENT
 domain: product
 role: GUIDE
-authority: CANONICAL
-lifecycle: ACTIVE
+authority: WORKING
+lifecycle: HISTORICAL
 ---
 
 # Virtual Clients Base Image — historical VMware setup

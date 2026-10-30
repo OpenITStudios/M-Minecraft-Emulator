@@ -31,6 +31,29 @@ implemented source from tests **NOT_EXECUTED** at the current revision.
 Do not infer local Windows access or ask for a user-owned PC to complete
 independent GitHub source analysis.
 
+## Native five-profile acceptance sequence (not yet executed)
+
+For one exact `Local` candidate SHA, verify existing Windows source and native
+package checks before claiming an installed build. On the target Windows host:
+
+1. First run: open Lazy Tester and manually launch MC01; authenticate with an
+   independently licensed Minecraft Education account and enter a responsive world.
+2. Parallel sessions: manually open MC02–MC05 with distinct licensed accounts;
+   confirm five playable processes and isolated profile identities.
+3. Workspace: inspect selected live window, four passive DWM previews, focus,
+   resize and minimize/restore without altering unrelated game windows.
+4. Lifecycle: check normal CloseOne/CloseAll, pending game dialogs, app exit
+   with retained game ownership and reconnect after reopening the manager.
+5. Persistence: confirm profile/account/world state after game restart and
+   reviewed install/repair/uninstall/reinstall; no silent data migration/deletion.
+6. Measure RAM/FPS/startup only after the same real workloads are confirmed;
+   existing read-only collectors may be used, never inferred from source.
+
+Record observed PASS/FAIL/UNKNOWN against the exact revision and environment
+in the existing handoff/evidence owner. Source, browser fixtures and installer
+hashes alone do not establish Windows, Minecraft or five-client acceptance.
+No new runner, hosted CI, status registry or automatic game operation is required.
+
 ## Retained historical experiments (not active tests)
 
 - [Earlier two-client Sandboxie feasibility](sandboxie-two-client-feasibility.md)

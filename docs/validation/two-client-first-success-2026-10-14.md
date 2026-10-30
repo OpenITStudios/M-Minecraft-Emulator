@@ -4,7 +4,7 @@ class: DOCUMENT
 domain: validation
 role: REPORT
 authority: WORKING
-lifecycle: ACTIVE
+lifecycle: HISTORICAL
 ---
 
 # First two-client success and subsequent crash — 14 October 2026

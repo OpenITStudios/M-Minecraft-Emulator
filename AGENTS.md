@@ -47,7 +47,7 @@ Use the strongest **actually available** evidence context:
 REMOTE_GITHUB → exact-source / static contract review
 SOURCE_EXECUTION → actually run Node, Svelte, Rust and Tauri checks
 PACKAGE_EXECUTION → actual Windows installer construction/inspection
-TARGET_WINDOWS → VMware, guest identity, interactive Windows session
+TARGET_WINDOWS → actual Windows native launcher, profiles, windows and process observations
 MINECRAFT_RUNTIME → live Education sign-in, gameplay, peer-to-peer network
 FIVE_CLIENT_ACCEPTANCE → five distinct licensed playable Minecraft Education sessions accepted concurrently on the chosen native approach; former four-client VM evidence is historical
 ```
@@ -70,7 +70,7 @@ Development uses ChatGPT + GitHub only. Do not assume or propose another executi
 | --- | --- | --- |
 | Improve or repair product, UI, source, packaging code, repo organization | `SYSTEM DEVELOPMENT` → `.agents/skills/emulator-development/SKILL.md` | `docs/system/implementation-map.md`, existing code |
 | Review environment, VM provisioning or guest issues | `DIAGNOSE` | Rust runtime/VMware source + observed evidence |
-| Measure or validate Windows/Minecraft runtime | `RUNTIME ACCEPTANCE` | `docs/validation/acceptance.md`, `Development/tooling/acceptance/windows/` |
+| Measure or validate Windows/Minecraft runtime | `RUNTIME ACCEPTANCE` | `docs/validation/README.md`, `Development/tooling/acceptance/windows/` |
 | Windows package / signing / release | `PACKAGE VERIFICATION` | `Development/engine/distribution/`, Tauri package config; manual gate |
 
 A diagnosis does not automatically authorize code changes or a destructive VM action. No operator mode automatically publishes to `main`.
