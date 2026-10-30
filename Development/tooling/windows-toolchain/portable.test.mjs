@@ -71,10 +71,11 @@ test('developer storage route supports report, explain, and non-destructive rete
   const inventory=read('tooling/storage/inventory.mjs');
   const planner=read('tooling/storage/retention.mjs');
   assert.match(developer,/\[string\]\$StorageMode = "report"/);
-  assert.match(developer,/ValidateSet\("report", "explain", "plan"\)/);
+  assert.match(developer,/ValidateSet\("report", "explain", "plan", "cargo"\)/);
   assert.match(developer,/if \(\$Command -eq "storage"\)/);
   assert.match(developer,/tooling\/storage\/inventory\.mjs/);
   assert.match(developer,/tooling\/storage\/retention\.mjs/);
+  assert.match(developer,/tooling\/storage\/cargo-footprint\.mjs/);
   assert.ok(developer.indexOf('if ($Command -eq "storage")') <
     developer.indexOf('Set-LocalDeveloperEnvironment -Root $Root'),
     'read-only inventory must bypass developer cache initialization');
@@ -85,6 +86,26 @@ test('developer storage route supports report, explain, and non-destructive rete
   assert.match(planner,/destructiveCapability:false/);
   assert.match(planner,/no --apply mode/);
   assert.doesNotMatch(planner,/\b(?:rmSync|unlinkSync|renameSync|writeFileSync|execFileSync|spawnSync)\b/);
+  const cargo=read('tooling/storage/cargo-footprint.mjs');
+  assert.match(cargo,/x86_64-pc-windows-msvc/);
+  assert.match(cargo,/opendirSync/);
+  assert.match(cargo,/lstatSync/);
+  assert.doesNotMatch(cargo,/\b(?:rmSync|unlinkSync|renameSync|writeFileSync|readFileSync|execFileSync|spawnSync)\b/);
+});
+
+test('developer Cargo target directory is canonical and refuses ambient overrides', () => {
+  assert.match(environment,/\$canonicalCargoTarget = \[IO\.Path\]::GetFullPath/);
+  assert.match(environment,/\$env:CARGO_TARGET_DIR\) -ine \$canonicalCargoTarget/);
+  assert.match(environment,/external CARGO_TARGET_DIR overrides are refused/);
+  assert.match(environment,/\[IO\.FileAttributes\]::ReparsePoint/);
+  assert.match(environment,/\$env:CARGO_TARGET_DIR = \$canonicalCargoTarget/);
+  assert.ok(environment.indexOf('$canonicalCargoTarget') <
+    environment.indexOf('New-Item -ItemType Directory'),
+    'invalid Cargo override should fail before cache directories are created');
+  assert.match(launcher,/DEV\.cmd storage cargo/);
+  const scripts=JSON.parse(read('package.json')).scripts;
+  assert.equal(scripts['storage:cargo'],'node tooling/storage/cargo-footprint.mjs');
+  assert.match(scripts['test:localtest'],/tooling\/storage\/cargo-footprint\.test\.mjs/);
 });
 
 test('scoped frontend and native source checks avoid accidental full verification', () => {

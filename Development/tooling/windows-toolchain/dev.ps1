@@ -3,7 +3,7 @@ param(
     [ValidateSet("setup", "doctor", "lock", "g0", "preflight", "check", "check:frontend", "check:rust", "bench:frontend", "bench:rust", "test", "dev", "package", "storage", "help")]
     [string]$Command = "help",
     [Parameter(Position=1)]
-    [ValidateSet("report", "explain", "plan")]
+    [ValidateSet("report", "explain", "plan", "cargo")]
     [string]$StorageMode = "report"
 )
 
@@ -26,6 +26,8 @@ if ($Command -eq "storage") {
     }
     if ($StorageMode -eq "plan") {
         & $localNode (Join-Path $DevelopmentRoot 'tooling/storage/retention.mjs')
+    } elseif ($StorageMode -eq "cargo") {
+        & $localNode (Join-Path $DevelopmentRoot 'tooling/storage/cargo-footprint.mjs')
     } else {
         & $localNode (Join-Path $DevelopmentRoot 'tooling/storage/inventory.mjs') $StorageMode
     }
@@ -404,6 +406,7 @@ try {
             Write-Host "  DEV.cmd storage report  # read-only developer file-size inventory"
             Write-Host "  DEV.cmd storage explain # top measured categories; no deletion"
             Write-Host "  DEV.cmd storage plan    # dry-run retention review; no deletion"
+            Write-Host "  DEV.cmd storage cargo   # debug/release/incremental disk breakdown"
         }
     }
 }

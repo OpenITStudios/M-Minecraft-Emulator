@@ -22,6 +22,7 @@ echo   DEV.cmd doctor      - show and verify all local toolchain paths
 echo   DEV.cmd storage report - read-only developer disk inventory
 echo   DEV.cmd storage explain - identify largest measured categories
 echo   DEV.cmd storage plan - retention review only ^(no deletion^)
+echo   DEV.cmd storage cargo - read-only Rust target artifact breakdown
 echo   DEV.cmd check:frontend - Svelte typecheck and Vitest, no Rust build
 echo   DEV.cmd check:rust - desktop and runtime-core Cargo checks
 echo   DEV.cmd bench:frontend - compare two frontend verification passes

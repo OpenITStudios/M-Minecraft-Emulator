@@ -40,6 +40,19 @@ It is also available without PowerShell as
 `node tooling/storage/retention.mjs` from `Development/`.
 Synthetic tests: `node --test tooling/storage/retention.test.mjs`.
 
+## Cargo target attribution
+
+`DEV.cmd storage cargo` uses the bounded read-only
+`storage/cargo-footprint.mjs` scanner. It separates canonical versus
+historical Cargo targets and provides debug/release and
+deps/incremental/build size groups. It does **not** calculate NTFS
+allocated bytes, delete data, run Cargo or authorize cache pruning.
+Synthetic tests:
+`node --test tooling/storage/cargo-footprint.test.mjs`.
+The portable `DEV.cmd` environment rejects an ambient
+`CARGO_TARGET_DIR` pointing outside the canonical target so new
+compiler output is not silently split across extra directories.
+
 ## Resource-efficiency source previews — closed decision, reusable code
 
 These **separate, explicit build tools are retained** for possible future

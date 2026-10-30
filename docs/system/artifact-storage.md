@@ -70,6 +70,42 @@ compilation retained. `release`, installer identity, native DLL hashes and
 runtime settings remain unchanged. The first profile change can cause a
 one-time recompilation; old artifacts remain until separately reviewed.
 
+## Cargo build-cache attribution (read-only)
+
+`DEV.cmd storage cargo` uses
+`Development/tooling/storage/cargo-footprint.mjs` to inspect **only** the
+canonical `workspace/builds/desktop/target` and two historical
+source-local Cargo `target` directories. It groups regular-file logical
+bytes by Windows MSVC versus host-default output, debug/release profile,
+and Cargo subdirectories including `deps`, `incremental`, `build`,
+`.fingerprint`, `examples`, and `bundle`. Unknown Cargo layouts remain
+counted under `other` rather than being dropped.
+
+The scan reads directory metadata only, has finite time/entry/depth
+budgets, refuses linked ancestors and does not follow symlinks or
+junctions. Hardlinks are counted as logical file entries and explicitly
+reported; totals **cannot** be treated as NTFS allocated bytes,
+distinct physical data, duplicates, or recoverable savings. A partial
+scan is a lower bound and cannot authorize deletion. The tool never
+touches `App/`, `Data/`, backups, game data or installed services.
+
+For developer commands via `DEV.cmd`, the local PowerShell environment
+now **enforces one canonical** `CARGO_TARGET_DIR`: 
+`workspace/builds/desktop/target`. Conflicting external environment
+overrides are refused, and existing link/reparse points along that
+target path block compilation. Direct Cargo from an unrelated shell
+is not governed by `DEV.cmd` and can still create alternate output.
+The new report is optional and does not launch Cargo, compile Rust,
+relocate caches or produce additional log files. It does not override
+the package-specific release gates.
+
+Cargo's [build-cache documentation](https://doc.rust-lang.org/cargo/reference/build-cache.html)
+notes that internal output layout can change and that
+`incremental` is reused for compilation. A nonempty `target/debug`
+alongside `target/x86_64-pc-windows-msvc/debug` only indicates two
+output layouts, **not** proof that either tree is obsolete. Keep the
+existing `storage plan` command read-only; no mutation is approved.
+
 ## Retention review (dry-run only)
 
 The optional `DEV.cmd storage plan` command uses

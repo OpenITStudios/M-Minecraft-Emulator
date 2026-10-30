@@ -95,6 +95,23 @@ components remain external prerequisites and are never relocated by `DEV.cmd`.
 GitHub Actions remains disabled. Historical debug downloads belong in
 `workspace/downloads/`; they are not inputs to the active Lazy Tester installer.
 
+## Cargo target breakdown (read-only)
+
+Run `DEV.cmd storage cargo` to inspect logical bytes in the canonical
+Cargo target and historical desktop/runtime-core target folders,
+grouped by debug/release and dependency/incremental/build artifacts.
+The scanner has entry/time/depth limits; `PARTIAL` means incomplete
+metadata, not a proven disk-space number. It does **not** clear caches,
+follow links, access `Data/` or private backups, or estimate reclaimable
+physical storage.
+
+The `DEV.cmd` local environment now requires exactly the checkout's
+`workspace/builds/desktop/target` for `CARGO_TARGET_DIR`. An ambient
+override to a second directory fails before cache creation; existing
+junctions/reparse points in the target path are refused. Direct shell
+Cargo commands bypass this launcher and may still use other targets.
+Existing archives remain preserved for explicit retention review.
+
 ## Scoped checks and optional timing
 
 `DEV.cmd check:frontend` runs only Svelte/TypeScript typecheck and

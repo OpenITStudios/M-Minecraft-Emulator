@@ -20,6 +20,26 @@ function Set-LocalDeveloperEnvironment {
       -not (Test-Path -LiteralPath (Join-Path $cargoHome 'bin/rustc.exe') -PathType Leaf)) {
     throw 'Workspace-local Node/npm/Rust is missing. Run DEV.cmd bootstrap first; no global fallback.'
   }
+  # One canonical compiler target for DEV.cmd. An ambient override would
+  # silently create another complete Rust artifact cache and exhaust disk.
+  $canonicalCargoTarget = [IO.Path]::GetFullPath((Join-Path $workspace 'builds/desktop/target'))
+  if (-not [string]::IsNullOrWhiteSpace($env:CARGO_TARGET_DIR)) {
+    if (-not [IO.Path]::IsPathRooted($env:CARGO_TARGET_DIR) -or
+        [IO.Path]::GetFullPath($env:CARGO_TARGET_DIR) -ine $canonicalCargoTarget) {
+      throw 'DEV.cmd requires the canonical workspace/builds/desktop/target; external CARGO_TARGET_DIR overrides are refused.'
+    }
+  }
+  foreach ($path in @((Join-Path $workspace 'builds'),
+      (Join-Path $workspace 'builds/desktop'), $canonicalCargoTarget)) {
+    if (Test-Path -LiteralPath $path) {
+      $item = Get-Item -LiteralPath $path -Force
+      if (-not $item.PSIsContainer -or
+          ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw "Cargo target must be an ordinary project-local directory: $path"
+      }
+    }
+  }
+  $env:CARGO_TARGET_DIR = $canonicalCargoTarget
   foreach ($directory in @($cacheDir,$tempDir,(Join-Path $cacheDir 'npm'),
       (Join-Path $cacheDir 'nuget'))) {
     if (-not (Test-Path -LiteralPath $directory)) {
@@ -31,7 +51,6 @@ function Set-LocalDeveloperEnvironment {
       throw "Developer cache/temp must be a real local directory: $directory"
     }
   }
-  if (-not $env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR = Join-Path $workspace 'builds/desktop/target' }
   $env:CARGO_HOME = $cargoHome
   $env:RUSTUP_HOME = $rustupHome
   $env:NPM_CONFIG_CACHE = Join-Path $cacheDir 'npm'

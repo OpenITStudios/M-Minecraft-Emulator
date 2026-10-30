@@ -1,5 +1,15 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — Cargo target footprint and canonical developer cache (30 October 2026)
+
+**State:** DONE for bounded source changes and an isolated synthetic Cargo scanner; actual Windows disk results, pinned PowerShell, Rust and Minecraft acceptance NOT_EXECUTED.
+**Decision:** Keep prior read-only inventory and retention review; add `DEV.cmd storage cargo` through the existing storage route to classify metadata-only file bytes across the active `workspace/builds/desktop/target` and two legacy source-local targets. Report Windows-target versus host-default debug/release layout and deps/incremental/build/fingerprint/bundle subgroups, explicit partial scan and hardlink counts. Prevent ambient `CARGO_TARGET_DIR` overrides in `DEV.cmd` from creating a second project compiler target. Check target ancestor/reparse safety before any developer cache setup. No files moved or deleted, no new target directory, executable, background worker, CI, build option, installer, game or account data mutation.
+**Proof:** SOURCE_EXECUTION: exact future committed blob of `cargo-footprint.mjs` and `cargo-footprint.test.mjs` matched the local executed source Git SHA, Node.js 22.16.0 scanner unit fixtures 10/10 PASS, including hardlinks, links, bounded scanning, and `--apply` refusal. REMOTE_GITHUB pinned source guard/CLI/caller review. Windows PowerShell 7.6.7, pinned Node 24, Windows NTFS behavior, Rust 1.99.1/Tauri compilation and actual 60 GB breakdown NOT_EXECUTED.
+**Unresolved:** Logical-byte measurements are not allocated or reclaimable physical disk; independent Cargo shells may still use different targets. Source-only path restrictions are not runtime Windows process evidence.
+**Next:** Obtain a bounded real Windows `storage report`, `storage cargo` and `storage plan` plus existing two-pass benchmarks; compare exact outputs before authorizing a deletion policy.
+
+---
+
 ## Current product work — Scoped developer checks and cache-reuse benchmark (30 October 2026)
 
 **State:** DONE for bounded source routing and benchmark authoring; pinned Windows toolchain, compilation, actual timing and disk savings NOT_EXECUTED.

@@ -101,6 +101,23 @@ Existing `DEV.cmd dev` retains Tauri's frontend hot reload / Rust rebuild
 behavior, the reviewed compatibility DLL staging and native identity. The
 new scoped routes do not modify game/session/process authority.
 
+## Cargo storage attribution
+
+`DEV.cmd storage cargo` is a no-build, read-only report of the canonical
+Cargo `target` and historical source-local targets. It groups logical
+file bytes by target layout and profile and will flag coexisting
+host-default/explicit-Windows debug output without claiming either is
+safe to remove. The portable `DEV.cmd` local environment refuses
+noncanonical `CARGO_TARGET_DIR` overrides (and existing links in the
+compiler-target ancestors). This **does not** affect direct Cargo shell
+commands or any installed product/runtime data.
+
+The scan is bounded, treats errors as `PARTIAL`, counts hardlinked files
+as logical entries and makes **no** physical disk savings claim.
+Read it alongside `DEV.cmd storage report` and
+`DEV.cmd storage plan` before considering any separate,
+explicitly authorized cleanup proposal. No automatic pruning is enabled.
+
 ## Package and release boundary
 
 The current product is **Lazy Tester**, with Windows-native independently
