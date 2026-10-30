@@ -57,6 +57,9 @@ identity, game package or native preview behavior is changed in this stage.
 
 - Align `AGENTS.md` runtime-acceptance navigation, current developer discipline
   and Windows-native toolchain metadata with the single five-profile product.
+- Direct `DIAGNOSE` at the existing native session/identity/workspace owners,
+  and define `TARGET_WINDOWS` as observed native host/game evidence; historical
+  VMware/Guest Agent artifacts remain protected but inactive.
 - Reclassify explicitly retired VMware/Sandboxie/earlier two-client documents
   as historical; keep their original evidence recoverable without treating
   their obsolete instructions as canonical product procedures.

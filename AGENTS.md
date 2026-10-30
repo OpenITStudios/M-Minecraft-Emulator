@@ -69,7 +69,7 @@ Development uses ChatGPT + GitHub only. Do not assume or propose another executi
 | Request | Procedure | Owner / artifact |
 | --- | --- | --- |
 | Improve or repair product, UI, source, packaging code, repo organization | `SYSTEM DEVELOPMENT` → `.agents/skills/emulator-development/SKILL.md` | `docs/system/implementation-map.md`, existing code |
-| Review environment, VM provisioning or guest issues | `DIAGNOSE` | Rust runtime/VMware source + observed evidence |
+| Diagnose native launch, session, profile or window failures | `DIAGNOSE` | `docs/system/implementation-map.md` → existing Rust session, identity or workspace owner + observed evidence |
 | Measure or validate Windows/Minecraft runtime | `RUNTIME ACCEPTANCE` | `docs/validation/README.md`, `Development/tooling/acceptance/windows/` |
 | Windows package / signing / release | `PACKAGE VERIFICATION` | `Development/engine/distribution/`, Tauri package config; manual gate |
 

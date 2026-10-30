@@ -25,7 +25,7 @@ Before mutation, establish repository, branch `Local`, HEAD SHA, first semantic 
 - `REMOTE_GITHUB` — code review, ownership analysis, Git trees, static policy/consumer checks and source commits. Default ChatGPT context.
 - `SOURCE_EXECUTION` — actually executed typecheck, tests, Rust build/format and desktop bundle checks.
 - `PACKAGE_EXECUTION` — actual NSIS build, installed payload integrity, install/repair/uninstall test.
-- `TARGET_WINDOWS` — actual host and VMware/Windows guest session observations.
+- `TARGET_WINDOWS` — actually observed native Windows host, game sessions, private profiles and DWM window behavior; historical VM evidence is separate.
 - `MINECRAFT_RUNTIME` — actual Education login, graphics and multiplayer.
 - `FIVE_CLIENT_ACCEPTANCE` — five independently licensed playable Minecraft Education clients meet the current accepted target simultaneously on the native approach; earlier four-client VM evidence is historical only.
 
@@ -62,7 +62,7 @@ desktop IPC route back to retired sandbox/guest code.
 
 ## 5. GitHub-first and no-user-PC boundary
 
-Complete all source/static work directly in GitHub when possible. `Local` names a **GitHub branch**, not a physical PC. `npm`, `DEV.cmd`, source tests and local VMware are optional stronger-proof contexts, not gates placed on user workstations to complete ChatGPT repository edits. Keep truly unresolved runtime requirements `NOT_EXECUTED`.
+Complete all source/static work directly in GitHub when possible. `Local` names a **GitHub branch**, not a physical PC. `npm`, `DEV.cmd`, source tests and native Windows/Minecraft execution are stronger-proof contexts, not gates placed on user workstations to complete ChatGPT repository edits. Keep truly unresolved runtime requirements `NOT_EXECUTED`.
 
 ### Short-prompt repository startup and topic recovery
 
@@ -72,7 +72,7 @@ To continue work in another chat, recover the named topic from `planning/develop
 
 ## 6. Mutations, compatibility and commit discipline
 
-Update canonical owner plus necessary callers/tests/docs in a coherent logical commit. Prefer correcting an existing owner over creating another abstraction. Preserve each Virtual's account-bearing disks and snapshots; reprovision is explicitly destructive and must not be a side effect of routine setup. Release/update identity, Guest Agent wire contract, installed product identifier and disk paths require an explicit migration review, not a source-folder tidy-up.
+Update canonical owner plus necessary callers/tests/docs in a coherent logical commit. Prefer correcting an existing owner over creating another abstraction. Preserve all native profile/world/registry data and retained historical account-bearing guest disks or snapshots; none may be deleted during routine source work. Native release/update identity, installed product identifiers, stored profile layouts and historical Guest Agent formats require explicit compatibility review before any migration.
 
 When composing GitHub source-file replacements in JavaScript, preserve literal replacement bytes: `String.replace(search, replacementString)` interprets `$'`, `$&` and related sequences, which can silently corrupt PowerShell regex or source text. Use a callback replacer (`replace(search, () => replacement)`) or exact splice, then fetch the committed blob and verify the complete affected expression and file ending. A successful GitHub write is not syntactic proof.
 
@@ -111,7 +111,7 @@ pretending five Minecraft instances or FPS limiting have been validated.
 
 ## 8. Security
 
-No VM images, Microsoft credentials, OAuth tokens, machine-identity raw values, Guest Agent secrets, account-bearing snapshots, private worlds or signing material in Git history. Privileged Guest Agent operations stay fixed and authenticated; ambiguous provider mutations fail closed. The installer must not silently delete runtime data.
+No VM images, Microsoft credentials, OAuth tokens, machine-identity raw values, Guest Agent secrets, account-bearing snapshots, private worlds or signing material in Git history. Retired Guest Agent and VM providers remain inactive; ambiguous native session, profile or installer mutations fail closed. The installer must not silently delete runtime data.
 
 ## 9. Failure policy
 
