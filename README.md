@@ -25,6 +25,30 @@ Archive/experiments/          Historical research
 workspace/            Ignored local tools, builds, candidates and private material
 ```
 
+## AI-ready developer control
+
+`DEV.cmd` is the single local developer entrypoint. AI can inspect the
+checkout, discover a fixed task catalog, recommend the smallest appropriate
+check, and run an explicitly selected reviewed task without memorizing Cargo,
+Tauri or PowerShell commands. **No UI, daemon or additional Rust build** is
+introduced.
+
+```text
+DEV.cmd inspect --json
+DEV.cmd catalog --json
+DEV.cmd plan --json
+DEV.cmd run frontend.validate --expect-sha <exact-40-char-Local-SHA> --json
+```
+
+Execution uses pinned portable Node and existing scripts. The `run` route
+requires an exact `Local` revision; setup, lockfile generation, full preflight,
+and candidate packaging additionally require explicit operator approval.
+Unknown/mixed source changes escalate to the full check. The old developer
+commands remain available, and CI stays disabled. Read
+[AI Developer Controller](Development/tooling/developer/README.md) for the
+task, output and safety contract. GitHub-only development cannot execute this
+Windows-local controller.
+
 `DEV.cmd dev` opens the development app. `DEV.cmd package` (or
 `npm --prefix Development run package:windows`) builds the
 native installer from a clean, committed `Local` revision, refreshes the local

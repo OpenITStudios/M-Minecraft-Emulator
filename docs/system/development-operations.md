@@ -25,6 +25,42 @@ pin Local HEAD
 
 A user-PC checkout, npm installation, `DEV.cmd`, VMware or Minecraft execution is not required for source-verifiable tasks. Actual compilations, package builds, Windows guest behavior and gameplay must not be claimed without executed evidence.
 
+## AI-ready single developer entry
+
+The GitHub-first source workflow above remains authoritative for remote
+ChatGPT edits. For an actual compatible Windows checkout, `DEV.cmd` now
+supports a **single AI-facing contract**:
+
+```text
+DEV.cmd inspect --json
+DEV.cmd catalog --json
+DEV.cmd plan --json
+DEV.cmd run frontend.validate --expect-sha <exact-Local-HEAD> --json
+```
+
+The registry and bounded Node controller live at
+[Developer Controller](../../Development/tooling/developer/README.md).
+The default planning action reads changed tracked/untracked *source path
+metadata* and proposes either a documentation, frontend, Rust, or full
+source check. It does not execute its own recommendation. Unknown, native,
+mixed and configuration changes take the full-source route; native DLL
+acceptance and Windows/Minecraft tests remain separately unverified.
+No path or arbitrary command from user/AI input becomes a shell invocation.
+
+`run` requires an unchanged, exact `Local` commit and an allowlisted
+task. A separate explicit operator approval is required before specifying
+`--approve <task-id>` for setup, lockfile mutation, full preflight or
+candidate packaging. Command success reports **exit status only**, not
+gameplay, installer, or signing acceptance. Exclusive local developer-output
+tasks are serialized by a fail-closed lock under ignored `workspace/tmp`.
+A stale lock must be inspected before any manual recovery; nothing
+automatically deletes protected data or forces a game process to close.
+
+The existing `DEV.cmd bootstrap`, underlying `dev.ps1`, pinned toolchain,
+package/retention guards and manual commands are retained. This is a bounded
+orchestration layer, **not** a second build engine, UI, daemon, CI workflow,
+or new compiler cache.
+
 ## Toolchain authority
 
 Read [toolchain.json](../../Development/toolchain.json) for canonical Node/npm/Rust/PowerShell pins. Desktop owns `Development/apps/desktop/package-lock.json`; desktop Tauri and runtime-core own independent Cargo locks. The root intentionally has **no separate Node dependency graph**.

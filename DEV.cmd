@@ -7,6 +7,12 @@ if /I "%~1"=="bootstrap" (
   powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%PROJECT_ROOT%Development\tooling\windows-toolchain\bootstrap.ps1"
   exit /b %ERRORLEVEL%
 )
+rem AI-facing control operations use only the reviewed workspace-local Node.
+if /I "%~1"=="inspect" goto controller
+if /I "%~1"=="catalog" goto controller
+if /I "%~1"=="plan" goto controller
+if /I "%~1"=="run" goto controller
+rem Existing manual developer routes remain available, unchanged.
 set "LOCAL_PWSH=%PROJECT_ROOT%workspace\toolchains\powershell\pwsh.exe"
 if not exist "%LOCAL_PWSH%" (
   echo Portable developer environment is missing. Run DEV.cmd bootstrap first.
@@ -15,19 +21,22 @@ if not exist "%LOCAL_PWSH%" (
 "%LOCAL_PWSH%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_ROOT%Development\tooling\windows-toolchain\dev.ps1" %*
 exit /b %ERRORLEVEL%
 
+:controller
+set "LOCAL_NODE=%PROJECT_ROOT%workspace\toolchains\node\node.exe"
+if not exist "%LOCAL_NODE%" (
+  echo Portable developer Node is missing. Run DEV.cmd bootstrap first.
+  exit /b 1
+)
+"%LOCAL_NODE%" "%PROJECT_ROOT%Development\tooling\developer\controller.mjs" %*
+exit /b %ERRORLEVEL%
+
 :help
-echo M-Minecraft-Emulator ^(Windows x64, one local checkout^)
-echo   DEV.cmd bootstrap   - download portable tools into workspace
-echo   DEV.cmd doctor      - show and verify all local toolchain paths
-echo   DEV.cmd storage report - read-only developer disk inventory
-echo   DEV.cmd storage explain - identify largest measured categories
-echo   DEV.cmd storage plan - retention review only ^(no deletion^)
-echo   DEV.cmd storage cargo - read-only Rust target artifact breakdown
-echo   DEV.cmd check:frontend - Svelte typecheck and Vitest, no Rust build
-echo   DEV.cmd check:rust - desktop and runtime-core Cargo checks
-echo   DEV.cmd bench:frontend - compare two frontend verification passes
-echo   DEV.cmd bench:rust - compare two Rust check passes
-echo   DEV.cmd preflight   - full source checks, no game/installer
-echo   DEV.cmd dev         - launch the desktop in developer mode
-echo All project downloads and toolchains belong inside workspace.
+echo M-Minecraft-Emulator ^(Windows x64, single developer entry^)
+echo   DEV.cmd bootstrap                      - reviewed opt-in toolchain setup
+echo   DEV.cmd inspect --json                - source state, changes, tool availability
+echo   DEV.cmd catalog --json                - safe, versioned task capabilities
+echo   DEV.cmd plan --json                   - recommended validation from changes
+echo   DEV.cmd run ^<task-id^> --expect-sha ^<sha^> - execute registered task only
+echo   Additional legacy developer routes remain supported.
+echo   No UI, cleanup, CI, or game/session automation is started by this launcher.
 exit /b 0

@@ -1,5 +1,15 @@
 # Current Development Handoff — LazyTester
 
+## Current product work — AI-ready single DEV.cmd task controller (30 October 2026)
+
+**State:** DONE for bounded GitHub source implementation and isolated Node controller tests. Pinned Windows portable Node/PowerShell, actual build/package and Minecraft runtime NOT_EXECUTED.
+**Decision:** Preserve the one root `DEV.cmd` launcher and all existing manual/legacy developer routes. Add only `inspect`, `catalog`, `plan` and `run` as AI-facing operations backed by a single `Development/tooling/developer/tasks.json` registry and bounded portable Node controller; there is no UI, daemon, independent Rust engine, new Cargo cache or CI. `plan` uses Git metadata or explicitly declared source paths and defaults unknown/mixed/native changes to full verification. Only allowlisted task IDs dispatch to the existing PowerShell/node owners, with exact current Local SHA binding, an exclusive developer-output lock for nonread tasks and separate explicit operator approval for npm setup, preflight (includes setup), lockfile creation and package candidate staging. Storage/retention stays read-only and account/world data is outside source routing.
+**Proof:** SOURCE_EXECUTION isolated Node.js 22.16.0 developer-controller fixture suite 7/7 PASS (safe registry, task planning, policy, routing and CLI parsing); the integration fixture emulated existing `dev.ps1` strings and is NOT a real Windows run. REMOTE_GITHUB pinned source/consumer review and new static policy contracts. Full pinned Windows Node24/Pwsh7, source test suite, real Tauri build/package, storage measurement and Minecraft gameplay NOT_EXECUTED.
+**Unresolved:** Portable bootstrap/PowerShell dispatch, long-running Windows Tauri session, mutex lifecycle on interruption, and end-to-end app acceptance still require real target execution. `--approve` records operator-provided intent but the AI cannot self-authorize a protected operation. No disk has been reclaimed.
+**Next:** Verify the complete pinned local source tests and `DEV.cmd inspect/catalog/plan/run` routing on Windows before replacing or removing any existing script owners.
+
+---
+
 ## Current product work — Cargo target guard regression assertions (30 October 2026)
 
 **State:** DONE for test-source correction; complete pinned Node/Windows test execution NOT_EXECUTED.

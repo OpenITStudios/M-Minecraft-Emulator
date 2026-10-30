@@ -1,0 +1,111 @@
+{
+  "schema": 1,
+  "tasks": [
+    {
+      "id": "environment.doctor",
+      "description": "Validate pinned local developer prerequisites",
+      "command": "doctor",
+      "scope": "environment"
+    },
+    {
+      "id": "environment.setup",
+      "description": "Install locked desktop npm dependencies (explicit operator approval)",
+      "command": "setup",
+      "scope": "environment"
+    },
+    {
+      "id": "cargo.lock",
+      "description": "Generate a missing desktop Cargo lockfile (source-changing, explicit approval)",
+      "command": "lock",
+      "scope": "environment"
+    },
+    {
+      "id": "repository.validate",
+      "description": "Check tracked layout and documentation links without building Rust",
+      "command": "repository-structure",
+      "scope": "repository"
+    },
+    {
+      "id": "frontend.validate",
+      "description": "Run Svelte typecheck and frontend tests without Cargo",
+      "command": "check:frontend",
+      "scope": "frontend"
+    },
+    {
+      "id": "rust.validate",
+      "description": "Check desktop and runtime-core Rust on the supported Windows MSVC target",
+      "command": "check:rust",
+      "scope": "rust"
+    },
+    {
+      "id": "source.validate",
+      "description": "Run full existing repository source verification",
+      "command": "check",
+      "scope": "source"
+    },
+    {
+      "id": "source.preflight",
+      "description": "Run exact-SHA pinned full preflight (may install locked npm dependencies)",
+      "command": "preflight",
+      "scope": "source"
+    },
+    {
+      "id": "source.tests",
+      "description": "Run existing desktop and runtime-core tests",
+      "command": "test",
+      "scope": "source"
+    },
+    {
+      "id": "dev.start",
+      "description": "Start the existing Tauri Lazy Tester developer application",
+      "command": "dev",
+      "scope": "desktop"
+    },
+    {
+      "id": "build.candidate",
+      "description": "Build an unsigned Lazy Tester candidate and stage App (explicit operator approval)",
+      "command": "package",
+      "scope": "package"
+    },
+    {
+      "id": "storage.audit",
+      "description": "Read-only inventory of local developer output categories",
+      "command": "storage",
+      "mode": "report",
+      "scope": "storage"
+    },
+    {
+      "id": "storage.explain",
+      "description": "Read-only explanation of the largest measured categories",
+      "command": "storage",
+      "mode": "explain",
+      "scope": "storage"
+    },
+    {
+      "id": "storage.cargo",
+      "description": "Read-only Cargo target and artifact breakdown",
+      "command": "storage",
+      "mode": "cargo",
+      "scope": "storage"
+    },
+    {
+      "id": "storage.plan",
+      "description": "Read-only preservation and retention review; no delete mode",
+      "command": "storage",
+      "mode": "plan",
+      "scope": "storage"
+    },
+    {
+      "id": "benchmark.frontend",
+      "description": "Two cache-preserving frontend verification timings",
+      "command": "bench:frontend",
+      "scope": "benchmark"
+    },
+    {
+      "id": "benchmark.rust",
+      "description": "Two cache-preserving Rust timings and read-only cache snapshots",
+      "command": "bench:rust",
+      "scope": "benchmark"
+    }
+  ]
+}

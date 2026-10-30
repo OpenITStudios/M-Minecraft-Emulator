@@ -23,6 +23,28 @@ test('DEV.cmd dispatches only workspace-local PowerShell after opt-in bootstrap'
   assert.match(launcher, /"%LOCAL_PWSH%" -NoLogo -NoProfile/);
   assert.doesNotMatch(launcher, /(?:^|\n)\s*pwsh -NoLogo/m);
 });
+test('AI DEV.cmd routes use pinned Node and preserve legacy PowerShell execution', () => {
+  for (const operation of ['inspect','catalog','plan','run']) {
+    assert.ok(launcher.includes('if /I "%~1"=="'+operation+'" goto controller'));
+  }
+  assert.match(launcher,/workspace\\toolchains\\node\\node\.exe/);
+  assert.match(launcher,/Development\\tooling\\developer\\controller\.mjs/);
+  assert.match(launcher,/"%LOCAL_NODE%" "%PROJECT_ROOT%Development\\tooling\\developer\\controller\.mjs" %\*/);
+  assert.match(launcher,/"%LOCAL_PWSH%" -NoLogo -NoProfile/);
+  assert.match(launcher,/if \/I "%~1"=="bootstrap"/);
+  const registry=JSON.parse(read('tooling/developer/tasks.json'));
+  const script=read('tooling/developer/controller.mjs');
+  assert.equal(registry.schema,1);
+  assert.ok(registry.tasks.some(task=>task.id==='frontend.validate'));
+  assert.ok(registry.tasks.some(task=>task.id==='build.candidate'));
+  assert.match(script,/spawnSync\(executable,execution\.args/);
+  assert.match(script,/shell:false/);
+  assert.match(script,/Exact current Local SHA is required/);
+  assert.match(script,/Operator approval required/);
+  assert.match(script,/openSync\(LOCK_FILE,constants\.O_CREAT\|constants\.O_EXCL/);
+  assert.doesNotMatch(script,/\b(?:eval|Function)\s*\(/);
+});
+
 test('download route is pinned, checksum-verified, local and non-global', () => {
   assert.equal(config.node.version,'24.22.0');
   assert.equal(config.npm.version,'12.2.0');
