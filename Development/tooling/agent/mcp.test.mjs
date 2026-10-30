@@ -117,7 +117,7 @@ test('opt-in persistent GPU observation reuses MCP tools and protects MC01',asyn
     sha256:'a'.repeat(64),frameFreshness:'CAPTURE_TIMESTAMP_RECENT_GAMEPLAY_NOT_VERIFIED'};
   const gpuFactory=()=>({
     async start(slot){calls.push(['start',slot]);return {slot};},
-    latest(slot){calls.push(['latest',slot]);return latestFrame;},
+    latest(slot,binding){calls.push(['latest',slot,binding]);return latestFrame;},
     stop(slots){calls.push(['stop',...slots]);},
     shutdown(){calls.push(['shutdown']);},
   });
@@ -140,6 +140,12 @@ test('opt-in persistent GPU observation reuses MCP tools and protects MC01',asyn
   const frame=await handler.callTool('observe_client',{slot:2});
   assert.equal(frame.metadata.provider,'NATIVE_WGC_PERSISTENT');
   assert.equal(frame.metadata.background,true);
+  const boundRead=calls.find(([operation])=>operation==='latest');
+  assert.equal(boundRead[1],2);
+  assert.equal(boundRead[2].pid,602);
+  assert.equal(boundRead[2].windowId,3002);
+  assert.equal(boundRead[2].createdFileTime,'134000000000000001');
+  assert.equal(boundRead[2].sessionId,1);
   handler.callTool('stop_visual_observation',{slots:[2]});
   handler.shutdown();
   assert.equal(calls.some(([op])=>op==='start'),true);

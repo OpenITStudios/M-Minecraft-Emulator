@@ -558,6 +558,27 @@ review; no tests, builds, installs, gameplay, RDP or agents executed.
 **Proof:** REMOTE_GITHUB plus primary Microsoft/OpenAI documentation.
 No test, build, packaging, ODR, device, Windows or Minecraft execution.
 
+## Phase 14: GPU observation source-to-client identity binding (31 October 2026)
+
+- Source audit found a real attribution gap: `captureVerifiedFrame`
+  inspected a native target before/after reading the persistent GPU
+  stream, but the cached WGC worker was pinned at *start* to a potentially
+  different PID/HWND/birth/session. A restarted client could receive
+  the previous worker's frame as if it belonged to its replacement.
+- Tightened the existing `gpu-frame-source.mjs` owner: `latest(slot,
+  expectedNativeTarget)` now requires and compares the exact native
+  process identity against the original worker binding before exposing
+  any PNG. A mismatch stops that read-only worker and discards its cache.
+  MCP passes the verified `before` target and still checks the `after`
+  target. Future-dated capture frames are not presented as fresh.
+- Existing source fixtures extended for four independent identity
+  mismatches and future timestamps, plus MCP contract verification.
+  No extra service, store, broad test suite, driver, game input route or
+  Minecraft session owner introduced. MC01 remains protected in hybrid.
+- **Proof ceiling:** REMOTE_GITHUB source-only. Tests AUTHOR_ONLY /
+  NOT_EXECUTED; native Windows WGC pixels, Minecraft game frames and
+  agent gameplay remain UNVERIFIED.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,
@@ -576,10 +597,10 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
 The Windows Agent Workspace feasibility question is resolved for the
 currently documented APIs: it is NOT an admitted input implementation.
 Retain the independent-input BLOCKED gate until a concrete, supported
-per-client game-input API becomes available. Meanwhile return to
-bounded source-only validation of existing native five-profile and
-visual observation paths; never add a second session controller,
-global keyboard fallback or speculative packaged MCP worker.
+per-client game-input API becomes available. Meanwhile continue bounded source-only validation of existing native
+five-profile visual observation and evidence attribution contracts;
+never add a second session controller, global keyboard fallback or
+speculative packaged MCP worker.
 **Do not execute local tests, toolchain builds, package staging, native input
 probes or gameplay until explicit operator approval.** When approval arrives,
 the first separate acceptance boundary is the pinned Windows agent CLI,

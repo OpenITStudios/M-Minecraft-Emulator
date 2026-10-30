@@ -112,6 +112,32 @@ Only code is committed; no user screenshots are collected now.
 
 Cua CLI reference: https://cua.ai/docs/cua-driver/reference/cli/serve-and-configure
 
+## Phase 14: pin GPU frames to their original native client (source only)
+
+The optional WGC worker is created for an exact, native-verified
+Minecraft PID, HWND, process birth FILETIME and Windows session. The
+previous `gpuSource.latest(slot)` checked packet age, while MCP checked
+the *current* native target before/after the call, but did not verify the
+worker was originally started for that exact target. A restarted MC02
+could therefore be incorrectly attributed a stale frame captured by
+an older worker when the old worker remained active.
+
+`gpuSource.latest(slot,expectedNativeTarget)` now requires a fresh exact
+binding and compares all four identity fields against the worker's
+original pinned target. Any mismatch immediately discards the cached
+PNG and stops that capture worker. The MCP passes its already-verified
+native target into every WGC read, then still revalidates the target
+after the frame read. Future-dated frame timestamps are refused until
+the capture time has actually arrived.
+
+The existing tests now cover PID, HWND, birth and Windows session
+replacement, required binding, and future frames; MCP tests assert the
+correct native identity is passed to the GPU cache. They are
+**AUTHORED_NOT_EXECUTED**. No new tool, continuously running daemon,
+input backend, driver, game control or profile lifecycle component
+was added. A source-level identity guard is NOT proof that WGC can
+capture Minecraft Education gameplay on Windows.
+
 ## Phase 13: Windows Agent Workspace + Codex interoperability verdict
 
 **Outcome: not a production input provider, no new implementation.**

@@ -156,18 +156,33 @@ export function createGpuFrameSource({
       provider:'NATIVE_WGC_PERSISTENT',durationMs,fps,
       gameInput:'NOT_IMPLEMENTED'};
   }
-  function latest(slot) {
+  function latest(slot,expectedTarget) {
     if (!Number.isInteger(slot) || slot<1 || slot>MAX_SLOTS) {
       throw new TypeError('Unknown Minecraft profile');
     }
     const state=slots.get(slot);
     if (!state?.active) throw new Error('GPU_SOURCE_NOT_ACTIVE');
-    if (clock()-state.lastFrameAt>NO_FRAME_TIMEOUT_MS) {
+    // The source is pinned at start to an owned game process. A fresh
+    // native target must match that binding at EVERY frame read. Checking
+    // native PID/HWND only before and after latest() is insufficient:
+    // an old GPU worker can still have a cached PNG for a replaced client.
+    const expected=validateGpuTarget(expectedTarget);
+    if (expected.pid!==state.identity.pid ||
+        expected.windowId!==state.identity.windowId ||
+        expected.createdFileTime!==state.identity.createdFileTime ||
+        expected.sessionId!==state.identity.sessionId) {
+      drop(state,'TARGET_IDENTITY_CHANGED'); // revokes worker and old PNG
+      throw new Error('GPU_TARGET_IDENTITY_CHANGED');
+    }
+    const now=clock();
+    if (now-state.lastFrameAt>NO_FRAME_TIMEOUT_MS) {
       drop(state,'GPU_STREAM_STALLED');
       throw new Error('GPU_STREAM_STALLED');
     }
     const frame=state.latest;
-    if (!frame || clock()-frame.capturedAtMs>MAX_AGE_MS) {
+    // A future-dated transport frame is not evidence of a fresh capture.
+    if (!frame || frame.capturedAtMs>now ||
+        now-frame.capturedAtMs>MAX_AGE_MS) {
       throw new Error('GPU_FRAME_NOT_READY');
     }
     return {

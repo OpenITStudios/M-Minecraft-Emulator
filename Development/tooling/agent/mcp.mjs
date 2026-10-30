@@ -236,7 +236,10 @@ export function createHandler(config,{
         await native(config.executable,'target',slot),slot);
       // GPU provider is a persistent producer started by the same explicit
       // visual-observation MCP action. No fallback to desktop/global capture.
-      const frame=gpuSource ? gpuSource.latest(slot) :
+      // Read ONLY from the WGC worker pinned to this same exact native
+      // process/window/birth/session. Without this check a restarted slot
+      // could receive its predecessor's cached frame.
+      const frame=gpuSource ? gpuSource.latest(slot,before) :
         await capture(config.cuaExecutable,before);
       const after=validateNativeWindowTarget(
         await native(config.executable,'target',slot),slot);
