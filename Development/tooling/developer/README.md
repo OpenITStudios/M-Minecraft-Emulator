@@ -12,16 +12,26 @@ DEV.cmd inspect --json
 DEV.cmd catalog --json
 DEV.cmd plan --json
 DEV.cmd plan --json --paths Development/apps/desktop/src/LazyTesterApp.svelte
+DEV.cmd plan --base-sha <40-char-ancestor-SHA> --json
 DEV.cmd run frontend.validate --expect-sha <40-char-Local-SHA> --json
 DEV.cmd run auto --expect-sha <40-char-Local-SHA> --json
+DEV.cmd run auto --expect-sha <40-char-Local-SHA> --base-sha <40-char-ancestor-SHA> --json
 ```
 
 `inspect` reports the Git revision, changed file counts/scopes and *presence*
 of portable tools, not version or gameplay proof. `catalog` lists task IDs,
 risk and approval policy without running a task. `plan` recommends the
 smallest safe check from changed paths; on a clean checkout, it examines
-the newest commit versus its parent. Unknown, native and mixed sources
-escalate to full verification. Planning never executes a recommendation.
+the newest commit versus its parent. For a multi-commit batch, the optional
+`--base-sha <exact-40-character-ancestor>` includes all net source changes
+from that ancestor to `Local` HEAD **plus current tracked/untracked edits**.
+A missing/non-ancestor base refuses the plan; the SHA cannot select another
+branch, process, command or release. `--base-sha` is allowed only for `plan`
+and `run auto`, never an explicit named task or `plan --paths`.
+Unknown, native and mixed sources escalate to full verification. Planning
+never executes a recommendation. Scoped checks are iteration evidence only;
+final candidate verification must still use the existing full source/Windows
+gates.
 `run auto` runs **only one** recommended validation task and skips execution
 when no changes exist. It does not install dependencies, generate lockfiles,
 package releases, delete files directly, or bypass consent-gated operations.

@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {dirname,resolve,join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawnSync} from 'node:child_process';
-import {validatedRegistry,classifyPath,planForPaths,legacyArgs,parseFlags,isPinnedNodeProcess,classifyCompletion,runOwnedChild,withBuildLock} from './controller.mjs';
+import {validatedRegistry,classifyPath,planForPaths,automaticChangeSet,legacyArgs,parseFlags,isPinnedNodeProcess,classifyCompletion,runOwnedChild,withBuildLock} from './controller.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'../../..');
 const registry=JSON.parse(readFileSync(new URL('./tasks.json',import.meta.url),'utf8'));
@@ -110,6 +110,13 @@ test('AI controller CLI arguments are constrained and source-pinned',()=>{
   assert.equal(parseFlags(['--json'],'catalog').json,true);
   assert.equal(parseFlags(['--json','--paths','docs/README.md'],'plan').paths[0],'docs/README.md');
   assert.equal(parseFlags(['frontend.validate','--expect-sha',SHA],'run').expectSha,SHA);
+  assert.equal(parseFlags(['--base-sha',SHA,'--json'],'plan').baseSha,SHA);
+  assert.equal(parseFlags(['auto','--expect-sha',SHA,'--base-sha',SHA],'run').baseSha,SHA);
+  assert.throws(()=>parseFlags(['auto','--base-sha','bad'],'run'),/40-character/);
+  assert.throws(()=>parseFlags(['auto','--base-sha',SHA,'--base-sha',SHA],'run'),/Unexpected/);
+  assert.throws(()=>parseFlags(['frontend.validate','--base-sha',SHA],'run'),/run auto/);
+  assert.throws(()=>parseFlags(['--base-sha',SHA,'--paths','docs/README.md'],'plan'),/cannot be combined/);
+  assert.throws(()=>parseFlags(['--paths','docs/README.md','--base-sha',SHA],'plan'),/source paths only/);
   assert.equal(parseFlags(['build.candidate','--expect-sha',SHA,'--approve','build.candidate'],'run').approval,'build.candidate');
   assert.throws(()=>parseFlags(['--approve','build.candidate'],'plan'),/Unexpected/);
   assert.throws(()=>parseFlags(['frontend.validate','--bogus'],'run'),/Unexpected/);
@@ -278,11 +285,63 @@ test('JSON-mode developer child logs go to stderr and do not corrupt the one std
   assert.doesNotMatch(output.stdout,/CHILD_DIAGNOSTIC/);
 });
 
-test('auto source validation routes last committed changes only on a clean working tree',()=>{
+test('default auto planning stays lightweight on changed files or the most recent commit',()=>{
+  const calls=[];
+  const readGit=(args)=>{
+    calls.push(args);
+    const key=JSON.stringify(args);
+    if(key===JSON.stringify(['diff','--name-only','-z','HEAD'])) return '';
+    if(key===JSON.stringify(['ls-files','--others','--exclude-standard','-z'])) return '';
+    if(key===JSON.stringify(['diff','--name-only','-z','HEAD^','HEAD','--'])) return 'docs/README.md\0';
+    throw Error('Unexpected Git command: '+key);
+  };
+  assert.deepEqual(automaticChangeSet(null,readGit),{paths:['docs/README.md'],basis:'latest-commit'});
+  assert.equal(calls.length,3);
+});
+
+test('explicit ancestor baseline covers all committed changes plus pending edits',()=>{
+  const base='b'.repeat(40);
+  const replies=new Map([
+    [JSON.stringify(['diff','--name-only','-z','HEAD']),'Development/apps/desktop/src/LazyTesterApp.svelte\0'],
+    [JSON.stringify(['ls-files','--others','--exclude-standard','-z']),''],
+    [JSON.stringify(['merge-base',base,'HEAD']),base+'\n'],
+    [JSON.stringify(['diff','--no-renames','--name-only','-z',base,'HEAD','--']),
+      'Development/engine/runtime-core/src/lib.rs\0Development/apps/desktop/src/LazyTesterApp.svelte\0'],
+  ]);
+  const readGit=args=>{
+    const key=JSON.stringify(args);
+    if(!replies.has(key))throw Error('Unexpected Git command '+key);
+    return replies.get(key);
+  };
+  const selection=automaticChangeSet(base,readGit);
+  assert.equal(selection.basis,'base-commit');
+  assert.equal(selection.baseSha,base);
+  assert.deepEqual(selection.paths,[
+    'Development/engine/runtime-core/src/lib.rs',
+    'Development/apps/desktop/src/LazyTesterApp.svelte'
+  ]);
+  assert.deepEqual(planForPaths(selection.paths,SHA).taskIds,['source.validate']);
+  replies.set(JSON.stringify(['merge-base',base,'HEAD']),'c'.repeat(40)+'\n');
+  assert.throws(()=>automaticChangeSet(base,readGit),/ancestor/);
+  assert.throws(()=>automaticChangeSet('untrusted',readGit),/Invalid exact base/);
+});
+
+test('empty baseline delta never claims a validation command ran',()=>{
+  const base='b'.repeat(40);
+  const replies=new Map([
+    [JSON.stringify(['diff','--name-only','-z','HEAD']),''],
+    [JSON.stringify(['ls-files','--others','--exclude-standard','-z']),''],
+    [JSON.stringify(['merge-base',base,'HEAD']),base+'\n'],
+    [JSON.stringify(['diff','--no-renames','--name-only','-z',base,'HEAD','--']),''],
+  ]);
+  const readGit=args=>replies.get(JSON.stringify(args))??(()=>{throw Error('Unexpected git request');})();
+  const selection=automaticChangeSet(base,readGit);
+  assert.deepEqual(selection.paths,[]);
+  assert.deepEqual(planForPaths(selection.paths,SHA).taskIds,[]);
+});
+
+test('automatic run remains one allowlisted validation without mutating approvals',()=>{
   const source=readFileSync(new URL('./controller.mjs',import.meta.url),'utf8');
-  assert.match(source,/const pending=changedPaths\(\)/);
-  assert.match(source,/if\(pending\.length\) return \{paths:pending,basis:'working-tree'\}/);
-  assert.match(source,/git\(\['diff','--name-only','-z','HEAD\^','HEAD','--'\]\)/);
   assert.match(source,/requested==='auto'/);
   assert.match(source,/if\(recommendation\.taskIds\.length!==1\)/);
   assert.match(source,/if\(parsed\.taskId==='auto' && task\.requiresApproval\)/);

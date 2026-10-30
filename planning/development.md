@@ -1,38 +1,65 @@
 # Current Development Handoff — Lazy Tester
 
-## Active source implementation — reusing installed npm dependencies (30 October 2026)
+## Current state — 30 October 2026
 
-**State:** SOURCE UPDATED; full test execution intentionally deferred at operator request. Windows PowerShell/Node 24 source-test and real installer/Minecraft acceptance remain NOT_EXECUTED.
+**State:** SOURCE UPDATED / FINAL VALIDATION PENDING. The active product remains
+Lazy Tester for five independent, individually licensed Minecraft Education
+Windows profiles, using the original official game installation, reviewed
+native compatibility payload, one retained session controller and private
+profile storage. Only branch Local receives product development; CI is off.
 
-**Decision:** Keep the one `DEV.cmd` entrypoint and existing `dev.ps1` owner. `DEV.cmd preflight` no longer unconditionally removes/reinstalls the desktop `node_modules` via `npm ci`: first verify the committed npm manifest/lock contract using the existing lock checker, ensure an ordinary unlinked dependency root and required local CLI launchers, and query the **actually installed** dependency graph with pinned `npm ls --all --offline` (including dev/optional/peer dependencies). Reuse it only when all checks succeed; missing/inconsistent modules trigger the existing frozen `npm ci` through the old `setup` script. Linked/malformed dependency roots or a contradictory manifest/lock refuse mutation. Explicit `DEV.cmd setup` still forces a clean install, and full `verify:source` remains unchanged. No new controller, cache, tool, persistent receipt, CI job or UI.
+**Proof ceiling:** Current source and GitHub revisions can be inspected
+remotely. The pinned Windows Node 24 / PowerShell / Cargo / Tauri suites,
+installed NSIS candidate, account sign-in, live DWM previews and five-client
+Education gameplay have **NOT_EXECUTED** acceptance at the exact new revision.
+A successful static source review is not a Windows or Minecraft PASS.
 
-**Safety and proof:** Inspection of `node_modules` metadata is a readiness check, not a cryptographic full-file audit or Rust/game test. The source changes do not touch Cargo target ownership, archive-retirement approval, installer export retention, `App/`, `Data/`, Microsoft accounts or worlds. This turn records implementation and remote source review only; **tests deliberately not run yet**.
+## Consolidated source outcome
 
-**Unresolved:** The installed npm tree and PowerShell exit-code handling on the target Windows machine have not been observed; all performance/storage savings are UNKNOWN. The pre-existing historic compiler cache remains approval-gated; active Rust incremental cache remains reusable.
+- DEV.cmd is the only developer entrypoint. Its existing Node controller
+  routes inspected changes to one allowlisted check; task execution requires
+  exact Local HEAD, and high-impact operations retain separate approval.
+- The default automatic check uses working-tree changes or the latest
+  committed delta. Explicit --base-sha selects the changed-path union
+  from a verified ancestor through HEAD plus local edits, so final
+  multi-commit development is not misrepresented as one-commit coverage.
+  It introduces no new runner, CI, state file, process, or build engine.
+- Desktop npm dependencies are reused only after pinned manifest/lock,
+  installed dependency-graph and nonlinked-root checks. Missing or invalid
+  ordinary dependencies fall back to frozen npm ci; uncertain links refuse.
+- Desktop and runtime-core Rust checks use the existing shared Windows-MSVC
+  Cargo target. Active incremental cache stays reusable. Neither a new target
+  tree nor unscoped cargo clean is introduced.
+- Successful package export may retire at most eight older verified installer
+  candidates, retaining the newest two. Historic compiler archive retirement
+  remains an **independently approved, fail-closed** action, never an automatic
+  consequence of run auto, preflight, or packaging.
 
-**Next:** After source implementation is complete, run pinned Windows dependency-reuse checks and the existing local-test/source verification suite as one final validation phase, then measure build duration and actual storage changes.
+These are source implementation decisions, not measured timing/disk savings.
+No Minecraft lifecycle, Microsoft account/world data, runtime DLL, installed
+identity, game package or native preview behavior is changed in this stage.
 
----
+## Unverified / deferred
 
+- Exact Windows dependency-reuse behavior, source regression tests,
+  desktop/compiler integration, signed/installed launch and full five-session
+  gameplay remain unexecuted at this revision.
+- The historical Cargo archive's real eligibility, linked-file risks and
+  physical storage reclamation are UNKNOWN. Preserve all archive contents
+  unless the separate approved retirement gate and actual evidence allow it.
+- Fresh-profile gameplay, cross-volume data migration, live DWM pixels and
+  reconnect/normal-exit paths need their existing target-Windows acceptance.
+- Extra RAM/FPS or graphics optimization, macOS support, new native providers,
+  hosted runners and CI remain outside the active development scope.
 
-## Active work: canonical Rust build outputs and approved historical cache retirement (30 October 2026)
+## Next — one validation boundary
 
-**State:** DONE for bounded source implementation and synthetic safety checks. Windows Node 24/PowerShell 7, Rust/Cargo/Tauri execution, actual cache cleanup and NTFS bytes reclaimed remain **NOT_EXECUTED**.
+After the bounded source changes are frozen, perform the existing
+exact-revision Windows test:localtest and full-source/preflight validation,
+then the actual installer and Minecraft five-profile acceptance as applicable.
+Collect developer build timings and storage inventory before proposing any
+further performance or cache change. Mark each unmet proof NOT_EXECUTED,
+not PASS; do not block independent remote source work on unavailable PCs.
 
-**Product and authority:** Lazy Tester manages five independently launched native Minecraft Education Windows profiles. Runtime/session ownership, reviewed native DLL hash admission, installed identity, App/Data profiles and Minecraft worlds remain unchanged. Only branch `Local` may receive product development changes. GitHub Actions are disabled.
-
-**Efficiency — one shared target:** Both the desktop and standalone runtime-core Cargo `check` and `test` scripts now select `--target x86_64-pc-windows-msvc` like the existing quick checks and Tauri dev path. This prevents unnecessary host-default **output directory** duplication on supported Windows. Cargo features and dev/test/release profiles can still produce legitimately different artifacts; a one-time rebuild may be required. Incremental compilation and the single canonical `workspace/builds/desktop/target` remain enabled; never run unscoped `cargo clean` on the active target. Cargo's automatic global cache GC remains Cargo-owned.
-
-**Efficiency — AI validation:** `DEV.cmd` remains one launcher with `inspect/catalog/plan/run` and a fixed task registry. Documentation accompanying only frontend or Rust source no longer forces full validation; standalone Cargo manifests, lockfiles, build.rs, native/CMake, unknown or mixed source still require full source verification. The `run auto` path is SHA-pinned and cannot initiate setup, packaging, archive retirement or other consent-gated tasks.
-
-**Old generated artifact lifecycle:** Post-success installer packaging already retains the latest two verified installer candidate copies and removes bounded old verified copies only. The older compiler archive `workspace/archive/compiler-cache-20261026` remains outside this automatic package turnover. `storage cargo` now measures its `target/` subtree separately from the active target. A **distinct approval-gated task** `storage.retire-archive` can use pinned Cargo `clean --target-dir` solely for `workspace/archive/compiler-cache-20261026/target` after checking recognized, complete nonlinked old Cargo layout and nonempty replacement Windows MSVC artifacts. Unknown entries, partial scans, symlinks, hardlinks, missing Cargo, and suspect paths block. This operation is **not scheduled or run automatically** and cannot access active Cargo, other archives, registry/toolchains, protected App/Data/worlds or backups.
-
-**Safety and evidence:** The new archive retirement module is fail-closed and exposes no arbitrary shell/deletion path. Its exact proposed Git blob passed 8/8 synthetic V8 mocked-filesystem/Cargo scenarios (including scoped target args, unknown/hardlinked contents, no active replacement, failed Cargo, and no false reclaimed-space claims). New Node filesystem fixture tests and source-routing regression assertions were authored but the full pinned Windows source test suite remains **NOT_EXECUTED**. No old archive contents or real Windows disk totals were available in this remote GitHub session. Source changes cannot be promoted into actual runtime/cleaner proof.
-
-**Unresolved:** Whether the historical archive matches the recognized structure, has hardlinks, or is actually responsible for the expected ~60 GB usage is UNKNOWN. Cleanup may block entirely; no real bytes have been freed. True disk-allocated bytes differ from logical file sizes. Direct Cargo outside `DEV.cmd` may still make new target trees. Windows ACL/junction/race behavior and rebuilt cache performance have not been measured.
-
-**Next:** Run the pinned Windows `test:localtest` suite, collect `DEV.cmd storage report` and `DEV.cmd storage cargo`, and inspect the actual archive eligibility before explicitly approving scoped retirement. Compare build timings and physical free space afterward.
-
----
-
-Historical phase descriptions, earlier decisions and prior proof classifications are retained in immutable `Local` Git commits, not accumulated in this active handoff.
+Historical work notes and prior Next proposals remain in immutable
+Local Git history, not in a parallel current-status register.

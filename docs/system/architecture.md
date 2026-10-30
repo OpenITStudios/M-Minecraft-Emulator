@@ -7,7 +7,68 @@ authority: CANONICAL
 lifecycle: ACTIVE
 ---
 
-# Minecraft Instance Manager — Lightweight Windows Architecture
+# Lazy Tester — Native Windows Architecture
+
+## Current source architecture — 30 October 2026
+
+**Product:** Lazy Tester is a Windows Tauri 2 / Svelte 5 desktop manager
+for five separate licensed Minecraft Education profiles (MC01–MC05).
+It uses one official Education installation with per-profile private data
+and retained OS-native process handles. Minecraft itself owns Microsoft
+authentication, game rendering, saved worlds, and multiplayer. App startup
+never launches a game; the operator launches each selected profile explicitly.
+
+**Canonical execution path:**
+
+1. Desktop UI: Development/apps/desktop/src/LazyTesterApp.svelte shows
+   session snapshots, the active game viewport, and four passive previews.
+2. Typed frontend IPC: src/app/bridge/lazyTester.ts is the one game
+   command/response projection; raw invoke is confined to invokeRuntime.ts.
+3. Tauri admission: src-tauri/src/commands/native_clients.rs serializes
+   heavyweight manager operations; app_bootstrap.rs owns application startup
+   and Windows exit confirmation.
+4. Native session authority: src-tauri/src/engine/independent_bootstrap.rs
+   and independent_bootstrap/session_controller.rs own verified profile
+   enrollment, manual Launch, normal CloseOne/CloseAll, storage handles,
+   process identity, recovery uncertainty, and settings admission.
+5. Native session transport: native_clients_session.rs and its pipe
+   establish retained same-binary Windows controller/peer communication.
+6. Windows presentation: workspace_surface.rs and subordinate native
+   controller/DWM preview modules own placement, preview lifetimes, and
+   window-restoration checkpoints.
+7. Portable domain contracts: Development/engine/runtime-core contains
+   value types and bounded inspection policies, **not** a second launcher,
+   credential manager, source of game lifecycle truth, or background daemon.
+8. Reviewed C++ native compatibility payload remains sourced from
+   Development/tooling/acceptance/windows/bootstrap-ordering/. Its directory
+   name is historical; source ownership has not yet been relocated.
+9. Development and package boundaries: DEV.cmd is the single optional local
+   entrypoint, Development/tooling owns checks, and Development/engine/
+   distribution owns the product/data-preserving distribution contract.
+
+**Runtime invariants:** one authoritative five-slot controller, no adoption
+of unknown Minecraft processes, no copied credentials or silent world
+migration, no automatic launch/force-kill, and no replay of uncertain
+mutations. The selected playable game and four DWM previews remain independent
+Minecraft Windows processes; grouping in Task Manager is not proven. Normal
+exit requires verified managed-process ownership and restoration of native
+window presentation.
+
+**Developer proof:** GitHub source inspection is REMOTE_GITHUB evidence.
+Neither successful source commits nor synthetic Windows fixtures prove
+installation, game login, true simultaneous five-client gameplay, live DWM
+pixels, FPS savings, or filesystem cleanup. The active proof ceiling and
+single next action are in planning/development.md. Main is release-reserved,
+Local is development-only, and GitHub Actions CI stays disabled.
+
+## Superseded design research (not operational authority)
+
+The dated sections below retain historical discussion of earlier four-slot,
+Sandboxie, AppContainer and VMware investigations. Their claimed providers,
+running counts, implementation paths, readiness and task lists **must not**
+override the current five-profile source owners above. This information
+survives for provenance and may be retired further once dependent references
+are audited. Current code and the ownership map always win.
 
 ## Independent engine direction - 21 October 2026
 

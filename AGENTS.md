@@ -21,10 +21,11 @@ For material writes read `GITHUB_RULES.md`, pin exact `Local` HEAD, and consult 
 
 The active product is **Lazy Tester**, with five independently managed
 Minecraft Education Windows profiles. The retired Sandboxie/VMware runtime
-has already been removed from Local. Current source work prioritizes lean
-Windows module ownership and native RAM evidence while preserving original
-session, game, account data and normal-close contracts. MC02 exit source is
-not an ongoing P0 blocker; Windows runtime acceptance remains deferred.
+has already been removed from Local. Current source work prioritizes one canonical development handoff,
+source/validation efficiency and final native Windows acceptance while
+preserving session, game, account data and normal-close contracts. RAM/FPS
+exploration is deferred until real resource evidence justifies it. MC02 exit
+source is not an ongoing P0 blocker; runtime acceptance remains deferred.
 `planning/development.md` owns the current blocker and next source action.
 Target Windows/macOS platform-neutral adapters remain future work; a build
 alone cannot claim multi-account Mac compatibility.
@@ -48,7 +49,7 @@ SOURCE_EXECUTION → actually run Node, Svelte, Rust and Tauri checks
 PACKAGE_EXECUTION → actual Windows installer construction/inspection
 TARGET_WINDOWS → VMware, guest identity, interactive Windows session
 MINECRAFT_RUNTIME → live Education sign-in, gameplay, peer-to-peer network
-FOUR_CLIENT_ACCEPTANCE → four distinct licensed playable Minecraft Education sessions accepted concurrently on the chosen proven approach; VM guests are not required by the new target
+FIVE_CLIENT_ACCEPTANCE → five distinct licensed playable Minecraft Education sessions accepted concurrently on the chosen native approach; former four-client VM evidence is historical
 ```
 
 Never promote one rung into another. Absence of runtime or source execution evidence is `NOT_EXECUTED`, not PASS.

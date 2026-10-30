@@ -37,15 +37,20 @@ introduced.
 DEV.cmd inspect --json
 DEV.cmd catalog --json
 DEV.cmd plan --json
+DEV.cmd plan --base-sha <40-char-ancestor-SHA> --json
 DEV.cmd run frontend.validate --expect-sha <exact-40-char-Local-SHA> --json
 DEV.cmd run auto --expect-sha <exact-40-char-Local-SHA> --json
+DEV.cmd run auto --expect-sha <exact-40-char-Local-SHA> --base-sha <40-char-ancestor-SHA> --json
 ```
 
 Execution uses pinned portable Node and existing scripts. The `run` route
 requires an exact `Local` revision; setup, lockfile generation, full preflight,
 and candidate packaging additionally require explicit operator approval.
-Unknown/mixed source changes escalate to the full check. The old developer
-commands remain available, and CI stays disabled. Read
+Unknown/mixed source changes escalate to the full check. The optional
+`--base-sha` covers multi-commit development ranges without adding a runner;
+default `auto` on a clean checkout checks only the latest commit. Final
+candidate acceptance still requires the existing full source/Windows/game
+checks. The old developer commands remain available, and CI stays disabled. Read
 [AI Developer Controller](Development/tooling/developer/README.md) for the
 task, output and safety contract. GitHub-only development cannot execute this
 Windows-local controller.

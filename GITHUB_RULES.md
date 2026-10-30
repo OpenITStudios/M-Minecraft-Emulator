@@ -27,7 +27,7 @@ Before mutation, establish repository, branch `Local`, HEAD SHA, first semantic 
 - `PACKAGE_EXECUTION` — actual NSIS build, installed payload integrity, install/repair/uninstall test.
 - `TARGET_WINDOWS` — actual host and VMware/Windows guest session observations.
 - `MINECRAFT_RUNTIME` — actual Education login, graphics and multiplayer.
-- `FOUR_CLIENT_ACCEPTANCE` — four independently licensed playable Minecraft Education clients meet the accepted target simultaneously, whether native or isolated; previous one-Native/three-VM evidence is historical only.
+- `FIVE_CLIENT_ACCEPTANCE` — five independently licensed playable Minecraft Education clients meet the current accepted target simultaneously on the native approach; earlier four-client VM evidence is historical only.
 
 A static test **authored** is not a test **executed**. A VM process is not game-ready, signed-in, or network-ready proof. Multiple SHAs cannot be combined as exact-head acceptance.
 
@@ -105,7 +105,7 @@ run manually when the user explicitly asks and a compatible execution
 environment is available. Do not block GitHub source commits waiting for
 a runner, or claim authored tests as executed. The user's choice to turn off
 CI does not permit deleting safety checks, weakening code review, or
-pretending four Minecraft instances or FPS limiting have been validated.
+pretending five Minecraft instances or FPS limiting have been validated.
 
 **G0–G4 in `docs/validation/acceptance.md` are historical VMware acceptance gates, NOT current native-engine progress.** Track live native product outcomes and a single current next action only in `planning/development.md`; do not create another TODO/status system. Static checks are supporting evidence, never gameplay acceptance; old CI proves only its original SHAs.
 

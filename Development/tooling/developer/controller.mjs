@@ -125,18 +125,28 @@ function sourceInfo() {
   if(!SHA.test(sha)) throw Error('Invalid source SHA');
   return {branch,sha};
 }
-function changedPaths() {
-  const changed=git(['diff','--name-only','-z','HEAD']).split('\0').filter(Boolean);
-  const untracked=git(['ls-files','--others','--exclude-standard','-z']).split('\0').filter(Boolean);
+function changedPaths(readGit=git) {
+  const changed=readGit(['diff','--name-only','-z','HEAD']).split('\0').filter(Boolean);
+  const untracked=readGit(['ls-files','--others','--exclude-standard','-z']).split('\0').filter(Boolean);
   if(changed.length+untracked.length>4096) throw Error('Too many changes for bounded planning');
   return [...new Set([...changed,...untracked])];
 }
-// Prefer live local edits for focused checks. On a clean checkout, inspect
-// the latest committed revision so DEV.cmd can validate a just-pushed change.
-function automaticChangeSet() {
-  const pending=changedPaths();
+// The ordinary quick route inspects the working tree, or HEAD^ on a clean
+// checkout. An explicit ancestor baseline covers an entire development batch
+// without a second task runner or a persistent "last validated" state file.
+export function automaticChangeSet(baseSha=null,readGit=git) {
+  const pending=changedPaths(readGit);
+  if(baseSha!==null) {
+    if(!SHA.test(baseSha)) throw Error('Invalid exact base SHA');
+    const ancestor=readGit(['merge-base',baseSha,'HEAD']).trim();
+    if(ancestor!==baseSha) throw Error('Base commit must be an ancestor of current Local HEAD');
+    const committed=readGit(['diff','--no-renames','--name-only','-z',baseSha,'HEAD','--']).split('\0').filter(Boolean);
+    const paths=[...new Set([...committed,...pending])];
+    if(paths.length>4096) throw Error('Too many changes for bounded planning');
+    return {paths,basis:'base-commit',baseSha};
+  }
   if(pending.length) return {paths:pending,basis:'working-tree'};
-  const committed=git(['diff','--name-only','-z','HEAD^','HEAD','--']).split('\0').filter(Boolean);
+  const committed=readGit(['diff','--name-only','-z','HEAD^','HEAD','--']).split('\0').filter(Boolean);
   if(committed.length>4096) throw Error('Too many committed changes for bounded routing');
   return {paths:[...new Set(committed)],basis:'latest-commit'};
 }
@@ -162,12 +172,13 @@ export function classifyCompletion(before,after,exitCode,spawnError=false,interr
 }
 function report(operation,data) {return {schema:1,operation,...data};}
 function usage() {
-  return 'Usage: DEV.cmd inspect|catalog|plan [--json] [--paths <source paths>...]\n'+
+  return 'Usage: DEV.cmd inspect|catalog|plan [--json] [--base-sha <ancestor-40-char-SHA>] [--paths <source paths>...]\n'+
+    '       DEV.cmd run auto --expect-sha <40-char Local SHA> [--base-sha <ancestor-40-char-SHA>] [--json]\n'+
     '       DEV.cmd run <task-id> --expect-sha <40-char Local SHA> [--approve <task-id>] [--json]\n'+
     '       DEV.cmd bootstrap (existing reviewed opt-in setup)';
 }
 export function parseFlags(tokens,operation) {
-  const result={json:false,paths:[],taskId:null,expectSha:null,approval:null};
+  const result={json:false,paths:[],taskId:null,expectSha:null,approval:null,baseSha:null};
   const rest=[...tokens];
   if(operation==='run') {
     result.taskId=rest.shift();
@@ -177,9 +188,14 @@ export function parseFlags(tokens,operation) {
   for(let i=0;i<rest.length;i++) {
     const token=rest[i];
     if(token==='--json' && !seen.has(token)){result.json=true;seen.add(token);continue;}
+    if((operation==='plan'||operation==='run') && token==='--base-sha' && !seen.has(token)) {
+      const base=rest[++i];
+      if(!SHA.test(base??'')) throw Error('--base-sha requires one exact 40-character commit SHA');
+      result.baseSha=base;seen.add(token);continue;
+    }
     if(operation==='plan' && token==='--paths' && !seen.has(token)) {
       result.paths=rest.slice(i+1);
-      if(!result.paths.length) throw Error('--paths requires source paths');
+      if(!result.paths.length || result.paths.some(path=>path.startsWith('--'))) throw Error('--paths requires source paths only');
       break;
     }
     if(operation==='run' && token==='--expect-sha' && !seen.has(token)) {
@@ -189,6 +205,10 @@ export function parseFlags(tokens,operation) {
       result.approval=rest[++i];seen.add(token);continue;
     }
     throw Error('Unexpected or repeated developer controller argument');
+  }
+  if(result.baseSha!==null && result.paths.length) throw Error('--base-sha cannot be combined with --paths');
+  if(result.baseSha!==null && operation==='run' && result.taskId!=='auto') {
+    throw Error('--base-sha is only supported by run auto');
   }
   return result;
 }
@@ -279,7 +299,7 @@ export async function withBuildLock(taskId,callback,lockFile=LOCK_FILE) {
     unlinkSync(lockFile);
   }
 }
-async function runTask(task,parsed,source) {
+async function runTask(task,parsed,source,selection=null) {
   if(source.branch!=='Local') return blocked('run','Task execution requires branch Local',parsed.json);
   if(!parsed.expectSha || !SHA.test(parsed.expectSha) || source.sha!==parsed.expectSha) {
     return blocked('run','Exact current Local SHA is required; re-inspect the checkout',parsed.json);
@@ -305,7 +325,9 @@ async function runTask(task,parsed,source) {
     const status=classifyCompletion(source,after,child.code,Boolean(child.error),child.interrupted);
     return {status,taskId:task.id,sourceSha:source.sha,exitCode:child.code??null,
       proof:status==='COMMAND_SUCCEEDED'?'COMMAND_EXIT_AND_HEAD_ONLY':'NOT_VERIFIED',
-      note:'Only the committed HEAD was rechecked. Uncommitted source and Windows/game acceptance are not certified.'};
+      note:'Only the committed HEAD was rechecked. Uncommitted source and Windows/game acceptance are not certified.',
+      ...(selection ? {selectionBasis:selection.basis,selectedChangeCount:selection.paths.length,
+        ...(selection.baseSha ? {baseSha:selection.baseSha} : {})} : {})};
   };
   let outcome;
   try {outcome=await (task.risk==='read'?invoke():withBuildLock(task.id,invoke));}
@@ -349,19 +371,22 @@ export async function main(argv=process.argv.slice(2)) {
     if(source.branch!=='Local') return blocked(operation,'Planning requires branch Local',parsed.json);
     let selection;
     try {selection=parsed.paths.length
-      ?{paths:parsed.paths,basis:'declared-paths'}:automaticChangeSet();}
+      ?{paths:parsed.paths,basis:'declared-paths'}:automaticChangeSet(parsed.baseSha);}
     catch(error){return blocked(operation,error.message,parsed.json);}
     const planned=planForPaths(selection.paths,source.sha);
     emit(report(operation,{...planned,basis:selection.basis,
+      ...(selection.baseSha ? {baseSha:selection.baseSha} : {}),
       sourceBranch:source.branch,proof:'STATIC_RECOMMENDATION_ONLY'}),parsed.json);
     return source.branch==='Local'&&planned.status!=='BLOCKED'?0:3;
   }
   let requested=parsed.taskId;
+  let autoSelection=null;
   if(requested==='auto') {
     if(source.branch!=='Local')return blocked(operation,'Automatic validation requires Local',parsed.json);
     let selection;
-    try {selection=automaticChangeSet();}
+    try {selection=automaticChangeSet(parsed.baseSha);}
     catch(error){return blocked(operation,error.message,parsed.json);}
+    autoSelection=selection;
     const recommendation=planForPaths(selection.paths,source.sha);
     if(recommendation.status!=='READY') return blocked(operation,
       'Automatic validation blocked by protected or untrusted paths',parsed.json);
@@ -370,6 +395,7 @@ export async function main(argv=process.argv.slice(2)) {
     }
     if(recommendation.taskIds.length===0) {
       emit(report(operation,{status:'SKIPPED_NO_CHANGES',sourceSha:source.sha,
+        selectionBasis:selection.basis,...(selection.baseSha ? {baseSha:selection.baseSha} : {}),
         proof:'STATIC_RECOMMENDATION_ONLY',reason:'No changed source; no build required.'}),parsed.json);
       return 0;
     }
@@ -379,7 +405,7 @@ export async function main(argv=process.argv.slice(2)) {
   const task=tasks.find(t=>t.id===requested);
   if(!task) return blocked(operation,'Unknown task id; use catalog for available capabilities',parsed.json);
   if(parsed.taskId==='auto' && task.requiresApproval)return blocked(operation,'Automatic mode cannot run consent-gated tasks',parsed.json);
-  return await runTask(task,parsed,source);
+  return await runTask(task,parsed,source,autoSelection);
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
   try {process.exitCode=await main();}

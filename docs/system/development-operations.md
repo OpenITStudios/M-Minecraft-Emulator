@@ -35,8 +35,10 @@ supports a **single AI-facing contract**:
 DEV.cmd inspect --json
 DEV.cmd catalog --json
 DEV.cmd plan --json
+DEV.cmd plan --base-sha <exact-ancestor-SHA> --json
 DEV.cmd run frontend.validate --expect-sha <exact-Local-HEAD> --json
 DEV.cmd run auto --expect-sha <exact-Local-HEAD> --json
+DEV.cmd run auto --expect-sha <exact-Local-HEAD> --base-sha <exact-ancestor-SHA> --json
 ```
 
 The registry and bounded Node controller live at
@@ -45,6 +47,13 @@ The default planning action reads changed tracked/untracked *source path
 metadata*, or the latest committed delta on a clean checkout, and proposes
 one documentation, frontend, Rust, or full-source check. `run auto` executes
 that **single** safe validation; `plan` itself never starts a task.
+For a batch spanning several commits, use an explicitly supplied ancestor
+`--base-sha` to include all changed committed paths since that baseline and
+any pending working-tree paths. The current exact `Local` HEAD remains required
+for execution. This uses the same controller, task registry and source checks,
+with no stored last-success marker. An affected-path run is not full candidate
+verification; complete the existing full-source, Windows and game acceptance
+at the final validation boundary.
 Documentation accompanying only frontend or Rust code does not unnecessarily
 escalate it to the full suite. Cargo manifests, lockfiles, build scripts,
 mixed/native and unknown changes take the full-source route; native DLL
