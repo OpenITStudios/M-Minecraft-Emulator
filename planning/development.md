@@ -196,25 +196,26 @@ Windows MCP execution and parallel input are NOT_EXECUTED.
 **Proof ceiling:** REMOTE_GITHUB exact-source review, no execution at this
 revision.
 
-## Focus-free in-game MakeCode File Relay experiment — source only
+## Rejected: MakeCode/file relay as gameplay controller (30 October 2026)
 
-- Research identified an official Windows/macOS MakeCode File Read & Write
-  extension and client-side MakeCode loops/player.teleport. Added an **isolated,
-  non-registered source candidate** under
-  `Development/tooling/agent/experimental/makecode-file-relay/`.
-- Four AI clients can conceptually read separate operator-created plain-text
-  mailboxes and write per-slot acknowledgements without global Windows input.
-  Hybrid mode rejects MC01. Only PING and bounded one-block **teleport**
-  actions are modeled; this does NOT simulate native WASD/attack/mouse/PvP.
-- Project template, path validation, sequence/ACK safeguards, documentation and
-  deferred source tests are authored. No input tool, native controller,
-  general command executor, game process, background daemon or UI is added.
-- **No tests, builds, local machine operations or game execution performed.**
-  MakeCode File extension reliability, four-client background execution, and
-  gameplay attribution remain UNKNOWN pending separate operator approval.
+The operator rejected MakeCode for AI player control because teleport and
+scripted world actions cannot reproduce responsive, independently controlled
+player movement, camera, PvP, or context-sensitive game interaction. The
+experimental file relay and its deferred tests were removed from the active
+`Local` tree; the historical commit remains in Git only as provenance.
+Do not reintroduce MakeCode/file relay, teleport-as-WASD, or scripted
+substitutes as AI player controllers.
 
-**Proof ceiling:** REMOTE_GITHUB source review and official documentation
-only. Not Minecraft input/gameplay acceptance.
+The required outcome remains five **real** Minecraft Education Windows
+clients sharing one normal peer-to-peer hosted world: MC01 human + four AI
+or all five AI. Agent actions must target independently controlled game clients
+without taking the human's keyboard/mouse focus. Codex/Claude should use
+actual gameplay observations for decisions and testing. Independent background
+input remains UNIMPLEMENTED/UNVERIFIED; do not imply `PostMessageW` has
+passed Minecraft gameplay acceptance.
+
+**Proof:** REMOTE_GITHUB cleanup only; no tests/build/Minecraft execution
+authorized.
 
 ## Unverified / deferred
 

@@ -132,15 +132,6 @@ MC01's original game window. It reports only
 evidence. If Minecraft ignores the messages, mark this transport BLOCKED; do
 not silently fall back to global input or claim parallel AI play.
 
-## Experimental MakeCode file relay (source only, no gameplay input)
-
-See [MakeCode File Relay](./experimental/makecode-file-relay/README.md).
-This optional source candidate avoids taking Windows keyboard focus by
-sending *bounded world-side file actions* to a client MakeCode project.
-Not registered as an MCP tool, not run, and not equivalent to a player's
-WASD/mouse actions. Official File Read & Write extension and background
-project behavior must be confirmed in Minecraft Education Windows later.
-
 ## Source tests and acceptance boundary
 
 ```powershell
