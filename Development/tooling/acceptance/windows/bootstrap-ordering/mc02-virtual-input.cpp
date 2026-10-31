@@ -542,6 +542,11 @@ UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
         SetLastError(previous);
         return originalRawBuffer(data,size,headerBytes);
     }
+    // Explicit native ReleaseAll zeroes the active packet and human
+    // focus hint, but retains the last pinned MC02 HWND. This allows
+    // the same MC02 game thread to consume pending synthetic KEY_BREAK
+    // and mouse-button UP events after a cancellation. No nonzero
+    // packet => observedForeground/Active/Focus cannot spoof focus.
     const HWND window=ownedGameWindow();
     // A buffered raw read consumes the calling thread's queue, not all
     // windows' queues. Only the verified MC02 OGLES window thread can

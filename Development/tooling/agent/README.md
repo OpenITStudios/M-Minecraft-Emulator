@@ -133,9 +133,14 @@ make them executable.
   controller. Native cleanup requires MC02's pinned original PID/birth/
   session and an opted-in channel, **not MC01 foreground**, because loss
   of human focus must not prevent release. The underlying shared state is
-  cleared (packet, cursor backlog, press counts and focus hints) under
-  the existing ABI-v4 revision. This is a transport state acknowledgement,
-  never proof that Minecraft consumed a key-up. Native TTL remains a
+  cleared (active packet, cursor backlog, press counts and human-focus hint)
+  under the existing ABI-v4 revision. The last pinned MC02 HWND is retained
+  inside its private channel until process close, so an existing
+  `GetRawInputBuffer` game-thread consumer can still receive pending
+  KEY_BREAK and mouse-button UP records after explicit cancellation.
+  An inactive packet cannot spoof the game focus or authorize movement.
+  This is a transport state acknowledgement, never proof that Minecraft
+  consumed a key-up. Native TTL remains a
   fail-safe if the release cannot be delivered. The normal single-pulse
   tool and unrelated normal tools remain unchanged.
 

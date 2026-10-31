@@ -1013,6 +1013,22 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October MC02 buffered release completion correction:**
+The exact-owner `Channel::release_all` previously zeroed both the
+active packet and `ai_window`. In buffered Raw Input mode that erased
+the verified thread selector before the opt-in MC02 consumer could
+emit pending key-up and mouse-button-up records. The native release
+now clears packet, human focus, cursor backlog and edge counters,
+while retaining the MC02-owned HWND *only* to identify the same
+process-local game thread for passive releases. The existing C++
+`ownedGameWindow` validation still checks PID, OGLES class, root,
+visibility and thread; no fresh packet means no focus spoof or
+active AI movement. No new hook/driver/provider, ABI change,
+feature enablement or input permission for MC03–MC05.
+Proof: REMOTE_GITHUB cross-language source/consumer inspection only.
+MSVC/Rust/Node builds and live Minecraft acceptance NOT_EXECUTED;
+game-level key-up delivery is still unverified.
+
 **31 October source-first native per-slot input admission:** The
 existing `native_clients_session.rs` now owns a single feature-gated
 `admit_native_input_frame` contract for MC02 virtual input, used by

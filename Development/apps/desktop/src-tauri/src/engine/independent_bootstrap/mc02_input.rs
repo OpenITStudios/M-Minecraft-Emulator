@@ -120,7 +120,15 @@ impl Channel {
         // a new cursor epoch prevents old look and rising-edge replay.
         input.cursor_revision.fetch_add(1,Ordering::SeqCst);
         input.human_window.store(0,Ordering::SeqCst);
-        input.ai_window.store(0,Ordering::SeqCst);
+        // IMPORTANT: Keep the original pinned MC02 root HWND until this
+        // process/channel exits. The opt-in buffered Raw Input consumer
+        // needs this window to identify its thread after packet=0 and
+        // emit the outstanding key-up/mouse-up records. Erasing ai_window
+        // here made explicit ReleaseAll suppress those release records.
+        // It cannot authorize new input: packet=0, human_window=0, and
+        // ownedGameWindow is never offered as spoofed focus without a
+        // fresh authenticated packet. The HWND is still validated
+        // process-locally by the existing C++ reader on every poll.
         input.cursor_epoch.fetch_add(1,Ordering::SeqCst);
         input.cursor_x.store(0,Ordering::SeqCst);
         input.cursor_y.store(0,Ordering::SeqCst);
