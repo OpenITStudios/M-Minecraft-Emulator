@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,symlink,rm,open,rename,appendFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,validateNativeReport,validateNativeWindowTarget} from './mcp.mjs';
+import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,validateNativeReport,validateNativeWindowTarget,boundedMcpText} from './mcp.mjs';
 
 const snapshot=(operation)=>({schema:1,ok:true,operation,profiles:Array.from({length:5},(_,i)=>({slot:i+1,state:i===0?'RUNNING':'STOPPED',responding:i===0,hasWindow:i===0,needsAttention:false}))});
 const config=(mode='human-plus-four-ai')=>({mode,executable:'C:\\App\\lazy-tester.exe',evidenceDirectory:''});
@@ -568,13 +568,18 @@ test('MCP does not forward untrusted native or file errors to Codex',async()=>{
 test('MCP bounds serialized text and image output before responding',async()=>{
   const privateValue='PRIVATE_NATIVE_PAYLOAD';
   const huge=privateValue.repeat(10_000);
+  // Core text serialization still rejects an oversized object, while
+  // native profiles are now projected to a small fixed allowlist before
+  // reaching that boundary.
+  assert.throws(()=>boundedMcpText({extra:huge}),
+    /MCP_TEXT_RESPONSE_TOO_LARGE/);
   const inspect=createHandler(config(),{
     native:async()=>({...snapshot('inspect'),extra:huge}),
   });
   const result=await inspect.handle({jsonrpc:'2.0',id:1,
     method:'tools/call',params:{name:'inspect_profiles',arguments:{}}});
-  assert.equal(result.result.isError,true);
-  assert.equal(result.result.content[0].text,'MCP_TEXT_RESPONSE_TOO_LARGE');
+  assert.equal(result.result.isError,false);
+  assert.equal(JSON.parse(result.result.content[0].text).profiles.length,5);
   assert.equal(JSON.stringify(result).includes(privateValue),false);
 
   const target=slot=>({schema:1,ok:true,operation:'target',
@@ -595,4 +600,65 @@ test('MCP bounds serialized text and image output before responding',async()=>{
   assert.equal(image.result.isError,true);
   assert.equal(image.result.content[0].text,'MCP_IMAGE_RESPONSE_TOO_LARGE');
   assert.equal(image.result.content.some(item=>item.type==='image'),false);
+});
+
+test('MCP native profile reports expose only the five allowlisted status fields',async()=>{
+  const secret='C:\\Users\\Sensitive\\Education\\worlds\\secret-token';
+  const unsafe=operation=>({
+    ...snapshot(operation),
+    evidence:secret,
+    dataStoragePath:secret,
+    accountAccessToken:secret,
+    profiles:snapshot(operation).profiles.map(p=>({
+      ...p,issue:secret,profilePath:secret,
+      process:{pid:9042,commandLine:secret},
+      microsoftAccount:{identifier:secret},
+    })),
+  });
+  const native=async(_exe,operation)=>unsafe(operation);
+  const h=createHandler(config(),{native});
+  for(const [name,args,operation] of [
+    ['inspect_profiles',{},'inspect'],
+    ['launch_profile',{slot:2},'launch'],
+  ]) {
+    const direct=await h.callTool(name,args);
+    assert.equal(direct.operation,operation);
+    assert.equal(direct.evidence,
+      'NATIVE_SESSION_ONLY_NOT_GAMEPLAY_OR_ACCOUNT_SIGNIN');
+    assert.deepEqual(Object.keys(direct.profiles[0]),
+      ['slot','state','hasWindow','responding','needsAttention']);
+    assert.equal(JSON.stringify(direct).includes(secret),false);
+    const wire=await h.handle({jsonrpc:'2.0',id:name,
+      method:'tools/call',params:{name,arguments:args}});
+    assert.equal(wire.result.isError,false);
+    assert.equal(JSON.stringify(wire).includes(secret),false);
+  }
+  const context=await h.handle({jsonrpc:'2.0',id:3,
+    method:'tools/call',params:{name:'get_test_context',
+      arguments:{slots:[2]}}});
+  assert.equal(context.result.isError,false);
+  const parsed=JSON.parse(context.result.content[0].text);
+  assert.deepEqual(Object.keys(parsed.nativeProfiles[1]),
+    ['slot','state','hasWindow','responding','needsAttention']);
+  assert.equal(parsed.peerPlan.hostWorld,'NOT_OBSERVED');
+  assert.equal(JSON.stringify(context).includes(secret),false);
+});
+
+test('native reports fail closed on malformed required fields after sanitization',async()=>{
+  const unsafe={...snapshot('inspect'),profiles:[
+    ...snapshot('inspect').profiles.slice(0,4),
+    {...snapshot('inspect').profiles[4],
+      responding:'yes',privateWorld:'C:\\private-world'},
+  ]};
+  assert.throws(()=>validateNativeReport(unsafe,'inspect'),
+    /Invalid profile state/);
+  assert.throws(()=>validateNativeReport(unsafe,'launch'),
+    /Native result unavailable/);
+  const h=createHandler(config(),{native:async()=>unsafe});
+  const wire=await h.handle({jsonrpc:'2.0',id:4,
+    method:'tools/call',params:{name:'inspect_profiles',arguments:{}}});
+  assert.equal(wire.result.isError,true);
+  assert.equal(wire.result.content[0].text,
+    'Tool unavailable; details withheld');
+  assert.equal(JSON.stringify(wire).includes('private-world'),false);
 });

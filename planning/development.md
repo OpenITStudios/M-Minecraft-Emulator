@@ -682,6 +682,31 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
   producer/player/world identity remains UNVERIFIED, independent AI
   gameplay input remains BLOCKED.
 
+## Phase 19: five-profile native status projection and MCP privacy (31 October 2026)
+
+- Read canonical `engine/agent_cli.rs`: current Rust inspect/launch
+  output already exposes only `slot/state/hasWindow/responding/
+  needsAttention` per profile, plus fixed schema/operation/evidence.
+  No actual Rust response path or account/world leak was observed.
+- Found a Node boundary weakness: `validateNativeReport` checked the
+  five required fields but returned the entire original object, and
+  the direct MCP `inspect_profiles` and `launch_profile` handlers
+  did not invoke it for injected/future providers.
+- `validateNativeReport` now projects an exact five-profile status
+  allowlist and fixes the non-gameplay evidence marker. Inspect and
+  launch handlers use it; existing `get_test_context` and
+  `plan_peer_session` calls inherit the same narrowed output.
+  Malformed native required fields continue to fail closed.
+- Retained Phase 18's 128 KiB JSON text-response ceiling; its prior
+  injected oversize native-object test was corrected to expect
+  sanitized output and instead checks the serializer ceiling directly.
+  Added targeted tests for private native fields and invalid status
+  in the existing test file, AUTHORED_NOT_EXECUTED.
+- **Proof:** REMOTE_GITHUB static source and consumer review only.
+  Node/Rust test suites, real Windows controller, Minecraft account
+  binding/gameplay and five-client acceptance NOT_EXECUTED. AI input
+  remains BLOCKED and MC01 protection unchanged.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,
@@ -700,11 +725,11 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
 The Windows Agent Workspace feasibility question is resolved for the
 currently documented APIs: it is NOT an admitted input implementation.
 Retain the independent-input BLOCKED gate until a concrete, supported
-per-client game-input API becomes available. Next source-only action: audit any remaining direct native-controller
-response that could expose unneeded account/profile paths to Codex,
-then make a bounded allowlist correction only if source proves a leak.
-Keep the current game/session owner, visual capture, and independent AI
-input BLOCKED gate unchanged.
+per-client game-input API becomes available. Next source-only action: audit the remaining native target/Codex
+observation response fields for any proven oversharing or stale-identity
+path before making further changes. Preserve current five-profile
+runtime authority and MC01 protection; do not add unverified gameplay
+input or source tests beyond a concrete regression need.
 **Do not execute local tests, toolchain builds, package staging, native input
 probes or gameplay until explicit operator approval.** When approval arrives,
 the first separate acceptance boundary is the pinned Windows agent CLI,

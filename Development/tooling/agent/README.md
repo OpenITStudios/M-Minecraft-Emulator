@@ -112,6 +112,44 @@ Only code is committed; no user screenshots are collected now.
 
 Cua CLI reference: https://cua.ai/docs/cua-driver/reference/cli/serve-and-configure
 
+## Phase 19: native five-profile status projection at the MCP boundary
+
+The canonical Rust `engine/agent_cli.rs` already constructs a
+minimal inspect/launch payload with only `slot`, `state`,
+`hasWindow`, `responding` and `needsAttention` per profile.
+No process path, account, world folder or private issue text is
+included in the actual Rust CLI output. **This is defense in depth,
+not a demonstrated leak from the current Rust product.**
+
+The existing Node `validateNativeReport` previously checked those
+five fields but returned the **original native JSON**. The direct
+`inspect_profiles` and `launch_profile` MCP actions bypassed
+that validation altogether when the native implementation returned
+a report. That would expose unneeded additional fields if a future
+native response or injected provider included them.
+
+The Node validator now reconstructs one exact five-profile view and
+forces the truthful `NATIVE_SESSION_ONLY_NOT_GAMEPLAY_OR_ACCOUNT_SIGNIN`
+evidence marker. The inspect and launch tool handlers reuse the same
+validator; `get_test_context` and `plan_peer_session` were already
+routed through it, so their profiles are now projected as well.
+Malformed core state/slot/operation still fails closed. Explicit
+profile launch is still an existing, permission-gated native action,
+not an implicit game launch.
+
+Phase 18's text-size guard remains present. Its existing oversized
+native-stub fixture was adjusted to expect a small sanitized report,
+and a direct pure serialization check retains coverage of the 128
+KiB limit. New cases in the same test file cover private native
+fields in both direct/MCP inspect/launch, context output, and invalid
+core profile state. These tests are AUTHORED_NOT_EXECUTED.
+
+No Rust controller, profile/world storage, account sign-in, native
+window presentation, network protocol, additional MCP tool, Windows
+installer, input backend or CI definition was modified. Real
+Windows/Minecraft acceptance remains NOT_EXECUTED and AI gameplay
+input remains BLOCKED.
+
 ## Phase 18: bounded MCP responses and private evidence error handling
 
 The existing `read_game_evidence` MCP tool previously returned the

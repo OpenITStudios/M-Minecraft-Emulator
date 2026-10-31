@@ -50,7 +50,7 @@ function publicToolError(error) {
     /^Native request refused: [A-Z_]{1,40}$/.test(message) ?
     message : 'Tool unavailable; details withheld';
 }
-function boundedMcpText(value) {
+export function boundedMcpText(value) {
   const encoded=JSON.stringify(value);
   if(typeof encoded!=='string' ||
      Buffer.byteLength(encoded,'utf8')>MAX_MCP_TEXT_BYTES) {
@@ -135,13 +135,28 @@ function computerUseTarget(value,slot,mode) {
 
 export function validateNativeReport(value, operation) {
   if (!value || value.schema!==1 || value.ok!==true || value.operation!==operation ||
-      !Array.isArray(value.profiles) || value.profiles.length!==5) throw new Error('Native result unavailable or inconsistent');
-  for (const [i,p] of value.profiles.entries()) {
+      !Array.isArray(value.profiles) || value.profiles.length!==5) {
+    throw new Error('Native result unavailable or inconsistent');
+  }
+  // The Rust agent_cli already emits a minimal five-profile view. Rebuild
+  // that exact view here, instead of returning its original JSON object:
+  // future native fields (paths, account info or issue text) must not become
+  // publicly visible just because the five mandatory fields were valid.
+  const profiles=value.profiles.map((p,i)=>{
     if (!p || p.slot!==i+1 || !VALID_STATES.has(p.state) ||
         typeof p.responding!=='boolean' || typeof p.hasWindow!=='boolean' ||
-        typeof p.needsAttention!=='boolean') throw new Error('Invalid profile state from native controller');
-  }
-  return value;
+        typeof p.needsAttention!=='boolean') {
+      throw new Error('Invalid profile state from native controller');
+    }
+    return {
+      slot:p.slot,state:p.state,hasWindow:p.hasWindow,
+      responding:p.responding,needsAttention:p.needsAttention,
+    };
+  });
+  return {
+    schema:1,ok:true,operation,profiles,
+    evidence:'NATIVE_SESSION_ONLY_NOT_GAMEPLAY_OR_ACCOUNT_SIGNIN',
+  };
 }
 export async function runNative(executable, operation, slot) {
   if (!executable) throw new Error('Native integration is not configured; set --exe');
@@ -605,16 +620,20 @@ export function createHandler(config,{
       keysExactly(args,[]);
       if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
-      try {return await native(config.executable,'inspect');}
-      finally {inFlight=false;}
+      try {
+        return validateNativeReport(
+          await native(config.executable,'inspect'),'inspect');
+      } finally {inFlight=false;}
     }
     if (name==='launch_profile') {
       keysExactly(args,['slot']);const slot=slotOf(args.slot);
       if (config.mode==='human-plus-four-ai' && slot===1) throw new Error('MC01 is reserved for the human host in hybrid mode');
       if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
-      try {return await native(config.executable,'launch',slot);}
-      finally {inFlight=false;}
+      try {
+        return validateNativeReport(
+          await native(config.executable,'launch',slot),'launch');
+      } finally {inFlight=false;}
     }
     throw new Error('Unknown tool');
   }
