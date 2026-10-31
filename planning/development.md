@@ -1013,6 +1013,22 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October MC02 cross-control release priority (source only):**
+The compile-OFF buffered Raw Input planner previously iterated W/S/A/D,
+jump, sneak and mouse buttons, emitting each control's new press while
+another control's previous release could still be pending. When a
+Minecraft caller accepts only one `RAWINPUT` record, a fresh movement
+key-down could precede an attack/use mouse-up. The same existing
+planner now emits all pending keyboard/mouse release transitions in
+phase 1, then fresh presses (including bounded quick click down/up)
+in phase 2, and relative-camera movement last. The existing
+`rawHeldMask`, ABI-v4 per-key press counts and delivered-prefix cursor
+reconstruct partial batch suffixes without replaying completed edges.
+No new provider, hook, driver, ABI, game input permission or release
+policy. Verified only by REMOTE_GITHUB source review; no Windows
+MSVC/Rust/Node tests/builds or Minecraft execution. A real MC02
+buffer consumer and gameplay effects remain NOT_EXECUTED.
+
 **31 October MC02 hidden/minimized release-thread correction:**
 The retained controller intentionally admits an exact-owner native
 `ReleaseAll` without requiring MC01 foreground or a visible MC02 HWND,

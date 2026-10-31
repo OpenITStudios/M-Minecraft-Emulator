@@ -147,12 +147,15 @@ make them executable.
   copying any synthetic release or input records. Rejected or partial
   reads do not advance the held-key/mouse state or cursor counters, so
   subsequent eligible polls can retry the remaining release records.
-  The buffered candidate now emits keyboard and attack/use button
-  transitions before the one-shot relative-camera record. This prevents
-  repeated new camera deltas from taking the first/only available record
-  on every small-buffer read and starving pending button releases.
-  Each button's release/press sequence remains ordered; cursor state
-  advances only when its own final movement record is actually copied.
+  The buffered candidate now uses a two-phase shared button
+  planner: **release all previously held keyboard/mouse controls
+  first**, then deliver fresh press transitions and finally the
+  one-shot relative-camera record. With small buffers, a new WASD
+  press cannot precede an already pending attack/use release.
+  Existing press counters reconstruct any undelivered suffix; each
+  button's release-before-press and short click down/up semantics
+  remain intact, and the cursor advances only if its movement record
+  was actually copied.
   The opt-in Raw Input reader may also identify a hidden/minimized
   MC02-owned OGLES window for pending key-up/mouse-up records after
   packet expiry, focus loss or explicit ReleaseAll, matching the

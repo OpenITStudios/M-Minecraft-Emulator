@@ -442,47 +442,53 @@ RawPlan nextRawPlan(std::uint64_t word) {
         pendingLookX=static_cast<LONG>(moveX);
         pendingLookY=static_cast<LONG>(moveY);
     }
-    // Six keyboard actions and two mouse buttons. A full press/release
-    // cycle between game polls is preserved via ABI-v4 rise counters.
-    // Multiple full cycles of one button between polls coalesce to one
-    // pulse: no false multi-click claims.
-    struct Key {unsigned bit;USHORT vk,scan;};
-    constexpr Key keys[]={
-        {1,'W',0x11},{2,'S',0x1f},{4,'A',0x1e},
-        {8,'D',0x20},{16,VK_SPACE,0x39},{32,VK_SHIFT,0x2a},
+    // All eight virtual buttons share ONE ordering rule. First release
+    // every previously held key/button that is now up or must be
+    // re-triggered, then synthesize new press edges. This matters when
+    // GetRawInputBuffer can return only one record: a new W key-down
+    // must not keep an older attack mouse-up pending in MC02.
+    // A full short press/release between game polls still emits a
+    // down/up pair; multiple cycles coalesce to one (never fabricated).
+    struct Button {
+        unsigned bit,index;
+        USHORT vk,scan,mouseDown,mouseUp;
+    };
+    constexpr Button buttons[]={
+        {1u,0u,'W',0x11,0,0},{2u,1u,'S',0x1f,0,0},
+        {4u,2u,'A',0x1e,0,0},{8u,3u,'D',0x20,0,0},
+        {16u,4u,VK_SPACE,0x39,0,0},{32u,5u,VK_SHIFT,0x2a,0,0},
+        {64u,6u,0,0,RI_MOUSE_LEFT_BUTTON_DOWN,RI_MOUSE_LEFT_BUTTON_UP},
+        {128u,7u,0,0,RI_MOUSE_RIGHT_BUTTON_DOWN,RI_MOUSE_RIGHT_BUTTON_UP},
     };
     const auto oldCounts=plan.epoch==rawSeenEpoch?rawSeenCounts:0;
-    for (const auto& key:keys) {
-        unsigned index=0;
-        for (unsigned bits=key.bit;bits>1;bits>>=1) ++index;
-        const bool prior=(rawHeldMask&key.bit)!=0;
-        const bool now=(plan.held&key.bit)!=0;
-        const auto delta=static_cast<std::uint8_t>(
-            (plan.counts>>(index*8))-(oldCounts>>(index*8)));
-        if (delta) {
-            if (prior) rawKey(plan.events,plan.count,key.vk,key.scan,false);
-            rawKey(plan.events,plan.count,key.vk,key.scan,true);
-            if (!now) rawKey(plan.events,plan.count,key.vk,key.scan,false);
-        } else if (prior!=now) {
-            rawKey(plan.events,plan.count,key.vk,key.scan,now);
-        }
+    const auto freshlyPressed=[&](const Button& button) {
+        const auto shift=button.index*8u;
+        return static_cast<std::uint8_t>(plan.counts>>shift)!=
+            static_cast<std::uint8_t>(oldCounts>>shift);
+    };
+    const auto emit=[&](const Button& button,bool down) {
+        if (button.bit&0xc0u)
+            rawMouse(plan.events,plan.count,
+                down?button.mouseDown:button.mouseUp);
+        else rawKey(plan.events,plan.count,button.vk,button.scan,down);
+    };
+    // Phase 1: drain ALL outstanding releases (key-up / mouse-up)
+    // before any new press, independent of button index.
+    for (const auto& button:buttons) {
+        const bool prior=(rawHeldMask&button.bit)!=0;
+        const bool now=(plan.held&button.bit)!=0;
+        if (prior && (freshlyPressed(button) || !now))
+            emit(button,false);
     }
-    for (unsigned index=6;index<=7;++index) {
-        const unsigned bit=1u<<index;
-        const bool prior=(rawHeldMask&bit)!=0;
-        const bool now=(plan.held&bit)!=0;
-        const USHORT down=static_cast<USHORT>(
-            index==6?RI_MOUSE_LEFT_BUTTON_DOWN:RI_MOUSE_RIGHT_BUTTON_DOWN);
-        const USHORT up=static_cast<USHORT>(
-            index==6?RI_MOUSE_LEFT_BUTTON_UP:RI_MOUSE_RIGHT_BUTTON_UP);
-        const auto old=static_cast<std::uint8_t>(oldCounts>>(index*8));
-        const auto fresh=static_cast<std::uint8_t>(plan.counts>>(index*8));
-        if (fresh!=old) {
-            if (prior) rawMouse(plan.events,plan.count,up);
-            rawMouse(plan.events,plan.count,down);
-            if (!now) rawMouse(plan.events,plan.count,up);
-        } else if (prior!=now) {
-            rawMouse(plan.events,plan.count,now?down:up);
+    // Phase 2: new down transitions. A short, already released click
+    // produces down/up in this phase. If only a prefix fits, the
+    // reader's rawHeldMask + press-count cursor reconstructs its suffix.
+    for (const auto& button:buttons) {
+        const bool prior=(rawHeldMask&button.bit)!=0;
+        const bool now=(plan.held&button.bit)!=0;
+        if (freshlyPressed(button) || (!prior && now)) {
+            emit(button,true);
+            if (!now) emit(button,false);
         }
     }
     // A caller can provide space for only ONE RAWINPUT record. When
