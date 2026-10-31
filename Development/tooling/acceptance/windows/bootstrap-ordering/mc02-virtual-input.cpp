@@ -33,6 +33,22 @@ const SharedInput* view=nullptr;
 std::atomic<bool> isolated{false}; // latched after first valid AI command
 std::atomic<bool> cursorInitialized{false};
 std::atomic<LONG> virtualX{0},virtualY{0};
+// Strictly one-shot hook-return evidence. A positive virtual return means
+// only that THIS game process polled an opted-in API: it does not prove
+// Minecraft applied the input to movement, camera or attack.
+std::atomic<bool> sawVirtualKeyboard{false},sawVirtualButtons{false},
+    sawVirtualLook{false};
+void noteVirtualRead(std::atomic<bool>& seen,const wchar_t* tag) {
+    const DWORD previous=GetLastError();
+    if (!seen.exchange(true,std::memory_order_relaxed)) OutputDebugStringW(tag);
+    SetLastError(previous);
+}
+void noteVirtualKeys(unsigned mask) {
+    if (mask & 0x3fu) noteVirtualRead(sawVirtualKeyboard,
+        L"[LT_MC02_INPUT][VIRTUAL_KEY_RETURNED]\n");
+    if (mask & 0xc0u) noteVirtualRead(sawVirtualButtons,
+        L"[LT_MC02_INPUT][VIRTUAL_BUTTON_RETURNED]\n");
+}
 // Select exactly ONE relative-camera delivery path at compile time:
 // the Win32 cursor polling route OR the explicit buffered Raw Input
 // experiment. Never apply the same look deltas to both.
@@ -244,6 +260,7 @@ SHORT WINAPI observedAsync(int key) {
     const bool newlyPressed=virtualPressEdge(keyMask,word);
     const SHORT result=static_cast<SHORT>(
         (held ? 0x8000u : 0u) | (newlyPressed ? 1u : 0u));
+    if (word && result) noteVirtualKeys(keyMask);
     SetLastError(previous);
     return result;
 }
@@ -254,6 +271,7 @@ SHORT WINAPI observedKey(int key) {
         SetLastError(previous); return originalKey(key);
     }
     const SHORT result=virtualDown(key,word)?static_cast<SHORT>(0x8000):0;
+    if (word && result) noteVirtualKeys(maskFor(key));
     SetLastError(previous);
     return result;
 }
@@ -268,6 +286,7 @@ BOOL WINAPI observedKeyboard(PBYTE state) {
         if (virtualDown(key,word)) state[key]=0x80;
     }
     if (virtualDown(VK_SHIFT,word)) state[VK_LSHIFT]=state[VK_RSHIFT]=0x80;
+    if (word) noteVirtualKeys(static_cast<unsigned>(word)&0xffu);
     SetLastError(previous);
     return TRUE;
 }
@@ -290,6 +309,8 @@ void applyPendingCursor() {
             if (dx>=-32767 && dx<=32767 && dy>=-32767 && dy<=32767) {
                 virtualX.fetch_add(static_cast<LONG>(dx),std::memory_order_acq_rel);
                 virtualY.fetch_add(static_cast<LONG>(dy),std::memory_order_acq_rel);
+                if (dx || dy) noteVirtualRead(sawVirtualLook,
+                    L"[LT_MC02_INPUT][VIRTUAL_LOOK_RETURNED]\n");
             }
             seenEpoch=epoch;seenRevision=before;seenX=x;seenY=y;
         }
@@ -513,6 +534,22 @@ UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
     rawSeenCounts=plan.counts;
     rawSeenX=plan.cursorX;
     rawSeenY=plan.cursorY;
+    // Do not count plans or size queries: only records actually copied
+    // to a genuine GetRawInputBuffer caller are observable hook output.
+    for (UINT i=0;i<plan.count;++i) {
+        const auto& event=plan.events[i];
+        if (event.header.dwType==RIM_TYPEKEYBOARD)
+            noteVirtualRead(sawVirtualKeyboard,
+                L"[LT_MC02_INPUT][VIRTUAL_KEY_RETURNED]\n");
+        else if (event.header.dwType==RIM_TYPEMOUSE) {
+            if (event.data.mouse.usButtonFlags)
+                noteVirtualRead(sawVirtualButtons,
+                    L"[LT_MC02_INPUT][VIRTUAL_BUTTON_RETURNED]\n");
+            if (event.data.mouse.lLastX || event.data.mouse.lLastY)
+                noteVirtualRead(sawVirtualLook,
+                    L"[LT_MC02_INPUT][VIRTUAL_LOOK_RETURNED]\n");
+        }
+    }
     rawBufferBusy.clear(std::memory_order_release);
     SetLastError(previous);
     return plan.count;

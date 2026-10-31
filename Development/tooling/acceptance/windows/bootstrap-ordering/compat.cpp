@@ -81,6 +81,7 @@ AsyncKeyCall originalAsyncKey = nullptr;
 KeyboardStateCall originalKeyboardState = nullptr;
 CursorPositionCall originalCursorPosition = nullptr;
 std::atomic<bool> sawInputData{false}, sawInputBuffer{false},
+    sawInputDataBytes{false}, sawInputBufferRecords{false},
     sawAsyncKey{false}, sawKeyboardState{false}, sawCursorPosition{false};
 std::atomic<bool> sawKeyboardRawRegistration{false}, sawMouseRawRegistration{false},
     sawKeyboardRawSink{false}, sawMouseRawSink{false},
@@ -134,11 +135,27 @@ BOOL WINAPI observedRegisterRawDevices(PCRAWINPUTDEVICE devices,
 UINT WINAPI observedInputData(HRAWINPUT input, UINT command, LPVOID output,
                               PUINT outputSize, UINT headerSize) {
     noteInputApi(sawInputData, L"[LT_INPUT_API][MC02][GetRawInputData]\n");
-    return originalInputData(input, command, output, outputSize, headerSize);
+    const UINT bytes=originalInputData(input, command, output, outputSize, headerSize);
+    const DWORD previous=GetLastError();
+    // A mere API call, RID_HEADER request, or size query is NOT evidence
+    // that a real Raw Input record reached the game's calling code.
+    if (command==RID_INPUT && output && bytes!=UINT(-1) && bytes!=0)
+        noteInputApi(sawInputDataBytes,
+            L"[LT_INPUT_API][MC02][RID_INPUT_BYTES_RETURNED]\n");
+    SetLastError(previous);
+    return bytes;
 }
 UINT WINAPI observedInputBuffer(PRAWINPUT input, PUINT outputSize, UINT headerSize) {
     noteInputApi(sawInputBuffer, L"[LT_INPUT_API][MC02][GetRawInputBuffer]\n");
-    return originalInputBuffer(input, outputSize, headerSize);
+    const UINT records=originalInputBuffer(input, outputSize, headerSize);
+    const DWORD previous=GetLastError();
+    // Count only successful, nonempty buffered reads; a null-buffer
+    // size query or failed read does not identify a usable input route.
+    if (input && records!=UINT(-1) && records!=0)
+        noteInputApi(sawInputBufferRecords,
+            L"[LT_INPUT_API][MC02][RAW_BUFFER_RECORDS_RETURNED]\n");
+    SetLastError(previous);
+    return records;
 }
 SHORT WINAPI observedAsyncKey(int key) {
     noteInputApi(sawAsyncKey, L"[LT_INPUT_API][MC02][GetAsyncKeyState]\n");

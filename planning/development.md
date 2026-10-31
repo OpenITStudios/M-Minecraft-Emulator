@@ -1013,6 +1013,17 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October source correction — Codex/MC02 input feasibility:** The
+already opt-in MC02 virtual polling hooks now emit one-shot debugger
+markers for nonzero virtual keyboard, attack/use button and camera
+output actually returned to a game caller (including buffered Raw
+Input). These are **hook-return evidence only**, not proof of in-game
+movement, PvP, world join or unaffected human input. The observer
+separately distinguishes real nonempty Raw Input reads from mere API
+calls. The source correction added no new hooks, input backend, controller,
+agent daemon or production package admission. All execution remains
+NOT_EXECUTED; the actual Minecraft input consumer is unresolved.
+
 **Stop scope drift.** Phases 14–19 hardened secondary observation/evidence
 and MCP response contracts without moving a Minecraft player. They are
 NOT a substitute for gameplay input. Do not continue the implied
@@ -1032,8 +1043,15 @@ has `provider:NONE` / `execution:DISABLED`.
 Microsoft Detours. Before adding any synthetic control hooks, the
 separate test-only CMake build now has an OFF-by-default
 `BOOTSTRAP_MC02_INPUT_API_OBSERVE` option. With an additional explicit
-MC02-only environment opt-in it can forward five existing Win32 input
-APIs unchanged while emitting one debugger marker per API *called*.
+MC02-only environment opt-in it forwards the existing Win32 input APIs
+unchanged and emits one debugger marker per API *called*. The same
+OFF-by-default observer now also emits separate one-shot markers only
+when `GetRawInputData(RID_INPUT)` returns nonempty bytes or
+`GetRawInputBuffer` returns nonempty records. This prevents a size
+query or incidental function entry being treated as a successful read.
+Markers contain no keys, mouse coordinates or account data. A real raw
+record can still originate from MC01's physical input and does not
+establish MC02 gameplay control.
 Ordinary builds contain no added input detours. This gives a narrowly
 scoped means to distinguish API candidates in Minecraft without
 inventing an input-provider contract. API calls alone do NOT prove
