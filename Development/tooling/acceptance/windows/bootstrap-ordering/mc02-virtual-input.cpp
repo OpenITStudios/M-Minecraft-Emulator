@@ -12,7 +12,7 @@
 #include <cwchar>
 
 namespace {
-constexpr std::uint32_t Magic=0x4c544932, Version=3;
+constexpr std::uint32_t Magic=0x4c544932, Version=4;
 struct alignas(8) SharedInput {
     std::uint32_t magic,version,bytes,slot,pid,session;
     std::uint64_t birth;
@@ -21,8 +21,9 @@ struct alignas(8) SharedInput {
     std::atomic<std::int64_t> cursorX,cursorY;
     std::atomic<std::uint64_t> cursorEpoch;
     std::atomic<std::uint64_t> humanWindow,aiWindow;
+    std::atomic<std::uint64_t> pressCounts;
 };
-static_assert(sizeof(SharedInput)==88 && alignof(SharedInput)==8);
+static_assert(sizeof(SharedInput)==96 && alignof(SharedInput)==8);
 static_assert(std::atomic<std::int64_t>::is_always_lock_free);
 static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
 const SharedInput* view=nullptr;
@@ -35,6 +36,11 @@ std::atomic<LONG> virtualX{0},virtualY{0};
 std::atomic_flag cursorReadBusy=ATOMIC_FLAG_INIT;
 std::uint64_t seenRevision=0,seenEpoch=0;
 std::int64_t seenX=0,seenY=0;
+// Per-process read cursor for 8 key/mouse rising-edge counters. Separate
+// nonblocking guard from cursor movement: async key and camera reads may
+// run on different Minecraft threads without sharing a blocking lock.
+std::atomic_flag asyncReadBusy=ATOMIC_FLAG_INIT;
+std::uint64_t seenPressEpoch=0,seenPressCounts=0;
 using KeyCall=SHORT (WINAPI*)(int);
 using KeyboardStateCall=BOOL (WINAPI*)(PBYTE);
 using CursorCall=BOOL (WINAPI*)(LPPOINT);
@@ -181,13 +187,50 @@ unsigned maskFor(int code) {
 bool virtualDown(int key,std::uint64_t word) {
     return (static_cast<unsigned>(word)&maskFor(key))!=0;
 }
+// GetAsyncKeyState returns the high bit for 'currently held' and the
+// low bit for 'pressed since the previous call'. A last-packet key mask
+// alone cannot report a short click followed by a release between polls.
+// The original Win32 low bit is unreliable across callers, but this
+// optional MC02-only read cursor is independent from MC01 hardware.
+// Read under the existing writer's revision and reject torn snapshots.
+bool virtualPressEdge(unsigned keyMask,std::uint64_t word) {
+    if (!view || !word || !keyMask ||
+        asyncReadBusy.test_and_set(std::memory_order_acquire)) return false;
+    bool pressed=false;
+    const auto revision=view->cursorRevision.load(std::memory_order_seq_cst);
+    if (revision!=0 && !(revision&1)) {
+        const auto counts=view->pressCounts.load(std::memory_order_seq_cst);
+        const auto epoch=view->cursorEpoch.load(std::memory_order_seq_cst);
+        const auto packet=view->packet.load(std::memory_order_seq_cst);
+        if (packet==word &&
+            view->cursorRevision.load(std::memory_order_seq_cst)==revision) {
+            if (epoch!=seenPressEpoch) {
+                seenPressEpoch=epoch;
+                seenPressCounts=0; // discard expired previous-epoch clicks
+            }
+            unsigned shift=0;
+            for (unsigned bits=keyMask;bits>1;bits>>=1) shift+=8;
+            const std::uint64_t mask=0xffull<<shift;
+            if ((seenPressCounts&mask)!=(counts&mask)) {
+                seenPressCounts=(seenPressCounts&~mask)|(counts&mask);
+                pressed=true;
+            }
+        }
+    }
+    asyncReadBusy.clear(std::memory_order_release);
+    return pressed;
+}
 SHORT WINAPI observedAsync(int key) {
     const DWORD previous=GetLastError();
     const auto word=currentPacket();
     if (!virtualMode(word)) {
         SetLastError(previous); return originalAsync(key);
     }
-    const SHORT result=virtualDown(key,word)?static_cast<SHORT>(0x8000):0;
+    const unsigned keyMask=maskFor(key);
+    const bool held=virtualDown(key,word);
+    const bool newlyPressed=virtualPressEdge(keyMask,word);
+    const SHORT result=static_cast<SHORT>(
+        (held ? 0x8000u : 0u) | (newlyPressed ? 1u : 0u));
     SetLastError(previous);
     return result;
 }

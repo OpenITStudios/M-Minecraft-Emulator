@@ -9,11 +9,11 @@ use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
 pub(super) const INPUT_ENV: &str = "MIVUBI_EDUCATION_MC02_INPUT_SECTION";
 const MAGIC: u32 = 0x4c544932; // LTI2 (MC02 only)
-const VERSION: u32 = 3;
+const VERSION: u32 = 4;
 const MAX_INPUT_REQUEST_AGE_MS:u64=500; // same-machine monotonic uptime
 
 
-// C++ counterpart: mc02-virtual-input.cpp, private 88-byte ABI v3.
+// C++ counterpart: mc02-virtual-input.cpp, private 96-byte ABI v4.
 // packet: high 32 bits = GetTickCount() expiry; low 8 = active key mask;
 // remaining low bits retain the last command sequence and signed dx/dy.
 // Cursor movement is NOT read from that last-writer-wins packet.
@@ -22,8 +22,12 @@ const MAX_INPUT_REQUEST_AGE_MS:u64=500; // same-machine monotonic uptime
 // cursor_revision is an even/odd transaction sequence for the child
 // reader's consistent lock-free snapshot. No child-writable mapping.
 // Commands and queued pointer movement expire after <=500 ms.
-// The two final window fields are only authoritative HWNDs supplied while
-// the controller pins MC01 and MC02; they cannot alter actual Windows focus.
+// The two window fields are authoritative HWNDs supplied while the
+// controller pins MC01 and MC02; they cannot alter actual Windows focus.
+// The final 64 bits hold 8 per-key rising-edge counters, incremented only
+// for a NEW down transition (including mouse attack/use). This preserves
+// short press/release actions across Win32 polling intervals without
+// keeping a button physically held after its time limit.
 #[repr(C, align(8))]
 struct SharedInput {
     magic:u32, version:u32, bytes:u32, slot:u32, pid:u32, session:u32,
@@ -35,8 +39,9 @@ struct SharedInput {
     cursor_epoch:AtomicU64,
     human_window:AtomicU64,
     ai_window:AtomicU64,
+    press_counts:AtomicU64,
 }
-const _: () = assert!(std::mem::size_of::<SharedInput>() == 88);
+const _: () = assert!(std::mem::size_of::<SharedInput>() == 96);
 const _: () = assert!(std::mem::align_of::<SharedInput>() == 8);
 
 pub(super) struct Channel {
@@ -80,6 +85,7 @@ impl Channel {
                 cursor_epoch:AtomicU64::new(0),
                 human_window:AtomicU64::new(0),
                 ai_window:AtomicU64::new(0),
+                press_counts:AtomicU64::new(0),
             });
         }
         if unsafe{UnmapViewOfFile(view)}==0 {return Err(io::Error::last_os_error());}
@@ -132,6 +138,24 @@ impl Channel {
         let y=if new_epoch {dy as i64} else {
             input.cursor_y.load(Ordering::SeqCst).saturating_add(dy as i64)
         };
+        // GetAsyncKeyState bit 0 signals a press since its last read.
+        // A last-writer-wins key mask loses short press/release sequences
+        // when MC02 reads more slowly than the native command producer.
+        // Keep per-action (8-bit) rising-edge counts within the same
+        // live epoch. Reset at expiry to reject long-stale clicks.
+        let previous_keys=if new_epoch {0u8} else {old as u8};
+        let rising=(keys as u8) & !previous_keys;
+        let mut counts=if new_epoch {0u64} else {
+            input.press_counts.load(Ordering::SeqCst)
+        };
+        for index in 0u32..8 {
+            if rising & (1u8 << index) != 0 {
+                let shift=index*8;
+                let previous=(counts >> shift) & 0xff;
+                let current=(previous+1) & 0xff;
+                counts=(counts & !(0xffu64 << shift)) | (current << shift);
+            }
+        }
         // Odd revision = in-flight transaction. Publish keys/expiry BEFORE
         // returning to even; MC02 only accepts matching even snapshots.
         input.cursor_revision.fetch_add(1,Ordering::SeqCst);
@@ -143,6 +167,8 @@ impl Channel {
         // to spoof focus if Windows no longer shows MC01 as foreground.
         input.human_window.store(human_hwnd as u64,Ordering::SeqCst);
         input.ai_window.store(ai_hwnd as u64,Ordering::SeqCst);
+        // Covered by the same even/odd revision used for cursor totals.
+        input.press_counts.store(counts,Ordering::SeqCst);
         input.packet.store(word,Ordering::SeqCst);
         input.cursor_revision.fetch_add(1,Ordering::SeqCst);
         if unsafe{UnmapViewOfFile(view)}==0 {return Err(io::Error::last_os_error());}

@@ -933,6 +933,38 @@ existing Win32 polling candidate, NOT evidence that Minecraft
 Education uses these APIs. Actual MC02 walking, relative camera,
 attack and Raw Input/GameInput compatibility are still UNVERIFIED.
 
+**P0 direct input-consumption correction — Win32 key/mouse press edges
+(31 October 2026).** The existing MC02-only `GetAsyncKeyState` hook
+returned the high bit (key currently held) but ALWAYS cleared the low
+bit (key newly pressed). Microsoft documents that the low bit is
+retained for press-since-last-call compatibility, although it is
+unreliable as a general Windows input signal. A game polling that
+bit for a short mouse attack/use or key action would see no press.
+
+The optional Rust-controller shared-memory input ABI is now
+**version 4, 96 bytes**. The existing sole writer adds a packed
+8 x 8-bit counter for rising-edge transitions of WASD, jump, sneak,
+attack and use. These counters change independently from the current
+held-key packet and are reset upon command-epoch expiration. The
+existing in-process MC02 DLL reads the counters under the same
+atomic revision as the key packet and cursor totals. A bounded
+nonblocking per-process read guard returns the low GetAsyncKeyState
+bit once per new press, even if the writer published press and
+release between reads, without returning stale clicks from an
+expired epoch. The high held-key bit, AI cursor accumulation,
+MC01 human-focus gate and ordinary client launches are unchanged.
+
+This corrects the implemented **Win32 polling** API contract only.
+It does NOT implement Windows Raw Input (`WM_INPUT`,
+`GetRawInputData` / `GetRawInputBuffer`) or Microsoft GameInput
+(`IGameInput`). No Minecraft Education API was invented from the
+similarly named but distinct Bedrock/GDK editions. Gameplay acceptance
+still requires a compatible real input-consumption path; neither
+actual player movement nor attack has been observed. Evidence:
+REMOTE_GITHUB exact source and Microsoft GetAsyncKeyState semantics;
+all Node/Rust/CMake/MSVC/Windows/Minecraft execution NOT_EXECUTED.
+Default app/DLL input features remain OFF. No new test suite added.
+
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
 **Stop scope drift.** Phases 14–19 hardened secondary observation/evidence
