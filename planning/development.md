@@ -1013,6 +1013,23 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October MC02 partial-buffer release-first ordering:**
+The compile-OFF native Raw Input adapter previously put its optional
+relative-camera motion record FIRST in each `RawPlan`, ahead of all
+keyboard and attack/use transitions. Because `GetRawInputBuffer`
+may deliver only one record per poll, repeated fresh look deltas could
+repeatedly claim that slot and starve pending key-up/mouse-up events.
+The existing plan now appends the one-shot camera record LAST, after
+all bounded per-key/button transitions. Each button retains its
+release/down/release ordering; the shared reader advances
+`rawHeldMask`, per-key press counters, and the cursor only for
+whole records actually returned. No new hook/driver/actor, ABI
+revision, installer or MC03–MC05 input permission. The outcome
+is a source-level ordering correction only; MSVC/Rust/Node builds,
+Windows execution, game thread polling and Minecraft gameplay
+acceptance remain NOT_EXECUTED. The P0 consumer backend is still
+unverified.
+
 **31 October buffered Raw Input neutral/partial-release consistency:**
 The existing compile-OFF MC02 C++ adapter now requires a stable even
 ABI-v4 `cursorRevision` for both nonzero input and zero/expired

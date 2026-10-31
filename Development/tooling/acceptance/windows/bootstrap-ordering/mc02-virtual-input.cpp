@@ -409,6 +409,7 @@ RawPlan nextRawPlan(std::uint64_t word) {
     plan.epoch=rawSeenEpoch;
     plan.counts=rawSeenCounts;
     plan.cursorX=rawSeenX;plan.cursorY=rawSeenY;
+    LONG pendingLookX=0,pendingLookY=0;
     // A zero/expired packet can still need key-up/mouse-up output.
     // Do not synthesize those releases while a native ReleaseAll or
     // replacement input write has an ODD shared-memory revision.
@@ -434,8 +435,8 @@ RawPlan nextRawPlan(std::uint64_t word) {
         const auto moveY=dy>32767?32767:dy< -32767?-32767:dy;
         plan.cursorX=baseX+moveX;
         plan.cursorY=baseY+moveY;
-        if (moveX || moveY) rawMouse(plan.events,plan.count,0,
-            static_cast<LONG>(moveX),static_cast<LONG>(moveY));
+        pendingLookX=static_cast<LONG>(moveX);
+        pendingLookY=static_cast<LONG>(moveY);
     }
     // Six keyboard actions and two mouse buttons. A full press/release
     // cycle between game polls is preserved via ABI-v4 rise counters.
@@ -480,6 +481,14 @@ RawPlan nextRawPlan(std::uint64_t word) {
             rawMouse(plan.events,plan.count,now?down:up);
         }
     }
+    // A caller can provide space for only ONE RAWINPUT record. When
+    // fresh relative look data arrives on every poll, placing the mouse
+    // movement first would postpone pending key-up/mouse-up indefinitely.
+    // Emit all button transitions first (preserving each button's
+    // release/press/release order); append one-shot camera motion last.
+    // rawSeenX/Y are advanced only when this final record is copied.
+    if (pendingLookX || pendingLookY)
+        rawMouse(plan.events,plan.count,0,pendingLookX,pendingLookY);
     // The synthetic batch must not be derived from a torn neutral
     // snapshot either. A subsequent poll retries any undelivered
     // releases from rawHeldMask; no read cursor advances on failure.

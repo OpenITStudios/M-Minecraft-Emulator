@@ -147,6 +147,12 @@ make them executable.
   copying any synthetic release or input records. Rejected or partial
   reads do not advance the held-key/mouse state or cursor counters, so
   subsequent eligible polls can retry the remaining release records.
+  The buffered candidate now emits keyboard and attack/use button
+  transitions before the one-shot relative-camera record. This prevents
+  repeated new camera deltas from taking the first/only available record
+  on every small-buffer read and starving pending button releases.
+  Each button's release/press sequence remains ordered; cursor state
+  advances only when its own final movement record is actually copied.
   Native TTL remains a
   fail-safe if the release cannot be delivered. The normal single-pulse
   tool and unrelated normal tools remain unchanged.
