@@ -4,7 +4,7 @@
 //! profile storage write. This module is absent unless its Cargo feature is
 //! explicitly enabled. Minecraft Education compatibility is NOT_EXECUTED.
 use super::*;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
 pub(super) const INPUT_ENV: &str = "MIVUBI_EDUCATION_MC02_INPUT_SECTION";
@@ -15,7 +15,9 @@ const VERSION: u32 = 1;
 
 // C++ counterpart: mc02-virtual-input.cpp. Atomic 64-bit on Win x64.
 // High 32 bits: GetTickCount() expiration. Bits 0..7: W,S,A,D,
-// jump,sneak,attack,use. Bits 16..23 / 24..31: signed dx/dy.
+// jump,sneak,attack,use. Bits 8..15: per-command sequence.
+// Bits 16..23 / 24..31: signed dx/dy. An identical repeated look
+// command must not be discarded within the same Windows tick.
 // Expiration is bounded to 500 ms; no sticky input after an agent crash.
 #[repr(C, align(8))]
 struct SharedInput {
@@ -29,6 +31,7 @@ const _: () = assert!(std::mem::align_of::<SharedInput>() == 8);
 pub(super) struct Channel {
     section: Configuration,
     target: Option<(u32,u64,u32)>,
+    sequence: AtomicU8,
 }
 impl Channel {
     pub(super) fn create(slot:u32) -> io::Result<Option<Self>> {
@@ -38,6 +41,7 @@ impl Channel {
         Ok(Some(Self {
             section:Configuration::create_sized(std::mem::size_of::<SharedInput>() as u32)?,
             target:None,
+            sequence:AtomicU8::new(0),
         }))
     }
     pub(super) fn reader(&self)->HANDLE {
@@ -77,8 +81,10 @@ impl Channel {
             return Err(invalid("Unbound, expired or invalid MC02 input command"));
         }
         let expires=(unsafe{GetTickCount64()} as u32).wrapping_add(ttl_ms);
+        let sequence=self.sequence.fetch_add(1,Ordering::Relaxed).wrapping_add(1);
         let word=((expires as u64)<<32) | ((dy as i8 as u8 as u64)<<24)
-             | ((dx as i8 as u8 as u64)<<16) | keys as u64;
+             | ((dx as i8 as u8 as u64)<<16)
+             | ((sequence as u64)<<8) | keys as u64;
         let view=self.mapped()?;
         // The existing authenticated native controller is the sole writer.
         unsafe{(*view.Value.cast::<SharedInput>()).packet.store(word,Ordering::Release);}

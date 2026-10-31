@@ -43,6 +43,9 @@ const PUBLIC_TOOL_ERRORS=new Set([
   'Native request outcome UNCERTAIN; do not retry blindly',
   'GPU_OBSERVATION_START_CANCELLED',
   'MCP_TEXT_RESPONSE_TOO_LARGE','MCP_IMAGE_RESPONSE_TOO_LARGE',
+  'MC02_EXPERIMENT_DISABLED','MC02_INPUT_INVALID_COMMAND',
+  'MC02_INPUT_HUMAN_FOREGROUND_REQUIRED',
+  'MC02_INPUT_TARGETS_NOT_SEPARATE','MC02_INPUT_NATIVE_RESULT_UNVERIFIED',
 ]);
 function publicToolError(error) {
   const message=typeof error?.message==='string' ? error.message : '';
@@ -65,9 +68,10 @@ export function parseConfiguration(argv, env = process.env) {
   let evidenceDirectory = env.LAZY_TESTER_EVIDENCE_DIR ?? '';
   let cuaExecutable = env.LAZY_TESTER_CUA_EXE ?? '';
   let gpuExecutable = env.LAZY_TESTER_GPU_CAPTURE_EXE ?? '';
+  let experimentalMc02InputEnabled=false;
   for (let i=0;i<argv.length;i++) {
     const flag=argv[i];
-    if (!['--mode','--exe','--evidence-dir','--cua-exe','--gpu-capture-exe'].includes(flag) || i===argv.length-1) {
+    if (!['--mode','--exe','--evidence-dir','--cua-exe','--gpu-capture-exe','--mc02-input-experimental'].includes(flag) || i===argv.length-1) {
       throw new Error('Accepted arguments: --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>] [--cua-exe <cua-driver.exe>] [--gpu-capture-exe <lazy-tester-gpu-capture.exe>]');
     }
     const value=argv[++i];
@@ -76,8 +80,17 @@ export function parseConfiguration(argv, env = process.env) {
     if (flag==='--evidence-dir') evidenceDirectory=value;
     if (flag==='--cua-exe') cuaExecutable=value;
     if (flag==='--gpu-capture-exe') gpuExecutable=value;
+    if (flag==='--mc02-input-experimental') {
+      if(value!=='on') throw new Error('MC02 experimental input requires explicit on');
+      experimentalMc02InputEnabled=true;
+    }
   }
   if (!['human-plus-four-ai','five-ai'].includes(mode)) throw new Error('Unknown test mode');
+  if(experimentalMc02InputEnabled &&
+     (mode!=='human-plus-four-ai' ||
+      env.LAZY_TESTER_MC02_VIRTUAL_INPUT!=='I_ACCEPT_EXPERIMENTAL_MC02_INPUT')) {
+    throw new Error('MC02 experiment needs human-plus-four-ai mode and explicit native opt-in');
+  }
   if (executable && (!path.isAbsolute(executable) || !/\.exe$/i.test(executable))) {
     throw new Error('Set --exe to the absolute path of the installed lazy-tester.exe');
   }
@@ -87,7 +100,7 @@ export function parseConfiguration(argv, env = process.env) {
   if (cuaExecutable) validateCuaExecutable(cuaExecutable);
   if (gpuExecutable) validateGpuExecutable(gpuExecutable);
   return Object.freeze({mode, executable, evidenceDirectory,
-    cuaExecutable, gpuExecutable});
+    cuaExecutable, gpuExecutable,experimentalMc02InputEnabled});
 }
 
 function slotOf(value) {
@@ -181,6 +194,78 @@ export async function runNative(executable, operation, slot) {
   return operation==='target' ?
     validateNativeWindowTarget(result,slot) :
     validateNativeReport(result,operation);
+}
+
+
+// The native input transport is intentionally NOT part of runNative()'s
+// inspect/launch/target contract. It is an opt-in one-shot operation on the
+// same reviewed lazy-tester.exe and authenticated session controller.
+const MC02_BUTTON_BITS=Object.freeze({
+  move_forward:1,move_backward:2,strafe_left:4,strafe_right:8,
+  jump:16,sneak:32,attack:64,use:128,
+});
+function mc02ButtonMask(buttons) {
+  if(!Array.isArray(buttons)||buttons.length>8||
+     new Set(buttons).size!==buttons.length) {
+    throw new Error('MC02_INPUT_INVALID_COMMAND');
+  }
+  let mask=0;
+  for(const button of buttons) {
+    if(typeof button!=='string' || !Object.hasOwn(MC02_BUTTON_BITS,button)) {
+      throw new Error('MC02_INPUT_INVALID_COMMAND');
+    }
+    mask|=MC02_BUTTON_BITS[button];
+  }
+  if((mask&3)===3||(mask&12)===12) {
+    throw new Error('MC02_INPUT_INVALID_COMMAND');
+  }
+  return mask;
+}
+export async function sendExperimentalMc02Native(executable,{keys,dx,dy,ttlMs}) {
+  if(!executable || !path.isAbsolute(executable) ||
+     !Number.isSafeInteger(keys)||keys<0||keys>255 ||
+     !Number.isSafeInteger(dx)||dx< -127||dx>127 ||
+     !Number.isSafeInteger(dy)||dy< -127||dy>127 ||
+     !Number.isSafeInteger(ttlMs)||ttlMs<1||ttlMs>500) {
+    throw new Error('MC02_INPUT_INVALID_COMMAND');
+  }
+  let stdout;
+  try {
+    const response=await execFileAsync(executable,[
+      '--lazy-tester-agent-cli','mc02-input','2',
+      String(keys),String(dx),String(dy),String(ttlMs),
+    ],{shell:false,windowsHide:true,timeout:6000,maxBuffer:8192});
+    stdout=response.stdout;
+  } catch(error) {
+    if(error.killed||error.signal) {
+      throw new Error('Native request outcome UNCERTAIN; do not retry blindly');
+    }
+    if(typeof error.stdout==='string') {
+      try {
+        const output=JSON.parse(error.stdout.trim());
+        if(output?.ok===false&&/^[A-Z_]{1,40}$/.test(output.code??'')) {
+          throw new Error('Native request refused: '+output.code);
+        }
+      } catch(parsed) {
+        if(parsed?.message?.startsWith('Native request refused:')) throw parsed;
+      }
+    }
+    throw new Error('Native controller unavailable or operation refused');
+  }
+  let receipt;
+  try {receipt=JSON.parse(stdout.trim());} catch {}
+  if(receipt?.schema!==1||receipt?.ok!==true||
+     receipt?.operation!=='mc02-input'||receipt?.slot!==2||
+     receipt?.delivery!=='PER_CLIENT_SHARED_STATE_WRITTEN_NOT_GAMEPLAY_PROOF'||
+     receipt?.gameplayObserved!==false) {
+    throw new Error('MC02_INPUT_NATIVE_RESULT_UNVERIFIED');
+  }
+  return {schema:1,slot:2,
+    status:'NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+    acknowledgedBy:'RETAINED_NATIVE_CONTROLLER',
+    gameplayObserved:false,
+    inputBackend:'EXPERIMENTAL_WIN32_POLLING_ONLY',
+    note:'A native shared-state write is not proof Minecraft processed movement, camera or attacks.'};
 }
 
 export function parseCapturedLine(line) {
@@ -331,13 +416,31 @@ export const TOOL_LIST=[
   {name:'read_game_evidence',description:'Read only a compact allowlisted projection of 1-20 captured evidence records for one profile. No raw Skills Probe JSON, credentials or verified gameplay claims.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
 ];
 
-function capabilities(mode) {return {schema:1,mode,hostSlot:1,humanSlots:mode==='human-plus-four-ai'?[1]:[],
+
+// Deliberately NOT in TOOL_LIST: omitted from tools/list in the normal mode.
+// Only an explicitly opted-in development MCP advertises it.
+const EXPERIMENTAL_MC02_TOOL={
+  name:'send_experimental_mc02_input',
+  description:'EXPERIMENTAL/OPT-IN: send one <=500ms MC02-only virtual Win32 polling state. MC01 stays human foreground. This does not prove Minecraft gameplay or support Raw Input/GameInput.',
+  inputSchema:{type:'object',properties:{
+    slot:{type:'integer',const:2},
+    buttons:{type:'array',maxItems:8,uniqueItems:true,
+      items:{type:'string',enum:['move_forward','move_backward','strafe_left',
+        'strafe_right','jump','sneak','attack','use']}},
+    lookDX:{type:'integer',minimum:-127,maximum:127},
+    lookDY:{type:'integer',minimum:-127,maximum:127},
+    ttlMs:{type:'integer',minimum:1,maximum:500},
+  },required:['slot','buttons'],additionalProperties:false},
+};
+
+function capabilities(mode,experimental=false) {return {schema:1,mode,hostSlot:1,humanSlots:mode==='human-plus-four-ai'?[1]:[],
   aiSlots:mode==='human-plus-four-ai'?[2,3,4,5]:[1,2,3,4,5],
-  available:['start_visual_observation','read_visual_observation','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence'],
+  available:['start_visual_observation','read_visual_observation','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence',...(experimental?[EXPERIMENTAL_MC02_TOOL.name]:[])],
   notAvailable:['parallel_independent_keyboard_mouse','automatic_world_host_join','send_minecraft_command'],
   visualCapture:'OPTIONAL_CUA_OR_PERSISTENT_WGC_SOURCE_NOT_RUNTIME_VERIFIED',
   independentInput:{state:'BLOCKED_NO_VERIFIED_PER_CLIENT_INPUT_BACKEND',
     simultaneousIntentChannels:true,actualInputEnabled:false,
+    experimentalMc02Win32PollingOnly:experimental?'OPTED_IN_NOT_GAMEPLAY_VERIFIED':'DISABLED',
     requiresHumanFocusProtection:true,requiresPerClientEmergencyRelease:true,
     nativeSessionModel:'SAME_WINDOWS_SESSION_ONLY',
     windowsAgentWorkspace:'PREVIEW_NOT_INTEGRATED_NO_CROSS_SESSION_INPUT',
@@ -346,10 +449,13 @@ function capabilities(mode) {return {schema:1,mode,hostSlot:1,humanSlots:mode===
 
 export function createHandler(config,{
   native=runNative,evidence=readGameEvidence,capture=captureCuaWindow,
+  mc02Input=sendExperimentalMc02Native,
   gpuSourceFactory=createGpuFrameSource,
 }={}) {
   let inFlight=false;
   let gpuStartup=null; // bounded request only; not game/session lifecycle
+  const mc02Enabled=config.experimentalMc02InputEnabled===true &&
+    config.mode==='human-plus-four-ai';
   const gpuSource=config.gpuExecutable ?
     gpuSourceFactory({executable:config.gpuExecutable}):null;
   function protectedSlot(slot) {
@@ -562,6 +668,44 @@ export function createHandler(config,{
         compilePlayerInputTimeline(config.mode,args.actions) :
         planPlayerActions(config.mode,args.actions);
     }
+    if (name==='send_experimental_mc02_input') {
+      if(!mc02Enabled) throw new Error('MC02_EXPERIMENT_DISABLED');
+      keysExactly(args,['slot','buttons','lookDX','lookDY','ttlMs']);
+      if(args.slot!==2) throw new Error('MC02_INPUT_INVALID_COMMAND');
+      const keys=mc02ButtonMask(args.buttons);
+      const dx=args.lookDX??0,dy=args.lookDY??0,ttlMs=args.ttlMs??150;
+      if(!Number.isSafeInteger(dx)||dx< -127||dx>127||
+         !Number.isSafeInteger(dy)||dy< -127||dy>127||
+         !Number.isSafeInteger(ttlMs)||ttlMs<1||ttlMs>500) {
+        throw new Error('MC02_INPUT_INVALID_COMMAND');
+      }
+      if(inFlight) throw new Error('Native operation in progress; do not overlap requests');
+      inFlight=true;
+      try {
+        const human=validateNativeWindowTarget(
+          await native(config.executable,'target',1),1);
+        const ai=validateNativeWindowTarget(
+          await native(config.executable,'target',2),2);
+        if(human.foreground!==true||ai.foreground!==false) {
+          throw new Error('MC02_INPUT_HUMAN_FOREGROUND_REQUIRED');
+        }
+        if(human.pid===ai.pid||human.windowId===ai.windowId||
+           human.sessionId!==ai.sessionId) {
+          throw new Error('MC02_INPUT_TARGETS_NOT_SEPARATE');
+        }
+        // Revalidated again by the native controller before it can write
+        // its inherited MC02-only section. No focus, key or cursor is
+        // changed by this MCP process.
+        const receipt=await mc02Input(config.executable,{keys,dx,dy,ttlMs});
+        if(receipt?.schema!==1||receipt?.slot!==2||
+           receipt?.gameplayObserved!==false||
+           receipt?.status!=='NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED') {
+          throw new Error('MC02_INPUT_NATIVE_RESULT_UNVERIFIED');
+        }
+        return {...receipt,ttlMs,
+          inputEffect:'UNVERIFIED_IN_MINECRAFT_EDUCATION'};
+      } finally {inFlight=false;}
+    }
     if (name==='assess_input_route') {
       keysExactly(args,['actions']);
       // Validate all actions and the human/AI ownership before touching
@@ -594,7 +738,7 @@ export function createHandler(config,{
         return planPeerSession(config.mode,validateNativeReport(report,'inspect'));
       } finally {inFlight=false;}
     }
-    if (name==='agent_capabilities') {keysExactly(args,[]);return capabilities(config.mode);}
+    if (name==='agent_capabilities') {keysExactly(args,[]);return capabilities(config.mode,mc02Enabled);}
     if (name==='read_game_evidence') {
       keysExactly(args,['slot']);
       const slot=slotOf(args.slot);
@@ -650,7 +794,8 @@ export function createHandler(config,{
           capabilities:{tools:{listChanged:false}},serverInfo:{name:'lazy-tester-agent',version:'0.1.0'}});
       }
       if (message.method==='ping') return result({});
-      if (message.method==='tools/list') return result({tools:TOOL_LIST});
+      if (message.method==='tools/list') return result({tools:mc02Enabled?
+        [...TOOL_LIST,EXPERIMENTAL_MC02_TOOL] : TOOL_LIST});
       if (message.method==='tools/call') {
         const name=message.params?.name;
         if (typeof name!=='string') return err(-32602,'Tool name is required');

@@ -662,3 +662,57 @@ test('native reports fail closed on malformed required fields after sanitization
     'Tool unavailable; details withheld');
   assert.equal(JSON.stringify(wire).includes('private-world'),false);
 });
+
+test('MC02 experiment is hidden by default and requires the original human focus',async()=>{
+  const optin='I_ACCEPT_EXPERIMENTAL_MC02_INPUT';
+  assert.throws(()=>parseConfiguration([
+    '--mc02-input-experimental','on'],{}),/explicit native opt-in/);
+  assert.throws(()=>parseConfiguration([
+    '--mode','five-ai','--mc02-input-experimental','on'],
+    {LAZY_TESTER_MC02_VIRTUAL_INPUT:optin}),/human-plus-four-ai/);
+  const configOpt=parseConfiguration([
+    '--exe',path.resolve('lazy-tester.exe'),
+    '--mc02-input-experimental','on'],
+    {LAZY_TESTER_MC02_VIRTUAL_INPUT:optin});
+  assert.equal(configOpt.experimentalMc02InputEnabled,true);
+  const native=async(_exe,operation,slot)=>({
+    schema:1,ok:true,operation:'target',slot,pid:700+slot,
+    windowId:4000+slot,createdFileTime:'134000000000000001',
+    sessionId:1,foreground:slot===1,visible:true,minimized:false,
+    verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',gameplayInput:'NOT_VERIFIED',
+  });
+  let writes=0;
+  const receipt={schema:1,slot:2,gameplayObserved:false,
+    status:'NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED'};
+  const enabled=createHandler(configOpt,{
+    native,mc02Input:async(_exe,packet)=>{
+      writes++;
+      assert.deepEqual(packet,{keys:17,dx:10,dy:-5,ttlMs:120});
+      return receipt;
+    },
+  });
+  const disabled=createHandler(config());
+  assert.equal((await disabled.handle({jsonrpc:'2.0',id:1,method:'tools/list'}))
+    .result.tools.some(x=>x.name==='send_experimental_mc02_input'),false);
+  assert.equal((await enabled.handle({jsonrpc:'2.0',id:2,method:'tools/list'}))
+    .result.tools.some(x=>x.name==='send_experimental_mc02_input'),true);
+  const input={slot:2,buttons:['move_forward','jump'],
+    lookDX:10,lookDY:-5,ttlMs:120};
+  const message={jsonrpc:'2.0',id:3,method:'tools/call',
+    params:{name:'send_experimental_mc02_input',arguments:input}};
+  const result=await enabled.handle(message);
+  assert.equal(result.result.isError,false);
+  assert.equal(JSON.parse(result.result.content[0].text).gameplayObserved,false);
+  assert.equal(writes,1);
+  const protectedHandler=createHandler(configOpt,{
+    native:async(...args)=>({...await native(...args),foreground:false}),
+    mc02Input:async()=>{throw Error('must never write when human is not foreground');},
+  });
+  const rejected=await protectedHandler.handle(message);
+  assert.equal(rejected.result.isError,true);
+  assert.equal(rejected.result.content[0].text,
+    'MC02_INPUT_HUMAN_FOREGROUND_REQUIRED');
+  assert.equal(writes,1);
+  await assert.rejects(()=>enabled.callTool('send_experimental_mc02_input',
+    {...input,buttons:['move_forward','move_backward']}),/INVALID_COMMAND/);
+});

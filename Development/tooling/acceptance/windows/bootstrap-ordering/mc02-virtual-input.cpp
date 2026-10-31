@@ -158,7 +158,8 @@ BOOL WINAPI observedClip(const RECT* rect) {
 } // namespace
 namespace mc02_input {
 bool attach(const education_bootstrap::Config& config) noexcept {
-    if (config.slot!=2) return false;
+    // This optional experiment must NEVER reject or hook MC01/MC03–MC05.
+    if (config.slot!=2) return true;
     wchar_t raw[2]{};
     // No inherited section => optional feature stays inert even in a
     // development binary. Environment is supplied only by the owner.

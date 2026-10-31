@@ -6,6 +6,9 @@ option(BOOTSTRAP_ORDERING_TEST_ONLY "Build the standalone self-child ordering ex
 # production package. Also requires an explicit MC02-only environment opt-in.
 option(BOOTSTRAP_MC02_INPUT_API_OBSERVE "Record one-shot MC02 input API presence; no input dispatch" OFF)
 option(BOOTSTRAP_MC02_VIRTUAL_INPUT "MC02 virtual keyboard/cursor polling via inherited read-only state (experimental)" OFF)
+if(BOOTSTRAP_MC02_VIRTUAL_INPUT AND BOOTSTRAP_MC02_INPUT_API_OBSERVE)
+  message(FATAL_ERROR "MC02 virtual input and API observer detour the same functions; select one")
+endif()
 option(BOOTSTRAP_GRAPHICS_WARM_POOLS_EXPERIMENT "Enable version-bound DefaultBufferHeap startup-capacity experiment" OFF)
 option(BOOTSTRAP_UPLOAD_RETENTION_EXPERIMENT "Enable version-bound Upload empty-heap retention canary" OFF)
 if(BOOTSTRAP_GRAPHICS_WARM_POOLS_EXPERIMENT AND BOOTSTRAP_UPLOAD_RETENTION_EXPERIMENT)

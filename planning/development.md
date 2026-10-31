@@ -740,8 +740,15 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
   Cargo `mc02-native-input` and CMake `BOOTSTRAP_MC02_VIRTUAL_INPUT`.
   Both the already-owned child and the experimental CLI require
   explicit `LAZY_TESTER_MC02_VIRTUAL_INPUT=I_ACCEPT_EXPERIMENTAL_MC02_INPUT`.
-  No MCP tool is exposed, default binary behavior is unchanged and no
-  DLL/input code is executed in this conversation.
+  The default MCP has no input tool, and no DLL/input code is executed in
+  this conversation. An additional development-only MCP tool is now
+  available **only** when --mc02-input-experimental on is paired with
+  LAZY_TESTER_MC02_VIRTUAL_INPUT=I_ACCEPT_EXPERIMENTAL_MC02_INPUT in
+  human-plus-four-ai mode. It accepts 1-500ms MC02 keyboard/button and
+  signed cursor delta commands, checks MC01 foreground and distinct
+  MC02 identity, and delegates to the same authenticated native CLI.
+  Its receipt explicitly says state written, gameplay UNVERIFIED; no
+  normal-product input authorization is implied.
 - Private input section ABI: 40-byte fixed header, PID, session and
   process birth, then one 64-bit atomic command. The controller's
   inherited read-only handle cannot write commands; it is bound to the
@@ -756,12 +763,45 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
   The existing MCP still advertises `actualInputEnabled:false`.
   Follow-up static review corrected a feature-gated Rust match branch:
   both Cargo feature-OFF and feature-ON configurations now use valid
-  conditional code. The optional DLL still needs the reviewed binary
+  conditional code. A further source correction makes the optional
+  DLL attach a no-op for MC01 and MC03-MC05; previously it returned
+  failure for every non-MC02 client. Mutually exclusive optional CMake
+  observation/virtual-input detours prevent duplicate API interception.
+  Repeated identical pointer commands now have a reserved sequence
+  byte so a second command within the same Windows tick is not dropped. The optional DLL still needs the reviewed binary
   compatibility/hash admission and cannot silently replace the installed
   bootstrap payload. This is source, not a successful Windows build.
 - The exact code was reviewed on GitHub only; Rust/CMake/MSVC builds,
   Windows system calls, full client lifecycles and gameplay remain
   NOT_EXECUTED. No localtest was requested or performed.
+
+## P0 source correction: MCP-to-native MC02 command path (31 October 2026)
+
+- The exact existing native one-shot `mc02-input` CLI is now reachable
+  from a dedicated experimental MCP command ONLY under explicit
+  `--mc02-input-experimental on` plus
+  `LAZY_TESTER_MC02_VIRTUAL_INPUT=I_ACCEPT_EXPERIMENTAL_MC02_INPUT`
+  in hybrid mode. The normal tools/list is unchanged; native
+  `actualInputEnabled` remains false because Minecraft gameplay is
+  not proven. Revalidation pins MC01 foreground and MC02 separate
+  PID/HWND/session before an input-state write.
+- A real source correctness issue in the optional in-process DLL
+  previously returned failure for every game except MC02, potentially
+  breaking unrelated profile launches. Non-MC02 attach is now a
+  strict no-op. CMake rejects enabling duplicate GetAsyncKeyState/
+  cursor detours. One-command look deltas cannot be lost when
+  repeated with identical payloads in one GetTickCount tick.
+- Windows Raw Input receives kernel HRAWINPUT via WM_INPUT, not
+  arbitrary fabricated HWND messages; GameInput is a different
+  reference-counted input stream. Neither is implemented by the
+  Win32 polling candidate. Minecraft Education support documentation
+  currently specifies keyboard and mouse on Windows, so adding an
+  unproven virtual XInput gamepad is not a supported shortcut.
+- No source test, Rust/CMake build, Windows action, Minecraft gameplay,
+  driver, new loader, new controller, CI or private file write was
+  executed. A single focused regression fixture was **AUTHORED,
+  NOT_EXECUTED** for opt-in tool visibility, input-pulse encoding and
+  MC01 focus refusal.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
