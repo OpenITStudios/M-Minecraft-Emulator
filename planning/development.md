@@ -1013,6 +1013,25 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October buffered Raw Input neutral/partial-release consistency:**
+The existing compile-OFF MC02 C++ adapter now requires a stable even
+ABI-v4 `cursorRevision` for both nonzero input and zero/expired
+release packets. Previously `nextRawPlan(0)` could construct
+synthetic key-up/mouse-up events while the retained native
+controller still had an odd in-progress ReleaseAll write. The
+reader also rechecks the exact pinned MC02 game window and the
+same revision after discarding physical Raw Input, before any
+synthetic record is copied or its cursor is consumed. A torn or
+stale plan returns no synthetic events; `rawHeldMask`, per-key
+press counts and relative-camera cursors are not advanced, so
+pending release transitions can be retried on a later eligible
+buffered read. No new detour, payload version, input backend,
+MCP tool or MC03-MC05 authorization was introduced.
+Proof: REMOTE_GITHUB exact Rust/C++ source and documented Windows
+buffered-reader contract; no Node, MSVC, Rust build/test or
+Minecraft execution. The game input consumer and real in-game
+release remain NOT_EXECUTED.
+
 **31 October MC02 buffered release completion correction:**
 The exact-owner `Channel::release_all` previously zeroed both the
 active packet and `ai_window`. In buffered Raw Input mode that erased

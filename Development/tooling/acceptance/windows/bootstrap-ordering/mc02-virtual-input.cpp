@@ -400,6 +400,7 @@ struct RawPlan {
     unsigned held=0;
     std::uint64_t epoch=0,counts=0;
     std::int64_t cursorX=0,cursorY=0;
+    std::uint64_t revision=0; // inherited ABI-v4 writer transaction
     bool coherent=false;
 };
 RawPlan nextRawPlan(std::uint64_t word) {
@@ -408,9 +409,15 @@ RawPlan nextRawPlan(std::uint64_t word) {
     plan.epoch=rawSeenEpoch;
     plan.counts=rawSeenCounts;
     plan.cursorX=rawSeenX;plan.cursorY=rawSeenY;
-    if (word && view) {
-        const auto revision=view->cursorRevision.load(std::memory_order_seq_cst);
-        if (!revision || (revision&1)) return plan;
+    // A zero/expired packet can still need key-up/mouse-up output.
+    // Do not synthesize those releases while a native ReleaseAll or
+    // replacement input write has an ODD shared-memory revision.
+    // The old neutral path bypassed this guard entirely.
+    if (!view) return plan;
+    const auto revision=view->cursorRevision.load(std::memory_order_seq_cst);
+    if (!revision || (revision&1)) return plan;
+    plan.revision=revision;
+    if (word) {
         const auto counts=view->pressCounts.load(std::memory_order_seq_cst);
         const auto epoch=view->cursorEpoch.load(std::memory_order_seq_cst);
         const auto x=view->cursorX.load(std::memory_order_seq_cst);
@@ -473,6 +480,11 @@ RawPlan nextRawPlan(std::uint64_t word) {
             rawMouse(plan.events,plan.count,now?down:up);
         }
     }
+    // The synthetic batch must not be derived from a torn neutral
+    // snapshot either. A subsequent poll retries any undelivered
+    // releases from rawHeldMask; no read cursor advances on failure.
+    if (view->cursorRevision.load(std::memory_order_seq_cst)!=plan.revision)
+        return plan;
     plan.coherent=true;
     return plan;
 }
@@ -577,7 +589,14 @@ UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
     // A command may expire while the genuine raw queue is being drained.
     // Never commit synthetic mouse/key actions after the deadline or
     // after MC01 has lost real Windows foreground.
-    if (!plan.coherent || currentPacket()!=word) {
+    // A native write can begin WHILE the real Raw Input queue is being
+    // discarded. Refuse a stale plan even if the 64-bit packet happens
+    // to be unchanged (e.g. a zero packet during a release transaction).
+    // After a failed read, held state and per-key/camera cursors are
+    // intentionally unchanged; the next game poll can finish the release.
+    if (!plan.coherent || currentPacket()!=word ||
+        view->cursorRevision.load(std::memory_order_seq_cst)!=plan.revision ||
+        (plan.count!=0 && ownedGameWindow()!=window)) {
         *size=0;
         rawBufferBusy.clear(std::memory_order_release);
         SetLastError(previous);return 0;

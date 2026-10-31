@@ -140,7 +140,14 @@ make them executable.
   KEY_BREAK and mouse-button UP records after explicit cancellation.
   An inactive packet cannot spoof the game focus or authorize movement.
   This is a transport state acknowledgement, never proof that Minecraft
-  consumed a key-up. Native TTL remains a
+  consumed a key-up. The existing opt-in C++ buffered reader now
+  validates the ABI-v4 even/odd revision for **neutral/expired** packets
+  as well as active packets. After draining the physical queue it
+  rechecks both that revision and the MC02-owned game window before
+  copying any synthetic release or input records. Rejected or partial
+  reads do not advance the held-key/mouse state or cursor counters, so
+  subsequent eligible polls can retry the remaining release records.
+  Native TTL remains a
   fail-safe if the release cannot be delivered. The normal single-pulse
   tool and unrelated normal tools remain unchanged.
 
