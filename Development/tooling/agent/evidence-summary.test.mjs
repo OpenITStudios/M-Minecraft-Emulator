@@ -113,3 +113,25 @@ test('unstable file evidence is excluded and reported, not treated as empty acce
   assert.equal(data.sources[1].incompleteTrailingLineIgnored,true);
   assert.equal(data.verdict,'EVIDENCE_ONLY_NOT_GAMEPLAY_ACCEPTANCE');
 });
+
+test('untyped game-result objects never inflate resultCount or gameplay acceptance',()=>{
+  const report={slot:2,status:'CAPTURE_FILE_PRESENT',events:[
+    event('game_results',{passed:true,total_score:999}),
+    event('game_results',{schema:1,record_type:'progress',
+      passed:true,total_score:999},'2026-10-30T12:00:01.000Z'),
+    event('game_results',{schema:'1',record_type:'gameplay_result',
+      total_score:999},'2026-10-30T12:00:02.000Z'),
+    event('game_results',{schema:1,record_type:'gameplay_result',
+      total_score:12},'2026-10-30T12:00:03.000Z'),
+    event('analytics',{type:'death',session_id:'s2'},
+      '2026-10-30T12:00:04.000Z'),
+  ]};
+  const output=summarizeEvidenceReports([2],[report]);
+  assert.equal(output.records,2);
+  assert.equal(output.resultCount,1);
+  assert.equal(output.sources[0].parsedRecords,2);
+  assert.equal(output.timeline.find(x=>x.severity==='RESULT').score,12);
+  assert.equal(output.verdict,'EVIDENCE_ONLY_NOT_GAMEPLAY_ACCEPTANCE');
+  assert.equal(output.playerToProfileIdentity,'NOT_VERIFIED');
+  assert.match(output.note,/NEVER a gameplay success/);
+});

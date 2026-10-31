@@ -630,6 +630,31 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
   API behavior, concurrent actual Skills Probe writes, Minecraft
   gameplay and independent AI input remain NOT_EXECUTED/UNVERIFIED.
 
+## Phase 17: Skills Probe parser and result-classification trust boundary (31 October 2026)
+
+- Found that `parseCapturedLine` searched marker substrings anywhere
+  inside debug text and accepted any JSON object following
+  `[GAME_RESULTS]`. The summary likewise labeled any internal
+  `game_results` event a `RESULT` without checking its record type.
+- The existing parser now requires a parseable timestamp, one leading
+  source marker, a bounded JSON object, and a non-empty event type.
+  Game results specifically require the currently recognized
+  `schema:1/record_type:'gameplay_result'` contract. Analytics with
+  a nonempty `type` and no version remain legacy unverified telemetry.
+- The existing summary applies the same typed game-result check even
+  when called through a fixture/evidence reader rather than the parser.
+  `resultCount` counts recognized untrusted record markers, not
+  successful gameplay; `worldIdentity` and `playerToProfileIdentity`
+  remain NOT_VERIFIED. No account or world claims are promoted.
+- Reused existing Node test files for incidental marker text, untyped
+  `passed:true`, wrong schema, canonical events, and direct-caller
+  result counting. No extra tests/test runners, input route or
+  Minecraft lifecycle authority were introduced.
+- **Proof ceiling:** REMOTE_GITHUB exact source and authored fixtures
+  only; source tests, Windows debugger output and Minecraft gameplay
+  NOT_EXECUTED. Compatibility with the real Skills Probe log producer
+  remains UNVERIFIED until approved runtime evidence is available.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,
@@ -648,11 +673,11 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
 The Windows Agent Workspace feasibility question is resolved for the
 currently documented APIs: it is NOT an admitted input implementation.
 Retain the independent-input BLOCKED gate until a concrete, supported
-per-client game-input API becomes available. Next source-only action: inspect the existing Skills Probe event parser
-and bounded evidence summary for source attribution or trust-boundary
-errors with a concrete failing case before adding more code. Keep the
-native five-profile owner, visual capture lifecycle and input BLOCKED
-gate unchanged; do not add a new provider or background runner.
+per-client game-input API becomes available. Next source-only action: review the existing MCP evidence payload sizes
+and response error handling for any concrete resource or privacy leak,
+without expanding test volume. Leave game input BLOCKED and keep the
+native controller, visual-capture lifecycle and five-profile data
+ownership unchanged.
 **Do not execute local tests, toolchain builds, package staging, native input
 probes or gameplay until explicit operator approval.** When approval arrives,
 the first separate acceptance boundary is the pinned Windows agent CLI,

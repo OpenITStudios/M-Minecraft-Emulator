@@ -112,6 +112,38 @@ Only code is committed; no user screenshots are collected now.
 
 Cua CLI reference: https://cua.ai/docs/cua-driver/reference/cli/serve-and-configure
 
+## Phase 17: reject incidental markers and untyped results
+
+The previous Skills Probe reader accepted the substring
+`[ANALYTICS]` or `[GAME_RESULTS]` anywhere within a PrintEvent
+message. An ordinary chat/debug line referring to those markers could
+therefore be parsed as a game event. It also accepted arbitrary JSON
+objects after `[GAME_RESULTS]`, and the evidence summary counted every
+caller-supplied `game_results` object as a `RESULT`.
+
+The existing `parseCapturedLine` now requires a valid-looking,
+parseable capture timestamp, one **leading** Skills Probe marker
+(after decoding the established JSON-string-escaped PrintEvent format)
+and one bounded JSON object. Analytics require a non-empty `type`.
+The currently recognized game-result shape is
+`{"schema":1,"record_type":"gameplay_result",...}`; untyped,
+unknown-version or other result objects are ignored. The summary
+performs the same minimal result-type check because its internal
+callers need not use the file parser.
+
+`resultCount` remains a count of recognized **untrusted records**,
+NOT success, winning, correct host/join, independent AI movement, or
+verified player/account/world identity. Historical analytics with a
+non-empty `type` and no schema are still read as unverified telemetry.
+This compatibility choice must be reviewed against real Skills Probe
+output before claiming producer-schema acceptance.
+
+Existing regression files cover embedded markers, untyped/malformed
+results, schema mismatch, trailing JSON garbage, invalid timestamps,
+and unchanged valid analytics/canonical result examples. All tests are
+AUTHORED_NOT_EXECUTED. No new parser service, persistent state, game
+hook, input backend, CI or native lifecycle component was introduced.
+
 ## Phase 16: stable bounded Skills Probe log snapshots
 
 The `readGameEvidence` reader previously took its tail offset from

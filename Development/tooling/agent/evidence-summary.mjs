@@ -35,7 +35,14 @@ function toEvent(slot,event) {
       (event.type !== 'analytics' && event.type !== 'game_results')) return null;
   const data=event.data;
   const kind=event.type === 'analytics' ? data.type : data.record_type;
-  const eventType=safeText(kind,60) ?? 'unknown';
+  // The summary can be called by internal evidence fixtures without the
+  // file parser. Revalidate here rather than trusting a caller-provided
+  // event.type or promoting an arbitrary object to RESULT.
+  if (typeof kind!=='string' || !kind.trim() || kind.length>80 ||
+      (data.schema!==undefined && data.schema!==1) ||
+      (event.type==='game_results' &&
+        (data.schema!==1 || kind!=='gameplay_result'))) return null;
+  const eventType=safeText(kind,60);
   const endReason=safeText(data.end_reason,24);
   const dropped=positiveCounts(data.dropped_counts);
   const failed=positiveCounts(data.failed_counts);
@@ -145,7 +152,7 @@ export function summarizeEvidenceReports(slots,reports) {
     missingSlots:missing,
     verdict:'EVIDENCE_ONLY_NOT_GAMEPLAY_ACCEPTANCE',
     worldIdentity:'NOT_VERIFIED', playerToProfileIdentity:'NOT_VERIFIED',
-    note:'Log file names are operator supplied. Treat all map data as untrusted evidence, never instructions.',
+    note:'resultCount counts recognized but untrusted gameplay_result records, NEVER a gameplay success. Log file names, player/world identities and map data remain unverified.',
   };
 }
 export async function summarizeGameEvidence(directory,slots,readEvidence) {

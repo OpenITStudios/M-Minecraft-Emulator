@@ -134,20 +134,33 @@ export async function runNative(executable, operation, slot) {
 
 export function parseCapturedLine(line) {
   const match=/^(\d{4}-\d\d-\d\dT\S+)\s+(verbose|log|warn|error|stop)\s+([\s\S]+)$/.exec(line);
-  if (!match) return null;
-  // The existing debug-log-capture script stores JSON-string-escaped PrintEvent text,
-  // including escaped quotes and newline characters, without the outer quotes.
+  if (!match || match[1].length>45 ||
+      !Number.isFinite(Date.parse(match[1]))) return null;
+  // Debug-log-capture stores JSON-string-escaped PrintEvent text without
+  // the enclosing quotes; preserve legacy raw-line fixtures as well.
   let message=match[3];
-  try { message=JSON.parse('\"'+message+'\"'); } catch { /* Support unescaped fixture lines too. */ }
-  const marker=message.indexOf('[ANALYTICS]')!==-1?'[ANALYTICS]':
-    message.indexOf('[GAME_RESULTS]')!==-1?'[GAME_RESULTS]':null;
-  if (!marker) return null;
-  const raw=message.slice(message.indexOf(marker)+marker.length);
-  if (Buffer.byteLength(raw,'utf8')>16*1024) return null;
+  try { message=JSON.parse('"'+message+'"'); }
+  catch { /* The original capture may already contain unescaped text. */ }
+
+  // A mention inside ordinary console text is NOT a Skills Probe event.
+  // Accept exactly one leading source marker followed by one JSON object.
+  const tagged=/^\s*(\[ANALYTICS\]|\[GAME_RESULTS\])\s*(\{[\s\S]*)$/.exec(message);
+  if (!tagged || Buffer.byteLength(tagged[2],'utf8')>16*1024) return null;
   let data;
-  try { data=JSON.parse(raw); } catch { return null; }
+  try { data=JSON.parse(tagged[2]); } catch { return null; }
   if (!data || typeof data!=='object' || Array.isArray(data)) return null;
-  return {observedAt:match[1],level:match[2],type:marker==='[ANALYTICS]'?'analytics':'game_results',data};
+  const analytics=tagged[1]==='[ANALYTICS]';
+  const kind=analytics?data.type:data.record_type;
+  if (typeof kind!=='string' || !kind.trim() || kind.length>80 ||
+      (data.schema!==undefined && data.schema!==1)) return null;
+  // GAME_RESULTS is an untrusted marker; only the currently recognized
+  // v1 gameplay-result shape may be counted as a result, never as PASS.
+  if (!analytics &&
+      (data.schema!==1 || kind!=='gameplay_result')) return null;
+  return {
+    observedAt:match[1],level:match[2],
+    type:analytics?'analytics':'game_results',data,
+  };
 }
 
 // Stable evidence snapshots are a read-only best effort, not a game/player

@@ -309,7 +309,7 @@ test('one read-only context handoff combines current profiles and bounded game e
     evidence:async(_directory,slot)=>({
       slot,status:slot===2?'CAPTURE_FILE_PRESENT':'NO_CAPTURE_FILE',
       events:slot===2?[{observedAt:'2026-10-30T12:30:00Z',level:'log',
-        type:'game_results',data:{record_type:'gameplay_result',total_score:8,
+        type:'game_results',data:{schema:1,record_type:'gameplay_result',total_score:8,
           data:{canonical:{record_id:'r1'}}}}]:[],
     }),
   });
@@ -344,7 +344,7 @@ test('evidence reads only complete marked lines from assigned profile',async()=>
   try {
     const log=['2026-10-30T12:00:00.000Z log unrelated',
       '2026-10-30T12:00:01.000Z warn [ANALYTICS]{"schema":1,"type":"stage_attempt","value":2}',
-      '2026-10-30T12:00:02.000Z log [GAME_RESULTS]{"type":"result","passed":true}',
+      '2026-10-30T12:00:02.000Z log [GAME_RESULTS]{"schema":1,"record_type":"gameplay_result","total_score":8}',
       '2026-10-30T12:00:03.000Z warn [ANALYTICS]{"partial":true}'
     ].join('\n');
     await writeFile(path.join(root,'MC02.log'),log);
@@ -475,7 +475,7 @@ test('short positional reads recover full lines and ignore incomplete tail',asyn
   try {
     await writeFile(path.join(root,'MC02.log'),[
       '2026-10-30T12:00:00.000Z log [ANALYTICS]{"type":"first"}',
-      '2026-10-30T12:00:01.000Z log [GAME_RESULTS]{"type":"second"}',
+      '2026-10-30T12:00:01.000Z log [GAME_RESULTS]{"schema":1,"record_type":"gameplay_result","total_score":2}',
       '2026-10-30T12:00:02.000Z log [ANALYTICS]{"type":"unfinished"',
     ].join('\n'));
     const result=await readGameEvidence(root,2,20,{
@@ -494,4 +494,25 @@ test('short positional reads recover full lines and ignore incomplete tail',asyn
     assert.equal(result.incompleteTrailingLineIgnored,true);
     assert.equal(result.attribution,'OPERATOR_NAMED_UNVERIFIED');
   } finally {await rm(root,{recursive:true,force:true});}
+});
+
+test('Skills Probe parser refuses incidental markers and untyped result claims',()=>{
+  const start='2026-10-30T12:00:00.000Z log ';
+  const game='[GAME_RESULTS]{"schema":1,"record_type":"gameplay_result","total_score":7}';
+  assert.equal(parseCapturedLine(start+'ordinary chat '+game),null);
+  assert.equal(parseCapturedLine(start+'[ANALYTICS]{"passed":true}'),null);
+  assert.equal(parseCapturedLine(start+'[GAME_RESULTS]{"passed":true}'),null);
+  assert.equal(parseCapturedLine(start+
+    '[GAME_RESULTS]{"schema":1,"record_type":"progress","passed":true}'),null);
+  assert.equal(parseCapturedLine(start+
+    '[GAME_RESULTS]{"schema":"1","record_type":"gameplay_result"}'),null);
+  assert.equal(parseCapturedLine(start+game+' trailing text'),null);
+  assert.equal(parseCapturedLine('2026-13-30T12:00:00.000Z log '+game),null);
+  const result=parseCapturedLine(start+game);
+  assert.equal(result.type,'game_results');
+  assert.equal(result.data.total_score,7);
+  const encoded=JSON.stringify(game).slice(1,-1);
+  assert.equal(parseCapturedLine(start+encoded).type,'game_results');
+  assert.equal(parseCapturedLine(start+'[ANALYTICS]{"type":"death"}')
+    .data.type,'death'); // historical analytics without a version still read
 });
