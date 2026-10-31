@@ -720,6 +720,36 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
 - Extra RAM/FPS or graphics optimization, macOS support, new native providers,
   hosted runners and CI remain outside the active development scope.
 
+## P0 source correction: explicit MC02 experimental launch (31 October 2026)
+
+The earlier source-only native input candidate had a blocking admission
+bug: `mc02_input::Channel::create` read an ambient opt-in flag in the
+already-running native controller, not the separately launched Codex MCP
+or one-shot CLI. An explicit MCP opt-in therefore could request input
+to an ordinary MC02 whose shared input section did not exist.
+
+The same authenticated session controller now admits a feature-gated
+`LaunchMc02Experiment {slot:2}` request from the existing one-shot
+`launch-mc02-input 2` operation. That CLI requires the exact experimental
+environment opt-in, and the MCP selects it only for MC02 in
+`human-plus-four-ai` mode when `--mc02-input-experimental on`
+has already been explicitly configured. The existing `launch_profile`
+tool name and normal launch path are unchanged.
+
+The original bootstrap creator has a separate explicit
+`experimental_input` argument at its internal entry point; every
+ordinary bootstrap call passes false. This avoids relying on ambient
+process environment or changing the profile/world storage, controller
+ownership, named pipes, or already-enrolled game DLL mechanism.
+Experimental MC02 launch requires the controller to own MC01 already;
+all other slots remain normal, no other client is hooked by this mode.
+
+**Source evidence only:** exact GitHub review; existing focused regression
+fixture AUTHORED_NOT_EXECUTED. Rust/Node/MSVC build, Windows input
+and Minecraft gameplay NOT_EXECUTED. The separately reviewed installed
+native DLL/hash admission is not bypassed, and Raw Input/GameInput
+acceptance remains UNVERIFIED. Default production input remains BLOCKED.
+
 ## P0 source implementation: controller-to-MC02 virtual input state (31 October 2026)
 
 - Added an **opt-in native input path, not another observer**. Existing

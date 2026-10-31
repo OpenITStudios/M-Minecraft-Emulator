@@ -268,6 +268,26 @@ fn create_unstarted_tracked(
     cleanup: Option<UnstartedCleanup>,
     #[cfg(test)] proof: Option<&tests::FixtureReceipt>,
 ) -> io::Result<PendingEducationBootstrap> {
+    create_unstarted_tracked_select(
+        path,image,storage,observe,presentation_library,cleanup,
+        #[cfg(feature="mc02-native-input")] false,
+        #[cfg(test)] proof,
+    )
+}
+
+// Only explicit launch intent from the already-authenticated controller
+// may enable the MC02-only reader. The existing startup and fixture
+// callsites continue through the original wrapper with input OFF.
+fn create_unstarted_tracked_select(
+    path: &Path,
+    image: File,
+    storage: Option<SlotStorage>,
+    observe: bool,
+    presentation_library: Option<&BootstrapLibrary>,
+    cleanup: Option<UnstartedCleanup>,
+    #[cfg(feature="mc02-native-input")] experimental_input: bool,
+    #[cfg(test)] proof: Option<&tests::FixtureReceipt>,
+) -> io::Result<PendingEducationBootstrap> {
     if presentation_library.is_some() && storage.is_none() {
         return Err(invalid("Presentation policy requires configured storage"));
     }
@@ -306,7 +326,7 @@ fn create_unstarted_tracked(
     };
     #[cfg(feature="mc02-native-input")]
     let mc02_input=if let Some(store)=&storage {
-        mc02_input::Channel::create(store.slot)?
+        mc02_input::Channel::create(store.slot,experimental_input)?
     } else {None};
     let mut inherited: Vec<HANDLE> = configuration
         .as_ref()

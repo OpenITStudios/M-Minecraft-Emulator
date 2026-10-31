@@ -675,7 +675,8 @@ test('MC02 experiment is hidden by default and requires the original human focus
     '--mc02-input-experimental','on'],
     {LAZY_TESTER_MC02_VIRTUAL_INPUT:optin});
   assert.equal(configOpt.experimentalMc02InputEnabled,true);
-  const native=async(_exe,operation,slot)=>({
+  const native=async(_exe,operation,slot)=>operation==='launch-mc02-input'?
+    snapshot(operation):({
     schema:1,ok:true,operation:'target',slot,pid:700+slot,
     windowId:4000+slot,createdFileTime:'134000000000000001',
     sessionId:1,foreground:slot===1,visible:true,minimized:false,
@@ -699,6 +700,10 @@ test('MC02 experiment is hidden by default and requires the original human focus
     .result.tools.some(x=>x.name==='send_experimental_mc02_input'),false);
   assert.equal((await enabled.handle({jsonrpc:'2.0',id:2,method:'tools/list'}))
     .result.tools.some(x=>x.name==='send_experimental_mc02_input'),true);
+  // Experimental MC02 launch must create the channel in the retained
+  // controller; a plain Launch lacks that authorization.
+  assert.equal((await enabled.callTool('launch_profile',{slot:2})).operation,
+    'launch-mc02-input');
   const input={slot:2,buttons:['move_forward','jump'],
     lookDX:10,lookDY:-5,ttlMs:120};
   const message={jsonrpc:'2.0',id:3,method:'tools/call',

@@ -165,6 +165,8 @@ pub enum SessionRequest {
     ClearProfileData {slot:u32, #[serde(rename="confirmationToken")] confirmation_token:String, #[serde(rename="confirmationName")] confirmation_name:String},
     Launch { slot: u32 },
     #[cfg(feature="mc02-native-input")]
+    LaunchMc02Experiment { slot: u32 },
+    #[cfg(feature="mc02-native-input")]
     Mc02Input {slot:u32,keys:u32,dx:i32,dy:i32,ttl_ms:u32,issued_at_ms:u64},
     CloseOne { slot: u32 },
     CloseAll,
@@ -226,6 +228,13 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
             io::ErrorKind::InvalidInput,
             "Unknown Minecraft profile",
         ));
+    }
+    #[cfg(feature="mc02-native-input")]
+    if let SessionRequest::LaunchMc02Experiment {slot}=request {
+        if slot!=2 {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                "Experimental input launch may only create MC02"));
+        }
     }
     #[cfg(feature="mc02-native-input")]
     if let SessionRequest::Mc02Input {slot,keys,dx,dy,ttl_ms,issued_at_ms}=request {

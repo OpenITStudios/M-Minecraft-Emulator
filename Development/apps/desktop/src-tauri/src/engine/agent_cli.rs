@@ -9,6 +9,9 @@ use serde_json::{json, Value};
 fn parse_operation(args: &[String]) -> Result<(&'static str, Option<u32>), &'static str> {
     match args {
         [one] if one == "inspect" => Ok(("inspect", None)),
+        #[cfg(feature="mc02-native-input")]
+        [one,slot] if one=="launch-mc02-input" && slot=="2" =>
+            Ok(("launch-mc02-input",Some(2))),
         [one, slot] if one == "launch" => {
             let slot = slot.parse::<u32>().map_err(|_| "INVALID_ARGUMENTS")?;
             if !(1..=5).contains(&slot) {
@@ -84,6 +87,13 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
             "gameplayObserved":false}));
     }
     let (operation, slot) = parse_operation(args)?;
+    #[cfg(all(windows, target_arch="x86_64",feature="lazy-tester-package",
+              feature="mc02-native-input"))]
+    if operation=="launch-mc02-input" &&
+       std::env::var("LAZY_TESTER_MC02_VIRTUAL_INPUT").ok().as_deref()
+         !=Some("I_ACCEPT_EXPERIMENTAL_MC02_INPUT") {
+        return Err("EXPERIMENT_NOT_AUTHORIZED");
+    }
     #[cfg(not(all(windows, target_arch = "x86_64", feature = "lazy-tester-package")))]
     {
         let _ = (operation, slot);
@@ -190,6 +200,18 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
                 "evidence":"NOT_VERIFIED_IN_MINECRAFT"
             }));
         }
+        #[cfg(feature="mc02-native-input")]
+        let request=if operation=="launch-mc02-input" {
+            SessionRequest::LaunchMc02Experiment {
+                slot:slot.ok_or("INVALID_ARGUMENTS")?
+            }
+        } else {
+            match slot {
+                Some(slot)=>SessionRequest::Launch {slot},
+                None=>SessionRequest::Inspect,
+            }
+        };
+        #[cfg(not(feature="mc02-native-input"))]
         let request = match slot {
             Some(slot) => SessionRequest::Launch { slot },
             None => SessionRequest::Inspect,
@@ -252,12 +274,16 @@ mod tests {
     fn one_shot_command_accepts_only_inspect_or_five_slots() {
         assert_eq!(parse_operation(&["inspect".into()]).unwrap(), ("inspect", None));
         assert_eq!(parse_operation(&["launch".into(), "5".into()]).unwrap(), ("launch", Some(5)));
+        #[cfg(feature="mc02-native-input")]
+        assert_eq!(parse_operation(&["launch-mc02-input".into(), "2".into()]).unwrap(),
+            ("launch-mc02-input",Some(2)));
         assert_eq!(parse_operation(&["target".into(), "2".into()]).unwrap(),
             ("target", Some(2)));
         assert_eq!(parse_operation(&["probe-background".into(), "2".into()]).unwrap(),
             ("probe-background", Some(2)));
         for args in [vec!["close"], vec!["launch"], vec!["launch", "0"],
             vec!["launch", "6"], vec!["inspect", "1"], vec!["launch", "1", "extra"],
+            vec!["launch-mc02-input","1"],vec!["launch-mc02-input","3"],
             vec!["probe-background", "1"], vec!["probe-background", "3"],
             vec!["probe-background"], vec!["probe-background", "2", "extra"],
             vec!["target"], vec!["target", "0"], vec!["target", "6"],

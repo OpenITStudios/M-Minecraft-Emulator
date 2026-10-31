@@ -784,8 +784,12 @@ export function createHandler(config,{
       if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       try {
+        // An already-running native controller never inherits the MCP
+        // process environment. Carry authorization as an authenticated
+        // launch request, or the MC02 input reader would not exist.
+        const operation=mc02Enabled&&slot===2?'launch-mc02-input':'launch';
         return validateNativeReport(
-          await native(config.executable,'launch',slot),'launch');
+          await native(config.executable,operation,slot),operation);
       } finally {inFlight=false;}
     }
     throw new Error('Unknown tool');

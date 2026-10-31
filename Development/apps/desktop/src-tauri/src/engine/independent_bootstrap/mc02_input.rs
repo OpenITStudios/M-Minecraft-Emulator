@@ -8,8 +8,6 @@ use std::sync::atomic::{AtomicI64, AtomicU64, AtomicU8, Ordering};
 use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
 pub(super) const INPUT_ENV: &str = "MIVUBI_EDUCATION_MC02_INPUT_SECTION";
-pub(super) const INPUT_OPTIN: &str = "LAZY_TESTER_MC02_VIRTUAL_INPUT";
-pub(super) const INPUT_CONSENT: &str = "I_ACCEPT_EXPERIMENTAL_MC02_INPUT";
 const MAGIC: u32 = 0x4c544932; // LTI2 (MC02 only)
 const VERSION: u32 = 2;
 const MAX_INPUT_REQUEST_AGE_MS:u64=500; // same-machine monotonic uptime
@@ -43,10 +41,12 @@ pub(super) struct Channel {
     sequence: AtomicU8,
 }
 impl Channel {
-    pub(super) fn create(slot:u32) -> io::Result<Option<Self>> {
-        if slot!=2 || std::env::var(INPUT_OPTIN).ok().as_deref()!=Some(INPUT_CONSENT) {
-            return Ok(None);
-        }
+    pub(super) fn create(slot:u32, explicitly_requested:bool) -> io::Result<Option<Self>> {
+        // Explicit launch intent is carried by the authenticated native
+        // request. The existing controller does NOT inherit the environment
+        // of a later Codex/CLI process, so ambient opt-in is insufficient.
+        if !explicitly_requested { return Ok(None); }
+        if slot!=2 { return Err(invalid("MC02-only experimental launch refused")); }
         Ok(Some(Self {
             section:Configuration::create_sized(std::mem::size_of::<SharedInput>() as u32)?,
             target:None,

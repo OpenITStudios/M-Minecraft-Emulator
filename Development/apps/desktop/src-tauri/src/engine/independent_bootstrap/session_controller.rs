@@ -82,6 +82,19 @@ impl Sessions {
     }
 
     fn launch(&mut self, slot: u32) -> io::Result<()> {
+        self.launch_inner(slot,false)
+    }
+    #[cfg(feature="mc02-native-input")]
+    fn launch_mc02_experiment(&mut self, slot:u32)->io::Result<()> {
+        if slot!=2 || self.running[0].is_none() {
+            return Err(invalid("MC02 experimental launch requires owned MC01 human session"));
+        }
+        self.launch_inner(slot,true)
+    }
+    fn launch_inner(&mut self, slot:u32,experimental_input:bool)->io::Result<()> {
+        if experimental_input && slot!=2 {
+            return Err(invalid("MC02 experimental launch cannot target another client"));
+        }
         if self.exiting {return Err(invalid("Minecraft sessions are closing. Finish closing them before starting another game."));}
         if !(1..=5).contains(&slot) {
             return Err(invalid("Unknown Minecraft profile"));
@@ -111,13 +124,15 @@ impl Sessions {
         // transaction. Cloning handles neither reopens paths nor seeds a profile.
         let cleanup = UnstartedCleanup::new();
         let attempt = (|| {
-            let child = create_unstarted_tracked(
+            let child = create_unstarted_tracked_select(
                 Path::new(&self.path),
                 self.image.try_clone()?,
                 Some(self.stores[index].as_ref().unwrap().duplicate()?),
                 true,
                 Some(&payload),
                 Some(cleanup.clone()),
+                #[cfg(feature="mc02-native-input")]
+                experimental_input,
                 #[cfg(test)]
                 None,
             )?;
@@ -1219,6 +1234,10 @@ fn run() -> io::Result<()> {
                 }
                 SessionRequest::Launch { slot } => {
                     sessions.launch(slot).map_err(|error| error.to_string())?
+                }
+                #[cfg(feature="mc02-native-input")]
+                SessionRequest::LaunchMc02Experiment {slot} => {
+                    sessions.launch_mc02_experiment(slot).map_err(|error|error.to_string())?
                 }
                 #[cfg(feature="mc02-native-input")]
                 SessionRequest::Mc02Input {slot,keys,dx,dy,ttl_ms,issued_at_ms} => {
