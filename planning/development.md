@@ -881,6 +881,32 @@ acceptance remains UNVERIFIED. Default production input remains BLOCKED.
   This is not additional Win32 input coverage: Raw Input/GameInput
   remains unsupported and Minecraft game response UNVERIFIED.
 
+## P0 source correction: experimental MC02 admission retains a live human host (31 October 2026)
+
+- `LaunchMc02Experiment` previously checked `running[0].is_some()`
+  BEFORE the original `launch_inner` reaped exited processes. A
+  stale/exited MC01 could therefore authorize the creation of MC02's
+  experimental input channel. The controller now reaps first and
+  verifies MC01's original process birth/liveness and unique,
+  responding visible game window BEFORE game settings or MC02 startup.
+  Ordinary `Launch` remains unchanged. An existing controller test
+  has one additional feature-gated assertion (AUTHORED_NOT_EXECUTED);
+  no new suite was added.
+- The native session transport now refuses an experimental MC02
+  launch if the existing authenticated controller endpoint is absent.
+  Previously only the input write was blocked, so an experimental
+  launch could spawn a controller that has no retained MC01 host.
+  Neither experimental operation may create a new controller.
+- The normal `lazy_tester_session` Tauri command now rejects the
+  experimental launch AND input-write variants at its boundary.
+  This prevents the desktop's generic session command from becoming
+  an alternative to the explicitly opted-in native agent CLI while
+  preserving all ordinary profile/session operations.
+- The changes affect only source under Cargo's `mc02-native-input`
+  feature. No Windows tests, builds, Minecraft login, DLL hooks,
+  CI or localtest was executed. Existing optional DLL/binary admission
+  remains unresolved and gameplay input compatibility UNVERIFIED.
+
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
 **Stop scope drift.** Phases 14–19 hardened secondary observation/evidence

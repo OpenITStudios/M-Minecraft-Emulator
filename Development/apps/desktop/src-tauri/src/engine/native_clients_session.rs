@@ -358,11 +358,14 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
         }
         return Ok(Ok(snapshot));
     }
-    // Input must NEVER boot a new controller or adopt an unowned game.
+    // Experimental MC02 input and launch both require an ALREADY owned
+    // MC01 session in the retained controller. Neither request is allowed
+    // to create a new controller or adopt an unrelated Minecraft process.
     #[cfg(feature="mc02-native-input")]
-    if matches!(request,SessionRequest::Mc02Input{..}) {
+    if matches!(request,SessionRequest::Mc02Input{..} |
+        SessionRequest::LaunchMc02Experiment{..}) {
         return Err(io::Error::new(io::ErrorKind::NotFound,
-            "No retained MC02 controller; input refused"));
+            "No retained MC01/MC02 controller; experiment refused"));
     }
     // Explicit user action only. A fresh UI first tries the existing authenticated endpoint.
     let executable=super::process_roles::image("sessions")?;

@@ -86,8 +86,8 @@ impl Sessions {
     }
     #[cfg(feature="mc02-native-input")]
     fn launch_mc02_experiment(&mut self, slot:u32)->io::Result<()> {
-        if slot!=2 || self.running[0].is_none() {
-            return Err(invalid("MC02 experimental launch requires owned MC01 human session"));
+        if slot!=2 {
+            return Err(invalid("MC02 experimental launch is limited to slot 2"));
         }
         self.launch_inner(slot,true)
     }
@@ -101,6 +101,19 @@ impl Sessions {
         }
         let index = slot as usize - 1;
         self.reap();
+        #[cfg(feature="mc02-native-input")]
+        if experimental_input {
+            // Reap first: running[0].is_some() can still refer to an MC01
+            // process that exited since its last Inspect. Never admit a
+            // new virtual-input MC02 based on stale MC01 ownership.
+            let host=self.running[0].as_ref()
+                .ok_or_else(||invalid("MC02 experimental launch requires live MC01"))?;
+            let child=&host.children[0];
+            child.identity()?;
+            if !window(child,false).is_some_and(|target|target.responding) {
+                return Err(invalid("MC02 experiment requires a responding MC01 window"));
+            }
+        }
         if self.running[index].is_some() {
             return Err(invalid(
                 "Minecraft profile is already running or its outcome is uncertain",
@@ -1478,6 +1491,9 @@ mod tests {
         // path can safely take a non-reaping snapshot of all five slots.
         assert_eq!(sessions.snapshot_without_reaping().profiles.len(),5);
         assert!(sessions.running.iter().all(Option::is_none));
+        #[cfg(feature="mc02-native-input")]
+        assert!(sessions.launch_mc02_experiment(2).unwrap_err().to_string()
+            .contains("requires live MC01"));
     }
 
     #[test]

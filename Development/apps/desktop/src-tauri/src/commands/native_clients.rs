@@ -33,6 +33,17 @@ pub async fn lazy_tester_session(
     request: crate::engine::native_clients_session::SessionRequest,
 ) -> Result<crate::engine::native_clients_session::SessionSnapshot, String> {
     if crate::app_bootstrap::startup_diagnostic_mode() && !matches!(request,crate::engine::native_clients_session::SessionRequest::Inspect) {return Err("Startup diagnostic cannot launch or modify games".into());}
+    // The desktop's normal session command must never be an alternate
+    // admission path for experimental game hooks. Only the explicitly
+    // opted-in, same-image native agent CLI may send these requests
+    // through the already-authenticated controller transport.
+    #[cfg(feature="mc02-native-input")]
+    if matches!(&request,
+        crate::engine::native_clients_session::SessionRequest::LaunchMc02Experiment{..} |
+        crate::engine::native_clients_session::SessionRequest::Mc02Input{..}
+    ) {
+        return Err("MC02 experimental input is restricted to the opt-in native agent CLI".into());
+    }
     tauri::async_runtime::spawn_blocking(move || run_manager_operation(|| {
         crate::engine::native_clients_session::request(request)
     })).await.map_err(|_| "Session task failed".to_string())?.map_err(|error| error.to_string())
