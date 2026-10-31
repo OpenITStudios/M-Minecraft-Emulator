@@ -229,6 +229,7 @@ export async function sendExperimentalMc02Native(executable,{keys,dx,dy,ttlMs,re
   }
   if(!executable || !path.isAbsolute(executable) ||
      !Number.isSafeInteger(keys)||keys<0||keys>255 ||
+     (keys&3)===3||(keys&12)===12 ||
      !Number.isSafeInteger(dx)||dx< -127||dx>127 ||
      !Number.isSafeInteger(dy)||dy< -127||dy>127 ||
      !Number.isSafeInteger(ttlMs)||ttlMs<1||ttlMs>500) {

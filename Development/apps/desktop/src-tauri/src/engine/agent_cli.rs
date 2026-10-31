@@ -59,8 +59,10 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
         let dy=args[4].parse::<i32>().map_err(|_|"INVALID_ARGUMENTS")?;
         let ttl_ms=args[5].parse::<u32>().map_err(|_|"INVALID_ARGUMENTS")?;
         let requested_at_ms=args[6].parse::<u64>().map_err(|_|"INVALID_ARGUMENTS")?;
-        if keys>255||!(-127..=127).contains(&dx)||!(-127..=127).contains(&dy)||
-           !(1..=500).contains(&ttl_ms) {return Err("INVALID_ARGUMENTS");}
+        // Enforce the same per-slot keyboard/camera admission before
+        // asking the retained native controller to inspect any process.
+        native_clients_session::admit_native_input_frame(2,keys,dx,dy,ttl_ms)
+            .map_err(|_|"INVALID_ARGUMENTS")?;
         // A delayed Node request must not receive a new execution window
         // just because this one-shot executable finally started. UTC is
         // only an admission check; the native pipe then uses shared uptime.

@@ -186,8 +186,11 @@ impl Sessions {
         // The existing authenticated SessionRequest is slot-addressed.
         // Only MC02 currently has a source candidate. No MC03-MC05
         // native channel, injected hook or input permission is implied.
-        let release_only=keys==0 && dx==0 && dy==0;
-        if slot!=2 || (self.exiting && !release_only) {
+        let action=crate::engine::native_clients_session::admit_native_input_frame(
+            slot,keys,dx,dy,ttl_ms)?;
+        let release_only=matches!(action,
+            crate::engine::native_clients_session::NativeInputIntent::ReleaseAll);
+        if self.exiting && !release_only {
             return Err(invalid("MC02-only experimental input refused"));
         }
         let ai=self.running[1].as_ref().ok_or_else(||

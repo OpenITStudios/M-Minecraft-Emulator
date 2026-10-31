@@ -172,6 +172,41 @@ pub enum SessionRequest {
     CloseAll,
 }
 
+// One native-source admission point for per-client input frame requests.
+// This remains MC02-only, feature-OFF by default and transport-only.
+// Expanding the allowed slot requires separate native/payload approval and
+// observed Minecraft keyboard+relative camera+attack acceptance; a five-slot
+// semantic plan is NEVER permission to send game input.
+#[cfg(feature="mc02-native-input")]
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub(crate) enum NativeInputIntent { Active, ReleaseAll }
+
+#[cfg(feature="mc02-native-input")]
+pub(crate) fn admit_native_input_frame(
+    slot:u32,keys:u32,dx:i32,dy:i32,ttl_ms:u32,
+)->io::Result<NativeInputIntent> {
+    // Slot ownership precedes any inspection, pipe connection or write.
+    // The human-owned MC01 and MC03-MC05 have no native input backend.
+    if slot!=2 {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput,
+            "No authorized native input backend for requested slot"));
+    }
+    // Reject impossible opposing movement controls even when a caller
+    // bypasses the MCP's action planner or sends its own IPC payload.
+    // Bits: W=1, S=2, A=4, D=8, jump=16, sneak=32, attack=64, use=128.
+    if keys>255 || (keys & 0x03)==0x03 || (keys & 0x0c)==0x0c ||
+       !(-127..=127).contains(&dx) || !(-127..=127).contains(&dy) ||
+       !(1..=500).contains(&ttl_ms) {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput,
+            "Invalid experimental native input frame"));
+    }
+    Ok(if keys==0 && dx==0 && dy==0 {
+        NativeInputIntent::ReleaseAll
+    } else {
+        NativeInputIntent::Active
+    })
+}
+
 pub(crate) type SessionReply = Result<SessionSnapshot, String>;
 #[cfg(windows)]
 pub(crate) mod pipe;
@@ -238,11 +273,12 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     }
     #[cfg(feature="mc02-native-input")]
     if let SessionRequest::Mc02Input {slot,keys,dx,dy,ttl_ms,issued_at_ms}=request {
-        if slot!=2||keys>255||!(-127..=127).contains(&dx)||
-           !(-127..=127).contains(&dy)||!(1..=500).contains(&ttl_ms)||
-           issued_at_ms==0 {
+        // Native IPC must not trust any client-side MCP/CLI button mask.
+        // One admission rule covers both active writes and release-all.
+        admit_native_input_frame(slot,keys,dx,dy,ttl_ms)?;
+        if issued_at_ms==0 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                "Invalid experimental MC02 input"));
+                "Missing native input issue timestamp"));
         }
     }
     let inspecting = matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings);
@@ -524,6 +560,32 @@ mod tests {
         assert!(matches!(serde_json::from_str::<SessionRequest>(
             r#"{"operation":"CloseOne","slot":2}"#
         ), Ok(SessionRequest::CloseOne {slot:2})));
+    }
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn per_client_input_admission_rejects_unauthorized_slots_and_opposing_controls() {
+        // Pure source fixture: does not create a retained controller, process
+        // or input section and is NOT Minecraft gameplay evidence.
+        for slot in [0,1,3,4,5,6,u32::MAX] {
+            assert_eq!(admit_native_input_frame(slot,1,0,0,150)
+                .unwrap_err().kind(),io::ErrorKind::InvalidInput);
+            assert_eq!(admit_native_input_frame(slot,0,0,0,1)
+                .unwrap_err().kind(),io::ErrorKind::InvalidInput);
+        }
+        for keys in [3,12,15,255,256] {
+            assert_eq!(admit_native_input_frame(2,keys,0,0,150)
+                .unwrap_err().kind(),io::ErrorKind::InvalidInput);
+        }
+        for (keys,dx,dy,ttl) in [(1,128,0,150),(1,0,-128,150),
+                                 (1,0,0,0),(1,0,0,501)] {
+            assert!(admit_native_input_frame(2,keys,dx,dy,ttl).is_err());
+        }
+        assert_eq!(admit_native_input_frame(2,0,0,0,1).unwrap(),
+            NativeInputIntent::ReleaseAll);
+        assert_eq!(admit_native_input_frame(2,0,10,-10,150).unwrap(),
+            NativeInputIntent::Active);
+        assert_eq!(admit_native_input_frame(2,1|4|16|64,0,0,150).unwrap(),
+            NativeInputIntent::Active);
     }
     #[test]
     fn protocol_rejects_paths_unknown_operations_and_unbounded_input() {

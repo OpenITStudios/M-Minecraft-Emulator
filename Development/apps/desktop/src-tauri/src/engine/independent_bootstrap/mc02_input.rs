@@ -133,10 +133,14 @@ impl Channel {
     pub(super) fn write(&self,pid:u32,birth:u64,session:u32,
                         keys:u32,dx:i32,dy:i32,ttl_ms:u32,
                         issued_at_ms:u64,human_hwnd:usize,ai_hwnd:usize)->io::Result<()> {
-        if human_hwnd==0 || ai_hwnd==0 || human_hwnd==ai_hwnd ||
-           self.target!=Some((pid,birth,session)) || keys>255 ||
-            !(-127..=127).contains(&dx) || !(-127..=127).contains(&dy) ||
-            !(1..=500).contains(&ttl_ms) {
+        // Final source-side defense: no direct caller may bypass the
+        // admission rules or turn a release request into an active write.
+        let action=crate::engine::native_clients_session::admit_native_input_frame(
+            2,keys,dx,dy,ttl_ms)?;
+        if !matches!(action,
+                crate::engine::native_clients_session::NativeInputIntent::Active)
+            || human_hwnd==0 || ai_hwnd==0 || human_hwnd==ai_hwnd ||
+            self.target!=Some((pid,birth,session)) {
             return Err(invalid("Unbound, expired or invalid MC02 input command"));
         }
         let view=self.mapped()?;

@@ -1013,6 +1013,25 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October source-first native per-slot input admission:** The
+existing `native_clients_session.rs` now owns a single feature-gated
+`admit_native_input_frame` contract for MC02 virtual input, used by
+the same-image CLI, authenticated SessionRequest, retained controller
+and final shared-memory channel. The permission matrix is explicit:
+MC02 opt-in candidate only; MC01 and MC03-MC05 always rejected
+for active AND release input. Contradictory W/S and A/D masks are
+rejected at native boundaries even if MCP action validation was
+bypassed. `NativeInputIntent::ReleaseAll` keeps the existing
+exact-MC02-owner path without MC01 foreground; active input still
+requires verified MC01/MC02 windows and real foreground. No change to
+wire schema, v4 shared-state ABI, C++ detours, installed game data,
+CI, production feature defaults or input access for other clients.
+Tests have been authored for slot/bit/TTL admission and raw CLI
+helper parity but NOT_EXECUTED; compile, target Windows and Minecraft
+gameplay remain NOT_EXECUTED. This prepares the native permission
+boundary without claiming independent multi-AI play.
+
+
 **31 October native/visual lock ownership correction:** A read-only
 exact-window capture no longer writes or clears the exclusive native
 mutation lock. It owns only the separate bounded visual gate;

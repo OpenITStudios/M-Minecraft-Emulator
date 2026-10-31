@@ -76,6 +76,28 @@ Native IPC contention or a failed image read is reported as unavailable,
 not as gameplay evidence. Cua/WGC providers, hooks, packaging defaults
 and production input remain unchanged. Tests are authored NOT_EXECUTED.
 
+## Per-slot native input admission (MC02 source candidate only)
+
+The **existing retained Rust session controller** now applies one
+`admit_native_input_frame(slot,keys,dx,dy,ttlMs)` rule to the
+same-image one-shot CLI, authenticated session IPC, controller
+dispatch and MC02 channel writes. No second lifecycle manager or
+input provider was introduced. The rule refuses MC01, MC03, MC04
+and MC05 even if a forged command bypasses the MCP planner; the only
+eligible slot is the separately opted-in MC02 experiment.
+
+The admission also rejects contradictory forward/back and left/right
+bits, out-of-range relative mouse values and invalid TTLs. It
+distinguishes `Active` from `ReleaseAll` at the native boundary:
+release is still authorized only against the original MC02 process
+PID/birth/session and channel and does not need human foreground.
+Active input still needs MC01's real foreground and exact original
+MC02 window/process identity. A native shared-state ACK is not
+gameplay input evidence. The external wire schema, private 96-byte
+ABI, package admission and normal disabled features remain unchanged.
+Authored fixtures are NOT_EXECUTED.
+
+
 ## Opt-in MC02 timed Computer Use action sequence — source only
 
 The existing Codex-facing local stdio MCP has a **separate** experimental

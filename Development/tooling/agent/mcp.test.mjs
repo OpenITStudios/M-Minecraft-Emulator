@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,symlink,rm,open,rename,appendFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,validateNativeReport,validateNativeWindowTarget,boundedMcpText} from './mcp.mjs';
+import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native} from './mcp.mjs';
 
 const snapshot=(operation)=>({schema:1,ok:true,operation,profiles:Array.from({length:5},(_,i)=>({slot:i+1,state:i===0?'RUNNING':'STOPPED',responding:i===0,hasWindow:i===0,needsAttention:false}))});
 const config=(mode='human-plus-four-ai')=>({mode,executable:'C:\\App\\lazy-tester.exe',evidenceDirectory:''});
@@ -872,4 +872,13 @@ test('urgent MC02 native neutral write may overlap read-only capture without unl
   const frame=await reading;
   assert.equal(frame.metadata.slot,2);
   handler.shutdown();
+});
+
+test('raw experimental MC02 input helper refuses contradictory native key masks before subprocess',async()=>{
+  const executable=path.resolve('lazy-tester.exe');
+  for(const keys of [3,12,15,255]) {
+    await assert.rejects(()=>sendExperimentalMc02Native(executable,{
+      keys,dx:0,dy:0,ttlMs:150,requestedAtMs:Date.now(),
+    }),/MC02_INPUT_INVALID_COMMAND/);
+  }
 });
