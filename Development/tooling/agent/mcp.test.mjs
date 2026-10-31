@@ -775,7 +775,7 @@ test('MC02 sequence allows exact-window image capture without unlocking native m
   let onFirstWrite,resumeFirstWrite;
   const entered=new Promise(resolve=>{onFirstWrite=resolve;});
   const blocked=new Promise(resolve=>{resumeFirstWrite=resolve;});
-  let first=true,nativeReads=0,writes=0;
+  let nativeReads=0,writes=0;
   const target=slot=>({schema:1,ok:true,operation:'target',slot,
     pid:800+slot,windowId:5000+slot,createdFileTime:'134000000000000001',
     sessionId:1,foreground:false,visible:true,minimized:false,
@@ -786,9 +786,18 @@ test('MC02 sequence allows exact-window image capture without unlocking native m
     },
     capture:async()=>({mimeType:'image/png',imageBase64:'iVBORw0KGgo=',
       width:640,height:360,sha256:'b'.repeat(64)}),
+    mc02Batch:async(_exe,pulses,{signal})=>{
+      writes++;
+      assert.ok(pulses[0].keys);
+      onFirstWrite();await blocked;
+      if(signal.aborted)throw Error('MC02_SEQUENCE_ABORTED');
+      return {schema:1,slot:2,
+        status:'EXPERIMENTAL_MC02_SEQUENCE_TRANSPORT_ACKNOWLEDGED',
+        pulsesAcknowledged:pulses.length,gameplayObserved:false};
+    },
     mc02Input:async(_exe,packet)=>{
       writes++;
-      if(packet.keys&&first){first=false;onFirstWrite();await blocked;}
+      assert.equal(packet.keys,0);
       return {schema:1,slot:2,
         status:'NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
         gameplayObserved:false};

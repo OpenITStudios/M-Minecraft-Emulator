@@ -121,11 +121,20 @@ make them executable.
   attack, use, and `look_relative` (individual deltas at most ±127).
 - It compiles through the existing `input-timeline.mjs`, coalesces
   same-timestamp transitions into complete held-button states, and
-  refreshes held input every 160 ms with native TTL 350 ms. Camera
-  deltas are published only once. It does not send one CLI per game frame.
-- On success, abort, or failure it attempts a final neutral MC02 input
-  packet. The independent native deadline is the fallback when MCP
-  crashes or the foreground gate refuses a release.
+  prepares bounded pulse times every 160 ms with TTL 350 ms. Camera
+  deltas are published only once. **One** opt-in same-image
+  `mc02-input-batch` CLI subprocess schedules the entire sequence;
+  each tick still enters the **same** authenticated retained controller.
+  This avoids process startup for every heartbeat. No second controller,
+  new pipe, driver, game hook, or server is introduced.
+- The native bounded batch refuses a stale initial request, nonmonotonic
+  timestamps, conflicting controls, out-of-range camera deltas, late
+  pulses (>150 ms) and all non-MC02 input. It attempts an exact-owner
+  neutral release on completion or a handled error. After the process
+  exits or is cancelled, MCP independently attempts another native
+  neutral write, with TTL expiry as the final fail-safe when killed.
+  The output remains **transport acknowledgement only**; actual
+  Minecraft gameplay and keyboard release remain NOT_EXECUTED.
 - `stop_experimental_mc02_actions` requests cancellation while a sequence
   is running; that immediate response is NOT a release acknowledgement.
   When no sequence is active, it issues one neutral MC02 native write

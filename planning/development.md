@@ -1013,6 +1013,29 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October MC02 heartbeat process-start feasibility correction:**
+The existing opt-in MCP action sequence sent each 160 ms heartbeat
+through `execFileAsync(lazy-tester.exe, mc02-input)`, starting a new
+Windows process and reestablishing native IPC on every pulse. With
+native TTL 350 ms, that cost threatens sustained input continuity
+even if Minecraft uses the target API. The canonical per-client
+frame compiler now prepares one bounded schedule (<=64 pulses,
+<=3.5 seconds); an opt-in `mc02-input-batch` mode in the existing
+same-image Rust CLI schedules ticks with monotonic uptime and sends
+each through the SAME retained authenticated controller. This is
+not a new controller, driver, named pipe or Minecraft input provider.
+Native admission validates each MC02-only tick, refuses >150 ms
+lateness and attempts neutral release on completed/failed batches.
+The MCP sequence always independently attempts a neutral write
+after the bounded subprocess returns or is cancelled; TTL remains
+the fail-safe if that write is refused. Normal single-pulse MCP
+operations and production input defaults remain unchanged. Relevant
+authored fixtures were updated to reflect the batch callback.
+REMOTE_GITHUB source review only; no JS/Rust/MSVC build or test was
+executed and no Minecraft gameplay/control result is known. The
+real input consumer and MC01 human isolation still require a
+separately authorized Windows acceptance observation.
+
 **31 October MC02 cross-control release priority (source only):**
 The compile-OFF buffered Raw Input planner previously iterated W/S/A/D,
 jump, sneak and mouse buttons, emitting each control's new press while

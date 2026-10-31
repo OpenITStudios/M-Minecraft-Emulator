@@ -42,7 +42,109 @@ fn native_error(error: io::Error) -> &'static str {
     }
 }
 
+#[cfg(all(windows,target_arch="x86_64",
+          feature="lazy-tester-package",feature="mc02-native-input"))]
+#[derive(serde::Deserialize)]
+#[serde(rename_all="camelCase",deny_unknown_fields)]
+struct Mc02BatchPulse {
+    at_ms:u32,keys:u32,dx:i32,dy:i32,ttl_ms:u32,
+}
+
+// A bounded same-image CLI process schedules ALL pulses for one MC02
+// sequence. The original authenticated retained controller is still
+// the only input writer. This removes repeated process startups inside
+// the 160ms heartbeat; it is NOT a new game controller or driver.
+#[cfg(all(windows,target_arch="x86_64",
+          feature="lazy-tester-package",feature="mc02-native-input"))]
+fn execute_mc02_batch(args:&[String])->Result<Value,&'static str> {
+    use super::native_clients_session::{self,SessionRequest};
+    use windows_sys::Win32::System::SystemInformation::GetTickCount64;
+    if std::env::var("LAZY_TESTER_MC02_VIRTUAL_INPUT").ok().as_deref()
+        !=Some("I_ACCEPT_EXPERIMENTAL_MC02_INPUT") {
+        return Err("EXPERIMENT_NOT_AUTHORIZED");
+    }
+    if args.len()!=4||args[1]!="2"||args[3].len()>8192 {
+        return Err("INVALID_ARGUMENTS");
+    }
+    // Reject delayed process startup before any batch tick. Subsequent
+    // ticks use the local monotonic uptime clock, not wall-clock time.
+    let requested_at_ms=args[2].parse::<u64>().map_err(|_|"INVALID_ARGUMENTS")?;
+    let now_wall=std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_|"STALE_MC02_INPUT")?.as_millis();
+    if requested_at_ms==0||now_wall<u128::from(requested_at_ms)||
+        now_wall-u128::from(requested_at_ms)>500 {
+        return Err("STALE_MC02_INPUT");
+    }
+    let pulses:Vec<Mc02BatchPulse>=serde_json::from_str(&args[3])
+        .map_err(|_|"INVALID_ARGUMENTS")?;
+    if pulses.is_empty()||pulses.len()>64 {
+        return Err("INVALID_ARGUMENTS");
+    }
+    let mut previous=None;
+    for pulse in &pulses {
+        // Explicit fixed native TTL and strictly increasing integer
+        // timestamps; only MC02 can receive a scheduled input batch.
+        if pulse.at_ms>3500||pulse.ttl_ms!=350||
+            previous.is_none()&&pulse.at_ms!=0 ||
+            previous.is_some_and(|last|pulse.at_ms<=last) ||
+            native_clients_session::admit_native_input_frame(
+                2,pulse.keys,pulse.dx,pulse.dy,pulse.ttl_ms).is_err() {
+            return Err("INVALID_ARGUMENTS");
+        }
+        previous=Some(pulse.at_ms);
+    }
+    let started=unsafe{GetTickCount64()};
+    let mut may_have_sent=false;
+    let result=(||->Result<(),&'static str>{
+        for pulse in &pulses {
+            let deadline=started.saturating_add(u64::from(pulse.at_ms));
+            let now=unsafe{GetTickCount64()};
+            if now<deadline {
+                std::thread::sleep(std::time::Duration::from_millis(deadline-now));
+            }
+            if unsafe{GetTickCount64()}.saturating_sub(deadline)>150 {
+                return Err("MC02_SEQUENCE_DEADLINE");
+            }
+            // An uncertain native IPC acknowledgement may still mean the
+            // original controller wrote a packet. Always attempt release.
+            may_have_sent=true;
+            let issued_at_ms=unsafe{GetTickCount64()};
+            let snapshot=native_clients_session::request(SessionRequest::Mc02Input{
+                slot:2,keys:pulse.keys,dx:pulse.dx,dy:pulse.dy,
+                ttl_ms:pulse.ttl_ms,issued_at_ms,
+            }).map_err(native_error)?;
+            if snapshot.schema!=1||snapshot.profiles.len()!=5 {
+                return Err("INVALID_NATIVE_SNAPSHOT");
+            }
+        }
+        Ok(())
+    })();
+    // The MCP bridge also attempts an independent neutral write after
+    // this subprocess exits/aborts. The native TTL is the final fallback
+    // on process termination or a failed authenticated release.
+    if may_have_sent {
+        let released=native_clients_session::request(SessionRequest::Mc02Input{
+            slot:2,keys:0,dx:0,dy:0,ttl_ms:1,
+            issued_at_ms:unsafe{GetTickCount64()},
+        });
+        if released.is_err() {
+            return Err("MC02_RELEASE_UNCONFIRMED");
+        }
+    }
+    result?;
+    Ok(json!({"schema":1,"ok":true,"operation":"mc02-input-batch",
+        "slot":2,"pulses":pulses.len(),
+        "delivery":"PER_CLIENT_SHARED_STATE_WRITTEN_NOT_GAMEPLAY_PROOF",
+        "gameplayObserved":false}))
+}
+
 fn execute(args: &[String]) -> Result<Value, &'static str> {
+    #[cfg(all(windows,target_arch="x86_64",
+              feature="lazy-tester-package",feature="mc02-native-input"))]
+    if args.first().map(String::as_str)==Some("mc02-input-batch") {
+        return execute_mc02_batch(args);
+    }
     #[cfg(all(windows,target_arch="x86_64",
               feature="lazy-tester-package",feature="mc02-native-input"))]
     if args.first().map(String::as_str)==Some("mc02-input") {

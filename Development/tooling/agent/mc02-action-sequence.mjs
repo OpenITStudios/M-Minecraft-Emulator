@@ -47,6 +47,44 @@ export function prepareMc02ActionSequence(actions) {
 }
 
 /**
+ * One bounded deterministic schedule for BOTH the native single-process
+ * batch transport and the source-only injected per-pulse fixture runner.
+ * The native controller still validates every pulse independently.
+ */
+export function prepareMc02PulseBatch(actions) {
+  const prepared=prepareMc02ActionSequence(actions);
+  const pulses=[];
+  let cursor=0,buttons=[],keyMask=0,heartbeatAt=Infinity;
+  while(cursor<prepared.frames.length || buttons.length>0) {
+    const eventAt=cursor<prepared.frames.length?
+      prepared.frames[cursor].atMs:Infinity;
+    const due=Math.min(eventAt,heartbeatAt);
+    if(!Number.isFinite(due)||due>MC02_SEQUENCE_LIMITS.maxHorizonMs||
+       pulses.length>=MC02_SEQUENCE_LIMITS.maxPulses) {
+      throw new Error('MC02_SEQUENCE_DEADLINE');
+    }
+    let dx=0,dy=0;
+    if(cursor<prepared.frames.length&&
+       prepared.frames[cursor].atMs===due) {
+      const frame=prepared.frames[cursor++];
+      buttons=frame.buttons;keyMask=frame.keyMask;
+      dx=frame.lookDX;dy=frame.lookDY;
+    }
+    pulses.push(Object.freeze({
+      atMs:due,keys:keyMask,buttons:Object.freeze([...buttons]),
+      dx,dy,ttlMs:MC02_SEQUENCE_LIMITS.ttlMs,
+    }));
+    heartbeatAt=buttons.length>0?
+      due+MC02_SEQUENCE_LIMITS.heartbeatMs:Infinity;
+  }
+  return Object.freeze({
+    pulses:Object.freeze(pulses),
+    count:pulses.length,
+    finalEventMs:prepared.finalEventMs,
+  });
+}
+
+/**
  * Bounded, serialized source adapter for the already opted-in native MC02
  * pulse. A successful emit() means a shared-state write was acknowledged,
  * NOT that Minecraft processed WASD, mouse movement or an attack.
@@ -63,46 +101,30 @@ export async function runExperimentalMc02Sequence(actions,{
   emit,signal,clock=()=>performance.now(),wait=sleep,
 }={}) {
   if(typeof emit!=='function')throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
-  const prepared=prepareMc02ActionSequence(actions);
+  const batch=prepareMc02PulseBatch(actions);
   if(signal?.aborted)throw new Error('MC02_SEQUENCE_ABORTED');
-  let buttons=[];
   const started=clock();
-  let cursor=0,heartbeatAt=Infinity,acknowledged=0,attempted=false;
+  let acknowledged=0,attempted=false;
   let executionError=null,neutralAcknowledged=false;
   try {
-    while(cursor<prepared.frames.length || buttons.length>0) {
+    for(const pulse of batch.pulses) {
       if(signal?.aborted)throw new Error('MC02_SEQUENCE_ABORTED');
-      const eventAt=cursor<prepared.frames.length?
-        prepared.frames[cursor].atMs:Infinity;
-      const due=Math.min(eventAt,heartbeatAt);
-      if(!Number.isFinite(due)||acknowledged>=MC02_SEQUENCE_LIMITS.maxPulses) {
-        throw new Error('MC02_SEQUENCE_DEADLINE');
-      }
-      const remaining=due-(clock()-started);
+      const remaining=pulse.atMs-(clock()-started);
       if(remaining>0)await wait(remaining,signal);
       if(signal?.aborted)throw new Error('MC02_SEQUENCE_ABORTED');
-      const lateness=clock()-started-due;
-      if(!Number.isFinite(lateness)||lateness>MC02_SEQUENCE_LIMITS.maxLatenessMs) {
+      const lateness=clock()-started-pulse.atMs;
+      if(!Number.isFinite(lateness)||
+         lateness>MC02_SEQUENCE_LIMITS.maxLatenessMs) {
         throw new Error('MC02_SEQUENCE_DEADLINE');
       }
-      let dx=0,dy=0;
-      if(cursor<prepared.frames.length &&
-         prepared.frames[cursor].atMs===due) {
-        const frame=prepared.frames[cursor++];
-        buttons=frame.buttons;
-        dx=frame.lookDX;dy=frame.lookDY;
-      }
-      // The canonical per-client frame supplies full held state.
-      // Heartbeats never repeat a one-shot camera delta.
       attempted=true;
       const accepted=await emit({
-        buttons:[...buttons],dx,dy,ttlMs:MC02_SEQUENCE_LIMITS.ttlMs,
+        buttons:[...pulse.buttons],dx:pulse.dx,dy:pulse.dy,
+        ttlMs:pulse.ttlMs,
       });
       if(accepted!==true)throw new Error('MC02_SEQUENCE_NATIVE_UNCONFIRMED');
       acknowledged++;
       if(signal?.aborted)throw new Error('MC02_SEQUENCE_ABORTED');
-      heartbeatAt=buttons.length>0?
-        due+MC02_SEQUENCE_LIMITS.heartbeatMs:Infinity;
     }
   } catch(error) {
     executionError=error;

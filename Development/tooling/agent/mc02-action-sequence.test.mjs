@@ -2,8 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import {prepareMc02ActionSequence,runExperimentalMc02Sequence,
-  MC02_SEQUENCE_LIMITS} from './mc02-action-sequence.mjs';
+import {prepareMc02ActionSequence,prepareMc02PulseBatch,
+  runExperimentalMc02Sequence,MC02_SEQUENCE_LIMITS} from './mc02-action-sequence.mjs';
 import {createHandler,parseConfiguration} from './mcp.mjs';
 const move=(kind,atMs,durationMs,other={})=>({slot:2,kind,atMs,durationMs,...other});
 function virtualClock(){
@@ -24,7 +24,10 @@ test('one bounded sequence combines movement and look; heartbeat and final neutr
     move('look_relative',0,50,{deltaX:20,deltaY:-10}),
     move('attack',100,150)];
   const prepared=prepareMc02ActionSequence(actions);
+  const scheduled=prepareMc02PulseBatch(actions);
   assert.ok(prepared.eventCount>0);
+  assert.equal(scheduled.pulses[0].keys,1);
+  assert.deepEqual([scheduled.pulses[0].dx,scheduled.pulses[0].dy],[20,-10]);
   assert.equal(prepared.frames.length,4);
   assert.deepEqual(prepared.frames[0].buttons,['move_forward']);
   assert.deepEqual([prepared.frames[0].lookDX,prepared.frames[0].lookDY],[20,-10]);
@@ -95,9 +98,15 @@ test('experimental sequence tools are invisible in the normal MCP mode',async()=
 });
 test('MCP experimental sequence reuses the retained native MC02 input callback',async()=>{
   const packets=[],cfg=optIn();
-  const handler=createHandler(cfg,{mc02Input:async(_exe,packet)=>{
-    packets.push(packet);return receipt;
-  }});
+  const handler=createHandler(cfg,{
+    mc02Batch:async(_exe,pulses)=>{
+      packets.push(...pulses);
+      return {schema:1,slot:2,
+        status:'EXPERIMENTAL_MC02_SEQUENCE_TRANSPORT_ACKNOWLEDGED',
+        pulsesAcknowledged:pulses.length,gameplayObserved:false};
+    },
+    mc02Input:async(_exe,packet)=>{packets.push(packet);return receipt;},
+  });
   const list=(await handler.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;
   assert.equal(list.some(t=>t.name==='run_experimental_mc02_actions'),true);
   assert.equal(list.some(t=>t.name==='stop_experimental_mc02_actions'),true);

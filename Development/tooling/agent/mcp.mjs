@@ -11,7 +11,7 @@ import {planPeerSession,planPlayerActions} from './control-plan.mjs';
 import {compilePlayerInputTimeline,compilePerClientInputFrames,GAME_BUTTON_BITS} from './input-timeline.mjs';
 import {assessInputRoute,requiredInputSlots} from './input-route.mjs';
 import {inputExecutionStatus} from './input-delivery.mjs';
-import {runExperimentalMc02Sequence} from './mc02-action-sequence.mjs';
+import {prepareMc02PulseBatch} from './mc02-action-sequence.mjs';
 import {summarizeGameEvidence,summarizeEvidenceReports,normalizeEvidenceSlots} from './evidence-summary.mjs';
 import {captureCuaWindow,validateCuaExecutable} from './visual-capture.mjs';
 import {createVisualObserver,OBSERVATION_LIMITS} from './visual-observer.mjs';
@@ -275,6 +275,76 @@ export async function sendExperimentalMc02Native(executable,{keys,dx,dy,ttlMs,re
     note:'A native shared-state write is not proof Minecraft processed movement, camera or attacks.'};
 }
 
+// One same-image child for one BOUNDED MC02 action sequence, rather than a
+// separate Windows process for each 160ms heartbeat. It never creates a
+// second Minecraft controller: each native tick enters existing IPC.
+export async function sendExperimentalMc02BatchNative(executable,pulses,{signal}={}) {
+  if(!executable||!path.isAbsolute(executable)||!Array.isArray(pulses)||
+     pulses.length<1||pulses.length>64) {
+    throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
+  }
+  let previous=-1;
+  const args=[];
+  for(const pulse of pulses) {
+    const {atMs,keys,dx,dy,ttlMs}=pulse;
+    if(!Number.isSafeInteger(atMs)||atMs<=previous||atMs>3500||
+       !Number.isSafeInteger(keys)||keys<0||keys>255||
+       (keys&3)===3||(keys&12)===12||
+       !Number.isSafeInteger(dx)||dx< -127||dx>127||
+       !Number.isSafeInteger(dy)||dy< -127||dy>127||
+       ttlMs!==350) {
+      throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
+    }
+    previous=atMs;
+    args.push({atMs,keys,dx,dy,ttlMs});
+  }
+  if(args[0].atMs!==0)throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
+  const serialized=JSON.stringify(args);
+  if(Buffer.byteLength(serialized,'utf8')>8192) {
+    throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
+  }
+  let stdout;
+  try {
+    const response=await execFileAsync(executable,[
+      '--lazy-tester-agent-cli','mc02-input-batch','2',
+      String(Date.now()),serialized,
+    ],{shell:false,windowsHide:true,timeout:9000,maxBuffer:8192,signal});
+    stdout=response.stdout;
+  } catch(error) {
+    if(signal?.aborted)throw new Error('MC02_SEQUENCE_ABORTED');
+    if(error.killed||error.signal) {
+      throw new Error('Native request outcome UNCERTAIN; do not retry blindly');
+    }
+    if(typeof error.stdout==='string') {
+      try {
+        const parsed=JSON.parse(error.stdout.trim());
+        if(parsed?.ok===false&&/^[A-Z_]{1,40}$/.test(parsed.code??'')) {
+          throw new Error('Native request refused: '+parsed.code);
+        }
+      } catch(parsed) {
+        if(parsed?.message?.startsWith('Native request refused:'))throw parsed;
+      }
+    }
+    throw new Error('Native controller unavailable or operation refused');
+  }
+  let receipt;
+  try {receipt=JSON.parse(stdout.trim());} catch {}
+  if(receipt?.schema!==1||receipt?.ok!==true||
+     receipt?.operation!=='mc02-input-batch'||receipt?.slot!==2||
+     receipt?.pulses!==args.length||
+     receipt?.delivery!=='PER_CLIENT_SHARED_STATE_WRITTEN_NOT_GAMEPLAY_PROOF'||
+     receipt?.gameplayObserved!==false) {
+    throw new Error('MC02_INPUT_NATIVE_RESULT_UNVERIFIED');
+  }
+  return {schema:1,slot:2,
+    status:'EXPERIMENTAL_MC02_SEQUENCE_TRANSPORT_ACKNOWLEDGED',
+    pulsesAcknowledged:args.length,
+    neutralState:'NATIVE_NEUTRAL_WRITE_ACKNOWLEDGED_ONLY',
+    inputEffect:'NOT_VERIFIED_IN_MINECRAFT_EDUCATION',
+    gameplayObserved:false,humanInputUninterrupted:'NOT_PROVEN',
+    note:'One native CLI child reused retained controller IPC for every bounded MC02 pulse; no Minecraft gameplay was observed.'};
+}
+
 export function parseCapturedLine(line) {
   const match=/^(\d{4}-\d\d-\d\dT\S+)\s+(verbose|log|warn|error|stop)\s+([\s\S]+)$/.exec(line);
   if (!match || match[1].length>45 ||
@@ -480,6 +550,7 @@ function capabilities(mode,experimental=false) {return {schema:1,mode,hostSlot:1
 export function createHandler(config,{
   native=runNative,evidence=readGameEvidence,capture=captureCuaWindow,
   mc02Input=sendExperimentalMc02Native,
+  mc02Batch=sendExperimentalMc02BatchNative,
   gpuSourceFactory=createGpuFrameSource,
 }={}) {
   let inFlight=false; // mutating or exclusive native operation
@@ -757,32 +828,44 @@ export function createHandler(config,{
       if(!mc02Enabled)throw new Error('MC02_EXPERIMENT_DISABLED');
       keysExactly(args,['slot','actions']);
       if(args.slot!==2)throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
+      // Pure compile before native admission: malformed timelines cannot
+      // spawn a child process or send a single MC02 game-input packet.
+      const batch=prepareMc02PulseBatch(args.actions);
       if(exclusiveBusy())throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       const abort=new AbortController();
       mc02SequenceAbort=abort;
+      let dispatched=false,neutralConfirmed=true;
       try {
-        return await runExperimentalMc02Sequence(args.actions,{
-          signal:abort.signal,
-          emit:async({buttons,dx,dy,ttlMs})=>{
-            // The retained native controller pins BOTH Minecraft processes,
-            // enforces MC01's real foreground, and writes only MC02 state.
-            // No second PID lookup or foreground switch inside the pulse.
-            const receipt=await mc02Input(config.executable,{
-              keys:mc02ButtonMask(buttons),dx,dy,ttlMs,
-              requestedAtMs:Date.now(),
-            });
-            if(receipt?.schema!==1||receipt?.slot!==2||
-               receipt?.gameplayObserved!==false||
-               receipt?.status!=='NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED') {
-              throw new Error('MC02_INPUT_NATIVE_RESULT_UNVERIFIED');
-            }
-            return true; // transport ACK only, never in-game acceptance
-          },
-        });
+        dispatched=true;
+        const result=await mc02Batch(config.executable,batch.pulses,
+          {signal:abort.signal});
+        if(result?.schema!==1||result?.slot!==2||
+           result?.status!=='EXPERIMENTAL_MC02_SEQUENCE_TRANSPORT_ACKNOWLEDGED'||
+           result?.pulsesAcknowledged!==batch.count||
+           result?.gameplayObserved!==false) {
+          throw new Error('MC02_INPUT_NATIVE_RESULT_UNVERIFIED');
+        }
+        if(abort.signal.aborted)throw new Error('MC02_SEQUENCE_ABORTED');
+        return result;
       } finally {
+        // If MCP cancels/kills the bounded native batch child, its
+        // destructor cannot guarantee release. The retained controller
+        // receives an independent exact-MC02 neutral-state request.
+        // Failing this release is NEVER reported as sequence success.
+        if(dispatched) {
+          try {
+            const receipt=await mc02Input(config.executable,{
+              keys:0,dx:0,dy:0,ttlMs:1,requestedAtMs:Date.now(),
+            });
+            neutralConfirmed=receipt?.schema===1&&receipt?.slot===2&&
+              receipt?.gameplayObserved===false&&
+              receipt?.status==='NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED';
+          } catch {neutralConfirmed=false;}
+        }
         if(mc02SequenceAbort===abort)mc02SequenceAbort=null;
         inFlight=false;
+        if(!neutralConfirmed)throw new Error('MC02_RELEASE_UNCONFIRMED');
       }
     }
     if (name==='send_experimental_mc02_input') {
