@@ -1013,6 +1013,20 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October source-first visual feedback under MC02 sequence:**
+The existing opt-in MCP now allows one verified read-only
+`observe_client`/bounded visual sampler capture while the MC02
+native-input sequence holds its mutation lock, without permitting
+another mutation or losing the lock when capture returns. The
+PID/HWND/birth/session before/after image checks remain required;
+MC01 remains excluded in hybrid mode. An idle emergency neutral
+MC02 release still uses the existing native owner while a snapshot
+is pending. No new Cua/WGC provider, tool, game hook, driver,
+process lifecycle manager or CI was added. Authored Node fixtures
+cover concurrent visual feedback, protected MC01, mutation exclusion
+and cancellation, but execution remains NOT_EXECUTED. Native
+scheduling latency and actual Minecraft gameplay remain unverified.
+
 **31 October source-first native MC02 release separation:**
 The retained controller now handles a fully neutral MC02 request
 (keys/dx/dy all zero) as a separate release-only state write in the

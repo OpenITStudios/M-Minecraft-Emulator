@@ -56,6 +56,26 @@ additional hook, process controller, CI or product input activation
 is introduced. Authored test fixtures remain NOT_EXECUTED.
 
 
+## Visual feedback while MC02 receives experimental input — source only
+
+The existing `observe_client({slot})` and a previously started bounded
+visual observer may capture **identity-verified, read-only** frames during
+an explicitly opted-in MC02 action sequence. A separate image-capture
+lock prevents concurrent screenshots and preserves the active native
+mutation lock. The human MC01 is still excluded in hybrid mode. Each
+captured image is checked against exact PID/HWND/birth/session both
+before and after Cua/WGC access, and may be discarded if the game
+window changes.
+
+Launch and other native mutations remain serialized with screenshots.
+The existing emergency neutral MC02 write retains priority over an
+ordinary read-only frame when no sequence is active, subject to native
+controller identity admission. During a sequence, stop still requests
+cancellation and the sequence attempts its own release.
+Native IPC contention or a failed image read is reported as unavailable,
+not as gameplay evidence. Cua/WGC providers, hooks, packaging defaults
+and production input remain unchanged. Tests are authored NOT_EXECUTED.
+
 ## Opt-in MC02 timed Computer Use action sequence — source only
 
 The existing Codex-facing local stdio MCP has a **separate** experimental

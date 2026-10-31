@@ -765,3 +765,71 @@ test('MCP five-slot control-frame preview never contacts native controller',asyn
     actions:[{slot:1,kind:'attack',atMs:0,durationMs:100}],
   }),/human-owned/);
 });
+
+test('MC02 sequence allows exact-window image capture without unlocking native mutations',async()=>{
+  const cfg=parseConfiguration([
+    '--exe',path.resolve('lazy-tester.exe'),
+    '--cua-exe',path.resolve('cua-driver.exe'),
+    '--mc02-input-experimental','on',
+  ],{LAZY_TESTER_MC02_VIRTUAL_INPUT:'I_ACCEPT_EXPERIMENTAL_MC02_INPUT'});
+  let onFirstWrite,resumeFirstWrite;
+  const entered=new Promise(resolve=>{onFirstWrite=resolve;});
+  const blocked=new Promise(resolve=>{resumeFirstWrite=resolve;});
+  let first=true,nativeReads=0,writes=0;
+  const target=slot=>({schema:1,ok:true,operation:'target',slot,
+    pid:800+slot,windowId:5000+slot,createdFileTime:'134000000000000001',
+    sessionId:1,foreground:false,visible:true,minimized:false,
+    verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',gameplayInput:'NOT_VERIFIED'});
+  const handler=createHandler(cfg,{
+    native:async(_exe,op,slot)=>{
+      assert.equal(op,'target');nativeReads++;return target(slot);
+    },
+    capture:async()=>({mimeType:'image/png',imageBase64:'iVBORw0KGgo=',
+      width:640,height:360,sha256:'b'.repeat(64)}),
+    mc02Input:async(_exe,packet)=>{
+      writes++;
+      if(packet.keys&&first){first=false;onFirstWrite();await blocked;}
+      return {schema:1,slot:2,
+        status:'NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+        gameplayObserved:false};
+    },
+  });
+  const running=handler.callTool('run_experimental_mc02_actions',{
+    slot:2,actions:[{slot:2,kind:'move_forward',atMs:0,durationMs:500}],
+  });
+  await entered;
+  const observed=await handler.callTool('observe_client',{slot:2});
+  assert.equal(observed.metadata.background,true);
+  assert.equal(observed.metadata.gameInput,'BACKGROUND_MINECRAFT_INPUT_UNVERIFIED');
+  assert.equal(nativeReads,2);
+  await assert.rejects(()=>handler.callTool('observe_client',{slot:1}),/human host/);
+  await assert.rejects(()=>handler.callTool('launch_profile',{slot:3}),/in progress/);
+  const stop=await handler.callTool('stop_experimental_mc02_actions',{slot:2});
+  assert.equal(stop.status,'CANCELLATION_REQUESTED');
+  resumeFirstWrite();
+  await assert.rejects(running,/MC02_SEQUENCE_ABORTED/);
+  assert.equal(writes,2);
+  handler.shutdown();
+});
+test('ordinary pending screenshot blocks mutations and simultaneous screenshots',async()=>{
+  let onCapture,resumeCapture;
+  const entered=new Promise(resolve=>{onCapture=resolve;});
+  const blocked=new Promise(resolve=>{resumeCapture=resolve;});
+  const handler=createHandler({...config(),cuaExecutable:path.resolve('cua-driver.exe')},{
+    native:async(_exe,op,slot)=>({schema:1,ok:true,operation:'target',
+      slot,pid:900+slot,windowId:6000+slot,
+      createdFileTime:'134000000000000001',sessionId:1,
+      foreground:false,visible:true,minimized:false,
+      verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',gameplayInput:'NOT_VERIFIED'}),
+    capture:async()=>{onCapture();await blocked;return {
+      mimeType:'image/png',imageBase64:'iVBORw0KGgo=',width:640,height:360};},
+  });
+  const reading=handler.callTool('observe_client',{slot:2});
+  await entered;
+  await assert.rejects(()=>handler.callTool('launch_profile',{slot:3}),/in progress/);
+  await assert.rejects(()=>handler.callTool('observe_client',{slot:3}),/in progress/);
+  resumeCapture();
+  const image=await reading;
+  assert.equal(image.metadata.slot,2);
+  handler.shutdown();
+});

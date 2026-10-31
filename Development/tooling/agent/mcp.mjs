@@ -482,7 +482,9 @@ export function createHandler(config,{
   gpuSourceFactory=createGpuFrameSource,
 }={}) {
   let inFlight=false;
-  let mc02SequenceAbort=null; // pending opted-in MCP request only
+  let visualReadBusy=false; // only one identity-pinned screenshot at a time
+  let mc02SequenceAbort=null;
+  const exclusiveBusy=()=>inFlight||visualReadBusy; // pending opted-in MCP request only
   let gpuStartup=null; // bounded request only; not game/session lifecycle
   const mc02Enabled=config.experimentalMc02InputEnabled===true &&
     config.mode==='human-plus-four-ai';
@@ -498,8 +500,15 @@ export function createHandler(config,{
     if (!config.cuaExecutable && !gpuSource) {
       throw new Error('Visual provider is NOT_CONFIGURED; set --cua-exe or --gpu-capture-exe');
     }
-    if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
-    inFlight=true;
+    // A verified read-only capture may accompany an already-running
+    // experimental MC02 sequence. It must never clear that sequence's
+    // native mutation ownership on completion.
+    const alongsideSequence=mc02SequenceAbort!==null;
+    if(visualReadBusy || (inFlight && !alongsideSequence)) {
+      throw new Error('Native operation in progress; do not overlap requests');
+    }
+    visualReadBusy=true;
+    if(!alongsideSequence)inFlight=true;
     try {
       const before=validateNativeWindowTarget(
         await native(config.executable,'target',slot),slot);
@@ -542,7 +551,10 @@ export function createHandler(config,{
         },
         imageBase64:frame.imageBase64,
       };
-    } finally {inFlight=false;}
+    } finally {
+      visualReadBusy=false;
+      if(!alongsideSequence)inFlight=false;
+    }
   }
   const visualObserver=createVisualObserver({
     capture:captureVerifiedFrame,
@@ -570,7 +582,7 @@ export function createHandler(config,{
       if (!gpuSource) {
         return visualObserver.start(slots,{intervalMs,durationMs});
       }
-      if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
+      if (exclusiveBusy()) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       const startup={slots:[...slots],cancelled:false};
       gpuStartup=startup;
@@ -644,7 +656,7 @@ export function createHandler(config,{
            !/^\d{1,20}$/.test(args.createdFileTime))) {
         throw new Error('Expected window identity must be exact and numeric');
       }
-      if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
+      if (exclusiveBusy()) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       try {
         const current=validateNativeWindowTarget(
@@ -666,7 +678,7 @@ export function createHandler(config,{
     if (name==='get_test_context') {
       keysExactly(args,['slots']);
       const slots=normalizeEvidenceSlots(args.slots ?? [1,2,3,4,5]);
-      if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
+      if (exclusiveBusy()) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       try {
         const nativeSnapshot=validateNativeReport(
@@ -742,7 +754,7 @@ export function createHandler(config,{
       if(!mc02Enabled)throw new Error('MC02_EXPERIMENT_DISABLED');
       keysExactly(args,['slot','actions']);
       if(args.slot!==2)throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
-      if(inFlight)throw new Error('Native operation in progress; do not overlap requests');
+      if(exclusiveBusy())throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       const abort=new AbortController();
       mc02SequenceAbort=abort;
@@ -782,7 +794,7 @@ export function createHandler(config,{
          !Number.isSafeInteger(ttlMs)||ttlMs<1||ttlMs>500) {
         throw new Error('MC02_INPUT_INVALID_COMMAND');
       }
-      if(inFlight) throw new Error('Native operation in progress; do not overlap requests');
+      if(exclusiveBusy()) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       try {
         // The retained Rust session controller already owns and pins
@@ -808,7 +820,7 @@ export function createHandler(config,{
       // Validate all actions and the human/AI ownership before touching
       // the native controller. The request only inspects existing windows.
       const required=requiredInputSlots(config.mode,args.actions);
-      if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
+      if (exclusiveBusy()) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       const started=Date.now();
       try {
@@ -828,7 +840,7 @@ export function createHandler(config,{
     }
     if (name==='plan_peer_session') {
       keysExactly(args,[]);
-      if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
+      if (exclusiveBusy()) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       try {
         const report=await native(config.executable,'inspect');
@@ -859,7 +871,7 @@ export function createHandler(config,{
     }
     if (name==='inspect_profiles') {
       keysExactly(args,[]);
-      if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
+      if (exclusiveBusy()) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       try {
         return validateNativeReport(
@@ -869,7 +881,7 @@ export function createHandler(config,{
     if (name==='launch_profile') {
       keysExactly(args,['slot']);const slot=slotOf(args.slot);
       if (config.mode==='human-plus-four-ai' && slot===1) throw new Error('MC01 is reserved for the human host in hybrid mode');
-      if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
+      if (exclusiveBusy()) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       try {
         // An already-running native controller never inherits the MCP
