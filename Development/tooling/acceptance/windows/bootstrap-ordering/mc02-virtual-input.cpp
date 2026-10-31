@@ -512,6 +512,27 @@ void consumeRawRecord(const RAWINPUT& event,const RawPlan& plan) {
         rawSeenX=plan.cursorX;rawSeenY=plan.cursorY;
     }
 }
+// The game-provided output buffer belongs to the virtual input consumer.
+// Never pass it to the genuine OS Raw Input reader: even a temporary
+// physical-keyboard write exposes MC01's real events to the MC02 caller.
+// Drain the actual queue using a separate, bounded, aligned scratch buffer.
+// A large HID packet or continuous queue that cannot be drained fails
+// closed instead of returning unfiltered events or inventing success.
+bool discardPhysicalRawInput(UINT headerBytes,DWORD& failure) {
+    alignas(8) std::array<RAWINPUT,64> scratch{};
+    constexpr unsigned MaxDrainPasses=16;
+    for (unsigned pass=0;pass<MaxDrainPasses;++pass) {
+        UINT capacity=static_cast<UINT>(sizeof(scratch));
+        const UINT count=originalRawBuffer(scratch.data(),&capacity,headerBytes);
+        if (count==UINT(-1)) {
+            failure=GetLastError();
+            return false;
+        }
+        if (count==0) return true;
+    }
+    failure=ERROR_BUSY; // Bounded fail-closed: never pretend queue is empty.
+    return false;
+}
 UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
     if (!view||!size||headerBytes!=sizeof(RAWINPUTHEADER))
         return originalRawBuffer(data,size,headerBytes);
@@ -539,14 +560,14 @@ UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
         SetLastError(previous);return 0;
     }
     const UINT capacity=*size;
-    // Drain the REAL raw-input queue through its genuine Win32 API
-    // before replacing keyboard/mouse output with MC02-only controls.
-    // This prevents MC01's physical input leaking to a background
-    // MC02 that registered RIDEV_INPUTSINK. Never mutate device state.
-    const UINT originalCount=originalRawBuffer(data,size,headerBytes);
-    if (originalCount==UINT(-1)) {
+    // The caller's data and size must remain untouched by real physical
+    // Raw Input. Suppression uses a private fixed-capacity scratch buffer.
+    DWORD physicalFailure=ERROR_SUCCESS;
+    if (!discardPhysicalRawInput(headerBytes,physicalFailure)) {
+        *size=0;
         rawBufferBusy.clear(std::memory_order_release);
-        return originalCount;
+        SetLastError(physicalFailure);
+        return UINT(-1);
     }
     // A command may expire while the genuine raw queue is being drained.
     // Never commit synthetic mouse/key actions after the deadline or

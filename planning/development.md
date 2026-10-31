@@ -1013,6 +1013,24 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October MC02 physical Raw Input suppression correction:** The existing
+compile-OFF buffered Raw Input experiment no longer passes the game's
+output buffer into the genuine OS `GetRawInputBuffer` call. Instead it
+discards real keyboard/mouse events with a bounded, aligned, private
+scratch array before emitting any MC02 virtual records. This avoids
+placing MC01 physical input bytes in the MC02 caller's memory even
+temporarily, and avoids incorrectly failing virtual delivery solely
+because the caller sized its output for synthetic records. A queue
+that cannot be drained within sixteen passes or contains an oversized
+raw device record fails closed; no unfiltered physical data is returned.
+The final virtual command and real MC01 foreground are revalidated
+after suppression. This is a narrow correction to the existing
+unbuilt, OFF-by-default candidate, not a new hook/provider, and
+does not establish Minecraft input consumption or gameplay acceptance.
+Proof: REMOTE_GITHUB exact source and Microsoft GetRawInputBuffer API
+review only. MSVC, Rust, Windows, Minecraft, installer and source
+test execution remain NOT_EXECUTED.
+
 **31 October MC02 buffered-reader contract correction:** The existing
 compile-OFF `GetRawInputBuffer` adapter now returns a bounded prefix of
 whole `RAWINPUT` records when the caller's capacity fits fewer records
