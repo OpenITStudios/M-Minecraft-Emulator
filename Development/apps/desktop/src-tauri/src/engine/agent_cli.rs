@@ -120,6 +120,15 @@ fn execute_mc02_batch(args:&[String])->Result<Value,&'static str> {
             if snapshot.schema!=1||snapshot.profiles.len()!=5 {
                 return Err("INVALID_NATIVE_SNAPSHOT");
             }
+            // The pre-dispatch check alone cannot establish a timely
+            // heartbeat: authenticated IPC and the five-profile receipt
+            // can finish after this pulse's +150-ms budget. Refuse a
+            // late ACK even for the final pulse, and enter the existing
+            // exact-MC02 neutral release below. This is NOT evidence
+            // of when Minecraft consumed (or ignored) the input.
+            if unsafe{GetTickCount64()}.saturating_sub(deadline)>150 {
+                return Err("MC02_SEQUENCE_DEADLINE");
+            }
         }
         Ok(())
     })();

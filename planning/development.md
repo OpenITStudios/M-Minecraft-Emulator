@@ -1013,6 +1013,24 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October MC02 heartbeat post-IPC deadline correction:**
+The same-image native batch checked a pulse's 150-ms lateness
+budget only BEFORE authenticated controller IPC. A late IPC reply
+(especially the last pulse) could still be counted as an
+on-time sequence. The same native batch loop now rechecks the
+existing monotonic deadline after each successful IPC receipt.
+An over-budget acknowledgement stops further active pulses
+and enters the existing best-effort exact-MC02 neutral
+ReleaseAll before reporting failure. The correction concerns
+transport timing, NOT proof of whether/when Minecraft applies
+the packet. It preserves the 64-pulse/3.5-second limits,
+native slot admission, feature-OFF defaults, the retained
+controller and existing wire schema. No new provider, hook,
+test runner, account operation or MC03-MC05 permission.
+REMOTE_GITHUB source review only; Node/Rust/MSVC build/tests,
+Windows latency and Minecraft gameplay remain NOT_EXECUTED.
+P0 still requires real MC02 input-consumer evidence.
+
 **31 October MC02 heartbeat receipt avoids unrelated title rewrites:**
 Each opt-in MC02 input request returned a verified five-profile
 `SessionSnapshot`, but the existing response path also called

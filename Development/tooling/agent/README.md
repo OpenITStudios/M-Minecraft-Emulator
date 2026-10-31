@@ -166,8 +166,13 @@ make them executable.
   No second controller, new pipe, driver, game hook, or server is introduced.
 - The native bounded batch refuses a stale initial request, nonmonotonic
   timestamps, conflicting controls, out-of-range camera deltas, late
-  pulses (>150 ms) and all non-MC02 input. It attempts an exact-owner
-  neutral release on completion or a handled error. After the process
+  pulses (>150 ms) and all non-MC02 input. The CLI checks the SAME
+  150-ms monotonic deadline both **before dispatch** and **after IPC
+  receipt**: even a slow final heartbeat acknowledgement cannot be
+  reported as an on-time sequence. After a late receipt, the batch
+  stops and attempts its existing exact-owner neutral release, as
+  it does on normal completion and other handled errors. Transport
+  timing does not prove when Minecraft consumed game input. After the process
   exits or is cancelled, MCP independently attempts another native
   neutral write, with TTL expiry as the final fail-safe when killed.
   An exact-owner, fully neutral MC02 request may also pass an
