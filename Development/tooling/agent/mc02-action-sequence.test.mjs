@@ -43,6 +43,16 @@ test('one bounded sequence combines movement and look; heartbeat and final neutr
   assert.deepEqual(pulses.at(-1),{buttons:[],dx:0,dy:0,ttlMs:1});
   assert.equal(pulses.slice(1).every(p=>p.dx===0&&p.dy===0),true);
 });
+test('MC02 batch keeps an initial waiting offset without inventing a 0ms input packet',()=>{
+  const batch=prepareMc02PulseBatch([
+    move('jump',400,100),
+  ]);
+  assert.deepEqual(batch.pulses.map(p=>[p.atMs,p.keys]),[
+    [400,16],[500,0],
+  ]);
+  assert.equal(batch.pulses.some(p=>p.atMs===0),false);
+  assert.equal(batch.finalEventMs,500);
+});
 test('reject all other slots, unimplemented camera directions and oversized deltas',()=>{
   for(const actions of [
     [{slot:1,kind:'attack',atMs:0,durationMs:100}],

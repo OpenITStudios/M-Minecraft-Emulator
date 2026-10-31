@@ -1013,6 +1013,23 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October first-pulse delayed-action compatibility:** The
+canonical semantic action planner and opt-in MC02 batch compiler already
+accepted a nonzero first offset (e.g. jump at 400 ms), but the MCP
+batch sender and native `execute_mc02_batch` rejected every sequence
+whose first pulse was not exactly at 0 ms. The same existing native
+monotonic scheduler already sleeps until each pulse's `at_ms`; both
+redundant zero-start checks have been removed without injecting an
+initial packet. Bounds remain MC02 only, <=64 pulses, <=3500 ms,
+strictly increasing timestamps, TTL 350 ms, stale-start rejection,
+native admission, real MC01 foreground, and explicit ReleaseAll.
+A source fixture now covers the original 400-ms delay followed by
+key release at 500 ms. No new API, provider, game hook, process,
+controller, wire schema, or MC03-MC05 permission. REMOTE_GITHUB
+static source/consumer verification only; Node/Rust/MSVC builds,
+Windows execution and Minecraft gameplay remain NOT_EXECUTED.
+The P0 blocker remains confirming the real game input consumer.
+
 **31 October MC02 virtual Win32 polling transaction coherence:**
 The C++ `currentPacket()` hook gate previously sampled the active
 packet and pinned MC01 foreground HWND independently, without

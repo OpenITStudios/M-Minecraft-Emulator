@@ -86,7 +86,6 @@ fn execute_mc02_batch(args:&[String])->Result<Value,&'static str> {
         // Explicit fixed native TTL and strictly increasing integer
         // timestamps; only MC02 can receive a scheduled input batch.
         if pulse.at_ms>3500||pulse.ttl_ms!=350||
-            previous.is_none()&&pulse.at_ms!=0 ||
             previous.is_some_and(|last|pulse.at_ms<=last) ||
             native_clients_session::admit_native_input_frame(
                 2,pulse.keys,pulse.dx,pulse.dy,pulse.ttl_ms).is_err() {
@@ -94,6 +93,10 @@ fn execute_mc02_batch(args:&[String])->Result<Value,&'static str> {
         }
         previous=Some(pulse.at_ms);
     }
+    // The first authored action may start AFTER a wait. Schedule all
+    // offsets relative to this single process's monotonic start and
+    // publish nothing during the preceding delay; no synthetic neutral
+    // pulse or process restart is required at time zero.
     let started=unsafe{GetTickCount64()};
     let mut may_have_sent=false;
     let result=(||->Result<(),&'static str>{

@@ -298,7 +298,9 @@ export async function sendExperimentalMc02BatchNative(executable,pulses,{signal}
     previous=atMs;
     args.push({atMs,keys,dx,dy,ttlMs});
   }
-  if(args[0].atMs!==0)throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
+  // A valid action timeline may begin after a wait. Do not invent a
+  // new 0ms packet: the native batch timer waits until the first
+  // authored offset, and the controller remains idle beforehand.
   const serialized=JSON.stringify(args);
   if(Buffer.byteLength(serialized,'utf8')>8192) {
     throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');

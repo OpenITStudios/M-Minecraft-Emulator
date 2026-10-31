@@ -146,8 +146,10 @@ make them executable.
   deltas are published only once. **One** opt-in same-image
   `mc02-input-batch` CLI subprocess schedules the entire sequence;
   each tick still enters the **same** authenticated retained controller.
-  This avoids process startup for every heartbeat. No second controller,
-  new pipe, driver, game hook, or server is introduced.
+  This avoids process startup for every heartbeat. An initial wait is
+  preserved: the first pulse may have a positive time offset, and no
+  artificial 0-ms command is sent before the requested action begins.
+  No second controller, new pipe, driver, game hook, or server is introduced.
 - The native bounded batch refuses a stale initial request, nonmonotonic
   timestamps, conflicting controls, out-of-range camera deltas, late
   pulses (>150 ms) and all non-MC02 input. It attempts an exact-owner
