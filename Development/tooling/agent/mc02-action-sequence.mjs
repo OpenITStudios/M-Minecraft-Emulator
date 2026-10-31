@@ -7,7 +7,7 @@ import {compilePlayerInputTimeline} from './input-timeline.mjs';
 
 export const MC02_SEQUENCE_LIMITS=Object.freeze({
   maxActions:12,maxHorizonMs:3500,maxPulses:64,
-  heartbeatMs:160,ttlMs:350,maxLatenessMs:500,
+  heartbeatMs:160,ttlMs:350,maxLatenessMs:150,
 });
 const ALLOWED=new Set([
   'move_forward','move_backward','strafe_left','strafe_right',
@@ -48,8 +48,11 @@ export function prepareMc02ActionSequence(actions) {
  * pulse. A successful emit() means a shared-state write was acknowledged,
  * NOT that Minecraft processed WASD, mouse movement or an attack.
  *
- * Each held-key pulse expires in <=350ms in the native controller. An extra
- * neutral packet is attempted even on abort, timeout or partial failure.
+ * Each held-key pulse expires in <=350ms in the native controller.
+ * Heartbeats are scheduled at 160ms with at most 150ms allowed lag, so
+ * late native CLI operations fail closed instead of claiming uninterrupted
+ * input after the previous pulse may already have expired.
+ * An extra neutral packet is attempted even on abort, timeout or partial failure.
  * If the MCP process crashes, the native TTL is the fail-safe; JavaScript
  * cannot guarantee an action-level key-up after process termination.
  */

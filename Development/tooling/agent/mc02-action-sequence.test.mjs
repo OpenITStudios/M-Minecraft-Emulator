@@ -1,6 +1,7 @@
 // AUTHORED ONLY: source fixtures; no Minecraft, native CLI or local run.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import {prepareMc02ActionSequence,runExperimentalMc02Sequence,
   MC02_SEQUENCE_LIMITS} from './mc02-action-sequence.mjs';
 import {createHandler,parseConfiguration} from './mcp.mjs';
@@ -13,7 +14,7 @@ function virtualClock(){
   }};
 }
 const optIn=()=>parseConfiguration([
-  '--exe','/sandbox/lazy-tester.exe','--mc02-input-experimental','on',
+  '--exe',path.resolve('lazy-tester.exe'),'--mc02-input-experimental','on',
 ],{LAZY_TESTER_MC02_VIRTUAL_INPUT:'I_ACCEPT_EXPERIMENTAL_MC02_INPUT'});
 const receipt={schema:1,slot:2,status:'NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',gameplayObserved:false};
 
@@ -46,6 +47,18 @@ test('reject all other slots, unimplemented camera directions and oversized delt
     Array.from({length:MC02_SEQUENCE_LIMITS.maxActions+1},(_,i)=>
       move('attack',i*100,50)),
   ])assert.throws(()=>prepareMc02ActionSequence(actions),/MC02_SEQUENCE_INVALID_ACTIONS/);
+});
+test('overdue native pulse fails closed before replaying stale controls',async()=>{
+  const packets=[];
+  let now=0;
+  await assert.rejects(()=>runExperimentalMc02Sequence(
+    [move('move_forward',0,500)],{
+      clock:()=>now,
+      wait:async(ms)=>{now+=ms+MC02_SEQUENCE_LIMITS.maxLatenessMs+1;},
+      emit:async p=>{packets.push(p);return true;},
+    }),/MC02_SEQUENCE_DEADLINE/);
+  assert.equal(packets.length,2); // initial press, then neutral
+  assert.deepEqual(packets.at(-1),{buttons:[],dx:0,dy:0,ttlMs:1});
 });
 test('native send failure still attempts neutral; never returns gameplay success',async()=>{
   const packets=[],timer=virtualClock();

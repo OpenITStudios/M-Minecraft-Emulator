@@ -1020,9 +1020,11 @@ opt-in MCP now has two additional conditional tools for MC02 ONLY:
 `Development/tooling/agent/mc02-action-sequence.mjs` uses the canonical
 semantic input timeline to merge held keys, jumps, attack/use and
 relative camera events into controller-owned MC02 pulses. Input held
-longer than one native TTL is refreshed at bounded intervals. The
-sequence attempts a neutral write on completion, cancellation or
-failure; a failed release is never reported as success. No global
+longer than one native TTL is refreshed at bounded intervals.
+A stale heartbeat (more than 150 ms behind its scheduled tick) fails
+closed rather than claiming uninterrupted movement after a 350 ms
+native TTL may already have elapsed. The sequence attempts a neutral
+write on completion, cancellation or failure; a failed release is never reported as success. No global
 SendInput, focus takeover, new input DLL, driver, second controller,
 world automation, new CI or production default was added. The existing
 MC02 opt-in plus native feature/payload review gates remain mandatory.
