@@ -1014,10 +1014,10 @@ signed/reviewed package without the separate existing operator gate.
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
 **31 October source-first multi-client frame contract:** The canonical
-\`input-timeline.mjs\` now produces complete held-button states,
+`input-timeline.mjs` now produces complete held-button states,
 8-bit button masks, one-shot relative camera deltas and per-client
 timestamp batches for both hybrid and five-AI planning. MCP
-\`plan_player_actions({includeClientFrames:true})\` exposes the
+`plan_player_actions({includeClientFrames:true})` exposes the
 deterministic PREVIEW without any native calls. The existing MC02
 experimental runner now consumes these same frames instead of keeping
 a second key-edge interpretation. Explicit retrigger flags preserve
