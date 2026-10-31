@@ -112,6 +112,38 @@ Only code is committed; no user screenshots are collected now.
 
 Cua CLI reference: https://cua.ai/docs/cua-driver/reference/cli/serve-and-configure
 
+## Phase 18: bounded MCP responses and private evidence error handling
+
+The existing `read_game_evidence` MCP tool previously returned the
+raw parsed Skills Probe `data` object. Because the capture format
+allows additional unrecognized JSON keys, this could send internal
+debugger fields, account paths or other unneeded content to a model.
+The tool keeps its name, slot/status/events response structure,
+but now reuses the existing `summarizeEvidenceReports` allowlist
+projection. Only bounded event fields are exposed; arbitrary nested
+log JSON is not. This is a deliberate narrowing of the public event
+shape. `summarize_test_evidence` remains available for cross-slot
+reports, and `readGameEvidence` remains internal to those reports.
+Short sanitized metadata strings can still contain user-supplied
+values: they are UNTRUSTED, not proof of identity or secrets filtering.
+
+MCP JSON-RPC tool errors previously returned `error.message`
+directly. Provider or filesystem errors can include local paths,
+user data or debugger text. Now only fixed, known application
+error messages and constrained native refusal codes are returned;
+unexpected failures use `Tool unavailable; details withheld`.
+Direct source `callTool` exceptions remain unchanged for regression
+assertions; this protection applies to model-visible MCP responses.
+
+The existing JSON-RPC response boundary now caps tool text at
+128 KiB and image base64 at 8 MiB (compatible with the 6 MiB Cua
+one-shot PNG ceiling). An oversize result is an explicit error with
+no partial payload. The source tests (AUTHORED_NOT_EXECUTED) cover
+extra private log fields, leaked provider paths, known MC01
+protection errors, and overlarge text/image outputs. No new MCP tool,
+game lifecycle, persistent state, credential store, Windows input
+provider, CI or daemon was added.
+
 ## Phase 17: reject incidental markers and untyped results
 
 The previous Skills Probe reader accepted the substring

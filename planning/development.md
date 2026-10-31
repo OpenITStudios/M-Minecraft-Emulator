@@ -655,6 +655,33 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
   NOT_EXECUTED. Compatibility with the real Skills Probe log producer
   remains UNVERIFIED until approved runtime evidence is available.
 
+## Phase 18: bounded MCP response serialization and evidence privacy (31 October 2026)
+
+- Found two concrete outward trust-boundary leaks in `mcp.mjs`:
+  `read_game_evidence` returned arbitrary nested Skills Probe JSON,
+  while JSON-RPC tool failures forwarded `error.message` from native/
+  filesystem/providers (potentially revealing local paths or private
+  diagnostic strings). There was no explicit serialized text response
+  ceiling on model-visible MCP tool content.
+- The raw per-slot tool now reuses the existing summary projector,
+  retaining its name and slot/status/events envelope but returning
+  bounded allowlisted event metadata, not arbitrary `data` objects.
+  This intentionally narrows the event shape; summary remains source
+  of truth for multi-slot evidence and still says gameplay not proven.
+- JSON-RPC errors expose only fixed allowlisted policy strings and
+  narrowly constrained native refusal codes; unexpected errors are
+  replaced with `Tool unavailable; details withheld`. Source
+  `callTool` exceptions are unchanged. MCP text responses are bounded
+  to 128 KiB and image base64 responses to 8 MiB; oversized outputs
+  are refused without returning partial content.
+- One existing MCP regression file extended for raw-field redaction,
+  a private-path error, legitimate MC01 refusal, and oversized text/
+  image responses. **AUTHORED_NOT_EXECUTED** under operator policy.
+- **Proof ceiling:** REMOTE_GITHUB source review only. Tests, Windows
+  file/system execution and Minecraft gameplay are NOT_EXECUTED;
+  producer/player/world identity remains UNVERIFIED, independent AI
+  gameplay input remains BLOCKED.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,
@@ -673,11 +700,11 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
 The Windows Agent Workspace feasibility question is resolved for the
 currently documented APIs: it is NOT an admitted input implementation.
 Retain the independent-input BLOCKED gate until a concrete, supported
-per-client game-input API becomes available. Next source-only action: review the existing MCP evidence payload sizes
-and response error handling for any concrete resource or privacy leak,
-without expanding test volume. Leave game input BLOCKED and keep the
-native controller, visual-capture lifecycle and five-profile data
-ownership unchanged.
+per-client game-input API becomes available. Next source-only action: audit any remaining direct native-controller
+response that could expose unneeded account/profile paths to Codex,
+then make a bounded allowlist correction only if source proves a leak.
+Keep the current game/session owner, visual capture, and independent AI
+input BLOCKED gate unchanged.
 **Do not execute local tests, toolchain builds, package staging, native input
 probes or gameplay until explicit operator approval.** When approval arrives,
 the first separate acceptance boundary is the pinned Windows agent CLI,

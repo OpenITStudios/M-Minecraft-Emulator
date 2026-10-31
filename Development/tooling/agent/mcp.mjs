@@ -11,17 +11,53 @@ import {planPeerSession,planPlayerActions} from './control-plan.mjs';
 import {compilePlayerInputTimeline} from './input-timeline.mjs';
 import {assessInputRoute,requiredInputSlots} from './input-route.mjs';
 import {inputExecutionStatus} from './input-delivery.mjs';
-import {summarizeGameEvidence,normalizeEvidenceSlots} from './evidence-summary.mjs';
+import {summarizeGameEvidence,summarizeEvidenceReports,normalizeEvidenceSlots} from './evidence-summary.mjs';
 import {captureCuaWindow,validateCuaExecutable} from './visual-capture.mjs';
 import {createVisualObserver,OBSERVATION_LIMITS} from './visual-observer.mjs';
 import {createGpuFrameSource,validateGpuExecutable} from './gpu-frame-source.mjs';
 
 const execFileAsync = promisify(execFile);
 const REQUEST_LIMIT = 64 * 1024;
+const MAX_MCP_TEXT_BYTES = 128 * 1024;
+const MAX_MCP_IMAGE_CHARS = 8 * 1024 * 1024; // Cua's 6 MiB PNG base64 upper bound
 const EVIDENCE_TAIL_BYTES = 256 * 1024;
 const EVIDENCE_LIMIT = 20;
 const VALID_STATES = new Set(['STOPPED','STARTING','RUNNING','NOT_RESPONDING','ATTENTION']);
 const SUPPORTED_PROTOCOLS = new Set(['2025-06-18','2025-11-25','2026-07-28']);
+
+// Only fixed application errors are exposed over MCP. Filesystem and
+// provider messages may contain account paths, native diagnostics or
+// untrusted log text. Internal direct callTool() errors remain available
+// to source tests; these do not become model-visible error strings.
+const PUBLIC_TOOL_ERRORS=new Set([
+  'Unknown tool','Invalid tool arguments',
+  'slot must be an integer from 1 to 5',
+  'Native operation in progress; do not overlap requests',
+  'MC01 is reserved for the human host in hybrid mode',
+  'MC01 human host is protected from AI visual observation',
+  'MC01 human host is protected from AI computer-use targeting',
+  'Visual provider is NOT_CONFIGURED',
+  'Visual provider is NOT_CONFIGURED; set --cua-exe or --gpu-capture-exe',
+  'Native integration is not configured; set --exe',
+  'Native controller unavailable or operation refused',
+  'Native request outcome UNCERTAIN; do not retry blindly',
+  'GPU_OBSERVATION_START_CANCELLED',
+  'MCP_TEXT_RESPONSE_TOO_LARGE','MCP_IMAGE_RESPONSE_TOO_LARGE',
+]);
+function publicToolError(error) {
+  const message=typeof error?.message==='string' ? error.message : '';
+  return PUBLIC_TOOL_ERRORS.has(message) ||
+    /^Native request refused: [A-Z_]{1,40}$/.test(message) ?
+    message : 'Tool unavailable; details withheld';
+}
+function boundedMcpText(value) {
+  const encoded=JSON.stringify(value);
+  if(typeof encoded!=='string' ||
+     Buffer.byteLength(encoded,'utf8')>MAX_MCP_TEXT_BYTES) {
+    throw new Error('MCP_TEXT_RESPONSE_TOO_LARGE');
+  }
+  return encoded;
+}
 
 export function parseConfiguration(argv, env = process.env) {
   let mode = 'human-plus-four-ai';
@@ -277,7 +313,7 @@ export const TOOL_LIST=[
   {name:'plan_player_actions',description:'Validate bounded concurrent AI player-action intents. PREVIEW ONLY: no input is sent to Minecraft.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}},includeTimeline:{type:'boolean'}},required:['actions'],additionalProperties:false}},
   {name:'assess_input_route',description:'Read-only native identity check for AI gameplay input: bind validated multi-client action timeline to real MC HWND/PID; ALWAYS reports no verified independent game-input backend and NEVER sends input.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}}},required:['actions'],additionalProperties:false}},
   {name:'summarize_test_evidence',description:'Read and condense bounded analytics/game-results capture from 1-5 profiles. No login, player mapping, host/join or gameplay result is inferred.',inputSchema:{type:'object',properties:{slots:{type:'array',items:{type:'integer',minimum:1,maximum:5},minItems:1,maxItems:5,uniqueItems:true}},additionalProperties:false}},
-  {name:'read_game_evidence',description:'Read the last bounded [ANALYTICS] and [GAME_RESULTS] records from a manually attributed per-profile debugger capture file.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
+  {name:'read_game_evidence',description:'Read only a compact allowlisted projection of 1-20 captured evidence records for one profile. No raw Skills Probe JSON, credentials or verified gameplay claims.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
 ];
 
 function capabilities(mode) {return {schema:1,mode,hostSlot:1,humanSlots:mode==='human-plus-four-ai'?[1]:[],
@@ -544,7 +580,27 @@ export function createHandler(config,{
       } finally {inFlight=false;}
     }
     if (name==='agent_capabilities') {keysExactly(args,[]);return capabilities(config.mode);}
-    if (name==='read_game_evidence') {keysExactly(args,['slot']);return evidence(config.evidenceDirectory,slotOf(args.slot));}
+    if (name==='read_game_evidence') {
+      keysExactly(args,['slot']);
+      const slot=slotOf(args.slot);
+      // Preserve the public tool name and slot/status/events layout, but
+      // never forward arbitrary debugger JSON fields to the model. Reuse
+      // the existing allowlisted, bounded summary event projection.
+      const summarized=summarizeEvidenceReports([slot],[
+        await evidence(config.evidenceDirectory,slot),
+      ]);
+      const source=summarized.sources[0];
+      return {
+        schema:1,slot,status:source.status,
+        events:summarized.timeline,records:summarized.records,
+        truncated:source.truncated,
+        incompleteTrailingLineIgnored:source.incompleteTrailingLineIgnored,
+        attribution:'OPERATOR_NAMED_UNVERIFIED',
+        response:'BOUNDED_PROJECTION_NO_RAW_SKILLS_PROBE_JSON',
+        verdict:summarized.verdict,
+        note:'Events contain bounded unverified metadata only, not raw captured payloads or gameplay acceptance.',
+      };
+    }
     if (name==='inspect_profiles') {
       keysExactly(args,[]);
       if (inFlight) throw new Error('Native operation in progress; do not overlap requests');
@@ -584,16 +640,19 @@ export function createHandler(config,{
           if (name==='observe_client' || name==='read_visual_observation') {
             // Cached rolling observation returns metadata alone unless a
             // newer frame is explicitly requested by the model.
-            const content=[{type:'text',text:JSON.stringify(data.metadata)}];
+            const content=[{type:'text',text:boundedMcpText(data.metadata)}];
             if (typeof data.imageBase64==='string') {
+              if(data.imageBase64.length>MAX_MCP_IMAGE_CHARS) {
+                throw new Error('MCP_IMAGE_RESPONSE_TOO_LARGE');
+              }
               content.push({type:'image',mimeType:'image/png',
                 data:data.imageBase64});
             }
             return result({content,isError:false});
           }
-          return result({content:[{type:'text',text:JSON.stringify(data)}],isError:false});
+          return result({content:[{type:'text',text:boundedMcpText(data)}],isError:false});
         } catch(error) {
-          return result({content:[{type:'text',text:error.message??'Tool unavailable'}],isError:true});
+          return result({content:[{type:'text',text:publicToolError(error)}],isError:true});
         }
       }
       return err(-32601,'Method not found');
