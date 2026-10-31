@@ -119,11 +119,25 @@ BOOL CALLBACK inspectOglesThread(HWND hwnd,LPARAM context) {
 }
 void noteBufferedReaderThread() {
     const DWORD previous=GetLastError();
+    // This hook may run every game-input poll. Enumerating all desktop
+    // windows on every read can perturb the very input path we observe.
+    // Classify each actual calling thread only once after finding a
+    // unique OGLES root; retry missing/ambiguous windows at most twice
+    // per second. Other reader threads retain independent classification.
+    static thread_local bool classified=false,attempted=false;
+    static thread_local DWORD lastAttempt=0;
+    if (classified) {SetLastError(previous);return;}
+    const DWORD now=GetTickCount();
+    if (attempted && static_cast<DWORD>(now-lastAttempt)<500) {
+        SetLastError(previous);return;
+    }
+    attempted=true;lastAttempt=now;
     OglesThread state{};
     // A missing/ambiguous game window cannot establish the caller's
     // relationship to the input-consumption thread.
     (void)EnumWindows(inspectOglesThread,reinterpret_cast<LPARAM>(&state));
     if (state.matches==1) {
+        classified=true;
         if (state.thread==GetCurrentThreadId())
             noteInputApi(sawBufferOnGameThread,
                 L"[LT_INPUT_API][MC02][RAW_BUFFER_OGLES_THREAD_POLL]\n");

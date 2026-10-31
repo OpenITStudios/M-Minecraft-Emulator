@@ -1013,6 +1013,22 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October P0 MC02 observer hot-path correction (source only):**
+The compile-OFF `GetRawInputBuffer` observer previously invoked
+`EnumWindows` on every successful non-null buffered read, although
+classification markers themselves were one-shot. The same existing
+observer now classifies each caller thread only once after finding a
+unique process-owned root OGLES window. If the game window is not yet
+available or is ambiguous, it retries on that thread no more than once
+per 500 ms; calls from other input threads remain independently eligible.
+The original Win32 `GetLastError` result is preserved. This limits
+desktop-wide enumeration in a potentially high-frequency game-input
+hook without adding a new hook, provider, input command, or controller.
+It does not establish that Minecraft Education consumes AI input.
+Proof: REMOTE_GITHUB exact-source inspection and Microsoft
+`EnumWindows` / `GetRawInputBuffer` contracts only; tests, Windows
+build and Minecraft gameplay NOT_EXECUTED.
+
 **31 October P0 input-consumer thread classification (source-only):**
 The existing, OFF-by-default MC02 input-API observer now distinguishes
 successful non-null `GetRawInputBuffer` polls on the process-local
