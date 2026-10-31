@@ -1013,6 +1013,31 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**1 November MC02 cross-process stale pulse after ReleaseAll:**
+The existing same-image CLI batch and the MCP independent neutral
+fallback run in distinct processes, so their authenticated IPC
+requests may reach the retained single session actor in a
+different order than their `GetTickCount64` issue timestamps.
+Previously an older active pulse arriving after a successful
+ReleaseAll could still satisfy the 500-ms request-age check
+and resurrect MC02 input. The canonical MC02 `Channel` now
+stores only in its original controller-local ownership object
+the maximum monotonic issue time of completed neutral releases
+(`fetch_max`), and refuses active writes whose issue time is
+less than or equal to that release watermark. This is checked
+after the existing age validation but before any shared-memory
+packet mutation. Fresh post-release actions remain under the
+original MC02-only slot/PID/birth/session, windows, real MC01
+foreground and TTL admission. An older out-of-order neutral
+request can still stop input conservatively; this cannot
+create active input. No new controller/provider, wire/ABI field,
+OS hook/driver, account operation, CI or MC03-MC05 permission.
+Proof: REMOTE_GITHUB exact Rust source and direct CLI/session
+consumer review, no runtime execution. Node/Rust/MSVC builds,
+Windows ordering/latency and Minecraft gameplay remain
+NOT_EXECUTED. P0 still requires actual per-client game input
+consumer and observable MC01-human/MC02-AI acceptance.
+
 **31 October MC02 overlapping camera/key-release preflight:**
 A camera-relative delta may coexist with a held movement/attack
 button, but a subsequent zero-key/zero-look pulse means the

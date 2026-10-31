@@ -48,6 +48,10 @@ pub(super) struct Channel {
     section: Configuration,
     target: Option<(u32,u64,u32)>,
     sequence: AtomicU8,
+    // Controller-local, NOT part of the inherited 96-byte game ABI.
+    // An already-issued active pulse must never re-arm MC02 after a
+    // later neutral ReleaseAll was admitted ahead of it over IPC.
+    last_release_issued_at_ms: AtomicU64,
 }
 impl Channel {
     pub(super) fn create(slot:u32, explicitly_requested:bool) -> io::Result<Option<Self>> {
@@ -60,6 +64,7 @@ impl Channel {
             section:Configuration::create_sized(std::mem::size_of::<SharedInput>() as u32)?,
             target:None,
             sequence:AtomicU8::new(0),
+            last_release_issued_at_ms:AtomicU64::new(0),
         }))
     }
     pub(super) fn reader(&self)->HANDLE {
@@ -135,6 +140,15 @@ impl Channel {
         input.press_counts.store(0,Ordering::SeqCst);
         input.packet.store(0,Ordering::SeqCst);
         input.cursor_revision.fetch_add(1,Ordering::SeqCst);
+        // The retained controller handles MC02 requests on one actor.
+        // Its IPC connections can originate from DIFFERENT short-lived
+        // CLI processes: after cancellation a newly issued neutral
+        // request may overtake an earlier, delayed active request.
+        // Preserve the greatest same-machine GetTickCount64 issue time,
+        // including an older release that arrives after a newer one.
+        // Never let a late pre-release active pulse resurrect controls.
+        self.last_release_issued_at_ms.fetch_max(
+            issued_at_ms,Ordering::SeqCst);
         if unsafe{UnmapViewOfFile(view)}==0 {return Err(io::Error::last_os_error());}
         Ok(())
     }
@@ -160,6 +174,15 @@ impl Channel {
             .is_none_or(|age|age>MAX_INPUT_REQUEST_AGE_MS) {
             let _=unsafe{UnmapViewOfFile(view)};
             return Err(invalid("MC02 input request expired before native delivery"));
+        }
+        // The original controller's single actor serializes Channel
+        // writes/releases. Distinct CLI IPC connections need not arrive
+        // in issue order. Any active pulse issued BEFORE (or on the same
+        // tick as) the latest completed neutral release is stale, even
+        // if its standalone 500-ms age check still passes.
+        if issued_at_ms<=self.last_release_issued_at_ms.load(Ordering::SeqCst) {
+            let _=unsafe{UnmapViewOfFile(view)};
+            return Err(invalid("MC02 active input predates neutral release"));
         }
         let expires=(now as u32).wrapping_add(ttl_ms);
         let sequence=self.sequence.fetch_add(1,Ordering::Relaxed).wrapping_add(1);

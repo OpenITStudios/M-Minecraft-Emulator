@@ -193,8 +193,16 @@ make them executable.
   *uncertain previous IPC* flag in the same CLI process. A still-pending
   native worker is never bypassed; all new movements and unrelated
   mutations remain denied under uncertainty. The original controller
-  still checks MC02 PID/birth/session and the opted-in channel. If
-  native release cannot be delivered, TTL remains the fail-safe.
+  still checks MC02 PID/birth/session and the opted-in channel.
+  The existing MC02 native channel now also retains the greatest
+  monotonic `GetTickCount64` issue timestamp of any neutral release.
+  This closes a cross-process cancellation race: a delayed older
+  active pulse arriving *after* ReleaseAll is rejected even if it is
+  still under the 500-ms normal request-age limit. The watermark is
+  controller-local, not another provider or change to the 96-byte
+  shared-memory ABI. A newly issued command after release still
+  passes the original per-slot admission and focus/ownership gates.
+  If native release cannot be delivered, TTL remains the fail-safe.
   The output remains **transport acknowledgement only**; actual
   Minecraft gameplay and keyboard release remain NOT_EXECUTED.
 - `stop_experimental_mc02_actions` requests cancellation while a sequence
