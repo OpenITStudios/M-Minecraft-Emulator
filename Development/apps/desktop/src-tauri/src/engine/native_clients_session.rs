@@ -282,6 +282,11 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
         }
     }
     let inspecting = matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings);
+    #[cfg(feature="mc02-native-input")]
+    let neutral_mc02_release = matches!(request,
+        SessionRequest::Mc02Input {slot:2,keys:0,dx:0,dy:0,..});
+    #[cfg(not(feature="mc02-native-input"))]
+    let neutral_mc02_release = false;
     let mut owner = admit_controller(&CONTROLLER)?;
     if let Some(pending) = &owner.pending {
         match pending.replies.try_recv() {
@@ -297,7 +302,15 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
             }
         }
     }
-    if owner.uncertain && !inspecting {
+    // A failed heartbeat IPC may leave MC02 controls held until native
+    // TTL expires. Do not let that uncertainty suppress a best-effort
+    // exact-owner neutral write from the SAME batch CLI. An in-flight
+    // request is still refused by the pending-worker gate above: never
+    // race an unresolved movement write with emergency release. All
+    // active input, lifecycle and other mutations stay blocked.
+    // The retained session actor still verifies original MC02
+    // PID/birth/session and its opt-in channel before clearing state.
+    if owner.uncertain && !inspecting && !neutral_mc02_release {
         return Err(io::Error::other(
             "Previous request outcome is uncertain. Refresh session status before another action.",
         ));

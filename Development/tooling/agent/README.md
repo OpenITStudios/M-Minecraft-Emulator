@@ -156,6 +156,12 @@ make them executable.
   neutral release on completion or a handled error. After the process
   exits or is cancelled, MCP independently attempts another native
   neutral write, with TTL expiry as the final fail-safe when killed.
+  An exact-owner, fully neutral MC02 request may also pass an
+  *uncertain previous IPC* flag in the same CLI process. A still-pending
+  native worker is never bypassed; all new movements and unrelated
+  mutations remain denied under uncertainty. The original controller
+  still checks MC02 PID/birth/session and the opted-in channel. If
+  native release cannot be delivered, TTL remains the fail-safe.
   The output remains **transport acknowledgement only**; actual
   Minecraft gameplay and keyboard release remain NOT_EXECUTED.
 - `stop_experimental_mc02_actions` requests cancellation while a sequence

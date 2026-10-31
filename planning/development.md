@@ -1013,6 +1013,23 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October MC02 same-process emergency release after uncertain IPC:**
+The existing native session client marked the batch CLI's transport
+`uncertain` after a failed or timed-out heartbeat. Its next request
+was then rejected even when it was the exact-owner zero-key/zero-look
+`ReleaseAll` that the same batch had to attempt. Only a feature-gated
+`Mc02Input {slot:2,keys:0,dx:0,dy:0}` now bypasses that uncertainty
+flag; an outstanding worker still blocks it, and the normal retained
+controller must still authenticate, verify the original MC02
+PID/birth/session, and find the opt-in channel. All active input
+and unrelated mutation remain refused. This is best-effort cleanup,
+not permission to race an unresolved write: native TTL remains
+the fallback if the transport does not complete. No new process,
+hook, driver, wire schema, controller, CI or MC03-MC05 capability.
+REMOTE_GITHUB exact-source review only. Rust/Node/MSVC builds,
+tests, Windows and Minecraft execution remain NOT_EXECUTED.
+The blocking P0 proof remains Minecraft input consumer/gameplay.
+
 **31 October first-pulse delayed-action compatibility:** The
 canonical semantic action planner and opt-in MC02 batch compiler already
 accepted a nonzero first offset (e.g. jump at 400 ms), but the MCP
