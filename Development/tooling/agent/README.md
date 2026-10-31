@@ -198,10 +198,15 @@ make them executable.
   monotonic `GetTickCount64` issue timestamp of any neutral release.
   This closes a cross-process cancellation race: a delayed older
   active pulse arriving *after* ReleaseAll is rejected even if it is
-  still under the 500-ms normal request-age limit. The watermark is
-  controller-local, not another provider or change to the 96-byte
-  shared-memory ABI. A newly issued command after release still
-  passes the original per-slot admission and focus/ownership gates.
+  still under the 500-ms normal request-age limit. The channel also
+  remembers the latest **active** input issue time. An older active
+  pulse arriving after a newer one cannot overwrite its keyboard or
+  camera state; a delayed old ReleaseAll cannot erase a newer accepted
+  active pulse. A same-millisecond tie gives neutral ReleaseAll
+  precedence over active state. Both watermarks are controller-local,
+  not another provider or change to the 96-byte shared-memory ABI.
+  A newly issued command after release still passes the original
+  per-slot admission and focus/ownership gates.
   If native release cannot be delivered, TTL remains the fail-safe.
   The output remains **transport acknowledgement only**; actual
   Minecraft gameplay and keyboard release remain NOT_EXECUTED.

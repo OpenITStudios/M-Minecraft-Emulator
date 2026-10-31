@@ -1013,6 +1013,34 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**1 November MC02 two-way cross-process issue-order fence:**
+After the completed neutral watermark fix, the same original
+MC02 Channel still accepted active pulses issued earlier than
+other already accepted active writes: distinct short-lived CLI
+processes can deliver authenticated IPC out of issue order,
+allowing an older held-key mask or camera delta to overwrite a
+newer one. A delayed neutral issued BEFORE a newer active input
+could likewise cancel the new controls, even though the neutral
+arrived later. The same controller-owned Channel now keeps the
+maximum accepted active `GetTickCount64` issue time, alongside
+the existing release high watermark. It rejects (a) active
+requests older than any accepted active request and (b) neutral
+requests older than a newer accepted active write, before
+mutating the game-visible shared state. Ties at the same
+millisecond remain release-first: an equal-tick ReleaseAll
+wins, and an active pulse at that same tick is rejected by
+the release watermark. The single retained session actor still
+serializes writes, and every request remains independently
+subject to the original <=500-ms age, authenticated MC02
+PID/birth/session/channel ownership, real MC01 foreground for
+active input, and valid HWND gates. The two issue watermarks are
+purely controller-local; no changed 96-byte ABI, IPC wire,
+injection policy, hook, new input backend, additional actor or
+MC03-MC05 authorization. Source-level REMOTE_GITHUB review
+only; Rust/Node/MSVC builds/tests and Minecraft playback
+remain NOT_EXECUTED. The P0 blocker is still direct evidence of
+Minecraft Education consuming independent MC02 input.
+
 **1 November MC02 cross-process stale pulse after ReleaseAll:**
 The existing same-image CLI batch and the MCP independent neutral
 fallback run in distinct processes, so their authenticated IPC

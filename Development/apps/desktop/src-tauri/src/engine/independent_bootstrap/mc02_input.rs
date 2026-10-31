@@ -52,6 +52,10 @@ pub(super) struct Channel {
     // An already-issued active pulse must never re-arm MC02 after a
     // later neutral ReleaseAll was admitted ahead of it over IPC.
     last_release_issued_at_ms: AtomicU64,
+    // Same controller-side ordering fence for acknowledged active pulses.
+    // Delayed packets and delayed old neutral requests must not overwrite
+    // a newer active input written by another already-authorized CLI.
+    last_active_issued_at_ms: AtomicU64,
 }
 impl Channel {
     pub(super) fn create(slot:u32, explicitly_requested:bool) -> io::Result<Option<Self>> {
@@ -65,6 +69,7 @@ impl Channel {
             target:None,
             sequence:AtomicU8::new(0),
             last_release_issued_at_ms:AtomicU64::new(0),
+            last_active_issued_at_ms:AtomicU64::new(0),
         }))
     }
     pub(super) fn reader(&self)->HANDLE {
@@ -119,6 +124,14 @@ impl Channel {
             let _=unsafe{UnmapViewOfFile(view)};
             return Err(invalid("MC02 release request expired before native delivery"));
         }
+        // A delayed final neutral from an older batch must not cancel an
+        // active pulse issued more recently by a separate CLI. If the
+        // millisecond tick is equal, neutral still wins: release is the
+        // safe ordering tie-breaker. This never authorizes new input.
+        if issued_at_ms<self.last_active_issued_at_ms.load(Ordering::SeqCst) {
+            let _=unsafe{UnmapViewOfFile(view)};
+            return Err(invalid("MC02 release predates newer active input"));
+        }
         let input=unsafe{&*view.Value.cast::<SharedInput>()};
         // Use the same v4 even/odd publication rule as movement writes.
         // Packet zero makes all virtual key/mouse polling return released;
@@ -144,8 +157,9 @@ impl Channel {
         // Its IPC connections can originate from DIFFERENT short-lived
         // CLI processes: after cancellation a newly issued neutral
         // request may overtake an earlier, delayed active request.
-        // Preserve the greatest same-machine GetTickCount64 issue time,
-        // including an older release that arrives after a newer one.
+        // Preserve the greatest accepted same-machine GetTickCount64
+        // release issue time. A release older than the most recent active
+        // input was rejected before clearing the shared memory above.
         // Never let a late pre-release active pulse resurrect controls.
         self.last_release_issued_at_ms.fetch_max(
             issued_at_ms,Ordering::SeqCst);
@@ -183,6 +197,16 @@ impl Channel {
         if issued_at_ms<=self.last_release_issued_at_ms.load(Ordering::SeqCst) {
             let _=unsafe{UnmapViewOfFile(view)};
             return Err(invalid("MC02 active input predates neutral release"));
+        }
+        // The original single actor processes IPC in arrival order, not
+        // necessarily GetTickCount64 issue order. Refuse an older active
+        // pulse after a newer active write: otherwise stale key masks
+        // and one-shot camera deltas can replace valid current controls.
+        // Equal-tick active writes retain actor order; any equal-tick
+        // ReleaseAll above still takes precedence over all of them.
+        if issued_at_ms<self.last_active_issued_at_ms.load(Ordering::SeqCst) {
+            let _=unsafe{UnmapViewOfFile(view)};
+            return Err(invalid("MC02 active input predates newer active input"));
         }
         let expires=(now as u32).wrapping_add(ttl_ms);
         let sequence=self.sequence.fetch_add(1,Ordering::Relaxed).wrapping_add(1);
@@ -239,6 +263,11 @@ impl Channel {
         input.press_counts.store(counts,Ordering::SeqCst);
         input.packet.store(word,Ordering::SeqCst);
         input.cursor_revision.fetch_add(1,Ordering::SeqCst);
+        // The same retained session actor completes the shared-state
+        // transaction before accepting the next IPC request. A maximum
+        // watermark rejects any delayed older active packet thereafter,
+        // without changing the game-visible 96-byte shared-state ABI.
+        self.last_active_issued_at_ms.fetch_max(issued_at_ms,Ordering::SeqCst);
         if unsafe{UnmapViewOfFile(view)}==0 {return Err(io::Error::last_os_error());}
         Ok(())
     }
