@@ -177,20 +177,33 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
         // asking the retained native controller to inspect any process.
         native_clients_session::admit_native_input_frame(2,keys,dx,dy,ttl_ms)
             .map_err(|_|"INVALID_ARGUMENTS")?;
-        // A delayed Node request must not receive a new execution window
-        // just because this one-shot executable finally started. UTC is
-        // only an admission check; the native pipe then uses shared uptime.
+        // A delayed Node request must not gain a new issue time merely
+        // because this one-shot executable started late. ReleaseAll and
+        // active input can arrive from DIFFERENT CLI processes; the
+        // retained MC02 Channel orders them by GetTickCount64 issue time.
+        // Sample uptime before wall time: if sampling is delayed, the
+        // original request is backdated conservatively, never made newer.
+        let uptime_now=unsafe{
+            windows_sys::Win32::System::SystemInformation::GetTickCount64()
+        };
         let wall_now=std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|_|"STALE_MC02_INPUT")?
             .as_millis();
-        if requested_at_ms==0 || wall_now<u128::from(requested_at_ms) ||
-            wall_now-u128::from(requested_at_ms)>500 {
+        if requested_at_ms==0 || wall_now<u128::from(requested_at_ms)) {
             return Err("STALE_MC02_INPUT");
         }
-        let issued_at_ms=unsafe{
-            windows_sys::Win32::System::SystemInformation::GetTickCount64()
-        };
+        let request_age_ms=wall_now-u128::from(requested_at_ms);
+        if request_age_ms>500 {
+            return Err("STALE_MC02_INPUT");
+        }
+        // Convert the bounded original MCP request age to this same
+        // host's monotonic uptime clock. Keep the request's original
+        // ordering instead of letting slow process startup turn an old
+        // release into a fresh one. Reject underflow and uptime zero;
+        // never wrap a newborn machine's tick counter.
+        let issued_at_ms=uptime_now.checked_sub(request_age_ms as u64)
+            .filter(|stamp|*stamp!=0).ok_or("STALE_MC02_INPUT")?;
         let snapshot=native_clients_session::request(
             SessionRequest::Mc02Input{slot:2,keys,dx,dy,ttl_ms,issued_at_ms}
         ).map_err(native_error)?;

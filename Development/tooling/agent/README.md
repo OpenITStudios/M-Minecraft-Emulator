@@ -229,6 +229,16 @@ make them executable.
   not another provider or change to the 96-byte shared-memory ABI.
   A newly issued command after release still passes the original
   per-slot admission and focus/ownership gates.
+  For one-shot `mc02-input` calls, the CLI now preserves the original
+  MCP `requestedAtMs` request order by translating its validated
+  <=500-ms wall-clock age into same-host `GetTickCount64` time.
+  Previously an older neutral command delayed during Windows process
+  startup could obtain a newer issue timestamp, circumventing the
+  controller's two existing cross-process ordering watermarks.
+  Unrepresentable uptime and invalid/future/stale wall time refuse
+  the request. This local conversion is bounded and conservative,
+  not evidence of input timing or Minecraft gameplay; independent
+  160-ms batch heartbeats still use their actual dispatch uptime.
   If native release cannot be delivered, TTL remains the fail-safe.
   The output remains **transport acknowledgement only**; actual
   Minecraft gameplay and keyboard release remain NOT_EXECUTED.

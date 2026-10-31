@@ -1013,6 +1013,31 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**1 November MC02 one-shot CLI startup timestamp ordering:**
+The canonical MC02 Channel now rejects stale out-of-order active
+and neutral requests by the `GetTickCount64` issue timestamp.
+However, the one-shot `mc02-input` CLI previously used the MCP
+`requestedAtMs` ONLY to refuse wall-clock request age >500 ms,
+then stamped a new uptime issue time AFTER executable startup.
+An old MCP ReleaseAll delayed while starting Windows could thus
+appear newer than an active input requested and accepted later,
+incorrectly clearing newer state despite the controller fence.
+The existing one-shot CLI now samples same-machine uptime before
+UTC, validates the nonfuture bounded original request age, and
+conservatively subtracts that age from sampled uptime before
+sending its unchanged authenticated `Mc02Input` request. Reject
+underflow/zero (early uptime), future and >500-ms request age.
+This applies to one-shot active and release input; the bounded
+same-image batch still timestamps each pulse at actual dispatch.
+The controller's PID/birth/session, MC01 real foreground, window,
+slot=2, TTL and two existing watermark checks remain unchanged.
+No new IPC field/schema, ABI, owner, driver, hook, CI, test suite
+or MC03-MC05 permission. REMOTE_GITHUB exact Rust CLI/Node sender/
+retained Channel source review only; Rust/Node/MSVC builds/tests,
+actual Windows clocks and Minecraft gameplay remain NOT_EXECUTED.
+P0 still requires evidence of the actual MC02 game input consumer
+and gameplay response while MC01 remains human-controlled.
+
 **1 November MC02 read-only Raw Input observer hidden-window blind spot:**
 The existing opt-in `GetRawInputBuffer` observer classified
 successful polling on the MC02 OGLES window thread versus a worker
