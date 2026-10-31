@@ -82,6 +82,7 @@ KeyboardStateCall originalKeyboardState = nullptr;
 CursorPositionCall originalCursorPosition = nullptr;
 std::atomic<bool> sawInputData{false}, sawInputBuffer{false},
     sawInputDataBytes{false}, sawInputBufferRecords{false},
+    sawBufferOnGameThread{false}, sawBufferOnOtherThread{false},
     sawAsyncKey{false}, sawKeyboardState{false}, sawCursorPosition{false};
 std::atomic<bool> sawKeyboardRawRegistration{false}, sawMouseRawRegistration{false},
     sawKeyboardRawSink{false}, sawMouseRawSink{false},
@@ -91,6 +92,45 @@ void noteInputApi(std::atomic<bool>& seen, const wchar_t* tag) {
     // A diagnostic must not alter a Win32 caller's LastError contract.
     const DWORD previous=GetLastError();
     if (!seen.exchange(true, std::memory_order_relaxed)) OutputDebugStringW(tag);
+    SetLastError(previous);
+}
+// The optional buffered AI candidate only emits on its own OGLES window
+// thread. Determine whether actual successful GetRawInputBuffer polls use
+// that thread, or a separate input worker. Do not log PID/HWND/TID values.
+// This is only a process-local thread classification, never gameplay proof.
+struct OglesThread {
+    DWORD matches=0;
+    DWORD thread=0;
+};
+BOOL CALLBACK inspectOglesThread(HWND hwnd,LPARAM context) {
+    DWORD pid=0;
+    const DWORD thread=GetWindowThreadProcessId(hwnd,&pid);
+    if (!thread || pid!=GetCurrentProcessId() ||
+        GetAncestor(hwnd,GA_ROOT)!=hwnd ||
+        GetWindow(hwnd,GW_OWNER)!=nullptr ||
+        !IsWindowVisible(hwnd) || IsIconic(hwnd)) return TRUE;
+    wchar_t className[16]{};
+    if (GetClassNameW(hwnd,className,16)!=5 ||
+        wcscmp(className,L"OGLES")!=0) return TRUE;
+    auto* state=reinterpret_cast<OglesThread*>(context);
+    ++state->matches;
+    if (state->matches==1) state->thread=thread;
+    return state->matches<2; // Multiple OGLES roots: ambiguous, no marker.
+}
+void noteBufferedReaderThread() {
+    const DWORD previous=GetLastError();
+    OglesThread state{};
+    // A missing/ambiguous game window cannot establish the caller's
+    // relationship to the input-consumption thread.
+    (void)EnumWindows(inspectOglesThread,reinterpret_cast<LPARAM>(&state));
+    if (state.matches==1) {
+        if (state.thread==GetCurrentThreadId())
+            noteInputApi(sawBufferOnGameThread,
+                L"[LT_INPUT_API][MC02][RAW_BUFFER_OGLES_THREAD_POLL]\n");
+        else
+            noteInputApi(sawBufferOnOtherThread,
+                L"[LT_INPUT_API][MC02][RAW_BUFFER_OTHER_THREAD_POLL]\n");
+    }
     SetLastError(previous);
 }
 // Windows delivers WM_INPUT to a window only after Raw Input registration.
@@ -149,11 +189,16 @@ UINT WINAPI observedInputBuffer(PRAWINPUT input, PUINT outputSize, UINT headerSi
     noteInputApi(sawInputBuffer, L"[LT_INPUT_API][MC02][GetRawInputBuffer]\n");
     const UINT records=originalInputBuffer(input, outputSize, headerSize);
     const DWORD previous=GetLastError();
-    // Count only successful, nonempty buffered reads; a null-buffer
-    // size query or failed read does not identify a usable input route.
-    if (input && records!=UINT(-1) && records!=0)
-        noteInputApi(sawInputBufferRecords,
-            L"[LT_INPUT_API][MC02][RAW_BUFFER_RECORDS_RETURNED]\n");
+    // A non-null successful poll establishes the consuming thread even
+    // when the real Windows Raw Input queue is empty. This directly
+    // distinguishes the existing MC02 virtual adapter's OGLES-thread
+    // requirement from an actual worker-thread consumer.
+    if (input && records!=UINT(-1)) {
+        noteBufferedReaderThread();
+        if (records!=0)
+            noteInputApi(sawInputBufferRecords,
+                L"[LT_INPUT_API][MC02][RAW_BUFFER_RECORDS_RETURNED]\n");
+    }
     SetLastError(previous);
     return records;
 }

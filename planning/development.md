@@ -1013,6 +1013,23 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October P0 input-consumer thread classification (source-only):**
+The existing, OFF-by-default MC02 input-API observer now distinguishes
+successful non-null `GetRawInputBuffer` polls on the process-local
+unique visible root OGLES window thread from polls on a different
+thread. Both empty and nonempty successful polling calls qualify;
+separate existing markers still distinguish nonempty real data.
+No numeric PID, HWND, thread ID, account, key, or mouse data is logged.
+Unknown/ambiguous OGLES ownership emits no thread classification.
+This determines whether the current MC02 buffered candidate's
+game-window-thread restriction is even applicable; it does not prove
+Minecraft Education consumed synthetic data, moved a player, or
+notified its input loop. No new hooks, SDK dependencies, controller,
+runtime input permission, or product-mode changes. Evidence:
+REMOTE_GITHUB exact-source review and Microsoft Raw Input thread-queue
+contract; NO Node/Cargo/MSVC/Windows/Minecraft tests or execution.
+The original gameplay-input blocker remains.
+
 **31 October MC02 physical Raw Input suppression correction:** The existing
 compile-OFF buffered Raw Input experiment no longer passes the game's
 output buffer into the genuine OS `GetRawInputBuffer` call. Instead it
