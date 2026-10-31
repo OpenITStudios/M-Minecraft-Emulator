@@ -818,6 +818,22 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
   NOT_EXECUTED** for opt-in tool visibility, input-pulse encoding and
   MC01 focus refusal.
 
+- Fixed a further first-owner input loss in the MC02 camera path:
+  the original 40-byte single-slot packet held only the LAST pointer
+  delta. If Codex sent two valid look commands before GetCursorPos was
+  polled, the earlier camera movement disappeared. The private Rust
+  controller and MC02-only DLL now share an ABI-v2 **72-byte** unnamed
+  mapping: the packet still owns the latest held keys and expiry,
+  while two atomic cumulative cursor axes preserve all movement within
+  one live command epoch. A paired odd/even revision lets the DLL read
+  a consistent snapshot; a bounded nonblocking in-process guard stops
+  concurrent Win32 cursor reads from applying the same delta twice.
+  Once the previous packet expires, the next writer begins a NEW
+  epoch, discarding unseen expired camera movement. The source also
+  checks ABI version/size on the already-authenticated bootstrap.
+  This is not additional Win32 input coverage: Raw Input/GameInput
+  remains unsupported and Minecraft game response UNVERIFIED.
+
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
 **Stop scope drift.** Phases 14–19 hardened secondary observation/evidence

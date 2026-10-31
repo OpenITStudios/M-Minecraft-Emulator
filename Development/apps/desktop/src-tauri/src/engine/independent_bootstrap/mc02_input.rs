@@ -4,30 +4,37 @@
 //! profile storage write. This module is absent unless its Cargo feature is
 //! explicitly enabled. Minecraft Education compatibility is NOT_EXECUTED.
 use super::*;
-use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicU64, AtomicU8, Ordering};
 use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
 pub(super) const INPUT_ENV: &str = "MIVUBI_EDUCATION_MC02_INPUT_SECTION";
 pub(super) const INPUT_OPTIN: &str = "LAZY_TESTER_MC02_VIRTUAL_INPUT";
 pub(super) const INPUT_CONSENT: &str = "I_ACCEPT_EXPERIMENTAL_MC02_INPUT";
 const MAGIC: u32 = 0x4c544932; // LTI2 (MC02 only)
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 const MAX_INPUT_REQUEST_AGE_MS:u64=500; // same-machine monotonic uptime
 
 
-// C++ counterpart: mc02-virtual-input.cpp. Atomic 64-bit on Win x64.
-// High 32 bits: GetTickCount() expiration. Bits 0..7: W,S,A,D,
-// jump,sneak,attack,use. Bits 8..15: per-command sequence.
-// Bits 16..23 / 24..31: signed dx/dy. An identical repeated look
-// command must not be discarded within the same Windows tick.
-// Expiration is bounded to 500 ms; no sticky input after an agent crash.
+// C++ counterpart: mc02-virtual-input.cpp, private 72-byte ABI v2.
+// packet: high 32 bits = GetTickCount() expiry; low 8 = active key mask;
+// remaining low bits retain the last command sequence and signed dx/dy.
+// Cursor movement is NOT read from that last-writer-wins packet.
+// cursor_x/y accumulate all commands published in the same live epoch,
+// cursor_epoch advances when the previous command expired, and
+// cursor_revision is an even/odd transaction sequence for the child
+// reader's consistent lock-free snapshot. No child-writable mapping.
+// Commands and queued pointer movement expire after <=500 ms.
 #[repr(C, align(8))]
 struct SharedInput {
     magic:u32, version:u32, bytes:u32, slot:u32, pid:u32, session:u32,
     birth:u64,
     packet:AtomicU64,
+    cursor_revision:AtomicU64,
+    cursor_x:AtomicI64,
+    cursor_y:AtomicI64,
+    cursor_epoch:AtomicU64,
 }
-const _: () = assert!(std::mem::size_of::<SharedInput>() == 40);
+const _: () = assert!(std::mem::size_of::<SharedInput>() == 72);
 const _: () = assert!(std::mem::align_of::<SharedInput>() == 8);
 
 pub(super) struct Channel {
@@ -64,6 +71,9 @@ impl Channel {
                 magic:MAGIC,version:VERSION,
                 bytes:std::mem::size_of::<SharedInput>() as u32,
                 slot:2,pid,session,birth,packet:AtomicU64::new(0),
+                cursor_revision:AtomicU64::new(0),
+                cursor_x:AtomicI64::new(0),cursor_y:AtomicI64::new(0),
+                cursor_epoch:AtomicU64::new(0),
             });
         }
         if unsafe{UnmapViewOfFile(view)}==0 {return Err(io::Error::last_os_error());}
@@ -98,8 +108,31 @@ impl Channel {
         let word=((expires as u64)<<32) | ((dy as i8 as u8 as u64)<<24)
              | ((dx as i8 as u8 as u64)<<16)
              | ((sequence as u64)<<8) | keys as u64;
-        // The existing authenticated native controller is the sole writer.
-        unsafe{(*view.Value.cast::<SharedInput>()).packet.store(word,Ordering::Release);}
+        // The authenticated native controller is the ONLY writer. A fresh
+        // input packet may overwrite the held button state, but it must NOT
+        // erase cursor deltas that MC02 has not polled yet. Cursor totals
+        // reset after expiration; the epoch prevents a later fresh command
+        // from replaying pointer movement that was missed while idle.
+        let input=unsafe{&*view.Value.cast::<SharedInput>()};
+        let old=input.packet.load(Ordering::SeqCst);
+        let ahead=((old>>32) as u32).wrapping_sub(now as u32) as i32;
+        let new_epoch=old==0 || ahead<=0 || ahead>500;
+        let epoch=input.cursor_epoch.load(Ordering::SeqCst)
+            .wrapping_add(u64::from(new_epoch));
+        let x=if new_epoch {dx as i64} else {
+            input.cursor_x.load(Ordering::SeqCst).saturating_add(dx as i64)
+        };
+        let y=if new_epoch {dy as i64} else {
+            input.cursor_y.load(Ordering::SeqCst).saturating_add(dy as i64)
+        };
+        // Odd revision = in-flight transaction. Publish keys/expiry BEFORE
+        // returning to even; MC02 only accepts matching even snapshots.
+        input.cursor_revision.fetch_add(1,Ordering::SeqCst);
+        input.cursor_x.store(x,Ordering::SeqCst);
+        input.cursor_y.store(y,Ordering::SeqCst);
+        input.cursor_epoch.store(epoch,Ordering::SeqCst);
+        input.packet.store(word,Ordering::SeqCst);
+        input.cursor_revision.fetch_add(1,Ordering::SeqCst);
         if unsafe{UnmapViewOfFile(view)}==0 {return Err(io::Error::last_os_error());}
         Ok(())
     }

@@ -11,18 +11,28 @@
 #include <initializer_list>
 
 namespace {
-constexpr std::uint32_t Magic=0x4c544932, Version=1;
+constexpr std::uint32_t Magic=0x4c544932, Version=2;
 struct alignas(8) SharedInput {
     std::uint32_t magic,version,bytes,slot,pid,session;
     std::uint64_t birth;
     std::atomic<std::uint64_t> packet;
+    std::atomic<std::uint64_t> cursorRevision;
+    std::atomic<std::int64_t> cursorX,cursorY;
+    std::atomic<std::uint64_t> cursorEpoch;
 };
-static_assert(sizeof(SharedInput)==40 && alignof(SharedInput)==8);
+static_assert(sizeof(SharedInput)==72 && alignof(SharedInput)==8);
+static_assert(std::atomic<std::int64_t>::is_always_lock_free);
+static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
 const SharedInput* view=nullptr;
 std::atomic<bool> isolated{false}; // latched after first valid AI command
 std::atomic<bool> cursorInitialized{false};
-std::atomic<std::uint64_t> seenPacket{0};
 std::atomic<LONG> virtualX{0},virtualY{0};
+// Only GetCursorPos consumes pending virtual pointer movement. Its
+// non-blocking per-process guard prevents two game threads applying the
+// same cumulative deltas twice. This is NOT a second input controller.
+std::atomic_flag cursorReadBusy=ATOMIC_FLAG_INIT;
+std::uint64_t seenRevision=0,seenEpoch=0;
+std::int64_t seenX=0,seenY=0;
 using KeyCall=SHORT (WINAPI*)(int);
 using KeyboardStateCall=BOOL (WINAPI*)(PBYTE);
 using CursorCall=BOOL (WINAPI*)(LPPOINT);
@@ -133,18 +143,39 @@ BOOL WINAPI observedKeyboard(PBYTE state) {
     SetLastError(previous);
     return TRUE;
 }
+void applyPendingCursor() {
+    if (!view || cursorReadBusy.test_and_set(std::memory_order_acquire)) return;
+    const auto before=view->cursorRevision.load(std::memory_order_seq_cst);
+    if (before!=0 && !(before&1) && before!=seenRevision) {
+        const auto x=view->cursorX.load(std::memory_order_seq_cst);
+        const auto y=view->cursorY.load(std::memory_order_seq_cst);
+        const auto epoch=view->cursorEpoch.load(std::memory_order_seq_cst);
+        if (view->cursorRevision.load(std::memory_order_seq_cst)==before) {
+            // Same epoch: take the difference in cumulative totals, even
+            // when multiple fresh commands arrived before one game poll.
+            // New epoch: the previous, expired cursor backlog is dropped.
+            const auto dx=epoch==seenEpoch ? x-seenX : x;
+            const auto dy=epoch==seenEpoch ? y-seenY : y;
+            // Reject implausible arithmetic rather than wrap LONG and
+            // teleport MC02's virtual pointer across the screen.
+            if (dx>=-32767 && dx<=32767 && dy>=-32767 && dy<=32767) {
+                virtualX.fetch_add(static_cast<LONG>(dx),std::memory_order_acq_rel);
+                virtualY.fetch_add(static_cast<LONG>(dy),std::memory_order_acq_rel);
+            }
+            seenEpoch=epoch;seenRevision=before;seenX=x;seenY=y;
+        }
+    }
+    cursorReadBusy.clear(std::memory_order_release);
+}
 BOOL WINAPI observedCursor(LPPOINT point) {
     const DWORD previous=GetLastError();
     const auto word=currentPacket();
     if (!virtualMode(word) || !point) {
         SetLastError(previous); return originalCursor(point);
     }
-    // Each controller packet applies pointer movement ONCE, even if
-    // Minecraft polls the cursor repeatedly on different threads.
-    if (word && seenPacket.exchange(word,std::memory_order_acq_rel)!=word) {
-        virtualX.fetch_add(static_cast<std::int8_t>((word>>16)&255));
-        virtualY.fetch_add(static_cast<std::int8_t>((word>>24)&255));
-    }
+    // Do not consume an expired command. The next fresh native command
+    // opens a new epoch, so stale look deltas cannot be replayed.
+    if (word) applyPendingCursor();
     point->x=virtualX.load(std::memory_order_acquire);
     point->y=virtualY.load(std::memory_order_acquire);
     SetLastError(previous);
