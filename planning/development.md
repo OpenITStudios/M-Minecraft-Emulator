@@ -749,6 +749,17 @@ inventing an input-provider contract. API calls alone do NOT prove
 the game uses that API for movement, camera, or attacks; absence of
 a marker does not exclude GameInput/DirectInput or later calls.
 The optional mode is NOT BUILT, NOT EXECUTED, and not an agent input tool.
+The next source correction adds an observer for successful
+`RegisterRawInputDevices` registration (keyboard/mouse, background flags
+and NOLEGACY) because raw-device registration is required by Windows
+before a game can receive `WM_INPUT`. This differentiates an actual
+Raw Input receiver from incidental calls to raw input APIs, without
+changing the registered device list or sending artificial events.
+Win32 `GetLastError` is preserved around the one-shot diagnostics.
+These observations are hints, not proof of Minecraft movement or that
+background input is independently routed. The diagnostic is still
+test-only, compile-OFF by default, and requires the explicit MC02
+environment opt-in. No real per-client AI input provider exists yet.
 
 Upstream ProtoInput `protoloader.h` exposes selected physical device
 routing and hooks but no general `sendSyntheticKey/mouseDelta` API.

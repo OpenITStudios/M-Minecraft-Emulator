@@ -67,19 +67,66 @@ struct InstallConfig {
 #if defined(BOOTSTRAP_MC02_INPUT_API_OBSERVE)
 using RawInputDataCall = UINT (WINAPI*)(HRAWINPUT, UINT, LPVOID, PUINT, UINT);
 using RawInputBufferCall = UINT (WINAPI*)(PRAWINPUT, PUINT, UINT);
+using RegisterRawDevicesCall = BOOL (WINAPI*)(PCRAWINPUTDEVICE, UINT, UINT);
 using AsyncKeyCall = SHORT (WINAPI*)(int);
 using KeyboardStateCall = BOOL (WINAPI*)(PBYTE);
 using CursorPositionCall = BOOL (WINAPI*)(LPPOINT);
 RawInputDataCall originalInputData = nullptr;
 RawInputBufferCall originalInputBuffer = nullptr;
+RegisterRawDevicesCall originalRegisterRawDevices = nullptr;
 AsyncKeyCall originalAsyncKey = nullptr;
 KeyboardStateCall originalKeyboardState = nullptr;
 CursorPositionCall originalCursorPosition = nullptr;
 std::atomic<bool> sawInputData{false}, sawInputBuffer{false},
     sawAsyncKey{false}, sawKeyboardState{false}, sawCursorPosition{false};
+std::atomic<bool> sawKeyboardRawRegistration{false}, sawMouseRawRegistration{false},
+    sawKeyboardRawSink{false}, sawMouseRawSink{false},
+    sawKeyboardNoLegacy{false}, sawMouseNoLegacy{false};
 
 void noteInputApi(std::atomic<bool>& seen, const wchar_t* tag) {
+    // A diagnostic must not alter a Win32 caller's LastError contract.
+    const DWORD previous=GetLastError();
     if (!seen.exchange(true, std::memory_order_relaxed)) OutputDebugStringW(tag);
+    SetLastError(previous);
+}
+// Windows delivers WM_INPUT to a window only after Raw Input registration.
+// Observe successful keyboard/mouse registration without changing any
+// device, window, foreground, flag, buffer, or message routing.
+BOOL WINAPI observedRegisterRawDevices(PCRAWINPUTDEVICE devices,
+                                        UINT count, UINT itemBytes) {
+    const BOOL result=originalRegisterRawDevices(devices,count,itemBytes);
+    const DWORD previous=GetLastError();
+    if (result && devices && itemBytes==sizeof(RAWINPUTDEVICE) && count<=16) {
+        for (UINT i=0; i<count; ++i) {
+            const RAWINPUTDEVICE& d=devices[i];
+            if (d.usUsagePage!=0x01 || (d.dwFlags & RIDEV_REMOVE)) continue;
+            if (d.usUsage==0x06) { // Generic Desktop Keyboard
+                noteInputApi(sawKeyboardRawRegistration,
+                    L"[LT_INPUT_API][MC02][RAW_KEYBOARD_REGISTERED]\n");
+                if (d.dwFlags & (RIDEV_INPUTSINK | RIDEV_EXINPUTSINK)) {
+                    noteInputApi(sawKeyboardRawSink,
+                        L"[LT_INPUT_API][MC02][RAW_KEYBOARD_BACKGROUND_FLAGS]\n");
+                }
+                if (d.dwFlags & RIDEV_NOLEGACY) {
+                    noteInputApi(sawKeyboardNoLegacy,
+                        L"[LT_INPUT_API][MC02][RAW_KEYBOARD_NO_LEGACY]\n");
+                }
+            } else if (d.usUsage==0x02) { // Generic Desktop Mouse
+                noteInputApi(sawMouseRawRegistration,
+                    L"[LT_INPUT_API][MC02][RAW_MOUSE_REGISTERED]\n");
+                if (d.dwFlags & (RIDEV_INPUTSINK | RIDEV_EXINPUTSINK)) {
+                    noteInputApi(sawMouseRawSink,
+                        L"[LT_INPUT_API][MC02][RAW_MOUSE_BACKGROUND_FLAGS]\n");
+                }
+                if (d.dwFlags & RIDEV_NOLEGACY) {
+                    noteInputApi(sawMouseNoLegacy,
+                        L"[LT_INPUT_API][MC02][RAW_MOUSE_NO_LEGACY]\n");
+                }
+            }
+        }
+    }
+    SetLastError(previous);
+    return result;
 }
 UINT WINAPI observedInputData(HRAWINPUT input, UINT command, LPVOID output,
                               PUINT outputSize, UINT headerSize) {
@@ -121,20 +168,25 @@ bool attachMc02InputApiObservation(const InstallConfig& config) {
         GetProcAddress(user32,"GetRawInputData"));
     originalInputBuffer=reinterpret_cast<RawInputBufferCall>(
         GetProcAddress(user32,"GetRawInputBuffer"));
+    originalRegisterRawDevices=reinterpret_cast<RegisterRawDevicesCall>(
+        GetProcAddress(user32,"RegisterRawInputDevices"));
     originalAsyncKey=reinterpret_cast<AsyncKeyCall>(
         GetProcAddress(user32,"GetAsyncKeyState"));
     originalKeyboardState=reinterpret_cast<KeyboardStateCall>(
         GetProcAddress(user32,"GetKeyboardState"));
     originalCursorPosition=reinterpret_cast<CursorPositionCall>(
         GetProcAddress(user32,"GetCursorPos"));
-    if (!originalInputData || !originalInputBuffer || !originalAsyncKey ||
-        !originalKeyboardState || !originalCursorPosition) return false;
+    if (!originalInputData || !originalInputBuffer || !originalRegisterRawDevices ||
+        !originalAsyncKey || !originalKeyboardState || !originalCursorPosition)
+        return false;
     // Reuse the single existing Detours transaction. No second injector,
     // process manager, window focus change or active keyboard mutation.
     return DetourAttach(reinterpret_cast<PVOID*>(&originalInputData),
                 reinterpret_cast<PVOID>(observedInputData))==NO_ERROR
         && DetourAttach(reinterpret_cast<PVOID*>(&originalInputBuffer),
                 reinterpret_cast<PVOID>(observedInputBuffer))==NO_ERROR
+        && DetourAttach(reinterpret_cast<PVOID*>(&originalRegisterRawDevices),
+                reinterpret_cast<PVOID>(observedRegisterRawDevices))==NO_ERROR
         && DetourAttach(reinterpret_cast<PVOID*>(&originalAsyncKey),
                 reinterpret_cast<PVOID>(observedAsyncKey))==NO_ERROR
         && DetourAttach(reinterpret_cast<PVOID*>(&originalKeyboardState),
