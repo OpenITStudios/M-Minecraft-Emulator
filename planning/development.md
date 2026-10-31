@@ -1013,6 +1013,25 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October source-first native MC02 release separation:**
+The retained controller now handles a fully neutral MC02 request
+(keys/dx/dy all zero) as a separate release-only state write in the
+original 96-byte v4 inherited channel. It verifies the original MC02
+process PID/birth/session and request freshness but no longer demands
+MC01 still running, foreground or MC02's window still visible just to
+clear MC02 virtual keys, press-edge counters and cursor backlog.
+Non-neutral writes retain all prior MC01 foreground and dual-window
+identity gates. Existing authenticated session IPC and one-shot CLI
+schemas are unchanged. The opt-in MCP stop tool now cancels an active
+sequence as before, or writes a native neutral state when idle after
+a one-shot pulse. Failed native release cannot produce a success ACK.
+No new C++ hooks, controller, driver, foreground mutation, production
+activation or input provider for MC03-MC05 is introduced. The cleared
+mapping remains an input transport state, NOT proof of in-game key-up
+or MC01 uninterrupted gameplay. REMOTE_GITHUB source inspection only;
+Rust/Node/C++ build/tests and Windows/Minecraft runtime NOT_EXECUTED.
+
+
 **31 October source-first multi-client frame contract:** The canonical
 `input-timeline.mjs` now produces complete held-button states,
 8-bit button masks, one-shot relative camera deltas and per-client

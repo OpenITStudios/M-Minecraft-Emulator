@@ -97,6 +97,39 @@ impl Channel {
         self.target=Some((pid,birth,session));
         Ok(())
     }
+    // Release is a distinct state transition, not a one-millisecond
+    // movement command. Only the retained, original MC02 process object
+    // may authorize it. The human MC01 window does NOT need foreground:
+    // losing focus must never block the attempt to clear MC02's controls.
+    // No device, desktop cursor, external process or foreground is touched.
+    pub(super) fn release_all(&self,pid:u32,birth:u64,session:u32,
+                              issued_at_ms:u64)->io::Result<()> {
+        if self.target!=Some((pid,birth,session)) {
+            return Err(invalid("MC02 release target does not match owned process"));
+        }
+        let view=self.mapped()?;
+        let now=unsafe{GetTickCount64()};
+        if issued_at_ms==0 || now.checked_sub(issued_at_ms)
+            .is_none_or(|age|age>MAX_INPUT_REQUEST_AGE_MS) {
+            let _=unsafe{UnmapViewOfFile(view)};
+            return Err(invalid("MC02 release request expired before native delivery"));
+        }
+        let input=unsafe{&*view.Value.cast::<SharedInput>()};
+        // Use the same v4 even/odd publication rule as movement writes.
+        // Packet zero makes all virtual key/mouse polling return released;
+        // a new cursor epoch prevents old look and rising-edge replay.
+        input.cursor_revision.fetch_add(1,Ordering::SeqCst);
+        input.human_window.store(0,Ordering::SeqCst);
+        input.ai_window.store(0,Ordering::SeqCst);
+        input.cursor_epoch.fetch_add(1,Ordering::SeqCst);
+        input.cursor_x.store(0,Ordering::SeqCst);
+        input.cursor_y.store(0,Ordering::SeqCst);
+        input.press_counts.store(0,Ordering::SeqCst);
+        input.packet.store(0,Ordering::SeqCst);
+        input.cursor_revision.fetch_add(1,Ordering::SeqCst);
+        if unsafe{UnmapViewOfFile(view)}==0 {return Err(io::Error::last_os_error());}
+        Ok(())
+    }
     pub(super) fn write(&self,pid:u32,birth:u64,session:u32,
                         keys:u32,dx:i32,dy:i32,ttl_ms:u32,
                         issued_at_ms:u64,human_hwnd:usize,ai_hwnd:usize)->io::Result<()> {

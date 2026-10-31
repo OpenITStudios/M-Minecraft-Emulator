@@ -183,19 +183,33 @@ impl Sessions {
     #[cfg(feature="mc02-native-input")]
     fn mc02_input(&self,slot:u32,keys:u32,dx:i32,dy:i32,
                   ttl_ms:u32,issued_at_ms:u64)->io::Result<()> {
-        if self.exiting||slot!=2 {
+        // The existing authenticated SessionRequest is slot-addressed.
+        // Only MC02 currently has a source candidate. No MC03-MC05
+        // native channel, injected hook or input permission is implied.
+        let release_only=keys==0 && dx==0 && dy==0;
+        if slot!=2 || (self.exiting && !release_only) {
             return Err(invalid("MC02-only experimental input refused"));
         }
-        // Both clients must still be managed and have their original
-        // verified windows. This code never changes foreground focus.
-        let human=self.running[0].as_ref().ok_or_else(||
-            invalid("MC01 human client is not running"))?;
         let ai=self.running[1].as_ref().ok_or_else(||
             invalid("MC02 AI client is not running"))?;
-        let human_child=&human.children[0];
         let ai_child=&ai.children[0];
-        human_child.identity()?;
         let (pid,birth)=ai_child.identity()?;
+        let input=ai_child.mc02_input.as_ref()
+            .ok_or_else(||invalid("MC02 input channel was not opted in at launch"))?;
+        let session=interactive_session(pid)?;
+        if release_only {
+            // Input *release* must not depend on MC01 still running or
+            // having real foreground, or on MC02 still owning a visible
+            // and responsive HWND. Only exact MC02 process/birth/session
+            // and the inherited channel may clear the virtual input.
+            return input.release_all(pid,birth,session,issued_at_ms);
+        }
+        // Non-neutral input remains under BOTH original process identities
+        // and verified windows. This path never changes Windows focus.
+        let human=self.running[0].as_ref().ok_or_else(||
+            invalid("MC01 human client is not running"))?;
+        let human_child=&human.children[0];
+        human_child.identity()?;
         let human_window=window(human_child,false)
             .ok_or_else(||invalid("MC01 verified game window unavailable"))?;
         let ai_window=window(ai_child,false)
@@ -205,14 +219,8 @@ impl Sessions {
            human_window.session_id!=ai_window.session_id {
             return Err(invalid("Independent MC01/MC02 ownership unavailable"));
         }
-        let input=ai_child.mc02_input.as_ref()
-            .ok_or_else(||invalid("MC02 input channel was not opted in at launch"))?;
-        let session=interactive_session(pid)?;
-        // The retained controller, NOT a separate pair of one-shot CLI
-        // preflights, is the authoritative input gate. Pin BOTH original
-        // process objects and verify each HWND through the existing owner
-        // all the way to publication. This also removes two process
-        // startups from the <=500ms lifetime of one AI input request.
+        // The retained controller, NOT extra CLI preflights, is the input
+        // gate. Revalidate real MC01 foreground inside pinned HWND owners.
         use windows_sys::Win32::UI::WindowsAndMessaging::{
             GetForegroundWindow,IsHungAppWindow,IsIconic,IsWindowVisible,
         };

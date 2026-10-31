@@ -457,7 +457,7 @@ const EXPERIMENTAL_MC02_SEQUENCE_TOOLS=[
         },required:['slot','kind','atMs','durationMs'],additionalProperties:false}},
     },required:['slot','actions'],additionalProperties:false}},
   {name:'stop_experimental_mc02_actions',
-    description:'Request cancellation of the active experimental MC02 action sequence. Neutral write is attempted by the running request; native TTL remains fail-safe.',
+    description:'Cancel an active experimental MC02 sequence; when idle, request an exact-owner native neutral-state write. Transport ACK only, not gameplay release proof.',
     inputSchema:{type:'object',properties:{slot:{type:'integer',const:2}},
       required:['slot'],additionalProperties:false}},
 ];
@@ -710,13 +710,33 @@ export function createHandler(config,{
       if(!mc02Enabled)throw new Error('MC02_EXPERIMENT_DISABLED');
       keysExactly(args,['slot']);
       if(args.slot!==2)throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
-      if(mc02SequenceAbort===null) {
-        return {schema:1,slot:2,status:'NO_ACTIVE_SEQUENCE',gameplayObserved:false};
+      if(mc02SequenceAbort!==null) {
+        mc02SequenceAbort.abort();
+        return {schema:1,slot:2,status:'CANCELLATION_REQUESTED',
+          neutralRelease:'PENDING_SEQUENCE_COMPLETION_OR_NATIVE_TTL',
+          gameplayObserved:false};
       }
-      mc02SequenceAbort.abort();
-      return {schema:1,slot:2,status:'CANCELLATION_REQUESTED',
-        neutralRelease:'PENDING_SEQUENCE_COMPLETION_OR_NATIVE_TTL',
-        gameplayObserved:false};
+      // An earlier one-shot pulse can still be held without an active
+      // sequence. Ask the exact native owner to clear MC02 input, never
+      // the global keyboard or MC01. This write is also allowed when the
+      // human foreground gate has already closed.
+      if(inFlight)throw new Error('Native operation in progress; do not overlap requests');
+      inFlight=true;
+      try {
+        const receipt=await mc02Input(config.executable,{
+          keys:0,dx:0,dy:0,ttlMs:1,requestedAtMs:Date.now(),
+        });
+        if(receipt?.schema!==1||receipt?.slot!==2||
+           receipt?.gameplayObserved!==false||
+           receipt?.status!=='NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED') {
+          throw new Error('MC02_INPUT_NATIVE_RESULT_UNVERIFIED');
+        }
+        return {schema:1,slot:2,
+          status:'MC02_NATIVE_NEUTRAL_STATE_WRITE_ACKNOWLEDGED',
+          actualGameKeyRelease:'NOT_VERIFIED',
+          gameplayObserved:false,
+          note:'State cleared by retained MC02 channel; no proof that Minecraft read the release.'};
+      } finally {inFlight=false;}
     }
     if (name==='run_experimental_mc02_actions') {
       if(!mc02Enabled)throw new Error('MC02_EXPERIMENT_DISABLED');

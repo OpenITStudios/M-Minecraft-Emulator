@@ -84,10 +84,18 @@ make them executable.
 - On success, abort, or failure it attempts a final neutral MC02 input
   packet. The independent native deadline is the fallback when MCP
   crashes or the foreground gate refuses a release.
-- `stop_experimental_mc02_actions` requests cancellation. Its immediate
-  response is NOT a release acknowledgement; the running tool or native
-  TTL must finish separately. The normal `send_experimental_mc02_input`
-  single pulse remains available and unrelated normal tools unchanged.
+- `stop_experimental_mc02_actions` requests cancellation while a sequence
+  is running; that immediate response is NOT a release acknowledgement.
+  When no sequence is active, it issues one neutral MC02 native write
+  (also useful after a stand-alone pulse) through the same authenticated
+  controller. Native cleanup requires MC02's pinned original PID/birth/
+  session and an opted-in channel, **not MC01 foreground**, because loss
+  of human focus must not prevent release. The underlying shared state is
+  cleared (packet, cursor backlog, press counts and focus hints) under
+  the existing ABI-v4 revision. This is a transport state acknowledgement,
+  never proof that Minecraft consumed a key-up. Native TTL remains a
+  fail-safe if the release cannot be delivered. The normal single-pulse
+  tool and unrelated normal tools remain unchanged.
 
 An MC02 native write receipt establishes **transport acknowledgement
 only**. It does not prove Minecraft Education accepted WASD, rotated

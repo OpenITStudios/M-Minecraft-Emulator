@@ -109,8 +109,12 @@ test('MCP experimental sequence reuses the retained native MC02 input callback',
   assert.equal(packets[0].keys,1);
   assert.equal(packets.at(-1).keys,0);
   assert.equal(packets.at(-1).ttlMs,1);
-  assert.equal((await handler.callTool('stop_experimental_mc02_actions',{slot:2}))
-    .status,'NO_ACTIVE_SEQUENCE');
+  const stop=await handler.callTool('stop_experimental_mc02_actions',{slot:2});
+  assert.equal(stop.status,'MC02_NATIVE_NEUTRAL_STATE_WRITE_ACKNOWLEDGED');
+  assert.equal(stop.gameplayObserved,false);
+  assert.deepEqual(packets.at(-1).keys,0);
+  assert.deepEqual({dx:packets.at(-1).dx,dy:packets.at(-1).dy,
+    ttlMs:packets.at(-1).ttlMs},{dx:0,dy:0,ttlMs:1});
   handler.shutdown();
 });
 
@@ -118,4 +122,25 @@ test('MC02 source adapter refuses collapsed same-timestamp release/repress',()=>
   assert.throws(()=>prepareMc02ActionSequence([
     move('attack',0,100),move('attack',100,100),
   ]),/MC02_SEQUENCE_INVALID_ACTIONS/);
+});
+
+test('idle MC02 stop refuses failed native release instead of acknowledging',async()=>{
+  const handler=createHandler(optIn(),{
+    mc02Input:async()=>{throw new Error('Native request refused: NATIVE_REFUSED');},
+  });
+  await assert.rejects(()=>handler.callTool('stop_experimental_mc02_actions',{slot:2}),
+    /Native request refused/);
+  handler.shutdown();
+});
+test('stop cannot target MC01 or MC03-MC05 even when opt-in is enabled',async()=>{
+  const calls=[];
+  const handler=createHandler(optIn(),{mc02Input:async(_exe,packet)=>{
+    calls.push(packet);return receipt;
+  }});
+  for(const slot of [1,3,4,5]) {
+    await assert.rejects(()=>handler.callTool('stop_experimental_mc02_actions',{slot}),
+      /MC02_SEQUENCE_INVALID_ACTIONS/);
+  }
+  assert.equal(calls.length,0);
+  handler.shutdown();
 });
