@@ -8,7 +8,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import {promisify} from 'node:util';
 import {planPeerSession,planPlayerActions} from './control-plan.mjs';
-import {compilePlayerInputTimeline} from './input-timeline.mjs';
+import {compilePlayerInputTimeline,compilePerClientInputFrames,GAME_BUTTON_BITS} from './input-timeline.mjs';
 import {assessInputRoute,requiredInputSlots} from './input-route.mjs';
 import {inputExecutionStatus} from './input-delivery.mjs';
 import {runExperimentalMc02Sequence} from './mc02-action-sequence.mjs';
@@ -204,10 +204,6 @@ export async function runNative(executable, operation, slot) {
 // The native input transport is intentionally NOT part of runNative()'s
 // inspect/launch/target contract. It is an opt-in one-shot operation on the
 // same reviewed lazy-tester.exe and authenticated session controller.
-const MC02_BUTTON_BITS=Object.freeze({
-  move_forward:1,move_backward:2,strafe_left:4,strafe_right:8,
-  jump:16,sneak:32,attack:64,use:128,
-});
 function mc02ButtonMask(buttons) {
   if(!Array.isArray(buttons)||buttons.length>8||
      new Set(buttons).size!==buttons.length) {
@@ -215,10 +211,10 @@ function mc02ButtonMask(buttons) {
   }
   let mask=0;
   for(const button of buttons) {
-    if(typeof button!=='string' || !Object.hasOwn(MC02_BUTTON_BITS,button)) {
+    if(typeof button!=='string' || !Object.hasOwn(GAME_BUTTON_BITS,button)) {
       throw new Error('MC02_INPUT_INVALID_COMMAND');
     }
-    mask|=MC02_BUTTON_BITS[button];
+    mask|=GAME_BUTTON_BITS[button];
   }
   if((mask&3)===3||(mask&12)===12) {
     throw new Error('MC02_INPUT_INVALID_COMMAND');
@@ -420,7 +416,7 @@ export const TOOL_LIST=[
   {name:'inspect_profiles',description:'Read five profile states from the authenticated native Lazy Tester controller (not game login or world readiness).',inputSchema:{type:'object',properties:{},additionalProperties:false}},
   {name:'launch_profile',description:'Explicitly request native Minecraft launch for an AI-controlled profile. Human MC01 cannot be launched in hybrid mode.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
   {name:'plan_peer_session',description:'Inspect native profiles and provide conservative human/AI host-and-join guidance. No world control or join is performed.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
-  {name:'plan_player_actions',description:'Validate bounded concurrent AI player-action intents. PREVIEW ONLY: no input is sent to Minecraft.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}},includeTimeline:{type:'boolean'}},required:['actions'],additionalProperties:false}},
+  {name:'plan_player_actions',description:'Validate bounded concurrent AI player-action intents. PREVIEW ONLY: no input is sent to Minecraft.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}},includeTimeline:{type:'boolean'},includeClientFrames:{type:'boolean'}},required:['actions'],additionalProperties:false}},
   {name:'assess_input_route',description:'Read-only native identity check for AI gameplay input: bind validated multi-client action timeline to real MC HWND/PID; ALWAYS reports no verified independent game-input backend and NEVER sends input.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}}},required:['actions'],additionalProperties:false}},
   {name:'summarize_test_evidence',description:'Read and condense bounded analytics/game-results capture from 1-5 profiles. No login, player mapping, host/join or gameplay result is inferred.',inputSchema:{type:'object',properties:{slots:{type:'array',items:{type:'integer',minimum:1,maximum:5},minItems:1,maxItems:5,uniqueItems:true}},additionalProperties:false}},
   {name:'read_game_evidence',description:'Read only a compact allowlisted projection of 1-20 captured evidence records for one profile. No raw Skills Probe JSON, credentials or verified gameplay claims.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
@@ -694,9 +690,17 @@ export function createHandler(config,{
         args.slots ?? [1,2,3,4,5],evidence);
     }
     if (name==='plan_player_actions') {
-      keysExactly(args,['actions','includeTimeline']);
-      if (args.includeTimeline!==undefined && typeof args.includeTimeline!=='boolean') {
-        throw new Error('includeTimeline must be a boolean');
+      keysExactly(args,['actions','includeTimeline','includeClientFrames']);
+      if ((args.includeTimeline!==undefined &&
+           typeof args.includeTimeline!=='boolean') ||
+          (args.includeClientFrames!==undefined &&
+           typeof args.includeClientFrames!=='boolean') ||
+          (args.includeTimeline===true && args.includeClientFrames===true)) {
+        throw new Error('Invalid tool arguments');
+      }
+      if(args.includeClientFrames===true) {
+        // Pure preview: NEVER contacts native controller or sends input.
+        return compilePerClientInputFrames(config.mode,args.actions);
       }
       return args.includeTimeline===true ?
         compilePlayerInputTimeline(config.mode,args.actions) :

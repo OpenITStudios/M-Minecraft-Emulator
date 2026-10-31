@@ -33,6 +33,29 @@ Use `--mode five-ai` only when **all five clients are intentionally AI-operated*
 
 `--lazy-tester-agent-cli inspect` refuses without a compatible retained controller; it never invents an empty five-client state. `launch` uses the reviewed original bootstrap to request a client launch, without silently opening or joining a Minecraft world.
 
+## Synchronized per-client input frames — source-only
+
+\`plan_player_actions({actions,includeClientFrames:true})\` now compiles
+the canonical action timeline into per-slot full button states and
+relative mouse deltas grouped by common timestamps, including MC02–MC05.
+\`includeClientFrames\` and \`includeTimeline\` cannot both be true.
+
+The pure compiler preserves release-before-press ordering, prevents
+cross-slot button-state sharing, protects human-owned MC01 in hybrid
+mode, and reports required per-slot emergency release. The same
+compiler now supplies frames to the existing **MC02-only** experimental
+native action runner. Same-timestamp release/repress of one button is
+explicitly flagged; the MC02 single-state writer refuses it rather
+than silently dropping a fresh press edge.
+
+The \`five-ai\` mode may plan MC01 as AI, but it does NOT enable actual
+MC01 input. MC03–MC05 still lack an input actuator. All frame batches
+report \`NOT_DISPATCHED\`; frames at the same timestamp are coordination
+intent, not proven simultaneous Windows/game input. No driver,
+additional hook, process controller, CI or product input activation
+is introduced. Authored test fixtures remain NOT_EXECUTED.
+
+
 ## Opt-in MC02 timed Computer Use action sequence — source only
 
 The existing Codex-facing local stdio MCP has a **separate** experimental

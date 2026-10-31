@@ -3,7 +3,7 @@
 // No SendInput, foreground changes, controller duplication or background daemon.
 import {performance} from 'node:perf_hooks';
 import {setTimeout as delay} from 'node:timers/promises';
-import {compilePlayerInputTimeline} from './input-timeline.mjs';
+import {compilePerClientInputFrames} from './input-timeline.mjs';
 
 export const MC02_SEQUENCE_LIMITS=Object.freeze({
   maxActions:12,maxHorizonMs:3500,maxPulses:64,
@@ -13,7 +13,6 @@ const ALLOWED=new Set([
   'move_forward','move_backward','strafe_left','strafe_right',
   'jump','sneak','attack','use','look_relative',
 ]);
-const HELD=new Set([...ALLOWED].filter(control=>control!=='look_relative'));
 const sleep=(ms,signal)=>delay(ms,undefined,{signal});
 
 /**
@@ -27,19 +26,23 @@ export function prepareMc02ActionSequence(actions) {
     throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
   }
   let timeline;
-  try {timeline=compilePlayerInputTimeline('human-plus-four-ai',actions);}
+  try {timeline=compilePerClientInputFrames('human-plus-four-ai',actions);}
   catch {throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');}
-  if(timeline.actions.some(a=>a.slot!==2||!ALLOWED.has(a.kind)) ||
-     timeline.inputEvents.length===0 ||
-     timeline.inputEvents.some(e=>e.atMs>MC02_SEQUENCE_LIMITS.maxHorizonMs ||
-       (e.phase==='POINTER_DELTA'&&
-        (Math.abs(e.deltaX)>127||Math.abs(e.deltaY)>127)))) {
+  const frames=timeline.batches.flatMap(batch=>batch.frames);
+  if(actions.some(a=>a.slot!==2||!ALLOWED.has(a.kind)) ||
+     frames.length===0 ||
+     frames.some(frame=>frame.slot!==2 ||
+       frame.atMs>MC02_SEQUENCE_LIMITS.maxHorizonMs ||
+       Math.abs(frame.lookDX)>127||Math.abs(frame.lookDY)>127 ||
+       frame.retriggeredButtons.length>0)) {
     throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
   }
   return Object.freeze({
-    events:timeline.inputEvents.map(event=>Object.freeze({...event})),
-    eventCount:timeline.inputEvents.length,
-    finalEventMs:timeline.inputEvents.at(-1).atMs,
+    frames:frames.map(frame=>Object.freeze({
+      ...frame,buttons:Object.freeze([...frame.buttons]),
+    })),
+    eventCount:timeline.inputEventCount,
+    finalEventMs:frames.at(-1).atMs,
   });
 }
 
@@ -62,15 +65,15 @@ export async function runExperimentalMc02Sequence(actions,{
   if(typeof emit!=='function')throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
   const prepared=prepareMc02ActionSequence(actions);
   if(signal?.aborted)throw new Error('MC02_SEQUENCE_ABORTED');
-  const held=new Set();
+  let buttons=[];
   const started=clock();
   let cursor=0,heartbeatAt=Infinity,acknowledged=0,attempted=false;
   let executionError=null,neutralAcknowledged=false;
   try {
-    while(cursor<prepared.events.length || held.size>0) {
+    while(cursor<prepared.frames.length || buttons.length>0) {
       if(signal?.aborted)throw new Error('MC02_SEQUENCE_ABORTED');
-      const eventAt=cursor<prepared.events.length?
-        prepared.events[cursor].atMs:Infinity;
+      const eventAt=cursor<prepared.frames.length?
+        prepared.frames[cursor].atMs:Infinity;
       const due=Math.min(eventAt,heartbeatAt);
       if(!Number.isFinite(due)||acknowledged>=MC02_SEQUENCE_LIMITS.maxPulses) {
         throw new Error('MC02_SEQUENCE_DEADLINE');
@@ -83,32 +86,22 @@ export async function runExperimentalMc02Sequence(actions,{
         throw new Error('MC02_SEQUENCE_DEADLINE');
       }
       let dx=0,dy=0;
-      while(cursor<prepared.events.length &&
-            prepared.events[cursor].atMs===due) {
-        const event=prepared.events[cursor++];
-        if(event.phase==='PRESS') {
-          if(!HELD.has(event.control))throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
-          held.add(event.control);
-        } else if(event.phase==='RELEASE') {
-          held.delete(event.control);
-        } else if(event.phase==='POINTER_DELTA') {
-          dx+=event.deltaX;dy+=event.deltaY;
-        } else throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
+      if(cursor<prepared.frames.length &&
+         prepared.frames[cursor].atMs===due) {
+        const frame=prepared.frames[cursor++];
+        buttons=frame.buttons;
+        dx=frame.lookDX;dy=frame.lookDY;
       }
-      if(Math.abs(dx)>127||Math.abs(dy)>127) {
-        throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
-      }
-      // Last-writer-wins native key mask: send the COMPLETE held state,
-      // not just the current PRESS/RELEASE edge. Pointer deltas occur
-      // only once at the actual semantic event timestamp.
+      // The canonical per-client frame supplies full held state.
+      // Heartbeats never repeat a one-shot camera delta.
       attempted=true;
       const accepted=await emit({
-        buttons:[...held],dx,dy,ttlMs:MC02_SEQUENCE_LIMITS.ttlMs,
+        buttons:[...buttons],dx,dy,ttlMs:MC02_SEQUENCE_LIMITS.ttlMs,
       });
       if(accepted!==true)throw new Error('MC02_SEQUENCE_NATIVE_UNCONFIRMED');
       acknowledged++;
       if(signal?.aborted)throw new Error('MC02_SEQUENCE_ABORTED');
-      heartbeatAt=held.size>0?
+      heartbeatAt=buttons.length>0?
         due+MC02_SEQUENCE_LIMITS.heartbeatMs:Infinity;
     }
   } catch(error) {

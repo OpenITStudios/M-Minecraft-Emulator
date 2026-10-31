@@ -1013,6 +1013,25 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October source-first multi-client frame contract:** The canonical
+\`input-timeline.mjs\` now produces complete held-button states,
+8-bit button masks, one-shot relative camera deltas and per-client
+timestamp batches for both hybrid and five-AI planning. MCP
+\`plan_player_actions({includeClientFrames:true})\` exposes the
+deterministic PREVIEW without any native calls. The existing MC02
+experimental runner now consumes these same frames instead of keeping
+a second key-edge interpretation. Explicit retrigger flags preserve
+release/press ambiguity; MC02 refuses unsupported same-timestamp
+retrigger rather than silently losing clicks. Author-only fixtures
+cover MC01 protection, MC02–MC05 independent masks, synchronized
+planning, five-AI preview, retrigger safety and MCP native-call absence.
+No new provider is created; MC03–MC05 and real five-AI input remain
+DISABLED. Source/consumer review at REMOTE_GITHUB only. No Node/Rust/
+C++ builds, test execution, real Windows or Minecraft observation.
+The one blocking acceptance remains Minecraft Education's real
+keyboard/camera/attack consumption and MC01 uninterrupted input.
+
+
 **31 October source-first Codex MC02 action sequencing:** The existing
 opt-in MCP now has two additional conditional tools for MC02 ONLY:
 `run_experimental_mc02_actions` and

@@ -735,3 +735,33 @@ test('MC02 experiment uses one input CLI and delegates authoritative focus check
   await assert.rejects(()=>enabled.callTool('send_experimental_mc02_input',
     {...input,buttons:['move_forward','move_backward']}),/INVALID_COMMAND/);
 });
+
+test('MCP five-slot control-frame preview never contacts native controller',async()=>{
+  let nativeCalls=0;
+  const h=createHandler(config(),{native:async()=>{
+    nativeCalls++;
+    throw Error('Unexpected native call during source-only planning');
+  }});
+  const output=await h.callTool('plan_player_actions',{
+    includeClientFrames:true,
+    actions:[
+      {slot:2,kind:'move_forward',atMs:0,durationMs:200},
+      {slot:3,kind:'attack',atMs:0,durationMs:100},
+      {slot:4,kind:'jump',atMs:50,durationMs:100},
+      {slot:5,kind:'use',atMs:50,durationMs:100},
+    ],
+  });
+  assert.equal(nativeCalls,0);
+  assert.equal(output.execution,'NOT_DISPATCHED');
+  assert.deepEqual(output.clients,[2,3,4,5]);
+  assert.deepEqual(output.releaseAllSlots,[2,3,4,5]);
+  assert.equal(output.batches[0].frames[0].keyMask,1);
+  await assert.rejects(()=>h.callTool('plan_player_actions',{
+    includeClientFrames:true,includeTimeline:true,
+    actions:[{slot:2,kind:'attack',atMs:0,durationMs:100}],
+  }),/Invalid tool arguments/);
+  await assert.rejects(()=>h.callTool('plan_player_actions',{
+    includeClientFrames:true,
+    actions:[{slot:1,kind:'attack',atMs:0,durationMs:100}],
+  }),/human-owned/);
+});

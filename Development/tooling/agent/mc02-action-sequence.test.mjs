@@ -25,6 +25,9 @@ test('one bounded sequence combines movement and look; heartbeat and final neutr
     move('attack',100,150)];
   const prepared=prepareMc02ActionSequence(actions);
   assert.ok(prepared.eventCount>0);
+  assert.equal(prepared.frames.length,4);
+  assert.deepEqual(prepared.frames[0].buttons,['move_forward']);
+  assert.deepEqual([prepared.frames[0].lookDX,prepared.frames[0].lookDY],[20,-10]);
   const result=await runExperimentalMc02Sequence(actions,{
     ...timer,emit:async p=>{pulses.push(p);return true;},
   });
@@ -109,4 +112,10 @@ test('MCP experimental sequence reuses the retained native MC02 input callback',
   assert.equal((await handler.callTool('stop_experimental_mc02_actions',{slot:2}))
     .status,'NO_ACTIVE_SEQUENCE');
   handler.shutdown();
+});
+
+test('MC02 source adapter refuses collapsed same-timestamp release/repress',()=>{
+  assert.throws(()=>prepareMc02ActionSequence([
+    move('attack',0,100),move('attack',100,100),
+  ]),/MC02_SEQUENCE_INVALID_ACTIONS/);
 });
