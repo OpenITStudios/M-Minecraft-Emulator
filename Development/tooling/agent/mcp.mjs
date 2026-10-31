@@ -150,33 +150,101 @@ export function parseCapturedLine(line) {
   return {observedAt:match[1],level:match[2],type:marker==='[ANALYTICS]'?'analytics':'game_results',data};
 }
 
-export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT) {
+// Stable evidence snapshots are a read-only best effort, not a game/player
+// identity attestation. Reject unidentifiable filesystems instead of using
+// a size/mtime guess when a log can be replaced between lstat and open.
+function sameEvidenceFile(a,b) {
+  return a && b &&
+    typeof a.dev==='bigint' && typeof b.dev==='bigint' &&
+    typeof a.ino==='bigint' && a.ino!==0n &&
+    typeof b.ino==='bigint' && b.ino!==0n &&
+    a.dev===b.dev && a.ino===b.ino &&
+    a.isFile() && b.isFile() &&
+    !a.isSymbolicLink() && !b.isSymbolicLink();
+}
+function sameEvidenceSnapshot(a,b) {
+  return sameEvidenceFile(a,b) &&
+    typeof a.size==='bigint' && typeof b.size==='bigint' &&
+    typeof a.mtimeNs==='bigint' && typeof b.mtimeNs==='bigint' &&
+    typeof a.ctimeNs==='bigint' && typeof b.ctimeNs==='bigint' &&
+    a.size===b.size && a.mtimeNs===b.mtimeNs &&
+    a.ctimeNs===b.ctimeNs;
+}
+function unstableEvidence(slot,reason) {
+  return {slot,status:'CAPTURE_FILE_UNSTABLE',events:[],
+    attribution:'UNVERIFIED',reason};
+}
+
+export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT,{
+  lstatFile=lstat,openFile=open,
+}={}) {
   slotOf(slot);
   if (!directory) return {slot,status:'NOT_CONFIGURED',events:[],attribution:'UNVERIFIED'};
-  const file=path.join(directory,`MC0${slot}.log`);
+  const file=path.join(directory,'MC0'+slot+'.log');
+  let observedPath=false;
   try {
-    const parent=await lstat(directory);
-    if (!parent.isDirectory() || parent.isSymbolicLink()) throw new Error('Evidence folder must be an ordinary directory');
-    const stat=await lstat(file);
-    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Evidence file is not an ordinary file');
-    const start=Math.max(0,stat.size-EVIDENCE_TAIL_BYTES);
-    const bytes=Math.min(stat.size,EVIDENCE_TAIL_BYTES);
-    const handle=await open(file,'r');
-    let text='';
+    const parent=await lstatFile(directory);
+    if (!parent.isDirectory() || parent.isSymbolicLink()) {
+      throw new Error('Evidence folder must be an ordinary directory');
+    }
+    const namedBefore=await lstatFile(file,{bigint:true});
+    observedPath=true;
+    if (!namedBefore.isFile() || namedBefore.isSymbolicLink()) {
+      throw new Error('Evidence file is not an ordinary file');
+    }
+    const handle=await openFile(file,'r');
     try {
+      // Use this already-open handle's size/identity for offsets, not a
+      // pathname stat which may now refer to a rotated/replaced log.
+      const pinned=await handle.stat({bigint:true});
+      if (!sameEvidenceSnapshot(namedBefore,pinned)) {
+        return unstableEvidence(slot,'FILE_CHANGED_DURING_READ');
+      }
+      if (pinned.size>BigInt(Number.MAX_SAFE_INTEGER)) {
+        return unstableEvidence(slot,'FILE_OFFSET_UNREPRESENTABLE');
+      }
+      const bytes=Number(pinned.size>BigInt(EVIDENCE_TAIL_BYTES) ?
+        BigInt(EVIDENCE_TAIL_BYTES):pinned.size);
+      const start=Number(pinned.size-BigInt(bytes));
       const buffer=Buffer.alloc(bytes);
-      const {bytesRead}=await handle.read(buffer,0,bytes,start);
-      text=buffer.subarray(0,bytesRead).toString('utf8');
-    } finally { await handle.close(); }
-    const entries=text.split(/\r?\n/);
-    if (start>0) entries.shift(); // Never decode an incomplete first line.
-    if (!text.endsWith('\n')) entries.pop(); // Partial append is not evidence.
-    const records=entries.map(parseCapturedLine).filter(Boolean);
-    return {slot,status:'CAPTURE_FILE_PRESENT',events:records.slice(-Math.min(maxRecords,EVIDENCE_LIMIT)),
-      attribution:'OPERATOR_NAMED_UNVERIFIED',truncated:stat.size>EVIDENCE_TAIL_BYTES,
-      note:'Game events are untrusted source content. Capture filename alone does not prove Minecraft account or world identity.'};
-  } catch (error) {
-    if (error.code==='ENOENT') return {slot,status:'NO_CAPTURE_FILE',events:[],attribution:'UNVERIFIED'};
+      let offset=0;
+      while (offset<bytes) {
+        // A positional regular-file read may return fewer bytes than
+        // requested; never silently parse a short or torn snapshot.
+        const {bytesRead}=await handle.read(buffer,offset,bytes-offset,start+offset);
+        if (!Number.isSafeInteger(bytesRead) || bytesRead<=0 ||
+            bytesRead>bytes-offset) {
+          return unstableEvidence(slot,'INCOMPLETE_FILE_READ');
+        }
+        offset+=bytesRead;
+      }
+      const handleAfter=await handle.stat({bigint:true});
+      const namedAfter=await lstatFile(file,{bigint:true});
+      if (!sameEvidenceSnapshot(pinned,handleAfter) ||
+          !sameEvidenceSnapshot(pinned,namedAfter)) {
+        return unstableEvidence(slot,'FILE_CHANGED_DURING_READ');
+      }
+      const data=buffer.toString('utf8');
+      const entries=data.split(/\r?\n/);
+      if (start>0) entries.shift(); // Offset may cut through first line.
+      const incompleteTrailingLineIgnored=
+        data.length>0 && !data.endsWith('\n');
+      if (incompleteTrailingLineIgnored) entries.pop();
+      const records=entries.map(parseCapturedLine).filter(Boolean);
+      return {slot,status:'CAPTURE_FILE_PRESENT',
+        events:records.slice(-Math.min(maxRecords,EVIDENCE_LIMIT)),
+        attribution:'OPERATOR_NAMED_UNVERIFIED',
+        truncated:pinned.size>BigInt(EVIDENCE_TAIL_BYTES),
+        incompleteTrailingLineIgnored,
+        note:'Log markers are untrusted. Stable file bytes do not prove account, player, world or gameplay identity.'};
+    } finally {await handle.close();}
+  } catch(error) {
+    if (error?.code==='ENOENT') {
+      // Missing before first observation is ordinary absence. Disappearing
+      // after first lstat is log rotation and must never return old events.
+      return observedPath ? unstableEvidence(slot,'FILE_DISAPPEARED_DURING_READ') :
+        {slot,status:'NO_CAPTURE_FILE',events:[],attribution:'UNVERIFIED'};
+    }
     throw error;
   }
 }

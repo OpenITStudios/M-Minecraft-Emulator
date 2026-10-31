@@ -112,6 +112,36 @@ Only code is committed; no user screenshots are collected now.
 
 Cua CLI reference: https://cua.ai/docs/cua-driver/reference/cli/serve-and-configure
 
+## Phase 16: stable bounded Skills Probe log snapshots
+
+The `readGameEvidence` reader previously took its tail offset from
+`lstat(path)`, then separately `open(path)` without checking they
+referred to the same file. An MC02 log replaced/rotated during this
+interval could cause an offset from the old file to be applied to the
+new file, producing incomplete or misattributed records. A log being
+appended/re-written during an open read had no before/after snapshot
+gate either.
+
+The existing reader now pins an ordinary file handle and compares its
+nonzero device/inode identity, size, nanosecond modification/change
+timestamps, and pathname identity before and after a bounded positional
+read. A changed, disappearing, or unverifiable source returns
+`CAPTURE_FILE_UNSTABLE` with **zero events**; the summary preserves
+that status as a missing/unaccepted source. It never guesses that the
+previous or replacement log belongs to the same Minecraft player.
+Filesystems without a verifiable file ID fail closed. The reader
+retries short positional reads within its existing 256 KiB limit, and
+still drops trailing incomplete lines; the returned metadata flags
+`incompleteTrailingLineIgnored`.
+
+This is a best-effort atomic *reader-side* snapshot check, not
+proof that the external debugger wrote a transactionally consistent
+record or that account/world attribution is correct. Deterministic
+regression fixtures cover rotation before open, append during read,
+short reads, partial tails and unstable-source summarization. They
+are AUTHORED_NOT_EXECUTED under current operator policy; there is
+no new watcher, permanent log index, file store or Minecraft hook.
+
 ## Phase 15: bounded visual-worker startup and evidence isolation
 
 The optional WGC source previously checked active workers only BEFORE its

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,writeFile,symlink,rm} from 'node:fs/promises';
+import {mkdtemp,writeFile,symlink,rm,open,rename,appendFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,validateNativeReport,validateNativeWindowTarget} from './mcp.mjs';
@@ -417,4 +417,81 @@ test('stop during pending GPU startup cancels batch without a false success',asy
   assert.equal((await handler.callTool('read_visual_observation',{slot:2}))
     .metadata.status,'NOT_OBSERVING');
   handler.shutdown();
+});
+
+test('log rotation before open refuses evidence from either file',async()=>{
+  const root=await mkdtemp(path.join(tmpdir(),'lazy-evidence-rotation-'));
+  const file=path.join(root,'MC02.log');
+  const archived=path.join(root,'archived.log');
+  try {
+    await writeFile(file,
+      '2026-10-30T12:00:00.000Z log [ANALYTICS]{"type":"old"}\n');
+    const result=await readGameEvidence(root,2,20,{
+      openFile:async(filePath,mode)=>{
+        await rename(filePath,archived);
+        await writeFile(filePath,
+          '2026-10-30T12:00:01.000Z log [ANALYTICS]{"type":"new"}\n');
+        return open(filePath,mode);
+      },
+    });
+    assert.equal(result.status,'CAPTURE_FILE_UNSTABLE');
+    assert.equal(result.reason,'FILE_CHANGED_DURING_READ');
+    assert.deepEqual(result.events,[]);
+  } finally {await rm(root,{recursive:true,force:true});}
+});
+
+test('concurrent append after pinned read cannot produce a mixed evidence snapshot',async()=>{
+  const root=await mkdtemp(path.join(tmpdir(),'lazy-evidence-append-'));
+  const file=path.join(root,'MC02.log');
+  try {
+    await writeFile(file,
+      '2026-10-30T12:00:00.000Z log [ANALYTICS]{"type":"before"}\n');
+    let appended=false;
+    const result=await readGameEvidence(root,2,20,{
+      openFile:async(...args)=>{
+        const handle=await open(...args);
+        return {
+          stat:(...options)=>handle.stat(...options),
+          read:async(...readArgs)=>{
+            const current=await handle.read(...readArgs);
+            if(!appended) {
+              appended=true;
+              await appendFile(file,
+                '2026-10-30T12:00:01.000Z log [GAME_RESULTS]{"type":"after"}\n');
+            }
+            return current;
+          },
+          close:()=>handle.close(),
+        };
+      },
+    });
+    assert.equal(result.status,'CAPTURE_FILE_UNSTABLE');
+    assert.deepEqual(result.events,[]);
+  } finally {await rm(root,{recursive:true,force:true});}
+});
+
+test('short positional reads recover full lines and ignore incomplete tail',async()=>{
+  const root=await mkdtemp(path.join(tmpdir(),'lazy-evidence-short-'));
+  try {
+    await writeFile(path.join(root,'MC02.log'),[
+      '2026-10-30T12:00:00.000Z log [ANALYTICS]{"type":"first"}',
+      '2026-10-30T12:00:01.000Z log [GAME_RESULTS]{"type":"second"}',
+      '2026-10-30T12:00:02.000Z log [ANALYTICS]{"type":"unfinished"',
+    ].join('\n'));
+    const result=await readGameEvidence(root,2,20,{
+      openFile:async(...args)=>{
+        const handle=await open(...args);
+        return {
+          stat:(...options)=>handle.stat(...options),
+          read:(buffer,offset,length,position)=>
+            handle.read(buffer,offset,Math.min(length,7),position),
+          close:()=>handle.close(),
+        };
+      },
+    });
+    assert.equal(result.status,'CAPTURE_FILE_PRESENT');
+    assert.deepEqual(result.events.map(e=>e.type),['analytics','game_results']);
+    assert.equal(result.incompleteTrailingLineIgnored,true);
+    assert.equal(result.attribution,'OPERATOR_NAMED_UNVERIFIED');
+  } finally {await rm(root,{recursive:true,force:true});}
 });

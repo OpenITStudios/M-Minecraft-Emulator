@@ -604,6 +604,32 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
   Tests/builds/Windows Minecraft execution NOT_EXECUTED. Input backend
   remains BLOCKED and MC01 protected.
 
+## Phase 16: bounded Skills Probe file replacement and partial-write safety (31 October 2026)
+
+- Identified a real read race in `mcp.mjs`: source tail offsets came
+  from pre-open `lstat(path)` and could be applied to a different
+  rotated/replaced log after `open(path)`. Active append/truncate
+  also lacked a consistency check at the end of the bounded read.
+- `readGameEvidence` now compares the ordinary named source with
+  its opened file handle via a nonzero exact file ID, device number,
+  size and nanosecond ctime/mtime. It reads the pinned 256 KiB tail
+  with bounded positional-read completion, then compares handle and
+  pathname state again before decoding a single completed line.
+  Replacement, disappearance or concurrent mutation produces
+  `CAPTURE_FILE_UNSTABLE` and **no events**. Ordinary initial
+  absence remains `NO_CAPTURE_FILE`; symlink paths still fail closed.
+- Summary now keeps unstable sources explicitly unaccepted and
+  surfaces whether an incomplete final line was ignored.
+  Player/account/world identity remains OPERATOR_NAMED_UNVERIFIED.
+- Existing test files were extended with controlled rotation, append,
+  short-read/partial-line and unstable-source aggregation fixtures.
+  There is no new daemon, test runner, game lifecycle owner, driver,
+  debugger listener, input route or CI workflow.
+- **Proof ceiling:** REMOTE_GITHUB exact source/static review only;
+  regression fixtures AUTHORED NOT_EXECUTED. Windows file-identity
+  API behavior, concurrent actual Skills Probe writes, Minecraft
+  gameplay and independent AI input remain NOT_EXECUTED/UNVERIFIED.
+
 ## Unverified / deferred
 
 - Exact Windows dependency-reuse behavior, source regression tests,
@@ -622,10 +648,11 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
 The Windows Agent Workspace feasibility question is resolved for the
 currently documented APIs: it is NOT an admitted input implementation.
 Retain the independent-input BLOCKED gate until a concrete, supported
-per-client game-input API becomes available. Next source-only action: review evidence-log file replacement/partial-write
-handling and reader attribution without changing the native game owner.
-Retain the existing visual observation and independent-input BLOCKED
-boundaries; do not add an OS driver, second controller, or global input.
+per-client game-input API becomes available. Next source-only action: inspect the existing Skills Probe event parser
+and bounded evidence summary for source attribution or trust-boundary
+errors with a concrete failing case before adding more code. Keep the
+native five-profile owner, visual capture lifecycle and input BLOCKED
+gate unchanged; do not add a new provider or background runner.
 **Do not execute local tests, toolchain builds, package staging, native input
 probes or gameplay until explicit operator approval.** When approval arrives,
 the first separate acceptance boundary is the pinned Windows agent CLI,

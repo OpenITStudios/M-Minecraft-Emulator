@@ -96,3 +96,20 @@ test('without verified session id repeated record ids remain separate',()=>{
   assert.equal(result.duplicatesSuppressed,0);
   assert.equal(result.timeline[0].sessionId,null);
 });
+
+test('unstable file evidence is excluded and reported, not treated as empty accepted capture',()=>{
+  const data=summarizeEvidenceReports([2,3],[
+    {slot:2,status:'CAPTURE_FILE_UNSTABLE',events:[
+      event('game_results',{record_type:'gameplay_result',total_score:99}),
+    ]},
+    {slot:3,status:'CAPTURE_FILE_PRESENT',events:[
+      event('analytics',{type:'death',session_id:'s3'}),
+    ],incompleteTrailingLineIgnored:true},
+  ]);
+  assert.equal(data.records,1);
+  assert.deepEqual(data.missingSlots,[2]);
+  assert.equal(data.sources[0].status,'CAPTURE_FILE_UNSTABLE');
+  assert.equal(data.sources[0].parsedRecords,0);
+  assert.equal(data.sources[1].incompleteTrailingLineIgnored,true);
+  assert.equal(data.verdict,'EVIDENCE_ONLY_NOT_GAMEPLAY_ACCEPTANCE');
+});

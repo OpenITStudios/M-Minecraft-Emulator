@@ -93,7 +93,9 @@ export function summarizeEvidenceReports(slots,reports) {
       result.status === 'CAPTURE_FILE_PRESENT' && Array.isArray(result.events);
     const status=valid ? 'CAPTURE_FILE_PRESENT' :
       result?.status === 'NO_CAPTURE_FILE' ? 'NO_CAPTURE_FILE' :
-      result?.status === 'NOT_CONFIGURED' ? 'NOT_CONFIGURED' : 'UNAVAILABLE';
+      result?.status === 'NOT_CONFIGURED' ? 'NOT_CONFIGURED' :
+      result?.status === 'CAPTURE_FILE_UNSTABLE' ? 'CAPTURE_FILE_UNSTABLE' :
+      'UNAVAILABLE';
     const truncated=valid && result.truncated === true;
     const sourceEvents=valid ? result.events.slice(-EVIDENCE_EVENTS_PER_SLOT) : [];
     let parsed=0;
@@ -115,7 +117,10 @@ export function summarizeEvidenceReports(slots,reports) {
     }
     sources.push({
       slot, status, parsedRecords:parsed,
-      truncated, attribution:'OPERATOR_NAMED_UNVERIFIED',
+      truncated,
+      incompleteTrailingLineIgnored:valid &&
+        result.incompleteTrailingLineIgnored===true,
+      attribution:'OPERATOR_NAMED_UNVERIFIED',
     });
   }
   events.sort((a,b) =>
