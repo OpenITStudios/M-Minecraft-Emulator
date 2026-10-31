@@ -1013,6 +1013,25 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October source-first Codex MC02 action sequencing:** The existing
+opt-in MCP now has two additional conditional tools for MC02 ONLY:
+`run_experimental_mc02_actions` and
+`stop_experimental_mc02_actions`. A new bounded source adapter
+`Development/tooling/agent/mc02-action-sequence.mjs` uses the canonical
+semantic input timeline to merge held keys, jumps, attack/use and
+relative camera events into controller-owned MC02 pulses. Input held
+longer than one native TTL is refreshed at bounded intervals. The
+sequence attempts a neutral write on completion, cancellation or
+failure; a failed release is never reported as success. No global
+SendInput, focus takeover, new input DLL, driver, second controller,
+world automation, new CI or production default was added. The existing
+MC02 opt-in plus native feature/payload review gates remain mandatory.
+This is **transport-source preparation only**: Minecraft input
+consumption, real gameplay, human uninterrupted input, one-shot CLI
+latency, Windows builds and new authored Node fixtures are NOT_EXECUTED.
+MC03-MC05 and all-five AI gameplay remain DISABLED. Do not promote
+the experimental sequence's ACK to gameplay acceptance.
+
 **31 October P0 MC02 observer hot-path correction (source only):**
 The compile-OFF `GetRawInputBuffer` observer previously invoked
 `EnumWindows` on every successful non-null buffered read, although

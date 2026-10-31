@@ -11,6 +11,7 @@ import {planPeerSession,planPlayerActions} from './control-plan.mjs';
 import {compilePlayerInputTimeline} from './input-timeline.mjs';
 import {assessInputRoute,requiredInputSlots} from './input-route.mjs';
 import {inputExecutionStatus} from './input-delivery.mjs';
+import {runExperimentalMc02Sequence} from './mc02-action-sequence.mjs';
 import {summarizeGameEvidence,summarizeEvidenceReports,normalizeEvidenceSlots} from './evidence-summary.mjs';
 import {captureCuaWindow,validateCuaExecutable} from './visual-capture.mjs';
 import {createVisualObserver,OBSERVATION_LIMITS} from './visual-observer.mjs';
@@ -47,6 +48,8 @@ const PUBLIC_TOOL_ERRORS=new Set([
   'MC02_INPUT_HUMAN_FOREGROUND_REQUIRED',
   'MC02_INPUT_TARGETS_NOT_SEPARATE','MC02_INPUT_NATIVE_RESULT_UNVERIFIED',
   'MC02_INPUT_REQUEST_STALE',
+  'MC02_SEQUENCE_INVALID_ACTIONS','MC02_SEQUENCE_NATIVE_UNCONFIRMED',
+  'MC02_SEQUENCE_DEADLINE','MC02_SEQUENCE_ABORTED','MC02_RELEASE_UNCONFIRMED',
 ]);
 function publicToolError(error) {
   const message=typeof error?.message==='string' ? error.message : '';
@@ -439,10 +442,33 @@ const EXPERIMENTAL_MC02_TOOL={
     ttlMs:{type:'integer',minimum:1,maximum:500},
   },required:['slot','buttons'],additionalProperties:false},
 };
+// These are intentionally opt-in ONLY, using the same MC02 native shared-state
+// writer. No provider for MC03-MC05 and no change to the normal tools list.
+const EXPERIMENTAL_MC02_SEQUENCE_TOOLS=[
+  {name:'run_experimental_mc02_actions',
+    description:'EXPERIMENTAL MC02 only: execute a short timed action sequence with held-key heartbeat and best-effort neutral release. Native state ACK, NOT verified Minecraft gameplay.',
+    inputSchema:{type:'object',properties:{
+      slot:{type:'integer',const:2},
+      actions:{type:'array',minItems:1,maxItems:12,
+        items:{type:'object',properties:{
+          slot:{type:'integer',const:2},
+          kind:{type:'string',enum:['move_forward','move_backward',
+            'strafe_left','strafe_right','jump','sneak','attack','use','look_relative']},
+          atMs:{type:'integer',minimum:0,maximum:3500},
+          durationMs:{type:'integer',minimum:50,maximum:2000},
+          deltaX:{type:'integer',minimum:-127,maximum:127},
+          deltaY:{type:'integer',minimum:-127,maximum:127},
+        },required:['slot','kind','atMs','durationMs'],additionalProperties:false}},
+    },required:['slot','actions'],additionalProperties:false}},
+  {name:'stop_experimental_mc02_actions',
+    description:'Request cancellation of the active experimental MC02 action sequence. Neutral write is attempted by the running request; native TTL remains fail-safe.',
+    inputSchema:{type:'object',properties:{slot:{type:'integer',const:2}},
+      required:['slot'],additionalProperties:false}},
+];
 
 function capabilities(mode,experimental=false) {return {schema:1,mode,hostSlot:1,humanSlots:mode==='human-plus-four-ai'?[1]:[],
   aiSlots:mode==='human-plus-four-ai'?[2,3,4,5]:[1,2,3,4,5],
-  available:['start_visual_observation','read_visual_observation','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence',...(experimental?[EXPERIMENTAL_MC02_TOOL.name]:[])],
+  available:['start_visual_observation','read_visual_observation','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence',...(experimental?[EXPERIMENTAL_MC02_TOOL.name,...EXPERIMENTAL_MC02_SEQUENCE_TOOLS.map(t=>t.name)]:[])],
   notAvailable:['parallel_independent_keyboard_mouse','automatic_world_host_join','send_minecraft_command'],
   visualCapture:'OPTIONAL_CUA_OR_PERSISTENT_WGC_SOURCE_NOT_RUNTIME_VERIFIED',
   independentInput:{state:'BLOCKED_NO_VERIFIED_PER_CLIENT_INPUT_BACKEND',
@@ -460,6 +486,7 @@ export function createHandler(config,{
   gpuSourceFactory=createGpuFrameSource,
 }={}) {
   let inFlight=false;
+  let mc02SequenceAbort=null; // pending opted-in MCP request only
   let gpuStartup=null; // bounded request only; not game/session lifecycle
   const mc02Enabled=config.experimentalMc02InputEnabled===true &&
     config.mode==='human-plus-four-ai';
@@ -675,6 +702,50 @@ export function createHandler(config,{
         compilePlayerInputTimeline(config.mode,args.actions) :
         planPlayerActions(config.mode,args.actions);
     }
+    if (name==='stop_experimental_mc02_actions') {
+      if(!mc02Enabled)throw new Error('MC02_EXPERIMENT_DISABLED');
+      keysExactly(args,['slot']);
+      if(args.slot!==2)throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
+      if(mc02SequenceAbort===null) {
+        return {schema:1,slot:2,status:'NO_ACTIVE_SEQUENCE',gameplayObserved:false};
+      }
+      mc02SequenceAbort.abort();
+      return {schema:1,slot:2,status:'CANCELLATION_REQUESTED',
+        neutralRelease:'PENDING_SEQUENCE_COMPLETION_OR_NATIVE_TTL',
+        gameplayObserved:false};
+    }
+    if (name==='run_experimental_mc02_actions') {
+      if(!mc02Enabled)throw new Error('MC02_EXPERIMENT_DISABLED');
+      keysExactly(args,['slot','actions']);
+      if(args.slot!==2)throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
+      if(inFlight)throw new Error('Native operation in progress; do not overlap requests');
+      inFlight=true;
+      const abort=new AbortController();
+      mc02SequenceAbort=abort;
+      try {
+        return await runExperimentalMc02Sequence(args.actions,{
+          signal:abort.signal,
+          emit:async({buttons,dx,dy,ttlMs})=>{
+            // The retained native controller pins BOTH Minecraft processes,
+            // enforces MC01's real foreground, and writes only MC02 state.
+            // No second PID lookup or foreground switch inside the pulse.
+            const receipt=await mc02Input(config.executable,{
+              keys:mc02ButtonMask(buttons),dx,dy,ttlMs,
+              requestedAtMs:Date.now(),
+            });
+            if(receipt?.schema!==1||receipt?.slot!==2||
+               receipt?.gameplayObserved!==false||
+               receipt?.status!=='NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED') {
+              throw new Error('MC02_INPUT_NATIVE_RESULT_UNVERIFIED');
+            }
+            return true; // transport ACK only, never in-game acceptance
+          },
+        });
+      } finally {
+        if(mc02SequenceAbort===abort)mc02SequenceAbort=null;
+        inFlight=false;
+      }
+    }
     if (name==='send_experimental_mc02_input') {
       if(!mc02Enabled) throw new Error('MC02_EXPERIMENT_DISABLED');
       const requestedAtMs=Date.now(); // before two native target inspections
@@ -801,7 +872,7 @@ export function createHandler(config,{
       }
       if (message.method==='ping') return result({});
       if (message.method==='tools/list') return result({tools:mc02Enabled?
-        [...TOOL_LIST,EXPERIMENTAL_MC02_TOOL] : TOOL_LIST});
+        [...TOOL_LIST,EXPERIMENTAL_MC02_TOOL,...EXPERIMENTAL_MC02_SEQUENCE_TOOLS] : TOOL_LIST});
       if (message.method==='tools/call') {
         const name=message.params?.name;
         if (typeof name!=='string') return err(-32602,'Tool name is required');
@@ -829,6 +900,7 @@ export function createHandler(config,{
     }catch {return err(-32603,'Internal error');}
   }
   return {handle,callTool,shutdown:()=>{
+    mc02SequenceAbort?.abort();
     if (gpuStartup) gpuStartup.cancelled=true;
     visualObserver.shutdown();
     gpuSource?.shutdown();

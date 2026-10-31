@@ -33,6 +33,47 @@ Use `--mode five-ai` only when **all five clients are intentionally AI-operated*
 
 `--lazy-tester-agent-cli inspect` refuses without a compatible retained controller; it never invents an empty five-client state. `launch` uses the reviewed original bootstrap to request a client launch, without silently opening or joining a Minecraft world.
 
+## Opt-in MC02 timed Computer Use action sequence — source only
+
+The existing Codex-facing local stdio MCP has a **separate** experimental
+action sequence that links the already-authored semantic timeline to the
+existing opt-in MC02 native shared-state writer. It does NOT replace Codex,
+install a driver, create a game controller, or enable four/five independent
+AI inputs. Normal MCP starts do not advertise these tools.
+
+This requires an explicitly reviewed Windows candidate built with the
+matching optional Rust `mc02-native-input` feature and the existing
+MC02-only compatibility DLL input hook, plus **both** the MCP
+`--mc02-input-experimental on` option and the environment
+`LAZY_TESTER_MC02_VIRTUAL_INPUT=I_ACCEPT_EXPERIMENTAL_MC02_INPUT`.
+Do not enable those experimental binaries or modify installed Minecraft
+without separate operator authorization. A source commit alone cannot
+make them executable.
+
+- `run_experimental_mc02_actions` accepts at most 12 semantic actions
+  targeting **MC02 only**, a 3.5-second maximum timeline and existing
+  nonoverlapping channel rules. It supports move, strafe, jump, sneak,
+  attack, use, and `look_relative` (individual deltas at most ±127).
+- It compiles through the existing `input-timeline.mjs`, coalesces
+  same-timestamp transitions into complete held-button states, and
+  refreshes held input every 160 ms with native TTL 350 ms. Camera
+  deltas are published only once. It does not send one CLI per game frame.
+- On success, abort, or failure it attempts a final neutral MC02 input
+  packet. The independent native deadline is the fallback when MCP
+  crashes or the foreground gate refuses a release.
+- `stop_experimental_mc02_actions` requests cancellation. Its immediate
+  response is NOT a release acknowledgement; the running tool or native
+  TTL must finish separately. The normal `send_experimental_mc02_input`
+  single pulse remains available and unrelated normal tools unchanged.
+
+An MC02 native write receipt establishes **transport acknowledgement
+only**. It does not prove Minecraft Education accepted WASD, rotated
+camera, attacked, stopped, joined a world, or preserved MC01 input.
+Prioritize one live MC01-human/MC02-AI observation at a separately
+authorized Windows acceptance stage before enabling other clients.
+Authored source fixtures are registered with the existing optional
+`test:localtest` script and have NOT been executed.
+
 ## Phase 1: Codex-targeted Windows Computer Use (source only)
 
 New MCP tools `get_computer_use_target({slot})` and
