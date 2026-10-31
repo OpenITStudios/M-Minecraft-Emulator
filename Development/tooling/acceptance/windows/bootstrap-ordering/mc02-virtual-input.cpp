@@ -9,9 +9,10 @@
 #include <cstdint>
 #include <cstring>
 #include <initializer_list>
+#include <cwchar>
 
 namespace {
-constexpr std::uint32_t Magic=0x4c544932, Version=2;
+constexpr std::uint32_t Magic=0x4c544932, Version=3;
 struct alignas(8) SharedInput {
     std::uint32_t magic,version,bytes,slot,pid,session;
     std::uint64_t birth;
@@ -19,8 +20,9 @@ struct alignas(8) SharedInput {
     std::atomic<std::uint64_t> cursorRevision;
     std::atomic<std::int64_t> cursorX,cursorY;
     std::atomic<std::uint64_t> cursorEpoch;
+    std::atomic<std::uint64_t> humanWindow,aiWindow;
 };
-static_assert(sizeof(SharedInput)==72 && alignof(SharedInput)==8);
+static_assert(sizeof(SharedInput)==88 && alignof(SharedInput)==8);
 static_assert(std::atomic<std::int64_t>::is_always_lock_free);
 static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
 const SharedInput* view=nullptr;
@@ -38,11 +40,13 @@ using KeyboardStateCall=BOOL (WINAPI*)(PBYTE);
 using CursorCall=BOOL (WINAPI*)(LPPOINT);
 using SetCursorCall=BOOL (WINAPI*)(int,int);
 using ClipCall=BOOL (WINAPI*)(const RECT*);
+using FocusCall=HWND (WINAPI*)();
 KeyCall originalAsync=nullptr,originalKey=nullptr;
 KeyboardStateCall originalKeyboard=nullptr;
 CursorCall originalCursor=nullptr;
 SetCursorCall originalSetCursor=nullptr;
 ClipCall originalClip=nullptr;
+FocusCall originalForeground=nullptr,originalActive=nullptr,originalFocus=nullptr;
 
 bool parseHandle(HANDLE& handle) {
     wchar_t text[32]{};
@@ -68,7 +72,72 @@ std::uint64_t currentPacket() {
     const DWORD until=static_cast<DWORD>(word>>32);
     const auto ahead=static_cast<LONG>(until-now);
     if (!word || ahead<=0 || ahead>500) return 0;
+    // Human focus is not merely checked when the controller writes.
+    // If MC01 loses the REAL Windows foreground before the child polls,
+    // no AI keys/cursor deltas are accepted, and virtual buttons release.
+    // Use the unhooked trampoline so fake foreground reads in this game
+    // cannot bypass the physical human-host focus requirement.
+    if (!originalForeground) return 0;
+    const auto host=reinterpret_cast<HWND>(
+        static_cast<ULONG_PTR>(view->humanWindow.load(std::memory_order_seq_cst)));
+    if (!host || originalForeground()!=host) return 0;
     return word;
+}
+// A background game may skip its Win32 input polling loop after comparing
+// GetForegroundWindow/GetActiveWindow/GetFocus to its own game HWND.
+// Return the pinned MC02 OGLES window only inside THIS opted-in child,
+// only for an unexpired AI packet while MC01 retains REAL foreground.
+// Never SetForegroundWindow, SetFocus, attach a message queue or touch MC01.
+HWND ownedGameWindow() {
+    if (!view) return nullptr;
+    const auto raw=view->aiWindow.load(std::memory_order_seq_cst);
+    if (!raw) return nullptr;
+    const HWND hwnd=reinterpret_cast<HWND>(static_cast<ULONG_PTR>(raw));
+    DWORD pid=0;
+    const DWORD thread=GetWindowThreadProcessId(hwnd,&pid);
+    wchar_t name[16]{};
+    if (!thread || pid!=GetCurrentProcessId() ||
+        GetClassNameW(hwnd,name,16)!=5 ||
+        std::wcscmp(name,L"OGLES")!=0 ||
+        GetAncestor(hwnd,GA_ROOT)!=hwnd ||
+        GetWindow(hwnd,GW_OWNER)!=nullptr ||
+        !IsWindowVisible(hwnd) || IsIconic(hwnd)) return nullptr;
+    return hwnd;
+}
+HWND WINAPI observedForeground() {
+    const DWORD previous=GetLastError();
+    const HWND real=originalForeground();
+    const auto word=currentPacket();
+    const HWND owned=word ? ownedGameWindow() : nullptr;
+    if (owned) isolated.store(true,std::memory_order_release);
+    SetLastError(previous);
+    return owned ? owned : real;
+}
+HWND WINAPI observedActive() {
+    const DWORD previous=GetLastError();
+    const HWND real=originalActive();
+    const auto word=currentPacket();
+    const HWND owned=word ? ownedGameWindow() : nullptr;
+    // GetActiveWindow is scoped to the caller's thread, unlike the
+    // process-wide GetForegroundWindow query.
+    const bool ownThread=owned &&
+        GetWindowThreadProcessId(owned,nullptr)==GetCurrentThreadId();
+    if (ownThread) isolated.store(true,std::memory_order_release);
+    SetLastError(previous);
+    return ownThread ? owned : real;
+}
+HWND WINAPI observedFocus() {
+    const DWORD previous=GetLastError();
+    const HWND real=originalFocus();
+    const auto word=currentPacket();
+    const HWND owned=word ? ownedGameWindow() : nullptr;
+    // GetFocus is thread-local too. Never pretend that a worker thread
+    // owns the Minecraft game window's message queue.
+    const bool ownThread=owned &&
+        GetWindowThreadProcessId(owned,nullptr)==GetCurrentThreadId();
+    if (ownThread) isolated.store(true,std::memory_order_release);
+    SetLastError(previous);
+    return ownThread ? owned : real;
 }
 // MC02 must never poll MC01's physical key/cursor state while MC01 is
 // foreground. Before the first AI command, allow local interaction with
@@ -77,7 +146,10 @@ std::uint64_t currentPacket() {
 // close; expiration releases the virtual buttons, not the isolation.
 bool virtualMode(std::uint64_t word) {
     if (word) isolated.store(true,std::memory_order_release);
-    const HWND foreground=GetForegroundWindow();
+    // Always query the REAL desktop foreground. Using the new game-local
+    // GetForegroundWindow detour here would make background MC02 appear
+    // physically focused and could leak MC01's real key states.
+    const HWND foreground=originalForeground ? originalForeground() : nullptr;
     DWORD owner=0;
     const bool ownForeground=foreground!=nullptr &&
         GetWindowThreadProcessId(foreground,&owner)!=0 &&
@@ -233,8 +305,17 @@ bool attach(const education_bootstrap::Config& config) noexcept {
     originalCursor=reinterpret_cast<CursorCall>(GetProcAddress(user,"GetCursorPos"));
     originalSetCursor=reinterpret_cast<SetCursorCall>(GetProcAddress(user,"SetCursorPos"));
     originalClip=reinterpret_cast<ClipCall>(GetProcAddress(user,"ClipCursor"));
+    originalForeground=reinterpret_cast<FocusCall>(
+        GetProcAddress(user,"GetForegroundWindow"));
+    originalActive=reinterpret_cast<FocusCall>(
+        GetProcAddress(user,"GetActiveWindow"));
+    originalFocus=reinterpret_cast<FocusCall>(
+        GetProcAddress(user,"GetFocus"));
     if (!originalAsync||!originalKey||!originalKeyboard||!originalCursor||
-        !originalSetCursor||!originalClip) {UnmapViewOfFile(mapped);return false;}
+        !originalSetCursor||!originalClip||!originalForeground||
+        !originalActive||!originalFocus) {
+        UnmapViewOfFile(mapped);return false;
+    }
     view=state;
     // Called inside the existing bootstrap-compat Detours transaction.
     return DetourAttach(reinterpret_cast<PVOID*>(&originalAsync),
@@ -248,6 +329,12 @@ bool attach(const education_bootstrap::Config& config) noexcept {
         && DetourAttach(reinterpret_cast<PVOID*>(&originalSetCursor),
                 reinterpret_cast<PVOID>(observedSetCursor))==NO_ERROR
         && DetourAttach(reinterpret_cast<PVOID*>(&originalClip),
-                reinterpret_cast<PVOID>(observedClip))==NO_ERROR;
+                reinterpret_cast<PVOID>(observedClip))==NO_ERROR
+        && DetourAttach(reinterpret_cast<PVOID*>(&originalForeground),
+                reinterpret_cast<PVOID>(observedForeground))==NO_ERROR
+        && DetourAttach(reinterpret_cast<PVOID*>(&originalActive),
+                reinterpret_cast<PVOID>(observedActive))==NO_ERROR
+        && DetourAttach(reinterpret_cast<PVOID*>(&originalFocus),
+                reinterpret_cast<PVOID>(observedFocus))==NO_ERROR;
 }
 } // namespace mc02_input

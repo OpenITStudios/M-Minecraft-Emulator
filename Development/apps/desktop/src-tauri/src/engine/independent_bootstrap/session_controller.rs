@@ -229,7 +229,8 @@ impl Sessions {
                            unsafe{IsHungAppWindow(ai_hwnd as _)}!=0 {
                             return Err(invalid("MC02 AI window is not playable"));
                         }
-                        input.write(pid,birth,session,keys,dx,dy,ttl_ms,issued_at_ms)
+                        input.write(pid,birth,session,keys,dx,dy,ttl_ms,issued_at_ms,
+                            human_hwnd,ai_hwnd)
                     },
                 )
             },

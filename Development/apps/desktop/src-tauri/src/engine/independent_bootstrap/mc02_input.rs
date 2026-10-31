@@ -9,11 +9,11 @@ use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
 pub(super) const INPUT_ENV: &str = "MIVUBI_EDUCATION_MC02_INPUT_SECTION";
 const MAGIC: u32 = 0x4c544932; // LTI2 (MC02 only)
-const VERSION: u32 = 2;
+const VERSION: u32 = 3;
 const MAX_INPUT_REQUEST_AGE_MS:u64=500; // same-machine monotonic uptime
 
 
-// C++ counterpart: mc02-virtual-input.cpp, private 72-byte ABI v2.
+// C++ counterpart: mc02-virtual-input.cpp, private 88-byte ABI v3.
 // packet: high 32 bits = GetTickCount() expiry; low 8 = active key mask;
 // remaining low bits retain the last command sequence and signed dx/dy.
 // Cursor movement is NOT read from that last-writer-wins packet.
@@ -22,6 +22,8 @@ const MAX_INPUT_REQUEST_AGE_MS:u64=500; // same-machine monotonic uptime
 // cursor_revision is an even/odd transaction sequence for the child
 // reader's consistent lock-free snapshot. No child-writable mapping.
 // Commands and queued pointer movement expire after <=500 ms.
+// The two final window fields are only authoritative HWNDs supplied while
+// the controller pins MC01 and MC02; they cannot alter actual Windows focus.
 #[repr(C, align(8))]
 struct SharedInput {
     magic:u32, version:u32, bytes:u32, slot:u32, pid:u32, session:u32,
@@ -31,8 +33,10 @@ struct SharedInput {
     cursor_x:AtomicI64,
     cursor_y:AtomicI64,
     cursor_epoch:AtomicU64,
+    human_window:AtomicU64,
+    ai_window:AtomicU64,
 }
-const _: () = assert!(std::mem::size_of::<SharedInput>() == 72);
+const _: () = assert!(std::mem::size_of::<SharedInput>() == 88);
 const _: () = assert!(std::mem::align_of::<SharedInput>() == 8);
 
 pub(super) struct Channel {
@@ -74,6 +78,8 @@ impl Channel {
                 cursor_revision:AtomicU64::new(0),
                 cursor_x:AtomicI64::new(0),cursor_y:AtomicI64::new(0),
                 cursor_epoch:AtomicU64::new(0),
+                human_window:AtomicU64::new(0),
+                ai_window:AtomicU64::new(0),
             });
         }
         if unsafe{UnmapViewOfFile(view)}==0 {return Err(io::Error::last_os_error());}
@@ -87,8 +93,9 @@ impl Channel {
     }
     pub(super) fn write(&self,pid:u32,birth:u64,session:u32,
                         keys:u32,dx:i32,dy:i32,ttl_ms:u32,
-                        issued_at_ms:u64)->io::Result<()> {
-        if self.target!=Some((pid,birth,session)) || keys>255 ||
+                        issued_at_ms:u64,human_hwnd:usize,ai_hwnd:usize)->io::Result<()> {
+        if human_hwnd==0 || ai_hwnd==0 || human_hwnd==ai_hwnd ||
+           self.target!=Some((pid,birth,session)) || keys>255 ||
             !(-127..=127).contains(&dx) || !(-127..=127).contains(&dy) ||
             !(1..=500).contains(&ttl_ms) {
             return Err(invalid("Unbound, expired or invalid MC02 input command"));
@@ -131,6 +138,11 @@ impl Channel {
         input.cursor_x.store(x,Ordering::SeqCst);
         input.cursor_y.store(y,Ordering::SeqCst);
         input.cursor_epoch.store(epoch,Ordering::SeqCst);
+        // Publish the exact HWNDs from the retained controller BEFORE the
+        // live packet: the optional MC02-only focus-read hooks must refuse
+        // to spoof focus if Windows no longer shows MC01 as foreground.
+        input.human_window.store(human_hwnd as u64,Ordering::SeqCst);
+        input.ai_window.store(ai_hwnd as u64,Ordering::SeqCst);
         input.packet.store(word,Ordering::SeqCst);
         input.cursor_revision.fetch_add(1,Ordering::SeqCst);
         if unsafe{UnmapViewOfFile(view)}==0 {return Err(io::Error::last_os_error());}

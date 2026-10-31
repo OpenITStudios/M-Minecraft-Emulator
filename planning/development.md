@@ -907,6 +907,32 @@ acceptance remains UNVERIFIED. Default production input remains BLOCKED.
   CI or localtest was executed. Existing optional DLL/binary admission
   remains unresolved and gameplay input compatibility UNVERIFIED.
 
+**P0 direct game-input correction — MC02 in-process focus-query virtualization
+(31 October 2026).** Existing Win32 keyboard/cursor polling hooks could
+remain ineffective if Minecraft Education first checks whether its own
+window is foreground and stops polling in the background. The same
+optional `bootstrap-compat` DLL now hooks the Win32 read-only queries
+`GetForegroundWindow`, `GetActiveWindow`, and `GetFocus` on MC02,
+using the already attached in-process Microsoft Detours transaction.
+The retained Rust controller writes both already-verified MC01 and
+MC02 HWNDs to the MC02-only shared section (private ABI v3, 88 bytes)
+when and only when it publishes a bounded input packet. The child
+checks that the REAL Windows foreground is STILL the pinned MC01
+HWND and that the MC02 HWND is still its own visible, unowned OGLES
+root. `GetActiveWindow` and `GetFocus` return MC02 only from its
+own game-window thread. After the packet expires or the host loses
+foreground, all fake focus reads return the real Windows results;
+background key polling remains neutral after the first AI packet.
+No OS focus mutation, `SendInput`, invented `HRAWINPUT`, virtual HID
+driver, new loader, second controller, or synthetic message injection
+is added. The regular build remains OFF by default.
+**Evidence:** REMOTE_GITHUB exact source/ABI review only;
+Rust/CMake/MSVC/Windows/Minecraft NOT_EXECUTED. This gives a
+source-grounded way to handle background foreground-gating in the
+existing Win32 polling candidate, NOT evidence that Minecraft
+Education uses these APIs. Actual MC02 walking, relative camera,
+attack and Raw Input/GameInput compatibility are still UNVERIFIED.
+
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
 **Stop scope drift.** Phases 14–19 hardened secondary observation/evidence
