@@ -97,7 +97,10 @@ void noteInputApi(std::atomic<bool>& seen, const wchar_t* tag) {
 // The optional buffered AI candidate only emits on its own OGLES window
 // thread. Determine whether actual successful GetRawInputBuffer polls use
 // that thread, or a separate input worker. Do not log PID/HWND/TID values.
-// This is only a process-local thread classification, never gameplay proof.
+// A root window may remain alive and keep polling when hidden/minimized.
+// Window visibility is NOT an input-consumer thread identity condition;
+// the active virtual-input admission has its own stricter visible gate.
+// This observer is process-local and read-only, never gameplay proof.
 struct OglesThread {
     DWORD matches=0;
     DWORD thread=0;
@@ -107,8 +110,7 @@ BOOL CALLBACK inspectOglesThread(HWND hwnd,LPARAM context) {
     const DWORD thread=GetWindowThreadProcessId(hwnd,&pid);
     if (!thread || pid!=GetCurrentProcessId() ||
         GetAncestor(hwnd,GA_ROOT)!=hwnd ||
-        GetWindow(hwnd,GW_OWNER)!=nullptr ||
-        !IsWindowVisible(hwnd) || IsIconic(hwnd)) return TRUE;
+        GetWindow(hwnd,GW_OWNER)!=nullptr) return TRUE;
     wchar_t className[16]{};
     if (GetClassNameW(hwnd,className,16)!=5 ||
         wcscmp(className,L"OGLES")!=0) return TRUE;

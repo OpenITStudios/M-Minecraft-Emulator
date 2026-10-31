@@ -98,6 +98,28 @@ ABI, package admission and normal disabled features remain unchanged.
 Authored fixtures are NOT_EXECUTED.
 
 
+## MC02 background Raw Input thread classification — source only
+
+The existing opt-in **read-only** MC02 API observer distinguishes
+`RAW_BUFFER_OGLES_THREAD_POLL` from
+`RAW_BUFFER_OTHER_THREAD_POLL` for successful non-null
+`GetRawInputBuffer` calls. Previously it required the exact MC02
+`OGLES` root HWND to be visible and non-minimized. That suppressed
+both markers when a still-running Minecraft window was hidden or
+minimized, even if the game thread continued polling. The observer
+now classifies using the original process-local PID, top-level
+unowned `OGLES` root, and **exactly one matching root** without
+requiring visibility. Missing/ambiguous roots still produce no
+thread-classification claim; PID/HWND/TID values are not logged.
+
+This changes only that existing read-only observer, not the
+virtual-input adapter: **active MC02 movement still requires the
+original visible, non-minimized, responsive window and real MC01
+foreground**. Neither the observer nor the MC02 input experiment
+is activated or packaged by this source change. An observed poll
+identifies the Win32 API/thread, not in-game input delivery.
+REMOTE_GITHUB source review only; Windows observations NOT_EXECUTED.
+
 ## MC02 batch replies avoid unrelated game window title writes — source only
 
 The retained session actor continues returning a truthfully verified

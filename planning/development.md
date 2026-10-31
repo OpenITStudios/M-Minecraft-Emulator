@@ -1013,6 +1013,28 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**1 November MC02 read-only Raw Input observer hidden-window blind spot:**
+The existing opt-in `GetRawInputBuffer` observer classified
+successful polling on the MC02 OGLES window thread versus a worker
+thread, but its root-window enumerator rejected every hidden or
+minimized MC02 OGLES root. That creates a false negative precisely
+when investigating whether the background/minimized game continues
+polling. The same existing observer now uses only current-process
+PID, unowned top-level OGLES class, and unique-root conditions
+to classify the Win32 caller; if none or more than one matches,
+it still refuses a thread-classification marker. No PID/HWND/TID
+is logged. **This does not expand input permission**: active
+virtual input still requires visible and responsive MC02 and real
+MC01 foreground through the independently unchanged adapter and
+controller. The observer and input features remain compile-OFF
+and separately opt-in; no new hook, protocol, game injection,
+controller, runner, account permission or MC03-MC05 enablement.
+Proof: REMOTE_GITHUB exact C++ observer/consumer and Microsoft
+EnumWindows contract review only, Windows API sampling and real
+Minecraft input effects NOT_EXECUTED. The remaining P0 question
+is which API and thread Minecraft Education actually consumes
+in a background MC02 session.
+
 **1 November MC02 two-way cross-process issue-order fence:**
 After the completed neutral watermark fix, the same original
 MC02 Channel still accepted active pulses issued earlier than
