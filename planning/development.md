@@ -720,21 +720,47 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
 - Extra RAM/FPS or graphics optimization, macOS support, new native providers,
   hosted runners and CI remain outside the active development scope.
 
-## Next — source-only continuation, testing deferred by operator
+## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
-The Windows Agent Workspace feasibility question is resolved for the
-currently documented APIs: it is NOT an admitted input implementation.
-Retain the independent-input BLOCKED gate until a concrete, supported
-per-client game-input API becomes available. Next source-only action: audit the remaining native target/Codex
-observation response fields for any proven oversharing or stale-identity
-path before making further changes. Preserve current five-profile
-runtime authority and MC01 protection; do not add unverified gameplay
-input or source tests beyond a concrete regression need.
-**Do not execute local tests, toolchain builds, package staging, native input
-probes or gameplay until explicit operator approval.** When approval arrives,
-the first separate acceptance boundary is the pinned Windows agent CLI,
-followed by MC01 human + MC02 AI independent input with actual game evidence.
-No VM, dedicated server, or global SendInput fallback is authorized.
+**Stop scope drift.** Phases 14–19 hardened secondary observation/evidence
+and MCP response contracts without moving a Minecraft player. They are
+NOT a substitute for gameplay input. Do not continue the implied
+"Phase 20" privacy/window-response audit, create extra microtests,
+or add more speculative source-only backend adapters.
+
+**One next action:** establish an acceptable **real** per-client Windows
+keyboard AND relative-mouse input mechanism for Minecraft Education,
+beginning with MC01 (human foreground) and MC02 (AI unfocused). The
+existing `background_input_probe.rs` posts one 80 ms W keydown/keyup
+message to MC02 only behind a manual opt-in; it does NOT deliver relative
+mouse, claim movement, or establish game acceptance. The MCP currently
+has `provider:NONE` / `execution:DISABLED`.
+
+The actual engineering decision is between: (a) independently evidenced
+per-process game hooks/input interception (ProtoInput-style; unapproved
+injection and game compatibility risks), and (b) genuinely independent
+supported Windows interactive sessions (not implemented, currently
+unsupported or outside approved local-only constraints). Global
+`SendInput`, fake `WM_INPUT`, XInput global pads, and additional
+semantic timelines do not solve per-process game input by themselves.
+No permitted, verified complete keyboard/mouse mechanism has yet been
+established. Do not write an actuator until a defensible mechanism is
+selected. If the no-injection/single-session constraint cannot be met,
+report the conflict explicitly rather than inventing a "working"
+background controller.
+
+**Success gate (NOT_EXECUTED):** two licensed Education clients remain
+in one P2P world; MC01 receives uninterrupted real human control;
+without foreground switching MC02 independently walks, rotates the
+camera, attacks, stops and releases all controls; game-level evidence
+attributes the effects to MC02 and not MC01. Only after this can
+MC03–MC05 concurrency become in scope.
+
+The operator is still working through ChatGPT + GitHub source.
+Local tests, Windows drivers, builds, Minecraft gameplay, injections,
+CI and external/cloud runners are NOT authorized or executed.
+Existing native session ownership, MC01 protection and profile/world
+preservation remain mandatory.
 
 Historical work notes and prior Next proposals remain in immutable
 Local Git history, not in a parallel current-status register.

@@ -21,12 +21,26 @@ For material writes read `GITHUB_RULES.md`, pin exact `Local` HEAD, and consult 
 
 The active product is **Lazy Tester**, with five independently managed
 Minecraft Education Windows profiles. The retired Sandboxie/VMware runtime
-has already been removed from Local. Current source work prioritizes one canonical development handoff,
-source/validation efficiency and final native Windows acceptance while
-preserving session, game, account data and normal-close contracts. RAM/FPS
-exploration is deferred until real resource evidence justifies it. MC02 exit
-source is not an ongoing P0 blocker; runtime acceptance remains deferred.
-`planning/development.md` owns the current blocker and next source action.
+has already been removed from Local. **Operator scope reset — 31 October 2026:** P0 is REAL, independent AI
+control of Minecraft Education, not further audit/QA hardening. First
+prove one human-controlled foreground MC01 plus one independently
+controlled background MC02 (keyboard movement, relative camera, attack,
+release-all, and observable in-game result), then scale to four/five AI
+clients in the same world. Native process/window identity and input
+intent planning already exist; there is NO verified per-client gameplay
+input backend. A posted WM_KEYDOWN message is not an observed Minecraft
+action. Do not infer progress from scaffolding, source-only microtests,
+privacy polishing, extra planning stages, or synthetic input ACKs.
+
+**Hard scope gate:** no more generic MCP/privacy/parser/observer audits,
+speculative providers, extra tests or milestone-number churn while real
+input remains blocked. Change source only for a concrete, directly
+relevant input feasibility correction with a documented mechanism.
+No unapproved game hooking, DLL injection, driver installation,
+foreground takeover, VM/RDP patching, CI or user-PC execution. Preserve
+all native profile/world/account data and normal close contracts.
+RAM/FPS exploration and unrelated cleanup remain deferred.
+`planning/development.md` owns the single current blocker and next action.
 Target Windows/macOS platform-neutral adapters remain future work; a build
 alone cannot claim multi-account Mac compatibility.
 
