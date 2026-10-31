@@ -1013,6 +1013,21 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October MC02 heartbeat receipt avoids unrelated title rewrites:**
+Each opt-in MC02 input request returned a verified five-profile
+`SessionSnapshot`, but the existing response path also called
+`label_slot_window` for every valid profile (or inside its fallback
+window enumeration) on every 160-ms heartbeat. The same verified
+snapshot now suppresses title mutations ONLY for
+`SessionRequest::Mc02Input`, preserving process identity, root HWND,
+responsiveness, reply schema, reaping policy, and normal UI/close
+title management. This removes nonessential Win32 calls from
+an input-critical path without a second controller or cached
+session truth. Source-only REMOTE_GITHUB inspection; timing gains,
+Rust/Node/MSVC builds/tests, actual Minecraft input consumption
+and human foreground safety remain NOT_EXECUTED. No change to input
+features or MC03-MC05 authorization.
+
 **31 October MC02 same-process emergency release after uncertain IPC:**
 The existing native session client marked the batch CLI's transport
 `uncertain` after a failed or timed-out heartbeat. Its next request

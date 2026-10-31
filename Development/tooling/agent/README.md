@@ -98,6 +98,20 @@ ABI, package admission and normal disabled features remain unchanged.
 Authored fixtures are NOT_EXECUTED.
 
 
+## MC02 batch replies avoid unrelated game window title writes — source only
+
+The retained session actor continues returning a truthfully verified
+five-profile `SessionSnapshot` after each MC02 native pulse. Previously
+every 160-ms heartbeat could also relabel all five Minecraft windows,
+even though MC01/MC02 were already checked for the input write. Those
+window-title mutations are now suppressed ONLY for MC02 input replies;
+the original process/HWND and responsiveness checks are retained.
+Normal Inspect, launcher and close paths retain their existing window
+labeling and lifecycle behavior. No new input controller, IPC schema,
+hook or account access was introduced. This removes unnecessary
+Win32 work from the heartbeat path, not proof of improved runtime
+latency or Minecraft gameplay. Builds/tests remain NOT_EXECUTED.
+
 ## Consistent MC02 virtual polling during batch and release — source only
 
 The existing C++ `currentPacket()` gate used by

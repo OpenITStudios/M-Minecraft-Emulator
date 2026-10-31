@@ -249,13 +249,15 @@ impl Sessions {
     }
     fn snapshot(&mut self) -> SessionSnapshot {
         self.reap();
-        self.snapshot_without_reaping()
+        self.snapshot_without_reaping(true)
     }
 
     // During a coordinated normal CloseAll/CloseOne, avoid unrelated journal
     // persistence both before the close request and in its response snapshot.
-    // The ordinary Inspect route continues to reap/persist as before.
-    fn snapshot_without_reaping(&mut self) -> SessionSnapshot {
+    // MC02's 160-ms input receipts should not write game-window titles for
+    // all five profiles. Keep the SAME original process/HWND verification
+    // and five-profile response shape; normal Inspect still repairs labels.
+    fn snapshot_without_reaping(&mut self, relabel: bool) -> SessionSnapshot {
         let profiles = (0..5)
             .map(|index| {
                 let process = self.running[index].as_ref().and_then(|started| {
@@ -266,7 +268,7 @@ impl Sessions {
                             // The game can reset its caption after a desktop/workspace transition.
                             let hwnd = usize::from_str_radix(&previous.window_handle[2..], 16).ok()?;
                             // Do not mutate game or dialog titles once full exit begins.
-                            if !self.exiting {
+                            if relabel && !self.exiting {
                                 let _ = label_slot_window(hwnd as _, child.pid, index as u32 + 1);
                             }
                             let mut process = previous.clone();
@@ -279,7 +281,7 @@ impl Sessions {
                             return Some(process);
                         }
                     }
-                    window(child, !self.exiting)
+                    window(child, relabel && !self.exiting)
                 });
                 self.windows[index] = process.clone();
                 let mut issue=self.issues[index].clone();
@@ -361,7 +363,7 @@ impl Sessions {
         // No journal write or sync_all until every targeted game process
         // has exited. MC01 disk persistence must not stall MC02's native
         // prompt confirmation on this single-threaded session actor.
-        let snapshot=self.snapshot_without_reaping();
+        let snapshot=self.snapshot_without_reaping(true);
         let mut issues=Vec::new();
         let mut progress: [NormalCloseProgress; 5] = std::array::from_fn(|_| NormalCloseProgress::default());
         for profile in snapshot.profiles {
@@ -1240,6 +1242,14 @@ fn run() -> io::Result<()> {
             let mut storage = None;
             let mut settings = None;
             let reap_all_for_reply = response_reaps_all(&envelope.request);
+            // The native MC02 input owner has already pinned and checked
+            // both live game processes. Preserve truthful five-slot reply
+            // verification but skip unrelated title writes per heartbeat.
+            #[cfg(feature="mc02-native-input")]
+            let relabel_on_reply = !matches!(&envelope.request,
+                SessionRequest::Mc02Input {..});
+            #[cfg(not(feature="mc02-native-input"))]
+            let relabel_on_reply = true;
             match envelope.request {
                 SessionRequest::Inspect => {}
                 SessionRequest::InspectSettings => {
@@ -1332,7 +1342,8 @@ fn run() -> io::Result<()> {
             } else {
                 // CloseOne has already persisted its selected journal; CloseAll
                 // has already persisted all five. Never flush a peer again here.
-                sessions.snapshot_without_reaping()
+                // MC02 input receipts also skip unrelated window title writes.
+                sessions.snapshot_without_reaping(relabel_on_reply)
             };
             if let Some(report)=settings.as_mut(){report.audio_issue=audio_issue.clone();}
             snapshot.storage = storage;
@@ -1501,7 +1512,7 @@ mod tests {
         assert!(sessions.selected_processes_exited(&all).unwrap());
         // Inspect is still an ordinary reaping operation, while the close
         // path can safely take a non-reaping snapshot of all five slots.
-        assert_eq!(sessions.snapshot_without_reaping().profiles.len(),5);
+        assert_eq!(sessions.snapshot_without_reaping(true).profiles.len(),5);
         assert!(sessions.running.iter().all(Option::is_none));
         #[cfg(feature="mc02-native-input")]
         assert!(sessions.launch_mc02_experiment(2).unwrap_err().to_string()
