@@ -1067,11 +1067,15 @@ fn receive_before_maintenance<T>(
 // The reply must not re-enter global journal persistence for unrelated games.
 // Ordinary Inspect and other operations retain their existing full reaping.
 fn response_reaps_all(request: &SessionRequest) -> bool {
-    !matches!(request, SessionRequest::CloseOne { .. } | SessionRequest::CloseAll)
-        && !matches!(request,
-            #[cfg(feature="mc02-native-input")]
-            SessionRequest::Mc02Input { .. }
-        )
+    if matches!(request, SessionRequest::CloseOne { .. } | SessionRequest::CloseAll) {
+        return false;
+    }
+    #[cfg(feature="mc02-native-input")]
+    if matches!(request, SessionRequest::Mc02Input { .. }) {
+        // Short input writes must not trigger unrelated journal maintenance.
+        return false;
+    }
+    true
 }
 
 fn run() -> io::Result<()> {

@@ -737,9 +737,9 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
   and virtual state then reports released controls, even if the command
   writer stops. The game is *not* assumed to use these specific APIs.
 - This source is behind two **nondefault compile options**:
-  Cargo \`mc02-native-input\` and CMake \`BOOTSTRAP_MC02_VIRTUAL_INPUT\`.
+  Cargo `mc02-native-input` and CMake `BOOTSTRAP_MC02_VIRTUAL_INPUT`.
   Both the already-owned child and the experimental CLI require
-  explicit \`LAZY_TESTER_MC02_VIRTUAL_INPUT=I_ACCEPT_EXPERIMENTAL_MC02_INPUT\`.
+  explicit `LAZY_TESTER_MC02_VIRTUAL_INPUT=I_ACCEPT_EXPERIMENTAL_MC02_INPUT`.
   No MCP tool is exposed, default binary behavior is unchanged and no
   DLL/input code is executed in this conversation.
 - Private input section ABI: 40-byte fixed header, PID, session and
@@ -753,7 +753,12 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
   camera and hit detection are **NOT_EXECUTED/UNVERIFIED**. Virtual
   cursor behavior and Minecraft keybind mapping are uncalibrated.
   It must not be described as a production-ready game-input backend.
-  The existing MCP still advertises \`actualInputEnabled:false\`.
+  The existing MCP still advertises `actualInputEnabled:false`.
+  Follow-up static review corrected a feature-gated Rust match branch:
+  both Cargo feature-OFF and feature-ON configurations now use valid
+  conditional code. The optional DLL still needs the reviewed binary
+  compatibility/hash admission and cannot silently replace the installed
+  bootstrap payload. This is source, not a successful Windows build.
 - The exact code was reviewed on GitHub only; Rust/CMake/MSVC builds,
   Windows system calls, full client lifecycles and gameplay remain
   NOT_EXECUTED. No localtest was requested or performed.

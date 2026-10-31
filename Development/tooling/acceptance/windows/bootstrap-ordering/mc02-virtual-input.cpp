@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 
 namespace {
 constexpr std::uint32_t Magic=0x4c544932, Version=1;
