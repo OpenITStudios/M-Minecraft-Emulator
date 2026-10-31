@@ -744,6 +744,23 @@ ownership, named pipes, or already-enrolled game DLL mechanism.
 Experimental MC02 launch requires the controller to own MC01 already;
 all other slots remain normal, no other client is hooked by this mode.
 
+**Input command critical-path correction:** the previous opted-in MCP
+action started TWO additional `target` one-shot CLI processes to inspect
+MC01 and MC02 before the THIRD `mc02-input` CLI could write one input
+packet. All of those launches consumed the same 500 ms command deadline.
+The actual authoritative check already lives in the retained Rust
+controller, not in the MCP preflight. MC02 input now starts only the
+one `mc02-input` CLI; the controller itself checks both independently
+owned/responding windows, same session, exclusive MC01 foreground,
+MC02 visibility/non-minimization and original PID/birth/root HWND
+identities while holding BOTH verified process handles through the
+shared-memory write. Its existing 500 ms monotonic stale-request check
+remains the final gate. No global input, new executable, new provider
+or product mode was added. The existing focused fixture was corrected
+to reject duplicated CLI target calls; AUTHORED_NOT_EXECUTED.
+This is a source-side input delivery latency improvement, NOT proof
+of actual Minecraft Education movement/camera/attack.
+
 **Source evidence only:** exact GitHub review; existing focused regression
 fixture AUTHORED_NOT_EXECUTED. Rust/Node/MSVC build, Windows input
 and Minecraft gameplay NOT_EXECUTED. The separately reviewed installed

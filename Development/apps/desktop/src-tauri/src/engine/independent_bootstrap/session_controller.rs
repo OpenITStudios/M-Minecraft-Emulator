@@ -188,19 +188,39 @@ impl Sessions {
         let ai_window=window(ai_child,false)
             .ok_or_else(||invalid("MC02 verified game window unavailable"))?;
         if human_window.pid==ai_window.pid||!human_window.responding||
-           !ai_window.responding {
+           !ai_window.responding ||
+           human_window.session_id!=ai_window.session_id {
             return Err(invalid("Independent MC01/MC02 ownership unavailable"));
         }
-        use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
-        let foreground=crate::engine::workspace_surface::with_verified_native_window(
-            &human_window,|hwnd|Ok(unsafe{GetForegroundWindow()}==hwnd as _))?;
-        if !foreground {
-            return Err(invalid("MC01 human foreground must remain unchanged"));
-        }
-        let session=interactive_session(pid)?;
         let input=ai_child.mc02_input.as_ref()
             .ok_or_else(||invalid("MC02 input channel was not opted in at launch"))?;
-        input.write(pid,birth,session,keys,dx,dy,ttl_ms,issued_at_ms)
+        let session=interactive_session(pid)?;
+        // The retained controller, NOT a separate pair of one-shot CLI
+        // preflights, is the authoritative input gate. Pin BOTH original
+        // process objects and verify each HWND through the existing owner
+        // all the way to publication. This also removes two process
+        // startups from the <=500ms lifetime of one AI input request.
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            GetForegroundWindow,IsHungAppWindow,IsIconic,IsWindowVisible,
+        };
+        crate::engine::workspace_surface::with_verified_native_window(
+            &human_window,|human_hwnd| {
+                crate::engine::workspace_surface::with_verified_native_window(
+                    &ai_window,|ai_hwnd| {
+                        if human_hwnd==ai_hwnd ||
+                           unsafe{GetForegroundWindow()} != human_hwnd as _ {
+                            return Err(invalid("MC01 human foreground must remain unchanged"));
+                        }
+                        if unsafe{IsWindowVisible(ai_hwnd as _)}==0 ||
+                           unsafe{IsIconic(ai_hwnd as _)}!=0 ||
+                           unsafe{IsHungAppWindow(ai_hwnd as _)}!=0 {
+                            return Err(invalid("MC02 AI window is not playable"));
+                        }
+                        input.write(pid,birth,session,keys,dx,dy,ttl_ms,issued_at_ms)
+                    },
+                )
+            },
+        )
     }
     fn snapshot(&mut self) -> SessionSnapshot {
         self.reap();

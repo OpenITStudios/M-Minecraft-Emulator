@@ -690,20 +690,13 @@ export function createHandler(config,{
       if(inFlight) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       try {
-        const human=validateNativeWindowTarget(
-          await native(config.executable,'target',1),1);
-        const ai=validateNativeWindowTarget(
-          await native(config.executable,'target',2),2);
-        if(human.foreground!==true||ai.foreground!==false) {
-          throw new Error('MC02_INPUT_HUMAN_FOREGROUND_REQUIRED');
-        }
-        if(human.pid===ai.pid||human.windowId===ai.windowId||
-           human.sessionId!==ai.sessionId) {
-          throw new Error('MC02_INPUT_TARGETS_NOT_SEPARATE');
-        }
-        // Revalidated again by the native controller before it can write
-        // its inherited MC02-only section. No focus, key or cursor is
-        // changed by this MCP process.
+        // The retained Rust session controller already owns and pins
+        // BOTH exact Minecraft game processes and their root HWNDs, and
+        // verifies MC01 foreground before the shared-memory write.
+        // Do not start two extra read-only target CLI processes here:
+        // those synchronous preflights consume most or all of the 500ms
+        // command deadline without adding authoritative protection.
+        // No fallback to global OS input or a foreign game process.
         const receipt=await mc02Input(config.executable,
           {keys,dx,dy,ttlMs,requestedAtMs});
         if(receipt?.schema!==1||receipt?.slot!==2||

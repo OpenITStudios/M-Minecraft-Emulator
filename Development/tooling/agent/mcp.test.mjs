@@ -663,7 +663,7 @@ test('native reports fail closed on malformed required fields after sanitization
   assert.equal(JSON.stringify(wire).includes('private-world'),false);
 });
 
-test('MC02 experiment is hidden by default and requires the original human focus',async()=>{
+test('MC02 experiment uses one input CLI and delegates authoritative focus checks to native owner',async()=>{
   const optin='I_ACCEPT_EXPERIMENTAL_MC02_INPUT';
   assert.throws(()=>parseConfiguration([
     '--mc02-input-experimental','on'],{}),/explicit native opt-in/);
@@ -675,13 +675,14 @@ test('MC02 experiment is hidden by default and requires the original human focus
     '--mc02-input-experimental','on'],
     {LAZY_TESTER_MC02_VIRTUAL_INPUT:optin});
   assert.equal(configOpt.experimentalMc02InputEnabled,true);
-  const native=async(_exe,operation,slot)=>operation==='launch-mc02-input'?
-    snapshot(operation):({
-    schema:1,ok:true,operation:'target',slot,pid:700+slot,
-    windowId:4000+slot,createdFileTime:'134000000000000001',
-    sessionId:1,foreground:slot===1,visible:true,minimized:false,
-    verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',gameplayInput:'NOT_VERIFIED',
-  });
+  const nativeCalls=[];
+  const native=async(_exe,operation,slot)=>{
+    nativeCalls.push([operation,slot]);
+    if(operation==='launch-mc02-input' && slot===2) {
+      return snapshot(operation);
+    }
+    throw Error('No separate target CLI preflight may run during input');
+  };
   let writes=0;
   const receipt={schema:1,slot:2,gameplayObserved:false,
     status:'NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED'};
@@ -712,15 +713,25 @@ test('MC02 experiment is hidden by default and requires the original human focus
   assert.equal(result.result.isError,false);
   assert.equal(JSON.parse(result.result.content[0].text).gameplayObserved,false);
   assert.equal(writes,1);
+  // The native controller already pins both process/HWND objects and
+  // checks MC01 foreground under those pins. No duplicated CLI preflight
+  // is permitted inside the 500ms command lifetime.
+  assert.deepEqual(nativeCalls,[['launch-mc02-input',2]]);
+  let nativeRefusals=0;
   const protectedHandler=createHandler(configOpt,{
-    native:async(...args)=>({...await native(...args),foreground:false}),
-    mc02Input:async()=>{throw Error('must never write when human is not foreground');},
+    native,
+    mc02Input:async()=>{
+      nativeRefusals++;
+      throw Error('Native request refused: NATIVE_REFUSED');
+    },
   });
   const rejected=await protectedHandler.handle(message);
   assert.equal(rejected.result.isError,true);
   assert.equal(rejected.result.content[0].text,
-    'MC02_INPUT_HUMAN_FOREGROUND_REQUIRED');
+    'Native request refused: NATIVE_REFUSED');
+  assert.equal(nativeRefusals,1);
   assert.equal(writes,1);
+  assert.deepEqual(nativeCalls,[['launch-mc02-input',2]]);
   await assert.rejects(()=>enabled.callTool('send_experimental_mc02_input',
     {...input,buttons:['move_forward','move_backward']}),/INVALID_COMMAND/);
 });
