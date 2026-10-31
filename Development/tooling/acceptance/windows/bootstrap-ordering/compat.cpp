@@ -3,6 +3,9 @@
 #include "startup-observation.h"
 #include "presentation-enrollment.h"
 #include "dxgi-pacing.h"
+#if defined(BOOTSTRAP_MC02_VIRTUAL_INPUT)
+#include "mc02-virtual-input.h"
+#endif
 #include <detours.h>
 #include <cstdio>
 #include <cwchar>
@@ -1076,7 +1079,11 @@ bool install(const InstallConfig& config, bool mutex) {
         || DetourAttach(reinterpret_cast<PVOID*>(&originalKnownPath),
                         reinterpret_cast<PVOID>(translatedKnownPath)) != NO_ERROR || !attachRegistry()
         || !presentation_enrollment::attach()
-        || !attachMc02InputApiObservation(config)) {
+        || !attachMc02InputApiObservation(config)
+#if defined(BOOTSTRAP_MC02_VIRTUAL_INPUT)
+        || (config.education && !mc02_input::attach(*config.education))
+#endif
+        ) {
         DetourTransactionAbort();
         CloseHandle(baseDirectory); baseDirectory = nullptr; return false;
     }

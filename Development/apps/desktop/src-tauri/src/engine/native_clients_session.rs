@@ -164,6 +164,8 @@ pub enum SessionRequest {
     DisableTextureStreaming { slot: u32 },
     ClearProfileData {slot:u32, #[serde(rename="confirmationToken")] confirmation_token:String, #[serde(rename="confirmationName")] confirmation_name:String},
     Launch { slot: u32 },
+    #[cfg(feature="mc02-native-input")]
+    Mc02Input {slot:u32,keys:u32,dx:i32,dy:i32,ttl_ms:u32},
     CloseOne { slot: u32 },
     CloseAll,
 }
@@ -224,6 +226,14 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
             io::ErrorKind::InvalidInput,
             "Unknown Minecraft profile",
         ));
+    }
+    #[cfg(feature="mc02-native-input")]
+    if let SessionRequest::Mc02Input {slot,keys,dx,dy,ttl_ms}=request {
+        if slot!=2||keys>255||!(-127..=127).contains(&dx)||
+           !(-127..=127).contains(&dy)||!(1..=500).contains(&ttl_ms) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                "Invalid experimental MC02 input"));
+        }
     }
     let inspecting = matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings);
     let mut owner = admit_controller(&CONTROLLER)?;
@@ -337,6 +347,12 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
             snapshot.settings = Some(SettingsReport::policy(idle, None)?);
         }
         return Ok(Ok(snapshot));
+    }
+    // Input must NEVER boot a new controller or adopt an unowned game.
+    #[cfg(feature="mc02-native-input")]
+    if matches!(request,SessionRequest::Mc02Input{..}) {
+        return Err(io::Error::new(io::ErrorKind::NotFound,
+            "No retained MC02 controller; input refused"));
     }
     // Explicit user action only. A fresh UI first tries the existing authenticated endpoint.
     let executable=super::process_roles::image("sessions")?;

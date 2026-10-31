@@ -40,6 +40,34 @@ fn native_error(error: io::Error) -> &'static str {
 }
 
 fn execute(args: &[String]) -> Result<Value, &'static str> {
+    #[cfg(all(windows,target_arch="x86_64",
+              feature="lazy-tester-package",feature="mc02-native-input"))]
+    if args.first().map(String::as_str)==Some("mc02-input") {
+        // Explicit one-shot CLI adapter, NOT an automatically exposed MCP
+        // tool. The authenticated native controller remains sole writer.
+        use super::native_clients_session::{self,SessionRequest};
+        if std::env::var("LAZY_TESTER_MC02_VIRTUAL_INPUT").ok().as_deref()
+            !=Some("I_ACCEPT_EXPERIMENTAL_MC02_INPUT") {
+            return Err("EXPERIMENT_NOT_AUTHORIZED");
+        }
+        if args.len()!=6 || args[1]!="2" {return Err("INVALID_ARGUMENTS");}
+        let keys=args[2].parse::<u32>().map_err(|_|"INVALID_ARGUMENTS")?;
+        let dx=args[3].parse::<i32>().map_err(|_|"INVALID_ARGUMENTS")?;
+        let dy=args[4].parse::<i32>().map_err(|_|"INVALID_ARGUMENTS")?;
+        let ttl_ms=args[5].parse::<u32>().map_err(|_|"INVALID_ARGUMENTS")?;
+        if keys>255||!(-127..=127).contains(&dx)||!(-127..=127).contains(&dy)||
+           !(1..=500).contains(&ttl_ms) {return Err("INVALID_ARGUMENTS");}
+        let snapshot=native_clients_session::request(
+            SessionRequest::Mc02Input{slot:2,keys,dx,dy,ttl_ms}
+        ).map_err(native_error)?;
+        if snapshot.schema!=1||snapshot.profiles.len()!=5 {
+            return Err("INVALID_NATIVE_SNAPSHOT");
+        }
+        return Ok(json!({"schema":1,"ok":true,
+            "operation":"mc02-input","slot":2,
+            "delivery":"PER_CLIENT_SHARED_STATE_WRITTEN_NOT_GAMEPLAY_PROOF",
+            "gameplayObserved":false}));
+    }
     let (operation, slot) = parse_operation(args)?;
     #[cfg(not(all(windows, target_arch = "x86_64", feature = "lazy-tester-package")))]
     {

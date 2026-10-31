@@ -5,6 +5,7 @@ option(BOOTSTRAP_ORDERING_TEST_ONLY "Build the standalone self-child ordering ex
 # P0 Minecraft input discovery only; never in the default game DLL or
 # production package. Also requires an explicit MC02-only environment opt-in.
 option(BOOTSTRAP_MC02_INPUT_API_OBSERVE "Record one-shot MC02 input API presence; no input dispatch" OFF)
+option(BOOTSTRAP_MC02_VIRTUAL_INPUT "MC02 virtual keyboard/cursor polling via inherited read-only state (experimental)" OFF)
 option(BOOTSTRAP_GRAPHICS_WARM_POOLS_EXPERIMENT "Enable version-bound DefaultBufferHeap startup-capacity experiment" OFF)
 option(BOOTSTRAP_UPLOAD_RETENTION_EXPERIMENT "Enable version-bound Upload empty-heap retention canary" OFF)
 if(BOOTSTRAP_GRAPHICS_WARM_POOLS_EXPERIMENT AND BOOTSTRAP_UPLOAD_RETENTION_EXPERIMENT)
@@ -47,6 +48,10 @@ target_compile_options(probe-detours PRIVATE /W4 /WX)
 
 add_library(bootstrap-dependency SHARED dependency.cpp)
 add_library(bootstrap-compat SHARED compat.cpp compat.def presentation-enrollment.cpp dxgi-pacing.cpp fps-hud.cpp graphics-warm-pools.cpp)
+if(BOOTSTRAP_MC02_VIRTUAL_INPUT)
+  target_sources(bootstrap-compat PRIVATE mc02-virtual-input.cpp)
+  target_compile_definitions(bootstrap-compat PRIVATE BOOTSTRAP_MC02_VIRTUAL_INPUT=1)
+endif()
 if(BOOTSTRAP_MC02_INPUT_API_OBSERVE)
   target_compile_definitions(bootstrap-compat PRIVATE BOOTSTRAP_MC02_INPUT_API_OBSERVE=1)
 endif()

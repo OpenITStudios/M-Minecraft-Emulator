@@ -720,6 +720,44 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
 - Extra RAM/FPS or graphics optimization, macOS support, new native providers,
   hosted runners and CI remain outside the active development scope.
 
+## P0 source implementation: controller-to-MC02 virtual input state (31 October 2026)
+
+- Added an **opt-in native input path, not another observer**. Existing
+  Rust controller allocates a private unnamed shared section before
+  launching its verified MC02 child, inherits a read-only handle into
+  that exact game and retains the sole writable handle. Existing
+  authenticated session request / same-image agent CLI can publish a
+  bounded key mask (WASD, jump, sneak, attack/use) and signed mouse
+  deltas for MC02 only; no second IPC server or controller is created.
+- The existing bootstrap DLL gains an optional, x64-only Win32 polling
+  adapter that consumes this state for GetAsyncKeyState, GetKeyState,
+  GetKeyboardState, GetCursorPos, SetCursorPos and ClipCursor. The
+  physical OS input, global cursor and MC01 game process are untouched
+  by these new hooks. Input expires automatically after at most 500ms
+  and virtual state then reports released controls, even if the command
+  writer stops. The game is *not* assumed to use these specific APIs.
+- This source is behind two **nondefault compile options**:
+  Cargo \`mc02-native-input\` and CMake \`BOOTSTRAP_MC02_VIRTUAL_INPUT\`.
+  Both the already-owned child and the experimental CLI require
+  explicit \`LAZY_TESTER_MC02_VIRTUAL_INPUT=I_ACCEPT_EXPERIMENTAL_MC02_INPUT\`.
+  No MCP tool is exposed, default binary behavior is unchanged and no
+  DLL/input code is executed in this conversation.
+- Private input section ABI: 40-byte fixed header, PID, session and
+  process birth, then one 64-bit atomic command. The controller's
+  inherited read-only handle cannot write commands; it is bound to the
+  original child before resume. No named mapping, profile data,
+  account token or world file is created or modified.
+- **Limits:** this candidate implements Win32 polling APIs only. It does
+  not intercept GameInput, DirectInput, the Raw Input WM_INPUT queue or
+  Minecraft-specific input. Actual Minecraft Education movement,
+  camera and hit detection are **NOT_EXECUTED/UNVERIFIED**. Virtual
+  cursor behavior and Minecraft keybind mapping are uncalibrated.
+  It must not be described as a production-ready game-input backend.
+  The existing MCP still advertises \`actualInputEnabled:false\`.
+- The exact code was reviewed on GitHub only; Rust/CMake/MSVC builds,
+  Windows system calls, full client lifecycles and gameplay remain
+  NOT_EXECUTED. No localtest was requested or performed.
+
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
 **Stop scope drift.** Phases 14–19 hardened secondary observation/evidence

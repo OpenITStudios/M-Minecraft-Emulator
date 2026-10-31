@@ -33,6 +33,9 @@ custom-protocol = ["tauri/custom-protocol"]
 # preview package overlay, verified again inside build.rs.
 native-workspace-preview = []
 lazy-tester-package = ["native-workspace-preview"]
+# Optional same-image MC02 virtual-input source candidate. No default or
+# release admission; match with BOOTSTRAP_MC02_VIRTUAL_INPUT in the C++ DLL.
+mc02-native-input = []
 
 # Lean daily Rust builds: retain panic backtrace line tables, not full symbols.
 # Incremental compilation remains enabled for fast source iteration.

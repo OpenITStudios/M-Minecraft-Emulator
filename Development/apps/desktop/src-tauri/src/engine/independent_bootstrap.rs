@@ -128,6 +128,8 @@ pub(super) struct PendingEducationBootstrap {
     configuration: Option<OwnedHandle>,
     observation: Option<StartupObservation>,
     policy: Option<instance_focus_events::PolicyChannel>,
+    #[cfg(feature="mc02-native-input")]
+    mc02_input: Option<mc02_input::Channel>,
     resume_attempted: bool,
     cleanup: Option<UnstartedCleanup>,
 }
@@ -302,6 +304,10 @@ fn create_unstarted_tracked(
     } else {
         None
     };
+    #[cfg(feature="mc02-native-input")]
+    let mc02_input=if let Some(store)=&storage {
+        mc02_input::Channel::create(store.slot)?
+    } else {None};
     let mut inherited: Vec<HANDLE> = configuration
         .as_ref()
         .map(|c| vec![c.readonly.as_raw_handle() as HANDLE])
@@ -312,6 +318,8 @@ fn create_unstarted_tracked(
     if let Some(config) = &presentation {
         inherited.push(config.readonly.as_raw_handle() as HANDLE);
     }
+    #[cfg(feature="mc02-native-input")]
+    if let Some(input)=&mc02_input { inherited.push(input.reader()); }
     #[cfg(test)]
     let inherited = {
         let mut handles = inherited;
@@ -335,6 +343,8 @@ fn create_unstarted_tracked(
             presentation
                 .as_ref()
                 .map(|c| c.readonly.as_raw_handle() as HANDLE),
+            #[cfg(feature="mc02-native-input")]
+            mc02_input.as_ref().map(|i|i.reader()),
         )?),
         _ => None,
     };
@@ -394,6 +404,8 @@ fn create_unstarted_tracked(
         configuration: None,
         observation,
         policy: None,
+        #[cfg(feature="mc02-native-input")]
+        mc02_input,
         resume_attempted: false,
         cleanup,
     };
@@ -419,6 +431,10 @@ fn create_unstarted_tracked(
         }
     }
     child.created = child.identity()?.1;
+    #[cfg(feature="mc02-native-input")]
+    if let Some(input)=child.mc02_input.as_mut() {
+        input.bind(child.pid,child.created,session)?;
+    }
     if unsafe { GetProcessIdOfThread(child._thread.as_raw_handle() as HANDLE) } != child.pid
         || interactive_session(child.pid)? != session
     {
@@ -482,6 +498,9 @@ mod game_preset;
 
 #[path = "independent_bootstrap/session_controller.rs"]
 mod session_controller;
+#[cfg(feature="mc02-native-input")]
+#[path = "independent_bootstrap/mc02_input.rs"]
+mod mc02_input;
 #[path = "independent_bootstrap/session_audio.rs"]
 mod session_audio;
 #[path = "independent_bootstrap/profile_storage.rs"]
@@ -2320,12 +2339,13 @@ fn child_environment(
     section: HANDLE,
     observation: Option<HANDLE>,
     presentation: Option<HANDLE>,
+    #[cfg(feature="mc02-native-input")] mc02_input: Option<HANDLE>,
 ) -> io::Result<Vec<u16>> {
     let raw = unsafe { GetEnvironmentStringsW() };
     if raw.is_null() {
         return Err(io::Error::last_os_error());
     }
-    let reserved: Vec<Vec<u16>> = [
+    let mut reserved: Vec<Vec<u16>> = [
         "APPDATA",
         "LOCALAPPDATA",
         "TMP",
@@ -2339,6 +2359,8 @@ fn child_environment(
     .iter()
     .map(|name| OsStr::new(name).encode_wide().collect())
     .collect();
+    #[cfg(feature="mc02-native-input")]
+    reserved.push(OsStr::new(mc02_input::INPUT_ENV).encode_wide().collect());
     let mut rows = Vec::<Vec<u16>>::new();
     let mut cursor = raw;
     let mut units = 0usize;
@@ -2407,6 +2429,11 @@ fn child_environment(
                 .encode_utf16()
                 .collect(),
         );
+    }
+    #[cfg(feature="mc02-native-input")]
+    if let Some(input)=mc02_input {
+        rows.push(format!("{}={}",mc02_input::INPUT_ENV,input as usize)
+            .encode_utf16().collect());
     }
     let mut compare_error = None;
     rows.sort_by(|a, b| {

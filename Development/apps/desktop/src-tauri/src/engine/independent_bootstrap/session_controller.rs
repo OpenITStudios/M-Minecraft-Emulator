@@ -152,6 +152,40 @@ impl Sessions {
         Ok(())
     }
 
+    #[cfg(feature="mc02-native-input")]
+    fn mc02_input(&self,slot:u32,keys:u32,dx:i32,dy:i32,ttl_ms:u32)->io::Result<()> {
+        if self.exiting||slot!=2 {
+            return Err(invalid("MC02-only experimental input refused"));
+        }
+        // Both clients must still be managed and have their original
+        // verified windows. This code never changes foreground focus.
+        let human=self.running[0].as_ref().ok_or_else(||
+            invalid("MC01 human client is not running"))?;
+        let ai=self.running[1].as_ref().ok_or_else(||
+            invalid("MC02 AI client is not running"))?;
+        let human_child=&human.children[0];
+        let ai_child=&ai.children[0];
+        human_child.identity()?;
+        let (pid,birth)=ai_child.identity()?;
+        let human_window=window(human_child,false)
+            .ok_or_else(||invalid("MC01 verified game window unavailable"))?;
+        let ai_window=window(ai_child,false)
+            .ok_or_else(||invalid("MC02 verified game window unavailable"))?;
+        if human_window.pid==ai_window.pid||!human_window.responding||
+           !ai_window.responding {
+            return Err(invalid("Independent MC01/MC02 ownership unavailable"));
+        }
+        use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+        let foreground=crate::engine::workspace_surface::with_verified_native_window(
+            &human_window,|hwnd|Ok(unsafe{GetForegroundWindow()}==hwnd as _))?;
+        if !foreground {
+            return Err(invalid("MC01 human foreground must remain unchanged"));
+        }
+        let session=interactive_session(pid)?;
+        let input=ai_child.mc02_input.as_ref()
+            .ok_or_else(||invalid("MC02 input channel was not opted in at launch"))?;
+        input.write(pid,birth,session,keys,dx,dy,ttl_ms)
+    }
     fn snapshot(&mut self) -> SessionSnapshot {
         self.reap();
         self.snapshot_without_reaping()
@@ -1034,6 +1068,10 @@ fn receive_before_maintenance<T>(
 // Ordinary Inspect and other operations retain their existing full reaping.
 fn response_reaps_all(request: &SessionRequest) -> bool {
     !matches!(request, SessionRequest::CloseOne { .. } | SessionRequest::CloseAll)
+        && !matches!(request,
+            #[cfg(feature="mc02-native-input")]
+            SessionRequest::Mc02Input { .. }
+        )
 }
 
 fn run() -> io::Result<()> {
@@ -1176,6 +1214,11 @@ fn run() -> io::Result<()> {
                 }
                 SessionRequest::Launch { slot } => {
                     sessions.launch(slot).map_err(|error| error.to_string())?
+                }
+                #[cfg(feature="mc02-native-input")]
+                SessionRequest::Mc02Input {slot,keys,dx,dy,ttl_ms} => {
+                    sessions.mc02_input(slot,keys,dx,dy,ttl_ms)
+                        .map_err(|error|error.to_string())?
                 }
                 SessionRequest::CloseAll => sessions.close_all().map_err(|error|error.to_string())?,
                 SessionRequest::CloseOne {slot} => sessions.close_one(slot).map_err(|error|error.to_string())?,
