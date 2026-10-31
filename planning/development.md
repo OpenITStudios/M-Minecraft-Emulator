@@ -1013,6 +1013,26 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October MC02 virtual Win32 polling transaction coherence:**
+The C++ `currentPacket()` hook gate previously sampled the active
+packet and pinned MC01 foreground HWND independently, without
+checking the Rust writer's ABI-v4 odd/even `cursorRevision`.
+An interleaved heartbeat or ReleaseAll write could therefore
+briefly expose mixed state to `GetAsyncKeyState`,
+`GetKeyState`, `GetKeyboardState`, cursor polling or focus
+queries. The hook now reads both fields under one even revision,
+requires a real MC01 foreground match, and rechecks that revision
+after the real Windows focus query. Torn/in-progress packets
+return zero rather than supplying old keys or spoofed focus.
+The buffered Raw Input reader already uses this revision guard;
+no new hook, ABI change, injected binary, driver, controller,
+tool or added slot permission was introduced. Opt-in and normal
+product defaults remain unchanged.
+Proof: REMOTE_GITHUB exact Rust writer/C++ reader/static consumer
+review only; C++/Rust/Node tests, Windows build and Minecraft
+runtime NOT_EXECUTED. Remaining P0 blocker: whether Minecraft
+Education reads and applies MC02 input at game level.
+
 **31 October MC02 heartbeat process-start feasibility correction:**
 The existing opt-in MCP action sequence sent each 160 ms heartbeat
 through `execFileAsync(lazy-tester.exe, mc02-input)`, starting a new

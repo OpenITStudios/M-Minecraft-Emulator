@@ -98,6 +98,27 @@ ABI, package admission and normal disabled features remain unchanged.
 Authored fixtures are NOT_EXECUTED.
 
 
+## Consistent MC02 virtual polling during batch and release — source only
+
+The existing C++ `currentPacket()` gate used by
+`GetAsyncKeyState`, `GetKeyState`, `GetKeyboardState`,
+`GetCursorPos` and the three focus-read hooks now samples its
+active packet and pinned MC01 HWND inside the same ABI-v4
+`cursorRevision` even/odd transaction. It rejects uninitialized,
+odd/in-progress and changed revisions, including a revision that
+changes while the real (unhooked) Windows foreground is checked.
+Before this correction the virtual Win32 polling hooks could read
+an old packet and a newly cleared host HWND while native ReleaseAll
+was being published. The buffered Raw Input reader already had
+a corresponding revision-based guard.
+
+No extra hook, notification loop, process, driver, IPC transport,
+ABI version or MC03–MC05 permission is introduced. This is
+**source-level coherence only**, not evidence that Minecraft
+Education consumes the virtual keyboard, mouse or camera state.
+Normal production input remains off; builds and gameplay are
+NOT_EXECUTED.
+
 ## Opt-in MC02 timed Computer Use action sequence — source only
 
 The existing Codex-facing local stdio MCP has a **separate** experimental

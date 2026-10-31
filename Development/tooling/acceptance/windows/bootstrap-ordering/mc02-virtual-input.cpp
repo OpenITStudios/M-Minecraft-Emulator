@@ -102,20 +102,31 @@ bool parseHandle(HANDLE& handle) {
 }
 std::uint64_t currentPacket() {
     if (!view) return 0;
-    const std::uint64_t word=view->packet.load(std::memory_order_acquire);
+    // Rust publishes packet, host HWND and input state inside one ABI-v4
+    // odd/even cursorRevision transaction. Sampling packet separately
+    // from humanWindow could expose a partly published heartbeat or
+    // briefly accept an old pressed key during ReleaseAll.
+    // All virtual Win32 key/focus/cursor hooks share this fail-closed gate.
+    const auto revision=view->cursorRevision.load(std::memory_order_seq_cst);
+    if (!revision || (revision&1)) return 0;
+    const auto word=view->packet.load(std::memory_order_seq_cst);
+    const auto hostRaw=view->humanWindow.load(std::memory_order_seq_cst);
     const DWORD now=GetTickCount();
     const DWORD until=static_cast<DWORD>(word>>32);
     const auto ahead=static_cast<LONG>(until-now);
-    if (!word || ahead<=0 || ahead>500) return 0;
+    if (!word || ahead<=0 || ahead>500 || !hostRaw ||
+        !originalForeground) return 0;
     // Human focus is not merely checked when the controller writes.
-    // If MC01 loses the REAL Windows foreground before the child polls,
-    // no AI keys/cursor deltas are accepted, and virtual buttons release.
-    // Use the unhooked trampoline so fake foreground reads in this game
-    // cannot bypass the physical human-host focus requirement.
-    if (!originalForeground) return 0;
+    // Use the real Win32 trampoline: a spoofed game-local focus read
+    // must never authorize background MC02 against physical MC01 input.
     const auto host=reinterpret_cast<HWND>(
-        static_cast<ULONG_PTR>(view->humanWindow.load(std::memory_order_seq_cst)));
-    if (!host || originalForeground()!=host) return 0;
+        static_cast<ULONG_PTR>(hostRaw));
+    if (originalForeground()!=host) return 0;
+    // Recheck AFTER the focus query. If the retained controller
+    // changed packet/window while we looked up physical foreground,
+    // discard the whole observation; retry only on a later game poll.
+    if (view->cursorRevision.load(std::memory_order_seq_cst)!=revision)
+        return 0;
     return word;
 }
 // A background game may skip its Win32 input polling loop after comparing
