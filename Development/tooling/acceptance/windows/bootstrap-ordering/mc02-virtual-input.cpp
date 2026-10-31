@@ -10,6 +10,9 @@
 #include <cstring>
 #include <initializer_list>
 #include <cwchar>
+#if defined(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
+#include <array>
+#endif
 
 namespace {
 constexpr std::uint32_t Magic=0x4c544932, Version=4;
@@ -30,12 +33,14 @@ const SharedInput* view=nullptr;
 std::atomic<bool> isolated{false}; // latched after first valid AI command
 std::atomic<bool> cursorInitialized{false};
 std::atomic<LONG> virtualX{0},virtualY{0};
-// Only GetCursorPos consumes pending virtual pointer movement. Its
-// non-blocking per-process guard prevents two game threads applying the
-// same cumulative deltas twice. This is NOT a second input controller.
+// Select exactly ONE relative-camera delivery path at compile time:
+// the Win32 cursor polling route OR the explicit buffered Raw Input
+// experiment. Never apply the same look deltas to both.
+#if !defined(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
 std::atomic_flag cursorReadBusy=ATOMIC_FLAG_INIT;
 std::uint64_t seenRevision=0,seenEpoch=0;
 std::int64_t seenX=0,seenY=0;
+#endif
 // Per-process read cursor for 8 key/mouse rising-edge counters. Separate
 // nonblocking guard from cursor movement: async key and camera reads may
 // run on different Minecraft threads without sharing a blocking lock.
@@ -47,6 +52,14 @@ using CursorCall=BOOL (WINAPI*)(LPPOINT);
 using SetCursorCall=BOOL (WINAPI*)(int,int);
 using ClipCall=BOOL (WINAPI*)(const RECT*);
 using FocusCall=HWND (WINAPI*)();
+#if defined(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
+using RawBufferCall=UINT (WINAPI*)(PRAWINPUT,PUINT,UINT);
+RawBufferCall originalRawBuffer=nullptr;
+std::atomic_flag rawBufferBusy=ATOMIC_FLAG_INIT;
+std::uint64_t rawSeenEpoch=0,rawSeenCounts=0;
+std::int64_t rawSeenX=0,rawSeenY=0;
+unsigned rawHeldMask=0;
+#endif
 KeyCall originalAsync=nullptr,originalKey=nullptr;
 KeyboardStateCall originalKeyboard=nullptr;
 CursorCall originalCursor=nullptr;
@@ -258,6 +271,7 @@ BOOL WINAPI observedKeyboard(PBYTE state) {
     SetLastError(previous);
     return TRUE;
 }
+#if !defined(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
 void applyPendingCursor() {
     if (!view || cursorReadBusy.test_and_set(std::memory_order_acquire)) return;
     const auto before=view->cursorRevision.load(std::memory_order_seq_cst);
@@ -282,6 +296,7 @@ void applyPendingCursor() {
     }
     cursorReadBusy.clear(std::memory_order_release);
 }
+#endif
 BOOL WINAPI observedCursor(LPPOINT point) {
     const DWORD previous=GetLastError();
     const auto word=currentPacket();
@@ -290,7 +305,11 @@ BOOL WINAPI observedCursor(LPPOINT point) {
     }
     // Do not consume an expired command. The next fresh native command
     // opens a new epoch, so stale look deltas cannot be replayed.
+    // In the separate Raw-buffer mode, camera deltas are published ONLY
+    // through GetRawInputBuffer; GetCursorPos retains menu cursor state.
+#if !defined(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
     if (word) applyPendingCursor();
+#endif
     point->x=virtualX.load(std::memory_order_acquire);
     point->y=virtualY.load(std::memory_order_acquire);
     SetLastError(previous);
@@ -318,6 +337,187 @@ BOOL WINAPI observedClip(const RECT* rect) {
     SetLastError(previous);
     return TRUE;
 }
+#if defined(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
+// This is ONLY a consumer-side adapter for games that *already poll*
+// GetRawInputBuffer. It does not post WM_INPUT, create HRAWINPUT handles,
+// supply a kernel HID, invent device registration or intercept GetRawInputData.
+// Synthetic RAWINPUTHEADER.hDevice is intentionally null: games that
+// demand a physical device handle are NOT supported by this candidate.
+// A separate OFF-by-default CMake option is required in addition to
+// BOOTSTRAP_MC02_VIRTUAL_INPUT; no extra DLL/controller/process is created.
+// At worst six keyboard actions and two mouse buttons each need
+// release/down/release records, plus one relative mouse movement: 25.
+using RawBatch=std::array<RAWINPUT,28>;
+void rawHeader(RAWINPUT& event,DWORD kind) {
+    std::memset(&event,0,sizeof(event));
+    event.header.dwType=kind;
+    event.header.dwSize=static_cast<DWORD>(sizeof(RAWINPUT));
+    event.header.hDevice=nullptr;
+    event.header.wParam=RIM_INPUTSINK;
+}
+void rawKey(RawBatch& batch,UINT& count,USHORT vk,USHORT scan,bool down) {
+    if (count>=static_cast<UINT>(batch.size())) return;
+    auto& e=batch[count++];
+    rawHeader(e,RIM_TYPEKEYBOARD);
+    e.data.keyboard.VKey=vk;
+    e.data.keyboard.MakeCode=scan;
+    e.data.keyboard.Flags=down?RI_KEY_MAKE:RI_KEY_BREAK;
+    e.data.keyboard.Message=down?WM_KEYDOWN:WM_KEYUP;
+}
+void rawMouse(RawBatch& batch,UINT& count,USHORT buttons,LONG dx=0,LONG dy=0) {
+    if (count>=static_cast<UINT>(batch.size())) return;
+    auto& e=batch[count++];
+    rawHeader(e,RIM_TYPEMOUSE);
+    e.data.mouse.usFlags=MOUSE_MOVE_RELATIVE;
+    e.data.mouse.usButtonFlags=buttons;
+    e.data.mouse.lLastX=dx;
+    e.data.mouse.lLastY=dy;
+}
+struct RawPlan {
+    RawBatch events{};
+    UINT count=0;
+    unsigned held=0;
+    std::uint64_t epoch=0,counts=0;
+    std::int64_t cursorX=0,cursorY=0;
+    bool coherent=false;
+};
+RawPlan nextRawPlan(std::uint64_t word) {
+    RawPlan plan{};
+    plan.held=word?static_cast<unsigned>(word&255):0;
+    plan.epoch=rawSeenEpoch;
+    plan.counts=rawSeenCounts;
+    plan.cursorX=rawSeenX;plan.cursorY=rawSeenY;
+    if (word && view) {
+        const auto revision=view->cursorRevision.load(std::memory_order_seq_cst);
+        if (!revision || (revision&1)) return plan;
+        const auto counts=view->pressCounts.load(std::memory_order_seq_cst);
+        const auto epoch=view->cursorEpoch.load(std::memory_order_seq_cst);
+        const auto x=view->cursorX.load(std::memory_order_seq_cst);
+        const auto y=view->cursorY.load(std::memory_order_seq_cst);
+        if (view->cursorRevision.load(std::memory_order_seq_cst)!=revision ||
+            view->packet.load(std::memory_order_seq_cst)!=word) return plan;
+        plan.epoch=epoch;plan.counts=counts;
+        const auto baseX=epoch==rawSeenEpoch?rawSeenX:0;
+        const auto baseY=epoch==rawSeenEpoch?rawSeenY:0;
+        const auto dx=x-baseX,dy=y-baseY;
+        // One call cannot move a virtual pointer by an unbounded amount.
+        // Keep the unconsumed remainder for the next buffered poll.
+        const auto moveX=dx>32767?32767:dx< -32767?-32767:dx;
+        const auto moveY=dy>32767?32767:dy< -32767?-32767:dy;
+        plan.cursorX=baseX+moveX;
+        plan.cursorY=baseY+moveY;
+        if (moveX || moveY) rawMouse(plan.events,plan.count,0,
+            static_cast<LONG>(moveX),static_cast<LONG>(moveY));
+    }
+    // Six keyboard actions and two mouse buttons. A full press/release
+    // cycle between game polls is preserved via ABI-v4 rise counters.
+    // Multiple full cycles of one button between polls coalesce to one
+    // pulse: no false multi-click claims.
+    struct Key {unsigned bit;USHORT vk,scan;};
+    constexpr Key keys[]={
+        {1,'W',0x11},{2,'S',0x1f},{4,'A',0x1e},
+        {8,'D',0x20},{16,VK_SPACE,0x39},{32,VK_SHIFT,0x2a},
+    };
+    const auto oldCounts=plan.epoch==rawSeenEpoch?rawSeenCounts:0;
+    for (const auto& key:keys) {
+        unsigned index=0;
+        for (unsigned bits=key.bit;bits>1;bits>>=1) ++index;
+        const bool prior=(rawHeldMask&key.bit)!=0;
+        const bool now=(plan.held&key.bit)!=0;
+        const auto delta=static_cast<std::uint8_t>(
+            (plan.counts>>(index*8))-(oldCounts>>(index*8)));
+        if (delta) {
+            if (prior) rawKey(plan.events,plan.count,key.vk,key.scan,false);
+            rawKey(plan.events,plan.count,key.vk,key.scan,true);
+            if (!now) rawKey(plan.events,plan.count,key.vk,key.scan,false);
+        } else if (prior!=now) {
+            rawKey(plan.events,plan.count,key.vk,key.scan,now);
+        }
+    }
+    for (unsigned index=6;index<=7;++index) {
+        const unsigned bit=1u<<index;
+        const bool prior=(rawHeldMask&bit)!=0;
+        const bool now=(plan.held&bit)!=0;
+        const USHORT down=static_cast<USHORT>(
+            index==6?RI_MOUSE_LEFT_BUTTON_DOWN:RI_MOUSE_RIGHT_BUTTON_DOWN);
+        const USHORT up=static_cast<USHORT>(
+            index==6?RI_MOUSE_LEFT_BUTTON_UP:RI_MOUSE_RIGHT_BUTTON_UP);
+        const auto old=static_cast<std::uint8_t>(oldCounts>>(index*8));
+        const auto fresh=static_cast<std::uint8_t>(plan.counts>>(index*8));
+        if (fresh!=old) {
+            if (prior) rawMouse(plan.events,plan.count,up);
+            rawMouse(plan.events,plan.count,down);
+            if (!now) rawMouse(plan.events,plan.count,up);
+        } else if (prior!=now) {
+            rawMouse(plan.events,plan.count,now?down:up);
+        }
+    }
+    plan.coherent=true;
+    return plan;
+}
+UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
+    if (!view||!size||headerBytes!=sizeof(RAWINPUTHEADER))
+        return originalRawBuffer(data,size,headerBytes);
+    const DWORD previous=GetLastError();
+    const auto word=currentPacket();
+    if (!virtualMode(word)) {
+        SetLastError(previous);
+        return originalRawBuffer(data,size,headerBytes);
+    }
+    const HWND window=ownedGameWindow();
+    // A buffered raw read consumes the calling thread's queue, not all
+    // windows' queues. Only the verified MC02 OGLES window thread can
+    // see synthesized buffered events.
+    const bool gameThread=window &&
+        GetWindowThreadProcessId(window,nullptr)==GetCurrentThreadId();
+    if (rawBufferBusy.test_and_set(std::memory_order_acquire)) {
+        *size=0;SetLastError(previous);return 0;
+    }
+    const auto plan=gameThread?nextRawPlan(word):RawPlan{};
+    if (!data) {
+        // Win32 size query never consumes the action. The next call
+        // with a real buffer must still see the same queued transitions.
+        *size=plan.count?static_cast<UINT>(sizeof(RAWINPUT)):0;
+        rawBufferBusy.clear(std::memory_order_release);
+        SetLastError(previous);return 0;
+    }
+    const UINT capacity=*size;
+    // Drain the REAL raw-input queue through its genuine Win32 API
+    // before replacing keyboard/mouse output with MC02-only controls.
+    // This prevents MC01's physical input leaking to a background
+    // MC02 that registered RIDEV_INPUTSINK. Never mutate device state.
+    const UINT originalCount=originalRawBuffer(data,size,headerBytes);
+    if (originalCount==UINT(-1)) {
+        rawBufferBusy.clear(std::memory_order_release);
+        return originalCount;
+    }
+    // A command may expire while the genuine raw queue is being drained.
+    // Never commit synthetic mouse/key actions after the deadline or
+    // after MC01 has lost real Windows foreground.
+    if (!plan.coherent || (word && currentPacket()!=word)) {
+        *size=0;
+        rawBufferBusy.clear(std::memory_order_release);
+        SetLastError(previous);return 0;
+    }
+    const UINT bytes=plan.count*static_cast<UINT>(sizeof(RAWINPUT));
+    if (bytes>capacity) {
+        *size=bytes;
+        rawBufferBusy.clear(std::memory_order_release);
+        SetLastError(ERROR_INSUFFICIENT_BUFFER);
+        return UINT(-1);
+    }
+    if (bytes) std::memcpy(data,plan.events.data(),bytes);
+    *size=bytes;
+    rawHeldMask=plan.held;
+    rawSeenEpoch=plan.epoch;
+    rawSeenCounts=plan.counts;
+    rawSeenX=plan.cursorX;
+    rawSeenY=plan.cursorY;
+    rawBufferBusy.clear(std::memory_order_release);
+    SetLastError(previous);
+    return plan.count;
+}
+#endif // BOOTSTRAP_MC02_RAW_BUFFER_POLL
 } // namespace
 namespace mc02_input {
 bool attach(const education_bootstrap::Config& config) noexcept {
@@ -354,6 +554,11 @@ bool attach(const education_bootstrap::Config& config) noexcept {
         GetProcAddress(user,"GetActiveWindow"));
     originalFocus=reinterpret_cast<FocusCall>(
         GetProcAddress(user,"GetFocus"));
+#if defined(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
+    originalRawBuffer=reinterpret_cast<RawBufferCall>(
+        GetProcAddress(user,"GetRawInputBuffer"));
+    if (!originalRawBuffer) {UnmapViewOfFile(mapped);return false;}
+#endif
     if (!originalAsync||!originalKey||!originalKeyboard||!originalCursor||
         !originalSetCursor||!originalClip||!originalForeground||
         !originalActive||!originalFocus) {
@@ -378,6 +583,11 @@ bool attach(const education_bootstrap::Config& config) noexcept {
         && DetourAttach(reinterpret_cast<PVOID*>(&originalActive),
                 reinterpret_cast<PVOID>(observedActive))==NO_ERROR
         && DetourAttach(reinterpret_cast<PVOID*>(&originalFocus),
-                reinterpret_cast<PVOID>(observedFocus))==NO_ERROR;
+                reinterpret_cast<PVOID>(observedFocus))==NO_ERROR
+#if defined(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
+        && DetourAttach(reinterpret_cast<PVOID*>(&originalRawBuffer),
+                reinterpret_cast<PVOID>(observedRawBuffer))==NO_ERROR
+#endif
+        ;
 }
 } // namespace mc02_input

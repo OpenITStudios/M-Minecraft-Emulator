@@ -965,6 +965,52 @@ REMOTE_GITHUB exact source and Microsoft GetAsyncKeyState semantics;
 all Node/Rust/CMake/MSVC/Windows/Minecraft execution NOT_EXECUTED.
 Default app/DLL input features remain OFF. No new test suite added.
 
+## MC02 buffered Raw Input consumer candidate (31 October 2026)
+
+**Direct input source work:** the existing MC02-only optional bootstrap
+DLL now contains a separately OFF-by-default
+`BOOTSTRAP_MC02_RAW_BUFFER_POLL` mode. It requires
+`BOOTSTRAP_MC02_VIRTUAL_INPUT=ON` and consumes the SAME
+controller-owned, ABI-v4 (96-byte) MC02 input section. It does not
+create a second game controller, DLL, process, driver, or OS-wide
+input route. All other profiles' DLL behavior stays unchanged.
+
+This mode hooks the real `GetRawInputBuffer` export in the existing
+MC02 Detours transaction. **Only if** the game itself calls that
+buffered-read API on its verified OGLES window thread, it produces
+bounded arrays of `RAWINPUT` keyboard and relative mouse structures
+from the shared key-held mask, rising-edge counters, and accumulated
+mouse deltas. Mouse attack/use and keyboard press/release transitions
+can be represented even if Codex emitted a short press-and-release
+between buffered reads. The caller's size-query, insufficient-buffer
+and counted-return conventions are implemented. A nonblocking guard
+prevents duplicate application across concurrent reads. When MC02
+is under virtual input, the original Raw Input buffer is drained and
+suppressed to avoid forwarding physical MC01 events into MC02.
+Expired commands do not produce late movement. When buffered mode
+is selected, `GetCursorPos` stops consuming the same look deltas
+so movement cannot be duplicated across two APIs.
+
+**Explicit compatibility boundary:** unlike the standard
+`GetRawInputData` path, this adapter NEVER synthesizes
+`WM_INPUT` or a kernel `HRAWINPUT`. It does not register fake HID
+devices, change the OS message queue, or implement GameInput.
+Synthetic `RAWINPUTHEADER.hDevice` is null, not a real device ID.
+Games that check device identity, wait for `QS_RAWINPUT` /
+`WM_INPUT` before polling, or exclusively use
+`GetRawInputData` / GameInput CANNOT be assumed compatible.
+Minecraft Education's actual input consumption API remains
+UNVERIFIED. This is a narrow possible buffered-reader route,
+NOT a real-player movement or attack success claim.
+
+**Proof ceiling:** REMOTE_GITHUB exact-source and Microsoft
+`GetRawInputBuffer` / `RAWINPUT` contract review.
+No tests were authored or executed; no MSVC/CMake/Rust/Windows
+builds, Minecraft execution, localtest, package approval, CI or
+gameplay proof occurred. Normal product input remains OFF.
+Do not enable this candidate or admit a new DLL binary into the
+signed/reviewed package without the separate existing operator gate.
+
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
 **Stop scope drift.** Phases 14–19 hardened secondary observation/evidence

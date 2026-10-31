@@ -6,6 +6,13 @@ option(BOOTSTRAP_ORDERING_TEST_ONLY "Build the standalone self-child ordering ex
 # production package. Also requires an explicit MC02-only environment opt-in.
 option(BOOTSTRAP_MC02_INPUT_API_OBSERVE "Record one-shot MC02 input API presence; no input dispatch" OFF)
 option(BOOTSTRAP_MC02_VIRTUAL_INPUT "MC02 virtual keyboard/cursor polling via inherited read-only state (experimental)" OFF)
+# Real GetRawInputBuffer consumers only. NOT the standard WM_INPUT/
+# GetRawInputData path, does not forge kernel HRAWINPUT or device handles.
+# Always a second explicit opt-in and absent from normal DLL builds.
+option(BOOTSTRAP_MC02_RAW_BUFFER_POLL "Experimental MC02 buffered Raw Input consumer using existing controller-owned state" OFF)
+if(BOOTSTRAP_MC02_RAW_BUFFER_POLL AND NOT BOOTSTRAP_MC02_VIRTUAL_INPUT)
+  message(FATAL_ERROR "MC02 Raw Input buffered polling requires MC02 virtual input")
+endif()
 if(BOOTSTRAP_MC02_VIRTUAL_INPUT AND BOOTSTRAP_MC02_INPUT_API_OBSERVE)
   message(FATAL_ERROR "MC02 virtual input and API observer detour the same functions; select one")
 endif()
@@ -54,6 +61,9 @@ add_library(bootstrap-compat SHARED compat.cpp compat.def presentation-enrollmen
 if(BOOTSTRAP_MC02_VIRTUAL_INPUT)
   target_sources(bootstrap-compat PRIVATE mc02-virtual-input.cpp)
   target_compile_definitions(bootstrap-compat PRIVATE BOOTSTRAP_MC02_VIRTUAL_INPUT=1)
+endif()
+if(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
+  target_compile_definitions(bootstrap-compat PRIVATE BOOTSTRAP_MC02_RAW_BUFFER_POLL=1)
 endif()
 if(BOOTSTRAP_MC02_INPUT_API_OBSERVE)
   target_compile_definitions(bootstrap-compat PRIVATE BOOTSTRAP_MC02_INPUT_API_OBSERVE=1)
