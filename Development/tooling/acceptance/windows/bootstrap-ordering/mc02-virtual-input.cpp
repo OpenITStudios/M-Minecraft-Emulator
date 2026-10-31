@@ -120,10 +120,13 @@ std::uint64_t currentPacket() {
 }
 // A background game may skip its Win32 input polling loop after comparing
 // GetForegroundWindow/GetActiveWindow/GetFocus to its own game HWND.
-// Return the pinned MC02 OGLES window only inside THIS opted-in child,
-// only for an unexpired AI packet while MC01 retains REAL foreground.
-// Never SetForegroundWindow, SetFocus, attach a message queue or touch MC01.
-HWND ownedGameWindow() {
+// Resolve only the pinned MC02 OGLES root in THIS opted-in child.
+// Active input and focus-spoof hooks must still require a visible,
+// non-minimized game window. The buffered Raw Input reader MAY also
+// resolve a hidden/minimized window solely to complete pending key-up
+// and mouse-button UP records when currentPacket()==0. This never
+// activates that window, changes focus or routes physical MC01 input.
+HWND ownedGameWindow(bool permitHiddenForRelease=false) {
     if (!view) return nullptr;
     const auto raw=view->aiWindow.load(std::memory_order_seq_cst);
     if (!raw) return nullptr;
@@ -136,7 +139,8 @@ HWND ownedGameWindow() {
         std::wcscmp(name,L"OGLES")!=0 ||
         GetAncestor(hwnd,GA_ROOT)!=hwnd ||
         GetWindow(hwnd,GW_OWNER)!=nullptr ||
-        !IsWindowVisible(hwnd) || IsIconic(hwnd)) return nullptr;
+        (!permitHiddenForRelease &&
+         (!IsWindowVisible(hwnd) || IsIconic(hwnd)))) return nullptr;
     return hwnd;
 }
 HWND WINAPI observedForeground() {
@@ -563,12 +567,12 @@ UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
         SetLastError(previous);
         return originalRawBuffer(data,size,headerBytes);
     }
-    // Explicit native ReleaseAll zeroes the active packet and human
-    // focus hint, but retains the last pinned MC02 HWND. This allows
-    // the same MC02 game thread to consume pending synthetic KEY_BREAK
-    // and mouse-button UP events after a cancellation. No nonzero
-    // packet => observedForeground/Active/Focus cannot spoof focus.
-    const HWND window=ownedGameWindow();
+    // An explicit ReleaseAll (or expiry/MC01 focus loss) clears the
+    // effective input word, but retains the exact MC02 HWND. Permit
+    // a hidden/minimized owner ONLY for pending release records. The
+    // focus-spoof hooks still use the strict visible-window selector,
+    // and an active word can never inject into a hidden game window.
+    const HWND window=ownedGameWindow(word==0);
     // A buffered raw read consumes the calling thread's queue, not all
     // windows' queues. Only the verified MC02 OGLES window thread can
     // see synthesized buffered events.
@@ -605,7 +609,7 @@ UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
     // intentionally unchanged; the next game poll can finish the release.
     if (!plan.coherent || currentPacket()!=word ||
         view->cursorRevision.load(std::memory_order_seq_cst)!=plan.revision ||
-        (plan.count!=0 && ownedGameWindow()!=window)) {
+        (plan.count!=0 && ownedGameWindow(word==0)!=window)) {
         *size=0;
         rawBufferBusy.clear(std::memory_order_release);
         SetLastError(previous);return 0;

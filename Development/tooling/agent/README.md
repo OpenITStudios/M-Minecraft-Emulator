@@ -153,6 +153,12 @@ make them executable.
   on every small-buffer read and starving pending button releases.
   Each button's release/press sequence remains ordered; cursor state
   advances only when its own final movement record is actually copied.
+  The opt-in Raw Input reader may also identify a hidden/minimized
+  MC02-owned OGLES window for pending key-up/mouse-up records after
+  packet expiry, focus loss or explicit ReleaseAll, matching the
+  existing native controller's release-only admission. The active
+  input and foreground/active/focus hooks still require a visible,
+  non-minimized window; no window is activated or switched.
   Native TTL remains a
   fail-safe if the release cannot be delivered. The normal single-pulse
   tool and unrelated normal tools remain unchanged.

@@ -1013,6 +1013,25 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October MC02 hidden/minimized release-thread correction:**
+The retained controller intentionally admits an exact-owner native
+`ReleaseAll` without requiring MC01 foreground or a visible MC02 HWND,
+but the C++ buffered Raw Input consumer still used the active-input
+`ownedGameWindow()` selector requiring a visible non-minimized window.
+Consequently, even if a hidden/minimized MC02 game thread kept polling,
+pending synthetic KEY_BREAK / mouse-button UP events could never be
+delivered after the neutral packet. The existing selector now permits
+an invisible/minimized MC02 OGLES root ONLY for the buffered reader
+when `currentPacket()==0` (expired/MC01 focus lost/ReleaseAll).
+PID, root class and owner checks remain mandatory, and the same
+release-only selection is revalidated after physical Raw Input drain.
+All active movement and GetForegroundWindow/GetActiveWindow/GetFocus
+spoofing retain the strict visible-window gate. No focus switch,
+new hook/provider, ABI change, build enablement or permissions for
+MC01/MC03–MC05. REMOTE_GITHUB exact-source review only; no
+Node/Rust/MSVC build/test or Minecraft execution. In-game release
+still requires real game-consumer evidence.
+
 **31 October MC02 partial-buffer release-first ordering:**
 The compile-OFF native Raw Input adapter previously put its optional
 relative-camera motion record FIRST in each `RawPlan`, ahead of all
