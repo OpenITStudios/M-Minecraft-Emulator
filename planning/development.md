@@ -1013,6 +1013,20 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October MC02 buffered-reader contract correction:** The existing
+compile-OFF `GetRawInputBuffer` adapter now returns a bounded prefix of
+whole `RAWINPUT` records when the caller's capacity fits fewer records
+than the current batch. Its per-client held-key, rising-edge and relative
+mouse cursors advance only for records actually copied. A subsequent poll
+recomputes the undelivered suffix; an expired command cannot replay old
+presses, and released buttons are derived from the last delivered state.
+Only a buffer too small for ONE record returns
+`ERROR_INSUFFICIENT_BUFFER`. This is the documented Win32 batched-read
+behavior, NOT proof Minecraft Education calls the API or consumes the
+virtual events. No extra detour, OS message forgery, production feature,
+MCP tool, or gameplay execution was added. Exact-HEAD source review only;
+Windows build and actual gameplay remain NOT_EXECUTED.
+
 **31 October source correction — Codex/MC02 input feasibility:** The
 already opt-in MC02 virtual polling hooks now emit one-shot debugger
 markers for nonzero virtual keyboard, attack/use button and camera

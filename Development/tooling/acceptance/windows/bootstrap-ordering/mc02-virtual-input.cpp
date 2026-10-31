@@ -476,6 +476,42 @@ RawPlan nextRawPlan(std::uint64_t word) {
     plan.coherent=true;
     return plan;
 }
+// GetRawInputBuffer accepts partial batches: the caller may provide room
+// for one RAWINPUT even when the current virtual plan has many transitions.
+// Advance ONLY the state represented by successfully copied records.
+// Re-planning after a partial read then emits the remaining transitions
+// without repeating an already delivered press or cursor delta.
+void consumeRawPress(unsigned bit,std::uint64_t latestCounts) {
+    unsigned shift=0;
+    for (unsigned bits=bit;bits>1;bits>>=1) shift+=8;
+    const std::uint64_t field=0xffull<<shift;
+    rawSeenCounts=(rawSeenCounts&~field)|(latestCounts&field);
+}
+void consumeRawRecord(const RAWINPUT& event,const RawPlan& plan) {
+    if (event.header.dwType==RIM_TYPEKEYBOARD) {
+        const unsigned bit=maskFor(event.data.keyboard.VKey);
+        if (!bit) return;
+        if (event.data.keyboard.Flags&RI_KEY_BREAK) rawHeldMask&=~bit;
+        else {
+            rawHeldMask|=bit;
+            consumeRawPress(bit,plan.counts);
+        }
+        return;
+    }
+    if (event.header.dwType!=RIM_TYPEMOUSE) return;
+    const USHORT flags=event.data.mouse.usButtonFlags;
+    if (flags&RI_MOUSE_LEFT_BUTTON_DOWN) {
+        rawHeldMask|=64u;consumeRawPress(64u,plan.counts);
+    }
+    if (flags&RI_MOUSE_LEFT_BUTTON_UP) rawHeldMask&=~64u;
+    if (flags&RI_MOUSE_RIGHT_BUTTON_DOWN) {
+        rawHeldMask|=128u;consumeRawPress(128u,plan.counts);
+    }
+    if (flags&RI_MOUSE_RIGHT_BUTTON_UP) rawHeldMask&=~128u;
+    if (event.data.mouse.lLastX || event.data.mouse.lLastY) {
+        rawSeenX=plan.cursorX;rawSeenY=plan.cursorY;
+    }
+}
 UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
     if (!view||!size||headerBytes!=sizeof(RAWINPUTHEADER))
         return originalRawBuffer(data,size,headerBytes);
@@ -515,29 +551,37 @@ UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
     // A command may expire while the genuine raw queue is being drained.
     // Never commit synthetic mouse/key actions after the deadline or
     // after MC01 has lost real Windows foreground.
-    if (!plan.coherent || (word && currentPacket()!=word)) {
+    if (!plan.coherent || currentPacket()!=word) {
         *size=0;
         rawBufferBusy.clear(std::memory_order_release);
         SetLastError(previous);return 0;
     }
-    const UINT bytes=plan.count*static_cast<UINT>(sizeof(RAWINPUT));
-    if (bytes>capacity) {
-        *size=bytes;
+    const UINT blockBytes=static_cast<UINT>(sizeof(RAWINPUT));
+    // Win32 GetRawInputBuffer returns the number of whole records that
+    // fit. ERROR_INSUFFICIENT_BUFFER applies only when even one required
+    // record cannot fit, not when a larger batch must be split.
+    if (plan.count!=0 && capacity<blockBytes) {
+        *size=blockBytes;
         rawBufferBusy.clear(std::memory_order_release);
         SetLastError(ERROR_INSUFFICIENT_BUFFER);
         return UINT(-1);
     }
+    const UINT available=capacity/blockBytes;
+    const UINT delivered=plan.count<available?plan.count:available;
+    const UINT bytes=delivered*blockBytes;
     if (bytes) std::memcpy(data,plan.events.data(),bytes);
     *size=bytes;
-    rawHeldMask=plan.held;
-    rawSeenEpoch=plan.epoch;
-    rawSeenCounts=plan.counts;
-    rawSeenX=plan.cursorX;
-    rawSeenY=plan.cursorY;
-    // Do not count plans or size queries: only records actually copied
-    // to a genuine GetRawInputBuffer caller are observable hook output.
-    for (UINT i=0;i<plan.count;++i) {
+    // A command's epoch resets stale cursor/click counts, but does not
+    // erase key-down state already observed by the game's Raw Input reader.
+    if (rawSeenEpoch!=plan.epoch) {
+        rawSeenEpoch=plan.epoch;rawSeenCounts=0;
+        rawSeenX=0;rawSeenY=0;
+    }
+    // Do not count size queries or undelivered plan suffixes. The read
+    // cursor advances after each actually copied record only.
+    for (UINT i=0;i<delivered;++i) {
         const auto& event=plan.events[i];
+        consumeRawRecord(event,plan);
         if (event.header.dwType==RIM_TYPEKEYBOARD)
             noteVirtualRead(sawVirtualKeyboard,
                 L"[LT_MC02_INPUT][VIRTUAL_KEY_RETURNED]\n");
@@ -552,7 +596,7 @@ UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
     }
     rawBufferBusy.clear(std::memory_order_release);
     SetLastError(previous);
-    return plan.count;
+    return delivered;
 }
 #endif // BOOTSTRAP_MC02_RAW_BUFFER_POLL
 } // namespace
