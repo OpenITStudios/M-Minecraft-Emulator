@@ -50,15 +50,30 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
             !=Some("I_ACCEPT_EXPERIMENTAL_MC02_INPUT") {
             return Err("EXPERIMENT_NOT_AUTHORIZED");
         }
-        if args.len()!=6 || args[1]!="2" {return Err("INVALID_ARGUMENTS");}
+        if args.len()!=7 || args[1]!="2" {return Err("INVALID_ARGUMENTS");}
         let keys=args[2].parse::<u32>().map_err(|_|"INVALID_ARGUMENTS")?;
         let dx=args[3].parse::<i32>().map_err(|_|"INVALID_ARGUMENTS")?;
         let dy=args[4].parse::<i32>().map_err(|_|"INVALID_ARGUMENTS")?;
         let ttl_ms=args[5].parse::<u32>().map_err(|_|"INVALID_ARGUMENTS")?;
+        let requested_at_ms=args[6].parse::<u64>().map_err(|_|"INVALID_ARGUMENTS")?;
         if keys>255||!(-127..=127).contains(&dx)||!(-127..=127).contains(&dy)||
            !(1..=500).contains(&ttl_ms) {return Err("INVALID_ARGUMENTS");}
+        // A delayed Node request must not receive a new execution window
+        // just because this one-shot executable finally started. UTC is
+        // only an admission check; the native pipe then uses shared uptime.
+        let wall_now=std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_|"STALE_MC02_INPUT")?
+            .as_millis();
+        if requested_at_ms==0 || wall_now<u128::from(requested_at_ms) ||
+            wall_now-u128::from(requested_at_ms)>500 {
+            return Err("STALE_MC02_INPUT");
+        }
+        let issued_at_ms=unsafe{
+            windows_sys::Win32::System::SystemInformation::GetTickCount64()
+        };
         let snapshot=native_clients_session::request(
-            SessionRequest::Mc02Input{slot:2,keys,dx,dy,ttl_ms}
+            SessionRequest::Mc02Input{slot:2,keys,dx,dy,ttl_ms,issued_at_ms}
         ).map_err(native_error)?;
         if snapshot.schema!=1||snapshot.profiles.len()!=5 {
             return Err("INVALID_NATIVE_SNAPSHOT");

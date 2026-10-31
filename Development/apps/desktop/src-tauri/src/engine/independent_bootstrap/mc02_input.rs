@@ -12,6 +12,8 @@ pub(super) const INPUT_OPTIN: &str = "LAZY_TESTER_MC02_VIRTUAL_INPUT";
 pub(super) const INPUT_CONSENT: &str = "I_ACCEPT_EXPERIMENTAL_MC02_INPUT";
 const MAGIC: u32 = 0x4c544932; // LTI2 (MC02 only)
 const VERSION: u32 = 1;
+const MAX_INPUT_REQUEST_AGE_MS:u64=500; // same-machine monotonic uptime
+
 
 // C++ counterpart: mc02-virtual-input.cpp. Atomic 64-bit on Win x64.
 // High 32 bits: GetTickCount() expiration. Bits 0..7: W,S,A,D,
@@ -74,18 +76,28 @@ impl Channel {
         Ok(())
     }
     pub(super) fn write(&self,pid:u32,birth:u64,session:u32,
-                        keys:u32,dx:i32,dy:i32,ttl_ms:u32)->io::Result<()> {
+                        keys:u32,dx:i32,dy:i32,ttl_ms:u32,
+                        issued_at_ms:u64)->io::Result<()> {
         if self.target!=Some((pid,birth,session)) || keys>255 ||
             !(-127..=127).contains(&dx) || !(-127..=127).contains(&dy) ||
             !(1..=500).contains(&ttl_ms) {
             return Err(invalid("Unbound, expired or invalid MC02 input command"));
         }
-        let expires=(unsafe{GetTickCount64()} as u32).wrapping_add(ttl_ms);
+        let view=self.mapped()?;
+        // The only authoritative expiry check is immediately before the
+        // native memory write. A pending authenticated IPC may complete
+        // after the requesting Codex/CLI process has already timed out.
+        let now=unsafe{GetTickCount64()};
+        if issued_at_ms==0 || now.checked_sub(issued_at_ms)
+            .is_none_or(|age|age>MAX_INPUT_REQUEST_AGE_MS) {
+            let _=unsafe{UnmapViewOfFile(view)};
+            return Err(invalid("MC02 input request expired before native delivery"));
+        }
+        let expires=(now as u32).wrapping_add(ttl_ms);
         let sequence=self.sequence.fetch_add(1,Ordering::Relaxed).wrapping_add(1);
         let word=((expires as u64)<<32) | ((dy as i8 as u8 as u64)<<24)
              | ((dx as i8 as u8 as u64)<<16)
              | ((sequence as u64)<<8) | keys as u64;
-        let view=self.mapped()?;
         // The existing authenticated native controller is the sole writer.
         unsafe{(*view.Value.cast::<SharedInput>()).packet.store(word,Ordering::Release);}
         if unsafe{UnmapViewOfFile(view)}==0 {return Err(io::Error::last_os_error());}

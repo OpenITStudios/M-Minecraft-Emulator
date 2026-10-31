@@ -19,7 +19,8 @@ struct alignas(8) SharedInput {
 };
 static_assert(sizeof(SharedInput)==40 && alignof(SharedInput)==8);
 const SharedInput* view=nullptr;
-std::atomic<bool> isolated{false};
+std::atomic<bool> isolated{false}; // latched after first valid AI command
+std::atomic<bool> cursorInitialized{false};
 std::atomic<std::uint64_t> seenPacket{0};
 std::atomic<LONG> virtualX{0},virtualY{0};
 using KeyCall=SHORT (WINAPI*)(int);
@@ -57,14 +58,30 @@ std::uint64_t currentPacket() {
     const DWORD until=static_cast<DWORD>(word>>32);
     const auto ahead=static_cast<LONG>(until-now);
     if (!word || ahead<=0 || ahead>500) return 0;
-    if (!isolated.exchange(true,std::memory_order_acq_rel)) {
+    return word;
+}
+// MC02 must never poll MC01's physical key/cursor state while MC01 is
+// foreground. Before the first AI command, allow local interaction with
+// MC02 only when MC02 itself is the foreground window (login/menu).
+// After the first command, virtual input remains latched until process
+// close; expiration releases the virtual buttons, not the isolation.
+bool virtualMode(std::uint64_t word) {
+    if (word) isolated.store(true,std::memory_order_release);
+    const HWND foreground=GetForegroundWindow();
+    DWORD owner=0;
+    const bool ownForeground=foreground!=nullptr &&
+        GetWindowThreadProcessId(foreground,&owner)!=0 &&
+        owner==GetCurrentProcessId();
+    const bool useVirtual=isolated.load(std::memory_order_acquire)||
+        !ownForeground;
+    if (useVirtual && !cursorInitialized.exchange(true,std::memory_order_acq_rel)) {
         POINT point{};
         if (originalCursor && originalCursor(&point)) {
             virtualX.store(point.x,std::memory_order_release);
             virtualY.store(point.y,std::memory_order_release);
         }
     }
-    return word;
+    return useVirtual;
 }
 unsigned maskFor(int code) {
     switch(code) {
@@ -85,7 +102,7 @@ bool virtualDown(int key,std::uint64_t word) {
 SHORT WINAPI observedAsync(int key) {
     const DWORD previous=GetLastError();
     const auto word=currentPacket();
-    if (!isolated.load(std::memory_order_acquire)) {
+    if (!virtualMode(word)) {
         SetLastError(previous); return originalAsync(key);
     }
     const SHORT result=virtualDown(key,word)?static_cast<SHORT>(0x8000):0;
@@ -95,7 +112,7 @@ SHORT WINAPI observedAsync(int key) {
 SHORT WINAPI observedKey(int key) {
     const DWORD previous=GetLastError();
     const auto word=currentPacket();
-    if (!isolated.load(std::memory_order_acquire)) {
+    if (!virtualMode(word)) {
         SetLastError(previous); return originalKey(key);
     }
     const SHORT result=virtualDown(key,word)?static_cast<SHORT>(0x8000):0;
@@ -105,7 +122,7 @@ SHORT WINAPI observedKey(int key) {
 BOOL WINAPI observedKeyboard(PBYTE state) {
     const DWORD previous=GetLastError();
     const auto word=currentPacket();
-    if (!isolated.load(std::memory_order_acquire) || !state) {
+    if (!virtualMode(word) || !state) {
         SetLastError(previous); return originalKeyboard(state);
     }
     std::memset(state,0,256);
@@ -119,7 +136,7 @@ BOOL WINAPI observedKeyboard(PBYTE state) {
 BOOL WINAPI observedCursor(LPPOINT point) {
     const DWORD previous=GetLastError();
     const auto word=currentPacket();
-    if (!isolated.load(std::memory_order_acquire) || !point) {
+    if (!virtualMode(word) || !point) {
         SetLastError(previous); return originalCursor(point);
     }
     // Each controller packet applies pointer movement ONCE, even if
@@ -135,8 +152,8 @@ BOOL WINAPI observedCursor(LPPOINT point) {
 }
 BOOL WINAPI observedSetCursor(int x,int y) {
     const DWORD previous=GetLastError();
-    currentPacket();
-    if (!isolated.load(std::memory_order_acquire)) {
+    const auto word=currentPacket();
+    if (!virtualMode(word)) {
         SetLastError(previous); return originalSetCursor(x,y);
     }
     // MC02's cursor recentering never physically moves MC01's pointer.
@@ -147,8 +164,8 @@ BOOL WINAPI observedSetCursor(int x,int y) {
 }
 BOOL WINAPI observedClip(const RECT* rect) {
     const DWORD previous=GetLastError();
-    currentPacket();
-    if (!isolated.load(std::memory_order_acquire)) {
+    const auto word=currentPacket();
+    if (!virtualMode(word)) {
         SetLastError(previous); return originalClip(rect);
     }
     // A background AI window must not clip the physical human desktop.

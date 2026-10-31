@@ -791,6 +791,21 @@ No test, build, packaging, ODR, device, Windows or Minecraft execution.
   strict no-op. CMake rejects enabling duplicate GetAsyncKeyState/
   cursor detours. One-command look deltas cannot be lost when
   repeated with identical payloads in one GetTickCount tick.
+- Fixed two concrete MC02 input defects without adding a provider:
+  (1) an authenticated native IPC could finish after Codex/CLI gave up,
+  then activate an old movement request for a fresh TTL; the MCP now
+  stamps the request, the one-shot CLI checks wall-clock age, and the
+  controller's sole shared-memory writer checks its own monotonic
+  GetTickCount64 age immediately before publication. Any request older
+  than 500ms or timestamped in the future refuses instead of moving
+  late; each accepted packet still expires after at most 500ms.
+  (2) before the first AI pulse, an unfocused MC02 polling Win32
+  keyboard/cursor APIs inherited physical human input. MC02 now returns
+  virtual neutral controls while background, allows manual foreground
+  login/menu interaction before the first AI command, and latches
+  exclusive virtual polling from the first valid command until exit.
+  This isolation applies only to the implemented Win32 polling hooks;
+  unimplemented Raw Input/GameInput handling remains UNVERIFIED.
 - Windows Raw Input receives kernel HRAWINPUT via WM_INPUT, not
   arbitrary fabricated HWND messages; GameInput is a different
   reference-counted input stream. Neither is implemented by the

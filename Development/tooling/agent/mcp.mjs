@@ -46,6 +46,7 @@ const PUBLIC_TOOL_ERRORS=new Set([
   'MC02_EXPERIMENT_DISABLED','MC02_INPUT_INVALID_COMMAND',
   'MC02_INPUT_HUMAN_FOREGROUND_REQUIRED',
   'MC02_INPUT_TARGETS_NOT_SEPARATE','MC02_INPUT_NATIVE_RESULT_UNVERIFIED',
+  'MC02_INPUT_REQUEST_STALE',
 ]);
 function publicToolError(error) {
   const message=typeof error?.message==='string' ? error.message : '';
@@ -221,7 +222,12 @@ function mc02ButtonMask(buttons) {
   }
   return mask;
 }
-export async function sendExperimentalMc02Native(executable,{keys,dx,dy,ttlMs}) {
+export async function sendExperimentalMc02Native(executable,{keys,dx,dy,ttlMs,requestedAtMs}) {
+  const nowMs=Date.now();
+  if(!Number.isSafeInteger(requestedAtMs)||
+     requestedAtMs>nowMs||nowMs-requestedAtMs>500) {
+    throw new Error('MC02_INPUT_REQUEST_STALE');
+  }
   if(!executable || !path.isAbsolute(executable) ||
      !Number.isSafeInteger(keys)||keys<0||keys>255 ||
      !Number.isSafeInteger(dx)||dx< -127||dx>127 ||
@@ -234,6 +240,7 @@ export async function sendExperimentalMc02Native(executable,{keys,dx,dy,ttlMs}) 
     const response=await execFileAsync(executable,[
       '--lazy-tester-agent-cli','mc02-input','2',
       String(keys),String(dx),String(dy),String(ttlMs),
+      String(requestedAtMs),
     ],{shell:false,windowsHide:true,timeout:6000,maxBuffer:8192});
     stdout=response.stdout;
   } catch(error) {
@@ -670,6 +677,7 @@ export function createHandler(config,{
     }
     if (name==='send_experimental_mc02_input') {
       if(!mc02Enabled) throw new Error('MC02_EXPERIMENT_DISABLED');
+      const requestedAtMs=Date.now(); // before two native target inspections
       keysExactly(args,['slot','buttons','lookDX','lookDY','ttlMs']);
       if(args.slot!==2) throw new Error('MC02_INPUT_INVALID_COMMAND');
       const keys=mc02ButtonMask(args.buttons);
@@ -696,7 +704,8 @@ export function createHandler(config,{
         // Revalidated again by the native controller before it can write
         // its inherited MC02-only section. No focus, key or cursor is
         // changed by this MCP process.
-        const receipt=await mc02Input(config.executable,{keys,dx,dy,ttlMs});
+        const receipt=await mc02Input(config.executable,
+          {keys,dx,dy,ttlMs,requestedAtMs});
         if(receipt?.schema!==1||receipt?.slot!==2||
            receipt?.gameplayObserved!==false||
            receipt?.status!=='NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED') {

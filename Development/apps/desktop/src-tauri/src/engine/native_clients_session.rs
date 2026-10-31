@@ -165,7 +165,7 @@ pub enum SessionRequest {
     ClearProfileData {slot:u32, #[serde(rename="confirmationToken")] confirmation_token:String, #[serde(rename="confirmationName")] confirmation_name:String},
     Launch { slot: u32 },
     #[cfg(feature="mc02-native-input")]
-    Mc02Input {slot:u32,keys:u32,dx:i32,dy:i32,ttl_ms:u32},
+    Mc02Input {slot:u32,keys:u32,dx:i32,dy:i32,ttl_ms:u32,issued_at_ms:u64},
     CloseOne { slot: u32 },
     CloseAll,
 }
@@ -228,9 +228,10 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
         ));
     }
     #[cfg(feature="mc02-native-input")]
-    if let SessionRequest::Mc02Input {slot,keys,dx,dy,ttl_ms}=request {
+    if let SessionRequest::Mc02Input {slot,keys,dx,dy,ttl_ms,issued_at_ms}=request {
         if slot!=2||keys>255||!(-127..=127).contains(&dx)||
-           !(-127..=127).contains(&dy)||!(1..=500).contains(&ttl_ms) {
+           !(-127..=127).contains(&dy)||!(1..=500).contains(&ttl_ms)||
+           issued_at_ms==0 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,
                 "Invalid experimental MC02 input"));
         }

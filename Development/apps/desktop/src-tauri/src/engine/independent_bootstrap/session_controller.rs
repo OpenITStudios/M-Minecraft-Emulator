@@ -153,7 +153,8 @@ impl Sessions {
     }
 
     #[cfg(feature="mc02-native-input")]
-    fn mc02_input(&self,slot:u32,keys:u32,dx:i32,dy:i32,ttl_ms:u32)->io::Result<()> {
+    fn mc02_input(&self,slot:u32,keys:u32,dx:i32,dy:i32,
+                  ttl_ms:u32,issued_at_ms:u64)->io::Result<()> {
         if self.exiting||slot!=2 {
             return Err(invalid("MC02-only experimental input refused"));
         }
@@ -184,7 +185,7 @@ impl Sessions {
         let session=interactive_session(pid)?;
         let input=ai_child.mc02_input.as_ref()
             .ok_or_else(||invalid("MC02 input channel was not opted in at launch"))?;
-        input.write(pid,birth,session,keys,dx,dy,ttl_ms)
+        input.write(pid,birth,session,keys,dx,dy,ttl_ms,issued_at_ms)
     }
     fn snapshot(&mut self) -> SessionSnapshot {
         self.reap();
@@ -1220,8 +1221,8 @@ fn run() -> io::Result<()> {
                     sessions.launch(slot).map_err(|error| error.to_string())?
                 }
                 #[cfg(feature="mc02-native-input")]
-                SessionRequest::Mc02Input {slot,keys,dx,dy,ttl_ms} => {
-                    sessions.mc02_input(slot,keys,dx,dy,ttl_ms)
+                SessionRequest::Mc02Input {slot,keys,dx,dy,ttl_ms,issued_at_ms} => {
+                    sessions.mc02_input(slot,keys,dx,dy,ttl_ms,issued_at_ms)
                         .map_err(|error|error.to_string())?
                 }
                 SessionRequest::CloseAll => sessions.close_all().map_err(|error|error.to_string())?,

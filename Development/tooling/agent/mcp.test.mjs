@@ -687,7 +687,10 @@ test('MC02 experiment is hidden by default and requires the original human focus
   const enabled=createHandler(configOpt,{
     native,mc02Input:async(_exe,packet)=>{
       writes++;
-      assert.deepEqual(packet,{keys:17,dx:10,dy:-5,ttlMs:120});
+      const {requestedAtMs,...action}=packet;
+      assert.equal(Number.isSafeInteger(requestedAtMs),true);
+      assert.ok(requestedAtMs<=Date.now());
+      assert.deepEqual(action,{keys:17,dx:10,dy:-5,ttlMs:120});
       return receipt;
     },
   });
