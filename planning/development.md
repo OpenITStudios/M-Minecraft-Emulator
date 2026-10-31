@@ -1013,6 +1013,18 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October native/visual lock ownership correction:** A read-only
+exact-window capture no longer writes or clears the exclusive native
+mutation lock. It owns only the separate bounded visual gate;
+all nonurgent mutations continue to use both gates for admission.
+Consequently an idle, exact-owner neutral MC02 release may safely
+overlap a pending read-only screenshot without the screenshot falsely
+unlocking that native release. An active sequence continues to own
+its native mutation lock while permitting visual feedback. The
+retained controller and process-identity checks remain the authority.
+Source fixtures authored; Node/Rust/Windows/Minecraft NOT_EXECUTED.
+No new input backend or production activation.
+
 **31 October source-first visual feedback under MC02 sequence:**
 The existing opt-in MCP now allows one verified read-only
 `observe_client`/bounded visual sampler capture while the MC02

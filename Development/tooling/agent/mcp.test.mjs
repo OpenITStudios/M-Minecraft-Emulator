@@ -833,3 +833,43 @@ test('ordinary pending screenshot blocks mutations and simultaneous screenshots'
   assert.equal(image.metadata.slot,2);
   handler.shutdown();
 });
+
+test('urgent MC02 native neutral write may overlap read-only capture without unlocking other mutations',async()=>{
+  const cfg=parseConfiguration([
+    '--exe',path.resolve('lazy-tester.exe'),
+    '--cua-exe',path.resolve('cua-driver.exe'),
+    '--mc02-input-experimental','on',
+  ],{LAZY_TESTER_MC02_VIRTUAL_INPUT:'I_ACCEPT_EXPERIMENTAL_MC02_INPUT'});
+  let captureReached,finishCapture;
+  const reached=new Promise(resolve=>{captureReached=resolve;});
+  const held=new Promise(resolve=>{finishCapture=resolve;});
+  let releases=0;
+  const handler=createHandler(cfg,{
+    native:async(_exe,op,slot)=>({schema:1,ok:true,operation:'target',
+      slot,pid:2000+slot,windowId:2100+slot,
+      createdFileTime:'134000000000000001',sessionId:1,
+      foreground:false,visible:true,minimized:false,
+      verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',
+      gameplayInput:'NOT_VERIFIED'}),
+    capture:async()=>{captureReached();await held;return {
+      mimeType:'image/png',imageBase64:'iVBORw0KGgo=',
+      width:640,height:360};},
+    mc02Input:async(_exe,packet)=>{
+      assert.deepEqual([packet.keys,packet.dx,packet.dy,packet.ttlMs],[0,0,0,1]);
+      releases++;return {schema:1,slot:2,
+        status:'NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+        gameplayObserved:false};
+    },
+  });
+  const reading=handler.callTool('observe_client',{slot:2});
+  await reached;
+  const stop=await handler.callTool('stop_experimental_mc02_actions',{slot:2});
+  assert.equal(stop.status,'MC02_NATIVE_NEUTRAL_STATE_WRITE_ACKNOWLEDGED');
+  assert.equal(stop.actualGameKeyRelease,'NOT_VERIFIED');
+  assert.equal(releases,1);
+  await assert.rejects(()=>handler.callTool('launch_profile',{slot:3}),/in progress/);
+  finishCapture();
+  const frame=await reading;
+  assert.equal(frame.metadata.slot,2);
+  handler.shutdown();
+});

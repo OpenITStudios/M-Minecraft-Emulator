@@ -481,10 +481,10 @@ export function createHandler(config,{
   mc02Input=sendExperimentalMc02Native,
   gpuSourceFactory=createGpuFrameSource,
 }={}) {
-  let inFlight=false;
+  let inFlight=false; // mutating or exclusive native operation
   let visualReadBusy=false; // only one identity-pinned screenshot at a time
-  let mc02SequenceAbort=null;
-  const exclusiveBusy=()=>inFlight||visualReadBusy; // pending opted-in MCP request only
+  let mc02SequenceAbort=null; // pending opted-in MCP request only
+  const exclusiveBusy=()=>inFlight||visualReadBusy;
   let gpuStartup=null; // bounded request only; not game/session lifecycle
   const mc02Enabled=config.experimentalMc02InputEnabled===true &&
     config.mode==='human-plus-four-ai';
@@ -507,8 +507,11 @@ export function createHandler(config,{
     if(visualReadBusy || (inFlight && !alongsideSequence)) {
       throw new Error('Native operation in progress; do not overlap requests');
     }
+    // This read-only gate is sufficient to block new native mutations
+    // via exclusiveBusy(). Never claim ownership of inFlight: a separate
+    // urgent neutral-state write may overlap a screenshot and must keep
+    // its own mutation lock until its authenticated request completes.
     visualReadBusy=true;
-    if(!alongsideSequence)inFlight=true;
     try {
       const before=validateNativeWindowTarget(
         await native(config.executable,'target',slot),slot);
@@ -553,7 +556,6 @@ export function createHandler(config,{
       };
     } finally {
       visualReadBusy=false;
-      if(!alongsideSequence)inFlight=false;
     }
   }
   const visualObserver=createVisualObserver({
