@@ -77,6 +77,27 @@ export function prepareMc02PulseBatch(actions) {
     heartbeatAt=buttons.length>0?
       due+MC02_SEQUENCE_LIMITS.heartbeatMs:Infinity;
   }
+  // A camera-only final pulse otherwise goes straight into the native
+  // batch's ReleaseAll, which clears the shared cursor backlog before
+  // Minecraft has any opportunity to poll the one-shot delta. Preserve
+  // precisely the AUTHOR-REQUESTED look duration, not a new arbitrary
+  // timer or repeated camera motion. Release stays an ordinary MC02
+  // neutral packet with the original identity and TTL gates.
+  const last=pulses.at(-1);
+  if(last.keys===0&&(last.dx!==0||last.dy!==0)) {
+    const look=actions.find(action=>
+      action.kind==='look_relative'&&action.atMs===last.atMs);
+    const releaseAt=look?.atMs+look?.durationMs;
+    if(!Number.isSafeInteger(releaseAt)||releaseAt<=last.atMs||
+       releaseAt>MC02_SEQUENCE_LIMITS.maxHorizonMs||
+       pulses.length>=MC02_SEQUENCE_LIMITS.maxPulses) {
+      throw new Error('MC02_SEQUENCE_DEADLINE');
+    }
+    pulses.push(Object.freeze({
+      atMs:releaseAt,keys:0,buttons:Object.freeze([]),
+      dx:0,dy:0,ttlMs:MC02_SEQUENCE_LIMITS.ttlMs,
+    }));
+  }
   return Object.freeze({
     pulses:Object.freeze(pulses),
     count:pulses.length,

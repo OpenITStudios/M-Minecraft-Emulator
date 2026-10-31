@@ -1013,6 +1013,27 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October terminal MC02 relative-camera delivery window:**
+The semantic timeline records `look_relative` as one delta at
+`atMs` (not a held key). For a final camera-only frame the batch
+previously returned immediately after its first IPC acknowledgement,
+and native `ReleaseAll` cleared `cursor_x/y` and advanced
+`cursor_epoch` before the game could necessarily read that delta.
+The existing MC02 pulse compiler now keeps precisely the author's
+validated look duration (50–250 ms) by appending a single neutral
+release pulse at its end ONLY when the terminal frame is a camera
+delta with no held buttons. No repeated relative motion is emitted;
+the original native transaction/identity gates and final explicit
+release remain unchanged. A camera action that would extend beyond
+the existing 3.5-second/64-pulse batch limits fails closed rather
+than silently truncating its delivery window. One existing source
+fixture now documents this pure-camera final state; NOT_EXECUTED.
+Proof: REMOTE_GITHUB Rust cursor-reset/C++ consumer/JS scheduler
+static inspection only. No build, source tests, Windows/Minecraft
+execution or proof that any real game polling occurred. This fixes
+a concrete early-clear source error but does NOT establish real
+independent MC02 gameplay input.
+
 **31 October MC02 heartbeat post-IPC deadline correction:**
 The same-image native batch checked a pulse's 150-ms lateness
 budget only BEFORE authenticated controller IPC. A late IPC reply

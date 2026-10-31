@@ -52,6 +52,19 @@ test('MC02 batch keeps an initial waiting offset without inventing a 0ms input p
   ]);
   assert.equal(batch.pulses.some(p=>p.atMs===0),false);
   assert.equal(batch.finalEventMs,500);
+  // A camera-only terminal command must NOT be cleared by native
+  // ReleaseAll immediately after the first IPC acknowledgement.
+  // The existing 80-ms action duration defines its exposure window.
+  const camera=prepareMc02PulseBatch([
+    move('look_relative',0,80,{deltaX:24,deltaY:-8}),
+  ]);
+  assert.deepEqual(camera.pulses.map(p=>[p.atMs,p.keys,p.dx,p.dy]),[
+    [0,0,24,-8],[80,0,0,0],
+  ]);
+  // The full exposure must fit inside the existing 3.5-second horizon.
+  assert.throws(()=>prepareMc02PulseBatch([
+    move('look_relative',3450,100,{deltaX:24,deltaY:0}),
+  ]),/MC02_SEQUENCE_DEADLINE/);
 });
 test('reject all other slots, unimplemented camera directions and oversized deltas',()=>{
   for(const actions of [

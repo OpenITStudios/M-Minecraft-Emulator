@@ -157,7 +157,14 @@ make them executable.
 - It compiles through the existing `input-timeline.mjs`, coalesces
   same-timestamp transitions into complete held-button states, and
   prepares bounded pulse times every 160 ms with TTL 350 ms. Camera
-  deltas are published only once. **One** opt-in same-image
+  deltas are published only once. A terminal camera-only action holds
+  that one-shot native packet through its authored 50–250 ms duration,
+  then schedules an ordinary neutral MC02 release. Without that dwell,
+  the previous immediate ReleaseAll cleared the unconsumed cursor
+  backlog before the next possible game poll. The entire camera action
+  and its release must fit within the original 3.5-second horizon;
+  this creates no extra look movement and does not prove Minecraft
+  actually polls or applies the delta. **One** opt-in same-image
   `mc02-input-batch` CLI subprocess schedules the entire sequence;
   each tick still enters the **same** authenticated retained controller.
   This avoids process startup for every heartbeat. An initial wait is
