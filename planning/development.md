@@ -1013,6 +1013,26 @@ signed/reviewed package without the separate existing operator gate.
 
 ## Next — P0 real independent AI gameplay input (operator reset, 31 October 2026)
 
+**31 October MC02 overlapping camera/key-release preflight:**
+A camera-relative delta may coexist with a held movement/attack
+button, but a subsequent zero-key/zero-look pulse means the
+existing native `ReleaseAll` clears both the held buttons AND
+the unconsumed camera cursor. If a shorter button action ends
+before the authored `look_relative` duration, the previous
+scheduler could silently truncate camera delivery even with
+the terminal-camera dwell fix. The same existing bounded MC02
+compiler now rejects this exact unsupported overlap BEFORE
+native dispatch. It still accepts camera-plus-key sequences
+whose first neutral release occurs at or after the camera
+exposure end and standalone terminal looks. It never delays
+a needed key-up, repeats look motion, changes ReleaseAll, or
+adds an input mechanism. One source fixture covers rejected
+and admitted combinations; AUTHORED NOT_EXECUTED. Proof is
+REMOTE_GITHUB exact JS plan/Rust ReleaseAll/C++ cursor static
+review only; no Node/Rust/MSVC builds, target Windows execution
+or Minecraft gameplay. The active blocker remains proving
+the real MC02 game input consumer and independent action effect.
+
 **31 October terminal MC02 relative-camera delivery window:**
 The semantic timeline records `look_relative` as one delta at
 `atMs` (not a held key). For a final camera-only frame the batch

@@ -164,7 +164,14 @@ make them executable.
   backlog before the next possible game poll. The entire camera action
   and its release must fit within the original 3.5-second horizon;
   this creates no extra look movement and does not prove Minecraft
-  actually polls or applies the delta. **One** opt-in same-image
+  actually polls or applies the delta. A simultaneous key action may
+  overlap a camera action **only while its eventual native neutral
+  release does not precede the camera's authored exposure end**.
+  Since the existing zero-input `ReleaseAll` clears pending camera
+  totals, the batch compiler rejects an early key-up/neutral pulse
+  that would truncate any overlapping `look_relative`. It does not
+  extend key holds, replay camera deltas, or claim the game consumed
+  them. **One** opt-in same-image
   `mc02-input-batch` CLI subprocess schedules the entire sequence;
   each tick still enters the **same** authenticated retained controller.
   This avoids process startup for every heartbeat. An initial wait is

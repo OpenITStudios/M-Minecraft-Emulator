@@ -98,6 +98,23 @@ export function prepareMc02PulseBatch(actions) {
       dx:0,dy:0,ttlMs:MC02_SEQUENCE_LIMITS.ttlMs,
     }));
   }
+  // A zero-key/zero-look pulse invokes native ReleaseAll, which
+  // deliberately resets the unread relative-camera cursor backlog.
+  // If a different control ends before an overlapping authored look
+  // duration, accepting that early neutral pulse would silently
+  // truncate the camera's exposure window even though the terminal
+  // camera-only case above is protected. There is no separate
+  // release-keys-but-keep-look command in the current native contract.
+  // Refuse this unsupported overlap BEFORE any game input is sent;
+  // never delay a key-up or repeat a one-shot camera delta.
+  const cameraActions=actions.filter(a=>a.kind==='look_relative');
+  if(pulses.some(pulse=>
+    pulse.keys===0 && pulse.dx===0 && pulse.dy===0 &&
+    cameraActions.some(look=>
+      pulse.atMs>look.atMs &&
+      pulse.atMs<look.atMs+look.durationMs))) {
+    throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
+  }
   return Object.freeze({
     pulses:Object.freeze(pulses),
     count:pulses.length,

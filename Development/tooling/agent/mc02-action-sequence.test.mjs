@@ -66,6 +66,24 @@ test('MC02 batch keeps an initial waiting offset without inventing a 0ms input p
     move('look_relative',3450,100,{deltaX:24,deltaY:0}),
   ]),/MC02_SEQUENCE_DEADLINE/);
 });
+test('MC02 refuses a button release that would clear an unfinished look',()=>{
+  // The native zero-mask/no-look request is ReleaseAll: at 50 ms it
+  // would clear a camera delta requested to remain available to 200 ms.
+  assert.throws(()=>prepareMc02PulseBatch([
+    move('move_forward',0,50),
+    move('look_relative',0,200,{deltaX:24,deltaY:0}),
+  ]),/MC02_SEQUENCE_INVALID_ACTIONS/);
+  // An overlapping camera is valid when the held button is not released
+  // until AFTER its authored exposure ends.
+  const valid=prepareMc02PulseBatch([
+    move('move_forward',0,250),
+    move('look_relative',0,200,{deltaX:24,deltaY:0}),
+  ]);
+  assert.equal(valid.pulses[0].dx,24);
+  assert.equal(valid.pulses.at(-1).atMs,250);
+  assert.equal(valid.pulses.at(-1).keys,0);
+  assert.equal(valid.pulses.some(p=>p.keys===0&&p.dx===0&&p.dy===0&&p.atMs<200),false);
+});
 test('reject all other slots, unimplemented camera directions and oversized deltas',()=>{
   for(const actions of [
     [{slot:1,kind:'attack',atMs:0,durationMs:100}],
