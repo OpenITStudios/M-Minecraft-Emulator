@@ -58,6 +58,94 @@ struct InstallConfig {
     const wchar_t* registryUserPath;
     const education_bootstrap::Config* education = nullptr;
 };
+
+// P0 feasibility instrumentation only. This does NOT synthesize input,
+// capture key contents, send mouse deltas, or alter Minecraft keyboard state.
+// It is entirely absent from the ordinary bootstrap-compat build.
+// The only enabled target is a verified Education MC02 process. Each marker
+// is emitted at most once, with no account, profile path or raw input bytes.
+#if defined(BOOTSTRAP_MC02_INPUT_API_OBSERVE)
+using RawInputDataCall = UINT (WINAPI*)(HRAWINPUT, UINT, LPVOID, PUINT, UINT);
+using RawInputBufferCall = UINT (WINAPI*)(PRAWINPUT, PUINT, UINT);
+using AsyncKeyCall = SHORT (WINAPI*)(int);
+using KeyboardStateCall = BOOL (WINAPI*)(PBYTE);
+using CursorPositionCall = BOOL (WINAPI*)(LPPOINT);
+RawInputDataCall originalInputData = nullptr;
+RawInputBufferCall originalInputBuffer = nullptr;
+AsyncKeyCall originalAsyncKey = nullptr;
+KeyboardStateCall originalKeyboardState = nullptr;
+CursorPositionCall originalCursorPosition = nullptr;
+std::atomic<bool> sawInputData{false}, sawInputBuffer{false},
+    sawAsyncKey{false}, sawKeyboardState{false}, sawCursorPosition{false};
+
+void noteInputApi(std::atomic<bool>& seen, const wchar_t* tag) {
+    if (!seen.exchange(true, std::memory_order_relaxed)) OutputDebugStringW(tag);
+}
+UINT WINAPI observedInputData(HRAWINPUT input, UINT command, LPVOID output,
+                              PUINT outputSize, UINT headerSize) {
+    noteInputApi(sawInputData, L"[LT_INPUT_API][MC02][GetRawInputData]\n");
+    return originalInputData(input, command, output, outputSize, headerSize);
+}
+UINT WINAPI observedInputBuffer(PRAWINPUT input, PUINT outputSize, UINT headerSize) {
+    noteInputApi(sawInputBuffer, L"[LT_INPUT_API][MC02][GetRawInputBuffer]\n");
+    return originalInputBuffer(input, outputSize, headerSize);
+}
+SHORT WINAPI observedAsyncKey(int key) {
+    noteInputApi(sawAsyncKey, L"[LT_INPUT_API][MC02][GetAsyncKeyState]\n");
+    return originalAsyncKey(key);
+}
+BOOL WINAPI observedKeyboardState(PBYTE state) {
+    noteInputApi(sawKeyboardState, L"[LT_INPUT_API][MC02][GetKeyboardState]\n");
+    return originalKeyboardState(state);
+}
+BOOL WINAPI observedCursorPosition(LPPOINT point) {
+    noteInputApi(sawCursorPosition, L"[LT_INPUT_API][MC02][GetCursorPos]\n");
+    return originalCursorPosition(point);
+}
+#endif
+
+bool attachMc02InputApiObservation(const InstallConfig& config) {
+#if defined(BOOTSTRAP_MC02_INPUT_API_OBSERVE)
+    if (!config.education || config.slot != 2) return true;
+    wchar_t permission[48]{};
+    constexpr wchar_t consent[] = L"I_ACCEPT_READ_ONLY_MC02_INPUT_APIS";
+    const DWORD length=GetEnvironmentVariableW(
+        L"LAZY_TESTER_MC02_INPUT_API_OBSERVE", permission, 48);
+    if (length != sizeof(consent)/sizeof(wchar_t)-1 ||
+        wcscmp(permission, consent) != 0) return true;
+    // Do NOT LoadLibrary inside DllMain. This DLL already uses user32
+    // through the approved presentation bootstrap; refuse if not loaded.
+    const HMODULE user32=GetModuleHandleW(L"user32.dll");
+    if (!user32) return false;
+    originalInputData=reinterpret_cast<RawInputDataCall>(
+        GetProcAddress(user32,"GetRawInputData"));
+    originalInputBuffer=reinterpret_cast<RawInputBufferCall>(
+        GetProcAddress(user32,"GetRawInputBuffer"));
+    originalAsyncKey=reinterpret_cast<AsyncKeyCall>(
+        GetProcAddress(user32,"GetAsyncKeyState"));
+    originalKeyboardState=reinterpret_cast<KeyboardStateCall>(
+        GetProcAddress(user32,"GetKeyboardState"));
+    originalCursorPosition=reinterpret_cast<CursorPositionCall>(
+        GetProcAddress(user32,"GetCursorPos"));
+    if (!originalInputData || !originalInputBuffer || !originalAsyncKey ||
+        !originalKeyboardState || !originalCursorPosition) return false;
+    // Reuse the single existing Detours transaction. No second injector,
+    // process manager, window focus change or active keyboard mutation.
+    return DetourAttach(reinterpret_cast<PVOID*>(&originalInputData),
+                reinterpret_cast<PVOID>(observedInputData))==NO_ERROR
+        && DetourAttach(reinterpret_cast<PVOID*>(&originalInputBuffer),
+                reinterpret_cast<PVOID>(observedInputBuffer))==NO_ERROR
+        && DetourAttach(reinterpret_cast<PVOID*>(&originalAsyncKey),
+                reinterpret_cast<PVOID>(observedAsyncKey))==NO_ERROR
+        && DetourAttach(reinterpret_cast<PVOID*>(&originalKeyboardState),
+                reinterpret_cast<PVOID>(observedKeyboardState))==NO_ERROR
+        && DetourAttach(reinterpret_cast<PVOID*>(&originalCursorPosition),
+                reinterpret_cast<PVOID>(observedCursorPosition))==NO_ERROR;
+#else
+    (void)config;
+    return true;
+#endif
+}
 bool initializeFiles(const InstallConfig& config, HMODULE ntdll) {
     if (!directoryInfo(config.fileLogicalRoot, logicalDirectoryId)
         || !directoryInfo(config.fileOwnRoot, ownDirectoryId)
@@ -935,7 +1023,8 @@ bool install(const InstallConfig& config, bool mutex) {
                         reinterpret_cast<PVOID>(translatedQueryFullAttributes)) != NO_ERROR
         || DetourAttach(reinterpret_cast<PVOID*>(&originalKnownPath),
                         reinterpret_cast<PVOID>(translatedKnownPath)) != NO_ERROR || !attachRegistry()
-        || !presentation_enrollment::attach()) {
+        || !presentation_enrollment::attach()
+        || !attachMc02InputApiObservation(config)) {
         DetourTransactionAbort();
         CloseHandle(baseDirectory); baseDirectory = nullptr; return false;
     }

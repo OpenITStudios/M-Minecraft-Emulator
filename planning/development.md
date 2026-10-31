@@ -736,6 +736,26 @@ message to MC02 only behind a manual opt-in; it does NOT deliver relative
 mouse, claim movement, or establish game acceptance. The MCP currently
 has `provider:NONE` / `execution:DISABLED`.
 
+**Direct P0 source work:** the reviewed bootstrap already injects
+`bootstrap-compat.dll` into each managed Education process and uses
+Microsoft Detours. Before adding any synthetic control hooks, the
+separate test-only CMake build now has an OFF-by-default
+`BOOTSTRAP_MC02_INPUT_API_OBSERVE` option. With an additional explicit
+MC02-only environment opt-in it can forward five existing Win32 input
+APIs unchanged while emitting one debugger marker per API *called*.
+Ordinary builds contain no added input detours. This gives a narrowly
+scoped means to distinguish API candidates in Minecraft without
+inventing an input-provider contract. API calls alone do NOT prove
+the game uses that API for movement, camera, or attacks; absence of
+a marker does not exclude GameInput/DirectInput or later calls.
+The optional mode is NOT BUILT, NOT EXECUTED, and not an agent input tool.
+
+Upstream ProtoInput `protoloader.h` exposes selected physical device
+routing and hooks but no general `sendSyntheticKey/mouseDelta` API.
+Accordingly a ProtoInput wrapper alone cannot serve as AI control.
+No process hooks may be enabled on a user's Windows machine without
+a separate approved target-Windows/rights/compatibility decision.
+
 The actual engineering decision is between: (a) independently evidenced
 per-process game hooks/input interception (ProtoInput-style; unapproved
 injection and game compatibility risks), and (b) genuinely independent
