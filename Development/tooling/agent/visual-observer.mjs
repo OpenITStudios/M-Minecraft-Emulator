@@ -9,7 +9,10 @@ export const OBSERVATION_LIMITS=Object.freeze({
 });
 const HASH=/^[a-f0-9]{64}$/;
 const MAX_ERRORS=3;
-const MAX_READ_FRAME_AGE_MS=3500; // Old caches cannot masquerade as recent images.
+const MAX_READ_FRAME_AGE_MS=3500; // Source age, not just MCP cache delivery.
+const SOURCE_TIME_KINDS=new Set([
+  'WGC_READBACK_COMPLETED','CUA_QUERY_STARTED',
+]);
 
 function allowedSlots(slots) {
   if (!Array.isArray(slots) || slots.length===0 || slots.length>OBSERVATION_LIMITS.maximumSlots ||
@@ -49,7 +52,24 @@ function boundedFrame(frame) {
       meta.screenshotStatus!=='PNG_RETURNED_NOT_GAMEPLAY_PROOF') {
     throw new TypeError('Unusable frame or unverified capture metadata');
   }
-  return {meta,identity:frameIdentity(meta)};
+  // WGC's worker sequence and readback timestamp are producer-authored.
+  // A Cua capture has no pixel-exposure timestamp: only the local time
+  // immediately BEFORE its explicit get_window_state request began.
+  // Both are approximate source anchors, never game-render timestamps.
+  const wgc=meta.provider==='NATIVE_WGC_PERSISTENT';
+  const sourceAt=wgc?meta.capturedAtMs:meta.captureStartedAtMs;
+  const unknown=sourceAt===undefined || sourceAt===null;
+  const producerSequence=wgc?meta.workerSequence:null;
+  if(wgc && (!Number.isSafeInteger(producerSequence) ||
+              producerSequence<1 || unknown) ||
+     !unknown && (!Number.isSafeInteger(sourceAt) || sourceAt<1)) {
+    throw new TypeError('Capture has invalid source clock or GPU sequence');
+  }
+  return {meta,identity:frameIdentity(meta),
+    sourceFrameAtMs:unknown?null:sourceAt,
+    sourceTimeKind:unknown?null:wgc?
+      'WGC_READBACK_COMPLETED':'CUA_QUERY_STARTED',
+    producerSequence};
 }
 
 /**
@@ -87,6 +107,9 @@ export function createVisualObserver({
     state.lastHash=null;
     state.identity=null;
     state.captureIdentity=null;
+    state.sourceFrameAtMs=null;
+    state.sourceTimeKind=null;
+    state.producerSequence=null;
     state.nextDueAt=null;
     // A native GPU producer is a separate read-only child. Revoke it as soon
     // as the corresponding observer expires, loses HWND, or becomes unhealthy.
@@ -129,10 +152,34 @@ export function createVisualObserver({
         finish(state,'EXPIRED');
         return;
       }
-      const {meta,identity}=boundedFrame(frame);
+      const {meta,identity,sourceFrameAtMs,sourceTimeKind,
+        producerSequence}=boundedFrame(frame);
+      const collectedMs=clock();
+      if(sourceFrameAtMs!==null &&
+         (sourceFrameAtMs>collectedMs ||
+          collectedMs-sourceFrameAtMs>MAX_READ_FRAME_AGE_MS)) {
+        throw new Error('CAPTURE_SOURCE_TIMESTAMP_NOT_RECENT');
+      }
       if (state.identity!==null && state.identity!==identity) {
         finish(state,'TARGET_REPLACED_REFUSE_CAPTURE');
         return;
+      }
+      // Each WGC worker can return its last cached PNG for several MCP
+      // polling cycles. Treat repeat workerSequence as the SAME sample:
+      // no new successfulSamples, no changed-PNG claims, no freshness reset.
+      if(sourceTimeKind==='WGC_READBACK_COMPLETED' &&
+         state.producerSequence!==null) {
+        if(producerSequence<state.producerSequence ||
+           sourceFrameAtMs<state.sourceFrameAtMs ||
+           (producerSequence===state.producerSequence &&
+            sourceFrameAtMs!==state.sourceFrameAtMs)) {
+          throw new Error('GPU_FRAME_SEQUENCE_REGRESSED');
+        }
+        if(producerSequence===state.producerSequence) {
+          state.duplicateGpuReads++;
+          state.status='GPU_WORKER_FRAME_NOT_ADVANCED';
+          return;
+        }
       }
       state.identity=identity;
       // Only source-captured, before/after verified process identifiers.
@@ -147,8 +194,11 @@ export function createVisualObserver({
       state.successfulSamples++;
       state.consecutiveErrors=0;
       state.lastError=null;
-      state.lastCollectedMs=clock();
-      state.lastCollectedAt=new Date(state.lastCollectedMs).toISOString();
+      state.lastCollectedMs=collectedMs;
+      state.lastCollectedAt=new Date(collectedMs).toISOString();
+      state.sourceFrameAtMs=sourceFrameAtMs;
+      state.sourceTimeKind=sourceTimeKind;
+      state.producerSequence=producerSequence;
       state.windowBackground=meta.background===true;
       if (meta.sha256!==state.lastHash) {
         state.lastHash=meta.sha256;
@@ -174,6 +224,12 @@ export function createVisualObserver({
         state.totalErrors++;
         state.lastError='WINDOW_IDENTITY_UNCONFIRMED';
         finish(state,'TARGET_REPLACED_REFUSE_CAPTURE');
+        return;
+      }
+      if (/GPU_FRAME_SEQUENCE_REGRESSED/.test(error?.message??'')) {
+        state.totalErrors++;
+        state.lastError='GPU_PRODUCER_SEQUENCE_INVALID';
+        finish(state,'GPU_FRAME_SEQUENCE_REFUSED');
         return;
       }
       if (/in progress|NATIVE_BUSY/.test(error?.message??'')) {
@@ -222,6 +278,8 @@ export function createVisualObserver({
         startedAt,endsAt:startedAt+durationMs,intervalMs,
         timer:null,nextDueAt:null,imageBase64:null,
         identity:null,captureIdentity:null,
+        sourceFrameAtMs:null,sourceTimeKind:null,producerSequence:null,
+        duplicateGpuReads:0,
         lastHash:null,lastCollectedAt:null,lastCollectedMs:null,
         width:null,height:null,windowBackground:null,
         successfulSamples:0,sameBytesCount:0,
@@ -252,9 +310,18 @@ export function createVisualObserver({
       imageBase64:null,
     };
     if (state.active && clock()>=state.endsAt) finish(state,'EXPIRED');
-    const ageMs=state.lastCollectedMs===null ? null :
-      Math.max(0,clock()-state.lastCollectedMs);
-    const tooOld=ageMs===null || ageMs>MAX_READ_FRAME_AGE_MS;
+    const now=clock();
+    const arrivalAge=state.lastCollectedMs===null ? null :
+      now-state.lastCollectedMs;
+    const sourceAge=state.sourceFrameAtMs===null ? null :
+      now-state.sourceFrameAtMs;
+    // Never replace an older worker frame's clock with the more recent
+    // time MCP happened to read the same cached PNG again.
+    const ageMs=arrivalAge===null?null:
+      sourceAge===null?arrivalAge:Math.max(arrivalAge,sourceAge);
+    const tooOld=ageMs===null || ageMs<0 ||
+      ageMs>MAX_READ_FRAME_AGE_MS ||
+      (sourceAge!==null && sourceAge<0);
     const fresh=state.active && !tooOld &&
       state.imageBase64!==null && state.captureIdentity!==null;
     const deliver=includeImage && fresh && state.sequence>afterSequence;
@@ -268,6 +335,15 @@ export function createVisualObserver({
         // or whether this particular MCP read requested a binary image.
         freshFrameAvailable:fresh,
         captureIdentity:fresh?{...state.captureIdentity}:null,
+        // A CUA timestamp is query-start only; WGC is readback-complete,
+        // not the original game frame presentation time. Both stay bound
+        // to the cached PNG even if it is retrieved much later.
+        sourceFrameAtMs:fresh?state.sourceFrameAtMs:null,
+        sourceTimeKind:fresh?state.sourceTimeKind:null,
+        producerSequence:fresh?state.producerSequence:null,
+        sourceTimeConfidence:state.sourceFrameAtMs===null?
+          'UNKNOWN_CANNOT_ORDER_GAME_ACTIONS':
+          'BOUND_SOURCE_EVENT_NOT_GAME_FRAME_PRESENTATION',
         frameAgeMs:ageMs,maximumReadableFrameAgeMs:MAX_READ_FRAME_AGE_MS,
         intervalMs:state.intervalMs,
         startedAt:new Date(state.startedAt).toISOString(),
@@ -277,6 +353,7 @@ export function createVisualObserver({
         width:state.width,height:state.height,
         successfulSamples:state.successfulSamples,
         repeatedPngBytes:state.sameBytesCount,
+        duplicateGpuReads:state.duplicateGpuReads,
         skippedBusy:state.skippedBusy,
         captureErrors:state.totalErrors,
         errorCode:state.lastError,
@@ -352,19 +429,38 @@ export function summarizeTeamVisualState(mode,slots,readings,since=[]) {
       Number.isSafeInteger(meta.frameAgeMs)&&meta.frameAgeMs>=0&&
       meta.frameAgeMs<=3500&&typeof meta.collectedAt==='string'&&
       Number.isFinite(Date.parse(meta.collectedAt));
+    const collectedMs=Date.parse(meta.collectedAt);
+    const origin=meta.sourceTimeKind;
+    const producerSequence=meta.producerSequence??null;
+    const sourceFrameAtMs=meta.sourceFrameAtMs;
+    const validSourceTime=Boolean(fresh&&SOURCE_TIME_KINDS.has(origin) &&
+      Number.isSafeInteger(sourceFrameAtMs)&&sourceFrameAtMs>0&&
+      sourceFrameAtMs<=collectedMs&&
+      (origin==='CUA_QUERY_STARTED'?producerSequence===null:
+        Number.isSafeInteger(producerSequence)&&producerSequence>0));
     const previous=baseline.get(slot);
     const sameTarget=Boolean(previous&&fresh&&
       previous.captureIdentity?.pid===identity.pid&&
       previous.captureIdentity?.windowId===identity.windowId&&
       previous.captureIdentity?.sessionId===identity.sessionId&&
       previous.captureIdentity?.createdFileTime===identity.createdFileTime);
-    const sampledSince=previous? Boolean(sameTarget&&
+    const originContinuous=Boolean(previous&&validSourceTime&&
+      previous.sourceTimeKind===origin&&
+      Number.isSafeInteger(previous.sourceFrameAtMs)&&
+      sourceFrameAtMs>=previous.sourceFrameAtMs&&
+      (origin==='CUA_QUERY_STARTED' ||
+        (Number.isSafeInteger(previous.producerSequence)&&
+         producerSequence>previous.producerSequence)));
+    const sampledSince=previous?Boolean(sameTarget&&originContinuous&&
       meta.successfulSamples>previous.samples):null;
     const pngBytesChanged=previous?Boolean(sameTarget&&
       meta.sequence>previous.sequence):null;
     const basis=fresh?{
       slot,sequence:meta.sequence,samples:meta.successfulSamples,
       collectedAt:meta.collectedAt,captureIdentity:{...identity},
+      sourceFrameAtMs:validSourceTime?sourceFrameAtMs:null,
+      sourceTimeKind:validSourceTime?origin:null,
+      producerSequence:validSourceTime?producerSequence:null,
     }:null;
     projection.push({
       slot,status:typeof meta.status==='string'?meta.status:'UNAVAILABLE',
@@ -373,6 +469,10 @@ export function summarizeTeamVisualState(mode,slots,readings,since=[]) {
       sequence:Number.isSafeInteger(meta.sequence)?meta.sequence:0,
       samples:Number.isSafeInteger(meta.successfulSamples)?meta.successfulSamples:0,
       collectedAt:typeof meta.collectedAt==='string'?meta.collectedAt:null,
+      sourceFrameAtMs:validSourceTime?sourceFrameAtMs:null,
+      sourceTimeKind:validSourceTime?origin:null,
+      producerSequence:validSourceTime?producerSequence:null,
+      sourceTimingUsable:validSourceTime,
       baseline:basis,observedSameProcessSinceBaseline:previous?sameTarget:null,
       sampledSinceBaseline:sampledSince,pngBytesChangedSinceBaseline:pngBytesChanged,
       // Only requesting a single already-cached frame via existing
@@ -408,6 +508,9 @@ export function verifyTeamObservationBasis(mode,slots,basis,readings) {
   if(!current.allSlotsHaveRecentFrames) {
     throw new Error('TEAM_OBSERVATION_INCOMPLETE');
   }
+  if(current.frames.some(frame=>!frame.sourceTimingUsable)) {
+    throw new Error('TEAM_OBSERVATION_TIMING_UNAVAILABLE');
+  }
   if(!Array.isArray(basis)||basis.length!==current.slots.length) {
     throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
   }
@@ -426,6 +529,9 @@ export function verifyTeamObservationBasis(mode,slots,basis,readings) {
        passed.sequence!==actual.sequence||
        passed.samples!==actual.samples||
        passed.collectedAt!==actual.collectedAt||
+       passed.sourceFrameAtMs!==actual.sourceFrameAtMs||
+       passed.sourceTimeKind!==actual.sourceTimeKind||
+       (passed.producerSequence??null)!==actual.producerSequence||
        id?.pid!==actual.captureIdentity.pid||
        id?.windowId!==actual.captureIdentity.windowId||
        id?.sessionId!==actual.captureIdentity.sessionId||
@@ -540,9 +646,19 @@ export function evaluateTeamActionFeedback(mode,actions,receipt,comparison,after
     if(!frame||frame.slot!==slot||!before) {
       throw new TypeError('Missing per-slot comparison');
     }
-    const beforeTime=Date.parse(before.collectedAt);
-    const afterTime=Date.parse(frame.collectedAt);
+    const beforeTime=before.sourceFrameAtMs;
+    const afterTime=frame.sourceFrameAtMs;
     const sameTarget=frame.observedSameProcessSinceBaseline===true;
+    const timingBound=Boolean(frame.sourceTimingUsable===true &&
+      SOURCE_TIME_KINDS.has(before.sourceTimeKind)&&
+      frame.sourceTimeKind===before.sourceTimeKind &&
+      Number.isSafeInteger(beforeTime)&&beforeTime>0 &&
+      Number.isSafeInteger(afterTime)&&afterTime>beforeTime &&
+      (before.sourceTimeKind==='CUA_QUERY_STARTED'?
+        (before.producerSequence??null)===null:
+        Number.isSafeInteger(before.producerSequence)&&
+        Number.isSafeInteger(frame.producerSequence)&&
+        frame.producerSequence>before.producerSequence));
     const suppliedAfter=after[index]; // may be null for a missing capture
     const current=frame.baseline;
     const afterMatches=Boolean(suppliedAfter&&current&&
@@ -550,25 +666,30 @@ export function evaluateTeamActionFeedback(mode,actions,receipt,comparison,after
       suppliedAfter.sequence===current.sequence&&
       suppliedAfter.samples===current.samples&&
       suppliedAfter.collectedAt===current.collectedAt&&
+      suppliedAfter.sourceFrameAtMs===current.sourceFrameAtMs&&
+      suppliedAfter.sourceTimeKind===current.sourceTimeKind&&
+      (suppliedAfter.producerSequence??null)===current.producerSequence&&
       suppliedAfter.captureIdentity?.pid===current.captureIdentity?.pid&&
       suppliedAfter.captureIdentity?.windowId===current.captureIdentity?.windowId&&
       suppliedAfter.captureIdentity?.sessionId===current.captureIdentity?.sessionId&&
       suppliedAfter.captureIdentity?.createdFileTime===
         current.captureIdentity?.createdFileTime);
-    // No accepted post-action observation without a fresh, newly captured
-    // frame on the SAME game HWND and an ordering after completion.
+    // CUA's query started after completion, or the WGC worker completed
+    // readback after completion. Neither is the actual game presentation
+    // timestamp: this only gates whether the image may be reviewed as a
+    // post-action candidate, never proof the pixel contents are new.
     const usable=frame.freshFrameAvailable===true && afterMatches &&
-      sameTarget && frame.sampledSinceBaseline===true &&
+      sameTarget && timingBound&&frame.sampledSinceBaseline===true &&
       Number.isSafeInteger(frame.samples)&&frame.samples>before.samples&&
       Number.isSafeInteger(frame.sequence)&&frame.sequence>=before.sequence&&
-      Number.isFinite(beforeTime)&&Number.isFinite(afterTime)&&
       beforeTime<=start&&afterTime>end;
     const cause=!frame.freshFrameAvailable?'NO_RECENT_POST_FRAME':
       !afterMatches?'POST_FRAME_SNAPSHOT_MISSING_OR_CHANGED':
       !sameTarget?'GAME_WINDOW_IDENTITY_CHANGED':
+      !timingBound?'SOURCE_FRAME_TIME_UNAVAILABLE_OR_REGRESSED':
       frame.sampledSinceBaseline!==true?'NO_NEW_SAME_PROCESS_SAMPLE':
-      beforeTime>start||!Number.isFinite(afterTime)||afterTime<=end?
-        'FRAME_TIMELINE_NOT_AFTER_ACTION':
+      beforeTime>start||afterTime<=end?
+        'FRAME_SOURCE_EVENT_NOT_AFTER_ACTION':
       frame.sequence<before.sequence?'FRAME_SEQUENCE_REGRESSION':'NONE';
     const categories=[...requested.get(slot)].sort();
     const findings=categories.map(category=>{
@@ -596,8 +717,9 @@ export function evaluateTeamActionFeedback(mode,actions,receipt,comparison,after
     });
     outcomes.push({
       slot,postFrameUsable:Boolean(usable),
-      sourceStatus:usable?'NEWER_SAME_PROCESS_FRAME':
+      sourceStatus:usable?'NEWER_SAME_PROCESS_FRAME_SOURCE_EVENT':
         cause==='NONE'?'INCOMPLETE_FRAME_CONTRACT':cause,
+      sourceTimeKind:usable?frame.sourceTimeKind:null,
       pngBytesChanged:usable?frame.pngBytesChangedSinceBaseline:null,
       samplesAfterBaseline:usable?frame.samples-before.samples:null,
       findings,
@@ -611,7 +733,7 @@ export function evaluateTeamActionFeedback(mode,actions,receipt,comparison,after
     outcomes,totals,imagesIncluded:false,
     transportReceipt:'CALLER_SUPPLIED_NOT_AUTHENTICATED_BY_EVALUATOR',
     visualReview:'EXTERNAL_MODEL_REPORT_NOT_INDEPENDENTLY_VERIFIED',
-    actionTiming:'CALLER_SUPPLIED_TIMESTAMPS_AND_CAPTURE_METADATA_ONLY',
+    actionTiming:'SOURCE_EVENT_ORDER_ONLY_NOT_GAME_FRAME_PRESENTATION',
     gameplayAcceptance:'NOT_VERIFIED',
     worldAndPlayerIdentity:'NOT_VERIFIED',
     note:'A visible change is a model-reported appearance, not verified player movement, camera control, an attack hit, or Minecraft input acceptance. A lack of visible change is not proof that a game action failed.',

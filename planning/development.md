@@ -1,5 +1,62 @@
 # Current Development Handoff — Lazy Tester
 
+## 1 November 2026 — per-AI visual source-time synchronization
+
+**State: SOURCE-ONLY FRAME PROVENANCE AND AFTER-ACTION GATE / GAMEPLAY BLOCKED.**
+No user-PC execution, Node/Rust/C++ tests/build, native hook activation,
+installer or GitHub Actions has been performed.
+
+The same bounded existing Visual Observer now distinguishes **original
+source timing** from the time the MCP cache reads/receives a PNG. The
+optional native Windows WGC worker stamps the UNIX millisecond time
+immediately AFTER fitted pixel readback, BEFORE the final window
+revalidation and PNG encoding/stdout; its inherited LTG1 field is labeled
+`WGC_READBACK_COMPLETED`. This does **not** prove when the game first
+presented those pixels. Cua's one-shot window route has no real pixel
+timestamp; the MCP records the conservative beginning of the explicit
+capture request, labeled `CUA_QUERY_STARTED` (also NOT render time).
+Unknown source times remain visible for ordinary read-only inspection
+but are refused as native observed-action evidence.
+
+The visual sampler now retains `sourceFrameAtMs`,
+`sourceTimeKind` and WGC `producerSequence` independently from
+`collectedAt`. Re-reading the SAME cached WGC worker sequence does
+NOT count as a new frame, does NOT refresh its age, and does NOT
+advance `successfulSamples` or the PNG sequence. Regressed worker
+sequences are refused and shut down within the existing observer.
+Future/aged-out source event timestamps are refused even if a
+read of their old PNG occurred recently; each frame's cache and
+source clocks have independent age checks.
+
+The existing per-client team visual baseline and explicit experimental
+observe→act→re-observe feedback tool now bind the exact original
+source time/kind/WGC worker sequence, sample count, PNG byte sequence,
+and pinned PID/birth/session/HWND. A post-action candidate requires a
+fresh **new source event** from the SAME original game, recorded after
+the transport completion timestamp; merely receiving or processing an
+old frame later no longer passes. Even when the order qualifies, WGC
+readback or Cua query start is only a source-side timing bound, NOT proof
+that Minecraft rendered, consumed keyboard/mouse input, moved, attacked,
+or changed the world after the action.
+
+Default MCP remains read-only; native action dispatch and evaluation
+remain behind their pre-existing explicit multi-client opt-in. No second
+screenshot service, AI runner, native controller, new input hook, source
+provider, data migration, or extra release package was added.
+
+**Proof:** REMOTE_GITHUB exact-source/contract review, with authored
+(NOT_EXECUTED) regression fixtures for WGC cached-sequence replay,
+regressed source sequence, delayed Cua capture, missing source clocks,
+delayed older GPU/Cua frames after an action, and 4/5-AI mode safety.
+Windows capture, WGC presentation time, actual input latency, native
+input consumption and AI-game feedback are NOT_EXECUTED/NOT_VERIFIED.
+
+**One next action:** With explicit permission on an appropriate Windows
+Minecraft Education installation, establish genuine per-client input
+consumption and frame response timing on this exact revision. No
+source-only frame ordering or native transport ACK is gameplay acceptance.
+
+
 ## 1 November 2026 — bounded 4/5-AI native timestamp groups
 
 **State: SOURCE-ONLY INPUT DISPATCH COHERENCE / GAMEPLAY INPUT BLOCKED.**

@@ -149,9 +149,12 @@ test('known replaced native target stops observation immediately',async()=>{
 
 
 function visualMeta(slot,overrides={}) {
+  const collectedAt=overrides.collectedAt??'2026-11-01T04:00:00.000Z';
   return {schema:1,slot,status:'FRAME_BYTES_CHANGED_NOT_SEMANTIC_PROOF',
     active:true,freshFrameAvailable:true,sequence:2,successfulSamples:4,
-    frameAgeMs:120,collectedAt:'2026-11-01T04:00:00.000Z',
+    frameAgeMs:120,collectedAt,
+    sourceFrameAtMs:Date.parse(collectedAt)-100,
+    sourceTimeKind:'CUA_QUERY_STARTED',producerSequence:null,
     captureIdentity:{pid:300+slot,windowId:1000+slot,sessionId:1,
       createdFileTime:'134000000000000001'},
     ...overrides};
@@ -233,6 +236,8 @@ function teamFeedbackFixture(){
   const slots=[2,3,4,5];
   const before=slots.map(slot=>({
     slot,sequence:1,samples:3,collectedAt:'2026-11-01T04:00:00.000Z',
+    sourceFrameAtMs:Date.parse('2026-11-01T04:00:00.000Z')-100,
+    sourceTimeKind:'CUA_QUERY_STARTED',producerSequence:null,
     captureIdentity:{pid:300+slot,windowId:1000+slot,sessionId:1,
       createdFileTime:'134000000000000001'},
   }));
@@ -354,4 +359,107 @@ test('action feedback rejects forged category, human MC01, duplicate reports and
   ]),/human-owned/);
   assert.throws(()=>evaluateTeamActionFeedback('five-ai',
     f.actions,f.receipt,f.compare(),f.afterBases(),[]),/incompatible/);
+});
+
+
+test('WGC worker cache replay never counts as a fresh per-client sample',async()=>{
+  const t=clockFixture();
+  let reads=0;
+  const observer=createVisualObserver({...t,capture:async slot=>{
+    reads++;
+    const raw=frame(slot);
+    return {...raw,metadata:{...raw.metadata,
+      provider:'NATIVE_WGC_PERSISTENT',workerSequence:reads<3?1:2,
+      capturedAtMs:reads<3?1000:t.clock()-50}};
+  }});
+  observer.start([2],{intervalMs:800,durationMs:10000});
+  await t.next();
+  const before=observer.read(2,{includeImage:false}).metadata;
+  assert.equal(before.successfulSamples,1);
+  assert.equal(before.sourceFrameAtMs,1000);
+  assert.equal(before.producerSequence,1);
+  await t.next(); // reading exactly the same WGC worker packet again
+  const same=observer.read(2,{includeImage:false}).metadata;
+  assert.equal(same.successfulSamples,1);
+  assert.equal(same.sequence,1);
+  assert.equal(same.producerSequence,1);
+  assert.equal(same.sourceFrameAtMs,1000);
+  assert.equal(same.duplicateGpuReads,1);
+  await t.next(); // a genuinely new worker sequence, even if same PNG
+  const next=observer.read(2,{includeImage:false}).metadata;
+  assert.equal(next.successfulSamples,2);
+  assert.equal(next.producerSequence,2);
+  assert.equal(next.sequence,1);
+  assert.equal(next.sourceFrameAtMs,t.clock()-50);
+  const cohort=summarizeTeamVisualState('human-plus-four-ai',[2],[next],
+    [summarizeTeamVisualState('human-plus-four-ai',[2],[before]).frames[0].baseline]);
+  assert.equal(cohort.frames[0].sampledSinceBaseline,true);
+  assert.equal(cohort.frames[0].pngBytesChangedSinceBaseline,false);
+  observer.shutdown();
+});
+
+test('WGC regressions refuse the worker rather than reusing a newer timestamp',async()=>{
+  const t=clockFixture();
+  let reads=0;
+  const observer=createVisualObserver({...t,capture:async slot=>{
+    reads++;
+    const raw=frame(slot);
+    return {...raw,metadata:{...raw.metadata,provider:'NATIVE_WGC_PERSISTENT',
+      workerSequence:reads===1?2:1,capturedAtMs:t.clock()-10}};
+  }});
+  observer.start([2],{intervalMs:800,durationMs:10000});
+  await t.next(); await t.next();
+  const result=observer.read(2,{includeImage:false}).metadata;
+  assert.equal(result.status,'GPU_FRAME_SEQUENCE_REFUSED');
+  assert.equal(result.active,false);
+  assert.equal(result.freshFrameAvailable,false);
+  observer.shutdown();
+});
+
+test('late Cua window response cannot convert old source into fresh cache evidence',async()=>{
+  const t=clockFixture();
+  const observer=createVisualObserver({...t,capture:async slot=>{
+    const raw=frame(slot);
+    const started=t.clock();
+    t.advance(4000);
+    return {...raw,metadata:{...raw.metadata,captureStartedAtMs:started}};
+  }});
+  observer.start([2],{intervalMs:800,durationMs:10000});
+  await t.next();
+  const read=observer.read(2,{includeImage:false});
+  assert.equal(read.metadata.successfulSamples,0);
+  assert.equal(read.metadata.freshFrameAvailable,false);
+  assert.equal(read.metadata.status,'CAPTURE_ERROR');
+  assert.equal(read.imageBase64,null);
+  observer.shutdown();
+});
+
+test('visual feedback rejects cached-after delivery when actual source event preceded action end',()=>{
+  const f=teamFeedbackFixture();
+  const tooEarly=f.after.map(v=>v.slot===3?
+    {...v,sourceFrameAtMs:Date.parse('2026-11-01T04:00:00.900Z')}:v);
+  const comparison=f.compare(tooEarly);
+  assert.equal(comparison.frames[1].sampledSinceBaseline,true);
+  assert.equal(comparison.frames[1].sourceTimingUsable,true);
+  const result=evaluateTeamActionFeedback('human-plus-four-ai',f.actions,
+    f.receipt,comparison,f.afterBases(tooEarly),[
+      {slot:3,category:'attack',assessment:'VISIBLE_CHANGE_REPORTED',
+        cue:'A swing is suggested by a changed hand position'},
+    ]);
+  assert.equal(result.outcomes[1].postFrameUsable,false);
+  assert.equal(result.outcomes[1].sourceStatus,'FRAME_SOURCE_EVENT_NOT_AFTER_ACTION');
+  assert.equal(result.outcomes[1].findings[0].status,'NOT_EVALUABLE');
+  assert.equal(result.gameplayAcceptance,'NOT_VERIFIED');
+});
+
+test('unknown source clock remains viewable but cannot authorize observed AI action',()=>{
+  const unknown=visualMeta(2,{
+    sourceFrameAtMs:null,sourceTimeKind:null,
+  });
+  const view=summarizeTeamVisualState('human-plus-four-ai',[2],[unknown]);
+  assert.equal(view.allSlotsHaveRecentFrames,true);
+  assert.equal(view.frames[0].sourceTimingUsable,false);
+  assert.equal(view.frames[0].baseline.sourceFrameAtMs,null);
+  assert.throws(()=>verifyTeamObservationBasis('human-plus-four-ai',
+    [2],[view.frames[0].baseline],[unknown]),/TIMING_UNAVAILABLE/);
 });

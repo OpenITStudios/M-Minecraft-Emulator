@@ -55,7 +55,7 @@ const PUBLIC_TOOL_ERRORS=new Set([
   'MC02_SEQUENCE_DEADLINE','MC02_SEQUENCE_ABORTED','MC02_RELEASE_UNCONFIRMED',
   'MULTI_CLIENT_EXPERIMENT_DISABLED','MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS',
   'TEAM_OBSERVATION_INCOMPLETE','TEAM_OBSERVATION_STALE_OR_REPLACED',
-  'TEAM_ACTION_RECEIPT_MISMATCH',
+  'TEAM_OBSERVATION_TIMING_UNAVAILABLE','TEAM_ACTION_RECEIPT_MISMATCH',
   'AI_SEQUENCE_ABORTED','AI_RELEASE_UNCONFIRMED','AI_INPUT_NATIVE_RESULT_UNVERIFIED',
 ]);
 function publicToolError(error) {
@@ -607,12 +607,16 @@ export const TOOL_LIST=[
           sequence:{type:'integer',minimum:0},
           samples:{type:'integer',minimum:0},
           collectedAt:{type:'string'},
+          sourceFrameAtMs:{anyOf:[{type:'integer',minimum:1},{type:'null'}]},
+          sourceTimeKind:{enum:['WGC_READBACK_COMPLETED','CUA_QUERY_STARTED',null]},
+          producerSequence:{anyOf:[{type:'integer',minimum:1},{type:'null'}]},
           captureIdentity:{type:'object',properties:{
             pid:{type:'integer',minimum:1},windowId:{type:'integer',minimum:1},
             sessionId:{type:'integer',minimum:0},createdFileTime:{type:'string'},
           },required:['pid','windowId','sessionId','createdFileTime'],
             additionalProperties:false},
-        },required:['slot','sequence','samples','collectedAt','captureIdentity'],
+        },required:['slot','sequence','samples','collectedAt',
+          'sourceFrameAtMs','sourceTimeKind','producerSequence','captureIdentity'],
         additionalProperties:false}},
     },additionalProperties:false}},
   {name:'read_visual_observation',description:'Retrieve only a NEW locally cached frame (and status), or metadata without pixels. Never triggers a screenshot itself.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},afterSequence:{type:'integer',minimum:0},includeImage:{type:'boolean'}},required:['slot'],additionalProperties:false}},
@@ -709,13 +713,18 @@ const EXPERIMENTAL_OBSERVED_TEAM_TOOL={
         sequence:{type:'integer',minimum:1},
         samples:{type:'integer',minimum:1},
         collectedAt:{type:'string'},
+        sourceFrameAtMs:{type:'integer',minimum:1},
+        sourceTimeKind:{type:'string',
+          enum:['WGC_READBACK_COMPLETED','CUA_QUERY_STARTED']},
+        producerSequence:{anyOf:[{type:'integer',minimum:1},{type:'null'}]},
         captureIdentity:{type:'object',properties:{
           pid:{type:'integer',minimum:1},windowId:{type:'integer',minimum:1},
           sessionId:{type:'integer',minimum:0},
           createdFileTime:{type:'string',pattern:'^[0-9]{1,20}$'},
         },required:['pid','windowId','sessionId','createdFileTime'],
           additionalProperties:false},
-      },required:['slot','sequence','samples','collectedAt','captureIdentity'],
+      },required:['slot','sequence','samples','collectedAt',
+        'sourceFrameAtMs','sourceTimeKind','producerSequence','captureIdentity'],
         additionalProperties:false}},
   },required:['actions','basis'],additionalProperties:false},
 };
@@ -826,6 +835,11 @@ export function createHandler(config,{
       // Read ONLY from the WGC worker pinned to this same exact native
       // process/window/birth/session. Without this check a restarted slot
       // could receive its predecessor's cached frame.
+      // A Cua screenshot has no trustworthy pixel-presentation timestamp.
+      // The query-start time is a conservative lower bound on WHEN a
+      // screenshot request began (not when the game rendered its pixels).
+      // WGC carries a separate producer-authored readback time instead.
+      const captureStartedAtMs=Date.now();
       const frame=gpuSource ? gpuSource.latest(slot,before) :
         await capture(config.cuaExecutable,before);
       const after=validateNativeWindowTarget(
@@ -850,6 +864,11 @@ export function createHandler(config,{
             createdFileTime:after.createdFileTime,sessionId:after.sessionId},
           width:frame.width,height:frame.height,
           sha256:frame.sha256??null,
+          capturedAtMs:gpuSource?frame.capturedAtMs:null,
+          captureStartedAtMs:gpuSource?null:captureStartedAtMs,
+          workerSequence:gpuSource?frame.workerSequence:null,
+          sourceTimeKind:gpuSource?'WGC_READBACK_COMPLETED':
+            'CUA_QUERY_STARTED',
           frameFreshness:gpuSource ?
             'WGC_RECENT_TIMESTAMP_NOT_GAMEPLAY_PROOF' :
             'UNVERIFIED_SINGLE_FRAME',

@@ -133,7 +133,8 @@ mod windows_capture {
         Ok(elapsed.as_millis() as u64)
     }
 
-    fn write_frame(out: &mut impl Write,sequence: u32,pixels: &[u8]) -> io::Result<()> {
+    fn write_frame(out: &mut impl Write,sequence: u32,pixels: &[u8],
+                   readback_at_ms:u64) -> io::Result<()> {
         if pixels.len()!=FRAME_WIDTH as usize*FRAME_HEIGHT as usize*4 {
             return Err(io::Error::new(io::ErrorKind::InvalidData,
                 "Unexpected GPU capture pixel format/size"));
@@ -147,14 +148,17 @@ mod windows_capture {
                 "Captured frame exceeds memory/IPC budget"));
         }
         // LTG1 header: magic(4), png bytes(4), width(4), height(4),
-        // sequence(4), Unix capture time in ms(8). Big-endian numbers.
+        // sequence(4), Unix *readback completion* ms(8). Big-endian.
+        // This time is sampled BEFORE PNG encoding and stdout delay,
+        // not after. The WGC frame may still represent older pixels;
+        // it is not a proof of presentation or Minecraft gameplay.
         let mut header=Vec::with_capacity(HEADER_BYTES);
         header.extend_from_slice(HEADER);
         header.extend_from_slice(&(png.len() as u32).to_be_bytes());
         header.extend_from_slice(&FRAME_WIDTH.to_be_bytes());
         header.extend_from_slice(&FRAME_HEIGHT.to_be_bytes());
         header.extend_from_slice(&sequence.to_be_bytes());
-        header.extend_from_slice(&frame_ms()?.to_be_bytes());
+        header.extend_from_slice(&readback_at_ms.to_be_bytes());
         out.write_all(&header)?;
         out.write_all(&png)?;
         out.flush()?;
@@ -186,10 +190,14 @@ mod windows_capture {
             let fitted=frame.pixels_fitted(FrameSize {
                 width:FRAME_WIDTH,height:FRAME_HEIGHT
             }).map_err(|_|io::Error::other("GPU pixel readback unavailable"))?;
+            // Timestamp IMMEDIATELY upon GPU readback completion. Capturing
+            // after the subsequent window verification could incorrectly
+            // date older pixels as post-action during a slow native check.
+            let readback_at_ms=frame_ms()?;
             verify_target(&target,&pin)?; // do not publish after window reuse
             sequence=sequence.checked_add(1).ok_or_else(||
                 io::Error::other("Capture sequence exhausted"))?;
-            write_frame(&mut out,sequence,&fitted)?;
+            write_frame(&mut out,sequence,&fitted,readback_at_ms)?;
             last_emit=Some(Instant::now());
         }
         // WGC's blocking iterator may not yield when a window stops rendering.

@@ -71,7 +71,11 @@ test('observe_client emits a bounded MCP image only after exact identity recheck
   assert.equal(response.result.content[0].type,'text');
   assert.equal(response.result.content[1].type,'image');
   assert.equal(response.result.content[1].mimeType,'image/png');
-  assert.equal(JSON.parse(response.result.content[0].text).background,true);
+  const metadata=JSON.parse(response.result.content[0].text);
+  assert.equal(metadata.background,true);
+  assert.equal(metadata.sourceTimeKind,'CUA_QUERY_STARTED');
+  assert.ok(Number.isSafeInteger(metadata.captureStartedAtMs));
+  assert.ok(metadata.captureStartedAtMs<=Date.now());
   assert.deepEqual(calls.map(x=>x[0]),['native','capture','native']);
   same=false;
   // Reuse one capture stub but change the HWND on the second native check.
@@ -114,7 +118,8 @@ test('opt-in persistent GPU observation reuses MCP tools and protects MC01',asyn
   const calls=[];
   const latestFrame={provider:'NATIVE_WGC_PERSISTENT',
     mimeType:'image/png',imageBase64:'a'.repeat(64),width:960,height:540,
-    sha256:'a'.repeat(64),frameFreshness:'CAPTURE_TIMESTAMP_RECENT_GAMEPLAY_NOT_VERIFIED'};
+    sha256:'a'.repeat(64),capturedAtMs:Date.now()-25,workerSequence:7,
+    frameFreshness:'CAPTURE_TIMESTAMP_RECENT_GAMEPLAY_NOT_VERIFIED'};
   const gpuFactory=()=>({
     async start(slot){calls.push(['start',slot]);return {slot};},
     latest(slot,binding){calls.push(['latest',slot,binding]);return latestFrame;},
@@ -140,6 +145,9 @@ test('opt-in persistent GPU observation reuses MCP tools and protects MC01',asyn
   const frame=await handler.callTool('observe_client',{slot:2});
   assert.equal(frame.metadata.provider,'NATIVE_WGC_PERSISTENT');
   assert.equal(frame.metadata.background,true);
+  assert.equal(frame.metadata.sourceTimeKind,'WGC_READBACK_COMPLETED');
+  assert.equal(frame.metadata.capturedAtMs,latestFrame.capturedAtMs);
+  assert.equal(frame.metadata.workerSequence,7);
   const boundRead=calls.find(([operation])=>operation==='latest');
   assert.equal(boundRead[1],2);
   assert.equal(boundRead[2].pid,602);
@@ -955,6 +963,8 @@ function teamVisualFixture(mode='human-plus-four-ai') {
     active:true,freshFrameAvailable:true,
     sequence:1,successfulSamples:3,frameAgeMs:100,
     collectedAt:'2026-11-01T05:00:00.000Z',
+    sourceFrameAtMs:Date.parse('2026-11-01T05:00:00.000Z')-100,
+    sourceTimeKind:'CUA_QUERY_STARTED',producerSequence:null,
     captureIdentity:{pid:400+slot,windowId:1400+slot,sessionId:1,
       createdFileTime:'134000000000000001'},
   }]));
@@ -981,6 +991,7 @@ test('team visual snapshot is metadata-only, names all four AI targets and prote
   assert.equal(state.status,'RECENT_PER_SLOT_FRAMES_AVAILABLE');
   assert.deepEqual(state.slots,[2,3,4,5]);
   assert.equal(state.imagesIncluded,false);
+  assert.equal(state.frames.every(f=>f.sourceTimingUsable===true),true);
   assert.deepEqual(fixture.reads,[[2,false],[3,false],[4,false],[5,false]]);
   assert.equal(state.frames.every(f=>f.imageRead.includeImage===true),true);
   await assert.rejects(()=>h.callTool('get_multi_client_visual_state',
@@ -1023,7 +1034,8 @@ test('observed cross-slot action uses exact recent visual basis and one existing
   for(const slot of fixture.slots) {
     const old=fixture.records.get(slot);
     fixture.records.set(slot,{...old,successfulSamples:old.successfulSamples+1,
-      frameAgeMs:80,collectedAt:'2026-11-01T05:00:01.000Z'});
+      frameAgeMs:80,collectedAt:'2026-11-01T05:00:01.000Z',
+      sourceFrameAtMs:Date.parse('2026-11-01T05:00:01.000Z')-100});
   }
   const after=await h.callTool('get_multi_client_visual_state',
     receipt.nextObservation.arguments);
@@ -1110,7 +1122,8 @@ test('MCP evaluates four AI action categories only from cached same-process visu
   for(const slot of fixture.slots) {
     const prior=fixture.records.get(slot);
     fixture.records.set(slot,{...prior,sequence:2,successfulSamples:4,
-      frameAgeMs:100,collectedAt:'2026-11-01T05:00:02.000Z'});
+      frameAgeMs:100,collectedAt:'2026-11-01T05:00:02.000Z',
+      sourceFrameAtMs:Date.parse('2026-11-01T05:00:02.000Z')-100});
   }
   const after=await handler.callTool('get_multi_client_visual_state',{
     slots:fixture.slots,since:receipt.visualBaseline});
@@ -1192,7 +1205,8 @@ test('five AI outcome feedback covers MC01 but never treats reported view moveme
   for(const slot of fixture.slots) {
     fixture.records.set(slot,{...fixture.records.get(slot),
       sequence:2,successfulSamples:5,frameAgeMs:100,
-      collectedAt:'2026-11-01T05:00:02.000Z'});
+      collectedAt:'2026-11-01T05:00:02.000Z',
+      sourceFrameAtMs:Date.parse('2026-11-01T05:00:02.000Z')-100});
   }
   const after=await handler.callTool('get_multi_client_visual_state',{});
   const output=await handler.callTool('evaluate_experimental_multi_client_outcomes',{
@@ -1205,6 +1219,67 @@ test('five AI outcome feedback covers MC01 but never treats reported view moveme
   assert.deepEqual(output.slots,[1,2,3,4,5]);
   assert.equal(output.outcomes[0].findings[0].status,
     'MODEL_REPORTS_VISUAL_CHANGE_UNVERIFIED');
+  assert.equal(output.gameplayAcceptance,'NOT_VERIFIED');
+  handler.shutdown();
+});
+
+
+test('missing capture-source timestamp prevents experimental observed action dispatch',async()=>{
+  const fixture=teamVisualFixture();
+  const old=fixture.records.get(3);
+  fixture.records.set(3,{...old,sourceFrameAtMs:null,sourceTimeKind:null});
+  let dispatches=0;
+  const handler=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
+    visualObserverFactory:fixture.factory,
+    aiMultiBatch:async()=>{dispatches++;throw Error('Unexpected native input');},
+  });
+  const team=await handler.callTool('get_multi_client_visual_state',{});
+  assert.equal(team.allSlotsHaveRecentFrames,true);
+  assert.equal(team.frames[1].sourceTimingUsable,false);
+  await assert.rejects(()=>handler.callTool('run_experimental_observed_actions',{
+    actions:fixture.slots.map(aiMove),basis:team.frames.map(f=>f.baseline),
+  }),/TEAM_OBSERVATION_TIMING_UNAVAILABLE/);
+  assert.equal(dispatches,0);
+  handler.shutdown();
+});
+
+test('MCP per-client feedback rejects a source timestamp older than action receipt even if delivered later',async()=>{
+  const fixture=teamVisualFixture();
+  const handler=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
+    visualObserverFactory:fixture.factory,
+    native:async()=>{throw Error('Unexpected native IPC');},
+    aiMultiBatch:async()=>{throw Error('Unexpected native action');},
+  });
+  const original=await handler.callTool('get_multi_client_visual_state',{});
+  const receipt={
+    schema:1,mode:'human-plus-four-ai',slots:fixture.slots,
+    status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
+    actionResult:'NATIVE_TRANSPORT_ONLY_NOT_GAMEPLAY_EVIDENCE',
+    gameplayObserved:false,visualBaseline:original.frames.map(f=>f.baseline),
+    actionFingerprint:fingerprintActions('human-plus-four-ai',fixture.slots.map(aiMove)),
+    transportStartedAt:'2026-11-01T05:00:00.250Z',
+    transportCompletedAt:'2026-11-01T05:00:01.250Z',
+  };
+  for(const slot of fixture.slots) {
+    fixture.records.set(slot,{...fixture.records.get(slot),
+      sequence:2,successfulSamples:4,frameAgeMs:60,
+      collectedAt:'2026-11-01T05:00:02.000Z',
+      // A delayed WGC/preview frame read can arrive AFTER the action
+      // even though the native pixel readback was BEFORE completion.
+      sourceFrameAtMs:Date.parse('2026-11-01T05:00:00.900Z')});
+  }
+  const post=await handler.callTool('get_multi_client_visual_state',{
+    slots:fixture.slots,since:receipt.visualBaseline});
+  assert.equal(post.frames.every(frame=>frame.sampledSinceBaseline===true),true);
+  const output=await handler.callTool('evaluate_experimental_multi_client_outcomes',{
+    actions:fixture.slots.map(aiMove),receipt,
+    after:post.frames.map(frame=>frame.baseline),
+    reviews:[{slot:2,category:'movement',assessment:'VISIBLE_CHANGE_REPORTED',
+      cue:'The player's position appears changed compared to the wall'}],
+  });
+  assert.equal(output.outcomes.every(frame=>frame.postFrameUsable===false),true);
+  assert.equal(output.outcomes[0].sourceStatus,'FRAME_SOURCE_EVENT_NOT_AFTER_ACTION');
+  assert.equal(output.totals.reportedVisibleChanges,0);
   assert.equal(output.gameplayAcceptance,'NOT_VERIFIED');
   handler.shutdown();
 });

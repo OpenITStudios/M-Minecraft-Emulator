@@ -115,6 +115,48 @@ real AI image reasoning, native input and simultaneous gameplay remain
 unverified. Standard installer, user data, fixed slot ownership,
 human MC01 isolation and CI policy are unchanged.
 
+## 4/5-AI visual source-clock synchronization (source only)
+
+The optional visual sampler keeps two different times per window:
+`collectedAt` is when MCP received/stored its frame, while
+`sourceFrameAtMs` is an earlier, provider-specific event bound to
+that frame. Its `sourceTimeKind` has exactly two meanings:
+
+- `WGC_READBACK_COMPLETED`: the optional native producer finished
+  reading fitted GPU pixels. The original PID/HWND/birth is checked
+  again before encoding/transmitting the PNG. The frame may still have come
+  from a previously queued game frame.
+- `CUA_QUERY_STARTED`: MCP started the explicit read-only Cua window
+  screenshot request. Cua does not expose the actual pixel acquisition
+  or game-presentation time here. An old-looking game picture can still
+  arrive after this request.
+
+Source clock values are NOT Minecraft-render presentation timestamps.
+No timeline claim is made when source timing is missing/ambiguous.
+MCP returns a source-time anchor and, for WGC, `producerSequence`
+on each freshly held frame. Re-reading the same WGC worker sequence
+no longer advances the per-client successful sample counter; source
+time does not become newer merely because MCP requested the old PNG
+again. Clock regressions or aged source frames fail closed.
+
+`get_multi_client_visual_state` now includes source timing in each
+`frames[].baseline` and exposes `sourceTimingUsable`. The
+already-opted-in `run_experimental_observed_actions` refuses missing
+source timing before input dispatch. The follow-up
+`evaluate_experimental_multi_client_outcomes` binds the SAME
+source identity, timestamp kind, WGC producer sequence and capture
+counter, and only treats a later source event as a candidate
+post-action visual observation when its source time is AFTER the
+action transport receipt's completion time. All findings remain
+external model visual reports, not validated in-game results.
+
+The normal read-only `read_visual_observation` can still return
+recently received images without source timing for manual review.
+Those images cannot authorize an observed-action round. No new
+driver, camera hook, game controller, CI or local execution is
+introduced; Windows timing quality and gameplay acceptance remain
+NOT_EXECUTED / NOT_VERIFIED.
+
 ## Per-client outcome classification from observed action rounds (source-only)
 
 The opt-in `run_experimental_observed_actions` response includes its
