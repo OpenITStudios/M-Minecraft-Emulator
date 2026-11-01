@@ -780,6 +780,9 @@ function capabilities(mode,experimental=false,multi=false) {return {schema:1,mod
     experimentalMc02Win32PollingOnly:experimental?'OPTED_IN_NOT_GAMEPLAY_VERIFIED':'DISABLED',
     experimentalMultiClientNative:multi?'OPTED_IN_SOURCE_CANDIDATE_NOT_GAMEPLAY_VERIFIED':'DISABLED',
     requiresHumanFocusProtection:mode==='human-plus-four-ai',
+    startupReconciliation:multi?
+      'EXPLICIT_NEUTRAL_OR_AUTHENTICATED_NEW_AI_LAUNCH':
+      'EXPERIMENT_DISABLED',
     requiresPerClientEmergencyRelease:true,
     nativeSessionModel:'SAME_WINDOWS_SESSION_ONLY',
     windowsAgentWorkspace:'PREVIEW_NOT_INTEGRATED_NO_CROSS_SESSION_INPUT',
@@ -802,9 +805,19 @@ export function createHandler(config,{
   // Volatile MCP-process fail-closed input markers, not another game
   // controller, OS channel owner, retry queue or account state registry.
   const uncertainAiSlots=new Set();
+  // A brand-new opted-in MCP process cannot know whether a previous MCP
+  // process died with active/uncertain input. Hold all AI-owned slots until
+  // an explicit exact-owner neutral ACK OR a verified new AI game launch.
+  // No native requests or game writes occur merely by starting MCP.
+  const startupReconcileSlots=new Set();
   let observedSequenceSlots=null; // one opted-in observed batch at a time
   const markAiUncertain=slots=>{
-    for(const slot of slots)uncertainAiSlots.add(slot);
+    for(const slot of slots) {
+      uncertainAiSlots.add(slot);
+      // Once an input sequence may have been sent, its failed transport
+      // requires neutral recovery even if this was a reconnecting slot.
+      startupReconcileSlots.delete(slot);
+    }
   };
   const refuseUncertain=slots=>{
     if(slots.some(slot=>uncertainAiSlots.has(slot))) {
@@ -816,6 +829,13 @@ export function createHandler(config,{
   const mc02Enabled=config.experimentalMc02InputEnabled===true &&
     config.mode==='human-plus-four-ai';
   const multiEnabled=config.experimentalMultiClientInputEnabled===true;
+  if(multiEnabled) {
+    const aiSlots=config.mode==='five-ai'?[1,2,3,4,5]:[2,3,4,5];
+    for(const slot of aiSlots) {
+      startupReconcileSlots.add(slot);
+      uncertainAiSlots.add(slot);
+    }
+  }
   const gpuSource=config.gpuExecutable ?
     gpuSourceFactory({executable:config.gpuExecutable}):null;
   function protectedSlot(slot) {
@@ -993,7 +1013,8 @@ export function createHandler(config,{
       const visual=summarizeTeamVisualState(
         config.mode,slots,readings,args.since??[]);
       const state=summarizeTeamCoordination(
-        config.mode,visual,[...uncertainAiSlots].sort((a,b)=>a-b),multiEnabled);
+        config.mode,visual,[...uncertainAiSlots].sort((a,b)=>a-b),multiEnabled,
+        [...startupReconcileSlots].sort((a,b)=>a-b));
       // A source-ready cache must not advertise a new action opportunity
       // while the original controller/observer MCP lock is still active.
       const busy=exclusiveBusy();
@@ -1137,7 +1158,10 @@ export function createHandler(config,{
         }
         // Only explicitly selected slots receive a new exact-owner
         // neutral ACK. Never silently clear other uncertain game slots.
-        for(const slot of slots)uncertainAiSlots.delete(slot);
+        for(const slot of slots) {
+          uncertainAiSlots.delete(slot);
+          startupReconcileSlots.delete(slot);
+        }
         return {schema:1,slots,status:'NATIVE_NEUTRAL_WRITES_ACKNOWLEDGED',
           actualGameKeyRelease:'NOT_VERIFIED',gameplayObserved:false};
       } finally {inFlight=false;}
@@ -1176,16 +1200,16 @@ export function createHandler(config,{
       if(!multiEnabled)throw new Error('MULTI_CLIENT_EXPERIMENT_DISABLED');
       keysExactly(args,['actions','basis']);
       const schedule=prepareMultiClientPulseBatches(config.mode,args.actions);
-      refuseUncertain(schedule.slots);
       if(exclusiveBusy())throw new Error('Native operation in progress; do not overlap requests');
-      // A model or external caller must have an exact recent baseline for
-      // EVERY targeted AI slot. Image pixels still require an explicit
-      // prior read_visual_observation call; metadata isn't visual reasoning.
+      // Compile and validate the caller's exact visual baseline even if
+      // reconnect recovery is still required; malformed image identities
+      // never silently become authorized by a neutral release.
       const state=verifyTeamObservationBasis(
         config.mode,schedule.slots,args.basis,
         schedule.slots.map(slot=>visualObserver.read(slot,{
           includeImage:false,
         }).metadata));
+      refuseUncertain(schedule.slots);
       // No await between freshness check and the original controller's
       // exclusive MCP lock. The existing observer revocation callback can
       // abort exactly this observed action if a selected source disappears.
@@ -1436,8 +1460,20 @@ export function createHandler(config,{
         const operation=multiEnabled?
           (config.mode==='five-ai'?'launch-ai-five':'launch-ai-hybrid') :
           (mc02Enabled&&slot===2?'launch-mc02-input':'launch');
-        return validateNativeReport(
+        const report=validateNativeReport(
           await native(config.executable,operation,slot),operation);
+        // A successful *new* native experimental launch creates a fresh
+        // exact-process channel with neutral initial input state. It
+        // cannot adopt an already-running game. Only a non-attention
+        // original child reported STARTING/RUNNING clears that slot's
+        // startup hold; an Inspect or older running window never does.
+        if(multiEnabled && ['STARTING','RUNNING'].includes(
+              report.profiles[slot-1].state) &&
+           report.profiles[slot-1].needsAttention===false) {
+          uncertainAiSlots.delete(slot);
+          startupReconcileSlots.delete(slot);
+        }
+        return report;
       } finally {inFlight=false;}
     }
     throw new Error('Unknown tool');

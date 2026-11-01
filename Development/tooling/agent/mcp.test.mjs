@@ -933,6 +933,12 @@ test('four/five opted-in AI action streams preserve per-slot neutral cleanup',as
   await assert.rejects(()=>hybrid.callTool('run_experimental_multi_client_actions',
     {actions:[make(1)]}));
   assert.equal(receipts.length,0);
+  // New opted-in MCP requires explicit native neutral ACK for any existing
+  // games; it must not assume another MCP exited with no keys held.
+  await hybrid.callTool('stop_experimental_multi_client_actions',{
+    slots:[2,3,4,5],
+  });
+  receipts.length=0;
   const four=await hybrid.callTool('run_experimental_multi_client_actions',
     {actions:[2,3,4,5].map(make)});
   assert.deepEqual(four.slots,[2,3,4,5]);
@@ -943,6 +949,10 @@ test('four/five opted-in AI action streams preserve per-slot neutral cleanup',as
 
   const full=createHandler({...config('five-ai'),experimentalMultiClientInputEnabled:true},
     {native,aiInput,aiMultiBatch});
+  await full.callTool('stop_experimental_multi_client_actions',{
+    slots:[1,2,3,4,5],
+  });
+  receipts.length=0;
   const five=await full.callTool('run_experimental_multi_client_actions',
     {actions:[1,2,3,4,5].map(make)});
   assert.deepEqual(five.slots,[1,2,3,4,5]);
@@ -1029,6 +1039,8 @@ test('observed cross-slot action uses exact recent visual basis and one existing
   });
   const tools=await h.handle({jsonrpc:'2.0',id:48,method:'tools/list'});
   assert.equal(tools.result.tools.some(t=>t.name==='run_experimental_observed_actions'),true);
+  await h.callTool('stop_experimental_multi_client_actions',{slots:fixture.slots});
+  released.length=0;
   const previous=await h.callTool('get_multi_client_visual_state',{});
   const basis=previous.frames.map(f=>f.baseline);
   const actions=fixture.slots.map(aiMove);
@@ -1095,6 +1107,7 @@ test('five-AI visual decision supports MC01 only when explicitly selected as an 
     aiInput:async(_exe,frame)=>({schema:1,slot:frame.slot,
       status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',gameplayObserved:false}),
   });
+  await h.callTool('stop_experimental_multi_client_actions',{slots:fixture.slots});
   const status=await h.callTool('get_multi_client_visual_state',{});
   assert.deepEqual(status.slots,[1,2,3,4,5]);
   const result=await h.callTool('run_experimental_observed_actions',{
@@ -1323,6 +1336,8 @@ test('uncertain native batch blocks only touched AI slots until explicit neutral
           gameplayObserved:false};
       },
     });
+    await handler.callTool('stop_experimental_multi_client_actions',{slots});
+    releases.length=0;
     const affected=slots.slice(0,2);
     await assert.rejects(()=>handler.callTool('run_experimental_multi_client_actions',{
       actions:affected.map(aiMove),
@@ -1398,6 +1413,10 @@ test('revoked visual slot aborts the entire observed native sequence and latches
         gameplayObserved:false};
     },
   });
+  await handler.callTool('stop_experimental_multi_client_actions',{
+    slots:fixture.slots,
+  });
+  released.length=0;
   const view=await handler.callTool('get_multi_client_visual_state',{});
   const actions=fixture.slots.map(aiMove);
   const pending=handler.callTool('run_experimental_observed_actions',{
@@ -1444,6 +1463,10 @@ test('first nonbusy observed capture error requests whole-cohort abort, never pa
         gameplayObserved:false};
     },
   });
+  await handler.callTool('stop_experimental_multi_client_actions',{
+    slots:fixture.slots,
+  });
+  released.length=0;
   const before=await handler.callTool('get_multi_client_visual_state',{});
   const pending=handler.callTool('run_experimental_observed_actions',{
     actions:fixture.slots.map(aiMove),
@@ -1457,4 +1480,202 @@ test('first nonbusy observed capture error requests whole-cohort abort, never pa
   assert.deepEqual(view.coordination.blockedSlots,[1,2,3,4,5]);
   assert.equal(view.coordination.observedActionEligible,false);
   handler.shutdown();
+});
+
+
+test('new 4/5 AI MCP connection does not trust any old channel without explicit reconciliation',async()=>{
+  for(const [mode,slots] of [
+    ['human-plus-four-ai',[2,3,4,5]],
+    ['five-ai',[1,2,3,4,5]],
+  ]){
+    const fixture=teamVisualFixture(mode);
+    const dispatched=[],neutral=[];
+    const handler=createHandler({...config(mode),
+      experimentalMultiClientInputEnabled:true},{
+      visualObserverFactory:fixture.factory,
+      aiMultiBatch:async(_exe,batches)=>{
+        dispatched.push(batches.map(batch=>batch.slot));
+        return {schema:1,slots:batches.map(batch=>batch.slot),
+          status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
+          gameplayObserved:false};
+      },
+      aiInput:async(_exe,frame)=>{
+        neutral.push(frame.slot);
+        return {schema:1,slot:frame.slot,
+          status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+          gameplayObserved:false};
+      },
+    });
+    // Creating the MCP never emits unsolicited native game I/O.
+    const before=await handler.callTool('get_multi_client_visual_state',{});
+    assert.deepEqual(before.coordination.blockedSlots,slots);
+    assert.deepEqual(before.coordination.pendingReconnectSlots,slots);
+    assert.equal(before.coordination.observedActionEligible,false);
+    assert.equal(before.coordination.clients[0].blockReason,
+      'NEW_MCP_CONNECTION_REQUIRES_NEUTRAL_OR_FRESH_AI_LAUNCH');
+    assert.deepEqual(neutral,[]);
+    assert.deepEqual(dispatched,[]);
+    const capabilities=await handler.callTool('agent_capabilities',{});
+    assert.equal(capabilities.independentInput.startupReconciliation,
+      'EXPLICIT_NEUTRAL_OR_AUTHENTICATED_NEW_AI_LAUNCH');
+    await assert.rejects(()=>handler.callTool('run_experimental_multi_client_actions',{
+      actions:slots.map(aiMove),
+    }),/AI_INPUT_RECOVERY_REQUIRED/);
+    assert.deepEqual(dispatched,[]);
+    // One explicitly requested neutral ACK is sufficient only for its slot.
+    await handler.callTool('stop_experimental_multi_client_actions',{
+      slots:[slots[0]],
+    });
+    const partial=await handler.callTool('get_multi_client_visual_state',{});
+    assert.deepEqual(partial.coordination.readySlots,[slots[0]]);
+    assert.deepEqual(partial.coordination.pendingReconnectSlots,slots.slice(1));
+    const accepted=await handler.callTool('run_experimental_multi_client_actions',{
+      actions:[aiMove(slots[0])],
+    });
+    assert.deepEqual(accepted.slots,[slots[0]]);
+    assert.deepEqual(dispatched,[[slots[0]]]);
+    // Reusing the remaining previously-running slots is still blocked.
+    await assert.rejects(()=>handler.callTool('run_experimental_multi_client_actions',{
+      actions:[aiMove(slots[1])],
+    }),/AI_INPUT_RECOVERY_REQUIRED/);
+    await handler.callTool('stop_experimental_multi_client_actions',{
+      slots:slots.slice(1),
+    });
+    const resolved=await handler.callTool('get_multi_client_visual_state',{});
+    assert.deepEqual(resolved.coordination.pendingReconnectSlots,[]);
+    assert.equal(resolved.coordination.observedActionEligible,true);
+    assert.equal(resolved.coordination.gameplayVerification,'NOT_VERIFIED');
+    handler.shutdown();
+  }
+});
+
+test('fresh authenticated opted-in AI launch clears only that original slot reconnect hold',async()=>{
+  for(const [mode,slots] of [
+    ['human-plus-four-ai',[2,3,4,5]],
+    ['five-ai',[1,2,3,4,5]],
+  ]){
+    const fixture=teamVisualFixture(mode);
+    const launchCalls=[];
+    let failed=false,staleReport=false;
+    const native=async(_exe,operation,slot)=>{
+      launchCalls.push([operation,slot]);
+      if(failed)throw new Error('Native controller unavailable or operation refused');
+      const report=snapshot(operation);
+      if(operation.startsWith('launch-ai-')){
+        const profile=report.profiles[slot-1];
+        report.profiles[slot-1]={...profile,
+          state:staleReport?'STOPPED':'STARTING',
+          needsAttention:false};
+      }
+      return report;
+    };
+    const handler=createHandler({...config(mode),
+      experimentalMultiClientInputEnabled:true},{
+      visualObserverFactory:fixture.factory,
+      native,
+    });
+    const selected=slots[0];
+    failed=true;
+    await assert.rejects(()=>handler.callTool('launch_profile',{slot:selected}),
+      /unavailable or operation refused/);
+    failed=false;
+    const held=await handler.callTool('get_multi_client_visual_state',{});
+    assert.deepEqual(held.coordination.pendingReconnectSlots,slots);
+    staleReport=true;
+    const stale=await handler.callTool('launch_profile',{slot:selected});
+    assert.equal(stale.profiles[selected-1].state,'STOPPED');
+    assert.deepEqual((await handler.callTool('get_multi_client_visual_state',{}))
+      .coordination.pendingReconnectSlots,slots);
+    staleReport=false;
+    const started=await handler.callTool('launch_profile',{slot:selected});
+    assert.equal(started.profiles[selected-1].state,'STARTING');
+    const now=await handler.callTool('get_multi_client_visual_state',{});
+    assert.deepEqual(now.coordination.pendingReconnectSlots,slots.slice(1));
+    assert.deepEqual(now.coordination.readySlots,[selected]);
+    assert.deepEqual(launchCalls.map(row=>row[0]),[
+      mode==='five-ai'?'launch-ai-five':'launch-ai-hybrid',
+      mode==='five-ai'?'launch-ai-five':'launch-ai-hybrid',
+      mode==='five-ai'?'launch-ai-five':'launch-ai-hybrid',
+    ]);
+    handler.shutdown();
+  }
+});
+
+test('restarted MCP conservatively forgets earlier release and requires a new exact-owner neutral ACK',async()=>{
+  const fixture=teamVisualFixture();
+  const calls=[];
+  const deps={
+    visualObserverFactory:fixture.factory,
+    aiInput:async(_exe,frame)=>{
+      calls.push(frame.slot);
+      return {schema:1,slot:frame.slot,
+        status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+        gameplayObserved:false};
+    },
+  };
+  const opt={...config(),experimentalMultiClientInputEnabled:true};
+  const first=createHandler(opt,deps);
+  await first.callTool('stop_experimental_multi_client_actions',{slots:[2]});
+  assert.deepEqual((await first.callTool('get_multi_client_visual_state',{}))
+    .coordination.pendingReconnectSlots,[3,4,5]);
+  first.shutdown();
+  const newConnection=createHandler(opt,deps);
+  assert.deepEqual((await newConnection.callTool('get_multi_client_visual_state',{}))
+    .coordination.pendingReconnectSlots,[2,3,4,5]);
+  await assert.rejects(()=>newConnection.callTool('run_experimental_multi_client_actions',{
+    actions:[aiMove(2)],
+  }),/AI_INPUT_RECOVERY_REQUIRED/);
+  await newConnection.callTool('stop_experimental_multi_client_actions',{
+    slots:[2],
+  });
+  assert.deepEqual((await newConnection.callTool('get_multi_client_visual_state',{}))
+    .coordination.pendingReconnectSlots,[3,4,5]);
+  assert.deepEqual(calls,[2,2]);
+  newConnection.shutdown();
+});
+
+
+test('partial startup neutral failure never unlocks a previously running 4/5-client cohort',async()=>{
+  for(const [mode,slots] of [
+    ['human-plus-four-ai',[2,3,4,5]],
+    ['five-ai',[1,2,3,4,5]],
+  ]){
+    const fixture=teamVisualFixture(mode);
+    let failing=slots[1],attempts=[];
+    const handler=createHandler({...config(mode),
+      experimentalMultiClientInputEnabled:true},{
+      visualObserverFactory:fixture.factory,
+      aiInput:async(_exe,frame)=>{
+        attempts.push(frame.slot);
+        if(frame.slot===failing)throw Error('NATIVE_NEUTRAL_UNCONFIRMED');
+        return {schema:1,slot:frame.slot,
+          status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+          gameplayObserved:false};
+      },
+    });
+    await assert.rejects(()=>handler.callTool('stop_experimental_multi_client_actions',{
+      slots,
+    }),/AI_RELEASE_UNCONFIRMED/);
+    assert.deepEqual(attempts,slots);
+    const held=await handler.callTool('get_multi_client_visual_state',{});
+    // A failed multi-slot recovery is treated as an uncertain whole
+    // transaction, including peers that may have received neutral ACK.
+    assert.deepEqual(held.coordination.pendingReconnectSlots,[]);
+    assert.deepEqual(held.coordination.blockedSlots,slots);
+    assert.equal(held.coordination.clients.every(c=>c.blockReason===
+      'UNCERTAIN_NATIVE_INPUT_REQUIRES_EXPLICIT_NEUTRAL'),true);
+    // Successful ACKs in the refused multi-slot stop were NOT silently
+    // committed as clearances: the entire requested request remains held.
+    failing=0;attempts=[];
+    const recovered=await handler.callTool('stop_experimental_multi_client_actions',{
+      slots,
+    });
+    assert.equal(recovered.status,'NATIVE_NEUTRAL_WRITES_ACKNOWLEDGED');
+    assert.deepEqual(attempts,slots);
+    const ready=await handler.callTool('get_multi_client_visual_state',{});
+    assert.deepEqual(ready.coordination.blockedSlots,[]);
+    assert.deepEqual(ready.coordination.pendingReconnectSlots,[]);
+    assert.equal(ready.coordination.gameplayVerification,'NOT_VERIFIED');
+    handler.shutdown();
+  }
 });

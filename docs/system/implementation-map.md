@@ -26,7 +26,7 @@ All desktop paths below start at `Development/apps/desktop/`.
 | Main Play, Settings, Storage and action sequencing | `src/LazyTesterApp.svelte` | `src/app/inspectionScheduling.ts`, `src/app/presentation/` |
 | Launcher rail and status guidance | `src/LauncherRail.svelte`, `src/SessionHealthNotice.svelte` | `src/app/presentation/sessionFeedback.ts` |
 | Settings and storage presentation | `src/GeneralSettings.svelte`, `src/DataStorage.svelte` | Typed `src/app/bridge/lazyTester.ts` |
-| Local agent MCP tools / bounded evidence reading | `Development/tooling/agent/mcp.mjs` | Same-timestamp 4/5-AI native IPC stays in `agent_cli.rs` and the one retained controller; existing `visual-observer.mjs` now supports per-slot source-failure admission and input-uncertainty containment, gameplay NOT_VERIFIED |
+| Local agent MCP tools / bounded evidence reading | `Development/tooling/agent/mcp.mjs` | Existing opt-in MCP now holds 4/5-AI input on every new connection pending exact neutral ACK or verified fresh launch; `visual-observer.mjs` reports per-slot recovery/source status; one retained native controller remains the only game owner, gameplay NOT_VERIFIED |
 | AI input timeline / native-bound preview (no default input dispatch) | `Development/tooling/agent/input-timeline.mjs`, `input-route.mjs` | `control-plan.mjs`, nonexecuting input transaction port `input-delivery.mjs`, and MCP `assess_input_route`; real background game input remains blocked |
 | One raw Tauri invoke boundary | `src/app/bridge/invokeRuntime.ts` | `src/app/bridge/lazyTester.ts`, `workspaceSurface.ts` |
 | Allowlisted native commands / heavy-operation admission | `src-tauri/src/commands/native_clients.rs` | Session and workspace owners |

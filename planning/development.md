@@ -1,5 +1,63 @@
 # Current Development Handoff — Lazy Tester
 
+## 1 November 2026 — fail-closed new-MCP input reconciliation
+
+**State: SOURCE-ONLY RECONNECT SAFETY / GAMEPLAY STILL BLOCKED.**
+The operator continues GitHub-only source development; no local PC, Node,
+Rust, Windows, installer, Minecraft or GitHub Actions execution.
+
+Previously, the opt-in MCP's bounded `uncertainAiSlots` held only
+failed/cancelled action outcomes in one process. A killed or restarted
+MCP could therefore forget those uncertain slots even while the
+original authenticated controller and Minecraft games remained.
+The SAME MCP handler now starts every AI-owned slot in a **read-only
+new-connection recovery hold** when, and only when, the separately
+opted-in multi-client experiment is enabled. In hybrid mode these
+are MC02–MC05; in five-ai mode they are MC01–MC05. MCP startup
+still performs NO game input, game launch, account access, inspection,
+device mutation or new background service.
+
+Before sending any new native action on a slot, this MCP connection
+requires one of two explicitly requested native controller outcomes:
+(1) `stop_experimental_multi_client_actions` returns acknowledged
+exact-original-slot neutral writes, or (2) the existing
+`launch_profile` successfully creates a genuinely NEW opted-in
+game child and its native five-profile receipt reports the selected
+child STARTING/RUNNING with no attention flag. An Inspect, a
+preexisting running game, a failed launch, a STOPPED/ATTENTION
+launch reply, screenshot or optional observer does NOT clear the hold.
+The native retained actor remains the only launch/input authority.
+
+The existing read-only `get_multi_client_visual_state` returns
+`coordination.pendingReconnectSlots` and a distinct
+`NEW_MCP_CONNECTION_REQUIRES_NEUTRAL_OR_FRESH_AI_LAUNCH`
+per-client block reason. Source-ready images are never sufficient
+to override this gate. Only individually reconciled slots can be
+selected in a NEW bounded action, and failed batch/uncertain release
+markers continue to require explicit neutral ACK. An intentionally
+new MCP process conservatively starts with the full hold again;
+there is NO fake persistent success token, no provider-side
+recovery loop, no credentials or on-disk input state.
+
+This does NOT prevent two different opted-in MCP processes from
+separately requesting input once they each reconcile through
+the retained controller. It also does not establish that Minecraft
+accepted either a neutral write or a game action. Native per-process
+identity, mode, human MC01 protection, TTL and ReleaseAll are unchanged.
+Normal MCP (without opt-in) has no new input gate or game writes.
+
+**Proof:** REMOTE_GITHUB source/consumer review and bounded Node
+regression fixtures AUTHORED_NOT_EXECUTED for hybrid/five AI startup
+holds, selective neutral release, fresh new AI launch, failed/stale
+launch receipts, reconnection and refusal to replay. Node/Rust/MSVC
+execution, real Windows startup/reconnect and game input remain
+NOT_EXECUTED / NOT_VERIFIED.
+
+**One next action:** With separately approved target-Windows access,
+prove the native AI input consumer and reconnect neutral/launch
+behavior on the exact commit, without treating IPC ACKs as gameplay.
+
+
 ## 1 November 2026 — multi-AI source loss and uncertain-input isolation
 
 **State: SOURCE-ONLY COHORT ADMISSION AND RECOVERY / GAMEPLAY BLOCKED.**

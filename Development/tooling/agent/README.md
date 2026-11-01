@@ -115,6 +115,46 @@ real AI image reasoning, native input and simultaneous gameplay remain
 unverified. Standard installer, user data, fixed slot ownership,
 human MC01 isolation and CI policy are unchanged.
 
+## Safe reconnection of the opt-in 4/5-AI MCP (source only)
+
+A newly created MCP process cannot inherit the in-memory input
+uncertainty marker of an earlier process. Therefore the explicit
+`--multi-client-input-experimental on` configuration starts in
+**fail-closed reconciliation** for every AI-owned slot. No input,
+game launch, controller IPC, process/window scan or account action
+happens automatically on startup. The default read-only MCP remains
+unchanged.
+
+`get_multi_client_visual_state` exposes
+`coordination.pendingReconnectSlots` and the per-client reason
+`NEW_MCP_CONNECTION_REQUIRES_NEUTRAL_OR_FRESH_AI_LAUNCH`.
+A fresh visual frame is NOT permission to bypass the hold.
+
+For an existing live opted-in game, explicitly request
+`stop_experimental_multi_client_actions({slots:[...]})` to send
+the original exact-owner neutral command through the retained
+controller; a fresh transport ACK clears only the specified slots.
+If the game has no opted-in input channel, the native stop refuses:
+do not invent one. Follow the normal game shutdown process, then
+explicitly launch the profile under the multi-AI experiment.
+
+For a genuinely **new** profile, `launch_profile({slot})`
+carries `launch-ai-hybrid` or `launch-ai-five` to the existing
+retained controller. Only a valid successful native launch receipt
+showing the selected child STARTING/RUNNING without attention can
+clear that slot's reconnect hold. An old window, ordinary Inspect,
+failed launch or stopped/attention reply cannot do it. A replacement
+MCP process starts with the entire hold again; no durable credential,
+recovery database or silent "all safe" flag is written.
+
+Previous aborted/uncertain native-input holds continue to need
+explicit neutral ACK. Cross-client AI action batches, WGC/Cua
+capture, source timestamps, per-slot ReleaseAll, game identity,
+MC01-human foreground checks, opt-in gates and native TTL retain
+their existing source contracts. Input ACK does NOT prove that
+Minecraft released a key or moved a player. Source tests and Windows
+gameplay remain NOT_EXECUTED / NOT_VERIFIED.
+
 ## Coordinated 4–5 AI source-loss and uncertain-input containment
 
 `get_multi_client_visual_state` now also returns a read-only

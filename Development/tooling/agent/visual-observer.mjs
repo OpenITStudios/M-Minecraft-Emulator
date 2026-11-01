@@ -509,11 +509,12 @@ export function summarizeTeamVisualState(mode,slots,readings,since=[]) {
 // a single unavailable slot prevents this exact full-cohort observed action.
 // A model may explicitly author an independent smaller action request,
 // which still has to pass the original native per-process admission.
-export function summarizeTeamCoordination(mode,visual,uncertainSlots=[],optedIn=false) {
+export function summarizeTeamCoordination(
+    mode,visual,uncertainSlots=[],optedIn=false,reconnectSlots=[]) {
   if(!['human-plus-four-ai','five-ai'].includes(mode) ||
       visual?.schema!==1||visual?.mode!==mode||
       !Array.isArray(visual.frames)||!Array.isArray(uncertainSlots) ||
-      typeof optedIn!=='boolean') {
+      !Array.isArray(reconnectSlots)||typeof optedIn!=='boolean') {
     throw new TypeError('Invalid multi-client coordination observation');
   }
   const slots=allowedSlots(visual.slots);
@@ -528,6 +529,13 @@ export function summarizeTeamCoordination(mode,visual,uncertainSlots=[],optedIn=
     }
     uncertain.add(slot);
   }
+  const reconnect=new Set();
+  for(const slot of reconnectSlots) {
+    if(!uncertain.has(slot)||reconnect.has(slot)) {
+      throw new TypeError('Invalid reconnect recovery slots');
+    }
+    reconnect.add(slot);
+  }
   if(visual.frames.length!==slots.length) {
     throw new TypeError('Incomplete coordination observation');
   }
@@ -537,7 +545,9 @@ export function summarizeTeamCoordination(mode,visual,uncertainSlots=[],optedIn=
     if(!frame||frame.slot!==slot) {
       throw new TypeError('Mismatched multi-client visual slot');
     }
-    const reason=uncertain.has(slot)?
+    const reason=reconnect.has(slot)?
+      'NEW_MCP_CONNECTION_REQUIRES_NEUTRAL_OR_FRESH_AI_LAUNCH':
+      uncertain.has(slot)?
       'UNCERTAIN_NATIVE_INPUT_REQUIRES_EXPLICIT_NEUTRAL':
       frame.observedSameProcessSinceBaseline===false?
       'CAPTURE_IDENTITY_CHANGED_SINCE_BASELINE':
@@ -559,6 +569,8 @@ export function summarizeTeamCoordination(mode,visual,uncertainSlots=[],optedIn=
     reselect:'NEVER_AUTOMATICALLY_DROP_UNREADY_SLOTS',
     explicitHealthySubset:'MUST_REPLAN_ACTIONS_AND_READ_FRESH_BASELINES',
     uncertainInputRecovery:'EXPLICIT_STOP_NEUTRAL_ACK_REQUIRED_PER_SLOT',
+    startupReconciliation:'EXPLICIT_NEUTRAL_ACK_OR_FRESH_AUTHENTICATED_AI_LAUNCH',
+    pendingReconnectSlots:slots.filter(slot=>reconnect.has(slot)),
     dispatch:'NO_INPUT_DISPATCHED',
     gameplayVerification:'NOT_VERIFIED',
   };

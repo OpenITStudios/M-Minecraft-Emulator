@@ -562,3 +562,42 @@ test('active observed round can react on first failed capture while read-only bu
   assert.deepEqual(finished,[]); // ordinary read-only retry policy preserved
   observer.shutdown();
 });
+
+
+test('reconnect status is explicit and remains a subset of originally held AI clients',()=>{
+  for(const [mode,slots] of [
+    ['human-plus-four-ai',[2,3,4,5]],['five-ai',[1,2,3,4,5]],
+  ]) {
+    const fresh=summarizeTeamVisualState(mode,slots,slots.map(slot=>visualMeta(slot)));
+    const status=summarizeTeamCoordination(mode,fresh,slots,true,slots);
+    assert.equal(status.status,'HOLD_SELECTED_COHORT');
+    assert.equal(status.observedActionEligible,false);
+    assert.deepEqual(status.blockedSlots,slots);
+    assert.deepEqual(status.pendingReconnectSlots,slots);
+    assert.equal(status.clients[0].blockReason,
+      'NEW_MCP_CONNECTION_REQUIRES_NEUTRAL_OR_FRESH_AI_LAUNCH');
+    assert.equal(status.startupReconciliation,
+      'EXPLICIT_NEUTRAL_ACK_OR_FRESH_AUTHENTICATED_AI_LAUNCH');
+    assert.equal(status.dispatch,'NO_INPUT_DISPATCHED');
+
+    const afterOne=slots.slice(1);
+    const partial=summarizeTeamCoordination(mode,fresh,afterOne,true,afterOne);
+    assert.deepEqual(partial.readySlots,[slots[0]]);
+    assert.deepEqual(partial.pendingReconnectSlots,afterOne);
+    assert.equal(partial.observedActionEligible,false);
+    assert.deepEqual(partial.blockedSlots,afterOne);
+    const resolved=summarizeTeamCoordination(mode,fresh,[],true,[]);
+    assert.equal(resolved.observedActionEligible,true);
+    assert.deepEqual(resolved.pendingReconnectSlots,[]);
+    assert.equal(resolved.gameplayVerification,'NOT_VERIFIED');
+
+    assert.throws(()=>summarizeTeamCoordination(mode,fresh,[],true,[slots[0]]),
+      /Invalid reconnect recovery slots/);
+    assert.throws(()=>summarizeTeamCoordination(mode,fresh,slots,true,
+      [slots[0],slots[0]]),/Invalid reconnect recovery slots/);
+    if(mode==='human-plus-four-ai') {
+      assert.throws(()=>summarizeTeamCoordination(mode,fresh,[1],true,[1]),
+        /Invalid uncertain input slots/);
+    }
+  }
+});
