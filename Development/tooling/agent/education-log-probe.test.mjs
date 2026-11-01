@@ -58,11 +58,79 @@ test('does not treat embedded, changed-run, malformed or secret fields as truste
     sample(1,10).replace('"START"','"DEFERRED"'),
   ].join('\n')+'\n';
   const output=summarizeEducationCapture(untrusted,{run,format:'marker-lines'});
-  assert.equal(output.status,'REJECTED_MARKERS');
+  assert.equal(output.status,'UNSUPPORTED_MARKER_WRAPPER_OR_CONTEXT');
+  assert.equal(output.unparsedMarkerLines,1);
   assert.equal(output.markerCandidates,4);
   assert.equal(output.invalidMarkers,4);
   assert.equal(JSON.stringify(output).includes('private-name'),false);
   assert.equal(JSON.stringify(output).includes('wrong-run'),false);
+});
+
+test('survey classifies wrapper shapes without parsing or revealing marker payloads',()=>{
+  const secret='private path C:\\Users\\Hidden\\minecraft token=example';
+  const input=[
+    'routine console text',
+    sample(1,10),
+    captured(2,30).trimEnd(),
+    secret+' '+sample(1,50),
+    'private chat '+sample(1,80)+' '+sample(2,100),
+  ].join('\n')+'\n';
+  const output=summarizeEducationCapture(input,{
+    run,format:'envelope-survey'});
+  assert.equal(output.status,'ENVELOPE_SURVEY_ONLY_NO_TRANSPORT_PROOF');
+  assert.equal(output.linesInspected,5);
+  assert.equal(output.markerBearingLines,4);
+  assert.equal(output.envelopeCounts.direct,1);
+  assert.equal(output.envelopeCounts.timestamped,1);
+  assert.equal(output.envelopeCounts.otherPrefix,2);
+  assert.equal(output.envelopeCounts.repeatedMarkerLines,1);
+  assert.equal(output.markerPayloadsRead,false);
+  assert.equal(output.minecraftEducationTransport,'NOT_VERIFIED');
+  assert.equal(output.rawLogSharedWithAI,false);
+  assert.equal(JSON.stringify(output).includes(secret),false);
+  assert.equal(JSON.stringify(output).includes('C:\\Users'),false);
+  assert.equal(JSON.stringify(output).includes('token='),false);
+});
+
+test('unknown Education wrapper is not incorrectly reported as absent output',()=>{
+  const unknown='[EDUCATION-UNVERIFIED] ';
+  const capturedLines=unknown+sample(1,100)+'\n'+
+    unknown+sample(2,120)+'\n';
+  for(const format of ['marker-lines','timestamped-print']) {
+    const out=summarizeEducationCapture(capturedLines,{run,format});
+    assert.equal(out.status,'UNSUPPORTED_MARKER_WRAPPER_OR_CONTEXT');
+    assert.equal(out.unparsedMarkerLines,2);
+    assert.equal(out.validMarkerCount,0);
+    assert.equal(out.candidateTickProgress,null);
+    assert.equal(out.gameplay,'NOT_VERIFIED');
+  }
+  const survey=summarizeEducationCapture(capturedLines,{
+    run,format:'envelope-survey'});
+  assert.equal(survey.envelopeCounts.otherPrefix,2);
+  assert.equal(survey.markerPayloadsRead,false);
+});
+
+test('extra marker-bearing chat text prevents a false positive marker pair',()=>{
+  const content=sample(1,40)+'\n'+sample(2,60)+'\n'+
+    'chat: '+sample(1,70)+'\n';
+  const output=summarizeEducationCapture(content,{
+    run,format:'marker-lines'});
+  assert.equal(output.validMarkerCount,2);
+  assert.equal(output.unparsedMarkerLines,1);
+  assert.equal(output.status,'UNSUPPORTED_MARKER_WRAPPER_OR_CONTEXT');
+  assert.equal(output.candidateTickProgress,null);
+});
+
+test('survey counts oversized marker-bearing lines but never returns their content',()=>{
+  const secret='token=hiddenvalue';
+  const input=secret+' '+('x'.repeat(4100))+sample(1,10)+'\n';
+  const out=summarizeEducationCapture(input,{
+    run,format:'envelope-survey'});
+  assert.equal(out.overlongLines,1);
+  assert.equal(out.overlongMarkerLines,1);
+  assert.equal(out.markerBearingLines,0);
+  assert.equal(JSON.stringify(out).includes(secret),false);
+  assert.equal(out.status,'ENVELOPE_SURVEY_ONLY_NO_TRANSPORT_PROOF');
 });
 
 test('missing, duplicate, unordered or non-progressing marker pairs cannot pass',()=>{

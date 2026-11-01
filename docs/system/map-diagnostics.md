@@ -170,13 +170,23 @@ does not imply the full evidence file was read: this is reported separately.
   file reader as the local importer. It never searches Education's folders,
   connects to a debugger, writes a run, or calls Codex.
 
-The two explicit capture format modes are:
-`marker-lines` (one complete `[LT_EDU_PROBE]{...}` line per record),
-and `timestamped-print` (a candidate `ISO_TIMESTAMP log|warn|... MESSAGE`
-wrapper, including escaped debugger PrintEvent text). **These are probe
-input formats only.** Neither has been demonstrated as Education's real
-Content Log format. Unrecognized/oversized/malformed data is never
-converted to a gameplay success or copied into an AI response.
+Three explicitly selected offline modes are supported:
+
+- `envelope-survey`: inspect only the **shape of lines containing**
+  `[LT_EDU_PROBE]`, counting exact-marker, timestamp-like and other
+  prefixes, plus repeated/oversized markers. **Never parses marker bodies**,
+  emits text snippets, or certifies a log transport.
+- `marker-lines`: validate one complete `[LT_EDU_PROBE]{...}` line
+  per record, only when no prefix exists.
+- `timestamped-print`: validate the candidate
+  `ISO_TIMESTAMP log|warn|... MESSAGE` wrapper, including escaped
+  debugger PrintEvent text.
+
+These are **candidate formats, not proven Education Content Log layouts**.
+If a marker is present but the selected strict parser cannot understand its
+wrapper, it reports `UNSUPPORTED_MARKER_WRAPPER_OR_CONTEXT` instead of
+incorrectly reporting that no marker exists. Even a perfectly matched
+two-marker pair remains `NOT_VERIFIED` as Minecraft Education evidence.
 
 The JavaScript probe has no manifest and is not an installed behavior
 pack. Only after a separately authorized Education test, an operator may
@@ -187,12 +197,18 @@ Education logging mechanism is observed. The original map/world and private
 game profile must remain unchanged.
 
 Once a bounded local capture is explicitly saved to a trusted absolute
-path, the optional offline inspector can be invoked from `Development/`:
+path, first survey its envelope from `Development/`:
 
-    node tooling/agent/education-log-probe.mjs inspect --source "C:\absolute\education-capture.log" --run edu-probe --format timestamped-print
+    node tooling/agent/education-log-probe.mjs inspect --source "C:\absolute\education-capture.log" --run edu-probe --format envelope-survey
 
-Or use `--format marker-lines` for a separately extracted marker-only
-capture. It accepts only absolute `.log` / `.txt` ordinary files, refuses
+Survey output contains only fixed counters and a source SHA-256. If a
+previously documented explicit format is applicable, independently inspect
+the same private file using `--format marker-lines` or
+`--format timestamped-print`. An unknown prefix is **not** automatically
+accepted or guessed. Review a deliberately redacted example before
+adding any Education-specific parser.
+
+The inspector accepts only absolute `.log` / `.txt` ordinary files, refuses
 linked/hardlinked source files, requires a complete newline-terminated
 capture and reads at most **4 MiB / 12,000 lines / 4,096 bytes per line**.
 It returns only fixed status/counters, a source SHA-256 and a validated

@@ -13,7 +13,7 @@ const MAX_LINE_BYTES=4096;
 const MAX_MARKER_BYTES=512;
 const RUN=/^[a-z][a-z0-9._-]{0,47}$/;
 const TAG='[LT_EDU_PROBE]';
-const MODES=new Set(['marker-lines','timestamped-print']);
+const MODES=new Set(['marker-lines','timestamped-print','envelope-survey']);
 
 function safeRun(run) {
   if(typeof run!=='string'||!RUN.test(run)) {
@@ -60,6 +60,16 @@ function recognize(message,run) {
   return {valid:true,seq:item.seq,tick:item.tick,phase:item.phase};
 }
 
+// An envelope survey answers only "what does an operator-supplied log look
+// like?". Any prefix around a marker remains UNTRUSTED, including chat text.
+// It never parses a marker payload or claims Education gameplay/transport.
+function surveyEnvelope(line) {
+  if(line.startsWith(TAG))return 'direct';
+  if(/^(\d{4}-\d\d-\d\dT\S{1,32})\s+(verbose|log|warn|error|stop)\s+/.test(line)) {
+    return 'timestamped';
+  }
+  return 'otherPrefix';
+}
 export function summarizeEducationCapture(text,{run,format}={}) {
   safeRun(run);
   if(!MODES.has(format))throw new TypeError('Unknown explicit capture format');
@@ -71,26 +81,66 @@ export function summarizeEducationCapture(text,{run,format}={}) {
   if(rawLines.length>MAX_LINES)throw new TypeError('Too many capture lines');
   const found=[];
   let markerCandidates=0,invalidMarkers=0,overlongLines=0,notRecognized=0;
+  let unparsedMarkerLines=0,overlongMarkerLines=0;
+  const envelopes={direct:0,timestamped:0,otherPrefix:0,repeatedMarkerLines:0};
   for(const raw of rawLines) {
     const line=raw.endsWith('\r')?raw.slice(0,-1):raw;
+    const containsMarker=line.includes(TAG);
     if(Buffer.byteLength(line,'utf8')>MAX_LINE_BYTES) {
       overlongLines++;
+      if(containsMarker)overlongMarkerLines++;
+      continue;
+    }
+    if(format==='envelope-survey') {
+      // Summarize shapes only. No arbitrary prefix text or marker body
+      // is returned, even if this is a real Education Content Log.
+      if(!containsMarker){notRecognized++;continue;}
+      const kind=surveyEnvelope(line);
+      envelopes[kind]++;
+      const at=line.indexOf(TAG);
+      if(line.indexOf(TAG,at+TAG.length)!==-1) {
+        envelopes.repeatedMarkerLines++;
+      }
       continue;
     }
     const msg=extractMessage(line,format);
-    if(msg===null) {notRecognized++;continue;}
+    if(msg===null) {
+      if(containsMarker)unparsedMarkerLines++;
+      else notRecognized++;
+      continue;
+    }
     const candidate=recognize(msg,run);
-    if(!candidate) {notRecognized++;continue;}
+    if(!candidate) {
+      if(containsMarker)unparsedMarkerLines++;
+      else notRecognized++;
+      continue;
+    }
     markerCandidates++;
     if(!candidate.valid) {invalidMarkers++;continue;}
     found.push(candidate);
   }
+  if(format==='envelope-survey') {
+    return {
+      schema:1,source:'OPERATOR_SUPPLIED_FILE_NOT_MINECRAFT_AUTHENTICATED',
+      run,format,status:'ENVELOPE_SURVEY_ONLY_NO_TRANSPORT_PROOF',
+      linesInspected:rawLines.length,overlongLines,overlongMarkerLines,
+      markerBearingLines:envelopes.direct+envelopes.timestamped+
+        envelopes.otherPrefix,
+      envelopeCounts:envelopes,unrecognizedLines:notRecognized,
+      markerPayloadsRead:false,rawLogSharedWithAI:false,
+      minecraftEducationTransport:'NOT_VERIFIED',worldIdentity:'NOT_VERIFIED',
+      gameplay:'NOT_VERIFIED',
+      next:'CHOOSE_A_SUPPORTED_EXPLICIT_FORMAT_OR_REVIEW_REDACTED_EDUCATION_WRAPPER',
+    };
+  }
   const first=found.filter(x=>x.seq===1),last=found.filter(x=>x.seq===2);
   const complete=invalidMarkers===0&&overlongLines===0&&
+    unparsedMarkerLines===0 &&
     found.length===2&&first.length===1&&last.length===1&&
     found[0].seq===1&&found[1].seq===2&&
     last[0].tick>first[0].tick;
   const status=overlongLines>0?'UNRELIABLE_CAPTURE_OVERSIZED_LINES':
+    unparsedMarkerLines>0?'UNSUPPORTED_MARKER_WRAPPER_OR_CONTEXT':
     complete?'CANDIDATE_MARKER_PAIR_FOUND':
     found.length>0?'PARTIAL_OR_REPEATED_MARKERS':
     markerCandidates>0?'REJECTED_MARKERS':'NO_RECOGNIZED_MARKER';
@@ -98,7 +148,8 @@ export function summarizeEducationCapture(text,{run,format}={}) {
     schema:1,source:'OPERATOR_SUPPLIED_FILE_NOT_MINECRAFT_AUTHENTICATED',
     run,format,status,linesInspected:rawLines.length,
     markerCandidates,validMarkerCount:found.length,
-    invalidMarkers,overlongLines,unrecognizedLines:notRecognized,
+    invalidMarkers,overlongLines,overlongMarkerLines,
+    unparsedMarkerLines,unrecognizedLines:notRecognized,
     candidateTickProgress:complete?last[0].tick-first[0].tick:null,
     minecraftEducationTransport:'NOT_VERIFIED',
     worldIdentity:'NOT_VERIFIED',
@@ -114,7 +165,7 @@ if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.ur
   const args=process.argv.slice(2);
   if(args.length!==7||args[0]!=='inspect'||args[1]!=='--source'||
      args[3]!=='--run'||args[5]!=='--format') {
-    console.error('Usage: education-log-probe.mjs inspect --source <absolute .log/.txt> --run <safe-id> --format marker-lines|timestamped-print');
+    console.error('Usage: education-log-probe.mjs inspect --source <absolute .log/.txt> --run <safe-id> --format marker-lines|timestamped-print|envelope-survey');
     process.exitCode=2;
   }else{
     const source=args[2],run=args[4],format=args[6];

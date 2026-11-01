@@ -92,8 +92,10 @@ usage, quotas and future Education verification see
 probe for an isolated Education test-copy behavior pack, not an installed
 pack or automatic game logger. `education-log-probe.mjs` reads only an
 operator-supplied absolute .log/.txt file, recognizes a tiny fixed marker
-contract, and outputs sanitized counts plus SHA-256. The parser supports
-two **candidate** input envelopes, not a proven Education Content Log
+contract, and outputs sanitized counts plus SHA-256. The parser offers an **envelope-survey** that counts potential marker
+wrappers without parsing or exposing their contents, followed by two
+strict candidate validators. Unsupported marker wrappers are distinguished
+from genuinely absent markers. None is a proven Education Content Log
 format. It does not create a diagnostics run, contact Codex, enumerate
 Minecraft account/world paths or advertise an MCP tool. Authored fixtures
 are NOT_EXECUTED. See `docs/system/map-diagnostics.md`.

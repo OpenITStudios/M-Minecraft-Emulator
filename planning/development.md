@@ -15,6 +15,15 @@ page of projected records in memory. Authored regressions for incomplete
 imports, checksum corruption, v1 compatibility and gap pagination are
 NOT_EXECUTED; no Windows, Minecraft Education or Codex runtime tested.
 
+**Education offline capture-format hardening (source-only):** the existing
+bounded local inspector now provides an explicit `envelope-survey` to count
+marker-wrapper shapes without reading marker payloads, exposing private log
+text or calling AI. Strict parsers distinguish unsupported wrappers from
+absent markers, preventing false-negative Education transport conclusions.
+Additional marker-wrapper/privacy regression fixtures are AUTHORED_NOT_EXECUTED.
+No Minecraft Education capture, profile attribution, build or Node tests were
+run; the blocker remains real Education output/source verification.
+
 **Education Script API log proof preparation (source-only):** authored one
 test-only `@minecraft/server` two-marker emitter and one local-only read-only
 capture inspector. The offline inspector accepts only explicitly selected
