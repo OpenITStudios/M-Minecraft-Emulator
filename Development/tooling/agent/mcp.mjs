@@ -1037,21 +1037,31 @@ export function createHandler(config,{
     }
   }
   async function releaseAiSlots(slots) {
-    // Fail-closed independent cleanup, SERIALIZED on the retained
-    // controller. Do not flood its authenticated pipe with concurrent
-    // short-lived one-shot writers. Attempt all slots despite failures.
-    let allConfirmed=true;
+    // SERIAL independent original-channel neutral writes. A dead AI
+    // window must not hide ACKs from other still-live game slots.
+    // Neither bucket is proof that Minecraft consumed a key release.
+    const acknowledged=[],unconfirmed=[];
     for(const slot of slots) {
+      let confirmed=false;
       try {
         const receipt=await aiInput(config.executable,{
           slot,keys:0,dx:0,dy:0,ttlMs:1,requestedAtMs:Date.now(),
         },{writerId,mode:config.mode});
-        if(receipt?.schema!==1||receipt?.slot!==slot||
-           receipt?.status!=='NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED'||
-           receipt?.gameplayObserved!==false)allConfirmed=false;
-      } catch {allConfirmed=false;}
+        confirmed=receipt?.schema===1&&receipt?.slot===slot&&
+          receipt?.status==='NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED'&&
+          receipt?.gameplayObserved===false;
+      } catch { /* Continue all slots; never retry an uncertain packet. */ }
+      (confirmed?acknowledged:unconfirmed).push(slot);
     }
-    return allConfirmed;
+    return {acknowledged,unconfirmed};
+  }
+  function clearReconciledAiSlots(slots) {
+    // Only original-channel neutral ACK + matching writer lease release
+    // may clear the local MCP hold; no group-wide optimistic clearance.
+    for(const slot of slots) {
+      uncertainAiSlots.delete(slot);
+      startupReconcileSlots.delete(slot);
+    }
   }
   async function callTool(name,args) {
     if (name==='start_visual_observation') {
@@ -1247,33 +1257,36 @@ export function createHandler(config,{
       }
       if(inFlight)throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
-      let leaseAttempted=false,leaseHeld=false,leaseReleased=false;
+      let leaseAttempted=false,leaseHeld=false;
+      let released=[];
       try {
-        // Claim the ENTIRE requested set in the native controller before
-        // writing even a neutral. A second MCP must not clear keys belonging
-        // to another still-active writer. Controller acquisition is atomic.
+        // Claim the ENTIRE requested set in the original controller
+        // before writing any neutral. Foreign writers are never touched.
         leaseAttempted=true;
         await changeAiLease('acquire',slots);
         leaseHeld=true;
-        if(!await releaseAiSlots(slots)) {
-          throw new Error('AI_RELEASE_UNCONFIRMED');
+        const neutral=await releaseAiSlots(slots);
+        // Only clients with an actual native neutral ACK may relinquish
+        // this MCP's writer claim. A departed MC03 must not hold MC02,
+        // MC04 or MC05 hostage after their independent neutral ACKs.
+        if(neutral.acknowledged.length) {
+          await changeAiLease('release',neutral.acknowledged);
+          released=neutral.acknowledged;
+          clearReconciledAiSlots(released);
         }
-        await changeAiLease('release',slots);
-        leaseReleased=true;
-        for(const slot of slots) {
-          uncertainAiSlots.delete(slot);
-          startupReconcileSlots.delete(slot);
+        if(neutral.unconfirmed.length) {
+          markAiUncertain(neutral.unconfirmed);
+          throw new Error('AI_RELEASE_UNCONFIRMED');
         }
         return {schema:1,slots,status:'NATIVE_NEUTRAL_WRITES_ACKNOWLEDGED',
           writerLease:'NATIVE_RELEASED_AFTER_NEUTRAL_ACK',
           actualGameKeyRelease:'NOT_VERIFIED',gameplayObserved:false};
       } catch(error) {
-        if(leaseAttempted&&!leaseReleased &&
-           (leaseHeld||!definitelyDeniedWriterLease(error))) {
-          // Malformed acquire ACK may have arrived AFTER native admission.
-          // Only a confirmed foreign-writer conflict is known to have
-          // made no changes and must not poison the denied MCP forever.
-          markAiUncertain(slots);
+        if(leaseAttempted && (leaseHeld||!definitelyDeniedWriterLease(error))) {
+          // Partial ACKs that were ALSO released stay reconciled. A
+          // malformed/uncertain group release or missing child cannot
+          // unlock any other possibly held source channel.
+          markAiUncertain(slots.filter(slot=>!released.includes(slot)));
         }
         throw error;
       } finally {inFlight=false;}
@@ -1360,9 +1373,10 @@ export function createHandler(config,{
       const abort=new AbortController();
       const run={abort,slots:schedule.slots};
       multiSequence=run;
-      let dispatched=false,neutralConfirmed=true,transportConfirmed=false;
-      let leaseAttempted=false,leaseHeld=false,leaseReleased=false;
+      let dispatched=false,transportConfirmed=false;
+      let leaseAttempted=false,leaseHeld=false;
       let leaseDefinitelyDenied=false;
+      let neutralUnconfirmed=[],released=[];
       try {
         leaseAttempted=true;
         // All-or-nothing native cohort claim. A definitely denied foreign
@@ -1390,34 +1404,38 @@ export function createHandler(config,{
         transportConfirmed=true;
         return receipt;
       }finally{
-        // An uncertain action result must never be replayed, even if its
-        // later best-effort neutral cleanup is acknowledged.
+        // A failed/aborted action may already have published packets.
+        // Keep the original ENTIRE cohort quarantined until the model
+        // explicitly requests recovery, even when neutral ACKs arrive.
         if(dispatched&&!transportConfirmed)markAiUncertain(schedule.slots);
-        if(dispatched) {
-          neutralConfirmed=await releaseAiSlots(schedule.slots);
-          if(!neutralConfirmed)markAiUncertain(schedule.slots);
-        }
-        // Never give another writer access until every potentially
-        // touched original slot has an ACKed neutral shared state.
-        // If no pulse was dispatched, newly acquired claims start
-        // neutral and may be returned directly to the native owner.
-        if(leaseHeld && neutralConfirmed) {
-          try {
-            await changeAiLease('release',schedule.slots);
-            leaseReleased=true;
-          } catch {
-            markAiUncertain(schedule.slots);
+        if(leaseHeld) {
+          // A claim that never dispatched input remains initially neutral.
+          const neutral=dispatched?
+            await releaseAiSlots(schedule.slots):
+            {acknowledged:schedule.slots,unconfirmed:[]};
+          neutralUnconfirmed=neutral.unconfirmed;
+          if(neutralUnconfirmed.length)markAiUncertain(neutralUnconfirmed);
+          if(neutral.acknowledged.length) {
+            try {
+              // Release only independently ACKed source channels.
+              // A dead client retains its own lease/TTL fallback, while
+              // unaffected peers are not held until ten-second expiry.
+              await changeAiLease('release',neutral.acknowledged);
+              released=neutral.acknowledged;
+            } catch {
+              markAiUncertain(neutral.acknowledged);
+            }
           }
         }
         if(leaseAttempted&&!leaseHeld&&!leaseDefinitelyDenied) {
-          // Malformed or timed-out acquisition may have been admitted.
-          // The finite native lease expires without a background daemon.
+          // Native acquire ACK was ambiguous. Never assume release or
+          // replay; each native writer claim expires without a daemon.
           markAiUncertain(schedule.slots);
         }
         if(multiSequence===run)multiSequence=null;
         inFlight=false;
-        if(!neutralConfirmed)throw new Error('AI_RELEASE_UNCONFIRMED');
-        if(leaseHeld&&!leaseReleased) {
+        if(neutralUnconfirmed.length)throw new Error('AI_RELEASE_UNCONFIRMED');
+        if(leaseHeld&&released.length!==schedule.slots.length) {
           throw new Error('AI_WRITER_LEASE_RELEASE_UNCONFIRMED');
         }
       }

@@ -1,5 +1,65 @@
 # Current Development Handoff — Lazy Tester
 
+## 1 November 2026 — per-client emergency neutral and lease-expiry safety
+
+**State: SOURCE-ONLY PER-SLOT FAILURE CONTAINMENT / MINECRAFT BLOCKED.**
+The operator has not authorized Node/Rust tests, Windows builds,
+native execution, Minecraft gameplay or CI. This is GitHub source only.
+
+The one retained native controller's feature-gated `AiLeaseBook` now
+marks a leased original child **potentially active BEFORE** publishing
+any keyboard/mouse state to that child's shared input channel. A
+failed/partial native write or expired native deadline must not leave
+its lease falsely marked neutral based on an older ACK. Only a NEW,
+successful exact-channel neutral input write can restore the neutral
+lease flag. The existing per-client 10-second monotonic writer lease,
+350-ms native packet TTL, original PID/birth/session/HWND, fixed
+hybrid/five-AI mode and no-foreign-writer checks remain mandatory.
+Expired claims can be re-acquired only through native admission;
+expiry is NOT a guarantee that Minecraft consumed key-up.
+
+In the same opted-in MCP, `releaseAiSlots` now keeps **independent
+per-client native neutral receipts** rather than collapsing all 4/5
+responses into one boolean. If one original Minecraft child exits or
+its neutral IPC is unavailable, every OTHER opted-in AI slot still
+gets its own neutral attempt. A native writer lease is returned
+ONLY for the subset of slots with a verified neutral transport ACK;
+the failed/unconfirmed slots remain held until an explicit recovery
+or their bounded native lease/packet TTL expires. Both ordinary
+post-action cleanup and an explicit idle
+`stop_experimental_multi_client_actions` use this path. The stop
+request still returns an ERROR when any selected slot fails; it
+does not claim whole-group success. Operators can read the existing
+per-slot `get_multi_client_visual_state.coordination` to see which
+slots remain held, without any new background owner or health timer.
+
+For an acknowledged action whose MC03 neutral write fails, MC02,
+MC04 and MC05 may give back their native lease immediately after
+their individual neutral ACKs; their MCP recovery holds can clear
+if their transport also completed reliably. Conversely, if the
+action transport itself is unverified, **the entire authored
+cohort remains quarantined in MCP** even when unaffected native
+leases were returned: no automatic action retry or partial gameplay
+claim. A late/lost cohort lease-release receipt remains fail-closed
+and is not silently retried. A process that exited has no new input
+written or lease adopted. Normal game exit/reap continues to forget
+its original claim, without deleting accounts or worlds.
+
+**Proof:** REMOTE_GITHUB exact-code/consumer static contract review
+and AUTHORED_NOT_EXECUTED Rust and Node fixtures covering pre-write
+uncertainty, finite lease expiry, partial idle stop, completed-batch
+peer release, and action-transport uncertainty in both four/five AI
+modes. These source fixtures have not been run; all actual native
+build and Minecraft input/gameplay proof remains NOT_EXECUTED /
+NOT_VERIFIED.
+
+**One next action:** When separately authorized Windows Minecraft
+Education access exists, validate this exact native build, real
+per-client input TTL, and the emergency neutral/lease-release
+behavior with one exited child. Until then, do not claim gameplay
+acceptance.
+
+
 ## 1 November 2026 — original-game mode binding for single-writer lease
 
 **State: SOURCE-ONLY MODE-BOUND WRITER ADMISSION / MINECRAFT BLOCKED.**

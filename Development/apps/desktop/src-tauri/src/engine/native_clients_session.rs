@@ -307,6 +307,19 @@ impl AiLeaseBook {
         }
         Ok(())
     }
+    // Declare a write potentially ACTIVE BEFORE calling the exact
+    // original process channel. A native I/O error can occur after the
+    // packet was partially/fully published; never leave the lease marked
+    // neutral based on the PREVIOUS acknowledged input state.
+    pub(crate) fn begin_write(&mut self,slot:u32,owner:&str,
+        pid:u32,birth:u64,now:u64)->io::Result<()> {
+        self.require(slot,owner,pid,birth,now)?;
+        let held=self.claims[(slot-1) as usize].as_mut().unwrap();
+        held.neutral=false;
+        held.until_ms=now.saturating_add(AI_WRITER_LEASE_MS);
+        Ok(())
+    }
+    // Only an acknowledged native shared-state write may restore neutral.
     pub(crate) fn wrote(&mut self,slot:u32,owner:&str,
         pid:u32,birth:u64,now:u64,neutral:bool)->io::Result<()> {
         self.require(slot,owner,pid,birth,now)?;
@@ -870,6 +883,37 @@ mod tests {
         assert!(matches!(serde_json::from_value::<SessionRequest>(five),
             Ok(SessionRequest::AiLeaseAcquire {
                 mode:AgentControlMode::FiveAi,..})));
+    }
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn interrupted_native_writer_never_releases_unconfirmed_input() {
+        // Pure lease-book fixture only: the controller's fail-closed path
+        // must not report safe neutral when the channel write fails.
+        let owner="a".repeat(32);
+        let group=vec![(2,202,2202),(3,203,2203),(4,204,2204),(5,205,2205)];
+        let mut book=AiLeaseBook::default();
+        book.acquire(&group,&owner,1000).unwrap();
+        book.begin_write(3,&owner,203,2203,1010).unwrap();
+        assert!(book.release(&group,&owner,1011).is_err());
+        assert!(book.acquire(&[(3,203,2203)],&"b".repeat(32),1012).is_err());
+        // Even if MC03's channel becomes unavailable, other original
+        // channels that never had an uncertain write can be released.
+        let safe=vec![(2,202,2202),(4,204,2204),(5,205,2205)];
+        assert!(book.release(&safe,&owner,1020).is_ok());
+        assert!(book.require(3,&owner,203,2203,1021).is_ok());
+        book.begin_write(3,&owner,203,2203,1030).unwrap();
+        // A known-good native neutral write restores releasability;
+        // merely attempting ReleaseAll does NOT.
+        assert!(book.release(&[(3,203,2203)],&owner,1031).is_err());
+        book.wrote(3,&owner,203,2203,1032,true).unwrap();
+        assert!(book.release(&[(3,203,2203)],&owner,1033).is_ok());
+        // Explicit finite expiration (10 seconds) still prevents a
+        // dead MCP from holding a process forever.
+        book.acquire(&[(3,203,2203)],&owner,2000).unwrap();
+        book.begin_write(3,&owner,203,2203,2001).unwrap();
+        assert!(book.require(3,&owner,203,2203,2001+AI_WRITER_LEASE_MS).is_err());
+        assert!(book.acquire(&[(3,203,2203)],&"b".repeat(32),
+            2002+AI_WRITER_LEASE_MS).is_ok());
     }
     #[cfg(feature="mc02-native-input")]
     #[test]

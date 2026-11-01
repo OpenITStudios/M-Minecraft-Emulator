@@ -1656,17 +1656,21 @@ test('restarted MCP conservatively forgets earlier release and requires a new ex
 });
 
 
-test('partial startup neutral failure never unlocks a previously running 4/5-client cohort',async()=>{
+test('failed neutral on one AI releases all independently ACKed peer leases',async()=>{
   for(const [mode,slots] of [
     ['human-plus-four-ai',[2,3,4,5]],
     ['five-ai',[1,2,3,4,5]],
   ]){
     const fixture=teamVisualFixture(mode);
     let failing=slots[1],attempts=[];
+    const leaseCalls=[];
     const handler=createHandler({...config(mode),
       experimentalMultiClientInputEnabled:true},{
       visualObserverFactory:fixture.factory,
-    aiLease:leaseAck,
+      aiLease:async(exe,operation,selected,opts)=>{
+        leaseCalls.push([operation,...selected]);
+        return leaseAck(exe,operation,selected,opts);
+      },
       aiInput:async(_exe,frame)=>{
         attempts.push(frame.slot);
         if(frame.slot===failing)throw Error('NATIVE_NEUTRAL_UNCONFIRMED');
@@ -1678,30 +1682,35 @@ test('partial startup neutral failure never unlocks a previously running 4/5-cli
     await assert.rejects(()=>handler.callTool('stop_experimental_multi_client_actions',{
       slots,
     }),/AI_RELEASE_UNCONFIRMED/);
-    assert.deepEqual(attempts,slots);
-    const held=await handler.callTool('get_multi_client_visual_state',{});
-    // A failed multi-slot recovery is treated as an uncertain whole
-    // transaction, including peers that may have received neutral ACK.
-    assert.deepEqual(held.coordination.pendingReconnectSlots,[]);
-    assert.deepEqual(held.coordination.blockedSlots,slots);
-    assert.equal(held.coordination.clients.every(c=>c.blockReason===
-      'UNCERTAIN_NATIVE_INPUT_REQUIRES_EXPLICIT_NEUTRAL'),true);
-    // Successful ACKs in the refused multi-slot stop were NOT silently
-    // committed as clearances: the entire requested request remains held.
-    failing=0;attempts=[];
-    const recovered=await handler.callTool('stop_experimental_multi_client_actions',{
-      slots,
+    assert.deepEqual(attempts,slots); // all attempted, even after MC03 error
+    const healthy=slots.filter(slot=>slot!==failing);
+    assert.deepEqual(leaseCalls,[
+      ['acquire',...slots],['release',...healthy],
+    ]);
+    const state=await handler.callTool('get_multi_client_visual_state',{});
+    assert.deepEqual(state.coordination.pendingReconnectSlots,[]);
+    assert.deepEqual(state.coordination.blockedSlots,[failing]);
+    assert.deepEqual(state.coordination.readySlots,healthy);
+    assert.equal(state.coordination.clients.find(c=>c.slot===failing).blockReason,
+      'UNCERTAIN_NATIVE_INPUT_REQUIRES_EXPLICIT_NEUTRAL');
+    assert.equal(state.coordination.gameplayVerification,'NOT_VERIFIED');
+    // Only MC03 needs another explicit neutral: previously ACKed peers
+    // must not be redundantly released or blocked by the failed client.
+    attempts=[];failing=0;
+    const recovery=await handler.callTool('stop_experimental_multi_client_actions',{
+      slots:[slots[1]],
     });
-    assert.equal(recovered.status,'NATIVE_NEUTRAL_WRITES_ACKNOWLEDGED');
-    assert.deepEqual(attempts,slots);
-    const ready=await handler.callTool('get_multi_client_visual_state',{});
-    assert.deepEqual(ready.coordination.blockedSlots,[]);
-    assert.deepEqual(ready.coordination.pendingReconnectSlots,[]);
-    assert.equal(ready.coordination.gameplayVerification,'NOT_VERIFIED');
+    assert.deepEqual(recovery.slots,[slots[1]]);
+    assert.deepEqual(attempts,[slots[1]]);
+    assert.deepEqual(leaseCalls.slice(-2),[
+      ['acquire',slots[1]],['release',slots[1]],
+    ]);
+    const now=await handler.callTool('get_multi_client_visual_state',{});
+    assert.deepEqual(now.coordination.blockedSlots,[]);
+    assert.deepEqual(now.coordination.pendingReconnectSlots,[]);
     handler.shutdown();
   }
 });
-
 
 test('native writer lease adapter refuses malformed owner and slot groups before any CLI execution',async()=>{
   const executable=path.resolve('lazy-tester.exe');
@@ -1972,5 +1981,112 @@ test('malformed native acquisition ACK is uncertain, never treated as a definiti
   const after=await handler.callTool('get_multi_client_visual_state',{slots});
   assert.deepEqual(after.coordination.blockedSlots,[3,4,5]);
   assert.equal(neutralWrites,1);
+  handler.shutdown();
+});
+
+
+test('one stopped AI during completed batch does not strand leases of neutral-ACKed peers',async()=>{
+  for(const [mode,slots] of [
+    ['human-plus-four-ai',[2,3,4,5]],
+    ['five-ai',[1,2,3,4,5]],
+  ]){
+    const fixture=teamVisualFixture(mode);
+    const leaseCalls=[],neutralWrites=[],actionBatches=[];
+    const failedSlot=slots[1];
+    let dead=false;
+    const handler=createHandler({...config(mode),
+      experimentalMultiClientInputEnabled:true},{
+      visualObserverFactory:fixture.factory,
+      aiLease:async(exe,operation,selected,opts)=>{
+        leaseCalls.push([operation,...selected]);
+        return leaseAck(exe,operation,selected,opts);
+      },
+      aiInput:async(_exe,frame)=>{
+        neutralWrites.push(frame.slot);
+        if(dead&&frame.slot===failedSlot) {
+          throw new Error('ORIGINAL_CHILD_EXITED');
+        }
+        return {schema:1,slot:frame.slot,
+          status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+          gameplayObserved:false};
+      },
+      aiMultiBatch:async(_exe,batches)=>{
+        actionBatches.push(batches.map(batch=>batch.slot));
+        return {schema:1,slots:batches.map(batch=>batch.slot),
+          status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
+          gameplayObserved:false};
+      },
+    });
+    await handler.callTool('stop_experimental_multi_client_actions',{slots});
+    leaseCalls.length=0; neutralWrites.length=0;
+    dead=true;
+    await assert.rejects(()=>handler.callTool('run_experimental_multi_client_actions',{
+      actions:slots.map(aiMove),
+    }),/AI_RELEASE_UNCONFIRMED/);
+    const healthy=slots.filter(slot=>slot!==failedSlot);
+    assert.deepEqual(neutralWrites,slots);
+    assert.deepEqual(actionBatches,[slots]);
+    assert.deepEqual(leaseCalls,[
+      ['acquire',...slots],['release',...healthy],
+    ]);
+    const status=await handler.callTool('get_multi_client_visual_state',{slots});
+    assert.deepEqual(status.coordination.blockedSlots,[failedSlot]);
+    assert.deepEqual(status.coordination.readySlots,healthy);
+    await assert.rejects(()=>handler.callTool('run_experimental_multi_client_actions',{
+      actions:[aiMove(failedSlot)],
+    }),/AI_INPUT_RECOVERY_REQUIRED/);
+    // The healthy peers can proceed ONLY as an explicit NEW action
+    // after their independently confirmed lease/neutral cleanup.
+    const next=await handler.callTool('run_experimental_multi_client_actions',{
+      actions:healthy.map(aiMove),
+    });
+    assert.deepEqual(next.slots,healthy);
+    assert.deepEqual(actionBatches,[slots,healthy]);
+    assert.deepEqual(leaseCalls.slice(-2),[
+      ['acquire',...healthy],['release',...healthy],
+    ]);
+    assert.equal(next.gameplayObserved,false);
+    handler.shutdown();
+  }
+});
+
+test('uncertain action delivery still quarantines whole cohort even if peer leases are released',async()=>{
+  const fixture=teamVisualFixture();
+  const slots=fixture.slots;
+  const leaseCalls=[];
+  let dead=false,dispatches=0;
+  const handler=createHandler({...config(),
+    experimentalMultiClientInputEnabled:true},{
+    visualObserverFactory:fixture.factory,
+    aiLease:async(exe,operation,selected,opts)=>{
+      leaseCalls.push([operation,...selected]);
+      return leaseAck(exe,operation,selected,opts);
+    },
+    aiInput:async(_exe,frame)=>{
+      if(dead&&frame.slot===3)throw Error('CHILD_DISAPPEARED');
+      return {schema:1,slot:frame.slot,
+        status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+        gameplayObserved:false};
+    },
+    aiMultiBatch:async()=>{
+      dispatches++;
+      throw new Error('IPC_RESPONSE_UNCERTAIN');
+    },
+  });
+  await handler.callTool('stop_experimental_multi_client_actions',{slots});
+  leaseCalls.length=0;dead=true;
+  await assert.rejects(()=>handler.callTool('run_experimental_multi_client_actions',{
+    actions:slots.map(aiMove),
+  }),/AI_RELEASE_UNCONFIRMED/);
+  assert.deepEqual(leaseCalls,[
+    ['acquire',...slots],['release',2,4,5],
+  ]);
+  const held=await handler.callTool('get_multi_client_visual_state',{});
+  assert.deepEqual(held.coordination.blockedSlots,slots);
+  assert.equal(dispatches,1);
+  await assert.rejects(()=>handler.callTool('run_experimental_multi_client_actions',{
+    actions:[aiMove(2)],
+  }),/AI_INPUT_RECOVERY_REQUIRED/);
+  assert.equal(dispatches,1); // NEVER blindly replay uncertain transport
   handler.shutdown();
 });

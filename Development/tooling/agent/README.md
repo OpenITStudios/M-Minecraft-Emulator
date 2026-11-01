@@ -115,6 +115,44 @@ real AI image reasoning, native input and simultaneous gameplay remain
 unverified. Standard installer, user data, fixed slot ownership,
 human MC01 isolation and CI policy are unchanged.
 
+## Per-slot emergency lease cleanup and interrupted native writes (source only)
+
+The retained native actor marks a per-slot writer lease
+**possibly active before** its original child channel I/O.
+A native channel failure can have already published a packet:
+an earlier neutral ACK can no longer be used to release that lease.
+Only a NEW acknowledged native neutral write restores the book's
+neutral flag. The existing 10-second lease expiry and 350-ms
+packet TTL bound a crashed/stopped client but do not prove a
+Minecraft key-up or actual game-input consumption.
+
+The existing opted-in MCP now attempts every independently
+requested per-slot neutral write and retains which originals
+received a valid transport ACK. After a four/five-AI batch or
+explicit idle stop, it releases the native writer lease only
+for the exact ACKed slots. A stopped/absent MC03 no longer
+prevents immediate native lease return for already-neutral
+MC02/MC04/MC05. Failed slots remain under a per-slot
+`AI_INPUT_RECOVERY_REQUIRED` hold. A partially failed idle
+stop **still reports an error**, while its read-only
+`get_multi_client_visual_state.coordination` reports exact
+held versus reconciled slots. No automatic retry, lease
+stealing, fake input success, second controller or worker
+has been introduced.
+
+If the MAIN multi-client input batch itself has an uncertain
+receipt, MCP conservatively holds the entire authored cohort
+even if individual native neutral ACKs allowed returning some
+source leases. A lost/ambiguous lease-release ACK also leaves
+its requested slots held, rather than assuming controller
+ownership has changed. Native original child identity,
+hybrid MC01 human protection and mode-bound admission remain
+unchanged.
+
+All regression fixtures are AUTHORED_NOT_EXECUTED; Windows,
+native transport timing, gameplay, input delivery and
+actual game key release remain NOT_VERIFIED.
+
 ## Mode-bound native writer admission (source only)
 
 The experimental single-writer lease is pinned to the exact
@@ -168,8 +206,10 @@ claim; its brief native active-input reservation prevents immediate
 multi-client handoff during legacy heartbeat polling.
 
 After an action, the MCP reuses independent per-slot ReleaseAll.
-Only after all neutral writes are acknowledged does
-`ai-lease-release` relinquish the cohort. A failed release, lost
+`ai-lease-release` relinquishes ONLY the exact subset whose
+native neutral writes are independently acknowledged. A failed
+child's lease is left for explicit recovery or finite expiry.
+A failed release, lost
 native response, cancellation or failed neutral is an explicit
 uncertain state and leaves the local MCP's slot recovery hold;
 the native lease eventually expires and 350-ms game packet TTL

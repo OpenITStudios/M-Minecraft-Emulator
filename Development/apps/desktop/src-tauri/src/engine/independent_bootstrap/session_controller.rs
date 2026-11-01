@@ -335,8 +335,15 @@ impl Sessions {
         ttl_ms:u32,issued_at_ms:u64,owner:&str)->io::Result<()> {
         use windows_sys::Win32::System::SystemInformation::GetTickCount64;
         let (_,pid,birth)=self.ai_lease_target(slot)?;
-        self.ai_leases.require(slot,owner,pid,birth,unsafe{GetTickCount64()})?;
+        // Before touching the original shared channel, conservatively
+        // record POSSIBLY_ACTIVE. Native input I/O can return an error
+        // after a packet was published; never let a prior neutral ACK
+        // authorize lease release if this write becomes uncertain.
+        self.ai_leases.begin_write(slot,owner,pid,birth,
+            unsafe{GetTickCount64()})?;
         self.mc02_input(slot,keys,dx,dy,ttl_ms,issued_at_ms)?;
+        // A new neutral ACK is the ONLY event that restores releasability.
+        // This is native transport evidence, not Minecraft key-up proof.
         self.ai_leases.wrote(slot,owner,pid,birth,
             unsafe{GetTickCount64()},keys==0&&dx==0&&dy==0)
     }
