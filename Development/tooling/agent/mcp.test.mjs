@@ -39,8 +39,25 @@ test('MCP handshake and tool discovery are standard JSON-RPC',async()=>{
   const init=await h.handle({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-11-25'}});
   assert.equal(init.result.protocolVersion,'2025-11-25');
   const listing=await h.handle({jsonrpc:'2.0',id:2,method:'tools/list'});
-  assert.deepEqual(listing.result.tools.map(x=>x.name),['start_visual_observation','get_multi_client_visual_state','read_visual_observation','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence','read_game_evidence']);
+  assert.deepEqual(listing.result.tools.map(x=>x.name),['start_visual_observation','get_multi_client_visual_state','read_visual_observation','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence','read_game_evidence','get_diagnostics_overview','list_issue_candidates','get_issue_details','query_diagnostic_evidence']);
   assert.equal(await h.handle({jsonrpc:'2.0',method:'notifications/initialized'}),null);
+});
+
+test('diagnostics MCP tools are read-only and unconfigured by default',async()=>{
+  const handler=createHandler(config(),{
+    native:async()=>{throw new Error('native must not be contacted');},
+  });
+  const overview=await handler.handle({jsonrpc:'2.0',id:99,method:'tools/call',
+    params:{name:'get_diagnostics_overview',arguments:{}}});
+  assert.equal(overview.result.isError,false);
+  const result=JSON.parse(overview.result.content[0].text);
+  assert.equal(result.status,'NOT_CONFIGURED');
+  assert.equal(result.rawDataSharedWithAI,false);
+  const candidate=await handler.handle({jsonrpc:'2.0',id:100,method:'tools/call',
+    params:{name:'list_issue_candidates',arguments:{run:'qa-run'}}});
+  assert.equal(JSON.parse(candidate.result.content[0].text).status,'NOT_CONFIGURED');
+  assert.throws(()=>parseConfiguration(['--diagnostics-dir','relative'],{}));
+  assert.throws(()=>parseConfiguration(['--diagnostics-dir',path.resolve('elsewhere')],{}));
 });
 
 test('hybrid mode refuses to launch human MC01, no native request sent',async()=>{

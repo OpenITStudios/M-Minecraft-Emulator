@@ -15,6 +15,8 @@ import {inputExecutionStatus} from './input-delivery.mjs';
 import {prepareMc02PulseBatch,prepareMultiClientPulseBatches} from './mc02-action-sequence.mjs';
 import {summarizeGameEvidence,summarizeEvidenceReports,normalizeEvidenceSlots} from './evidence-summary.mjs';
 import {captureCuaWindow,validateCuaExecutable} from './visual-capture.mjs';
+import {validateDiagnosticsRoot,diagnosticsOverview,listDiagnosticIssues,
+  getDiagnosticIssue,queryDiagnosticEvidence} from './diagnostics-local.mjs';
 import {createVisualObserver,OBSERVATION_LIMITS,
   summarizeTeamVisualState,verifyTeamObservationBasis,
   evaluateTeamActionFeedback,summarizeTeamCoordination} from './visual-observer.mjs';
@@ -82,19 +84,21 @@ export function parseConfiguration(argv, env = process.env) {
   let mode = 'human-plus-four-ai';
   let executable = env.LAZY_TESTER_AGENT_EXE ?? '';
   let evidenceDirectory = env.LAZY_TESTER_EVIDENCE_DIR ?? '';
+  let diagnosticsDirectory = env.LAZY_TESTER_DIAGNOSTICS_DIR ?? '';
   let cuaExecutable = env.LAZY_TESTER_CUA_EXE ?? '';
   let gpuExecutable = env.LAZY_TESTER_GPU_CAPTURE_EXE ?? '';
   let experimentalMc02InputEnabled=false;
   let experimentalMultiClientInputEnabled=false;
   for (let i=0;i<argv.length;i++) {
     const flag=argv[i];
-    if (!['--mode','--exe','--evidence-dir','--cua-exe','--gpu-capture-exe','--mc02-input-experimental','--multi-client-input-experimental'].includes(flag) || i===argv.length-1) {
-      throw new Error('Accepted arguments: --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>] [--cua-exe <cua-driver.exe>] [--gpu-capture-exe <lazy-tester-gpu-capture.exe>]');
+    if (!['--mode','--exe','--evidence-dir','--diagnostics-dir','--cua-exe','--gpu-capture-exe','--mc02-input-experimental','--multi-client-input-experimental'].includes(flag) || i===argv.length-1) {
+      throw new Error('Accepted arguments: --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>] [--diagnostics-dir <Data/Diagnostics>] [--cua-exe <cua-driver.exe>] [--gpu-capture-exe <lazy-tester-gpu-capture.exe>]');
     }
     const value=argv[++i];
     if (flag==='--mode') mode=value;
     if (flag==='--exe') executable=value;
     if (flag==='--evidence-dir') evidenceDirectory=value;
+    if (flag==='--diagnostics-dir') diagnosticsDirectory=value;
     if (flag==='--cua-exe') cuaExecutable=value;
     if (flag==='--gpu-capture-exe') gpuExecutable=value;
     if (flag==='--mc02-input-experimental') {
@@ -125,9 +129,10 @@ export function parseConfiguration(argv, env = process.env) {
   if (evidenceDirectory && !path.isAbsolute(evidenceDirectory)) {
     throw new Error('Evidence directory must be absolute');
   }
+  if (diagnosticsDirectory) validateDiagnosticsRoot(diagnosticsDirectory);
   if (cuaExecutable) validateCuaExecutable(cuaExecutable);
   if (gpuExecutable) validateGpuExecutable(gpuExecutable);
-  return Object.freeze({mode, executable, evidenceDirectory,
+  return Object.freeze({mode, executable, evidenceDirectory,diagnosticsDirectory,
     cuaExecutable,gpuExecutable,experimentalMc02InputEnabled,
     experimentalMultiClientInputEnabled});
 }
@@ -720,6 +725,32 @@ export const TOOL_LIST=[
   {name:'assess_input_route',description:'Read-only native identity check for AI gameplay input: bind validated multi-client action timeline to real MC HWND/PID; ALWAYS reports no verified independent game-input backend and NEVER sends input.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}}},required:['actions'],additionalProperties:false}},
   {name:'summarize_test_evidence',description:'Read and condense bounded analytics/game-results capture from 1-5 profiles. No login, player mapping, host/join or gameplay result is inferred.',inputSchema:{type:'object',properties:{slots:{type:'array',items:{type:'integer',minimum:1,maximum:5},minItems:1,maxItems:5,uniqueItems:true}},additionalProperties:false}},
   {name:'read_game_evidence',description:'Read only a compact allowlisted projection of 1-20 captured evidence records for one profile. No raw Skills Probe JSON, credentials or verified gameplay claims.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
+  // Source-only local-first diagnostics: explicitly imported immutable evidence.
+  // No raw log, filesystem path, or automatic Minecraft activity is exposed.
+  {name:'get_diagnostics_overview',
+    description:'Read a tiny LOCAL diagnostic summary or up to 10 run IDs. No gameplay success or raw event dump. Import is never triggered over MCP.',
+    inputSchema:{type:'object',properties:{
+      run:{type:'string',pattern:'^[a-z][a-z0-9._-]{0,47}$'},
+    },additionalProperties:false}},
+  {name:'list_issue_candidates',
+    description:'Return up to 10 grouped UNVERIFIED local issue candidates and a pagination cursor. No raw logs.',
+    inputSchema:{type:'object',properties:{
+      run:{type:'string',pattern:'^[a-z][a-z0-9._-]{0,47}$'},
+      cursor:{type:'integer',minimum:0},limit:{type:'integer',minimum:1,maximum:10},
+    },required:['run'],additionalProperties:false}},
+  {name:'get_issue_details',
+    description:'Read one selected UNVERIFIED issue with at most 8 curated samples. Never returns full source logs.',
+    inputSchema:{type:'object',properties:{
+      run:{type:'string',pattern:'^[a-z][a-z0-9._-]{0,47}$'},
+      id:{type:'string',pattern:'^[a-f0-9]{16}$'},
+    },required:['run','id'],additionalProperties:false}},
+  {name:'query_diagnostic_evidence',
+    description:'Read at most 8 allowlisted evidence records for a selected issue from LOCAL archive; paginated and no arbitrary file paths.',
+    inputSchema:{type:'object',properties:{
+      run:{type:'string',pattern:'^[a-z][a-z0-9._-]{0,47}$'},
+      id:{type:'string',pattern:'^[a-f0-9]{16}$'},
+      cursor:{type:'integer',minimum:0},limit:{type:'integer',minimum:1,maximum:8},
+    },required:['run','id'],additionalProperties:false}},
 ];
 
 
@@ -855,7 +886,7 @@ const EXPERIMENTAL_TEAM_FEEDBACK_TOOL={
 
 function capabilities(mode,experimental=false,multi=false) {return {schema:1,mode,hostSlot:1,humanSlots:mode==='human-plus-four-ai'?[1]:[],
   aiSlots:mode==='human-plus-four-ai'?[2,3,4,5]:[1,2,3,4,5],
-  available:['start_visual_observation','read_visual_observation','get_multi_client_visual_state','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence',...(experimental?[EXPERIMENTAL_MC02_TOOL.name,...EXPERIMENTAL_MC02_SEQUENCE_TOOLS.map(t=>t.name)]:[]),
+  available:['start_visual_observation','read_visual_observation','get_multi_client_visual_state','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence','get_diagnostics_overview','list_issue_candidates','get_issue_details','query_diagnostic_evidence',...(experimental?[EXPERIMENTAL_MC02_TOOL.name,...EXPERIMENTAL_MC02_SEQUENCE_TOOLS.map(t=>t.name)]:[]),
     ...(multi?[...EXPERIMENTAL_MULTI_CLIENT_TOOLS.map(t=>t.name),
       EXPERIMENTAL_OBSERVED_TEAM_TOOL.name,
       EXPERIMENTAL_TEAM_FEEDBACK_TOOL.name]:[])],
@@ -1076,6 +1107,26 @@ export function createHandler(config,{
     }
   }
   async function callTool(name,args) {
+    // All diagnostic calls are read-only, scoped to one configured Data/
+    // Diagnostics root. A Codex/MCP caller cannot import or request a path.
+    if(name==='get_diagnostics_overview') {
+      keysExactly(args,['run']);
+      return diagnosticsOverview(config.diagnosticsDirectory,args.run);
+    }
+    if(name==='list_issue_candidates') {
+      keysExactly(args,['run','cursor','limit']);
+      return listDiagnosticIssues(config.diagnosticsDirectory,args.run,
+        {cursor:args.cursor,limit:args.limit});
+    }
+    if(name==='get_issue_details') {
+      keysExactly(args,['run','id']);
+      return getDiagnosticIssue(config.diagnosticsDirectory,args.run,args.id);
+    }
+    if(name==='query_diagnostic_evidence') {
+      keysExactly(args,['run','id','cursor','limit']);
+      return queryDiagnosticEvidence(config.diagnosticsDirectory,args.run,args.id,
+        {cursor:args.cursor,limit:args.limit});
+    }
     if (name==='start_visual_observation') {
       keysExactly(args,['slots','intervalMs','durationMs']);
       const slots=checkedSlots(args.slots);

@@ -65,6 +65,23 @@ native transport and never establish Minecraft movement.
   The **external** AI model must inspect individual images and decide
   next actions; there is no autonomous model loop in this repo.
 
+## Minecraft Education local-first diagnostic import (source only)
+
+The existing MCP now offers four **read-only**, bounded diagnostics tools:
+get_diagnostics_overview, list_issue_candidates, get_issue_details and
+query_diagnostic_evidence. They are inactive without an explicit
+--diagnostics-dir / LAZY_TESTER_DIAGNOSTICS_DIR rooted at Data/Diagnostics.
+The underlying diagnostics-local.mjs importer runs only as a separately
+invoked local CLI; **Codex cannot import raw files, perform arbitrary path
+reads, auto-collect, upload, or delete anything** over MCP.
+
+Every import retains a local immutable validated JSONL archive and a
+compact issue index. Data from unverified Education logs is never claimed
+as gameplay PASS. This is not a live Minecraft Education collector, not
+a debugger connection and not part of the release. For contract, bounded
+usage, quotas and future Education verification see
+[local-first map diagnostics](../../../docs/system/map-diagnostics.md).
+
 ## Test/release boundary
 
 Read [current handoff](../../../planning/development.md) and

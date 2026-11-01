@@ -1,5 +1,37 @@
 # Current Development Handoff — Lazy Tester
 
+## Minecraft Education local-first diagnostics — 2 November 2026
+
+**State: SOURCE-ONLY BOUNDED IMPLEMENTATION AUTHORED, RUNTIME NOT_EXECUTED.**
+
+Operator approved keeping all captured evidence **locally** and exposing
+only compact issue candidates/on-demand evidence to Codex, using the
+existing MCP. On the Local branch, the first slice adds:
+- diagnostics-local.mjs: an explicit offline normalized JSONL importer,
+  immutable runs under ignored Data/Diagnostics, finite source/index quotas,
+  deduplicated candidates and read-only indexed/paginated evidence queries.
+- The existing mcp.mjs exposes four bounded read-only diagnostics tools.
+  No path may be supplied by an MCP caller; diagnostics directory is explicit
+  and disabled when absent. Import is CLI-only, not AI driven.
+- Authored Node regression fixtures and the contract in
+  docs/system/map-diagnostics.md. No DB server, remote upload,
+  automatic tailer, second game actor, profile/world changes, CI,
+  Windows build or Minecraft execution.
+
+This first slice does **not** implement live Education Script API collection.
+The JSONL format is a proposed normalized adapter contract, not a verified
+Minecraft content-log message. World/player-to-profile identity, stable
+Education transport, timing, telemetry performance and debugger compatibility
+are UNKNOWN. A local import/ACK never establishes gameplay PASS. All
+new diagnostic tests are AUTHORED_NOT_EXECUTED.
+
+**One next diagnostics action, subject to distinct execution approval:**
+verify Education build-specific stable Script API output and the real
+per-profile Content Log transport/source identity on an approved Windows
+target; only then author a bounded live ingestion adapter. Keep the
+experimental AI input feature blocked and default-OFF independently.
+
+
 ## Decision — 1 November 2026
 
 **State: SOURCE-ONLY NATIVE BUILD/ABI PREPARATION; EXPERIMENTAL DLL TRUST BLOCKED / NOT_EXECUTED.**
@@ -108,7 +140,7 @@ migration, force-close, or source-to-production promotion. Preserve
 persistent Minecraft accounts/worlds, original process identity and
 normal game exit/recovery.
 
-## One next action
+## Separate native AI input next gate (still blocked)
 
 **Only after separate operator approval on a compatible Windows x64 host:**
 compile the exact-`Local`-SHA C++ input-enabled DLL and Rust input-feature

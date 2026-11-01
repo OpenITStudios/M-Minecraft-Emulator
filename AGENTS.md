@@ -36,11 +36,22 @@ approval. Whether Minecraft Education consumes these Win32 inputs is
 still unverified on MC02 AND all other clients. Neither source-only
 work nor IPC ACKs nor hook-return markers are game acceptance.
 
-**Hard scope gate:** no generic MCP/privacy/parser/observer audits,
+**Scoped diagnostic authorization — 2 November 2026:** operator
+explicitly approved **source-only local-first Minecraft Education
+diagnostics**: immutable Data/Diagnostics evidence import, grouped issue
+summaries, and bounded read-only Codex/MCP queries. This authorizes no
+automatic Education log discovery, game execution, token upload,
+debugger TCP connection, CI, installs, changes to the single native
+controller, account/world access, or source tests. All live Education
+data paths and actor/world attribution remain NOT_VERIFIED. See
+docs/system/map-diagnostics.md.
+
+**Hard scope gate for experimental AI input:** no generic MCP/privacy/parser/observer audits,
 second game controller, speculative provider or milestone churn.
-Source work must directly implement the existing per-client native
-input route coherently across 4–5 profiles, with only bounded
-authored regression fixtures until execution is approved.
+Native AI input source work must directly implement the existing per-client
+native input route coherently across 4–5 profiles, with only bounded
+authored regression fixtures until execution is approved. The separately
+authorized local-first diagnostics scope above is not an AI input feature.
 No unapproved game hooking, DLL injection, driver installation,
 foreground takeover, VM/RDP patching, CI or user-PC execution. Preserve
 all native profile/world/account data and normal close contracts.
