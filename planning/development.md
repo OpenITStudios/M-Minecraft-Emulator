@@ -2,7 +2,7 @@
 
 ## Decision — 1 November 2026
 
-**State: PREPARED FOR CONTROLLED LOCAL SOURCE PREFLIGHT; MINECRAFT AI INPUT BLOCKED / NOT_EXECUTED.**
+**State: SOURCE-ONLY NATIVE BUILD/ABI PREPARATION; EXPERIMENTAL DLL TRUST BLOCKED / NOT_EXECUTED.**
 
 Lazy Tester has one native controller for five Minecraft Education Windows
 profiles. The separate optional Computer Use candidate includes source for
@@ -55,6 +55,30 @@ hardening, not an executed build**, binary identity check or verified
 Minecraft input consumer. No source/toolchain/runtime/package permission was
 changed.
 
+## Experimental AI DLL trust gate — 1 November 2026
+
+A concrete native integration blocker was identified: previously the Rust
+experimental input feature still selected the ordinary reviewed production
+`bootstrap-compat.dll`, which intentionally excludes optional virtual-input
+hooks. Thus native input-state ACKs could be emitted for an original game whose
+DLL has no game-side AI consumer. A rebuilt experimental C++ DLL would also
+fail the old production DLL hash.
+
+The existing `BootstrapLibrary::reviewed()` now selects a distinct
+`REVIEWED_EDUCATION_AI_BOOTSTRAP` compile-time digest when the Rust input
+feature is enabled, for the **entire** retained native controller. The
+experimental digest is deliberately `None` until separately reviewed:
+the feature-enabled manager refuses its unapproved DLL rather than silently
+falling back to the normal one. Normal builds keep the exact production hash
+and error semantics unchanged. Human MC01 and AI MC02–MC05 must use one
+source-matched experimental DLL pair, with no AI input section for MC01.
+No new DLL loader, path override, provider, installer enablement or game hook
+was introduced. A negative test was authored but NOT_EXECUTED.
+
+This is a *source-side refusal*, not build success or a working AI input
+mechanism. The approved experimental C++ DLL hash and binary identity do
+not exist yet; game-level input consumption remains UNKNOWN.
+
 ## Current proof boundary and safety
 
 The single procedure for the next stage is
@@ -75,10 +99,11 @@ normal game exit/recovery.
 ## One next action
 
 **Only after separate operator approval on a compatible Windows x64 host:**
-perform the exact-`Local`-SHA native build and ABI preflight for the matching
-opted-in C++/Rust/controller pair. Stop on the first compiler, binary,
-identity or IPC failure. Game-level MC01-human / MC02-AI testing is a
-separate later gate, not permission implicit in a successful build.
+compile the exact-`Local`-SHA C++ input-enabled DLL and Rust input-feature
+candidate (without launching Minecraft), verify binary identity and ABI,
+and review the resulting C++ hash for a future explicit experimental
+digest pin. Stop at any compile/identity mismatch. Game-level MC01-human /
+MC02-AI acceptance needs a separate later approval.
 
 **Proof recorded now:** REMOTE_GITHUB source/tree/doc and consumer inspection
 only; executable test suites, Windows/MSVC build, installer and Minecraft

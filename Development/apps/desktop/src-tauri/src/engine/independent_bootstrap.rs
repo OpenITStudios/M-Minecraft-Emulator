@@ -755,6 +755,14 @@ const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = Some(PayloadDigests
         0xe9, 0x0b, 0x31, 0x2b, 0x3f, 0x12, 0x91, 0x50, 0x98, 0xa3, 0x57, 0x1a, 0x64, 0x70, 0x50, 0xd5, 0xe3, 0xa1, 0xd0, 0x82, 0xa0, 0xf8, 0x31, 0x24, 0x2d, 0x92, 0xff, 0xac, 0x55, 0x14, 0x65, 0x3f,
     ],
 });
+// A feature-enabled AI controller must NOT adopt the ordinary reviewed
+// bootstrap-compat.dll: that production image intentionally omits optional
+// Win32 virtual input hooks. A standalone experimental C++ DLL changes its
+// hash and must be separately reviewed/pinned for this WHOLE controller.
+// No hash override or game DLL fallback. OFF until separately approved.
+#[cfg(feature="mc02-native-input")]
+const REVIEWED_EDUCATION_AI_BOOTSTRAP: Option<PayloadDigests> = None;
+
 #[derive(Clone, Copy)]
 struct PayloadDigests {
     enroller: [u8; 32],
@@ -800,11 +808,22 @@ struct BootstrapLibrary {
 }
 impl BootstrapLibrary {
     fn reviewed() -> io::Result<Self> {
-        let digests = REVIEWED_EDUCATION_BOOTSTRAP.ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::Unsupported,
-                "No reviewed Education bootstrap payload",
-            )
+        // Select one reviewed compatibility DLL pair PER feature-enabled
+        // original session controller, not per slot or per late MCP packet.
+        // A hybrid human MC01 has no AI mapping, so experimental hooks stay
+        // inert for that process while sharing one consistent DLL image.
+        #[cfg(feature="mc02-native-input")]
+        let (expected, missing) = (
+            REVIEWED_EDUCATION_AI_BOOTSTRAP,
+            "No separately reviewed experimental AI bootstrap payload",
+        );
+        #[cfg(not(feature="mc02-native-input"))]
+        let (expected, missing) = (
+            REVIEWED_EDUCATION_BOOTSTRAP,
+            "No reviewed Education bootstrap payload",
+        );
+        let digests = expected.ok_or_else(|| {
+            io::Error::new(io::ErrorKind::Unsupported, missing)
         })?;
         let executable = std::env::current_exe()?;
         let root = executable
@@ -982,6 +1001,18 @@ impl BootstrapLibrary {
         Ok(())
     }
 }
+// Negative source fixture: no native payload, game launch or profile write
+// can be authorized for an unreviewed AI-input feature build.
+#[cfg(all(test, feature="mc02-native-input"))]
+#[test]
+fn experimental_native_input_cannot_adopt_the_standard_dll() {
+    assert!(REVIEWED_EDUCATION_AI_BOOTSTRAP.is_none());
+    let refusal = BootstrapLibrary::reviewed()
+        .err()
+        .expect("Unapproved experimental DLL must be refused");
+    assert_eq!(refusal.kind(), io::ErrorKind::Unsupported);
+}
+
 impl Drop for BootstrapLibrary {
     fn drop(&mut self) {
         if unsafe { windows_sys::Win32::Foundation::FreeLibrary(self.module) } == 0 {

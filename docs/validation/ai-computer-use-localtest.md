@@ -86,6 +86,18 @@ upgrade this source-only result to a game-ready claim.
 
 ## Gate C — opt-in native build and ABI acceptance (NOT_EXECUTED)
 
+**Separate DLL identity gate:** the standard Lazy Tester hash authorizes a
+compatibility DLL compiled WITHOUT the experimental Win32 input hooks.
+The feature-enabled Rust controller now selects a distinct
+`REVIEWED_EDUCATION_AI_BOOTSTRAP` digest, deliberately set to `None`.
+Therefore even a successful standalone experimental C++/Rust compilation
+cannot launch an AI game until its exact binary pair and SHA-256 digest
+are separately reviewed and pinned in a future source commit. Do not use
+the normal compatibility DLL as a substitute, overwrite an installed
+account-bearing `App/`, or add a runtime hash/path override. All five
+clients under one experimental controller must use the same reviewed
+compatibility image; unconfigured human MC01 receives no AI input section.
+
 This is the **next required engineering proof** and needs its own
 approval plus real Windows MSVC x64. Keep all binaries, DLLs and test
 results tied to the same exact `Local` revision:
