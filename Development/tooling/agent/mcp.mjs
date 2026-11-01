@@ -250,7 +250,8 @@ export function sendExperimentalMc02Native(executable,frame) {
 }
 
 export async function sendExperimentalAiNative(executable,
-    {slot,keys,dx,dy,ttlMs,requestedAtMs},{legacy=false,writerId}={}) {
+    {slot,keys,dx,dy,ttlMs,requestedAtMs},
+    {legacy=false,writerId,mode}={}) {
   const nowMs=Date.now();
   if(!Number.isSafeInteger(requestedAtMs)||
      requestedAtMs>nowMs||nowMs-requestedAtMs>500) {
@@ -272,7 +273,7 @@ export async function sendExperimentalAiNative(executable,
       String(keys),String(dx),String(dy),String(ttlMs),
       String(requestedAtMs),
     ],{shell:false,windowsHide:true,timeout:6000,maxBuffer:8192,
-      ...(legacy?{}:{env:writerEnvironment(writerId)})});
+      ...(legacy?{}:{env:writerEnvironment(writerId,mode)})});
     stdout=response.stdout;
   } catch(error) {
     if(error.killed||error.signal) {
@@ -384,14 +385,25 @@ export async function sendExperimentalMc02BatchNative(executable,pulses,{signal}
 // arbitrates all actual per-original-game input. Never expose it over MCP
 // or through Windows command-line arguments.
 const AI_WRITER_ID_PATTERN=/^[a-f0-9]{32}$/;
-function writerEnvironment(writerId){
-  if(typeof writerId!=='string'||!AI_WRITER_ID_PATTERN.test(writerId)) {
+// Only an exact native writer conflict proves that acquisition never
+// succeeded. A transport timeout, malformed receipt, or generic refusal
+// must remain uncertain until explicit owner-side reconciliation.
+function definitelyDeniedWriterLease(error) {
+  return [
+    'Native request refused: NATIVE_WRITER_BUSY',
+    'Native request refused: NATIVE_WRITER_MODE_MISMATCH',
+  ].includes(error?.message);
+}
+function writerEnvironment(writerId,mode){
+  if(typeof writerId!=='string'||!AI_WRITER_ID_PATTERN.test(writerId) ||
+     !['human-plus-four-ai','five-ai'].includes(mode)) {
     throw new Error('AI_WRITER_LEASE_REQUIRED');
   }
-  return {...process.env,LAZY_TESTER_AI_WRITER_ID:writerId};
+  return {...process.env,LAZY_TESTER_AI_WRITER_ID:writerId,
+    LAZY_TESTER_AI_WRITER_MODE:mode};
 }
 export async function sendExperimentalAiWriterLeaseNative(
-    executable,operation,slots,{writerId}={}){
+    executable,operation,slots,{writerId,mode}={}){
   if(!executable||!path.isAbsolute(executable)||
      !['acquire','release'].includes(operation)||
      !Array.isArray(slots)||slots.length<1||slots.length>5||
@@ -399,7 +411,7 @@ export async function sendExperimentalAiWriterLeaseNative(
        (i>0&&slots[i-1]>=slot))) {
     throw new Error('AI_WRITER_LEASE_INVALID');
   }
-  const env=writerEnvironment(writerId);
+  const env=writerEnvironment(writerId,mode);
   const name='ai-lease-'+operation;
   let stdout;
   try{
@@ -440,7 +452,7 @@ export async function sendExperimentalAiWriterLeaseNative(
 // One short-lived SAME-IMAGE CLI coordinates all requested AI slots.
 // No second Minecraft session owner or background agent daemon is created.
 export async function sendExperimentalMultiClientBatchNative(
-    executable,batches,{signal,writerId}={}) {
+    executable,batches,{signal,writerId,mode}={}) {
   if(!executable||!path.isAbsolute(executable)||!Array.isArray(batches)||
      batches.length<1||batches.length>5) {
     throw new Error('MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS');
@@ -488,7 +500,7 @@ export async function sendExperimentalMultiClientBatchNative(
       '--lazy-tester-agent-cli','ai-multi-input-batch',
       String(Date.now()),serialized,
     ],{shell:false,windowsHide:true,timeout:9000,maxBuffer:8192,signal,
-      env:writerEnvironment(writerId)});
+      env:writerEnvironment(writerId,mode)});
     stdout=response.stdout;
   }catch(error){
     if(signal?.aborted)throw new Error('AI_SEQUENCE_ABORTED');
@@ -1013,7 +1025,9 @@ export function createHandler(config,{
   }
   async function changeAiLease(operation,slots) {
     if(!multiEnabled)throw new Error('MULTI_CLIENT_EXPERIMENT_DISABLED');
-    const result=await aiLease(config.executable,operation,slots,{writerId});
+    const result=await aiLease(config.executable,operation,slots,{
+      writerId,mode:config.mode,
+    });
     if(result?.schema!==1||
        JSON.stringify(result?.slots)!==JSON.stringify(slots)||
        result?.status!==(operation==='acquire'?
@@ -1031,7 +1045,7 @@ export function createHandler(config,{
       try {
         const receipt=await aiInput(config.executable,{
           slot,keys:0,dx:0,dy:0,ttlMs:1,requestedAtMs:Date.now(),
-        },{writerId});
+        },{writerId,mode:config.mode});
         if(receipt?.schema!==1||receipt?.slot!==slot||
            receipt?.status!=='NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED'||
            receipt?.gameplayObserved!==false)allConfirmed=false;
@@ -1254,8 +1268,11 @@ export function createHandler(config,{
           writerLease:'NATIVE_RELEASED_AFTER_NEUTRAL_ACK',
           actualGameKeyRelease:'NOT_VERIFIED',gameplayObserved:false};
       } catch(error) {
-        if(leaseAttempted && !leaseReleased &&
-           (leaseHeld||error?.message?.includes('UNCERTAIN'))) {
+        if(leaseAttempted&&!leaseReleased &&
+           (leaseHeld||!definitelyDeniedWriterLease(error))) {
+          // Malformed acquire ACK may have arrived AFTER native admission.
+          // Only a confirmed foreign-writer conflict is known to have
+          // made no changes and must not poison the denied MCP forever.
           markAiUncertain(slots);
         }
         throw error;
@@ -1345,18 +1362,24 @@ export function createHandler(config,{
       multiSequence=run;
       let dispatched=false,neutralConfirmed=true,transportConfirmed=false;
       let leaseAttempted=false,leaseHeld=false,leaseReleased=false;
+      let leaseDefinitelyDenied=false;
       try {
         leaseAttempted=true;
-        // All-or-nothing source-side cohort claim on the ORIGINAL native
-        // actor. Refuse the entire action when another MCP owns one slot.
-        await changeAiLease('acquire',schedule.slots);
+        // All-or-nothing native cohort claim. A definitely denied foreign
+        // writer never touched an input and needs no added recovery marker.
+        try {
+          await changeAiLease('acquire',schedule.slots);
+        } catch(error) {
+          leaseDefinitelyDenied=definitelyDeniedWriterLease(error);
+          throw error;
+        }
         leaseHeld=true;
         // A visual source could disappear during the await. Do not
         // acquire a lease and then send the already-invalidated action.
         refuseUncertain(schedule.slots);
         dispatched=true;
         const receipt=await aiMultiBatch(config.executable,schedule.batches,
-          {signal:abort.signal,writerId});
+          {signal:abort.signal,writerId,mode:config.mode});
         if(receipt?.schema!==1||
            JSON.stringify(receipt?.slots)!==JSON.stringify(schedule.slots)||
            receipt?.status!=='EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED'||
@@ -1386,8 +1409,8 @@ export function createHandler(config,{
             markAiUncertain(schedule.slots);
           }
         }
-        if(leaseAttempted&&!leaseHeld) {
-          // A timed-out acquire can still have been admitted remotely.
+        if(leaseAttempted&&!leaseHeld&&!leaseDefinitelyDenied) {
+          // Malformed or timed-out acquisition may have been admitted.
           // The finite native lease expires without a background daemon.
           markAiUncertain(schedule.slots);
         }

@@ -115,6 +115,35 @@ real AI image reasoning, native input and simultaneous gameplay remain
 unverified. Standard installer, user data, fixed slot ownership,
 human MC01 isolation and CI policy are unchanged.
 
+## Mode-bound native writer admission (source only)
+
+The experimental single-writer lease is pinned to the exact
+original game session and its AI launch mode, not merely to
+the MCP's numeric slot and writer ID. Every native lease
+acquisition includes a private, exact control-mode indication:
+`human-plus-four-ai` (MC01 human, MC02–MC05 AI) or
+`five-ai` (MC01–MC05 AI). The existing retained controller
+verifies the original channel mode on EVERY requested slot
+before granting ANY lease. It rejects a mixed-mode cohort
+atomically with `NATIVE_WRITER_MODE_MISMATCH`. Neither a
+model prompt nor a caller-selected MCP mode can convert
+an already-running hybrid child to a five-AI input channel.
+
+The per-MCP writer ID and control mode travel only in the
+same-image CLI child's environment; the original authenticated
+IPC still checks the per-slot lease and PID/birth on each
+bounded action and independent neutral write. Exact native
+busy/mode-mismatch denials cannot have sent input and do not
+poison the MCP's recovery state. A timed-out or malformed
+native lease response remains ambiguous and holds all
+possibly claimed slots until a new explicit exact-owner
+neutral request succeeds. No automatic retry, retarget,
+foreground takeover, or legacy MC02 bypass was added.
+
+This does not authenticate adversarial same-user programs.
+Source tests/builds and Minecraft runtime acceptance are
+NOT_EXECUTED / NOT_VERIFIED.
+
 ## Single-writer controller lease for 4–5 AI inputs (source only)
 
 Every opt-in MCP now has one ephemeral local writer ID. It is passed

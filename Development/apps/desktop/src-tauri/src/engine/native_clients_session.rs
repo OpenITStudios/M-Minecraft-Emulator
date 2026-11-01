@@ -178,7 +178,7 @@ pub enum SessionRequest {
     // A single retained controller atomically admits all original game
     // slots for one ephemeral MCP writer before any movement packet.
     #[cfg(feature="mc02-native-input")]
-    AiLeaseAcquire {slots:Vec<u32>,owner_id:String},
+    AiLeaseAcquire {slots:Vec<u32>,owner_id:String,mode:AgentControlMode},
     #[cfg(feature="mc02-native-input")]
     AiLeaseRelease {slots:Vec<u32>,owner_id:String},
     // One authenticated request for all per-client states due at the SAME
@@ -494,8 +494,15 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
         }
     }
     #[cfg(feature="mc02-native-input")]
-    if let SessionRequest::AiLeaseAcquire {ref slots,ref owner_id} |
-           SessionRequest::AiLeaseRelease {ref slots,ref owner_id}=request {
+    if let SessionRequest::AiLeaseAcquire {ref slots,ref owner_id,mode}=request {
+        validate_ai_lease_slots(slots,owner_id)?;
+        if mode==AgentControlMode::HumanPlusFourAi && slots.contains(&1) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                "Hybrid MC01 human slot cannot acquire AI writer lease"));
+        }
+    }
+    #[cfg(feature="mc02-native-input")]
+    if let SessionRequest::AiLeaseRelease {ref slots,ref owner_id}=request {
         validate_ai_lease_slots(slots,owner_id)?;
     }
     let inspecting = matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings);
@@ -838,6 +845,32 @@ mod tests {
             1203+AI_WRITER_LEASE_MS).is_ok());
     }
 
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn writer_acquisition_wire_is_mode_bound_before_any_native_claim() {
+        // No IPC, controller or Minecraft execution.
+        let owner="a".repeat(32);
+        let packet=serde_json::json!({
+            "operation":"AiLeaseAcquire","slots":[2,3,4,5],
+            "owner_id":owner,"mode":"human-plus-four-ai"
+        });
+        assert!(matches!(serde_json::from_value::<SessionRequest>(packet.clone()),
+            Ok(SessionRequest::AiLeaseAcquire {
+                mode:AgentControlMode::HumanPlusFourAi,..})));
+        let mut missing=packet.clone();
+        missing.as_object_mut().unwrap().remove("mode");
+        assert!(serde_json::from_value::<SessionRequest>(missing).is_err());
+        let mut unsupported=packet.clone();
+        unsupported["mode"]=serde_json::json!("unknown");
+        assert!(serde_json::from_value::<SessionRequest>(unsupported).is_err());
+        let five=serde_json::json!({
+            "operation":"AiLeaseAcquire","slots":[1,2,3,4,5],
+            "owner_id":"a".repeat(32),"mode":"five-ai"
+        });
+        assert!(matches!(serde_json::from_value::<SessionRequest>(five),
+            Ok(SessionRequest::AiLeaseAcquire {
+                mode:AgentControlMode::FiveAi,..})));
+    }
     #[cfg(feature="mc02-native-input")]
     #[test]
     fn writer_lease_rejects_invalid_protocol_and_legacy_overlap() {

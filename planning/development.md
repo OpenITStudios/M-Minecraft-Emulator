@@ -1,5 +1,59 @@
 # Current Development Handoff — Lazy Tester
 
+## 1 November 2026 — original-game mode binding for single-writer lease
+
+**State: SOURCE-ONLY MODE-BOUND WRITER ADMISSION / MINECRAFT BLOCKED.**
+Source review found that the prior experimental `AiLeaseAcquire`
+wire checked original game PID/birth and owner ID, but did **not**
+require the MCP's selected control mode to match the mode in each
+retained child input channel. An independently connected `five-ai`
+MCP could attempt a lease on an existing `human-plus-four-ai`
+game channel, or vice versa. This commit closes that admission
+gap, not a new launcher or a second session/input provider.
+
+The existing MCP's one ephemeral writer ID now travels together
+with its exact `human-plus-four-ai` or `five-ai` mode in the
+private same-image CLI environment. For lease acquisition only,
+the CLI carries a typed `AgentControlMode` over the same
+authenticated retained-controller IPC. The original Sessions
+actor checks ALL selected, pinned game child input channels'
+original launch modes before any claim is made, including the
+MC01-human prohibition in hybrid mode. A single mismatch refuses
+the ENTIRE requested 4/5-client cohort with fixed
+`NATIVE_WRITER_MODE_MISMATCH`; it never partially grants input.
+Existing `AiLeasedInput` and timestamp-group writes still
+require the exact original PID/birth, current writer ID and
+unexpired native claim. The launch mode is fixed for that
+original process and cannot be changed by a writer request.
+
+The existing MCP now separates known native writer/launch-mode
+denials from uncertain acquisition outcomes. A known conflict
+or mismatch did not touch the original shared input state and
+does NOT create an extra false uncertainty marker. However,
+a malformed native lease receipt, timeout, or other ambiguous
+acquisition still enters the same local per-slot recovery
+hold until explicitly acknowledged neutral state. No retry
+or automatic takeover is introduced.
+
+No changes to ordinary read-only MCP mode, game files, Minecraft
+accounts/worlds, Windows installer, default-OFF compile features,
+the original native input mapping or the established MC02-only
+legacy input route.
+
+**Proof:** REMOTE_GITHUB exact-source and wire/consumer inspection.
+New/updated Rust and Node regression fixtures AUTHORED_NOT_EXECUTED
+for both AI modes, human MC01, missing/invalid mode, conflict
+versus uncertain lease receipt, and no native input on rejection.
+No Node/Rust/MSVC tests, build, Windows execution or Minecraft
+gameplay were run. Source contracts and simulated fixtures
+do NOT prove an actual Minecraft Education input outcome.
+
+**One next action:** When explicitly permitted on the original
+Windows machine, validate the feature-gated native controller
+compilation and 4/5-client lease/input behavior against the
+actual Education game processes; retain NOT_VERIFIED until then.
+
+
 ## 1 November 2026 — single-writer native AI slot lease
 
 **State: SOURCE-ONLY NATIVE CONTROLLER ARBITRATION / MINECRAFT BLOCKED.**

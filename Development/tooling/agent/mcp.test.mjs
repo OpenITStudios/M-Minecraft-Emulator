@@ -8,8 +8,9 @@ import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,vali
 
 const snapshot=(operation)=>({schema:1,ok:true,operation,profiles:Array.from({length:5},(_,i)=>({slot:i+1,state:i===0?'RUNNING':'STOPPED',responding:i===0,hasWindow:i===0,needsAttention:false}))});
 const config=(mode='human-plus-four-ai')=>({mode,executable:'C:\\App\\lazy-tester.exe',evidenceDirectory:''});
-const leaseAck=async(_exe,operation,slots,{writerId}={})=>{
+const leaseAck=async(_exe,operation,slots,{writerId,mode}={})=>{
   assert.match(writerId,/^[a-f0-9]{32}$/);
+  assert.equal(['human-plus-four-ai','five-ai'].includes(mode),true);
   return {schema:1,slots,status:operation==='acquire'?
     'AI_NATIVE_WRITER_LEASE_ACQUIRED':'AI_NATIVE_WRITER_LEASE_RELEASED',
     gameplayObserved:false};
@@ -1715,6 +1716,9 @@ test('native writer lease adapter refuses malformed owner and slot groups before
   await assert.rejects(()=>sendExperimentalAiWriterLeaseNative(
     executable,'force',[2],{writerId:'a'.repeat(32)}),
     /AI_WRITER_LEASE_INVALID/);
+  await assert.rejects(()=>sendExperimentalAiWriterLeaseNative(
+    executable,'acquire',[2],{writerId:'a'.repeat(32),mode:'incorrect'}),
+    /AI_WRITER_LEASE_REQUIRED/);
 });
 
 test('two independent opted-in MCPs cannot both own one native AI slot',async()=>{
@@ -1763,7 +1767,9 @@ test('two independent opted-in MCPs cannot both own one native AI slot',async()=
       return nativeBatch(_exe,batches);
     },
   });
+  const visual=teamVisualFixture();
   const second=createHandler(opt,{aiLease,aiInput,
+    visualObserverFactory:visual.factory,
     aiMultiBatch:async(exe,batches)=>nativeBatch(exe,batches),
   });
   await first.callTool('stop_experimental_multi_client_actions',{slots});
@@ -1776,6 +1782,11 @@ test('two independent opted-in MCPs cannot both own one native AI slot',async()=
     {actions}),/NATIVE_WRITER_BUSY/);
   await assert.rejects(()=>second.callTool('stop_experimental_multi_client_actions',
     {slots:slots.slice(0,2)}),/NATIVE_WRITER_BUSY/);
+  const rejected=await second.callTool('get_multi_client_visual_state',{slots});
+  assert.deepEqual(rejected.coordination.blockedSlots,[]);
+  assert.deepEqual(rejected.coordination.pendingReconnectSlots,[]);
+  // Native says definitely denied: the second writer did NOT mutate
+  // the original game, so it must not gain a false recovery quarantine.
   assert.equal(leaseOwners.size,2); // no foreign neutral or claim
   completeA();
   const succeeded=await executing;
@@ -1867,5 +1878,99 @@ test('operator stop accepts unsorted slots but native lease receives one canonic
     ['acquire',2,3,5],['neutral',2],['neutral',3],['neutral',5],
     ['release',2,3,5],
   ]);
+  handler.shutdown();
+});
+
+
+test('source-only MCP lease request forwards cohort mode and refuses a channel launched for the other mode',async()=>{
+  for(const [mode,actual] of [
+    ['five-ai','human-plus-four-ai'],
+    ['human-plus-four-ai','five-ai'],
+  ]) {
+    const slots=mode==='five-ai'?[1,2,3,4,5]:[2,3,4,5];
+    const visual=teamVisualFixture(mode);
+    const claims=[];
+    let inputWrites=0;
+    const handler=createHandler({
+      ...config(mode),experimentalMultiClientInputEnabled:true,
+    },{
+      visualObserverFactory:visual.factory,
+      aiLease:async(_exe,operation,selected,{writerId,mode:requested})=>{
+        assert.match(writerId,/^[a-f0-9]{32}$/);
+        assert.equal(requested,mode);
+        claims.push([operation,...selected]);
+        if(operation==='acquire'&&requested!==actual){
+          // Same fixed code that the native CLI returns after verifying
+          // every original child channel before any lease mutation.
+          throw new Error('Native request refused: NATIVE_WRITER_MODE_MISMATCH');
+        }
+        return {schema:1,slots:selected,status:operation==='acquire'?
+          'AI_NATIVE_WRITER_LEASE_ACQUIRED':'AI_NATIVE_WRITER_LEASE_RELEASED',
+          gameplayObserved:false};
+      },
+      aiInput:async()=>{inputWrites++;throw Error('FORBIDDEN_WRONG_MODE_INPUT');},
+      aiMultiBatch:async()=>{inputWrites++;throw Error('FORBIDDEN_WRONG_MODE_ACTION');},
+    });
+    await assert.rejects(()=>handler.callTool('stop_experimental_multi_client_actions',{
+      slots,
+    }),/NATIVE_WRITER_MODE_MISMATCH/);
+    assert.deepEqual(claims,[['acquire',...slots]]);
+    assert.equal(inputWrites,0);
+    const state=await handler.callTool('get_multi_client_visual_state',{slots});
+    assert.deepEqual(state.coordination.pendingReconnectSlots,slots);
+    assert.equal(state.coordination.clients[0].blockReason,
+      'NEW_MCP_CONNECTION_REQUIRES_NEUTRAL_OR_FRESH_AI_LAUNCH');
+    await assert.rejects(()=>handler.callTool('run_experimental_multi_client_actions',{
+      actions:slots.map(aiMove),
+    }),/AI_INPUT_RECOVERY_REQUIRED/);
+    assert.equal(inputWrites,0);
+    handler.shutdown();
+  }
+});
+
+
+test('malformed native acquisition ACK is uncertain, never treated as a definitive writer refusal',async()=>{
+  const fixture=teamVisualFixture();
+  let malformed=true,neutralWrites=0,actionsSent=0;
+  const slots=[2,3,4,5];
+  const handler=createHandler({...config(),
+    experimentalMultiClientInputEnabled:true},{
+    visualObserverFactory:fixture.factory,
+    aiLease:async(_exe,operation,selected,{writerId,mode})=>{
+      assert.match(writerId,/^[a-f0-9]{32}$/);
+      assert.equal(mode,'human-plus-four-ai');
+      if(malformed&&operation==='acquire') {
+        return {schema:1,slots:selected,status:'UNKNOWN_ACK',gameplayObserved:false};
+      }
+      return {schema:1,slots:selected,status:operation==='acquire'?
+        'AI_NATIVE_WRITER_LEASE_ACQUIRED':'AI_NATIVE_WRITER_LEASE_RELEASED',
+        gameplayObserved:false};
+    },
+    aiInput:async(_exe,pulse)=>{
+      neutralWrites++;
+      return {schema:1,slot:pulse.slot,
+        status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+        gameplayObserved:false};
+    },
+    aiMultiBatch:async()=>{actionsSent++;throw Error('UNEXPECTED_ACTION');},
+  });
+  await assert.rejects(()=>handler.callTool('stop_experimental_multi_client_actions',{
+    slots:[2],
+  }),/AI_WRITER_LEASE_UNCONFIRMED/);
+  const held=await handler.callTool('get_multi_client_visual_state',{slots});
+  assert.deepEqual(held.coordination.blockedSlots,slots);
+  assert.deepEqual(held.coordination.pendingReconnectSlots,[3,4,5]);
+  assert.equal(held.coordination.clients[0].blockReason,
+    'UNCERTAIN_NATIVE_INPUT_REQUIRES_EXPLICIT_NEUTRAL');
+  assert.equal(neutralWrites,0);
+  assert.equal(actionsSent,0);
+  await assert.rejects(()=>handler.callTool('run_experimental_multi_client_actions',{
+    actions:[aiMove(2)],
+  }),/AI_INPUT_RECOVERY_REQUIRED/);
+  malformed=false;
+  await handler.callTool('stop_experimental_multi_client_actions',{slots:[2]});
+  const after=await handler.callTool('get_multi_client_visual_state',{slots});
+  assert.deepEqual(after.coordination.blockedSlots,[3,4,5]);
+  assert.equal(neutralWrites,1);
   handler.shutdown();
 });

@@ -15,6 +15,13 @@ use crate::engine::native_clients_session::{
     validate_ai_input_group,validate_ai_lease_slots,
 };
 
+#[cfg(feature="mc02-native-input")]
+fn ai_writer_mode_matches(slot:u32,requested:AgentControlMode,
+                          actual:AgentControlMode)->bool {
+    (1..=5).contains(&slot) && requested==actual &&
+    (requested!=AgentControlMode::HumanPlusFourAi || slot!=1)
+}
+
 struct Sessions {
     stores: Vec<Option<SlotStorage>>,
     running: Vec<Option<StartedEducationObservation<1>>>,
@@ -293,10 +300,27 @@ impl Sessions {
         slots.iter().map(|slot|self.ai_lease_target(*slot)).collect()
     }
     #[cfg(feature="mc02-native-input")]
-    fn ai_lease_acquire(&mut self,slots:&[u32],owner:&str)->io::Result<()> {
+    fn ai_lease_acquire(&mut self,slots:&[u32],owner:&str,
+                        mode:AgentControlMode)->io::Result<()> {
         use windows_sys::Win32::System::SystemInformation::GetTickCount64;
         validate_ai_lease_slots(slots,owner)?;
-        let targets=self.ai_lease_targets(slots)?;
+        let mut targets=Vec::with_capacity(slots.len());
+        for &slot in slots {
+            // The caller's selected mode is NOT sufficient authority:
+            // every original child must have been launched with the SAME
+            // mode before acquiring any slot. Never adopt a legacy hybrid
+            // MC02 child into a five-AI batch, or vice versa.
+            let target=self.ai_lease_target(slot)?;
+            let channel=self.running[(slot-1) as usize].as_ref()
+                .and_then(|game|game.children[0].mc02_input.as_ref())
+                .ok_or_else(||invalid("Original AI channel disappeared"))?;
+            if !ai_writer_mode_matches(slot,mode,channel.mode()) {
+                return Err(invalid("AI writer mode conflicts with original game channel"));
+            }
+            targets.push(target);
+        }
+        // All slot/mode/identity checks completed; no partial writer claim
+        // even when a later selected client is incompatible.
         self.ai_leases.acquire(&targets,owner,unsafe{GetTickCount64()})
     }
     #[cfg(feature="mc02-native-input")]
@@ -1455,8 +1479,8 @@ fn run() -> io::Result<()> {
                         issued_at_ms,&owner_id).map_err(|error|error.to_string())?
                 }
                 #[cfg(feature="mc02-native-input")]
-                SessionRequest::AiLeaseAcquire {slots,owner_id} =>
-                    sessions.ai_lease_acquire(&slots,&owner_id)
+                SessionRequest::AiLeaseAcquire {slots,owner_id,mode} =>
+                    sessions.ai_lease_acquire(&slots,&owner_id,mode)
                         .map_err(|error|error.to_string())?,
                 #[cfg(feature="mc02-native-input")]
                 SessionRequest::AiLeaseRelease {slots,owner_id} =>
@@ -1546,6 +1570,27 @@ pub(super) fn maybe_run() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn ai_writer_acquisition_requires_matching_original_launch_mode() {
+        // Pure mode fixture only. Never launches or reaps a game.
+        use crate::engine::native_clients_session::AgentControlMode as Mode;
+        for slot in 2..=5 {
+            assert!(ai_writer_mode_matches(
+                slot,Mode::HumanPlusFourAi,Mode::HumanPlusFourAi));
+            assert!(ai_writer_mode_matches(slot,Mode::FiveAi,Mode::FiveAi));
+            assert!(!ai_writer_mode_matches(
+                slot,Mode::HumanPlusFourAi,Mode::FiveAi));
+            assert!(!ai_writer_mode_matches(
+                slot,Mode::FiveAi,Mode::HumanPlusFourAi));
+        }
+        assert!(!ai_writer_mode_matches(1,Mode::HumanPlusFourAi,
+            Mode::HumanPlusFourAi));
+        assert!(ai_writer_mode_matches(1,Mode::FiveAi,Mode::FiveAi));
+        assert!(!ai_writer_mode_matches(1,Mode::FiveAi,
+            Mode::HumanPlusFourAi));
+        assert!(!ai_writer_mode_matches(6,Mode::FiveAi,Mode::FiveAi));
+    }
     #[test]
     fn close_replies_do_not_trigger_unrelated_journal_reap() {
         // Pure routing assertions; do not launch a game or touch profile data.

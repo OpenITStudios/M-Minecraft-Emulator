@@ -43,6 +43,9 @@ fn parse_operation(args: &[String]) -> Result<(&'static str, Option<u32>), &'sta
 }
 
 fn native_error(error: io::Error) -> &'static str {
+    if error.to_string()=="AI writer mode conflicts with original game channel" {
+        return "NATIVE_WRITER_MODE_MISMATCH";
+    }
     // Fixed, allowlisted native writer-conflict status. Other controller
     // errors are never forwarded raw into the MCP model response.
     if matches!(error.to_string().as_str(),
@@ -86,7 +89,7 @@ fn writer_id()->Result<String,&'static str> {
           feature="lazy-tester-package",feature="mc02-native-input"))]
 fn execute_ai_lease(args:&[String])->Result<Value,&'static str> {
     use super::native_clients_session::{self,SessionRequest,
-        validate_ai_lease_slots};
+        AgentControlMode,validate_ai_lease_slots};
     if std::env::var("LAZY_TESTER_MULTI_CLIENT_VIRTUAL_INPUT").ok().as_deref()
        !=Some("I_ACCEPT_EXPERIMENTAL_MULTI_CLIENT_INPUT") {
         return Err("EXPERIMENT_NOT_AUTHORIZED");
@@ -99,7 +102,22 @@ fn execute_ai_lease(args:&[String])->Result<Value,&'static str> {
         .collect::<Result<Vec<_>,_>>().map_err(|_|"INVALID_ARGUMENTS")?;
     validate_ai_lease_slots(&slots,&owner).map_err(|_|"INVALID_ARGUMENTS")?;
     let request=if args[0]=="ai-lease-acquire" {
-        SessionRequest::AiLeaseAcquire {slots:slots.clone(),owner_id:owner}
+        // An opaque writer ID is not enough to decide game intent.
+        // Explicit mode travels in the CLI child's private environment,
+        // and the original controller checks EVERY child's launch mode
+        // before claiming even one slot.
+        let mode=match std::env::var("LAZY_TESTER_AI_WRITER_MODE")
+            .ok().as_deref() {
+            Some("five-ai")=>AgentControlMode::FiveAi,
+            Some("human-plus-four-ai")=>AgentControlMode::HumanPlusFourAi,
+            _=>return Err("AI_WRITER_MODE_REQUIRED"),
+        };
+        if mode==AgentControlMode::HumanPlusFourAi && slots.contains(&1) {
+            return Err("INVALID_ARGUMENTS");
+        }
+        SessionRequest::AiLeaseAcquire {
+            slots:slots.clone(),owner_id:owner,mode,
+        }
     }else {
         SessionRequest::AiLeaseRelease {slots:slots.clone(),owner_id:owner}
     };
@@ -673,6 +691,9 @@ mod tests {
         let known=Error::new(ErrorKind::Other,
             "AI writer lease conflict; existing game input preserved");
         assert_eq!(native_error(known),"NATIVE_WRITER_BUSY");
+        assert_eq!(native_error(Error::other(
+            "AI writer mode conflicts with original game channel")),
+            "NATIVE_WRITER_MODE_MISMATCH");
         assert_eq!(native_error(Error::other("Unknown private controller detail")),
             "NATIVE_UNAVAILABLE");
     }
