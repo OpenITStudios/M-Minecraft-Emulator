@@ -2,6 +2,21 @@
 
 ## Minecraft Education local-first diagnostics — 2 November 2026
 
+**Disposable Education Script API pack preparation (source-only):** added
+`prepare-education-probe.mjs`, an explicitly invoked offline generator for
+an isolated behavior-pack folder. It reuses the single
+`education-script-probe.js` source; each staging action generates a new
+nonsecret 12-hex run ID, fresh manifest UUIDs, one explicit
+`@minecraft/server` stable dependency selection and a local receipt with
+hashes. Only ignored `workspace/diagnostics/education-probe/` is a
+possible destination. This does **not** install/activate a pack, guess
+Education's supported module version or read a Minecraft profile/world.
+Authored pure unit fixtures are NOT_EXECUTED. Actual Education Script API
+load/output, Content Log path/wrapper, host and profile identity remain
+NOT_VERIFIED. The next gate remains a separately approved isolated Windows
+Education test before live ingestion.
+
+
 **State: SOURCE-ONLY BOUNDED IMPLEMENTATION AUTHORED, RUNTIME NOT_EXECUTED.**
 
 **Storage hardening continuation (source-only):** new v2 run folders

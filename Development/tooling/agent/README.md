@@ -100,6 +100,19 @@ format. It does not create a diagnostics run, contact Codex, enumerate
 Minecraft account/world paths or advertise an MCP tool. Authored fixtures
 are NOT_EXECUTED. See `docs/system/map-diagnostics.md`.
 
+## Disposable Minecraft Education Script API probe pack stager
+
+`prepare-education-probe.mjs` is an **explicit, offline, source-only**
+CLI that generates a self-contained `manifest.json` + `scripts/main.js`
+behavior pack from the single canonical `education-script-probe.js`
+emitter. It requires an explicitly selected stable `@minecraft/server`
+dependency version, assigns unique run/pack UUID identities, and puts
+source output **only** below ignored `workspace/diagnostics/education-probe/`.
+It does not install/activate a pack, locate a Minecraft account/world,
+launch a game, connect a debugger, run tests, or contact Codex. The
+receipt is a local source artifact, not proof of Education compatibility.
+See `docs/system/map-diagnostics.md` for the invocation and limits.
+
 ## Test/release boundary
 
 Read [current handoff](../../../planning/development.md) and

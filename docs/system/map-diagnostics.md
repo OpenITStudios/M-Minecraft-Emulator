@@ -188,13 +188,68 @@ wrapper, it reports `UNSUPPORTED_MARKER_WRAPPER_OR_CONTEXT` instead of
 incorrectly reporting that no marker exists. Even a perfectly matched
 two-marker pair remains `NOT_VERIFIED` as Minecraft Education evidence.
 
-The JavaScript probe has no manifest and is not an installed behavior
-pack. Only after a separately authorized Education test, an operator may
-place it in an isolated **test-copy** pack with a compatible stable
-Script API module, explicitly call
-`emitEducationScriptLogProbe('edu-probe')` once, and collect whatever real
-Education logging mechanism is observed. The original map/world and private
-game profile must remain unchanged.
+## Generate a complete disposable test-only behavior pack (source preparation)
+
+The reviewed two-marker emitter stays in
+`Development/tooling/agent/education-script-probe.js`. A new explicit
+source-only stager, `prepare-education-probe.mjs`, can create an isolated
+behavior-pack folder from this **one canonical source**, without duplicating
+the emitter or opening any Minecraft directories.
+
+After independently reviewing which **stable** `@minecraft/server`
+module version is actually supported in the targeted Education build,
+an operator may later run from `Development/`:
+
+    node tooling/agent/prepare-education-probe.mjs prepare --server-version 1.17.0
+
+The `1.17.0` value is a documented **Bedrock stable API candidate**, NOT
+a verified Minecraft Education 26.33 module version. It may need adjustment
+when actual Education compatibility is proven. The stager checks only stable
+semver syntax, not whether that module loads in Education. Manifest
+`format_version:2` declares one data module, one JavaScript `script` module
+with `scripts/main.js` entry, and one explicit `@minecraft/server` dependency;
+it does not select preview/beta capabilities. The test-only entry explicitly
+calls the two-marker emitter when the pack loads. Repeated reloading can
+produce duplicate markers: this intentionally fails strict two-marker
+verification instead of hiding a session ambiguity.
+
+The only output destination is **under the existing gitignored workspace**:
+`workspace/diagnostics/education-probe/`. It is not an active Minecraft
+profile or the private evidence archive:
+
+    workspace/
+      diagnostics/
+        education-probe/
+          edu-<12-hex-run-id>/
+            receipt.json         -- prepared last, local hashes/status
+            pack/
+              manifest.json      -- unique header/module UUIDs
+              scripts/
+                main.js          -- reviewed emitter + ONE explicit invocation
+
+The CLI returns the generated safe `run` ID and relative folder path for
+future manual installation. Every invocation creates new random run/pack
+identity; there is no overwrite, prune, zip/upload, service, account
+lookup, Minecraft launch or behavior-pack activation. A partially staged
+folder stays reserved for manual inspection; no automatic cleanup occurs.
+
+**Runtime verification remains a separate approval:** the operator must
+use an isolated, disposable **Minecraft Education test-copy world**, activate
+only the generated `pack/` folder and inspect the actual log output/path
+using an independently authorized Windows session. Never install the
+generated probe into original world data, production resource packs or
+the five retained account/profile directories automatically.
+
+The generated receipt and matching run marker help correlate a deliberately
+staged test source with a captured pair, but they **do not authenticate**
+Minecraft player, host/server, world, device or profile. Those must be
+verified independently before a live collector can trust the source.
+
+
+
+The JavaScript probe is only emitted if a compatible behavior pack
+actually loads and invokes the code. Staging a folder is not a test run.
+The packaging source can be reviewed independently of the runtime test.
 
 Once a bounded local capture is explicitly saved to a trusted absolute
 path, first survey its envelope from `Development/`:
