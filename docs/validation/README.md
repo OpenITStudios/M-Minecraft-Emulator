@@ -15,6 +15,13 @@ No VMware/Sandboxie provider is selected in the active product.
 GitHub Actions CI is disabled; all optional verification commands
 remain on-demand, not hosted workflows.
 
+**Current AI Computer Use validation is routed only through the
+[controlled Windows local-test guide](ai-computer-use-localtest.md).**
+It distinguishes standard source preflight, opt-in native compilation/ABI,
+MC01-human/MC02-AI gameplay and later four/five-client concurrency.
+Earlier VMware/Sandboxie G0 notes are historical, not this test path.
+No current Minecraft background-input acceptance has been executed.
+
 ## Select evidence matching the claim
 
 | Claim | Current existing owner or evidence source | What it does not prove |

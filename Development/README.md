@@ -1,5 +1,11 @@
 # Development
 
+For native AI Computer Use local preparation, start with the
+[controlled local-test guide](../docs/validation/ai-computer-use-localtest.md).
+Normal `DEV.cmd dev`, `preflight` and packaging do not compile or enable
+experimental independent input; explicit native build and game permissions
+are separate.
+
 The only product source tree: `apps/desktop` owns the desktop integration,
 `engine` owns runtime/distribution contracts, and `tooling` owns developer commands
 and verification. Retained legacy code stays with its consumers; moving it here

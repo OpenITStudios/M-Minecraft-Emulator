@@ -9,6 +9,12 @@ lifecycle: ACTIVE
 
 # Development Operations
 
+The single procedure for preparing the **experimental AI Computer Use**
+Windows local test is [here](../validation/ai-computer-use-localtest.md).
+Standard `DEV.cmd` checks and `dev` do not compile or activate the
+OFF-by-default AI native input candidate. Source-command success is not
+Minecraft gameplay or key-up evidence.
+
 ## GitHub-first work
 
 The regular ChatGPT developer path is **REMOTE_GITHUB**:

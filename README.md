@@ -13,6 +13,14 @@ channel and one bounded cross-slot CLI scheduler. No standard installer
 includes this feature; Windows/Minecraft execution and actual gameplay
 remain NOT_EXECUTED/NOT_VERIFIED.
 
+**Before a Windows local test:** use the single
+[Computer Use local-test guide](docs/validation/ai-computer-use-localtest.md)
+for pinned checkout, approved source checks, separate experimental native
+build/ABI review, and then MC01-human/MC02-AI Minecraft observation.
+The default `DEV.cmd dev` or installer does **not** enable the AI input
+experiment. The [current handoff](planning/development.md) is concise and
+previous long source notes are kept in [planning history](planning/README.md).
+
 ## Repository and distribution layout
 
 This checkout is the development project, not the folder distributed to players.

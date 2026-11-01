@@ -4,10 +4,16 @@ class: DOCUMENT
 domain: validation
 role: EXTERNAL_REFERENCE
 authority: REFERENCE
-lifecycle: ACTIVE
+lifecycle: HISTORICAL
 ---
 
-# Minecraft Education and VMware Platform Prerequisites
+# Retired VMware platform prerequisites — historical reference
+
+> **Do not run these old VMware Base/guest tests as current Lazy Tester
+> acceptance.** The active native Computer Use test has a separate
+> [Windows local-test guide](ai-computer-use-localtest.md).
+> Previous external hardware/licensing figures are dated references,
+> not a current native game compatibility assessment.
 
 Last external review: 2026-10-10. These are **platform constraints**, not evidence that a VMware guest meets them.
 

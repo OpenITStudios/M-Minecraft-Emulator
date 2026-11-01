@@ -23,6 +23,7 @@ Read one relevant owner, not the entire documentation tree:
 | What are the runtime safety boundaries? | [Architecture](system/architecture.md) and [data layout](system/data-layout.md) |
 | How do source changes and optional checks work? | [Development operations](system/development-operations.md) |
 | What is actually proven or still untested? | [Validation router](validation/README.md) |
+| Where is the AI Computer Use local-test procedure? | [Controlled Windows local-test guide](validation/ai-computer-use-localtest.md) |
 | What is the one current work status/next action? | [Development handoff](../planning/development.md) |
 | How are installer data and developer cache protected? | [Storage](system/artifact-storage.md) / [distribution](../Development/engine/distribution/README.md) |
 | Where are the retired VMware/Sandboxie studies? | [Legacy retirement](system/legacy-retirement.md) and previous Git commits |
