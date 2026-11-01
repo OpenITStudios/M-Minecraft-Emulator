@@ -26,7 +26,7 @@ All desktop paths below start at `Development/apps/desktop/`.
 | Main Play, Settings, Storage and action sequencing | `src/LazyTesterApp.svelte` | `src/app/inspectionScheduling.ts`, `src/app/presentation/` |
 | Launcher rail and status guidance | `src/LauncherRail.svelte`, `src/SessionHealthNotice.svelte` | `src/app/presentation/sessionFeedback.ts` |
 | Settings and storage presentation | `src/GeneralSettings.svelte`, `src/DataStorage.svelte` | Typed `src/app/bridge/lazyTester.ts` |
-| Local agent MCP tools / bounded evidence reading | `Development/tooling/agent/mcp.mjs` | `engine/agent_cli.rs` uses the existing authenticated controller; one opt-in 4/5 AI cross-slot CLI scheduler and isolated channel per original process; game input NOT_VERIFIED |
+| Local agent MCP tools / bounded evidence reading | `Development/tooling/agent/mcp.mjs` | Existing `visual-observer.mjs` now supplies cached multi-client visual baselines and post-action comparison; opt-in 4/5 AI native batch remains the same controller, game input NOT_VERIFIED |
 | AI input timeline / native-bound preview (no default input dispatch) | `Development/tooling/agent/input-timeline.mjs`, `input-route.mjs` | `control-plan.mjs`, nonexecuting input transaction port `input-delivery.mjs`, and MCP `assess_input_route`; real background game input remains blocked |
 | One raw Tauri invoke boundary | `src/app/bridge/invokeRuntime.ts` | `src/app/bridge/lazyTester.ts`, `workspaceSurface.ts` |
 | Allowlisted native commands / heavy-operation admission | `src-tauri/src/commands/native_clients.rs` | Session and workspace owners |

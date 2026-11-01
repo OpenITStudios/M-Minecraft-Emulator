@@ -14,7 +14,8 @@ import {inputExecutionStatus} from './input-delivery.mjs';
 import {prepareMc02PulseBatch,prepareMultiClientPulseBatches} from './mc02-action-sequence.mjs';
 import {summarizeGameEvidence,summarizeEvidenceReports,normalizeEvidenceSlots} from './evidence-summary.mjs';
 import {captureCuaWindow,validateCuaExecutable} from './visual-capture.mjs';
-import {createVisualObserver,OBSERVATION_LIMITS} from './visual-observer.mjs';
+import {createVisualObserver,OBSERVATION_LIMITS,
+  summarizeTeamVisualState,verifyTeamObservationBasis} from './visual-observer.mjs';
 import {createGpuFrameSource,validateGpuExecutable} from './gpu-frame-source.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -51,6 +52,7 @@ const PUBLIC_TOOL_ERRORS=new Set([
   'MC02_SEQUENCE_INVALID_ACTIONS','MC02_SEQUENCE_NATIVE_UNCONFIRMED',
   'MC02_SEQUENCE_DEADLINE','MC02_SEQUENCE_ABORTED','MC02_RELEASE_UNCONFIRMED',
   'MULTI_CLIENT_EXPERIMENT_DISABLED','MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS',
+  'TEAM_OBSERVATION_INCOMPLETE','TEAM_OBSERVATION_STALE_OR_REPLACED',
   'AI_SEQUENCE_ABORTED','AI_RELEASE_UNCONFIRMED','AI_INPUT_NATIVE_RESULT_UNVERIFIED',
 ]);
 function publicToolError(error) {
@@ -586,6 +588,25 @@ export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT,
 
 export const TOOL_LIST=[
   {name:'start_visual_observation',description:'Start a time-limited LOCAL read-only frame sampler for 1-5 AI-owned Minecraft windows. No continuous images are sent to the model and no gameplay inputs occur.',inputSchema:{type:'object',properties:{slots:{type:'array',minItems:1,maxItems:5,uniqueItems:true,items:{type:'integer',minimum:1,maximum:5}},intervalMs:{type:'integer',minimum:400,maximum:5000},durationMs:{type:'integer',minimum:5000,maximum:90000}},required:['slots'],additionalProperties:false}},
+  {name:'get_multi_client_visual_state',
+    description:'Read a single compact METADATA-ONLY view of existing cached visual frames across 1-5 AI clients. No screenshot is taken, no pixels are transmitted, and changed PNG bytes are not gameplay proof. Read individual frames explicitly to make model decisions.',
+    inputSchema:{type:'object',properties:{
+      slots:{type:'array',minItems:1,maxItems:5,uniqueItems:true,
+        items:{type:'integer',minimum:1,maximum:5}},
+      since:{type:'array',minItems:1,maxItems:5,items:{type:'object',
+        properties:{
+          slot:{type:'integer',minimum:1,maximum:5},
+          sequence:{type:'integer',minimum:0},
+          samples:{type:'integer',minimum:0},
+          collectedAt:{type:'string'},
+          captureIdentity:{type:'object',properties:{
+            pid:{type:'integer',minimum:1},windowId:{type:'integer',minimum:1},
+            sessionId:{type:'integer',minimum:0},createdFileTime:{type:'string'},
+          },required:['pid','windowId','sessionId','createdFileTime'],
+            additionalProperties:false},
+        },required:['slot','sequence','samples','collectedAt','captureIdentity'],
+        additionalProperties:false}},
+    },additionalProperties:false}},
   {name:'read_visual_observation',description:'Retrieve only a NEW locally cached frame (and status), or metadata without pixels. Never triggers a screenshot itself.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},afterSequence:{type:'integer',minimum:0},includeImage:{type:'boolean'}},required:['slot'],additionalProperties:false}},
   {name:'stop_visual_observation',description:'Stop one or more bounded visual samplers and immediately drop their in-memory image caches.',inputSchema:{type:'object',properties:{slots:{type:'array',minItems:1,maxItems:5,uniqueItems:true,items:{type:'integer',minimum:1,maximum:5}}},required:['slots'],additionalProperties:false}},
   {name:'observe_client',description:'Read-only screenshot of one AI-owned native Minecraft window via an explicitly configured Cua Driver daemon; rejects a replaced or stale window, never takes foreground or sends input.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
@@ -666,17 +687,44 @@ const EXPERIMENTAL_MULTI_CLIENT_TOOLS=[
     },required:['slots'],additionalProperties:false}},
 ];
 
+// This opt-in tool only binds a RECENT per-slot frame snapshot to the
+// existing native batch call. It never makes AI decisions or bypasses the
+// original game controller's independent input admission checks.
+const EXPERIMENTAL_OBSERVED_TEAM_TOOL={
+  name:'run_experimental_observed_actions',
+  description:'EXPERIMENTAL: require exact recent visual baselines for every AI slot, then reuse the existing one-CLI native action batch. Follow with get_multi_client_visual_state to check newer samples. No automatic gameplay perception or success claim.',
+  inputSchema:{type:'object',properties:{
+    actions:EXPERIMENTAL_MULTI_CLIENT_TOOLS[0].inputSchema.properties.actions,
+    basis:{type:'array',minItems:1,maxItems:5,uniqueItems:true,
+      items:{type:'object',properties:{
+        slot:{type:'integer',minimum:1,maximum:5},
+        sequence:{type:'integer',minimum:1},
+        samples:{type:'integer',minimum:1},
+        collectedAt:{type:'string'},
+        captureIdentity:{type:'object',properties:{
+          pid:{type:'integer',minimum:1},windowId:{type:'integer',minimum:1},
+          sessionId:{type:'integer',minimum:0},
+          createdFileTime:{type:'string',pattern:'^[0-9]{1,20}$'},
+        },required:['pid','windowId','sessionId','createdFileTime'],
+          additionalProperties:false},
+      },required:['slot','sequence','samples','collectedAt','captureIdentity'],
+        additionalProperties:false}},
+  },required:['actions','basis'],additionalProperties:false},
+};
+
 function capabilities(mode,experimental=false,multi=false) {return {schema:1,mode,hostSlot:1,humanSlots:mode==='human-plus-four-ai'?[1]:[],
   aiSlots:mode==='human-plus-four-ai'?[2,3,4,5]:[1,2,3,4,5],
-  available:['start_visual_observation','read_visual_observation','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence',...(experimental?[EXPERIMENTAL_MC02_TOOL.name,...EXPERIMENTAL_MC02_SEQUENCE_TOOLS.map(t=>t.name)]:[]),
-    ...(multi?EXPERIMENTAL_MULTI_CLIENT_TOOLS.map(t=>t.name):[])],
+  available:['start_visual_observation','read_visual_observation','get_multi_client_visual_state','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence',...(experimental?[EXPERIMENTAL_MC02_TOOL.name,...EXPERIMENTAL_MC02_SEQUENCE_TOOLS.map(t=>t.name)]:[]),
+    ...(multi?[...EXPERIMENTAL_MULTI_CLIENT_TOOLS.map(t=>t.name),
+      EXPERIMENTAL_OBSERVED_TEAM_TOOL.name]:[])],
   notAvailable:['parallel_independent_keyboard_mouse','automatic_world_host_join','send_minecraft_command'],
   visualCapture:'OPTIONAL_CUA_OR_PERSISTENT_WGC_SOURCE_NOT_RUNTIME_VERIFIED',
   independentInput:{state:'BLOCKED_NO_VERIFIED_PER_CLIENT_INPUT_BACKEND',
     simultaneousIntentChannels:true,actualInputEnabled:false,
     experimentalMc02Win32PollingOnly:experimental?'OPTED_IN_NOT_GAMEPLAY_VERIFIED':'DISABLED',
     experimentalMultiClientNative:multi?'OPTED_IN_SOURCE_CANDIDATE_NOT_GAMEPLAY_VERIFIED':'DISABLED',
-    requiresHumanFocusProtection:true,requiresPerClientEmergencyRelease:true,
+    requiresHumanFocusProtection:mode==='human-plus-four-ai',
+    requiresPerClientEmergencyRelease:true,
     nativeSessionModel:'SAME_WINDOWS_SESSION_ONLY',
     windowsAgentWorkspace:'PREVIEW_NOT_INTEGRATED_NO_CROSS_SESSION_INPUT',
     transactionEngine:inputExecutionStatus()},
@@ -689,6 +737,7 @@ export function createHandler(config,{
   aiInput=sendExperimentalAiNative,
   aiMultiBatch=sendExperimentalMultiClientBatchNative,
   gpuSourceFactory=createGpuFrameSource,
+  visualObserverFactory=createVisualObserver,
 }={}) {
   let inFlight=false; // mutating or exclusive native operation
   let visualReadBusy=false; // only one identity-pinned screenshot at a time
@@ -769,7 +818,7 @@ export function createHandler(config,{
       visualReadBusy=false;
     }
   }
-  const visualObserver=createVisualObserver({
+  const visualObserver=visualObserverFactory({
     capture:captureVerifiedFrame,
     sourceLabel:gpuSource?'PERSISTENT_WGC_GPU_FRAME_SOURCE':'BOUNDED_CUA_WINDOW_SNAPSHOTS',
     onFinish:(slot)=>gpuSource?.stop([slot]),
@@ -840,6 +889,17 @@ export function createHandler(config,{
         if (gpuStartup===startup) gpuStartup=null;
         inFlight=false;
       }
+    }
+    if (name==='get_multi_client_visual_state') {
+      keysExactly(args,['slots','since']);
+      const slots=checkedSlots(args.slots ??
+        (config.mode==='human-plus-four-ai'?[2,3,4,5]:[1,2,3,4,5]));
+      // Local cache read only: do NOT trigger new native inspections,
+      // create GPU workers, or silently hand image bytes to the model.
+      const readings=slots.map(slot=>visualObserver.read(slot,{
+        includeImage:false,
+      }).metadata);
+      return summarizeTeamVisualState(config.mode,slots,readings,args.since??[]);
     }
     if (name==='read_visual_observation') {
       keysExactly(args,['slot','afterSequence','includeImage']);
@@ -974,6 +1034,35 @@ export function createHandler(config,{
         return {schema:1,slots,status:'NATIVE_NEUTRAL_WRITES_ACKNOWLEDGED',
           actualGameKeyRelease:'NOT_VERIFIED',gameplayObserved:false};
       } finally {inFlight=false;}
+    }
+    if (name==='run_experimental_observed_actions') {
+      if(!multiEnabled)throw new Error('MULTI_CLIENT_EXPERIMENT_DISABLED');
+      keysExactly(args,['actions','basis']);
+      const schedule=prepareMultiClientPulseBatches(config.mode,args.actions);
+      if(exclusiveBusy())throw new Error('Native operation in progress; do not overlap requests');
+      // A model or external caller must have an exact recent baseline for
+      // EVERY targeted AI slot. Image pixels still require an explicit
+      // prior read_visual_observation call; metadata isn't visual reasoning.
+      const state=verifyTeamObservationBasis(
+        config.mode,schedule.slots,args.basis,
+        schedule.slots.map(slot=>visualObserver.read(slot,{
+          includeImage:false,
+        }).metadata));
+      // No await between freshness check and the existing controller
+      // dispatch acquiring its exclusive MCP lock. The original controller
+      // independently rechecks HWND/process/foreground for each pulse.
+      const receipt=await callTool('run_experimental_multi_client_actions',{
+        actions:args.actions,
+      });
+      const prior=state.frames.map(frame=>frame.baseline);
+      return {...receipt,visualBaseline:prior,
+        decision:'EXTERNAL_AI_DECISION_NOT_VERIFIED_BY_MCP',
+        actionResult:'NATIVE_TRANSPORT_ONLY_NOT_GAMEPLAY_EVIDENCE',
+        nextObservation:{
+          tool:'get_multi_client_visual_state',
+          arguments:{slots:schedule.slots,since:prior},
+        },
+        note:'Compare newer per-client samples and explicitly review PNGs via read_visual_observation; unchanged or changed PNG bytes alone cannot prove Minecraft movement.'};
     }
     if (name==='run_experimental_multi_client_actions') {
       if(!multiEnabled)throw new Error('MULTI_CLIENT_EXPERIMENT_DISABLED');
@@ -1214,7 +1303,8 @@ export function createHandler(config,{
       if (message.method==='ping') return result({});
       if (message.method==='tools/list') return result({tools:mc02Enabled?
         [...TOOL_LIST,EXPERIMENTAL_MC02_TOOL,...EXPERIMENTAL_MC02_SEQUENCE_TOOLS] :
-        (multiEnabled?[...TOOL_LIST,...EXPERIMENTAL_MULTI_CLIENT_TOOLS]:TOOL_LIST)});
+        (multiEnabled?[...TOOL_LIST,...EXPERIMENTAL_MULTI_CLIENT_TOOLS,
+          EXPERIMENTAL_OBSERVED_TEAM_TOOL]:TOOL_LIST)});
       if (message.method==='tools/call') {
         const name=message.params?.name;
         if (typeof name!=='string') return err(-32602,'Tool name is required');

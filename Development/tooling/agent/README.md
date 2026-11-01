@@ -41,6 +41,49 @@ tests, Windows build, packaging, Minecraft and user-PC execution remain
 NOT_EXECUTED. Original MC02-only tools are retained only as a legacy hybrid
 experiment and cannot be enabled simultaneously with the multi-client flag.
 
+## Coordinated 4–5 AI visual decision loop (source-only)
+
+The existing Visual Observer owns temporary, bounded frame caches,
+and the original per-client Cua/WGC capture path already validates
+native PID/HWND/process birth/session before and after capture.
+There is no second observer, model, or autonomous background loop.
+
+1. Start the existing `start_visual_observation` for the AI-owned slots.
+   In hybrid mode these are MC02–MC05; five-AI can use MC01–MC05.
+2. Call `get_multi_client_visual_state` (no arguments defaults to the
+   mode's AI slots). It returns one compact metadata-only cohort:
+   per-slot sampled count, changed-byte sequence, frame freshness,
+   exact capture-process binding and an optional fresh `baseline`.
+   No PNG bytes are sent by this tool, and no new capture is triggered.
+3. Call the existing `read_visual_observation` for EACH necessary slot
+   to send its cached PNG to Codex/Claude. Model reasoning/decision
+   happens outside Lazy Tester; metadata alone is not visual reasoning.
+4. Under separately approved experimental multi-client opt-in ONLY,
+   submit `run_experimental_observed_actions` with at most 32 bounded
+   semantic actions and a `basis` array containing the exact
+   `frames[].baseline` from the preceding team-state result for every
+   action slot. Changed/missing/aged-out images or replaced game
+   windows are rejected before native dispatch. The original one-CLI
+   multi-slot scheduler and retained game-owner validation are reused.
+5. Follow the returned `nextObservation` instruction with another
+   `get_multi_client_visual_state`, then request individual PNGs
+   again. `sampledSinceBaseline` means a sampler delivered a newer
+   capture. `pngBytesChangedSinceBaseline` means encoded PNG bytes
+   changed. Neither means Minecraft accepted WASD, changed view, or
+   joined the same world.
+
+The original `run_experimental_multi_client_actions` remains available
+for explicitly opted-in experiments that do not require image baselines.
+No execution tool is advertised on the default MCP. Stale observed
+actions cannot silently fall back to an unobserved dispatch.
+The team-state tool works without a configured provider, but correctly
+reports NOT_OBSERVING/incomplete until real captures exist.
+
+**Proof ceiling:** SOURCE AUTHORED / NOT_EXECUTED. Windows capture,
+real AI image reasoning, native input and simultaneous gameplay remain
+unverified. Standard installer, user data, fixed slot ownership,
+human MC01 isolation and CI policy are unchanged.
+
 ## Exactly what works in source
 
 - A local **stdio MCP** server in `mcp.mjs` exposes profile, Computer Use target, optional read-only visual observation, peer planning, and gameplay evidence tools.

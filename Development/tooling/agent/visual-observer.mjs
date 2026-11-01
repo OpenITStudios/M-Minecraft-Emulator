@@ -86,6 +86,7 @@ export function createVisualObserver({
     state.imageBase64=null;
     state.lastHash=null;
     state.identity=null;
+    state.captureIdentity=null;
     state.nextDueAt=null;
     // A native GPU producer is a separate read-only child. Revoke it as soon
     // as the corresponding observer expires, loses HWND, or becomes unhealthy.
@@ -134,6 +135,15 @@ export function createVisualObserver({
         return;
       }
       state.identity=identity;
+      // Only source-captured, before/after verified process identifiers.
+      // They may be exposed for per-slot consistency checks while a fresh
+      // image exists, never as a Microsoft account or world identity.
+      state.captureIdentity={
+        pid:meta.processIdentity.pid,
+        windowId:meta.processIdentity.windowId,
+        sessionId:meta.processIdentity.sessionId,
+        createdFileTime:meta.processIdentity.createdFileTime,
+      };
       state.successfulSamples++;
       state.consecutiveErrors=0;
       state.lastError=null;
@@ -211,7 +221,8 @@ export function createVisualObserver({
         slot,active:true,status:'WAITING_FOR_FIRST_FRAME',sequence:0,
         startedAt,endsAt:startedAt+durationMs,intervalMs,
         timer:null,nextDueAt:null,imageBase64:null,
-        identity:null,lastHash:null,lastCollectedAt:null,lastCollectedMs:null,
+        identity:null,captureIdentity:null,
+        lastHash:null,lastCollectedAt:null,lastCollectedMs:null,
         width:null,height:null,windowBackground:null,
         successfulSamples:0,sameBytesCount:0,
         skippedBusy:0,totalErrors:0,consecutiveErrors:0,lastError:null,
@@ -244,14 +255,19 @@ export function createVisualObserver({
     const ageMs=state.lastCollectedMs===null ? null :
       Math.max(0,clock()-state.lastCollectedMs);
     const tooOld=ageMs===null || ageMs>MAX_READ_FRAME_AGE_MS;
-    const deliver=includeImage && state.active && !tooOld &&
-      state.imageBase64!==null && state.sequence>afterSequence;
+    const fresh=state.active && !tooOld &&
+      state.imageBase64!==null && state.captureIdentity!==null;
+    const deliver=includeImage && fresh && state.sequence>afterSequence;
     return {
       metadata:{
         schema:1,slot,sequence:state.sequence,
         status:state.active && tooOld && state.imageBase64!==null ?
           'CACHED_FRAME_AGED_OUT' : state.status,
         hasNewImage:deliver,active:state.active,
+        // Frame availability is independent from whether PNG bytes changed
+        // or whether this particular MCP read requested a binary image.
+        freshFrameAvailable:fresh,
+        captureIdentity:fresh?{...state.captureIdentity}:null,
         frameAgeMs:ageMs,maximumReadableFrameAgeMs:MAX_READ_FRAME_AGE_MS,
         intervalMs:state.intervalMs,
         startedAt:new Date(state.startedAt).toISOString(),
@@ -286,4 +302,136 @@ export function createVisualObserver({
     sessions.clear();
   }
   return {start,read,stop,shutdown};
+}
+
+// A pure bounded cross-client view over the SAME ephemeral per-slot frame
+// cache. This does not collect screenshots, decide game actions, create a
+// provider or infer gameplay from changed PNG bytes.
+export function summarizeTeamVisualState(mode,slots,readings,since=[]) {
+  if(!['human-plus-four-ai','five-ai'].includes(mode)) {
+    throw new TypeError('Unknown AI team mode');
+  }
+  const selected=allowedSlots(slots);
+  if(mode==='human-plus-four-ai' && selected.includes(1)) {
+    throw new TypeError('Human MC01 cannot be an AI visual target');
+  }
+  if(!Array.isArray(readings)||readings.length!==selected.length ||
+     !Array.isArray(since)||since.length>selected.length) {
+    throw new TypeError('Incomplete multi-client visual observations');
+  }
+  const baseline=new Map();
+  for(const entry of since){
+    if(!entry||!Number.isInteger(entry.slot)||!selected.includes(entry.slot)||
+       baseline.has(entry.slot)||
+       !Number.isSafeInteger(entry.sequence)||entry.sequence<0||
+       !Number.isSafeInteger(entry.samples)||entry.samples<0) {
+      throw new TypeError('Invalid per-client visual baseline');
+    }
+    baseline.set(entry.slot,entry);
+  }
+  if(since.length>0 && baseline.size!==selected.length) {
+    throw new TypeError('Visual baseline must cover every selected client');
+  }
+  const seen=new Set();
+  const projection=[];
+  for(const meta of readings) {
+    const slot=meta?.slot;
+    if(meta?.schema!==1||!selected.includes(slot)||seen.has(slot)) {
+      throw new TypeError('Invalid/duplicate visual client result');
+    }
+    seen.add(slot);
+    const identity=meta.captureIdentity;
+    const validIdentity=identity&&Number.isSafeInteger(identity.pid)&&identity.pid>0&&
+      Number.isSafeInteger(identity.windowId)&&identity.windowId>0&&
+      Number.isSafeInteger(identity.sessionId)&&identity.sessionId>=0&&
+      typeof identity.createdFileTime==='string'&&
+      /^\d{1,20}$/.test(identity.createdFileTime);
+    const fresh=meta.active===true&&meta.freshFrameAvailable===true&&
+      validIdentity && Number.isSafeInteger(meta.sequence)&&meta.sequence>0&&
+      Number.isSafeInteger(meta.successfulSamples)&&meta.successfulSamples>0&&
+      Number.isSafeInteger(meta.frameAgeMs)&&meta.frameAgeMs>=0&&
+      meta.frameAgeMs<=3500&&typeof meta.collectedAt==='string'&&
+      Number.isFinite(Date.parse(meta.collectedAt));
+    const previous=baseline.get(slot);
+    const sameTarget=Boolean(previous&&fresh&&
+      previous.captureIdentity?.pid===identity.pid&&
+      previous.captureIdentity?.windowId===identity.windowId&&
+      previous.captureIdentity?.sessionId===identity.sessionId&&
+      previous.captureIdentity?.createdFileTime===identity.createdFileTime);
+    const sampledSince=previous? Boolean(sameTarget&&
+      meta.successfulSamples>previous.samples):null;
+    const pngBytesChanged=previous?Boolean(sameTarget&&
+      meta.sequence>previous.sequence):null;
+    const basis=fresh?{
+      slot,sequence:meta.sequence,samples:meta.successfulSamples,
+      collectedAt:meta.collectedAt,captureIdentity:{...identity},
+    }:null;
+    projection.push({
+      slot,status:typeof meta.status==='string'?meta.status:'UNAVAILABLE',
+      active:meta.active===true,freshFrameAvailable:Boolean(fresh),
+      frameAgeMs:Number.isSafeInteger(meta.frameAgeMs)?meta.frameAgeMs:null,
+      sequence:Number.isSafeInteger(meta.sequence)?meta.sequence:0,
+      samples:Number.isSafeInteger(meta.successfulSamples)?meta.successfulSamples:0,
+      collectedAt:typeof meta.collectedAt==='string'?meta.collectedAt:null,
+      baseline:basis,observedSameProcessSinceBaseline:previous?sameTarget:null,
+      sampledSinceBaseline:sampledSince,pngBytesChangedSinceBaseline:pngBytesChanged,
+      // Only requesting a single already-cached frame via existing
+      // read_visual_observation passes image bytes to Codex/Claude.
+      imageRead:fresh?{tool:'read_visual_observation',slot,afterSequence:0,
+        includeImage:true}:null,
+      gameplayChange:'NOT_EVALUATED_BY_MINECRAFT_OR_MODEL',
+    });
+  }
+  projection.sort((a,b)=>a.slot-b.slot);
+  const allRecent=projection.length===selected.length&&
+    projection.every(item=>item.freshFrameAvailable);
+  return {
+    schema:1,mode,slots:selected,source:'EXISTING_BOUNDED_VISUAL_OBSERVER',
+    status:allRecent?'RECENT_PER_SLOT_FRAMES_AVAILABLE':
+      'INCOMPLETE_OR_STALE_VISUAL_OBSERVATION',
+    allSlotsHaveRecentFrames:allRecent,
+    frameCount:projection.filter(item=>item.freshFrameAvailable).length,
+    frames:projection,imagesIncluded:false,
+    decision:'REQUIRES_EXPLICIT_AI_IMAGE_REVIEW',
+    motionInference:'PNG_BYTES_AND_TIMESTAMPS_NOT_GAMEPLAY_PROOF',
+    note:'One metadata read of 1-5 existing local caches; no new capture, gameplay input, world identity, or automated AI decision is implied.',
+  };
+}
+
+// An observed experimental action must be grounded in recent per-client
+// cached frames. This is a freshness check, NOT game-input authorization;
+// the same retained native controller still verifies each actual write.
+// The exact sample/identity prevents inadvertent use of a previous
+// window or a newer unseen frame to justify a stale decision.
+export function verifyTeamObservationBasis(mode,slots,basis,readings) {
+  const current=summarizeTeamVisualState(mode,slots,readings);
+  if(!current.allSlotsHaveRecentFrames) {
+    throw new Error('TEAM_OBSERVATION_INCOMPLETE');
+  }
+  if(!Array.isArray(basis)||basis.length!==current.slots.length) {
+    throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
+  }
+  const expected=new Map();
+  for(const item of basis) {
+    if(!item||!Number.isInteger(item.slot)||expected.has(item.slot)) {
+      throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
+    }
+    expected.set(item.slot,item);
+  }
+  for(const frame of current.frames) {
+    const actual=frame.baseline;
+    const passed=expected.get(frame.slot);
+    const id=passed?.captureIdentity;
+    if(!actual||!passed||
+       passed.sequence!==actual.sequence||
+       passed.samples!==actual.samples||
+       passed.collectedAt!==actual.collectedAt||
+       id?.pid!==actual.captureIdentity.pid||
+       id?.windowId!==actual.captureIdentity.windowId||
+       id?.sessionId!==actual.captureIdentity.sessionId||
+       id?.createdFileTime!==actual.captureIdentity.createdFileTime) {
+      throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
+    }
+  }
+  return current;
 }

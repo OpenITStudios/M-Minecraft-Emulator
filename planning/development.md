@@ -1,5 +1,46 @@
 # Current Development Handoff — Lazy Tester
 
+## 1 November 2026 continuation — multi-client visual decision handoff
+
+**State: SOURCE-ONLY TEAM OBSERVE → DECIDE → ACT → RE-OBSERVE.**
+The operator continues with ChatGPT/GitHub only; local PC access,
+Node/Rust/C++ tests, Minecraft execution, builds and CI remain deferred.
+
+The existing ONE MCP process and bounded Visual Observer now expose an
+AI-team visual-state tool over cached frames for MC02–MC05 (hybrid) or
+MC01–MC05 (five-AI). No extra GPU worker, controller, screenshot loop,
+network service or automatic game action is created by this read.
+Per-slot metadata distinguishes a fresh captured frame from a newly
+changed PNG and a successful later sample. The cached frame is bound
+to its capture-verified PID/HWND/birth/session; identity data is not
+advertised from expired/stopped/failed captures. Models still use the
+original per-slot read_visual_observation to request actual PNG pixels.
+
+With the existing manual multi-client experimental opt-in, an additional
+observed-action tool can require an EXACT still-fresh cached visual
+baseline for every action slot before delegating to the original
+cross-slot batch/retained native controller. This is source-level
+stale-decision protection, NOT new native input permission and NOT proof
+the model truly interpreted an image. Normal unobserved experimental
+actions remain available under their existing explicit opt-in.
+After the batch, the new team visual-state tool compares per-slot
+successful sample counts and PNG-byte sequences against the baseline;
+it does NOT infer walking, aiming, attack, PvP or player/world identity.
+There is no autonomous AI planning service: Codex/Claude must review
+image frames and decide the next explicit bounded action sequence.
+
+**Proof:** REMOTE_GITHUB source-only; authored fixtures for hybrid/five-AI
+cohorts, stale/missing/replaced frame refusal, after-action counters,
+no PNG fan-out, and protected human MC01 are NOT_EXECUTED.
+Windows Cua/WGC pixels, actual frame freshness, native game movement,
+cross-client AI control, latency, and human input safety remain
+NOT_EXECUTED/NOT_VERIFIED.
+
+**Next:** On a separately authorized compatible Windows host, validate
+real per-game visual feedback and input consumption for the four/five
+AI clients; no static result may be promoted to Minecraft acceptance.
+
+
 ## Current direction — 1 November 2026 (supersedes MC02-only roadmap)
 
 **State: MULTI-CLIENT SOURCE CANDIDATE / GAME INPUT BLOCKED.**

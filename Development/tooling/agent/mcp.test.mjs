@@ -28,7 +28,7 @@ test('MCP handshake and tool discovery are standard JSON-RPC',async()=>{
   const init=await h.handle({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-11-25'}});
   assert.equal(init.result.protocolVersion,'2025-11-25');
   const listing=await h.handle({jsonrpc:'2.0',id:2,method:'tools/list'});
-  assert.deepEqual(listing.result.tools.map(x=>x.name),['start_visual_observation','read_visual_observation','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence','read_game_evidence']);
+  assert.deepEqual(listing.result.tools.map(x=>x.name),['start_visual_observation','get_multi_client_visual_state','read_visual_observation','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence','read_game_evidence']);
   assert.equal(await h.handle({jsonrpc:'2.0',method:'notifications/initialized'}),null);
 });
 
@@ -945,4 +945,135 @@ test('four/five opted-in AI action streams preserve per-slot neutral cleanup',as
     {slots:[1,3,5]});
   assert.deepEqual(released.slots,[1,3,5]);
   assert.equal(released.actualGameKeyRelease,'NOT_VERIFIED');
+});
+
+
+function teamVisualFixture(mode='human-plus-four-ai') {
+  const slots=mode==='five-ai'?[1,2,3,4,5]:[2,3,4,5];
+  const records=new Map(slots.map(slot=>[slot,{
+    schema:1,slot,status:'FRAME_BYTES_CHANGED_NOT_SEMANTIC_PROOF',
+    active:true,freshFrameAvailable:true,
+    sequence:1,successfulSamples:3,frameAgeMs:100,
+    collectedAt:'2026-11-01T05:00:00.000Z',
+    captureIdentity:{pid:400+slot,windowId:1400+slot,sessionId:1,
+      createdFileTime:'134000000000000001'},
+  }]));
+  const reads=[];
+  const factory=()=>({
+    read(slot,{includeImage}={}){
+      reads.push([slot,includeImage]);
+      return {metadata:{...(records.get(slot)??{
+        schema:1,slot,status:'NOT_OBSERVING',active:false,
+      })},imageBase64:null};
+    },
+    start(){throw Error('Unexpected extra capture owner');},
+    stop(){return {status:'STOP_REQUESTED'};},
+    shutdown(){},
+  });
+  return {slots,records,reads,factory};
+}
+const aiMove=slot=>({slot,kind:'move_forward',atMs:0,durationMs:320});
+
+test('team visual snapshot is metadata-only, names all four AI targets and protects human MC01',async()=>{
+  const fixture=teamVisualFixture();
+  const h=createHandler(config(),{visualObserverFactory:fixture.factory});
+  const state=await h.callTool('get_multi_client_visual_state',{});
+  assert.equal(state.status,'RECENT_PER_SLOT_FRAMES_AVAILABLE');
+  assert.deepEqual(state.slots,[2,3,4,5]);
+  assert.equal(state.imagesIncluded,false);
+  assert.deepEqual(fixture.reads,[[2,false],[3,false],[4,false],[5,false]]);
+  assert.equal(state.frames.every(f=>f.imageRead.includeImage===true),true);
+  await assert.rejects(()=>h.callTool('get_multi_client_visual_state',
+    {slots:[1,2]}),/human host/);
+  h.shutdown();
+});
+
+test('observed cross-slot action uses exact recent visual basis and one existing native batch',async()=>{
+  const fixture=teamVisualFixture();
+  const batches=[],released=[];
+  const h=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
+    visualObserverFactory:fixture.factory,
+    aiMultiBatch:async(_exe,entries)=>{batches.push(entries);return{
+      schema:1,slots:entries.map(e=>e.slot),
+      status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
+      gameplayObserved:false,
+    };},
+    aiInput:async(_exe,frame)=>{released.push([frame.slot,frame.keys]);return{
+      schema:1,slot:frame.slot,
+      status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+      gameplayObserved:false,
+    };},
+  });
+  const tools=await h.handle({jsonrpc:'2.0',id:48,method:'tools/list'});
+  assert.equal(tools.result.tools.some(t=>t.name==='run_experimental_observed_actions'),true);
+  const previous=await h.callTool('get_multi_client_visual_state',{});
+  const basis=previous.frames.map(f=>f.baseline);
+  const actions=fixture.slots.map(aiMove);
+  const receipt=await h.callTool('run_experimental_observed_actions',{actions,basis});
+  assert.equal(batches.length,1);
+  assert.deepEqual(batches[0].map(b=>b.slot),fixture.slots);
+  assert.deepEqual(released,fixture.slots.map(slot=>[slot,0]));
+  assert.equal(receipt.actionResult,'NATIVE_TRANSPORT_ONLY_NOT_GAMEPLAY_EVIDENCE');
+  assert.equal(receipt.gameplayObserved,false);
+  assert.deepEqual(receipt.nextObservation.arguments,{slots:fixture.slots,since:basis});
+  assert.equal(receipt.decision,'EXTERNAL_AI_DECISION_NOT_VERIFIED_BY_MCP');
+  for(const slot of fixture.slots) {
+    const old=fixture.records.get(slot);
+    fixture.records.set(slot,{...old,successfulSamples:old.successfulSamples+1,
+      frameAgeMs:80,collectedAt:'2026-11-01T05:00:01.000Z'});
+  }
+  const after=await h.callTool('get_multi_client_visual_state',
+    receipt.nextObservation.arguments);
+  assert.equal(after.frames.every(f=>f.sampledSinceBaseline===true),true);
+  assert.equal(after.frames.every(f=>f.pngBytesChangedSinceBaseline===false),true);
+  assert.equal(after.motionInference,'PNG_BYTES_AND_TIMESTAMPS_NOT_GAMEPLAY_PROOF');
+  h.shutdown();
+});
+
+test('no opt-in, missing capture, stale image or replaced client cannot enter observed action dispatch',async()=>{
+  const fixture=teamVisualFixture();
+  let nativeBatches=0;
+  const overrides={visualObserverFactory:fixture.factory,
+    aiMultiBatch:async()=>{nativeBatches++;throw Error('UNEXPECTED_NATIVE_MUTATION');}};
+  const disabled=createHandler(config(),overrides);
+  await assert.rejects(()=>disabled.callTool('run_experimental_observed_actions',
+    {actions:fixture.slots.map(aiMove),basis:[]}),/EXPERIMENT_DISABLED/);
+  disabled.shutdown();
+  const enabled=createHandler({...config(),experimentalMultiClientInputEnabled:true},overrides);
+  const state=await enabled.callTool('get_multi_client_visual_state',{});
+  const basis=state.frames.map(f=>f.baseline);
+  await assert.rejects(()=>enabled.callTool('run_experimental_observed_actions',
+    {actions:fixture.slots.map(aiMove),basis:basis.slice(1)}),/STALE_OR_REPLACED/);
+  fixture.records.set(3,{...fixture.records.get(3),
+    frameAgeMs:5000,freshFrameAvailable:false});
+  await assert.rejects(()=>enabled.callTool('run_experimental_observed_actions',
+    {actions:fixture.slots.map(aiMove),basis}),/INCOMPLETE/);
+  fixture.records.set(3,{...fixture.records.get(3),
+    frameAgeMs:100,freshFrameAvailable:true,
+    captureIdentity:{...fixture.records.get(3).captureIdentity,windowId:5555}});
+  await assert.rejects(()=>enabled.callTool('run_experimental_observed_actions',
+    {actions:fixture.slots.map(aiMove),basis}),/STALE_OR_REPLACED/);
+  assert.equal(nativeBatches,0);
+  enabled.shutdown();
+});
+
+test('five-AI visual decision supports MC01 only when explicitly selected as an AI client',async()=>{
+  const fixture=teamVisualFixture('five-ai');
+  const h=createHandler({...config('five-ai'),experimentalMultiClientInputEnabled:true},{
+    visualObserverFactory:fixture.factory,
+    aiMultiBatch:async(_exe,entries)=>({
+      schema:1,slots:entries.map(e=>e.slot),
+      status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
+      gameplayObserved:false}),
+    aiInput:async(_exe,frame)=>({schema:1,slot:frame.slot,
+      status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',gameplayObserved:false}),
+  });
+  const status=await h.callTool('get_multi_client_visual_state',{});
+  assert.deepEqual(status.slots,[1,2,3,4,5]);
+  const result=await h.callTool('run_experimental_observed_actions',{
+    actions:fixture.slots.map(aiMove),
+    basis:status.frames.map(f=>f.baseline),
+  });
+  assert.deepEqual(result.slots,[1,2,3,4,5]);
+  h.shutdown();
 });

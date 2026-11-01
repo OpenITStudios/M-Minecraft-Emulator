@@ -1,7 +1,8 @@
 // Source authored only. Operator has not authorized running Node tests.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createVisualObserver} from './visual-observer.mjs';
+import {createVisualObserver,summarizeTeamVisualState,
+  verifyTeamObservationBasis} from './visual-observer.mjs';
 
 function clockFixture() {
   let now=1000;
@@ -144,4 +145,85 @@ test('known replaced native target stops observation immediately',async()=>{
   observer.stop([2]);
   observer.shutdown();
   assert.deepEqual(finished,[[2,'TARGET_REPLACED_REFUSE_CAPTURE']]);
+});
+
+
+function visualMeta(slot,overrides={}) {
+  return {schema:1,slot,status:'FRAME_BYTES_CHANGED_NOT_SEMANTIC_PROOF',
+    active:true,freshFrameAvailable:true,sequence:2,successfulSamples:4,
+    frameAgeMs:120,collectedAt:'2026-11-01T04:00:00.000Z',
+    captureIdentity:{pid:300+slot,windowId:1000+slot,sessionId:1,
+      createdFileTime:'134000000000000001'},
+    ...overrides};
+}
+
+test('team summary reports four/five fresh cached frames without image bytes or gameplay conclusions',()=>{
+  const slots=[2,3,4,5];
+  const frames=slots.map(slot=>visualMeta(slot));
+  const view=summarizeTeamVisualState('human-plus-four-ai',slots,frames);
+  assert.equal(view.status,'RECENT_PER_SLOT_FRAMES_AVAILABLE');
+  assert.equal(view.allSlotsHaveRecentFrames,true);
+  assert.equal(view.imagesIncluded,false);
+  assert.deepEqual(view.frames.map(x=>x.slot),slots);
+  assert.equal(view.frames.every(x=>x.imageRead.tool==='read_visual_observation'),true);
+  assert.equal(view.frames.every(x=>x.gameplayChange==='NOT_EVALUATED_BY_MINECRAFT_OR_MODEL'),true);
+  const full=summarizeTeamVisualState('five-ai',[1,2,3,4,5],
+    [1,2,3,4,5].map(slot=>visualMeta(slot)));
+  assert.equal(full.frameCount,5);
+  assert.throws(()=>summarizeTeamVisualState('human-plus-four-ai',[1,2],
+    [1,2].map(slot=>visualMeta(slot))),/Human MC01/);
+});
+
+test('visual snapshots keep sample-count changes separate from PNG-byte changes',()=>{
+  const slot=3;
+  const first=summarizeTeamVisualState('five-ai',[slot],[visualMeta(slot)]);
+  const basis=first.frames[0].baseline;
+  const sampled=summarizeTeamVisualState('five-ai',[slot],[
+    visualMeta(slot,{successfulSamples:5,frameAgeMs:100}),
+  ],[basis]);
+  assert.equal(sampled.frames[0].sampledSinceBaseline,true);
+  assert.equal(sampled.frames[0].pngBytesChangedSinceBaseline,false);
+  assert.equal(sampled.motionInference,'PNG_BYTES_AND_TIMESTAMPS_NOT_GAMEPLAY_PROOF');
+  const replaced=summarizeTeamVisualState('five-ai',[slot],[
+    visualMeta(slot,{captureIdentity:{...basis.captureIdentity,windowId:9999}}),
+  ],[basis]);
+  assert.equal(replaced.frames[0].observedSameProcessSinceBaseline,false);
+  assert.equal(replaced.frames[0].sampledSinceBaseline,false);
+});
+
+test('observed action basis rejects incomplete, stale, changed and reordered client identities',()=>{
+  const slots=[2,3,4,5],frames=slots.map(slot=>visualMeta(slot));
+  const baselines=summarizeTeamVisualState('human-plus-four-ai',
+    slots,frames).frames.map(v=>v.baseline);
+  const good=verifyTeamObservationBasis('human-plus-four-ai',slots,baselines,frames);
+  assert.equal(good.frameCount,4);
+  assert.throws(()=>verifyTeamObservationBasis('human-plus-four-ai',
+    slots,baselines.slice(1),frames),/STALE_OR_REPLACED/);
+  assert.throws(()=>verifyTeamObservationBasis('human-plus-four-ai',
+    slots,baselines.map(b=>b.slot===4?{...b,samples:b.samples+1}:b),
+    frames),/STALE_OR_REPLACED/);
+  assert.throws(()=>verifyTeamObservationBasis('human-plus-four-ai',
+    slots,baselines,frames.map(f=>f.slot===5?{...f,
+      captureIdentity:{...f.captureIdentity,pid:9999}}:f)),/STALE_OR_REPLACED/);
+  assert.throws(()=>verifyTeamObservationBasis('human-plus-four-ai',
+    slots,baselines,frames.map(f=>f.slot===3?{...f,
+      frameAgeMs:5000,freshFrameAvailable:false}:f)),/INCOMPLETE/);
+});
+
+test('cached capture identifiers are available only while the underlying frame is fresh',async()=>{
+  const t=clockFixture();
+  const observer=createVisualObserver({...t,capture:async slot=>frame(slot)});
+  observer.start([2],{intervalMs:800,durationMs:10000});
+  await t.next();
+  const fresh=observer.read(2,{includeImage:false}).metadata;
+  assert.equal(fresh.freshFrameAvailable,true);
+  assert.equal(fresh.captureIdentity.pid,212);
+  assert.equal(fresh.hasNewImage,false);
+  t.advance(4000);
+  const old=observer.read(2,{includeImage:false}).metadata;
+  assert.equal(old.freshFrameAvailable,false);
+  assert.equal(old.captureIdentity,null);
+  observer.stop([2]);
+  assert.equal(observer.read(2,{includeImage:false}).metadata.captureIdentity,null);
+  observer.shutdown();
 });
