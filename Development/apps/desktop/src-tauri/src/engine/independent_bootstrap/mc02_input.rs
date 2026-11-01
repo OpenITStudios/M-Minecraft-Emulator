@@ -42,8 +42,30 @@ struct SharedInput {
     ai_window:AtomicU64,
     press_counts:AtomicU64,
 }
-const _: () = assert!(std::mem::size_of::<SharedInput>() == 96);
-const _: () = assert!(std::mem::align_of::<SharedInput>() == 8);
+// This is a private cross-language ABI, not just a Rust struct. The C++
+// game-side reader must interpret every v4 field at the same byte offset.
+// A field reorder of unchanged total size must fail compilation on BOTH sides.
+const _: () = {
+    assert!(std::mem::size_of::<SharedInput>() == 96);
+    assert!(std::mem::align_of::<SharedInput>() == 8);
+    assert!(std::mem::size_of::<AtomicU64>() == 8);
+    assert!(std::mem::size_of::<AtomicI64>() == 8);
+    assert!(std::mem::offset_of!(SharedInput, magic) == 0);
+    assert!(std::mem::offset_of!(SharedInput, version) == 4);
+    assert!(std::mem::offset_of!(SharedInput, bytes) == 8);
+    assert!(std::mem::offset_of!(SharedInput, slot) == 12);
+    assert!(std::mem::offset_of!(SharedInput, pid) == 16);
+    assert!(std::mem::offset_of!(SharedInput, session) == 20);
+    assert!(std::mem::offset_of!(SharedInput, birth) == 24);
+    assert!(std::mem::offset_of!(SharedInput, packet) == 32);
+    assert!(std::mem::offset_of!(SharedInput, cursor_revision) == 40);
+    assert!(std::mem::offset_of!(SharedInput, cursor_x) == 48);
+    assert!(std::mem::offset_of!(SharedInput, cursor_y) == 56);
+    assert!(std::mem::offset_of!(SharedInput, cursor_epoch) == 64);
+    assert!(std::mem::offset_of!(SharedInput, human_window) == 72);
+    assert!(std::mem::offset_of!(SharedInput, ai_window) == 80);
+    assert!(std::mem::offset_of!(SharedInput, press_counts) == 88);
+};
 
 pub(super) struct Channel {
     section: Configuration,

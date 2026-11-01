@@ -7,8 +7,7 @@
 Lazy Tester has one native controller for five Minecraft Education Windows
 profiles. The separate optional Computer Use candidate includes source for
 4/5-client AI control, but remains **compile-OFF, default-OFF and absent from
-the normal product installer**. Last native source change before this
-documentation cleanup: `22057376b8e60760abaeab968cb69f6d3a9bef45` (Raw Input malformed-argument isolation).
+the normal product installer**. Latest native source work now includes compile-time assertions for all 15 field offsets of the Rust/C++ 96-byte input ABI v4. The earlier functional input change was `22057376b8e60760abaeab968cb69f6d3a9bef45` (Raw Input malformed-argument isolation).
 Re-pin the latest `Local` HEAD before any future test; older commits are not
 acceptance for the current revision.
 
@@ -44,6 +43,17 @@ Minecraft movement or game-level key-up proof.
 | Per-window capture | Optional Cua/WGC source adapters | Windows capture NOT_VERIFIED |
 | Four/five concurrent AI gameplay | Source schedules, not observed control | NOT_EXECUTED |
 | Production AI input package/release | Explicitly excluded | BLOCKED |
+
+## Native ABI source gate — 1 November 2026
+
+The original Rust game-input writer and optional C++ reader now each declare
+the 15 exact field offsets (0–88 bytes), alongside size/alignment and atomic
+width assertions for their 96-byte ABI v4 mapping. A future compile with the
+experimental input feature must fail if any local field layout drifts, even
+when the aggregate type remains 96 bytes. This is **compile-time source
+hardening, not an executed build**, binary identity check or verified
+Minecraft input consumer. No source/toolchain/runtime/package permission was
+changed.
 
 ## Current proof boundary and safety
 

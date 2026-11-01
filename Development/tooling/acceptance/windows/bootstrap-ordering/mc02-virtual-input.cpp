@@ -6,6 +6,7 @@
 #include "mc02-virtual-input.h"
 #include <detours.h>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <initializer_list>
@@ -29,6 +30,28 @@ struct alignas(8) SharedInput {
 static_assert(sizeof(SharedInput)==96 && alignof(SharedInput)==8);
 static_assert(std::atomic<std::int64_t>::is_always_lock_free);
 static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
+// SharedInput is ABI v4 and shared with the Rust native controller.
+// Size/alignment alone cannot detect a reordered field of equal width.
+// Pin every field offset in the C++ game reader and Rust writer.
+static_assert(sizeof(std::atomic<std::uint64_t>)==8 &&
+              sizeof(std::atomic<std::int64_t>)==8);
+static_assert(
+    offsetof(SharedInput,magic)==0 &&
+    offsetof(SharedInput,version)==4 &&
+    offsetof(SharedInput,bytes)==8 &&
+    offsetof(SharedInput,slot)==12 &&
+    offsetof(SharedInput,pid)==16 &&
+    offsetof(SharedInput,session)==20 &&
+    offsetof(SharedInput,birth)==24 &&
+    offsetof(SharedInput,packet)==32 &&
+    offsetof(SharedInput,cursorRevision)==40 &&
+    offsetof(SharedInput,cursorX)==48 &&
+    offsetof(SharedInput,cursorY)==56 &&
+    offsetof(SharedInput,cursorEpoch)==64 &&
+    offsetof(SharedInput,humanWindow)==72 &&
+    offsetof(SharedInput,aiWindow)==80 &&
+    offsetof(SharedInput,pressCounts)==88 ,
+    "SharedInput v4 offsets must match the Rust native writer");
 const SharedInput* view=nullptr;
 std::atomic<bool> isolated{false}; // latched after first valid AI command
 std::atomic<bool> cursorInitialized{false};
