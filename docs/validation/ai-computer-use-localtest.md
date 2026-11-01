@@ -124,7 +124,11 @@ results tied to the same exact `Local` revision:
 
 **Stop if exact-source opt-in compilation, matching binary identity or
 native admission cannot be demonstrated.** Do not invent another input
-backend or injection/packaging route to skip this gate.
+backend or injection/packaging route to skip this gate. In addition, the
+Tauri/Cargo `build.rs` now explicitly refuses any `release` profile with
+`mc02-native-input` or `multi-client-native-input`: this experiment may
+be compiled for developer verification only, not included in an ordinary
+installer or released as a product.
 
 ## Gate D — one human MC01 + one AI MC02 game (NOT_EXECUTED)
 

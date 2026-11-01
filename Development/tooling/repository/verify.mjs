@@ -114,6 +114,36 @@ export function verifyNativeGraphicsExperimentBoundary(cmake, source) {
     'Unselected heap experiments must compile to the no-op');
 }
 
+
+// The optional Minecraft AI game-input channel is a *developer-only* native
+// candidate. The current reviewed product DLL excludes those input hooks.
+// A caller must not be able to turn an ordinary Tauri release into a
+// feature-enabled binary that starts with an unapproved DLL.
+export function verifyExperimentalInputReleaseBoundary(build, manifest, cmake, bootstrap) {
+  assert.match(build,
+    /let experimental_input = std::env::var_os\("CARGO_FEATURE_MC02_NATIVE_INPUT"\)\.is_some\(\)\s*\|\|\s*std::env::var_os\("CARGO_FEATURE_MULTI_CLIENT_NATIVE_INPUT"\)\.is_some\(\);/,
+    'Both the historical and preferred AI input Cargo features must be release-blocked');
+  assert.match(build,
+    /if experimental_input && std::env::var\("PROFILE"\)\.as_deref\(\) == Ok\("release"\) \{\s*panic!\(/,
+    'Experimental native AI input must refuse a release build before bundling');
+  assert.match(manifest, /^default\s*=\s*\["custom-protocol"\]\s*$/m,
+    'Normal desktop default features must not enable experimental AI input');
+  assert.match(manifest, /^mc02-native-input\s*=\s*\[\]\s*$/m,
+    'Historical MC02 input source feature must remain opt-in');
+  assert.match(manifest, /^multi-client-native-input\s*=\s*\["mc02-native-input"\]\s*$/m,
+    'The multi-AI feature must retain its one canonical native implementation');
+  for(const option of ['BOOTSTRAP_MC02_VIRTUAL_INPUT','BOOTSTRAP_MULTI_CLIENT_VIRTUAL_INPUT']) {
+    assert.match(cmake,new RegExp('^option\\('+option+' "[^"\\r\\n]+" OFF\\)$','m'),
+      'Virtual-input C++ source must remain default OFF: '+option);
+  }
+  assert.match(bootstrap,
+    /const REVIEWED_EDUCATION_AI_BOOTSTRAP: Option<PayloadDigests> = None;/,
+    'AI DLL identity remains unreviewed and must fail closed');
+  assert.match(bootstrap,
+    /#\[cfg\(feature="mc02-native-input"\)\]\s*let \(expected, missing\) = \(\s*REVIEWED_EDUCATION_AI_BOOTSTRAP,/,
+    'Experimental game input cannot reuse production bootstrap DLL hash');
+}
+
 export function traceFrontend(sources,entry='main.ts') {
   const reached=new Set();
   function visit(path) {
@@ -186,6 +216,11 @@ export function verifyRepository(root,g0=false) {
   const buildScript=read('Development/apps/desktop/src-tauri/build.rs');
   assert.ok(buildScript.includes('CARGO_CFG_TARGET_OS') && buildScript.includes('CARGO_FEATURE_LAZY_TESTER_PACKAGE'),
     'Native Windows-only product packaging must reject unsupported OS targets');
+  verifyExperimentalInputReleaseBoundary(
+    buildScript,
+    read('Development/apps/desktop/src-tauri/Cargo.toml'),
+    read('Development/tooling/acceptance/windows/bootstrap-ordering/CMakeLists.txt'),
+    read('Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs'));
   const inspectionPolicy=read('Development/apps/desktop/src/app/inspectionScheduling.ts');
   assert.ok(inspectionPolicy.includes('export function periodicInspectionDue(') &&
     inspectionPolicy.includes('runningCount > 0 || !available || elapsedMs >= 10_000;'),

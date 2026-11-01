@@ -79,6 +79,18 @@ This is a *source-side refusal*, not build success or a working AI input
 mechanism. The approved experimental C++ DLL hash and binary identity do
 not exist yet; game-level input consumption remains UNKNOWN.
 
+## Experimental release build separation — source-only
+
+The opt-in native feature cannot be shipped with the standard Lazy Tester
+release pipeline. `build.rs` now refuses a Rust release-profile build when
+either `mc02-native-input` or its `multi-client-native-input` alias is
+selected. Developer-profile source compilation is not implicitly authorized
+and the experimental DLL review pin remains `None`. The existing repository
+source verifier and bounded negative fixtures now assert this release hold,
+feature alias, CMake default-OFF switches and independent DLL trust boundary.
+These fixtures are AUTHORED_NOT_EXECUTED. No installer, feature activation,
+profile/world data or runtime process was modified.
+
 ## Current proof boundary and safety
 
 The single procedure for the next stage is

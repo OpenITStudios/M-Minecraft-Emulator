@@ -1,6 +1,16 @@
 fn main() {
     let native_preview = std::env::var_os("CARGO_FEATURE_NATIVE_WORKSPACE_PREVIEW").is_some();
     let lazy_package = std::env::var_os("CARGO_FEATURE_LAZY_TESTER_PACKAGE").is_some();
+    // The AI virtual-input DLL is NOT part of a reviewed Lazy Tester release.
+    // Cargo's historical mc02-native-input feature is also activated by the
+    // multi-client-native-input alias. Reject release/profile packaging
+    // BEFORE Tauri prepares or bundles any resource. Developer-only native
+    // source checks remain possible; this is not gameplay authorization.
+    let experimental_input = std::env::var_os("CARGO_FEATURE_MC02_NATIVE_INPUT").is_some()
+        || std::env::var_os("CARGO_FEATURE_MULTI_CLIENT_NATIVE_INPUT").is_some();
+    if experimental_input && std::env::var("PROFILE").as_deref() == Ok("release") {
+        panic!("Experimental Minecraft AI input is not approved for release packaging");
+    }
 
     // Both native product/preview features are tied to reviewed Windows
     // process roles, Win32 window recovery and NSIS identities. Neither may

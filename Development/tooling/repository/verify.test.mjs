@@ -98,3 +98,44 @@ test('native graphics allocator canaries must not activate without a pinned opt-
       'namespace graphics_warm_pools { void consider() noexcept { attach(); } }'),
   ]) assert.throws(()=>verifyNativeGraphicsExperimentBoundary(cmake,modified));
 });
+
+test('experimental native AI inputs remain OFF in product releases and require separate DLL review',()=>{
+  const build=[
+    'let experimental_input = std::env::var_os("CARGO_FEATURE_MC02_NATIVE_INPUT").is_some()',
+    '    || std::env::var_os("CARGO_FEATURE_MULTI_CLIENT_NATIVE_INPUT").is_some();',
+    'if experimental_input && std::env::var("PROFILE").as_deref() == Ok("release") {',
+    '    panic!("Experimental AI input is not approved for release");',
+    '}',
+  ].join('\n');
+  const manifest=[
+    '[features]',
+    'default = ["custom-protocol"]',
+    'mc02-native-input = []',
+    'multi-client-native-input = ["mc02-native-input"]',
+  ].join('\n');
+  const cmake=[
+    'option(BOOTSTRAP_MC02_VIRTUAL_INPUT "MC02 virtual input" OFF)',
+    'option(BOOTSTRAP_MULTI_CLIENT_VIRTUAL_INPUT "Multi-client virtual input" OFF)',
+  ].join('\n');
+  const native=[
+    'const REVIEWED_EDUCATION_AI_BOOTSTRAP: Option<PayloadDigests> = None;',
+    '#[cfg(feature="mc02-native-input")]',
+    'let (expected, missing) = (',
+    '    REVIEWED_EDUCATION_AI_BOOTSTRAP,',
+  ].join('\n');
+  const verify=(b=build,m=manifest,c=cmake,n=native)=>
+    verifyExperimentalInputReleaseBoundary(b,m,c,n);
+  assert.doesNotThrow(()=>verify());
+  for(const invalid of [
+    ()=>verify(build.replace('CARGO_FEATURE_MC02_NATIVE_INPUT','CARGO_FEATURE_UNKNOWN_INPUT')),
+    ()=>verify(build.replace('CARGO_FEATURE_MULTI_CLIENT_NATIVE_INPUT','CARGO_FEATURE_UNKNOWN_INPUT')),
+    ()=>verify(build.replace('Ok("release")','Ok("dev")')),
+    ()=>verify(build.replace('panic!', 'eprintln!')),
+    ()=>verify(build,manifest.replace('default = ["custom-protocol"]','default = ["mc02-native-input"]')),
+    ()=>verify(build,manifest.replace('multi-client-native-input = ["mc02-native-input"]','multi-client-native-input = []')),
+    ()=>verify(build,manifest,cmake.replace('"Multi-client virtual input" OFF','"Multi-client virtual input" ON')),
+    ()=>verify(build,manifest,cmake.replace('"MC02 virtual input" OFF','"MC02 virtual input" ON')),
+    ()=>verify(build,manifest,cmake,native.replace('= None;','= REVIEWED_EDUCATION_BOOTSTRAP;')),
+    ()=>verify(build,manifest,cmake,native.replace('    REVIEWED_EDUCATION_AI_BOOTSTRAP,','    REVIEWED_EDUCATION_BOOTSTRAP,')),
+  ]) assert.throws(invalid);
+});
