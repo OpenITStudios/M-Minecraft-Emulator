@@ -31,6 +31,8 @@ Development/apps/desktop/src-tauri/gen/
 Development/apps/desktop/src-tauri/binaries/
 Development/apps/desktop/src-tauri/package-resources/
 *.log
+*.jsonl
+*.cpuprofile
 *.tmp
 .DS_Store
 Thumbs.db

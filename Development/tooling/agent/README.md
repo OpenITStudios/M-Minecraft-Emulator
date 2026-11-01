@@ -75,8 +75,12 @@ The underlying diagnostics-local.mjs importer runs only as a separately
 invoked local CLI; **Codex cannot import raw files, perform arbitrary path
 reads, auto-collect, upload, or delete anything** over MCP.
 
-Every import retains a local immutable validated JSONL archive and a
-compact issue index. Data from unverified Education logs is never claimed
+Every new import creates a versioned local run folder with separated
+evidence/, analysis/ and a manifest.json commit marker carrying SHA-256
+checksums. Partial imports remain quarantined; v1 two-file archives stay
+read-only and are flagged as legacy without checksums. No automatic
+cleanup or raw-event upload exists. The importer retains the normalized
+JSONL archive and a compact issue index. Data from unverified Education logs is never claimed
 as gameplay PASS. This is not a live Minecraft Education collector, not
 a debugger connection and not part of the release. For contract, bounded
 usage, quotas and future Education verification see

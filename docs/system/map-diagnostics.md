@@ -11,10 +11,10 @@ lifecycle: SOURCE_ONLY
 
 ## Scope and proof
 
-Minecraft **Education** is the runtime target. The first source-only slice
-adds **explicit local import of normalized diagnostic JSONL**, an immutable
-private archive, bounded issue-candidate detection and four read-only MCP
-queries. It does **not** claim Education Content Log, native debugger,
+Minecraft **Education** is the runtime target. The source-only diagnostics
+feature provides **explicit local import of normalized diagnostic JSONL**,
+immutable per-run archives with a commit marker and SHA-256 integrity fields,
+bounded issue-candidate detection and four read-only MCP queries. It does **not** claim Education Content Log, native debugger,
 Script API output, world/session attribution, multiplayer or gameplay
 compatibility. No background observer, network server, Codex upload,
 in-game add-on, native input, world mutation or Windows execution is enabled.
@@ -63,16 +63,46 @@ local tooling is available, execute from the Development directory:
 
     node tooling/agent/diagnostics-local.mjs import --source "C:\absolute\capture.jsonl" --store "C:\Lazy-Tester\Data\Diagnostics" --run td-test
 
-The importer validates a stable ordinary source file before any write and
-then creates, never overwrites, the following private archive:
+The importer validates a stable ordinary source file **before writing**
+and then creates one exclusive run directory. The actual storage layout for
+new **v2 run archives** is:
 
-    Data/Diagnostics/runs/td-test/events.jsonl  -- full validated import
-    Data/Diagnostics/runs/td-test/index.json   -- grouped issues
+    Data/
+      Diagnostics/
+        runs/
+          td-test/
+            manifest.json            -- published LAST, commit marker
+            evidence/
+              events.jsonl            -- original validated normalized bytes
+            analysis/
+              issues.json             -- grouped candidate index (not raw logs)
+
+The manifest records the run ID, storage schema (2), import timestamp,
+source classification, immutable/manual-retention status, byte counts and
+SHA-256 digests for both archived files. Per-run overview includes import
+time and logical event+index bytes, without opening the entire event file;
+these are not physical disk-usage measurements. Use descriptive nonsecret
+run IDs such as dgn-defense-20261102-r01 (maximum 48 characters). The timestamp records the local
+import time, **not** a verified game time. The SHA-256 fields detect damaged
+or unexpectedly changed local files, **not** authenticity of a Minecraft
+Education game session.
+
+Each file is written with an exclusive-create flag. Data files are flushed
+before a temporary manifest is renamed to manifest.json as the final commit
+marker. An interrupted import leaves a reserved but uncommitted run
+directory; no MCP query treats it as completed. The overview reports the
+number of incomplete run entries without reading or transmitting their
+contents. Recovery and deletion remain manual.
+
+**Compatibility:** v1 archives from the previous revision remain readable
+in their original `runs/<id>/events.jsonl` and `runs/<id>/index.json` layout,
+without silent migration. Such records are marked
+`LEGACY_NOT_CHECKSUMMED` because they do not contain a committed
+manifest and source digest. No old archive is rewritten.
 
 Git already ignores Data/. The importer refuses symlinked Data parents;
 no files in world, account, profile or existing run directories are
-modified. Interrupted partial imports are unavailable as accepted evidence
-and require separate operator review before any cleanup.
+modified or automatically removed. The source input is not deleted.
 
 ## Limits: local storage and model context are separate budgets
 
@@ -80,16 +110,28 @@ and require separate operator review before any cleanup.
 | --- | --- |
 | Captured import | 4 MiB, 10,000 records, 4,096 bytes per line |
 | Computed index | 256 KiB; reject oversized imports |
-| Run archives | 64 directories; no automatic prune/delete |
+| Commit manifest | 4 KiB; fail closed if invalid or missing on v2 |
+| Run archives | 64 directories including interrupted imports; no automatic prune/delete |
 | Issue sample cache | At most 8 selected records |
 | MCP overview | Up to 10 run IDs, sorted lexically, not by recency |
 | MCP issue page | At most 10 issue candidates |
 | MCP evidence page | At most 8 projected records |
 | AI | Zero calls on import; only model-requested MCP tool results |
 
+An incomplete v2 run is counted but not exposed as a committed run;
+its identifier stays reserved until explicit, separately reviewed recovery.
+No silent migration or automatic deletion is performed. Future gameplay
+volume beyond these prototype limits needs separately measured segmentation.
+
 Quotas fail closed; rejected sources remain local, not silently truncated.
 MCP never returns full JSONL captures, raw error text or arbitrary file
 contents. It does not enumerate or open an unapproved path.
+For a selected v2 run, metadata-only issue queries validate the manifest
+and index SHA-256; a deeper evidence query separately checks the archived
+JSONL digest. Evidence records are projected through an allowlist and
+paginated, not passed through unchanged. Normal evidence queries scan a
+bounded <=4 MiB archive but hold only one requested page of projected
+records in memory; no persistent background database is necessary yet.
 
 ## Codex connection is optional and read-only
 
@@ -109,7 +151,10 @@ The four read-only MCP tools are:
 
 Codex should start from the overview, select an issue, then request
 specific evidence only if necessary. Source proofs do not establish
-actual Minecraft player, arena, world or gameplay outcomes.
+actual Minecraft player, arena, world or gameplay outcomes. A committed
+archive means "the importer finished writing local files", **not** that
+the map's mechanics passed any test. An overview's issue-index checksum
+does not imply the full evidence file was read: this is reported separately.
 
 ## Technical gates before live Education capture
 

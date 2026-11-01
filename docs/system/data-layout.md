@@ -20,6 +20,11 @@ Minecraft-Emulator/
   App/                           application, two reviewed DLLs, build receipt
   Data/
     Cache/                       WebView data and process-local temporary files
+    Diagnostics/                 optional source-only local QA evidence archive
+      runs/<run-id>/
+        manifest.json            final committed run marker, checksums
+        evidence/events.jsonl    full normalized local evidence
+        analysis/issues.json     compact derived issue candidates
     Settings/
       data-location.json         project-local location pointer
       performance.json           saved FPS limits
@@ -45,8 +50,16 @@ local App refresh preserve the legacy pointer. Catalog schema 1 uses
 This compatibility route never grants permission to move, overwrite, copy
 or recreate private account/world data.
 
-All runtime files are ignored and never bundled or tracked. App refresh preserves
-Data and the previous app/starter. project_profiles remains the existing
+All runtime files are ignored and never bundled or tracked. The optional
+Data/Diagnostics archive is created only by an explicit local import, not
+automatically when Lazy Tester starts or when Codex connects. Its files are
+private to the existing Data root and are not installed, bundled or uploaded.
+Each new run is reserved exclusively; the manifest is committed last.
+Uncommitted directories are preserved for manual review, never auto-deleted.
+Older unmodified two-file archives remain readable. The storage contract
+and quotas are in docs/system/map-diagnostics.md.
+
+App refresh preserves Data and the previous app/starter. project_profiles remains the existing
 product_profiles.rs owner; manager_settings.rs owns root/preferences and the
 original session controller alone owns games and admission. No parallel ready flag,
 registry gateway or profile catalog is introduced.

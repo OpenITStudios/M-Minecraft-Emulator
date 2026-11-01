@@ -4,6 +4,17 @@
 
 **State: SOURCE-ONLY BOUNDED IMPLEMENTATION AUTHORED, RUNTIME NOT_EXECUTED.**
 
+**Storage hardening continuation (source-only):** new v2 run folders
+separate evidence/events.jsonl, analysis/issues.json, and manifest.json.
+The importer writes with exclusive-create semantics, flushes files,
+publishes the manifest last, and records file-size/SHA-256 integrity.
+Incomplete folders are excluded from overview run listings (and counted);
+checksum mismatches block access. v1 files are still readable but
+marked LEGACY_NOT_CHECKSUMMED. Evidence queries only materialize a requested
+page of projected records in memory. Authored regressions for incomplete
+imports, checksum corruption, v1 compatibility and gap pagination are
+NOT_EXECUTED; no Windows, Minecraft Education or Codex runtime tested.
+
 Operator approved keeping all captured evidence **locally** and exposing
 only compact issue candidates/on-demand evidence to Codex, using the
 existing MCP. On the Local branch, the first slice adds:
