@@ -156,6 +156,57 @@ archive means "the importer finished writing local files", **not** that
 the map's mechanics passed any test. An overview's issue-index checksum
 does not imply the full evidence file was read: this is reported separately.
 
+## Minecraft Education Script API log-path verification (source only)
+
+**Next narrow technical gate.** An optional test-only probe pair now exists:
+
+- `Development/tooling/agent/education-script-probe.js`: a tiny
+  `@minecraft/server` source module whose explicit call emits exactly
+  two `[LT_EDU_PROBE]` JSON markers using `console.warn()` and
+  `system.currentTick`. The second marker is scheduled 20 ticks later.
+  It does **nothing on import** and must not be used in production maps.
+- `Development/tooling/agent/education-log-probe.mjs`: an **operator-only,
+  read-only** offline capture validator. It reuses the same stable ordinary
+  file reader as the local importer. It never searches Education's folders,
+  connects to a debugger, writes a run, or calls Codex.
+
+The two explicit capture format modes are:
+`marker-lines` (one complete `[LT_EDU_PROBE]{...}` line per record),
+and `timestamped-print` (a candidate `ISO_TIMESTAMP log|warn|... MESSAGE`
+wrapper, including escaped debugger PrintEvent text). **These are probe
+input formats only.** Neither has been demonstrated as Education's real
+Content Log format. Unrecognized/oversized/malformed data is never
+converted to a gameplay success or copied into an AI response.
+
+The JavaScript probe has no manifest and is not an installed behavior
+pack. Only after a separately authorized Education test, an operator may
+place it in an isolated **test-copy** pack with a compatible stable
+Script API module, explicitly call
+`emitEducationScriptLogProbe('edu-probe')` once, and collect whatever real
+Education logging mechanism is observed. The original map/world and private
+game profile must remain unchanged.
+
+Once a bounded local capture is explicitly saved to a trusted absolute
+path, the optional offline inspector can be invoked from `Development/`:
+
+    node tooling/agent/education-log-probe.mjs inspect --source "C:\absolute\education-capture.log" --run edu-probe --format timestamped-print
+
+Or use `--format marker-lines` for a separately extracted marker-only
+capture. It accepts only absolute `.log` / `.txt` ordinary files, refuses
+linked/hardlinked source files, requires a complete newline-terminated
+capture and reads at most **4 MiB / 12,000 lines / 4,096 bytes per line**.
+It returns only fixed status/counters, a source SHA-256 and a validated
+nonsecret run ID. It never prints raw lines, player names, usernames,
+account identifiers, original source paths or exception messages.
+
+`CANDIDATE_MARKER_PAIR_FOUND` means only that two well-formed source
+strings with increasing tick numbers were recognized in the **operator
+supplied file**. It is not proof of a real Education log transport or
+world attribution. Mismatches, missing markers and unsupported wrappers
+remain `NOT_VERIFIED`. Live watching, automatic ingestion and the MCP
+interface **remain unchanged** until real source paths and provenance
+are independently verified.
+
 ## Technical gates before live Education capture
 
 1. Separately verify Minecraft Education stable Script API behavior pack

@@ -86,6 +86,18 @@ a debugger connection and not part of the release. For contract, bounded
 usage, quotas and future Education verification see
 [local-first map diagnostics](../../../docs/system/map-diagnostics.md).
 
+## Education Script API capture probe — offline source preparation
+
+`education-script-probe.js` is an **explicit** two-marker Script API smoke
+probe for an isolated Education test-copy behavior pack, not an installed
+pack or automatic game logger. `education-log-probe.mjs` reads only an
+operator-supplied absolute .log/.txt file, recognizes a tiny fixed marker
+contract, and outputs sanitized counts plus SHA-256. The parser supports
+two **candidate** input envelopes, not a proven Education Content Log
+format. It does not create a diagnostics run, contact Codex, enumerate
+Minecraft account/world paths or advertise an MCP tool. Authored fixtures
+are NOT_EXECUTED. See `docs/system/map-diagnostics.md`.
+
 ## Test/release boundary
 
 Read [current handoff](../../../planning/development.md) and

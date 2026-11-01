@@ -15,6 +15,18 @@ page of projected records in memory. Authored regressions for incomplete
 imports, checksum corruption, v1 compatibility and gap pagination are
 NOT_EXECUTED; no Windows, Minecraft Education or Codex runtime tested.
 
+**Education Script API log proof preparation (source-only):** authored one
+test-only `@minecraft/server` two-marker emitter and one local-only read-only
+capture inspector. The offline inspector accepts only explicitly selected
+absolute .log/.txt files and the candidate `marker-lines` or
+`timestamped-print` envelopes; it emits bounded sanitized counters and
+a source SHA-256, not raw data. No Minecraft log path is guessed, no
+world/profile is visited and no MCP or AI call is made. Source fixtures
+for marker ordering, malformed/escaped lines and data suppression are
+AUTHORED_NOT_EXECUTED. Bedrock documentation is not Education runtime proof.
+The next gate remains separately approved Education Windows capture with
+correct world/pack/slot identity before any live ingestion.
+
 Operator approved keeping all captured evidence **locally** and exposing
 only compact issue candidates/on-demand evidence to Codex, using the
 existing MCP. On the Local branch, the first slice adds:

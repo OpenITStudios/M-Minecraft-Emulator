@@ -183,7 +183,7 @@ function snapshotEqual(a,b) {
     a.size===b.size && a.mtimeNs===b.mtimeNs &&
     a.ctimeNs===b.ctimeNs;
 }
-async function readPinned(file,maxBytes) {
+export async function readPinned(file,maxBytes) {
   const before=await lstat(file,{bigint:true});
   if(!before.isFile()||before.isSymbolicLink()||before.nlink!==1n||
      before.size>BigInt(maxBytes)||before.size<1n) {
