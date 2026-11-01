@@ -278,6 +278,110 @@ remain `NOT_VERIFIED`. Live watching, automatic ingestion and the MCP
 interface **remain unchanged** until real source paths and provenance
 are independently verified.
 
+## Universal lightweight diagnostics pack — same .mcpack for multiple maps
+
+**This is the recommended general QA pack**; the separately named
+`education-script-probe.js` and `prepare-education-probe.mjs` remain narrow,
+disposable **transport-verification tools**, not the generic runtime collector.
+
+Source owners:
+- `Development/tooling/agent/education-universal-pack/manifest.json`
+- `Development/tooling/agent/education-universal-pack/scripts/main.js`
+- `Development/tooling/agent/build-education-universal-pack.mjs`
+
+The universal behavior pack has stable header and module UUIDs, pack version
+1.0.0, manifest format 2, minimum engine 1.26.30 and stable
+`@minecraft/server` 2.8.0. Those version choices are grounded by the
+operator-supplied `skills-probe-main` archive, whose BP manifest targeted
+Education 26.32 / engine 1.26.30 with the same Script API. This is
+**not** proof of Education 26.33 Windows compatibility. The same source
+pack can be activated in more than one world without generating a UUID,
+run ID or new build per map. Updating pack source in the future must
+increment its package version; do not silently overwrite an installed
+pack with different bytes under the same version.
+
+Prepare exactly once, from `Development/` when local tool execution is
+separately authorized:
+
+    node tooling/agent/build-education-universal-pack.mjs prepare
+
+The builder reads only the reviewed local source pack and writes under
+`workspace/diagnostics/education-universal/v1/`, ignored by Git, using
+exclusive creation. It generates a small ZIP STORE `.mcpack` containing
+only root-level `manifest.json` and `scripts/main.js`. Repeating the
+command accepts only byte-identical existing output; it never overwrites
+or deletes an existing file. The prebuilt `.mcpack` shared in the
+conversation uses the same exact source entries. The repository does not
+commit binaries, run installs, or silently publish packages.
+
+**Using the same file across test maps:**
+
+1. Double-click the reusable `LazyTester-Universal-Diagnostics-Education-1.0.0.mcpack`
+   to import it into Minecraft Education, following official Add-On UI.
+2. In each copied test world, go to Add-Ons → Behavior Packs → My Packs →
+   Activate `Lazy Tester - Universal Diagnostics`. Activation is per world;
+   no automatic installation into other worlds.
+3. In a test world where operator commands are permitted, issue
+   `/scriptevent lazytester:diagnostics start`.
+4. Reproduce a gameplay scenario; `status` or `flush` may be used on demand.
+5. Issue `/scriptevent lazytester:diagnostics stop` before ending the test.
+
+The pack emits only explicitly namespaced `[LT_EDU_DIAG]` console markers.
+On import/initial load it prints one `ready` marker; **collection stays
+OFF until `start`**. During an active capture, it subscribes to stable
+Script API event surfaces (when present), aggregates first spawn/respawn,
+player leave, player/entity deaths, entity spawn, and damage events into
+bounded counters. It prints at most one nonempty periodic summary per
+200 game ticks (nominally 10 s at 20 TPS), plus a heartbeat every 600
+ticks and explicit control messages. No world/player inventories, player
+names/IDs, coordinates, message text, raw chat, other packs' private
+JavaScript variables, scoreboard, or per-tick entity scanning is involved.
+An unsupported event is disclosed as a safe event name, not silently
+declared valid. The `session` field is a nonsecret **correlation token**,
+never an authenticated world/profile ID.
+
+**Coverage boundary:** This generic pack can describe basic activity but
+cannot validate tower defense wave rules, shop/coin transactions, arena
+isolation, entity pathfinding decisions, or arbitrary script exceptions
+inside unrelated packs. Map-specific logic still requires voluntarily
+instrumented, versioned assertions or the developer's existing
+`[ANALYTICS]` and `[GAME_RESULTS]` exports. An entity count or a damage
+count is *not* evidence of a bug by itself.
+
+**Local-first boundary:** A `.mcpack` is not a Windows log collector.
+Output becomes available locally only through a Content Log or optional
+debugger capture transport separately proven for the Education build.
+Neither this pack nor its builder opens a TCP socket or sends data to
+Codex. The existing MCP keeps its read-only/issue-on-demand behavior;
+this new marker is not automatically imported or presented as a verified
+test result. Any raw Content Log may contain unrelated sensitive data:
+never dump an unredacted raw log directly into an AI prompt.
+
+### Relevance of the team's uploaded Bedrock Skills and Skills Probe
+
+The operator-provided archives `minecraft-bedrock-agent-skills-main` and
+`skills-probe-main` contain implementation patterns relevant to QA:
+a single channel-based throttled logger, event-driven counters, staged
+and paginated analytics exports, bounded `[ANALYTICS]` and
+`[GAME_RESULTS]` contracts, diagnostics/profiler capture, and small
+scenario-specific test assertions. Those are architecture references;
+they were **not copied wholesale** into the portable universal pack.
+Importing a broad system would increase per-world resource and
+compatibility risks.
+
+The included `docs/test-runs/2026-10-28-debug-log-capture-run-1.md`
+reports a direct TCP debugger capture from **Minecraft Education 26.32
+on macOS**, with negotiated protocol 7 and repeated complete 176-message
+exports. The archives contain the corresponding raw capture file.
+This is stronger evidence for a future **optional local debugger
+collector without VS Code** than relying on general Bedrock docs.
+It remains a team report with scope limited to that client/OS/world,
+not Windows 26.33 or any five-profile run. The benchmark documents
+also show a large 285 KB analytics export printing in one tick caused
+roughly 472–486 ms of measured wall-clock work, reinforcing our
+event aggregation and paced export design. Neither measurement is a
+benchmark of the new universal pack.
+
 ## Technical gates before live Education capture
 
 1. Separately verify Minecraft Education stable Script API behavior pack

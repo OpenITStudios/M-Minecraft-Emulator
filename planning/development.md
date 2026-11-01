@@ -2,6 +2,28 @@
 
 ## Minecraft Education local-first diagnostics — 2 November 2026
 
+**Reusable universal .mcpack (source-only + separately prepared artifact):**
+The operator supplied two team archives (`minecraft-bedrock-agent-skills-main`
+and `skills-probe-main`), which include a documented protocol-7 direct
+debugger capture on Minecraft Education 26.32/macOS, an Education BP
+manifest with `@minecraft/server` 2.8.0 and bounded analytics exports.
+We used these as **source/evidence references only**, not direct live
+compatibility proof for Windows 26.33. Added fixed-identity
+`education-universal-pack/` with one original opt-in generic diagnostics
+module; it uses simple stable event subscriptions, 200-tick aggregated
+counters and 600-tick heartbeat, privacy-safe `[LT_EDU_DIAG]` lines,
+`/scriptevent lazytester:diagnostics start|status|flush|stop` and no
+world mutation or per-map identity. The packager
+`build-education-universal-pack.mjs` prepares one local `.mcpack` under
+ignored workspace without overwriting or installing it. Its ZIP/manifest
+fixtures are AUTHORED_NOT_EXECUTED. This pack is **not** a full
+map-specific assertions adapter, and its emitted log marker is not yet
+connected to the existing read-only MCP. Actual Education Windows
+pack import, Script API dependency load, command reception, log capture,
+resource overhead and world/profile attribution are NOT_VERIFIED.
+
+
+
 **Disposable Education Script API pack preparation (source-only):** added
 `prepare-education-probe.mjs`, an explicitly invoked offline generator for
 an isolated behavior-pack folder. It reuses the single

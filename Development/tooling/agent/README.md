@@ -113,6 +113,29 @@ launch a game, connect a debugger, run tests, or contact Codex. The
 receipt is a local source artifact, not proof of Education compatibility.
 See `docs/system/map-diagnostics.md` for the invocation and limits.
 
+## One reusable Education .mcpack for generic QA (source-only)
+
+`education-universal-pack/` holds the **single fixed-identity** lightweight
+behavior pack, separate from the disposable two-marker transport probe.
+Its `manifest.json` pins the exact pack UUIDs, version 1.0.0, min engine
+1.26.30 and stable `@minecraft/server` 2.8.0 (the user-supplied Skills
+Probe has a matching Education 26.32 macOS test manifest; Windows 26.33
+is NOT_VERIFIED). Its `scripts/main.js` is an original tiny read-only
+counter collector; it does not import the developer's full skill system.
+Collection is OFF by default, controlled only by namespaced
+`/scriptevent lazytester:diagnostics start|flush|status|stop`.
+No event-by-event dumping, player names, coordinates, chat, secrets,
+world/inventory writes or per-tick entity scans.
+
+`build-education-universal-pack.mjs prepare` produces one reusable
+`.mcpack` in ignored `workspace/diagnostics/education-universal/v1/`.
+No per-map UUIDs, no direct game install, no automatic Codex/MCP log
+stream and no account/world access. Re-running refuses a mismatched
+existing archive. Import once, then activate on each **test-copy**
+Education world through Behavior Packs. See `docs/system/map-diagnostics.md`.
+No source tests or Education runtime executions were performed for this
+commit; any manually distributed artifact is structurally verified only.
+
 ## Test/release boundary
 
 Read [current handoff](../../../planning/development.md) and
