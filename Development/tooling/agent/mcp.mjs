@@ -13,7 +13,8 @@ import {compilePlayerInputTimeline,compilePerClientInputFrames,GAME_BUTTON_BITS}
 import {assessInputRoute,requiredInputSlots} from './input-route.mjs';
 import {inputExecutionStatus} from './input-delivery.mjs';
 import {prepareMc02PulseBatch,prepareMultiClientPulseBatches} from './mc02-action-sequence.mjs';
-import {summarizeGameEvidence,summarizeEvidenceReports,normalizeEvidenceSlots} from './evidence-summary.mjs';
+import {summarizeGameEvidence,summarizeEvidenceReports,normalizeEvidenceSlots,
+  validateUniversalDiagnostic} from './evidence-summary.mjs';
 import {captureCuaWindow,validateCuaExecutable} from './visual-capture.mjs';
 import {validateDiagnosticsRoot,diagnosticsOverview,listDiagnosticIssues,
   getDiagnosticIssue,queryDiagnosticEvidence} from './diagnostics-local.mjs';
@@ -28,6 +29,8 @@ const MAX_MCP_TEXT_BYTES = 128 * 1024;
 const MAX_MCP_IMAGE_CHARS = 8 * 1024 * 1024; // Cua's 6 MiB PNG base64 upper bound
 const EVIDENCE_TAIL_BYTES = 256 * 1024;
 const EVIDENCE_LIMIT = 20;
+const TEAM_CAPTURE_MAX_LINE_BYTES = 24 * 1024; // team analytics/results contract
+const UNIVERSAL_CAPTURE_MAX_LINE_BYTES = 2 * 1024; // small optional counters
 const VALID_STATES = new Set(['STOPPED','STARTING','RUNNING','NOT_RESPONDING','ATTENTION']);
 const SUPPORTED_PROTOCOLS = new Set(['2025-06-18','2025-11-25','2026-07-28']);
 
@@ -558,33 +561,50 @@ export async function sendExperimentalMultiClientBatchNative(
 
 export function parseCapturedLine(line) {
   const match=/^(\d{4}-\d\d-\d\dT\S+)\s+(verbose|log|warn|error|stop)\s+([\s\S]+)$/.exec(line);
-  if (!match || match[1].length>45 ||
-      !Number.isFinite(Date.parse(match[1]))) return null;
-  // Debug-log-capture stores JSON-string-escaped PrintEvent text without
-  // the enclosing quotes; preserve legacy raw-line fixtures as well.
+  if(!match||match[1].length>45||
+     !Number.isFinite(Date.parse(match[1])) ||
+     Buffer.byteLength(match[3],'utf8')>TEAM_CAPTURE_MAX_LINE_BYTES*2) {
+    return null;
+  }
+  // The team's direct debugger capture uses JSON-string-escaped PrintEvent
+  // text without the enclosing quotes; keep bounded raw legacy lines too.
   let message=match[3];
-  try { message=JSON.parse('"'+message+'"'); }
-  catch { /* The original capture may already contain unescaped text. */ }
-
-  // A mention inside ordinary console text is NOT a Skills Probe event.
-  // Accept exactly one leading source marker followed by one JSON object.
-  const tagged=/^\s*(\[ANALYTICS\]|\[GAME_RESULTS\])\s*(\{[\s\S]*)$/.exec(message);
-  if (!tagged || Buffer.byteLength(tagged[2],'utf8')>16*1024) return null;
+  try{message=JSON.parse('"'+message+'"');}
+  catch{/* The existing capture may already contain unescaped text. */}
+  // A marker embedded in ordinary chat/console text is NOT accepted.
+  const tagged=/^\s*(\[ANALYTICS\]|\[GAME_RESULTS\]|\[LT_EDU_DIAG\])\s*(\{[\s\S]*)$/.exec(message);
+  if(!tagged)return null;
+  const universal=tagged[1]==='[LT_EDU_DIAG]';
+  const maxBytes=universal?UNIVERSAL_CAPTURE_MAX_LINE_BYTES:
+    TEAM_CAPTURE_MAX_LINE_BYTES;
+  if(Buffer.byteLength(tagged[1]+' '+tagged[2],'utf8')>maxBytes)return null;
   let data;
-  try { data=JSON.parse(tagged[2]); } catch { return null; }
-  if (!data || typeof data!=='object' || Array.isArray(data)) return null;
+  try{data=JSON.parse(tagged[2]);}catch{return null;}
+  if(!data||typeof data!=='object'||Array.isArray(data))return null;
+  if(universal) {
+    if(!validateUniversalDiagnostic(data))return null;
+    return {observedAt:match[1],level:match[2],
+      type:'universal_diagnostics',data};
+  }
   const analytics=tagged[1]==='[ANALYTICS]';
   const kind=analytics?data.type:data.record_type;
-  if (typeof kind!=='string' || !kind.trim() || kind.length>80 ||
-      (data.schema!==undefined && data.schema!==1)) return null;
-  // GAME_RESULTS is an untrusted marker; only the currently recognized
-  // v1 gameplay-result shape may be counted as a result, never as PASS.
-  if (!analytics &&
-      (data.schema!==1 || kind!=='gameplay_result')) return null;
-  return {
-    observedAt:match[1],level:match[2],
-    type:analytics?'analytics':'game_results',data,
-  };
+  if(typeof kind!=='string'||!kind.trim()||kind.length>80||
+     (data.schema!==undefined&&data.schema!==1))return null;
+  if(!analytics) {
+    // Team-owned result records include a final export_summary carrying
+    // completeness/failure counts. It is not a gameplay_result/PASS.
+    if(data.schema!==1||
+       !['gameplay_result','level_score','export_summary'].includes(kind))return null;
+    if(kind==='export_summary' &&
+       (!data.counts||typeof data.counts!=='object'||
+        Array.isArray(data.counts)||
+        Object.keys(data.counts).length>64||
+        Object.entries(data.counts).some(([key,value])=>
+          key.length>64||!Number.isSafeInteger(value)||value<0||
+          value>1000000)))return null;
+  }
+  return {observedAt:match[1],level:match[2],
+    type:analytics?'analytics':'game_results',data};
 }
 
 // Stable evidence snapshots are a read-only best effort, not a game/player
@@ -723,8 +743,8 @@ export const TOOL_LIST=[
   {name:'plan_peer_session',description:'Inspect native profiles and provide conservative human/AI host-and-join guidance. No world control or join is performed.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
   {name:'plan_player_actions',description:'Validate bounded concurrent AI player-action intents. PREVIEW ONLY: no input is sent to Minecraft.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}},includeTimeline:{type:'boolean'},includeClientFrames:{type:'boolean'}},required:['actions'],additionalProperties:false}},
   {name:'assess_input_route',description:'Read-only native identity check for AI gameplay input: bind validated multi-client action timeline to real MC HWND/PID; ALWAYS reports no verified independent game-input backend and NEVER sends input.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}}},required:['actions'],additionalProperties:false}},
-  {name:'summarize_test_evidence',description:'Read and condense bounded analytics/game-results capture from 1-5 profiles. No login, player mapping, host/join or gameplay result is inferred.',inputSchema:{type:'object',properties:{slots:{type:'array',items:{type:'integer',minimum:1,maximum:5},minItems:1,maxItems:5,uniqueItems:true}},additionalProperties:false}},
-  {name:'read_game_evidence',description:'Read only a compact allowlisted projection of 1-20 captured evidence records for one profile. No raw Skills Probe JSON, credentials or verified gameplay claims.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
+  {name:'summarize_test_evidence',description:'Read up to 20 bounded captured records/profile from team [ANALYTICS], [GAME_RESULTS] and optional [LT_EDU_DIAG]. Only allowlisted summaries reach the model; no game identity or gameplay PASS is inferred.',inputSchema:{type:'object',properties:{slots:{type:'array',items:{type:'integer',minimum:1,maximum:5},minItems:1,maxItems:5,uniqueItems:true}},additionalProperties:false}},
+  {name:'read_game_evidence',description:'Read one compact allowlisted 1-20 record projection of team analytics/results or optional generic diagnostics. No raw game JSON, player record IDs, credentials or gameplay PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
   // Source-only local-first diagnostics: explicitly imported immutable evidence.
   // No raw log, filesystem path, or automatic Minecraft activity is exposed.
   {name:'get_diagnostics_overview',

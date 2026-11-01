@@ -2195,3 +2195,70 @@ test('delayed old process packet cannot match a newly issued same-writer epoch',
   assert.equal(accepted(fresh,303,101),false);
   assert.equal(accepted(fresh,404,202),true);
 });
+
+test('team analytics export accepts up to 24 KiB source contract without increasing returned records',()=>{
+  const prefix='2026-10-30T12:00:00.000Z log ';
+  const teamLine='[ANALYTICS] '+JSON.stringify({
+    schema:1,type:'stage_attempt',record_id:'r1',
+    extra:'x'.repeat(17*1024),
+  });
+  assert.ok(Buffer.byteLength(teamLine,'utf8')>16*1024);
+  assert.ok(Buffer.byteLength(teamLine,'utf8')<24*1024);
+  assert.equal(parseCapturedLine(prefix+teamLine).type,'analytics');
+  const oversized='[ANALYTICS] '+JSON.stringify({
+    schema:1,type:'stage_attempt',extra:'x'.repeat(25*1024),
+  });
+  assert.equal(parseCapturedLine(prefix+oversized),null);
+});
+
+test('team game-results export_summary is captured but is not a gameplay result',()=>{
+  const prefix='2026-10-30T12:00:00.000Z warn ';
+  const summary='[GAME_RESULTS] '+JSON.stringify({
+    schema:1,record_type:'export_summary',
+    counts:{gameplay_result:1,level_score:0},
+    failed_counts:{gameplay_result:2},
+  });
+  const parsed=parseCapturedLine(prefix+summary);
+  assert.equal(parsed.type,'game_results');
+  assert.equal(parsed.data.record_type,'export_summary');
+  const level=parseCapturedLine(prefix+'[GAME_RESULTS] '+
+    JSON.stringify({schema:1,record_type:'level_score',total_score:7}));
+  assert.equal(level.type,'game_results');
+  assert.equal(parseCapturedLine(prefix+'[GAME_RESULTS] '+
+    JSON.stringify({schema:1,record_type:'export_summary',
+      counts:{level_score:'not a number'}})),null);
+  const h=createHandler(config(),{evidence:async(_dir,slot)=>({
+    slot,status:'CAPTURE_FILE_PRESENT',events:[parsed,level],
+  })});
+  return h.callTool('summarize_test_evidence',{slots:[2]}).then(result=>{
+    assert.equal(result.resultCount,0);
+    assert.equal(result.teamGameResultSummaryCount,1);
+    assert.equal(result.teamLevelScoreCount,1);
+    assert.equal(result.attentionCount,1);
+    assert.equal(result.verdict,'EVIDENCE_ONLY_NOT_GAMEPLAY_ACCEPTANCE');
+  });
+});
+
+test('universal short diagnostic marker projects only bounded counters on MCP',async()=>{
+  const prefix='2026-10-30T12:00:00.000Z log ';
+  const mk=(data)=>prefix+'[LT_EDU_DIAG] '+JSON.stringify(data);
+  const good={schema:1,session:'lt-abcde-1',seq:4,tick:200,kind:'summary',
+    data:{capture:1,reason:'interval',saturated:0,
+      counts:{firstSpawns:2,playerDeaths:1,entitySpawns:3}}};
+  const parsed=parseCapturedLine(mk(good));
+  assert.equal(parsed.type,'universal_diagnostics');
+  const bad={...good,data:{...good.data,playerName:'PRIVATE'}}; 
+  assert.equal(parseCapturedLine(mk(bad)),null);
+  const badCount={...good,data:{...good.data,
+    counts:{firstSpawns:1,password:999}}};
+  assert.equal(parseCapturedLine(mk(badCount)),null);
+  assert.equal(parseCapturedLine(prefix+'Player says '+mk(good)),null);
+  const h=createHandler(config(),{evidence:async(_dir,slot)=>({
+    slot,status:'CAPTURE_FILE_PRESENT',events:[parsed],
+  })});
+  const out=await h.callTool('summarize_test_evidence',{slots:[3]});
+  assert.equal(out.universalSummaryCount,1);
+  assert.equal(out.resultCount,0);
+  assert.equal(out.timeline[0].summaryCounts.firstSpawns,2);
+  assert.equal(JSON.stringify(out).includes('PRIVATE'),false);
+});

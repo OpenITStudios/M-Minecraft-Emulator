@@ -16,7 +16,7 @@ test('manifest is one reusable Education script pack with stable pinned identifi
   const m=JSON.parse((await readFile(files[0][1])).toString('utf8'));
   assert.equal(m.format_version,2);
   assert.equal(m.header.name,'Lazy Tester - Universal Diagnostics');
-  assert.deepEqual(m.header.version,[1,0,0]);
+  assert.deepEqual(m.header.version,[1,1,0]);
   assert.deepEqual(m.header.min_engine_version,[1,26,30]);
   assert.equal(m.header.uuid,'4af9d3f0-9fa1-4cb9-a011-fd37c1b2fb16');
   assert.deepEqual(m.modules.map(x=>x.type),['data','script']);
@@ -29,7 +29,10 @@ test('universal pack has no test-world-specific run ID or active logging by defa
   assert.match(source,/const COMMAND = "lazytester:diagnostics";/);
   assert.match(source,/let active = false;/);
   assert.match(source,/const SUMMARY_TICKS = 200;/);
+  assert.match(source,/const FOCUS_TICKS = 600;/);
   assert.match(source,/scriptEventReceive\.subscribe/);
+  assert.match(source,/command==="combat on"/);
+  assert.match(source,/command==="entities on"/);
   assert.match(source,/function begin\(\)/);
   assert.match(source,/function finish\(\)/);
   assert.doesNotMatch(source,/getAllPlayers\(|getEntities\(|setDynamicProperty\(|runCommand\(|fetch\(/);
@@ -52,6 +55,24 @@ test('ZIP archive contains only fixed files, correct local and central headers',
     assert.ok(zip.includes(Buffer.from(name,'ascii')));
   }
   assert.equal(Buffer.compare(zip,buildEducationMcpack(entries)),0);
+});
+
+test('team analytics tier 1 is default; noisy entity and hurt subscriptions are opt-in only',async()=>{
+  const src=(await readFile(files[1][1])).toString('utf8');
+  const baseline=src.slice(src.indexOf('function start(){'),src.indexOf('// Explicit short-lived focus'));
+  assert.match(baseline,/world\.afterEvents\.playerSpawn/);
+  assert.match(baseline,/world\.afterEvents\.playerLeave/);
+  assert.match(baseline,/world\.afterEvents\.playerDimensionChange/);
+  assert.match(baseline,/FILTER_PLAYER/);
+  assert.doesNotMatch(baseline,/entityHurt/);
+  assert.doesNotMatch(baseline,/entitySpawn/);
+  const focus=src.slice(src.indexOf('function enableFocus('),src.indexOf('function status()'));
+  assert.match(focus,/subscribe\("combat",world\.afterEvents\.entityHurt/);
+  assert.match(focus,/subscribe\("entities",world\.afterEvents\.entitySpawn/);
+  assert.match(focus,/FOCUS_TICKS/);
+  assert.match(focus,/focusGeneration\[group\]===generation/);
+  assert.equal(src.includes('[ANALYTICS]'),false);
+  assert.equal(src.includes('[GAME_RESULTS]'),false);
 });
 
 test('ZIP refuses missing, unknown or oversized entries',()=>{

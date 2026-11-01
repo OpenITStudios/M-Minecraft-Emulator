@@ -117,24 +117,40 @@ See `docs/system/map-diagnostics.md` for the invocation and limits.
 
 `education-universal-pack/` holds the **single fixed-identity** lightweight
 behavior pack, separate from the disposable two-marker transport probe.
-Its `manifest.json` pins the exact pack UUIDs, version 1.0.0, min engine
+Its `manifest.json` pins the exact pack UUIDs, version 1.1.0, min engine
 1.26.30 and stable `@minecraft/server` 2.8.0 (the user-supplied Skills
 Probe has a matching Education 26.32 macOS test manifest; Windows 26.33
 is NOT_VERIFIED). Its `scripts/main.js` is an original tiny read-only
 counter collector; it does not import the developer's full skill system.
 Collection is OFF by default, controlled only by namespaced
-`/scriptevent lazytester:diagnostics start|flush|status|stop`.
+`/scriptevent lazytester:diagnostics start|flush|status|stop`, with
+optional short-lived `combat on|off` and `entities on|off` commands.
+Following the team analytics tier policy, only lifecycle subscriptions
+are enabled on start; high-frequency sources require explicit focus and
+auto-expire after 600 game ticks.
 No event-by-event dumping, player names, coordinates, chat, secrets,
 world/inventory writes or per-tick entity scans.
 
 `build-education-universal-pack.mjs prepare` produces one reusable
-`.mcpack` in ignored `workspace/diagnostics/education-universal/v1/`.
+`.mcpack` in ignored `workspace/diagnostics/education-universal/v1.1/`.
 No per-map UUIDs, no direct game install, no automatic Codex/MCP log
 stream and no account/world access. Re-running refuses a mismatched
 existing archive. Import once, then activate on each **test-copy**
 Education world through Behavior Packs. See `docs/system/map-diagnostics.md`.
 No source tests or Education runtime executions were performed for this
 commit; any manually distributed artifact is structurally verified only.
+
+## Developer team telemetry compatibility
+
+The canonical contracts are the **operator-supplied** Bedrock Agent Skills
+modules: `[ANALYTICS]` (general mechanics) and `[GAME_RESULTS]`
+(scoring). Skills Probe provides the real Education 26.32 macOS debugger
+capture evidence; it is not target Windows 26.33 acceptance. Lazy Tester
+consumes both existing markers and the distinct optional `[LT_EDU_DIAG]`
+marker, with **24 KiB team wire-record limits**, no raw player-record ID
+in projected MCP timelines, and recognized `export_summary` failure
+counts. None of this adds background AI calls.
+See `docs/system/education-team-telemetry-compat.md`.
 
 ## Test/release boundary
 

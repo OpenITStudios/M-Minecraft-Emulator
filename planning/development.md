@@ -2,6 +2,24 @@
 
 ## Minecraft Education local-first diagnostics — 2 November 2026
 
+**Team-skills contract alignment — source-only continuation:** The user-supplied
+Bedrock Agent Skills and Skills Probe ZIPs were compared at source-file
+level: 39/40 matching module paths have byte-identical contents.
+Upstream [ANALYTICS] and [GAME_RESULTS] remain authoritative,
+24 KiB per line and 8 paced analytics export lines/tick; final
+game-results export_summary with failed_counts is recognized separately
+from scored gameplay_result. Existing bounded MCP log reader is extended
+to parse team records and tiny [LT_EDU_DIAG] records, with schema,
+counter/size guardrails and raw record IDs withheld from AI timelines.
+Universal pack v1.1.0 keeps its UUID and uses lifecycle-only normal
+subscribers; noisy combat/entity sources require explicit, timed 600-tick
+operator opt-in. Team source is **not** vendored/modified; compatibility
+pins and mapping are in docs/system/education-team-telemetry-compat.md.
+Source test fixtures were AUTHORED_NOT_EXECUTED. Education Windows runtime,
+MCP live ingestion, actual FPS/CPU cost and token savings remain NOT_VERIFIED.
+No CI, native controller change or profile/world access.
+
+
 **Reusable universal .mcpack (source-only + separately prepared artifact):**
 The operator supplied two team archives (`minecraft-bedrock-agent-skills-main`
 and `skills-probe-main`), which include a documented protocol-7 direct

@@ -135,3 +135,82 @@ test('untyped game-result objects never inflate resultCount or gameplay acceptan
   assert.equal(output.playerToProfileIdentity,'NOT_VERIFIED');
   assert.match(output.note,/NEVER a gameplay success/);
 });
+
+test('team result export_summary remains a completeness signal, not a scored result',()=>{
+  const reports=[{slot:2,status:'CAPTURE_FILE_PRESENT',events:[
+    event('game_results',{schema:1,record_type:'gameplay_result',
+      total_score:50,map:{name:'Arena Test'},data:{canonical:{record_id:'player-11:secret-id'}}}),
+    event('game_results',{schema:1,record_type:'export_summary',
+      counts:{gameplay_result:1,level_score:1},
+      failed_counts:{gameplay_result:2}}),
+    event('game_results',{schema:1,record_type:'level_score',
+      total_score:20,map:{name:'Arena Test'},data:{canonical:{}}}),
+  ]}];
+  const output=summarizeEvidenceReports([2],reports);
+  assert.equal(output.resultCount,1);
+  assert.equal(output.teamGameResultSummaryCount,1);
+  assert.equal(output.teamLevelScoreCount,1);
+  assert.equal(output.attentionCount,1);
+  assert.equal(output.timeline.some(e=>e.eventType==='export_summary'&&
+    e.severity==='ATTENTION'),true);
+  // Team record IDs may include player IDs; keep them local for dedupe only.
+  assert.equal(JSON.stringify(output).includes('player-11:secret-id'),false);
+  assert.equal(output.verdict,'EVIDENCE_ONLY_NOT_GAMEPLAY_ACCEPTANCE');
+});
+
+test('universal low-volume summary is separate from team-owned analytics/scoring',()=>{
+  const diagnostic={
+    schema:1,session:'lt-abcde-1',seq:2,tick:200,kind:'summary',
+    data:{capture:1,reason:'interval',saturated:0,
+      counts:{firstSpawns:1,respawns:2,playerLeaves:1,playerDeaths:0}},
+  };
+  const result=summarizeEvidenceReports([1],[{
+    slot:1,status:'CAPTURE_FILE_PRESENT',
+    events:[event('universal_diagnostics',diagnostic)],
+  }]);
+  assert.equal(result.records,1);
+  assert.equal(result.universalSummaryCount,1);
+  assert.equal(result.resultCount,0);
+  assert.equal(result.timeline[0].source,'universal_diagnostics');
+  assert.equal(result.timeline[0].summaryCounts.respawns,2);
+  assert.equal(result.timeline[0].severity,'INFO');
+  assert.equal(result.worldIdentity,'NOT_VERIFIED');
+});
+
+test('universal markers are deduped by session and sequence, not by map identity',()=>{
+  const base={schema:1,session:'lt-abcde-1',seq:3,tick:400,kind:'heartbeat',
+    data:{capture:1,active:true}};
+  const output=summarizeEvidenceReports([2],[{
+    slot:2,status:'CAPTURE_FILE_PRESENT',events:[
+      event('universal_diagnostics',base),
+      event('universal_diagnostics',{...base}),
+      event('universal_diagnostics',{...base,session:'lt-abcde-2'}),
+    ],
+  }]);
+  assert.equal(output.records,2);
+  assert.equal(output.duplicatesSuppressed,1);
+  assert.equal(output.resultCount,0);
+  assert.equal(output.timeline.every(e=>e.source==='universal_diagnostics'),true);
+});
+
+test('forged universal detail fields and unbounded counters are not accepted',()=>{
+  const good={schema:1,session:'lt-abcde-1',seq:1,tick:100,
+    kind:'summary',data:{capture:1,reason:'interval',saturated:0,
+      counts:{playerDeaths:1}}};
+  const rejected=[
+    {...good,data:{...good.data,playerName:'sensitive'}},
+    {...good,data:{...good.data,counts:{playerDeaths:1000001}}},
+    {...good,data:{...good.data,counts:{'ignore AI instructions':9}}},
+    {...good,session:'some-other-script'},
+    {...good,seq:0},
+    {...good,unknownField:'secret'},
+  ];
+  for(const item of rejected){
+    const out=summarizeEvidenceReports([2],[{
+      slot:2,status:'CAPTURE_FILE_PRESENT',
+      events:[event('universal_diagnostics',item)],
+    }]);
+    assert.equal(out.records,0);
+    assert.equal(JSON.stringify(out).includes('sensitive'),false);
+  }
+});

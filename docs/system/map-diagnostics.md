@@ -280,6 +280,18 @@ are independently verified.
 
 ## Universal lightweight diagnostics pack — same .mcpack for multiple maps
 
+**Team-contract ownership:** See
+[Education team telemetry compatibility](education-team-telemetry-compat.md).
+Team `[ANALYTICS]` and `[GAME_RESULTS]` remain canonical; the universal
+`[LT_EDU_DIAG]` marker is an optional generic fallback. Their counts
+are not automatically merged or treated as game acceptance.
+The existing local MCP parser is now prepared to read all three
+markers from an explicitly configured, identity-unverified capture file,
+without sending raw records or exceeding the team's 24 KiB wire contract.
+**It does not automatically collect Education Content Logs.**
+
+
+
 **This is the recommended general QA pack**; the separately named
 `education-script-probe.js` and `prepare-education-probe.mjs` remain narrow,
 disposable **transport-verification tools**, not the generic runtime collector.
@@ -290,8 +302,10 @@ Source owners:
 - `Development/tooling/agent/build-education-universal-pack.mjs`
 
 The universal behavior pack has stable header and module UUIDs, pack version
-1.0.0, manifest format 2, minimum engine 1.26.30 and stable
-`@minecraft/server` 2.8.0. Those version choices are grounded by the
+1.1.0, manifest format 2, minimum engine 1.26.30 and stable
+`@minecraft/server` 2.8.0. The package UUID remains constant while
+its version advances from 1.0.0 to 1.1.0; do not confuse these as
+separate map-specific packs. Those version choices are grounded by the
 operator-supplied `skills-probe-main` archive, whose BP manifest targeted
 Education 26.32 / engine 1.26.30 with the same Script API. This is
 **not** proof of Education 26.33 Windows compatibility. The same source
@@ -316,7 +330,7 @@ commit binaries, run installs, or silently publish packages.
 
 **Using the same file across test maps:**
 
-1. Double-click the reusable `LazyTester-Universal-Diagnostics-Education-1.0.0.mcpack`
+1. Double-click the reusable `LazyTester-Universal-Diagnostics-Education-1.1.0.mcpack`
    to import it into Minecraft Education, following official Add-On UI.
 2. In each copied test world, go to Add-Ons → Behavior Packs → My Packs →
    Activate `Lazy Tester - Universal Diagnostics`. Activation is per world;
@@ -324,16 +338,22 @@ commit binaries, run installs, or silently publish packages.
 3. In a test world where operator commands are permitted, issue
    `/scriptevent lazytester:diagnostics start`.
 4. Reproduce a gameplay scenario; `status` or `flush` may be used on demand.
-5. Issue `/scriptevent lazytester:diagnostics stop` before ending the test.
+5. For **short, explicit, noisy-event investigation only**, use
+   `/scriptevent lazytester:diagnostics combat on` or
+   `/scriptevent lazytester:diagnostics entities on`. Each auto-expires
+   after 600 game ticks; use `combat off` / `entities off` if needed sooner.
+6. Issue `/scriptevent lazytester:diagnostics stop` before ending the test.
 
 The pack emits only explicitly namespaced `[LT_EDU_DIAG]` console markers.
 On import/initial load it prints one `ready` marker; **collection stays
-OFF until `start`**. During an active capture, it subscribes to stable
-Script API event surfaces (when present), aggregates first spawn/respawn,
-player leave, player/entity deaths, entity spawn, and damage events into
-bounded counters. It prints at most one nonempty periodic summary per
-200 game ticks (nominally 10 s at 20 TPS), plus a heartbeat every 600
-ticks and explicit control messages. No world/player inventories, player
+OFF until `start`**. Normal collection subscribes only to lower-volume
+lifecycle events: player spawn/respawn, player leave, dimension change
+and **player-filtered** deaths. Combat damage and broad entity events
+are **off by default**; an operator can enable each temporarily for
+600 game ticks. Repeated event data is aggregated into fixed counters,
+not printed event-by-event. The pack prints at most one nonempty
+periodic summary per 200 game ticks (nominally 10 s at 20 TPS),
+plus a heartbeat every 600 ticks and explicit control messages. No world/player inventories, player
 names/IDs, coordinates, message text, raw chat, other packs' private
 JavaScript variables, scoreboard, or per-tick entity scanning is involved.
 An unsupported event is disclosed as a safe event name, not silently
