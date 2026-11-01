@@ -2,7 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createVisualObserver,summarizeTeamVisualState,
-  verifyTeamObservationBasis,evaluateTeamActionFeedback} from './visual-observer.mjs';
+  verifyTeamObservationBasis,evaluateTeamActionFeedback,
+  summarizeTeamCoordination} from './visual-observer.mjs';
 
 function clockFixture() {
   let now=1000;
@@ -462,4 +463,102 @@ test('unknown source clock remains viewable but cannot authorize observed AI act
   assert.equal(view.frames[0].baseline.sourceFrameAtMs,null);
   assert.throws(()=>verifyTeamObservationBasis('human-plus-four-ai',
     [2],[view.frames[0].baseline],[unknown]),/TIMING_UNAVAILABLE/);
+});
+
+
+test('coordinated 4/5 AI visual cohorts fail closed per slot without silently shrinking plans',()=>{
+  for(const [mode,slots] of [
+    ['human-plus-four-ai',[2,3,4,5]],['five-ai',[1,2,3,4,5]],
+  ]) {
+    const readings=slots.map(slot=>visualMeta(slot));
+    const visual=summarizeTeamVisualState(mode,slots,readings);
+    const admitted=summarizeTeamCoordination(mode,visual,[],true);
+    assert.equal(admitted.observedActionEligible,true);
+    assert.deepEqual(admitted.readySlots,slots);
+    assert.deepEqual(admitted.blockedSlots,[]);
+    assert.equal(admitted.dispatch,'NO_INPUT_DISPATCHED');
+    assert.equal(admitted.gameplayVerification,'NOT_VERIFIED');
+
+    const oneMissing=slots[1];
+    const missing=summarizeTeamVisualState(mode,slots,
+      readings.map(meta=>meta.slot===oneMissing?
+        {...meta,active:false,freshFrameAvailable:false,
+          status:'CAPTURE_STOPPED_AFTER_REPEATED_ERRORS',
+          captureIdentity:null,sourceFrameAtMs:null,
+          sourceTimeKind:null}:meta));
+    const hold=summarizeTeamCoordination(mode,missing,[],true);
+    assert.equal(hold.status,'HOLD_SELECTED_COHORT');
+    assert.equal(hold.observedActionEligible,false);
+    assert.deepEqual(hold.blockedSlots,[oneMissing]);
+    assert.deepEqual(hold.readySlots,slots.filter(s=>s!==oneMissing));
+    assert.equal(hold.clients.find(c=>c.slot===oneMissing).blockReason,
+      'NO_RECENT_VERIFIED_FRAME');
+    assert.equal(hold.reselect,'NEVER_AUTOMATICALLY_DROP_UNREADY_SLOTS');
+
+    // Only a NEW caller-selected and revalidated action subset is allowed.
+    const explicit=slots.filter(slot=>slot!==oneMissing);
+    const smaller=summarizeTeamCoordination(mode,
+      summarizeTeamVisualState(mode,explicit,
+        readings.filter(v=>explicit.includes(v.slot))),[],true);
+    assert.deepEqual(smaller.readySlots,explicit);
+    assert.equal(smaller.observedActionEligible,true);
+
+    const uncertain=summarizeTeamCoordination(mode,visual,[slots[0]],true);
+    assert.deepEqual(uncertain.blockedSlots,[slots[0]]);
+    assert.equal(uncertain.clients[0].blockReason,
+      'UNCERTAIN_NATIVE_INPUT_REQUIRES_EXPLICIT_NEUTRAL');
+    assert.equal(uncertain.uncertainInputRecovery,
+      'EXPLICIT_STOP_NEUTRAL_ACK_REQUIRED_PER_SLOT');
+    const readOnly=summarizeTeamCoordination(mode,visual,[],false);
+    assert.equal(readOnly.status,'READ_ONLY_NO_INPUT_PERMISSION');
+    assert.equal(readOnly.observedActionEligible,false);
+  }
+});
+
+test('coordination refuses replaced process and missing source time before action admission',()=>{
+  const slots=[2,3,4,5];
+  const readings=slots.map(slot=>visualMeta(slot));
+  const prior=summarizeTeamVisualState('human-plus-four-ai',slots,readings)
+    .frames.map(frame=>frame.baseline);
+  const post=readings.map(meta=>meta.slot===3?
+    {...meta,captureIdentity:{...meta.captureIdentity,windowId:99},
+      successfulSamples:meta.successfulSamples+1,
+      sourceFrameAtMs:meta.sourceFrameAtMs+100,
+      collectedAt:'2026-11-01T04:00:00.500Z'}:meta);
+  const visual=summarizeTeamVisualState('human-plus-four-ai',slots,post,prior);
+  const hold=summarizeTeamCoordination('human-plus-four-ai',visual,[],true);
+  assert.deepEqual(hold.blockedSlots,[3]);
+  assert.equal(hold.clients[1].blockReason,'CAPTURE_IDENTITY_CHANGED_SINCE_BASELINE');
+  const unknown=summarizeTeamVisualState('human-plus-four-ai',slots,
+    readings.map(meta=>meta.slot===5?
+      {...meta,sourceTimeKind:null,sourceFrameAtMs:null}:meta));
+  const missing=summarizeTeamCoordination('human-plus-four-ai',unknown,[],true);
+  assert.deepEqual(missing.blockedSlots,[5]);
+  assert.equal(missing.clients[3].blockReason,'CAPTURE_SOURCE_TIMING_UNAVAILABLE');
+  assert.throws(()=>summarizeTeamCoordination(
+    'human-plus-four-ai',visual,[1],true),/Invalid uncertain/);
+  assert.throws(()=>summarizeTeamCoordination(
+    'human-plus-four-ai',visual,[2,2],true),/Invalid uncertain/);
+});
+
+
+test('active observed round can react on first failed capture while read-only busy skips remain nonfatal',async()=>{
+  const t=clockFixture();
+  let busy=true;
+  const faults=[],finished=[];
+  const observer=createVisualObserver({...t,
+    capture:async()=>{throw new Error(busy?'NATIVE_BUSY':'GPU_FRAME_NOT_READY');},
+    onCaptureFailure:(slot,code)=>faults.push([slot,code]),
+    onFinish:(slot,code)=>finished.push([slot,code]),
+  });
+  observer.start([2],{intervalMs:800,durationMs:10000});
+  await t.next(); // temporary verified native capture contention
+  assert.deepEqual(faults,[]);
+  assert.equal(observer.read(2,{includeImage:false}).metadata.active,true);
+  busy=false;
+  await t.next(); // first nonbusy failed screenshot, before 3-error limit
+  assert.deepEqual(faults,[[2,'CAPTURE_UNAVAILABLE']]);
+  assert.equal(observer.read(2,{includeImage:false}).metadata.active,true);
+  assert.deepEqual(finished,[]); // ordinary read-only retry policy preserved
+  observer.shutdown();
 });

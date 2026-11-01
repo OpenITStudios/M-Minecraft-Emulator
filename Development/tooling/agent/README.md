@@ -115,6 +115,51 @@ real AI image reasoning, native input and simultaneous gameplay remain
 unverified. Standard installer, user data, fixed slot ownership,
 human MC01 isolation and CI policy are unchanged.
 
+## Coordinated 4–5 AI source-loss and uncertain-input containment
+
+`get_multi_client_visual_state` now also returns a read-only
+`coordination` projection for each selected AI-owned slot.
+`readySlots` means only a usable recent observed source/time;
+`blockedSlots` lists missing/stale frames, source timing problems,
+changed native window identity since the supplied baseline, or
+`UNCERTAIN_NATIVE_INPUT_REQUIRES_EXPLICIT_NEUTRAL`. No input is
+dispatched by this read. MC01 is always excluded in hybrid mode.
+
+The existing `run_experimental_observed_actions` uses strict
+all-selected-slots admission. **It never automatically drops an
+unavailable AI and sends actions to the remaining clients.** To
+continue with fewer independent AI clients, the model/operator must
+explicitly submit a NEW action list for only the chosen healthy
+slots and fetch matching fresh per-slot baselines.
+
+With explicit multi-client native opt-in, failed/aborted/uncertain
+native sequence ACKs or failed neutral releases put all possibly
+touched slots in a local input-recovery hold. Even if automatic
+best-effort cleanup ACKs, the next action cannot retry any held slot
+without a new operator/AI invocation of
+`stop_experimental_multi_client_actions({slots:[...]})`. That idle
+stop sends the existing native per-client neutral command, and only
+acknowledged exact selected slots leave the local hold. A failed
+neutral leaves the hold; unaffected slots are not stopped or silently
+reselected. An ACK is a transport state write, not proof game keys
+were released.
+
+An observed round is also aborted if one of its selected visual
+samplers expires, is stopped, sees a replaced root window, or reaches
+a non-busy capture failure. The same global batch cancellation and
+per-slot neutral cleanup are reused; no background controller or new
+capture loop is installed. A temporary native-busy capture skip keeps
+the original observer's bounded retry behavior.
+
+The recovery hold exists in the ONE MCP process memory, not in the
+game or on disk; a newly started MCP cannot infer a previous
+process's failed requests. The original native TTL and per-process
+identity/channel gates remain mandatory last-resort defenses.
+Neither the coordinator's `observedActionEligible` nor native
+transport ACKs prove Minecraft actually consumed a command. All
+execution, timing improvements and gameplay remain NOT_EXECUTED /
+NOT_VERIFIED.
+
 ## 4/5-AI visual source-clock synchronization (source only)
 
 The optional visual sampler keeps two different times per window:

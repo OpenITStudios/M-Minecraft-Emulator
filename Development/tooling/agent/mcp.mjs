@@ -17,7 +17,7 @@ import {summarizeGameEvidence,summarizeEvidenceReports,normalizeEvidenceSlots} f
 import {captureCuaWindow,validateCuaExecutable} from './visual-capture.mjs';
 import {createVisualObserver,OBSERVATION_LIMITS,
   summarizeTeamVisualState,verifyTeamObservationBasis,
-  evaluateTeamActionFeedback} from './visual-observer.mjs';
+  evaluateTeamActionFeedback,summarizeTeamCoordination} from './visual-observer.mjs';
 import {createGpuFrameSource,validateGpuExecutable} from './gpu-frame-source.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -57,6 +57,7 @@ const PUBLIC_TOOL_ERRORS=new Set([
   'TEAM_OBSERVATION_INCOMPLETE','TEAM_OBSERVATION_STALE_OR_REPLACED',
   'TEAM_OBSERVATION_TIMING_UNAVAILABLE','TEAM_ACTION_RECEIPT_MISMATCH',
   'AI_SEQUENCE_ABORTED','AI_RELEASE_UNCONFIRMED','AI_INPUT_NATIVE_RESULT_UNVERIFIED',
+  'AI_INPUT_RECOVERY_REQUIRED',
 ]);
 function publicToolError(error) {
   const message=typeof error?.message==='string' ? error.message : '';
@@ -798,6 +799,18 @@ export function createHandler(config,{
   let visualReadBusy=false; // only one identity-pinned screenshot at a time
   let mc02SequenceAbort=null; // pending opted-in legacy MC02 request only
   let multiSequence=null; // one bounded cross-slot request, not a game owner
+  // Volatile MCP-process fail-closed input markers, not another game
+  // controller, OS channel owner, retry queue or account state registry.
+  const uncertainAiSlots=new Set();
+  let observedSequenceSlots=null; // one opted-in observed batch at a time
+  const markAiUncertain=slots=>{
+    for(const slot of slots)uncertainAiSlots.add(slot);
+  };
+  const refuseUncertain=slots=>{
+    if(slots.some(slot=>uncertainAiSlots.has(slot))) {
+      throw new Error('AI_INPUT_RECOVERY_REQUIRED');
+    }
+  };
   const exclusiveBusy=()=>inFlight||visualReadBusy;
   let gpuStartup=null; // bounded request only; not game/session lifecycle
   const mc02Enabled=config.experimentalMc02InputEnabled===true &&
@@ -883,10 +896,23 @@ export function createHandler(config,{
       visualReadBusy=false;
     }
   }
+  const revokeObservedRound=slot=>{
+    if(observedSequenceSlots?.includes(slot)) {
+      // A single missing/revoked captured frame source invalidates
+      // the entire SELECTED action round. Never silently proceed with
+      // the remaining AI clients or start a retry.
+      markAiUncertain(observedSequenceSlots);
+      multiSequence?.abort.abort();
+    }
+  };
   const visualObserver=visualObserverFactory({
     capture:captureVerifiedFrame,
     sourceLabel:gpuSource?'PERSISTENT_WGC_GPU_FRAME_SOURCE':'BOUNDED_CUA_WINDOW_SNAPSHOTS',
-    onFinish:(slot)=>gpuSource?.stop([slot]),
+    onFinish:(slot)=>{
+      gpuSource?.stop([slot]);
+      revokeObservedRound(slot);
+    },
+    onCaptureFailure:(slot)=>revokeObservedRound(slot),
   });
   function checkedSlots(slots) {
     if (!Array.isArray(slots) || slots.length<1 || slots.length>5 ||
@@ -964,7 +990,18 @@ export function createHandler(config,{
       const readings=slots.map(slot=>visualObserver.read(slot,{
         includeImage:false,
       }).metadata);
-      return summarizeTeamVisualState(config.mode,slots,readings,args.since??[]);
+      const visual=summarizeTeamVisualState(
+        config.mode,slots,readings,args.since??[]);
+      const state=summarizeTeamCoordination(
+        config.mode,visual,[...uncertainAiSlots].sort((a,b)=>a-b),multiEnabled);
+      // A source-ready cache must not advertise a new action opportunity
+      // while the original controller/observer MCP lock is still active.
+      const busy=exclusiveBusy();
+      return {...visual,coordination:{
+        ...state,observedActionEligible:state.observedActionEligible&&!busy,
+        status:busy&&!state.blockedSlots.length?
+          'MCP_OPERATION_IN_PROGRESS':state.status,
+      }};
     }
     if (name==='read_visual_observation') {
       keysExactly(args,['slot','afterSequence','includeImage']);
@@ -1084,6 +1121,7 @@ export function createHandler(config,{
         // One shared CLI schedule: partial cancellation is unsafe.
         // The native process is cancelled and ALL its touched slots get
         // independent neutral cleanup (also repeated by MCP finally).
+        markAiUncertain(multiSequence.slots);
         multiSequence.abort.abort();
         return {schema:1,slots:multiSequence.slots,
           status:'CANCELLATION_REQUESTED_ALL_ACTIVE_AI_SLOTS',
@@ -1094,8 +1132,12 @@ export function createHandler(config,{
       inFlight=true;
       try {
         if(!await releaseAiSlots(slots)) {
+          markAiUncertain(slots);
           throw new Error('AI_RELEASE_UNCONFIRMED');
         }
+        // Only explicitly selected slots receive a new exact-owner
+        // neutral ACK. Never silently clear other uncertain game slots.
+        for(const slot of slots)uncertainAiSlots.delete(slot);
         return {schema:1,slots,status:'NATIVE_NEUTRAL_WRITES_ACKNOWLEDGED',
           actualGameKeyRelease:'NOT_VERIFIED',gameplayObserved:false};
       } finally {inFlight=false;}
@@ -1134,6 +1176,7 @@ export function createHandler(config,{
       if(!multiEnabled)throw new Error('MULTI_CLIENT_EXPERIMENT_DISABLED');
       keysExactly(args,['actions','basis']);
       const schedule=prepareMultiClientPulseBatches(config.mode,args.actions);
+      refuseUncertain(schedule.slots);
       if(exclusiveBusy())throw new Error('Native operation in progress; do not overlap requests');
       // A model or external caller must have an exact recent baseline for
       // EVERY targeted AI slot. Image pixels still require an explicit
@@ -1143,39 +1186,45 @@ export function createHandler(config,{
         schedule.slots.map(slot=>visualObserver.read(slot,{
           includeImage:false,
         }).metadata));
-      // No await between freshness check and the existing controller
-      // dispatch acquiring its exclusive MCP lock. The original controller
-      // independently rechecks HWND/process/foreground for each pulse.
+      // No await between freshness check and the original controller's
+      // exclusive MCP lock. The existing observer revocation callback can
+      // abort exactly this observed action if a selected source disappears.
       const transportStartedAt=new Date().toISOString();
-      const receipt=await callTool('run_experimental_multi_client_actions',{
-        actions:args.actions,
-      });
-      const transportCompletedAt=new Date().toISOString();
-      const prior=state.frames.map(frame=>frame.baseline);
-      return {...receipt,mode:config.mode,visualBaseline:prior,
-        actionFingerprint:fingerprintActions(config.mode,args.actions),
-        transportStartedAt,transportCompletedAt,
-        decision:'EXTERNAL_AI_DECISION_NOT_VERIFIED_BY_MCP',
-        actionResult:'NATIVE_TRANSPORT_ONLY_NOT_GAMEPLAY_EVIDENCE',
-        nextObservation:{
-          tool:'get_multi_client_visual_state',
-          arguments:{slots:schedule.slots,since:prior},
-        },
-        nextEvaluation:{tool:'evaluate_experimental_multi_client_outcomes',
-          requiredInputs:['actions','receipt','after','reviews']},
-        note:'Compare newer per-client samples and explicitly review PNGs via read_visual_observation; unchanged or changed PNG bytes alone cannot prove Minecraft movement.'};
+      observedSequenceSlots=[...schedule.slots];
+      try {
+        const receipt=await callTool('run_experimental_multi_client_actions',{
+          actions:args.actions,
+        });
+        const transportCompletedAt=new Date().toISOString();
+        const prior=state.frames.map(frame=>frame.baseline);
+        return {...receipt,mode:config.mode,visualBaseline:prior,
+          actionFingerprint:fingerprintActions(config.mode,args.actions),
+          transportStartedAt,transportCompletedAt,
+          decision:'EXTERNAL_AI_DECISION_NOT_VERIFIED_BY_MCP',
+          actionResult:'NATIVE_TRANSPORT_ONLY_NOT_GAMEPLAY_EVIDENCE',
+          nextObservation:{
+            tool:'get_multi_client_visual_state',
+            arguments:{slots:schedule.slots,since:prior},
+          },
+          nextEvaluation:{tool:'evaluate_experimental_multi_client_outcomes',
+            requiredInputs:['actions','receipt','after','reviews']},
+          note:'Compare newer per-client samples and explicitly review PNGs via read_visual_observation; unchanged or changed PNG bytes alone cannot prove Minecraft movement.'};
+      } finally {
+        observedSequenceSlots=null;
+      }
     }
     if (name==='run_experimental_multi_client_actions') {
       if(!multiEnabled)throw new Error('MULTI_CLIENT_EXPERIMENT_DISABLED');
       keysExactly(args,['actions']);
       // Compile the FULL cross-slot plan before any input request.
       const schedule=prepareMultiClientPulseBatches(config.mode,args.actions);
+      refuseUncertain(schedule.slots);
       if(exclusiveBusy())throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       const abort=new AbortController();
       const run={abort,slots:schedule.slots};
       multiSequence=run;
-      let dispatched=false,neutralConfirmed=true;
+      let dispatched=false,neutralConfirmed=true,transportConfirmed=false;
       try {
         dispatched=true;
         const receipt=await aiMultiBatch(config.executable,schedule.batches,
@@ -1187,12 +1236,16 @@ export function createHandler(config,{
           throw new Error('AI_INPUT_NATIVE_RESULT_UNVERIFIED');
         }
         if(abort.signal.aborted)throw new Error('AI_SEQUENCE_ABORTED');
+        transportConfirmed=true;
         return receipt;
       }finally{
-        // Release EVERY potentially sent slot, not only the final
-        // acknowledged one. A failed neutral IPC remains an error.
+        // Failed/aborted/unacknowledged input is potentially delivered.
+        // A best-effort automatic ReleaseAll is not permission to replay:
+        // a separate explicit stop/neutral ACK is required to recover.
+        if(dispatched&&!transportConfirmed)markAiUncertain(schedule.slots);
         if(dispatched) {
           neutralConfirmed=await releaseAiSlots(schedule.slots);
+          if(!neutralConfirmed)markAiUncertain(schedule.slots);
         }
         if(multiSequence===run)multiSequence=null;
         inFlight=false;

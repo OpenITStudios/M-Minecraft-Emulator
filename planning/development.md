@@ -1,5 +1,70 @@
 # Current Development Handoff — Lazy Tester
 
+## 1 November 2026 — multi-AI source loss and uncertain-input isolation
+
+**State: SOURCE-ONLY COHORT ADMISSION AND RECOVERY / GAMEPLAY BLOCKED.**
+The operator continues ChatGPT + GitHub source work; no local PC,
+Node/Rust/Windows execution, native input activation, Minecraft testing,
+installer work or CI is authorized/executed.
+
+The existing ONE MCP local process and Visual Observer now return a
+per-slot `coordination` summary within the existing read-only
+`get_multi_client_visual_state` result. It distinguishes fresh
+source-timed AI visual caches from unavailable/stale frames, targets
+replaced since a previous baseline, and a slot whose last native
+input result is uncertain. Source-ready means only a permissible
+candidate for review: the normal MCP has no native input authority,
+and a source-ready opted-in action still depends on exact pinned
+PID/birth/HWND/session/foreground verification by the retained owner.
+There is no automatic removal of one failed participant from a
+requested four/five-AI action cohort. A healthy subset can only be
+sent as a NEW explicit action and freshly read per-slot baselines.
+
+The same opted-in multi-client action path now keeps a bounded,
+MCP-process-local uncertainty set of the slots it may have touched.
+Any aborted, failed, malformed-ACK or unconfirmed ReleaseAll attempt
+marks the WHOLE affected action cohort for manual reconciliation, even
+if the automatic best-effort neutral cleanup later receives ACKs.
+Uncertain slots refuse both observed and unobserved new native action
+requests with `AI_INPUT_RECOVERY_REQUIRED`, without retrying a
+possibly delivered batch. An explicit idle
+`stop_experimental_multi_client_actions({slots})` sends fresh exact
+controller-owned per-slot neutral writes, attempts every requested
+slot, and clears the local block ONLY if all requested neutral ACKs
+are acknowledged; unselected uncertain slots remain blocked. This is
+NOT proof that Minecraft consumed a key-up or that a new MCP process
+can reconstruct its predecessor's in-memory uncertainty marker.
+
+The existing observer's normal expiry, explicit stop, replaced-window
+and repeated-error finish path aborts a currently active
+`run_experimental_observed_actions` cohort if ANY selected visual
+source disappears. The same observer also surfaces its FIRST non-busy
+capture failure to the active observed batch, without changing the
+ordinary read-only sampler retry policy or creating a new timer,
+controller, service, worker or network endpoint. A cancelled batch
+attempts its existing independent per-slot native ReleaseAll; a killed
+CLI or failed neutral still relies on native packet TTL and must not
+claim confirmed game key-up.
+
+No changes to ordinary user UI, Minecraft files/accounts/worlds,
+existing native channel ABI, Tauri package admission, default-OFF
+experimental flags, or CI. The previous single native controller and
+same-timestamp grouped native IPC remain the only input route.
+
+**Proof:** REMOTE_GITHUB exact-source/consumer and static contract review;
+bounded Node fixture cases for hybrid/five-AI status separation, explicit
+healthy subset, uncertain ACK, selective neutral recovery, source
+revocation, and first capture failure are AUTHORED_NOT_EXECUTED.
+No source test suite, Windows process, keyboard/camera, game session,
+input consumption, four/five client timing or FPS evidence is claimed.
+
+**One next action:** When an explicitly authorized compatible Windows
+Minecraft Education target becomes available, validate real per-client
+input consumption, observed capture interruption and recovery on the
+exact Local revision. Continue bounded source work meanwhile without
+promoting transport ACKs or PNG changes to gameplay PASS.
+
+
 ## 1 November 2026 — per-AI visual source-time synchronization
 
 **State: SOURCE-ONLY FRAME PROVENANCE AND AFTER-ACTION GATE / GAMEPLAY BLOCKED.**

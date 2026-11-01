@@ -969,7 +969,11 @@ function teamVisualFixture(mode='human-plus-four-ai') {
       createdFileTime:'134000000000000001'},
   }]));
   const reads=[];
-  const factory=()=>({
+  let finishObservation=null,captureFailure=null;
+  const factory=({onFinish,onCaptureFailure}={})=>{
+    finishObservation=onFinish;
+    captureFailure=onCaptureFailure;
+    return {
     read(slot,{includeImage}={}){
       reads.push([slot,includeImage]);
       return {metadata:{...(records.get(slot)??{
@@ -979,8 +983,16 @@ function teamVisualFixture(mode='human-plus-four-ai') {
     start(){throw Error('Unexpected extra capture owner');},
     stop(){return {status:'STOP_REQUESTED'};},
     shutdown(){},
-  });
-  return {slots,records,reads,factory};
+    };
+  };
+  return {slots,records,reads,factory,
+    revoke(slot,reason='TARGET_REPLACED_REFUSE_CAPTURE'){
+      finishObservation?.(slot,reason);
+    },
+    failCapture(slot,reason='CAPTURE_UNAVAILABLE'){
+      captureFailure?.(slot,reason);
+    },
+  };
 }
 const aiMove=slot=>({slot,kind:'move_forward',atMs:0,durationMs:320});
 
@@ -1281,5 +1293,168 @@ test('MCP per-client feedback rejects a source timestamp older than action recei
   assert.equal(output.outcomes[0].sourceStatus,'FRAME_SOURCE_EVENT_NOT_AFTER_ACTION');
   assert.equal(output.totals.reportedVisibleChanges,0);
   assert.equal(output.gameplayAcceptance,'NOT_VERIFIED');
+  handler.shutdown();
+});
+
+
+test('uncertain native batch blocks only touched AI slots until explicit neutral ACK',async()=>{
+  for(const [mode,slots] of [
+    ['human-plus-four-ai',[2,3,4,5]],
+    ['five-ai',[1,2,3,4,5]],
+  ]) {
+    const fixture=teamVisualFixture(mode);
+    let first=true,failNeutral=0;
+    const sends=[],releases=[];
+    const handler=createHandler({...config(mode),
+      experimentalMultiClientInputEnabled:true},{
+      visualObserverFactory:fixture.factory,
+      aiMultiBatch:async(_exe,batches)=>{
+        sends.push(batches.map(b=>b.slot));
+        if(first){first=false;throw new Error('IPC_RESPONSE_UNCERTAIN');}
+        return {schema:1,slots:batches.map(b=>b.slot),
+          status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
+          gameplayObserved:false};
+      },
+      aiInput:async(_exe,frame)=>{
+        releases.push(frame.slot);
+        if(frame.slot===failNeutral)throw new Error('UNCONFIRMED_NEUTRAL');
+        return {schema:1,slot:frame.slot,
+          status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+          gameplayObserved:false};
+      },
+    });
+    const affected=slots.slice(0,2);
+    await assert.rejects(()=>handler.callTool('run_experimental_multi_client_actions',{
+      actions:affected.map(aiMove),
+    }),/IPC_RESPONSE_UNCERTAIN/);
+    assert.deepEqual(sends,[affected]);
+    assert.deepEqual(releases.slice(0,2),affected);
+
+    const view=await handler.callTool('get_multi_client_visual_state',{slots});
+    assert.deepEqual(view.coordination.blockedSlots,affected);
+    assert.deepEqual(view.coordination.readySlots,slots.slice(2));
+    assert.equal(view.coordination.status,'HOLD_SELECTED_COHORT');
+    assert.equal(view.coordination.observedActionEligible,false);
+    assert.equal(view.coordination.clients[0].blockReason,
+      'UNCERTAIN_NATIVE_INPUT_REQUIRES_EXPLICIT_NEUTRAL');
+    await assert.rejects(()=>handler.callTool('run_experimental_multi_client_actions',{
+      actions:[aiMove(affected[0])],
+    }),/AI_INPUT_RECOVERY_REQUIRED/);
+    assert.equal(sends.length,1); // NEVER blindly replay the unconfirmed call
+
+    // Healthy slots can be chosen ONLY via a newly explicit action list;
+    // the full cohort is never silently reduced by the MCP.
+    const healthy=slots.slice(2);
+    const ok=await handler.callTool('run_experimental_multi_client_actions',{
+      actions:healthy.map(aiMove),
+    });
+    assert.deepEqual(ok.slots,healthy);
+    assert.deepEqual(sends.at(-1),healthy);
+
+    failNeutral=affected[0];
+    await assert.rejects(()=>handler.callTool('stop_experimental_multi_client_actions',{
+      slots:[affected[0]],
+    }),/AI_RELEASE_UNCONFIRMED/);
+    const still=await handler.callTool('get_multi_client_visual_state',{slots});
+    assert.deepEqual(still.coordination.blockedSlots,affected);
+    failNeutral=0;
+    const cleared=await handler.callTool('stop_experimental_multi_client_actions',{
+      slots:[affected[0]],
+    });
+    assert.equal(cleared.status,'NATIVE_NEUTRAL_WRITES_ACKNOWLEDGED');
+    const partial=await handler.callTool('get_multi_client_visual_state',{slots});
+    assert.deepEqual(partial.coordination.blockedSlots,[affected[1]]);
+    assert.equal(partial.coordination.clients.find(c=>c.slot===affected[0]).status,
+      'VISUAL_SOURCE_READY_ONLY');
+    await handler.callTool('stop_experimental_multi_client_actions',{
+      slots:[affected[1]],
+    });
+    const full=await handler.callTool('get_multi_client_visual_state',{slots});
+    assert.deepEqual(full.coordination.blockedSlots,[]);
+    assert.equal(full.coordination.observedActionEligible,true);
+    handler.shutdown();
+  }
+});
+
+test('revoked visual slot aborts the entire observed native sequence and latches recovery',async()=>{
+  const fixture=teamVisualFixture();
+  let announce;
+  const entered=new Promise(resolve=>{announce=resolve;});
+  const released=[];
+  const handler=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
+    visualObserverFactory:fixture.factory,
+    aiMultiBatch:async(_exe,_batches,{signal})=>{
+      announce();
+      return new Promise((_resolve,reject)=>{
+        if(signal.aborted){reject(new Error('AI_SEQUENCE_ABORTED'));return;}
+        signal.addEventListener('abort',()=>reject(new Error('AI_SEQUENCE_ABORTED')),
+          {once:true});
+      });
+    },
+    aiInput:async(_exe,frame)=>{
+      released.push(frame.slot);
+      return {schema:1,slot:frame.slot,
+        status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+        gameplayObserved:false};
+    },
+  });
+  const view=await handler.callTool('get_multi_client_visual_state',{});
+  const actions=fixture.slots.map(aiMove);
+  const pending=handler.callTool('run_experimental_observed_actions',{
+    actions,basis:view.frames.map(f=>f.baseline),
+  });
+  await entered; // async experimental transport is active
+  fixture.revoke(3,'TARGET_REPLACED_REFUSE_CAPTURE');
+  await assert.rejects(pending,/AI_SEQUENCE_ABORTED/);
+  assert.deepEqual(released,fixture.slots);
+  const held=await handler.callTool('get_multi_client_visual_state',{});
+  assert.deepEqual(held.coordination.blockedSlots,fixture.slots);
+  await assert.rejects(()=>handler.callTool('run_experimental_observed_actions',{
+    actions,basis:view.frames.map(f=>f.baseline),
+  }),/AI_INPUT_RECOVERY_REQUIRED/);
+  await handler.callTool('stop_experimental_multi_client_actions',{slots:[3]});
+  const stillHeld=await handler.callTool('get_multi_client_visual_state',{});
+  assert.deepEqual(stillHeld.coordination.blockedSlots,[2,4,5]);
+  assert.equal(stillHeld.coordination.reselect,
+    'NEVER_AUTOMATICALLY_DROP_UNREADY_SLOTS');
+  handler.shutdown();
+});
+
+
+test('first nonbusy observed capture error requests whole-cohort abort, never partial input replay',async()=>{
+  const fixture=teamVisualFixture('five-ai');
+  let notifyStart;
+  const entered=new Promise(resolve=>{notifyStart=resolve;});
+  const released=[];
+  const handler=createHandler({...config('five-ai'),
+    experimentalMultiClientInputEnabled:true},{
+    visualObserverFactory:fixture.factory,
+    aiMultiBatch:async(_exe,_batches,{signal})=>{
+      notifyStart();
+      return new Promise((_resolve,reject)=>{
+        if(signal.aborted){reject(new Error('AI_SEQUENCE_ABORTED'));return;}
+        signal.addEventListener('abort',()=>reject(new Error('AI_SEQUENCE_ABORTED')),
+          {once:true});
+      });
+    },
+    aiInput:async(_exe,frame)=>{
+      released.push(frame.slot);
+      return {schema:1,slot:frame.slot,
+        status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+        gameplayObserved:false};
+    },
+  });
+  const before=await handler.callTool('get_multi_client_visual_state',{});
+  const pending=handler.callTool('run_experimental_observed_actions',{
+    actions:fixture.slots.map(aiMove),
+    basis:before.frames.map(frame=>frame.baseline),
+  });
+  await entered;
+  fixture.failCapture(4,'CAPTURE_UNAVAILABLE'); // no 3-error wait
+  await assert.rejects(pending,/AI_SEQUENCE_ABORTED/);
+  assert.deepEqual(released,[1,2,3,4,5]);
+  const view=await handler.callTool('get_multi_client_visual_state',{});
+  assert.deepEqual(view.coordination.blockedSlots,[1,2,3,4,5]);
+  assert.equal(view.coordination.observedActionEligible,false);
   handler.shutdown();
 });

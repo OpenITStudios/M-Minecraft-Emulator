@@ -84,8 +84,10 @@ export function createVisualObserver({
   cancel=clearTimeout,
   sourceLabel='BOUNDED_CUA_WINDOW_SNAPSHOTS',
   onFinish=()=>{},
+  onCaptureFailure=()=>{},
 }={}) {
-  if (typeof capture!=='function' || typeof onFinish!=='function') {
+  if (typeof capture!=='function' || typeof onFinish!=='function' ||
+      typeof onCaptureFailure!=='function') {
     throw new TypeError('A verified capture and cleanup callback are required');
   }
   const sessions=new Map();
@@ -243,6 +245,10 @@ export function createVisualObserver({
         state.imageBase64=null; // Never serve an old image as a fresh one.
         state.lastHash=null;
         state.status='CAPTURE_ERROR';
+        // Surface the FIRST non-busy capture failure to an active observed
+        // round, before three retries can consume its whole 3.5s action
+        // horizon. The default read-only sampler retains its retries.
+        try {onCaptureFailure(state.slot,state.lastError);} catch {}
         if (state.consecutiveErrors>=MAX_ERRORS) {
           finish(state,'CAPTURE_STOPPED_AFTER_REPEATED_ERRORS');
           return;
@@ -495,6 +501,66 @@ export function summarizeTeamVisualState(mode,slots,readings,since=[]) {
     decision:'REQUIRES_EXPLICIT_AI_IMAGE_REVIEW',
     motionInference:'PNG_BYTES_AND_TIMESTAMPS_NOT_GAMEPLAY_PROOF',
     note:'One metadata read of 1-5 existing local caches; no new capture, gameplay input, world identity, or automated AI decision is implied.',
+  };
+}
+
+// Source-only group admission preview over the EXISTING ephemeral observer.
+// This is not a game input authorizer, new readiness owner or AI decision:
+// a single unavailable slot prevents this exact full-cohort observed action.
+// A model may explicitly author an independent smaller action request,
+// which still has to pass the original native per-process admission.
+export function summarizeTeamCoordination(mode,visual,uncertainSlots=[],optedIn=false) {
+  if(!['human-plus-four-ai','five-ai'].includes(mode) ||
+      visual?.schema!==1||visual?.mode!==mode||
+      !Array.isArray(visual.frames)||!Array.isArray(uncertainSlots) ||
+      typeof optedIn!=='boolean') {
+    throw new TypeError('Invalid multi-client coordination observation');
+  }
+  const slots=allowedSlots(visual.slots);
+  if(mode==='human-plus-four-ai'&&slots.includes(1)) {
+    throw new TypeError('Cannot coordinate human-owned MC01 as AI');
+  }
+  const uncertain=new Set();
+  for(const slot of uncertainSlots) {
+    if(!Number.isInteger(slot)||slot<1||slot>5||
+       (mode==='human-plus-four-ai'&&slot===1)||uncertain.has(slot)) {
+      throw new TypeError('Invalid uncertain input slots');
+    }
+    uncertain.add(slot);
+  }
+  if(visual.frames.length!==slots.length) {
+    throw new TypeError('Incomplete coordination observation');
+  }
+  const readySlots=[],blockedSlots=[],clients=[];
+  for(let i=0;i<slots.length;i++){
+    const slot=slots[i],frame=visual.frames[i];
+    if(!frame||frame.slot!==slot) {
+      throw new TypeError('Mismatched multi-client visual slot');
+    }
+    const reason=uncertain.has(slot)?
+      'UNCERTAIN_NATIVE_INPUT_REQUIRES_EXPLICIT_NEUTRAL':
+      frame.observedSameProcessSinceBaseline===false?
+      'CAPTURE_IDENTITY_CHANGED_SINCE_BASELINE':
+      frame.freshFrameAvailable!==true?
+      'NO_RECENT_VERIFIED_FRAME':
+      frame.sourceTimingUsable!==true||!frame.baseline?
+      'CAPTURE_SOURCE_TIMING_UNAVAILABLE':null;
+    clients.push({slot,status:reason??'VISUAL_SOURCE_READY_ONLY',
+      blockReason:reason,gameplayVerified:false});
+    if(reason)blockedSlots.push(slot);
+    else readySlots.push(slot);
+  }
+  return {
+    schema:1,mode,slots,clients,readySlots,blockedSlots,
+    status:blockedSlots.length?'HOLD_SELECTED_COHORT':
+      optedIn?'SOURCE_COHORT_READY_NOT_NATIVE_ACCEPTED':
+      'READ_ONLY_NO_INPUT_PERMISSION',
+    observedActionEligible:optedIn&&blockedSlots.length===0,
+    reselect:'NEVER_AUTOMATICALLY_DROP_UNREADY_SLOTS',
+    explicitHealthySubset:'MUST_REPLAN_ACTIONS_AND_READ_FRESH_BASELINES',
+    uncertainInputRecovery:'EXPLICIT_STOP_NEUTRAL_ACK_REQUIRED_PER_SLOT',
+    dispatch:'NO_INPUT_DISPATCHED',
+    gameplayVerification:'NOT_VERIFIED',
   };
 }
 
