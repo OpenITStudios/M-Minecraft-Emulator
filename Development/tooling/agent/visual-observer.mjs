@@ -435,3 +435,185 @@ export function verifyTeamObservationBasis(mode,slots,basis,readings) {
   }
   return current;
 }
+
+
+// Conservative per-client feedback over a completed *caller-supplied*
+// experimental action receipt and the EXISTING bounded visual cache.
+// The model must review before/after PNG images separately. A reported
+// appearance is NEVER a Minecraft input, hit, movement, or game PASS.
+const VISUAL_ASSESSMENTS=new Set([
+  'VISIBLE_CHANGE_REPORTED','NO_VISIBLE_CHANGE_REPORTED','UNDETERMINED',
+]);
+const VISUAL_CATEGORIES=new Set(['movement','camera','attack','interaction']);
+function visualCategory(kind) {
+  if(['move_forward','move_backward','strafe_left','strafe_right',
+      'jump','sneak'].includes(kind)) return 'movement';
+  if(kind==='look_relative') return 'camera';
+  if(kind==='attack') return 'attack';
+  if(kind==='use') return 'interaction';
+  return null;
+}
+
+/**
+ * Evaluates only whether the model's bounded per-slot visual reports can
+ * be associated with newer, same-process frames after a caller-reported
+ * native action round. The receipt itself is NOT authenticated here:
+ * no durable action ledger, external gameplay telemetry or second owner.
+ */
+export function evaluateTeamActionFeedback(mode,actions,receipt,comparison,after,reviews=[]) {
+  if(!['human-plus-four-ai','five-ai'].includes(mode) ||
+     !Array.isArray(actions)||actions.length<1||actions.length>32 ||
+     !Array.isArray(reviews)||reviews.length>20 ||
+     !Array.isArray(after)||after.length>5) {
+    throw new TypeError('Invalid bounded multi-client evaluation');
+  }
+  const requested=new Map();
+  for(const action of actions) {
+    const kind=visualCategory(action?.kind);
+    const slot=action?.slot;
+    if(!kind||!Number.isInteger(slot)||slot<1||slot>5||
+       (mode==='human-plus-four-ai'&&slot===1)) {
+      throw new TypeError('Invalid AI evaluation action or human-owned slot');
+    }
+    if(!requested.has(slot))requested.set(slot,new Set());
+    requested.get(slot).add(kind);
+  }
+  const slots=[...requested.keys()].sort((a,b)=>a-b);
+  const exactly=(list)=>Array.isArray(list)&&list.length===slots.length&&
+    list.every((slot,i)=>slot===slots[i]);
+  if(receipt?.schema!==1||receipt?.mode!==mode||
+     receipt?.status!=='EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED'||
+     receipt?.actionResult!=='NATIVE_TRANSPORT_ONLY_NOT_GAMEPLAY_EVIDENCE'||
+     receipt?.gameplayObserved!==false||
+     !exactly(receipt?.slots)||
+     !Array.isArray(receipt?.visualBaseline)||
+     receipt.visualBaseline.length!==slots.length ||
+     after.length!==slots.length ||
+     comparison?.schema!==1||comparison?.mode!==mode||
+     !exactly(comparison.slots)||
+     !Array.isArray(comparison.frames)||comparison.frames.length!==slots.length) {
+    throw new TypeError('Invalid or incompatible unverified action receipt');
+  }
+  const start=Date.parse(receipt.transportStartedAt);
+  const end=Date.parse(receipt.transportCompletedAt);
+  if(!Number.isFinite(start)||!Number.isFinite(end)||end<start) {
+    throw new TypeError('Action round has no bounded timestamp');
+  }
+  const first=new Map();
+  for(const item of receipt.visualBaseline) {
+    if(!item||!slots.includes(item.slot)||first.has(item.slot)||
+       !Number.isSafeInteger(item.sequence)||item.sequence<1||
+       !Number.isSafeInteger(item.samples)||item.samples<1||
+       !Number.isFinite(Date.parse(item.collectedAt)) ||
+       !item.captureIdentity) {
+      throw new TypeError('Invalid per-slot visual baseline in action receipt');
+    }
+    first.set(item.slot,item);
+  }
+  const reported=new Map();
+  for(const row of reviews) {
+    if(!row||!slots.includes(row.slot)||!VISUAL_CATEGORIES.has(row.category)||
+       !requested.get(row.slot).has(row.category)||
+       !VISUAL_ASSESSMENTS.has(row.assessment)) {
+      throw new TypeError('Invalid model visual report or unrequested category');
+    }
+    const key=row.slot+':'+row.category;
+    if(reported.has(key))throw new TypeError('Duplicate model visual report');
+    const cue=row.cue;
+    if(row.assessment!=='UNDETERMINED' &&
+       (typeof cue!=='string'||cue.trim().length<8||cue.length>160||
+        /[\u0000-\u001f\u007f]/.test(cue))) {
+      throw new TypeError('Visible finding needs a bounded scene-specific cue');
+    }
+    if(cue!==undefined&&(typeof cue!=='string'||cue.length>160||
+       /[\u0000-\u001f\u007f]/.test(cue))) {
+      throw new TypeError('Invalid visual report cue');
+    }
+    reported.set(key,{assessment:row.assessment,cue:cue?.trim()||null});
+  }
+  const outcomes=[];
+  const totals={reportedVisibleChanges:0,reportedNoVisibleChanges:0,
+    undetermined:0,notEvaluable:0};
+  for(const [index,slot] of slots.entries()) {
+    const frame=comparison.frames[index];
+    const before=first.get(slot);
+    if(!frame||frame.slot!==slot||!before) {
+      throw new TypeError('Missing per-slot comparison');
+    }
+    const beforeTime=Date.parse(before.collectedAt);
+    const afterTime=Date.parse(frame.collectedAt);
+    const sameTarget=frame.observedSameProcessSinceBaseline===true;
+    const suppliedAfter=after[index]; // may be null for a missing capture
+    const current=frame.baseline;
+    const afterMatches=Boolean(suppliedAfter&&current&&
+      suppliedAfter.slot===slot&&
+      suppliedAfter.sequence===current.sequence&&
+      suppliedAfter.samples===current.samples&&
+      suppliedAfter.collectedAt===current.collectedAt&&
+      suppliedAfter.captureIdentity?.pid===current.captureIdentity?.pid&&
+      suppliedAfter.captureIdentity?.windowId===current.captureIdentity?.windowId&&
+      suppliedAfter.captureIdentity?.sessionId===current.captureIdentity?.sessionId&&
+      suppliedAfter.captureIdentity?.createdFileTime===
+        current.captureIdentity?.createdFileTime);
+    // No accepted post-action observation without a fresh, newly captured
+    // frame on the SAME game HWND and an ordering after completion.
+    const usable=frame.freshFrameAvailable===true && afterMatches &&
+      sameTarget && frame.sampledSinceBaseline===true &&
+      Number.isSafeInteger(frame.samples)&&frame.samples>before.samples&&
+      Number.isSafeInteger(frame.sequence)&&frame.sequence>=before.sequence&&
+      Number.isFinite(beforeTime)&&Number.isFinite(afterTime)&&
+      beforeTime<=start&&afterTime>end;
+    const cause=!frame.freshFrameAvailable?'NO_RECENT_POST_FRAME':
+      !afterMatches?'POST_FRAME_SNAPSHOT_MISSING_OR_CHANGED':
+      !sameTarget?'GAME_WINDOW_IDENTITY_CHANGED':
+      frame.sampledSinceBaseline!==true?'NO_NEW_SAME_PROCESS_SAMPLE':
+      beforeTime>start||!Number.isFinite(afterTime)||afterTime<=end?
+        'FRAME_TIMELINE_NOT_AFTER_ACTION':
+      frame.sequence<before.sequence?'FRAME_SEQUENCE_REGRESSION':'NONE';
+    const categories=[...requested.get(slot)].sort();
+    const findings=categories.map(category=>{
+      const review=reported.get(slot+':'+category);
+      let status='UNDETERMINED_NOT_REVIEWED';
+      if(!usable) status='NOT_EVALUABLE';
+      else if(review?.assessment==='VISIBLE_CHANGE_REPORTED') {
+        status=frame.pngBytesChangedSinceBaseline===true?
+          'MODEL_REPORTS_VISUAL_CHANGE_UNVERIFIED':
+          'MODEL_REPORT_CONFLICTS_WITH_IDENTICAL_PNG';
+      } else if(review?.assessment==='NO_VISIBLE_CHANGE_REPORTED') {
+        status='MODEL_REPORTS_NO_VISIBLE_CHANGE_UNVERIFIED';
+      } else if(review?.assessment==='UNDETERMINED') {
+        status='UNDETERMINED_BY_MODEL';
+      }
+      if(status==='MODEL_REPORTS_VISUAL_CHANGE_UNVERIFIED')
+        totals.reportedVisibleChanges++;
+      else if(status==='MODEL_REPORTS_NO_VISIBLE_CHANGE_UNVERIFIED')
+        totals.reportedNoVisibleChanges++;
+      else if(status==='NOT_EVALUABLE')totals.notEvaluable++;
+      else totals.undetermined++;
+      return {category,status,cue:usable?(review?.cue??null):null,
+        reportedBy:review?'EXTERNAL_MODEL_UNVERIFIED':null,
+        gameplayConfirmed:false};
+    });
+    outcomes.push({
+      slot,postFrameUsable:Boolean(usable),
+      sourceStatus:usable?'NEWER_SAME_PROCESS_FRAME':
+        cause==='NONE'?'INCOMPLETE_FRAME_CONTRACT':cause,
+      pngBytesChanged:usable?frame.pngBytesChangedSinceBaseline:null,
+      samplesAfterBaseline:usable?frame.samples-before.samples:null,
+      findings,
+    });
+  }
+  return {
+    schema:1,mode,slots,status:totals.notEvaluable?
+      'INCOMPLETE_VISUAL_EVALUATION':
+      (totals.reportedVisibleChanges+totals.reportedNoVisibleChanges>0?
+        'MODEL_VISUAL_REPORT_ONLY':'UNDETERMINED_NO_VISUAL_REPORT'),
+    outcomes,totals,imagesIncluded:false,
+    transportReceipt:'CALLER_SUPPLIED_NOT_AUTHENTICATED_BY_EVALUATOR',
+    visualReview:'EXTERNAL_MODEL_REPORT_NOT_INDEPENDENTLY_VERIFIED',
+    actionTiming:'CALLER_SUPPLIED_TIMESTAMPS_AND_CAPTURE_METADATA_ONLY',
+    gameplayAcceptance:'NOT_VERIFIED',
+    worldAndPlayerIdentity:'NOT_VERIFIED',
+    note:'A visible change is a model-reported appearance, not verified player movement, camera control, an attack hit, or Minecraft input acceptance. A lack of visible change is not proof that a game action failed.',
+  };
+}

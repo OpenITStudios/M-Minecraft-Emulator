@@ -2,6 +2,7 @@
 // Local stdio MCP bridge. No HTTP listener, shell commands, credential access or native game input.
 // Every native mutation goes through the existing authenticated Lazy Tester controller.
 import {execFile} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {lstat, open} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 import path from 'node:path';
@@ -15,7 +16,8 @@ import {prepareMc02PulseBatch,prepareMultiClientPulseBatches} from './mc02-actio
 import {summarizeGameEvidence,summarizeEvidenceReports,normalizeEvidenceSlots} from './evidence-summary.mjs';
 import {captureCuaWindow,validateCuaExecutable} from './visual-capture.mjs';
 import {createVisualObserver,OBSERVATION_LIMITS,
-  summarizeTeamVisualState,verifyTeamObservationBasis} from './visual-observer.mjs';
+  summarizeTeamVisualState,verifyTeamObservationBasis,
+  evaluateTeamActionFeedback} from './visual-observer.mjs';
 import {createGpuFrameSource,validateGpuExecutable} from './gpu-frame-source.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -53,6 +55,7 @@ const PUBLIC_TOOL_ERRORS=new Set([
   'MC02_SEQUENCE_DEADLINE','MC02_SEQUENCE_ABORTED','MC02_RELEASE_UNCONFIRMED',
   'MULTI_CLIENT_EXPERIMENT_DISABLED','MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS',
   'TEAM_OBSERVATION_INCOMPLETE','TEAM_OBSERVATION_STALE_OR_REPLACED',
+  'TEAM_ACTION_RECEIPT_MISMATCH',
   'AI_SEQUENCE_ABORTED','AI_RELEASE_UNCONFIRMED','AI_INPUT_NATIVE_RESULT_UNVERIFIED',
 ]);
 function publicToolError(error) {
@@ -712,11 +715,49 @@ const EXPERIMENTAL_OBSERVED_TEAM_TOOL={
   },required:['actions','basis'],additionalProperties:false},
 };
 
+// Optional read-only result classification. Input receipt and AI review are
+// caller-supplied; neither is independently authenticated as gameplay proof.
+// SHA-256 of the deterministic canonical pulse plan. Prevents accidental
+// evaluation against a different action list; it does not authenticate an
+// externally copied or fabricated receipt and proves no Minecraft effect.
+export function fingerprintActions(mode,actions) {
+  const plan=prepareMultiClientPulseBatches(mode,actions);
+  const projected=plan.batches.map(batch=>({
+    slot:batch.slot,pulses:batch.pulses.map(pulse=>({
+      atMs:pulse.atMs,keys:pulse.keys,dx:pulse.dx,dy:pulse.dy,ttlMs:pulse.ttlMs,
+    })),
+  }));
+  return createHash('sha256').update(JSON.stringify({mode,projected}))
+    .digest('hex');
+}
+
+const EXPERIMENTAL_TEAM_FEEDBACK_TOOL={
+  name:'evaluate_experimental_multi_client_outcomes',
+  description:'EXPERIMENTAL READ-ONLY: classify per-client movement, camera, attack and interaction reports against exact newer same-window frame metadata. A model-reported visual change is NEVER verified Minecraft movement or attack success.',
+  inputSchema:{type:'object',properties:{
+    actions:EXPERIMENTAL_MULTI_CLIENT_TOOLS[0].inputSchema.properties.actions,
+    receipt:{type:'object'},
+    after:{type:'array',minItems:1,maxItems:5,items:{anyOf:[
+      EXPERIMENTAL_OBSERVED_TEAM_TOOL.inputSchema.properties.basis.items,
+      {type:'null'},
+    ]}},
+    reviews:{type:'array',maxItems:20,items:{type:'object',properties:{
+      slot:{type:'integer',minimum:1,maximum:5},
+      category:{type:'string',enum:['movement','camera','attack','interaction']},
+      assessment:{type:'string',enum:[
+        'VISIBLE_CHANGE_REPORTED','NO_VISIBLE_CHANGE_REPORTED','UNDETERMINED',
+      ]},
+      cue:{type:'string',maxLength:160},
+    },required:['slot','category','assessment'],additionalProperties:false}},
+  },required:['actions','receipt','after'],additionalProperties:false},
+};
+
 function capabilities(mode,experimental=false,multi=false) {return {schema:1,mode,hostSlot:1,humanSlots:mode==='human-plus-four-ai'?[1]:[],
   aiSlots:mode==='human-plus-four-ai'?[2,3,4,5]:[1,2,3,4,5],
   available:['start_visual_observation','read_visual_observation','get_multi_client_visual_state','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence',...(experimental?[EXPERIMENTAL_MC02_TOOL.name,...EXPERIMENTAL_MC02_SEQUENCE_TOOLS.map(t=>t.name)]:[]),
     ...(multi?[...EXPERIMENTAL_MULTI_CLIENT_TOOLS.map(t=>t.name),
-      EXPERIMENTAL_OBSERVED_TEAM_TOOL.name]:[])],
+      EXPERIMENTAL_OBSERVED_TEAM_TOOL.name,
+      EXPERIMENTAL_TEAM_FEEDBACK_TOOL.name]:[])],
   notAvailable:['parallel_independent_keyboard_mouse','automatic_world_host_join','send_minecraft_command'],
   visualCapture:'OPTIONAL_CUA_OR_PERSISTENT_WGC_SOURCE_NOT_RUNTIME_VERIFIED',
   independentInput:{state:'BLOCKED_NO_VERIFIED_PER_CLIENT_INPUT_BACKEND',
@@ -1035,6 +1076,36 @@ export function createHandler(config,{
           actualGameKeyRelease:'NOT_VERIFIED',gameplayObserved:false};
       } finally {inFlight=false;}
     }
+    if (name==='evaluate_experimental_multi_client_outcomes') {
+      if(!multiEnabled)throw new Error('MULTI_CLIENT_EXPERIMENT_DISABLED');
+      keysExactly(args,['actions','receipt','after','reviews']);
+      // The same compiler defines which AI slots and outcome categories
+      // were requested. A caller cannot invent an evaluation of MC01
+      // human actions or an unrelated attack/interaction.
+      const scheduled=prepareMultiClientPulseBatches(config.mode,args.actions);
+      if(args.receipt?.actionFingerprint!==fingerprintActions(
+          config.mode,args.actions)) {
+        throw new Error('TEAM_ACTION_RECEIPT_MISMATCH');
+      }
+      if(multiSequence!==null||inFlight) {
+        throw new Error('Native operation in progress; do not overlap requests');
+      }
+      if(!Array.isArray(args.receipt?.visualBaseline)) {
+        throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
+      }
+      const reading=scheduled.slots.map(slot=>visualObserver.read(slot,{
+        includeImage:false,
+      }).metadata);
+      // This read does NOT generate a screenshot. The caller-supplied
+      // before/after images must have been viewed separately. This only
+      // binds recent cache identities and timestamps to an unverified
+      // model visual report; it cannot certify Minecraft gameplay.
+      const comparison=summarizeTeamVisualState(
+        config.mode,scheduled.slots,reading,args.receipt.visualBaseline);
+      return evaluateTeamActionFeedback(
+        config.mode,args.actions,args.receipt,comparison,
+        args.after,args.reviews??[]);
+    }
     if (name==='run_experimental_observed_actions') {
       if(!multiEnabled)throw new Error('MULTI_CLIENT_EXPERIMENT_DISABLED');
       keysExactly(args,['actions','basis']);
@@ -1051,17 +1122,23 @@ export function createHandler(config,{
       // No await between freshness check and the existing controller
       // dispatch acquiring its exclusive MCP lock. The original controller
       // independently rechecks HWND/process/foreground for each pulse.
+      const transportStartedAt=new Date().toISOString();
       const receipt=await callTool('run_experimental_multi_client_actions',{
         actions:args.actions,
       });
+      const transportCompletedAt=new Date().toISOString();
       const prior=state.frames.map(frame=>frame.baseline);
-      return {...receipt,visualBaseline:prior,
+      return {...receipt,mode:config.mode,visualBaseline:prior,
+        actionFingerprint:fingerprintActions(config.mode,args.actions),
+        transportStartedAt,transportCompletedAt,
         decision:'EXTERNAL_AI_DECISION_NOT_VERIFIED_BY_MCP',
         actionResult:'NATIVE_TRANSPORT_ONLY_NOT_GAMEPLAY_EVIDENCE',
         nextObservation:{
           tool:'get_multi_client_visual_state',
           arguments:{slots:schedule.slots,since:prior},
         },
+        nextEvaluation:{tool:'evaluate_experimental_multi_client_outcomes',
+          requiredInputs:['actions','receipt','after','reviews']},
         note:'Compare newer per-client samples and explicitly review PNGs via read_visual_observation; unchanged or changed PNG bytes alone cannot prove Minecraft movement.'};
     }
     if (name==='run_experimental_multi_client_actions') {
@@ -1304,7 +1381,8 @@ export function createHandler(config,{
       if (message.method==='tools/list') return result({tools:mc02Enabled?
         [...TOOL_LIST,EXPERIMENTAL_MC02_TOOL,...EXPERIMENTAL_MC02_SEQUENCE_TOOLS] :
         (multiEnabled?[...TOOL_LIST,...EXPERIMENTAL_MULTI_CLIENT_TOOLS,
-          EXPERIMENTAL_OBSERVED_TEAM_TOOL]:TOOL_LIST)});
+          EXPERIMENTAL_OBSERVED_TEAM_TOOL,
+          EXPERIMENTAL_TEAM_FEEDBACK_TOOL]:TOOL_LIST)});
       if (message.method==='tools/call') {
         const name=message.params?.name;
         if (typeof name!=='string') return err(-32602,'Tool name is required');

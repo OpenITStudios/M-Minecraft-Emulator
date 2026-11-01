@@ -84,6 +84,47 @@ real AI image reasoning, native input and simultaneous gameplay remain
 unverified. Standard installer, user data, fixed slot ownership,
 human MC01 isolation and CI policy are unchanged.
 
+## Per-client outcome classification from observed action rounds (source-only)
+
+The opt-in `run_experimental_observed_actions` response includes its
+original `visualBaseline` plus `mode`, `transportStartedAt`,
+`transportCompletedAt` and a canonical SHA-256 `actionFingerprint`.
+The digest prevents accidental mixing with another submitted action
+plan, but it is not a signature, cannot authenticate a copied/fabricated
+receipt, and is not proof Minecraft processed input.
+The timestamps are caller-visible transport timestamps, not
+authenticated Minecraft action timestamps.
+
+After the requested cross-slot action completes, retrieve another
+`get_multi_client_visual_state` for the original AI slots. Then
+explicitly request the relevant PNGs with `read_visual_observation`
+and compare them with the images viewed before dispatch. Submit
+`evaluate_experimental_multi_client_outcomes` with:
+
+- `actions`: the SAME bounded action list used in the round
+- `receipt`: the result of `run_experimental_observed_actions`
+- `after`: one `frames[].baseline` for each requested slot in ascending
+  slot order (use null for an unavailable post-frame)
+- `reviews` (optional): only intended action categories, with
+  `slot`, `category` (movement, camera, attack, interaction),
+  `assessment` (VISIBLE_CHANGE_REPORTED, NO_VISIBLE_CHANGE_REPORTED,
+  UNDETERMINED), and a brief relevant `cue` for non-uncertain findings
+
+The new tool NEVER sends a new input action or starts capture. It
+reads the EXISTING cache metadata and returns one outcome per expected
+category/client. Missing, old, replaced or pre-completion images
+remain NOT_EVALUABLE. A visible-change report with identical PNG bytes
+is flagged as inconsistent, rather than promoted to success. Its
+`totals` count model reports, NOT game successes.
+
+**Important:** the submitted receipt and model findings are untrusted
+caller claims; exact metadata comparison does not authenticate them.
+The MCP cannot prove Codex/Claude reviewed two images. PNG changes
+can be unrelated to movement; an attack animation is not proof of a
+hit, and an absent animation is not proof an attack failed. No PASS
+or FAIL is claimed for Minecraft gameplay. All real execution
+and visual providers remain NOT_EXECUTED/NOT_VERIFIED.
+
 ## Exactly what works in source
 
 - A local **stdio MCP** server in `mcp.mjs` exposes profile, Computer Use target, optional read-only visual observation, peer planning, and gameplay evidence tools.

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,symlink,rm,open,rename,appendFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native} from './mcp.mjs';
+import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions} from './mcp.mjs';
 
 const snapshot=(operation)=>({schema:1,ok:true,operation,profiles:Array.from({length:5},(_,i)=>({slot:i+1,state:i===0?'RUNNING':'STOPPED',responding:i===0,hasWindow:i===0,needsAttention:false}))});
 const config=(mode='human-plus-four-ai')=>({mode,executable:'C:\\App\\lazy-tester.exe',evidenceDirectory:''});
@@ -1015,6 +1015,9 @@ test('observed cross-slot action uses exact recent visual basis and one existing
   assert.deepEqual(released,fixture.slots.map(slot=>[slot,0]));
   assert.equal(receipt.actionResult,'NATIVE_TRANSPORT_ONLY_NOT_GAMEPLAY_EVIDENCE');
   assert.equal(receipt.gameplayObserved,false);
+  assert.match(receipt.actionFingerprint,/^[a-f0-9]{64}$/);
+  assert.ok(Date.parse(receipt.transportStartedAt)<=
+    Date.parse(receipt.transportCompletedAt));
   assert.deepEqual(receipt.nextObservation.arguments,{slots:fixture.slots,since:basis});
   assert.equal(receipt.decision,'EXTERNAL_AI_DECISION_NOT_VERIFIED_BY_MCP');
   for(const slot of fixture.slots) {
@@ -1076,4 +1079,132 @@ test('five-AI visual decision supports MC01 only when explicitly selected as an 
   });
   assert.deepEqual(result.slots,[1,2,3,4,5]);
   h.shutdown();
+});
+
+
+test('MCP evaluates four AI action categories only from cached same-process visual metadata',async()=>{
+  const fixture=teamVisualFixture();
+  let nativeCalls=0;
+  const handler=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
+    visualObserverFactory:fixture.factory,
+    native:async()=>{nativeCalls++;throw Error('Unexpected native request');},
+    aiMultiBatch:async()=>{nativeCalls++;throw Error('Unexpected action dispatch');},
+  });
+  const advertised=await handler.handle({jsonrpc:'2.0',id:71,method:'tools/list'});
+  assert.equal(advertised.result.tools.some(
+    t=>t.name==='evaluate_experimental_multi_client_outcomes'),true);
+  const before=await handler.callTool('get_multi_client_visual_state',{});
+  const receipt={
+    schema:1,mode:'human-plus-four-ai',slots:fixture.slots,
+    status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
+    actionResult:'NATIVE_TRANSPORT_ONLY_NOT_GAMEPLAY_EVIDENCE',
+    gameplayObserved:false,
+    visualBaseline:before.frames.map(f=>f.baseline),
+    actionFingerprint:fingerprintActions('human-plus-four-ai',[
+      aiMove(2),{slot:3,kind:'look_relative',atMs:0,durationMs:90,deltaX:12,deltaY:0},
+      {slot:4,kind:'attack',atMs:0,durationMs:120},aiMove(5),
+    ]),
+    transportStartedAt:'2026-11-01T05:00:00.250Z',
+    transportCompletedAt:'2026-11-01T05:00:01.250Z',
+  };
+  for(const slot of fixture.slots) {
+    const prior=fixture.records.get(slot);
+    fixture.records.set(slot,{...prior,sequence:2,successfulSamples:4,
+      frameAgeMs:100,collectedAt:'2026-11-01T05:00:02.000Z'});
+  }
+  const after=await handler.callTool('get_multi_client_visual_state',{
+    slots:fixture.slots,since:receipt.visualBaseline});
+  assert.equal(after.frames.every(row=>row.sampledSinceBaseline===true),true);
+  const result=await handler.callTool('evaluate_experimental_multi_client_outcomes',{
+    actions:[
+      aiMove(2),{slot:3,kind:'look_relative',atMs:0,durationMs:90,deltaX:12,deltaY:0},
+      {slot:4,kind:'attack',atMs:0,durationMs:120},aiMove(5),
+    ],
+    receipt,after:after.frames.map(f=>f.baseline),
+    reviews:[
+      {slot:2,category:'movement',assessment:'VISIBLE_CHANGE_REPORTED',
+        cue:'The player appears farther from the same wall landmark'},
+      {slot:3,category:'camera',assessment:'VISIBLE_CHANGE_REPORTED',
+        cue:'A tree shifts toward the left side of the view'},
+      {slot:4,category:'attack',assessment:'UNDETERMINED'},
+    ],
+  });
+  assert.equal(result.gameplayAcceptance,'NOT_VERIFIED');
+  assert.equal(result.imagesIncluded,false);
+  assert.deepEqual(result.slots,[2,3,4,5]);
+  assert.equal(result.totals.reportedVisibleChanges,2);
+  assert.equal(result.totals.undetermined,2);
+  assert.equal(nativeCalls,0);
+  assert.equal(fixture.reads.every(([slot,image])=>fixture.slots.includes(slot)&&image===false),true);
+  const alteredReceipt={...receipt,actionFingerprint:'f'.repeat(64)};
+  await assert.rejects(()=>handler.callTool('evaluate_experimental_multi_client_outcomes',{
+    actions:[
+      aiMove(2),{slot:3,kind:'look_relative',atMs:0,durationMs:90,deltaX:12,deltaY:0},
+      {slot:4,kind:'attack',atMs:0,durationMs:120},aiMove(5),
+    ],receipt:alteredReceipt,after:after.frames.map(f=>f.baseline),
+  }),/TEAM_ACTION_RECEIPT_MISMATCH/);
+  const stale=after.frames.map(f=>f.baseline);
+  stale[0]={...stale[0],sequence:999};
+  const inconclusive=await handler.callTool('evaluate_experimental_multi_client_outcomes',{
+    actions:[
+      aiMove(2),{slot:3,kind:'look_relative',atMs:0,durationMs:90,deltaX:12,deltaY:0},
+      {slot:4,kind:'attack',atMs:0,durationMs:120},aiMove(5),
+    ],receipt,after:stale,
+  });
+  assert.equal(inconclusive.outcomes[0].postFrameUsable,false);
+  assert.equal(inconclusive.outcomes[0].findings[0].status,'NOT_EVALUABLE');
+  handler.shutdown();
+});
+
+test('MCP feedback evaluation cannot enable multi-client input or evaluate human MC01 in hybrid',async()=>{
+  const fixture=teamVisualFixture();
+  const disabled=createHandler(config(),{visualObserverFactory:fixture.factory});
+  const advertised=await disabled.handle({jsonrpc:'2.0',id:72,method:'tools/list'});
+  assert.equal(advertised.result.tools.some(
+    x=>x.name==='evaluate_experimental_multi_client_outcomes'),false);
+  await assert.rejects(()=>disabled.callTool('evaluate_experimental_multi_client_outcomes',
+    {actions:fixture.slots.map(aiMove),receipt:{},after:[]}),/EXPERIMENT_DISABLED/);
+  disabled.shutdown();
+  const enabled=createHandler({...config(),experimentalMultiClientInputEnabled:true},
+    {visualObserverFactory:fixture.factory});
+  await assert.rejects(()=>enabled.callTool('evaluate_experimental_multi_client_outcomes',{
+    actions:[aiMove(1)],receipt:{},after:[null],
+  }),/human-owned/);
+  enabled.shutdown();
+});
+
+test('five AI outcome feedback covers MC01 but never treats reported view movement as game acceptance',async()=>{
+  const fixture=teamVisualFixture('five-ai');
+  const handler=createHandler({...config('five-ai'),
+    experimentalMultiClientInputEnabled:true},{
+    visualObserverFactory:fixture.factory,
+  });
+  const first=await handler.callTool('get_multi_client_visual_state',{});
+  const receipt={
+    schema:1,mode:'five-ai',slots:fixture.slots,
+    status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
+    actionResult:'NATIVE_TRANSPORT_ONLY_NOT_GAMEPLAY_EVIDENCE',
+    gameplayObserved:false,visualBaseline:first.frames.map(f=>f.baseline),
+    actionFingerprint:fingerprintActions('five-ai',fixture.slots.map(aiMove)),
+    transportStartedAt:'2026-11-01T05:00:00.250Z',
+    transportCompletedAt:'2026-11-01T05:00:01.250Z',
+  };
+  for(const slot of fixture.slots) {
+    fixture.records.set(slot,{...fixture.records.get(slot),
+      sequence:2,successfulSamples:5,frameAgeMs:100,
+      collectedAt:'2026-11-01T05:00:02.000Z'});
+  }
+  const after=await handler.callTool('get_multi_client_visual_state',{});
+  const output=await handler.callTool('evaluate_experimental_multi_client_outcomes',{
+    actions:fixture.slots.map(aiMove),receipt,
+    after:after.frames.map(f=>f.baseline),reviews:[
+      {slot:1,category:'movement',assessment:'VISIBLE_CHANGE_REPORTED',
+        cue:'Background bridge appears closer after the movement command'},
+    ],
+  });
+  assert.deepEqual(output.slots,[1,2,3,4,5]);
+  assert.equal(output.outcomes[0].findings[0].status,
+    'MODEL_REPORTS_VISUAL_CHANGE_UNVERIFIED');
+  assert.equal(output.gameplayAcceptance,'NOT_VERIFIED');
+  handler.shutdown();
 });

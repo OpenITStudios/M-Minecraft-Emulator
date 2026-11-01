@@ -1,5 +1,55 @@
 # Current Development Handoff — Lazy Tester
 
+## 1 November 2026 continuation — per-AI visual outcome evaluation
+
+**State: SOURCE-ONLY RESULT CLASSIFICATION / GAMEPLAY STILL BLOCKED.**
+The existing 4/5-client observe → action → re-observe chain now
+supports a bounded read-only `evaluate_experimental_multi_client_outcomes`
+MCP tool under the SAME experimental multi-client opt-in.
+
+A successful `run_experimental_observed_actions` now returns a
+caller-facing mode, canonical action-plan SHA-256 digest and transport
+start/completion timestamps alongside its previous exact per-slot
+visual baselines. The digest prevents accidental action/receipt mismatch,
+not deliberate receipt forgery. After an explicit new
+`get_multi_client_visual_state` and selected per-slot PNG reads,
+Codex/Claude may submit the ORIGINAL action list, returned receipt,
+post-action `frames[].baseline` values, and optional scene-specific
+visual reviews. The evaluator derives requested movement, camera,
+attack and interaction categories from the existing action compiler.
+It compares only the already-cached image metadata: exact original
+PID/HWND/birth/session, new sample count, monotonic frame sequence,
+and post-capture timestamp after the action receipt's completion time.
+A replaced, expired, unchanged-sample, earlier, or no-longer-current
+post frame yields per-slot NOT_EVALUABLE without a false success.
+
+The bounded review vocabulary is VISIBLE_CHANGE_REPORTED,
+NO_VISIBLE_CHANGE_REPORTED or UNDETERMINED. A non-uncertain report
+requires a short scene-specific cue, but both cue and action receipt
+are caller-supplied and untrusted; they CANNOT prove the model actually
+viewed an image. A positive report against identical cached PNG bytes
+is explicitly rejected as inconsistent. Even a model-reported visible
+change with changed PNG bytes remains visually suggestive ONLY:
+no gameplay movement, camera response, attack hit, player identity,
+network, or actual AI input acceptance is certified.
+
+No new capture provider, model runner, mutable session/round database,
+native controller, game hook, DLL, launcher, installer, CI or data
+migration was introduced. The normal MCP and native product behaviors
+are unaffected; evaluation is advertised only under explicit
+multi-client experiment opt-in.
+
+**Proof:** REMOTE_GITHUB code/contract inspection and authored regression
+fixtures for 4-AI/five-AI, independent action kinds, no fresh frame,
+identity changes, same PNG, malicious/unrequested review, and lack
+of native calls. Fixtures and all Node/Rust/MSVC/Windows/Minecraft
+execution are NOT_EXECUTED. Actual game results remain NOT_VERIFIED.
+
+**One next action:** When separate compatible target-Windows approval
+exists, validate real Minecraft visual/input feedback for every AI slot;
+never classify this source-only visual evaluator as gameplay acceptance.
+
+
 ## 1 November 2026 continuation — multi-client visual decision handoff
 
 **State: SOURCE-ONLY TEAM OBSERVE → DECIDE → ACT → RE-OBSERVE.**
