@@ -1,5 +1,68 @@
 # Current Development Handoff — Lazy Tester
 
+## 1 November 2026 — per-transaction fencing for game exit/relaunch
+
+**State: SOURCE-ONLY NATIVE FENCING / MINECRAFT INPUT BLOCKED.**
+The same retained controller's prior 4/5-AI writer lease pinned
+PID/birth and a **per-MCP** writer ID, but the writer ID was reused
+across independent action and recovery transactions. If an original
+Minecraft child exited, was reaped and a new opted-in game was
+later launched in the same slot, a delayed short-lived CLI
+command from the OLD transaction could accidentally match a NEW
+same-writer claim. This source change adds a separate **fresh
+32-lower-hex `lease_epoch` per explicit MCP transaction** as the
+fencing value: no extra session owner, daemon or background process.
+
+The existing opt-in MCP now creates a fresh nonce for EACH action
+or explicit idle neutral-recovery transaction. It passes the
+same epoch and existing writer ID privately to same-image CLI
+children for every timestamp-group input, independent ReleaseAll,
+lease acquire and lease release. The original authenticated
+controller saves the epoch in each original game slot claim;
+every input/neutral/release now must match writer ID, epoch,
+live original PID/birth and unexpired claim. The controller
+still checks the whole original launch-mode cohort atomically
+before native admission. A new game child cannot inherit the old
+claim; an old late CLI packet with its old epoch cannot mutate,
+neutralize or release a NEW claim even if its writer ID and
+slot match the new transaction.
+
+Explicit idle stop sends a `recovery`-only lease-acquire
+request. An existing active lease held by the SAME writer can be
+superseded with a NEW epoch for emergency neutral writes, even
+when previous input response was unconfirmed; this fences old
+in-flight CLI packets. That replacement claim is marked
+`neutral_only`: a keyboard/mouse ACTIVE write is rejected by
+the original controller, and only a separately ACKed native
+neutral state makes lease release possible. Foreign live writer
+claims still refuse acquisition; ordinary action acquisitions
+cannot supersede another ACTIVE epoch. No automatic retry or
+stolen foreground focus is introduced.
+
+The original 10-second finite lease and <=350-ms packet TTL are
+unchanged. Lease expiry may REFUSE delayed recovery writes; it
+is not proof Minecraft saw key-up. A timed-out or malformed
+acquire/release remains uncertain; opt-in MCP retains its
+per-slot hold until explicit reconciliation. A new MCP process
+also requires explicit recovery. There is NO durable token,
+new input ABI, launcher change, world/account migration or
+normal release/package feature activation.
+
+**Proof:** REMOTE_GITHUB exact source/consumer and serialized private
+wire review; bounded Rust and Node regression fixtures AUTHORED,
+NOT_EXECUTED for old-epoch input/neutral/release refusal,
+same-writer cross-process replacement, 4/5-AI cohort atomicity,
+recovery-only active-input refusal, and per-transaction epoch
+uniqueness. No Node/Rust/C++ tests, Windows build, CI, native
+controller run or Minecraft gameplay were executed. Actual input
+consumption and key-up in Minecraft Education remain NOT_VERIFIED.
+
+**One next action:** With separate approval to access the original
+Windows Minecraft Education target, compile and verify the pinned
+native lease-epoch protocol, process exit/relaunch, and real
+per-client input/neutral behavior on this exact revision.
+
+
 ## 1 November 2026 — per-client emergency neutral and lease-expiry safety
 
 **State: SOURCE-ONLY PER-SLOT FAILURE CONTAINMENT / MINECRAFT BLOCKED.**

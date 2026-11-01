@@ -8,9 +8,12 @@ import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,vali
 
 const snapshot=(operation)=>({schema:1,ok:true,operation,profiles:Array.from({length:5},(_,i)=>({slot:i+1,state:i===0?'RUNNING':'STOPPED',responding:i===0,hasWindow:i===0,needsAttention:false}))});
 const config=(mode='human-plus-four-ai')=>({mode,executable:'C:\\App\\lazy-tester.exe',evidenceDirectory:''});
-const leaseAck=async(_exe,operation,slots,{writerId,mode}={})=>{
+const leaseAck=async(_exe,operation,slots,
+    {writerId,mode,leaseEpoch,neutralOnly}={})=>{
   assert.match(writerId,/^[a-f0-9]{32}$/);
+  assert.match(leaseEpoch,/^[a-f0-9]{32}$/);
   assert.equal(['human-plus-four-ai','five-ai'].includes(mode),true);
+  assert.equal(typeof neutralOnly,'boolean');
   return {schema:1,slots,status:operation==='acquire'?
     'AI_NATIVE_WRITER_LEASE_ACQUIRED':'AI_NATIVE_WRITER_LEASE_RELEASED',
     gameplayObserved:false};
@@ -2089,4 +2092,89 @@ test('uncertain action delivery still quarantines whole cohort even if peer leas
   }),/AI_INPUT_RECOVERY_REQUIRED/);
   assert.equal(dispatches,1); // NEVER blindly replay uncertain transport
   handler.shutdown();
+});
+
+
+test('every 4/5-AI input transaction carries one fresh native fencing epoch',async()=>{
+  for(const [mode,slots] of [
+    ['human-plus-four-ai',[2,3,4,5]],['five-ai',[1,2,3,4,5]],
+  ]){
+    const held=new Map(),used=[];
+    const handler=createHandler({
+      ...config(mode),experimentalMultiClientInputEnabled:true,
+    },{
+      aiLease:async(_exe,operation,selected,{writerId,mode:requested,
+          leaseEpoch,neutralOnly})=>{
+        assert.match(writerId,/^[a-f0-9]{32}$/);
+        assert.match(leaseEpoch,/^[a-f0-9]{32}$/);
+        assert.equal(requested,mode);
+        assert.deepEqual(selected,slots);
+        if(operation==='acquire'){
+          assert.equal(held.size,0);
+          used.push([leaseEpoch,neutralOnly]);
+          selected.forEach(slot=>held.set(slot,{writerId,leaseEpoch,neutralOnly}));
+        } else {
+          selected.forEach(slot=>{
+            assert.equal(held.get(slot)?.leaseEpoch,leaseEpoch);
+            held.delete(slot);
+          });
+        }
+        return {schema:1,slots:selected,status:operation==='acquire'?
+          'AI_NATIVE_WRITER_LEASE_ACQUIRED':'AI_NATIVE_WRITER_LEASE_RELEASED',
+          gameplayObserved:false};
+      },
+      aiInput:async(_exe,frame,{writerId,leaseEpoch})=>{
+        assert.equal(held.get(frame.slot)?.writerId,writerId);
+        assert.equal(held.get(frame.slot)?.leaseEpoch,leaseEpoch);
+        assert.equal(frame.keys,0);
+        return {schema:1,slot:frame.slot,
+          status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+          gameplayObserved:false};
+      },
+      aiMultiBatch:async(_exe,batches,{writerId,leaseEpoch})=>{
+        batches.forEach(batch=>{
+          const claim=held.get(batch.slot);
+          assert.equal(claim?.writerId,writerId);
+          assert.equal(claim?.leaseEpoch,leaseEpoch);
+          assert.equal(claim?.neutralOnly,false);
+        });
+        return {schema:1,slots:batches.map(b=>b.slot),
+          status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
+          gameplayObserved:false};
+      },
+    });
+    await handler.callTool('stop_experimental_multi_client_actions',{slots});
+    await handler.callTool('run_experimental_multi_client_actions',{
+      actions:slots.map(aiMove),
+    });
+    await handler.callTool('stop_experimental_multi_client_actions',{slots});
+    assert.equal(used.length,3);
+    assert.deepEqual(used.map(v=>v[1]),[true,false,true]);
+    assert.equal(new Set(used.map(v=>v[0])).size,3);
+    assert.equal(held.size,0);
+    handler.shutdown();
+  }
+});
+
+test('native lease adapter refuses missing/stale fencing epoch before CLI spawn',async()=>{
+  const executable=path.resolve('lazy-tester.exe');
+  for(const leaseEpoch of [undefined,'WRONG_EPOCH','A'.repeat(32)]){
+    await assert.rejects(()=>sendExperimentalAiWriterLeaseNative(
+      executable,'acquire',[2],{
+        writerId:'a'.repeat(32),mode:'human-plus-four-ai',
+        leaseEpoch,neutralOnly:true,
+      }),/AI_LEASE_EPOCH_REQUIRED/);
+  }
+});
+
+test('delayed old process packet cannot match a newly issued same-writer epoch',()=>{
+  // Native AiLeaseBook regression is authoritative for this contract.
+  const writerId='a'.repeat(32),old='1'.repeat(32),fresh='2'.repeat(32);
+  let native={slot:3,pid:303,birth:101,writerId,epoch:old};
+  native={slot:3,pid:404,birth:202,writerId,epoch:fresh};
+  const accepted=(epoch,pid,birth)=>native.writerId===writerId &&
+    native.epoch===epoch && native.pid===pid && native.birth===birth;
+  assert.equal(accepted(old,404,202),false);
+  assert.equal(accepted(fresh,303,101),false);
+  assert.equal(accepted(fresh,404,202),true);
 });

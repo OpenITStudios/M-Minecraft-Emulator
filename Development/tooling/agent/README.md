@@ -115,6 +115,43 @@ real AI image reasoning, native input and simultaneous gameplay remain
 unverified. Standard installer, user data, fixed slot ownership,
 human MC01 isolation and CI policy are unchanged.
 
+## Original-process fencing token per 4/5-AI lease transaction
+
+One MCP connection has a stable ephemeral **writer ID**, but now a
+different random 32-lower-hex **`lease_epoch` for EACH explicit
+action or neutral-recovery transaction**. It is sent only through
+the existing short-lived same-image CLI child environment and the
+retained authenticated session pipe, never model responses, argv
+or disk. The native actor pins that token to each original
+game slot/PID/birth and control mode at lease acquisition.
+
+All native AI timestamp groups, per-slot neutral packets and
+lease releases require BOTH the current writer ID and the exact
+current transaction epoch. If the original game exits, native
+reap drops its old lease; delayed input or ReleaseAll carrying
+the old epoch cannot write to a replacement game that was
+later launched and leased by the SAME writer.
+
+The CLI's `ai-lease-acquire` source-only contract distinguishes
+ordinary `action` from explicit `recovery` acquisition.
+A normal action cannot take over a different ACTIVE epoch.
+An explicit recovery from the same writer may fence out the
+previous ACTIVE transaction with a new epoch, but the new
+claim is **neutral only**: it can issue an exact-channel
+ReleaseAll and relinquish only after a new native neutral ACK.
+It cannot send WASD, relative camera movement, attack or use.
+A different writer's live lease remains protected.
+
+The native 10-second lease and per-packet 350-ms TTL remain
+finite source fail-safes, not evidence of Minecraft key-up.
+A dead controller, uncertain transport or game exit cannot
+magically replay previous inputs, revive an old process, or
+prove a playable 4/5-client Education session.
+
+This is source-only, compile-OFF/default-OFF and
+AUTHORED_NOT_EXECUTED. No local Node/Rust tests, Windows
+build, game input or installer acceptance has been run.
+
 ## Per-slot emergency lease cleanup and interrupted native writes (source only)
 
 The retained native actor marks a per-slot writer lease

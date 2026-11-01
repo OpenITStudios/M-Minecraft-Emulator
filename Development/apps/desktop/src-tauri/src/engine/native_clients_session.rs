@@ -173,21 +173,24 @@ pub enum SessionRequest {
     #[cfg(feature="mc02-native-input")]
     AiLeasedInput {
         slot:u32,keys:u32,dx:i32,dy:i32,ttl_ms:u32,issued_at_ms:u64,
-        owner_id:String,
+        owner_id:String,lease_epoch:String,
     },
     // A single retained controller atomically admits all original game
     // slots for one ephemeral MCP writer before any movement packet.
     #[cfg(feature="mc02-native-input")]
-    AiLeaseAcquire {slots:Vec<u32>,owner_id:String,mode:AgentControlMode},
+    AiLeaseAcquire {
+        slots:Vec<u32>,owner_id:String,mode:AgentControlMode,
+        lease_epoch:String,neutral_only:bool,
+    },
     #[cfg(feature="mc02-native-input")]
-    AiLeaseRelease {slots:Vec<u32>,owner_id:String},
+    AiLeaseRelease {slots:Vec<u32>,owner_id:String,lease_epoch:String},
     // One authenticated request for all per-client states due at the SAME
     // timestamp. This is a bounded group, not a promise of atomic Win32
     // delivery or simultaneous Minecraft polling.
     #[cfg(feature="mc02-native-input")]
     AiInputGroup {
         frames:Vec<AiInputFrame>,issued_at_ms:u64,deadline_at_ms:u64,
-        owner_id:String,
+        owner_id:String,lease_epoch:String,
     },
     CloseOne { slot: u32 },
     CloseAll,
@@ -252,7 +255,8 @@ pub(crate) fn validate_ai_lease_slots(slots:&[u32],owner_id:&str)->io::Result<()
 #[cfg(feature="mc02-native-input")]
 #[derive(Clone,Debug)]
 struct AiWriterClaim {
-    owner_id:String,pid:u32,birth:u64,until_ms:u64,neutral:bool,
+    owner_id:String,lease_epoch:String,pid:u32,birth:u64,
+    until_ms:u64,neutral:bool,neutral_only:bool,
 }
 #[cfg(feature="mc02-native-input")]
 #[derive(Debug)]
@@ -268,18 +272,36 @@ impl Default for AiLeaseBook {
 }
 #[cfg(feature="mc02-native-input")]
 impl AiLeaseBook {
-    // Original process identities are verified by the SAME Sessions actor
-    // before this pure book is called. No partial acquisition on conflict.
+    // The ephemeral lease_epoch is a per-TRANSACTION fencing value.
+    // It is not OS authentication. A delayed CLI from a previous
+    // lease/release (even with the same MCP writer ID) must never
+    // touch a newly launched child after the original slot was reaped.
     pub(crate) fn acquire(&mut self,targets:&[(u32,u32,u64)],
-        owner:&str,now:u64)->io::Result<()> {
+        owner:&str,epoch:&str,now:u64,neutral_only:bool)->io::Result<()> {
         let slots=targets.iter().map(|(slot,_,_)|*slot).collect::<Vec<_>>();
         validate_ai_lease_slots(&slots,owner)?;
+        if !valid_ai_writer_id(epoch) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                "Invalid AI transaction fencing epoch"));
+        }
         if now==0 || targets.iter().any(|(slot,pid,birth)| {
             *pid==0||*birth==0 ||
             self.legacy_until_ms[(*slot-1) as usize]>now ||
             self.claims[(*slot-1) as usize].as_ref().is_some_and(|held|
-                held.until_ms>now && (held.owner_id!=owner ||
-                    held.pid!=*pid||held.birth!=*birth))
+                held.until_ms>now && (
+                    held.owner_id!=owner || held.pid!=*pid ||
+                    held.birth!=*birth ||
+                    // Normal action acquisition may replace only an
+                    // already-neutral prior claim from the SAME writer.
+                    // An explicit neutral-only recovery can supersede a
+                    // prior unconfirmed ACTIVE claim from the same
+                    // writer, thereby fencing out its delayed CLI packets.
+                    (held.lease_epoch!=epoch && !neutral_only && !held.neutral) ||
+                    // A recovery-only epoch cannot become an active
+                    // writer with the very same transaction identifier.
+                    (held.lease_epoch==epoch && held.neutral_only &&
+                     !neutral_only)
+                ))
         }) {
             return Err(io::Error::new(io::ErrorKind::PermissionDenied,
                 "AI writer lease conflict; existing game input preserved"));
@@ -288,52 +310,55 @@ impl AiLeaseBook {
             let index=(slot-1) as usize;
             let neutral=self.claims[index].as_ref().is_none_or(|held|
                 held.until_ms<=now || held.owner_id!=owner ||
-                held.pid!=pid||held.birth!=birth || held.neutral);
+                held.pid!=pid || held.birth!=birth || held.neutral);
             self.claims[index]=Some(AiWriterClaim {
-                owner_id:owner.into(),pid,birth,
-                until_ms:now.saturating_add(AI_WRITER_LEASE_MS),neutral,
+                owner_id:owner.into(),lease_epoch:epoch.into(),pid,birth,
+                until_ms:now.saturating_add(AI_WRITER_LEASE_MS),
+                neutral,neutral_only,
             });
         }
         Ok(())
     }
-    pub(crate) fn require(&self,slot:u32,owner:&str,
+    pub(crate) fn require(&self,slot:u32,owner:&str,epoch:&str,
         pid:u32,birth:u64,now:u64)->io::Result<()> {
-        if !valid_ai_writer_id(owner)||!(1..=5).contains(&slot)||now==0||
+        if !valid_ai_writer_id(owner)||!valid_ai_writer_id(epoch)||
+           !(1..=5).contains(&slot)||now==0||
            !self.claims[(slot-1) as usize].as_ref().is_some_and(|held|
-             held.owner_id==owner && held.pid==pid &&
-             held.birth==birth && held.until_ms>now) {
+             held.owner_id==owner && held.lease_epoch==epoch &&
+             held.pid==pid && held.birth==birth && held.until_ms>now) {
             return Err(io::Error::new(io::ErrorKind::PermissionDenied,
                 "AI slot is not owned by this live writer lease"));
         }
         Ok(())
     }
-    // Declare a write potentially ACTIVE BEFORE calling the exact
-    // original process channel. A native I/O error can occur after the
-    // packet was partially/fully published; never leave the lease marked
-    // neutral based on the PREVIOUS acknowledged input state.
-    pub(crate) fn begin_write(&mut self,slot:u32,owner:&str,
-        pid:u32,birth:u64,now:u64)->io::Result<()> {
-        self.require(slot,owner,pid,birth,now)?;
+    pub(crate) fn begin_write(&mut self,slot:u32,owner:&str,epoch:&str,
+        pid:u32,birth:u64,now:u64,neutral:bool)->io::Result<()> {
+        self.require(slot,owner,epoch,pid,birth,now)?;
         let held=self.claims[(slot-1) as usize].as_mut().unwrap();
+        if held.neutral_only && !neutral {
+            return Err(io::Error::new(io::ErrorKind::PermissionDenied,
+                "AI neutral-only recovery lease refuses active game input"));
+        }
+        // Native I/O may fail AFTER publishing a shared packet. Keep
+        // the original lease non-neutral until a NEW neutral ACK.
         held.neutral=false;
         held.until_ms=now.saturating_add(AI_WRITER_LEASE_MS);
         Ok(())
     }
-    // Only an acknowledged native shared-state write may restore neutral.
-    pub(crate) fn wrote(&mut self,slot:u32,owner:&str,
+    pub(crate) fn wrote(&mut self,slot:u32,owner:&str,epoch:&str,
         pid:u32,birth:u64,now:u64,neutral:bool)->io::Result<()> {
-        self.require(slot,owner,pid,birth,now)?;
+        self.require(slot,owner,epoch,pid,birth,now)?;
         let held=self.claims[(slot-1) as usize].as_mut().unwrap();
         held.until_ms=now.saturating_add(AI_WRITER_LEASE_MS);
         held.neutral=neutral;
         Ok(())
     }
     pub(crate) fn release(&mut self,targets:&[(u32,u32,u64)],
-        owner:&str,now:u64)->io::Result<()> {
+        owner:&str,epoch:&str,now:u64)->io::Result<()> {
         let slots=targets.iter().map(|(slot,_,_)|*slot).collect::<Vec<_>>();
         validate_ai_lease_slots(&slots,owner)?;
         for &(slot,pid,birth) in targets {
-            self.require(slot,owner,pid,birth,now)?;
+            self.require(slot,owner,epoch,pid,birth,now)?;
             if !self.claims[(slot-1) as usize].as_ref().unwrap().neutral {
                 return Err(io::Error::new(io::ErrorKind::PermissionDenied,
                     "AI slot must be neutral before relinquishing writer lease"));
@@ -488,35 +513,47 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     }
     #[cfg(feature="mc02-native-input")]
     if let SessionRequest::AiInputGroup {
-        ref frames,issued_at_ms,deadline_at_ms,ref owner_id,
+        ref frames,issued_at_ms,deadline_at_ms,
+        ref owner_id,ref lease_epoch,
     } = request {
         validate_ai_input_group(frames,issued_at_ms,deadline_at_ms)?;
-        if !valid_ai_writer_id(owner_id) {
+        if !valid_ai_writer_id(owner_id)||!valid_ai_writer_id(lease_epoch) {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                "Invalid AI writer lease ID"));
+                "Invalid AI writer or transaction fencing epoch"));
         }
     }
     #[cfg(feature="mc02-native-input")]
     if let SessionRequest::AiLeasedInput {
-        slot,keys,dx,dy,ttl_ms,issued_at_ms,ref owner_id,
+        slot,keys,dx,dy,ttl_ms,issued_at_ms,
+        ref owner_id,ref lease_epoch,
     } = request {
         admit_native_input_frame(slot,keys,dx,dy,ttl_ms)?;
-        if issued_at_ms==0||!valid_ai_writer_id(owner_id) {
+        if issued_at_ms==0||!valid_ai_writer_id(owner_id)||
+           !valid_ai_writer_id(lease_epoch) {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                "Invalid leased AI input"));
+                "Invalid leased AI input or transaction epoch"));
         }
     }
     #[cfg(feature="mc02-native-input")]
-    if let SessionRequest::AiLeaseAcquire {ref slots,ref owner_id,mode}=request {
+    if let SessionRequest::AiLeaseAcquire {
+        ref slots,ref owner_id,mode,ref lease_epoch,neutral_only:_,
+    }=request {
         validate_ai_lease_slots(slots,owner_id)?;
-        if mode==AgentControlMode::HumanPlusFourAi && slots.contains(&1) {
+        if !valid_ai_writer_id(lease_epoch) ||
+           (mode==AgentControlMode::HumanPlusFourAi && slots.contains(&1)) {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                "Hybrid MC01 human slot cannot acquire AI writer lease"));
+                "Invalid AI lease epoch or protected hybrid MC01"));
         }
     }
     #[cfg(feature="mc02-native-input")]
-    if let SessionRequest::AiLeaseRelease {ref slots,ref owner_id}=request {
+    if let SessionRequest::AiLeaseRelease {
+        ref slots,ref owner_id,ref lease_epoch,
+    }=request {
         validate_ai_lease_slots(slots,owner_id)?;
+        if !valid_ai_writer_id(lease_epoch) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                "Invalid AI release fencing epoch"));
+        }
     }
     let inspecting = matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings);
     #[cfg(feature="mc02-native-input")]
@@ -819,126 +856,140 @@ mod tests {
     }
     #[cfg(feature="mc02-native-input")]
     #[test]
-    fn original_native_actor_lease_is_atomic_and_process_pinned() {
-        // Pure book fixture: no Windows calls, Minecraft, IPC or input hooks.
+    fn fenced_writer_conflict_is_atomic_and_process_bound() {
+        // Pure Rust source fixture; no Windows, IPC, or Minecraft execution.
         let a="a".repeat(32);
         let b="b".repeat(32);
+        let e1="1".repeat(32);
+        let e2="2".repeat(32);
         let four=vec![(2,102,1002),(3,103,1003),(4,104,1004),(5,105,1005)];
         let mut five=vec![(1,101,1001)];
         five.extend(four.iter().copied());
         let mut book=AiLeaseBook::default();
-        assert!(book.acquire(&four,&a,1000).is_ok());
+        assert!(book.acquire(&four,&a,&e1,1000,false).is_ok());
         for &(slot,pid,birth) in &four {
-            assert!(book.require(slot,&a,pid,birth,1001).is_ok());
-            assert!(book.require(slot,&b,pid,birth,1001).is_err());
-            assert!(book.require(slot,&a,pid,birth+1,1001).is_err());
+            assert!(book.require(slot,&a,&e1,pid,birth,1001).is_ok());
+            assert!(book.require(slot,&a,&e2,pid,birth,1001).is_err());
+            assert!(book.require(slot,&b,&e1,pid,birth,1001).is_err());
+            assert!(book.require(slot,&a,&e1,pid,birth+1,1001).is_err());
         }
-        // A contested five-slot request must NOT steal idle MC01.
-        assert!(book.acquire(&five,&b,1002).is_err());
-        assert!(book.require(1,&b,101,1001,1002).is_err());
-        // An outstanding key-down forbids releasing the claim to a rival.
-        book.wrote(2,&a,102,1002,1100,false).unwrap();
-        assert!(book.release(&four,&a,1101).is_err());
-        assert!(book.acquire(&[(2,102,1002)],&b,1101).is_err());
-        book.wrote(2,&a,102,1002,1110,true).unwrap();
-        assert!(book.release(&four,&a,1111).is_ok());
-        assert!(book.acquire(&five,&b,1200).is_ok());
-        assert!(book.require(1,&b,101,1001,1201).is_ok());
-        // Original process identity cannot be inherited by a new game.
-        assert!(book.acquire(&[(2,999,1002)],&b,1201).is_err());
+        // Another writer cannot claim idle MC01 while peers conflict.
+        assert!(book.acquire(&five,&b,&e2,1002,false).is_err());
+        assert!(book.require(1,&b,&e2,101,1001,1002).is_err());
+        book.begin_write(2,&a,&e1,102,1002,1010,false).unwrap();
+        assert!(book.release(&four,&a,&e1,1011).is_err());
+        assert!(book.acquire(&[(2,102,1002)],&a,&e2,1012,false).is_err());
+        // Emergency neutral takeover fences the old same-writer epoch.
+        assert!(book.acquire(&four,&a,&e2,1020,true).is_ok());
+        assert!(book.require(2,&a,&e1,102,1002,1021).is_err());
+        assert!(book.release(&four,&a,&e2,1022).is_err());
+        assert!(book.begin_write(2,&a,&e2,102,1002,1023,false).is_err());
+        book.begin_write(2,&a,&e2,102,1002,1024,true).unwrap();
+        book.wrote(2,&a,&e2,102,1002,1025,true).unwrap();
+        assert!(book.release(&four,&a,&e2,1026).is_ok());
+        assert!(book.acquire(&five,&b,&e1,1030,false).is_ok());
+        assert!(book.require(1,&b,&e1,101,1001,1031).is_ok());
+        // Process exit invalidates an original claim. A freshly claimed
+        // replacement uses a DIFFERENT epoch, not a reused owner ID.
+        assert!(book.acquire(&[(2,999,1002)],&b,&e2,1032,false).is_err());
         book.forget_slot(2);
-        assert!(book.acquire(&[(2,999,9002)],&a,1202).is_ok());
-        assert!(book.require(2,&b,102,1002,1203).is_err());
-        assert!(book.require(2,&a,999,9002,1203).is_ok());
-        // A writer idle beyond expiry must re-acquire. Packet TTL
-        // (350ms) is shorter than lease lifetime; no held key proof.
-        assert!(book.require(2,&a,999,9002,
-            1202+AI_WRITER_LEASE_MS).is_err());
-        assert!(book.acquire(&[(2,999,9002)],&b,
-            1203+AI_WRITER_LEASE_MS).is_ok());
+        assert!(book.acquire(&[(2,999,9002)],&b,&e2,1033,false).is_ok());
+        assert!(book.require(2,&b,&e1,102,1002,1034).is_err());
+        assert!(book.require(2,&b,&e2,999,9002,1034).is_ok());
+        assert!(book.release(&[(2,999,9002)],&b,&e1,1035).is_err());
+        assert!(book.begin_write(2,&b,&e1,999,9002,1035,true).is_err());
+        assert!(book.require(2,&b,&e2,999,9002,
+            1033+AI_WRITER_LEASE_MS).is_err());
+        assert!(book.acquire(&[(2,999,9002)],&a,&e1,
+            1034+AI_WRITER_LEASE_MS,false).is_ok());
     }
 
     #[cfg(feature="mc02-native-input")]
     #[test]
-    fn writer_acquisition_wire_is_mode_bound_before_any_native_claim() {
-        // No IPC, controller or Minecraft execution.
-        let owner="a".repeat(32);
-        let packet=serde_json::json!({
-            "operation":"AiLeaseAcquire","slots":[2,3,4,5],
-            "owner_id":owner,"mode":"human-plus-four-ai"
+    fn interrupted_native_write_remains_non_neutral_and_isolated() {
+        let a="a".repeat(32);
+        let e1="1".repeat(32);
+        let e2="2".repeat(32);
+        let targets=vec![(2,202,2202),(3,203,2203),(4,204,2204),(5,205,2205)];
+        let mut book=AiLeaseBook::default();
+        book.acquire(&targets,&a,&e1,1000,false).unwrap();
+        book.begin_write(3,&a,&e1,203,2203,1010,false).unwrap();
+        assert!(book.release(&targets,&a,&e1,1011).is_err());
+        let peers=vec![(2,202,2202),(4,204,2204),(5,205,2205)];
+        book.release(&peers,&a,&e1,1020).unwrap();
+        assert!(book.require(3,&a,&e1,203,2203,1021).is_ok());
+        book.begin_write(3,&a,&e1,203,2203,1030,true).unwrap();
+        assert!(book.release(&[(3,203,2203)],&a,&e1,1031).is_err());
+        book.wrote(3,&a,&e1,203,2203,1032,true).unwrap();
+        book.release(&[(3,203,2203)],&a,&e1,1033).unwrap();
+        book.acquire(&[(3,203,2203)],&a,&e2,2000,true).unwrap();
+        book.begin_write(3,&a,&e2,203,2203,2001,true).unwrap();
+        assert!(book.require(3,&a,&e2,203,2203,
+            2001+AI_WRITER_LEASE_MS).is_err());
+        assert!(book.acquire(&[(3,203,2203)],&"b".repeat(32),&e1,
+            2002+AI_WRITER_LEASE_MS,true).is_ok());
+    }
+
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn fencing_protocol_rejects_invalid_ids_and_legacy_overlap() {
+        let a="a".repeat(32);
+        let e1="1".repeat(32);
+        let e2="2".repeat(32);
+        let mut book=AiLeaseBook::default();
+        assert!(validate_ai_lease_slots(&[2,3,4,5],&a).is_ok());
+        for invalid in ["short".to_owned(),"A".repeat(32),"x".repeat(32)] {
+            assert!(validate_ai_lease_slots(&[2],&invalid).is_err());
+            assert!(book.acquire(&[(2,202,2002)],&a,&invalid,1000,false).is_err());
+        }
+        for invalid_slots in [vec![],vec![2,2],vec![3,2],vec![0],vec![6],
+            vec![1,2,3,4,5,6]] {
+            assert!(validate_ai_lease_slots(&invalid_slots,&a).is_err());
+        }
+        book.legacy_wrote(2,1000,false);
+        assert!(book.acquire(&[(2,202,2002)],&a,&e1,1300,false).is_err());
+        assert!(book.acquire(&[(2,202,2002)],&a,&e1,1501,false).is_ok());
+        assert!(book.legacy_allowed(2,1502).is_err());
+        book.begin_write(2,&a,&e1,202,2002,1503,false).unwrap();
+        assert!(book.acquire(&[(2,202,2002)],&a,&e2,1504,true).is_ok());
+        assert!(book.require(2,&a,&e1,202,2002,1505).is_err());
+        book.begin_write(2,&a,&e2,202,2002,1506,true).unwrap();
+        book.wrote(2,&a,&e2,202,2002,1507,true).unwrap();
+        book.release(&[(2,202,2002)],&a,&e2,1508).unwrap();
+        book.legacy_wrote(2,1509,true);
+        assert!(book.acquire(&[(2,202,2002)],&a,&e1,1510,false).is_ok());
+    }
+
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn private_acquire_wire_requires_mode_epoch_and_recovery_intent() {
+        // Reject old unfenced serialized requests BEFORE controller mutation.
+        let valid=serde_json::json!({
+            "operation":"AiLeaseAcquire",
+            "slots":[2,3,4,5],
+            "owner_id":"a".repeat(32),
+            "mode":"human-plus-four-ai",
+            "lease_epoch":"1".repeat(32),
+            "neutral_only":false
         });
-        assert!(matches!(serde_json::from_value::<SessionRequest>(packet.clone()),
+        assert!(matches!(serde_json::from_value::<SessionRequest>(valid.clone()),
             Ok(SessionRequest::AiLeaseAcquire {
-                mode:AgentControlMode::HumanPlusFourAi,..})));
-        let mut missing=packet.clone();
-        missing.as_object_mut().unwrap().remove("mode");
-        assert!(serde_json::from_value::<SessionRequest>(missing).is_err());
-        let mut unsupported=packet.clone();
-        unsupported["mode"]=serde_json::json!("unknown");
-        assert!(serde_json::from_value::<SessionRequest>(unsupported).is_err());
-        let five=serde_json::json!({
-            "operation":"AiLeaseAcquire","slots":[1,2,3,4,5],
-            "owner_id":"a".repeat(32),"mode":"five-ai"
-        });
+                mode:AgentControlMode::HumanPlusFourAi,
+                neutral_only:false,..})));
+        for required in ["mode","owner_id","lease_epoch","neutral_only"] {
+            let mut old=valid.clone();
+            old.as_object_mut().unwrap().remove(required);
+            assert!(serde_json::from_value::<SessionRequest>(old).is_err());
+        }
+        let mut bad=valid.clone();
+        bad["mode"]=serde_json::json!("unrecognized");
+        assert!(serde_json::from_value::<SessionRequest>(bad).is_err());
+        let mut five=valid.clone();
+        five["mode"]=serde_json::json!("five-ai");
+        five["slots"]=serde_json::json!([1,2,3,4,5]);
         assert!(matches!(serde_json::from_value::<SessionRequest>(five),
             Ok(SessionRequest::AiLeaseAcquire {
                 mode:AgentControlMode::FiveAi,..})));
-    }
-    #[cfg(feature="mc02-native-input")]
-    #[test]
-    fn interrupted_native_writer_never_releases_unconfirmed_input() {
-        // Pure lease-book fixture only: the controller's fail-closed path
-        // must not report safe neutral when the channel write fails.
-        let owner="a".repeat(32);
-        let group=vec![(2,202,2202),(3,203,2203),(4,204,2204),(5,205,2205)];
-        let mut book=AiLeaseBook::default();
-        book.acquire(&group,&owner,1000).unwrap();
-        book.begin_write(3,&owner,203,2203,1010).unwrap();
-        assert!(book.release(&group,&owner,1011).is_err());
-        assert!(book.acquire(&[(3,203,2203)],&"b".repeat(32),1012).is_err());
-        // Even if MC03's channel becomes unavailable, other original
-        // channels that never had an uncertain write can be released.
-        let safe=vec![(2,202,2202),(4,204,2204),(5,205,2205)];
-        assert!(book.release(&safe,&owner,1020).is_ok());
-        assert!(book.require(3,&owner,203,2203,1021).is_ok());
-        book.begin_write(3,&owner,203,2203,1030).unwrap();
-        // A known-good native neutral write restores releasability;
-        // merely attempting ReleaseAll does NOT.
-        assert!(book.release(&[(3,203,2203)],&owner,1031).is_err());
-        book.wrote(3,&owner,203,2203,1032,true).unwrap();
-        assert!(book.release(&[(3,203,2203)],&owner,1033).is_ok());
-        // Explicit finite expiration (10 seconds) still prevents a
-        // dead MCP from holding a process forever.
-        book.acquire(&[(3,203,2203)],&owner,2000).unwrap();
-        book.begin_write(3,&owner,203,2203,2001).unwrap();
-        assert!(book.require(3,&owner,203,2203,2001+AI_WRITER_LEASE_MS).is_err());
-        assert!(book.acquire(&[(3,203,2203)],&"b".repeat(32),
-            2002+AI_WRITER_LEASE_MS).is_ok());
-    }
-    #[cfg(feature="mc02-native-input")]
-    #[test]
-    fn writer_lease_rejects_invalid_protocol_and_legacy_overlap() {
-        let mut book=AiLeaseBook::default();
-        let a="a".repeat(32);
-        assert!(validate_ai_lease_slots(&[2,3,4,5],&a).is_ok());
-        for id in ["bad".to_owned(),"A".repeat(32),"x".repeat(32)] {
-            assert!(validate_ai_lease_slots(&[2],&id).is_err());
-        }
-        for slots in [vec![],vec![0],vec![6],vec![2,2],
-            vec![3,2],vec![1,2,3,4,5,6]] {
-            assert!(validate_ai_lease_slots(&slots,&a).is_err());
-        }
-        book.legacy_wrote(2,1000,false);
-        assert!(book.acquire(&[(2,202,2002)],&a,1300).is_err());
-        assert!(book.acquire(&[(2,202,2002)],&a,1501).is_ok());
-        assert!(book.legacy_allowed(2,1502).is_err());
-        // ReleaseAll is not a bypass around another live writer.
-        assert!(book.legacy_allowed(2,1503).is_err());
-        book.wrote(2,&a,202,2002,1510,true).unwrap();
-        book.release(&[(2,202,2002)],&a,1511).unwrap();
-        assert!(book.legacy_allowed(2,1512).is_ok());
-        book.legacy_wrote(2,1512,true);
-        assert!(book.acquire(&[(2,202,2002)],&a,1513).is_ok());
     }
 
     #[cfg(feature="mc02-native-input")]
@@ -968,12 +1019,18 @@ mod tests {
         let json=r#"{"operation":"AiInputGroup","frames":[{"slot":2,
             "keys":1,"dx":0,"dy":0,"ttl_ms":350}],
             "issued_at_ms":1000,"deadline_at_ms":1100,
-            "owner_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#;
+            "owner_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "lease_epoch":"11111111111111111111111111111111"}"#;
         assert!(matches!(serde_json::from_str::<SessionRequest>(json),
             Ok(SessionRequest::AiInputGroup{..})));
-        assert!(serde_json::from_str::<SessionRequest>(
-            &json.replace(",\"owner_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"", "")
-        ).is_err()); // Missing writer must not fall back to the old unleased group.
+        let original:serde_json::Value=serde_json::from_str(json).unwrap();
+        for required in ["owner_id","lease_epoch"] {
+            let mut old=original.clone();
+            old.as_object_mut().unwrap().remove(required);
+            // Remove the actual JSON object field, not a textual
+            // substring that might not exist due to whitespace.
+            assert!(serde_json::from_value::<SessionRequest>(old).is_err());
+        }
         assert!(serde_json::from_str::<SessionRequest>(
             &json.replace("\"ttl_ms\":350", "\"ttl_ms\":350,\"pid\":123")
         ).is_err());

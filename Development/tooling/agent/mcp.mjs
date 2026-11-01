@@ -58,6 +58,7 @@ const PUBLIC_TOOL_ERRORS=new Set([
   'TEAM_OBSERVATION_TIMING_UNAVAILABLE','TEAM_ACTION_RECEIPT_MISMATCH',
   'AI_SEQUENCE_ABORTED','AI_RELEASE_UNCONFIRMED','AI_INPUT_NATIVE_RESULT_UNVERIFIED',
   'AI_WRITER_LEASE_INVALID','AI_WRITER_LEASE_REQUIRED',
+  'AI_LEASE_EPOCH_REQUIRED',
   'AI_WRITER_LEASE_UNCONFIRMED',
   'AI_WRITER_LEASE_RELEASE_UNCONFIRMED',
   'AI_INPUT_RECOVERY_REQUIRED',
@@ -251,7 +252,7 @@ export function sendExperimentalMc02Native(executable,frame) {
 
 export async function sendExperimentalAiNative(executable,
     {slot,keys,dx,dy,ttlMs,requestedAtMs},
-    {legacy=false,writerId,mode}={}) {
+    {legacy=false,writerId,mode,leaseEpoch}={}) {
   const nowMs=Date.now();
   if(!Number.isSafeInteger(requestedAtMs)||
      requestedAtMs>nowMs||nowMs-requestedAtMs>500) {
@@ -273,7 +274,7 @@ export async function sendExperimentalAiNative(executable,
       String(keys),String(dx),String(dy),String(ttlMs),
       String(requestedAtMs),
     ],{shell:false,windowsHide:true,timeout:6000,maxBuffer:8192,
-      ...(legacy?{}:{env:writerEnvironment(writerId,mode)})});
+      ...(legacy?{}:{env:writerEnvironment(writerId,mode,leaseEpoch)})});
     stdout=response.stdout;
   } catch(error) {
     if(error.killed||error.signal) {
@@ -394,16 +395,24 @@ function definitelyDeniedWriterLease(error) {
     'Native request refused: NATIVE_WRITER_MODE_MISMATCH',
   ].includes(error?.message);
 }
-function writerEnvironment(writerId,mode){
+// A newly acquired lease has a fresh nonce even when the same MCP
+// process later controls the same slot. A delayed prior CLI packet
+// cannot cross this native-actor fencing boundary after exit/relaunch.
+function writerEnvironment(writerId,mode,leaseEpoch){
   if(typeof writerId!=='string'||!AI_WRITER_ID_PATTERN.test(writerId) ||
      !['human-plus-four-ai','five-ai'].includes(mode)) {
     throw new Error('AI_WRITER_LEASE_REQUIRED');
   }
+  if(typeof leaseEpoch!=='string'||!AI_WRITER_ID_PATTERN.test(leaseEpoch)){
+    throw new Error('AI_LEASE_EPOCH_REQUIRED');
+  }
   return {...process.env,LAZY_TESTER_AI_WRITER_ID:writerId,
-    LAZY_TESTER_AI_WRITER_MODE:mode};
+    LAZY_TESTER_AI_WRITER_MODE:mode,
+    LAZY_TESTER_AI_LEASE_EPOCH:leaseEpoch};
 }
 export async function sendExperimentalAiWriterLeaseNative(
-    executable,operation,slots,{writerId,mode}={}){
+    executable,operation,slots,
+    {writerId,mode,leaseEpoch,neutralOnly=false}={}){
   if(!executable||!path.isAbsolute(executable)||
      !['acquire','release'].includes(operation)||
      !Array.isArray(slots)||slots.length<1||slots.length>5||
@@ -411,12 +420,14 @@ export async function sendExperimentalAiWriterLeaseNative(
        (i>0&&slots[i-1]>=slot))) {
     throw new Error('AI_WRITER_LEASE_INVALID');
   }
-  const env=writerEnvironment(writerId,mode);
+  if(typeof neutralOnly!=='boolean')throw new Error('AI_WRITER_LEASE_INVALID');
+  const env=writerEnvironment(writerId,mode,leaseEpoch);
   const name='ai-lease-'+operation;
   let stdout;
   try{
     const result=await execFileAsync(executable,[
       '--lazy-tester-agent-cli',name,slots.join(','),
+      ...(operation==='acquire'?[neutralOnly?'recovery':'action']:[]),
     ],{shell:false,windowsHide:true,timeout:6000,maxBuffer:8192,env});
     stdout=result.stdout;
   }catch(error){
@@ -452,7 +463,7 @@ export async function sendExperimentalAiWriterLeaseNative(
 // One short-lived SAME-IMAGE CLI coordinates all requested AI slots.
 // No second Minecraft session owner or background agent daemon is created.
 export async function sendExperimentalMultiClientBatchNative(
-    executable,batches,{signal,writerId,mode}={}) {
+    executable,batches,{signal,writerId,mode,leaseEpoch}={}) {
   if(!executable||!path.isAbsolute(executable)||!Array.isArray(batches)||
      batches.length<1||batches.length>5) {
     throw new Error('MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS');
@@ -500,7 +511,7 @@ export async function sendExperimentalMultiClientBatchNative(
       '--lazy-tester-agent-cli','ai-multi-input-batch',
       String(Date.now()),serialized,
     ],{shell:false,windowsHide:true,timeout:9000,maxBuffer:8192,signal,
-      env:writerEnvironment(writerId,mode)});
+      env:writerEnvironment(writerId,mode,leaseEpoch)});
     stdout=response.stdout;
   }catch(error){
     if(signal?.aborted)throw new Error('AI_SEQUENCE_ABORTED');
@@ -1023,10 +1034,11 @@ export function createHandler(config,{
     for (const slot of slots) protectedSlot(slotOf(slot));
     return slots;
   }
-  async function changeAiLease(operation,slots) {
+  async function changeAiLease(operation,slots,leaseEpoch,
+                               neutralOnly=false) {
     if(!multiEnabled)throw new Error('MULTI_CLIENT_EXPERIMENT_DISABLED');
     const result=await aiLease(config.executable,operation,slots,{
-      writerId,mode:config.mode,
+      writerId,mode:config.mode,leaseEpoch,neutralOnly,
     });
     if(result?.schema!==1||
        JSON.stringify(result?.slots)!==JSON.stringify(slots)||
@@ -1036,7 +1048,7 @@ export function createHandler(config,{
       throw new Error('AI_WRITER_LEASE_UNCONFIRMED');
     }
   }
-  async function releaseAiSlots(slots) {
+  async function releaseAiSlots(slots,leaseEpoch) {
     // SERIAL independent original-channel neutral writes. A dead AI
     // window must not hide ACKs from other still-live game slots.
     // Neither bucket is proof that Minecraft consumed a key release.
@@ -1046,7 +1058,7 @@ export function createHandler(config,{
       try {
         const receipt=await aiInput(config.executable,{
           slot,keys:0,dx:0,dy:0,ttlMs:1,requestedAtMs:Date.now(),
-        },{writerId,mode:config.mode});
+        },{writerId,mode:config.mode,leaseEpoch});
         confirmed=receipt?.schema===1&&receipt?.slot===slot&&
           receipt?.status==='NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED'&&
           receipt?.gameplayObserved===false;
@@ -1257,20 +1269,23 @@ export function createHandler(config,{
       }
       if(inFlight)throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
+      // A fresh epoch for THIS explicit neutral-recovery transaction.
+      // It fences old CLI input packets from the same MCP writer.
+      const leaseEpoch=randomBytes(16).toString('hex');
       let leaseAttempted=false,leaseHeld=false;
       let released=[];
       try {
         // Claim the ENTIRE requested set in the original controller
         // before writing any neutral. Foreign writers are never touched.
         leaseAttempted=true;
-        await changeAiLease('acquire',slots);
+        await changeAiLease('acquire',slots,leaseEpoch,true);
         leaseHeld=true;
-        const neutral=await releaseAiSlots(slots);
+        const neutral=await releaseAiSlots(slots,leaseEpoch);
         // Only clients with an actual native neutral ACK may relinquish
         // this MCP's writer claim. A departed MC03 must not hold MC02,
         // MC04 or MC05 hostage after their independent neutral ACKs.
         if(neutral.acknowledged.length) {
-          await changeAiLease('release',neutral.acknowledged);
+          await changeAiLease('release',neutral.acknowledged,leaseEpoch);
           released=neutral.acknowledged;
           clearReconciledAiSlots(released);
         }
@@ -1370,6 +1385,9 @@ export function createHandler(config,{
       refuseUncertain(schedule.slots);
       if(exclusiveBusy())throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
+      // One completely new epoch per authored cross-client action.
+      // No native lease may adopt stale frames from a prior invocation.
+      const leaseEpoch=randomBytes(16).toString('hex');
       const abort=new AbortController();
       const run={abort,slots:schedule.slots};
       multiSequence=run;
@@ -1382,7 +1400,7 @@ export function createHandler(config,{
         // All-or-nothing native cohort claim. A definitely denied foreign
         // writer never touched an input and needs no added recovery marker.
         try {
-          await changeAiLease('acquire',schedule.slots);
+          await changeAiLease('acquire',schedule.slots,leaseEpoch,false);
         } catch(error) {
           leaseDefinitelyDenied=definitelyDeniedWriterLease(error);
           throw error;
@@ -1393,7 +1411,7 @@ export function createHandler(config,{
         refuseUncertain(schedule.slots);
         dispatched=true;
         const receipt=await aiMultiBatch(config.executable,schedule.batches,
-          {signal:abort.signal,writerId,mode:config.mode});
+          {signal:abort.signal,writerId,mode:config.mode,leaseEpoch});
         if(receipt?.schema!==1||
            JSON.stringify(receipt?.slots)!==JSON.stringify(schedule.slots)||
            receipt?.status!=='EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED'||
@@ -1411,7 +1429,7 @@ export function createHandler(config,{
         if(leaseHeld) {
           // A claim that never dispatched input remains initially neutral.
           const neutral=dispatched?
-            await releaseAiSlots(schedule.slots):
+            await releaseAiSlots(schedule.slots,leaseEpoch):
             {acknowledged:schedule.slots,unconfirmed:[]};
           neutralUnconfirmed=neutral.unconfirmed;
           if(neutralUnconfirmed.length)markAiUncertain(neutralUnconfirmed);
@@ -1420,7 +1438,7 @@ export function createHandler(config,{
               // Release only independently ACKed source channels.
               // A dead client retains its own lease/TTL fallback, while
               // unaffected peers are not held until ten-second expiry.
-              await changeAiLease('release',neutral.acknowledged);
+              await changeAiLease('release',neutral.acknowledged,leaseEpoch);
               released=neutral.acknowledged;
             } catch {
               markAiUncertain(neutral.acknowledged);

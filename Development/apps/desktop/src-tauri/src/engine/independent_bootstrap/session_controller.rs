@@ -301,7 +301,8 @@ impl Sessions {
     }
     #[cfg(feature="mc02-native-input")]
     fn ai_lease_acquire(&mut self,slots:&[u32],owner:&str,
-                        mode:AgentControlMode)->io::Result<()> {
+                        mode:AgentControlMode,epoch:&str,
+                        neutral_only:bool)->io::Result<()> {
         use windows_sys::Win32::System::SystemInformation::GetTickCount64;
         validate_ai_lease_slots(slots,owner)?;
         let mut targets=Vec::with_capacity(slots.len());
@@ -321,30 +322,32 @@ impl Sessions {
         }
         // All slot/mode/identity checks completed; no partial writer claim
         // even when a later selected client is incompatible.
-        self.ai_leases.acquire(&targets,owner,unsafe{GetTickCount64()})
+        self.ai_leases.acquire(&targets,owner,epoch,
+            unsafe{GetTickCount64()},neutral_only)
     }
     #[cfg(feature="mc02-native-input")]
-    fn ai_lease_release(&mut self,slots:&[u32],owner:&str)->io::Result<()> {
+    fn ai_lease_release(&mut self,slots:&[u32],owner:&str,
+                        epoch:&str)->io::Result<()> {
         use windows_sys::Win32::System::SystemInformation::GetTickCount64;
         validate_ai_lease_slots(slots,owner)?;
         let targets=self.ai_lease_targets(slots)?;
-        self.ai_leases.release(&targets,owner,unsafe{GetTickCount64()})
+        self.ai_leases.release(&targets,owner,epoch,unsafe{GetTickCount64()})
     }
     #[cfg(feature="mc02-native-input")]
     fn ai_leased_input(&mut self,slot:u32,keys:u32,dx:i32,dy:i32,
-        ttl_ms:u32,issued_at_ms:u64,owner:&str)->io::Result<()> {
+        ttl_ms:u32,issued_at_ms:u64,owner:&str,epoch:&str)->io::Result<()> {
         use windows_sys::Win32::System::SystemInformation::GetTickCount64;
         let (_,pid,birth)=self.ai_lease_target(slot)?;
         // Before touching the original shared channel, conservatively
         // record POSSIBLY_ACTIVE. Native input I/O can return an error
         // after a packet was published; never let a prior neutral ACK
         // authorize lease release if this write becomes uncertain.
-        self.ai_leases.begin_write(slot,owner,pid,birth,
-            unsafe{GetTickCount64()})?;
+        self.ai_leases.begin_write(slot,owner,epoch,pid,birth,
+            unsafe{GetTickCount64()},keys==0&&dx==0&&dy==0)?;
         self.mc02_input(slot,keys,dx,dy,ttl_ms,issued_at_ms)?;
         // A new neutral ACK is the ONLY event that restores releasability.
         // This is native transport evidence, not Minecraft key-up proof.
-        self.ai_leases.wrote(slot,owner,pid,birth,
+        self.ai_leases.wrote(slot,owner,epoch,pid,birth,
             unsafe{GetTickCount64()},keys==0&&dx==0&&dy==0)
     }
     #[cfg(feature="mc02-native-input")]
@@ -369,8 +372,8 @@ impl Sessions {
     }
     #[cfg(feature="mc02-native-input")]
     fn ai_input_group(&mut self,frames:&[AiInputFrame],
-                      issued_at_ms:u64,deadline_at_ms:u64,owner:&str)
-                      ->io::Result<()> {
+                      issued_at_ms:u64,deadline_at_ms:u64,
+                      owner:&str,epoch:&str)->io::Result<()> {
         use windows_sys::Win32::System::SystemInformation::GetTickCount64;
         // Never trust a CLI that previously validated the group. An
         // authenticated client cannot bypass the same bounded constraints.
@@ -381,7 +384,8 @@ impl Sessions {
         let targets=self.ai_lease_targets(&frames.iter()
             .map(|f|f.slot).collect::<Vec<_>>())?;
         for &(slot,pid,birth) in &targets {
-            self.ai_leases.require(slot,owner,pid,birth,unsafe{GetTickCount64()})?;
+            self.ai_leases.require(slot,owner,epoch,pid,birth,
+                unsafe{GetTickCount64()})?;
         }
         let mut attempted=Vec::with_capacity(frames.len());
         let mut failure=None;
@@ -394,7 +398,7 @@ impl Sessions {
             // have published state into this exact original game channel.
             attempted.push(frame.slot);
             if let Err(error)=self.ai_leased_input(frame.slot,frame.keys,
-                frame.dx,frame.dy,frame.ttl_ms,issued_at_ms,owner) {
+                frame.dx,frame.dy,frame.ttl_ms,issued_at_ms,owner,epoch) {
                 failure=Some(error);
                 break;
             }
@@ -407,7 +411,7 @@ impl Sessions {
             // any game; each native channel retains its own TTL fallback.
             for slot in attempted {
                 let _=self.ai_leased_input(
-                    slot,0,0,0,1,unsafe{GetTickCount64()},owner);
+                    slot,0,0,0,1,unsafe{GetTickCount64()},owner,epoch);
             }
             return Err(error);
         }
@@ -1481,24 +1485,29 @@ fn run() -> io::Result<()> {
                 }
                 #[cfg(feature="mc02-native-input")]
                 SessionRequest::AiLeasedInput {slot,keys,dx,dy,ttl_ms,
-                    issued_at_ms,owner_id} => {
+                    issued_at_ms,owner_id,lease_epoch} => {
                     sessions.ai_leased_input(slot,keys,dx,dy,ttl_ms,
-                        issued_at_ms,&owner_id).map_err(|error|error.to_string())?
+                        issued_at_ms,&owner_id,&lease_epoch)
+                        .map_err(|error|error.to_string())?
                 }
                 #[cfg(feature="mc02-native-input")]
-                SessionRequest::AiLeaseAcquire {slots,owner_id,mode} =>
-                    sessions.ai_lease_acquire(&slots,&owner_id,mode)
+                SessionRequest::AiLeaseAcquire {
+                    slots,owner_id,mode,lease_epoch,neutral_only,
+                } => sessions.ai_lease_acquire(
+                    &slots,&owner_id,mode,&lease_epoch,neutral_only)
                         .map_err(|error|error.to_string())?,
                 #[cfg(feature="mc02-native-input")]
-                SessionRequest::AiLeaseRelease {slots,owner_id} =>
-                    sessions.ai_lease_release(&slots,&owner_id)
+                SessionRequest::AiLeaseRelease {
+                    slots,owner_id,lease_epoch,
+                } => sessions.ai_lease_release(&slots,&owner_id,&lease_epoch)
                         .map_err(|error|error.to_string())?,
                 #[cfg(feature="mc02-native-input")]
                 SessionRequest::AiInputGroup {
-                    frames,issued_at_ms,deadline_at_ms,owner_id,
+                    frames,issued_at_ms,deadline_at_ms,owner_id,lease_epoch,
                 } => {
                     sessions.ai_input_group(&frames,issued_at_ms,deadline_at_ms,
-                        &owner_id).map_err(|error|error.to_string())?
+                        &owner_id,&lease_epoch)
+                        .map_err(|error|error.to_string())?
                 }
                 SessionRequest::CloseAll => sessions.close_all().map_err(|error|error.to_string())?,
                 SessionRequest::CloseOne {slot} => sessions.close_one(slot).map_err(|error|error.to_string())?,
@@ -1624,6 +1633,7 @@ mod tests {
             let request=SessionRequest::AiInputGroup {
                 frames:vec![frame],issued_at_ms:1000,deadline_at_ms:1100,
                 owner_id:"a".repeat(32),
+                lease_epoch:"1".repeat(32),
             };
             assert!(!response_reaps_all(&request));
         }

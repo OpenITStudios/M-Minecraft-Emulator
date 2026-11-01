@@ -85,6 +85,20 @@ fn writer_id()->Result<String,&'static str> {
     Ok(value)
 }
 
+// A fresh nonce for each separately acquired native lease. It is never
+// passed on argv, never stored on disk and never reused when the same
+// MCP writer recovers or starts a later action transaction.
+#[cfg(all(windows,target_arch="x86_64",
+          feature="lazy-tester-package",feature="mc02-native-input"))]
+fn lease_epoch()->Result<String,&'static str> {
+    let value=std::env::var("LAZY_TESTER_AI_LEASE_EPOCH")
+        .map_err(|_|"AI_LEASE_EPOCH_REQUIRED")?;
+    if !super::native_clients_session::valid_ai_writer_id(&value) {
+        return Err("AI_LEASE_EPOCH_REQUIRED");
+    }
+    Ok(value)
+}
+
 #[cfg(all(windows,target_arch="x86_64",
           feature="lazy-tester-package",feature="mc02-native-input"))]
 fn execute_ai_lease(args:&[String])->Result<Value,&'static str> {
@@ -94,14 +108,17 @@ fn execute_ai_lease(args:&[String])->Result<Value,&'static str> {
        !=Some("I_ACCEPT_EXPERIMENTAL_MULTI_CLIENT_INPUT") {
         return Err("EXPERIMENT_NOT_AUTHORIZED");
     }
-    if args.len()!=2||args[1].len()>9 {
+    let acquiring=args[0]=="ai-lease-acquire";
+    if (acquiring && args.len()!=3) ||
+       (!acquiring && args.len()!=2) || args[1].len()>9 {
         return Err("INVALID_ARGUMENTS");
     }
     let owner=writer_id()?;
+    let epoch=lease_epoch()?;
     let slots=args[1].split(',').map(|s|s.parse::<u32>())
         .collect::<Result<Vec<_>,_>>().map_err(|_|"INVALID_ARGUMENTS")?;
     validate_ai_lease_slots(&slots,&owner).map_err(|_|"INVALID_ARGUMENTS")?;
-    let request=if args[0]=="ai-lease-acquire" {
+    let request=if acquiring {
         // An opaque writer ID is not enough to decide game intent.
         // Explicit mode travels in the CLI child's private environment,
         // and the original controller checks EVERY child's launch mode
@@ -115,11 +132,19 @@ fn execute_ai_lease(args:&[String])->Result<Value,&'static str> {
         if mode==AgentControlMode::HumanPlusFourAi && slots.contains(&1) {
             return Err("INVALID_ARGUMENTS");
         }
+        let neutral_only=match args[2].as_str() {
+            "action"=>false,
+            "recovery"=>true,
+            _=>return Err("INVALID_ARGUMENTS"),
+        };
         SessionRequest::AiLeaseAcquire {
             slots:slots.clone(),owner_id:owner,mode,
+            lease_epoch:epoch,neutral_only,
         }
     }else {
-        SessionRequest::AiLeaseRelease {slots:slots.clone(),owner_id:owner}
+        SessionRequest::AiLeaseRelease {
+            slots:slots.clone(),owner_id:owner,lease_epoch:epoch,
+        }
     };
     let snapshot=native_clients_session::request(request).map_err(native_error)?;
     if snapshot.schema!=1||snapshot.profiles.len()!=5 {
@@ -266,6 +291,7 @@ fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
         return Err("EXPERIMENT_NOT_AUTHORIZED");
     }
     let owner=writer_id()?;
+    let epoch=lease_epoch()?;
     if args.len()!=3 || args[2].len()>24000 {
         return Err("INVALID_ARGUMENTS");
     }
@@ -336,7 +362,7 @@ fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
             let snapshot=native_clients_session::request(
                 SessionRequest::AiInputGroup {
                     frames,issued_at_ms,deadline_at_ms:latest,
-                    owner_id:owner.clone(),
+                    owner_id:owner.clone(),lease_epoch:epoch.clone(),
                 }
             ).map_err(native_error)?;
             if snapshot.schema!=1||snapshot.profiles.len()!=5 {
@@ -357,7 +383,7 @@ fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
         if native_clients_session::request(SessionRequest::AiLeasedInput{
             slot,keys:0,dx:0,dy:0,ttl_ms:1,
             issued_at_ms:unsafe{GetTickCount64()},
-            owner_id:owner.clone(),
+            owner_id:owner.clone(),lease_epoch:epoch.clone(),
         }).is_err() {
             release_failed=true;
         }
@@ -450,7 +476,8 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
             SessionRequest::Mc02Input{slot,keys,dx,dy,ttl_ms,issued_at_ms}
         }else{
             SessionRequest::AiLeasedInput {
-                slot,keys,dx,dy,ttl_ms,issued_at_ms,owner_id:writer_id()?,
+                slot,keys,dx,dy,ttl_ms,issued_at_ms,
+                owner_id:writer_id()?,lease_epoch:lease_epoch()?,
             }
         };
         let snapshot=native_clients_session::request(request)
