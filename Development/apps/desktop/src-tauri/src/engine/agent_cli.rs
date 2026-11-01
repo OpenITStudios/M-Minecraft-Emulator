@@ -172,10 +172,23 @@ struct MultiAiPulse {
     slot:u32,at_ms:u32,keys:u32,dx:i32,dy:i32,ttl_ms:u32,
 }
 
+// The CLI validates ascending (at_ms,slot) before calling this function.
+// One timestamp group uses ONE authenticated native session transaction,
+// rather than 4–5 independent snapshot-producing IPC exchanges.
+#[cfg(all(windows,target_arch="x86_64",
+          feature="lazy-tester-package",feature="mc02-native-input"))]
+fn multi_ai_group_end(pulses:&[MultiAiPulse],first:usize)->usize {
+    if first>=pulses.len() {return pulses.len();}
+    let at=pulses[first].at_ms;
+    let mut next=first+1;
+    while next<pulses.len() && pulses[next].at_ms==at {next+=1;}
+    next
+}
+
 #[cfg(all(windows,target_arch="x86_64",
           feature="lazy-tester-package",feature="mc02-native-input"))]
 fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
-    use super::native_clients_session::{self,SessionRequest};
+    use super::native_clients_session::{self,SessionRequest,AiInputFrame};
     use windows_sys::Win32::System::SystemInformation::GetTickCount64;
     use std::collections::BTreeSet;
     if std::env::var("LAZY_TESTER_MULTI_CLIENT_VIRTUAL_INPUT").ok().as_deref()
@@ -219,29 +232,49 @@ fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
     }
     let started=unsafe{GetTickCount64()};
     let mut attempted=BTreeSet::<u32>::new();
+    let mut groups=0usize;
     let result=(||->Result<(),&'static str>{
-        for pulse in &pulses {
-            let deadline=started.saturating_add(u64::from(pulse.at_ms));
+        let mut index=0;
+        while index<pulses.len() {
+            let group_end=multi_ai_group_end(&pulses,index);
+            let group=&pulses[index..group_end];
+            let deadline=started.saturating_add(u64::from(group[0].at_ms));
+            let latest=deadline.saturating_add(150);
             let now=unsafe{GetTickCount64()};
             if now<deadline {
                 std::thread::sleep(std::time::Duration::from_millis(deadline-now));
             }
-            if unsafe{GetTickCount64()}.saturating_sub(deadline)>150 {
+            if unsafe{GetTickCount64()}>latest {
                 return Err("AI_SEQUENCE_DEADLINE");
             }
-            // Attempted before exchange: an uncertain reply may still
-            // represent an accepted input write needing neutral release.
-            attempted.insert(pulse.slot);
-            let snapshot=native_clients_session::request(SessionRequest::Mc02Input{
-                slot:pulse.slot,keys:pulse.keys,dx:pulse.dx,dy:pulse.dy,
-                ttl_ms:pulse.ttl_ms,issued_at_ms:unsafe{GetTickCount64()},
-            }).map_err(native_error)?;
+            let frames=group.iter().map(|pulse| {
+                // The entire group is possibly touched once the request
+                // enters IPC, even if acknowledgement is uncertain. Record
+                // before dispatch for independent best-effort ReleaseAll.
+                attempted.insert(pulse.slot);
+                AiInputFrame {
+                    slot:pulse.slot,keys:pulse.keys,dx:pulse.dx,
+                    dy:pulse.dy,ttl_ms:pulse.ttl_ms,
+                }
+            }).collect::<Vec<_>>();
+            let issued_at_ms=unsafe{GetTickCount64()};
+            if issued_at_ms>latest {return Err("AI_SEQUENCE_DEADLINE");}
+            // The original session actor still verifies every owned process
+            // and channel. A group is NOT an atomic or simultaneous Windows
+            // input broadcast; it only removes redundant IPC round trips.
+            let snapshot=native_clients_session::request(
+                SessionRequest::AiInputGroup {
+                    frames,issued_at_ms,deadline_at_ms:latest,
+                }
+            ).map_err(native_error)?;
             if snapshot.schema!=1||snapshot.profiles.len()!=5 {
                 return Err("INVALID_NATIVE_SNAPSHOT");
             }
-            if unsafe{GetTickCount64()}.saturating_sub(deadline)>150 {
+            if unsafe{GetTickCount64()}>latest {
                 return Err("AI_SEQUENCE_DEADLINE");
             }
+            groups+=1;
+            index=group_end;
         }
         Ok(())
     })();
@@ -261,6 +294,7 @@ fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
     Ok(json!({"schema":1,"ok":true,"operation":"ai-multi-input-batch",
         "slots":requested.into_iter().collect::<Vec<_>>(),
         "pulses":pulses.len(),
+        "timestampGroups":groups,
         "delivery":"PER_CLIENT_SHARED_STATE_WRITTEN_NOT_GAMEPLAY_PROOF",
         "gameplayObserved":false}))
 }
@@ -545,6 +579,26 @@ pub fn maybe_run() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(all(windows,target_arch="x86_64",
+          feature="lazy-tester-package",feature="mc02-native-input"))]
+    #[test]
+    fn multi_ai_grouping_keeps_same_timestamp_slots_together() {
+        let pulse=|slot,at_ms|MultiAiPulse {
+            slot,at_ms,keys:1,dx:0,dy:0,ttl_ms:350,
+        };
+        for ids in [vec![2,3,4,5],vec![1,2,3,4,5]] {
+            let mut pulses=ids.iter().map(|&slot|pulse(slot,0)).collect::<Vec<_>>();
+            pulses.extend(ids.iter().map(|&slot|pulse(slot,160)));
+            assert_eq!(multi_ai_group_end(&pulses,0),ids.len());
+            assert_eq!(multi_ai_group_end(&pulses,ids.len()),pulses.len());
+            assert_eq!(multi_ai_group_end(&pulses,pulses.len()),pulses.len());
+            for group in [&pulses[..ids.len()],&pulses[ids.len()..]] {
+                assert!(group.windows(2).all(|w|w[0].slot<w[1].slot));
+                assert!(group.iter().all(|f|f.at_ms==group[0].at_ms));
+            }
+        }
+    }
+
     #[test]
     fn one_shot_command_accepts_only_inspect_or_five_slots() {
         assert_eq!(parse_operation(&["inspect".into()]).unwrap(), ("inspect", None));

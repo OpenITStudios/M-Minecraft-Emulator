@@ -41,6 +41,37 @@ tests, Windows build, packaging, Minecraft and user-PC execution remain
 NOT_EXECUTED. Original MC02-only tools are retained only as a legacy hybrid
 experiment and cannot be enabled simultaneously with the multi-client flag.
 
+## Coherent timestamp-group native scheduling — source only
+
+The optional multi-client native scheduler now sends all AI pulses
+sharing one timestamp in a SINGLE authenticated `AiInputGroup`
+request on the existing controller pipe, avoiding 4–5 independent
+five-profile IPC receipts for that timestamp. Up to five distinct
+client slots are allowed, in ascending order; each pulse retains
+its independent keys, relative mouse deltas and original process
+channel. A group is **not** atomic or guaranteed simultaneous:
+the single retained actor still validates and writes slots in
+sequence.
+
+The originating CLI computes the monotonic deadline at each due
+timestamp +150 ms. The controller checks that deadline before
+every game-local channel write. Late delivery refuses the group.
+If a member fails, the controller attempts neutral ReleaseAll for
+each possibly touched member of that group. Independently, the
+CLI retains its original release pass across every attempted
+slot in all groups, followed by the MCP neutral cleanup and
+native TTL fallback if a process is interrupted. Partial or
+uncertain release must NOT report success.
+
+`timestampGroups` in the CLI receipt is checked against the MCP
+submitted schedule and surfaced as
+`timestampGroupsAcknowledged`. The unchanged
+`PER_CLIENT_SHARED_STATE_WRITTEN_NOT_GAMEPLAY_PROOF` marker is
+transport-only; runtime input consumption and latency are NOT
+EXECUTED or verified. This changes only the separately opted-in
+native input route; default builds, normal manager, legacy
+MC02-only input and user data remain unchanged.
+
 ## Coordinated 4–5 AI visual decision loop (source-only)
 
 The existing Visual Observer owns temporary, bounded frame caches,

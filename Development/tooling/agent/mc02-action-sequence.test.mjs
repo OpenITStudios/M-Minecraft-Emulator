@@ -212,3 +212,26 @@ test('multi-client compiler keeps four/five independent bounded channels without
   assert.throws(()=>prepareMultiClientPulseBatches('five-ai',
     Array.from({length:33},(_,i)=>moveSlot(i%5+1))));
 });
+
+test('four/five-client compiler yields grouped shared timestamps without merging slot masks',()=>{
+  const action=slot=>({slot,kind:'move_forward',atMs:0,durationMs:320});
+  for(const [mode,slots] of [
+    ['human-plus-four-ai',[2,3,4,5]],
+    ['five-ai',[1,2,3,4,5]],
+  ]) {
+    const plan=prepareMultiClientPulseBatches(mode,slots.map(action));
+    const pulses=plan.batches.flatMap(batch=>batch.pulses.map(pulse=>({
+      slot:batch.slot,...pulse,
+    }))).sort((a,b)=>a.atMs-b.atMs||a.slot-b.slot);
+    const times=[...new Set(pulses.map(pulse=>pulse.atMs))];
+    assert.deepEqual(times,[0,160,320]);
+    for(const time of times) {
+      const group=pulses.filter(pulse=>pulse.atMs===time);
+      assert.deepEqual(group.map(pulse=>pulse.slot),slots);
+      assert.equal(group.length,slots.length);
+      assert.equal(group.every(pulse=>pulse.ttlMs===350),true);
+      assert.equal(group.every(pulse=>pulse.keys===(time===320?0:1)),true);
+    }
+    assert.equal(plan.slots.includes(1),mode==='five-ai');
+  }
+});

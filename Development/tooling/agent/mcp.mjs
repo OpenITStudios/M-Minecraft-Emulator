@@ -411,6 +411,10 @@ export async function sendExperimentalMultiClientBatchNative(
       throw new Error('MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS');
     }
   }
+  // Native now processes all slots sharing one timeline timestamp in one
+  // authenticated IPC group. Never call this concurrent/simultaneous game
+  // input: the retained actor still revalidates and writes each channel.
+  const expectedGroups=new Set(pulses.map(pulse=>pulse.atMs)).size;
   const serialized=JSON.stringify(pulses);
   if(Buffer.byteLength(serialized,'utf8')>24000) {
     throw new Error('MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS');
@@ -446,12 +450,13 @@ export async function sendExperimentalMultiClientBatchNative(
      !Array.isArray(receipt?.slots)||
      JSON.stringify(receipt.slots)!==JSON.stringify([...slots].sort((a,b)=>a-b))||
      receipt?.pulses!==pulses.length||
+     receipt?.timestampGroups!==expectedGroups||
      receipt?.delivery!=='PER_CLIENT_SHARED_STATE_WRITTEN_NOT_GAMEPLAY_PROOF'||
      receipt?.gameplayObserved!==false) {
     throw new Error('AI_INPUT_NATIVE_RESULT_UNVERIFIED');
   }
   return {schema:1,slots:[...slots].sort((a,b)=>a-b),
-    pulsesAcknowledged:pulses.length,
+    pulsesAcknowledged:pulses.length,timestampGroupsAcknowledged:expectedGroups,
     status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
     gameplayObserved:false,
     humanInputUninterrupted:'NOT_PROVEN',

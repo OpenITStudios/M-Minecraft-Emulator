@@ -10,7 +10,9 @@ use crate::engine::{
 use std::{io::Write, time::{Duration, Instant}};
 use virtual_clients_core::InspectionBudget;
 #[cfg(feature="mc02-native-input")]
-use crate::engine::native_clients_session::AgentControlMode;
+use crate::engine::native_clients_session::{
+    AgentControlMode,AiInputFrame,validate_ai_input_group,
+};
 
 struct Sessions {
     stores: Vec<Option<SlotStorage>>,
@@ -263,6 +265,43 @@ impl Sessions {
             })
         })
     }
+    #[cfg(feature="mc02-native-input")]
+    fn ai_input_group(&self,frames:&[AiInputFrame],
+                      issued_at_ms:u64,deadline_at_ms:u64)->io::Result<()> {
+        use windows_sys::Win32::System::SystemInformation::GetTickCount64;
+        // Never trust a CLI that previously validated the group. An
+        // authenticated client cannot bypass the same bounded constraints.
+        validate_ai_input_group(frames,issued_at_ms,deadline_at_ms)?;
+        let mut attempted=Vec::with_capacity(frames.len());
+        let mut failure=None;
+        for frame in frames {
+            if unsafe{GetTickCount64()}>deadline_at_ms {
+                failure=Some(invalid("AI timestamp group missed its native deadline"));
+                break;
+            }
+            // Record BEFORE writing: a failed/uncertain operation might
+            // have published state into this exact original game channel.
+            attempted.push(frame.slot);
+            if let Err(error)=self.mc02_input(frame.slot,frame.keys,
+                frame.dx,frame.dy,frame.ttl_ms,issued_at_ms) {
+                failure=Some(error);
+                break;
+            }
+        }
+        if let Some(error)=failure {
+            // Best effort on EVERY possibly written slot of THIS group.
+            // The calling CLI separately releases every group it attempted
+            // across the whole sequence, including previously held peers.
+            // Release has no human-focus requirement and never terminates
+            // any game; each native channel retains its own TTL fallback.
+            for slot in attempted {
+                let _=self.mc02_input(slot,0,0,0,1,unsafe{GetTickCount64()});
+            }
+            return Err(error);
+        }
+        Ok(())
+    }
+
     fn snapshot(&mut self) -> SessionSnapshot {
         self.reap();
         self.snapshot_without_reaping(true)
@@ -1150,8 +1189,10 @@ fn response_reaps_all(request: &SessionRequest) -> bool {
         return false;
     }
     #[cfg(feature="mc02-native-input")]
-    if matches!(request, SessionRequest::Mc02Input { .. }) {
-        // Short input writes must not trigger unrelated journal maintenance.
+    if matches!(request, SessionRequest::Mc02Input { .. } |
+        SessionRequest::AiInputGroup { .. }) {
+        // A multi-client group and single-slot pulse share the original
+        // short-lived input receipt rule. Never wait for unrelated journals.
         return false;
     }
     true
@@ -1263,7 +1304,8 @@ fn run() -> io::Result<()> {
             // verification but skip unrelated title writes per heartbeat.
             #[cfg(feature="mc02-native-input")]
             let relabel_on_reply = !matches!(&envelope.request,
-                SessionRequest::Mc02Input {..});
+                SessionRequest::Mc02Input {..} |
+                SessionRequest::AiInputGroup {..});
             #[cfg(not(feature="mc02-native-input"))]
             let relabel_on_reply = true;
             match envelope.request {
@@ -1317,6 +1359,13 @@ fn run() -> io::Result<()> {
                 #[cfg(feature="mc02-native-input")]
                 SessionRequest::Mc02Input {slot,keys,dx,dy,ttl_ms,issued_at_ms} => {
                     sessions.mc02_input(slot,keys,dx,dy,ttl_ms,issued_at_ms)
+                        .map_err(|error|error.to_string())?
+                }
+                #[cfg(feature="mc02-native-input")]
+                SessionRequest::AiInputGroup {
+                    frames,issued_at_ms,deadline_at_ms,
+                } => {
+                    sessions.ai_input_group(&frames,issued_at_ms,deadline_at_ms)
                         .map_err(|error|error.to_string())?
                 }
                 SessionRequest::CloseAll => sessions.close_all().map_err(|error|error.to_string())?,
@@ -1413,6 +1462,16 @@ mod tests {
             SessionRequest::Launch { slot: 2 },
         ] {
             assert!(response_reaps_all(&request));
+        }
+        #[cfg(feature="mc02-native-input")]
+        {
+            let frame=crate::engine::native_clients_session::AiInputFrame {
+                slot:2,keys:1,dx:0,dy:0,ttl_ms:350,
+            };
+            let request=SessionRequest::AiInputGroup {
+                frames:vec![frame],issued_at_ms:1000,deadline_at_ms:1100,
+            };
+            assert!(!response_reaps_all(&request));
         }
         // CloseOne reaps one verified slot; CloseAll still reaps all five.
         for slot in 1..=5 {

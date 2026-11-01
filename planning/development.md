@@ -1,5 +1,57 @@
 # Current Development Handoff — Lazy Tester
 
+## 1 November 2026 — bounded 4/5-AI native timestamp groups
+
+**State: SOURCE-ONLY INPUT DISPATCH COHERENCE / GAMEPLAY INPUT BLOCKED.**
+The operator continues GitHub-only implementation without local PC,
+Node/Rust/MSVC execution, Windows builds, installed game hooks or CI.
+
+The existing one-shot same-image CLI still compiles at most 32 semantic
+actions, up to five AI slots, max 64 pulses per slot, a <=3500-ms
+sequence and 350-ms TTL. Instead of one authenticated pipe
+transaction and five-profile response per individual AI pulse, it
+now submits all client frames due at the SAME timestamp through one
+private feature-gated `SessionRequest::AiInputGroup` (max five
+strictly ascending unique slots). The original retained controller
+revalidates every native input value, exact opted-in process/channel,
+hybrid human MC01 foreground or five-AI launch mode, and native
+deadline before each write. One snapshot is returned per timestamp
+group; individual writes are still sequenced by one actor, NOT
+atomic or proven simultaneous in Minecraft.
+
+The monotonic Windows deadline is supplied by the original CLI at
+the due timestamp +150 ms, alongside same-machine issue time.
+Controller-side checks refuse late groups during their execution,
+not just at the caller after the reply. On any group member failure,
+the actor attempts independent neutral writes for each possibly
+touched channel in that group; the CLI separately attempts
+per-slot ReleaseAll across ALL groups it dispatched. MCP still
+performs independent neutral cleanup on the same original controller
+and each channel retains its short TTL if the CLI is killed.
+An uncertain release remains an explicit failure, never a PASS.
+
+The existing private single-slot `Mc02Input` and legacy MC02 pilot,
+session lifecycle, account/world storage, reviewed DLL, installer,
+UI, CI and default-OFF opt-in gates remain unchanged. The CLI
+returns a bounded `timestampGroups` count; MCP cross-checks the
+count against its submitted schedule to distinguish a complete
+transport receipt from a partially dispatched batch. No new
+agent daemon, driver, game process owner, bypass of normal
+Minecraft focus, or general-purpose input endpoint is created.
+
+**Proof:** REMOTE_GITHUB exact-source and private wire/consumer
+static review only. Bounded Rust and JS regression fixtures were
+AUTHORED, NOT_EXECUTED. Timing improvements, native build
+compatibility, actual game input consumption, mouse/attack behavior,
+MC01 human independence and 4/5-game throughput remain
+NOT_EXECUTED / NOT_VERIFIED.
+
+**One next action:** Validate actual per-client keyboard/relative
+mouse input and group deadline behavior on an explicitly approved
+Windows Minecraft Education target when available; continue
+source-only work without promoting IPC acknowledgements to gameplay.
+
+
 ## 1 November 2026 continuation — per-AI visual outcome evaluation
 
 **State: SOURCE-ONLY RESULT CLASSIFICATION / GAMEPLAY STILL BLOCKED.**

@@ -170,8 +170,48 @@ pub enum SessionRequest {
     LaunchAiExperiment {slot:u32,mode:AgentControlMode},
     #[cfg(feature="mc02-native-input")]
     Mc02Input {slot:u32,keys:u32,dx:i32,dy:i32,ttl_ms:u32,issued_at_ms:u64},
+    // One authenticated request for all per-client states due at the SAME
+    // timestamp. This is a bounded group, not a promise of atomic Win32
+    // delivery or simultaneous Minecraft polling.
+    #[cfg(feature="mc02-native-input")]
+    AiInputGroup {
+        frames:Vec<AiInputFrame>,issued_at_ms:u64,deadline_at_ms:u64,
+    },
     CloseOne { slot: u32 },
     CloseAll,
+}
+
+#[cfg(feature="mc02-native-input")]
+#[derive(Clone,Copy,Debug,Deserialize,Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AiInputFrame {
+    pub slot:u32,pub keys:u32,pub dx:i32,pub dy:i32,pub ttl_ms:u32,
+}
+
+// Validate the COMPLETE private group before any controller-side mutation.
+// Require strictly ascending, distinct native slots and fixed experimental
+// pulse TTL. This cannot authorize a child that lacks its opted-in channel.
+#[cfg(feature="mc02-native-input")]
+pub(crate) fn validate_ai_input_group(
+    frames:&[AiInputFrame],issued_at_ms:u64,deadline_at_ms:u64,
+)->io::Result<()> {
+    if frames.is_empty() || frames.len()>5 || issued_at_ms==0 ||
+       deadline_at_ms<issued_at_ms ||
+       deadline_at_ms-issued_at_ms>150 {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput,
+            "Invalid experimental AI timestamp group"));
+    }
+    let mut previous_slot=0;
+    for frame in frames {
+        if frame.slot<=previous_slot || frame.ttl_ms!=350 {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                "AI group must have distinct ascending slots and fixed TTL"));
+        }
+        admit_native_input_frame(frame.slot,frame.keys,frame.dx,frame.dy,
+            frame.ttl_ms)?;
+        previous_slot=frame.slot;
+    }
+    Ok(())
 }
 
 // Private experimental launch mode: pinned in the original game owner.
@@ -296,6 +336,12 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,
                 "Missing native input issue timestamp"));
         }
+    }
+    #[cfg(feature="mc02-native-input")]
+    if let SessionRequest::AiInputGroup {
+        ref frames,issued_at_ms,deadline_at_ms,
+    } = request {
+        validate_ai_input_group(frames,issued_at_ms,deadline_at_ms)?;
     }
     let inspecting = matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings);
     #[cfg(feature="mc02-native-input")]
@@ -428,6 +474,7 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
     // merely because an input command mentions its numerical slot.
     #[cfg(feature="mc02-native-input")]
     if matches!(request,SessionRequest::Mc02Input{..} |
+        SessionRequest::AiInputGroup{..} |
         SessionRequest::LaunchMc02Experiment{..} |
         SessionRequest::LaunchAiExperiment{..}) {
         return Err(io::Error::new(io::ErrorKind::NotFound,
@@ -590,6 +637,39 @@ mod tests {
         assert!(matches!(serde_json::from_str::<SessionRequest>(
             r#"{"operation":"CloseOne","slot":2}"#
         ), Ok(SessionRequest::CloseOne {slot:2})));
+    }
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn grouped_ai_input_admission_rejects_ambiguous_and_expired_deadlines() {
+        // Pure source-authored fixture; no IPC, game windows or input sent.
+        let frame=|slot|AiInputFrame{slot,keys:1,dx:0,dy:0,ttl_ms:350};
+        for slots in [vec![2,3,4,5],vec![1,2,3,4,5]] {
+            let valid=slots.into_iter().map(frame).collect::<Vec<_>>();
+            assert!(validate_ai_input_group(&valid,1000,1150).is_ok());
+            assert!(validate_ai_input_group(&valid,1000,1000).is_ok());
+            assert!(validate_ai_input_group(&valid,1000,1151).is_err());
+            assert!(validate_ai_input_group(&valid,1100,1099).is_err());
+            assert!(validate_ai_input_group(&valid,0,100).is_err());
+        }
+        for slots in [vec![],vec![2,2],vec![3,2],vec![1,2,3,4,5,6],
+            vec![0],vec![6]] {
+            let invalid=slots.into_iter().map(frame).collect::<Vec<_>>();
+            assert!(validate_ai_input_group(&invalid,1000,1100).is_err());
+        }
+        let mut invalid=frame(2);
+        invalid.keys=3; // conflicting W/S must not enter the actor
+        assert!(validate_ai_input_group(&[invalid],1000,1100).is_err());
+        invalid=frame(2);
+        invalid.ttl_ms=1;
+        assert!(validate_ai_input_group(&[invalid],1000,1100).is_err());
+        let json=r#"{"operation":"AiInputGroup","frames":[{"slot":2,
+            "keys":1,"dx":0,"dy":0,"ttl_ms":350}],
+            "issued_at_ms":1000,"deadline_at_ms":1100}"#;
+        assert!(matches!(serde_json::from_str::<SessionRequest>(json),
+            Ok(SessionRequest::AiInputGroup{..})));
+        assert!(serde_json::from_str::<SessionRequest>(
+            &json.replace("\"ttl_ms\":350", "\"ttl_ms\":350,\"pid\":123")
+        ).is_err());
     }
     #[cfg(feature="mc02-native-input")]
     #[test]
