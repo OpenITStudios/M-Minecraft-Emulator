@@ -891,3 +891,58 @@ test('raw experimental MC02 input helper refuses contradictory native key masks 
     }),/MC02_INPUT_INVALID_COMMAND/);
   }
 });
+
+test('five-client native input experiment is explicit, source only and mode-bound',()=>{
+  const env={LAZY_TESTER_MULTI_CLIENT_VIRTUAL_INPUT:'I_ACCEPT_EXPERIMENTAL_MULTI_CLIENT_INPUT'};
+  assert.equal(parseConfiguration(['--mode','five-ai',
+    '--multi-client-input-experimental','on'],env).experimentalMultiClientInputEnabled,true);
+  assert.throws(()=>parseConfiguration(['--multi-client-input-experimental','on'],{}));
+  assert.throws(()=>parseConfiguration([
+    '--multi-client-input-experimental','on','--mc02-input-experimental','on',
+  ],{...env,LAZY_TESTER_MC02_VIRTUAL_INPUT:'I_ACCEPT_EXPERIMENTAL_MC02_INPUT'}));
+});
+
+test('four/five opted-in AI action streams preserve per-slot neutral cleanup',async()=>{
+  const receipts=[],launches=[];
+  const native=async(_exe,op,slot)=>{launches.push([op,slot]);return snapshot(op);};
+  const aiInput=async(_exe,frame)=>{
+    receipts.push(['release',frame.slot,frame.keys]);
+    return {schema:1,slot:frame.slot,
+      status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+      gameplayObserved:false};
+  };
+  const aiMultiBatch=async(_exe,batches)=>{
+    receipts.push(['batch',...batches.map(b=>b.slot)]);
+    return {schema:1,slots:batches.map(b=>b.slot),
+      status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
+      gameplayObserved:false};
+  };
+  const make=(slot)=>({slot,kind:'move_forward',atMs:0,durationMs:320});
+  const hybrid=createHandler({...config(),experimentalMultiClientInputEnabled:true},
+    {native,aiInput,aiMultiBatch});
+  const list=await hybrid.handle({jsonrpc:'2.0',id:21,method:'tools/list'});
+  assert.ok(list.result.tools.some(t=>t.name==='run_experimental_multi_client_actions'));
+  await assert.rejects(()=>hybrid.callTool('run_experimental_multi_client_actions',
+    {actions:[make(1)]}));
+  assert.equal(receipts.length,0);
+  const four=await hybrid.callTool('run_experimental_multi_client_actions',
+    {actions:[2,3,4,5].map(make)});
+  assert.deepEqual(four.slots,[2,3,4,5]);
+  assert.deepEqual(receipts.map(r=>r[0]),['batch','release','release','release','release']);
+  assert.deepEqual(receipts.slice(1).map(r=>r[1]),[2,3,4,5]);
+  await hybrid.callTool('launch_profile',{slot:5});
+  assert.deepEqual(launches.at(-1),['launch-ai-hybrid',5]);
+
+  const full=createHandler({...config('five-ai'),experimentalMultiClientInputEnabled:true},
+    {native,aiInput,aiMultiBatch});
+  const five=await full.callTool('run_experimental_multi_client_actions',
+    {actions:[1,2,3,4,5].map(make)});
+  assert.deepEqual(five.slots,[1,2,3,4,5]);
+  assert.deepEqual(receipts.at(-6),['batch',1,2,3,4,5]);
+  await full.callTool('launch_profile',{slot:1});
+  assert.deepEqual(launches.at(-1),['launch-ai-five',1]);
+  const released=await full.callTool('stop_experimental_multi_client_actions',
+    {slots:[1,3,5]});
+  assert.deepEqual(released.slots,[1,3,5]);
+  assert.equal(released.actualGameKeyRelease,'NOT_VERIFIED');
+});

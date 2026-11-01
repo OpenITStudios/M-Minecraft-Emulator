@@ -1,9 +1,10 @@
-//! MC02-only source implementation: controller-owned, pagefile-backed input
+//! Slot-scoped MC01-MC05 experiment: controller-owned, pagefile-backed input
 //! state consumed inside the already enrolled bootstrap-compat DLL.
 //! No global SendInput, driver, new named pipe, second game controller, or
 //! profile storage write. This module is absent unless its Cargo feature is
 //! explicitly enabled. Minecraft Education compatibility is NOT_EXECUTED.
 use super::*;
+use crate::engine::native_clients_session::AgentControlMode;
 use std::sync::atomic::{AtomicI64, AtomicU64, AtomicU8, Ordering};
 use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
@@ -46,6 +47,8 @@ const _: () = assert!(std::mem::align_of::<SharedInput>() == 8);
 
 pub(super) struct Channel {
     section: Configuration,
+    slot: u32,
+    mode: AgentControlMode,
     target: Option<(u32,u64,u32)>,
     sequence: AtomicU8,
     // Controller-local, NOT part of the inherited 96-byte game ABI.
@@ -58,20 +61,24 @@ pub(super) struct Channel {
     last_active_issued_at_ms: AtomicU64,
 }
 impl Channel {
-    pub(super) fn create(slot:u32, explicitly_requested:bool) -> io::Result<Option<Self>> {
-        // Explicit launch intent is carried by the authenticated native
-        // request. The existing controller does NOT inherit the environment
-        // of a later Codex/CLI process, so ambient opt-in is insufficient.
-        if !explicitly_requested { return Ok(None); }
-        if slot!=2 { return Err(invalid("MC02-only experimental launch refused")); }
+    pub(super) fn create(slot:u32, mode:Option<AgentControlMode>) -> io::Result<Option<Self>> {
+        // Each authenticated explicit launch binds ONE original slot and
+        // mode. Shared memory is never multiplexed between game processes.
+        let Some(mode)=mode else {return Ok(None);};
+        if !(1..=5).contains(&slot) ||
+           (slot==1 && mode==AgentControlMode::HumanPlusFourAi) {
+            return Err(invalid("Invalid experimental AI slot/mode"));
+        }
         Ok(Some(Self {
             section:Configuration::create_sized(std::mem::size_of::<SharedInput>() as u32)?,
+            slot,mode,
             target:None,
             sequence:AtomicU8::new(0),
             last_release_issued_at_ms:AtomicU64::new(0),
             last_active_issued_at_ms:AtomicU64::new(0),
         }))
     }
+    pub(super) fn mode(&self)->AgentControlMode {self.mode}
     pub(super) fn reader(&self)->HANDLE {
         self.section.readonly.as_raw_handle() as HANDLE
     }
@@ -89,7 +96,7 @@ impl Channel {
             std::ptr::write(view.Value.cast::<SharedInput>(), SharedInput {
                 magic:MAGIC,version:VERSION,
                 bytes:std::mem::size_of::<SharedInput>() as u32,
-                slot:2,pid,session,birth,packet:AtomicU64::new(0),
+                slot:self.slot,pid,session,birth,packet:AtomicU64::new(0),
                 cursor_revision:AtomicU64::new(0),
                 cursor_x:AtomicI64::new(0),cursor_y:AtomicI64::new(0),
                 cursor_epoch:AtomicU64::new(0),
@@ -172,10 +179,13 @@ impl Channel {
         // Final source-side defense: no direct caller may bypass the
         // admission rules or turn a release request into an active write.
         let action=crate::engine::native_clients_session::admit_native_input_frame(
-            2,keys,dx,dy,ttl_ms)?;
+            self.slot,keys,dx,dy,ttl_ms)?;
         if !matches!(action,
                 crate::engine::native_clients_session::NativeInputIntent::Active)
-            || human_hwnd==0 || ai_hwnd==0 || human_hwnd==ai_hwnd ||
+            || ai_hwnd==0 ||
+            (self.mode==AgentControlMode::HumanPlusFourAi &&
+                (human_hwnd==0 || human_hwnd==ai_hwnd)) ||
+            (self.mode==AgentControlMode::FiveAi && human_hwnd!=0) ||
             self.target!=Some((pid,birth,session)) {
             return Err(invalid("Unbound, expired or invalid MC02 input command"));
         }

@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import {prepareMc02ActionSequence,prepareMc02PulseBatch,
-  runExperimentalMc02Sequence,MC02_SEQUENCE_LIMITS} from './mc02-action-sequence.mjs';
+  prepareMultiClientPulseBatches,runExperimentalMc02Sequence,MC02_SEQUENCE_LIMITS} from './mc02-action-sequence.mjs';
 import {createHandler,parseConfiguration} from './mcp.mjs';
 const move=(kind,atMs,durationMs,other={})=>({slot:2,kind,atMs,durationMs,...other});
 function virtualClock(){
@@ -193,4 +193,22 @@ test('stop cannot target MC01 or MC03-MC05 even when opt-in is enabled',async()=
   }
   assert.equal(calls.length,0);
   handler.shutdown();
+});
+
+test('multi-client compiler keeps four/five independent bounded channels without MC01 hybrid dispatch',()=>{
+  const moveSlot=slot=>({slot,kind:'move_forward',atMs:0,durationMs:320});
+  const hybrid=prepareMultiClientPulseBatches('human-plus-four-ai',[2,3,4,5].map(moveSlot));
+  assert.deepEqual(hybrid.slots,[2,3,4,5]);
+  assert.equal(hybrid.batches.length,4);
+  for(const batch of hybrid.batches) {
+    assert.equal(batch.pulses[0].keys,1);
+    assert.equal(batch.pulses.at(-1).keys,0);
+  }
+  const full=prepareMultiClientPulseBatches('five-ai',[1,2,3,4,5].map(moveSlot));
+  assert.deepEqual(full.slots,[1,2,3,4,5]);
+  assert.equal(full.batches.length,5);
+  assert.throws(()=>prepareMultiClientPulseBatches('human-plus-four-ai',[moveSlot(1)]));
+  assert.throws(()=>prepareMultiClientPulseBatches('five-ai',[moveSlot(6)]));
+  assert.throws(()=>prepareMultiClientPulseBatches('five-ai',
+    Array.from({length:33},(_,i)=>moveSlot(i%5+1))));
 });

@@ -20,18 +20,20 @@ const sleep=(ms,signal)=>delay(ms,undefined,{signal});
  * Rejections here are additional limitations of the MC02 experimental
  * backend, not a restriction on the five-client preview-only planner.
  */
-export function prepareMc02ActionSequence(actions) {
+export function prepareAiActionSequence(mode,slot,actions) {
   if(!Array.isArray(actions)||actions.length<1||
      actions.length>MC02_SEQUENCE_LIMITS.maxActions) {
     throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
   }
   let timeline;
-  try {timeline=compilePerClientInputFrames('human-plus-four-ai',actions);}
+  try {timeline=compilePerClientInputFrames(mode,actions);}
   catch {throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');}
   const frames=timeline.batches.flatMap(batch=>batch.frames);
-  if(actions.some(a=>a.slot!==2||!ALLOWED.has(a.kind)) ||
+  if(!Number.isInteger(slot)||slot<1||slot>5||
+     (mode==='human-plus-four-ai'&&slot===1)||
+     actions.some(a=>a.slot!==slot||!ALLOWED.has(a.kind)) ||
      frames.length===0 ||
-     frames.some(frame=>frame.slot!==2 ||
+     frames.some(frame=>frame.slot!==slot ||
        frame.atMs>MC02_SEQUENCE_LIMITS.maxHorizonMs ||
        Math.abs(frame.lookDX)>127||Math.abs(frame.lookDY)>127 ||
        frame.retriggeredButtons.length>0)) {
@@ -46,13 +48,18 @@ export function prepareMc02ActionSequence(actions) {
   });
 }
 
+// Compatibility wrapper for the original MC02-only pilot and its fixtures.
+export function prepareMc02ActionSequence(actions) {
+  return prepareAiActionSequence('human-plus-four-ai',2,actions);
+}
+
 /**
  * One bounded deterministic schedule for BOTH the native single-process
  * batch transport and the source-only injected per-pulse fixture runner.
  * The native controller still validates every pulse independently.
  */
-export function prepareMc02PulseBatch(actions) {
-  const prepared=prepareMc02ActionSequence(actions);
+export function prepareAiPulseBatch(mode,slot,actions) {
+  const prepared=prepareAiActionSequence(mode,slot,actions);
   const pulses=[];
   let cursor=0,buttons=[],keyMask=0,heartbeatAt=Infinity;
   while(cursor<prepared.frames.length || buttons.length>0) {
@@ -120,6 +127,30 @@ export function prepareMc02PulseBatch(actions) {
     count:pulses.length,
     finalEventMs:prepared.finalEventMs,
   });
+}
+
+export function prepareMc02PulseBatch(actions) {
+  return prepareAiPulseBatch('human-plus-four-ai',2,actions);
+}
+
+// Shared semantic input compiler for 1-5 AI channels. No input is sent here.
+// The native controller owns one independent channel per opted-in process;
+// all requested slots are validated together before any runner is started.
+export function prepareMultiClientPulseBatches(mode,actions) {
+  if(!Array.isArray(actions)||actions.length<1||actions.length>32) {
+    throw new Error('MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS');
+  }
+  try { compilePerClientInputFrames(mode,actions); }
+  catch {throw new Error('MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS');}
+  const slots=[...new Set(actions.map(a=>a.slot))].sort((a,b)=>a-b);
+  const batches=slots.map(slot=>{
+    const batch=prepareAiPulseBatch(mode,slot,
+      actions.filter(action=>action.slot===slot));
+    return Object.freeze({slot,...batch});
+  });
+  return Object.freeze({mode,slots:Object.freeze(slots),
+    batches:Object.freeze(batches),
+    inputTransport:'NOT_DISPATCHED_GAMEPLAY_UNVERIFIED'});
 }
 
 /**

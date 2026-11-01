@@ -1,5 +1,40 @@
 # Current Development Handoff — Lazy Tester
 
+## Current direction — 1 November 2026 (supersedes MC02-only roadmap)
+
+**State: MULTI-CLIENT SOURCE CANDIDATE / GAME INPUT BLOCKED.**
+The operator cannot access Windows locally and explicitly wants four/five
+AI input channels implemented together instead of replicating MC02 work.
+
+The existing retained native session controller now has a source-only,
+compile-OFF candidate with a separately inherited 96-byte read-only
+mapping per explicitly opted-in AI child. The MC02-named private wire
+and files remain as compatibility source names, but original process/
+birth/session/channel validation is slot-addressed for MC01–MC05.
+An explicit mode is pinned at launch: hybrid protects human MC01 and
+requires its genuine foreground; five-ai permits all five AI clients
+without fabricating a human focus gate. Mixed active input modes are
+rejected. Each channel owns its TTL and ReleaseAll ordering independently.
+
+MCP can optionally expose cross-slot run/stop through the canonical
+semantic action planner and one short-lived same-image native CLI batch.
+The same original controller remains the only native game/input writer.
+The game DLL input hooks, developer/Windows build and opt-in consent
+remain OFF by default. Standard installer, accounts, worlds, profile
+stores, ordinary close and lifecycle are unchanged.
+
+**Proof ceiling:** REMOTE_GITHUB source inspection/authoring ONLY.
+All Node/Rust/MSVC tests, Windows builds, packages, installed Education,
+keyboard/camera/attack consumption, four/five independent AI gameplay,
+human MC01 isolation and P2P host/join are NOT_EXECUTED/NOT_VERIFIED.
+Native writes/receipts do NOT establish gameplay.
+
+**One next action:** When approved on a compatible Windows PC, verify
+Minecraft Education's actual keyboard and relative-mouse consumer
+and the complete hybrid/five-AI isolation matrix on the exact revision.
+Until then do not turn source acceptance into a runtime PASS.
+
+
 ## Current state — 30 October 2026
 
 **State:** CANONICAL SOURCE ROUTING ALIGNED / NATIVE VALIDATION DEFERRED. The active product remains

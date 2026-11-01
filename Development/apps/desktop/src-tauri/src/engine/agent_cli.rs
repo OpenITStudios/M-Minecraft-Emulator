@@ -12,6 +12,16 @@ fn parse_operation(args: &[String]) -> Result<(&'static str, Option<u32>), &'sta
         #[cfg(feature="mc02-native-input")]
         [one,slot] if one=="launch-mc02-input" && slot=="2" =>
             Ok(("launch-mc02-input",Some(2))),
+        #[cfg(feature="mc02-native-input")]
+        [one,slot] if one=="launch-ai-hybrid" || one=="launch-ai-five" => {
+            let slot=slot.parse::<u32>().map_err(|_|"INVALID_ARGUMENTS")?;
+            if !(1..=5).contains(&slot) ||
+               (one=="launch-ai-hybrid" && slot==1) {
+                return Err("INVALID_ARGUMENTS");
+            }
+            Ok((if one=="launch-ai-hybrid" {"launch-ai-hybrid"}
+                else {"launch-ai-five"},Some(slot)))
+        },
         [one, slot] if one == "launch" => {
             let slot = slot.parse::<u32>().map_err(|_| "INVALID_ARGUMENTS")?;
             if !(1..=5).contains(&slot) {
@@ -151,7 +161,116 @@ fn execute_mc02_batch(args:&[String])->Result<Value,&'static str> {
         "gameplayObserved":false}))
 }
 
+// One same-image scheduler for MC01-MC05. Each pulse is still separately
+// admitted and written by the EXISTING retained authenticated controller.
+// The game may ignore it: this is not Minecraft gameplay acceptance.
+#[cfg(all(windows,target_arch="x86_64",
+          feature="lazy-tester-package",feature="mc02-native-input"))]
+#[derive(serde::Deserialize)]
+#[serde(rename_all="camelCase",deny_unknown_fields)]
+struct MultiAiPulse {
+    slot:u32,at_ms:u32,keys:u32,dx:i32,dy:i32,ttl_ms:u32,
+}
+
+#[cfg(all(windows,target_arch="x86_64",
+          feature="lazy-tester-package",feature="mc02-native-input"))]
+fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
+    use super::native_clients_session::{self,SessionRequest};
+    use windows_sys::Win32::System::SystemInformation::GetTickCount64;
+    use std::collections::BTreeSet;
+    if std::env::var("LAZY_TESTER_MULTI_CLIENT_VIRTUAL_INPUT").ok().as_deref()
+       !=Some("I_ACCEPT_EXPERIMENTAL_MULTI_CLIENT_INPUT") {
+        return Err("EXPERIMENT_NOT_AUTHORIZED");
+    }
+    if args.len()!=3 || args[2].len()>24000 {
+        return Err("INVALID_ARGUMENTS");
+    }
+    let requested_at_ms=args[1].parse::<u64>().map_err(|_|"INVALID_ARGUMENTS")?;
+    let now_wall=std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_|"STALE_AI_INPUT")?.as_millis();
+    if requested_at_ms==0||now_wall<u128::from(requested_at_ms)||
+       now_wall-u128::from(requested_at_ms)>500 {
+        return Err("STALE_AI_INPUT");
+    }
+    let pulses:Vec<MultiAiPulse>=serde_json::from_str(&args[2])
+        .map_err(|_|"INVALID_ARGUMENTS")?;
+    if pulses.is_empty()||pulses.len()>320 {
+        return Err("INVALID_ARGUMENTS");
+    }
+    let mut requested=BTreeSet::<u32>::new();
+    let mut last=None;
+    let mut per_slot=[0u32;5];
+    for pulse in &pulses {
+        if !(1..=5).contains(&pulse.slot)||pulse.at_ms>3500||
+           pulse.ttl_ms!=350 ||
+           last.is_some_and(|previous:(u32,u32)|
+              (pulse.at_ms,pulse.slot)<=previous) ||
+           native_clients_session::admit_native_input_frame(
+             pulse.slot,pulse.keys,pulse.dx,pulse.dy,pulse.ttl_ms).is_err() {
+            return Err("INVALID_ARGUMENTS");
+        }
+        per_slot[(pulse.slot-1) as usize]+=1;
+        if per_slot[(pulse.slot-1) as usize]>64 {
+            return Err("INVALID_ARGUMENTS");
+        }
+        requested.insert(pulse.slot);
+        last=Some((pulse.at_ms,pulse.slot));
+    }
+    let started=unsafe{GetTickCount64()};
+    let mut attempted=BTreeSet::<u32>::new();
+    let result=(||->Result<(),&'static str>{
+        for pulse in &pulses {
+            let deadline=started.saturating_add(u64::from(pulse.at_ms));
+            let now=unsafe{GetTickCount64()};
+            if now<deadline {
+                std::thread::sleep(std::time::Duration::from_millis(deadline-now));
+            }
+            if unsafe{GetTickCount64()}.saturating_sub(deadline)>150 {
+                return Err("AI_SEQUENCE_DEADLINE");
+            }
+            // Attempted before exchange: an uncertain reply may still
+            // represent an accepted input write needing neutral release.
+            attempted.insert(pulse.slot);
+            let snapshot=native_clients_session::request(SessionRequest::Mc02Input{
+                slot:pulse.slot,keys:pulse.keys,dx:pulse.dx,dy:pulse.dy,
+                ttl_ms:pulse.ttl_ms,issued_at_ms:unsafe{GetTickCount64()},
+            }).map_err(native_error)?;
+            if snapshot.schema!=1||snapshot.profiles.len()!=5 {
+                return Err("INVALID_NATIVE_SNAPSHOT");
+            }
+            if unsafe{GetTickCount64()}.saturating_sub(deadline)>150 {
+                return Err("AI_SEQUENCE_DEADLINE");
+            }
+        }
+        Ok(())
+    })();
+    // Every possibly touched ORIGINAL channel is released independently.
+    // A killed CLI cannot guarantee this; each native packet also expires.
+    let mut release_failed=false;
+    for slot in attempted {
+        if native_clients_session::request(SessionRequest::Mc02Input{
+            slot,keys:0,dx:0,dy:0,ttl_ms:1,
+            issued_at_ms:unsafe{GetTickCount64()},
+        }).is_err() {
+            release_failed=true;
+        }
+    }
+    if release_failed {return Err("AI_RELEASE_UNCONFIRMED");}
+    result?;
+    Ok(json!({"schema":1,"ok":true,"operation":"ai-multi-input-batch",
+        "slots":requested.into_iter().collect::<Vec<_>>(),
+        "pulses":pulses.len(),
+        "delivery":"PER_CLIENT_SHARED_STATE_WRITTEN_NOT_GAMEPLAY_PROOF",
+        "gameplayObserved":false}))
+}
+
 fn execute(args: &[String]) -> Result<Value, &'static str> {
+    #[cfg(all(windows,target_arch="x86_64",
+              feature="lazy-tester-package",feature="mc02-native-input"))]
+    if args.first().map(String::as_str)==Some("ai-multi-input-batch") {
+        return execute_multi_ai_batch(args);
+    }
     #[cfg(all(windows,target_arch="x86_64",
               feature="lazy-tester-package",feature="mc02-native-input"))]
     if args.first().map(String::as_str)==Some("mc02-input-batch") {
@@ -159,15 +278,25 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
     }
     #[cfg(all(windows,target_arch="x86_64",
               feature="lazy-tester-package",feature="mc02-native-input"))]
-    if args.first().map(String::as_str)==Some("mc02-input") {
-        // Explicit one-shot CLI adapter, NOT an automatically exposed MCP
-        // tool. The authenticated native controller remains sole writer.
+    if matches!(args.first().map(String::as_str),Some("mc02-input")|Some("ai-input")) {
+        // Private one-shot adapter reuses the original authenticated
+        // native controller. The actual game process must own an opted-in
+        // slot-specific channel and matched launch mode.
         use super::native_clients_session::{self,SessionRequest};
-        if std::env::var("LAZY_TESTER_MC02_VIRTUAL_INPUT").ok().as_deref()
-            !=Some("I_ACCEPT_EXPERIMENTAL_MC02_INPUT") {
-            return Err("EXPERIMENT_NOT_AUTHORIZED");
+        let legacy=args.first().map(String::as_str)==Some("mc02-input");
+        let consent=if legacy {
+            std::env::var("LAZY_TESTER_MC02_VIRTUAL_INPUT").ok().as_deref()
+                ==Some("I_ACCEPT_EXPERIMENTAL_MC02_INPUT")
+        } else {
+            std::env::var("LAZY_TESTER_MULTI_CLIENT_VIRTUAL_INPUT").ok().as_deref()
+                ==Some("I_ACCEPT_EXPERIMENTAL_MULTI_CLIENT_INPUT")
+        };
+        if !consent {return Err("EXPERIMENT_NOT_AUTHORIZED");}
+        if args.len()!=7 {return Err("INVALID_ARGUMENTS");}
+        let slot=args[1].parse::<u32>().map_err(|_|"INVALID_ARGUMENTS")?;
+        if !(1..=5).contains(&slot)||(legacy&&slot!=2) {
+            return Err("INVALID_ARGUMENTS");
         }
-        if args.len()!=7 || args[1]!="2" {return Err("INVALID_ARGUMENTS");}
         let keys=args[2].parse::<u32>().map_err(|_|"INVALID_ARGUMENTS")?;
         let dx=args[3].parse::<i32>().map_err(|_|"INVALID_ARGUMENTS")?;
         let dy=args[4].parse::<i32>().map_err(|_|"INVALID_ARGUMENTS")?;
@@ -175,7 +304,7 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
         let requested_at_ms=args[6].parse::<u64>().map_err(|_|"INVALID_ARGUMENTS")?;
         // Enforce the same per-slot keyboard/camera admission before
         // asking the retained native controller to inspect any process.
-        native_clients_session::admit_native_input_frame(2,keys,dx,dy,ttl_ms)
+        native_clients_session::admit_native_input_frame(slot,keys,dx,dy,ttl_ms)
             .map_err(|_|"INVALID_ARGUMENTS")?;
         // A delayed Node request must not gain a new issue time merely
         // because this one-shot executable started late. ReleaseAll and
@@ -205,13 +334,13 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
         let issued_at_ms=uptime_now.checked_sub(request_age_ms as u64)
             .filter(|stamp|*stamp!=0).ok_or("STALE_MC02_INPUT")?;
         let snapshot=native_clients_session::request(
-            SessionRequest::Mc02Input{slot:2,keys,dx,dy,ttl_ms,issued_at_ms}
+            SessionRequest::Mc02Input{slot,keys,dx,dy,ttl_ms,issued_at_ms}
         ).map_err(native_error)?;
         if snapshot.schema!=1||snapshot.profiles.len()!=5 {
             return Err("INVALID_NATIVE_SNAPSHOT");
         }
         return Ok(json!({"schema":1,"ok":true,
-            "operation":"mc02-input","slot":2,
+            "operation":args[0],"slot":slot,
             "delivery":"PER_CLIENT_SHARED_STATE_WRITTEN_NOT_GAMEPLAY_PROOF",
             "gameplayObserved":false}));
     }
@@ -221,6 +350,13 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
     if operation=="launch-mc02-input" &&
        std::env::var("LAZY_TESTER_MC02_VIRTUAL_INPUT").ok().as_deref()
          !=Some("I_ACCEPT_EXPERIMENTAL_MC02_INPUT") {
+        return Err("EXPERIMENT_NOT_AUTHORIZED");
+    }
+    #[cfg(all(windows, target_arch="x86_64",feature="lazy-tester-package",
+              feature="mc02-native-input"))]
+    if (operation=="launch-ai-hybrid" || operation=="launch-ai-five") &&
+       std::env::var("LAZY_TESTER_MULTI_CLIENT_VIRTUAL_INPUT").ok().as_deref()
+         !=Some("I_ACCEPT_EXPERIMENTAL_MULTI_CLIENT_INPUT") {
         return Err("EXPERIMENT_NOT_AUTHORIZED");
     }
     #[cfg(not(all(windows, target_arch = "x86_64", feature = "lazy-tester-package")))]
@@ -334,6 +470,16 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
             SessionRequest::LaunchMc02Experiment {
                 slot:slot.ok_or("INVALID_ARGUMENTS")?
             }
+        } else if operation=="launch-ai-hybrid" || operation=="launch-ai-five" {
+            use super::native_clients_session::AgentControlMode;
+            SessionRequest::LaunchAiExperiment {
+                slot:slot.ok_or("INVALID_ARGUMENTS")?,
+                mode:if operation=="launch-ai-five" {
+                    AgentControlMode::FiveAi
+                } else {
+                    AgentControlMode::HumanPlusFourAi
+                },
+            }
         } else {
             match slot {
                 Some(slot)=>SessionRequest::Launch {slot},
@@ -404,8 +550,16 @@ mod tests {
         assert_eq!(parse_operation(&["inspect".into()]).unwrap(), ("inspect", None));
         assert_eq!(parse_operation(&["launch".into(), "5".into()]).unwrap(), ("launch", Some(5)));
         #[cfg(feature="mc02-native-input")]
-        assert_eq!(parse_operation(&["launch-mc02-input".into(), "2".into()]).unwrap(),
-            ("launch-mc02-input",Some(2)));
+        {
+            assert_eq!(parse_operation(&["launch-mc02-input".into(),"2".into()]).unwrap(),
+                ("launch-mc02-input",Some(2)));
+            assert_eq!(parse_operation(&["launch-ai-hybrid".into(),"5".into()]).unwrap(),
+                ("launch-ai-hybrid",Some(5)));
+            assert_eq!(parse_operation(&["launch-ai-five".into(),"1".into()]).unwrap(),
+                ("launch-ai-five",Some(1)));
+            assert!(parse_operation(&["launch-ai-hybrid".into(),"1".into()]).is_err());
+            assert!(parse_operation(&["launch-ai-five".into(),"6".into()]).is_err());
+        }
         assert_eq!(parse_operation(&["target".into(), "2".into()]).unwrap(),
             ("target", Some(2)));
         assert_eq!(parse_operation(&["probe-background".into(), "2".into()]).unwrap(),

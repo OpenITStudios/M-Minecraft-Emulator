@@ -1,6 +1,45 @@
 # Windows AI test bridge — source implementation
 
-The bridge exists for **Minecraft Education peer-to-peer client testing** using the five native profiles owned by Lazy Tester. It does **not** start a dedicated server, create a second game controller, inject input, move players in background windows, or modify account/world data.
+The bridge exists for **Minecraft Education peer-to-peer client testing** using the five native profiles owned by Lazy Tester. The ordinary bridge does NOT start a dedicated server, create a second game controller or modify account/world data. Optional compile-OFF native per-client input experiments are source-only candidates, NOT tested Minecraft gameplay.
+
+## 1 November 2026: 4/5 AI input source candidate
+
+The original MC02 virtual polling candidate has been generalized for four AI clients
+(MC02–MC05 in human-plus-four-ai mode) or five clients (MC01–MC05 in five-ai mode).
+Each explicitly opted-in game process receives its OWN inherited 96-byte read-only
+input mapping; one retained authenticated native controller remains the only writer.
+Hybrid requires real human MC01 foreground for each active AI packet and forbids
+AI input on MC01. Five-ai requires its own explicit per-slot AI launch and never
+uses global SendInput, foreground takeover or a second game owner.
+
+Experimental native code is OFF by default, excluded from ordinary packaging,
+and NOT authorized for execution. Preferred source build flags are Cargo feature
+multi-client-native-input (alias of historical mc02-native-input) and test-only
+CMake option BOOTSTRAP_MULTI_CLIENT_VIRTUAL_INPUT. The old private
+MIVUBI_EDUCATION_MC02_INPUT_SECTION name and Mc02Input request remain unchanged
+for source compatibility; both are now bound to an exact selected original slot.
+
+For a separately approved developer setup ONLY: the MCP opt-in option is
+--multi-client-input-experimental on with --mode human-plus-four-ai or five-ai,
+and the required environment consent is:
+
+    LAZY_TESTER_MULTI_CLIENT_VIRTUAL_INPUT=I_ACCEPT_EXPERIMENTAL_MULTI_CLIENT_INPUT
+
+The extra experimental tools are run_experimental_multi_client_actions and
+stop_experimental_multi_client_actions. The first compiles up to 32 semantic
+actions into at most 64 input pulses per client within 3.5 seconds and
+dispatches one same-image bounded CLI schedule for the requested AI slots.
+The second cancels the WHOLE active cross-slot sequence (not one slot from a
+shared schedule), or requests independent neutral states on named idle slots.
+The native 350ms TTL is only a last-resort state expiry, not gameplay evidence.
+
+This implementation does not prove Minecraft Education consumes keyboard,
+Raw Input, relative mouse, attack/use, or state releases. It also does NOT
+prove that MC01 remains unaffected, host/join succeeds, screenshots are fresh,
+or four/five game clients can run AI movement simultaneously. Node/Rust/MSVC
+tests, Windows build, packaging, Minecraft and user-PC execution remain
+NOT_EXECUTED. Original MC02-only tools are retained only as a legacy hybrid
+experiment and cannot be enabled simultaneously with the multi-client flag.
 
 ## Exactly what works in source
 

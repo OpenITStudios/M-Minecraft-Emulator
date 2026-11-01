@@ -6,6 +6,13 @@ running. The runtime uses our native compatibility implementation, one official
 Minecraft installation, and persistent private profiles. It does not require
 Sandboxie or VMware.
 
+A source-only dormant developer experiment now admits input channels for
+four AI clients (MC02–MC05, with human MC01) or all five AI clients.
+It reuses one authenticated session controller, one independent per-game
+channel and one bounded cross-slot CLI scheduler. No standard installer
+includes this feature; Windows/Minecraft execution and actual gameplay
+remain NOT_EXECUTED/NOT_VERIFIED.
+
 ## Repository and distribution layout
 
 This checkout is the development project, not the folder distributed to players.

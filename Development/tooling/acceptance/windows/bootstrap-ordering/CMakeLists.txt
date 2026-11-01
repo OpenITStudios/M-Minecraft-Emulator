@@ -2,10 +2,15 @@ cmake_minimum_required(VERSION 3.24)
 project(BootstrapOrderingSelfTest LANGUAGES CXX)
 
 option(BOOTSTRAP_ORDERING_TEST_ONLY "Build the standalone self-child ordering experiment" OFF)
-# P0 Minecraft input discovery only; never in the default game DLL or
-# production package. Also requires an explicit MC02-only environment opt-in.
+# Input discovery/experimental native source only. No default product
+# payload or automatic execution. MC02-named flags retain private ABI
+# compatibility; the new opt-in permits 1-5 independently owned slots.
 option(BOOTSTRAP_MC02_INPUT_API_OBSERVE "Record one-shot MC02 input API presence; no input dispatch" OFF)
-option(BOOTSTRAP_MC02_VIRTUAL_INPUT "MC02 virtual keyboard/cursor polling via inherited read-only state (experimental)" OFF)
+option(BOOTSTRAP_MC02_VIRTUAL_INPUT "Historical name for the isolated per-client AI polling candidate" OFF)
+option(BOOTSTRAP_MULTI_CLIENT_VIRTUAL_INPUT "Experimental MC01-MC05 independently owned AI polling" OFF)
+if(BOOTSTRAP_MULTI_CLIENT_VIRTUAL_INPUT)
+  set(BOOTSTRAP_MC02_VIRTUAL_INPUT ON)
+endif()
 # Real GetRawInputBuffer consumers only. NOT the standard WM_INPUT/
 # GetRawInputData path, does not forge kernel HRAWINPUT or device handles.
 # Always a second explicit opt-in and absent from normal DLL builds.

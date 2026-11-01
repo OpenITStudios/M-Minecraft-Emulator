@@ -7,6 +7,14 @@ one verified game process/session controller, persistent private profile
 Roaming/Local/HKCU handles, a Windows DWM preview owner, native compatibility
 DLLs and explicit normal-exit/recovery handling.
 
+The 1 November 2026 source-only direction generalizes the dormant native
+AI input candidate across MC01–MC05, with one retained authenticated
+controller and one multi-slot CLI schedule. Hybrid protects MC01 human;
+five-ai can explicitly opt in MC01 as AI. One native channel/identity/
+ReleaseAll watermark per process; all experimental features remain OFF
+by default. There is no source-execution or Minecraft gameplay proof,
+and the MC02 input-consumer feasibility question still blocks all slots.
+
 The last live Windows observation recorded in the source handoff found one
 MC02 normal-exit failure. Subsequent source corrections are not Windows/game
 acceptance. Every actual execution requirement remains `NOT_EXECUTED` unless

@@ -21,21 +21,26 @@ For material writes read `GITHUB_RULES.md`, pin exact `Local` HEAD, and consult 
 
 The active product is **Lazy Tester**, with five independently managed
 Minecraft Education Windows profiles. The retired Sandboxie/VMware runtime
-has already been removed from Local. **Operator scope reset — 31 October 2026:** P0 is REAL, independent AI
-control of Minecraft Education, not further audit/QA hardening. First
-prove one human-controlled foreground MC01 plus one independently
-controlled background MC02 (keyboard movement, relative camera, attack,
-release-all, and observable in-game result), then scale to four/five AI
-clients in the same world. Native process/window identity and input
-intent planning already exist; there is NO verified per-client gameplay
-input backend. A posted WM_KEYDOWN message is not an observed Minecraft
-action. Do not infer progress from scaffolding, source-only microtests,
-privacy polishing, extra planning stages, or synthetic input ACKs.
+has already been removed from Local. **Operator scope reset — 1 November 2026:**
+while the operator cannot access the Windows PC, develop the SAME
+experimental native input capability for 4–5 AI clients at once rather
+than scaling MC02 source later. The two modes remain MC01 human +
+MC02–MC05 AI, or all five clients AI. Never route an AI action to human
+MC01 in hybrid mode. Retain one authenticated controller, one separate
+per-process input mapping per opted-in AI client, per-client identity
+and ReleaseAll, and one bounded cross-slot scheduler. Keep all new
+input source compile-OFF, manually opted-in, and excluded from normal
+product builds/packages. No local-PC tests, Windows builds, installer
+changes, enabling game hooks or gameplay execution without separate
+approval. Whether Minecraft Education consumes these Win32 inputs is
+still unverified on MC02 AND all other clients. Neither source-only
+work nor IPC ACKs nor hook-return markers are game acceptance.
 
-**Hard scope gate:** no more generic MCP/privacy/parser/observer audits,
-speculative providers, extra tests or milestone-number churn while real
-input remains blocked. Change source only for a concrete, directly
-relevant input feasibility correction with a documented mechanism.
+**Hard scope gate:** no generic MCP/privacy/parser/observer audits,
+second game controller, speculative provider or milestone churn.
+Source work must directly implement the existing per-client native
+input route coherently across 4–5 profiles, with only bounded
+authored regression fixtures until execution is approved.
 No unapproved game hooking, DLL injection, driver installation,
 foreground takeover, VM/RDP patching, CI or user-PC execution. Preserve
 all native profile/world/account data and normal close contracts.

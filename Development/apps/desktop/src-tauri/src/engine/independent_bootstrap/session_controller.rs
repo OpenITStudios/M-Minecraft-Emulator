@@ -9,6 +9,8 @@ use crate::engine::{
 };
 use std::{io::Write, time::{Duration, Instant}};
 use virtual_clients_core::InspectionBudget;
+#[cfg(feature="mc02-native-input")]
+use crate::engine::native_clients_session::AgentControlMode;
 
 struct Sessions {
     stores: Vec<Option<SlotStorage>>,
@@ -82,19 +84,20 @@ impl Sessions {
     }
 
     fn launch(&mut self, slot: u32) -> io::Result<()> {
-        self.launch_inner(slot,false)
+        self.launch_inner(slot,#[cfg(feature="mc02-native-input")] None)
     }
     #[cfg(feature="mc02-native-input")]
     fn launch_mc02_experiment(&mut self, slot:u32)->io::Result<()> {
-        if slot!=2 {
-            return Err(invalid("MC02 experimental launch is limited to slot 2"));
-        }
-        self.launch_inner(slot,true)
+        if slot!=2 {return Err(invalid("Legacy MC02 experiment is slot 2 only"));}
+        self.launch_ai_experiment(slot,AgentControlMode::HumanPlusFourAi)
     }
-    fn launch_inner(&mut self, slot:u32,experimental_input:bool)->io::Result<()> {
-        if experimental_input && slot!=2 {
-            return Err(invalid("MC02 experimental launch cannot target another client"));
-        }
+    #[cfg(feature="mc02-native-input")]
+    fn launch_ai_experiment(&mut self,slot:u32,mode:AgentControlMode)->io::Result<()> {
+        self.launch_inner(slot,Some(mode))
+    }
+    fn launch_inner(&mut self,slot:u32,
+        #[cfg(feature="mc02-native-input")] experimental_input:Option<AgentControlMode>,
+    )->io::Result<()> {
         if self.exiting {return Err(invalid("Minecraft sessions are closing. Finish closing them before starting another game."));}
         if !(1..=5).contains(&slot) {
             return Err(invalid("Unknown Minecraft profile"));
@@ -102,16 +105,25 @@ impl Sessions {
         let index = slot as usize - 1;
         self.reap();
         #[cfg(feature="mc02-native-input")]
-        if experimental_input {
-            // Reap first: running[0].is_some() can still refer to an MC01
-            // process that exited since its last Inspect. Never admit a
-            // new virtual-input MC02 based on stale MC01 ownership.
-            let host=self.running[0].as_ref()
-                .ok_or_else(||invalid("MC02 experimental launch requires live MC01"))?;
-            let child=&host.children[0];
-            child.identity()?;
-            if !window(child,false).is_some_and(|target|target.responding) {
-                return Err(invalid("MC02 experiment requires a responding MC01 window"));
+        if let Some(mode)=experimental_input {
+            // A single controller must not mix hybrid and full-AI channels.
+            for running in self.running.iter().flatten() {
+                if let Some(channel)=running.children[0].mc02_input.as_ref() {
+                    if channel.mode()!=mode {
+                        return Err(invalid("Cannot mix hybrid and five-AI input modes"));
+                    }
+                }
+            }
+            if mode==AgentControlMode::HumanPlusFourAi {
+                if slot==1 {return Err(invalid("MC01 belongs to the human"));}
+                let host=self.running[0].as_ref()
+                    .ok_or_else(||invalid("Hybrid AI launch requires live MC01"))?;
+                let child=&host.children[0];
+                child.identity()?;
+                if child.mc02_input.is_some() ||
+                   !window(child,false).is_some_and(|target|target.responding) {
+                    return Err(invalid("Hybrid requires a responding human-owned MC01"));
+                }
             }
         }
         if self.running[index].is_some() {
@@ -183,69 +195,73 @@ impl Sessions {
     #[cfg(feature="mc02-native-input")]
     fn mc02_input(&self,slot:u32,keys:u32,dx:i32,dy:i32,
                   ttl_ms:u32,issued_at_ms:u64)->io::Result<()> {
-        // The existing authenticated SessionRequest is slot-addressed.
-        // Only MC02 currently has a source candidate. No MC03-MC05
-        // native channel, injected hook or input permission is implied.
+        use crate::engine::workspace_surface::with_verified_native_window;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            GetForegroundWindow,IsHungAppWindow,IsIconic,IsWindowVisible,
+        };
         let action=crate::engine::native_clients_session::admit_native_input_frame(
             slot,keys,dx,dy,ttl_ms)?;
         let release_only=matches!(action,
             crate::engine::native_clients_session::NativeInputIntent::ReleaseAll);
         if self.exiting && !release_only {
-            return Err(invalid("MC02-only experimental input refused"));
+            return Err(invalid("Native AI experiment is closing"));
         }
-        let ai=self.running[1].as_ref().ok_or_else(||
-            invalid("MC02 AI client is not running"))?;
-        let ai_child=&ai.children[0];
-        let (pid,birth)=ai_child.identity()?;
-        let input=ai_child.mc02_input.as_ref()
-            .ok_or_else(||invalid("MC02 input channel was not opted in at launch"))?;
+        let started=self.running.get((slot-1) as usize)
+            .and_then(|entry|entry.as_ref())
+            .ok_or_else(||invalid("AI profile is not running"))?;
+        let child=&started.children[0];
+        let (pid,birth)=child.identity()?;
+        let input=child.mc02_input.as_ref()
+            .ok_or_else(||invalid("AI profile was not opted in at launch"))?;
         let session=interactive_session(pid)?;
         if release_only {
-            // Input *release* must not depend on MC01 still running or
-            // having real foreground, or on MC02 still owning a visible
-            // and responsive HWND. Only exact MC02 process/birth/session
-            // and the inherited channel may clear the virtual input.
+            // Independent exact-owner release never depends on another slot
+            // still running or on any window keeping foreground focus.
             return input.release_all(pid,birth,session,issued_at_ms);
         }
-        // Non-neutral input remains under BOTH original process identities
-        // and verified windows. This path never changes Windows focus.
-        let human=self.running[0].as_ref().ok_or_else(||
-            invalid("MC01 human client is not running"))?;
+        let target=window(child,false)
+            .ok_or_else(||invalid("Verified AI game window unavailable"))?;
+        if !target.responding {
+            return Err(invalid("AI game window is not responsive"));
+        }
+        let write_target=|ai_hwnd:usize,human_hwnd:usize| {
+            if unsafe{IsWindowVisible(ai_hwnd as _)}==0 ||
+               unsafe{IsIconic(ai_hwnd as _)}!=0 ||
+               unsafe{IsHungAppWindow(ai_hwnd as _)}!=0 {
+                return Err(invalid("AI window is not playable"));
+            }
+            input.write(pid,birth,session,keys,dx,dy,ttl_ms,issued_at_ms,
+                human_hwnd,ai_hwnd)
+        };
+        if input.mode()==AgentControlMode::FiveAi {
+            // No artificial human foreground requirement in all-five mode.
+            // The game-local hook still isolates physical keyboard/mouse
+            // state and checks this child's exact root HWND on polling.
+            return with_verified_native_window(&target,|ai_hwnd|
+                write_target(ai_hwnd,0));
+        }
+        let human=self.running[0].as_ref()
+            .ok_or_else(||invalid("Human MC01 is not running"))?;
         let human_child=&human.children[0];
         human_child.identity()?;
-        let human_window=window(human_child,false)
-            .ok_or_else(||invalid("MC01 verified game window unavailable"))?;
-        let ai_window=window(ai_child,false)
-            .ok_or_else(||invalid("MC02 verified game window unavailable"))?;
-        if human_window.pid==ai_window.pid||!human_window.responding||
-           !ai_window.responding ||
-           human_window.session_id!=ai_window.session_id {
-            return Err(invalid("Independent MC01/MC02 ownership unavailable"));
+        if human_child.mc02_input.is_some() {
+            return Err(invalid("Hybrid human MC01 has an AI input channel"));
         }
-        // The retained controller, NOT extra CLI preflights, is the input
-        // gate. Revalidate real MC01 foreground inside pinned HWND owners.
-        use windows_sys::Win32::UI::WindowsAndMessaging::{
-            GetForegroundWindow,IsHungAppWindow,IsIconic,IsWindowVisible,
-        };
-        crate::engine::workspace_surface::with_verified_native_window(
-            &human_window,|human_hwnd| {
-                crate::engine::workspace_surface::with_verified_native_window(
-                    &ai_window,|ai_hwnd| {
-                        if human_hwnd==ai_hwnd ||
-                           unsafe{GetForegroundWindow()} != human_hwnd as _ {
-                            return Err(invalid("MC01 human foreground must remain unchanged"));
-                        }
-                        if unsafe{IsWindowVisible(ai_hwnd as _)}==0 ||
-                           unsafe{IsIconic(ai_hwnd as _)}!=0 ||
-                           unsafe{IsHungAppWindow(ai_hwnd as _)}!=0 {
-                            return Err(invalid("MC02 AI window is not playable"));
-                        }
-                        input.write(pid,birth,session,keys,dx,dy,ttl_ms,issued_at_ms,
-                            human_hwnd,ai_hwnd)
-                    },
-                )
-            },
-        )
+        let human_window=window(human_child,false)
+            .ok_or_else(||invalid("Verified human MC01 window unavailable"))?;
+        if !human_window.responding || human_window.pid==target.pid ||
+           human_window.session_id!=target.session_id {
+            return Err(invalid("Human and AI game identities not independent"));
+        }
+        with_verified_native_window(&human_window,|human_hwnd| {
+            with_verified_native_window(&target,|ai_hwnd| {
+                if human_hwnd==ai_hwnd ||
+                   unsafe{GetForegroundWindow()}!=human_hwnd as _ {
+                    return Err(invalid("MC01 human foreground changed"));
+                }
+                write_target(ai_hwnd,human_hwnd)
+            })
+        })
     }
     fn snapshot(&mut self) -> SessionSnapshot {
         self.reap();
@@ -1293,6 +1309,10 @@ fn run() -> io::Result<()> {
                 #[cfg(feature="mc02-native-input")]
                 SessionRequest::LaunchMc02Experiment {slot} => {
                     sessions.launch_mc02_experiment(slot).map_err(|error|error.to_string())?
+                }
+                #[cfg(feature="mc02-native-input")]
+                SessionRequest::LaunchAiExperiment {slot,mode} => {
+                    sessions.launch_ai_experiment(slot,mode).map_err(|error|error.to_string())?
                 }
                 #[cfg(feature="mc02-native-input")]
                 SessionRequest::Mc02Input {slot,keys,dx,dy,ttl_ms,issued_at_ms} => {

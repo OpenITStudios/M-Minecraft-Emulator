@@ -270,7 +270,7 @@ fn create_unstarted_tracked(
 ) -> io::Result<PendingEducationBootstrap> {
     create_unstarted_tracked_select(
         path,image,storage,observe,presentation_library,cleanup,
-        #[cfg(feature="mc02-native-input")] false,
+        #[cfg(feature="mc02-native-input")] None,
         #[cfg(test)] proof,
     )
 }
@@ -285,7 +285,7 @@ fn create_unstarted_tracked_select(
     observe: bool,
     presentation_library: Option<&BootstrapLibrary>,
     cleanup: Option<UnstartedCleanup>,
-    #[cfg(feature="mc02-native-input")] experimental_input: bool,
+    #[cfg(feature="mc02-native-input")] experimental_input: Option<crate::engine::native_clients_session::AgentControlMode>,
     #[cfg(test)] proof: Option<&tests::FixtureReceipt>,
 ) -> io::Result<PendingEducationBootstrap> {
     if presentation_library.is_some() && storage.is_none() {

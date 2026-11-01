@@ -11,7 +11,7 @@ import {planPeerSession,planPlayerActions} from './control-plan.mjs';
 import {compilePlayerInputTimeline,compilePerClientInputFrames,GAME_BUTTON_BITS} from './input-timeline.mjs';
 import {assessInputRoute,requiredInputSlots} from './input-route.mjs';
 import {inputExecutionStatus} from './input-delivery.mjs';
-import {prepareMc02PulseBatch} from './mc02-action-sequence.mjs';
+import {prepareMc02PulseBatch,prepareMultiClientPulseBatches} from './mc02-action-sequence.mjs';
 import {summarizeGameEvidence,summarizeEvidenceReports,normalizeEvidenceSlots} from './evidence-summary.mjs';
 import {captureCuaWindow,validateCuaExecutable} from './visual-capture.mjs';
 import {createVisualObserver,OBSERVATION_LIMITS} from './visual-observer.mjs';
@@ -50,6 +50,8 @@ const PUBLIC_TOOL_ERRORS=new Set([
   'MC02_INPUT_REQUEST_STALE',
   'MC02_SEQUENCE_INVALID_ACTIONS','MC02_SEQUENCE_NATIVE_UNCONFIRMED',
   'MC02_SEQUENCE_DEADLINE','MC02_SEQUENCE_ABORTED','MC02_RELEASE_UNCONFIRMED',
+  'MULTI_CLIENT_EXPERIMENT_DISABLED','MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS',
+  'AI_SEQUENCE_ABORTED','AI_RELEASE_UNCONFIRMED','AI_INPUT_NATIVE_RESULT_UNVERIFIED',
 ]);
 function publicToolError(error) {
   const message=typeof error?.message==='string' ? error.message : '';
@@ -73,9 +75,10 @@ export function parseConfiguration(argv, env = process.env) {
   let cuaExecutable = env.LAZY_TESTER_CUA_EXE ?? '';
   let gpuExecutable = env.LAZY_TESTER_GPU_CAPTURE_EXE ?? '';
   let experimentalMc02InputEnabled=false;
+  let experimentalMultiClientInputEnabled=false;
   for (let i=0;i<argv.length;i++) {
     const flag=argv[i];
-    if (!['--mode','--exe','--evidence-dir','--cua-exe','--gpu-capture-exe','--mc02-input-experimental'].includes(flag) || i===argv.length-1) {
+    if (!['--mode','--exe','--evidence-dir','--cua-exe','--gpu-capture-exe','--mc02-input-experimental','--multi-client-input-experimental'].includes(flag) || i===argv.length-1) {
       throw new Error('Accepted arguments: --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>] [--cua-exe <cua-driver.exe>] [--gpu-capture-exe <lazy-tester-gpu-capture.exe>]');
     }
     const value=argv[++i];
@@ -88,12 +91,23 @@ export function parseConfiguration(argv, env = process.env) {
       if(value!=='on') throw new Error('MC02 experimental input requires explicit on');
       experimentalMc02InputEnabled=true;
     }
+    if (flag==='--multi-client-input-experimental') {
+      if(value!=='on')throw new Error('Multi-client input opt-in requires explicit on');
+      experimentalMultiClientInputEnabled=true;
+    }
+  }
+  if(experimentalMc02InputEnabled&&experimentalMultiClientInputEnabled) {
+    throw new Error('Select only one experimental native input mode');
   }
   if (!['human-plus-four-ai','five-ai'].includes(mode)) throw new Error('Unknown test mode');
   if(experimentalMc02InputEnabled &&
      (mode!=='human-plus-four-ai' ||
       env.LAZY_TESTER_MC02_VIRTUAL_INPUT!=='I_ACCEPT_EXPERIMENTAL_MC02_INPUT')) {
     throw new Error('MC02 experiment needs human-plus-four-ai mode and explicit native opt-in');
+  }
+  if(experimentalMultiClientInputEnabled &&
+     env.LAZY_TESTER_MULTI_CLIENT_VIRTUAL_INPUT!=='I_ACCEPT_EXPERIMENTAL_MULTI_CLIENT_INPUT') {
+    throw new Error('Multi-client input requires explicit native opt-in');
   }
   if (executable && (!path.isAbsolute(executable) || !/\.exe$/i.test(executable))) {
     throw new Error('Set --exe to the absolute path of the installed lazy-tester.exe');
@@ -104,7 +118,8 @@ export function parseConfiguration(argv, env = process.env) {
   if (cuaExecutable) validateCuaExecutable(cuaExecutable);
   if (gpuExecutable) validateGpuExecutable(gpuExecutable);
   return Object.freeze({mode, executable, evidenceDirectory,
-    cuaExecutable, gpuExecutable,experimentalMc02InputEnabled});
+    cuaExecutable,gpuExecutable,experimentalMc02InputEnabled,
+    experimentalMultiClientInputEnabled});
 }
 
 function slotOf(value) {
@@ -221,13 +236,19 @@ function mc02ButtonMask(buttons) {
   }
   return mask;
 }
-export async function sendExperimentalMc02Native(executable,{keys,dx,dy,ttlMs,requestedAtMs}) {
+export function sendExperimentalMc02Native(executable,frame) {
+  return sendExperimentalAiNative(executable,{...frame,slot:2},{legacy:true});
+}
+
+export async function sendExperimentalAiNative(executable,
+    {slot,keys,dx,dy,ttlMs,requestedAtMs},{legacy=false}={}) {
   const nowMs=Date.now();
   if(!Number.isSafeInteger(requestedAtMs)||
      requestedAtMs>nowMs||nowMs-requestedAtMs>500) {
     throw new Error('MC02_INPUT_REQUEST_STALE');
   }
   if(!executable || !path.isAbsolute(executable) ||
+     !Number.isInteger(slot)||slot<1||slot>5||(legacy&&slot!==2) ||
      !Number.isSafeInteger(keys)||keys<0||keys>255 ||
      (keys&3)===3||(keys&12)===12 ||
      !Number.isSafeInteger(dx)||dx< -127||dx>127 ||
@@ -238,7 +259,7 @@ export async function sendExperimentalMc02Native(executable,{keys,dx,dy,ttlMs,re
   let stdout;
   try {
     const response=await execFileAsync(executable,[
-      '--lazy-tester-agent-cli','mc02-input','2',
+      '--lazy-tester-agent-cli',legacy?'mc02-input':'ai-input',String(slot),
       String(keys),String(dx),String(dy),String(ttlMs),
       String(requestedAtMs),
     ],{shell:false,windowsHide:true,timeout:6000,maxBuffer:8192});
@@ -262,13 +283,14 @@ export async function sendExperimentalMc02Native(executable,{keys,dx,dy,ttlMs,re
   let receipt;
   try {receipt=JSON.parse(stdout.trim());} catch {}
   if(receipt?.schema!==1||receipt?.ok!==true||
-     receipt?.operation!=='mc02-input'||receipt?.slot!==2||
+     receipt?.operation!==(legacy?'mc02-input':'ai-input')||receipt?.slot!==slot||
      receipt?.delivery!=='PER_CLIENT_SHARED_STATE_WRITTEN_NOT_GAMEPLAY_PROOF'||
      receipt?.gameplayObserved!==false) {
     throw new Error('MC02_INPUT_NATIVE_RESULT_UNVERIFIED');
   }
-  return {schema:1,slot:2,
-    status:'NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+  return {schema:1,slot,
+    status:legacy?'NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED':
+      'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
     acknowledgedBy:'RETAINED_NATIVE_CONTROLLER',
     gameplayObserved:false,
     inputBackend:'EXPERIMENTAL_WIN32_POLLING_ONLY',
@@ -345,6 +367,91 @@ export async function sendExperimentalMc02BatchNative(executable,pulses,{signal}
     inputEffect:'NOT_VERIFIED_IN_MINECRAFT_EDUCATION',
     gameplayObserved:false,humanInputUninterrupted:'NOT_PROVEN',
     note:'One native CLI child reused retained controller IPC for every bounded MC02 pulse; no Minecraft gameplay was observed.'};
+}
+
+// One short-lived SAME-IMAGE CLI coordinates all requested AI slots.
+// No second Minecraft session owner or background agent daemon is created.
+export async function sendExperimentalMultiClientBatchNative(
+    executable,batches,{signal}={}) {
+  if(!executable||!path.isAbsolute(executable)||!Array.isArray(batches)||
+     batches.length<1||batches.length>5) {
+    throw new Error('MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS');
+  }
+  const slots=batches.map(b=>b.slot);
+  if(new Set(slots).size!==slots.length ||
+     slots.some(slot=>!Number.isInteger(slot)||slot<1||slot>5)) {
+    throw new Error('MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS');
+  }
+  const pulses=batches.flatMap(batch=>{
+    if(!Array.isArray(batch.pulses)||batch.pulses.length<1||
+       batch.pulses.length>64) {
+      throw new Error('MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS');
+    }
+    return batch.pulses.map(pulse=>{
+      const {atMs,keys,dx,dy,ttlMs}=pulse;
+      if(!Number.isSafeInteger(atMs)||atMs<0||atMs>3500||
+         !Number.isSafeInteger(keys)||keys<0||keys>255||
+         (keys&3)===3||(keys&12)===12||
+         !Number.isSafeInteger(dx)||dx< -127||dx>127||
+         !Number.isSafeInteger(dy)||dy< -127||dy>127||
+         ttlMs!==350) {
+        throw new Error('MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS');
+      }
+      return {slot:batch.slot,atMs,keys,dx,dy,ttlMs};
+    });
+  }).sort((a,b)=>a.atMs-b.atMs||a.slot-b.slot);
+  for(let i=1;i<pulses.length;i++) {
+    if(pulses[i].slot===pulses[i-1].slot &&
+       pulses[i].atMs===pulses[i-1].atMs) {
+      throw new Error('MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS');
+    }
+  }
+  const serialized=JSON.stringify(pulses);
+  if(Buffer.byteLength(serialized,'utf8')>24000) {
+    throw new Error('MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS');
+  }
+  let stdout;
+  try {
+    const response=await execFileAsync(executable,[
+      '--lazy-tester-agent-cli','ai-multi-input-batch',
+      String(Date.now()),serialized,
+    ],{shell:false,windowsHide:true,timeout:9000,maxBuffer:8192,signal});
+    stdout=response.stdout;
+  }catch(error){
+    if(signal?.aborted)throw new Error('AI_SEQUENCE_ABORTED');
+    if(error.killed||error.signal) {
+      throw new Error('Native request outcome UNCERTAIN; do not retry blindly');
+    }
+    if(typeof error.stdout==='string') {
+      try {
+        const output=JSON.parse(error.stdout.trim());
+        if(output?.ok===false&&/^[A-Z_]{1,40}$/.test(output.code??'')) {
+          throw new Error('Native request refused: '+output.code);
+        }
+      }catch(parsed){
+        if(parsed?.message?.startsWith('Native request refused:'))throw parsed;
+      }
+    }
+    throw new Error('Native controller unavailable or operation refused');
+  }
+  let receipt;
+  try{receipt=JSON.parse(stdout.trim());}catch{}
+  if(receipt?.schema!==1||receipt?.ok!==true||
+     receipt?.operation!=='ai-multi-input-batch'||
+     !Array.isArray(receipt?.slots)||
+     JSON.stringify(receipt.slots)!==JSON.stringify([...slots].sort((a,b)=>a-b))||
+     receipt?.pulses!==pulses.length||
+     receipt?.delivery!=='PER_CLIENT_SHARED_STATE_WRITTEN_NOT_GAMEPLAY_PROOF'||
+     receipt?.gameplayObserved!==false) {
+    throw new Error('AI_INPUT_NATIVE_RESULT_UNVERIFIED');
+  }
+  return {schema:1,slots:[...slots].sort((a,b)=>a-b),
+    pulsesAcknowledged:pulses.length,
+    status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
+    gameplayObserved:false,
+    humanInputUninterrupted:'NOT_PROVEN',
+    inputEffect:'NOT_VERIFIED_IN_MINECRAFT_EDUCATION',
+    note:'A single bounded native scheduler wrote separate per-slot input state; no actual game response has been verified.'};
 }
 
 export function parseCapturedLine(line) {
@@ -535,14 +642,40 @@ const EXPERIMENTAL_MC02_SEQUENCE_TOOLS=[
       required:['slot'],additionalProperties:false}},
 ];
 
-function capabilities(mode,experimental=false) {return {schema:1,mode,hostSlot:1,humanSlots:mode==='human-plus-four-ai'?[1]:[],
+// Registered ONLY after a separate developer opt-in. Native DLL/Cargo
+// features remain absent from the ordinary packaged application.
+const EXPERIMENTAL_MULTI_CLIENT_TOOLS=[
+  {name:'run_experimental_multi_client_actions',
+    description:'EXPERIMENTAL: dispatch a <=3.5s cross-slot action timeline to 1-5 opted-in AI game clients in one bounded native CLI. Transport acknowledgement only, NOT verified Minecraft gameplay.',
+    inputSchema:{type:'object',properties:{
+      actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{
+        slot:{type:'integer',minimum:1,maximum:5},
+        kind:{type:'string',enum:['move_forward','move_backward',
+          'strafe_left','strafe_right','jump','sneak','attack','use','look_relative']},
+        atMs:{type:'integer',minimum:0,maximum:3500},
+        durationMs:{type:'integer',minimum:50,maximum:2000},
+        deltaX:{type:'integer',minimum:-127,maximum:127},
+        deltaY:{type:'integer',minimum:-127,maximum:127},
+      },required:['slot','kind','atMs','durationMs'],additionalProperties:false}},
+    },required:['actions'],additionalProperties:false}},
+  {name:'stop_experimental_multi_client_actions',
+    description:'Cancel the whole active cross-slot experiment if a requested slot participates, or request exact-owner neutral writes for listed idle AI clients. Never sends global keyboard/mouse input.',
+    inputSchema:{type:'object',properties:{
+      slots:{type:'array',minItems:1,maxItems:5,uniqueItems:true,
+        items:{type:'integer',minimum:1,maximum:5}},
+    },required:['slots'],additionalProperties:false}},
+];
+
+function capabilities(mode,experimental=false,multi=false) {return {schema:1,mode,hostSlot:1,humanSlots:mode==='human-plus-four-ai'?[1]:[],
   aiSlots:mode==='human-plus-four-ai'?[2,3,4,5]:[1,2,3,4,5],
-  available:['start_visual_observation','read_visual_observation','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence',...(experimental?[EXPERIMENTAL_MC02_TOOL.name,...EXPERIMENTAL_MC02_SEQUENCE_TOOLS.map(t=>t.name)]:[])],
+  available:['start_visual_observation','read_visual_observation','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence',...(experimental?[EXPERIMENTAL_MC02_TOOL.name,...EXPERIMENTAL_MC02_SEQUENCE_TOOLS.map(t=>t.name)]:[]),
+    ...(multi?EXPERIMENTAL_MULTI_CLIENT_TOOLS.map(t=>t.name):[])],
   notAvailable:['parallel_independent_keyboard_mouse','automatic_world_host_join','send_minecraft_command'],
   visualCapture:'OPTIONAL_CUA_OR_PERSISTENT_WGC_SOURCE_NOT_RUNTIME_VERIFIED',
   independentInput:{state:'BLOCKED_NO_VERIFIED_PER_CLIENT_INPUT_BACKEND',
     simultaneousIntentChannels:true,actualInputEnabled:false,
     experimentalMc02Win32PollingOnly:experimental?'OPTED_IN_NOT_GAMEPLAY_VERIFIED':'DISABLED',
+    experimentalMultiClientNative:multi?'OPTED_IN_SOURCE_CANDIDATE_NOT_GAMEPLAY_VERIFIED':'DISABLED',
     requiresHumanFocusProtection:true,requiresPerClientEmergencyRelease:true,
     nativeSessionModel:'SAME_WINDOWS_SESSION_ONLY',
     windowsAgentWorkspace:'PREVIEW_NOT_INTEGRATED_NO_CROSS_SESSION_INPUT',
@@ -553,15 +686,19 @@ export function createHandler(config,{
   native=runNative,evidence=readGameEvidence,capture=captureCuaWindow,
   mc02Input=sendExperimentalMc02Native,
   mc02Batch=sendExperimentalMc02BatchNative,
+  aiInput=sendExperimentalAiNative,
+  aiMultiBatch=sendExperimentalMultiClientBatchNative,
   gpuSourceFactory=createGpuFrameSource,
 }={}) {
   let inFlight=false; // mutating or exclusive native operation
   let visualReadBusy=false; // only one identity-pinned screenshot at a time
-  let mc02SequenceAbort=null; // pending opted-in MCP request only
+  let mc02SequenceAbort=null; // pending opted-in legacy MC02 request only
+  let multiSequence=null; // one bounded cross-slot request, not a game owner
   const exclusiveBusy=()=>inFlight||visualReadBusy;
   let gpuStartup=null; // bounded request only; not game/session lifecycle
   const mc02Enabled=config.experimentalMc02InputEnabled===true &&
     config.mode==='human-plus-four-ai';
+  const multiEnabled=config.experimentalMultiClientInputEnabled===true;
   const gpuSource=config.gpuExecutable ?
     gpuSourceFactory({executable:config.gpuExecutable}):null;
   function protectedSlot(slot) {
@@ -577,7 +714,7 @@ export function createHandler(config,{
     // A verified read-only capture may accompany an already-running
     // experimental MC02 sequence. It must never clear that sequence's
     // native mutation ownership on completion.
-    const alongsideSequence=mc02SequenceAbort!==null;
+    const alongsideSequence=mc02SequenceAbort!==null||multiSequence!==null;
     if(visualReadBusy || (inFlight && !alongsideSequence)) {
       throw new Error('Native operation in progress; do not overlap requests');
     }
@@ -644,6 +781,23 @@ export function createHandler(config,{
     }
     for (const slot of slots) protectedSlot(slotOf(slot));
     return slots;
+  }
+  async function releaseAiSlots(slots) {
+    // Fail-closed independent cleanup, SERIALIZED on the retained
+    // controller. Do not flood its authenticated pipe with concurrent
+    // short-lived one-shot writers. Attempt all slots despite failures.
+    let allConfirmed=true;
+    for(const slot of slots) {
+      try {
+        const receipt=await aiInput(config.executable,{
+          slot,keys:0,dx:0,dy:0,ttlMs:1,requestedAtMs:Date.now(),
+        });
+        if(receipt?.schema!==1||receipt?.slot!==slot||
+           receipt?.status!=='NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED'||
+           receipt?.gameplayObserved!==false)allConfirmed=false;
+      } catch {allConfirmed=false;}
+    }
+    return allConfirmed;
   }
   async function callTool(name,args) {
     if (name==='start_visual_observation') {
@@ -794,6 +948,67 @@ export function createHandler(config,{
         compilePlayerInputTimeline(config.mode,args.actions) :
         planPlayerActions(config.mode,args.actions);
     }
+    if (name==='stop_experimental_multi_client_actions') {
+      if(!multiEnabled)throw new Error('MULTI_CLIENT_EXPERIMENT_DISABLED');
+      keysExactly(args,['slots']);
+      const slots=checkedSlots(args.slots);
+      if(multiSequence) {
+        if(!slots.some(slot=>multiSequence.slots.includes(slot))) {
+          throw new Error('MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS');
+        }
+        // One shared CLI schedule: partial cancellation is unsafe.
+        // The native process is cancelled and ALL its touched slots get
+        // independent neutral cleanup (also repeated by MCP finally).
+        multiSequence.abort.abort();
+        return {schema:1,slots:multiSequence.slots,
+          status:'CANCELLATION_REQUESTED_ALL_ACTIVE_AI_SLOTS',
+          neutralRelease:'PENDING_SEQUENCE_COMPLETION_OR_NATIVE_TTL',
+          gameplayObserved:false};
+      }
+      if(inFlight)throw new Error('Native operation in progress; do not overlap requests');
+      inFlight=true;
+      try {
+        if(!await releaseAiSlots(slots)) {
+          throw new Error('AI_RELEASE_UNCONFIRMED');
+        }
+        return {schema:1,slots,status:'NATIVE_NEUTRAL_WRITES_ACKNOWLEDGED',
+          actualGameKeyRelease:'NOT_VERIFIED',gameplayObserved:false};
+      } finally {inFlight=false;}
+    }
+    if (name==='run_experimental_multi_client_actions') {
+      if(!multiEnabled)throw new Error('MULTI_CLIENT_EXPERIMENT_DISABLED');
+      keysExactly(args,['actions']);
+      // Compile the FULL cross-slot plan before any input request.
+      const schedule=prepareMultiClientPulseBatches(config.mode,args.actions);
+      if(exclusiveBusy())throw new Error('Native operation in progress; do not overlap requests');
+      inFlight=true;
+      const abort=new AbortController();
+      const run={abort,slots:schedule.slots};
+      multiSequence=run;
+      let dispatched=false,neutralConfirmed=true;
+      try {
+        dispatched=true;
+        const receipt=await aiMultiBatch(config.executable,schedule.batches,
+          {signal:abort.signal});
+        if(receipt?.schema!==1||
+           JSON.stringify(receipt?.slots)!==JSON.stringify(schedule.slots)||
+           receipt?.status!=='EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED'||
+           receipt?.gameplayObserved!==false) {
+          throw new Error('AI_INPUT_NATIVE_RESULT_UNVERIFIED');
+        }
+        if(abort.signal.aborted)throw new Error('AI_SEQUENCE_ABORTED');
+        return receipt;
+      }finally{
+        // Release EVERY potentially sent slot, not only the final
+        // acknowledged one. A failed neutral IPC remains an error.
+        if(dispatched) {
+          neutralConfirmed=await releaseAiSlots(schedule.slots);
+        }
+        if(multiSequence===run)multiSequence=null;
+        inFlight=false;
+        if(!neutralConfirmed)throw new Error('AI_RELEASE_UNCONFIRMED');
+      }
+    }
     if (name==='stop_experimental_mc02_actions') {
       if(!mc02Enabled)throw new Error('MC02_EXPERIMENT_DISABLED');
       keysExactly(args,['slot']);
@@ -935,7 +1150,7 @@ export function createHandler(config,{
         return planPeerSession(config.mode,validateNativeReport(report,'inspect'));
       } finally {inFlight=false;}
     }
-    if (name==='agent_capabilities') {keysExactly(args,[]);return capabilities(config.mode,mc02Enabled);}
+    if (name==='agent_capabilities') {keysExactly(args,[]);return capabilities(config.mode,mc02Enabled,multiEnabled);}
     if (name==='read_game_evidence') {
       keysExactly(args,['slot']);
       const slot=slotOf(args.slot);
@@ -975,7 +1190,9 @@ export function createHandler(config,{
         // An already-running native controller never inherits the MCP
         // process environment. Carry authorization as an authenticated
         // launch request, or the MC02 input reader would not exist.
-        const operation=mc02Enabled&&slot===2?'launch-mc02-input':'launch';
+        const operation=multiEnabled?
+          (config.mode==='five-ai'?'launch-ai-five':'launch-ai-hybrid') :
+          (mc02Enabled&&slot===2?'launch-mc02-input':'launch');
         return validateNativeReport(
           await native(config.executable,operation,slot),operation);
       } finally {inFlight=false;}
@@ -996,7 +1213,8 @@ export function createHandler(config,{
       }
       if (message.method==='ping') return result({});
       if (message.method==='tools/list') return result({tools:mc02Enabled?
-        [...TOOL_LIST,EXPERIMENTAL_MC02_TOOL,...EXPERIMENTAL_MC02_SEQUENCE_TOOLS] : TOOL_LIST});
+        [...TOOL_LIST,EXPERIMENTAL_MC02_TOOL,...EXPERIMENTAL_MC02_SEQUENCE_TOOLS] :
+        (multiEnabled?[...TOOL_LIST,...EXPERIMENTAL_MULTI_CLIENT_TOOLS]:TOOL_LIST)});
       if (message.method==='tools/call') {
         const name=message.params?.name;
         if (typeof name!=='string') return err(-32602,'Tool name is required');
@@ -1025,6 +1243,7 @@ export function createHandler(config,{
   }
   return {handle,callTool,shutdown:()=>{
     mc02SequenceAbort?.abort();
+    multiSequence?.abort.abort();
     if (gpuStartup) gpuStartup.cancelled=true;
     visualObserver.shutdown();
     gpuSource?.shutdown();

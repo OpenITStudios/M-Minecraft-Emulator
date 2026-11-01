@@ -1,4 +1,4 @@
-// Optional MC02 in-process virtual keyboard/cursor polling implementation.
+// Optional per-process MC01-MC05 AI keyboard/cursor polling candidate.
 // It reuses the existing private bootstrap DLL and controller-owned inherited
 // read-only mapping. No OS/global keyboard or mouse events are synthesized.
 // This is NOT a working claim for Minecraft Raw Input/GameInput, and is
@@ -114,14 +114,18 @@ std::uint64_t currentPacket() {
     const DWORD now=GetTickCount();
     const DWORD until=static_cast<DWORD>(word>>32);
     const auto ahead=static_cast<LONG>(until-now);
-    if (!word || ahead<=0 || ahead>500 || !hostRaw ||
-        !originalForeground) return 0;
+    if (!word || ahead<=0 || ahead>500 || !originalForeground) return 0;
     // Human focus is not merely checked when the controller writes.
     // Use the real Win32 trampoline: a spoofed game-local focus read
     // must never authorize background MC02 against physical MC01 input.
-    const auto host=reinterpret_cast<HWND>(
-        static_cast<ULONG_PTR>(hostRaw));
-    if (originalForeground()!=host) return 0;
+    // A nonzero host HWND denotes hybrid and demands the real MC01
+    // foreground. Zero is reserved for an explicitly opted-in five-AI
+    // channel; no global foreground or physical input is synthesized.
+    if (hostRaw) {
+        const auto host=reinterpret_cast<HWND>(
+            static_cast<ULONG_PTR>(hostRaw));
+        if (originalForeground()!=host) return 0;
+    }
     // Recheck AFTER the focus query. If the retained controller
     // changed packet/window while we looked up physical foreground,
     // discard the whole observation; retry only on a later game poll.
@@ -189,7 +193,7 @@ HWND WINAPI observedFocus() {
     SetLastError(previous);
     return ownThread ? owned : real;
 }
-// MC02 must never poll MC01's physical key/cursor state while MC01 is
+// An AI client must never poll another human's physical input while MC01 is
 // foreground. Before the first AI command, allow local interaction with
 // MC02 only when MC02 itself is the foreground window (login/menu).
 // After the first command, virtual input remains latched until process
@@ -677,8 +681,9 @@ UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
 } // namespace
 namespace mc02_input {
 bool attach(const education_bootstrap::Config& config) noexcept {
-    // This optional experiment must NEVER reject or hook MC01/MC03–MC05.
-    if (config.slot!=2) return true;
+    // Every opted-in game gets its OWN inherited read-only channel.
+    // No mapping in the child => its native hooks remain entirely inert.
+    if (!education_bootstrap::validSlot(config.slot)) return false;
     wchar_t raw[2]{};
     // No inherited section => optional feature stays inert even in a
     // development binary. Environment is supplied only by the owner.
@@ -690,7 +695,7 @@ bool attach(const education_bootstrap::Config& config) noexcept {
     if (!mapped) return false;
     const auto* state=static_cast<const SharedInput*>(mapped);
     if (state->magic!=Magic||state->version!=Version||state->bytes!=sizeof(SharedInput)||
-        state->slot!=2||state->pid!=GetCurrentProcessId()||
+        state->slot!=config.slot||state->pid!=GetCurrentProcessId()||
         state->session!=config.session||
         state->birth!=(static_cast<std::uint64_t>(config.created.dwHighDateTime)<<32 |
                         config.created.dwLowDateTime)) {
