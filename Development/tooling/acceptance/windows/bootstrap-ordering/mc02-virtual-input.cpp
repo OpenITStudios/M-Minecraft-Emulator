@@ -580,13 +580,20 @@ bool discardPhysicalRawInput(UINT headerBytes,DWORD& failure) {
     return false;
 }
 UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
-    if (!view||!size||headerBytes!=sizeof(RAWINPUTHEADER))
-        return originalRawBuffer(data,size,headerBytes);
+    if (!view) return originalRawBuffer(data,size,headerBytes);
     const DWORD previous=GetLastError();
     const auto word=currentPacket();
     if (!virtualMode(word)) {
         SetLastError(previous);
         return originalRawBuffer(data,size,headerBytes);
+    }
+    // Once this opted-in AI child is isolated, malformed buffer arguments
+    // must never bypass the virtual reader and expose the physical queue
+    // through the genuine GetRawInputBuffer. Refuse without touching caller
+    // memory or advancing the virtual release/button cursors.
+    if (!size || headerBytes!=sizeof(RAWINPUTHEADER)) {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return UINT(-1);
     }
     // An explicit ReleaseAll (or expiry/MC01 focus loss) clears the
     // effective input word, but retains the exact MC02 HWND. Permit

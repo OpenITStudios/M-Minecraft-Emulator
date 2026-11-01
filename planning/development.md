@@ -1,5 +1,38 @@
 # Current Development Handoff — Lazy Tester
 
+## 1 November 2026 — malformed Raw Input requests stay isolated in native AI mode
+
+**State: SOURCE-ONLY RAW INPUT BOUNDARY CORRECTION / MINECRAFT INPUT BLOCKED.**
+The existing opt-in C++ `GetRawInputBuffer` detour returned directly to
+the original Win32 reader when `pcbSize` was null or the supplied
+`RAWINPUTHEADER` size was unexpected. This occurred before checking
+whether this game process had entered its isolated AI input mode.
+The caller's original Raw Input buffer must not be passed to the
+physical reader while this independent game client is isolated.
+
+The same existing detour now passes through to genuine Win32 only if
+there is no opted-in input mapping or if the child has not entered
+virtual mode and owns the real foreground. In isolated mode, an
+invalid `pcbSize` or header-size argument returns `UINT(-1)` with
+`ERROR_INVALID_PARAMETER`, without calling the original reader,
+modifying caller memory or advancing any virtual held-key/release
+cursor. Correctly shaped requests retain the established private
+physical-queue drain, same-thread owner validation, ABI-v4 revision
+checks and bounded synthetic record delivery. No new hook, controller,
+MCP tool, mode, input mapping or DLL build/package activation.
+
+**Proof:** REMOTE_GITHUB exact old/new source branch and C++ call-site
+review; no C++/Rust/Node execution, MSVC build, CI, Windows runtime or
+Minecraft gameplay testing. This closes a source-level fallback path
+but is NOT evidence that Education polls this input API, processes
+AI movement, receives neutral key-up, or preserves MC01 human control.
+
+**One next action:** After separate operator approval for the original
+Windows target, compile the exact pinned native opt-in candidate and
+collect MC01-human / MC02-background real game input and release
+evidence before widening gameplay claims.
+
+
 ## 1 November 2026 — per-transaction fencing for game exit/relaunch
 
 **State: SOURCE-ONLY NATIVE FENCING / MINECRAFT INPUT BLOCKED.**
