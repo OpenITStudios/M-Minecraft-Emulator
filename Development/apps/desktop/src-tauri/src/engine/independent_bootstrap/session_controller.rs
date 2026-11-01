@@ -11,7 +11,8 @@ use std::{io::Write, time::{Duration, Instant}};
 use virtual_clients_core::InspectionBudget;
 #[cfg(feature="mc02-native-input")]
 use crate::engine::native_clients_session::{
-    AgentControlMode,AiInputFrame,validate_ai_input_group,
+    AgentControlMode,AiInputFrame,AiLeaseBook,
+    validate_ai_input_group,validate_ai_lease_slots,
 };
 
 struct Sessions {
@@ -22,6 +23,8 @@ struct Sessions {
     path: String,
     image: File,
     exiting: bool,
+    #[cfg(feature="mc02-native-input")]
+    ai_leases:AiLeaseBook, // ONE native actor: no additional game owner.
 }
 impl Sessions {
     fn prepare() -> io::Result<Self> {
@@ -45,6 +48,8 @@ impl Sessions {
             path,
             image,
             exiting: false,
+            #[cfg(feature="mc02-native-input")]
+            ai_leases:AiLeaseBook::default(),
         })
     }
 
@@ -82,6 +87,8 @@ impl Sessions {
             let [mut child] = started.children;
             self.stores[index] = child.storage.take();
             self.windows[index] = None;
+            #[cfg(feature="mc02-native-input")]
+            self.ai_leases.forget_slot(index as u32+1);
         }
     }
 
@@ -265,13 +272,86 @@ impl Sessions {
             })
         })
     }
+
+    // The native ACTOR, not MCP or the ephemeral CLI, owns all slot
+    // arbitration. No release bypass when a different live lease exists.
     #[cfg(feature="mc02-native-input")]
-    fn ai_input_group(&self,frames:&[AiInputFrame],
-                      issued_at_ms:u64,deadline_at_ms:u64)->io::Result<()> {
+    fn ai_lease_target(&self,slot:u32)->io::Result<(u32,u32,u64)> {
+        let index=slot.checked_sub(1).filter(|s|*s<5)
+            .ok_or_else(||invalid("Invalid AI lease slot"))? as usize;
+        let started=self.running[index].as_ref()
+            .ok_or_else(||invalid("Original AI child is not running"))?;
+        let child=&started.children[0];
+        let (pid,birth)=child.identity()?;
+        if child.mc02_input.is_none() {
+            return Err(invalid("No opted-in native AI input channel"));
+        }
+        Ok((slot,pid,birth))
+    }
+    #[cfg(feature="mc02-native-input")]
+    fn ai_lease_targets(&self,slots:&[u32])->io::Result<Vec<(u32,u32,u64)>> {
+        slots.iter().map(|slot|self.ai_lease_target(*slot)).collect()
+    }
+    #[cfg(feature="mc02-native-input")]
+    fn ai_lease_acquire(&mut self,slots:&[u32],owner:&str)->io::Result<()> {
+        use windows_sys::Win32::System::SystemInformation::GetTickCount64;
+        validate_ai_lease_slots(slots,owner)?;
+        let targets=self.ai_lease_targets(slots)?;
+        self.ai_leases.acquire(&targets,owner,unsafe{GetTickCount64()})
+    }
+    #[cfg(feature="mc02-native-input")]
+    fn ai_lease_release(&mut self,slots:&[u32],owner:&str)->io::Result<()> {
+        use windows_sys::Win32::System::SystemInformation::GetTickCount64;
+        validate_ai_lease_slots(slots,owner)?;
+        let targets=self.ai_lease_targets(slots)?;
+        self.ai_leases.release(&targets,owner,unsafe{GetTickCount64()})
+    }
+    #[cfg(feature="mc02-native-input")]
+    fn ai_leased_input(&mut self,slot:u32,keys:u32,dx:i32,dy:i32,
+        ttl_ms:u32,issued_at_ms:u64,owner:&str)->io::Result<()> {
+        use windows_sys::Win32::System::SystemInformation::GetTickCount64;
+        let (_,pid,birth)=self.ai_lease_target(slot)?;
+        self.ai_leases.require(slot,owner,pid,birth,unsafe{GetTickCount64()})?;
+        self.mc02_input(slot,keys,dx,dy,ttl_ms,issued_at_ms)?;
+        self.ai_leases.wrote(slot,owner,pid,birth,
+            unsafe{GetTickCount64()},keys==0&&dx==0&&dy==0)
+    }
+    #[cfg(feature="mc02-native-input")]
+    fn legacy_mc02_input(&mut self,slot:u32,keys:u32,dx:i32,dy:i32,
+        ttl_ms:u32,issued_at_ms:u64)->io::Result<()> {
+        use windows_sys::Win32::System::SystemInformation::GetTickCount64;
+        // Historical unleased Mc02Input is ONLY the hybrid MC02 pilot.
+        // All 4/5-AI controls, including per-slot cleanup, now use
+        // AiLeasedInput. Never let the compatibility wire bypass a lease
+        // on MC01 or MC03-MC05, or touch a full-five AI mode channel.
+        if slot!=2 || !self.running[1].as_ref()
+            .and_then(|game|game.children[0].mc02_input.as_ref())
+            .is_some_and(|input|input.mode()==AgentControlMode::HumanPlusFourAi) {
+            return Err(invalid("Legacy MC02 input is not bound to a hybrid child"));
+        }
+        let now=unsafe{GetTickCount64()};
+        self.ai_leases.legacy_allowed(slot,now)?;
+        self.mc02_input(slot,keys,dx,dy,ttl_ms,issued_at_ms)?;
+        self.ai_leases.legacy_wrote(slot,unsafe{GetTickCount64()},
+            keys==0&&dx==0&&dy==0);
+        Ok(())
+    }
+    #[cfg(feature="mc02-native-input")]
+    fn ai_input_group(&mut self,frames:&[AiInputFrame],
+                      issued_at_ms:u64,deadline_at_ms:u64,owner:&str)
+                      ->io::Result<()> {
         use windows_sys::Win32::System::SystemInformation::GetTickCount64;
         // Never trust a CLI that previously validated the group. An
         // authenticated client cannot bypass the same bounded constraints.
         validate_ai_input_group(frames,issued_at_ms,deadline_at_ms)?;
+        // ALL source-owned channels must belong to the SAME current
+        // writer before the FIRST member of the time group is written.
+        // No partial input if another MCP process holds one of the slots.
+        let targets=self.ai_lease_targets(&frames.iter()
+            .map(|f|f.slot).collect::<Vec<_>>())?;
+        for &(slot,pid,birth) in &targets {
+            self.ai_leases.require(slot,owner,pid,birth,unsafe{GetTickCount64()})?;
+        }
         let mut attempted=Vec::with_capacity(frames.len());
         let mut failure=None;
         for frame in frames {
@@ -282,8 +362,8 @@ impl Sessions {
             // Record BEFORE writing: a failed/uncertain operation might
             // have published state into this exact original game channel.
             attempted.push(frame.slot);
-            if let Err(error)=self.mc02_input(frame.slot,frame.keys,
-                frame.dx,frame.dy,frame.ttl_ms,issued_at_ms) {
+            if let Err(error)=self.ai_leased_input(frame.slot,frame.keys,
+                frame.dx,frame.dy,frame.ttl_ms,issued_at_ms,owner) {
                 failure=Some(error);
                 break;
             }
@@ -295,7 +375,8 @@ impl Sessions {
             // Release has no human-focus requirement and never terminates
             // any game; each native channel retains its own TTL fallback.
             for slot in attempted {
-                let _=self.mc02_input(slot,0,0,0,1,unsafe{GetTickCount64()});
+                let _=self.ai_leased_input(
+                    slot,0,0,0,1,unsafe{GetTickCount64()},owner);
             }
             return Err(error);
         }
@@ -1190,7 +1271,10 @@ fn response_reaps_all(request: &SessionRequest) -> bool {
     }
     #[cfg(feature="mc02-native-input")]
     if matches!(request, SessionRequest::Mc02Input { .. } |
-        SessionRequest::AiInputGroup { .. }) {
+        SessionRequest::AiLeasedInput { .. } |
+        SessionRequest::AiInputGroup { .. } |
+        SessionRequest::AiLeaseAcquire { .. } |
+        SessionRequest::AiLeaseRelease { .. }) {
         // A multi-client group and single-slot pulse share the original
         // short-lived input receipt rule. Never wait for unrelated journals.
         return false;
@@ -1305,7 +1389,10 @@ fn run() -> io::Result<()> {
             #[cfg(feature="mc02-native-input")]
             let relabel_on_reply = !matches!(&envelope.request,
                 SessionRequest::Mc02Input {..} |
-                SessionRequest::AiInputGroup {..});
+                SessionRequest::AiLeasedInput {..} |
+                SessionRequest::AiInputGroup {..} |
+                SessionRequest::AiLeaseAcquire {..} |
+                SessionRequest::AiLeaseRelease {..});
             #[cfg(not(feature="mc02-native-input"))]
             let relabel_on_reply = true;
             match envelope.request {
@@ -1358,15 +1445,29 @@ fn run() -> io::Result<()> {
                 }
                 #[cfg(feature="mc02-native-input")]
                 SessionRequest::Mc02Input {slot,keys,dx,dy,ttl_ms,issued_at_ms} => {
-                    sessions.mc02_input(slot,keys,dx,dy,ttl_ms,issued_at_ms)
+                    sessions.legacy_mc02_input(slot,keys,dx,dy,ttl_ms,issued_at_ms)
                         .map_err(|error|error.to_string())?
                 }
                 #[cfg(feature="mc02-native-input")]
+                SessionRequest::AiLeasedInput {slot,keys,dx,dy,ttl_ms,
+                    issued_at_ms,owner_id} => {
+                    sessions.ai_leased_input(slot,keys,dx,dy,ttl_ms,
+                        issued_at_ms,&owner_id).map_err(|error|error.to_string())?
+                }
+                #[cfg(feature="mc02-native-input")]
+                SessionRequest::AiLeaseAcquire {slots,owner_id} =>
+                    sessions.ai_lease_acquire(&slots,&owner_id)
+                        .map_err(|error|error.to_string())?,
+                #[cfg(feature="mc02-native-input")]
+                SessionRequest::AiLeaseRelease {slots,owner_id} =>
+                    sessions.ai_lease_release(&slots,&owner_id)
+                        .map_err(|error|error.to_string())?,
+                #[cfg(feature="mc02-native-input")]
                 SessionRequest::AiInputGroup {
-                    frames,issued_at_ms,deadline_at_ms,
+                    frames,issued_at_ms,deadline_at_ms,owner_id,
                 } => {
-                    sessions.ai_input_group(&frames,issued_at_ms,deadline_at_ms)
-                        .map_err(|error|error.to_string())?
+                    sessions.ai_input_group(&frames,issued_at_ms,deadline_at_ms,
+                        &owner_id).map_err(|error|error.to_string())?
                 }
                 SessionRequest::CloseAll => sessions.close_all().map_err(|error|error.to_string())?,
                 SessionRequest::CloseOne {slot} => sessions.close_one(slot).map_err(|error|error.to_string())?,
@@ -1470,6 +1571,7 @@ mod tests {
             };
             let request=SessionRequest::AiInputGroup {
                 frames:vec![frame],issued_at_ms:1000,deadline_at_ms:1100,
+                owner_id:"a".repeat(32),
             };
             assert!(!response_reaps_all(&request));
         }

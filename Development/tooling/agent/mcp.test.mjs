@@ -3,10 +3,17 @@ import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,symlink,rm,open,rename,appendFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions} from './mcp.mjs';
+import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions,
+  sendExperimentalAiWriterLeaseNative} from './mcp.mjs';
 
 const snapshot=(operation)=>({schema:1,ok:true,operation,profiles:Array.from({length:5},(_,i)=>({slot:i+1,state:i===0?'RUNNING':'STOPPED',responding:i===0,hasWindow:i===0,needsAttention:false}))});
 const config=(mode='human-plus-four-ai')=>({mode,executable:'C:\\App\\lazy-tester.exe',evidenceDirectory:''});
+const leaseAck=async(_exe,operation,slots,{writerId}={})=>{
+  assert.match(writerId,/^[a-f0-9]{32}$/);
+  return {schema:1,slots,status:operation==='acquire'?
+    'AI_NATIVE_WRITER_LEASE_ACQUIRED':'AI_NATIVE_WRITER_LEASE_RELEASED',
+    gameplayObserved:false};
+};
 
 test('modes, absolute paths, no implicit native permissions',()=>{
   assert.equal(parseConfiguration(['--mode','five-ai']).mode,'five-ai');
@@ -927,7 +934,7 @@ test('four/five opted-in AI action streams preserve per-slot neutral cleanup',as
   };
   const make=(slot)=>({slot,kind:'move_forward',atMs:0,durationMs:320});
   const hybrid=createHandler({...config(),experimentalMultiClientInputEnabled:true},
-    {native,aiInput,aiMultiBatch});
+    {native,aiInput,aiMultiBatch,aiLease:leaseAck});
   const list=await hybrid.handle({jsonrpc:'2.0',id:21,method:'tools/list'});
   assert.ok(list.result.tools.some(t=>t.name==='run_experimental_multi_client_actions'));
   await assert.rejects(()=>hybrid.callTool('run_experimental_multi_client_actions',
@@ -948,7 +955,7 @@ test('four/five opted-in AI action streams preserve per-slot neutral cleanup',as
   assert.deepEqual(launches.at(-1),['launch-ai-hybrid',5]);
 
   const full=createHandler({...config('five-ai'),experimentalMultiClientInputEnabled:true},
-    {native,aiInput,aiMultiBatch});
+    {native,aiInput,aiMultiBatch,aiLease:leaseAck});
   await full.callTool('stop_experimental_multi_client_actions',{
     slots:[1,2,3,4,5],
   });
@@ -1026,6 +1033,7 @@ test('observed cross-slot action uses exact recent visual basis and one existing
   const batches=[],released=[];
   const h=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
     visualObserverFactory:fixture.factory,
+    aiLease:leaseAck,
     aiMultiBatch:async(_exe,entries)=>{batches.push(entries);return{
       schema:1,slots:entries.map(e=>e.slot),
       status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
@@ -1073,6 +1081,7 @@ test('no opt-in, missing capture, stale image or replaced client cannot enter ob
   const fixture=teamVisualFixture();
   let nativeBatches=0;
   const overrides={visualObserverFactory:fixture.factory,
+    aiLease:leaseAck,
     aiMultiBatch:async()=>{nativeBatches++;throw Error('UNEXPECTED_NATIVE_MUTATION');}};
   const disabled=createHandler(config(),overrides);
   await assert.rejects(()=>disabled.callTool('run_experimental_observed_actions',
@@ -1100,6 +1109,7 @@ test('five-AI visual decision supports MC01 only when explicitly selected as an 
   const fixture=teamVisualFixture('five-ai');
   const h=createHandler({...config('five-ai'),experimentalMultiClientInputEnabled:true},{
     visualObserverFactory:fixture.factory,
+    aiLease:leaseAck,
     aiMultiBatch:async(_exe,entries)=>({
       schema:1,slots:entries.map(e=>e.slot),
       status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
@@ -1124,6 +1134,7 @@ test('MCP evaluates four AI action categories only from cached same-process visu
   let nativeCalls=0;
   const handler=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
     visualObserverFactory:fixture.factory,
+    aiLease:leaseAck,
     native:async()=>{nativeCalls++;throw Error('Unexpected native request');},
     aiMultiBatch:async()=>{nativeCalls++;throw Error('Unexpected action dispatch');},
   });
@@ -1216,6 +1227,7 @@ test('five AI outcome feedback covers MC01 but never treats reported view moveme
   const handler=createHandler({...config('five-ai'),
     experimentalMultiClientInputEnabled:true},{
     visualObserverFactory:fixture.factory,
+    aiLease:leaseAck,
   });
   const first=await handler.callTool('get_multi_client_visual_state',{});
   const receipt={
@@ -1256,6 +1268,7 @@ test('missing capture-source timestamp prevents experimental observed action dis
   let dispatches=0;
   const handler=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
     visualObserverFactory:fixture.factory,
+    aiLease:leaseAck,
     aiMultiBatch:async()=>{dispatches++;throw Error('Unexpected native input');},
   });
   const team=await handler.callTool('get_multi_client_visual_state',{});
@@ -1272,6 +1285,7 @@ test('MCP per-client feedback rejects a source timestamp older than action recei
   const fixture=teamVisualFixture();
   const handler=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
     visualObserverFactory:fixture.factory,
+    aiLease:leaseAck,
     native:async()=>{throw Error('Unexpected native IPC');},
     aiMultiBatch:async()=>{throw Error('Unexpected native action');},
   });
@@ -1321,6 +1335,7 @@ test('uncertain native batch blocks only touched AI slots until explicit neutral
     const handler=createHandler({...config(mode),
       experimentalMultiClientInputEnabled:true},{
       visualObserverFactory:fixture.factory,
+    aiLease:leaseAck,
       aiMultiBatch:async(_exe,batches)=>{
         sends.push(batches.map(b=>b.slot));
         if(first){first=false;throw new Error('IPC_RESPONSE_UNCERTAIN');}
@@ -1398,6 +1413,7 @@ test('revoked visual slot aborts the entire observed native sequence and latches
   const released=[];
   const handler=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
     visualObserverFactory:fixture.factory,
+    aiLease:leaseAck,
     aiMultiBatch:async(_exe,_batches,{signal})=>{
       announce();
       return new Promise((_resolve,reject)=>{
@@ -1448,6 +1464,7 @@ test('first nonbusy observed capture error requests whole-cohort abort, never pa
   const handler=createHandler({...config('five-ai'),
     experimentalMultiClientInputEnabled:true},{
     visualObserverFactory:fixture.factory,
+    aiLease:leaseAck,
     aiMultiBatch:async(_exe,_batches,{signal})=>{
       notifyStart();
       return new Promise((_resolve,reject)=>{
@@ -1493,6 +1510,7 @@ test('new 4/5 AI MCP connection does not trust any old channel without explicit 
     const handler=createHandler({...config(mode),
       experimentalMultiClientInputEnabled:true},{
       visualObserverFactory:fixture.factory,
+    aiLease:leaseAck,
       aiMultiBatch:async(_exe,batches)=>{
         dispatched.push(batches.map(batch=>batch.slot));
         return {schema:1,slots:batches.map(batch=>batch.slot),
@@ -1572,6 +1590,7 @@ test('fresh authenticated opted-in AI launch clears only that original slot reco
     const handler=createHandler({...config(mode),
       experimentalMultiClientInputEnabled:true},{
       visualObserverFactory:fixture.factory,
+    aiLease:leaseAck,
       native,
     });
     const selected=slots[0];
@@ -1606,6 +1625,7 @@ test('restarted MCP conservatively forgets earlier release and requires a new ex
   const calls=[];
   const deps={
     visualObserverFactory:fixture.factory,
+    aiLease:leaseAck,
     aiInput:async(_exe,frame)=>{
       calls.push(frame.slot);
       return {schema:1,slot:frame.slot,
@@ -1645,6 +1665,7 @@ test('partial startup neutral failure never unlocks a previously running 4/5-cli
     const handler=createHandler({...config(mode),
       experimentalMultiClientInputEnabled:true},{
       visualObserverFactory:fixture.factory,
+    aiLease:leaseAck,
       aiInput:async(_exe,frame)=>{
         attempts.push(frame.slot);
         if(frame.slot===failing)throw Error('NATIVE_NEUTRAL_UNCONFIRMED');
@@ -1678,4 +1699,173 @@ test('partial startup neutral failure never unlocks a previously running 4/5-cli
     assert.equal(ready.coordination.gameplayVerification,'NOT_VERIFIED');
     handler.shutdown();
   }
+});
+
+
+test('native writer lease adapter refuses malformed owner and slot groups before any CLI execution',async()=>{
+  const executable=path.resolve('lazy-tester.exe');
+  await assert.rejects(()=>sendExperimentalAiWriterLeaseNative(
+    executable,'acquire',[2],{writerId:'NOT-A-WRITER'}),
+    /AI_WRITER_LEASE_REQUIRED/);
+  for(const slots of [[],[2,2],[3,2],[0],[6],[1,2,3,4,5,6]]){
+    await assert.rejects(()=>sendExperimentalAiWriterLeaseNative(
+      executable,'acquire',slots,{writerId:'a'.repeat(32)}),
+      /AI_WRITER_LEASE_INVALID/);
+  }
+  await assert.rejects(()=>sendExperimentalAiWriterLeaseNative(
+    executable,'force',[2],{writerId:'a'.repeat(32)}),
+    /AI_WRITER_LEASE_INVALID/);
+});
+
+test('two independent opted-in MCPs cannot both own one native AI slot',async()=>{
+  const slots=[2,3,4,5];
+  const leaseOwners=new Map(),claimedIds=new Set();
+  const aiLease=async(_exe,operation,requested,{writerId})=>{
+    assert.match(writerId,/^[a-f0-9]{32}$/);
+    claimedIds.add(writerId);
+    for(const slot of requested){
+      if(operation==='acquire' &&
+         leaseOwners.has(slot)&&leaseOwners.get(slot)!==writerId){
+        throw new Error('Native request refused: NATIVE_WRITER_BUSY');
+      }
+      if(operation==='release' && leaseOwners.get(slot)!==writerId){
+        throw new Error('Native request refused: NATIVE_WRITER_BUSY');
+      }
+    }
+    for(const slot of requested){
+      if(operation==='acquire')leaseOwners.set(slot,writerId);
+      else leaseOwners.delete(slot);
+    }
+    return {schema:1,slots:requested,status:operation==='acquire'?
+      'AI_NATIVE_WRITER_LEASE_ACQUIRED':'AI_NATIVE_WRITER_LEASE_RELEASED',
+      gameplayObserved:false};
+  };
+  const events=[];
+  let started,completeA;
+  const inBatch=new Promise(resolve=>{started=resolve;});
+  const pendingA=new Promise(resolve=>{completeA=resolve;});
+  const aiInput=async(_exe,packet)=>{
+    events.push(['neutral',packet.slot]);
+    return {schema:1,slot:packet.slot,
+      status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+      gameplayObserved:false};
+  };
+  const nativeBatch=(_exe,batches,waiting=false)=>({
+    schema:1,slots:batches.map(b=>b.slot),
+    status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
+    gameplayObserved:false,
+  });
+  const opt={...config(),experimentalMultiClientInputEnabled:true};
+  const first=createHandler(opt,{aiLease,aiInput,
+    aiMultiBatch:async(_exe,batches)=>{
+      started();
+      await pendingA;
+      return nativeBatch(_exe,batches);
+    },
+  });
+  const second=createHandler(opt,{aiLease,aiInput,
+    aiMultiBatch:async(exe,batches)=>nativeBatch(exe,batches),
+  });
+  await first.callTool('stop_experimental_multi_client_actions',{slots});
+  await second.callTool('stop_experimental_multi_client_actions',{slots});
+  const actions=slots.slice(0,2).map(aiMove);
+  const executing=first.callTool('run_experimental_multi_client_actions',{actions});
+  await inBatch;
+  assert.equal(leaseOwners.size,2);
+  await assert.rejects(()=>second.callTool('run_experimental_multi_client_actions',
+    {actions}),/NATIVE_WRITER_BUSY/);
+  await assert.rejects(()=>second.callTool('stop_experimental_multi_client_actions',
+    {slots:slots.slice(0,2)}),/NATIVE_WRITER_BUSY/);
+  assert.equal(leaseOwners.size,2); // no foreign neutral or claim
+  completeA();
+  const succeeded=await executing;
+  assert.deepEqual(succeeded.slots,[2,3]);
+  assert.equal(leaseOwners.size,0); // returned after native neutral ACK
+  await second.callTool('stop_experimental_multi_client_actions',{
+    slots:slots.slice(0,2),
+  });
+  const after=await second.callTool('run_experimental_multi_client_actions',{actions});
+  assert.deepEqual(after.slots,[2,3]);
+  assert.equal(leaseOwners.size,0);
+  assert.equal(claimedIds.size,2);
+  first.shutdown();second.shutdown();
+});
+
+test('unconfirmed writer lease release keeps AI input held until explicit recovery',async()=>{
+  const slots=[2,3,4,5],fixture=teamVisualFixture();
+  let failRelease=true,dispatched=0;
+  const calls=[];
+  const handler=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
+    visualObserverFactory:fixture.factory,
+    aiLease:async(_exe,operation,target,{writerId})=>{
+      assert.match(writerId,/^[a-f0-9]{32}$/);
+      calls.push([operation,...target]);
+      if(operation==='release'&&failRelease){
+        throw new Error('Native request outcome UNCERTAIN; do not retry blindly');
+      }
+      return {schema:1,slots:target,status:operation==='acquire'?
+        'AI_NATIVE_WRITER_LEASE_ACQUIRED':'AI_NATIVE_WRITER_LEASE_RELEASED',
+        gameplayObserved:false};
+    },
+    aiMultiBatch:async(_exe,batches)=>{
+      dispatched++;
+      return {schema:1,slots:batches.map(x=>x.slot),
+        status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
+        gameplayObserved:false};
+    },
+    aiInput:async(_exe,f)=>({schema:1,slot:f.slot,
+      status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+      gameplayObserved:false}),
+  });
+  // Initial startup reconciliation also needs a verified lease return.
+  failRelease=false;
+  await handler.callTool('stop_experimental_multi_client_actions',{slots});
+  failRelease=true;
+  await assert.rejects(()=>handler.callTool('run_experimental_multi_client_actions',{
+    actions:slots.map(aiMove),
+  }),/AI_WRITER_LEASE_RELEASE_UNCONFIRMED/);
+  assert.equal(dispatched,1);
+  const held=await handler.callTool('get_multi_client_visual_state',{});
+  assert.deepEqual(held.coordination.blockedSlots,slots);
+  await assert.rejects(()=>handler.callTool('run_experimental_multi_client_actions',{
+    actions:[aiMove(2)],
+  }),/AI_INPUT_RECOVERY_REQUIRED/);
+  failRelease=false;
+  const neutral=await handler.callTool('stop_experimental_multi_client_actions',{slots});
+  assert.equal(neutral.writerLease,'NATIVE_RELEASED_AFTER_NEUTRAL_ACK');
+  assert.deepEqual((await handler.callTool('get_multi_client_visual_state',{}))
+    .coordination.blockedSlots,[]);
+  assert.equal(dispatched,1); // no replay of original pulse batch
+  assert.equal(calls.some(c=>c[0]==='acquire'&&c.length===5),true);
+  handler.shutdown();
+});
+
+
+test('operator stop accepts unsorted slots but native lease receives one canonical ascending cohort',async()=>{
+  const calls=[];
+  const handler=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
+    aiLease:async(_exe,operation,slots,{writerId})=>{
+      assert.match(writerId,/^[a-f0-9]{32}$/);
+      calls.push([operation,...slots]);
+      assert.deepEqual(slots,[2,3,5]);
+      return {schema:1,slots,status:operation==='acquire'?
+        'AI_NATIVE_WRITER_LEASE_ACQUIRED':'AI_NATIVE_WRITER_LEASE_RELEASED',
+        gameplayObserved:false};
+    },
+    aiInput:async(_exe,frame)=>{
+      calls.push(['neutral',frame.slot]);
+      return {schema:1,slot:frame.slot,
+        status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+        gameplayObserved:false};
+    },
+  });
+  const stopped=await handler.callTool('stop_experimental_multi_client_actions',{
+    slots:[5,2,3],
+  });
+  assert.deepEqual(stopped.slots,[2,3,5]);
+  assert.deepEqual(calls,[
+    ['acquire',2,3,5],['neutral',2],['neutral',3],['neutral',5],
+    ['release',2,3,5],
+  ]);
+  handler.shutdown();
 });

@@ -43,6 +43,14 @@ fn parse_operation(args: &[String]) -> Result<(&'static str, Option<u32>), &'sta
 }
 
 fn native_error(error: io::Error) -> &'static str {
+    // Fixed, allowlisted native writer-conflict status. Other controller
+    // errors are never forwarded raw into the MCP model response.
+    if matches!(error.to_string().as_str(),
+        "AI writer lease conflict; existing game input preserved" |
+        "AI slot is not owned by this live writer lease" |
+        "An AI slot is held by a different native writer") {
+        return "NATIVE_WRITER_BUSY";
+    }
     match error.kind() {
         io::ErrorKind::WouldBlock => "NATIVE_BUSY",
         io::ErrorKind::TimedOut | io::ErrorKind::Interrupted => "OUTCOME_UNCERTAIN",
@@ -58,6 +66,50 @@ fn native_error(error: io::Error) -> &'static str {
 #[serde(rename_all="camelCase",deny_unknown_fields)]
 struct Mc02BatchPulse {
     at_ms:u32,keys:u32,dx:i32,dy:i32,ttl_ms:u32,
+}
+
+// Stable for one MCP stdio process, supplied privately to its short-lived
+// native CLI children. The controller owns all actual slot lease authority.
+// This identifier is NOT a secret, security boundary, or game credential.
+#[cfg(all(windows,target_arch="x86_64",
+          feature="lazy-tester-package",feature="mc02-native-input"))]
+fn writer_id()->Result<String,&'static str> {
+    let value=std::env::var("LAZY_TESTER_AI_WRITER_ID")
+        .map_err(|_|"AI_WRITER_ID_REQUIRED")?;
+    if !super::native_clients_session::valid_ai_writer_id(&value) {
+        return Err("AI_WRITER_ID_REQUIRED");
+    }
+    Ok(value)
+}
+
+#[cfg(all(windows,target_arch="x86_64",
+          feature="lazy-tester-package",feature="mc02-native-input"))]
+fn execute_ai_lease(args:&[String])->Result<Value,&'static str> {
+    use super::native_clients_session::{self,SessionRequest,
+        validate_ai_lease_slots};
+    if std::env::var("LAZY_TESTER_MULTI_CLIENT_VIRTUAL_INPUT").ok().as_deref()
+       !=Some("I_ACCEPT_EXPERIMENTAL_MULTI_CLIENT_INPUT") {
+        return Err("EXPERIMENT_NOT_AUTHORIZED");
+    }
+    if args.len()!=2||args[1].len()>9 {
+        return Err("INVALID_ARGUMENTS");
+    }
+    let owner=writer_id()?;
+    let slots=args[1].split(',').map(|s|s.parse::<u32>())
+        .collect::<Result<Vec<_>,_>>().map_err(|_|"INVALID_ARGUMENTS")?;
+    validate_ai_lease_slots(&slots,&owner).map_err(|_|"INVALID_ARGUMENTS")?;
+    let request=if args[0]=="ai-lease-acquire" {
+        SessionRequest::AiLeaseAcquire {slots:slots.clone(),owner_id:owner}
+    }else {
+        SessionRequest::AiLeaseRelease {slots:slots.clone(),owner_id:owner}
+    };
+    let snapshot=native_clients_session::request(request).map_err(native_error)?;
+    if snapshot.schema!=1||snapshot.profiles.len()!=5 {
+        return Err("INVALID_NATIVE_SNAPSHOT");
+    }
+    Ok(json!({"schema":1,"ok":true,"operation":args[0],
+        "slots":slots,"lease":"NATIVE_CONTROLLER_PER_SLOT_ONLY",
+        "gameplayObserved":false}))
 }
 
 // A bounded same-image CLI process schedules ALL pulses for one MC02
@@ -195,6 +247,7 @@ fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
        !=Some("I_ACCEPT_EXPERIMENTAL_MULTI_CLIENT_INPUT") {
         return Err("EXPERIMENT_NOT_AUTHORIZED");
     }
+    let owner=writer_id()?;
     if args.len()!=3 || args[2].len()>24000 {
         return Err("INVALID_ARGUMENTS");
     }
@@ -265,6 +318,7 @@ fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
             let snapshot=native_clients_session::request(
                 SessionRequest::AiInputGroup {
                     frames,issued_at_ms,deadline_at_ms:latest,
+                    owner_id:owner.clone(),
                 }
             ).map_err(native_error)?;
             if snapshot.schema!=1||snapshot.profiles.len()!=5 {
@@ -282,9 +336,10 @@ fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
     // A killed CLI cannot guarantee this; each native packet also expires.
     let mut release_failed=false;
     for slot in attempted {
-        if native_clients_session::request(SessionRequest::Mc02Input{
+        if native_clients_session::request(SessionRequest::AiLeasedInput{
             slot,keys:0,dx:0,dy:0,ttl_ms:1,
             issued_at_ms:unsafe{GetTickCount64()},
+            owner_id:owner.clone(),
         }).is_err() {
             release_failed=true;
         }
@@ -304,6 +359,12 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
               feature="lazy-tester-package",feature="mc02-native-input"))]
     if args.first().map(String::as_str)==Some("ai-multi-input-batch") {
         return execute_multi_ai_batch(args);
+    }
+    #[cfg(all(windows,target_arch="x86_64",
+              feature="lazy-tester-package",feature="mc02-native-input"))]
+    if matches!(args.first().map(String::as_str),
+        Some("ai-lease-acquire")|Some("ai-lease-release")) {
+        return execute_ai_lease(args);
     }
     #[cfg(all(windows,target_arch="x86_64",
               feature="lazy-tester-package",feature="mc02-native-input"))]
@@ -367,9 +428,15 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
         // never wrap a newborn machine's tick counter.
         let issued_at_ms=uptime_now.checked_sub(request_age_ms as u64)
             .filter(|stamp|*stamp!=0).ok_or("STALE_MC02_INPUT")?;
-        let snapshot=native_clients_session::request(
+        let request=if legacy {
             SessionRequest::Mc02Input{slot,keys,dx,dy,ttl_ms,issued_at_ms}
-        ).map_err(native_error)?;
+        }else{
+            SessionRequest::AiLeasedInput {
+                slot,keys,dx,dy,ttl_ms,issued_at_ms,owner_id:writer_id()?,
+            }
+        };
+        let snapshot=native_clients_session::request(request)
+            .map_err(native_error)?;
         if snapshot.schema!=1||snapshot.profiles.len()!=5 {
             return Err("INVALID_NATIVE_SNAPSHOT");
         }
@@ -599,6 +666,16 @@ mod tests {
         }
     }
 
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn lease_conflicts_have_stable_private_native_error_code() {
+        use std::io::{Error,ErrorKind};
+        let known=Error::new(ErrorKind::Other,
+            "AI writer lease conflict; existing game input preserved");
+        assert_eq!(native_error(known),"NATIVE_WRITER_BUSY");
+        assert_eq!(native_error(Error::other("Unknown private controller detail")),
+            "NATIVE_UNAVAILABLE");
+    }
     #[test]
     fn one_shot_command_accepts_only_inspect_or_five_slots() {
         assert_eq!(parse_operation(&["inspect".into()]).unwrap(), ("inspect", None));

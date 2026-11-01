@@ -1,5 +1,73 @@
 # Current Development Handoff — Lazy Tester
 
+## 1 November 2026 — single-writer native AI slot lease
+
+**State: SOURCE-ONLY NATIVE CONTROLLER ARBITRATION / MINECRAFT BLOCKED.**
+With the operator still unable to access the Windows host, work remains
+REMOTE_GITHUB only. No Node, Rust, C++, Windows build, package, CI or
+Minecraft input execution is authorized or claimed.
+
+Previous 4/5-AI MCP source required a fresh native neutral ACK on new
+connections but did NOT prevent TWO separately reconciled MCP processes
+from sending same-slot inputs. This change adds a short, original-process-
+pinned, per-slot **10,000ms single-writer lease** inside the ALREADY
+retained authenticated Sessions actor. One controller-owned
+`AiLeaseBook` uses original child PID/birth, slot, a bounded 32-lower-hex
+ephemeral per-MCP owner ID, monotonic tick expiry and explicit neutral
+state. The source uses no new session controller, service, daemon,
+network endpoint, persistent token or account/world storage.
+
+One MCP process generates one random owner ID kept in its own memory
+and handed to same-image, short-lived CLI children using private
+process environment, never public MCP arguments or CLI argv.
+`ai-lease-acquire` atomically checks ALL requested slots in the one
+retained native actor. A currently live foreign writer, a recent
+legacy MC02 active input reservation, an absent/unopted-in original
+child or a changed PID/birth refuses the entire claim without writing
+game input. After admission, every multi-client native group and
+single-slot multi-AI neutral packet carries its same owner ID over
+the EXISTING authenticated local controller pipe. The actor
+rechecks lease ownership/expiry and original process identity before
+the game-local input mapping write. Legacy MC02 commands without
+an owner ID cannot override a live multi-AI lease. Original MC01
+human focus and five-AI mode checks remain independent and mandatory.
+
+An opted-in MCP acquires the lease before a bounded 4/5-AI action,
+retains it while the existing short sequence and independent ReleaseAll
+operate, and returns it via `ai-lease-release` only AFTER all original
+slots have ACKed a neutral native input state. Lease release refuses
+an unneutralized slot. On failed input, cancellation, uncertain
+acquisition/release or unconfirmed neutral, the local MCP retains
+its explicit recovery hold and the controller's finite lease and
+per-channel 350ms packet TTL fail closed. A successful explicit
+idle `stop_experimental_multi_client_actions` also claims the set
+before touching any foreign slot and relinquishes after neutral ACK.
+No automatic retry, lease renewal daemon or cross-client fallback
+is installed; legitimate fresh MCPs can acquire only once the old
+writer returns the lease or it expires. Old process exit/reap drops
+its corresponding lease, and a new game process cannot inherit it.
+
+**Limit:** The 32-hex writer ID is a correlation identifier, NOT a
+cryptographic proof of Windows process principal. Another malicious
+same-user process could duplicate it. This source prevents accidental
+competition by independent, well-behaved MCP processes; it is not a
+security barrier against adversarial local code. Lease ACK is NOT
+proof that Minecraft consumed movement, relative mouse, attack,
+neutral key release or synchronized frames.
+
+**Proof:** REMOTE_GITHUB exact-source and caller/consumer static
+inspection; authored (NOT_EXECUTED) native book and Node fixtures for
+atomic conflict refusal across 4/5 clients, original process reuse,
+expiry/neutral, legacy MC02 collision, two MCPs and native release
+uncertainty. Native compilation and actual Windows/controller/Minecraft
+behavior remain NOT_EXECUTED and NOT_VERIFIED.
+
+**One next action:** On a separately approved original Windows Minecraft
+Education target, compile and validate the experimental controller
+lease, independent per-game input consumption and multi-client
+neutral/cancel behavior at the pinned HEAD.
+
+
 ## 1 November 2026 — fail-closed new-MCP input reconciliation
 
 **State: SOURCE-ONLY RECONNECT SAFETY / GAMEPLAY STILL BLOCKED.**

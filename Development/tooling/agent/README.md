@@ -115,6 +115,54 @@ real AI image reasoning, native input and simultaneous gameplay remain
 unverified. Standard installer, user data, fixed slot ownership,
 human MC01 isolation and CI policy are unchanged.
 
+## Single-writer controller lease for 4–5 AI inputs (source only)
+
+Every opt-in MCP now has one ephemeral local writer ID. It is passed
+only to the same-image CLI child via process environment; it is NOT
+exposed to the MCP model and is NOT a Windows identity credential.
+The existing authenticated retained controller owns five independent
+native AI writer claims (one per original game slot) using verified
+PID/birth, a 10-second monotonic expiry and last acknowledged
+native neutral/active state. No game, account, world or installer
+data is persisted.
+
+Before a native four/five AI batch, the bridge requests
+`ai-lease-acquire` for the FULL selected cohort. The native actor
+checks ALL owners and process identities before claiming ANY.
+A different writer holding even one live slot refuses the whole
+batch. The previous `ai-multi-input-batch` now forwards the
+same writer ID for EVERY timestamp group; per-client cleanup
+`ai-input` also forwards it and cannot overwrite a foreign
+writer's buttons. The original MC02-only pilot uses its historical
+IPC operation and cannot override a currently live multi-AI writer
+claim; its brief native active-input reservation prevents immediate
+multi-client handoff during legacy heartbeat polling.
+
+After an action, the MCP reuses independent per-slot ReleaseAll.
+Only after all neutral writes are acknowledged does
+`ai-lease-release` relinquish the cohort. A failed release, lost
+native response, cancellation or failed neutral is an explicit
+uncertain state and leaves the local MCP's slot recovery hold;
+the native lease eventually expires and 350-ms game packet TTL
+remains the final input-state fallback. An explicit idle stop likewise
+must acquire the cohort lease BEFORE neutralizing input. A new MCP
+cannot silently clear the previous writer's live input.
+
+A fresh launch still creates a NEW opted-in channel through the
+original game owner, but a later action must separately acquire
+the native writer lease. The hybrid human MC01 is never a writer
+target; five-ai may explicitly control MC01 via its own opted-in
+channel. This is deliberate **single-writer coordination**, not
+an OS-principal security boundary: another hostile same-user
+process can imitate a writer ID. There is no lease daemon, background
+renewal, new session owner or changes to ordinary builds.
+
+**No gameplay proof:** The controller arbitrates source-level input
+writers. None of these receipts prove Minecraft Education read
+the virtual state, moved a player, released a held button, or
+accepted 4/5-client input at bounded latency. Source fixtures
+were authored but NOT_EXECUTED; Windows/Minecraft remain blocked.
+
 ## Safe reconnection of the opt-in 4/5-AI MCP (source only)
 
 A newly created MCP process cannot inherit the in-memory input

@@ -170,12 +170,24 @@ pub enum SessionRequest {
     LaunchAiExperiment {slot:u32,mode:AgentControlMode},
     #[cfg(feature="mc02-native-input")]
     Mc02Input {slot:u32,keys:u32,dx:i32,dy:i32,ttl_ms:u32,issued_at_ms:u64},
+    #[cfg(feature="mc02-native-input")]
+    AiLeasedInput {
+        slot:u32,keys:u32,dx:i32,dy:i32,ttl_ms:u32,issued_at_ms:u64,
+        owner_id:String,
+    },
+    // A single retained controller atomically admits all original game
+    // slots for one ephemeral MCP writer before any movement packet.
+    #[cfg(feature="mc02-native-input")]
+    AiLeaseAcquire {slots:Vec<u32>,owner_id:String},
+    #[cfg(feature="mc02-native-input")]
+    AiLeaseRelease {slots:Vec<u32>,owner_id:String},
     // One authenticated request for all per-client states due at the SAME
     // timestamp. This is a bounded group, not a promise of atomic Win32
     // delivery or simultaneous Minecraft polling.
     #[cfg(feature="mc02-native-input")]
     AiInputGroup {
         frames:Vec<AiInputFrame>,issued_at_ms:u64,deadline_at_ms:u64,
+        owner_id:String,
     },
     CloseOne { slot: u32 },
     CloseAll,
@@ -212,6 +224,130 @@ pub(crate) fn validate_ai_input_group(
         previous_slot=frame.slot;
     }
     Ok(())
+}
+
+// A bounded, controller-owned writer lease for the feature-gated AI input
+// experiment. The 32-hex owner ID is an ephemeral correlation ID supplied
+// only via the local MCP child environment: NOT an OS authentication
+// credential. Same-user malicious processes can imitate it; this prevents
+// accidental independent MCP writers, not hostile same-user tampering.
+// Native PID/birth/mode checks and per-process game input gates still apply.
+#[cfg(feature="mc02-native-input")]
+pub(crate) const AI_WRITER_LEASE_MS:u64=10_000;
+#[cfg(feature="mc02-native-input")]
+pub(crate) fn valid_ai_writer_id(value:&str)->bool {
+    value.len()==32 && value.bytes().all(|b|b.is_ascii_hexdigit()&&
+        !b.is_ascii_uppercase())
+}
+#[cfg(feature="mc02-native-input")]
+pub(crate) fn validate_ai_lease_slots(slots:&[u32],owner_id:&str)->io::Result<()> {
+    if !valid_ai_writer_id(owner_id)||slots.is_empty()||slots.len()>5||
+       slots.windows(2).any(|p|p[0]>=p[1])||
+       slots.iter().any(|slot|!(1..=5).contains(slot)) {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput,
+            "Invalid experimental AI writer lease"));
+    }
+    Ok(())
+}
+#[cfg(feature="mc02-native-input")]
+#[derive(Clone,Debug)]
+struct AiWriterClaim {
+    owner_id:String,pid:u32,birth:u64,until_ms:u64,neutral:bool,
+}
+#[cfg(feature="mc02-native-input")]
+#[derive(Debug)]
+pub(crate) struct AiLeaseBook {
+    claims:[Option<AiWriterClaim>;5],
+    legacy_until_ms:[u64;5],
+}
+#[cfg(feature="mc02-native-input")]
+impl Default for AiLeaseBook {
+    fn default()->Self {
+        Self{claims:std::array::from_fn(|_|None),legacy_until_ms:[0;5]}
+    }
+}
+#[cfg(feature="mc02-native-input")]
+impl AiLeaseBook {
+    // Original process identities are verified by the SAME Sessions actor
+    // before this pure book is called. No partial acquisition on conflict.
+    pub(crate) fn acquire(&mut self,targets:&[(u32,u32,u64)],
+        owner:&str,now:u64)->io::Result<()> {
+        let slots=targets.iter().map(|(slot,_,_)|*slot).collect::<Vec<_>>();
+        validate_ai_lease_slots(&slots,owner)?;
+        if now==0 || targets.iter().any(|(slot,pid,birth)| {
+            *pid==0||*birth==0 ||
+            self.legacy_until_ms[(*slot-1) as usize]>now ||
+            self.claims[(*slot-1) as usize].as_ref().is_some_and(|held|
+                held.until_ms>now && (held.owner_id!=owner ||
+                    held.pid!=*pid||held.birth!=*birth))
+        }) {
+            return Err(io::Error::new(io::ErrorKind::PermissionDenied,
+                "AI writer lease conflict; existing game input preserved"));
+        }
+        for &(slot,pid,birth) in targets {
+            let index=(slot-1) as usize;
+            let neutral=self.claims[index].as_ref().is_none_or(|held|
+                held.until_ms<=now || held.owner_id!=owner ||
+                held.pid!=pid||held.birth!=birth || held.neutral);
+            self.claims[index]=Some(AiWriterClaim {
+                owner_id:owner.into(),pid,birth,
+                until_ms:now.saturating_add(AI_WRITER_LEASE_MS),neutral,
+            });
+        }
+        Ok(())
+    }
+    pub(crate) fn require(&self,slot:u32,owner:&str,
+        pid:u32,birth:u64,now:u64)->io::Result<()> {
+        if !valid_ai_writer_id(owner)||!(1..=5).contains(&slot)||now==0||
+           !self.claims[(slot-1) as usize].as_ref().is_some_and(|held|
+             held.owner_id==owner && held.pid==pid &&
+             held.birth==birth && held.until_ms>now) {
+            return Err(io::Error::new(io::ErrorKind::PermissionDenied,
+                "AI slot is not owned by this live writer lease"));
+        }
+        Ok(())
+    }
+    pub(crate) fn wrote(&mut self,slot:u32,owner:&str,
+        pid:u32,birth:u64,now:u64,neutral:bool)->io::Result<()> {
+        self.require(slot,owner,pid,birth,now)?;
+        let held=self.claims[(slot-1) as usize].as_mut().unwrap();
+        held.until_ms=now.saturating_add(AI_WRITER_LEASE_MS);
+        held.neutral=neutral;
+        Ok(())
+    }
+    pub(crate) fn release(&mut self,targets:&[(u32,u32,u64)],
+        owner:&str,now:u64)->io::Result<()> {
+        let slots=targets.iter().map(|(slot,_,_)|*slot).collect::<Vec<_>>();
+        validate_ai_lease_slots(&slots,owner)?;
+        for &(slot,pid,birth) in targets {
+            self.require(slot,owner,pid,birth,now)?;
+            if !self.claims[(slot-1) as usize].as_ref().unwrap().neutral {
+                return Err(io::Error::new(io::ErrorKind::PermissionDenied,
+                    "AI slot must be neutral before relinquishing writer lease"));
+            }
+        }
+        for &(slot,_,_) in targets {self.claims[(slot-1) as usize]=None;}
+        Ok(())
+    }
+    pub(crate) fn legacy_allowed(&self,slot:u32,now:u64)->io::Result<()> {
+        if !(1..=5).contains(&slot)||now==0 ||
+           self.claims[(slot-1) as usize].as_ref().is_some_and(|c|c.until_ms>now) {
+            return Err(io::Error::new(io::ErrorKind::PermissionDenied,
+                "An AI slot is held by a different native writer"));
+        }
+        Ok(())
+    }
+    pub(crate) fn legacy_wrote(&mut self,slot:u32,now:u64,neutral:bool) {
+        self.claims[(slot-1) as usize]=None;
+        self.legacy_until_ms[(slot-1) as usize]=
+            if neutral{0}else{now.saturating_add(500)};
+    }
+    pub(crate) fn forget_slot(&mut self,slot:u32) {
+        if (1..=5).contains(&slot) {
+            self.claims[(slot-1) as usize]=None;
+            self.legacy_until_ms[(slot-1) as usize]=0;
+        }
+    }
 }
 
 // Private experimental launch mode: pinned in the original game owner.
@@ -339,14 +475,34 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     }
     #[cfg(feature="mc02-native-input")]
     if let SessionRequest::AiInputGroup {
-        ref frames,issued_at_ms,deadline_at_ms,
+        ref frames,issued_at_ms,deadline_at_ms,ref owner_id,
     } = request {
         validate_ai_input_group(frames,issued_at_ms,deadline_at_ms)?;
+        if !valid_ai_writer_id(owner_id) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                "Invalid AI writer lease ID"));
+        }
+    }
+    #[cfg(feature="mc02-native-input")]
+    if let SessionRequest::AiLeasedInput {
+        slot,keys,dx,dy,ttl_ms,issued_at_ms,ref owner_id,
+    } = request {
+        admit_native_input_frame(slot,keys,dx,dy,ttl_ms)?;
+        if issued_at_ms==0||!valid_ai_writer_id(owner_id) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                "Invalid leased AI input"));
+        }
+    }
+    #[cfg(feature="mc02-native-input")]
+    if let SessionRequest::AiLeaseAcquire {ref slots,ref owner_id} |
+           SessionRequest::AiLeaseRelease {ref slots,ref owner_id}=request {
+        validate_ai_lease_slots(slots,owner_id)?;
     }
     let inspecting = matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings);
     #[cfg(feature="mc02-native-input")]
     let neutral_mc02_release = matches!(request,
-        SessionRequest::Mc02Input {keys:0,dx:0,dy:0,..});
+        SessionRequest::Mc02Input {keys:0,dx:0,dy:0,..} |
+        SessionRequest::AiLeasedInput {keys:0,dx:0,dy:0,..});
     #[cfg(not(feature="mc02-native-input"))]
     let neutral_mc02_release = false;
     let mut owner = admit_controller(&CONTROLLER)?;
@@ -475,6 +631,9 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
     #[cfg(feature="mc02-native-input")]
     if matches!(request,SessionRequest::Mc02Input{..} |
         SessionRequest::AiInputGroup{..} |
+        SessionRequest::AiLeasedInput{..} |
+        SessionRequest::AiLeaseAcquire{..} |
+        SessionRequest::AiLeaseRelease{..} |
         SessionRequest::LaunchMc02Experiment{..} |
         SessionRequest::LaunchAiExperiment{..}) {
         return Err(io::Error::new(io::ErrorKind::NotFound,
@@ -640,6 +799,73 @@ mod tests {
     }
     #[cfg(feature="mc02-native-input")]
     #[test]
+    fn original_native_actor_lease_is_atomic_and_process_pinned() {
+        // Pure book fixture: no Windows calls, Minecraft, IPC or input hooks.
+        let a="a".repeat(32);
+        let b="b".repeat(32);
+        let four=vec![(2,102,1002),(3,103,1003),(4,104,1004),(5,105,1005)];
+        let mut five=vec![(1,101,1001)];
+        five.extend(four.iter().copied());
+        let mut book=AiLeaseBook::default();
+        assert!(book.acquire(&four,&a,1000).is_ok());
+        for &(slot,pid,birth) in &four {
+            assert!(book.require(slot,&a,pid,birth,1001).is_ok());
+            assert!(book.require(slot,&b,pid,birth,1001).is_err());
+            assert!(book.require(slot,&a,pid,birth+1,1001).is_err());
+        }
+        // A contested five-slot request must NOT steal idle MC01.
+        assert!(book.acquire(&five,&b,1002).is_err());
+        assert!(book.require(1,&b,101,1001,1002).is_err());
+        // An outstanding key-down forbids releasing the claim to a rival.
+        book.wrote(2,&a,102,1002,1100,false).unwrap();
+        assert!(book.release(&four,&a,1101).is_err());
+        assert!(book.acquire(&[(2,102,1002)],&b,1101).is_err());
+        book.wrote(2,&a,102,1002,1110,true).unwrap();
+        assert!(book.release(&four,&a,1111).is_ok());
+        assert!(book.acquire(&five,&b,1200).is_ok());
+        assert!(book.require(1,&b,101,1001,1201).is_ok());
+        // Original process identity cannot be inherited by a new game.
+        assert!(book.acquire(&[(2,999,1002)],&b,1201).is_err());
+        book.forget_slot(2);
+        assert!(book.acquire(&[(2,999,9002)],&a,1202).is_ok());
+        assert!(book.require(2,&b,102,1002,1203).is_err());
+        assert!(book.require(2,&a,999,9002,1203).is_ok());
+        // A writer idle beyond expiry must re-acquire. Packet TTL
+        // (350ms) is shorter than lease lifetime; no held key proof.
+        assert!(book.require(2,&a,999,9002,
+            1202+AI_WRITER_LEASE_MS).is_err());
+        assert!(book.acquire(&[(2,999,9002)],&b,
+            1203+AI_WRITER_LEASE_MS).is_ok());
+    }
+
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn writer_lease_rejects_invalid_protocol_and_legacy_overlap() {
+        let mut book=AiLeaseBook::default();
+        let a="a".repeat(32);
+        assert!(validate_ai_lease_slots(&[2,3,4,5],&a).is_ok());
+        for id in ["bad".to_owned(),"A".repeat(32),"x".repeat(32)] {
+            assert!(validate_ai_lease_slots(&[2],&id).is_err());
+        }
+        for slots in [vec![],vec![0],vec![6],vec![2,2],
+            vec![3,2],vec![1,2,3,4,5,6]] {
+            assert!(validate_ai_lease_slots(&slots,&a).is_err());
+        }
+        book.legacy_wrote(2,1000,false);
+        assert!(book.acquire(&[(2,202,2002)],&a,1300).is_err());
+        assert!(book.acquire(&[(2,202,2002)],&a,1501).is_ok());
+        assert!(book.legacy_allowed(2,1502).is_err());
+        // ReleaseAll is not a bypass around another live writer.
+        assert!(book.legacy_allowed(2,1503).is_err());
+        book.wrote(2,&a,202,2002,1510,true).unwrap();
+        book.release(&[(2,202,2002)],&a,1511).unwrap();
+        assert!(book.legacy_allowed(2,1512).is_ok());
+        book.legacy_wrote(2,1512,true);
+        assert!(book.acquire(&[(2,202,2002)],&a,1513).is_ok());
+    }
+
+    #[cfg(feature="mc02-native-input")]
+    #[test]
     fn grouped_ai_input_admission_rejects_ambiguous_and_expired_deadlines() {
         // Pure source-authored fixture; no IPC, game windows or input sent.
         let frame=|slot|AiInputFrame{slot,keys:1,dx:0,dy:0,ttl_ms:350};
@@ -664,9 +890,13 @@ mod tests {
         assert!(validate_ai_input_group(&[invalid],1000,1100).is_err());
         let json=r#"{"operation":"AiInputGroup","frames":[{"slot":2,
             "keys":1,"dx":0,"dy":0,"ttl_ms":350}],
-            "issued_at_ms":1000,"deadline_at_ms":1100}"#;
+            "issued_at_ms":1000,"deadline_at_ms":1100,
+            "owner_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#;
         assert!(matches!(serde_json::from_str::<SessionRequest>(json),
             Ok(SessionRequest::AiInputGroup{..})));
+        assert!(serde_json::from_str::<SessionRequest>(
+            &json.replace(",\"owner_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"", "")
+        ).is_err()); // Missing writer must not fall back to the old unleased group.
         assert!(serde_json::from_str::<SessionRequest>(
             &json.replace("\"ttl_ms\":350", "\"ttl_ms\":350,\"pid\":123")
         ).is_err());
