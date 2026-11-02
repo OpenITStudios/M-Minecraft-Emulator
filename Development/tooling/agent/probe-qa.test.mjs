@@ -1,7 +1,8 @@
 // SOURCE-AUTHORED ONLY. Run separately when source checks are approved.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseProbeCapturedLine,reviewProbeRun,compactProbeQaResult} from './probe-qa.mjs';
+import {parseProbeCapturedLine,reviewProbeRun,compactProbeQaResult,
+  probeQaProofGate} from './probe-qa.mjs';
 
 const stamp='2026-11-02T07:00:00.000Z';
 const line=(issue,fields,time=stamp)=>
@@ -138,4 +139,37 @@ test('compact one-call AI QA summary keeps Probe status separate from gameplay',
   assert.equal(compactProbeQaResult({
     status:'PROBE_REPORTED_ALL_PASS',counts:{
       pass:2,fail:0,info:0,look:-1}},2).counts,undefined);
+});
+
+test('proof gate never authorizes dispatch or certifies world/Player from file and window',()=>{
+  const strong=probeQaProofGate({sourceReady:true,captureReady:true,targetBound:true});
+  assert.equal(strong.readiness,'BLOCKED');
+  assert.equal(strong.automaticDispatch,'DISABLED');
+  assert.equal(strong.logOrigin,'NOT_VERIFIED');
+  assert.equal(strong.qaWorld,'NOT_VERIFIED');
+  assert.equal(strong.playerAdmin,'NOT_VERIFIED');
+  assert.deepEqual(strong.missingEvidence,[
+    'AUTHORIZED_PLAYER_ADMIN_COMMAND_DELIVERY',
+    'EXACT_QA_WORLD_IDENTITY',
+    'SOURCE_BOUND_CONTENT_LOG_ORIGIN',
+  ]);
+  const unbound=probeQaProofGate({sourceReady:true,captureReady:true});
+  assert.equal(unbound.targetAtPrepare,'NOT_VERIFIED');
+  assert.equal(unbound.missingEvidence.includes('VERIFIED_NATIVE_TARGET_AT_PREPARE'),true);
+  const absent=probeQaProofGate();
+  assert.equal(absent.missingEvidence.includes('APPROVED_PROBE_SOURCE'),true);
+  assert.equal(absent.missingEvidence.includes('STABLE_CAPTURE_CHECKPOINT'),true);
+  assert.throws(()=>probeQaProofGate({sourceReady:'yes'}),TypeError);
+});
+
+test('mixed build provenance is incomplete even if all RESULT IDs pass',()=>{
+  const events=markers();
+  events[2]={...events[2],build:'release'};
+  const mixed=reviewProbeRun(events,session);
+  assert.equal(mixed.status,'INCOMPLETE_MIXED_PROBE_BUILDS');
+  assert.equal(mixed.probeOutcome,'NOT_ESTABLISHED');
+  assert.equal(mixed.gameplayAcceptance,'NOT_VERIFIED');
+  const valid=reviewProbeRun(markers(),session);
+  assert.equal(valid.reportedBuild,'dev');
+  assert.equal(compactProbeQaResult(valid,2).reportedBuild,'dev');
 });

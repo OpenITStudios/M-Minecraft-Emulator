@@ -22,7 +22,8 @@ import {createVisualObserver,OBSERVATION_LIMITS,
   evaluateTeamActionFeedback,summarizeTeamCoordination} from './visual-observer.mjs';
 import {createGpuFrameSource,validateGpuExecutable} from './gpu-frame-source.mjs';
 import {readPinnedProbeCatalogCached,probeSourceRevisionStatus,
-  parseProbeCapturedLine,reviewProbeRun,compactProbeQaResult} from './probe-qa.mjs';
+  parseProbeCapturedLine,reviewProbeRun,compactProbeQaResult,
+  probeQaProofGate} from './probe-qa.mjs';
 import {readMapTestContractCached,mapContractSourceStatus,planMapTests,
   compactMapTestPlan} from './map-test-plan.mjs';
 
@@ -1047,6 +1048,7 @@ export function createHandler(config,{
     }
     if(plan.terminalReport)return plan.terminalReport;
     const frozen=Object.freeze({...report,
+      ...(plan.proofGate?{proofGate:plan.proofGate}:{}),
       ...(plan.mapPlan && !Object.hasOwn(report,'mapPlan')?{mapPlan:plan.mapPlan}:{}),
       terminal:true,
       ...(report.counts?{counts:Object.freeze({...report.counts})}:{}),
@@ -1308,7 +1310,9 @@ export function createHandler(config,{
             return {schema:1,slot,phase:'PREFLIGHT',status:'BLOCKED',
               reason:prepared.status,commandSentByLazyTester:false,
               gameplayAcceptance:'NOT_VERIFIED',
-              next:'Configure the approved ZIP and stable capture once; retry probe_qa.'};
+              next:prepared.status==='CAPTURE_SLOT_COLLISION'?
+                'MC slots must use distinct original capture files; verify collection provenance before a new QA checkpoint.':
+                'Configure the approved ZIP and stable capture once; retry probe_qa.'};
           }
           const activePlan=probeQaPlans.get(slot);
           if(activePlan?.sessionId!==prepared.sessionId) {
@@ -1362,6 +1366,13 @@ export function createHandler(config,{
             return {schema:1,slot,status:'BLOCKED',
               reason:'QA_PLAN_SUPERSEDED',gameplayAcceptance:'NOT_VERIFIED'};
           }
+          // The gate is a source-only readiness report, never a caller
+          // claim of Player/admin, world or live debugger provenance.
+          const proofGate=probeQaProofGate({
+            sourceReady:true,captureReady:true,
+            targetBound:targetHandoff!==null,
+          });
+          activePlan.proofGate=proofGate;
           return {schema:1,slot,phase:'AWAITING_AUTHORIZED_COMMAND',
             status:'BLOCKED',reason:'COMMAND_DISPATCH_NOT_ENABLED',
             sourceCapture:'APPROVED_SOURCE_LOG_FILE_PRESENT',gameExecution:'NOT_VERIFIED',
@@ -1370,6 +1381,7 @@ export function createHandler(config,{
             command:prepared.command,
             requires:'AUTHORIZED_PLAYER_ADMIN_AND_QA_WORLD',
             commandSentByLazyTester:false,gameplayAcceptance:'NOT_VERIFIED',
+            proofGate,
             ...(mapPlan?{mapPlan}:{})};
         }
         // Do NOT read/hash/parse the ZIP again on every result query.
@@ -1495,6 +1507,18 @@ export function createHandler(config,{
       }
       if(existing.captureCursor?.kind!=='STABLE_CAPTURE_CURSOR_V1') {
         return {schema:1,slot,status:'CAPTURE_CHECKPOINT_UNAVAILABLE',
+          commandSent:false,gameplayAcceptance:'NOT_VERIFIED'};
+      }
+      // Two supposedly independent MC slots must never accept the SAME
+      // underlying log inode as independent probe evidence. This detects
+      // a misconfigured hard-link/shared capture, not world authenticity.
+      const captureFileIdentity=existing.captureCursor.fileIdentity;
+      if(typeof captureFileIdentity==='string'&&
+         /^[a-f0-9]{64}$/.test(captureFileIdentity)&&
+         [...probeQaPlans.entries()].some(([otherSlot,other])=>
+           otherSlot!==slot&&
+           other.captureCursor?.fileIdentity===captureFileIdentity)) {
+        return {schema:1,slot,status:'CAPTURE_SLOT_COLLISION',
           commandSent:false,gameplayAcceptance:'NOT_VERIFIED'};
       }
       const sessionId=randomBytes(12).toString('hex');

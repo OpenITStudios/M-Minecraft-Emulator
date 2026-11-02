@@ -149,6 +149,26 @@ changes. Only then does the next preparation perform a fresh,
 approved-source review. Simultaneous client preparations share the
 same in-flight review; unapproved versions remain blocked.
 
+P2 source-only proof fencing: the same first `probe_qa` response now
+includes one compact `proofGate`. It distinguishes an approved source
+ZIP, a stable **local** capture file checkpoint and an optional
+read-only native target *at preparation* from missing runtime proof:
+Player/admin command delivery, exact isolated QA world and a capture
+source tied to that process/world. The gate always reports
+`readiness: BLOCKED` and `automaticDispatch: DISABLED`.
+Even a completed original Probe report never changes that gate into
+Minecraft gameplay acceptance. The frozen terminal snapshot preserves
+the historical gate without repeated I/O.
+
+The original runner's RESULT markers include `build=dev|release`.
+Interleaved dev/release markers are now `INCOMPLETE_MIXED_PROBE_BUILDS`,
+not an apparent all-PASS. Distinct MC slots with the same available
+local capture-file identity are refused with
+`CAPTURE_SLOT_COLLISION` before creating a second QA plan.
+Neither check proves the origin of a Content Log; filenames, hashes,
+PID/HWND, timestamps, operator claims and appended marker bytes do
+not independently certify a world or admin Player.
+
 The first QA call pins an existing capture cursor and may return an
 exact read-only game-window target. Its short response distinguishes
 `sourceCapture: APPROVED_SOURCE_LOG_FILE_PRESENT` from

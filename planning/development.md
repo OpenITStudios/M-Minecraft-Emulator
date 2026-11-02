@@ -1,5 +1,46 @@
 # Current Development Handoff — Lazy Tester
 
+## Probe QA P2 provenance and Player/admin proof gate — 2 November 2026
+
+**State: SOURCE_ONLY / RUNTIME BLOCKED / NOT_EXECUTED.**
+Within the existing original `probe-qa.mjs` and single `mcp.mjs`,
+the preferred `probe_qa` source handoff now reports one bounded
+`proofGate` explicitly separating (a) an approved original Probe
+source and local stable capture checkpoint, (b) optional exact
+native PID/HWND/birth at prepare, and (c) the **unverified**
+Player/admin command delivery, active QA world, and actual
+Content Log process/world origin. Every combination keeps
+`automaticDispatch=DISABLED` and `gameplayAcceptance=NOT_VERIFIED`.
+Only first and terminal source snapshots include the proof gate;
+pending reads remain lightweight. Terminal snapshots are historical,
+not current environment attestations.
+
+A mixed dev/release RESULT build in one purported Probe run fails
+as `INCOMPLETE_MIXED_PROBE_BUILDS`. The original source-only
+preparation refuses two MC slots pointing at one observed capture
+file identity with `CAPTURE_SLOT_COLLISION` rather than treating a
+shared underlying file as independent evidence. These safeguards
+detect simple misleading captures; they DO NOT authenticate a
+Minecraft world or prove a Player command. The original team runner,
+ZIP baseline, map plan, CLI protocol, controller, help pack, and
+native input remain unchanged. No new evaluator/test engine,
+log collector, daemon, UI, installer, CI or world mutation.
+
+**Proof:** REMOTE_GITHUB pinned original source/consumer static review.
+Node regression fixtures AUTHORED_NOT_EXECUTED. No Node tests, native
+Windows runtime, Minecraft Education, admin Player, ScriptEvent,
+Content Log transport or game automation executed.
+
+**Unresolved:** Real source-bound Content Log provenance, exact QA
+world identity, authorized Player/admin ScriptEvent transport,
+current Windows compatibility and actual tests remain NOT_VERIFIED.
+
+**Next:** With separately approved Windows Education QA access,
+verify one original Skills Probe admin-Player run in an isolated
+QA world and independently tie its Content Log to that exact
+process/world before considering command dispatch.
+
+
 ## Map-aware Gameplay Probe QA P1 — 2 November 2026
 
 **State: SOURCE_ONLY / NOT_EXECUTED.** Added one bounded declarative

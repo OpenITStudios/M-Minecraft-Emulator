@@ -127,6 +127,11 @@ test('one AI QA MCP entry performs source/capture/target readiness then compact 
   assert.equal(ready.reason,'COMMAND_DISPATCH_NOT_ENABLED');
   assert.equal(ready.sourceCapture,'APPROVED_SOURCE_LOG_FILE_PRESENT');
   assert.equal(ready.gameExecution,'NOT_VERIFIED');
+  assert.equal(ready.proofGate.readiness,'BLOCKED');
+  assert.equal(ready.proofGate.targetAtPrepare,'NATIVE_PROCESS_WINDOW_ONLY');
+  assert.equal(ready.proofGate.playerAdmin,'NOT_VERIFIED');
+  assert.equal(ready.proofGate.qaWorld,'NOT_VERIFIED');
+  assert.equal(ready.proofGate.automaticDispatch,'DISABLED');
   assert.deepEqual(nativeCalls,[['target',2]]); // read-only; no launch/input
   const report=await h.callTool('probe_qa',{slot:2});
   assert.equal(report.status,'PROBE_REPORTED_PASS');
@@ -134,6 +139,8 @@ test('one AI QA MCP entry performs source/capture/target readiness then compact 
   assert.equal(report.counts.pass,2);
   assert.equal(report.target,'NATIVE_PROCESS_MATCH_AT_READ_TIME_ONLY');
   assert.equal(report.gameplayAcceptance,'NOT_VERIFIED');
+  assert.deepEqual(report.proofGate,ready.proofGate);
+  assert.equal(report.proofGate.logOrigin,'NOT_VERIFIED');
   assert.deepEqual(nativeCalls,[['target',2],['target',2]]);
   assert.equal(catalogReads,1); // No catalog reload on result reads
   assert.equal(revisionReads,1); // Only cheap metadata comparison
@@ -2844,4 +2851,43 @@ test('retired [LT_EDU_DIAG] records are not parsed or sent to Codex',()=>{
     '[ANALYTICS] {"schema":1,"type":"death"}').type,'analytics');
   assert.equal(parseCapturedLine('2026-10-30T12:00:00.000Z warn '+
     '[GAME_RESULTS] {"schema":1,"record_type":"gameplay_result"}').type,'game_results');
+});
+
+test('two MC slots cannot count one identical local capture inode twice',async()=>{
+  let nativeCalls=0;
+  const h=createHandler({...config(),executable:'',
+    probeZip:path.resolve('skills-probe.zip'),
+    evidenceDirectory:path.resolve('capture')},{
+    probeCatalog:async()=>({autoCount:1,autoIds:['P01'],
+      runnerSha256:'a'.repeat(64),archiveSha256:'b'.repeat(64),
+      sourceRevision:'c'.repeat(64)}),
+    native:async()=>{nativeCalls++;throw Error('no game operation allowed');},
+    evidence:async()=>({status:'CAPTURE_FILE_PRESENT',captureCursor:{
+      kind:'STABLE_CAPTURE_CURSOR_V1',fileIdentity:'d'.repeat(64)}})
+  });
+  const first=await h.callTool('prepare_probe_qa',{slot:2});
+  assert.equal(first.status,'PREPARED_SOURCE_ONLY');
+  const second=await h.callTool('prepare_probe_qa',{slot:3});
+  assert.equal(second.status,'CAPTURE_SLOT_COLLISION');
+  assert.equal(second.commandSent,false);
+  assert.equal(nativeCalls,0);
+  h.shutdown();
+});
+
+test('different native log identities remain independent across MC slots',async()=>{
+  const h=createHandler({...config(),executable:'',
+    probeZip:path.resolve('skills-probe.zip'),
+    evidenceDirectory:path.resolve('capture')},{
+    probeCatalog:async()=>({autoCount:1,autoIds:['P01'],
+      runnerSha256:'a'.repeat(64),archiveSha256:'b'.repeat(64),
+      sourceRevision:'c'.repeat(64)}),
+    evidence:async(_directory,slot)=>({
+      status:'CAPTURE_FILE_PRESENT',captureCursor:{
+        kind:'STABLE_CAPTURE_CURSOR_V1',
+        fileIdentity:(slot===2?'d':'e').repeat(64)}
+    })
+  });
+  assert.equal((await h.callTool('prepare_probe_qa',{slot:2})).status,'PREPARED_SOURCE_ONLY');
+  assert.equal((await h.callTool('prepare_probe_qa',{slot:3})).status,'PREPARED_SOURCE_ONLY');
+  h.shutdown();
 });

@@ -159,7 +159,38 @@ export function compactProbeQaResult(report,slot) {
       {missingIds:report.missingIds.slice(0,8)}:{}),
     ...(typeof report?.captureIssue==='string'?
       {captureIssue:report.captureIssue}:{}),
+    ...(['dev','release'].includes(report?.reportedBuild)?
+      {reportedBuild:report.reportedBuild}:{}),
     gameplayAcceptance:'NOT_VERIFIED'};
+}
+
+/**
+ * Minimal source-only proof admission. These booleans come solely from the
+ * existing internal preflight, never from model arguments or a claimed world.
+ * No combination can turn runtime provenance into VERIFIED.
+ */
+export function probeQaProofGate({sourceReady=false,captureReady=false,
+  targetBound=false}={}) {
+  if([sourceReady,captureReady,targetBound].some(v=>typeof v!=='boolean'))
+    throw new TypeError('Invalid Probe proof gate inputs');
+  const missing=[
+    ...(!sourceReady?['APPROVED_PROBE_SOURCE']:[]),
+    ...(!captureReady?['STABLE_CAPTURE_CHECKPOINT']:[]),
+    ...(!targetBound?['VERIFIED_NATIVE_TARGET_AT_PREPARE']:[]),
+    'AUTHORIZED_PLAYER_ADMIN_COMMAND_DELIVERY',
+    'EXACT_QA_WORLD_IDENTITY',
+    'SOURCE_BOUND_CONTENT_LOG_ORIGIN',
+  ];
+  return Object.freeze({schema:1,readiness:'BLOCKED',
+    sourceAtPrepare:sourceReady?'APPROVED_ZIP_SOURCE_ONLY':'NOT_VERIFIED',
+    captureAtPrepare:captureReady?
+      'STABLE_LOCAL_LOG_FILE_ONLY':'NOT_VERIFIED',
+    targetAtPrepare:targetBound?
+      'NATIVE_PROCESS_WINDOW_ONLY':'NOT_VERIFIED',
+    playerAdmin:'NOT_VERIFIED',qaWorld:'NOT_VERIFIED',
+    logOrigin:'NOT_VERIFIED',commandDelivery:'NOT_VERIFIED',
+    automaticDispatch:'DISABLED',gameplayAcceptance:'NOT_VERIFIED',
+    missingEvidence:Object.freeze(missing)});
 }
 
 /** Only three runner marker types; no raw detail, chat, or arbitrary JSON. */
@@ -249,6 +280,15 @@ export function reviewProbeRun(events,session,{captureStatus='CAPTURE_FILE_PRESE
       expectedCount:expected.size};
   }
   const reported=events.slice(1,-1);
+  // The original log includes a dev/release origin on each result.
+  // Mixed build origins in a single run may indicate interleaved/merged
+  // captures, and must never be reported as one complete Probe run.
+  const builds=new Set(reported.filter(e=>e?.kind==='result')
+    .map(e=>e.build).filter(v=>v!==undefined));
+  if(builds.size>1||[...builds].some(v=>v!=='dev'&&v!=='release')) {
+    return {...empty('INCOMPLETE_MIXED_PROBE_BUILDS'),
+      expectedCount:expected.size};
+  }
   const observed=new Map();
   let invalid=false;
   for(const event of reported) {
@@ -278,6 +318,7 @@ export function reviewProbeRun(events,session,{captureStatus='CAPTURE_FILE_PRESE
     fromTick:start.tick,toTick:end.tick,
     evidenceBoundary:'SAME_STABLE_FILE_APPENDED_BYTES_AFTER_PREPARE',
     source:'TEAM_SKILLS_PROBE_RUN_MARKERS',
+    ...(builds.size===1?{reportedBuild:[...builds][0]}:{}),
     sourceIdentity:'OPERATOR_NAMED_LOG_UNVERIFIED',
     gameplayAcceptance:'NOT_VERIFIED',
     priorCaptureTruncated:captureTruncated===true,

@@ -49,6 +49,13 @@ bytes and a compact result; `restart=true` starts a new plan.
 Unchanged ZIPs are never rehashed, reopened or reparsed: only
 lightweight change metadata is checked.
 
+P2 source-only proof fencing makes the existing one-call response
+explicit about missing Player/admin, QA-world and source-bound
+Content Log evidence. Mixed Probe build markers and duplicated
+local capture identities across slots are rejected, without enabling
+automatic command dispatch. Neither a file nor a PID/HWND proves
+world identity.
+
 The original two lower-level MCP tools remain compatible. Neither path
 installs the Probe, starts Minecraft, sends a command, activates native
 AI input or certifies map gameplay. See the
