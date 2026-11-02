@@ -2,6 +2,27 @@
 
 ## Minecraft Education team source parity + command help — 2 November 2026
 
+**Simplified in-game help v2.1.0 (SOURCE_ONLY / NOT_EXECUTED):**
+The user requested a single memorable help command, not
+`/scriptevent lazytester:help commands`. Minecraft already reserves
+`/help` for built-in help. We therefore replaced the optional
+Script API help listener with a **data-only** behavior pack containing
+`functions/help.mcfunction` (one-line wrapper) and the only canonical
+list `functions/lazytester/help.mcfunction`. Operators type
+`/function help` (fallback `/function lazytester/help` if a map has
+a conflicting help function). The list uses `tellraw @s`, displays
+the exact original team commands but executes none, and never
+broadcasts or calls AI. The pack retains its UUID but changes to
+version 2.1.0, removes its script module and
+`@minecraft/server` dependency, and updates the offline ZIP builder
+to the exact three-file pack layout. Its structure follows the
+Skills Probe ZIP's existing `functions/probe/command_sources.mcfunction`
+convention. Authored Node fixtures were NOT_EXECUTED. No Minecraft
+Education 26.33 Windows import, real function execution, or pack
+build was performed. No CI, original world/account changes,
+team analytics fork or new MCP feature was introduced.
+
+
 **State: SOURCE_ONLY; Education Windows runtime BLOCKED / NOT_EXECUTED.**
 
 Operator corrected the earlier approach: do NOT build a second
@@ -26,16 +47,17 @@ remain as consumers of the team's unmodified `[ANALYTICS]` and
 and privacy-limited Codex responses are preserved. No data is
 automatically exported, no native controller changed.
 
-The **single optional help-only addon** v2.0.0 shares the former
-Lazy Tester pack UUID to avoid two active Lazy Tester packs, but
-contains NO analytics, scoring, telemetry, timers, gameplay events
-or AI calls. It handles only the full readable command:
+The **single optional help-only addon** v2.1.0 retains the former
+Lazy Tester pack UUID for one upgrade path and contains NO analytics,
+scoring, telemetry, Script API, timers or AI calls. Its normal command:
 
-    /scriptevent lazytester:help commands
+    /function help
 
-In-game help lists the team commands and makes the Skills Probe-only
-admin scope explicit. Source list must be updated when the team
-releases a changed command contract. Canonical module updates use
+The help alias delegates to `/function lazytester/help` (a fallback
+for map name conflicts) without duplicating command-list content.
+An earlier v2.0.0 script-event help addon was retired as of this
+revision. The help list clearly separates team exports from
+Skills Probe-only admin commands. Canonical team module updates use
 `bun run skills:check` / `bun run skills:sync` through the TEAM
 repo's versioned lockfile mechanism, not copies in Lazy Tester.
 

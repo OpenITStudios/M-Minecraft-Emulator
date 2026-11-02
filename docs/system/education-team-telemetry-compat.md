@@ -23,16 +23,26 @@ in Git history only; old previously distributed .mcpack files must
 be disabled in copied QA worlds. No original world is modified or
 migrated automatically.
 
-The sole optional Minecraft-side helper now is **Lazy Tester - Team
-Commands Help v2.0.0**: a minimal, help-only behavior pack with ONE
-Script API command:
+The sole optional Minecraft-side helper is **Lazy Tester - Team
+Commands Help v2.1.0**, now a **data-only behavior pack with Minecraft
+function files** and NO Script API, JavaScript module, dependency or
+event subscriber. The only normal operator command is:
 
-    /scriptevent lazytester:help commands
+    /function help
 
-It lists existing team commands and their prerequisites. It performs
-no logging, analytics, scoring, tests, automatic world scanning,
-or MCP calls. It responds only to a player who explicitly requests
-help, with no fallback broadcast to other players.
+This executes the tiny alias `functions/help.mcfunction`, which
+delegates to the one canonical command list in
+`functions/lazytester/help.mcfunction`. If a map already defines its
+own function named `help`, operators may instead use the unique
+`/function lazytester/help` path. These are two names for ONE static
+list, not two alternative analytics implementations.
+
+The command list uses `tellraw @s` to show the original team commands
+and their prerequisites to the invoking player, without broadcasting
+to all players. It never exports logs, runs tests, scans a world,
+or calls Codex. `/help` remains Minecraft's native command and is NOT
+replaced or modified. `/function` requires cheats/operator permission
+in the copied QA world.
 
 ## Commands verified from the user-supplied source ZIPs
 

@@ -74,18 +74,26 @@ their analytics, gameplay scoring, subscriber engine or telemetry.
 The earlier `[LT_EDU_DIAG]` parallel universal diagnostics pack has
 been retired from active source and must not be enabled on QA maps.
 
-The optional minimal `education-team-help-pack/` is **help text only**,
-not a diagnostics engine. Its command is:
+The optional minimal `education-team-help-pack/` is now a
+**data-only function pack** with no Script API dependency, listener,
+background work, telemetry or gameplay writes.
 
-    /scriptevent lazytester:help commands
+Minecraft command (operator/cheats in a copied QA world):
 
-It lists the original team commands and clearly separates the two
-team exports from Skills Probe-only admin/test commands. The helper
-contains no counters, logging, game-state changes or AI calls; it
-shows messages to the requesting player only. The single offline
-builder `build-education-team-help-pack.mjs` creates a reusable
-.mcpack only under ignored `workspace/diagnostics/education-team-help/v2/`.
-No original world, account or installed game data are touched.
+    /function help
+
+This runs one canonical team-command list via `tellraw @s`, mirroring
+the static `.mcfunction` convention used by Skills Probe.
+When a map owns a conflicting `help` function, the fallback is
+`/function lazytester/help`. Minecraft's native `/help` command
+remains untouched.
+
+The offline `build-education-team-help-pack.mjs` stages one v2.1.0
+.mcpack only under ignored
+`workspace/diagnostics/education-team-help/v2.1/`. It does not install
+a team module, perform runtime testing, touch a Minecraft world,
+or use Codex. Developer exports and Skills Probe-only commands
+are displayed but never executed by the helper.
 
 **Existing local MCP** remains a bounded, read-only consumer of
 `[ANALYTICS]` and `[GAME_RESULTS]` captured records. Four

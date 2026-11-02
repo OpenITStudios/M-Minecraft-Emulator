@@ -52,9 +52,12 @@ logging and game results. Skills Probe owns runtime validation. Retire
 the parallel Lazy Tester Universal Diagnostics collector and
 [LT_EDU_DIAG] schema; do not recreate them or a short lt:diag command.
 Only the read-only local evidence/MCP consumer and an optional
-help-only script event may remain. In-game help lists the ORIGINAL team
-commands using /scriptevent lazytester:help commands; it never
-pretends to install those team modules. Team updates use their
+**data-only Minecraft function help pack** may remain. In-game help
+lists the ORIGINAL team commands with /function help (fallback:
+ /function lazytester/help if there is a function-name conflict).
+Minecraft's built-in /help remains untouched. No Script API
+subscription, JavaScript help listener, or second team analytics
+engine is authorized. The helper cannot install team modules. Team updates use their
 skills:check / skills:sync workflow, not a copied module fork.
 Actual Education Windows capability stays NOT_VERIFIED.
 

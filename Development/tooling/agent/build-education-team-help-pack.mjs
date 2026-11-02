@@ -7,10 +7,14 @@ import {lstat,mkdir,open,readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-const PACK_NAME='LazyTester-Team-Commands-Help-Education-2.0.0.mcpack';
+const PACK_NAME='LazyTester-Team-Commands-Help-Education-2.1.0.mcpack';
 const SOURCE=new URL('./education-team-help-pack/',import.meta.url);
 const ROOT=fileURLToPath(new URL('../../../',import.meta.url));
-const ENTRIES=['manifest.json','scripts/main.js'];
+const ENTRIES=[
+  'manifest.json',
+  'functions/help.mcfunction',
+  'functions/lazytester/help.mcfunction',
+];
 const MAX_SOURCE_BYTES=64*1024;
 const MAX_ARCHIVE_BYTES=256*1024;
 
@@ -26,9 +30,8 @@ function crc32(buf){
 // ZIP STORE is sufficient for this tiny file. No external archiver, JS
 // dependency or dynamic paths. Fixed DOS timestamp makes builds stable.
 export function buildEducationMcpack(entries){
-  if(!Array.isArray(entries)||entries.length!==2||
-     entries[0]?.name!=='manifest.json'||
-     entries[1]?.name!=='scripts/main.js') {
+  if(!Array.isArray(entries)||entries.length!==ENTRIES.length||
+     entries.some((entry,i)=>entry?.name!==ENTRIES[i])) {
     throw new TypeError('Unexpected Education pack entries');
   }
   const locals=[],central=[];
@@ -112,27 +115,60 @@ export async function stageUniversalEducationMcpack(){
   const manifest=JSON.parse(contents[0].toString('utf8'));
   if(manifest.format_version!==2||
      manifest.header?.uuid!=='4af9d3f0-9fa1-4cb9-a011-fd37c1b2fb16'||
-     manifest.header?.version?.join('.')!=='2.0.0'||
+     manifest.header?.version?.join('.')!=='2.1.0'||
      manifest.header?.name!=='Lazy Tester - Team Commands Help'||
-     manifest.modules?.[1]?.entry!=='scripts/main.js'||
-     manifest.dependencies?.[0]?.module_name!=='@minecraft/server'||
-     manifest.dependencies?.[0]?.version!=='2.8.0') {
+     !Array.isArray(manifest.modules)||manifest.modules.length!==1||
+     manifest.modules[0]?.type!=='data'||
+     manifest.modules[0]?.uuid!=='736d52ad-7c03-4a4b-880d-25a89072586f'||
+     manifest.modules[0]?.version?.join('.')!=='2.1.0'||
+     Object.hasOwn(manifest,'dependencies')) {
     throw Error('Reviewed reusable Education manifest drift');
   }
-  const helpCode=contents[1].toString('utf8');
-  // Explicitly refuse any legacy telemetry implementation under this
-  // package identity. Only a help listener is permitted.
-  if(!helpCode.includes('const HELP_EVENT = "lazytester:help"')||
-     !helpCode.includes('const HELP_MESSAGE = "commands"')||
-     helpCode.includes('[LT_EDU_DIAG]')||helpCode.includes('runInterval(')||
-     helpCode.includes('world.afterEvents')) {
-    throw Error('Help-only source contract drift');
+  // No JavaScript module, dependencies, dynamic script-event listener, or
+  // analytics: the one static function displays developer command help.
+  const alias=contents[1].toString('utf8');
+  const aliasCommands=alias.split(/\r?\n/).filter(line=>
+    line.trim()&&!line.startsWith('#'));
+  if(aliasCommands.length!==1||aliasCommands[0]!=='function lazytester/help') {
+    throw Error('Short help alias must forward only to the canonical function');
+  }
+  const lines=contents[2].toString('utf8').split(/\r?\n/)
+    .filter(line=>line.trim()&&!line.startsWith('#'));
+  if(lines.length<5||lines.length>18) {
+    throw Error('Help display has unsupported number of commands');
+  }
+  const messages=[];
+  for(const line of lines) {
+    if(!line.startsWith('tellraw @s ')) {
+      throw Error('Help pack cannot execute non-display commands');
+    }
+    let obj;
+    try {obj=JSON.parse(line.slice('tellraw @s '.length));}
+    catch {throw Error('Invalid help message JSON');}
+    if(!obj||Object.keys(obj).length!==1||
+       !Array.isArray(obj.rawtext)||obj.rawtext.length!==1||
+       Object.keys(obj.rawtext[0]).length!==1||
+       typeof obj.rawtext[0].text!=='string'||
+       obj.rawtext[0].text.length>220) {
+      throw Error('Help display must be a fixed, bounded single text line');
+    }
+    messages.push(obj.rawtext[0].text);
+  }
+  const rendered=messages.join('\n');
+  for(const cmd of [
+    '/scriptevent mivubi:get_analytics',
+    '/scriptevent daigon:get_all_scoring',
+    '/scriptevent probe:list',
+    '/scriptevent probe:run auto',
+    '/scriptevent probe:report',
+  ]) {
+    if(!rendered.includes(cmd))throw Error('Canonical team command is missing');
   }
   const content=buildEducationMcpack(ENTRIES.map((name,i)=>({
     name,content:contents[i]
   })));
   const dir=await child(await child(await child(
-    path.join(ROOT,'workspace'),'diagnostics'),'education-team-help'),'v2');
+    path.join(ROOT,'workspace'),'diagnostics'),'education-team-help'),'v2.1');
   const file=path.join(dir,PACK_NAME);
   const hash=digest(content);
   try{
@@ -140,7 +176,7 @@ export async function stageUniversalEducationMcpack(){
     try{await h.writeFile(content);await h.sync();}
     finally{await h.close();}
     return {status:'CREATED_LOCALLY_NOT_EDUCATION_TESTED',
-      relativeFile:'workspace/diagnostics/education-team-help/v2/'+PACK_NAME,
+      relativeFile:'workspace/diagnostics/education-team-help/v2.1/'+PACK_NAME,
       bytes:content.length,sha256:hash,uploadedToAI:false};
   }catch(error){
     if(error?.code!=='EEXIST')throw error;
@@ -152,7 +188,7 @@ export async function stageUniversalEducationMcpack(){
     const previous=await readFile(file);
     if(!previous.equals(content))throw Error('Existing pack differs; never overwrite');
     return {status:'ALREADY_PRESENT_IDENTICAL_NOT_EDUCATION_TESTED',
-      relativeFile:'workspace/diagnostics/education-team-help/v2/'+PACK_NAME,
+      relativeFile:'workspace/diagnostics/education-team-help/v2.1/'+PACK_NAME,
       bytes:content.length,sha256:hash,uploadedToAI:false};
   }
 }

@@ -177,52 +177,61 @@ already-imported .mcpack files must be disabled manually in QA
 worlds to avoid a parallel telemetry system. No accounts/worlds
 are opened or modified by this source correction.
 
-### One help-only behavior pack (not another analytics implementation)
+### One help-only behavior pack — /function help
 
-A minimal pack named **Lazy Tester - Team Commands Help 2.0.0**
-keeps the earlier Lazy Tester pack UUID (major version increment) to
-avoid advertising two active Lazy Tester feature packs. It contains
-only one Script API listener and does not collect any data.
+The optional **Lazy Tester - Team Commands Help v2.1.0** retains the
+former Lazy Tester pack's UUID and raises the version for a clean
+upgrade. It is **data-only**: no Script API module or dependency,
+JavaScript, listeners, diagnostic counters or telemetry. This is
+compatible in structure with the `.mcfunction` approach used by
+the team's Skills Probe archive.
 
-Only one new operator command must be remembered:
+Minecraft reserves `/help` for built-in help and it cannot be safely
+overwritten by a behavior pack. After the new helper is imported and
+activated on an isolated test-copy world, the operator can enter:
 
-    /scriptevent lazytester:help commands
+    /function help
 
-It responds privately in Minecraft chat to the player typing the
-command and lists:
+The command executes `functions/help.mcfunction`, a tiny alias for the
+single canonical help list at `functions/lazytester/help.mcfunction`.
+If another behavior pack or map already defines `help`, use the
+collision-resistant fallback:
 
-- `/scriptevent mivubi:get_analytics` — developer analytics export
-- `/scriptevent daigon:get_all_scoring` — developer results export
+    /function lazytester/help
+
+The one list displays these **team-owned** commands through
+`tellraw @s` (only the command executor, not all world players):
+
+- `/scriptevent mivubi:get_analytics` — team analytics export
+- `/scriptevent daigon:get_all_scoring` — team game-results export
 - `/scriptevent probe:list` — Skills Probe only, admin
 - `/scriptevent probe:run auto` — Skills Probe only, admin, test world
 - `/scriptevent probe:report` — Skills Probe only, admin
 
-For each group, it states that the relevant team modules must be
-installed in the world. This help pack does NOT install those team
-modules or provide any replacement scorer/logger. If no player
-source is available, the helper sends no chat, rather than
-broadcasting to an entire multiplayer world.
+Each group explains that its team module must actually be installed.
+The helper never installs those modules, provides its own scorer,
+or executes any of the listed commands. `/function` requires
+cheats/operator permission; availability and `tellraw @s` context
+still need Education 26.33 Windows runtime verification.
 
 Source:
 - `Development/tooling/agent/education-team-help-pack/manifest.json`
-- `Development/tooling/agent/education-team-help-pack/scripts/main.js`
+- `Development/tooling/agent/education-team-help-pack/functions/help.mcfunction`
+- `Development/tooling/agent/education-team-help-pack/functions/lazytester/help.mcfunction`
 - `Development/tooling/agent/build-education-team-help-pack.mjs`
 
-When local source execution is separately approved, prepare a
-help-only `.mcpack` from `Development/`:
+When source execution is separately approved, stage a reusable
+.mcpack from `Development/`:
 
     node tooling/agent/build-education-team-help-pack.mjs prepare
 
-It stages a reusable ZIP/`.mcpack` under the ignored
-`workspace/diagnostics/education-team-help/v2/` folder.
-The builder refuses overwriting a nonidentical artifact. No
-original Minecraft world, pack installation, user profile, test
-session or AI integration is touched.
-
-On a **copied QA world**, import/activate the help pack once.
-Use the single full help command above. No per-map rebuild is
-needed; activation is still configured per world. Do not leave
-obsolete Lazy Tester Universal Diagnostics v1.x packs active.
+The source-only builder checks three fixed archive entries and stores
+the output under ignored
+`workspace/diagnostics/education-team-help/v2.1/`. It refuses
+overwriting non-identical files and touches no installed Minecraft
+world, profile, account or server. The previously produced v2.0
+Script API help pack should not remain active alongside v2.1.
+No per-map rebuild is necessary; activation remains per world.
 
 ### How developer analytics are actually enabled
 

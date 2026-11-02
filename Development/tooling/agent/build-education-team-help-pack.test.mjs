@@ -1,82 +1,91 @@
-// Source-authored fixtures ONLY. No Node/game tests executed at this SHA.
+// SOURCE-ONLY fixtures. Node tests, pack build and Minecraft are NOT_EXECUTED.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {buildEducationMcpack} from './build-education-team-help-pack.mjs';
 
-const entries=[
+const source=[
   ['manifest.json',new URL('./education-team-help-pack/manifest.json',import.meta.url)],
-  ['scripts/main.js',new URL('./education-team-help-pack/scripts/main.js',import.meta.url)]
+  ['functions/help.mcfunction',new URL('./education-team-help-pack/functions/help.mcfunction',import.meta.url)],
+  ['functions/lazytester/help.mcfunction',new URL('./education-team-help-pack/functions/lazytester/help.mcfunction',import.meta.url)],
 ];
-async function readEntries(){
-  return Promise.all(entries.map(async ([name,url])=>
-    ({name,content:await readFile(url)})));
-}
+const read=async()=>Promise.all(source.map(async([name,url])=>({
+  name,content:await readFile(url),
+})));
 
-test('major version retires own telemetry but retains original Education pack UUID',async()=>{
-  const m=JSON.parse((await readFile(entries[0][1])).toString('utf8'));
+test('version 2.1 retires Script API; one data-only pack UUID is preserved',async()=>{
+  const m=JSON.parse((await readFile(source[0][1])).toString('utf8'));
   assert.equal(m.format_version,2);
   assert.equal(m.header.name,'Lazy Tester - Team Commands Help');
   assert.equal(m.header.uuid,'4af9d3f0-9fa1-4cb9-a011-fd37c1b2fb16');
-  assert.deepEqual(m.header.version,[2,0,0]);
-  assert.deepEqual(m.modules.map(x=>x.version),[[2,0,0],[2,0,0]]);
+  assert.deepEqual(m.header.version,[2,1,0]);
   assert.deepEqual(m.header.min_engine_version,[1,26,30]);
-  assert.deepEqual(m.dependencies,[{module_name:'@minecraft/server',version:'2.8.0'}]);
-  assert.equal(m.modules[1].entry,'scripts/main.js');
+  assert.deepEqual(m.modules,[{
+    type:'data',uuid:'736d52ad-7c03-4a4b-880d-25a89072586f',
+    version:[2,1,0],
+  }]);
+  assert.equal('dependencies' in m,false);
+  assert.equal(m.header.description.includes('/function help'),true);
 });
 
-test('help displays canonical developer commands but contains no custom analytics',async()=>{
-  const source=(await readFile(entries[1][1])).toString('utf8');
-  assert.match(source,/const HELP_EVENT = "lazytester:help"/);
-  assert.match(source,/const HELP_MESSAGE = "commands"/);
-  for(const cmd of [
+test('a single /function help alias routes into one canonical help listing',async()=>{
+  const alias=(await readFile(source[1][1])).toString('utf8');
+  const commands=alias.split(/\r?\n/).filter(x=>x.trim()&&!x.startsWith('#'));
+  assert.deepEqual(commands,['function lazytester/help']);
+  assert.equal(alias.includes('tellraw'),false);
+});
+
+test('canonical Minecraft function displays team source commands privately',async()=>{
+  const code=(await readFile(source[2][1])).toString('utf8');
+  const lines=code.split(/\r?\n/).filter(x=>x.trim()&&!x.startsWith('#'));
+  assert.ok(lines.length>=5&&lines.length<=18);
+  for(const line of lines){
+    assert.ok(line.startsWith('tellraw @s '));
+    const m=JSON.parse(line.slice('tellraw @s '.length));
+    assert.deepEqual(Object.keys(m),['rawtext']);
+    assert.equal(m.rawtext.length,1);
+    assert.equal(typeof m.rawtext[0].text,'string');
+  }
+  for(const command of [
     '/scriptevent mivubi:get_analytics',
     '/scriptevent daigon:get_all_scoring',
     '/scriptevent probe:list',
     '/scriptevent probe:run auto',
     '/scriptevent probe:report',
-  ])assert.equal(source.includes(cmd),true,cmd);
-  assert.equal(source.includes('/scriptevent lt:diag'),false);
-  assert.equal(source.includes('[LT_EDU_DIAG]'),false);
-  assert.equal(source.includes('initAnalyticsEvents('),false);
-  assert.equal(source.includes('initGameResultsExport('),false);
-  assert.equal(source.includes('system.runInterval('),false);
-  assert.equal(source.includes('world.afterEvents'),false);
-  assert.equal(source.includes('console.log('),false);
-  assert.equal(source.includes('console.warn('),false);
-  assert.equal(source.includes('world.sendMessage('),false);
-  assert.equal(source.includes('player.sendMessage('),true);
+  ])assert.ok(code.includes(command),command);
+  assert.equal(code.includes('scriptevent lazytester:help'),false);
+  assert.equal(code.includes('LT_EDU_DIAG'),false);
+  assert.equal(code.includes('function lt:diag'),false);
+  assert.equal(code.includes('tellraw @a'),false);
 });
 
-test('help is player-scoped, has no command execution or export side effects',async()=>{
-  const source=(await readFile(entries[1][1])).toString('utf8');
-  assert.match(source,/event\.sourceEntity/);
-  assert.match(source,/player instanceof Player/);
-  assert.match(source,/event\.id !== HELP_EVENT/);
-  assert.match(source,/event\.message \?\? ""/);
-  assert.doesNotMatch(source,/runCommand\(|getAllPlayers\(|setDynamicProperty\(|setScore\(|getEntities\(/);
-  assert.doesNotMatch(source,/fetch\(|XMLHttpRequest|createServer/);
-});
-
-test('fixed ZIP root contains only two required files',async()=>{
-  const e=await readEntries();
-  const bytes=buildEducationMcpack(e);
-  assert.ok(bytes.length>0&&bytes.length<256*1024);
-  assert.equal(bytes.readUInt32LE(0),0x04034b50);
-  assert.equal(bytes.readUInt16LE(8),0);
-  assert.equal(bytes.readUInt32LE(bytes.length-22),0x06054b50);
-  assert.equal(bytes.readUInt16LE(bytes.length-22+10),2);
-  for(const name of ['manifest.json','scripts/main.js']){
-    assert.ok(bytes.includes(Buffer.from(name,'ascii')));
+test('ZIP has exactly manifest and two static function files',async()=>{
+  const entries=await read();
+  const packed=buildEducationMcpack(entries);
+  const end=packed.length-22;
+  assert.equal(packed.readUInt32LE(0),0x04034b50);
+  assert.equal(packed.readUInt32LE(end),0x06054b50);
+  assert.equal(packed.readUInt16LE(end+8),3);
+  assert.equal(packed.readUInt16LE(end+10),3);
+  assert.equal(packed.readUInt16LE(8),0); // ZIP STORE
+  for(const name of entries.map(x=>x.name)) {
+    assert.ok(packed.includes(Buffer.from(name,'ascii')));
   }
-  assert.equal(Buffer.compare(bytes,buildEducationMcpack(e)),0);
+  assert.equal(packed.includes(Buffer.from('scripts/main.js')),false);
+  assert.equal(Buffer.compare(packed,buildEducationMcpack(entries)),0);
 });
 
-test('ZIP rejects altered entry names and oversized payloads',()=>{
-  const good=Buffer.from('{}'),module=Buffer.from('script');
-  assert.throws(()=>buildEducationMcpack([{name:'../manifest.json',content:good},
-    {name:'scripts/main.js',content:module}]));
-  assert.throws(()=>buildEducationMcpack([{name:'manifest.json',content:good}]));
-  assert.throws(()=>buildEducationMcpack([{name:'manifest.json',content:good},
-    {name:'scripts/main.js',content:Buffer.alloc(65537)}]));
+test('ZIP rejects alternate paths, missing functions and oversized content',()=>{
+  const x=Buffer.from('{}'),y=Buffer.from('function lazytester/help\n');
+  assert.throws(()=>buildEducationMcpack([
+    {name:'manifest.json',content:x},
+    {name:'functions/../help.mcfunction',content:y},
+    {name:'functions/lazytester/help.mcfunction',content:y},
+  ]));
+  assert.throws(()=>buildEducationMcpack([{name:'manifest.json',content:x}]));
+  assert.throws(()=>buildEducationMcpack([
+    {name:'manifest.json',content:x},
+    {name:'functions/help.mcfunction',content:y},
+    {name:'functions/lazytester/help.mcfunction',content:Buffer.alloc(65537)},
+  ]));
 });
