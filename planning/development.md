@@ -31,6 +31,14 @@ new-revision acceptance.
   resource-pack diagnostics use native disclosure; basic Storage actions
   remain visible. No visual theme, five-slot rail, native IPC or game
   session change. Regression fixtures AUTHORED_NOT_EXECUTED.
+- **AI/QA activity contract (2 November):** existing MCP
+  `agent_capabilities.activity` projects only allowlisted in-memory
+  visual-sampling, Probe checkpoint/report, and experimental AI-input
+  recovery/request state; **never** external Windows control or Minecraft
+  gameplay success. No new tool/collector, native IPC, hidden UI badge
+  or extra action is introduced. Desktop has no authenticated MCP status
+  reader, so new activity indicators remain deferred and disconnected
+  status must not be treated as idle. Fixtures AUTHORED_NOT_EXECUTED.
 - **Native owner:** original Rust session controller handles game
   process identity, private profiles, normal exit and recovery.
   Workspace/DWM presentation never becomes a second lifecycle owner.

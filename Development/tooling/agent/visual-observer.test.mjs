@@ -42,6 +42,29 @@ test('finishing a failed/expired visual slot calls its capture-worker cleanup on
   observer.shutdown();
 });
 
+test('activity metadata is bounded and never starts, stops, or captures game windows',async()=>{
+  const t=clockFixture();
+  let sampled=0;
+  const finished=[];
+  const observer=createVisualObserver({...t,
+    capture:async slot=>{sampled++;return frame(slot);},
+    onFinish:(slot,reason)=>finished.push([slot,reason]),
+  });
+  assert.deepEqual(observer.activity(),[]);
+  observer.start([4,2],{intervalMs:800,durationMs:5000});
+  assert.deepEqual(observer.activity(),[
+    {slot:2,status:'SAMPLER_ACTIVE_NO_RECENT_FRAME'},
+    {slot:4,status:'SAMPLER_ACTIVE_NO_RECENT_FRAME'},
+  ]);
+  assert.equal(sampled,0);
+  assert.deepEqual(finished,[]);
+  t.advance(5001);
+  assert.deepEqual(observer.activity(),[]);
+  assert.deepEqual(finished,[],'A read-only status snapshot never calls capture cleanup');
+  observer.stop([2,4]);
+  observer.shutdown();
+});
+
 test('one local sampler retains a frame but only delivers it upon a read',async()=>{
   const t=clockFixture();
   const calls=[];

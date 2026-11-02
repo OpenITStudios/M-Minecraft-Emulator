@@ -59,6 +59,41 @@ The separate experimental mode adds
 `run_experimental_observed_actions`, but their receipts only acknowledge
 native transport and never establish Minecraft movement.
 
+## Minimal activity status contract (read-only, MCP-local)
+
+The existing `agent_capabilities` tool now includes a compact `activity`
+projection from the **same** MCP process's in-memory Probe checkpoints, local
+visual sampler and experimental input/recovery markers. It does not add an
+MCP endpoint, watcher, agent daemon, log reader, Windows process inspector,
+game command or controller. See `activity-status.mjs` for the owned
+allowlisted enum projection and `activity-status.test.mjs` for authored
+source-only scenarios (NOT_EXECUTED).
+
+- `activity.displayHint` is `HIDDEN_NO_LOCAL_SIGNAL`, `ACTIVITY`, or
+  `ATTENTION`. No default banner or alert is inferred from an idle MCP.
+- `items` include **only relevant slots**: local visual sampling (not
+  AI control), a Probe checkpoint/limited original report (not a verified
+  game/map test), and opted-in input requests or recovery holds (not proof
+  Minecraft consumed keys). The source and reported outcome are allowlisted.
+- `desktopControl=NOT_OBSERVED_NO_AUTHENTICATED_DESKTOP_PROVIDER` means
+  **unknown external Windows control**, not that nobody controls the PC.
+- `snapshotAt` timestamps this MCP read only, NOT the age/identity of any
+  native game frame or QA world. Disconnecting/restarting MCP invalidates the
+  UI's ability to treat prior activity as live.
+- A terminal original Probe PASS is labelled
+  `PROBE_REPORT_AVAILABLE` and `PROBE_REPORTED_PASS`; map checks remain
+  `NOT_TESTED`. An active sampler is not gameplay readiness.
+- No raw log, PID/HWND, username, account path, source command, private
+  lease ID, image bytes or world identity crosses this compact projection.
+
+**Desktop integration gate:** Lazy Tester's Tauri UI does NOT currently have
+an authenticated read-only MCP-status bridge. Therefore this source change
+does **not** show AI/QA badges, an activity panel, or a Stop button. A future
+authorized bridge must bind the exact same MCP session and fail to
+"status unavailable" on connection loss; it must not treat missing signals
+as verified idle or synthesize Windows control from native game input.
+Preserve the existing five fixed Minecraft previews and style.
+
 ## Optional input/capture integration (not authorized to execute yet)
 
 - Desktop Rust `multi-client-native-input` alias `mc02-native-input`

@@ -370,6 +370,27 @@ export function createVisualObserver({
       imageBase64:deliver?state.imageBase64:null,
     };
   }
+  // Metadata-only and side-effect free. In contrast to read(), this does
+  // not expire/stop workers, request pixels or contact native windows.
+  function activity() {
+    const now=clock();
+    return [...sessions.values()]
+      .filter(state=>state.active && now<state.endsAt)
+      .map(state=>{
+        const sourceAge=state.sourceFrameAtMs===null?null:
+          now-state.sourceFrameAtMs;
+        const collectionAge=state.lastCollectedMs===null?null:
+          now-state.lastCollectedMs;
+        const recent=state.imageBase64!==null &&
+          state.captureIdentity!==null &&
+          collectionAge!==null&&collectionAge>=0&&
+          collectionAge<=MAX_READ_FRAME_AGE_MS&&
+          (sourceAge===null || sourceAge>=0&&
+            sourceAge<=MAX_READ_FRAME_AGE_MS);
+        return {slot:state.slot,status:recent?
+          'SAMPLER_ACTIVE_RECENT_FRAME':'SAMPLER_ACTIVE_NO_RECENT_FRAME'};
+      }).sort((a,b)=>a.slot-b.slot);
+  }
   function stop(slots) {
     const selected=allowedSlots(slots);
     for (const slot of selected) {
@@ -384,7 +405,7 @@ export function createVisualObserver({
     for (const state of sessions.values()) finish(state,'CONNECTION_CLOSED');
     sessions.clear();
   }
-  return {start,read,stop,shutdown};
+  return {start,read,activity,stop,shutdown};
 }
 
 // A pure bounded cross-client view over the SAME ephemeral per-slot frame

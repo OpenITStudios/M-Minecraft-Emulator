@@ -12,6 +12,7 @@ import {planPeerSession,planPlayerActions} from './control-plan.mjs';
 import {compilePlayerInputTimeline,compilePerClientInputFrames,GAME_BUTTON_BITS} from './input-timeline.mjs';
 import {assessInputRoute,requiredInputSlots} from './input-route.mjs';
 import {inputExecutionStatus} from './input-delivery.mjs';
+import {projectAgentActivity} from './activity-status.mjs';
 import {prepareMc02PulseBatch,prepareMultiClientPulseBatches} from './mc02-action-sequence.mjs';
 import {summarizeGameEvidence,summarizeEvidenceReports,normalizeEvidenceSlots} from './evidence-summary.mjs';
 import {captureCuaWindow,validateCuaExecutable} from './visual-capture.mjs';
@@ -2138,7 +2139,28 @@ export function createHandler(config,{
         return planPeerSession(config.mode,validateNativeReport(report,'inspect'));
       } finally {inFlight=false;}
     }
-    if (name==='agent_capabilities') {keysExactly(args,[]);return capabilities(config.mode,mc02Enabled,multiEnabled);}
+    if (name==='agent_capabilities') {
+      keysExactly(args,[]);
+      // One bounded read of already-owned MCP memory. It cannot attest
+      // external desktop control, successful input, an authenticated QA world,
+      // or whether a separately run Skills Probe command was actually sent.
+      const activity=projectAgentActivity({
+        mode:config.mode,atMs:qaClock(),
+        multiEnabled,legacyEnabled:mc02Enabled,
+        multiSlots:multiSequence?.slots??[],
+        legacyPending:mc02SequenceAbort!==null,
+        uncertainSlots:multiEnabled?[...uncertainAiSlots]:[],
+        startupReconcileSlots:multiEnabled?[...startupReconcileSlots]:[],
+        probePlans:[...probeQaPlans.entries()].map(([slot,plan])=>({
+          slot,preparedAt:plan.preparedAt,
+          terminalStatus:plan.terminalReport?.status??null,
+        })),
+        probeBusy:[...probeQaBusy],
+        visualSamplers:typeof visualObserver.activity==='function'?
+          visualObserver.activity():[],
+      });
+      return {...capabilities(config.mode,mc02Enabled,multiEnabled),activity};
+    }
     if (name==='read_game_evidence') {
       keysExactly(args,['slot']);
       const slot=slotOf(args.slot);

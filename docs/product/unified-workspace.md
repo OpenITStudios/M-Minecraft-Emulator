@@ -41,6 +41,17 @@ on request. Data Storage surfaces size, cache, disk space and folder actions
 before expandable read-only resource-pack diagnostics. Full profile deletion
 and recovery actions retain their existing review/confirmation gates.
 
+An optional source-only MCP activity projection can describe local
+observation, unverified experimental input requests/recovery, and original
+Skills Probe checkpoint/report progress. These are distinct from **external
+Windows desktop control**. The current desktop has no authenticated MCP
+activity bridge. Therefore the default Play UI must remain unchanged and
+must NOT display speculative AI/QA labels or buttons. When a verified
+read-only status route exists, hide routine absent signals, show only
+relevant per-profile activity or action-required issues, and preserve all five
+keyed DWM preview cards without resizing or shifting the layout. An absent
+or disconnected MCP is UNKNOWN, not proof of no AI activity.
+
 Session ownership belongs to the existing native bootstrap; the UI is a consumer.
 The bootstrap keeps the reviewed game/DLL hashes, original process handles, private
 Roaming/Local/TEMP/HKCU stores, scoped singleton compatibility, and 144/10 FPS policy.

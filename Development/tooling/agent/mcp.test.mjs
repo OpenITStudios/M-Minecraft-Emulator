@@ -127,6 +127,11 @@ test('one AI QA MCP entry performs source/capture/target readiness then compact 
   assert.equal(ready.reason,'COMMAND_DISPATCH_NOT_ENABLED');
   assert.equal(ready.sourceCapture,'APPROVED_SOURCE_LOG_FILE_PRESENT');
   assert.equal(ready.gameExecution,'NOT_VERIFIED');
+  const qaPending=(await h.callTool('agent_capabilities',{})).activity;
+  assert.deepEqual(qaPending.items.map(x=>[x.kind,x.slot,x.status]),[
+    ['SKILLS_PROBE',2,'AWAITING_AUTHORIZED_COMMAND_OR_EVIDENCE']]);
+  assert.equal(qaPending.desktopControl,'NOT_OBSERVED_NO_AUTHENTICATED_DESKTOP_PROVIDER');
+  assert.equal(qaPending.mapGameplayAcceptance,'NOT_TESTED');
   assert.equal(ready.mapPlan,undefined);
   assert.equal(ready.qaReport,undefined); // legacy source-only shape stays unextended
   assert.equal(ready.proofGate.readiness,'BLOCKED');
@@ -138,6 +143,10 @@ test('one AI QA MCP entry performs source/capture/target readiness then compact 
   const report=await h.callTool('probe_qa',{slot:2});
   assert.equal(report.status,'PROBE_REPORTED_PASS');
   assert.equal(report.terminal,true);
+  const qaActivity=(await h.callTool('agent_capabilities',{})).activity;
+  assert.equal(qaActivity.items[0].status,'PROBE_REPORT_AVAILABLE');
+  assert.equal(qaActivity.items[0].reportedOutcome,'PROBE_REPORTED_PASS');
+  assert.equal(qaActivity.mapGameplayAcceptance,'NOT_TESTED');
   assert.equal(report.qaReport,undefined);
   assert.equal(report.probeReportedStatus,undefined);
   assert.equal(report.counts.pass,2);
@@ -1021,6 +1030,9 @@ test('experimental background input is NOT exposed as an agent tool',async()=>{
     'SAME_WINDOWS_SESSION_ONLY');
   assert.equal(capabilities.independentInput.windowsAgentWorkspace,
     'PREVIEW_NOT_INTEGRATED_NO_CROSS_SESSION_INPUT');
+  assert.equal(capabilities.activity.displayHint,'HIDDEN_NO_LOCAL_SIGNAL');
+  assert.equal(capabilities.activity.desktopControl,
+    'NOT_OBSERVED_NO_AUTHENTICATED_DESKTOP_PROVIDER');
 });
 
 test('never trusts incomplete or out-of-order native profiles',()=>{
@@ -1564,6 +1576,10 @@ test('four/five opted-in AI action streams preserve per-slot neutral cleanup',as
   const make=(slot)=>({slot,kind:'move_forward',atMs:0,durationMs:320});
   const hybrid=createHandler({...config(),experimentalMultiClientInputEnabled:true},
     {native,aiInput,aiMultiBatch,aiLease:leaseAck});
+  const initialInput=(await hybrid.callTool('agent_capabilities',{})).activity;
+  assert.equal(initialInput.displayHint,'ATTENTION');
+  assert.deepEqual(initialInput.items.filter(x=>x.kind==='AI_INPUT')
+    .map(x=>x.status),Array(4).fill('STARTUP_RECONCILIATION_REQUIRED'));
   const list=await hybrid.handle({jsonrpc:'2.0',id:21,method:'tools/list'});
   assert.ok(list.result.tools.some(t=>t.name==='run_experimental_multi_client_actions'));
   await assert.rejects(()=>hybrid.callTool('run_experimental_multi_client_actions',
@@ -1574,6 +1590,9 @@ test('four/five opted-in AI action streams preserve per-slot neutral cleanup',as
   await hybrid.callTool('stop_experimental_multi_client_actions',{
     slots:[2,3,4,5],
   });
+  assert.equal((await hybrid.callTool('agent_capabilities',{})).activity.items
+    .some(x=>x.kind==='AI_INPUT'),false,
+    'Confirmed native neutral/release clears the local recovery hold only');
   receipts.length=0;
   const four=await hybrid.callTool('run_experimental_multi_client_actions',
     {actions:[2,3,4,5].map(make)});
