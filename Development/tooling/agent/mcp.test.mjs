@@ -94,7 +94,8 @@ test('one AI QA MCP entry performs source/capture/target readiness then compact 
   };
   const checkpoint={kind:'STABLE_CAPTURE_CURSOR_V1'};
   const catalog=async()=>({autoCount:2,autoIds:['P01','P02'],
-    archiveSha256:'a'.repeat(64),cache:'UNCHANGED_APPROVED_ZIP'});
+    archiveSha256:'a'.repeat(64),runnerSha256:'e'.repeat(64),
+    cache:'UNCHANGED_APPROVED_ZIP'});
   const evidence=async(_directory,slot,_limit,options)=>{
     if(options?.probeCheckpoint)return {slot,status:'CAPTURE_FILE_PRESENT',
       probeEvents:[
@@ -114,6 +115,10 @@ test('one AI QA MCP entry performs source/capture/target readiness then compact 
   assert.equal(ready.catalogCache,'UNCHANGED_APPROVED_ZIP');
   assert.equal(ready.command,'/scriptevent probe:run auto');
   assert.equal(ready.target,'NATIVE_TARGET_OBSERVED_NOT_GAME_READY');
+  assert.deepEqual(ready.targetHandoff.window,{kind:'window',pid:4002,window_id:8002});
+  assert.equal(ready.targetHandoff.identity.createdFileTime,'1234567');
+  assert.equal(ready.targetHandoff.verification,'PROCESS_WINDOW_ONLY_NOT_GAME_WORLD');
+  assert.equal(ready.targetHandoff.input,'NOT_AVAILABLE_OR_AUTHORIZED');
   assert.equal(ready.commandSentByLazyTester,false);
   assert.equal(ready.world,'NOT_VERIFIED');
   assert.deepEqual(nativeCalls,[['target',2]]); // read-only; no launch/input
@@ -154,7 +159,8 @@ test('one QA entry refuses concurrent source preparations for the same slot',asy
   let release;
   const pendingCatalog=new Promise(resolve=>{release=resolve;});
   const catalog={autoCount:1,autoIds:['P01'],
-    archiveSha256:'b'.repeat(64),cache:'FRESH_SOURCE_REVIEW'};
+    archiveSha256:'b'.repeat(64),runnerSha256:'e'.repeat(64),
+    cache:'FRESH_SOURCE_REVIEW'};
   const h=createHandler({...config(),executable:'',
     probeZip:path.resolve('skills-probe.zip'),
     evidenceDirectory:path.resolve('capture')},{
@@ -169,6 +175,46 @@ test('one QA entry refuses concurrent source preparations for the same slot',asy
   release();
   const ready=await first;
   assert.equal(ready.phase,'AWAITING_AUTHORIZED_COMMAND');
+  h.shutdown();
+});
+
+test('QA single entry refuses source drift and log-only PASS without a pinned target',async()=>{
+  let digest='a'.repeat(64),failRead=false;
+  const expected={autoCount:2,autoIds:['P01','P02'],
+    runnerSha256:'e'.repeat(64),cache:'UNCHANGED_APPROVED_ZIP'};
+  const catalog=async()=>{if(failRead)throw Error('missing ZIP');return {
+    ...expected,archiveSha256:digest};};
+  const cp={kind:'STABLE_CAPTURE_CURSOR_V1'};
+  const events=[
+    {kind:'start',arg:'auto',count:2,tick:100,at:null},
+    {kind:'result',id:'P01',result:'pass',tick:101,at:null},
+    {kind:'result',id:'P02',result:'pass',tick:102,at:null},
+    {kind:'done',arg:'auto',count:2,tick:103,at:null},
+  ];
+  const h=createHandler({...config(),executable:'',
+    probeZip:path.resolve('skills-probe.zip'),
+    evidenceDirectory:path.resolve('capture')},{
+    probeCatalog:catalog,
+    native:async()=>{throw Error('Unexpected native target inspection');},
+    evidence:async(_dir,slot,_limit,opts)=>opts?.probeCheckpoint?
+      {slot,status:'CAPTURE_FILE_PRESENT',probeEvents:events}:
+      {slot,status:'CAPTURE_FILE_PRESENT',captureCursor:cp},
+  });
+  assert.equal((await h.callTool('probe_qa',{slot:2})).phase,'AWAITING_AUTHORIZED_COMMAND');
+  const logOnly=await h.callTool('probe_qa',{slot:2});
+  assert.equal(logOnly.status,'INCOMPLETE');
+  assert.equal(logOnly.sourceStatus,'QA_NATIVE_TARGET_NOT_BOUND');
+  assert.equal(logOnly.counts.pass,2);
+  assert.equal(logOnly.gameplayAcceptance,'NOT_VERIFIED');
+  digest='b'.repeat(64);
+  const changed=await h.callTool('probe_qa',{slot:2});
+  assert.equal(changed.status,'BLOCKED');
+  assert.equal(changed.reason,'QA_SOURCE_CHANGED_STOP');
+  assert.equal((await h.callTool('probe_qa',{slot:2})).phase,'AWAITING_AUTHORIZED_COMMAND');
+  failRead=true;
+  const unavailable=await h.callTool('probe_qa',{slot:2});
+  assert.equal(unavailable.status,'BLOCKED');
+  assert.equal(unavailable.reason,'QA_SOURCE_UNAVAILABLE');
   h.shutdown();
 });
 
@@ -188,7 +234,8 @@ test('one QA entry fails closed on unreviewed ZIP and missing result source',asy
   let stage=0;
   const ready=createHandler(base,{
     probeCatalog:async()=>({autoCount:1,autoIds:['P01'],
-      archiveSha256:'c'.repeat(64),cache:'FRESH_SOURCE_REVIEW'}),
+      archiveSha256:'c'.repeat(64),runnerSha256:'e'.repeat(64),
+      cache:'FRESH_SOURCE_REVIEW'}),
     evidence:async(_dir,slot,_limit,options)=>{
       if(options?.probeCheckpoint)throw Error('capture disappeared');
       stage++;
@@ -204,6 +251,23 @@ test('one QA entry fails closed on unreviewed ZIP and missing result source',asy
   assert.equal(incomplete.reason,'EVIDENCE_UNAVAILABLE');
   assert.equal(incomplete.gameplayAcceptance,'NOT_VERIFIED');
   ready.shutdown();
+});
+
+test('QA source catalog refuses a missing runner checksum before capture',async()=>{
+  let reads=0;
+  const h=createHandler({...config(),executable:'',
+    probeZip:path.resolve('skills-probe.zip'),
+    evidenceDirectory:path.resolve('capture')},{
+    probeCatalog:async()=>({
+      autoCount:1,autoIds:['P01'],archiveSha256:'a'.repeat(64),
+      cache:'FRESH_SOURCE_REVIEW'}),
+    evidence:async()=>{reads++;throw Error('capture must not be read');},
+  });
+  const blocked=await h.callTool('probe_qa',{slot:2});
+  assert.equal(blocked.status,'BLOCKED');
+  assert.equal(blocked.reason,'PROBE_SOURCE_REVIEW_REQUIRED');
+  assert.equal(reads,0);
+  h.shutdown();
 });
 
 test('hybrid mode refuses to launch human MC01, no native request sent',async()=>{

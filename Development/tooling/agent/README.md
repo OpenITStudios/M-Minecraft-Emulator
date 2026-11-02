@@ -151,11 +151,20 @@ or automatic approval is introduced.
 - First call: source/capture preflight and, if the native executable is
   configured, **read-only** PID/HWND/birth target admission. It pins the
   existing MC0x.log capture cursor and returns the original command
-  `/scriptevent probe:run auto`. It says `BLOCKED` until the command
-  is executed through a separately approved, identity-verified
-  in-game **Player/admin** in a disposable Skills Probe QA world.
-- Call `probe_qa` again: one small status and pass/fail/info/look
-  summary from fresh `RUN_START` / `RESULT` / `RUN_DONE` markers.
+  `/scriptevent probe:run auto`. When a native target is observed,
+  the response includes an exact-window **read-only `targetHandoff`**
+  so AI does not have to guess or switch to another Minecraft window.
+  This is NOT permission or proof of successful input: the command must
+  still come from an authorized **Player/admin** in a disposable
+  Skills Probe QA world, using a separately approved Computer Use path.
+  A server-only ScriptEvent is not a substitute for the required Player.
+- Call `probe_qa` again: it checks the exact pinned ZIP/runner/catalog
+  again (using the fast cache when unchanged), revalidates the original
+  target and reads a compact pass/fail/info/look summary from fresh
+  `RUN_START` / `RESULT` / `RUN_DONE` markers. If the ZIP changes,
+  the capture becomes unavailable, or the target changes, it stops or
+  reports INCOMPLETE. A log-only all-pass without even a pinned native
+  target is also INCOMPLETE, not a trustworthy completed run.
   No session ID, timestamp, path or full logs are required from the AI.
 - To deliberately start a new run, call `probe_qa` with
   `{ "restart": true }`. Old evidence never becomes new PASS.

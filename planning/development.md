@@ -1,5 +1,31 @@
 # Current Development Handoff — Lazy Tester
 
+## AI QA source-continuity and exact-target handoff — 2 November 2026
+
+**State: SOURCE_ONLY / NOT_EXECUTED.** The existing single `probe_qa`
+tool now returns an exact-window, read-only `targetHandoff` when the
+original controller verifies PID/HWND/process birth. No new target
+resolver, command dispatcher or user procedure was added. On every
+subsequent read, `probe_qa` rechecks the same approved ZIP, runner SHA
+and complete auto-ID catalog using the existing cheap cache; any
+source change or missing ZIP invalidates the in-memory plan and
+blocks acceptance. The source catalog contract is explicitly
+validated before a new plan is stored.
+
+The result of an unbound target cannot become a `PROBE_REPORTED_PASS`;
+it is marked INCOMPLETE while preserving the original limited
+Probe counts for troubleshooting. Replacement of a previously pinned
+game process also downgrades the outcome. These are source-level
+trust gates, not proof that the capture came from the chosen world or
+that the admin Player executed any command. Tests were AUTHORED but
+NOT_EXECUTED. No Windows/Node test, Minecraft runtime, AI input,
+debugger connection, CI, installer, or world/account mutation occurred.
+
+**Next requiring separately authorized Windows QA:** validate one
+original Player/admin Skills Probe command and prove a profile/world
+capture binding; only then consider connecting a command sender to
+the existing authenticated controller.
+
 ## Consolidated single-entry AI Gameplay QA — 2 November 2026
 
 **State: SOURCE_ONLY / NOT_EXECUTED.** AI now has one recommended

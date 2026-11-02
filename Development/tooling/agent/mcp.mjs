@@ -1224,6 +1224,7 @@ export function createHandler(config,{
               next:'Configure the approved ZIP and stable capture once; retry probe_qa.'};
           }
           let targetStatus='NATIVE_TARGET_NOT_CONFIGURED';
+          let targetHandoff=null;
           // Reuse the existing strict PID/HWND/birth gate. A source-only
           // plan never authorizes keyboard input or infers a loaded world.
           if(config.executable) {
@@ -1240,6 +1241,13 @@ export function createHandler(config,{
                     pid:target.identity.pid,
                     windowId:target.identity.windowId,
                     createdFileTime:target.identity.createdFileTime};
+                  targetHandoff={
+                    window:{kind:'window',pid:target.identity.pid,
+                      window_id:target.identity.windowId},
+                    identity:{...active.targetIdentity,
+                      sessionId:target.identity.sessionId},
+                    verification:'PROCESS_WINDOW_ONLY_NOT_GAME_WORLD',
+                    input:'NOT_AVAILABLE_OR_AUTHORIZED'};
                   targetStatus='NATIVE_TARGET_OBSERVED_NOT_GAME_READY';
                 }
               }
@@ -1256,12 +1264,37 @@ export function createHandler(config,{
             sourceZip:'APPROVED_PINNED_SNAPSHOT',
             capture:'SAME_FILE_CHECKPOINT_PINNED',
             target:targetStatus,
+            ...(targetHandoff?{targetHandoff}:{}),
             world:'NOT_VERIFIED',playerAdmin:'NOT_VERIFIED',
             commandInput:'NOT_VERIFIED',
             command:prepared.command,
             commandSentByLazyTester:false,
             gameplayAcceptance:'NOT_VERIFIED',
             next:'Use a separately approved, exact-target Computer Use channel to run the original command as an in-game admin Player in a disposable Skills Probe world, then call probe_qa again. Otherwise stop at BLOCKED.'};
+        }
+        // An already-prepared session must not adopt a replaced ZIP,
+        // repinned baseline or changed auto probe catalog mid-run.
+        // The approved catalog cache makes the unchanged path cheap.
+        try {
+          const current=await probeCatalog(config.probeZip);
+          const sameSource=current?.archiveSha256===plan.archiveSha256&&
+            current?.runnerSha256===plan.runnerSha256&&
+            Array.isArray(current?.autoIds)&&
+            current.autoIds.length===plan.autoIds.length&&
+            current.autoIds.every((id,index)=>id===plan.autoIds[index]);
+          if(!sameSource) {
+            probeQaPlans.delete(slot);
+            return {schema:1,slot,phase:'SOURCE_CONTINUITY',
+              status:'BLOCKED',reason:'QA_SOURCE_CHANGED_STOP',
+              commandSentByLazyTester:false,gameplayAcceptance:'NOT_VERIFIED',
+              next:'Review the changed team ZIP using the existing source gate, then start a new QA session.'};
+          }
+        } catch {
+          probeQaPlans.delete(slot);
+          return {schema:1,slot,phase:'SOURCE_CONTINUITY',
+            status:'BLOCKED',reason:'QA_SOURCE_UNAVAILABLE',
+            commandSentByLazyTester:false,gameplayAcceptance:'NOT_VERIFIED',
+            next:'Restore the exact approved ZIP and prepare a new QA session; do not reuse earlier results.'};
         }
         let raw;
         try {
@@ -1295,6 +1328,13 @@ export function createHandler(config,{
           compact={...compact,status:'INCOMPLETE',
             sourceStatus:'QA_NATIVE_TARGET_CHANGED',
             gameplayAcceptance:'NOT_VERIFIED'};
+        } else if(!plan.targetIdentity&&
+          compact.status==='PROBE_REPORTED_PASS') {
+          // Preserve the Probe's raw counts but never elevate a log-only
+          // result when we have not even observed the intended game window.
+          compact={...compact,status:'INCOMPLETE',
+            sourceStatus:'QA_NATIVE_TARGET_NOT_BOUND',
+            gameplayAcceptance:'NOT_VERIFIED'};
         }
         const needsRestart=compact.status==='BLOCKED'||
           compact.status==='INCOMPLETE';
@@ -1322,6 +1362,16 @@ export function createHandler(config,{
         commandSent:false};
       if(exclusiveBusy())throw new Error('Native operation in progress; do not overlap requests');
       const catalog=await probeCatalog(config.probeZip);
+      if(!catalog||!Array.isArray(catalog.autoIds)||
+        catalog.autoIds.length<1||catalog.autoIds.length>80||
+        catalog.autoCount!==catalog.autoIds.length||
+        new Set(catalog.autoIds).size!==catalog.autoIds.length||
+        catalog.autoIds.some(id=>typeof id!=='string'||
+          !/^P[0-9]{1,3}[A-Z0-9]{0,12}$/.test(id))||
+        !/^[a-f0-9]{64}$/.test(catalog.archiveSha256??'')||
+        !/^[a-f0-9]{64}$/.test(catalog.runnerSha256??'')) {
+        throw new Error('PROBE_SOURCE_REVIEW_REQUIRED');
+      }
       const existing=await evidence(config.evidenceDirectory,slot);
       if(existing.status!=='CAPTURE_FILE_PRESENT') {
         return {schema:1,slot,status:'CAPTURE_NOT_READY',
@@ -1334,7 +1384,9 @@ export function createHandler(config,{
       const sessionId=randomBytes(12).toString('hex');
       const preparedAt=new Date().toISOString();
       probeQaPlans.set(slot,{sessionId,slot,preparedAt,autoIds:catalog.autoIds,
-        archiveSha256:catalog.archiveSha256,captureCursor:existing.captureCursor});
+        archiveSha256:catalog.archiveSha256,
+        runnerSha256:catalog.runnerSha256,
+        captureCursor:existing.captureCursor});
       return {schema:1,slot,status:'PREPARED_SOURCE_ONLY',
         sessionId,preparedAt,autoProbeCount:catalog.autoCount,
         autoProbeIds:catalog.autoIds,
