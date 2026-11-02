@@ -15,6 +15,9 @@ Use the smallest current owner relevant to the task:
 | --- | --- |
 | Active layered Windows native architecture | [Architecture](architecture.md) |
 | Exact Rust/Tauri/UI/tooling source owner | [Implementation map](implementation-map.md) |
+| Current end-to-end desktop / MCP / Skills Probe / diagnostics flow | [Architecture routing](architecture.md#canonical-end-to-end-flow-routing) |
+| Original Skills Probe and map-aware QA proof boundary | [Map-Aware Probe QA](map-aware-probe-qa.md) |
+| Original team source updates | [Team ZIP review](education-team-source-updates.md) |
 | Current profile and product persistence | [Data layout](data-layout.md) |
 | Source naming and existing compatibility constraints | [Canonical naming](canonical-naming.md) |
 | Optional scoped source checks, `DEV.cmd` and disabled CI | [Development operations](development-operations.md) |

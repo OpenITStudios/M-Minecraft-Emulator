@@ -13,7 +13,7 @@ Find the first wrong canonical owner via `docs/system/implementation-map.md`. Id
 ## Code and tests
 
 - Keep typed Tauri command adapters thin; lifecycle and provider policies belong to Rust.
-- Follow canonical module responsibilities and keep destructive VM operations explicit and preconditioned.
+- Follow canonical module responsibilities; native profile/world mutations require verified ownership and explicit authorization.
 - Unit tests cover invariants; a written regression test is `NOT_EXECUTED` until actually run.
 - Prefer targeted source verification over automatic expensive CI.
 - Prefer one named implementation and Git history to `-new`, `-final`, `-v2` copies of internal code. Public schema versions remain explicit.

@@ -1,252 +1,119 @@
 # Lazy Tester
 
-A Windows desktop control center for five independent Minecraft Education profiles.
-Users open the profiles they need, select one game to control, and keep the others
-running. The runtime uses our native compatibility implementation, one official
-Minecraft installation, and persistent private profiles. It does not require
-Sandboxie or VMware.
+**Lazy Tester** is a Windows desktop manager for up to five independent,
+licensed Minecraft Education profiles (MC01–MC05). It uses one official
+game installation and persistent, private profile data. The operator
+explicitly launches games; opening Lazy Tester never starts Minecraft,
+signs in to Microsoft, or enters a world.
 
-A source-only dormant developer experiment now admits input channels for
-four AI clients (MC02–MC05, with human MC01) or all five AI clients.
-It reuses one authenticated session controller, one independent per-game
-channel and one bounded cross-slot CLI scheduler. No standard installer
-includes this feature; Windows/Minecraft execution and actual gameplay
-remain NOT_EXECUTED/NOT_VERIFIED.
+**Development branch:** `Local`. `main` is release-reserved and GitHub
+Actions CI is disabled. This is the **source checkout**, not a distribution
+folder or an approved installer. Read [current status](planning/development.md)
+for the proof ceiling at the latest revision.
 
-**Before a Windows local test:** use the single
-[Computer Use local-test guide](docs/validation/ai-computer-use-localtest.md)
-for pinned checkout, approved source checks, separate experimental native
-build/ABI review, and then MC01-human/MC02-AI Minecraft observation.
-The default `DEV.cmd dev` or installer does **not** enable the AI input
-experiment. The [current handoff](planning/development.md) is concise and
-previous long source notes are kept in [planning history](planning/README.md).
+## Choose the correct workflow
 
-## Repository and distribution layout
+| Goal | Entry point | Canonical details |
+| --- | --- | --- |
+| Open an already prepared app | Root `Lazy Tester.exe` or compatibility `RUN.cmd` | [Desktop workspace](docs/product/unified-workspace.md) |
+| Develop or package locally **when explicitly authorized** | `DEV.cmd` | [Developer controller](Development/tooling/developer/README.md), [distribution](Development/engine/distribution/README.md) |
+| Inspect or launch profiles through an external model | Optional `Development/tooling/agent/mcp.mjs` | [MCP bridge](Development/tooling/agent/README.md) |
+| Review the original team's Skills Probe results | Existing MCP tool `probe_qa` | [Map-Aware Probe QA](docs/system/map-aware-probe-qa.md) |
+| Check map-specific requirements **without executing them** | Optional approved map contract + `probe_qa` | [Contract and scope](docs/system/map-aware-probe-qa.md) |
+| Compare new team/Probe ZIP snapshots | Explicit offline `team:update:inspect` | [Team source review](docs/system/education-team-source-updates.md) |
+| Inspect imported diagnostic evidence | Existing read-only diagnostic MCP tools | [Local evidence](docs/system/map-diagnostics.md) |
 
-This checkout is the development project, not the folder distributed to players.
-There is one product source tree; do not maintain separate developing/release
-copies of the code.
+The complete current [flow and ownership diagram](docs/system/architecture.md)
+separates desktop, native controller, MCP, source intake, Probe QA and
+reporting. For individual files use the [implementation map](docs/system/implementation-map.md).
+
+## What runs — and what does not
+
+**Desktop:** Svelte/Tauri sends validated requests to the original Rust
+session controller, which owns process lifetime, private storage, and
+normal exit. Window presentation/DWM previews are a separate concern.
+Minecraft itself owns accounts, rendering, worlds, gameplay and networking.
+A process or preview is not evidence of a signed-in playable world.
+
+**MCP:** the optional local stdio bridge reuses that same controller.
+Normal tools inspect profiles, explicitly request launches, plan actions,
+read bounded evidence, and optionally capture windows. Independent
+keyboard/mouse AI input is an **OFF-by-default, not runtime-verified**
+experiment and is excluded from standard release builds.
+
+**Skills Probe:** `probe_qa` verifies a pinned original Skills Probe ZIP,
+records a stable local capture checkpoint, optionally pins a read-only
+native window target and prepares the original admin command. It **does
+not** send that command, install a Probe pack or certify a Minecraft world.
+On later calls it reads appended Probe log markers; completed results are
+frozen until `restart=true`. Even Probe-reported all-PASS means only
+that those original probes reported PASS, **not** map gameplay acceptance.
+
+**Map-Aware QA:** an optional local `map-test-contract.json` selects
+`full`, `smoke` or `affected` requirements. Without independently
+verified map source diffs, `affected` conservatively selects `full`.
+The `mapPlan` is source-only and always `NOT_TESTED`. No second in-game
+scoring/test engine or automatic map action was introduced.
+
+**Proof boundary:** ZIP provenance, stable log bytes and PID/HWND cannot
+independently establish the actual QA world, Player/admin authority or
+Content Log's process/world origin. The source-only `proofGate` marks
+those unknowns; command dispatch stays disabled. No exact-revision
+Windows/gameplay acceptance or current Node test execution is claimed.
+
+## Source and private data layout
 
 ```text
-Lazy Tester.exe       Open the prepared local app directly, with its application icon
-App/                  Ignored runnable app, reviewed DLLs and build receipt
-Data/                 Settings and private per-launcher files/registry hives
-Development/apps/desktop/         Desktop source, native integration and desktop build scripts
-Development/engine/               Runtime source and distribution contracts
-Development/tooling/              Developer tools, source checks and acceptance collectors
-docs/                 Architecture and user/developer documentation
-planning/             Current handoff and historical work
-Archive/experiments/          Historical research
-workspace/            Ignored local tools, builds, candidates and private material
+Lazy Tester.exe    ignored prepared root launcher (when built)
+RUN.cmd            compatibility wrapper for that launcher
+DEV.cmd            one guarded developer entrypoint
+App/               ignored prepared application and reviewed DLL payload
+Data/              ignored settings, private profiles and optional diagnostics
+Development/
+  apps/desktop/    one active Svelte/Tauri desktop
+  engine/          portable contracts and distribution
+  tooling/         source checks, MCP, controlled development tools
+docs/              active guides and historical reference documents
+planning/          ONE concise current handoff + archived handoffs
+Archive/           old investigations; not a runtime fallback
+workspace/         ignored local builds, packages, tools and private material
 ```
 
-## Gameplay Probe AI QA (source-only)
+`App/`, `Data/`, worlds, accounts, private registry hives, local
+compiler artifacts and installer candidates are **not Git source**.
+Do not move, reset or delete them as part of repository cleanup.
+See [data layout](docs/system/data-layout.md),
+[artifact retention](docs/system/artifact-storage.md) and
+[security boundaries](SECURITY.md). Sandboxie, VMware and Guest Agent
+are retired from the active runtime; historical evidence is retained.
 
-`probe_qa` is the **one recommended MCP entrypoint** for AI QA. Its first
-call reuses the approved cached Probe catalog, existing capture and
-native target availability. Subsequent calls read only appended log
-bytes and a compact result; `restart=true` starts a new plan.
-Unchanged ZIPs are never rehashed, reopened or reparsed: only
-lightweight change metadata is checked.
-
-P2 source-only proof fencing makes the existing one-call response
-explicit about missing Player/admin, QA-world and source-bound
-Content Log evidence. Mixed Probe build markers and duplicated
-local capture identities across slots are rejected, without enabling
-automatic command dispatch. Neither a file nor a PID/HWND proves
-world identity.
-
-The original two lower-level MCP tools remain compatible. Neither path
-installs the Probe, starts Minecraft, sends a command, activates native
-AI input or certifies map gameplay. See the
-[short QA workflow](Development/tooling/agent/README.md#ai-gameplay-qa--one-mcp-entry-source-only).
-
-Optional **map-aware source-only QA planning** adds a local contract
-to the existing `probe_qa` response without changing the original
-team Probe runner. It never runs map-specific tests or claims map PASS.
-See [Map-Aware Probe QA](docs/system/map-aware-probe-qa.md).
-
-## AI-ready developer control
-
-`DEV.cmd` is the single local developer entrypoint. AI can inspect the
-checkout, discover a fixed task catalog, recommend the smallest appropriate
-check, and run an explicitly selected reviewed task without memorizing Cargo,
-Tauri or PowerShell commands. **No UI, daemon or additional Rust build** is
-introduced.
+## Developer entrypoints (reference only; not executed by repository review)
 
 ```text
 DEV.cmd inspect --json
 DEV.cmd catalog --json
 DEV.cmd plan --json
-DEV.cmd plan --base-sha <40-char-ancestor-SHA> --json
-DEV.cmd run frontend.validate --expect-sha <exact-40-char-Local-SHA> --json
-DEV.cmd run auto --expect-sha <exact-40-char-Local-SHA> --json
-DEV.cmd run auto --expect-sha <exact-40-char-Local-SHA> --base-sha <40-char-ancestor-SHA> --json
+DEV.cmd run auto --expect-sha <exact-Local-HEAD-SHA> --json
+DEV.cmd dev
+DEV.cmd package
 ```
 
-Execution uses pinned portable Node and existing scripts. The `run` route
-requires an exact `Local` revision; setup, lockfile generation, full preflight,
-and candidate packaging additionally require explicit operator approval.
-Unknown/mixed source changes escalate to the full check. The optional
-`--base-sha` covers multi-commit development ranges without adding a runner;
-default `auto` on a clean checkout checks only the latest commit. Final
-candidate acceptance still requires the existing full source/Windows/game
-checks. The old developer commands remain available, and CI stays disabled. Read
-[AI Developer Controller](Development/tooling/developer/README.md) for the
-task, output and safety contract. GitHub-only development cannot execute this
-Windows-local controller.
+Developer commands require the reviewed local toolchain, a matching
+revision, and explicit authorization for effects. `DEV.cmd dev` and
+package preparation require the reviewed native payload configured
+through `LAZY_TESTER_NATIVE_PAYLOAD_DIR`. A package candidate is not a
+signed or gameplay-accepted release. No local tests, builds, package
+operations, game launches or CI are started by a GitHub source review.
 
-`DEV.cmd dev` opens the development app. `DEV.cmd package` (or
-`npm --prefix Development run package:windows`) builds the
-native installer from a clean, committed `Local` revision, refreshes the local
-`App/` payload, and exports a new folder:
+## Navigation
 
-```text
-workspace/packages/lazy-tester/<version>-<commit>-<UTC>/
-  Lazy-Tester-<version>-windows-x86_64-setup.exe
-  SHA256SUMS.txt
-  package-manifest.json
-```
+- [Product and workspace](docs/product/README.md)
+- [System architecture and file ownership](docs/system/README.md)
+- [MCP and Probe QA](Development/tooling/agent/README.md)
+- [Validation and evidence boundaries](docs/validation/README.md)
+- [Single current handoff](planning/development.md)
+- [Repository development rules](AGENTS.md) · [GitHub policy](GITHUB_RULES.md)
 
-Use `npm --prefix Development run package:windows -- --export-only` to export a
-candidate while preserving the current App. After a successfully completed
-build, the packager retains the latest **two verified installer exports**
-and can automatically retire up to eight older verified three-file exports
-per build. Unknown or modified receipts block pruning. This does **not**
-remove Rust incremental data, historical compiler archives, previous App
-backups, accounts or worlds. Developer configuration is inside
-[Development](Development/README.md), and retained research is in
-[Archive](Archive/README.md). The old root apps/engine/tooling directories are gone.
-Portable toolchains stay in workspace/toolchains; new Cargo output defaults to
-workspace/builds/desktop/target. Old source-tree Cargo caches were moved to
-workspace/archive/compiler-cache-20261026 without deleting their contents.
-
-The root executable starts only App/lazy-tester.exe and writes no separate
-configuration. Desktop/Start Menu shortcuts use that same entry point. RUN.cmd
-is retained only as a compatibility wrapper around the root executable.
-
-Only these three files are exported. Do not distribute this repository, a raw
-compiler output directory, `workspace`, or developer profile folders. The manifest
-identifies an unaccepted development candidate, not an approved public release.
-Signing, installed/gameplay acceptance and publication remain separate. See the
-[storage policy](docs/system/artifact-storage.md) for the source/build/runtime split.
-
-For this checkout, start the prepared candidate with `RUN.cmd`. Packaging does
-not start the app or any game. A refresh preserves the complete `Data/` tree
-including `Data/Settings/data-location.json`, and copies any historical
-`App/data-location.json` pointer for backward compatibility. The previous app
-is archived under `workspace/private/local-app-backups/`. A fresh installation
-does not automatically migrate old pilot accounts or worlds. The preserved
-original stores require the separate reviewed migration; an empty folder is
-not a migration.
-
-## Active architecture
-
-- `Development/apps/desktop/src/LazyTesterApp.svelte`: the mounted Svelte interface.
-- `Development/apps/desktop/src/app/bridge/lazyTester.ts`: validated five-profile desktop contract.
-- `Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs`: bounded reconnecting controller transport; `native_clients_session/pipe.rs` checks both Windows peers.
-- `Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs`: manual per-profile session ownership, retained handles, and metadata-only storage inspection.
-- `Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs`: reviewed game/payload/profile checks and startup enrollment, shared with the accepted five-client pilot.
-- `Development/apps/desktop/src-tauri/src/engine/workspace_surface.rs`: recoverable five-window presentation/parking; its `workspace_surface/previews.rs` renders the four native DWM tiles and `recovery_gate.rs` serializes checkpoint handoff.
-- `Development/tooling/acceptance/windows/bootstrap-ordering/`: current compatibility DLL source; relocating this runtime out of acceptance tooling remains unfinished.
-
-Minecraft still owns authentication, worlds, rendering, and Education Host World
-multiplayer. Lazy Tester does not store passwords or copy tokens. The native
-compatibility layer is not a general Windows security sandbox.
-
-## Resource-efficiency previews (source-only; closed)
-
-The temporary RAM/resource-efficiency development stage was closed on
-29 October 2026. [Current decision and future evidence gates](planning/development.md)
-are owned by one handoff; no optimization or measurement task is currently active.
-
-| Retained independent preview | Source owner | Boundaries |
-| --- | --- | --- |
-| **Block Texture Lite v0.1** | [`lazytester-textures/`](Development/tooling/lazytester-textures/README.md) | Static pinned vanilla block albedo 16×16 → 8×8; entities, UI, animations, geometry and PBR unchanged. |
-| **Particle Tuning v0.3** | [`lazytester-particles/`](Development/tooling/lazytester-particles/README.md) | Twenty selected ambient definitions; optional 75/50/25/0 relative distance budget. Manual emitter caps do not guarantee spawn-rate reductions. |
-
-Both are **offline builders**, not launched game features, installers or a
-background texture/FPS switch. No `.mcpack` is bundled or applied to any
-Minecraft account/world. Minecraft Education 26.32 pack compatibility,
-independent per-client activation, and real RAM/VRAM/FPS improvement remain
-**NOT_VERIFIED**. See [tooling navigation and source-only checks](Development/tooling/README.md)
-for a future explicitly requested review; historical native heap candidates
-stay OFF.
-
-## Product and evidence
-
-Settings includes editable Active/Background FPS limits, Save and Restore
-defaults (144/10 on first run). Saved values override these defaults on each
-profile's next launch: for example, 120/10 means a **120 FPS foreground ceiling**
-and **10 FPS background ceiling**, and foreground focus restores 120, not
-a permanent 10 FPS limit. A ceiling is not a guaranteed achieved frame rate.
-New profiles with no saved graphics preference use
-**Preserve Visuals**, leaving Minecraft's own texture quality, lighting,
-MSAA and render distance unchanged; existing explicitly saved Low/High presets
-keep their historical 12-chunk behavior. A change to these preferences requires
-the original all-sessions-stopped gate. Data Storage exposes an explicit,
-backed-up Texture Streaming 0/1 switch only when the key exists on a stopped
-profile, plus bounded read-only counts of on-disk pack folders and saved
-world_resource_packs.json references. The latter are declarations, **not**
-proof of current world activation, actual loaded textures or RAM savings. These controls do not launch
-or stop Minecraft. See [data layout](docs/system/data-layout.md) for persistence
-and validation. Native pacer fixtures are not fresh Minecraft gameplay acceptance.
-
-The prior five-client pilot was operator-confirmed with five licensed accounts in
-the same Education Host World, persistent sign-in/world data, and the 144 active /
-10 background FPS policy. That acceptance does not automatically validate the new
-Lazy Tester UI/controller integration.
-
-Manual profile launch, workspace selection, next/previous selection, and on-demand
-profile-size inspection are integrated in source. Same-binary controller
-reconnection after UI restart is implemented and covered by native Windows pipe
-fixtures, including two successive client processes. Four native DWM preview tiles
-are now wired into the workspace, with background adoption and retained recovery
-checkpoints. Native DWM registration/update/release passed on hidden test windows;
-live Minecraft pixels, offscreen host-world behavior and the complete UI remain
-unverified. Per-profile disk usage/free-space reporting and explicit classified
-HTTP-cache cleanup are implemented with inactive-game admission and handle-based
-filesystem checks, verified only on disposable fixtures. A separate Lazy Tester
-installer candidate now includes the native DLLs and branding. Explicit private
-binding of reviewed existing profiles is implemented. New product data uses a
-five-profile catalog beneath the application home's Data folder; Storage exposes
-its current location and verified reattachment. Fresh-profile gameplay, installed
-startup, cross-volume migration and integrated acceptance remain unfinished.
-Task Manager grouping is not claimed.
-
-See [workspace contract](docs/product/unified-workspace.md) for product behavior,
-[implementation map](docs/system/implementation-map.md) for ownership, and
-[current handoff](planning/development.md) for actual evidence and the next action.
-The [application/data layout](docs/system/data-layout.md) defines visible App/Data
-folders, automatic existing-profile adoption, persistent locations and remaining
-relocation limits. Old accounts/worlds are preserved in place, never silently moved.
-
-## Development and archive
-
-`Local` is the only active product-development branch. `main` remains release
-reserved. GitHub Actions is disabled entirely. Follow [AGENTS.md](AGENTS.md) and
-[GITHUB_RULES.md](GITHUB_RULES.md).
-
-The pre-Lazy-Tester source is preserved at
-[`codex/archive-before-lazy-tester-20261026`](https://github.com/OpenITStudios/M-Minecraft-Emulator/tree/codex/archive-before-lazy-tester-20261026),
-pinned to `d166b5c8b24e8435f2c84675cb00a61c753aeb6a`. This is a historical
-snapshot, not another active implementation branch. The
-[retirement register](docs/system/legacy-retirement.md) owns remaining source
-removal/movement. The 35 retired frontend files and their exclusive tests have
-left the active tree and remain recoverable at pre-removal commit 5601c354.
-The sole mounted frontend is Lazy Tester, with seven reachable source files.
-Legacy disks, worlds, accounts, and installed data are retained.
-
-The GUI continues to use Tauri 2, Rust, Svelte, and TypeScript with locked existing
-dependencies. The [native packaging decision](Development/engine/distribution/README.md)
-creates a separate Lazy Tester product while retaining old installations/settings
-and private game profile paths. Legacy installer generation remains blocked.
-
-`npm --prefix Development run dev` (also `DEV.cmd dev`) now uses the same Lazy Tester identity,
-native feature and reviewed DLL staging as `npm --prefix Development run package:windows`. Set
-`LAZY_TESTER_NATIVE_PAYLOAD_DIR` to the directory containing the two reviewed
-bootstrap DLLs before either command; missing or different DLLs are refused.
-Staging copies only those DLLs, never adjacent profile bindings. First-run profile
-selection uses the product's private binding; opening the app does not launch games.
-The old developer-only adjacent-binding route remains explicit through
-`npm --prefix Development/apps/desktop run dev:preview`; it is not the default product route.
+Historic four-client designs, prior installer experiments and resource
+preview research are not live instructions; consult their linked owners
+only when specifically needed.

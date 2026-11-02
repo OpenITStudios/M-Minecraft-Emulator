@@ -502,7 +502,7 @@ test('QA single entry refuses source drift and log-only PASS without a pinned ta
   assert.equal((await h.callTool('probe_qa',{slot:2})).phase,'AWAITING_AUTHORIZED_COMMAND');
   const logOnly=await h.callTool('probe_qa',{slot:2});
   assert.equal(logOnly.status,'INCOMPLETE');
-  assert.equal(logOnly.sourceStatus,'QA_NATIVE_TARGET_NOT_BOUND');
+  assert.equal(logOnly.reason,'QA_NATIVE_TARGET_NOT_BOUND');
   assert.equal(logOnly.counts.pass,2);
   assert.equal(logOnly.gameplayAcceptance,'NOT_VERIFIED');
   assert.equal(logOnly.terminal,true);

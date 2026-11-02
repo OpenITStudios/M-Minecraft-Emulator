@@ -22,6 +22,14 @@ MC01-human/MC02-AI gameplay and later four/five-client concurrency.
 Earlier VMware/Sandboxie G0 notes are historical, not this test path.
 No current Minecraft background-input acceptance has been executed.
 
+**Probe QA is currently source-only.** The
+[one-entry QA workflow and proof gates](../system/map-aware-probe-qa.md)
+distinguish an approved Probe ZIP, local log file and native window from
+the **unverified** admin Player, loaded QA world and live Content Log
+source identity. A Probe-reported all-PASS does not certify map gameplay.
+This is a future runtime acceptance gate, not a request for local
+testing now.
+
 ## Select evidence matching the claim
 
 | Claim | Current existing owner or evidence source | What it does not prove |

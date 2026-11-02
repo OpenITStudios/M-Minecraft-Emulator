@@ -23,6 +23,8 @@ Read one relevant owner, not the entire documentation tree:
 | What are the runtime safety boundaries? | [Architecture](system/architecture.md) and [data layout](system/data-layout.md) |
 | How do source changes and optional checks work? | [Development operations](system/development-operations.md) |
 | What is actually proven or still untested? | [Validation router](validation/README.md) |
+| How do the desktop, MCP, Probe, map planner and diagnostics fit together? | [Canonical flow routing](system/architecture.md#canonical-end-to-end-flow-routing) |
+| How do I operate the existing read-only Probe QA entry? | [Map-Aware Probe QA](system/map-aware-probe-qa.md) / [MCP bridge](../Development/tooling/agent/README.md) |
 | Where is the AI Computer Use local-test procedure? | [Controlled Windows local-test guide](validation/ai-computer-use-localtest.md) |
 | What is the one current work status/next action? | [Development handoff](../planning/development.md) |
 | How are installer data and developer cache protected? | [Storage](system/artifact-storage.md) / [distribution](../Development/engine/distribution/README.md) |

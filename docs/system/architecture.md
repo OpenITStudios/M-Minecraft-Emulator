@@ -39,6 +39,36 @@ other independent native game windows contribute passive preview tiles.
 Minecraft remains separate OS processes; Task Manager grouping is **not**
 a product acceptance claim.
 
+## Canonical end-to-end flow routing
+
+Every active flow has ONE existing owner. An interface or source snapshot
+may request/observe work, but cannot take ownership from its runtime owner:
+
+| Flow | Entry -> responsible component | What it cannot establish |
+| --- | --- | --- |
+| App startup / manual Play | Root launcher -> Tauri/Svelte -> typed bridge -> retained Rust game controller -> official Minecraft processes | Launch/window state does not imply sign-in or world readiness |
+| Window composition / session exit | Workspace/DWM owner -> original verified game window; game controller owns normal close and exact process lifecycle | A DWM tile cannot own or terminate Minecraft |
+| External AI/MCP | Optional `Development/tooling/agent/mcp.mjs` (stdio) -> same-image CLI/authenticated original controller | Reading target identity or native ACK cannot prove gameplay input |
+| Original Skills Probe | Reviewed ZIP/cache -> `probe_qa` local capture checkpoint -> externally authorized Player/admin command -> appended original runner markers -> frozen source report | Original Probe-reported PASS cannot verify a map/world or gameplay |
+| Map-aware QA | Map-owned JSON -> `map-test-plan.mjs` -> bounded optional `probe_qa.mapPlan` | A plan is NOT_TESTED and never executes map tests |
+| Team module changes | Explicit local ZIP comparison -> approved team locks/source -> separately reviewed team sync | Lazy Tester does not install or fork analytics/scoring |
+| Diagnostic evidence | Explicit local JSONL import -> ignored `Data/Diagnostics` -> bounded read-only MCP | File identity/checksum does not prove Minecraft world origin |
+| Developer checks / package | `DEV.cmd` -> reviewed local tools -> existing check/package owners | Source checks or unsigned packages do not certify gameplay |
+
+The recommended **one** QA interface is `probe_qa`. Its default mode is
+source-only: it prepares the original admin command but **does not send
+it**. Its `proofGate` keeps Player/admin delivery, exact QA world and
+process/world-bound Content Log `NOT_VERIFIED`; only a separately
+authorized real Windows/Minecraft observation could change those
+runtime claims. No extra command dispatcher, game controller, QA engine,
+daemon, hosted CI or automatic map state writer is in this flow.
+
+For the minimal source owners and consumers, consult
+[the implementation map](implementation-map.md). For exact QA status,
+scope and failure handling, consult
+[Map-Aware Probe QA](map-aware-probe-qa.md). The one current work/status
+owner is [the concise development handoff](../../planning/development.md).
+
 ## One owner per responsibility
 
 - Native lifecycle, launch authorization, close and uncertain outcomes:

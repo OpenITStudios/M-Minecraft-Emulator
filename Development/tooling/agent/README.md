@@ -7,6 +7,23 @@ not an installed/tested AI controller. Follow the
 for the future approved verification. Earlier phases and detailed source
 notes are preserved in [history](../../../planning/history/mcp-agent-implementation-notes-through-2026-11-01.md).
 
+## One-entry flow selection
+
+| Task | Existing route | Runtime authority |
+| --- | --- | --- |
+| Human-controlled MC01–MC05 desktop | Lazy Tester UI -> original Rust session controller | Minecraft owns login/world |
+| AI inspection / optional target and capture | `mcp.mjs` stdio -> same-image CLI/native owner | Identity/capture only, not gameplay acceptance |
+| Foundation QA | `probe_qa` -> approved original Skills Probe ZIP -> stable log cursor -> bounded result | Actual admin Player command and world origin are NOT_VERIFIED |
+| Map-specific requirements | Optional map JSON -> `map-test-plan.mjs` -> `probe_qa.mapPlan` | Source-only plan; all map requirements NOT_TESTED |
+| Team source update | `team:update:inspect` offline -> official lockfile review | No automatic module sync |
+| Evidence investigation | Explicit local import -> `Data/Diagnostics` -> read-only MCP | No auto capture, no game control |
+
+Follow the [single architecture flow map](../../../docs/system/architecture.md#canonical-end-to-end-flow-routing)
+and [current concise handoff](../../../planning/development.md).
+No second controller, test runner, log collector, command dispatch or
+CI is introduced. The source-only QA `proofGate` is never an
+authorization to send gameplay input.
+
 ## Source ownership
 
 `mcp.mjs` is the single optional **local stdio MCP** bridge. It uses the
@@ -205,7 +222,7 @@ of the world/player or of successful native input.
 updater, capture collector, native input, in-game module, CI or
 world/account mutation. Tests authored in source remain NOT_EXECUTED.
 
-## Map-Aware Probe QA — P1 source-only
+## Map-Aware Probe QA — P1 planning / P2 proof, both source-only
 
 Optionally configure one map-owned JSON contract with
 `LAZY_TESTER_MAP_CONTRACT` or `--map-contract`. The same `probe_qa`
