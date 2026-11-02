@@ -759,6 +759,10 @@ try {
   assert.equal(await heading('Ready when you are').count(),0);
   await heading('Connection needs attention').waitFor();
   assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 1',exact:true}).isDisabled(),true);
+  assert.equal((await page.locator('[data-slot="1"] .lt-card-picture').textContent())?.trim(),'Unavailable',
+    'Disconnected profiles cannot advertise a misleading Launch action');
+  assert.equal((await page.locator('[data-slot="1"] .lt-card small').textContent())?.trim(),'Status unavailable',
+    'Disconnected cards must not claim the last known native state');
   // A transient first check must recover through a deliberate Refresh, without import/reset.
   await page.evaluate(()=>{window.__bindingFailure='';window.__locationFailure='';window.__finishBinding=()=>{};});
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
