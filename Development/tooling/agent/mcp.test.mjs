@@ -42,6 +42,12 @@ test('MCP handshake and tool discovery are standard JSON-RPC',async()=>{
   const init=await h.handle({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-11-25'}});
   assert.equal(init.result.protocolVersion,'2025-11-25');
   const listing=await h.handle({jsonrpc:'2.0',id:2,method:'tools/list'});
+  assert.equal(listing.result.tools.find(x=>x.name==='probe_qa')
+    .inputSchema.properties.publishToDesktop.type,'boolean');
+  assert.match(listing.result.tools.find(x=>x.name==='prepare_probe_qa')
+    .description,/LEGACY COMPATIBILITY ONLY/);
+  assert.match(listing.result.tools.find(x=>x.name==='read_probe_qa_result')
+    .description,/LEGACY COMPATIBILITY ONLY/);
   assert.deepEqual(listing.result.tools.map(x=>x.name),['start_visual_observation','get_multi_client_visual_state','read_visual_observation','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence','read_game_evidence','probe_qa','prepare_probe_qa','read_probe_qa_result','get_diagnostics_overview','list_issue_candidates','get_issue_details','query_diagnostic_evidence']);
   assert.equal(await h.handle({jsonrpc:'2.0',method:'notifications/initialized'}),null);
 });
@@ -1067,6 +1073,116 @@ test('publishing an activity summary is opt-in, bounded, and never game control'
   handler.shutdown();offline.shutdown();
 });
 
+
+test('one probe_qa call can optionally mirror the SAME source-only Testing state',async()=>{
+  let catalogs=0,captures=0,published=0,mutableCalls=[];
+  const fixture=createHandler({...config(),probeZip:path.resolve('skills-probe.zip'),
+    evidenceDirectory:path.resolve('capture')},{
+    native:async(_exe,operation,slot)=>{
+      mutableCalls.push([operation,slot]);
+      assert.equal(operation,'target','Only read-only identity may be inspected');
+      assert.equal(slot,2);
+      return {schema:1,ok:true,operation:'target',slot,
+        pid:402,windowId:802,createdFileTime:'99001',sessionId:1,
+        foreground:false,visible:true,minimized:false,
+        verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',
+        gameplayInput:'NOT_VERIFIED'};
+    },
+    probeCatalog:async()=>{
+      catalogs++;
+      return {autoCount:2,autoIds:['P01','P02'],
+        archiveSha256:'a'.repeat(64),runnerSha256:'b'.repeat(64),
+        sourceRevision:'c'.repeat(64),cache:'UNCHANGED_APPROVED_ZIP'};
+    },
+    probeRevisionStatus:async()=> 'UNCHANGED',
+    evidence:async(_root,slot,_limit,options)=>{
+      captures++;
+      if(options?.probeCheckpoint) {
+        return {slot,status:'CAPTURE_FILE_PRESENT',probeEvents:[
+          {kind:'start',arg:'auto',count:2,tick:100,at:null},
+          {kind:'result',id:'P01',result:'pass',tick:101,at:null},
+          {kind:'result',id:'P02',result:'pass',tick:102,at:null},
+          {kind:'done',arg:'auto',count:2,tick:103,at:null},
+        ]};
+      }
+      return {slot,status:'CAPTURE_FILE_PRESENT',captureCursor:{
+        kind:'STABLE_CAPTURE_CURSOR_V1'}};
+    },
+    publishActivity:async(_exe,activity)=>{
+      published++;
+      assert.equal(activity.desktopControl,
+        'NOT_OBSERVED_NO_AUTHENTICATED_DESKTOP_PROVIDER');
+      assert.equal(activity.mapGameplayAcceptance,'NOT_TESTED');
+      assert.equal(activity.items[0]?.slot,2);
+      return {status:'REPORTED_TO_EXISTING_NATIVE_CONTROLLER'};
+    },
+  });
+  const first=await fixture.callTool('probe_qa',
+    {slot:2,publishToDesktop:true});
+  assert.equal(first.phase,'AWAITING_AUTHORIZED_COMMAND');
+  assert.equal(first.operatorNextAction,
+    'AWAIT_AUTHORIZED_PLAYER_COMMAND_AND_QA_WORLD');
+  assert.equal(first.commandSentByLazyTester,false);
+  assert.equal(first.desktopDelivery,'REPORTED_TO_EXISTING_NATIVE_CONTROLLER');
+  const second=await fixture.callTool('probe_qa',
+    {slot:2,publishToDesktop:true});
+  assert.equal(second.status,'PROBE_REPORTED_PASS');
+  assert.equal(second.terminal,true);
+  assert.equal(second.operatorNextAction,
+    'REVIEW_REPORTED_PROBE_PASS_MAP_NOT_TESTED');
+  assert.equal(second.counts.pass,2);
+  assert.equal(second.desktopDelivery,'REPORTED_TO_EXISTING_NATIVE_CONTROLLER');
+  const beforeRepeated=[catalogs,captures,mutableCalls.length];
+  const duplicate=await fixture.callTool('probe_qa',
+    {slot:2,publishToDesktop:true});
+  assert.equal(duplicate.status,second.status);
+  assert.equal(duplicate.counts.pass,second.counts.pass);
+  assert.deepEqual([catalogs,captures,mutableCalls.length],beforeRepeated,
+    'Mirroring a terminal result must not rerun source, log or native checks');
+  assert.equal(published,3,'One explicit mirror per opted-in call only');
+  const legacy=await fixture.callTool('probe_qa',{slot:2});
+  assert.equal(legacy.operatorNextAction,undefined);
+  assert.equal(legacy.desktopDelivery,undefined);
+  assert.equal(published,3,'Legacy read does not publish anything');
+  const hintOnly=await fixture.callTool('probe_qa',
+    {slot:2,publishToDesktop:false});
+  assert.equal(hintOnly.operatorNextAction,
+    'REVIEW_REPORTED_PROBE_PASS_MAP_NOT_TESTED');
+  assert.equal(hintOnly.desktopDelivery,undefined);
+  assert.equal(published,3);
+  await assert.rejects(()=>fixture.callTool('probe_qa',
+    {slot:2,publishToDesktop:'true'}),/Invalid tool arguments/);
+  assert.equal(catalogs,1,'One checkpoint was prepared');
+  fixture.shutdown();
+});
+
+test('AI one-entry preflight refusal cannot mirror an older or invented run',async()=>{
+  let published=0;
+  const blocked=createHandler(config(),{
+    native:async()=>{throw Error('No native call authorized');},
+    publishActivity:async()=>{published++;return {
+      status:'REPORTED_TO_EXISTING_NATIVE_CONTROLLER'};},
+  });
+  const result=await blocked.callTool('probe_qa',
+    {slot:2,publishToDesktop:true});
+  assert.equal(result.phase,'PREFLIGHT');
+  assert.equal(result.status,'BLOCKED');
+  assert.equal(result.operatorNextAction,'RESOLVE_APPROVED_PROBE_SOURCE_OR_CAPTURE');
+  assert.equal(result.desktopDelivery,
+    'NO_CURRENT_TESTING_CHECKPOINT_TO_MIRROR');
+  assert.equal(published,0,'Do not falsely publish an unauthenticated run');
+  await assert.rejects(()=>blocked.callTool('probe_qa',
+    {slot:1,publishToDesktop:true}),/MC01 human host is protected/);
+  blocked.shutdown();
+});
+
+test('operator hints distinguish waiting, source-only, and blocked terminal reports',async()=>{
+  const fixture=createHandler(config());
+  assert.equal((await fixture.callTool('probe_qa',
+    {slot:2,publishToDesktop:false})).operatorNextAction,
+    'RESOLVE_APPROVED_PROBE_SOURCE_OR_CAPTURE');
+  fixture.shutdown();
+});
 test('never trusts incomplete or out-of-order native profiles',()=>{
   assert.throws(()=>validateNativeReport({schema:1,ok:true,operation:'inspect',profiles:snapshot('inspect').profiles.toReversed()},'inspect'));
   assert.throws(()=>validateNativeReport({schema:1,ok:true,operation:'inspect',profiles:snapshot('inspect').profiles},'launch'));

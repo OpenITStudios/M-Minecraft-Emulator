@@ -867,9 +867,9 @@ export const TOOL_LIST=[
   {name:'assess_input_route',description:'Read-only native identity check for AI gameplay input: bind validated multi-client action timeline to real MC HWND/PID; ALWAYS reports no verified independent game-input backend and NEVER sends input.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}}},required:['actions'],additionalProperties:false}},
   {name:'summarize_test_evidence',description:'Read up to 20 bounded team [ANALYTICS] and [GAME_RESULTS] records per profile. Only sanitized summaries reach the model; no game identity or gameplay PASS is inferred.',inputSchema:{type:'object',properties:{slots:{type:'array',items:{type:'integer',minimum:1,maximum:5},minItems:1,maxItems:5,uniqueItems:true}},additionalProperties:false}},
   {name:'read_game_evidence',description:'Read one compact allowlisted 1-20 record projection of team analytics/results or optional generic diagnostics. No raw game JSON, player record IDs, credentials or gameplay PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
-  {name:'probe_qa',description:'One source-only QA entry. Original Probe result is separate from optional map contract plan. scope=full|smoke|affected selects map requirements only; affected without trusted VCS diff falls back to full. restart=true is explicit. No game command, input or map PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},restart:{type:'boolean'},scope:{type:'string',enum:['full','smoke','affected']}},additionalProperties:false}},
-  {name:'prepare_probe_qa',description:'ONE-STEP read-only Gameplay Probe auto-run preparation from an exact approved ZIP. Returns a player-admin command for an externally authorized QA-world operator/AI; never sends keys, commands, installs packs or starts Minecraft.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},additionalProperties:false}},
-  {name:'read_probe_qa_result',description:'Review only fresh RUN_START/RESULT/RUN_DONE markers from the prepared pinned Skills Probe run. Never treats stored results or native transport ACK as a gameplay pass.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},sessionId:{type:'string',pattern:'^[a-f0-9]{24}$'}},required:['slot','sessionId'],additionalProperties:false}},
+  {name:'probe_qa',description:'Single source-only Testing entry: reuse one per-slot checkpoint and the original immutable Probe outcome until explicit restart=true. Optional publishToDesktop=true uses the SAME in-memory activity source to mirror status in one tool call and returns an operatorNextAction hint. It never sends Minecraft commands or establishes map gameplay PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},restart:{type:'boolean'},scope:{type:'string',enum:['full','smoke','affected']},publishToDesktop:{type:'boolean'}},additionalProperties:false}},
+  {name:'prepare_probe_qa',description:'LEGACY COMPATIBILITY ONLY. Prefer probe_qa for all new AI Testing workflows. A direct legacy prepare invalidates an existing per-slot result checkpoint. Returns a command for a separately authorized player/admin; never sends input or starts Minecraft.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},additionalProperties:false}},
+  {name:'read_probe_qa_result',description:'LEGACY COMPATIBILITY ONLY. Prefer probe_qa to prepare, read and resume the same canonical checkpoint without carrying a session token. This reader inspects original RUN_START/RESULT/RUN_DONE and never certifies gameplay success.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},sessionId:{type:'string',pattern:'^[a-f0-9]{24}$'}},required:['slot','sessionId'],additionalProperties:false}},
   // Source-only local-first diagnostics: explicitly imported immutable evidence.
   // No raw log, filesystem path, or automatic Minecraft activity is exposed.
   {name:'get_diagnostics_overview',
@@ -1052,6 +1052,36 @@ function capabilities(mode,experimental=false,multi=false) {return {schema:1,mod
     windowsAgentWorkspace:'PREVIEW_NOT_INTEGRATED_NO_CROSS_SESSION_INPUT',
     transactionEngine:inputExecutionStatus()},
   note:'MCP tools control the native session owner and read evidence; they do NOT independently move multiple background Minecraft clients.'};}
+
+/**
+ * One conservative next-action hint for the original probe_qa response.
+ * AI should use this rather than inventing a second Testing workflow or
+ * treating a source-only CHECKPOINT as a game action.
+ * This is not a second result/acceptance classification or dispatch gate.
+ */
+export function operatorNextTestingAction(result) {
+  if(!result||typeof result!=='object')return 'REVIEW_UNAVAILABLE_TESTING_STATUS';
+  if(result.terminal===true) {
+    if(result.status==='PROBE_REPORTED_PASS')
+      return 'REVIEW_REPORTED_PROBE_PASS_MAP_NOT_TESTED';
+    if(result.status==='FAIL')return 'REVIEW_REPORTED_PROBE_FAILURES';
+    if(result.status==='NEEDS_REVIEW')return 'REVIEW_REPORTED_PROBE_NOTES';
+    return 'REVIEW_BLOCKED_OR_INCOMPLETE_TERMINAL_REPORT';
+  }
+  if(result.phase==='AWAITING_AUTHORIZED_COMMAND')
+    return 'AWAIT_AUTHORIZED_PLAYER_COMMAND_AND_QA_WORLD';
+  if(result.phase==='PREFLIGHT')
+    return 'RESOLVE_APPROVED_PROBE_SOURCE_OR_CAPTURE';
+  if(result.status==='WAITING')
+    return 'WAIT_FOR_NEW_EVIDENCE_THEN_CALL_SAME_TOOL';
+  if(result.reason==='QA_OPERATION_IN_PROGRESS')
+    return 'WAIT_FOR_CURRENT_TESTING_READ';
+  if(result.status==='INCOMPLETE')
+    return 'REVIEW_INCOMPLETE_EVIDENCE';
+  if(result.status==='BLOCKED')
+    return 'RESOLVE_BLOCKER_NO_AUTOMATIC_RESTART';
+  return 'REVIEW_UNAVAILABLE_TESTING_STATUS';
+}
 
 export function createHandler(config,{
   native=runNative,evidence=readGameEvidence,capture=captureCuaWindow,
@@ -1284,6 +1314,35 @@ export function createHandler(config,{
     }
   }
   async function callTool(name,args) {
+    // Opt-in AI convenience path over the SAME original Probe checkpoint.
+    // Legacy calls without the flag are byte-for-byte behavior-compatible.
+    // Desktop delivery is only a short-lived presentation mirror, never
+    // another result store, runner, approval or proof of gameplay input.
+    if(name==='probe_qa' && args && Object.hasOwn(args,'publishToDesktop')) {
+      keysExactly(args,['slot','restart','scope','publishToDesktop']);
+      if(typeof args.publishToDesktop!=='boolean')
+        throw new Error('Invalid tool arguments');
+      const originalArguments={};
+      for(const key of ['slot','restart','scope']) {
+        if(Object.hasOwn(args,key))originalArguments[key]=args[key];
+      }
+      const result=await callTool('probe_qa',originalArguments);
+      const operatorNextAction=operatorNextTestingAction(result);
+      if(args.publishToDesktop!==true)return {...result,operatorNextAction};
+      const slot=slotOf(args.slot??2);
+      // Do not show an unrelated old checkpoint when this preflight
+      // failed, another caller superseded it, or no run was admitted.
+      if(result.phase==='PREFLIGHT'||
+         result.reason==='QA_PLAN_SUPERSEDED'||
+         !probeQaPlans.has(slot)) {
+        return {...result,operatorNextAction,
+          desktopDelivery:'NO_CURRENT_TESTING_CHECKPOINT_TO_MIRROR'};
+      }
+      const mirrored=await callTool('agent_capabilities',
+        {publishToDesktop:true});
+      return {...result,operatorNextAction,
+        desktopDelivery:mirrored.desktopDelivery??'STATUS_DELIVERY_UNAVAILABLE'};
+    }
     if(name==='probe_qa') {
       keysExactly(args,['slot','restart','scope']);
       const slot=slotOf(args.slot??2);

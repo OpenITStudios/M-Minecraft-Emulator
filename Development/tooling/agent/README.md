@@ -237,6 +237,56 @@ Existing MCP stays a read-only telemetry consumer. No new Codex
 stream, auto-update daemon, test runner or Minecraft game process.
 See [team update workflow](../../../docs/system/education-team-source-updates.md).
 
+## AI-friendly one-entry Testing and result workflow
+
+The preferred AI operation remains the **original** `probe_qa`. An agent
+may now request `probe_qa({slot:2,publishToDesktop:true})` to prepare or
+read the same per-slot source-only checkpoint **and** explicitly mirror
+its existing status to the Play header in one MCP call. Further calls with
+`restart` omitted reuse the same run. Setting `restart:true` **always**
+requests a fresh checkpoint and must not be repeated casually. This is not a new tool, controller, QA runner, log
+collector, archive, or automatic game command.
+
+- The response retains the original `probe_qa` fields (the source of
+  truth) and adds one `operatorNextAction` code and
+  `desktopDelivery`. The latter is only receipt of a short-lived
+  `agent_capabilities.activity` projection, **not** proof the UI was
+  viewed or a particular Minecraft run completed.
+- `publishToDesktop:false` gives the same operator hint without native
+  mirroring; omitting the flag preserves the original response exactly.
+  The AI no longer needs to call `agent_capabilities` separately solely
+  to update Testing activity. It may still call that tool for general
+  agent/capture information.
+- Preparation remains `AWAIT_AUTHORIZED_PLAYER_COMMAND_AND_QA_WORLD`:
+  no command is sent, and no world/player authority is invented. The
+  agent must not repeatedly restart or treat `WAITING` as verified
+  in-game execution; it may poll the same `probe_qa` checkpoint only
+  when there is new reason to expect evidence.
+- The original frozen `terminalReport` remains the **one** Testing
+  outcome in MCP memory. Re-reading a terminal response does not run
+  Skills Probe again. Any optional `qaReport` is a map-scope projection
+  inside that same response, not a second PASS/FAIL owner. The UI's
+  `Testing Summary` reads this same report-derived status/counts only.
+- A missing/preflight-blocked checkpoint does not publish a misleading
+  older Testing state. Status publication failures are reported as
+  `desktopDelivery=STATUS_DELIVERY_UNAVAILABLE` while the canonical
+  Probe result remains readable. All user-facing UI labels stay English.
+- **Scope of deduplication:** one frozen terminal result per Minecraft slot
+  is guaranteed only inside the SAME MCP stdio process. Multiple independent
+  MCP processes currently cannot prove global uniqueness or coordinate
+  one shared report. Use one designated MCP Testing coordinator per app
+  session; do not run independent competing Probe owners for the same
+  slot. Native game/input ownership remains singular, but it is NOT a
+  substitute for an authenticated cross-process Testing-run identity.
+
+**Still unverified:** The native input experiment is disabled in regular
+builds; actual Player/admin command delivery, game/world-bound log
+attribution, Minecraft movement and full map acceptance have not been
+tested. Removing those trust gates is not a UI-efficiency improvement.
+The desktop status mirror expires after 12 seconds and does not become
+a persistent result archive. No Windows execution, app build or CI is
+authorized by this source change.
+
 ## Gameplay Probe AI QA — no repeated ZIP work
 
 **One-time configuration:** point the existing MCP at the approved

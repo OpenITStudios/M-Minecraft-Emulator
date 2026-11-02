@@ -67,6 +67,18 @@ new-revision acceptance.
   Native/TypeScript/source validation, MCP fixtures and browser
   regressions AUTHORED_NOT_EXECUTED. The explicit status mirror still
   expires after 12 seconds and requires agent opt-in publication.
+- **Single AI-driven Testing entry (2 November):** The existing
+  `probe_qa({slot,publishToDesktop:true})` can explicitly mirror its
+  current source-only Testing activity to desktop in the SAME MCP call,
+  rather than requiring a second `agent_capabilities` tool call.
+  Returns a conservative `operatorNextAction` hint while preserving
+  the ONE original per-slot checkpoint/immutable `terminalReport` and
+  optional nested map `qaReport`. The default `probe_qa` behavior is
+  unchanged, no automatic Minecraft command/UI automation, no second
+  test-runner, account/world mutation, CI, app/window rearrangement,
+  persistent report archive or background observer. Regression fixtures
+  AUTHORED_NOT_EXECUTED; actual PC control and Skills Probe world/result
+  provenance NOT_VERIFIED.
 - **Native owner:** original Rust session controller handles game
   process identity, private profiles, normal exit and recovery.
   Workspace/DWM presentation never becomes a second lifecycle owner.
