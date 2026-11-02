@@ -395,31 +395,31 @@ safety constraint, not a missing automatic retry.
 
 ### Combined native + private archive review (source-only)
 
-When \`Data/Testing\` was explicitly configured, the SAME
-\`probe_qa({slot:2,inspectRun:true})\` additionally scans the original,
+When `Data/Testing` was explicitly configured, the SAME
+`probe_qa({slot:2,inspectRun:true})` additionally scans the original,
 bounded immutable summary archive read-only, using the existing
-\`testing-result-store.mjs\` verifier. It returns \`archiveReview\`:
+`testing-result-store.mjs` verifier. It returns `archiveReview`:
 
-- \`NOT_CONFIGURED\`: no archive read was requested;
-  \`NO_COMMITTED_SUMMARY_FOUND\`: no committed summary was found in
+- `NOT_CONFIGURED`: no archive read was requested;
+  `NO_COMMITTED_SUMMARY_FOUND`: no committed summary was found in
   this configured root, **not** proof that no historical run ever existed.
-- \`HISTORICAL_SUMMARY_PRESENT\`: a validated source-only result
+- `HISTORICAL_SUMMARY_PRESENT`: a validated source-only result
   exists, but does not itself match the current native FINAL reference.
-  Open it explicitly through \`probe_qa({archivedRunId})\`.
-- \`FINAL_REFERENCE_MATCHES_ARCHIVE\`: current native FINAL ID,
+  Open it explicitly through `probe_qa({archivedRunId})`.
+- `FINAL_REFERENCE_MATCHES_ARCHIVE`: current native FINAL ID,
   source-only status and SHA-256 digest match a committed summary;
   this is **not** world, player, or operator authentication.
-- \`CONFLICT_RESERVED_HAS_FINAL_ARCHIVE\` or
-  \`CONFLICT_FINAL_REFERENCE_MISMATCH\`: do not transfer or restart;
+- `CONFLICT_RESERVED_HAS_FINAL_ARCHIVE` or
+  `CONFLICT_FINAL_REFERENCE_MISMATCH`: do not transfer or restart;
   the native and archive observations disagree.
-- \`INTEGRITY_UNAVAILABLE_OR_CONFLICT\`: a missing, partial, corrupt,
+- `INTEGRITY_UNAVAILABLE_OR_CONFLICT`: a missing, partial, corrupt,
   linked or otherwise unreadable archive must be reviewed manually.
 
-Every result fixes \`archiveReview.authorizesTransfer=false\` and
-the native \`inspection.transferAllowed=false\`. Owner alive or unknown
-means wait/review. Even \`BOUND_PARENT_EXIT_CONFIRMED\` together with
-\`NO_COMMITTED_SUMMARY_FOUND\` only returns
-\`AWAIT_SEPARATE_OPERATOR_APPROVAL_NO_TRANSFER_AVAILABLE\`. No user
+Every result fixes `archiveReview.authorizesTransfer=false` and
+the native `inspection.transferAllowed=false`. Owner alive or unknown
+means wait/review. Even `BOUND_PARENT_EXIT_CONFIRMED` together with
+`NO_COMMITTED_SUMMARY_FOUND` only returns
+`AWAIT_SEPARATE_OPERATOR_APPROVAL_NO_TRANSFER_AVAILABLE`. No user
 can approve takeover through MCP, Tauri, an environment variable,
 a time threshold, an AI assertion, or an archive checksum.
 

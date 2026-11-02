@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-**Updated:** 2 November 2026. **Branch:** `Local` only;
+**Updated:** 3 November 2026. **Branch:** `Local` only;
 `main` release-reserved; GitHub Actions CI disabled.
 This file is the **single current status and next-action owner**.
 Older detailed sections are preserved in
@@ -130,14 +130,14 @@ new-revision acceptance.
   Windows/runtime tests and source suites NOT_EXECUTED; source regressions
   authored only. No second controller, automatic input or new desktop UI.
 - **Read-only native/archive Testing reconciliation (3 November, source-only):**
-  the existing \`probe_qa({slot,inspectRun:true})\` now combines the
-  original native inspection with an explicit optional \`Data/Testing\`
+  the existing `probe_qa({slot,inspectRun:true})` now combines the
+  original native inspection with an explicit optional `Data/Testing`
   immutable-summary scan. Final run ID/outcome/digest correlations,
   archived historical summaries, missing archives and contradictory or
   unreadable records get distinct bounded statuses. Missing archives,
   confirmed OS-parent exit, hash matches and model input **never**
-  authorize a run transfer: \`archiveReview.authorizesTransfer=false\`
-  and original \`inspection.transferAllowed=false\` remain enforced.
+  authorize a run transfer: `archiveReview.authorizesTransfer=false`
+  and original `inspection.transferAllowed=false` remain enforced.
   Pure Node regression scenarios authored NOT_EXECUTED; no new native
   controller, Test runner, desktop panel, CI, Windows or Minecraft action.
 - **Native owner:** original Rust session controller handles game
