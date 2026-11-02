@@ -232,6 +232,49 @@ export async function archiveTestingResult({store,runId,slot,report,reportDigest
 }
 
 
+// Conservative read-only correlation of an optional private original-Probe
+// archive and a native run inspection. An empty archive is not proof that
+// no earlier result existed, and a checksum never authenticates a world.
+// NO status returned here is operator consent or transfer admission.
+export async function reviewTestingArchiveForRun({
+  store,slot,phase,runId=null,reportedStatus=null,reportDigest=null,
+}) {
+  if(!validSlot(slot)||!['NO_RECORD','RESERVED','FINAL'].includes(phase)||
+     (phase==='NO_RECORD'&&(runId!==null||reportedStatus!==null||
+       reportDigest!==null))||
+     (phase==='RESERVED'&&(!validRun(runId)||
+       reportedStatus!==null||reportDigest!==null))||
+     (phase==='FINAL'&&(!validRun(runId)||
+       !TERMINAL.has(reportedStatus)||!validDigest(reportDigest))))
+    throw new Error('Invalid native Testing archive review context');
+  const latest=await archivedTestingSlotReference({store,slot});
+  const base={
+    schema:1,slot,
+    trust:'LOCAL_CHECKSUM_ONLY_NOT_MINECRAFT_OR_OPERATOR_ATTESTATION',
+    authorizesTransfer:false,
+  };
+  if(!latest)return {
+    ...base,status:'NO_COMMITTED_SUMMARY_FOUND',
+  };
+  // The reference scanner already validated every manifest and file in
+  // bounded Data/Testing. Revalidate this selected record before comparison.
+  const saved=await readTestingArchive({store,runId:latest.runId});
+  if(saved.slot!==slot||saved.status!=='ARCHIVED_SOURCE_ONLY')
+    throw new Error('Testing archive slot reference inconsistent');
+  const fields={...base,archivedRunId:saved.runId,
+    archivedOutcome:saved.reportedOutcome};
+  if(phase==='FINAL'&&saved.runId===runId) {
+    return {...fields,status:
+      saved.originalDigest===reportDigest&&
+      saved.reportedOutcome===reportedStatus?
+        'FINAL_REFERENCE_MATCHES_ARCHIVE':
+        'CONFLICT_FINAL_REFERENCE_MISMATCH'};
+  }
+  if(phase==='RESERVED'&&saved.runId===runId)
+    return {...fields,status:'CONFLICT_RESERVED_HAS_FINAL_ARCHIVE'};
+  return {...fields,status:'HISTORICAL_SUMMARY_PRESENT'};
+}
+
 // On the FIRST coordinated request after MCP restart, an existing
 // committed historical result is evidence of an earlier run that must
 // not silently be replayed. This is an archive query, not live control.

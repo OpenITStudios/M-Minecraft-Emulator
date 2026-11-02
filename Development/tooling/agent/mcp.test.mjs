@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,readFile,writeFile,symlink,rm,open,rename,appendFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,coordinateTestingRunNative,inspectTestingRunNative,parseTestingInspectionReceipt,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions,
+import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,coordinateTestingRunNative,inspectTestingRunNative,parseTestingInspectionReceipt,testingRecoveryNextAction,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions,
   sendExperimentalAiWriterLeaseNative} from './mcp.mjs';
 
 const snapshot=(operation)=>({schema:1,ok:true,operation,profiles:Array.from({length:5},(_,i)=>({slot:i+1,state:i===0?'RUNNING':'STOPPED',responding:i===0,hasWindow:i===0,needsAttention:false}))});
@@ -1546,6 +1546,8 @@ test('read-only one-entry Testing inspection does not create or mutate a run',as
   assert.equal(reply.inspection.phase,'RESERVED');
   assert.equal(reply.inspection.transferAllowed,false);
   assert.equal(reply.inspection.ownerProcessProof,'NOT_BOUND_TO_PROCESS_HANDLE');
+  assert.equal(reply.archiveReview.status,'NOT_CONFIGURED');
+  assert.equal(reply.archiveReview.authorizesTransfer,false);
   assert.equal(reply.operatorNextAction,
     'REQUIRE_VERIFIED_OWNER_DEATH_AND_OPERATOR_APPROVAL');
   assert.equal(reply.commandSentByLazyTester,false);
@@ -1582,6 +1584,68 @@ test('Testing native read-only inspections do not infer ownership from absence',
   assert.equal(result.inspection.transferAllowed,false);
   assert.equal(result.gameplayAcceptance,'NOT_VERIFIED');
   handler.shutdown();
+});
+
+
+test('operator review correlates source-only archive, live parent and conflicts without takeover',async()=>{
+  const reserved={
+    schema:1,slot:2,phase:'RESERVED',runId:'b'.repeat(32),
+    ownerTokenMatch:false,reportedStatus:null,reportDigest:null,
+    ownerProcessProof:'BOUND_PARENT_EXIT_CONFIRMED',
+    operatorApproval:'NOT_AVAILABLE_IN_PROTOCOL',transferAllowed:false,
+    recoveryAction:'REQUIRE_VERIFIED_OWNER_DEATH_AND_OPERATOR_APPROVAL',
+    provenance:'RETAINED_CONTROLLER_MEMORY_ONLY_NOT_GAMEPLAY_PROOF'};
+  let archiveCalls=0,inspectCalls=0;
+  let archiveStatus='NO_COMMITTED_SUMMARY_FOUND';
+  const state={...config(),testingArchiveDirectory:path.join(
+    path.resolve('Data'),'Testing')};
+  const handler=createHandler(state,{
+    native:async()=>{throw Error('Never read Minecraft or invoke controls');},
+    coordinateTesting:async()=>{throw Error('Never reserve Testing');},
+    evidence:async()=>{throw Error('Never inspect live game capture');},
+    publishActivity:async()=>{throw Error('Never publish');},
+    inspectTesting:async()=>{inspectCalls++;return reserved;},
+    reviewTestingArchive:async({slot,phase,runId})=>{
+      archiveCalls++;
+      assert.equal(slot,2);assert.equal(phase,'RESERVED');
+      assert.equal(runId,reserved.runId);
+      if(archiveStatus==='THROW')throw Error('Private path is unavailable');
+      return {schema:1,slot,status:archiveStatus,
+        trust:'LOCAL_CHECKSUM_ONLY_NOT_MINECRAFT_OR_OPERATOR_ATTESTATION',
+        authorizesTransfer:false};
+    },
+  });
+  try {
+    const exited=await handler.callTool('probe_qa',{slot:2,inspectRun:true});
+    assert.equal(exited.archiveReview.status,'NO_COMMITTED_SUMMARY_FOUND');
+    assert.equal(exited.operatorNextAction,
+      'AWAIT_SEPARATE_OPERATOR_APPROVAL_NO_TRANSFER_AVAILABLE');
+    assert.equal(exited.inspection.transferAllowed,false);
+    assert.equal(exited.archiveReview.authorizesTransfer,false);
+    archiveStatus='CONFLICT_RESERVED_HAS_FINAL_ARCHIVE';
+    const conflict=await handler.callTool('probe_qa',{slot:2,inspectRun:true});
+    assert.equal(conflict.operatorNextAction,
+      'REVIEW_TESTING_ARCHIVE_CONFLICT_NO_TRANSFER');
+    archiveStatus='THROW';
+    const unknown=await handler.callTool('probe_qa',{slot:2,inspectRun:true});
+    assert.equal(unknown.archiveReview.status,'INTEGRITY_UNAVAILABLE_OR_CONFLICT');
+    assert.equal(unknown.operatorNextAction,
+      'REVIEW_TESTING_ARCHIVE_CONFLICT_NO_TRANSFER');
+    assert.equal(inspectCalls,3);
+    assert.equal(archiveCalls,3);
+  }finally{handler.shutdown();}
+  assert.equal(testingRecoveryNextAction({
+    ...reserved,ownerProcessProof:'BOUND_PARENT_RUNNING_AT_INSPECTION'},
+    {status:'NO_COMMITTED_SUMMARY_FOUND'}),
+    'WAIT_FOR_LIVE_TESTING_OWNER_NO_TRANSFER');
+  assert.equal(testingRecoveryNextAction(reserved,{status:'NOT_CONFIGURED'}),
+    'RECONCILE_TESTING_ARCHIVE_BEFORE_ANY_TRANSFER');
+  assert.equal(testingRecoveryNextAction({
+    ...reserved,phase:'FINAL'},{status:'FINAL_REFERENCE_MATCHES_ARCHIVE'}),
+    'READ_FINAL_REPORT_NO_OWNER_TRANSFER');
+  assert.equal(testingRecoveryNextAction({
+    ...reserved,phase:'NO_RECORD'},{status:'HISTORICAL_SUMMARY_PRESENT'}),
+    'READ_HISTORICAL_RESULT_NO_AUTOMATIC_RESTART');
 });
 
 test('native Testing inspection admission fails before subprocess on bad input',async()=>{

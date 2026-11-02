@@ -5,7 +5,7 @@ import {mkdtemp,mkdir,readFile,writeFile,readdir,rm,symlink} from 'node:fs/promi
 import path from 'node:path';
 import {tmpdir} from 'node:os';
 import {validateTestingArchiveRoot,archiveTestingResult,readTestingArchive,
-  archivedTestingSlotReference} from './testing-result-store.mjs';
+  archivedTestingSlotReference,reviewTestingArchiveForRun} from './testing-result-store.mjs';
 
 const id='a'.repeat(32),digest='c'.repeat(64);
 const original=(status='PROBE_REPORTED_PASS')=>({
@@ -124,5 +124,52 @@ test('archive slot inspection is read-only and blocks unsafe restart guesses',as
       /ENOENT/);
     assert.equal(await readTestingArchive({store,runId:id}).reportedOutcome,
       'PROBE_REPORTED_PASS');
+  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('read-only native/archive recovery review matches final source reference but authorizes nothing',async()=>{
+  const root=await mkdtemp(path.join(tmpdir(),'lt-testing-recovery-review-'));
+  const data=path.join(root,'Data');await mkdir(data);
+  const store=path.join(data,'Testing');
+  const run='e'.repeat(32), prior='f'.repeat(32);
+  const inspect=(phase,runId,status=null,sha=null)=>({
+    store,slot:2,phase,runId,reportedStatus:status,reportDigest:sha});
+  try {
+    const empty=await reviewTestingArchiveForRun(inspect('NO_RECORD',null));
+    assert.equal(empty.status,'NO_COMMITTED_SUMMARY_FOUND');
+    assert.equal(empty.authorizesTransfer,false);
+    await archiveTestingResult({
+      store,runId:run,slot:2,report:original(),reportDigest:digest});
+    const match=await reviewTestingArchiveForRun(inspect(
+      'FINAL',run,'PROBE_REPORTED_PASS',digest));
+    assert.equal(match.status,'FINAL_REFERENCE_MATCHES_ARCHIVE');
+    assert.equal(match.archivedRunId,run);
+    assert.equal(match.authorizesTransfer,false);
+    assert.equal(match.trust,
+      'LOCAL_CHECKSUM_ONLY_NOT_MINECRAFT_OR_OPERATOR_ATTESTATION');
+    const mismatch=await reviewTestingArchiveForRun(inspect(
+      'FINAL',run,'PROBE_REPORTED_PASS','d'.repeat(64)));
+    assert.equal(mismatch.status,'CONFLICT_FINAL_REFERENCE_MISMATCH');
+    assert.equal((await reviewTestingArchiveForRun(inspect(
+      'RESERVED',run))).status,'CONFLICT_RESERVED_HAS_FINAL_ARCHIVE');
+    const historical=await reviewTestingArchiveForRun(inspect(
+      'RESERVED',prior));
+    assert.equal(historical.status,'HISTORICAL_SUMMARY_PRESENT');
+    assert.equal((await reviewTestingArchiveForRun(inspect(
+      'NO_RECORD',null))).status,'HISTORICAL_SUMMARY_PRESENT');
+    assert.equal(historical.authorizesTransfer,false);
+    assert.equal(historical.archivedRunId,run);
+    for(const bad of [
+      inspect('RESERVED',null),inspect('FINAL',run,'FAIL','invalid'),
+      inspect('NO_RECORD',run),inspect('FINISHED',run),
+    ]) {
+      await assert.rejects(()=>reviewTestingArchiveForRun(bad),
+        /Invalid native Testing archive review context/);
+    }
+    // An uncommitted/corrupted archive invalidates the ENTIRE scan,
+    // not just the current slot; no green recovery status is possible.
+    await mkdir(path.join(store,'runs',prior));
+    await assert.rejects(()=>reviewTestingArchiveForRun(inspect(
+      'RESERVED',run)));
   }finally{await rm(root,{recursive:true,force:true});}
 });

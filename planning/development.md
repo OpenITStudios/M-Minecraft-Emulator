@@ -129,6 +129,17 @@ new-revision acceptance.
   consent. `transferAllowed=false` and no operator approval remain enforced.
   Windows/runtime tests and source suites NOT_EXECUTED; source regressions
   authored only. No second controller, automatic input or new desktop UI.
+- **Read-only native/archive Testing reconciliation (3 November, source-only):**
+  the existing \`probe_qa({slot,inspectRun:true})\` now combines the
+  original native inspection with an explicit optional \`Data/Testing\`
+  immutable-summary scan. Final run ID/outcome/digest correlations,
+  archived historical summaries, missing archives and contradictory or
+  unreadable records get distinct bounded statuses. Missing archives,
+  confirmed OS-parent exit, hash matches and model input **never**
+  authorize a run transfer: \`archiveReview.authorizesTransfer=false\`
+  and original \`inspection.transferAllowed=false\` remain enforced.
+  Pure Node regression scenarios authored NOT_EXECUTED; no new native
+  controller, Test runner, desktop panel, CI, Windows or Minecraft action.
 - **Native owner:** original Rust session controller handles game
   process identity, private profiles, normal exit and recovery.
   Workspace/DWM presentation never becomes a second lifecycle owner.
@@ -237,9 +248,10 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: design separate operator-authenticated approval and atomic
-compare-and-swap Testing-run transfer using the retained parent handle,
-exact old run ID, and private archive reconciliation. The observed OS-parent
+Next: design and implement an independently authenticated **local operator**
+approval boundary, then an atomic compare-and-swap Testing-run transfer in
+the original retained controller using its pinned process handle, exact
+old run ID, and the new read-only private archive reconciliation. The observed OS-parent
 exit is not proof of MCP-script authenticity or operator consent;
 `transferAllowed=false` remains mandatory until those gates exist. Runtime tests remain deferred. Retain
 the source-only P3 report with map tests NOT_TESTED and real-world

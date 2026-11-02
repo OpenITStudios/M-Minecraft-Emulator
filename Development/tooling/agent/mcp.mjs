@@ -19,7 +19,7 @@ import {captureCuaWindow,validateCuaExecutable} from './visual-capture.mjs';
 import {validateDiagnosticsRoot,diagnosticsOverview,listDiagnosticIssues,
   getDiagnosticIssue,queryDiagnosticEvidence} from './diagnostics-local.mjs';
 import {validateTestingArchiveRoot,archiveTestingResult,
-  readTestingArchive,archivedTestingSlotReference}
+  readTestingArchive,archivedTestingSlotReference,reviewTestingArchiveForRun}
   from './testing-result-store.mjs';
 import {createVisualObserver,OBSERVATION_LIMITS,
   summarizeTeamVisualState,verifyTeamObservationBasis,
@@ -277,6 +277,27 @@ export function parseTestingInspectionReceipt(message,slot) {
        obs.recoveryAction!=='READ_FINAL_REPORT_NO_OWNER_TRANSFER')fail();
   }
   return obs;
+}
+
+// Read-only operator guidance. NEVER treats a missing archive, parent exit,
+// token match or checksum as authorization for another Testing owner.
+export function testingRecoveryNextAction(inspection,archiveReview) {
+  if(archiveReview?.status==='INTEGRITY_UNAVAILABLE_OR_CONFLICT'||
+     archiveReview?.status==='CONFLICT_RESERVED_HAS_FINAL_ARCHIVE'||
+     archiveReview?.status==='CONFLICT_FINAL_REFERENCE_MISMATCH')
+    return 'REVIEW_TESTING_ARCHIVE_CONFLICT_NO_TRANSFER';
+  if(inspection.phase==='FINAL')return 'READ_FINAL_REPORT_NO_OWNER_TRANSFER';
+  if(inspection.phase==='NO_RECORD')
+    return archiveReview?.status==='HISTORICAL_SUMMARY_PRESENT'?
+      'READ_HISTORICAL_RESULT_NO_AUTOMATIC_RESTART':
+      'CHECK_ARCHIVE_AND_CONTROLLER_EPOCH';
+  if(inspection.ownerProcessProof==='BOUND_PARENT_RUNNING_AT_INSPECTION')
+    return 'WAIT_FOR_LIVE_TESTING_OWNER_NO_TRANSFER';
+  if(inspection.ownerProcessProof==='BOUND_PARENT_EXIT_CONFIRMED')
+    return archiveReview?.status==='NO_COMMITTED_SUMMARY_FOUND'?
+      'AWAIT_SEPARATE_OPERATOR_APPROVAL_NO_TRANSFER_AVAILABLE':
+      'RECONCILE_TESTING_ARCHIVE_BEFORE_ANY_TRANSFER';
+  return 'REQUIRE_VERIFIED_OWNER_DEATH_AND_OPERATOR_APPROVAL';
 }
 
 export async function inspectTestingRunNative(executable,{slot,ownerId}) {
@@ -1004,7 +1025,7 @@ export const TOOL_LIST=[
   {name:'assess_input_route',description:'Read-only native identity check for AI gameplay input: bind validated multi-client action timeline to real MC HWND/PID; ALWAYS reports no verified independent game-input backend and NEVER sends input.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}}},required:['actions'],additionalProperties:false}},
   {name:'summarize_test_evidence',description:'Read up to 20 bounded team [ANALYTICS] and [GAME_RESULTS] records per profile. Only sanitized summaries reach the model; no game identity or gameplay PASS is inferred.',inputSchema:{type:'object',properties:{slots:{type:'array',items:{type:'integer',minimum:1,maximum:5},minItems:1,maxItems:5,uniqueItems:true}},additionalProperties:false}},
   {name:'read_game_evidence',description:'Read one compact allowlisted 1-20 record projection of team analytics/results or optional generic diagnostics. No raw game JSON, player record IDs, credentials or gameplay PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
-  {name:'probe_qa',description:'Canonical Testing entry. inspectRun=true reads the original controller per-slot reservation and recovery requirements without starting a run, taking ownership or proving AI liveness. coordinateNative=true reserves a cooperating run; archivedRunId reads source-only immutable summaries. No automatic game command, operator approval, takeover or verified map PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},inspectRun:{type:'boolean'},restart:{type:'boolean'},scope:{type:'string',enum:['full','smoke','affected']},publishToDesktop:{type:'boolean'},coordinateNative:{type:'boolean'},archivedRunId:{type:'string',pattern:'^[a-f0-9]{32}$'}},additionalProperties:false}},
+  {name:'probe_qa',description:'Canonical Testing entry. inspectRun=true reads the original controller per-slot reservation, bounded parent status and optional Data/Testing archive reconciliation without starting a run, taking ownership or proving AI liveness. coordinateNative=true reserves a cooperating run; archivedRunId reads source-only immutable summaries. No automatic game command, operator approval, takeover or verified map PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},inspectRun:{type:'boolean'},restart:{type:'boolean'},scope:{type:'string',enum:['full','smoke','affected']},publishToDesktop:{type:'boolean'},coordinateNative:{type:'boolean'},archivedRunId:{type:'string',pattern:'^[a-f0-9]{32}$'}},additionalProperties:false}},
   {name:'prepare_probe_qa',description:'LEGACY COMPATIBILITY ONLY. Prefer probe_qa for all new AI Testing workflows. A direct legacy prepare invalidates an existing per-slot result checkpoint. Returns a command for a separately authorized player/admin; never sends input or starts Minecraft.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},additionalProperties:false}},
   {name:'read_probe_qa_result',description:'LEGACY COMPATIBILITY ONLY. Prefer probe_qa to prepare, read and resume the same canonical checkpoint without carrying a session token. This reader inspects original RUN_START/RESULT/RUN_DONE and never certifies gameplay success.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},sessionId:{type:'string',pattern:'^[a-f0-9]{24}$'}},required:['slot','sessionId'],additionalProperties:false}},
   // Source-only local-first diagnostics: explicitly imported immutable evidence.
@@ -1235,6 +1256,7 @@ export function createHandler(config,{
   archiveTesting=archiveTestingResult,
   readArchivedTesting=readTestingArchive,
   findArchivedTestingSlot=archivedTestingSlotReference,
+  reviewTestingArchive=reviewTestingArchiveForRun,
   probeCatalog=readPinnedProbeCatalogCached,
   probeRevisionStatus=probeSourceRevisionStatus,
   mapContract=readMapTestContractCached,
@@ -1472,14 +1494,10 @@ export function createHandler(config,{
         gameplayAcceptance:'NOT_VERIFIED',
         commandSentByLazyTester:false,
       };
+      let inspection;
       try {
-        const inspection=await inspectTesting(config.executable,{
+        inspection=await inspectTesting(config.executable,{
           slot,ownerId:testingOwnerId});
-        return {schema:1,slot,status:'TESTING_RUN_INSPECTION',
-          inspection,operatorNextAction:inspection.recoveryAction,
-          gameplayAcceptance:'NOT_VERIFIED',
-          commandSentByLazyTester:false,
-        };
       }catch{
         return {schema:1,slot,status:'TESTING_INSPECTION_UNAVAILABLE',
           operatorNextAction:'REVIEW_NATIVE_CONTROLLER_AVAILABILITY',
@@ -1487,6 +1505,38 @@ export function createHandler(config,{
           commandSentByLazyTester:false,
         };
       }
+      // The original controller owns the run; the original Data/Testing
+      // store owns committed summaries. Correlate read-only and return only
+      // bounded source-only facts. Never create, finalize, retry or transfer.
+      let archiveReview={schema:1,slot,status:'NOT_CONFIGURED',
+        trust:'LOCAL_CHECKSUM_ONLY_NOT_MINECRAFT_OR_OPERATOR_ATTESTATION',
+        authorizesTransfer:false};
+      if(config.testingArchiveDirectory){
+        try {
+          archiveReview=await reviewTestingArchive({
+            store:config.testingArchiveDirectory,slot,
+            phase:inspection.phase,runId:inspection.runId,
+            reportedStatus:inspection.reportedStatus,
+            reportDigest:inspection.reportDigest,
+          });
+          if(archiveReview?.schema!==1||archiveReview.slot!==slot||
+             archiveReview.authorizesTransfer!==false||
+             archiveReview.trust!==
+               'LOCAL_CHECKSUM_ONLY_NOT_MINECRAFT_OR_OPERATOR_ATTESTATION')
+            throw new Error('Untrusted Testing archive review');
+        }catch{
+          archiveReview={schema:1,slot,
+            status:'INTEGRITY_UNAVAILABLE_OR_CONFLICT',
+            trust:'LOCAL_CHECKSUM_ONLY_NOT_MINECRAFT_OR_OPERATOR_ATTESTATION',
+            authorizesTransfer:false};
+        }
+      }
+      return {schema:1,slot,status:'TESTING_RUN_INSPECTION',
+        inspection,archiveReview,
+        operatorNextAction:testingRecoveryNextAction(inspection,archiveReview),
+        gameplayAcceptance:'NOT_VERIFIED',
+        commandSentByLazyTester:false,
+      };
     }
     if(name==='probe_qa' && args && Object.hasOwn(args,'archivedRunId')) {
       // Historical summary is an explicit READ, never a new checkpoint,

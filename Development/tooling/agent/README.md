@@ -392,6 +392,48 @@ controller, and must not modify Minecraft process or world state. Until
 then an abandoned `RESERVED` run remains blocked. This is a deliberate
 safety constraint, not a missing automatic retry.
 
+
+### Combined native + private archive review (source-only)
+
+When \`Data/Testing\` was explicitly configured, the SAME
+\`probe_qa({slot:2,inspectRun:true})\` additionally scans the original,
+bounded immutable summary archive read-only, using the existing
+\`testing-result-store.mjs\` verifier. It returns \`archiveReview\`:
+
+- \`NOT_CONFIGURED\`: no archive read was requested;
+  \`NO_COMMITTED_SUMMARY_FOUND\`: no committed summary was found in
+  this configured root, **not** proof that no historical run ever existed.
+- \`HISTORICAL_SUMMARY_PRESENT\`: a validated source-only result
+  exists, but does not itself match the current native FINAL reference.
+  Open it explicitly through \`probe_qa({archivedRunId})\`.
+- \`FINAL_REFERENCE_MATCHES_ARCHIVE\`: current native FINAL ID,
+  source-only status and SHA-256 digest match a committed summary;
+  this is **not** world, player, or operator authentication.
+- \`CONFLICT_RESERVED_HAS_FINAL_ARCHIVE\` or
+  \`CONFLICT_FINAL_REFERENCE_MISMATCH\`: do not transfer or restart;
+  the native and archive observations disagree.
+- \`INTEGRITY_UNAVAILABLE_OR_CONFLICT\`: a missing, partial, corrupt,
+  linked or otherwise unreadable archive must be reviewed manually.
+
+Every result fixes \`archiveReview.authorizesTransfer=false\` and
+the native \`inspection.transferAllowed=false\`. Owner alive or unknown
+means wait/review. Even \`BOUND_PARENT_EXIT_CONFIRMED\` together with
+\`NO_COMMITTED_SUMMARY_FOUND\` only returns
+\`AWAIT_SEPARATE_OPERATOR_APPROVAL_NO_TRANSFER_AVAILABLE\`. No user
+can approve takeover through MCP, Tauri, an environment variable,
+a time threshold, an AI assertion, or an archive checksum.
+
+**Future operator-approved CAS admission:** preserve the original
+per-slot run ID and original pinned handle, require verified death,
+revalidate archive integrity and the same controller epoch, obtain
+independent real-operator authentication (not a model-supplied flag),
+then compare-and-swap the exact RESERVED run to one fresh owner/run
+inside the original retained native actor. Reject changed run IDs,
+owner replacement, FINAL references, missing provenance, failed
+operator authentication and every interrupted/ambiguous operation.
+Do not introduce a second Testing runner or mutate Minecraft.
+This design is **not** implemented as an accessible transfer action.
+
 ## Immutable original Probe summary archive (explicit opt-in)
 
 Configure the optional absolute private `Data/Testing` root ONCE with
