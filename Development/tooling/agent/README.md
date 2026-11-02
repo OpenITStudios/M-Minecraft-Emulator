@@ -83,6 +83,13 @@ source-only scenarios (NOT_EXECUTED).
 - A terminal original Probe PASS is labelled
   `PROBE_REPORT_AVAILABLE` and `PROBE_REPORTED_PASS`; map checks remain
   `NOT_TESTED`. An active sampler is not gameplay readiness.
+- A **completed** original Probe result may optionally include compact
+  `probeCounts={expected,pass,fail,info,look}` from the same already-frozen
+  `probe_qa` terminal report. Numbers must be integral, bounded by the
+  original `MAX_AUTO_PROBES`, and sum exactly to the expected count.
+  Reported PASS/FAIL/NEEDS_REVIEW categories must be consistent with their
+  counts. Incomplete/blocked results, mismatches and unknown records omit
+  counts rather than fabricating progress. No new ZIP, log or window reads.
 - No raw log, PID/HWND, username, account path, source command, private
   lease ID, image bytes or world identity crosses this compact projection.
 
@@ -112,6 +119,17 @@ claims of PC control or map PASS. The Tauri webpage is explicitly forbidden
 to publish activity into the controller. A same-image CLI process is **not**
 cryptographic proof of the parent Node MCP agent, and the GUI only says
 "Reported by local agent"; no verified third-party Windows control is inferred.
+
+When a completed original Probe report is explicitly mirrored, clicking
+the existing **Testing · Results available · MC0x** header disclosure shows
+a read-only **Testing Summary** in that same panel: target, reported Probe
+result, reported check counts when validated, `Map Testing: Not tested`
+and `Verification: Not verified`. A reported FAIL or NEEDS_REVIEW has
+its own attention label and opens the same summary. Incomplete/blocked
+reports do NOT use "Results available" and never display completed-run
+counts. No new page, permanent results archive, extra MCP tool, in-game
+testing workflow or native game control is introduced. UI terminology stays
+English; `probe_qa` and other internal identifiers are unchanged.
 
 The controller uses a monotonic 12-second freshness limit. Expired normal
 reports disappear; expired **ATTENTION** reports become an explicit

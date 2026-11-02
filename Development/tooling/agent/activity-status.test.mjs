@@ -86,3 +86,48 @@ test('malformed/caller-provided claims cannot mark desktop controlled',()=>{
     {slot:4,status:'AI_CONTROLLING_PC'},
   ]}),/Invalid sampler activity/);
 });
+
+test('original Probe summary carries only complete exact counts, not map acceptance',()=>{
+  const input={...base(),probePlans:[{slot:2,
+    terminalStatus:'PROBE_REPORTED_PASS',
+    expectedCount:3,terminalCounts:{pass:3,fail:0,info:0,look:0},
+  }]};
+  const view=projectAgentActivity(input);
+  assert.deepEqual(view.items[0].probeCounts,
+    {expected:3,pass:3,fail:0,info:0,look:0});
+  assert.equal(view.mapGameplayAcceptance,'NOT_TESTED');
+  const unknown=projectAgentActivity({...base(),probePlans:[{slot:2,
+    terminalStatus:'PROBE_REPORTED_PASS',expectedCount:3,
+    terminalCounts:{pass:4,fail:0,info:0,look:0},
+  }]});
+  assert.equal(Object.hasOwn(unknown.items[0],'probeCounts'),false,
+    'Mismatched totals cannot reach the results panel');
+  for(const status of ['BLOCKED','INCOMPLETE']) {
+    const unverified=projectAgentActivity({...base(),probePlans:[{slot:2,
+      terminalStatus:status,expectedCount:3,
+      terminalCounts:{pass:3,fail:0,info:0,look:0},
+    }]});
+    assert.equal(Object.hasOwn(unverified.items[0],'probeCounts'),false,
+      'Blocked or incomplete reports never display complete-run counts');
+  }
+});
+
+test('Probe failure and review counters require matching original outcomes',()=>{
+  const failed=projectAgentActivity({...base(),probePlans:[{slot:4,
+    terminalStatus:'FAIL',expectedCount:2,
+    terminalCounts:{pass:1,fail:1,info:0,look:0},
+  }]});
+  assert.deepEqual(failed.items[0].probeCounts,
+    {expected:2,pass:1,fail:1,info:0,look:0});
+  assert.equal(failed.displayHint,'ATTENTION');
+  const review=projectAgentActivity({...base(),probePlans:[{slot:4,
+    terminalStatus:'NEEDS_REVIEW',expectedCount:2,
+    terminalCounts:{pass:1,fail:0,info:1,look:0},
+  }]});
+  assert.equal(review.items[0].probeCounts.info,1);
+  const invalid=projectAgentActivity({...base(),probePlans:[{slot:4,
+    terminalStatus:'NEEDS_REVIEW',expectedCount:2,
+    terminalCounts:{pass:2,fail:0,info:0,look:0},
+  }]});
+  assert.equal(Object.hasOwn(invalid.items[0],'probeCounts'),false);
+});

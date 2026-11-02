@@ -146,6 +146,8 @@ test('one AI QA MCP entry performs source/capture/target readiness then compact 
   const qaActivity=(await h.callTool('agent_capabilities',{})).activity;
   assert.equal(qaActivity.items[0].status,'PROBE_REPORT_AVAILABLE');
   assert.equal(qaActivity.items[0].reportedOutcome,'PROBE_REPORTED_PASS');
+  assert.deepEqual(qaActivity.items[0].probeCounts,
+    {expected:2,pass:2,fail:0,info:0,look:0});
   assert.equal(qaActivity.mapGameplayAcceptance,'NOT_TESTED');
   assert.equal(report.qaReport,undefined);
   assert.equal(report.probeReportedStatus,undefined);

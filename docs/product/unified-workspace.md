@@ -44,10 +44,12 @@ and recovery actions retain their existing review/confirmation gates.
 An optional source-only MCP activity projection can describe local
 observation, unverified experimental input requests/recovery, and original
 Skills Probe checkpoint/report progress. These are distinct from **external
-Windows desktop control**. The current desktop has no authenticated MCP
-activity bridge. Therefore the default Play UI must remain unchanged and
-must NOT display speculative AI/Testing labels or buttons. When a verified
-read-only status route exists, hide routine absent signals, show only
+Windows desktop control**. The desktop only receives optional, short-lived local MCP
+activity reports from the original native controller; this is not
+authentication of the parent Node agent or proof of desktop-wide control.
+Therefore the default Play UI must remain unchanged and
+must NOT display speculative AI/Testing labels or buttons. With a reported
+status available, hide routine absent signals, show only
 relevant per-profile activity or action-required issues, and preserve all five
 keyed DWM preview cards without resizing or shifting the layout. An absent
 or disconnected MCP is UNKNOWN, not proof of no AI activity.
@@ -69,6 +71,18 @@ and the regular desktop Tauri session command must refuse publications.
 User-facing status terminology is English: "Testing" replaces "QA" in
 the Play activity summary and details. Internal `probe_qa` names and
 source-level event contracts are preserved for compatibility.
+
+**One-click Testing Results:** When original Probe markers report a complete
+PASS, FAIL or NEEDS_REVIEW result, the single existing Play-header
+activity disclosure shows a compact Testing Summary. Target MC0x, original
+Probe result, and bounded PASS/FAIL/INFO/LOOK-derived reported counts
+(if present and internally consistent) are displayed with "Map Testing:
+Not tested" and "Verification: Not verified". No extra route, dashboard,
+download, world commands, or log IDs are shown. A blocked/incomplete
+checkpoint cannot be labelled "Results available" or shown with complete
+counts. No report, stale snapshot or missing MCP source does not imply
+completed map QA. Normal activity-report expiry is still 12 seconds;
+this is not a permanent results archive or automatic reporter.
 
 Session ownership belongs to the existing native bootstrap; the UI is a consumer.
 The bootstrap keeps the reviewed game/DLL hashes, original process handles, private

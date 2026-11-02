@@ -2,6 +2,28 @@
 // No new worker, controller, game-input owner, QA executor or persistent store.
 // These statuses describe local source observations, not control of Windows
 // or successful Minecraft Education input / map gameplay.
+import {MAX_AUTO_PROBES} from './probe-qa.mjs';
+
+const completedStatuses=new Set(['PROBE_REPORTED_PASS','FAIL','NEEDS_REVIEW']);
+/** Only exact complete original Probe counts; never accepts caller claims
+ * or displays partial/blocked reports as successes. No ZIP/log reads. */
+function compactProbeCounts(plan,status) {
+  if(!completedStatuses.has(status))return null;
+  const count=plan.terminalCounts,expected=plan.expectedCount;
+  if(!count||typeof count!=='object'||Array.isArray(count)||
+     !Number.isSafeInteger(expected)||expected<1||expected>MAX_AUTO_PROBES ||
+     Object.keys(count).length!==4||
+     !['pass','fail','info','look'].every(k=>
+       Object.hasOwn(count,k)&&Number.isSafeInteger(count[k])&&
+       count[k]>=0&&count[k]<=MAX_AUTO_PROBES))return null;
+  const {pass,fail,info,look}=count;
+  if(pass+fail+info+look!==expected ||
+     status==='PROBE_REPORTED_PASS'&&pass!==expected ||
+     status==='FAIL'&&fail===0 ||
+     status==='NEEDS_REVIEW'&&(fail!==0||info+look===0))
+    return null;
+  return Object.freeze({expected,pass,fail,info,look});
+}
 const kinds=Object.freeze({AI:'AI_INPUT',OBS:'VISUAL_OBSERVATION',QA:'SKILLS_PROBE'});
 const terminalStatus=new Set(['PROBE_REPORTED_PASS','FAIL','NEEDS_REVIEW','INCOMPLETE','BLOCKED']);
 function slots(values) {
@@ -81,9 +103,11 @@ export function projectAgentActivity({
       const status=terminalStatus.has(p.terminalStatus)?
         p.terminalStatus:'UNRECOGNIZED_TERMINAL_STATUS';
       const needsReview=status!=='PROBE_REPORTED_PASS';
+      const counts=compactProbeCounts(p,status);
       add(items,kinds.QA,p.slot,'PROBE_REPORT_AVAILABLE',needsReview,
         {evidence:'ORIGINAL_PROBE_LOG_UNVERIFIED_ORIGIN',
-          reportedOutcome:status});
+          reportedOutcome:status,
+          ...(counts?{probeCounts:counts}:{})});
     } else if(checking.includes(p.slot)) {
       add(items,kinds.QA,p.slot,'LOCAL_QA_REVIEW_IN_PROGRESS',false,
         {evidence:'MCP_PROCESS_ONLY'});

@@ -247,6 +247,67 @@ try {
   await statusDisclosure.locator('summary').click();
   assert.match(await statusDisclosure.textContent(),/awaiting command or evidence/);
   assert.doesNotMatch(await statusDisclosure.textContent(),/AI controlling PC|Testing running verified/);
+
+  // Results available opens the original Probe summary in ONE click, not
+  // a separate page or an inferred map acceptance result.
+  await statusDisclosure.locator('summary').click(); // close waiting details
+  await page.evaluate(()=>{window.__agentReport={
+      schema:1,source:'CURRENT_MCP_PROCESS_MEMORY_ONLY',
+      snapshotAt:new Date().toISOString(),displayHint:'ACTIVITY',
+      desktopControl:'NOT_OBSERVED_NO_AUTHENTICATED_DESKTOP_PROVIDER',
+      minecraftInputEffect:'NOT_VERIFIED',mapGameplayAcceptance:'NOT_TESTED',
+      stale:false,items:[{kind:'SKILLS_PROBE',slot:2,
+        status:'PROBE_REPORT_AVAILABLE',
+        importance:'INFORMATION',evidence:'ORIGINAL_PROBE_LOG_UNVERIFIED_ORIGIN',
+        reportedOutcome:'PROBE_REPORTED_PASS',
+        probeCounts:{expected:2,pass:2,fail:0,info:0,look:0}}],
+    };});
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.getByText('Testing · Results available · MC02',{exact:true}).waitFor();
+  assert.equal(await statusDisclosure.locator('summary').getAttribute('title'),
+    'Testing · Results available · MC02',
+    'A fixed-width header must preserve the complete text in its title');
+  assert.equal(await statusDisclosure.getAttribute('open'),null,
+    'Results initially remain collapsed until the user opens them');
+  await statusDisclosure.locator('summary').click();
+  const testingSummary=page.getByRole('region',{name:'Testing summary for MC02'});
+  await testingSummary.waitFor();
+  assert.match(await testingSummary.textContent(),/Testing Summary/);
+  assert.match(await testingSummary.textContent(),/Reported pass/);
+  assert.match(await testingSummary.textContent(),/2 of 2/);
+  assert.match(await testingSummary.textContent(),/2 pass/);
+  assert.match(await testingSummary.textContent(),/Map Testing\s*Not tested/);
+  assert.match(await testingSummary.textContent(),/Verification\s*Not verified/);
+  assert.doesNotMatch(await testingSummary.textContent(),/Map passed|Gameplay passed|QA passed/);
+  assert.equal(await page.locator('.lt-filmstrip .lt-launcher-entry').count(),5,
+    'Opening a Probe summary must preserve all five fixed Minecraft cards');
+  const resultCalls=await page.evaluate(()=>window.__calls.filter(c=>
+    c.command==='lazy_tester_session'&&c.args?.request?.operation!=='Inspect').length);
+  await testingSummary.click();
+  assert.equal(await page.evaluate(()=>window.__calls.filter(c=>
+    c.command==='lazy_tester_session'&&c.args?.request?.operation!=='Inspect').length),
+    resultCalls,'Reading the Testing Summary never sends game or QA commands');
+
+  // A terminal incomplete report must NOT claim complete results available,
+  // and must not invent PASS counts from missing/inconsistent Probe evidence.
+  await page.evaluate(()=>{
+    window.__agentReport={
+      schema:1,source:'CURRENT_MCP_PROCESS_MEMORY_ONLY',
+      snapshotAt:new Date().toISOString(),displayHint:'ATTENTION',
+      desktopControl:'NOT_OBSERVED_NO_AUTHENTICATED_DESKTOP_PROVIDER',
+      minecraftInputEffect:'NOT_VERIFIED',mapGameplayAcceptance:'NOT_TESTED',
+      stale:false,items:[{kind:'SKILLS_PROBE',slot:2,
+        status:'PROBE_REPORT_AVAILABLE',importance:'ATTENTION',
+        evidence:'ORIGINAL_PROBE_LOG_UNVERIFIED_ORIGIN',
+        reportedOutcome:'INCOMPLETE'}],
+    };
+  });
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.getByText('Testing · Incomplete · MC02',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('region',{name:'Testing summary for MC02'}).count(),0,
+    'Incomplete Probe status cannot expose a completed test result');
+  assert.doesNotMatch(await statusDisclosure.textContent(),/Results available/);
+
   await page.evaluate(()=>{
     window.__agentReport={
       schema:1,source:'CURRENT_MCP_PROCESS_MEMORY_ONLY',

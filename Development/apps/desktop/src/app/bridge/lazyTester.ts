@@ -40,6 +40,13 @@ export interface PreviewPlacement {slot: ProfileSlot; viewport: WorkspaceViewpor
 export interface PreviewStatus {slot: ProfileSlot; registered: boolean; reason: string | null}
 export interface PreviewReport {schema: 1; tiles: PreviewStatus[]}
 
+export interface AgentProbeCounts {
+  expected:number;
+  pass:number;
+  fail:number;
+  info:number;
+  look:number;
+}
 export interface AgentActivityItem {
   kind:'AI_INPUT'|'SKILLS_PROBE'|'VISUAL_OBSERVATION';
   slot:ProfileSlot;
@@ -47,6 +54,7 @@ export interface AgentActivityItem {
   importance:'INFORMATION'|'ATTENTION';
   evidence:string;
   reportedOutcome?:string;
+  probeCounts?:AgentProbeCounts;
 }
 export interface AgentActivityReport {
   schema:1;
@@ -96,7 +104,8 @@ export function parseAgentActivity(value:unknown):AgentActivityReport {
   for(const entry of value.items) {
     if(!record(entry)||!['AI_INPUT','SKILLS_PROBE','VISUAL_OBSERVATION'].includes(String(entry.kind))||
        !exact(entry,['kind','slot','status','importance','evidence',
-         ...(Object.hasOwn(entry,'reportedOutcome')?['reportedOutcome']:[])])||
+         ...(Object.hasOwn(entry,'reportedOutcome')?['reportedOutcome']:[]),
+         ...(Object.hasOwn(entry,'probeCounts')?['probeCounts']:[])])||
        !profileSlots.includes(entry.slot as ProfileSlot)||
        !['INFORMATION','ATTENTION'].includes(String(entry.importance))||
        typeof entry.status!=='string'||typeof entry.evidence!=='string')throw new TypeError('Invalid agent activity item');
@@ -119,6 +128,22 @@ export function parseAgentActivity(value:unknown):AgentActivityReport {
       'UNRECOGNIZED_TERMINAL_STATUS'].includes(String(entry.reportedOutcome)):
       Object.hasOwn(entry,'reportedOutcome'))
       throw new TypeError('Invalid reported Probe outcome');
+    if(Object.hasOwn(entry,'probeCounts')) {
+      const counts=entry.probeCounts;
+      if(!terminal ||
+        !['PROBE_REPORTED_PASS','FAIL','NEEDS_REVIEW'].includes(String(entry.reportedOutcome)) ||
+        !record(counts) ||
+        !exact(counts,['expected','pass','fail','info','look']) ||
+        !Number.isSafeInteger(counts.expected)||counts.expected<1||counts.expected>80||
+        !['pass','fail','info','look'].every(k=>Number.isSafeInteger(counts[k])&&
+          Number(counts[k])>=0&&Number(counts[k])<=80) ||
+        Number(counts.pass)+Number(counts.fail)+Number(counts.info)+Number(counts.look)!==counts.expected ||
+        entry.reportedOutcome==='PROBE_REPORTED_PASS'&&counts.pass!==counts.expected ||
+        entry.reportedOutcome==='FAIL'&&counts.fail===0 ||
+        entry.reportedOutcome==='NEEDS_REVIEW'&&
+          (counts.fail!==0||Number(counts.info)+Number(counts.look)===0))
+        throw new TypeError('Invalid original Probe counts');
+    }
   }
   const expected=attention?'ATTENTION':value.items.length?'ACTIVITY':'HIDDEN_NO_LOCAL_SIGNAL';
   if(value.displayHint!==expected || value.stale===true&&value.displayHint!=='ATTENTION')

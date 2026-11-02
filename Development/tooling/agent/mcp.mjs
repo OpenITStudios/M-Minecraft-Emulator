@@ -2190,6 +2190,8 @@ export function createHandler(config,{
         probePlans:[...probeQaPlans.entries()].map(([slot,plan])=>({
           slot,preparedAt:plan.preparedAt,
           terminalStatus:plan.terminalReport?.status??null,
+          terminalCounts:plan.terminalReport?.counts??null,
+          expectedCount:plan.terminalReport?.expectedCount??null,
         })),
         probeBusy:[...probeQaBusy],
         visualSamplers:typeof visualObserver.activity==='function'?

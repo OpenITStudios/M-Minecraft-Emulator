@@ -56,6 +56,17 @@ new-revision acceptance.
   The existing status source, five fixed DWM cards, controller paths and
   `probe_qa` API identifiers remain unchanged. Updated regression assertions
   are AUTHORED_NOT_EXECUTED.
+- **One-click Testing Summary (2 November):** the existing Play-header
+  activity disclosure presents original Probe target and completed
+  reported PASS/FAIL/REVIEW outcome, plus allowlisted counts already
+  present in the in-memory `probe_qa` terminal snapshot (if complete
+  and consistent). Reports always show "Map Testing: Not tested" and
+  "Verification: Not verified"; blocked/incomplete checkpoints do not
+  masquerade as Results available or acquire fabricated counts. No new
+  page/engine/IPC or result archive, no layout/previews changes.
+  Native/TypeScript/source validation, MCP fixtures and browser
+  regressions AUTHORED_NOT_EXECUTED. The explicit status mirror still
+  expires after 12 seconds and requires agent opt-in publication.
 - **Native owner:** original Rust session controller handles game
   process identity, private profiles, normal exit and recovery.
   Workspace/DWM presentation never becomes a second lifecycle owner.
