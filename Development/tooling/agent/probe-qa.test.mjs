@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseProbeCapturedLine,reviewProbeRun,compactProbeQaResult,
-  probeQaProofGate} from './probe-qa.mjs';
+  probeQaProofGate,MAX_AUTO_PROBES} from './probe-qa.mjs';
 
 const stamp='2026-11-02T07:00:00.000Z';
 const line=(issue,fields,time=stamp)=>
@@ -172,4 +172,8 @@ test('mixed build provenance is incomplete even if all RESULT IDs pass',()=>{
   const valid=reviewProbeRun(markers(),session);
   assert.equal(valid.reportedBuild,'dev');
   assert.equal(compactProbeQaResult(valid,2).reportedBuild,'dev');
+});
+
+test('official Probe auto-catalog bound is exported for the map report consumer',()=>{
+  assert.equal(MAX_AUTO_PROBES,80);
 });

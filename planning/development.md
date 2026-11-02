@@ -81,6 +81,12 @@ Appended original Probe RUN_START / RESULT / RUN_DONE markers
   `qaReport.acceptance=NOT_ACCEPTED` regardless of Probe-reported
   PASS. Pending polls remain compact; final snapshots are reused
   without additional I/O.
+- P3 report-integrity correction: `map-test-plan.mjs` now imports
+  the original `probe-qa.mjs` auto-count cap (previous undefined
+  reference could fail terminal composition). Only bounded status
+  reasons are included; required selected/skipped counts are
+  validated and exposed. Regression fixtures AUTHORED_NOT_EXECUTED;
+  there is still no game command or map PASS.
 - Team ZIP changes are inspected offline through existing lock
   fingerprints; new baseline versions are never auto-approved or
   synced into a running world.

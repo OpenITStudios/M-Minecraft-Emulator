@@ -246,7 +246,11 @@ identity only; not world or author approval). Its
 map test coverage and missing evidence. Even if the original Probe
 reports all PASS, `qaReport.map` remains 0 executed/0 passed and
 `qaReport.acceptance=NOT_ACCEPTED` until real map-specific tests
-and world proof exist. The map plan/report are also available during
+and world proof exist. The report now shares the original Probe
+catalog's count limit (rather than an undefined local constant),
+includes bounded status-code reasons, and separates mandatory
+selected/skipped map checks. These are source-only integrity fixes,
+not proof that the tests passed. The map plan/report are also available during
 an original ZIP or capture PREFLIGHT refusal, so planning does not
 require Minecraft. Repeated terminal MCP calls reuse the frozen
 report without more file or native reads. Ordinary calls with no

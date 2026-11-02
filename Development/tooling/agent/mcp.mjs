@@ -1312,14 +1312,14 @@ export function createHandler(config,{
           let prepared;
           try {prepared=await callTool('prepare_probe_qa',{slot});}
           catch(error) {
+            const reason=error?.message==='PROBE_SOURCE_REVIEW_REQUIRED'?
+              'PROBE_SOURCE_REVIEW_REQUIRED':'PROBE_SOURCE_OR_CAPTURE_UNAVAILABLE';
             return {schema:1,slot,phase:'PREFLIGHT',status:'BLOCKED',
-              reason:error?.message==='PROBE_SOURCE_REVIEW_REQUIRED'?
-                'PROBE_SOURCE_REVIEW_REQUIRED':'PROBE_SOURCE_OR_CAPTURE_UNAVAILABLE',
-              commandSentByLazyTester:false,
+              reason,commandSentByLazyTester:false,
               gameplayAcceptance:'NOT_VERIFIED',
               next:'Check the approved ZIP and local capture configuration; do not dispatch a command.',
               ...(mapPlan?{mapPlan,qaReport:composeMapQaReport(mapPlan,
-                {schema:1,status:'BLOCKED'},probeQaProofGate())}:{})};
+                {schema:1,status:'BLOCKED',reason},probeQaProofGate())}:{})};
           }
           if(prepared.status!=='PREPARED_SOURCE_ONLY') {
             return {schema:1,slot,phase:'PREFLIGHT',status:'BLOCKED',
@@ -1329,7 +1329,8 @@ export function createHandler(config,{
                 'MC slots must use distinct original capture files; verify collection provenance before a new QA checkpoint.':
                 'Configure the approved ZIP and stable capture once; retry probe_qa.',
               ...(mapPlan?{mapPlan,qaReport:composeMapQaReport(mapPlan,
-                {schema:1,status:'BLOCKED'},probeQaProofGate())}:{})};
+                {schema:1,status:'BLOCKED',reason:prepared.status},
+                probeQaProofGate())}:{})};
           }
           const activePlan=probeQaPlans.get(slot);
           if(activePlan?.sessionId!==prepared.sessionId) {
@@ -1400,7 +1401,8 @@ export function createHandler(config,{
             commandSentByLazyTester:false,gameplayAcceptance:'NOT_VERIFIED',
             proofGate,
             ...(mapPlan?{mapPlan,qaReport:composeMapQaReport(mapPlan,
-              {schema:1,status:'BLOCKED'},proofGate)}:{})};
+              {schema:1,status:'BLOCKED',
+                reason:'COMMAND_DISPATCH_NOT_ENABLED'},proofGate)}:{})};
         }
         // Do NOT read/hash/parse the ZIP again on every result query.
         // Only compare cheap filesystem change tokens against the pinned

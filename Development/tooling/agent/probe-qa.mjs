@@ -8,7 +8,7 @@ const BASELINE=new URL('./team-source-baseline.json',import.meta.url);
 const RUNNER='packs/BP/scripts/probe/runner/runner.ts';
 const PROBES='packs/BP/scripts/probe/probes/';
 const MAX_PROBE_FILES=100;
-const MAX_AUTO_PROBES=80;
+export const MAX_AUTO_PROBES=80;
 const MAX_PROBE_LINE_BYTES=4096;
 const PROBE_ID=/^P[0-9]{1,3}[A-Z0-9]{0,12}$/;
 

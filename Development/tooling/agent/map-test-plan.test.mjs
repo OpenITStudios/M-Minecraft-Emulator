@@ -8,6 +8,7 @@ import {validateMapTestContract,planMapTests,compactMapTestPlan,
   composeMapQaReport,readMapTestContractCached,mapContractSourceStatus}
   from './map-test-plan.mjs';
 import {createHandler,parseConfiguration} from './mcp.mjs';
+import {MAX_AUTO_PROBES} from './probe-qa.mjs';
 
 const base=()=>({schema:1,map:'dgn-defense',revision:'spec-v1',requirements:[
   {id:'flag.initial_hp',given:'arena.running',action:'none',
@@ -70,6 +71,12 @@ test('smoke narrows to tagged checks and prerequisites, or falls back to full',(
   assert.equal(smoke.requiredSelected,1);
   assert.equal(smoke.requiredNotSelected,2);
   assert.equal(smoke.notTestedCount,3);
+  const preview=composeMapQaReport(smoke,{schema:1,status:'BLOCKED',
+    reason:'COMMAND_DISPATCH_NOT_ENABLED'});
+  assert.equal(preview.map.requiredSelected,1);
+  assert.equal(preview.map.requiredSkipped,2);
+  assert.equal(preview.foundation.reason,'COMMAND_DISPATCH_NOT_ENABLED');
+  assert.equal(preview.map.notTested,3);
   const none={...value,requirements:value.requirements.map(r=>({...r,smoke:false}))};
   assert.equal(plan(none,{scope:'smoke'}).effectiveScope,'full');
 });
@@ -136,6 +143,7 @@ test('existing probe_qa includes optional map plan but never dispatches map acti
     assert.match(first.mapPlan.contractSha256,/^[a-f0-9]{64}$/);
     assert.equal(first.mapPlan.mapAcceptance,'NOT_TESTED');
     assert.equal(first.qaReport.foundation.status,'BLOCKED');
+    assert.equal(first.qaReport.foundation.reason,'COMMAND_DISPATCH_NOT_ENABLED');
     assert.equal(first.qaReport.map.notTested,3);
     assert.equal(first.qaReport.map.tested,0);
     assert.equal(first.qaReport.evidence.mapEvidence,'NOT_COLLECTED');
@@ -148,6 +156,7 @@ test('existing probe_qa includes optional map plan but never dispatches map acti
     const blocked=await handler.callTool('probe_qa',{slot:2});
     assert.equal(blocked.reason,'MAP_CONTRACT_CHANGED_STOP');
     assert.equal(blocked.qaReport.foundation.status,'BLOCKED');
+    assert.equal(blocked.qaReport.foundation.reason,'MAP_CONTRACT_CHANGED_STOP');
     assert.equal(blocked.qaReport.map.notTested,3);
     assert.equal(blocked.terminal,true);
     assert.equal((await handler.callTool('probe_qa',{slot:2})).reason,
@@ -172,6 +181,7 @@ test('composed report separates original Probe observations from zero map execut
   assert.equal(allPass.kind,'SOURCE_ONLY_QA_REPORT');
   assert.equal(allPass.foundation.status,'PROBE_REPORTED_PASS');
   assert.equal(allPass.foundation.counts.pass,2);
+  assert.equal(allPass.foundation.expectedCount,2); // previously referenced an undefined cap
   assert.equal(allPass.foundation.evidenceOrigin,'UNATTRIBUTED_ORIGINAL_PROBE_LOG');
   assert.equal(allPass.map.status,'NOT_TESTED');
   assert.deepEqual({selected:allPass.map.selected,skipped:allPass.map.skipped,
@@ -193,6 +203,10 @@ test('composed report separates original Probe observations from zero map execut
   assert.equal(downgraded.foundation.status,'INCOMPLETE');
   assert.equal(downgraded.foundation.probeReportedStatus,'PROBE_REPORTED_PASS');
   assert.equal(downgraded.acceptance,'NOT_ACCEPTED');
+  const rejectedRawReason=composeMapQaReport(mapPlan,{
+    schema:1,status:'BLOCKED',reason:'sensitive/local/path'},proofGate);
+  assert.equal(rejectedRawReason.foundation.reason,undefined);
+  assert.equal(JSON.stringify(rejectedRawReason).includes('sensitive/local/path'),false);
   const untrustedProof=composeMapQaReport(mapPlan,
     {schema:1,status:'BLOCKED'},{missingEvidence:[]});
   assert.equal(untrustedProof.evidence.missingProof.includes('EXACT_QA_WORLD_IDENTITY'),true);
@@ -219,6 +233,7 @@ test('map plan remains visible if official Probe source or capture is unavailabl
     assert.equal(blocked.status,'BLOCKED');
     assert.equal(blocked.reason,'PROBE_SOURCE_REVIEW_REQUIRED');
     assert.equal(blocked.mapPlan.selectedCount,1);
+    assert.equal(blocked.qaReport.foundation.reason,'PROBE_SOURCE_REVIEW_REQUIRED');
     assert.equal(blocked.qaReport.map.notTested,3);
     assert.equal(blocked.qaReport.foundation.status,'BLOCKED');
     assert.equal(blocked.qaReport.evidence.missingProof.includes('APPROVED_PROBE_SOURCE'),true);
@@ -338,4 +353,26 @@ test('unbound game target preserves reported Probe PASS only as unauthenticated 
     assert.equal(report.qaReport.acceptance,'NOT_ACCEPTED');
     handler.shutdown();
   } finally {await rm(dir,{recursive:true,force:true});}
+});
+
+test('one original Probe catalog cap is shared with the map report, with bounded counts',()=>{
+  const mapPlan=compactMapTestPlan(plan(base()));
+  assert.equal(MAX_AUTO_PROBES,80);
+  const report=composeMapQaReport(mapPlan,{schema:1,status:'PROBE_REPORTED_PASS',
+    expectedCount:MAX_AUTO_PROBES,
+    counts:{pass:MAX_AUTO_PROBES,fail:0,info:0,look:0}});
+  assert.equal(report.foundation.expectedCount,MAX_AUTO_PROBES);
+  assert.equal(report.foundation.counts.pass,MAX_AUTO_PROBES);
+  assert.equal(report.map.notTested,mapPlan.total);
+  const outOfBounds=composeMapQaReport(mapPlan,{schema:1,status:'BLOCKED',
+    reason:'QA_SOURCE_UNAVAILABLE',
+    expectedCount:MAX_AUTO_PROBES+1,
+    counts:{pass:MAX_AUTO_PROBES+1,fail:0,info:0,look:0}});
+  assert.equal(outOfBounds.foundation.expectedCount,undefined);
+  assert.equal(outOfBounds.foundation.counts,undefined);
+  assert.equal(outOfBounds.foundation.reason,'QA_SOURCE_UNAVAILABLE');
+  assert.equal(outOfBounds.acceptance,'NOT_ACCEPTED');
+  assert.throws(()=>composeMapQaReport(
+    {...mapPlan,requiredNotSelected:mapPlan.requiredNotSelected+1},
+    {schema:1,status:'BLOCKED'}));
 });

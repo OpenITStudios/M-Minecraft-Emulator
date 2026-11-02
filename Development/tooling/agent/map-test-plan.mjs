@@ -3,6 +3,7 @@
 import {createHash} from 'node:crypto';
 import {lstat,readFile} from 'node:fs/promises';
 import path from 'node:path';
+import {MAX_AUTO_PROBES} from './probe-qa.mjs';
 
 const MAX_BYTES=96*1024;
 const MAX_REQUIREMENTS=64;
@@ -237,6 +238,14 @@ export function composeMapQaReport(mapPlan,probeResult,proofGate=null) {
      mapPlan.selectedCount<1||mapPlan.selectedCount>mapPlan.total||
      !Number.isSafeInteger(mapPlan.required)||mapPlan.required<0||
      mapPlan.required>mapPlan.total||
+     !Number.isSafeInteger(mapPlan.requiredSelected)||
+     mapPlan.requiredSelected<0||
+     mapPlan.requiredSelected>mapPlan.required||
+     mapPlan.requiredSelected>mapPlan.selectedCount||
+     !Number.isSafeInteger(mapPlan.requiredNotSelected)||
+     mapPlan.requiredNotSelected!==mapPlan.required-mapPlan.requiredSelected||
+     !Number.isSafeInteger(mapPlan.notSelectedCount)||
+     mapPlan.notSelectedCount!==mapPlan.total-mapPlan.selectedCount||
      !list(mapPlan.evidenceNeeded,5,x=>EVIDENCE.has(x))||
      !object(probeResult)||probeResult.schema!==1)refuse();
 
@@ -248,6 +257,13 @@ export function composeMapQaReport(mapPlan,probeResult,proofGate=null) {
     evidenceOrigin:['PROBE_REPORTED_PASS','FAIL','NEEDS_REVIEW'].includes(status)?
       'UNATTRIBUTED_ORIGINAL_PROBE_LOG':'NO_COMPLETE_AUTHENTICATED_PROBE_RESULT',
     gameplayAcceptance:'NOT_VERIFIED'};
+  // A compact fixed status code is sufficient for useful QA feedback.
+  // Never copy arbitrary raw captured error/log text into the report.
+  if(['WAITING','INCOMPLETE','BLOCKED'].includes(status)&&
+     typeof probeResult.reason==='string'&&
+     /^[A-Z][A-Z0-9_]{2,63}$/.test(probeResult.reason)) {
+    foundation.reason=probeResult.reason;
+  }
   if(['PROBE_REPORTED_PASS','FAIL','NEEDS_REVIEW'].includes(
       probeResult.probeReportedStatus)) {
     foundation.probeReportedStatus=probeResult.probeReportedStatus;
@@ -285,6 +301,8 @@ export function composeMapQaReport(mapPlan,probeResult,proofGate=null) {
       requestedScope:mapPlan.requestedScope,
       effectiveScope:mapPlan.effectiveScope,
       required:mapPlan.required,selected:mapPlan.selectedCount,
+      requiredSelected:mapPlan.requiredSelected,
+      requiredSkipped:mapPlan.requiredNotSelected,
       skipped:mapPlan.total-mapPlan.selectedCount,
       tested:0,passed:0,failed:0,notTested:mapPlan.total,
       status:'NOT_TESTED',

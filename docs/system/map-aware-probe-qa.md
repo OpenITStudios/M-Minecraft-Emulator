@@ -198,6 +198,23 @@ QA-world and Content Log proof gaps. Overall
 `qaReport.acceptance=NOT_ACCEPTED`, even when foundation Probe markers
 report all PASS.
 
+The foundation summary reads its original maximum auto-probe count
+from `probe-qa.mjs`, the existing authoritative source, rather than
+redeclaring a conflicting limit. An earlier source-only composition
+referenced an undefined `MAX_AUTO_PROBES`, which could abort terminal
+`qaReport` creation when actual expected counts were present; that
+reference is corrected without enabling any execution. Counts larger
+than the original catalog limit are omitted instead of being promoted
+to valid proof. `qaReport.foundation.reason` retains only bounded
+uppercase status codes for BLOCKED/WAITING/INCOMPLETE, not raw log
+messages, filesystem paths, or an arbitrary exception. A preflight
+refusal and the initial no-command state also carry those codes.
+
+The map summary now includes `requiredSelected` and
+`requiredSkipped` so a Smoke selection cannot conceal mandatory
+untested requirements. Those counts are checked for internal
+consistency; the underlying map checks remain NOT_TESTED.
+
 Only fixed, validated summary fields reach the MCP caller; no raw logs,
 player identifiers, private paths, world data, source code or arbitrary
 `result.detail` are forwarded. The existing optional diagnostic evidence
