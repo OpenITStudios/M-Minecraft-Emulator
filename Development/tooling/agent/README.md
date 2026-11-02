@@ -434,6 +434,42 @@ operator authentication and every interrupted/ambiguous operation.
 Do not introduce a second Testing runner or mutate Minecraft.
 This design is **not** implemented as an accessible transfer action.
 
+### Staged original-controller compare-and-swap (not callable)
+
+The original Rust \`NativeTestingRunBook\` now contains a **private,
+unreachable-from-production** \`transfer_with_sealed_admission\` branch.
+It accepts only private native operator-presence and native archive-review
+markers, an exact old run ID/owner, distinct new run ID/owner, a
+confirmed-exited pinned old process and a live pinned successor.
+The actor checks all conditions again before ONE atomic slot replacement;
+old tokens cannot finalize the replaced reservation. It refuses
+\`FINAL\`, changed run IDs, mismatched owners, unknown processes and
+unsafe same-owner reuse.
+
+These markers deliberately have **no production constructors**;
+no MCP schema, Tauri command, native CLI operation, or automatic job
+can issue them. The new pure Rust tests use explicitly scoped fixtures,
+**AUTHORED_NOT_EXECUTED**. This is a correctness foundation, not an
+available transfer workflow, approval mechanism, Windows verification,
+gameplay result, or permission to take over a previous agent.
+
+A Windows Hello operator-verification implementation could become the
+separate local presence boundary after review. Microsoft documents
+\`IUserConsentVerifierInterop::RequestVerificationForWindowAsync\` for
+desktop applications; its current Win32 interop requirements include
+Windows build 22000 or later. An ordinary confirmation dialog, MCP
+environment flag, AI answer, or UAC elevation alone is **not** an
+independently authenticated operator. Do not add an insecure fallback.
+See https://learn.microsoft.com/en-us/windows/win32/api/userconsentverifierinterop/nf-userconsentverifierinterop-iuserconsentverifierinterop-requestverificationforwindowasync
+
+The subsequent implementation must independently validate all private
+\`Data/Testing\` manifests **inside the native controller**, bind the
+original per-controller reservation to that evidence and to a fresh
+operator challenge, and mint the two private markers only on successful
+verification. No absence-of-archive shortcut authorizes an overwrite.
+Do not expose this method or claim P0 acceptance before those gates and
+exact-revision Windows verification succeed.
+
 ## Immutable original Probe summary archive (explicit opt-in)
 
 Configure the optional absolute private `Data/Testing` root ONCE with

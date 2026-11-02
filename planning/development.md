@@ -140,6 +140,18 @@ new-revision acceptance.
   and original `inspection.transferAllowed=false` remain enforced.
   Pure Node regression scenarios authored NOT_EXECUTED; no new native
   controller, Test runner, desktop panel, CI, Windows or Minecraft action.
+- **Original-controller Testing CAS correctness core (3 November, source-only):**
+  \`native_clients_session.rs\` now contains a sealed, private
+  \`transfer_with_sealed_admission\` operation that can replace ONE
+  original RESERVED run only after exact old run/owner comparison, distinct
+  successor identity, pinned old-parent OS exit and live pinned successor.
+  Pure Rust preflight regressions reject stale IDs, FINAL, wrong owners
+  and invalid proposals. Both operator-verification and native-archive
+  markers have no production constructors; no command, Tauri or MCP
+  path can invoke transfer. Authored tests NOT_EXECUTED; no gameplay,
+  Windows native runtime, source suite, CI or installer execution.
+  P0 is still BLOCKED pending native archive trust and independently
+  authenticated operator consent; an archive screenshot/token is not proof.
 - **Native owner:** original Rust session controller handles game
   process identity, private profiles, normal exit and recovery.
   Workspace/DWM presentation never becomes a second lifecycle owner.
@@ -248,10 +260,11 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: design and implement an independently authenticated **local operator**
-approval boundary, then an atomic compare-and-swap Testing-run transfer in
-the original retained controller using its pinned process handle, exact
-old run ID, and the new read-only private archive reconciliation. The observed OS-parent
+Next: implement a native private Data/Testing archive verification gate, then
+an independently authenticated Windows operator challenge (Windows Hello
+interop review, no ordinary confirmation-only fallback). Only those native
+gates may construct the sealed recovery markers; the staged original-controller
+CAS core must remain uncallable from MCP, Tauri and the CLI until then. The observed OS-parent
 exit is not proof of MCP-script authenticity or operator consent;
 `transferAllowed=false` remains mandatory until those gates exist. Runtime tests remain deferred. Retain
 the source-only P3 report with map tests NOT_TESTED and real-world

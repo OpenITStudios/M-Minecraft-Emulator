@@ -200,6 +200,26 @@ struct TestingRecord {
     #[cfg(windows)]
     owner_process:Option<pipe::McpOwnerLifetime>,
 }
+// Stage-only recovery capability: NO production constructor or IPC/Tauri
+// deserialization exists. These private markers must eventually be issued
+// only by independently authenticated Windows operator presence and a
+// native, revalidated immutable-archive decision in this controller.
+// Neither a model-provided boolean nor a source-only MCP archive report
+// can create either marker. The only constructors are in pure unit fixtures.
+#[allow(dead_code)]
+struct VerifiedTestingOperatorPresence(());
+#[allow(dead_code)]
+struct VerifiedNativeTestingArchive(());
+#[allow(dead_code)]
+struct TestingRecoveryAdmission {
+    slot:u32,
+    expected_run_id:String,
+    expected_owner:String,
+    new_run_id:String,
+    new_owner:String,
+    _operator:VerifiedTestingOperatorPresence,
+    _archive:VerifiedNativeTestingArchive,
+}
 pub(crate) struct NativeTestingRunBook {
     slots:[Option<TestingRecord>;5],
 }
@@ -378,6 +398,78 @@ impl NativeTestingRunBook {
         }
         self.finalize(slot,owner,run_id,outcome,digest)
     }
+    // Compare-only portion of one prospective transfer. No ownership is
+    // changed by a preflight and it does NOT authenticate the admission.
+    // The actual internal CAS below independently pins the old + new OS
+    // process lifetime just before replacing the ONE native slot record.
+    #[allow(dead_code)]
+    fn check_recovery_cas(
+        &self,permit:&TestingRecoveryAdmission,
+    )->Result<(),&'static str> {
+        if !(1..=5).contains(&permit.slot)||
+           !valid_testing_id(&permit.expected_run_id)||
+           !valid_testing_id(&permit.expected_owner)||
+           !valid_testing_id(&permit.new_run_id)||
+           !valid_testing_id(&permit.new_owner)||
+           permit.new_run_id==permit.expected_run_id||
+           permit.new_owner==permit.expected_owner {
+            return Err("TESTING_TRANSFER_INVALID_CONTRACT");
+        }
+        let current=self.slots[(permit.slot-1) as usize].as_ref()
+            .ok_or("TESTING_TRANSFER_OLD_RUN_UNAVAILABLE")?;
+        if current.view.run_id!=permit.expected_run_id||
+           current.owner!=permit.expected_owner {
+            return Err("TESTING_TRANSFER_STALE_EXPECTED_RUN");
+        }
+        if current.view.phase!="RESERVED"||
+           current.view.reported_status.is_some()||
+           current.view.report_digest.is_some() {
+            return Err("TESTING_TRANSFER_FINAL_OR_INCONSISTENT");
+        }
+        Ok(())
+    }
+
+    // No live route currently calls this method. All markers are private,
+    // have no production issuers, and cannot be built from wire, UI or MCP
+    // values. It remains unreachable until independent native operator
+    // authentication + archive reconciliation have been implemented.
+    #[cfg(windows)]
+    #[allow(dead_code)]
+    fn transfer_with_sealed_admission(
+        &mut self,permit:TestingRecoveryAdmission,
+        successor:pipe::McpOwnerLifetime,
+    )->Result<TestingRunView,&'static str> {
+        self.check_recovery_cas(&permit)?;
+        let index=(permit.slot-1) as usize;
+        let old=self.slots[index].as_ref()
+            .ok_or("TESTING_TRANSFER_OLD_RUN_UNAVAILABLE")?;
+        let old_pin=old.owner_process.as_ref()
+            .ok_or("TESTING_TRANSFER_OLD_PROCESS_NOT_PINNED")?;
+        // A time threshold, a stale caller token, or an UNKNOWN process
+        // state can NEVER release the original reservation.
+        if old_pin.status()!="BOUND_PARENT_EXIT_CONFIRMED" {
+            return Err("TESTING_TRANSFER_OLD_PROCESS_NOT_CONFIRMED_EXITED");
+        }
+        if successor.status()!="BOUND_PARENT_RUNNING_AT_INSPECTION"||
+           successor.same(old_pin) {
+            return Err("TESTING_TRANSFER_NEW_PROCESS_NOT_VERIFIED");
+        }
+        // No await, filesystem access, IPC request or guest action between
+        // final checks and this single-slot replacement. The old run is
+        // never reused; previous same-token finalize now fails closed.
+        let view=TestingRunView {
+            schema:1,slot:permit.slot,run_id:permit.new_run_id,
+            phase:"RESERVED".into(),owner_match:true,
+            reported_status:None,report_digest:None,
+            provenance:"NATIVE_RUN_CORRELATION_ONLY_NOT_GAMEPLAY_PROOF".into(),
+        };
+        self.slots[index]=Some(TestingRecord {
+            owner:permit.new_owner,view:view.clone(),
+            owner_process:Some(successor),
+        });
+        Ok(view)
+    }
+
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1194,6 +1286,61 @@ pub(super) fn read_message(input: &mut impl io::BufRead) -> io::Result<Option<St
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn staged_testing_recovery_cas_rejects_stale_or_finalized_slots() {
+        // Pure contract fixtures, NOT authenticated operator approval.
+        // No production constructor, native transfer request, or game action.
+        fn fixture(slot:u32,old_run:&str,old_owner:&str,
+                   new_run:&str,new_owner:&str)->TestingRecoveryAdmission {
+            TestingRecoveryAdmission{
+                slot,expected_run_id:old_run.into(),
+                expected_owner:old_owner.into(),
+                new_run_id:new_run.into(),new_owner:new_owner.into(),
+                _operator:VerifiedTestingOperatorPresence(()),
+                _archive:VerifiedNativeTestingArchive(()),
+            }
+        }
+        let mut book=NativeTestingRunBook::default();
+        let old="a".repeat(32);
+        let other="b".repeat(32);
+        let next="c".repeat(32);
+        let old_run="d".repeat(32);
+        let new_run="e".repeat(32);
+        assert_eq!(
+            book.check_recovery_cas(&fixture(2,&old_run,&old,&new_run,&next)),
+            Err("TESTING_TRANSFER_OLD_RUN_UNAVAILABLE"));
+        let owned=book.reserve(2,&old,&old_run,None).unwrap();
+        let proposed=fixture(2,&old_run,&old,&new_run,&next);
+        assert_eq!(book.check_recovery_cas(&proposed),Ok(()));
+        assert_eq!(book.inspect(2,&other).unwrap().run_id.as_deref(),
+            Some(old_run.as_str()),"Preflight cannot change ownership");
+        for candidate in [
+            fixture(0,&old_run,&old,&new_run,&next),
+            fixture(6,&old_run,&old,&new_run,&next),
+            fixture(2,&old_run,&old,&old_run,&next),
+            fixture(2,&old_run,&old,&new_run,&old),
+            fixture(2,&old_run,&old,"INVALID",&next),
+        ] {
+            assert_eq!(book.check_recovery_cas(&candidate),
+                Err("TESTING_TRANSFER_INVALID_CONTRACT"));
+        }
+        for candidate in [
+            fixture(2,&new_run,&old,&new_run,&next),
+            fixture(2,&old_run,&other,&new_run,&next),
+        ] {
+            assert_eq!(book.check_recovery_cas(&candidate),
+                Err("TESTING_TRANSFER_STALE_EXPECTED_RUN"));
+        }
+        assert_eq!(book.inspect(2,&other).unwrap().phase,"RESERVED");
+        assert_eq!(book.reserve(2,&old,&old_run,None).unwrap(),owned);
+        book.finalize(2,&old,&old_run,"BLOCKED",&"f".repeat(64)).unwrap();
+        assert_eq!(
+            book.check_recovery_cas(&fixture(2,&old_run,&old,&new_run,&next)),
+            Err("TESTING_TRANSFER_FINAL_OR_INCONSISTENT"));
+        assert_eq!(book.inspect(2,&other).unwrap().phase,"FINAL");
+        assert!(!book.inspect(2,&other).unwrap().transfer_allowed);
+    }
 
     #[test]
     fn testing_inspection_is_read_only_and_never_authorizes_orphan_takeover() {
