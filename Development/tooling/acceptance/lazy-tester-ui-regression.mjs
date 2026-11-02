@@ -306,6 +306,12 @@ try {
   assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.command==='lazy_tester_previews').length===window.__previewBaseline),true,'unchanged polling must not reapply native geometry');
   await page.evaluate(()=>window.__stableObserver.disconnect());
   await nav('Settings').click();await heading('General').waitFor();
+  const presetExplanation=page.locator('details.lt-settings-explanation');
+  assert.equal(await presetExplanation.getAttribute('open'),null,
+    'Technical preset explanations stay out of the default Settings path');
+  await presetExplanation.locator('summary').click();
+  assert.match(await presetExplanation.textContent(),/simulation distance stays unchanged/,
+    'Advanced graphics explanation remains accessible on demand');
   await page.getByLabel('While playing',{exact:true}).fill('60');await page.getByLabel('In the background',{exact:true}).fill('5');
   await section('Data Storage').click();await heading('Data Storage').waitFor();
   await page.getByText('At least 1.0 MB',{exact:true}).waitFor();
@@ -431,6 +437,15 @@ try {
   await page.evaluate(()=>window.__finishBinding());
   await nav('Settings').click();
   await section('Data Storage').click();
+  const packDetails=page.locator('details.lt-storage-packs');
+  assert.equal(await packDetails.getAttribute('open'),null,
+    'Read-only resource pack diagnostics start collapsed');
+  await packDetails.locator('summary').click();
+  assert.match(await packDetails.textContent(),/Manifest-containing folders/,
+    'Existing resource pack evidence remains accessible under the disclosure');
+  assert.equal(await page.locator('.lt-storage-packs-body button').count(),0,
+    'Viewing pack diagnostics must not expose an invented mutation control');
+  await packDetails.locator('summary').click();
   await page.getByRole('button',{name:'Clear cache…',exact:true}).click();
   const cacheReview=page.getByRole('region',{name:'Confirm cache cleanup'});
   await cacheReview.waitFor();
@@ -656,14 +671,25 @@ try {
   assert.match(await affectedCard.getAttribute('title')??'',/Refresh/);
   await page.getByRole('button',{name:'Close Minecraft - 2 normally'}).click();
   const closeReview=page.getByRole('region',{name:'Confirm one Minecraft close'});
+  await page.waitForFunction(()=>document.activeElement?.textContent?.trim()==='Cancel');
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true,
     'Manual Refresh is unavailable while the selected-game confirmation is open');
-  await closeReview.getByRole('button',{name:'Cancel',exact:true}).click();
+  await page.keyboard.press('Escape');
+  await closeReview.waitFor({state:'detached'});
+  assert.equal(await page.getByRole('button',{name:'Close Minecraft - 2 normally'})
+    .evaluate(node=>document.activeElement===node),true,
+    'Escape cancels the review and returns focus to its original launcher');
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isEnabled(),true,
     'Cancel restores Refresh without sending a game-close request');
   assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
     call.command==='lazy_tester_close_one').length),0,
     'Canceling CloseOne must not close any Minecraft session');
+  await page.getByRole('button',{name:'Close Minecraft - 2 normally'}).click();
+  await closeReview.getByRole('button',{name:'Cancel',exact:true}).click();
+  await closeReview.waitFor({state:'detached'});
+  assert.equal(await page.getByRole('button',{name:'Close Minecraft - 2 normally'})
+    .evaluate(node=>document.activeElement===node),true,
+    'Cancel button returns keyboard focus without modifying Minecraft');
   await page.getByRole('button',{name:'Close Minecraft - 2 normally'}).click();
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true);
   await page.getByRole('region',{name:'Confirm one Minecraft close'})

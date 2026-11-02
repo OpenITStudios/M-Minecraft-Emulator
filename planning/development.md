@@ -25,6 +25,12 @@ new-revision acceptance.
   and require positive window response before offering guided Select game
   after a DWM preview failure. Preserve rail geometry, theme and native
   admission. Updated UI fixtures AUTHORED_NOT_EXECUTED.
+- **Desktop focused UX (2 November):** selected-game Close review focuses
+  Cancel, supports Escape and restores keyboard focus to the invoking
+  launcher after cancellation. Graphics legacy details and read-only
+  resource-pack diagnostics use native disclosure; basic Storage actions
+  remain visible. No visual theme, five-slot rail, native IPC or game
+  session change. Regression fixtures AUTHORED_NOT_EXECUTED.
 - **Native owner:** original Rust session controller handles game
   process identity, private profiles, normal exit and recovery.
   Workspace/DWM presentation never becomes a second lifecycle owner.

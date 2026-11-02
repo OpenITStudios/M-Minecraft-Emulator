@@ -55,6 +55,9 @@
   // Presentation-only close reviews; never another process or session owner.
   let nativeExitReview = false, observationEpoch = 0;
   let closeOneSlot: ProfileSlot | null = null, closingOneSlot: ProfileSlot | null = null;
+  // UI-only keyboard focus references, never another game or window owner.
+  let closeOneTrigger: HTMLButtonElement | null = null;
+  let closeCancelButton: HTMLButtonElement | undefined;
   // UI warning only; native presentation authority remains in workspace_surface.
   let uncertainWindowSlots = new Set<ProfileSlot>();
   let previewStatuses: PreviewStatus[] = [];
@@ -183,7 +186,7 @@
       manualRefreshRequested = true; // Original manual Refresh path.
     }
   }
-  function select(slot: ProfileSlot) { closeOneSlot=null; requested = null; queued = slot; }
+  function select(slot: ProfileSlot) { closeOneSlot=null;closeOneTrigger=null; requested = null; queued = slot; }
   async function consumeSelection() {
     const slot = queued; queued = null;
     if (slot === null || !available || profiles.find(profile => profile.slot === slot)?.state !== 'RUNNING') return;
@@ -264,7 +267,7 @@
   function navigate(next: typeof page) {
     // Settings and storage require the Windows native session owner.
     if (nativeBackend !== 'WindowsNative') return;
-    closeOneSlot=null;recovery=null;clearSlot=null;fullReview=null;
+    closeOneSlot=null;closeOneTrigger=null;recovery=null;clearSlot=null;fullReview=null;
     if(next==='launchers')next='workspace';
     queuedPage = next; queued = null;queuedLaunch=null;
   }
@@ -361,7 +364,21 @@
     }catch(error){issueKey='performance';}
     finally{savingPerformance=false;busy=false;}
   }
-  function requestCloseOne(slot: ProfileSlot) {
+  function cancelCloseOne() {
+    if (closeOneSlot===null) return;
+    const trigger=closeOneTrigger;
+    closeOneSlot=null;closeOneTrigger=null;
+    // Restore keyboard context without scrolling the fixed five-card rail.
+    void tick().then(()=>{
+      if (!disposed && trigger?.isConnected && !trigger.disabled) trigger.focus({preventScroll:true});
+    });
+  }
+  function closeReviewKeydown(event: KeyboardEvent) {
+    if (closeOneSlot!==null && event.key==='Escape') {
+      event.preventDefault();event.stopPropagation();cancelCloseOne();
+    }
+  }
+  function requestCloseOne(slot: ProfileSlot, trigger: HTMLButtonElement) {
     if (closeInProgress || nativeExitReview || busy || closingOneSlot !== null) return;
     const profile=profiles.find(item=>item.slot===slot);
     if (!profile || !['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)) return;
@@ -370,13 +387,17 @@
     observationEpoch++;
     if (queuedLaunch===slot) queuedLaunch=null;
     if (queued===slot) queued=null;
-    closeOneSlot=slot;
+    closeOneTrigger=trigger;closeOneSlot=slot;
+    // Cancel is the safe initial keyboard choice. Do not reselect/launch games.
+    void tick().then(()=>{
+      if (!disposed && closeOneSlot===slot && closeCancelButton?.isConnected) closeCancelButton.focus();
+    });
   }
   async function confirmCloseOne() {
     const slot=closeOneSlot;
     if (slot===null || closeInProgress || nativeExitReview || busy ||
         refreshing || resizing || closingOneSlot!==null) return;
-    closeOneSlot=null; closingOneSlot=slot; busy=true; issueKey=null;
+    closeOneSlot=null;closeOneTrigger=null; closingOneSlot=slot; busy=true; issueKey=null;
     try {
       const report=await lazyTester.closeOne(slot);
       if (!report.presentationReleased) {
@@ -724,7 +745,7 @@
       closeInProgress = event.payload;
       if (closeInProgress) {
         observationEpoch++;
-        closeOneSlot=null;
+        closeOneSlot=null;closeOneTrigger=null;
         queuedLaunch=null;
         queued=null;
       }
@@ -775,6 +796,7 @@
 <svelte:head><title>Lazy Tester</title></svelte:head>
 <div class="lt-app">
   <WindowTitlebar backendSupport={nativeBackend} />
+  <svelte:window on:keydown={closeReviewKeydown}/>
   <header class="lt-topbar">
     <a class="lt-brand" href="#play" on:click|preventDefault={() => navigate('workspace')}><span>LT</span>Lazy Tester</a>
     <nav aria-label="Main navigation"><button disabled={closeInProgress} class:chosen={page==='workspace'} aria-current={page==='workspace'?'page':undefined} on:click={()=>navigate('workspace')}>Play</button><button disabled={closeInProgress||nativeBackend!=='WindowsNative'} class:chosen={page!=='workspace'} aria-current={page!=='workspace'?'page':undefined} on:click={()=>navigate('settings')}>Settings</button></nav>
@@ -843,7 +865,7 @@
             <p>Only this Minecraft session will be asked to exit normally. Other games will keep running. Save any work in Minecraft before continuing.</p>
             <div class="lt-actions">
               <button disabled={busy||refreshing||resizing||closeInProgress||nativeExitReview} on:click={()=>void confirmCloseOne()}>Close Minecraft - {closeOneSlot}</button>
-              <button class="lt-secondary" disabled={busy||closeInProgress||nativeExitReview} on:click={()=>closeOneSlot=null}>Cancel</button>
+              <button class="lt-secondary" bind:this={closeCancelButton} disabled={busy||closeInProgress||nativeExitReview} on:click={cancelCloseOne}>Cancel</button>
             </div>
           </section>
         {/if}

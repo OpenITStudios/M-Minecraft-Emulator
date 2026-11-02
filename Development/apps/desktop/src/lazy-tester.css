@@ -465,3 +465,12 @@
 .lt-alert .lt-feedback-reference{margin-top:5px;font-size:12px;line-height:1.4}
 .lt-alert .lt-feedback-reference summary{cursor:pointer;color:var(--lt-accent);width:max-content;max-width:100%}
 .lt-alert .lt-feedback-reference p{margin:4px 0 0;font-size:12px;overflow-wrap:anywhere}
+
+/* Progressive disclosure only: use the current theme and existing setting rows. */
+.lt-settings-explanation{margin-top:10px}
+.lt-settings-explanation summary{cursor:pointer;color:var(--lt-accent);font-size:13px}
+.lt-settings-explanation p{margin-top:8px;max-width:720px}
+.lt-storage-packs{margin-top:16px;border-top:1px solid var(--lt-line);border-bottom:1px solid var(--lt-line)}
+.lt-storage-packs summary{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;padding:14px 0;color:var(--lt-accent);cursor:pointer}
+.lt-storage-packs summary small{font-size:12px;color:var(--lt-muted)}
+.lt-storage-packs-body{padding-bottom:14px}

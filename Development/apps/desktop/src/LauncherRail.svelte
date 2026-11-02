@@ -23,7 +23,7 @@
   export let observePreview: (node: HTMLElement, slot: ProfileSlot) => {destroy(): void};
   export let onSelect: (slot: ProfileSlot) => void;
   export let onLaunch: (slot: ProfileSlot) => void;
-  export let onRequestClose: (slot: ProfileSlot) => void;
+  export let onRequestClose: (slot: ProfileSlot, trigger: HTMLButtonElement) => void;
   export let onGuidedRecovery: (slot: ProfileSlot, action: SessionHealthAction) => void;
 
   // A changing native enumeration never changes a launcher's visual slot.
@@ -64,7 +64,7 @@
         <button class="lt-secondary lt-close-launcher"
           aria-label={'Close Minecraft - '+profile.slot+' normally'}
           disabled={busy||closeInProgress||nativeExitReview||!available||!bindingConfigured}
-          on:click={()=>onRequestClose(profile.slot)}>Close game</button>
+          on:click={event=>onRequestClose(profile.slot,event.currentTarget)}>Close game</button>
       {/if}
     </div>
   {/each}
