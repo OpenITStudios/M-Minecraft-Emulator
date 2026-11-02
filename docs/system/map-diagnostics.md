@@ -302,9 +302,9 @@ Source owners:
 - `Development/tooling/agent/build-education-universal-pack.mjs`
 
 The universal behavior pack has stable header and module UUIDs, pack version
-1.1.0, manifest format 2, minimum engine 1.26.30 and stable
+1.2.0, manifest format 2, minimum engine 1.26.30 and stable
 `@minecraft/server` 2.8.0. The package UUID remains constant while
-its version advances from 1.0.0 to 1.1.0; do not confuse these as
+its version advances from 1.0.0 through 1.1.0 to 1.2.0; do not confuse these as
 separate map-specific packs. Those version choices are grounded by the
 operator-supplied `skills-probe-main` archive, whose BP manifest targeted
 Education 26.32 / engine 1.26.30 with the same Script API. This is
@@ -320,7 +320,7 @@ separately authorized:
     node tooling/agent/build-education-universal-pack.mjs prepare
 
 The builder reads only the reviewed local source pack and writes under
-`workspace/diagnostics/education-universal/v1/`, ignored by Git, using
+`workspace/diagnostics/education-universal/v1.2/`, ignored by Git, using
 exclusive creation. It generates a small ZIP STORE `.mcpack` containing
 only root-level `manifest.json` and `scripts/main.js`. Repeating the
 command accepts only byte-identical existing output; it never overwrites
@@ -330,19 +330,32 @@ commit binaries, run installs, or silently publish packages.
 
 **Using the same file across test maps:**
 
-1. Double-click the reusable `LazyTester-Universal-Diagnostics-Education-1.1.0.mcpack`
-   to import it into Minecraft Education, following official Add-On UI.
-2. In each copied test world, go to Add-Ons → Behavior Packs → My Packs →
-   Activate `Lazy Tester - Universal Diagnostics`. Activation is per world;
-   no automatic installation into other worlds.
-3. In a test world where operator commands are permitted, issue
-   `/scriptevent lazytester:diagnostics start`.
-4. Reproduce a gameplay scenario; `status` or `flush` may be used on demand.
-5. For **short, explicit, noisy-event investigation only**, use
-   `/scriptevent lazytester:diagnostics combat on` or
-   `/scriptevent lazytester:diagnostics entities on`. Each auto-expires
-   after 600 game ticks; use `combat off` / `entities off` if needed sooner.
-6. Issue `/scriptevent lazytester:diagnostics stop` before ending the test.
+1. Import `LazyTester-Universal-Diagnostics-Education-1.2.0.mcpack`
+   into Minecraft Education, then activate `Lazy Tester - Universal Diagnostics`
+   under Behavior Packs on each **copied QA world**. The old v1.1.0 and
+   new v1.2.0 share a pack UUID; only one version should be active.
+2. With cheats/operator permission, type `/scriptevent lt:diag help`.
+   Instructions are shown in-game. No VS Code, new pack per map,
+   or secondary manager is needed.
+3. Start the test with `/scriptevent lt:diag on`; finish with
+   `/scriptevent lt:diag off`. These are the only commands necessary
+   for a normal QA session.
+4. Optional: `/scriptevent lt:diag status` reports the current state.
+   `/scriptevent lt:diag more` enables combat+entity detail for a maximum
+   of 600 game ticks (approximately 30 seconds at 20 TPS), then expires.
+
+The old developer command ID `/scriptevent lazytester:diagnostics`
+still supports all previous payloads, including `start`, `stop`,
+`status`, `flush`, `combat on/off` and `entities on/off`.
+Both IDs use the same capture state and produce the same
+`[LT_EDU_DIAG]` schema; no separate analytics engine exists.
+
+**In-game feedback:** help/status/on/off/more show a brief reply only
+when requested. Script event sources do not always identify a player,
+so a feedback line may be broadcast to the QA world. The pack does
+not emit periodic chat, read names, or copy chat into its telemetry.
+`world.sendMessage` is a stable Bedrock API; Education 26.33 Windows
+runtime compatibility still needs to be verified.
 
 The pack emits only explicitly namespaced `[LT_EDU_DIAG]` console markers.
 On import/initial load it prints one `ready` marker; **collection stays

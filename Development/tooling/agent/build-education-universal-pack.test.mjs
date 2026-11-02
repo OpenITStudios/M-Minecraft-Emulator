@@ -16,7 +16,8 @@ test('manifest is one reusable Education script pack with stable pinned identifi
   const m=JSON.parse((await readFile(files[0][1])).toString('utf8'));
   assert.equal(m.format_version,2);
   assert.equal(m.header.name,'Lazy Tester - Universal Diagnostics');
-  assert.deepEqual(m.header.version,[1,1,0]);
+  assert.deepEqual(m.header.version,[1,2,0]);
+  assert.match(m.header.description,/lt:diag help/);
   assert.deepEqual(m.header.min_engine_version,[1,26,30]);
   assert.equal(m.header.uuid,'4af9d3f0-9fa1-4cb9-a011-fd37c1b2fb16');
   assert.deepEqual(m.modules.map(x=>x.type),['data','script']);
@@ -27,14 +28,15 @@ test('manifest is one reusable Education script pack with stable pinned identifi
 test('universal pack has no test-world-specific run ID or active logging by default',async()=>{
   const source=(await readFile(files[1][1])).toString('utf8');
   assert.match(source,/const COMMAND = "lazytester:diagnostics";/);
+  assert.match(source,/const SIMPLE_COMMAND = "lt:diag";/);
   assert.match(source,/let active = false;/);
   assert.match(source,/const SUMMARY_TICKS = 200;/);
   assert.match(source,/const FOCUS_TICKS = 600;/);
   assert.match(source,/scriptEventReceive\.subscribe/);
   assert.match(source,/command==="combat on"/);
   assert.match(source,/command==="entities on"/);
-  assert.match(source,/function begin\(\)/);
-  assert.match(source,/function finish\(\)/);
+  assert.match(source,/function start\(\)/);
+  assert.match(source,/function stop\(\)/);
   assert.doesNotMatch(source,/getAllPlayers\(|getEntities\(|setDynamicProperty\(|runCommand\(|fetch\(/);
   assert.doesNotMatch(source,/\b(mc0[1-5]|my-world|my-map)\b/i);
 });
@@ -71,8 +73,42 @@ test('team analytics tier 1 is default; noisy entity and hurt subscriptions are 
   assert.match(focus,/subscribe\("entities",world\.afterEvents\.entitySpawn/);
   assert.match(focus,/FOCUS_TICKS/);
   assert.match(focus,/focusGeneration\[group\]===generation/);
-  assert.equal(src.includes('[ANALYTICS]'),false);
-  assert.equal(src.includes('[GAME_RESULTS]'),false);
+  // Comments may mention the team marker names as documentation.
+  // Assert runtime marker ownership, not incidental source comments.
+  assert.equal(src.includes('const MARKER = "[LT_EDU_DIAG]"'),true);
+  assert.equal(src.includes('const MARKER = "[ANALYTICS]"'),false);
+  assert.equal(src.includes('const MARKER = "[GAME_RESULTS]"'),false);
+});
+
+test('short help/on/off/status/more aliases preserve the old team command',async()=>{
+  const source=(await readFile(files[1][1])).toString('utf8');
+  assert.match(source,/if\(e\.id!==COMMAND&&e\.id!==SIMPLE_COMMAND\)return/);
+  assert.match(source,/command==="on"\|\|command==="start"/);
+  assert.match(source,/command==="off"\|\|command==="stop"/);
+  assert.match(source,/command==="help"\|\|command==="\?"/);
+  assert.match(source,/command==="status"/);
+  assert.match(source,/command==="more"/);
+  assert.match(source,/command==="combat on"/);
+  assert.match(source,/command==="entities on"/);
+  assert.match(source,/if\(!focus\.combat\)enableFocus\("combat",true\)/);
+  assert.match(source,/if\(!focus\.entities\)enableFocus\("entities",true\)/);
+  assert.match(source,/world\.sendMessage\(text\)/);
+  // In-game chat only responds to explicit commands, never each tick/event.
+  const heartbeat=source.slice(source.indexOf('// Single low-frequency heartbeat'));
+  assert.doesNotMatch(heartbeat,/sendMessage\(/);
+  assert.equal(source.includes('getAllPlayers('),false);
+});
+
+test('help is available even when capture is OFF and no active subscription exists',async()=>{
+  const src=(await readFile(files[1][1])).toString('utf8');
+  assert.match(src,/let active = false;/);
+  const command=src.slice(src.indexOf('scriptEventReceive.subscribe'));
+  assert.ok(command.indexOf('command==="help"')<
+    command.indexOf('command==="on"'));
+  assert.match(src,/function showHelp\(event\)/);
+  assert.match(src,/for\(const line of HELP_LINES\)replyToOperator\(event,line\)/);
+  assert.match(src,/const SIMPLE_COMMAND = "lt:diag"/);
+  assert.match(src,/The canonical analytics\/scoring contracts remain owned by the team skills/);
 });
 
 test('ZIP refuses missing, unknown or oversized entries',()=>{

@@ -76,19 +76,28 @@ by a downstream 16 KiB filter.
 
 ### [LT_EDU_DIAG] — optional generic, low-overhead fallback
 
-The universal test pack is deliberately *not* the team's analytics
-implementation or scoring implementation. It uses a stable UUID and
-version 1.1.0, keeping the same file reusable across Education test-copy
-worlds. By default nothing is collected. Commands:
+The universal pack is separate from the team's analytics/scoring.
+It keeps the same pack UUID and advances to **version 1.2.0**; one
+file remains reusable across test-copy worlds. Collection is OFF by
+default. Operators only need the short, memorable `lt:diag` prefix:
 
-    /scriptevent lazytester:diagnostics start
-    /scriptevent lazytester:diagnostics status
-    /scriptevent lazytester:diagnostics flush
-    /scriptevent lazytester:diagnostics combat on
-    /scriptevent lazytester:diagnostics combat off
-    /scriptevent lazytester:diagnostics entities on
-    /scriptevent lazytester:diagnostics entities off
-    /scriptevent lazytester:diagnostics stop
+    /scriptevent lt:diag help       # show in-game instructions
+    /scriptevent lt:diag on         # start
+    /scriptevent lt:diag off        # stop, write final summary
+    /scriptevent lt:diag status     # current state
+    /scriptevent lt:diag more       # focus for 600 game ticks
+
+The full `/scriptevent lazytester:diagnostics` ID and its
+`start`, `status`, `flush`, `combat on/off`, `entities on/off`
+and `stop` messages **remain supported unchanged**. Both IDs dispatch
+through ONE collector and never replace the team's
+`mivubi:get_analytics` or `daigon:get_all_scoring` contracts.
+
+Help works even when capture is OFF, and sends no diagnostic event.
+Short chat feedback is emitted only for explicit help/control commands:
+it targets a player source when available; otherwise it may broadcast
+to everyone in the QA world. There is no recurring chat spam, inventory
+write, or additional AI/MCP request.
 
 After start, **only lifecycle facts** are subscribed: first spawn,
 respawn, leave, dimension change and player-only deaths. Combat

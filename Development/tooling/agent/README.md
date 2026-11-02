@@ -117,14 +117,23 @@ See `docs/system/map-diagnostics.md` for the invocation and limits.
 
 `education-universal-pack/` holds the **single fixed-identity** lightweight
 behavior pack, separate from the disposable two-marker transport probe.
-Its `manifest.json` pins the exact pack UUIDs, version 1.1.0, min engine
+Its `manifest.json` pins the exact pack UUIDs, version 1.2.0, min engine
 1.26.30 and stable `@minecraft/server` 2.8.0 (the user-supplied Skills
 Probe has a matching Education 26.32 macOS test manifest; Windows 26.33
 is NOT_VERIFIED). Its `scripts/main.js` is an original tiny read-only
 counter collector; it does not import the developer's full skill system.
-Collection is OFF by default, controlled only by namespaced
-`/scriptevent lazytester:diagnostics start|flush|status|stop`, with
-optional short-lived `combat on|off` and `entities on|off` commands.
+Collection is OFF by default. The simple operator workflow is:
+
+    /scriptevent lt:diag help
+    /scriptevent lt:diag on
+    /scriptevent lt:diag off
+
+Optional: `/scriptevent lt:diag status` and `more` (600-tick focus).
+In-game replies are shown only after an explicit operator command; if
+no player source is available, feedback may be broadcast to the QA world.
+The full `/scriptevent lazytester:diagnostics` command remains
+backward-compatible, including `start`, `stop`, `flush`,
+`status`, `combat on/off` and `entities on/off`.
 Following the team analytics tier policy, only lifecycle subscriptions
 are enabled on start; high-frequency sources require explicit focus and
 auto-expire after 600 game ticks.
@@ -132,7 +141,7 @@ No event-by-event dumping, player names, coordinates, chat, secrets,
 world/inventory writes or per-tick entity scans.
 
 `build-education-universal-pack.mjs prepare` produces one reusable
-`.mcpack` in ignored `workspace/diagnostics/education-universal/v1.1/`.
+`.mcpack` in ignored `workspace/diagnostics/education-universal/v1.2/`.
 No per-map UUIDs, no direct game install, no automatic Codex/MCP log
 stream and no account/world access. Re-running refuses a mismatched
 existing archive. Import once, then activate on each **test-copy**

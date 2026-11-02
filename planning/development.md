@@ -2,6 +2,25 @@
 
 ## Minecraft Education local-first diagnostics — 2 November 2026
 
+**Operator command UX — source-only:** v1.2.0 of the fixed-UUID
+Education universal diagnostic behavior pack now recognizes
+`/scriptevent lt:diag help|on|off|status|more` with the same internal
+collector/state as the legacy `lazytester:diagnostics` script event.
+`help` responds in chat when invoked, without activating telemetry or
+sending analytics to MCP/Codex; `on` and `off` form the normal two-command
+QA workflow. `more` temporarily activates both already-bounded focus
+sources for up to 600 game ticks. When no player is identifiable from a
+script event, explicit replies can be broadcast to the test world; no
+periodic chat or player identities are used. Old command messages and
+the team's [ANALYTICS]/[GAME_RESULTS] contracts are unchanged.
+Manifest/modules and the offline builder are versioned 1.2.0; prior pack
+versions must not run alongside the new version. Regression source
+fixtures were AUTHORED_NOT_EXECUTED. Actual Education Windows 26.33
+support for source, chat, commands, logs, and multiplayer remains
+NOT_VERIFIED. No native controller/input/MCP mutation, AI automation,
+GitHub Actions, test execution or actual game installation occurred.
+
+
 **Team-skills contract alignment — source-only continuation:** The user-supplied
 Bedrock Agent Skills and Skills Probe ZIPs were compared at source-file
 level: 39/40 matching module paths have byte-identical contents.

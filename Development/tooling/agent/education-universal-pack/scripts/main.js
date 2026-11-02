@@ -1,11 +1,16 @@
-// Lazy Tester Universal Diagnostics 1.1.0 — Minecraft Education.
+// Lazy Tester Universal Diagnostics 1.2.0 — Minecraft Education.
 // Team-aligned, OPTIONAL generic observations; not [ANALYTICS] or [GAME_RESULTS].
 // No raw player identity, location, inventory, chat, commands or world writes.
 // The canonical analytics/scoring contracts remain owned by the team skills.
 import {system, world} from "@minecraft/server";
 
 const MARKER = "[LT_EDU_DIAG]";
-const COMMAND = "lazytester:diagnostics";
+const COMMAND = "lazytester:diagnostics"; // Retained team / old-world command
+const SIMPLE_COMMAND = "lt:diag";          // Short operator alias
+const HELP_LINES = [
+  "[Lazy Tester] on = mulai | off = selesai | status = cek",
+  "[Lazy Tester] more = detail 30 detik | help = bantuan. Contoh: /scriptevent lt:diag on"
+];
 const SUMMARY_TICKS = 200;       // Nominally 10 seconds at 20 TPS
 const FOCUS_TICKS = 600;         // Noisy sources expire after 30 game seconds
 const MAX_COUNT = 1000000;
@@ -33,6 +38,22 @@ function tick(){return Number.isSafeInteger(system.currentTick)?system.currentTi
 function resetCounts(){for(const key of COUNTER_KEYS)counters[key]=0;}
 resetCounts();
 
+function replyToOperator(event,text){
+  // Only after an explicit command: no periodic chat, no player names.
+  // scriptEventReceive may have no player source (e.g., command block);
+  // when no player is available this is a world-chat announcement.
+  try{
+    const target=event?.initiator ?? event?.sourceEntity;
+    if(target?.typeId==="minecraft:player"&&
+       typeof target.sendMessage==="function"){
+      target.sendMessage(text);return;
+    }
+    world.sendMessage(text);
+  }catch{/* Chat feedback is optional; telemetry must not fail. */}
+}
+function showHelp(event){
+  for(const line of HELP_LINES)replyToOperator(event,line);
+}
 function log(kind,data={}){
   // Fixed fields and counters only, never arbitrary event objects or text.
   try{
@@ -125,7 +146,7 @@ function start(){
     unsupported,worldIdentity:"UNVERIFIED"});
 }
 // Explicit short-lived focus, no universal default world-wide entity scans.
-function enableFocus(group){
+function enableFocus(group,quiet=false){
   if(!active){
     log("status",{active:false,note:"START_REQUIRED"});return;
   }
@@ -144,7 +165,7 @@ function enableFocus(group){
       onOtherDeath,"entityDieOthers");
   }
   const generation=++focusGeneration[group];
-  log("status",{capture:captureNumber,active:true,
+  if(!quiet)log("status",{capture:captureNumber,active:true,
     combat:focus.combat,entities:focus.entities,note:"FOCUS_STARTED"});
   // Generation fence prevents an earlier timeout from stopping a newer test.
   system.runTimeout(()=>{
@@ -168,20 +189,61 @@ function stop(){
   unsubscribe("core");
   log("stopped",{capture:captureNumber});
 }
-// One namespaced command route; no use of player identities or chat.
+// Two IDs, ONE execution path. The original command is preserved for
+// developer scripts and older worlds; the short alias is operator-friendly.
+// Only an explicit help/status/control command sends chat feedback.
 try{
   system.afterEvents.scriptEventReceive.subscribe(e=>{
-    if(e.id!==COMMAND)return;
+    if(e.id!==COMMAND&&e.id!==SIMPLE_COMMAND)return;
     const command=String(e.message??"").trim().toLowerCase();
-    if(command==="start")start();
-    else if(command==="stop")stop();
-    else if(command==="status")status();
-    else if(command==="flush")flush("manual",true);
-    else if(command==="combat on")enableFocus("combat");
+    if(command==="help"||command==="?"){
+      showHelp(e);
+    }else if(command==="on"||command==="start"){
+      const already=active;
+      start();
+      replyToOperator(e,already?
+        "[Lazy Tester] Diagnostics sudah aktif.":
+        "[Lazy Tester] Diagnostics aktif. Ketik /scriptevent lt:diag off setelah selesai.");
+    }else if(command==="off"||command==="stop"){
+      const already=!active;
+      stop();
+      replyToOperator(e,already?
+        "[Lazy Tester] Diagnostics sudah nonaktif.":
+        "[Lazy Tester] Diagnostics dihentikan. Ringkasan terakhir dicatat lokal melalui jalur log jika tersedia.");
+    }else if(command==="status"){
+      status();
+      replyToOperator(e,active?
+        "[Lazy Tester] AKTIF. Detail sementara: "+
+          (focus.combat||focus.entities?"ON":"OFF")+
+          ". Ketik /scriptevent lt:diag help untuk bantuan.":
+        "[Lazy Tester] NONAKTIF. Mulai: /scriptevent lt:diag on");
+    }else if(command==="more"){
+      if(!active){
+        replyToOperator(e,"[Lazy Tester] Mulai dulu: /scriptevent lt:diag on");
+      }else{
+        const already=focus.combat&&focus.entities;
+        if(!focus.combat)enableFocus("combat",true);
+        if(!focus.entities)enableFocus("entities",true);
+        if(!already)log("status",{capture:captureNumber,active:true,
+          combat:focus.combat,entities:focus.entities,
+          note:"FOCUS_SHORT_STARTED"});
+        replyToOperator(e,already?
+          "[Lazy Tester] Detail masih aktif; akan berhenti otomatis.":
+          "[Lazy Tester] Detail aktif sekitar 30 detik waktu game, lalu otomatis nonaktif.");
+      }
+    }else if(command==="flush"){
+      flush("manual",true);
+      replyToOperator(e,active?
+        "[Lazy Tester] Ringkasan dicatat ke log jika tersedia.":
+        "[Lazy Tester] Diagnostics nonaktif, tidak ada ringkasan baru.");
+    }else if(command==="combat on")enableFocus("combat");
     else if(command==="combat off")stopFocus("combat","FOCUS_DISABLED");
     else if(command==="entities on")enableFocus("entities");
     else if(command==="entities off")stopFocus("entities","FOCUS_DISABLED");
-    else log("status",{active,note:"INVALID_SUBCOMMAND"});
+    else {
+      log("status",{active,note:"INVALID_SUBCOMMAND"});
+      showHelp(e);
+    }
   });
   system.run(()=>log("ready",{scope:"CORE_LIFECYCLE_ONLY",
     defaultActive:false,command:COMMAND,compatibility:"NOT_VERIFIED"}));
