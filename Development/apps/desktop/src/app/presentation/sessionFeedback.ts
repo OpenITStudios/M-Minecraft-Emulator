@@ -7,23 +7,23 @@ export type FeedbackArea = 'Application' | 'Connection' | 'Launcher' | 'Game' | 
 // Operation-scoped user feedback only. A native exception's arbitrary
 // details must never select a category, code, or permission to retry.
 const feedback = {
-  general: {code:'LT-APP-01',area:'Application',message:'The action could not be confirmed. Check the latest session status before retrying.'},
+  general: {code:'LT-APP-01',area:'Application',message:'The action was not confirmed. Choose Refresh to check session status before trying again.'},
   backend: {code:'LT-APP-02',area:'Application',message:'Windows game support could not be checked. Try again.'},
   binding: {code:'LT-PRO-01',area:'Launcher',message:'Saved launcher data could not be verified. No game was launched.'},
-  connection: {code:'LT-CON-01',area:'Connection',message:'Minecraft session status is unavailable. Refresh to check your games.'},
-  launch: {code:'LT-GAM-01',area:'Game',message:'Launch could not be confirmed. Refresh this launcher before trying again.'},
-  selection: {code:'LT-DIS-01',area:'Display',message:'This Minecraft window could not be shown. Check the session before retrying.'},
-  workspace: {code:'LT-DIS-02',area:'Display',message:'The game view could not be updated. Your Minecraft sessions were not asked to close.'},
+  connection: {code:'LT-CON-01',area:'Connection',message:'Minecraft session status is unavailable. Choose Refresh to check before launching another game.'},
+  launch: {code:'LT-GAM-01',area:'Game',message:'Minecraft launch was not confirmed. It may still be starting. Choose Refresh before another launch.'},
+  selection: {code:'LT-DIS-01',area:'Display',message:'This Minecraft window could not be shown. Choose Refresh before selecting it again.'},
+  workspace: {code:'LT-DIS-02',area:'Display',message:'The game view could not be updated. No Minecraft session was asked to close. Choose Refresh to check status.'},
   location: {code:'LT-STO-01',area:'Storage',message:'The launcher data location could not be confirmed. Review Data Storage before retrying.'},
   storage: {code:'LT-STO-02',area:'Storage',message:'Storage information is unavailable. Refresh to check it again.'},
   settings: {code:'LT-SET-01',area:'Settings',message:'The settings change could not be confirmed. Refresh before retrying.'},
   performance: {code:'LT-SET-02',area:'Settings',message:'Frame limits could not be confirmed. Check Settings before retrying.'},
   audio: {code:'LT-SET-03',area:'Settings',message:'Background audio could not be confirmed. Check Settings before retrying.'},
-  close: {code:'LT-GAM-02',area:'Game',message:'Minecraft did not confirm a normal exit. Check the game before retrying.'},
-  recovery: {code:'LT-DIS-03',area:'Display',message:'Window restoration was not confirmed. Check the affected Minecraft before retrying.'},
+  close: {code:'LT-GAM-02',area:'Game',message:'Minecraft did not confirm a normal exit. Check its window before attempting another close.'},
+  recovery: {code:'LT-DIS-03',area:'Display',message:'Window restoration was not confirmed. Do not assume the game closed. Refresh checks game status only.'},
   closeAll: {code:'LT-GAM-03',area:'Game',message:'Lazy Tester could not finish closing all games. Check the remaining sessions.'},
-  preview: {code:'LT-DIS-04',area:'Display',message:'Preview is unavailable. Select the Minecraft launcher to view its game window.'},
-  profile: {code:'LT-PRO-02',area:'Launcher',message:'This launcher needs attention. Refresh to check its status.'},
+  preview: {code:'LT-DIS-04',area:'Display',message:'Preview is unavailable. The game may still be running; select its Minecraft card to view the window.'},
+  profile: {code:'LT-PRO-02',area:'Launcher',message:'This launcher needs attention. Choose Refresh to inspect its current status.'},
   pack: {code:'LT-STO-03',area:'Storage',message:'Resource pack information is incomplete. No packs were changed.'},
   worldPack: {code:'LT-STO-04',area:'Storage',message:'Saved world pack information is incomplete. No packs were changed.'},
   cache: {code:'LT-STO-05',area:'Storage',message:'Cache cleanup could not be confirmed. Refresh Data Storage before retrying.'},
@@ -60,7 +60,7 @@ export function sessionConnectionLabel(
   if (backend === 'Unsupported') return 'Not supported';
   if (backend !== 'WindowsNative') return 'Status unavailable';
   if (!bindingConfigured) return 'Profiles unavailable';
-  return sessionObserved ? 'Profiles verified' : 'Session status unavailable';
+  return sessionObserved ? 'Profile data verified' : 'Session status unavailable';
 }
 
 // UI-only unresolved warnings, deliberately not lifecycle/admission state.

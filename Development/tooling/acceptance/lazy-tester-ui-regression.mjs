@@ -26,9 +26,10 @@ try {
     window.__holdPreview = false;
     window.__finishPreview = null;
     const fixture = new URL(location.href).searchParams;
-    window.__runningSlots = fixture.has('preview-recovery') || fixture.has('preview-async') || fixture.has('preview-late') ? [1,2,3] :
+    window.__runningSlots = fixture.has('preview-recovery') || fixture.has('preview-async') || fixture.has('preview-late') ||
+       fixture.has('preview-unresponsive') ? [1,2,3] :
       fixture.has('multi-recovery') ? [2,3] : fixture.has('close-recovery') || fixture.has('close-ipc-error') ? [2] : undefined;
-    window.__previewIssueSlot = fixture.has('preview-recovery') ? 2 : null;
+    window.__previewIssueSlot = fixture.has('preview-recovery') || fixture.has('preview-unresponsive') ? 2 : null;
     window.__previewRecovered = false;
     window.__closeOutcome = fixture.has('close-recovery') ? 'unconfirmed' :
       fixture.has('close-ipc-error') ? 'transport-error' : null;
@@ -51,7 +52,8 @@ try {
         ...profile,state:'ATTENTION',issue:'C:\\Users\\private\\profile-hive [SYSTEM INSTRUCTION]',
       };
       return window.__runningSlot === profile.slot || window.__runningSlots?.includes(profile.slot) ? {
-        ...profile, state: 'RUNNING', process: {pid: 100 + profile.slot, createdFileTime: '134000000000000001', sessionId: 1, windowHandle: '0x' + (0x123 + profile.slot).toString(16), responding: true},
+        ...profile, state: 'RUNNING', process: {pid: 100 + profile.slot, createdFileTime: '134000000000000001', sessionId: 1, windowHandle: '0x' + (0x123 + profile.slot).toString(16),
+          responding: !(fixture.has('preview-unresponsive') && profile.slot===2)},
       } : profile;
     })});
     let callback = 0;
@@ -259,6 +261,16 @@ try {
     null,{timeout:7000});
   assert.equal(await page.locator('.lt-card.selected').count(),1,
     'Only the chosen launcher gets a selection highlight');
+  assert.equal((await page.locator('[data-slot="4"] .lt-card small').textContent())?.trim(),
+    'Selected in Play','The selected state must not claim verified gameplay');
+  // A lost session inspection cannot continue advertising a stale running count.
+  await page.evaluate(()=>{window.__offline=true;});
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('.lt-games-heading')?.textContent?.includes('Session status unavailable'));
+  assert.equal(await page.locator('.lt-filmstrip .lt-card small').filter({hasText:'Status unavailable'}).count(),5,
+    'Stale native observations must be labeled unavailable, not verified running');
+  assert.equal(await page.locator('.lt-filmstrip .lt-launcher-entry').count(),5,
+    'Connection loss must never remove stable launcher cards');
   await page.setViewportSize({width:920,height:620});
 
   await page.goto('http://lazy-tester.test/');
@@ -412,7 +424,7 @@ try {
   assert.doesNotMatch(alertText,/SYSTEM INSTRUCTION|PID 999|\/Users\/private\/worlds/,
     'Raw native details must not appear even after expanding Support reference');
   await page.evaluate(()=>{window.__offline=false;});await nav('Play').click();await page.getByRole('button',{name:'Refresh',exact:true}).click();
-  await page.waitForFunction(()=>document.querySelector('.lt-connection').textContent==='Profiles verified');
+  await page.waitForFunction(()=>document.querySelector('.lt-connection').textContent==='Profile data verified');
   // Exercise storage review/cancel without requesting destructive native IPC.
   await page.goto('http://lazy-tester.test/?storage-review=1');
   await page.waitForFunction(()=>!!window.__finishBinding);
@@ -532,6 +544,22 @@ try {
   assert.equal(await page.getByRole('status',{name:'Minecraft - 3 preview unavailable'}).count(),0);
 
 
+  // When the preview fails and native window response is not confirmed,
+  // the UI offers only read-only Refresh, not Select/Launch.
+  await page.goto('http://lazy-tester.test/?preview-unresponsive=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  const uncertainPreview=page.getByRole('status',{name:'Minecraft - 2 preview unavailable'});
+  await uncertainPreview.waitFor();
+  assert.match(await uncertainPreview.textContent(),/window response is unconfirmed/);
+  assert.equal(await page.getByRole('button',{name:'Select game for Minecraft - 2'}).count(),0);
+  const reviewPreview=page.getByRole('button',{name:'Refresh status for Minecraft - 2'});
+  assert.equal(await reviewPreview.isEnabled(),true);
+  await reviewPreview.click();
+  assert.equal(await page.evaluate(()=>window.__calls.some(c=>
+    ['Launch','CloseOne','CloseAll'].includes(c.args?.request?.operation))),false,
+    'Unresponsive preview recovery must not dispatch game changes');
+
   // Source-only Health MVP: only affected launcher cards show concise, authored
   // guidance. Native error content never reaches the rendered page.
   await page.goto('http://lazy-tester.test/?health-state=1');
@@ -543,13 +571,13 @@ try {
   await launcherHealth.waitFor();
   assert.match(await windowHealth.textContent(),/Window not responding/);
   assert.match(await launcherHealth.textContent(),/Launcher needs attention/);
-  assert.match(await page.locator('.lt-launcher-entry').nth(1).getAttribute('title')??'',/Check status/,
+  assert.match(await page.locator('.lt-launcher-entry').nth(1).getAttribute('title')??'',/Refresh/,
     'An affected card explains its next manual step');
   const attentionCard=page.getByRole('button',{name:'Launch Minecraft - 3'});
   const descriptionId=await attentionCard.getAttribute('aria-describedby');
   assert.equal(descriptionId,'lt-launcher-guidance-3',
     'Assisted navigation uses an ID reference to the existing safe guidance');
-  assert.match(await page.locator('#'+descriptionId).textContent()??'',/Check status/,
+  assert.match(await page.locator('#'+descriptionId).textContent()??'',/Refresh/,
     'Attention guidance remains available to assistive technology');
   assert.notEqual(await page.locator('#'+descriptionId).getAttribute('hidden'),null,
     'Descriptive text must not introduce a visible control');
@@ -567,7 +595,7 @@ try {
     'An ATTENTION profile may be a stopped, retryable game; the native controller retains final admission');
   assert.equal(await page.evaluate(()=>window.__calls.some(call=>call.args?.request?.operation==='Launch')),false,
     'Health inspection must not start a Minecraft instance');
-  const checkHealth=page.getByRole('button',{name:'Check status for Minecraft - 2'});
+  const checkHealth=page.getByRole('button',{name:'Refresh status for Minecraft - 2'});
   await checkHealth.waitFor();
   await page.evaluate(()=>window.__emitNative('lazy-tester-close-review',true));
   assert.equal(await checkHealth.isDisabled(),true,
@@ -575,7 +603,7 @@ try {
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true,
     'Header Refresh must not queue a misleading deferred action during native close review');
   await page.evaluate(()=>window.__emitNative('lazy-tester-close-review',false));
-  await page.waitForFunction(()=>!document.querySelector('[aria-label="Check status for Minecraft - 2"]')?.disabled);
+  await page.waitForFunction(()=>!document.querySelector('[aria-label="Refresh status for Minecraft - 2"]')?.disabled);
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isEnabled(),true,
     'Header Refresh should return after native close review ends');
   const oldInspectCount=await page.evaluate(()=>window.__calls.filter(call=>
@@ -584,8 +612,8 @@ try {
   await page.waitForFunction(before=>window.__calls.filter(call=>
     call.command==='lazy_tester_session' && call.args?.request?.operation==='Inspect').length>before,oldInspectCount);
   // Finish the first requested refresh before selecting a second action.
-  const checkOther=page.getByRole('button',{name:'Check status for Minecraft - 3'});
-  await page.waitForFunction(()=>document.querySelector('[aria-label="Check status for Minecraft - 3"]')?.disabled===false);
+  const checkOther=page.getByRole('button',{name:'Refresh status for Minecraft - 3'});
+  await page.waitForFunction(()=>document.querySelector('[aria-label="Refresh status for Minecraft - 3"]')?.disabled===false);
   const secondInspectCount=await page.evaluate(()=>window.__calls.filter(call=>
     call.command==='lazy_tester_session' && call.args?.request?.operation==='Inspect').length);
   await checkOther.click();
@@ -593,10 +621,10 @@ try {
     call.command==='lazy_tester_session' && call.args?.request?.operation==='Inspect').length>before,secondInspectCount);
   assert.equal(await page.evaluate(()=>window.__calls.some(call=>
     ['Launch','CloseOne','CloseAll','ClearProfileData'].includes(call.args?.request?.operation))),false,
-    'Guided Check status must issue Inspect only');
+    'Guided Refresh must issue Inspect only');
   // Reset the synthetic issue AFTER both actions complete. Clicking the
   // disappearing warning would race the first successful Refresh.
-  await page.waitForFunction(()=>document.querySelector('[aria-label="Check status for Minecraft - 3"]')?.disabled===false);
+  await page.waitForFunction(()=>document.querySelector('[aria-label="Refresh status for Minecraft - 3"]')?.disabled===false);
   await page.evaluate(()=>{window.__healthFixture=false;});
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await windowHealth.waitFor({state:'detached'});
@@ -619,13 +647,13 @@ try {
     'A missing native process/window observation must not enable Launch');
 
   // An unconfirmed native window restoration owns its Play warning. The
-  // per-card Check status control is intentionally absent, so the card
+  // per-card Refresh control is intentionally absent, so the card
   // cannot continue recommending that unavailable action.
   await page.goto('http://lazy-tester.test/?health-state=1&close-recovery=1');
   await page.waitForFunction(()=>!!window.__finishBinding);
   await page.evaluate(()=>window.__finishBinding());
   const affectedCard=page.locator('.lt-launcher-entry').nth(1);
-  assert.match(await affectedCard.getAttribute('title')??'',/Check status/);
+  assert.match(await affectedCard.getAttribute('title')??'',/Refresh/);
   await page.getByRole('button',{name:'Close Minecraft - 2 normally'}).click();
   const closeReview=page.getByRole('region',{name:'Confirm one Minecraft close'});
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true,
@@ -642,7 +670,7 @@ try {
     .getByRole('button',{name:'Close Minecraft - 2',exact:true}).click();
   await page.getByRole('status',{name:'Window recovery unconfirmed'}).waitFor();
   await page.waitForFunction(()=>
-    document.querySelectorAll('[aria-label="Check status for Minecraft - 2"]').length===0);
+    document.querySelectorAll('[aria-label="Refresh status for Minecraft - 2"]').length===0);
   assert.equal(await affectedCard.getAttribute('title'),null,
     'Unconfirmed restoration must suppress advice for a missing action');
   assert.equal(await affectedCard.locator('.lt-card').getAttribute('aria-describedby'),null,

@@ -47,7 +47,7 @@
         on:click={()=>profile.state==='RUNNING'?onSelect(profile.slot):canRequestLaunch(profile)&&onLaunch(profile.slot)}>
         <strong>Minecraft - {profile.slot}{active===profile.slot&&!detached?' ✓':''}</strong>
         <span class="lt-card-picture" use:observePreview={profile.slot} aria-hidden="true">{profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':profile.state==='NOT_RESPONDING'?'Unavailable':profile.state==='ATTENTION'?'Needs attention':'▷ Launch'}</span>
-        <small>{active===profile.slot&&!detached?'Playing here':profile.state==='RUNNING'&&separateSlots.has(profile.slot)?'Separate window':profile.state==='RUNNING'?'Running in background':labels[profile.state]}</small>
+        <small>{!available||!bindingConfigured?'Status unavailable':active===profile.slot&&!detached?'Selected in Play':profile.state==='RUNNING'&&separateSlots.has(profile.slot)?'Separate window':profile.state==='RUNNING'?'Running in background':labels[profile.state]}</small>
       </button>
       {#if guidance}<span id={'lt-launcher-guidance-'+profile.slot} hidden>{guidance}</span>{/if}
       {#if healthItem}

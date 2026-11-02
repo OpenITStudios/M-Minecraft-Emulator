@@ -21,6 +21,16 @@ skips sessions without a usable window. Profile slots are fixed by storage
 identity, never native enumeration order, window title, or a claim that an
 account is signed in.
 
+Visible launcher status is based on the most recent native observation, never
+a claim of Minecraft sign-in or gameplay acceptance. The selected card says
+"Selected in Play" rather than implying Minecraft is playable. If inspection
+becomes unavailable, the five cards remain visible but their status is
+"Status unavailable"; no stale running count is shown. "Profile data verified"
+means validated stored profile identities only. Read-only status rechecks use
+the same visible "Refresh" wording in the toolbar and per-launcher recovery.
+A failed native preview offers "Select game" only when window response is
+positively observed; otherwise the safe offered action is "Refresh".
+
 Session ownership belongs to the existing native bootstrap; the UI is a consumer.
 The bootstrap keeps the reviewed game/DLL hashes, original process handles, private
 Roaming/Local/TEMP/HKCU stores, scoped singleton compatibility, and 144/10 FPS policy.

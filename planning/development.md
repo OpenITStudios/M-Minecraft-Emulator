@@ -19,6 +19,12 @@ new-revision acceptance.
   layer only; selection does not recreate preview elements. The rail heading
   now matches its existing 1600px width cap. Relevant regression scenarios
   are AUTHORED_NOT_EXECUTED; live Windows/Minecraft behavior NOT_VERIFIED.
+- **Desktop clarity UX (2 November):** unify global/per-slot read-only
+  Refresh wording; distinguish verified profile data from actual game
+  readiness, suppress stale running-count claims during connection loss,
+  and require positive window response before offering guided Select game
+  after a DWM preview failure. Preserve rail geometry, theme and native
+  admission. Updated UI fixtures AUTHORED_NOT_EXECUTED.
 - **Native owner:** original Rust session controller handles game
   process identity, private profiles, normal exit and recovery.
   Workspace/DWM presentation never becomes a second lifecycle owner.

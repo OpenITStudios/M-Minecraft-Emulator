@@ -9,7 +9,9 @@
   $: accessibleName = item.kind === 'preview'
     ? 'Minecraft - ' + item.slot + ' preview unavailable'
     : 'Minecraft - ' + item.slot + ' needs attention';
-  $: actionLabel = item.action === 'open' ? 'Select game' : 'Check status';
+  // Match the global read-only Refresh action, not a competing "Check status".
+  $: actionLabel = item.action === 'open' ? 'Select game' : 'Refresh';
+  $: actionName = item.action === 'open' ? 'Select game' : 'Refresh status';
 </script>
 
 <div class="lt-health-notice">
@@ -25,7 +27,7 @@
     type="button"
     class="lt-health-action"
     disabled={disabled}
-    aria-label={actionLabel + ' for Minecraft - ' + item.slot}
+    aria-label={actionName + ' for Minecraft - ' + item.slot}
     on:click={() => onAction(item.slot, item.action)}
   >{actionLabel}</button>
 </div>
