@@ -76,7 +76,8 @@ function requirement(value){
 }
 export function validateMapTestContract(value){
   if(!keys(value,['schema','map','revision','requirements'])||
-    value.schema!==1||!MAP.test(value.map)||!REVISION.test(value.revision)||
+    value.schema!==1||typeof value.map!=='string'||!MAP.test(value.map)||
+    typeof value.revision!=='string'||!REVISION.test(value.revision)||
     !Array.isArray(value.requirements)||
     value.requirements.length<1||value.requirements.length>MAX_REQUIREMENTS)refuse();
   const requirements=value.requirements.map(requirement);
@@ -102,6 +103,7 @@ function matchPath(changed,selector){
 }
 function verifiedShape(changeSet){
   return keys(changeSet,['baseSha','headSha','paths'])&&
+    typeof changeSet.baseSha==='string'&&typeof changeSet.headSha==='string'&&
     SHA.test(changeSet.baseSha)&&SHA.test(changeSet.headSha)&&
     changeSet.baseSha!==changeSet.headSha&&
     list(changeSet.paths,MAX_CHANGED_PATHS,x=>sourcePath(x));

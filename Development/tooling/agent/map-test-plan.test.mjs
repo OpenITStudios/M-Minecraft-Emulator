@@ -31,6 +31,8 @@ test('map contract is only data: unknown fields, unsafe values and unconfirmed a
     .some(c=>c.state==='MAP_ADAPTER_NOT_IMPLEMENTED'),true);
   assert.equal(compactMapTestPlan(plan(value)).foundationProbe,'SEPARATE_TEST_SCOPE');
   assert.throws(()=>validateMapTestContract({...value,command:'/scriptevent'}));
+  assert.throws(()=>validateMapTestContract({...value,map:['dgn-defense']}));
+  assert.throws(()=>validateMapTestContract({...value,revision:['spec-v1']}));
   assert.throws(()=>validateMapTestContract({...value,requirements:[
     {...value.requirements[0],expect:{operator:'equals',value:'unsafe expression!'}}]}));
   assert.throws(()=>validateMapTestContract({...value,requirements:[
@@ -74,6 +76,9 @@ test('affected dependency selection is bounded and unmapped changes fall back to
     ['flag.initial_hp','flag.player_protection']);
   assert.equal(affected.selectionProof,'SOURCE_ONLY_NOT_GAMEPLAY_OR_DIFF_AUTHENTICATION');
   assert.equal(plan(value,{scope:'affected'}).effectiveScope,'full');
+  assert.equal(plan(value,{scope:'affected',changeSet:{
+    ...changed,baseSha:['a'.repeat(40)]
+  }}).effectiveScope,'full');
   assert.equal(plan(value,{scope:'affected',changeSet:{
     ...changed,paths:['scripts/combat/attack.ts','config/manifest.json']
   }}).effectiveScope,'full');
