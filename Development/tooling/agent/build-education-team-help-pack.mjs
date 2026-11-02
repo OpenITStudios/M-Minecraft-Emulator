@@ -1,14 +1,14 @@
-// Explicit offline .mcpack packager for the ONE reusable Education pack.
+// Explicit offline .mcpack packager for a HELP-ONLY command list.
 // No Minecraft launch, profile/world search, network/AI access or input.
 // Refuses replacing any existing archive; source-controlled pack UUIDs stay
-// identical across different test worlds. UTF-8 fixed file names only.
+// identical across different test worlds; no analytics or log engine. UTF-8 fixed file names only.
 import {createHash} from 'node:crypto';
 import {lstat,mkdir,open,readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-const PACK_NAME='LazyTester-Universal-Diagnostics-Education-1.2.0.mcpack';
-const SOURCE=new URL('./education-universal-pack/',import.meta.url);
+const PACK_NAME='LazyTester-Team-Commands-Help-Education-2.0.0.mcpack';
+const SOURCE=new URL('./education-team-help-pack/',import.meta.url);
 const ROOT=fileURLToPath(new URL('../../../',import.meta.url));
 const ENTRIES=['manifest.json','scripts/main.js'];
 const MAX_SOURCE_BYTES=64*1024;
@@ -112,17 +112,27 @@ export async function stageUniversalEducationMcpack(){
   const manifest=JSON.parse(contents[0].toString('utf8'));
   if(manifest.format_version!==2||
      manifest.header?.uuid!=='4af9d3f0-9fa1-4cb9-a011-fd37c1b2fb16'||
-     manifest.header?.version?.join('.')!=='1.2.0'||
+     manifest.header?.version?.join('.')!=='2.0.0'||
+     manifest.header?.name!=='Lazy Tester - Team Commands Help'||
      manifest.modules?.[1]?.entry!=='scripts/main.js'||
      manifest.dependencies?.[0]?.module_name!=='@minecraft/server'||
      manifest.dependencies?.[0]?.version!=='2.8.0') {
     throw Error('Reviewed reusable Education manifest drift');
   }
+  const helpCode=contents[1].toString('utf8');
+  // Explicitly refuse any legacy telemetry implementation under this
+  // package identity. Only a help listener is permitted.
+  if(!helpCode.includes('const HELP_EVENT = "lazytester:help"')||
+     !helpCode.includes('const HELP_MESSAGE = "commands"')||
+     helpCode.includes('[LT_EDU_DIAG]')||helpCode.includes('runInterval(')||
+     helpCode.includes('world.afterEvents')) {
+    throw Error('Help-only source contract drift');
+  }
   const content=buildEducationMcpack(ENTRIES.map((name,i)=>({
     name,content:contents[i]
   })));
   const dir=await child(await child(await child(
-    path.join(ROOT,'workspace'),'diagnostics'),'education-universal'),'v1.2');
+    path.join(ROOT,'workspace'),'diagnostics'),'education-team-help'),'v2');
   const file=path.join(dir,PACK_NAME);
   const hash=digest(content);
   try{
@@ -130,7 +140,7 @@ export async function stageUniversalEducationMcpack(){
     try{await h.writeFile(content);await h.sync();}
     finally{await h.close();}
     return {status:'CREATED_LOCALLY_NOT_EDUCATION_TESTED',
-      relativeFile:'workspace/diagnostics/education-universal/v1.2/'+PACK_NAME,
+      relativeFile:'workspace/diagnostics/education-team-help/v2/'+PACK_NAME,
       bytes:content.length,sha256:hash,uploadedToAI:false};
   }catch(error){
     if(error?.code!=='EEXIST')throw error;
@@ -142,16 +152,16 @@ export async function stageUniversalEducationMcpack(){
     const previous=await readFile(file);
     if(!previous.equals(content))throw Error('Existing pack differs; never overwrite');
     return {status:'ALREADY_PRESENT_IDENTICAL_NOT_EDUCATION_TESTED',
-      relativeFile:'workspace/diagnostics/education-universal/v1.2/'+PACK_NAME,
+      relativeFile:'workspace/diagnostics/education-team-help/v2/'+PACK_NAME,
       bytes:content.length,sha256:hash,uploadedToAI:false};
   }
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   if(process.argv.length!==3||process.argv[2]!=='prepare'){
-    console.error('Usage: node build-education-universal-pack.mjs prepare');
+    console.error('Usage: node build-education-team-help-pack.mjs prepare');
     process.exitCode=2;
   }else{
     stageUniversalEducationMcpack().then(result=>console.log(JSON.stringify(result)))
-      .catch(()=>{console.error('Education universal pack staging refused');process.exitCode=1;});
+      .catch(()=>{console.error('Education team-help pack staging refused');process.exitCode=1;});
   }
 }

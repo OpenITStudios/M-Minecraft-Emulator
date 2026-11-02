@@ -65,101 +65,43 @@ native transport and never establish Minecraft movement.
   The **external** AI model must inspect individual images and decide
   next actions; there is no autonomous model loop in this repo.
 
-## Minecraft Education local-first diagnostic import (source only)
+## Minecraft Education team source sync, help and read-only MCP
 
-The existing MCP now offers four **read-only**, bounded diagnostics tools:
-get_diagnostics_overview, list_issue_candidates, get_issue_details and
-query_diagnostic_evidence. They are inactive without an explicit
---diagnostics-dir / LAZY_TESTER_DIAGNOSTICS_DIR rooted at Data/Diagnostics.
-The underlying diagnostics-local.mjs importer runs only as a separately
-invoked local CLI; **Codex cannot import raw files, perform arbitrary path
-reads, auto-collect, upload, or delete anything** over MCP.
+**One authoritative game runtime:** the team's original
+`minecraft-bedrock-agent-skills` modules; only the team `skills-probe`
+project is used to validate them. Lazy Tester does NOT reimplement
+their analytics, gameplay scoring, subscriber engine or telemetry.
+The earlier `[LT_EDU_DIAG]` parallel universal diagnostics pack has
+been retired from active source and must not be enabled on QA maps.
 
-Every new import creates a versioned local run folder with separated
-evidence/, analysis/ and a manifest.json commit marker carrying SHA-256
-checksums. Partial imports remain quarantined; v1 two-file archives stay
-read-only and are flagged as legacy without checksums. No automatic
-cleanup or raw-event upload exists. The importer retains the normalized
-JSONL archive and a compact issue index. Data from unverified Education logs is never claimed
-as gameplay PASS. This is not a live Minecraft Education collector, not
-a debugger connection and not part of the release. For contract, bounded
-usage, quotas and future Education verification see
-[local-first map diagnostics](../../../docs/system/map-diagnostics.md).
+The optional minimal `education-team-help-pack/` is **help text only**,
+not a diagnostics engine. Its command is:
 
-## Education Script API capture probe — offline source preparation
+    /scriptevent lazytester:help commands
 
-`education-script-probe.js` is an **explicit** two-marker Script API smoke
-probe for an isolated Education test-copy behavior pack, not an installed
-pack or automatic game logger. `education-log-probe.mjs` reads only an
-operator-supplied absolute .log/.txt file, recognizes a tiny fixed marker
-contract, and outputs sanitized counts plus SHA-256. The parser offers an **envelope-survey** that counts potential marker
-wrappers without parsing or exposing their contents, followed by two
-strict candidate validators. Unsupported marker wrappers are distinguished
-from genuinely absent markers. None is a proven Education Content Log
-format. It does not create a diagnostics run, contact Codex, enumerate
-Minecraft account/world paths or advertise an MCP tool. Authored fixtures
-are NOT_EXECUTED. See `docs/system/map-diagnostics.md`.
+It lists the original team commands and clearly separates the two
+team exports from Skills Probe-only admin/test commands. The helper
+contains no counters, logging, game-state changes or AI calls; it
+shows messages to the requesting player only. The single offline
+builder `build-education-team-help-pack.mjs` creates a reusable
+.mcpack only under ignored `workspace/diagnostics/education-team-help/v2/`.
+No original world, account or installed game data are touched.
 
-## Disposable Minecraft Education Script API probe pack stager
+**Existing local MCP** remains a bounded, read-only consumer of
+`[ANALYTICS]` and `[GAME_RESULTS]` captured records. Four
+`get_diagnostics_overview/list_issue_candidates/get_issue_details/query_diagnostic_evidence`
+tools query explicitly imported `Data/Diagnostics` evidence only.
+The game capture path and source identity are still NOT_VERIFIED in
+Minecraft Education 26.33 Windows. No raw capture automatically
+streams to Codex.
 
-`prepare-education-probe.mjs` is an **explicit, offline, source-only**
-CLI that generates a self-contained `manifest.json` + `scripts/main.js`
-behavior pack from the single canonical `education-script-probe.js`
-emitter. It requires an explicitly selected stable `@minecraft/server`
-dependency version, assigns unique run/pack UUID identities, and puts
-source output **only** below ignored `workspace/diagnostics/education-probe/`.
-It does not install/activate a pack, locate a Minecraft account/world,
-launch a game, connect a debugger, run tests, or contact Codex. The
-receipt is a local source artifact, not proof of Education compatibility.
-See `docs/system/map-diagnostics.md` for the invocation and limits.
-
-## One reusable Education .mcpack for generic QA (source-only)
-
-`education-universal-pack/` holds the **single fixed-identity** lightweight
-behavior pack, separate from the disposable two-marker transport probe.
-Its `manifest.json` pins the exact pack UUIDs, version 1.2.0, min engine
-1.26.30 and stable `@minecraft/server` 2.8.0 (the user-supplied Skills
-Probe has a matching Education 26.32 macOS test manifest; Windows 26.33
-is NOT_VERIFIED). Its `scripts/main.js` is an original tiny read-only
-counter collector; it does not import the developer's full skill system.
-Collection is OFF by default. The simple operator workflow is:
-
-    /scriptevent lt:diag help
-    /scriptevent lt:diag on
-    /scriptevent lt:diag off
-
-Optional: `/scriptevent lt:diag status` and `more` (600-tick focus).
-In-game replies are shown only after an explicit operator command; if
-no player source is available, feedback may be broadcast to the QA world.
-The full `/scriptevent lazytester:diagnostics` command remains
-backward-compatible, including `start`, `stop`, `flush`,
-`status`, `combat on/off` and `entities on/off`.
-Following the team analytics tier policy, only lifecycle subscriptions
-are enabled on start; high-frequency sources require explicit focus and
-auto-expire after 600 game ticks.
-No event-by-event dumping, player names, coordinates, chat, secrets,
-world/inventory writes or per-tick entity scans.
-
-`build-education-universal-pack.mjs prepare` produces one reusable
-`.mcpack` in ignored `workspace/diagnostics/education-universal/v1.2/`.
-No per-map UUIDs, no direct game install, no automatic Codex/MCP log
-stream and no account/world access. Re-running refuses a mismatched
-existing archive. Import once, then activate on each **test-copy**
-Education world through Behavior Packs. See `docs/system/map-diagnostics.md`.
-No source tests or Education runtime executions were performed for this
-commit; any manually distributed artifact is structurally verified only.
-
-## Developer team telemetry compatibility
-
-The canonical contracts are the **operator-supplied** Bedrock Agent Skills
-modules: `[ANALYTICS]` (general mechanics) and `[GAME_RESULTS]`
-(scoring). Skills Probe provides the real Education 26.32 macOS debugger
-capture evidence; it is not target Windows 26.33 acceptance. Lazy Tester
-consumes both existing markers and the distinct optional `[LT_EDU_DIAG]`
-marker, with **24 KiB team wire-record limits**, no raw player-record ID
-in projected MCP timelines, and recognized `export_summary` failure
-counts. None of this adds background AI calls.
-See `docs/system/education-team-telemetry-compat.md`.
+For team-owned modules, use the project's existing
+`bun run skills:check` and `bun run skills:sync` workflow rather
+than copying module code into Lazy Tester. For module-specific
+prerequisites and upstream ZIP hashes, see
+[team source mapping](../../../docs/system/education-team-telemetry-compat.md).
+For storage and help-addon details see
+[map diagnostics](../../../docs/system/map-diagnostics.md).
 
 ## Test/release boundary
 

@@ -2239,26 +2239,12 @@ test('team game-results export_summary is captured but is not a gameplay result'
   });
 });
 
-test('universal short diagnostic marker projects only bounded counters on MCP',async()=>{
-  const prefix='2026-10-30T12:00:00.000Z log ';
-  const mk=(data)=>prefix+'[LT_EDU_DIAG] '+JSON.stringify(data);
-  const good={schema:1,session:'lt-abcde-1',seq:4,tick:200,kind:'summary',
-    data:{capture:1,reason:'interval',saturated:0,
-      counts:{firstSpawns:2,playerDeaths:1,entitySpawns:3}}};
-  const parsed=parseCapturedLine(mk(good));
-  assert.equal(parsed.type,'universal_diagnostics');
-  const bad={...good,data:{...good.data,playerName:'PRIVATE'}}; 
-  assert.equal(parseCapturedLine(mk(bad)),null);
-  const badCount={...good,data:{...good.data,
-    counts:{firstSpawns:1,password:999}}};
-  assert.equal(parseCapturedLine(mk(badCount)),null);
-  assert.equal(parseCapturedLine(prefix+'Player says '+mk(good)),null);
-  const h=createHandler(config(),{evidence:async(_dir,slot)=>({
-    slot,status:'CAPTURE_FILE_PRESENT',events:[parsed],
-  })});
-  const out=await h.callTool('summarize_test_evidence',{slots:[3]});
-  assert.equal(out.universalSummaryCount,1);
-  assert.equal(out.resultCount,0);
-  assert.equal(out.timeline[0].summaryCounts.firstSpawns,2);
-  assert.equal(JSON.stringify(out).includes('PRIVATE'),false);
+test('retired [LT_EDU_DIAG] records are not parsed or sent to Codex',()=>{
+  const line='2026-10-30T12:00:00.000Z warn '+
+    '[LT_EDU_DIAG] {"schema":1,"kind":"summary","session":"lt-old-1"}';
+  assert.equal(parseCapturedLine(line),null);
+  assert.equal(parseCapturedLine('2026-10-30T12:00:00.000Z warn '+
+    '[ANALYTICS] {"schema":1,"type":"death"}').type,'analytics');
+  assert.equal(parseCapturedLine('2026-10-30T12:00:00.000Z warn '+
+    '[GAME_RESULTS] {"schema":1,"record_type":"gameplay_result"}').type,'game_results');
 });

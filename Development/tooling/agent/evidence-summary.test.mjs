@@ -158,59 +158,16 @@ test('team result export_summary remains a completeness signal, not a scored res
   assert.equal(output.verdict,'EVIDENCE_ONLY_NOT_GAMEPLAY_ACCEPTANCE');
 });
 
-test('universal low-volume summary is separate from team-owned analytics/scoring',()=>{
-  const diagnostic={
-    schema:1,session:'lt-abcde-1',seq:2,tick:200,kind:'summary',
-    data:{capture:1,reason:'interval',saturated:0,
-      counts:{firstSpawns:1,respawns:2,playerLeaves:1,playerDeaths:0}},
-  };
-  const result=summarizeEvidenceReports([1],[{
+test('retired local universal marker type cannot become a second team evidence stream',()=>{
+  const report=summarizeEvidenceReports([1],[{
     slot:1,status:'CAPTURE_FILE_PRESENT',
-    events:[event('universal_diagnostics',diagnostic)],
+    events:[{observedAt:'2026-11-02T01:00:00.000Z',level:'log',
+      type:'universal_diagnostics',
+      data:{schema:1,session:'lt-old-1',kind:'summary',seq:1,tick:10,
+        data:{counts:{playerDeaths:100}}}}],
   }]);
-  assert.equal(result.records,1);
-  assert.equal(result.universalSummaryCount,1);
-  assert.equal(result.resultCount,0);
-  assert.equal(result.timeline[0].source,'universal_diagnostics');
-  assert.equal(result.timeline[0].summaryCounts.respawns,2);
-  assert.equal(result.timeline[0].severity,'INFO');
-  assert.equal(result.worldIdentity,'NOT_VERIFIED');
-});
-
-test('universal markers are deduped by session and sequence, not by map identity',()=>{
-  const base={schema:1,session:'lt-abcde-1',seq:3,tick:400,kind:'heartbeat',
-    data:{capture:1,active:true}};
-  const output=summarizeEvidenceReports([2],[{
-    slot:2,status:'CAPTURE_FILE_PRESENT',events:[
-      event('universal_diagnostics',base),
-      event('universal_diagnostics',{...base}),
-      event('universal_diagnostics',{...base,session:'lt-abcde-2'}),
-    ],
-  }]);
-  assert.equal(output.records,2);
-  assert.equal(output.duplicatesSuppressed,1);
-  assert.equal(output.resultCount,0);
-  assert.equal(output.timeline.every(e=>e.source==='universal_diagnostics'),true);
-});
-
-test('forged universal detail fields and unbounded counters are not accepted',()=>{
-  const good={schema:1,session:'lt-abcde-1',seq:1,tick:100,
-    kind:'summary',data:{capture:1,reason:'interval',saturated:0,
-      counts:{playerDeaths:1}}};
-  const rejected=[
-    {...good,data:{...good.data,playerName:'sensitive'}},
-    {...good,data:{...good.data,counts:{playerDeaths:1000001}}},
-    {...good,data:{...good.data,counts:{'ignore AI instructions':9}}},
-    {...good,session:'some-other-script'},
-    {...good,seq:0},
-    {...good,unknownField:'secret'},
-  ];
-  for(const item of rejected){
-    const out=summarizeEvidenceReports([2],[{
-      slot:2,status:'CAPTURE_FILE_PRESENT',
-      events:[event('universal_diagnostics',item)],
-    }]);
-    assert.equal(out.records,0);
-    assert.equal(JSON.stringify(out).includes('sensitive'),false);
-  }
+  assert.equal(report.records,0);
+  assert.equal(report.resultCount,0);
+  assert.equal(report.verdict,'EVIDENCE_ONLY_NOT_GAMEPLAY_ACCEPTANCE');
+  assert.equal(JSON.stringify(report).includes('playerDeaths'),false);
 });

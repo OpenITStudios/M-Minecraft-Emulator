@@ -3,168 +3,123 @@ id: document.system.education-team-telemetry-compat
 class: DOCUMENT
 domain: system
 role: GUIDE
-authority: WORKING
+authority: CANONICAL
 lifecycle: SOURCE_ONLY
 ---
 
-# Minecraft Education — team analytics + Lazy Tester compatibility
+# Minecraft Education: one canonical team source
 
-## Canonical sources (operator-supplied ZIPs, not repo dependencies)
+## No duplicate analytics or debugging engines
 
-| Responsibility | Team-owned source | Team wire contract | Lazy Tester consumer |
-| --- | --- | --- | --- |
-| Player/map analytics | minecraft-bedrock-agent-skills-main/modules/analytics/{contract.ts,analytics-events.ts,analytics-export.ts} | [ANALYTICS] schema 1, /scriptevent mivubi:get_analytics | tooling/agent/mcp.mjs + evidence-summary.mjs |
-| Official game scoring | minecraft-bedrock-agent-skills-main/modules/game-results/{game-results-contract.ts,game-results-export.ts} | [GAME_RESULTS] schema 1, /scriptevent daigon:get_all_scoring | Same bounded read-only MCP projection |
-| Channels, issue codes, throttling | minecraft-bedrock-agent-skills-main/modules/logging/{log-core.ts,log.ts} | [project:channel] WARN/INFO etc; per-issue throttle | Debugger/Content Log transport; NOT a gameplay-result record |
-| Runtime/export proof | skills-probe-main/docs/test-runs/2026-10-28-debug-log-capture-run-1.md | TCP debugger protocol 7 (Education 26.32, macOS) | Future optional Education-debugger adapter, NOT Windows proof |
-| Generic fallback (not a team module) | Development/tooling/agent/education-universal-pack/ | [LT_EDU_DIAG], schema 1, manual start/stop | Same read-only MCP capture projection; separate source label |
+The operator's canonical Minecraft runtime implementation is the
+`minecraft-bedrock-agent-skills` team repository. `skills-probe` is the
+separate validation project. Lazy Tester is an optional local
+evidence reader/MCP bridge, **not** a second source of analytics,
+scoring, game-state truth, or in-game telemetry.
 
-Both user-supplied ZIPs are *snapshot references*, not automatically
-installed plugins or checked-in raw archives. The files are not copied,
-vendored, or changed by Lazy Tester. Of 40 matching module-relative file
-paths across the two snapshots, 39 are byte-identical; the one difference
-is the modules/README.md. This is evidence of snapshot consistency, not
-proof of compatibility on other Education builds.
+Earlier Lazy Tester Universal Diagnostics versions 1.0.0–1.2.0 and
+their `[LT_EDU_DIAG]` data format are **RETIRED**. Old source remains
+in Git history only; old previously distributed .mcpack files must
+be disabled in copied QA worlds. No original world is modified or
+migrated automatically.
 
-SHA-256 of the uploaded archives (local provenance pins; do not automatically
-upload raw archives to the repository):
+The sole optional Minecraft-side helper now is **Lazy Tester - Team
+Commands Help v2.0.0**: a minimal, help-only behavior pack with ONE
+Script API command:
 
-- minecraft-bedrock-agent-skills-main (3)(1).zip:
+    /scriptevent lazytester:help commands
+
+It lists existing team commands and their prerequisites. It performs
+no logging, analytics, scoring, tests, automatic world scanning,
+or MCP calls. It responds only to a player who explicitly requests
+help, with no fallback broadcast to other players.
+
+## Commands verified from the user-supplied source ZIPs
+
+| Command | Canonical source | When it works |
+| --- | --- | --- |
+| /scriptevent mivubi:get_analytics | modules/analytics/contract.ts and analytics-export.ts | Map must initialize the team analytics module |
+| /scriptevent daigon:get_all_scoring | modules/game-results/game-results-contract.ts and game-results-export.ts | Map must initialize the team results adapter |
+| /scriptevent probe:list | Skills Probe: packs/BP/scripts/probe/runner/runner.ts | Skills Probe isolated test world only; admin |
+| /scriptevent probe:run auto | Same Skills Probe runner | Skills Probe only; admin; may alter test setup |
+| /scriptevent probe:report | Same Skills Probe runner | Skills Probe only; admin |
+
+The first two commands export output to the server Content Log;
+the help-only pack does not pull, parse or forward that output.
+`probe:list` prints the detailed list of probes in the Content Log,
+not in a universal Minecraft production world. Its in-game status
+may be restricted to developer builds.
+
+A help-only pack **cannot** make team commands work in arbitrary maps
+where the needed modules were never installed or initialized.
+It does not recreate map-defined stages, coins, flags or scoring.
+
+## Canonical installation and update path
+
+Follow the team's actual `modules/README.md` and `README.md`:
+
+- Install a module in a map with `bun run modules:add analytics` or
+  `bun run modules:add game-results`, when its prerequisites exist.
+- Check pinned skills/modules with `bun run skills:check`.
+- Explicitly update project copies with `bun run skills:sync` or
+  the team `bun run modules:sync --from <team-clone>` workflow.
+- Do not edit the copied project modules directly. Fix the team
+  source, release it, then sync projects using `tools/sync.mjs`.
+
+Analytics requires the team's database/time/logging integration and
+the map's own session/stage ownership. Game-results requires the
+map's adapter. Copying either module by itself is not proof that
+a map exports complete or correct gameplay evidence.
+
+## Exact snapshot comparison / provenance
+
+The two original user-supplied ZIPs are snapshots, not evidence that
+the private team repositories have not changed since upload.
+
+- `minecraft-bedrock-agent-skills-main (3)(1).zip` SHA-256:
   26c0a322cabed172ca74970413d5bb7a20d6f67181446df5f688e36057c54e21
-- skills-probe-main (2)(1).zip:
+- `skills-probe-main (2)(1).zip` SHA-256:
   462fb6fe48b60f2bcf255f59d7ce0cb810c3a7ec598102c9e3888c68b341653b
 
-Contract file pins (source bytes extracted from the user-supplied ZIP):
+Of 40 matching module-relative paths in both ZIPs, 39 are
+byte-identical; the differing module-relative path is
+`modules/README.md`. The full archives are NOT identical. The
+earlier universal diagnostics implementation was NOT an exact copy.
 
-- modules/analytics/contract.ts: ef43cd5a6af36c266664e7a0f935bb510df9e853712105d82eed9de63ee45d16
-- modules/game-results/game-results-contract.ts: 0fc57cac2d30d7a3bf1c2eeb14146700662cde79eabf94babd7f451f7bdbb7a4
-- modules/logging/log-core.ts: c1dd1b88b02e515d815b4c974f966e2d194273f78efbc55f40883bc6c6efc674
-- skills-probe-main/packs/BP/manifest.json:
-  be7a063a4b73e216c819d6f943fa482094c70115e2fecdb4a591d38560a12aed
+Canonical command-source checksums:
+- `modules/analytics/contract.ts`:
+  ef43cd5a6af36c266664e7a0f935bb510df9e853712105d82eed9de63ee45d16
+- `modules/game-results/game-results-contract.ts`:
+  0fc57cac2d30d7a3bf1c2eeb14146700662cde79eabf94babd7f451f7bdbb7a4
+- Skills Probe `packs/BP/scripts/probe/runner/runner.ts`:
+  d2fd141a833d91e9cc923dc8e41552574b81c58917a5293cdd0d7935281fd796
 
-## Protocol and resource policy
+If an upstream command changes, review the newer team source, update
+the minimal help text and its authored fixtures, and resync the
+project through team tooling. Do not fork the team analytics engine.
 
-### [ANALYTICS] — canonical general map analytics
+## Lazy Tester local-only consumer
 
-The team analytics contract defines three collection tiers:
-1. Lifecycle/low-volume facts.
-2. Map-selected aggregated counters, **off by default**.
-3. Bounded detail samples, explicit opt-in only.
+The existing MCP parser recognizes only team `[ANALYTICS]` and
+`[GAME_RESULTS]` markers. Their maximum source wire size is 24 KiB;
+analytics export is paced at 8 lines/tick, and game-results
+`level_score`, `gameplay_result` and `export_summary` remain distinct.
+Failure counts are preserved as signals, never claimed gameplay PASS.
 
-The wire line limit is **24 KiB total marker + JSON**. Pacing is
-**8 exported lines per tick**, checkpoint interval 100 ticks, and the
-default caps include records=5000, counters=16, keys=10, samples=4096,
-pageSize=128 and failures=3. These are upstream facts, not newly
-calibrated Lazy Tester performance guarantees. A dropped/failed
-counter must remain visible as ATTENTION, not silently become PASS.
+The local `Data/Diagnostics` store and optional MCP bridge are
+**evidence readers**, not in-game analytics engines. Raw account,
+player and world identity must remain private, and MC01–MC05 log
+filenames alone never establish authoritative game source identity.
+Codex is not called automatically and receives only explicitly
+requested bounded summaries/evidence.
 
-The map/developer still owns optional stage/task boundaries and action
-semantics. Lazy Tester must not fabricate them using generic event counts.
+The team Skills Probe's direct debugger protocol-7 capture was
+reported on Education 26.32/macOS; it has not verified Education
+26.33 Windows or five simultaneous clients.
 
-### [GAME_RESULTS] — canonical scoring
+## Verification boundary
 
-The game-results module owns Daigon-compatible scores.
-The team identifies level_score and gameplay_result as scored record
-types. Lazy Tester counts **only gameplay_result** as final
-resultCount; level_score has a separate teamLevelScoreCount. The
-record_type=export_summary is the final export completeness record,
-including counts and optional failed_counts. Lazy Tester now recognizes
-**both** but includes only gameplay_result in resultCount. A summary
-with failed_counts is ATTENTION. Neither means verified gameplay PASS.
-The maximum line size is 24 KiB; this must not be silently reduced
-by a downstream 16 KiB filter.
-
-### [LT_EDU_DIAG] — optional generic, low-overhead fallback
-
-The universal pack is separate from the team's analytics/scoring.
-It keeps the same pack UUID and advances to **version 1.2.0**; one
-file remains reusable across test-copy worlds. Collection is OFF by
-default. Operators only need the short, memorable `lt:diag` prefix:
-
-    /scriptevent lt:diag help       # show in-game instructions
-    /scriptevent lt:diag on         # start
-    /scriptevent lt:diag off        # stop, write final summary
-    /scriptevent lt:diag status     # current state
-    /scriptevent lt:diag more       # focus for 600 game ticks
-
-The full `/scriptevent lazytester:diagnostics` ID and its
-`start`, `status`, `flush`, `combat on/off`, `entities on/off`
-and `stop` messages **remain supported unchanged**. Both IDs dispatch
-through ONE collector and never replace the team's
-`mivubi:get_analytics` or `daigon:get_all_scoring` contracts.
-
-Help works even when capture is OFF, and sends no diagnostic event.
-Short chat feedback is emitted only for explicit help/control commands:
-it targets a player source when available; otherwise it may broadcast
-to everyone in the QA world. There is no recurring chat spam, inventory
-write, or additional AI/MCP request.
-
-After start, **only lifecycle facts** are subscribed: first spawn,
-respawn, leave, dimension change and player-only deaths. Combat
-and broad entity event subscriptions activate only on explicit
-commands, **auto-expire after 600 game ticks** and never emit an
-event-per-hit/player payload. Summary is aggregated at most once per
-200 game ticks when nonempty, with an explicit flush/stop option.
-A 600-tick heartbeat can distinguish quiet from inactive captures.
-This follows the upstream *tiered capture and throttle* principle
-without duplicating the full team analytics/storage framework.
-
-The generic marker has its own schema/source label and cannot be
-relabelled as [ANALYTICS] or [GAME_RESULTS]. No developer-defined
-wave, shop, damage-protection, arena, scoring or player outcome
-can be inferred from this generic counter stream. Running both
-packs may collect overlapping general facts; **do not add their
-counters together**. Prefer the map's canonical team analytics
-for stage/task QA. Generic fallback is useful when a map has no
-team-instrumented analytics.
-
-## Evidence, storage and AI budgets
-
-- All raw local capture evidence remains under the existing
-  approved Data/Diagnostics or explicitly configured local capture
-  folder. A .mcpack itself does not collect logs into local files.
-- Existing MCP reads a bounded 256 KiB tail / at most 20 parsed records
-  per requested profile; a truncated tail is **partial**, not complete.
-- The MCP parser recognizes [ANALYTICS] and [GAME_RESULTS] records up
-  to their 24 KiB wire contract and separately recognizes the tiny
-  [LT_EDU_DIAG] record (2 KiB ceiling).
-- Source markers are untrusted. File name MC02.log is not proof of
-  player/world/account authority; direct Education Windows Content Log
-  and debugger transport still require their own verification.
-- The reader produces a bounded timeline and grouped counters without
-  forwarding raw JSON, player names, untrusted record IDs, or screenshots.
-  Codex requests deeper evidence only through the existing on-demand
-  read-only MCP tools, never by a continuous stream.
-- This is source/contract compatibility **NOT_EXECUTED** on target
-  Minecraft Education Windows; the macOS 26.32 protocol-7 evidence
-  in the ZIP does not certify Windows 26.33 or multi-client testing.
-
-## How a developer updates the team modules
-
-1. Continue developing analytics, game-results and logging in the
-   team's canonical Minecraft Bedrock Agent Skills repository.
-2. Consume those modules inside a map using the team's documented
-   module-sync workflow. Avoid copying Lazy Tester marker logic
-   into the team's module implementation.
-3. When a contract intentionally changes, provide the new contract
-   and a small captured sample with raw credentials/player names
-   removed, or an updated source ZIP. Confirm schema, line budget,
-   marker/event ID, summary/failed-count semantics and version.
-4. Update only the Lazy Tester source-compatible parser/projection
-   and regression fixtures as needed. Do not duplicate the team's
-   storage, scoring rules, or JS runtime subscriber manager.
-5. Verify on an authorized Minecraft Education world before
-   claiming real run success.
-
-## Open validation gates
-
-- Real Education 26.33 Windows Script API and supported module version.
-- Actual local log transport, receipt of generic/team markers,
-  protocol negotiation and verified profile/world attribution.
-- Overhead under multiplayer stress (up to 30 players remains a
-  stated team target, not an observed Windows performance result).
-- Executed Node fixtures, Windows build, live pack import,
-  and end-to-end MCP token/byte measurements.
-
-No game launch, testing, installation, CI or external network
-collection is enabled by this document.
+No Node test suites, local package builds, Minecraft Education
+execution, Windows profile access, CI or live telemetry ingestion
+were performed at this revision. In-game help and pack compatibility
+still need separate acceptance on a disposable QA world.

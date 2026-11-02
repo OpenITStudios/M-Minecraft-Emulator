@@ -46,6 +46,18 @@ controller, account/world access, or source tests. All live Education
 data paths and actor/world attribution remain NOT_VERIFIED. See
 docs/system/map-diagnostics.md.
 
+**Superseding team-source decision — 2 November 2026:** The uploaded
+minecraft-bedrock-agent-skills team modules own all in-game analytics,
+logging and game results. Skills Probe owns runtime validation. Retire
+the parallel Lazy Tester Universal Diagnostics collector and
+[LT_EDU_DIAG] schema; do not recreate them or a short lt:diag command.
+Only the read-only local evidence/MCP consumer and an optional
+help-only script event may remain. In-game help lists the ORIGINAL team
+commands using /scriptevent lazytester:help commands; it never
+pretends to install those team modules. Team updates use their
+skills:check / skills:sync workflow, not a copied module fork.
+Actual Education Windows capability stays NOT_VERIFIED.
+
 **Hard scope gate for experimental AI input:** no generic MCP/privacy/parser/observer audits,
 second game controller, speculative provider or milestone churn.
 Native AI input source work must directly implement the existing per-client
