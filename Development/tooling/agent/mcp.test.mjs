@@ -93,9 +93,13 @@ test('one AI QA MCP entry performs source/capture/target readiness then compact 
       gameplayInput:'NOT_VERIFIED'};
   };
   const checkpoint={kind:'STABLE_CAPTURE_CURSOR_V1'};
-  const catalog=async()=>({autoCount:2,autoIds:['P01','P02'],
-    archiveSha256:'a'.repeat(64),runnerSha256:'e'.repeat(64),
-    cache:'UNCHANGED_APPROVED_ZIP'});
+  let catalogReads=0,revisionReads=0;
+  const catalog=async()=>{
+    catalogReads++;
+    return {autoCount:2,autoIds:['P01','P02'],
+      archiveSha256:'a'.repeat(64),runnerSha256:'e'.repeat(64),
+      sourceRevision:'f'.repeat(64),cache:'UNCHANGED_APPROVED_ZIP'};
+  };
   const evidence=async(_directory,slot,_limit,options)=>{
     if(options?.probeCheckpoint)return {slot,status:'CAPTURE_FILE_PRESENT',
       probeEvents:[
@@ -107,12 +111,12 @@ test('one AI QA MCP entry performs source/capture/target readiness then compact 
     return {slot,status:'CAPTURE_FILE_PRESENT',captureCursor:checkpoint};
   };
   const h=createHandler({...config(),probeZip:path.resolve('skills-probe.zip'),
-    evidenceDirectory:path.resolve('capture')},{native,evidence,probeCatalog:catalog});
+    evidenceDirectory:path.resolve('capture')},{native,evidence,probeCatalog:catalog,
+      probeRevisionStatus:async()=>{revisionReads++;return 'UNCHANGED';}});
   const ready=await h.callTool('probe_qa',{slot:2});
   assert.equal(ready.phase,'AWAITING_AUTHORIZED_COMMAND');
   assert.equal(ready.status,'BLOCKED');
   assert.equal(ready.probeCount,2);
-  assert.equal(ready.catalogCache,'UNCHANGED_APPROVED_ZIP');
   assert.equal(ready.command,'/scriptevent probe:run auto');
   assert.equal(ready.target,'NATIVE_TARGET_OBSERVED_NOT_GAME_READY');
   assert.deepEqual(ready.targetHandoff.window,{kind:'window',pid:4002,window_id:8002});
@@ -120,7 +124,7 @@ test('one AI QA MCP entry performs source/capture/target readiness then compact 
   assert.equal(ready.targetHandoff.verification,'PROCESS_WINDOW_ONLY_NOT_GAME_WORLD');
   assert.equal(ready.targetHandoff.input,'NOT_AVAILABLE_OR_AUTHORIZED');
   assert.equal(ready.commandSentByLazyTester,false);
-  assert.equal(ready.world,'NOT_VERIFIED');
+  assert.equal(ready.reason,'COMMAND_DISPATCH_NOT_ENABLED');
   assert.deepEqual(nativeCalls,[['target',2]]); // read-only; no launch/input
   const report=await h.callTool('probe_qa',{slot:2});
   assert.equal(report.status,'PROBE_REPORTED_PASS');
@@ -128,6 +132,8 @@ test('one AI QA MCP entry performs source/capture/target readiness then compact 
   assert.equal(report.target,'NATIVE_PROCESS_MATCH_AT_READ_TIME_ONLY');
   assert.equal(report.gameplayAcceptance,'NOT_VERIFIED');
   assert.deepEqual(nativeCalls,[['target',2],['target',2]]);
+  assert.equal(catalogReads,1); // No catalog reload on result reads
+  assert.equal(revisionReads,1); // Only cheap metadata comparison
   // A changed target must not retain an old all-pass as fresh acceptance.
   targetBirth='9876543';
   const changed=await h.callTool('probe_qa',{slot:2});
@@ -142,6 +148,47 @@ test('one AI QA MCP entry performs source/capture/target readiness then compact 
   h.shutdown();
 });
 
+test('unchanged Probe status polls skip ZIP parsing and native target IPC',async()=>{
+  let catalogReads=0,revisionReads=0,nativeReads=0,captureReads=0;
+  const h=createHandler({...config(),probeZip:path.resolve('skills-probe.zip'),
+    evidenceDirectory:path.resolve('capture')},{
+    probeCatalog:async()=>{
+      catalogReads++;
+      return {autoIds:['P01'],autoCount:1,archiveSha256:'a'.repeat(64),
+        runnerSha256:'b'.repeat(64),sourceRevision:'c'.repeat(64),
+        cache:'UNCHANGED_APPROVED_ZIP'};
+    },
+    probeRevisionStatus:async()=>{revisionReads++;return 'UNCHANGED';},
+    native:async(_exe,op,slot)=>{
+      nativeReads++;
+      return {schema:1,ok:true,operation:'target',slot,pid:402,
+        windowId:802,createdFileTime:'9001',sessionId:1,
+        foreground:false,visible:true,minimized:false,
+        verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',
+        gameplayInput:'NOT_VERIFIED'};
+    },
+    evidence:async(_dir,slot,_limit,opts)=>{
+      captureReads++;
+      return opts?.probeCheckpoint?
+        {slot,status:'CAPTURE_FILE_PRESENT',probeEvents:[]}:
+        {slot,status:'CAPTURE_FILE_PRESENT',
+          captureCursor:{kind:'STABLE_CAPTURE_CURSOR_V1'}};
+    },
+  });
+  await h.callTool('probe_qa',{slot:2});
+  assert.equal(catalogReads,1);
+  assert.equal(nativeReads,1);
+  const first=await h.callTool('probe_qa',{slot:2});
+  const second=await h.callTool('probe_qa',{slot:2});
+  assert.equal(first.status,'WAITING');
+  assert.equal(second.status,'WAITING');
+  assert.equal(catalogReads,1); // no ZIP open/hash on status polls
+  assert.equal(revisionReads,2); // cheap metadata-change probes only
+  assert.equal(nativeReads,1); // no repeated target IPC while waiting
+  assert.equal(captureReads,3);
+  h.shutdown();
+});
+
 test('one QA entry blocks missing setup and protects human MC01',async()=>{
   const h=createHandler({...config(),executable:''},{
     native:async()=>{throw Error('native must not be invoked');},
@@ -149,7 +196,7 @@ test('one QA entry blocks missing setup and protects human MC01',async()=>{
   const missing=await h.callTool('probe_qa',{});
   assert.equal(missing.status,'BLOCKED');
   assert.equal(missing.reason,'PROBE_ZIP_NOT_CONFIGURED');
-  assert.equal(missing.commandSentByLazyTester,false);
+  assert.equal(missing.gameplayAcceptance,'NOT_VERIFIED');
   await assert.rejects(()=>h.callTool('probe_qa',{slot:1}),
     /MC01 human host is protected/);
   h.shutdown();
@@ -160,11 +207,12 @@ test('one QA entry refuses concurrent source preparations for the same slot',asy
   const pendingCatalog=new Promise(resolve=>{release=resolve;});
   const catalog={autoCount:1,autoIds:['P01'],
     archiveSha256:'b'.repeat(64),runnerSha256:'e'.repeat(64),
-    cache:'FRESH_SOURCE_REVIEW'};
+    sourceRevision:'f'.repeat(64),cache:'FRESH_SOURCE_REVIEW'};
   const h=createHandler({...config(),executable:'',
     probeZip:path.resolve('skills-probe.zip'),
     evidenceDirectory:path.resolve('capture')},{
     probeCatalog:async()=>{await pendingCatalog;return catalog;},
+    probeRevisionStatus:async()=> 'UNCHANGED',
     evidence:async(_directory,slot)=>({slot,status:'CAPTURE_FILE_PRESENT',
       captureCursor:{kind:'STABLE_CAPTURE_CURSOR_V1'}}),
   });
@@ -181,7 +229,8 @@ test('one QA entry refuses concurrent source preparations for the same slot',asy
 test('QA single entry refuses source drift and log-only PASS without a pinned target',async()=>{
   let digest='a'.repeat(64),failRead=false;
   const expected={autoCount:2,autoIds:['P01','P02'],
-    runnerSha256:'e'.repeat(64),cache:'UNCHANGED_APPROVED_ZIP'};
+    runnerSha256:'e'.repeat(64),sourceRevision:'f'.repeat(64),
+    cache:'UNCHANGED_APPROVED_ZIP'};
   const catalog=async()=>{if(failRead)throw Error('missing ZIP');return {
     ...expected,archiveSha256:digest};};
   const cp={kind:'STABLE_CAPTURE_CURSOR_V1'};
@@ -195,6 +244,8 @@ test('QA single entry refuses source drift and log-only PASS without a pinned ta
     probeZip:path.resolve('skills-probe.zip'),
     evidenceDirectory:path.resolve('capture')},{
     probeCatalog:catalog,
+    probeRevisionStatus:async()=>failRead?'UNAVAILABLE':
+      digest==='a'.repeat(64)?'UNCHANGED':'CHANGED',
     native:async()=>{throw Error('Unexpected native target inspection');},
     evidence:async(_dir,slot,_limit,opts)=>opts?.probeCheckpoint?
       {slot,status:'CAPTURE_FILE_PRESENT',probeEvents:events}:
@@ -235,7 +286,8 @@ test('one QA entry fails closed on unreviewed ZIP and missing result source',asy
   const ready=createHandler(base,{
     probeCatalog:async()=>({autoCount:1,autoIds:['P01'],
       archiveSha256:'c'.repeat(64),runnerSha256:'e'.repeat(64),
-      cache:'FRESH_SOURCE_REVIEW'}),
+      sourceRevision:'f'.repeat(64),cache:'FRESH_SOURCE_REVIEW'}),
+    probeRevisionStatus:async()=> 'UNCHANGED',
     evidence:async(_dir,slot,_limit,options)=>{
       if(options?.probeCheckpoint)throw Error('capture disappeared');
       stage++;
@@ -618,10 +670,11 @@ test('Probe QA cursor accepts only appended complete lines from same capture',as
       row('RUN_START','arg=auto count=1')+
       row('RESULT','id=P01 result=pass build=dev detail=historic')+
       row('RUN_DONE','arg=auto count=1'));
-    const prepared=await readGameEvidence(root,2);
+    const prepared=await readGameEvidence(root,2,20,{probeOnly:true});
     assert.equal(prepared.status,'CAPTURE_FILE_PRESENT');
     assert.equal(prepared.captureCursor.kind,'STABLE_CAPTURE_CURSOR_V1');
     assert.deepEqual(prepared.probeEvents,[]);
+    assert.deepEqual(prepared.events,[]); // QA never parses unrelated records
 
     const waiting=await readGameEvidence(root,2,20,{
       probeCheckpoint:prepared.captureCursor});

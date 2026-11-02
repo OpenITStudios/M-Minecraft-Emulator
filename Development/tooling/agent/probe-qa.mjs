@@ -73,41 +73,66 @@ export async function readPinnedProbeCatalog(filename) {
 }
 
 
-// A single tiny in-process catalog cache, never a second source of truth.
-// Cache admission rechecks both the approved baseline bytes and the ZIP's
-// file identity/size/mtime/ctime. A changed file is fully reviewed again.
+// Approved ZIP bytes are inspected only on first use or file/baseline change.
+// Normal QA needs TWO cheap filesystem metadata observations and ZERO ZIP reads,
+// baseline reads, JS/TS parsing or rehashing. No watcher, daemon or extra MCP.
 let cachedProbeCatalog=null;
-async function zipStatFingerprint(filename) {
-  if(typeof filename!=='string'||!path.isAbsolute(filename)||
-     path.extname(filename).toLowerCase()!=='.zip')refuse();
-  const stat=await lstat(filename,{bigint:true});
+let pendingProbeCatalog=null;
+async function sourceFileStamp(file,{zip=false}={}) {
+  if(zip&&(!path.isAbsolute(file)||path.extname(file).toLowerCase()!=='.zip'))refuse();
+  const stat=await lstat(file,{bigint:true});
   if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink!==1n||
-     stat.ino===0n||stat.size<22n)refuse();
+     stat.ino===0n||stat.size<1n||
+     (!zip&&stat.size>64n*1024n)||
+     (zip&&stat.size<22n))refuse();
   return [stat.dev,stat.ino,stat.size,stat.mtimeNs,stat.ctimeNs]
     .map(value=>value.toString()).join(':');
 }
-
-/** Reuse only already-reviewed, unchanged ZIP bytes, never file-name trust. */
-export async function readPinnedProbeCatalogCached(filename) {
-  const baselineBytes=await readFile(BASELINE);
-  let baseline;
-  try {baseline=JSON.parse(baselineBytes.toString('utf8'));}catch{refuse();}
-  if(!baseline||typeof baseline!=='object'||Array.isArray(baseline)||
-     baseline.reviewState!=='APPROVED_SOURCE_REVIEW'||
-     !/^[a-f0-9]{64}$/.test(baseline.provenance?.probeArchiveSha256??''))refuse();
-  const approvalFingerprint=sha256(baselineBytes);
-  const before=await zipStatFingerprint(filename);
-  const key=filename+'\0'+before+'\0'+approvalFingerprint;
-  if(cachedProbeCatalog?.key===key) {
-    if(await zipStatFingerprint(filename)!==before)refuse();
-    return {...cachedProbeCatalog.catalog,cache:'UNCHANGED_APPROVED_ZIP'};
+async function sourceRevision(filename) {
+  const [zipStamp,baselineStamp]=await Promise.all([
+    sourceFileStamp(filename,{zip:true}),
+    sourceFileStamp(BASELINE),
+  ]);
+  // Do not expose an operator's absolute ZIP path via MCP.
+  return sha256(Buffer.from(filename+'\0'+zipStamp+'\0'+baselineStamp));
+}
+export async function probeSourceRevisionStatus(filename,expectedRevision) {
+  if(typeof expectedRevision!=='string'||!/^[a-f0-9]{64}$/.test(expectedRevision))
+    return 'UNAVAILABLE';
+  try {
+    return await sourceRevision(filename)===expectedRevision?'UNCHANGED':'CHANGED';
+  } catch {
+    return 'UNAVAILABLE';
   }
+}
+
+/** One source review per unchanged ZIP. Concurrent profiles share the review. */
+export async function readPinnedProbeCatalogCached(filename) {
+  const revision=await sourceRevision(filename);
+  if(cachedProbeCatalog?.revision===revision) {
+    return {...cachedProbeCatalog.catalog,sourceRevision:revision,
+      cache:'UNCHANGED_APPROVED_ZIP'};
+  }
+  if(pendingProbeCatalog?.revision===revision) {
+    const catalog=await pendingProbeCatalog.promise;
+    return {...catalog,sourceRevision:revision,
+      cache:'UNCHANGED_APPROVED_ZIP'};
+  }
+  // A new or updated ZIP may NOT inherit a previously approved catalog.
   cachedProbeCatalog=null;
-  const catalog=await readPinnedProbeCatalog(filename);
-  if(await zipStatFingerprint(filename)!==before||
-     sha256(await readFile(BASELINE))!==approvalFingerprint)refuse();
-  cachedProbeCatalog={key,catalog};
-  return {...catalog,cache:'FRESH_SOURCE_REVIEW'};
+  const inspection=(async()=>{
+    const catalog=await readPinnedProbeCatalog(filename);
+    if(await sourceRevision(filename)!==revision)refuse();
+    cachedProbeCatalog={revision,catalog};
+    return catalog;
+  })();
+  pendingProbeCatalog={revision,promise:inspection};
+  try {
+    const catalog=await inspection;
+    return {...catalog,sourceRevision:revision,cache:'FRESH_SOURCE_REVIEW'};
+  } finally {
+    if(pendingProbeCatalog?.promise===inspection)pendingProbeCatalog=null;
+  }
 }
 
 /** Compact output for AI. The Probe's result is never a map-gameplay PASS. */
@@ -123,19 +148,18 @@ export function compactProbeQaResult(report,slot) {
   const safeCounts=counts&&['pass','fail','info','look'].every(
     key=>Number.isSafeInteger(counts[key])&&counts[key]>=0)?
     {pass:counts.pass,fail:counts.fail,info:counts.info,look:counts.look}:null;
-  return {schema:1,slot,phase:'PROBE_RESULT_REVIEW',status:category,
-    sourceStatus:status,
+  // AI needs the outcome, not repeated source/procedure prose.
+  return {schema:1,slot,status:category,
+    ...(['WAITING','INCOMPLETE','BLOCKED'].includes(category)?
+      {reason:status}:{}),
     ...(Number.isSafeInteger(report?.expectedCount)?
       {expectedCount:report.expectedCount}:{}),
     ...(safeCounts?{counts:safeCounts}:{}),
-    ...(Array.isArray(report?.missingIds)?
+    ...(Array.isArray(report?.missingIds)&&report.missingIds.length?
       {missingIds:report.missingIds.slice(0,8)}:{}),
     ...(typeof report?.captureIssue==='string'?
       {captureIssue:report.captureIssue}:{}),
-    resultOrigin:'ORIGINAL_SKILLS_PROBE_LOG_NOT_GAMEPLAY_PROOF',
-    gameWorldIdentity:'NOT_VERIFIED',
-    gameplayAcceptance:'NOT_VERIFIED',
-    commandSentByLazyTester:false};
+    gameplayAcceptance:'NOT_VERIFIED'};
 }
 
 /** Only three runner marker types; no raw detail, chat, or arbitrary JSON. */

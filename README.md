@@ -43,10 +43,11 @@ workspace/            Ignored local tools, builds, candidates and private materi
 ## Gameplay Probe AI QA (source-only)
 
 `probe_qa` is the **one recommended MCP entrypoint** for AI QA. Its first
-call checks the approved original Skills Probe ZIP, existing capture and
-native target availability. Subsequent calls read a compact result from
-the same run; `restart=true` deliberately starts a new plan. The ZIP
-catalog is cached only while the source and approval baseline are unchanged.
+call reuses the approved cached Probe catalog, existing capture and
+native target availability. Subsequent calls read only appended log
+bytes and a compact result; `restart=true` starts a new plan.
+Unchanged ZIPs are never rehashed, reopened or reparsed: only
+lightweight change metadata is checked.
 
 The original two lower-level MCP tools remain compatible. Neither path
 installs the Probe, starts Minecraft, sends a command, activates native

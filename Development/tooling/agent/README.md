@@ -132,62 +132,43 @@ Existing MCP stays a read-only telemetry consumer. No new Codex
 stream, auto-update daemon, test runner or Minecraft game process.
 See [team update workflow](../../../docs/system/education-team-source-updates.md).
 
-## AI Gameplay QA — one MCP entry (source-only)
+## Gameplay Probe AI QA — no repeated ZIP work
 
-Configure two existing local paths **once**, not on each QA request:
+**One-time configuration:** point the existing MCP at the approved
+Skills Probe ZIP and per-profile capture directory:
 
     LAZY_TESTER_PROBE_ZIP=C:\absolute\skills-probe-main.zip
     LAZY_TESTER_EVIDENCE_DIR=C:\absolute\existing-captures
 
-The ZIP must match the approved `team-source-baseline.json` SHA-256.
-Use the existing `team:update:inspect` process when its version changes.
-A small in-process catalog cache avoids reopening the unchanged 38-MiB
-ZIP on subsequent QA preparations. File identity, size, mtime/ctime
-and reviewed baseline are rechecked before reuse; no background watcher
-or automatic approval is introduced.
+AI only needs `probe_qa` (MC02 by default). On first use, the original
+ZIP is checked against the approved baseline and its probe catalog
+is cached **in MCP memory**. While unchanged, future QA requests and
+result reads never reopen, hash or reparse that ZIP or baseline.
+Instead, a tiny file-metadata check detects when the ZIP/baseline
+changes. Only then does the next preparation perform a fresh,
+approved-source review. Simultaneous client preparations share the
+same in-flight review; unapproved versions remain blocked.
 
-**For AI, use only `probe_qa`** (defaults to MC02):
+The first QA call pins an existing capture cursor and may return an
+exact read-only game-window target; it NEVER sends commands or
+certifies player/admin/world readiness. The official command is
+`/scriptevent probe:run auto` and still needs a separately approved
+in-game Player/admin Computer Use channel and disposable QA world.
+Subsequent `probe_qa` calls inspect only **newly appended log bytes**,
+not an entire 256-KiB tail or unrelated analytics records. Waiting
+responses do not recheck native game windows and carry no long
+repeated instructions. The first call and result reports stay compact.
+To start a new session intentionally, use `probe_qa` with
+`{ "restart": true }`. No session ID must be passed by AI.
 
-- First call: source/capture preflight and, if the native executable is
-  configured, **read-only** PID/HWND/birth target admission. It pins the
-  existing MC0x.log capture cursor and returns the original command
-  `/scriptevent probe:run auto`. When a native target is observed,
-  the response includes an exact-window **read-only `targetHandoff`**
-  so AI does not have to guess or switch to another Minecraft window.
-  This is NOT permission or proof of successful input: the command must
-  still come from an authorized **Player/admin** in a disposable
-  Skills Probe QA world, using a separately approved Computer Use path.
-  A server-only ScriptEvent is not a substitute for the required Player.
-- Call `probe_qa` again: it checks the exact pinned ZIP/runner/catalog
-  again (using the fast cache when unchanged), revalidates the original
-  target and reads a compact pass/fail/info/look summary from fresh
-  `RUN_START` / `RESULT` / `RUN_DONE` markers. If the ZIP changes,
-  the capture becomes unavailable, or the target changes, it stops or
-  reports INCOMPLETE. A log-only all-pass without even a pinned native
-  target is also INCOMPLETE, not a trustworthy completed run.
-  No session ID, timestamp, path or full logs are required from the AI.
-- To deliberately start a new run, call `probe_qa` with
-  `{ "restart": true }`. Old evidence never becomes new PASS.
+The original `prepare_probe_qa`/`read_probe_qa_result` calls remain
+for backward compatibility. Probe output and Minecraft gameplay
+acceptance are explicitly different; log identity alone is NOT proof
+of the world/player or of successful native input.
 
-The older `prepare_probe_qa` and `read_probe_qa_result` MCP tools remain
-available **for existing integrations** but are no longer the
-recommended AI interface. `probe_qa` reuses both internally.
-
-**Limits:** This bridge neither installs packs, starts Minecraft,
-discovers Content Logs, triggers a keyboard/ScriptEvent command nor
-promotes a Probe-reported PASS to verified map gameplay. Native AI
-input remains compile-OFF/unverified. The optional native target
-preflight only observes original process/window identity and
-must be revalidated before a future authorized external action.
-
-The source ZIP declares 22 literal `auto` probes. Historic
-`docs/AGENT-TEST-RUN.md` instructions mentioning 12 are not a runtime
-catalog. `setup` and `manual` probes remain separate. The existing
-capture reader requires a stable per-profile file; source identity,
-world identity and player/admin permissions still need Windows runtime
-proof. Missing/rotated/truncated captures, unknown source changes,
-throttled markers and incomplete runs fail closed rather than creating
-a false PASS.
+**Runtime boundary:** no new daemon, watcher, background loop, ZIP
+updater, capture collector, native input, in-game module, CI or
+world/account mutation. Tests authored in source remain NOT_EXECUTED.
 
 ## Test/release boundary
 

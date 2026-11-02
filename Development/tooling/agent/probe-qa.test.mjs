@@ -112,8 +112,9 @@ test('compact one-call AI QA summary keeps Probe status separate from gameplay',
     gameplayAcceptance:'NOT_VERIFIED'},2);
   assert.equal(approved.status,'PROBE_REPORTED_PASS');
   assert.equal(approved.gameplayAcceptance,'NOT_VERIFIED');
-  assert.equal(approved.commandSentByLazyTester,false);
-  assert.equal(approved.resultOrigin,'ORIGINAL_SKILLS_PROBE_LOG_NOT_GAMEPLAY_PROOF');
+  assert.equal(approved.commandSentByLazyTester,undefined);
+  assert.equal(approved.resultOrigin,undefined);
+  assert.equal(approved.reason,undefined);
   assert.equal(approved.counts.pass,2);
   const failed=compactProbeQaResult({
     status:'PROBE_REPORTED_FAILURES',counts:{pass:1,fail:1,info:0,look:0}},2);
@@ -123,6 +124,7 @@ test('compact one-call AI QA summary keeps Probe status separate from gameplay',
   assert.equal(review.status,'NEEDS_REVIEW');
   const pending=compactProbeQaResult({status:'WAITING_FOR_RUN_DONE'},2);
   assert.equal(pending.status,'WAITING');
+  assert.equal(pending.reason,'WAITING_FOR_RUN_DONE');
   const incomplete=compactProbeQaResult({
     status:'CAPTURE_FILE_UNSTABLE',captureIssue:'PROBE_CAPTURE_REPLACED',
     missingIds:['P01','P02']},2);

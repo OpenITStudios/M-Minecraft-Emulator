@@ -1,5 +1,29 @@
 # Current Development Handoff — Lazy Tester
 
+## Eliminate repeated Skills Probe QA work — 2 November 2026
+
+**State: SOURCE_ONLY / NOT_EXECUTED.** Removed redundant per-result
+approved-ZIP/baseline reading and catalog parsing. One cold review
+checks approved SHA/runner/catalog; in-memory reuse compares only
+bounded ZIP and baseline filesystem metadata (two lstat calls),
+and concurrent initial QA calls share the same review. Source
+metadata change invalidates the active session; a new source is
+fully inspected only at a new prepare and never auto-approved.
+
+Scoped probe capture now reads a 128-byte tail anchor at prepare
+and only appended bytes plus that anchor at result. It does not
+scan unrelated analytics or the normal 256-KiB log tail. While
+waiting for new results, no native target IPC is sent. Preferred
+`probe_qa` output removes repeated ZIP status, verbose procedural
+next steps and constant metadata, while keeping failure reasons
+and gameplay acceptance distinct. Legacy MCP tools still work.
+
+**No execution:** source fixtures were authored, not run; there
+was no CI, Windows build, game, debugger connection, world access
+or AI Computer Use. Remaining runtime gate: original Skills Probe
+Player/admin command and independently grounded capture-to-world
+identity on an isolated Windows Education QA session.
+
 ## AI QA source-continuity and exact-target handoff — 2 November 2026
 
 **State: SOURCE_ONLY / NOT_EXECUTED.** The existing single `probe_qa`

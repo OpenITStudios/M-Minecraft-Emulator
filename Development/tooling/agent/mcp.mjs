@@ -21,8 +21,8 @@ import {createVisualObserver,OBSERVATION_LIMITS,
   summarizeTeamVisualState,verifyTeamObservationBasis,
   evaluateTeamActionFeedback,summarizeTeamCoordination} from './visual-observer.mjs';
 import {createGpuFrameSource,validateGpuExecutable} from './gpu-frame-source.mjs';
-import {readPinnedProbeCatalogCached,parseProbeCapturedLine,reviewProbeRun,
-  compactProbeQaResult} from './probe-qa.mjs';
+import {readPinnedProbeCatalogCached,probeSourceRevisionStatus,
+  parseProbeCapturedLine,reviewProbeRun,compactProbeQaResult} from './probe-qa.mjs';
 
 const execFileAsync = promisify(execFile);
 const REQUEST_LIMIT = 64 * 1024;
@@ -632,7 +632,7 @@ function unstableEvidence(slot,reason) {
 }
 
 export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT,{
-  lstatFile=lstat,openFile=open,probeCheckpoint=null,
+  lstatFile=lstat,openFile=open,probeCheckpoint=null,probeOnly=false,
 }={}) {
   slotOf(slot);
   if (!directory) return {slot,status:'NOT_CONFIGURED',events:[],attribution:'UNVERIFIED'};
@@ -659,9 +659,31 @@ export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT,
       if (pinned.size>BigInt(Number.MAX_SAFE_INTEGER)) {
         return unstableEvidence(slot,'FILE_OFFSET_UNREPRESENTABLE');
       }
-      const bytes=Number(pinned.size>BigInt(EVIDENCE_TAIL_BYTES) ?
-        BigInt(EVIDENCE_TAIL_BYTES):pinned.size);
-      const start=Number(pinned.size-BigInt(bytes));
+      // Normal analytics queries retain their original bounded tail.
+      // QA preparation reads only the last 128-byte checkpoint anchor.
+      // QA result reads only the newly appended bytes plus that anchor.
+      const size=Number(pinned.size);
+      let bytes=Math.min(size,EVIDENCE_TAIL_BYTES);
+      if(probeCheckpoint!==null) {
+        const cp=probeCheckpoint;
+        if(!cp||cp.kind!=='STABLE_CAPTURE_CURSOR_V1'||
+           !Number.isSafeInteger(cp.byteOffset)||cp.byteOffset<0||
+           !Number.isSafeInteger(cp.anchorBytes)||cp.anchorBytes<0||
+           cp.anchorBytes>128||cp.anchorBytes>cp.byteOffset) {
+          return unstableEvidence(slot,'PROBE_CHECKPOINT_INVALID');
+        }
+        if(cp.byteOffset>size) {
+          return unstableEvidence(slot,'PROBE_CAPTURE_TRUNCATED');
+        }
+        const appended=size-cp.byteOffset;
+        if(appended+cp.anchorBytes>EVIDENCE_TAIL_BYTES) {
+          return unstableEvidence(slot,'PROBE_CAPTURE_TAIL_GAP');
+        }
+        bytes=Math.min(size,Math.max(128,appended+cp.anchorBytes));
+      } else if(probeOnly) {
+        bytes=Math.min(size,128);
+      }
+      const start=size-bytes;
       const buffer=Buffer.alloc(bytes);
       let offset=0;
       while (offset<bytes) {
@@ -680,8 +702,10 @@ export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT,
           !sameEvidenceSnapshot(pinned,namedAfter)) {
         return unstableEvidence(slot,'FILE_CHANGED_DURING_READ');
       }
+      // Do not parse unrelated [ANALYTICS]/[GAME_RESULTS] for QA-only calls.
+      const qaOnly=probeOnly||probeCheckpoint!==null;
       const data=buffer.toString('utf8');
-      const entries=data.split(/\r?\n/);
+      const entries=qaOnly?[]:data.split(/\r?\n/);
       if (start>0) entries.shift(); // Offset may cut through first line.
       const incompleteTrailingLineIgnored=
         data.length>0 && !data.endsWith('\n');
@@ -801,7 +825,7 @@ export const TOOL_LIST=[
   {name:'assess_input_route',description:'Read-only native identity check for AI gameplay input: bind validated multi-client action timeline to real MC HWND/PID; ALWAYS reports no verified independent game-input backend and NEVER sends input.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}}},required:['actions'],additionalProperties:false}},
   {name:'summarize_test_evidence',description:'Read up to 20 bounded team [ANALYTICS] and [GAME_RESULTS] records per profile. Only sanitized summaries reach the model; no game identity or gameplay PASS is inferred.',inputSchema:{type:'object',properties:{slots:{type:'array',items:{type:'integer',minimum:1,maximum:5},minItems:1,maxItems:5,uniqueItems:true}},additionalProperties:false}},
   {name:'read_game_evidence',description:'Read one compact allowlisted 1-20 record projection of team analytics/results or optional generic diagnostics. No raw game JSON, player record IDs, credentials or gameplay PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
-  {name:'probe_qa',description:'PREFERRED single read-only Gameplay Probe QA entry. First call validates ZIP and captures a fresh log checkpoint; subsequent calls compactly report the same run. restart=true explicitly resets the slot plan. It never installs packs, sends Minecraft commands, launches games, or certifies gameplay.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},restart:{type:'boolean'}},additionalProperties:false}},
+  {name:'probe_qa',description:'Preferred single read-only QA entry. Reuses approved cached Probe catalog (reload only if source changed), records a log cursor, and returns compact appended results. restart=true starts a new plan. No game command, input or map PASS is executed or claimed.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},restart:{type:'boolean'}},additionalProperties:false}},
   {name:'prepare_probe_qa',description:'ONE-STEP read-only Gameplay Probe auto-run preparation from an exact approved ZIP. Returns a player-admin command for an externally authorized QA-world operator/AI; never sends keys, commands, installs packs or starts Minecraft.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},additionalProperties:false}},
   {name:'read_probe_qa_result',description:'Review only fresh RUN_START/RESULT/RUN_DONE markers from the prepared pinned Skills Probe run. Never treats stored results or native transport ACK as a gameplay pass.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},sessionId:{type:'string',pattern:'^[a-f0-9]{24}$'}},required:['slot','sessionId'],additionalProperties:false}},
   // Source-only local-first diagnostics: explicitly imported immutable evidence.
@@ -997,6 +1021,7 @@ export function createHandler(config,{
   gpuSourceFactory=createGpuFrameSource,
   visualObserverFactory=createVisualObserver,
   probeCatalog=readPinnedProbeCatalogCached,
+  probeRevisionStatus=probeSourceRevisionStatus,
 }={}) {
   let inFlight=false; // mutating or exclusive native operation
   // One volatile plan per slot; not a Minecraft world manager or an auto-run loop.
@@ -1258,55 +1283,43 @@ export function createHandler(config,{
               reason:'QA_PLAN_SUPERSEDED',gameplayAcceptance:'NOT_VERIFIED'};
           }
           return {schema:1,slot,phase:'AWAITING_AUTHORIZED_COMMAND',
-            status:'BLOCKED',
-            probeCount:prepared.autoProbeCount,
-            catalogCache:prepared.catalogCache,
-            sourceZip:'APPROVED_PINNED_SNAPSHOT',
-            capture:'SAME_FILE_CHECKPOINT_PINNED',
-            target:targetStatus,
+            status:'BLOCKED',reason:'COMMAND_DISPATCH_NOT_ENABLED',
+            probeCount:prepared.autoProbeCount,target:targetStatus,
             ...(targetHandoff?{targetHandoff}:{}),
-            world:'NOT_VERIFIED',playerAdmin:'NOT_VERIFIED',
-            commandInput:'NOT_VERIFIED',
             command:prepared.command,
-            commandSentByLazyTester:false,
-            gameplayAcceptance:'NOT_VERIFIED',
-            next:'Use a separately approved, exact-target Computer Use channel to run the original command as an in-game admin Player in a disposable Skills Probe world, then call probe_qa again. Otherwise stop at BLOCKED.'};
+            requires:'AUTHORIZED_PLAYER_ADMIN_AND_QA_WORLD',
+            commandSentByLazyTester:false,gameplayAcceptance:'NOT_VERIFIED'};
         }
-        // An already-prepared session must not adopt a replaced ZIP,
-        // repinned baseline or changed auto probe catalog mid-run.
-        // The approved catalog cache makes the unchanged path cheap.
-        try {
-          const current=await probeCatalog(config.probeZip);
-          const sameSource=current?.archiveSha256===plan.archiveSha256&&
-            current?.runnerSha256===plan.runnerSha256&&
-            Array.isArray(current?.autoIds)&&
-            current.autoIds.length===plan.autoIds.length&&
-            current.autoIds.every((id,index)=>id===plan.autoIds[index]);
-          if(!sameSource) {
-            probeQaPlans.delete(slot);
-            return {schema:1,slot,phase:'SOURCE_CONTINUITY',
-              status:'BLOCKED',reason:'QA_SOURCE_CHANGED_STOP',
-              commandSentByLazyTester:false,gameplayAcceptance:'NOT_VERIFIED',
-              next:'Review the changed team ZIP using the existing source gate, then start a new QA session.'};
-          }
-        } catch {
+        // Do NOT read/hash/parse the ZIP again on every result query.
+        // Only compare cheap filesystem change tokens against the pinned
+        // source revision. A changed ZIP is reviewed on NEXT prepare.
+        let revision;
+        try {revision=await probeRevisionStatus(config.probeZip,plan.sourceRevision);}
+        catch {revision='UNAVAILABLE';}
+        if(revision!=='UNCHANGED') {
           probeQaPlans.delete(slot);
-          return {schema:1,slot,phase:'SOURCE_CONTINUITY',
-            status:'BLOCKED',reason:'QA_SOURCE_UNAVAILABLE',
-            commandSentByLazyTester:false,gameplayAcceptance:'NOT_VERIFIED',
-            next:'Restore the exact approved ZIP and prepare a new QA session; do not reuse earlier results.'};
+          return {schema:1,slot,status:'BLOCKED',
+            reason:revision==='CHANGED'?'QA_SOURCE_CHANGED_STOP':
+              'QA_SOURCE_UNAVAILABLE',gameplayAcceptance:'NOT_VERIFIED'};
         }
         let raw;
         try {
           raw=await callTool('read_probe_qa_result',{
             slot,sessionId:plan.sessionId});
         } catch {
-          return {schema:1,slot,phase:'PROBE_RESULT_REVIEW',
-            status:'INCOMPLETE',reason:'EVIDENCE_UNAVAILABLE',
-            commandSentByLazyTester:false,gameplayAcceptance:'NOT_VERIFIED',
-            next:'Inspect the local capture source; do not accept missing results as PASS.'};
+          return {schema:1,slot,status:'INCOMPLETE',
+            reason:'EVIDENCE_UNAVAILABLE',gameplayAcceptance:'NOT_VERIFIED'};
         }
         let compact=compactProbeQaResult(raw,slot);
+        // Waiting/incomplete evidence needs no native IPC or window probe.
+        // Revalidate only when there is an actual Probe outcome to report.
+        if(probeQaPlans.get(slot)?.sessionId!==plan.sessionId) {
+          return {schema:1,slot,status:'BLOCKED',
+            reason:'QA_PLAN_SUPERSEDED',gameplayAcceptance:'NOT_VERIFIED'};
+        }
+        if(['WAITING','INCOMPLETE','BLOCKED'].includes(compact.status)) {
+          return compact;
+        }
         let target='NOT_PINNED_AT_PREPARE';
         if(plan.targetIdentity) {
           target='CHANGED_OR_UNAVAILABLE';
@@ -1336,14 +1349,7 @@ export function createHandler(config,{
             sourceStatus:'QA_NATIVE_TARGET_NOT_BOUND',
             gameplayAcceptance:'NOT_VERIFIED'};
         }
-        const needsRestart=compact.status==='BLOCKED'||
-          compact.status==='INCOMPLETE';
-        return {...compact,target,
-          next:needsRestart?
-            'Inspect missing or changed evidence; use probe_qa with restart=true for a new session only after correction.':
-            compact.status==='WAITING'?
-              'Await the already-authorized original Probe run and call probe_qa again; no automatic command dispatch is active.':
-              'Review original Probe results; map gameplay acceptance still needs separate evidence.'};
+        return {...compact,target};
       } finally {probeQaBusy.delete(slot);}
     }
     if(name==='prepare_probe_qa') {
@@ -1365,6 +1371,7 @@ export function createHandler(config,{
       if(!catalog||!Array.isArray(catalog.autoIds)||
         catalog.autoIds.length<1||catalog.autoIds.length>80||
         catalog.autoCount!==catalog.autoIds.length||
+        !/^[a-f0-9]{64}$/.test(catalog.sourceRevision??'')||
         new Set(catalog.autoIds).size!==catalog.autoIds.length||
         catalog.autoIds.some(id=>typeof id!=='string'||
           !/^P[0-9]{1,3}[A-Z0-9]{0,12}$/.test(id))||
@@ -1372,7 +1379,8 @@ export function createHandler(config,{
         !/^[a-f0-9]{64}$/.test(catalog.runnerSha256??'')) {
         throw new Error('PROBE_SOURCE_REVIEW_REQUIRED');
       }
-      const existing=await evidence(config.evidenceDirectory,slot);
+      const existing=await evidence(config.evidenceDirectory,slot,EVIDENCE_LIMIT,{
+        probeOnly:true});
       if(existing.status!=='CAPTURE_FILE_PRESENT') {
         return {schema:1,slot,status:'CAPTURE_NOT_READY',
           captureStatus:existing.status,commandSent:false};
@@ -1384,8 +1392,7 @@ export function createHandler(config,{
       const sessionId=randomBytes(12).toString('hex');
       const preparedAt=new Date().toISOString();
       probeQaPlans.set(slot,{sessionId,slot,preparedAt,autoIds:catalog.autoIds,
-        archiveSha256:catalog.archiveSha256,
-        runnerSha256:catalog.runnerSha256,
+        sourceRevision:catalog.sourceRevision,
         captureCursor:existing.captureCursor});
       return {schema:1,slot,status:'PREPARED_SOURCE_ONLY',
         sessionId,preparedAt,autoProbeCount:catalog.autoCount,
