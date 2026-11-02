@@ -416,6 +416,96 @@ test('evidence reads only complete marked lines from assigned profile',async()=>
   } finally {await rm(root,{recursive:true,force:true});}
 });
 
+test('Probe QA cursor accepts only appended complete lines from same capture',async()=>{
+  const root=await mkdtemp(path.join(tmpdir(),'lazy-probe-cursor-'));
+  const filename=path.join(root,'MC02.log');
+  const row=(issue,fields,at='2026-11-02T08:00:00Z')=>
+    at+' warn [probe:probe] INFO tick=120 issue='+issue+' '+fields+'\n';
+  try {
+    // Historic complete Probe markers must not be read by a new plan.
+    await writeFile(filename,
+      row('RUN_START','arg=auto count=1')+
+      row('RESULT','id=P01 result=pass build=dev detail=historic')+
+      row('RUN_DONE','arg=auto count=1'));
+    const prepared=await readGameEvidence(root,2);
+    assert.equal(prepared.status,'CAPTURE_FILE_PRESENT');
+    assert.equal(prepared.captureCursor.kind,'STABLE_CAPTURE_CURSOR_V1');
+    assert.deepEqual(prepared.probeEvents,[]);
+
+    const waiting=await readGameEvidence(root,2,20,{
+      probeCheckpoint:prepared.captureCursor});
+    assert.deepEqual(waiting.probeEvents,[]);
+
+    await appendFile(filename,
+      row('RUN_START','arg=auto count=2','2026-11-02T08:01:00Z')+
+      row('RESULT','id=P01 result=pass build=dev detail=new','2026-11-02T08:01:01Z'));
+    const partial=await readGameEvidence(root,2,20,{
+      probeCheckpoint:prepared.captureCursor});
+    assert.deepEqual(partial.probeEvents.map(x=>x.kind),['start','result']);
+
+    await appendFile(filename,
+      row('RESULT','id=P02 result=fail build=dev detail=new','2026-11-02T08:01:02Z')+
+      row('RUN_DONE','arg=auto count=2','2026-11-02T08:01:03Z'));
+    const completed=await readGameEvidence(root,2,20,{
+      probeCheckpoint:prepared.captureCursor});
+    assert.deepEqual(completed.probeEvents.map(x=>x.kind),
+      ['start','result','result','done']);
+    assert.equal(completed.probeEvents[2].result,'fail');
+    assert.equal(completed.captureCursor.byteOffset>prepared.captureCursor.byteOffset,true);
+
+    // Replacing the physical file, even at the same pathname, invalidates
+    // the checkpoint; old bytes are not accepted as a new QA run.
+    await rename(filename,path.join(root,'old.log'));
+    await writeFile(filename,row('RUN_START','arg=auto count=2'));
+    const replaced=await readGameEvidence(root,2,20,{
+      probeCheckpoint:prepared.captureCursor});
+    assert.equal(replaced.status,'CAPTURE_FILE_UNSTABLE');
+    assert.equal(replaced.reason,'PROBE_CAPTURE_REPLACED');
+  } finally {await rm(root,{recursive:true,force:true});}
+});
+
+test('raw Skills Probe debugger lines remain valid without invented timestamps',async()=>{
+  const root=await mkdtemp(path.join(tmpdir(),'lazy-probe-raw-'));
+  const filename=path.join(root,'MC02.log');
+  try {
+    await writeFile(filename,'Debugger attached to [127.0.0.1] on port [19144].\n');
+    const before=await readGameEvidence(root,2);
+    await appendFile(filename,
+      '[probe:probe] INFO tick=1000 issue=RUN_START arg=auto count=1\n'+
+      '[probe:probe] INFO tick=1002 issue=RESULT id=P01 result=pass build=dev detail=okay\n'+
+      '[probe:probe] INFO tick=1002 issue=RUN_DONE arg=auto count=1\n');
+    const after=await readGameEvidence(root,2,20,{
+      probeCheckpoint:before.captureCursor});
+    assert.deepEqual(after.probeEvents.map(e=>e.kind),
+      ['start','result','done']);
+    assert.equal(after.probeEvents[1].at,null);
+  } finally {await rm(root,{recursive:true,force:true});}
+});
+
+test('Probe QA cursor rejects file rewrites, truncated tails and partial lines',async()=>{
+  const root=await mkdtemp(path.join(tmpdir(),'lazy-probe-rewrite-'));
+  const filename=path.join(root,'MC02.log');
+  const prefix='2026-11-02T08:00:00Z warn starting captured content\n';
+  try {
+    await writeFile(filename,prefix);
+    const first=await readGameEvidence(root,2);
+    await appendFile(filename,
+      '2026-11-02T08:01:00Z warn [probe:probe] INFO tick=120 issue=RUN_START arg=auto count=1');
+    let observed=await readGameEvidence(root,2,20,{probeCheckpoint:first.captureCursor});
+    assert.deepEqual(observed.probeEvents,[]); // incomplete line
+    await appendFile(filename,'\n');
+    observed=await readGameEvidence(root,2,20,{probeCheckpoint:first.captureCursor});
+    assert.equal(observed.probeEvents[0].kind,'start');
+
+    // Modify checkpoint boundary in the same file without replacing inode.
+    await writeFile(filename,prefix.replace('starting','modified')+
+      '2026-11-02T08:02:00Z warn [probe:probe] INFO tick=121 issue=RUN_START arg=auto count=1\n');
+    observed=await readGameEvidence(root,2,20,{probeCheckpoint:first.captureCursor});
+    assert.equal(observed.status,'CAPTURE_FILE_UNSTABLE');
+    assert.equal(observed.reason,'PROBE_CAPTURE_PREFIX_CHANGED');
+  } finally {await rm(root,{recursive:true,force:true});}
+});
+
 test('experimental background input is NOT exposed as an agent tool',async()=>{
   const h=createHandler(config());
   const tools=(await h.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;

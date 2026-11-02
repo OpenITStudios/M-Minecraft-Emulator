@@ -6,7 +6,8 @@ import {parseProbeCapturedLine,reviewProbeRun} from './probe-qa.mjs';
 const stamp='2026-11-02T07:00:00.000Z';
 const line=(issue,fields,time=stamp)=>
   time+' warn [probe:probe] INFO tick=120 issue='+issue+' '+fields;
-const session={preparedAt:'2026-11-02T06:59:59.000Z',autoIds:['P01','P02']};
+const session={preparedAt:'2026-11-02T06:59:59.000Z',autoIds:['P01','P02'],
+  captureCursor:{kind:'STABLE_CAPTURE_CURSOR_V1'}};
 const markers=(first='2026-11-02T07:00:00.000Z')=>[
   parseProbeCapturedLine(line('RUN_START','arg=auto count=2',first)),
   parseProbeCapturedLine(line('RESULT','id=P01 result=pass build=dev detail=okay',
@@ -23,16 +24,27 @@ test('probe marker parser accepts only canonical runner markers',()=>{
   assert.equal(parseProbeCapturedLine(line('STORED','id=P01 result=pass build=dev')),null);
   assert.equal(parseProbeCapturedLine(stamp+' log Minecraft says issue=RUN_DONE arg=auto count=2'),null);
   assert.equal(parseProbeCapturedLine(line('RESULT','id=P01 result=excellent build=dev')),null);
+  const raw='[probe:probe] INFO tick=261598 issue=RESULT id=P01 result=pass build=dev detail=okay';
+  const parsedRaw=parseProbeCapturedLine(raw);
+  assert.equal(parsedRaw.id,'P01');
+  assert.equal(parsedRaw.at,null);
+  assert.equal(parsedRaw.tick,261598);
+  const suppressed=parseProbeCapturedLine(
+    '[probe:probe] INFO tick=261599 issue=RUN_START arg=auto count=2 (suppressed 1)');
+  assert.equal(suppressed.throttled,true);
   assert.equal(parseProbeCapturedLine(line('RUN_DONE','arg=all count=1000')),null);
   const escaped=JSON.stringify('[probe:probe] INFO tick=121 issue=RESULT id=P01 result=pass build=dev detail=x').slice(1,-1);
   assert.equal(parseProbeCapturedLine(stamp+' warn '+escaped).id,'P01');
 });
 
-test('old stored or earlier run cannot become fresh PASS',()=>{
-  const earlier=markers('2026-11-02T06:58:59.000Z');
-  assert.equal(reviewProbeRun(earlier,session).status,'WAITING_FOR_NEW_RUN_START');
+test('old STORED results cannot be classified as an appended fresh run',()=>{
   const stored=parseProbeCapturedLine(line('STORED','id=P01 result=pass build=dev'));
-  assert.equal(reviewProbeRun([stored],session).status,'WAITING_FOR_NEW_RUN_START');
+  assert.equal(reviewProbeRun([stored].filter(Boolean),session).status,'WAITING_FOR_NEW_RUN_START');
+  assert.equal(reviewProbeRun([],session).status,'WAITING_FOR_NEW_RUN_START');
+  // Source timestamps are not the freshness authority. A stable-file cursor
+  // from the local capture reader defines what was appended after prepare.
+  assert.equal(reviewProbeRun(markers('2026-11-02T06:58:59.000Z'),session)
+    .evidenceBoundary,'SAME_STABLE_FILE_APPENDED_BYTES_AFTER_PREPARE');
 });
 
 test('only one complete run with exactly expected results is reported',()=>{
@@ -40,6 +52,8 @@ test('only one complete run with exactly expected results is reported',()=>{
   assert.equal(passed.status,'PROBE_REPORTED_ALL_PASS');
   assert.equal(passed.gameplayAcceptance,'NOT_VERIFIED');
   assert.equal(passed.counts.pass,2);
+  assert.equal(passed.fromTick,120);
+  assert.equal(passed.toTick,120);
   const missing=reviewProbeRun([markers()[0],markers()[1],markers()[3]],session);
   assert.equal(missing.status,'INCOMPLETE_RESULTS');
   assert.deepEqual(missing.missingIds,['P02']);
@@ -54,11 +68,38 @@ test('fail and look stay distinct; overlapping runs are incomplete',()=>{
   bad[2]={...bad[2],result:'look'};
   assert.equal(reviewProbeRun(bad,session).status,'PROBE_REVIEW_REQUIRED');
   const overlap=[markers()[0],markers()[0],...markers().slice(1)];
-  assert.equal(reviewProbeRun(overlap,session).status,'INCOMPLETE_OVERLAPPING_RUNS');
+  assert.equal(reviewProbeRun(overlap,session).status,'INCOMPLETE_UNEXPECTED_RUN');
   assert.equal(reviewProbeRun(markers().slice(0,3),session).status,'WAITING_FOR_RUN_DONE');
 });
 
 test('missing, absent or unusable local capture never implies game success',()=>{
   assert.equal(reviewProbeRun([],session,{captureStatus:'NO_CAPTURE_FILE'}).status,'NO_CAPTURE_FILE');
   assert.equal(reviewProbeRun([],null).status,'NOT_PREPARED');
+});
+
+test('unrelated runs, repeated records and tick resets cannot be PASS',()=>{
+  const full=markers();
+  const duplicated=[full[0],full[1],full[1],full[2],full[3]];
+  assert.equal(reviewProbeRun(duplicated,session).status,'INCOMPLETE_RESULTS');
+  const other=[{...full[0],arg:'all'},...full.slice(1)];
+  assert.equal(reviewProbeRun(other,session).status,'INCOMPLETE_UNEXPECTED_RUN');
+  const noStart=[...full.slice(1)];
+  assert.equal(reviewProbeRun(noStart,session).status,'INCOMPLETE_NO_RUN_START');
+  const restarted=[full[0],full[1],{...full[2],tick:80},full[3]];
+  assert.equal(reviewProbeRun(restarted,session).status,'INCOMPLETE_PROBE_TICK_REGRESSION');
+});
+
+test('capture checkpoint mismatch remains unavailable, not a test failure',()=>{
+  const result=reviewProbeRun(markers(),session,{
+    captureStatus:'CAPTURE_FILE_UNSTABLE',
+    captureReason:'PROBE_CAPTURE_REPLACED'});
+  assert.equal(result.status,'CAPTURE_FILE_UNSTABLE');
+  assert.equal(result.probeOutcome,'NOT_ESTABLISHED');
+  assert.equal(result.captureIssue,'PROBE_CAPTURE_REPLACED');
+});
+
+test('logger throttle notices block acceptance even with complete result counts',()=>{
+  const flagged=markers().map((e,i)=>i===0?{...e,throttled:true}:e);
+  assert.equal(reviewProbeRun(flagged,session).status,'INCOMPLETE_THROTTLED_MARKERS');
+  assert.equal(reviewProbeRun(flagged,session).gameplayAcceptance,'NOT_VERIFIED');
 });

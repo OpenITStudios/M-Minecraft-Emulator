@@ -76,23 +76,31 @@ export async function readPinnedProbeCatalog(filename) {
 export function parseProbeCapturedLine(line) {
   if(typeof line!=='string'||Buffer.byteLength(line,'utf8')>MAX_PROBE_LINE_BYTES)return null;
   const envelope=/^(\d{4}-\d\d-\d\dT\S{1,40})\s+(?:verbose|log|warn|error|stop)\s+([\s\S]+)$/.exec(line);
-  if(!envelope||!Number.isFinite(Date.parse(envelope[1])))return null;
-  let message=envelope[2];
-  try {message=JSON.parse('"'+message+'"');}catch {/* ordinary log */}
+  if(envelope&&!Number.isFinite(Date.parse(envelope[1])))return null;
+  // Skills Probe's own retained Debug Console examples use raw [probe:probe]
+  // lines without timestamps. Our stable file cursor, not timestamps,
+  // defines which bytes are eligible for a newly prepared QA run.
+  const at=envelope?envelope[1]:null;
+  let message=envelope?envelope[2]:line;
+  if(envelope) {
+    try {message=JSON.parse('"'+message+'"');}catch {/* ordinary log */}
+  }
   const marker=/^\[probe:probe\] INFO tick=(\d{1,12}) issue=(RUN_START|RUN_DONE|RESULT) (.*)$/.exec(message);
   if(!marker)return null;
   const tick=Number(marker[1]);
   if(!Number.isSafeInteger(tick))return null;
-  const at=envelope[1];
+  const suppressed=/\(suppressed ([1-9]\d{0,5})\)$/.exec(marker[3]);
+  const throttled=suppressed!==null;
   if(marker[2]==='RESULT') {
     const parsed=/^id=(P[0-9]{1,3}[A-Z0-9]{0,12}) result=(pass|fail|info|look) build=(dev|release)(?:\s|$)/.exec(marker[3]);
     if(!parsed)return null;
-    return {kind:'result',at,tick,id:parsed[1],result:parsed[2],build:parsed[3]};
+    return {kind:'result',at,tick,id:parsed[1],result:parsed[2],
+      build:parsed[3],throttled};
   }
   const parsed=/^arg=(auto|all|P[0-9]{1,3}[A-Z0-9]{0,12}) count=(\d{1,3})(?:\s|$)/.exec(marker[3]);
   if(!parsed||Number(parsed[2])>MAX_AUTO_PROBES)return null;
   return {kind:marker[2]==='RUN_START'?'start':'done',
-    at,tick,arg:parsed[1],count:Number(parsed[2])};
+    at,tick,arg:parsed[1],count:Number(parsed[2]),throttled};
 }
 
 const empty=(status)=>({schema:1,status,probeOutcome:'NOT_ESTABLISHED',
@@ -100,39 +108,66 @@ const empty=(status)=>({schema:1,status,probeOutcome:'NOT_ESTABLISHED',
   gameplayAcceptance:'NOT_VERIFIED'});
 
 /**
- * Matches one fresh, complete auto run only. STORED/probe:report is never
- * accepted, and a completed runner is not equivalent to gameplay success.
+ * Events MUST already be read from bytes appended after the private stable
+ * capture cursor. A log timestamp alone can never authenticate a new test.
+ * No game-level acceptance is inferred, even from all-pass Probe output.
  */
 export function reviewProbeRun(events,session,{captureStatus='CAPTURE_FILE_PRESENT',
-  captureTruncated=false}={}) {
-  if(!session||typeof session.preparedAt!=='string'||
-     !Array.isArray(session.autoIds)||!Array.isArray(events))return empty('NOT_PREPARED');
-  if(captureStatus!=='CAPTURE_FILE_PRESENT')return {
-    ...empty(captureStatus),source:'TEAM_PROBE_LOG'};
-  const preparedMs=Date.parse(session.preparedAt);
-  if(!Number.isFinite(preparedMs))return empty('NOT_PREPARED');
-  const fresh=events.filter(event=>event&&
-    Number.isFinite(Date.parse(event.at))&&Date.parse(event.at)>=preparedMs);
-  const first=fresh.findIndex(event=>event.kind==='start'&&event.arg==='auto');
-  if(first<0)return {...empty('WAITING_FOR_NEW_RUN_START'),
-    expectedCount:session.autoIds.length};
-  const start=fresh[first];
-  const endAt=fresh.findIndex((event,index)=>index>first&&
-    event.kind==='done'&&event.arg==='auto');
-  const ambiguous=fresh.slice(first+1,endAt<0?undefined:endAt)
-    .some(event=>event.kind==='start');
-  if(ambiguous)return {...empty('INCOMPLETE_OVERLAPPING_RUNS'),
-    expectedCount:session.autoIds.length};
-  if(endAt<0)return {...empty('WAITING_FOR_RUN_DONE'),
-    expectedCount:session.autoIds.length};
-  const end=fresh[endAt];
-  const reported=fresh.slice(first+1,endAt).filter(event=>event.kind==='result');
+  captureReason=null,captureTruncated=false}={}) {
+  if(!session||!session.captureCursor||
+     !Array.isArray(session.autoIds)||session.autoIds.length<1||
+     !Array.isArray(events))return empty('NOT_PREPARED');
+  if(captureStatus!=='CAPTURE_FILE_PRESENT') {
+    const reason=typeof captureReason==='string'&&
+      /^PROBE_[A-Z_]{2,50}$/.test(captureReason)?captureReason:null;
+    return {...empty(captureStatus),source:'TEAM_PROBE_LOG',
+      ...(reason?{captureIssue:reason}:{})};
+  }
   const expected=new Set(session.autoIds);
+  if(expected.size!==session.autoIds.length)return empty('INVALID_PROBE_CATALOG');
+  if(events.some(event=>event?.throttled===true)) {
+    return {...empty('INCOMPLETE_THROTTLED_MARKERS'),
+      expectedCount:expected.size};
+  }
+
+  // The source logger can suppress repeated RUN_START/RUN_DONE markers.
+  // Multiple or interleaved runs therefore cannot be attributed safely.
+  const starts=events.map((event,index)=>event?.kind==='start'?index:-1)
+    .filter(index=>index>=0);
+  if(starts.length===0) {
+    return {...empty(events.length?'INCOMPLETE_NO_RUN_START':'WAITING_FOR_NEW_RUN_START'),
+      expectedCount:expected.size};
+  }
+  if(starts.length!==1||starts[0]!==0||events[0].arg!=='auto') {
+    return {...empty('INCOMPLETE_UNEXPECTED_RUN'),expectedCount:expected.size};
+  }
+  const ends=events.map((event,index)=>event?.kind==='done'?index:-1)
+    .filter(index=>index>=0);
+  if(!ends.length)return {...empty('WAITING_FOR_RUN_DONE'),
+    expectedCount:expected.size};
+  if(ends.length!==1||ends[0]!==events.length-1||
+     events[ends[0]].arg!=='auto') {
+    return {...empty('INCOMPLETE_UNEXPECTED_RUN'),expectedCount:expected.size};
+  }
+  const start=events[0];
+  const end=events.at(-1);
+  if(start.tick>end.tick||events.some((event,index)=>
+    !Number.isSafeInteger(event.tick)||event.tick<start.tick||
+    event.tick>end.tick||
+    (index>0&&event.tick<events[index-1].tick))) {
+    return {...empty('INCOMPLETE_PROBE_TICK_REGRESSION'),
+      expectedCount:expected.size};
+  }
+  const reported=events.slice(1,-1);
   const observed=new Map();
   let invalid=false;
   for(const event of reported) {
-    if(!expected.has(event.id)||observed.has(event.id))invalid=true;
-    else observed.set(event.id,event.result);
+    if(event?.kind!=='result'||!expected.has(event.id)||
+       observed.has(event.id)||!['pass','fail','info','look'].includes(event.result)) {
+      invalid=true;
+    } else {
+      observed.set(event.id,event.result);
+    }
   }
   const missing=session.autoIds.filter(id=>!observed.has(id));
   const countsMatch=start.count===expected.size&&end.count===expected.size&&
@@ -150,9 +185,11 @@ export function reviewProbeRun(events,session,{captureStatus='CAPTURE_FILE_PRESE
     expectedCount:expected.size,receivedCount:reported.length,counts,
     missingIds:missing.slice(0,24),
     from:start.at,to:end.at,
+    fromTick:start.tick,toTick:end.tick,
+    evidenceBoundary:'SAME_STABLE_FILE_APPENDED_BYTES_AFTER_PREPARE',
     source:'TEAM_SKILLS_PROBE_RUN_MARKERS',
     sourceIdentity:'OPERATOR_NAMED_LOG_UNVERIFIED',
     gameplayAcceptance:'NOT_VERIFIED',
     priorCaptureTruncated:captureTruncated===true,
-    note:'Only the original Skills Probe result markers were counted. No game/world/player attribution or map gameplay PASS is asserted.'};
+    note:'Official Skills Probe reports only; log file identity is pinned but game/world/player origin and map gameplay are not verified.'};
 }

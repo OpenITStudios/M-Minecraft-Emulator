@@ -1,5 +1,29 @@
 # Current Development Handoff — Lazy Tester
 
+## Stable Gameplay Probe capture checkpoint — 2 November 2026
+
+**State: SOURCE_ONLY / NOT_EXECUTED.** The first source-only
+`prepare_probe_qa` revision compared timestamps in the capture,
+which could confuse cached, rotated or replayed logs with a new run.
+The existing stable `MC0x.log` reader now returns an internal
+file-identity/byte-offset/anchor checksum checkpoint at preparation,
+then parses Probe events only from complete bytes appended after that
+checkpoint. Identity change, truncation, rewritten capture tail,
+lost 256-KiB window, repeated/interleaved markers, game-tick
+regression, excessive markers and explicit logger throttling fail closed. Official ZIP Debug
+Console examples have timestamp-free [probe:probe] lines; these
+are now accepted without fabricating timestamps. Older map/source
+evidence readers keep their bounded projections. No new listener,
+file writer, background collector, command sender, second controller,
+CI, game/world/process execution, credential access or native input
+was introduced. Source regression fixtures were **authored but not run**.
+
+This strengthens LOG provenance only: a file name and stable bytes
+still do not attest that the game, world, player or AI input came from
+the chosen profile. The separate runtime acceptance gate remains
+one authorized Skills Probe test in an isolated Minecraft Education
+Windows world with exact target/process attribution.
+
 ## Simple Gameplay Probe AI QA handoff — 2 November 2026
 
 **State: SOURCE_ONLY / NOT_EXECUTED.** The existing local MCP has two

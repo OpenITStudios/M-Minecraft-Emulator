@@ -631,7 +631,7 @@ function unstableEvidence(slot,reason) {
 }
 
 export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT,{
-  lstatFile=lstat,openFile=open,
+  lstatFile=lstat,openFile=open,probeCheckpoint=null,
 }={}) {
   slotOf(slot);
   if (!directory) return {slot,status:'NOT_CONFIGURED',events:[],attribution:'UNVERIFIED'};
@@ -686,10 +686,65 @@ export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT,
         data.length>0 && !data.endsWith('\n');
       if (incompleteTrailingLineIgnored) entries.pop();
       const records=entries.map(parseCapturedLine).filter(Boolean);
-      const probeEvents=entries.map(parseProbeCapturedLine).filter(Boolean);
+      // Exact stable-file checkpoint. File timestamps cannot establish that
+      // a Probe result belongs to the run prepared by this MCP process.
+      const fileIdentity=createHash('sha256')
+        .update(pinned.dev.toString()+':'+pinned.ino.toString())
+        .digest('hex');
+      const anchorBytes=Math.min(128,buffer.length);
+      const captureCursor={
+        kind:'STABLE_CAPTURE_CURSOR_V1',fileIdentity,
+        byteOffset:Number(pinned.size),
+        anchorBytes,
+        anchorSha256:createHash('sha256')
+          .update(buffer.subarray(buffer.length-anchorBytes)).digest('hex'),
+        completeLastLine:buffer.length===0||buffer[buffer.length-1]===10,
+      };
+      let probeEvents=[];
+      if(probeCheckpoint!==null) {
+        const cp=probeCheckpoint;
+        if(!cp||cp.kind!=='STABLE_CAPTURE_CURSOR_V1'||
+          !/^[a-f0-9]{64}$/.test(cp.fileIdentity??'')||
+          !Number.isSafeInteger(cp.byteOffset)||cp.byteOffset<0||
+          !Number.isInteger(cp.anchorBytes)||cp.anchorBytes<0||
+          cp.anchorBytes>128||cp.anchorBytes>cp.byteOffset||
+          !/^[a-f0-9]{64}$/.test(cp.anchorSha256??'')||
+          typeof cp.completeLastLine!=='boolean') {
+          return unstableEvidence(slot,'PROBE_CHECKPOINT_INVALID');
+        }
+        if(cp.fileIdentity!==fileIdentity) {
+          return unstableEvidence(slot,'PROBE_CAPTURE_REPLACED');
+        }
+        if(cp.byteOffset>captureCursor.byteOffset) {
+          return unstableEvidence(slot,'PROBE_CAPTURE_TRUNCATED');
+        }
+        if(cp.byteOffset-cp.anchorBytes<start) {
+          return unstableEvidence(slot,'PROBE_CAPTURE_TAIL_GAP');
+        }
+        const from=cp.byteOffset-start;
+        const anchor=buffer.subarray(from-cp.anchorBytes,from);
+        if(createHash('sha256').update(anchor).digest('hex')!==cp.anchorSha256) {
+          return unstableEvidence(slot,'PROBE_CAPTURE_PREFIX_CHANGED');
+        }
+        let added=buffer.subarray(from).toString('utf8');
+        // A partial line present at preparation must never be completed
+        // later and then mistaken for a newly started Probe run.
+        if(!cp.completeLastLine) {
+          const firstNewline=added.indexOf('\n');
+          added=firstNewline<0?'':added.slice(firstNewline+1);
+        }
+        // Incomplete active writer tails are ignored until the next read.
+        if(added && !added.endsWith('\n')) {
+          added=added.slice(0,added.lastIndexOf('\n')+1);
+        }
+        probeEvents=added.split(/\r?\n/).map(parseProbeCapturedLine).filter(Boolean);
+        if(probeEvents.length>200) {
+          return unstableEvidence(slot,'PROBE_MARKER_VOLUME_EXCEEDED');
+        }
+      }
       return {slot,status:'CAPTURE_FILE_PRESENT',
         events:records.slice(-Math.min(maxRecords,EVIDENCE_LIMIT)),
-        probeEvents:probeEvents.slice(-200),
+        captureCursor,probeEvents,
         attribution:'OPERATOR_NAMED_UNVERIFIED',
         truncated:pinned.size>BigInt(EVIDENCE_TAIL_BYTES),
         incompleteTrailingLineIgnored,
@@ -1152,16 +1207,25 @@ export function createHandler(config,{
         return {schema:1,slot,status:'CAPTURE_NOT_READY',
           captureStatus:existing.status,commandSent:false};
       }
+      if(existing.captureCursor?.kind!=='STABLE_CAPTURE_CURSOR_V1') {
+        return {schema:1,slot,status:'CAPTURE_CHECKPOINT_UNAVAILABLE',
+          commandSent:false,gameplayAcceptance:'NOT_VERIFIED'};
+      }
       const sessionId=randomBytes(12).toString('hex');
       const preparedAt=new Date().toISOString();
       probeQaPlans.set(slot,{sessionId,slot,preparedAt,autoIds:catalog.autoIds,
-        archiveSha256:catalog.archiveSha256});
+        archiveSha256:catalog.archiveSha256,captureCursor:existing.captureCursor});
       return {schema:1,slot,status:'PREPARED_SOURCE_ONLY',
         sessionId,preparedAt,autoProbeCount:catalog.autoCount,
         autoProbeIds:catalog.autoIds,
         sourceZipSha256:catalog.archiveSha256,
         command:'/scriptevent probe:run auto',
         dispatch:'NOT_AVAILABLE_IN_LAZY_TESTER',
+        computerUse:{input:'NOT_VERIFIED',approvedWorldRequired:true,
+          playerAdminRequired:true,requiresExactTarget:true,
+          existingTargetTool:'get_computer_use_target',
+          revalidationTool:'revalidate_computer_use_target',
+          commandInputTool:'NOT_AVAILABLE'},
         requirements:'Copied QA world; Skills Probe installed; approved Player/admin; confirmed target profile and command-entry capability',
         next:'After an authorized operator or verified AI Computer Use executes the original command, call read_probe_qa_result for this sessionId.',
         commandSent:false,gameplayAcceptance:'NOT_VERIFIED'};
@@ -1183,10 +1247,16 @@ export function createHandler(config,{
         return {schema:1,slot,status:'QA_PLAN_EXPIRED',
           gameplayAcceptance:'NOT_VERIFIED'};
       }
-      const report=await evidence(config.evidenceDirectory,slot);
+      const report=await evidence(config.evidenceDirectory,slot,EVIDENCE_LIMIT,{
+        probeCheckpoint:session.captureCursor});
+      if(probeQaPlans.get(slot)?.sessionId!==session.sessionId) {
+        return {schema:1,slot,status:'QA_PLAN_SUPERSEDED',
+          gameplayAcceptance:'NOT_VERIFIED'};
+      }
       return {slot,sessionId:session.sessionId,
         ...reviewProbeRun(report.probeEvents??[],session,{
-          captureStatus:report.status,captureTruncated:report.truncated})};
+          captureStatus:report.status,captureReason:report.reason,
+          captureTruncated:report.truncated})};
     }
     // All diagnostic calls are read-only, scoped to one configured Data/
     // Diagnostics root. A Codex/MCP caller cannot import or request a path.

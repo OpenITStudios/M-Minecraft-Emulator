@@ -149,15 +149,22 @@ New ZIP versions require the existing team update review.
    ZIP, derives the auto probe IDs from that source, checks that the existing
    per-profile capture is present, and returns a session ID plus the
    original `/scriptevent probe:run auto` command. Re-preparing invalidates
-   the previous plan for that slot.
+   the previous plan for that slot. It also pins the exact existing log
+   file identity, length and a small tail checksum as a private checkpoint.
 2. A separately authorized operator or verified per-window Computer Use
    provider executes that command as an **in-game admin Player in a
    disposable QA world with Skills Probe installed**.
 3. Call `read_probe_qa_result` with that slot and session ID. It reads
-   fresh `[probe:probe]` RUN_START / RESULT / RUN_DONE markers using the
-   existing bounded MC0x.log reader. Old `probe:report` STORED data
-   never counts. Missing or repeated markers, unexpected results or
-   non-PASS outcomes do not become gameplay PASS.
+   `[probe:probe]` RUN_START / RESULT / RUN_DONE markers **only in
+   complete lines appended after that file checkpoint**, using the same
+   bounded MC0x.log reader. It accepts both timestamp-wrapped captures
+   and the original raw Debug Console lines shown in the team's ZIP; it
+   does not invent timestamps for raw records. Replaced, truncated, rewritten or rotated
+   files, oversized capture gaps and marker overflow fail closed.
+   The original logger's `(suppressed N)` throttle notices also make
+   that run incomplete; a quiet log is never treated as proof of PASS.
+   Old `probe:report` STORED data never counts. Missing, repeated or
+   interleaved runs and non-PASS outcomes do not become gameplay PASS.
 
 There is no automatic import, capture process, new UI, game command
 sender, model loop, pack builder, source sync or account/world mutation.
