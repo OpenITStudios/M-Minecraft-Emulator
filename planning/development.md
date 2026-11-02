@@ -113,9 +113,10 @@ new-revision acceptance.
   controller's volatile reservation phase, run ID and fixed recovery
   action without preparing a new Probe, publishing activity or writing
   game input. It preserves an explicit `transferAllowed=false`,
-  `ownerProcessProof=NOT_BOUND_TO_PROCESS_HANDLE` and
-  `operatorApproval=NOT_AVAILABLE_IN_PROTOCOL`. A token match is not
-  a verified live/dead MCP process. No unapproved native transfer,
+  `operatorApproval=NOT_AVAILABLE_IN_PROTOCOL`. At that earlier revision,
+  `ownerProcessProof=NOT_BOUND_TO_PROCESS_HANDLE`; new coordinated runs now
+  bind an OS-observed Node parent lifetime as described below. A token
+  match alone is not proof of MCP-script identity. No unapproved native transfer,
   extra UI/Testing engine, CI or background service. Native/Node
   read-only regressions AUTHORED_NOT_EXECUTED; Windows runtime unknown.
 - **Pinned MCP Testing parent lifetime (2 November, source-only):**
