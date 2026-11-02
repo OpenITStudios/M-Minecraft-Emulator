@@ -51,6 +51,11 @@ new-revision acceptance.
   reports are not verified Windows control, gameplay or map QA. All newly
   authored Rust/Node/desktop fixtures are NOT_EXECUTED and the complete
   cross-process UI handoff on Windows remains NOT_VERIFIED.
+- **AI/Testing UI wording (2 November):** all activity labels and descriptions
+  are in English, with user-facing "Testing" instead of "QA".
+  The existing status source, five fixed DWM cards, controller paths and
+  `probe_qa` API identifiers remain unchanged. Updated regression assertions
+  are AUTHORED_NOT_EXECUTED.
 - **Native owner:** original Rust session controller handles game
   process identity, private profiles, normal exit and recovery.
   Workspace/DWM presentation never becomes a second lifecycle owner.

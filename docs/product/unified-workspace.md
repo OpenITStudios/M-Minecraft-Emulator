@@ -46,13 +46,13 @@ observation, unverified experimental input requests/recovery, and original
 Skills Probe checkpoint/report progress. These are distinct from **external
 Windows desktop control**. The current desktop has no authenticated MCP
 activity bridge. Therefore the default Play UI must remain unchanged and
-must NOT display speculative AI/QA labels or buttons. When a verified
+must NOT display speculative AI/Testing labels or buttons. When a verified
 read-only status route exists, hide routine absent signals, show only
 relevant per-profile activity or action-required issues, and preserve all five
 keyed DWM preview cards without resizing or shifting the layout. An absent
 or disconnected MCP is UNKNOWN, not proof of no AI activity.
 
-A bounded read-only AI/QA activity disclosure can appear in the Play
+A bounded read-only AI/Testing activity disclosure can appear in the Play
 header only when the original native controller has received an explicit
 short-lived local MCP status report. There is **no implicit status upload**,
 new background watcher, agent process discovery or separate UI status owner.
@@ -62,9 +62,13 @@ DWM preview. Items identify reported local observation, source-only Probe
 preparation/results or experimental input/recovery only; **never** external
 Windows control, verified Minecraft input, or map gameplay acceptance.
 No incoming report means no extra UI. A stale earlier attention report
-is "AI/QA status unavailable", not an assumption of successful recovery.
+is "AI & Testing · Status unavailable", not an assumption of successful recovery.
 Only the same-image original controller receives explicit activity reports,
 and the regular desktop Tauri session command must refuse publications.
+
+User-facing status terminology is English: "Testing" replaces "QA" in
+the Play activity summary and details. Internal `probe_qa` names and
+source-level event contracts are preserved for compatibility.
 
 Session ownership belongs to the existing native bootstrap; the UI is a consumer.
 The bootstrap keeps the reviewed game/DLL hashes, original process handles, private

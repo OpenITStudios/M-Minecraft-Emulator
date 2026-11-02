@@ -240,11 +240,13 @@ try {
   await page.evaluate(()=>window.__finishBinding());
   const statusDisclosure=page.locator('.lt-agent-activity');
   await statusDisclosure.waitFor();
-  assert.match(await statusDisclosure.textContent(),/QA prepared/);
+  assert.match(await statusDisclosure.textContent(),/Testing · Waiting · MC02/);
+  assert.doesNotMatch(await statusDisclosure.textContent(),/\bQA\b/,
+    'All visible AI and Testing labels use the agreed English terminology');
   assert.equal(await page.locator('.lt-filmstrip .lt-launcher-entry').count(),5);
   await statusDisclosure.locator('summary').click();
-  assert.match(await statusDisclosure.textContent(),/command\/evidence pending/);
-  assert.doesNotMatch(await statusDisclosure.textContent(),/AI controlling PC|QA running verified/);
+  assert.match(await statusDisclosure.textContent(),/awaiting command or evidence/);
+  assert.doesNotMatch(await statusDisclosure.textContent(),/AI controlling PC|Testing running verified/);
   await page.evaluate(()=>{
     window.__agentReport={
       schema:1,source:'CURRENT_MCP_PROCESS_MEMORY_ONLY',
@@ -259,7 +261,7 @@ try {
   });
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await page.locator('.lt-agent-activity summary')
-    .getByText('AI/QA status unavailable').waitFor();
+    .getByText('AI & Testing · Status unavailable').waitFor();
   await page.evaluate(()=>{window.__agentReport=null;});
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await statusDisclosure.waitFor({state:'detached'});

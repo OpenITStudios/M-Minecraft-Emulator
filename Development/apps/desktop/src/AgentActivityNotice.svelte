@@ -4,15 +4,15 @@
 </script>
 
 <!-- Positioned out of normal layout: never changes viewport or rail size. -->
-<details class="lt-agent-activity" aria-label="Local AI and QA activity">
+<details class="lt-agent-activity" aria-label="Local AI and Testing activity">
   <summary aria-label={view.summary}>{view.summary}</summary>
   <div class="lt-agent-activity-details">
-    <strong>{view.urgent?'Attention required':'Agent activity'}</strong>
+    <strong>{view.urgent?'Attention required':'Activity overview'}</strong>
     {#each view.lines as item}
       <p>{item}</p>
     {/each}
     <small>{view.stale?
-      'The original agent report has expired. Do not assume input or QA completed.' :
-      'Reported by the local agent. Windows desktop control and map gameplay are not verified.'}</small>
+      'The latest status report has expired. AI input and testing outcomes are unconfirmed.' :
+      'Reported by the local agent. PC control and Minecraft gameplay are not verified.'}</small>
   </div>
 </details>
