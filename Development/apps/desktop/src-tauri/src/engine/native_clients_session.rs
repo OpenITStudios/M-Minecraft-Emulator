@@ -1306,6 +1306,7 @@ mod tests {
         let other="b".repeat(32);
         let next="c".repeat(32);
         let old_run="d".repeat(32);
+        let stale_run="9".repeat(32);
         let new_run="e".repeat(32);
         assert_eq!(
             book.check_recovery_cas(&fixture(2,&old_run,&old,&new_run,&next)),
@@ -1326,7 +1327,7 @@ mod tests {
                 Err("TESTING_TRANSFER_INVALID_CONTRACT"));
         }
         for candidate in [
-            fixture(2,&new_run,&old,&new_run,&next),
+            fixture(2,&stale_run,&old,&new_run,&next),
             fixture(2,&old_run,&other,&new_run,&next),
         ] {
             assert_eq!(book.check_recovery_cas(&candidate),

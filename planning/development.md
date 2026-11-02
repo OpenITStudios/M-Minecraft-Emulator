@@ -141,8 +141,8 @@ new-revision acceptance.
   Pure Node regression scenarios authored NOT_EXECUTED; no new native
   controller, Test runner, desktop panel, CI, Windows or Minecraft action.
 - **Original-controller Testing CAS correctness core (3 November, source-only):**
-  \`native_clients_session.rs\` now contains a sealed, private
-  \`transfer_with_sealed_admission\` operation that can replace ONE
+  `native_clients_session.rs` now contains a sealed, private
+  `transfer_with_sealed_admission` operation that can replace ONE
   original RESERVED run only after exact old run/owner comparison, distinct
   successor identity, pinned old-parent OS exit and live pinned successor.
   Pure Rust preflight regressions reject stale IDs, FINAL, wrong owners
