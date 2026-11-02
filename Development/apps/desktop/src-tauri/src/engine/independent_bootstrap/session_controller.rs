@@ -495,6 +495,7 @@ impl Sessions {
             storage: None,
             settings: None,
             agent_activity: None,
+            testing_run: None,
         }
     }
 
@@ -1303,7 +1304,8 @@ fn receive_before_maintenance<T>(
 // Ordinary Inspect and other operations retain their existing full reaping.
 fn response_reaps_all(request: &SessionRequest) -> bool {
     if matches!(request, SessionRequest::CloseOne { .. } |
-        SessionRequest::CloseAll | SessionRequest::PublishAgentActivity {..}) {
+        SessionRequest::CloseAll | SessionRequest::PublishAgentActivity {..} |
+        SessionRequest::TestingReserve {..} | SessionRequest::TestingFinalize {..}) {
         return false;
     }
     #[cfg(feature="mc02-native-input")]
@@ -1343,6 +1345,9 @@ fn run() -> io::Result<()> {
     // Only the original actor keeps one ephemeral UI report mirror.
     // This does not own Probe progress, games, input, or agent processes.
     let mut agent_activity:Option<(crate::engine::native_clients_session::AgentActivityReport,Instant)>=None;
+    // Singleton native actor arbitrates run identity across independent
+    // MCP stdio clients. This does not run tests or own Probe evidence.
+    let mut testing_runs=crate::engine::native_clients_session::NativeTestingRunBook::default();
     let mut audio=None;
     let mut audio_mode=crate::engine::manager_settings::load_audio()?;
     // Audio's COM session enumerator already has a one-second discovery
@@ -1428,6 +1433,9 @@ fn run() -> io::Result<()> {
             // verification but skip unrelated title writes per heartbeat.
             #[cfg(feature="mc02-native-input")]
             let relabel_on_reply = !matches!(&envelope.request,
+                SessionRequest::TestingReserve{..} |
+                SessionRequest::TestingFinalize{..} |
+                SessionRequest::PublishAgentActivity{..} |
                 SessionRequest::Mc02Input {..} |
                 SessionRequest::AiLeasedInput {..} |
                 SessionRequest::AiInputGroup {..} |
@@ -1435,9 +1443,25 @@ fn run() -> io::Result<()> {
                 SessionRequest::AiLeaseRelease {..});
             #[cfg(not(feature="mc02-native-input"))]
             let relabel_on_reply = !matches!(&envelope.request,
-                SessionRequest::PublishAgentActivity{..});
+                SessionRequest::PublishAgentActivity{..} |
+                SessionRequest::TestingReserve{..} |
+                SessionRequest::TestingFinalize{..});
+            let mut testing_reply=None;
             match envelope.request {
                 SessionRequest::Inspect => {}
+                SessionRequest::TestingReserve {
+                    slot,owner_id,run_id,replace_run_id
+                } => {
+                    testing_reply=Some(testing_runs.reserve(slot,&owner_id,&run_id,
+                        replace_run_id.as_deref()).map_err(|e|e.to_string())?);
+                }
+                SessionRequest::TestingFinalize {
+                    slot,owner_id,run_id,reported_status,report_digest
+                } => {
+                    testing_reply=Some(testing_runs.finalize(
+                        slot,&owner_id,&run_id,&reported_status,&report_digest)
+                        .map_err(|e|e.to_string())?);
+                }
                 SessionRequest::PublishAgentActivity {activity} => {
                     if !activity.valid_ingress() {
                         return Err("Invalid agent activity report".into());
@@ -1570,6 +1594,7 @@ fn run() -> io::Result<()> {
             if let Some(report)=settings.as_mut(){report.audio_issue=audio_issue.clone();}
             snapshot.storage = storage;
             snapshot.settings = settings;
+            snapshot.testing_run=testing_reply;
             snapshot.agent_activity=agent_activity.as_ref().and_then(|(report,at)|{
                 if at.elapsed()<=Duration::from_secs(12) {
                     Some(report.clone())

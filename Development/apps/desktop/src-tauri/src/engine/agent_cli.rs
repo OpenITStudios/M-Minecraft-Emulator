@@ -399,6 +399,50 @@ fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
 }
 
 fn execute(args: &[String]) -> Result<Value, &'static str> {
+    // Correlation-only native Testing arbitration, never an executor.
+    // The random MCP owner token is passed via environment, NOT CLI argv.
+    if matches!(args.first().map(String::as_str),
+       Some("testing-reserve"|"testing-finalize")) {
+        #[cfg(not(all(windows,target_arch="x86_64",feature="lazy-tester-package")))]
+        {return Err("UNSUPPORTED");}
+        #[cfg(all(windows,target_arch="x86_64",feature="lazy-tester-package"))]
+        {
+            use super::native_clients_session::{self,SessionRequest,valid_testing_id};
+            let owner=std::env::var("LAZY_TESTER_TESTING_OWNER_ID")
+                .map_err(|_|"TESTING_OWNER_ID_REQUIRED")?;
+            if !valid_testing_id(&owner){return Err("TESTING_OWNER_ID_REQUIRED");}
+            if args.len()<3{return Err("INVALID_ARGUMENTS");}
+            let slot=args[1].parse::<u32>().map_err(|_|"INVALID_ARGUMENTS")?;
+            let run_id=&args[2];
+            if !(1..=5).contains(&slot)||!valid_testing_id(run_id) {
+                return Err("INVALID_ARGUMENTS");
+            }
+            let request=if args[0]=="testing-reserve" {
+                if args.len()!=4{return Err("INVALID_ARGUMENTS");}
+                let replace=if args[3]=="none"{None}
+                    else if valid_testing_id(&args[3]){Some(args[3].clone())}
+                    else{return Err("INVALID_ARGUMENTS")};
+                SessionRequest::TestingReserve {slot,owner_id:owner,
+                    run_id:run_id.clone(),replace_run_id:replace}
+            } else {
+                if args.len()!=5{return Err("INVALID_ARGUMENTS");}
+                SessionRequest::TestingFinalize {slot,owner_id:owner,
+                    run_id:run_id.clone(),
+                    reported_status:args[3].clone(),report_digest:args[4].clone()}
+            };
+            // Do not silently create the original manager or adopt another
+            // executable's game process just to claim a Testing run.
+            if !native_clients_session::existing_controller_gate(
+                "Local\\MivubiEducationStartupObservation").map_err(native_error)? {
+                return Err("CONTROLLER_UNAVAILABLE");
+            }
+            let observed=native_clients_session::request(request)
+                .map_err(native_error)?;
+            let run=observed.testing_run.ok_or("TESTING_RESULT_UNAVAILABLE")?;
+            return Ok(json!({"schema":1,"ok":true,
+                "operation":args[0],"run":run}));
+        }
+    }
     // Explicit, one-shot, non-gameplay metadata report to the retained
     // same-image controller. Never starts a controller, game, or worker.
     if args.first().map(String::as_str)==Some("report-agent-activity") {

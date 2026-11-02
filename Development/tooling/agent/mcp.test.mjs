@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,symlink,rm,open,rename,appendFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions,
+import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,coordinateTestingRunNative,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions,
   sendExperimentalAiWriterLeaseNative} from './mcp.mjs';
 
 const snapshot=(operation)=>({schema:1,ok:true,operation,profiles:Array.from({length:5},(_,i)=>({slot:i+1,state:i===0?'RUNNING':'STOPPED',responding:i===0,hasWindow:i===0,needsAttention:false}))});
@@ -1183,6 +1183,167 @@ test('operator hints distinguish waiting, source-only, and blocked terminal repo
     'RESOLVE_APPROVED_PROBE_SOURCE_OR_CAPTURE');
   fixture.shutdown();
 });
+
+test('native-coordinated Testing admits one MCP process and rejects a rival',async()=>{
+  const nativeRuns=new Map();
+  const calls=[];
+  const coordinate=async(_exe,request)=>{
+    calls.push({...request});
+    let existing=nativeRuns.get(request.slot);
+    if(request.operation==='reserve') {
+      if(existing&&request.replaceRunId===existing.runId &&
+         existing.phase==='FINAL'&&existing.ownerId===request.ownerId) {
+        existing=null;
+      } else if(existing) {
+        return {schema:1,slot:request.slot,runId:existing.runId,
+          phase:existing.phase,
+          ownerMatch:existing.ownerId===request.ownerId &&
+            existing.runId===request.runId,
+          reportedStatus:existing.reportedStatus,
+          reportDigest:existing.reportDigest,
+          provenance:'NATIVE_RUN_CORRELATION_ONLY_NOT_GAMEPLAY_PROOF'};
+      }
+      const run={schema:1,slot:request.slot,runId:request.runId,
+        ownerId:request.ownerId,phase:'RESERVED',ownerMatch:true,
+        reportedStatus:null,reportDigest:null,
+        provenance:'NATIVE_RUN_CORRELATION_ONLY_NOT_GAMEPLAY_PROOF'};
+      nativeRuns.set(request.slot,run);
+      return {...run};
+    }
+    assert.equal(request.operation,'finalize');
+    assert.equal(existing.runId,request.runId);
+    assert.equal(existing.ownerId,request.ownerId);
+    if(existing.phase==='FINAL') {
+      assert.equal(existing.reportDigest,request.reportDigest);
+      assert.equal(existing.reportedStatus,request.reportedStatus);
+    } else {
+      existing.phase='FINAL';
+      existing.reportedStatus=request.reportedStatus;
+      existing.reportDigest=request.reportDigest;
+    }
+    return {...existing};
+  };
+  let catalogs=0,captures=0,published=0;
+  const configA={...config(),probeZip:path.resolve('skills-probe.zip'),
+    evidenceDirectory:path.resolve('capture')};
+  const shared={
+    coordinateTesting:coordinate,
+    publishActivity:async(_exe,activity)=>{
+      published++;
+      assert.equal(activity.mapGameplayAcceptance,'NOT_TESTED');
+      return {status:'REPORTED_TO_EXISTING_NATIVE_CONTROLLER'};
+    },
+    probeCatalog:async()=>{
+      catalogs++;
+      return {autoCount:1,autoIds:['P01'],
+        archiveSha256:'a'.repeat(64),runnerSha256:'b'.repeat(64),
+        sourceRevision:'c'.repeat(64),cache:'UNCHANGED_APPROVED_ZIP'};
+    },
+    probeRevisionStatus:async()=> 'UNCHANGED',
+    native:async(_exe,operation,slot)=>({
+      schema:1,ok:true,operation:'target',slot,pid:402,windowId:802,
+      createdFileTime:'9001',sessionId:1,foreground:false,
+      visible:true,minimized:false,
+      verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',
+      gameplayInput:'NOT_VERIFIED',
+    }),
+    evidence:async(_path,slot,_n,opts)=>{
+      captures++;
+      return opts?.probeCheckpoint?
+        {slot,status:'CAPTURE_FILE_PRESENT',probeEvents:[
+          {kind:'start',arg:'auto',count:1,tick:1,at:null},
+          {kind:'result',id:'P01',result:'pass',tick:2,at:null},
+          {kind:'done',arg:'auto',count:1,tick:3,at:null},
+        ]}:
+        {slot,status:'CAPTURE_FILE_PRESENT',
+          captureCursor:{kind:'STABLE_CAPTURE_CURSOR_V1'}};
+    },
+  };
+  const one=createHandler(configA,shared),two=createHandler(configA,shared);
+  const prepared=await one.callTool('probe_qa',
+    {slot:2,coordinateNative:true,publishToDesktop:true});
+  assert.equal(prepared.phase,'AWAITING_AUTHORIZED_COMMAND');
+  assert.equal(prepared.nativeRunStatus,'RESERVED');
+  assert.equal(prepared.desktopDelivery,'REPORTED_TO_EXISTING_NATIVE_CONTROLLER');
+  assert.match(prepared.testingRunId,/^[a-f0-9]{32}$/);
+  const denied=await two.callTool('probe_qa',
+    {slot:2,coordinateNative:true,publishToDesktop:true});
+  assert.equal(denied.status,'BLOCKED');
+  assert.equal(denied.reason,'TESTING_RUN_ALREADY_RESERVED');
+  assert.equal(denied.existingRunId,prepared.testingRunId);
+  assert.equal(catalogs,1,'A competing MCP cannot prepare duplicate source Testing');
+  const completed=await one.callTool('probe_qa',
+    {slot:2,coordinateNative:true,publishToDesktop:true});
+  assert.equal(completed.status,'PROBE_REPORTED_PASS');
+  assert.equal(completed.nativeRunStatus,'FINAL');
+  assert.match(completed.reportDigest,/^[a-f0-9]{64}$/);
+  const snap=[catalogs,captures];
+  const reused=await one.callTool('probe_qa',
+    {slot:2,coordinateNative:true,publishToDesktop:true});
+  assert.equal(reused.reportDigest,completed.reportDigest);
+  assert.deepEqual([catalogs,captures],snap);
+  const rivalAgain=await two.callTool('probe_qa',
+    {slot:2,coordinateNative:true,publishToDesktop:true});
+  assert.equal(rivalAgain.reason,'TESTING_RUN_ALREADY_RESERVED');
+  assert.equal(published,3,'Only owner publishes source Testing summaries');
+  const restart=await one.callTool('probe_qa',
+    {slot:2,coordinateNative:true,restart:true,publishToDesktop:true});
+  assert.equal(restart.nativeRunStatus,'RESERVED');
+  assert.notEqual(restart.testingRunId,prepared.testingRunId);
+  assert.equal(catalogs,2,'An explicit owner restart creates one new checkpoint');
+  // Legacy direct preparation invalidates only this MCP's local checkpoint
+  // identity. It cannot silently inherit the old native reservation.
+  const legacy=await one.callTool('prepare_probe_qa',{slot:2});
+  assert.equal(legacy.status,'PREPARED_SOURCE_ONLY');
+  const mismatched=await one.callTool('probe_qa',
+    {slot:2,coordinateNative:true});
+  assert.equal(mismatched.reason,
+    'EXISTING_LEGACY_TESTING_CHECKPOINT_NOT_COORDINATED');
+  one.shutdown();two.shutdown();
+});
+
+test('native coordination fails closed without creating a local Testing checkpoint',async()=>{
+  const offline=createHandler({...config(),executable:''},{
+    coordinateTesting:async()=>{throw Error('No controller allowed');},
+  });
+  const blocked=await offline.callTool('probe_qa',
+    {slot:2,coordinateNative:true,publishToDesktop:true});
+  assert.equal(blocked.reason,'TESTING_NATIVE_CONTROLLER_NOT_CONFIGURED');
+  const lost=createHandler(config(),{
+    coordinateTesting:async()=>{throw Error('Native status unavailable');},
+    native:async()=>{throw Error('Must not request native Minecraft');},
+  });
+  assert.equal((await lost.callTool('probe_qa',
+    {slot:2,coordinateNative:true})).reason,
+    'TESTING_NATIVE_RESERVATION_UNCONFIRMED');
+  await assert.rejects(()=>lost.callTool('probe_qa',
+    {slot:1,coordinateNative:true}),/MC01 human host is protected/);
+  await assert.rejects(()=>lost.callTool('probe_qa',
+    {slot:2,coordinateNative:'true'}),/Invalid tool arguments/);
+  offline.shutdown();lost.shutdown();
+});
+
+test('native Testing helper validates correlation before any subprocess',async()=>{
+  await assert.rejects(()=>coordinateTestingRunNative('',{
+    operation:'reserve',slot:2,runId:'a'.repeat(32),
+    ownerId:'b'.repeat(32),
+  }),/Native Testing controller not configured/);
+  const executable=path.resolve('lazy-tester.exe');
+  await assert.rejects(()=>coordinateTestingRunNative(executable,{
+    operation:'reserve',slot:0,runId:'a'.repeat(32),
+    ownerId:'b'.repeat(32),
+  }),/Invalid Testing run correlation request/);
+  await assert.rejects(()=>coordinateTestingRunNative(executable,{
+    operation:'reserve',slot:2,runId:'A'.repeat(32),
+    ownerId:'b'.repeat(32),
+  }),/Invalid Testing run correlation request/);
+  await assert.rejects(()=>coordinateTestingRunNative(executable,{
+    operation:'finalize',slot:2,runId:'a'.repeat(32),
+    ownerId:'b'.repeat(32),reportedStatus:'PASS',
+    reportDigest:'c'.repeat(64),
+  }),/Invalid Testing terminal reference/);
+});
+
 test('never trusts incomplete or out-of-order native profiles',()=>{
   assert.throws(()=>validateNativeReport({schema:1,ok:true,operation:'inspect',profiles:snapshot('inspect').profiles.toReversed()},'inspect'));
   assert.throws(()=>validateNativeReport({schema:1,ok:true,operation:'inspect',profiles:snapshot('inspect').profiles},'launch'));

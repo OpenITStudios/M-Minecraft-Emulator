@@ -224,6 +224,67 @@ export function validateNativeReport(value, operation) {
     evidence:'NATIVE_SESSION_ONLY_NOT_GAMEPLAY_OR_ACCOUNT_SIGNIN',
   };
 }
+export async function coordinateTestingRunNative(executable,{
+  operation,slot,runId,ownerId,replaceRunId=null,
+  reportedStatus=null,reportDigest=null,
+}) {
+  if(!executable)throw new Error('Native Testing controller not configured');
+  if(!['reserve','finalize'].includes(operation)||
+    !Number.isInteger(slot)||slot<1||slot>5||
+    !/^[a-f0-9]{32}$/.test(runId??'')||
+    !/^[a-f0-9]{32}$/.test(ownerId??'')||
+    (replaceRunId!==null&&!/^[a-f0-9]{32}$/.test(replaceRunId))) {
+    throw new Error('Invalid Testing run correlation request');
+  }
+  const args=operation==='reserve'?
+    ['--lazy-tester-agent-cli','testing-reserve',String(slot),runId,
+      replaceRunId??'none']:
+    ['--lazy-tester-agent-cli','testing-finalize',String(slot),runId,
+      reportedStatus??'',reportDigest??''];
+  if(operation==='finalize'&&
+      (!['PROBE_REPORTED_PASS','FAIL','NEEDS_REVIEW','INCOMPLETE','BLOCKED']
+        .includes(reportedStatus)||!/^[a-f0-9]{64}$/.test(reportDigest??'')))
+    throw new Error('Invalid Testing terminal reference');
+  let output;
+  try {
+    // Same-image native CLI + existing authenticated controller only.
+    // Owner correlation is private in env, never argv or UI. Neither it
+    // nor a successful native ACK certifies MCP parent/game provenance.
+    output=await execFileAsync(executable,args,{
+      env:{...process.env,LAZY_TESTER_TESTING_OWNER_ID:ownerId},
+      shell:false,windowsHide:true,timeout:4000,maxBuffer:32*1024});
+  } catch {
+    // An ambiguous native reservation must never fall back to a fresh
+    // local checkpoint or start the game through another path.
+    throw new Error('TESTING_NATIVE_RESERVATION_UNCONFIRMED');
+  }
+  let result;
+  try {result=JSON.parse(output.stdout.trim());} catch {
+    throw new Error('TESTING_NATIVE_RECEIPT_INVALID');
+  }
+  const run=result?.run;
+  if(result?.ok!==true||result.schema!==1||
+    result.operation!=='testing-'+operation||
+    run?.schema!==1||run.slot!==slot||
+    !/^[a-f0-9]{32}$/.test(run.runId??'')||
+    !['RESERVED','FINAL'].includes(run.phase)||
+    typeof run.ownerMatch!=='boolean'||
+    run.provenance!=='NATIVE_RUN_CORRELATION_ONLY_NOT_GAMEPLAY_PROOF'||
+    !(run.reportedStatus===null||
+      ['PROBE_REPORTED_PASS','FAIL','NEEDS_REVIEW','INCOMPLETE','BLOCKED']
+        .includes(run.reportedStatus))||
+    !(run.reportDigest===null||/^[a-f0-9]{64}$/.test(run.reportDigest))) {
+    throw new Error('TESTING_NATIVE_RECEIPT_INVALID');
+  }
+  if(run.phase==='RESERVED' &&
+     (run.reportedStatus!==null||run.reportDigest!==null)||
+     run.phase==='FINAL'&&
+     (run.reportedStatus===null||run.reportDigest===null)) {
+    throw new Error('TESTING_NATIVE_RECEIPT_INVALID');
+  }
+  return run;
+}
+
 export async function publishAgentActivityNative(executable,report) {
   if(!executable)throw new Error('Native integration is not configured; set --exe');
   if(!report||report.source!=='CURRENT_MCP_PROCESS_MEMORY_ONLY'||
@@ -867,7 +928,7 @@ export const TOOL_LIST=[
   {name:'assess_input_route',description:'Read-only native identity check for AI gameplay input: bind validated multi-client action timeline to real MC HWND/PID; ALWAYS reports no verified independent game-input backend and NEVER sends input.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}}},required:['actions'],additionalProperties:false}},
   {name:'summarize_test_evidence',description:'Read up to 20 bounded team [ANALYTICS] and [GAME_RESULTS] records per profile. Only sanitized summaries reach the model; no game identity or gameplay PASS is inferred.',inputSchema:{type:'object',properties:{slots:{type:'array',items:{type:'integer',minimum:1,maximum:5},minItems:1,maxItems:5,uniqueItems:true}},additionalProperties:false}},
   {name:'read_game_evidence',description:'Read one compact allowlisted 1-20 record projection of team analytics/results or optional generic diagnostics. No raw game JSON, player record IDs, credentials or gameplay PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
-  {name:'probe_qa',description:'Single source-only Testing entry: reuse one per-slot checkpoint and the original immutable Probe outcome until explicit restart=true. Optional publishToDesktop=true uses the SAME in-memory activity source to mirror status in one tool call and returns an operatorNextAction hint. It never sends Minecraft commands or establishes map gameplay PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},restart:{type:'boolean'},scope:{type:'string',enum:['full','smoke','affected']},publishToDesktop:{type:'boolean'}},additionalProperties:false}},
+  {name:'probe_qa',description:'Single source-only Testing entry. Optional coordinateNative=true first reserves one correlation ID per MC slot in the existing original native controller across cooperating MCP agents; duplicate owners are refused. publishToDesktop=true mirrors the original Probe status. Only restart=true may replace an owned FINAL run. No automatic game command, persistent report archive or gameplay PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},restart:{type:'boolean'},scope:{type:'string',enum:['full','smoke','affected']},publishToDesktop:{type:'boolean'},coordinateNative:{type:'boolean'}},additionalProperties:false}},
   {name:'prepare_probe_qa',description:'LEGACY COMPATIBILITY ONLY. Prefer probe_qa for all new AI Testing workflows. A direct legacy prepare invalidates an existing per-slot result checkpoint. Returns a command for a separately authorized player/admin; never sends input or starts Minecraft.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},additionalProperties:false}},
   {name:'read_probe_qa_result',description:'LEGACY COMPATIBILITY ONLY. Prefer probe_qa to prepare, read and resume the same canonical checkpoint without carrying a session token. This reader inspects original RUN_START/RESULT/RUN_DONE and never certifies gameplay success.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},sessionId:{type:'string',pattern:'^[a-f0-9]{24}$'}},required:['slot','sessionId'],additionalProperties:false}},
   // Source-only local-first diagnostics: explicitly imported immutable evidence.
@@ -1093,6 +1154,7 @@ export function createHandler(config,{
   gpuSourceFactory=createGpuFrameSource,
   visualObserverFactory=createVisualObserver,
   publishActivity=publishAgentActivityNative,
+  coordinateTesting=coordinateTestingRunNative,
   probeCatalog=readPinnedProbeCatalogCached,
   probeRevisionStatus=probeSourceRevisionStatus,
   mapContract=readMapTestContractCached,
@@ -1102,6 +1164,10 @@ export function createHandler(config,{
   let inFlight=false; // mutating or exclusive native operation
   // One volatile plan per slot; not a Minecraft world manager or an auto-run loop.
   const probeQaPlans=new Map();
+  // Only correlation identifiers, never a second checkpoint or outcome
+  // database. Native retained actor decides whether a slot is owned.
+  const testingRunIds=new Map();
+  const testingOwnerId=randomBytes(16).toString('hex');
   const probeQaBusy=new Set(); // short per-slot tool admission, no background runner
   // Source-only terminal snapshots live in the same per-slot plan. No disk
   // database, background processing, or extra QA session authority.
@@ -1318,29 +1384,142 @@ export function createHandler(config,{
     // Legacy calls without the flag are byte-for-byte behavior-compatible.
     // Desktop delivery is only a short-lived presentation mirror, never
     // another result store, runner, approval or proof of gameplay input.
-    if(name==='probe_qa' && args && Object.hasOwn(args,'publishToDesktop')) {
-      keysExactly(args,['slot','restart','scope','publishToDesktop']);
-      if(typeof args.publishToDesktop!=='boolean')
+    if(name==='probe_qa' && args &&
+       (Object.hasOwn(args,'publishToDesktop') ||
+        Object.hasOwn(args,'coordinateNative'))) {
+      keysExactly(args,['slot','restart','scope','publishToDesktop','coordinateNative']);
+      if(args.publishToDesktop!==undefined&&typeof args.publishToDesktop!=='boolean'||
+         args.coordinateNative!==undefined&&typeof args.coordinateNative!=='boolean')
         throw new Error('Invalid tool arguments');
       const originalArguments={};
       for(const key of ['slot','restart','scope']) {
         if(Object.hasOwn(args,key))originalArguments[key]=args[key];
       }
+      if(args.restart!==undefined&&typeof args.restart!=='boolean')
+        throw new Error('Invalid tool arguments');
+      if(args.scope!==undefined&&!['full','smoke','affected'].includes(args.scope))
+        throw new Error('Invalid tool arguments');
+      if(args.scope!==undefined&&!config.mapContractPath) {
+        return {schema:1,slot:slotOf(args.slot??2),status:'BLOCKED',
+          reason:'MAP_CONTRACT_NOT_CONFIGURED',
+          operatorNextAction:'RESOLVE_APPROVED_PROBE_SOURCE_OR_CAPTURE',
+          gameplayAcceptance:'NOT_VERIFIED'};
+      }
+      const slot=slotOf(args.slot??2);
+      // Block human MC01 before any correlation reservation.
+      if(config.mode==='human-plus-four-ai'&&slot===1)
+        throw new Error('MC01 human host is protected from AI computer-use targeting');
+      let runRef=null;
+      let runId=null;
+      if(args.coordinateNative===true) {
+        if(!config.executable)return {
+          schema:1,slot,status:'BLOCKED',
+          reason:'TESTING_NATIVE_CONTROLLER_NOT_CONFIGURED',
+          operatorNextAction:'RESOLVE_BLOCKER_NO_AUTOMATIC_RESTART',
+          gameplayAcceptance:'NOT_VERIFIED',
+          desktopDelivery:'NO_CURRENT_TESTING_CHECKPOINT_TO_MIRROR',
+        };
+        const existing=probeQaPlans.get(slot);
+        if(existing&&(!testingRunIds.has(slot)||
+            existing.nativeRunId!==testingRunIds.get(slot)))return {
+          schema:1,slot,status:'BLOCKED',
+          reason:'EXISTING_LEGACY_TESTING_CHECKPOINT_NOT_COORDINATED',
+          operatorNextAction:'RESOLVE_BLOCKER_NO_AUTOMATIC_RESTART',
+          gameplayAcceptance:'NOT_VERIFIED',
+        };
+        if(args.restart===true&&!testingRunIds.has(slot))return {
+          schema:1,slot,status:'BLOCKED',
+          reason:'TESTING_RESTART_REQUIRES_OWNED_RUN_ID',
+          operatorNextAction:'RESOLVE_BLOCKER_NO_AUTOMATIC_RESTART',
+          gameplayAcceptance:'NOT_VERIFIED',
+        };
+        const previous=testingRunIds.get(slot)??null;
+        runId=previous&&args.restart!==true?
+          previous:randomBytes(16).toString('hex');
+        try {
+          runRef=await coordinateTesting(config.executable,{
+            operation:'reserve',slot,runId,ownerId:testingOwnerId,
+            replaceRunId:args.restart===true?previous:null,
+          });
+        } catch {
+          return {schema:1,slot,status:'BLOCKED',
+            reason:'TESTING_NATIVE_RESERVATION_UNCONFIRMED',
+            operatorNextAction:'RESOLVE_BLOCKER_NO_AUTOMATIC_RESTART',
+            gameplayAcceptance:'NOT_VERIFIED',
+          };
+        }
+        if(runRef.runId!==runId||runRef.ownerMatch!==true) {
+          return {schema:1,slot,status:'BLOCKED',
+            reason:'TESTING_RUN_ALREADY_RESERVED',
+            existingRunId:runRef.runId,runPhase:runRef.phase,
+            operatorNextAction:'RESOLVE_BLOCKER_NO_AUTOMATIC_RESTART',
+            gameplayAcceptance:'NOT_VERIFIED',
+          };
+        }
+        if(runRef.phase==='FINAL' && args.restart!==true &&
+            !existing?.terminalReport) {
+          return {schema:1,slot,status:'BLOCKED',
+            reason:'TESTING_FINAL_REFERENCE_EXISTS_LOCAL_REPORT_UNAVAILABLE',
+            testingRunId:runRef.runId,
+            reportedStatus:runRef.reportedStatus,
+            reportDigest:runRef.reportDigest,
+            operatorNextAction:'REVIEW_BLOCKED_OR_INCOMPLETE_TERMINAL_REPORT',
+            gameplayAcceptance:'NOT_VERIFIED',
+          };
+        }
+      }
       const result=await callTool('probe_qa',originalArguments);
       const operatorNextAction=operatorNextTestingAction(result);
-      if(args.publishToDesktop!==true)return {...result,operatorNextAction};
-      const slot=slotOf(args.slot??2);
-      // Do not show an unrelated old checkpoint when this preflight
-      // failed, another caller superseded it, or no run was admitted.
+      if(runRef!==null) {
+        const actualPlan=probeQaPlans.get(slot);
+        if(actualPlan?.nativeRunId&&actualPlan.nativeRunId!==runId) {
+          return {schema:1,slot,status:'BLOCKED',
+            reason:'TESTING_CANONICAL_RUN_REPLACED_DURING_READ',
+            operatorNextAction:'RESOLVE_BLOCKER_NO_AUTOMATIC_RESTART',
+            gameplayAcceptance:'NOT_VERIFIED'};
+        }
+        // Store only the correlation ID on the existing Probe checkpoint;
+        // native actor remains the sole cross-MCP admission authority.
+        if(actualPlan)actualPlan.nativeRunId=runId;
+        testingRunIds.set(slot,runId);
+      }
+      let terminalReference=null;
+      if(runRef!==null) {
+        if(result.terminal===true||result.phase==='PREFLIGHT') {
+          const outcome=['PROBE_REPORTED_PASS','FAIL','NEEDS_REVIEW',
+            'INCOMPLETE','BLOCKED'].includes(result.status)?
+            result.status:'BLOCKED';
+          const reportDigest=createHash('sha256')
+            .update(JSON.stringify(result)).digest('hex');
+          try {
+            terminalReference=await coordinateTesting(config.executable,{
+              operation:'finalize',slot,runId,ownerId:testingOwnerId,
+              reportedStatus:outcome,reportDigest,
+            });
+          } catch {
+            return {...result,operatorNextAction,testingRunId:runId,
+              nativeRunStatus:'FINAL_REFERENCE_UNCONFIRMED',
+              desktopDelivery:'STATUS_DELIVERY_UNAVAILABLE'};
+          }
+        }
+      }
+      const shaped={...result,operatorNextAction,
+        ...(runRef!==null?{
+          testingRunId:runId,
+          nativeRunStatus:terminalReference?.phase??runRef.phase,
+          ...(terminalReference?{
+            reportDigest:terminalReference.reportDigest}:{}),
+        }:{})};
+      if(args.publishToDesktop!==true)return shaped;
       if(result.phase==='PREFLIGHT'||
          result.reason==='QA_PLAN_SUPERSEDED'||
          !probeQaPlans.has(slot)) {
-        return {...result,operatorNextAction,
+        return {...shaped,
           desktopDelivery:'NO_CURRENT_TESTING_CHECKPOINT_TO_MIRROR'};
       }
       const mirrored=await callTool('agent_capabilities',
         {publishToDesktop:true});
-      return {...result,operatorNextAction,
+      return {...shaped,
         desktopDelivery:mirrored.desktopDelivery??'STATUS_DELIVERY_UNAVAILABLE'};
     }
     if(name==='probe_qa') {
@@ -1594,7 +1773,11 @@ export function createHandler(config,{
         throw new Error('MC01 human host is protected from AI computer-use targeting');
       }
       // Preparing again invalidates any older result token for the same slot.
+      // A direct legacy prepare cannot inherit a previous native run ID.
+      // The coordinated wrapper reattaches its admitted ID to the new
+      // canonical plan after the ONE original probe_qa call completes.
       probeQaPlans.delete(slot);
+      testingRunIds.delete(slot);
       if(!config.probeZip)return {schema:1,slot,status:'PROBE_ZIP_NOT_CONFIGURED',
         needed:'Set LAZY_TESTER_PROBE_ZIP once to the approved local Skills Probe ZIP',
         commandSent:false};

@@ -79,6 +79,20 @@ new-revision acceptance.
   persistent report archive or background observer. Regression fixtures
   AUTHORED_NOT_EXECUTED; actual PC control and Skills Probe world/result
   provenance NOT_VERIFIED.
+- **Cooperative cross-MCP Testing run correlation (2 November):**
+  The original native controller now holds a bounded one-entry-per-slot
+  reservation book for new `probe_qa({coordinateNative:true})` calls
+  from cooperating MCP agents. Other owner IDs see the existing ID,
+  cannot prepare a second canonical Probe checkpoint, and cannot
+  overwrite a finalized source-only status + report digest. An explicit
+  same-owner `restart:true` can replace only a FINAL reference.
+  Default legacy uncoordinated `probe_qa` remains compatible, so this
+  does NOT guarantee universal deduplication. Native book and MCP
+  terminal reports remain volatile, not a durable report archive.
+  No second Testing runner or game controller, no automatic
+  in-game command, no extra desktop UI, no CI or local execution.
+  Native/Node regression tests AUTHORED_NOT_EXECUTED; real Windows
+  source/game/world identity and five-client acceptance NOT_VERIFIED.
 - **Native owner:** original Rust session controller handles game
   process identity, private profiles, normal exit and recovery.
   Workspace/DWM presentation never becomes a second lifecycle owner.

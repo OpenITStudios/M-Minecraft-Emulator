@@ -287,6 +287,51 @@ The desktop status mirror expires after 12 seconds and does not become
 a persistent result archive. No Windows execution, app build or CI is
 authorized by this source change.
 
+## Native Testing Run correlation — optional cooperative mode
+
+The existing `probe_qa` tool accepts
+`{slot:2,coordinateNative:true,publishToDesktop:true}` to ask the
+**original retained native controller** for one MC02 run reservation BEFORE
+preparing the original source-only Skills Probe checkpoint. The one-shot
+native CLI runs in the same executable and authenticates to its original
+pipe. It never starts a game, test runner or second controller.
+
+- The controller retains **one correlation record per MC01–MC05 slot**.
+  A competing cooperating MCP process receives `TESTING_RUN_ALREADY_RESERVED`
+  and the existing `testingRunId`, without performing a second Probe
+  preparation or publishing an independent result.
+- The MCP process keeps a private 32-hex correlation owner ID. The owner ID
+  goes to the same-image CLI through its child environment, not argv.
+  The public run ID is **not** a password and its existence does not prove
+  AI, player, world, or game-log identity. Same-user tampering remains
+  outside this handshake's claimed security guarantee.
+- A resulting original `probe_qa` terminal report (or blocked preflight)
+  may publish a **write-once** status + SHA-256 digest to the native book.
+  Repeating the same final reference is idempotent. Different owners or
+  a different digest cannot overwrite it. The original MCP terminalReport
+  remains the *only source-only Testing result*, not a second native grader.
+- `restart:true` is required to replace a FINAL run, and only its own
+  cooperating MCP process may request it. A live RESERVED run cannot be
+  replaced automatically, even if its owner disappears; safe recovery
+  requires an explicit future protocol. Other slots are unaffected.
+- This is an **opt-in migration path**: legacy `probe_qa` without
+  `coordinateNative:true` remains functional for backward compatibility,
+  so global uniqueness is **not yet guaranteed against uncoordinated agents**.
+  To avoid duplicates in new workflows, designate one MCP Testing
+  coordinator and always request native coordination where available.
+- **Not persistent:** the native book lasts only while the retained
+  controller is alive. It stores an outcome/digest reference, not a complete
+  retrievable report. It is NOT a durable archive across app restarts and
+  cannot verify that any Minecraft command was sent. A future persistent
+  archive must have a separately reviewed private location and immutable
+  original-report integrity policy; it must not write to game profiles,
+  Skills Probe ZIPs or unverified capture/log files.
+
+Controller-unavailable or uncertain native receipts fail closed. The
+source changes and Rust/Node regression fixtures are **NOT_EXECUTED**;
+live Windows, per-slot input, player/admin command delivery, original
+Probe world/source attribution and gameplay remain NOT_VERIFIED.
+
 ## Gameplay Probe AI QA — no repeated ZIP work
 
 **One-time configuration:** point the existing MCP at the approved
