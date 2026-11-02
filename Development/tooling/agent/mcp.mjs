@@ -21,7 +21,8 @@ import {createVisualObserver,OBSERVATION_LIMITS,
   summarizeTeamVisualState,verifyTeamObservationBasis,
   evaluateTeamActionFeedback,summarizeTeamCoordination} from './visual-observer.mjs';
 import {createGpuFrameSource,validateGpuExecutable} from './gpu-frame-source.mjs';
-import {readPinnedProbeCatalog,parseProbeCapturedLine,reviewProbeRun} from './probe-qa.mjs';
+import {readPinnedProbeCatalogCached,parseProbeCapturedLine,reviewProbeRun,
+  compactProbeQaResult} from './probe-qa.mjs';
 
 const execFileAsync = promisify(execFile);
 const REQUEST_LIMIT = 64 * 1024;
@@ -800,6 +801,7 @@ export const TOOL_LIST=[
   {name:'assess_input_route',description:'Read-only native identity check for AI gameplay input: bind validated multi-client action timeline to real MC HWND/PID; ALWAYS reports no verified independent game-input backend and NEVER sends input.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}}},required:['actions'],additionalProperties:false}},
   {name:'summarize_test_evidence',description:'Read up to 20 bounded team [ANALYTICS] and [GAME_RESULTS] records per profile. Only sanitized summaries reach the model; no game identity or gameplay PASS is inferred.',inputSchema:{type:'object',properties:{slots:{type:'array',items:{type:'integer',minimum:1,maximum:5},minItems:1,maxItems:5,uniqueItems:true}},additionalProperties:false}},
   {name:'read_game_evidence',description:'Read one compact allowlisted 1-20 record projection of team analytics/results or optional generic diagnostics. No raw game JSON, player record IDs, credentials or gameplay PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
+  {name:'probe_qa',description:'PREFERRED single read-only Gameplay Probe QA entry. First call validates ZIP and captures a fresh log checkpoint; subsequent calls compactly report the same run. restart=true explicitly resets the slot plan. It never installs packs, sends Minecraft commands, launches games, or certifies gameplay.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},restart:{type:'boolean'}},additionalProperties:false}},
   {name:'prepare_probe_qa',description:'ONE-STEP read-only Gameplay Probe auto-run preparation from an exact approved ZIP. Returns a player-admin command for an externally authorized QA-world operator/AI; never sends keys, commands, installs packs or starts Minecraft.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},additionalProperties:false}},
   {name:'read_probe_qa_result',description:'Review only fresh RUN_START/RESULT/RUN_DONE markers from the prepared pinned Skills Probe run. Never treats stored results or native transport ACK as a gameplay pass.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},sessionId:{type:'string',pattern:'^[a-f0-9]{24}$'}},required:['slot','sessionId'],additionalProperties:false}},
   // Source-only local-first diagnostics: explicitly imported immutable evidence.
@@ -963,7 +965,7 @@ const EXPERIMENTAL_TEAM_FEEDBACK_TOOL={
 
 function capabilities(mode,experimental=false,multi=false) {return {schema:1,mode,hostSlot:1,humanSlots:mode==='human-plus-four-ai'?[1]:[],
   aiSlots:mode==='human-plus-four-ai'?[2,3,4,5]:[1,2,3,4,5],
-  available:['start_visual_observation','read_visual_observation','get_multi_client_visual_state','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','prepare_probe_qa','read_probe_qa_result','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence','get_diagnostics_overview','list_issue_candidates','get_issue_details','query_diagnostic_evidence',...(experimental?[EXPERIMENTAL_MC02_TOOL.name,...EXPERIMENTAL_MC02_SEQUENCE_TOOLS.map(t=>t.name)]:[]),
+  available:['start_visual_observation','read_visual_observation','get_multi_client_visual_state','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','probe_qa','prepare_probe_qa','read_probe_qa_result','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence','get_diagnostics_overview','list_issue_candidates','get_issue_details','query_diagnostic_evidence',...(experimental?[EXPERIMENTAL_MC02_TOOL.name,...EXPERIMENTAL_MC02_SEQUENCE_TOOLS.map(t=>t.name)]:[]),
     ...(multi?[...EXPERIMENTAL_MULTI_CLIENT_TOOLS.map(t=>t.name),
       EXPERIMENTAL_OBSERVED_TEAM_TOOL.name,
       EXPERIMENTAL_TEAM_FEEDBACK_TOOL.name]:[])],
@@ -994,10 +996,12 @@ export function createHandler(config,{
   aiLease=sendExperimentalAiWriterLeaseNative,
   gpuSourceFactory=createGpuFrameSource,
   visualObserverFactory=createVisualObserver,
+  probeCatalog=readPinnedProbeCatalogCached,
 }={}) {
   let inFlight=false; // mutating or exclusive native operation
   // One volatile plan per slot; not a Minecraft world manager or an auto-run loop.
   const probeQaPlans=new Map();
+  const probeQaBusy=new Set(); // short per-slot tool admission, no background runner
   let visualReadBusy=false; // only one identity-pinned screenshot at a time
   let mc02SequenceAbort=null; // pending opted-in legacy MC02 request only
   let multiSequence=null; // one bounded cross-slot request, not a game owner
@@ -1186,6 +1190,122 @@ export function createHandler(config,{
     }
   }
   async function callTool(name,args) {
+    if(name==='probe_qa') {
+      keysExactly(args,['slot','restart']);
+      const slot=slotOf(args.slot??2);
+      if(args.restart!==undefined&&typeof args.restart!=='boolean') {
+        throw new Error('Invalid tool arguments');
+      }
+      if(config.mode==='human-plus-four-ai'&&slot===1) {
+        throw new Error('MC01 human host is protected from AI computer-use targeting');
+      }
+      if(probeQaBusy.has(slot))return {schema:1,slot,status:'BLOCKED',
+        reason:'QA_OPERATION_IN_PROGRESS',gameplayAcceptance:'NOT_VERIFIED'};
+      probeQaBusy.add(slot);
+      try {
+        let plan=probeQaPlans.get(slot);
+        // One user-facing tool. Existing prepare/read tools remain for
+        // backward-compatible callers, but AI need not carry a session ID.
+        if(!plan||args.restart===true) {
+          let prepared;
+          try {prepared=await callTool('prepare_probe_qa',{slot});}
+          catch(error) {
+            return {schema:1,slot,phase:'PREFLIGHT',status:'BLOCKED',
+              reason:error?.message==='PROBE_SOURCE_REVIEW_REQUIRED'?
+                'PROBE_SOURCE_REVIEW_REQUIRED':'PROBE_SOURCE_OR_CAPTURE_UNAVAILABLE',
+              commandSentByLazyTester:false,
+              gameplayAcceptance:'NOT_VERIFIED',
+              next:'Check the approved ZIP and local capture configuration; do not dispatch a command.'};
+          }
+          if(prepared.status!=='PREPARED_SOURCE_ONLY') {
+            return {schema:1,slot,phase:'PREFLIGHT',status:'BLOCKED',
+              reason:prepared.status,commandSentByLazyTester:false,
+              gameplayAcceptance:'NOT_VERIFIED',
+              next:'Configure the approved ZIP and stable capture once; retry probe_qa.'};
+          }
+          let targetStatus='NATIVE_TARGET_NOT_CONFIGURED';
+          // Reuse the existing strict PID/HWND/birth gate. A source-only
+          // plan never authorizes keyboard input or infers a loaded world.
+          if(config.executable) {
+            targetStatus='NATIVE_TARGET_UNAVAILABLE';
+            try {
+              const target=await callTool('get_computer_use_target',{slot});
+              if(target?.verification===
+                 'NATIVE_PROCESS_AND_WINDOW_VERIFIED_AT_READ_TIME'&&
+                 target.identity?.pid>0&&target.identity?.windowId>0&&
+                 /^\d{1,20}$/.test(target.identity.createdFileTime??'')) {
+                const active=probeQaPlans.get(slot);
+                if(active?.sessionId===prepared.sessionId) {
+                  active.targetIdentity={
+                    pid:target.identity.pid,
+                    windowId:target.identity.windowId,
+                    createdFileTime:target.identity.createdFileTime};
+                  targetStatus='NATIVE_TARGET_OBSERVED_NOT_GAME_READY';
+                }
+              }
+            } catch { /* Native read-only target may be unavailable. */ }
+          }
+          if(probeQaPlans.get(slot)?.sessionId!==prepared.sessionId) {
+            return {schema:1,slot,status:'BLOCKED',
+              reason:'QA_PLAN_SUPERSEDED',gameplayAcceptance:'NOT_VERIFIED'};
+          }
+          return {schema:1,slot,phase:'AWAITING_AUTHORIZED_COMMAND',
+            status:'BLOCKED',
+            probeCount:prepared.autoProbeCount,
+            catalogCache:prepared.catalogCache,
+            sourceZip:'APPROVED_PINNED_SNAPSHOT',
+            capture:'SAME_FILE_CHECKPOINT_PINNED',
+            target:targetStatus,
+            world:'NOT_VERIFIED',playerAdmin:'NOT_VERIFIED',
+            commandInput:'NOT_VERIFIED',
+            command:prepared.command,
+            commandSentByLazyTester:false,
+            gameplayAcceptance:'NOT_VERIFIED',
+            next:'Use a separately approved, exact-target Computer Use channel to run the original command as an in-game admin Player in a disposable Skills Probe world, then call probe_qa again. Otherwise stop at BLOCKED.'};
+        }
+        let raw;
+        try {
+          raw=await callTool('read_probe_qa_result',{
+            slot,sessionId:plan.sessionId});
+        } catch {
+          return {schema:1,slot,phase:'PROBE_RESULT_REVIEW',
+            status:'INCOMPLETE',reason:'EVIDENCE_UNAVAILABLE',
+            commandSentByLazyTester:false,gameplayAcceptance:'NOT_VERIFIED',
+            next:'Inspect the local capture source; do not accept missing results as PASS.'};
+        }
+        let compact=compactProbeQaResult(raw,slot);
+        let target='NOT_PINNED_AT_PREPARE';
+        if(plan.targetIdentity) {
+          target='CHANGED_OR_UNAVAILABLE';
+          try {
+            const checked=await callTool('revalidate_computer_use_target',{
+              slot,...plan.targetIdentity});
+            if(checked?.matched===true) {
+              target='NATIVE_PROCESS_MATCH_AT_READ_TIME_ONLY';
+            }
+          } catch { /* No game input or inferred fallback. */ }
+        }
+        // Never display a report from a superseded concurrent plan.
+        if(probeQaPlans.get(slot)?.sessionId!==plan.sessionId&&
+           raw.status!=='QA_PLAN_EXPIRED') {
+          return {schema:1,slot,status:'BLOCKED',
+            reason:'QA_PLAN_SUPERSEDED',gameplayAcceptance:'NOT_VERIFIED'};
+        }
+        if(plan.targetIdentity&&target==='CHANGED_OR_UNAVAILABLE') {
+          compact={...compact,status:'INCOMPLETE',
+            sourceStatus:'QA_NATIVE_TARGET_CHANGED',
+            gameplayAcceptance:'NOT_VERIFIED'};
+        }
+        const needsRestart=compact.status==='BLOCKED'||
+          compact.status==='INCOMPLETE';
+        return {...compact,target,
+          next:needsRestart?
+            'Inspect missing or changed evidence; use probe_qa with restart=true for a new session only after correction.':
+            compact.status==='WAITING'?
+              'Await the already-authorized original Probe run and call probe_qa again; no automatic command dispatch is active.':
+              'Review original Probe results; map gameplay acceptance still needs separate evidence.'};
+      } finally {probeQaBusy.delete(slot);}
+    }
     if(name==='prepare_probe_qa') {
       keysExactly(args,['slot']);
       const slot=slotOf(args.slot??2);
@@ -1201,7 +1321,7 @@ export function createHandler(config,{
         needed:'Configure the existing per-profile evidence directory once',
         commandSent:false};
       if(exclusiveBusy())throw new Error('Native operation in progress; do not overlap requests');
-      const catalog=await readPinnedProbeCatalog(config.probeZip);
+      const catalog=await probeCatalog(config.probeZip);
       const existing=await evidence(config.evidenceDirectory,slot);
       if(existing.status!=='CAPTURE_FILE_PRESENT') {
         return {schema:1,slot,status:'CAPTURE_NOT_READY',
@@ -1218,6 +1338,7 @@ export function createHandler(config,{
       return {schema:1,slot,status:'PREPARED_SOURCE_ONLY',
         sessionId,preparedAt,autoProbeCount:catalog.autoCount,
         autoProbeIds:catalog.autoIds,
+        catalogCache:catalog.cache,
         sourceZipSha256:catalog.archiveSha256,
         command:'/scriptevent probe:run auto',
         dispatch:'NOT_AVAILABLE_IN_LAZY_TESTER',

@@ -1,7 +1,7 @@
 // SOURCE-AUTHORED ONLY. Run separately when source checks are approved.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseProbeCapturedLine,reviewProbeRun} from './probe-qa.mjs';
+import {parseProbeCapturedLine,reviewProbeRun,compactProbeQaResult} from './probe-qa.mjs';
 
 const stamp='2026-11-02T07:00:00.000Z';
 const line=(issue,fields,time=stamp)=>
@@ -102,4 +102,38 @@ test('logger throttle notices block acceptance even with complete result counts'
   const flagged=markers().map((e,i)=>i===0?{...e,throttled:true}:e);
   assert.equal(reviewProbeRun(flagged,session).status,'INCOMPLETE_THROTTLED_MARKERS');
   assert.equal(reviewProbeRun(flagged,session).gameplayAcceptance,'NOT_VERIFIED');
+});
+
+
+test('compact one-call AI QA summary keeps Probe status separate from gameplay',()=>{
+  const approved=compactProbeQaResult({
+    status:'PROBE_REPORTED_ALL_PASS',expectedCount:2,
+    counts:{pass:2,fail:0,info:0,look:0},missingIds:[],
+    gameplayAcceptance:'NOT_VERIFIED'},2);
+  assert.equal(approved.status,'PROBE_REPORTED_PASS');
+  assert.equal(approved.gameplayAcceptance,'NOT_VERIFIED');
+  assert.equal(approved.commandSentByLazyTester,false);
+  assert.equal(approved.resultOrigin,'ORIGINAL_SKILLS_PROBE_LOG_NOT_GAMEPLAY_PROOF');
+  assert.equal(approved.counts.pass,2);
+  const failed=compactProbeQaResult({
+    status:'PROBE_REPORTED_FAILURES',counts:{pass:1,fail:1,info:0,look:0}},2);
+  assert.equal(failed.status,'FAIL');
+  const review=compactProbeQaResult({
+    status:'PROBE_REVIEW_REQUIRED',counts:{pass:1,fail:0,info:0,look:1}},2);
+  assert.equal(review.status,'NEEDS_REVIEW');
+  const pending=compactProbeQaResult({status:'WAITING_FOR_RUN_DONE'},2);
+  assert.equal(pending.status,'WAITING');
+  const incomplete=compactProbeQaResult({
+    status:'CAPTURE_FILE_UNSTABLE',captureIssue:'PROBE_CAPTURE_REPLACED',
+    missingIds:['P01','P02']},2);
+  assert.equal(incomplete.status,'INCOMPLETE');
+  assert.equal(incomplete.captureIssue,'PROBE_CAPTURE_REPLACED');
+  assert.equal(compactProbeQaResult({status:'QA_PLAN_EXPIRED'},2).status,'BLOCKED');
+  assert.deepEqual(compactProbeQaResult({
+    status:'INCOMPLETE_RESULTS',
+    missingIds:Array.from({length:30},(_,i)=>'P'+i)},2).missingIds,
+    ['P0','P1','P2','P3','P4','P5','P6','P7']);
+  assert.equal(compactProbeQaResult({
+    status:'PROBE_REPORTED_ALL_PASS',counts:{
+      pass:2,fail:0,info:0,look:-1}},2).counts,undefined);
 });

@@ -132,53 +132,53 @@ Existing MCP stays a read-only telemetry consumer. No new Codex
 stream, auto-update daemon, test runner or Minecraft game process.
 See [team update workflow](../../../docs/system/education-team-source-updates.md).
 
-## Simple AI Gameplay Probe QA (source-only)
+## AI Gameplay QA — one MCP entry (source-only)
 
-**Two MCP calls; no second test runner or game controller.** Configure
-these two paths once in the local MCP process (CLI option
-`--probe-zip` may replace the first environment variable):
+Configure two existing local paths **once**, not on each QA request:
 
     LAZY_TESTER_PROBE_ZIP=C:\absolute\skills-probe-main.zip
     LAZY_TESTER_EVIDENCE_DIR=C:\absolute\existing-captures
 
-The ZIP is neither copied into the repository nor installed to Minecraft.
-Only the exact reviewed SHA-256 in `team-source-baseline.json` is accepted.
-New ZIP versions require the existing team update review.
+The ZIP must match the approved `team-source-baseline.json` SHA-256.
+Use the existing `team:update:inspect` process when its version changes.
+A small in-process catalog cache avoids reopening the unchanged 38-MiB
+ZIP on subsequent QA preparations. File identity, size, mtime/ctime
+and reviewed baseline are rechecked before reuse; no background watcher
+or automatic approval is introduced.
 
-1. Call `prepare_probe_qa` (defaults to MC02). It verifies the original
-   ZIP, derives the auto probe IDs from that source, checks that the existing
-   per-profile capture is present, and returns a session ID plus the
-   original `/scriptevent probe:run auto` command. Re-preparing invalidates
-   the previous plan for that slot. It also pins the exact existing log
-   file identity, length and a small tail checksum as a private checkpoint.
-2. A separately authorized operator or verified per-window Computer Use
-   provider executes that command as an **in-game admin Player in a
-   disposable QA world with Skills Probe installed**.
-3. Call `read_probe_qa_result` with that slot and session ID. It reads
-   `[probe:probe]` RUN_START / RESULT / RUN_DONE markers **only in
-   complete lines appended after that file checkpoint**, using the same
-   bounded MC0x.log reader. It accepts both timestamp-wrapped captures
-   and the original raw Debug Console lines shown in the team's ZIP; it
-   does not invent timestamps for raw records. Replaced, truncated, rewritten or rotated
-   files, oversized capture gaps and marker overflow fail closed.
-   The original logger's `(suppressed N)` throttle notices also make
-   that run incomplete; a quiet log is never treated as proof of PASS.
-   Old `probe:report` STORED data never counts. Missing, repeated or
-   interleaved runs and non-PASS outcomes do not become gameplay PASS.
+**For AI, use only `probe_qa`** (defaults to MC02):
 
-There is no automatic import, capture process, new UI, game command
-sender, model loop, pack builder, source sync or account/world mutation.
-This is an **AI-ready plan/evidence bridge**, not permission to enable
-experimental input. The current MCP has no `send_minecraft_command`
-tool and the native AI input experiment remains OFF/unverified. Any
-actual Computer Use action needs its own target identity, permission
-and game-input proof before execution.
+- First call: source/capture preflight and, if the native executable is
+  configured, **read-only** PID/HWND/birth target admission. It pins the
+  existing MC0x.log capture cursor and returns the original command
+  `/scriptevent probe:run auto`. It says `BLOCKED` until the command
+  is executed through a separately approved, identity-verified
+  in-game **Player/admin** in a disposable Skills Probe QA world.
+- Call `probe_qa` again: one small status and pass/fail/info/look
+  summary from fresh `RUN_START` / `RESULT` / `RUN_DONE` markers.
+  No session ID, timestamp, path or full logs are required from the AI.
+- To deliberately start a new run, call `probe_qa` with
+  `{ "restart": true }`. Old evidence never becomes new PASS.
 
-The supplied `docs/AGENT-TEST-RUN.md` describes a historical 12-auto
-run, but the pinned ZIP presently declares 22 literal auto probes.
-The list is read from the approved source, never from that stale number;
-unrecognized dynamic auto registrations fail closed. Manual/setup
-cases remain separate and Probe PASS never certifies another map.
+The older `prepare_probe_qa` and `read_probe_qa_result` MCP tools remain
+available **for existing integrations** but are no longer the
+recommended AI interface. `probe_qa` reuses both internally.
+
+**Limits:** This bridge neither installs packs, starts Minecraft,
+discovers Content Logs, triggers a keyboard/ScriptEvent command nor
+promotes a Probe-reported PASS to verified map gameplay. Native AI
+input remains compile-OFF/unverified. The optional native target
+preflight only observes original process/window identity and
+must be revalidated before a future authorized external action.
+
+The source ZIP declares 22 literal `auto` probes. Historic
+`docs/AGENT-TEST-RUN.md` instructions mentioning 12 are not a runtime
+catalog. `setup` and `manual` probes remain separate. The existing
+capture reader requires a stable per-profile file; source identity,
+world identity and player/admin permissions still need Windows runtime
+proof. Missing/rotated/truncated captures, unknown source changes,
+throttled markers and incomplete runs fail closed rather than creating
+a false PASS.
 
 ## Test/release boundary
 

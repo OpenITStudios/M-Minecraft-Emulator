@@ -42,14 +42,16 @@ workspace/            Ignored local tools, builds, candidates and private materi
 
 ## Gameplay Probe AI QA (source-only)
 
-The optional MCP offers two read-only operations:
-`prepare_probe_qa` and `read_probe_qa_result`. Configure the
-reviewed Skills Probe ZIP and an existing local capture directory
-once. The first returns the original `/scriptevent probe:run auto`
-step; the second reads fresh results, not stored or historic PASS data.
-Lazy Tester does not install the Probe, execute commands or certify
-gameplay. See the [short AI QA workflow](Development/tooling/agent/README.md#simple-ai-gameplay-probe-qa-source-only)
-before authorizing future Computer Use.
+`probe_qa` is the **one recommended MCP entrypoint** for AI QA. Its first
+call checks the approved original Skills Probe ZIP, existing capture and
+native target availability. Subsequent calls read a compact result from
+the same run; `restart=true` deliberately starts a new plan. The ZIP
+catalog is cached only while the source and approval baseline are unchanged.
+
+The original two lower-level MCP tools remain compatible. Neither path
+installs the Probe, starts Minecraft, sends a command, activates native
+AI input or certifies map gameplay. See the
+[short QA workflow](Development/tooling/agent/README.md#ai-gameplay-qa--one-mcp-entry-source-only).
 
 ## AI-ready developer control
 

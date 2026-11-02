@@ -42,7 +42,7 @@ test('MCP handshake and tool discovery are standard JSON-RPC',async()=>{
   const init=await h.handle({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-11-25'}});
   assert.equal(init.result.protocolVersion,'2025-11-25');
   const listing=await h.handle({jsonrpc:'2.0',id:2,method:'tools/list'});
-  assert.deepEqual(listing.result.tools.map(x=>x.name),['start_visual_observation','get_multi_client_visual_state','read_visual_observation','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence','read_game_evidence','prepare_probe_qa','read_probe_qa_result','get_diagnostics_overview','list_issue_candidates','get_issue_details','query_diagnostic_evidence']);
+  assert.deepEqual(listing.result.tools.map(x=>x.name),['start_visual_observation','get_multi_client_visual_state','read_visual_observation','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence','read_game_evidence','probe_qa','prepare_probe_qa','read_probe_qa_result','get_diagnostics_overview','list_issue_candidates','get_issue_details','query_diagnostic_evidence']);
   assert.equal(await h.handle({jsonrpc:'2.0',method:'notifications/initialized'}),null);
 });
 
@@ -77,6 +77,133 @@ test('QA MCP requires one pinned ZIP and cannot target human MC01',async()=>{
     slot:2,sessionId:'a'.repeat(24)});
   assert.equal(results.status,'NOT_PREPARED_OR_EXPIRED');
   assert.equal(nativeCalls,0);
+});
+
+test('one AI QA MCP entry performs source/capture/target readiness then compact read',async()=>{
+  let targetBirth='1234567';
+  const nativeCalls=[];
+  const native=async(_exe,operation,slot)=>{
+    nativeCalls.push([operation,slot]);
+    assert.equal(operation,'target');
+    assert.equal(slot,2);
+    return {schema:1,ok:true,operation:'target',slot,
+      pid:4002,windowId:8002,createdFileTime:targetBirth,
+      sessionId:1,foreground:false,visible:true,minimized:false,
+      verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',
+      gameplayInput:'NOT_VERIFIED'};
+  };
+  const checkpoint={kind:'STABLE_CAPTURE_CURSOR_V1'};
+  const catalog=async()=>({autoCount:2,autoIds:['P01','P02'],
+    archiveSha256:'a'.repeat(64),cache:'UNCHANGED_APPROVED_ZIP'});
+  const evidence=async(_directory,slot,_limit,options)=>{
+    if(options?.probeCheckpoint)return {slot,status:'CAPTURE_FILE_PRESENT',
+      probeEvents:[
+        {kind:'start',arg:'auto',count:2,tick:100,at:null},
+        {kind:'result',id:'P01',result:'pass',tick:101,at:null},
+        {kind:'result',id:'P02',result:'pass',tick:102,at:null},
+        {kind:'done',arg:'auto',count:2,tick:103,at:null},
+      ]};
+    return {slot,status:'CAPTURE_FILE_PRESENT',captureCursor:checkpoint};
+  };
+  const h=createHandler({...config(),probeZip:path.resolve('skills-probe.zip'),
+    evidenceDirectory:path.resolve('capture')},{native,evidence,probeCatalog:catalog});
+  const ready=await h.callTool('probe_qa',{slot:2});
+  assert.equal(ready.phase,'AWAITING_AUTHORIZED_COMMAND');
+  assert.equal(ready.status,'BLOCKED');
+  assert.equal(ready.probeCount,2);
+  assert.equal(ready.catalogCache,'UNCHANGED_APPROVED_ZIP');
+  assert.equal(ready.command,'/scriptevent probe:run auto');
+  assert.equal(ready.target,'NATIVE_TARGET_OBSERVED_NOT_GAME_READY');
+  assert.equal(ready.commandSentByLazyTester,false);
+  assert.equal(ready.world,'NOT_VERIFIED');
+  assert.deepEqual(nativeCalls,[['target',2]]); // read-only; no launch/input
+  const report=await h.callTool('probe_qa',{slot:2});
+  assert.equal(report.status,'PROBE_REPORTED_PASS');
+  assert.equal(report.counts.pass,2);
+  assert.equal(report.target,'NATIVE_PROCESS_MATCH_AT_READ_TIME_ONLY');
+  assert.equal(report.gameplayAcceptance,'NOT_VERIFIED');
+  assert.deepEqual(nativeCalls,[['target',2],['target',2]]);
+  // A changed target must not retain an old all-pass as fresh acceptance.
+  targetBirth='9876543';
+  const changed=await h.callTool('probe_qa',{slot:2});
+  assert.equal(changed.status,'INCOMPLETE');
+  assert.equal(changed.sourceStatus,'QA_NATIVE_TARGET_CHANGED');
+  assert.equal(changed.gameplayAcceptance,'NOT_VERIFIED');
+  const restarted=await h.callTool('probe_qa',{slot:2,restart:true});
+  assert.equal(restarted.phase,'AWAITING_AUTHORIZED_COMMAND');
+  assert.equal(restarted.commandSentByLazyTester,false);
+  await assert.rejects(()=>h.callTool('probe_qa',{slot:2,restart:'true'}),
+    /Invalid tool arguments/);
+  h.shutdown();
+});
+
+test('one QA entry blocks missing setup and protects human MC01',async()=>{
+  const h=createHandler({...config(),executable:''},{
+    native:async()=>{throw Error('native must not be invoked');},
+  });
+  const missing=await h.callTool('probe_qa',{});
+  assert.equal(missing.status,'BLOCKED');
+  assert.equal(missing.reason,'PROBE_ZIP_NOT_CONFIGURED');
+  assert.equal(missing.commandSentByLazyTester,false);
+  await assert.rejects(()=>h.callTool('probe_qa',{slot:1}),
+    /MC01 human host is protected/);
+  h.shutdown();
+});
+
+test('one QA entry refuses concurrent source preparations for the same slot',async()=>{
+  let release;
+  const pendingCatalog=new Promise(resolve=>{release=resolve;});
+  const catalog={autoCount:1,autoIds:['P01'],
+    archiveSha256:'b'.repeat(64),cache:'FRESH_SOURCE_REVIEW'};
+  const h=createHandler({...config(),executable:'',
+    probeZip:path.resolve('skills-probe.zip'),
+    evidenceDirectory:path.resolve('capture')},{
+    probeCatalog:async()=>{await pendingCatalog;return catalog;},
+    evidence:async(_directory,slot)=>({slot,status:'CAPTURE_FILE_PRESENT',
+      captureCursor:{kind:'STABLE_CAPTURE_CURSOR_V1'}}),
+  });
+  const first=h.callTool('probe_qa',{slot:2});
+  const denied=await h.callTool('probe_qa',{slot:2});
+  assert.equal(denied.status,'BLOCKED');
+  assert.equal(denied.reason,'QA_OPERATION_IN_PROGRESS');
+  release();
+  const ready=await first;
+  assert.equal(ready.phase,'AWAITING_AUTHORIZED_COMMAND');
+  h.shutdown();
+});
+
+test('one QA entry fails closed on unreviewed ZIP and missing result source',async()=>{
+  const base={...config(),executable:'',
+    probeZip:path.resolve('skills-probe.zip'),
+    evidenceDirectory:path.resolve('capture')};
+  const blocked=createHandler(base,{
+    probeCatalog:async()=>{throw Error('PROBE_SOURCE_REVIEW_REQUIRED');},
+    evidence:async()=>{throw Error('not expected after rejected ZIP');},
+  });
+  const refused=await blocked.callTool('probe_qa',{slot:2});
+  assert.equal(refused.status,'BLOCKED');
+  assert.equal(refused.reason,'PROBE_SOURCE_REVIEW_REQUIRED');
+  blocked.shutdown();
+
+  let stage=0;
+  const ready=createHandler(base,{
+    probeCatalog:async()=>({autoCount:1,autoIds:['P01'],
+      archiveSha256:'c'.repeat(64),cache:'FRESH_SOURCE_REVIEW'}),
+    evidence:async(_dir,slot,_limit,options)=>{
+      if(options?.probeCheckpoint)throw Error('capture disappeared');
+      stage++;
+      return {slot,status:'CAPTURE_FILE_PRESENT',
+        captureCursor:{kind:'STABLE_CAPTURE_CURSOR_V1'}};
+    },
+  });
+  const prepared=await ready.callTool('probe_qa',{slot:2});
+  assert.equal(prepared.phase,'AWAITING_AUTHORIZED_COMMAND');
+  assert.equal(stage,1);
+  const incomplete=await ready.callTool('probe_qa',{slot:2});
+  assert.equal(incomplete.status,'INCOMPLETE');
+  assert.equal(incomplete.reason,'EVIDENCE_UNAVAILABLE');
+  assert.equal(incomplete.gameplayAcceptance,'NOT_VERIFIED');
+  ready.shutdown();
 });
 
 test('hybrid mode refuses to launch human MC01, no native request sent',async()=>{

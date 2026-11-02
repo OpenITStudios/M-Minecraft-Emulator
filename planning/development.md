@@ -1,5 +1,38 @@
 # Current Development Handoff — Lazy Tester
 
+## Consolidated single-entry AI Gameplay QA — 2 November 2026
+
+**State: SOURCE_ONLY / NOT_EXECUTED.** AI now has one recommended
+`probe_qa` MCP tool, defaulting to MC02. First call composes the existing
+reviewed ZIP/capture preflight with optional read-only native PID/HWND
+target admission, while returning BLOCKED rather than claiming an
+authorized game command. Repeated calls read the same session's bounded
+original Probe markers without passing a session ID; `restart=true`
+explicitly starts a new source/capture checkpoint. The prior
+`prepare_probe_qa` and `read_probe_qa_result` remain available unchanged
+for callers already using them.
+
+The approved ZIP catalog is cached in memory only when filename, stable
+file identity, byte size, mtime/ctime and exact approved baseline bytes
+still match. A changed source is revalidated by the existing ZIP reader;
+nothing is automatically synced, installed, executed or approved.
+Compact MCP output keeps FAIL, NEEDS_REVIEW, WAITING, INCOMPLETE and
+Probe-reported PASS distinct from actual Minecraft gameplay acceptance.
+Existing strict native target validation is reused; target changes
+downgrade results to incomplete, and native identity is not proof of
+the QA world, admin rights, input delivery or log source attribution.
+
+New Node regression fixtures were **AUTHORED_NOT_EXECUTED**. No
+source tests, CI, native build, game process or Windows QA were run.
+No new engine, daemon, computer-use input, world mutation, provider,
+source mirror or installer change was introduced.
+
+**Single next proof gate (requires separate Windows authorization):**
+Run the original Skills Probe command in one isolated Education QA world
+via a validated Player/admin input channel and confirm exact capture
+world/profile identity. Only then evaluate command dispatch enablement.
+
+
 ## Stable Gameplay Probe capture checkpoint — 2 November 2026
 
 **State: SOURCE_ONLY / NOT_EXECUTED.** The first source-only
