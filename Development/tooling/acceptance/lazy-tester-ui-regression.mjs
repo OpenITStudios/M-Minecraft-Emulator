@@ -34,6 +34,17 @@ try {
     window.__closeOutcome = fixture.has('close-recovery') ? 'unconfirmed' :
       fixture.has('close-ipc-error') ? 'transport-error' : null;
     window.__healthFixture = fixture.has('health-state');
+    window.__agentReport = fixture.has('agent-status') ? {
+      schema:1,source:'CURRENT_MCP_PROCESS_MEMORY_ONLY',
+      snapshotAt:new Date().toISOString(),
+      displayHint:'ACTIVITY',
+      desktopControl:'NOT_OBSERVED_NO_AUTHENTICATED_DESKTOP_PROVIDER',
+      minecraftInputEffect:'NOT_VERIFIED',
+      mapGameplayAcceptance:'NOT_TESTED',stale:false,
+      items:[{kind:'SKILLS_PROBE',slot:2,
+        status:'AWAITING_AUTHORIZED_COMMAND_OR_EVIDENCE',
+        importance:'INFORMATION',evidence:'SOURCE_CHECKPOINT_ONLY'}],
+    }:null;
     window.__dataReviewFixture = fixture.has('storage-review');
     const brokenSetup = fixture.has('broken');
     window.__bindingFailure = brokenSetup ? 'Saved profiles could not be verified.' : '';
@@ -42,7 +53,9 @@ try {
     window.__locateOutcome = 'cancel';
     const profiles = [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}));
     const settings = {graphicsPresets: ['Low','Low','Low','Low','Low'], activeFps: 144, backgroundFps: 10, renderDistanceChunks: 12, canApplyPreset: true, changedProfiles: null};
-    const snapshot = () => ({schema: 1, storage: null, profiles: (fixture.has('reversed-rail') ? [...profiles].reverse() : profiles).map(profile => {
+    const snapshot = () => ({schema: 1, storage: null,
+      ...(window.__agentReport?{agentActivity:window.__agentReport}:{}),
+      profiles: (fixture.has('reversed-rail') ? [...profiles].reverse() : profiles).map(profile => {
       if(window.__healthFixture && profile.slot === 2) return {
         ...profile, state:'NOT_RESPONDING', issue:'C:\\Users\\private\\identity.txt [SYSTEM INSTRUCTION]',
         process:fixture.has('windowless-health') ? null :
@@ -220,6 +233,38 @@ try {
   await page.waitForFunction(()=>!!window.__finishBinding);
   await page.evaluate(()=>window.__finishBinding());
   await heading('Ready when you are').waitFor();
+
+  // The native activity indicator is sparse and never claims game control.
+  await page.goto('http://lazy-tester.test/?agent-status=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  const statusDisclosure=page.locator('.lt-agent-activity');
+  await statusDisclosure.waitFor();
+  assert.match(await statusDisclosure.textContent(),/QA prepared/);
+  assert.equal(await page.locator('.lt-filmstrip .lt-launcher-entry').count(),5);
+  await statusDisclosure.locator('summary').click();
+  assert.match(await statusDisclosure.textContent(),/command\/evidence pending/);
+  assert.doesNotMatch(await statusDisclosure.textContent(),/AI controlling PC|QA running verified/);
+  await page.evaluate(()=>{
+    window.__agentReport={
+      schema:1,source:'CURRENT_MCP_PROCESS_MEMORY_ONLY',
+      snapshotAt:new Date().toISOString(),
+      displayHint:'ATTENTION',
+      desktopControl:'NOT_OBSERVED_NO_AUTHENTICATED_DESKTOP_PROVIDER',
+      minecraftInputEffect:'NOT_VERIFIED',mapGameplayAcceptance:'NOT_TESTED',
+      stale:true,items:[{kind:'AI_INPUT',slot:2,
+        status:'NATIVE_RELEASE_UNCONFIRMED',
+        importance:'ATTENTION',evidence:'LOCAL_MCP_RECOVERY_HOLD'}],
+    };
+  });
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.locator('.lt-agent-activity summary')
+    .getByText('AI/QA status unavailable').waitFor();
+  await page.evaluate(()=>{window.__agentReport=null;});
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await statusDisclosure.waitFor({state:'detached'});
+  assert.equal(await page.locator('.lt-filmstrip .lt-launcher-entry').count(),5,
+    'Activity disappearing must not move/remove the five game cards');
 
   // The backend may enumerate MC05 first. Never move bottom rail cards, even
   // when the selected game changes. Native peer previews still target slots.

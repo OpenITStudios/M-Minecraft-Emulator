@@ -399,6 +399,28 @@ fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
 }
 
 fn execute(args: &[String]) -> Result<Value, &'static str> {
+    // Explicit, one-shot, non-gameplay metadata report to the retained
+    // same-image controller. Never starts a controller, game, or worker.
+    if args.first().map(String::as_str)==Some("report-agent-activity") {
+        #[cfg(not(all(windows,target_arch="x86_64",feature="lazy-tester-package")))]
+        {return Err("UNSUPPORTED");}
+        #[cfg(all(windows,target_arch="x86_64",feature="lazy-tester-package"))]
+        {
+            use super::native_clients_session::{self,SessionRequest,AgentActivityReport};
+            if args.len()!=2||args[1].len()>5000{return Err("INVALID_ARGUMENTS");}
+            let activity:AgentActivityReport=serde_json::from_str(&args[1])
+                .map_err(|_|"INVALID_ARGUMENTS")?;
+            if !activity.valid_ingress(){return Err("INVALID_ARGUMENTS");}
+            let connected=native_clients_session::existing_controller_gate(
+                "Local\\MivubiEducationStartupObservation").map_err(native_error)?;
+            if !connected{return Err("CONTROLLER_UNAVAILABLE");}
+            native_clients_session::request(
+                SessionRequest::PublishAgentActivity{activity}).map_err(native_error)?;
+            return Ok(json!({"schema":1,"ok":true,
+                "operation":"report-agent-activity",
+                "status":"LOCAL_AGENT_REPORT_RECEIVED_NOT_DESKTOP_CONTROL"}));
+        }
+    }
     #[cfg(all(windows,target_arch="x86_64",
               feature="lazy-tester-package",feature="mc02-native-input"))]
     if args.first().map(String::as_str)==Some("ai-multi-input-batch") {

@@ -1035,6 +1035,36 @@ test('experimental background input is NOT exposed as an agent tool',async()=>{
     'NOT_OBSERVED_NO_AUTHENTICATED_DESKTOP_PROVIDER');
 });
 
+
+test('publishing an activity summary is opt-in, bounded, and never game control',async()=>{
+  let publishes=0,seen=null;
+  const handler=createHandler(config(),{
+    native:async()=>{throw Error('No native game/QA request allowed');},
+    publishActivity:async(_exe,status)=>{
+      publishes++;seen=status;
+      return {status:'REPORTED_TO_EXISTING_NATIVE_CONTROLLER'};
+    },
+  });
+  const defaultResult=await handler.callTool('agent_capabilities',{});
+  assert.equal(publishes,0,'ordinary capabilities reads never contact native');
+  assert.equal(defaultResult.activity.displayHint,'HIDDEN_NO_LOCAL_SIGNAL');
+  const published=await handler.callTool('agent_capabilities',{publishToDesktop:true});
+  assert.equal(publishes,1);
+  assert.equal(published.desktopDelivery,'REPORTED_TO_EXISTING_NATIVE_CONTROLLER');
+  assert.equal(seen.desktopControl,'NOT_OBSERVED_NO_AUTHENTICATED_DESKTOP_PROVIDER');
+  assert.equal(seen.minecraftInputEffect,'NOT_VERIFIED');
+  assert.equal(seen.mapGameplayAcceptance,'NOT_TESTED');
+  await assert.rejects(()=>handler.callTool('agent_capabilities',{
+    publishToDesktop:'true'}),/Invalid tool arguments/);
+  const offline=createHandler(config(),{
+    publishActivity:async()=>{throw Error('No retained controller');},
+  });
+  const unavailable=await offline.callTool('agent_capabilities',{publishToDesktop:true});
+  assert.equal(unavailable.desktopDelivery,'STATUS_DELIVERY_UNAVAILABLE');
+  assert.equal(unavailable.activity.displayHint,'HIDDEN_NO_LOCAL_SIGNAL');
+  handler.shutdown();offline.shutdown();
+});
+
 test('never trusts incomplete or out-of-order native profiles',()=>{
   assert.throws(()=>validateNativeReport({schema:1,ok:true,operation:'inspect',profiles:snapshot('inspect').profiles.toReversed()},'inspect'));
   assert.throws(()=>validateNativeReport({schema:1,ok:true,operation:'inspect',profiles:snapshot('inspect').profiles},'launch'));

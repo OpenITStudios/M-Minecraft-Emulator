@@ -35,10 +35,97 @@ export function parseNativeBackendSupport(value: unknown): NativeBackendSupport 
 export type GraphicsPreset = 'Preserve' | 'High' | 'Low';
 export type BackgroundAudio = 'Keep'|'Mute';
 export interface SettingsReport {backgroundAudio?:BackgroundAudio; audioIssue?:string; graphicsPresets?:GraphicsPreset[]; activeFps:number; backgroundFps:number; renderDistanceChunks:number; canApplyPreset:boolean; changedProfiles:number|null}
-export interface SessionSnapshot {schema: 1; profiles: ProfileSession[]; storage: ProfileStorage[] | null; settings?:SettingsReport}
+export interface SessionSnapshot {schema: 1; profiles: ProfileSession[]; storage: ProfileStorage[] | null; settings?:SettingsReport; agentActivity?:AgentActivityReport}
 export interface PreviewPlacement {slot: ProfileSlot; viewport: WorkspaceViewport}
 export interface PreviewStatus {slot: ProfileSlot; registered: boolean; reason: string | null}
 export interface PreviewReport {schema: 1; tiles: PreviewStatus[]}
+
+export interface AgentActivityItem {
+  kind:'AI_INPUT'|'SKILLS_PROBE'|'VISUAL_OBSERVATION';
+  slot:ProfileSlot;
+  status:string;
+  importance:'INFORMATION'|'ATTENTION';
+  evidence:string;
+  reportedOutcome?:string;
+}
+export interface AgentActivityReport {
+  schema:1;
+  source:'CURRENT_MCP_PROCESS_MEMORY_ONLY';
+  snapshotAt:string;
+  displayHint:'HIDDEN_NO_LOCAL_SIGNAL'|'ACTIVITY'|'ATTENTION';
+  desktopControl:'NOT_OBSERVED_NO_AUTHENTICATED_DESKTOP_PROVIDER';
+  minecraftInputEffect:'NOT_VERIFIED';
+  mapGameplayAcceptance:'NOT_TESTED';
+  items:AgentActivityItem[];
+  stale:boolean;
+}
+const agentItemStatuses:Record<AgentActivityItem['kind'],Record<string,string>>={
+  AI_INPUT:{
+    NATIVE_RELEASE_UNCONFIRMED:'LOCAL_MCP_RECOVERY_HOLD',
+    STARTUP_RECONCILIATION_REQUIRED:'LOCAL_MCP_RECOVERY_HOLD',
+    EXPERIMENTAL_INPUT_REQUEST_IN_FLIGHT:'LOCAL_MCP_REQUEST_ONLY',
+  },
+  SKILLS_PROBE:{
+    PROBE_REPORT_AVAILABLE:'ORIGINAL_PROBE_LOG_UNVERIFIED_ORIGIN',
+    LOCAL_QA_REVIEW_IN_PROGRESS:'MCP_PROCESS_ONLY',
+    LOCAL_QA_PREPARATION_IN_PROGRESS:'MCP_PROCESS_ONLY',
+    AWAITING_AUTHORIZED_COMMAND_OR_EVIDENCE:'SOURCE_CHECKPOINT_ONLY',
+    CHECKPOINT_EXPIRED_OR_UNAVAILABLE:'SOURCE_CHECKPOINT_ONLY',
+  },
+  VISUAL_OBSERVATION:{
+    SAMPLER_ACTIVE_NO_RECENT_FRAME:'LOCAL_SAMPLER_ONLY',
+    SAMPLER_ACTIVE_RECENT_FRAME:'LOCAL_SAMPLER_ONLY',
+  },
+};
+export function parseAgentActivity(value:unknown):AgentActivityReport {
+  if(!record(value)||
+    !exact(value,['schema','source','snapshotAt','displayHint','desktopControl',
+      'minecraftInputEffect','mapGameplayAcceptance','items','stale'])||
+    value.schema!==1||value.source!=='CURRENT_MCP_PROCESS_MEMORY_ONLY'||
+    typeof value.snapshotAt!=='string'||
+    !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(value.snapshotAt)||
+    !Number.isFinite(Date.parse(value.snapshotAt))||
+    !['HIDDEN_NO_LOCAL_SIGNAL','ACTIVITY','ATTENTION'].includes(String(value.displayHint))||
+    value.desktopControl!=='NOT_OBSERVED_NO_AUTHENTICATED_DESKTOP_PROVIDER'||
+    value.minecraftInputEffect!=='NOT_VERIFIED'||
+    value.mapGameplayAcceptance!=='NOT_TESTED'||
+    typeof value.stale!=='boolean'||!Array.isArray(value.items)||value.items.length>15)
+    throw new TypeError('Invalid agent activity status');
+  const seen=new Set<string>();
+  let attention=false;
+  for(const entry of value.items) {
+    if(!record(entry)||!['AI_INPUT','SKILLS_PROBE','VISUAL_OBSERVATION'].includes(String(entry.kind))||
+       !exact(entry,['kind','slot','status','importance','evidence',
+         ...(Object.hasOwn(entry,'reportedOutcome')?['reportedOutcome']:[])])||
+       !profileSlots.includes(entry.slot as ProfileSlot)||
+       !['INFORMATION','ATTENTION'].includes(String(entry.importance))||
+       typeof entry.status!=='string'||typeof entry.evidence!=='string')throw new TypeError('Invalid agent activity item');
+    const allowed=agentItemStatuses[entry.kind as AgentActivityItem['kind']];
+    if(!Object.hasOwn(allowed,entry.status)||allowed[entry.status]!==entry.evidence)
+      throw new TypeError('Invalid agent activity evidence');
+    const key=String(entry.kind)+':'+String(entry.slot);
+    if(seen.has(key))throw new TypeError('Duplicate agent activity');
+    seen.add(key);
+    attention ||= entry.importance==='ATTENTION';
+    const important=['NATIVE_RELEASE_UNCONFIRMED',
+      'STARTUP_RECONCILIATION_REQUIRED',
+      'CHECKPOINT_EXPIRED_OR_UNAVAILABLE'].includes(entry.status) ||
+      entry.status==='PROBE_REPORT_AVAILABLE' &&
+        entry.reportedOutcome!=='PROBE_REPORTED_PASS';
+    if((entry.importance==='ATTENTION')!==important)
+      throw new TypeError('Incorrect agent activity importance');
+    const terminal=entry.kind==='SKILLS_PROBE'&&entry.status==='PROBE_REPORT_AVAILABLE';
+    if(terminal?!['PROBE_REPORTED_PASS','FAIL','NEEDS_REVIEW','INCOMPLETE','BLOCKED',
+      'UNRECOGNIZED_TERMINAL_STATUS'].includes(String(entry.reportedOutcome)):
+      Object.hasOwn(entry,'reportedOutcome'))
+      throw new TypeError('Invalid reported Probe outcome');
+  }
+  const expected=attention?'ATTENTION':value.items.length?'ACTIVITY':'HIDDEN_NO_LOCAL_SIGNAL';
+  if(value.displayHint!==expected || value.stale===true&&value.displayHint!=='ATTENTION')
+    throw new TypeError('Invalid agent activity importance');
+  return value as unknown as AgentActivityReport;
+}
+
 // An existing workspace-surface-error string carries this observation-only
 // diagnostic. It is not game readiness, and has no authority to launch/close.
 export interface DwmPreviewInvalidation {slot: ProfileSlot; process: OwnedProcess; reason: string}
@@ -95,7 +182,9 @@ export function parseProfileBinding(value: unknown): ProfileBinding {
 }
 
 export function parseSession(value: unknown): SessionSnapshot {
-  if (!record(value) || !exact(value, Object.hasOwn(value,'settings') ? ['schema','profiles','storage','settings'] : ['schema', 'profiles', 'storage']) || value.schema !== 1 ||
+  if (!record(value) || !exact(value, ['schema','profiles','storage',
+     ...(Object.hasOwn(value,'settings')?['settings']:[]),
+     ...(Object.hasOwn(value,'agentActivity')?['agentActivity']:[])]) || value.schema !== 1 ||
       !Array.isArray(value.profiles) || value.profiles.length !== 5) throw new TypeError('Invalid session response');
   const pids = new Set<number>();
   value.profiles.forEach((profile: unknown, index: number) => {
@@ -191,6 +280,7 @@ export function parseSession(value: unknown): SessionSnapshot {
       settings.canApplyPreset&&(value.profiles as ProfileSession[]).some(p=>['STARTING','RUNNING','NOT_RESPONDING'].includes(p.state))||
       settings.changedProfiles!==null&&!settings.canApplyPreset)throw new TypeError('Invalid settings response');
   }
+  if(Object.hasOwn(value,'agentActivity'))parseAgentActivity(value.agentActivity);
   return value as unknown as SessionSnapshot;
 }
 

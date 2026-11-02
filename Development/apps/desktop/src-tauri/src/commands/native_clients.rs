@@ -33,6 +33,11 @@ pub async fn lazy_tester_session(
     request: crate::engine::native_clients_session::SessionRequest,
 ) -> Result<crate::engine::native_clients_session::SessionSnapshot, String> {
     if crate::app_bootstrap::startup_diagnostic_mode() && !matches!(request,crate::engine::native_clients_session::SessionRequest::Inspect) {return Err("Startup diagnostic cannot launch or modify games".into());}
+    // Untrusted webview code may not forge agent-reported activity.
+    if matches!(&request,
+       crate::engine::native_clients_session::SessionRequest::PublishAgentActivity{..}) {
+        return Err("Desktop cannot publish agent activity reports".into());
+    }
     // The desktop's normal session command must never be an alternate
     // admission path for experimental game hooks. Only the explicitly
     // opted-in, same-image native agent CLI may send these requests

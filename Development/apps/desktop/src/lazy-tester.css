@@ -474,3 +474,14 @@
 .lt-storage-packs summary{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;padding:14px 0;color:var(--lt-accent);cursor:pointer}
 .lt-storage-packs summary small{font-size:12px;color:var(--lt-muted)}
 .lt-storage-packs-body{padding-bottom:14px}
+
+/* Status only when the original controller reports a recent local MCP
+   activity. Absolute positioning preserves existing rail/viewport geometry. */
+.lt-topbar{position:relative}
+.lt-agent-activity{position:absolute;right:230px;top:9px;z-index:12;width:192px;font-size:12px}
+.lt-agent-activity summary{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;padding:8px 10px;border:1px solid var(--lt-line);border-radius:6px;background:#242a36;color:var(--lt-accent)}
+.lt-agent-activity summary:focus-visible{outline:2px solid var(--lt-accent);outline-offset:2px}
+.lt-agent-activity-details{position:absolute;right:0;top:38px;width:310px;max-width:calc(100vw - 40px);max-height:260px;overflow:auto;padding:14px;border:1px solid var(--lt-line);border-radius:8px;background:var(--lt-panel);color:#edf0f7;box-shadow:0 6px 24px #0006}
+.lt-agent-activity-details strong{display:block;font-size:13px}
+.lt-agent-activity-details p{margin:8px 0;font-size:12px;line-height:1.4}
+.lt-agent-activity-details small{display:block;margin-top:10px;color:var(--lt-muted);line-height:1.4}

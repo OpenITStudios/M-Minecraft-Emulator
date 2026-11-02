@@ -224,6 +224,38 @@ export function validateNativeReport(value, operation) {
     evidence:'NATIVE_SESSION_ONLY_NOT_GAMEPLAY_OR_ACCOUNT_SIGNIN',
   };
 }
+export async function publishAgentActivityNative(executable,report) {
+  if(!executable)throw new Error('Native integration is not configured; set --exe');
+  if(!report||report.source!=='CURRENT_MCP_PROCESS_MEMORY_ONLY'||
+     report.desktopControl!=='NOT_OBSERVED_NO_AUTHENTICATED_DESKTOP_PROVIDER'||
+     report.minecraftInputEffect!=='NOT_VERIFIED'||
+     report.mapGameplayAcceptance!=='NOT_TESTED') {
+    throw new Error('Invalid agent activity report');
+  }
+  const payload=JSON.stringify(report);
+  if(Buffer.byteLength(payload,'utf8')>5000)
+    throw new Error('Invalid agent activity report');
+  // Explicit short same-image CLI status mirror. This is NOT a native
+  // input/QA command and never retries an uncertain report delivery.
+  let output;
+  try {
+    output=await execFileAsync(executable,
+      ['--lazy-tester-agent-cli','report-agent-activity',payload],
+      {shell:false,windowsHide:true,timeout:1500,maxBuffer:4096});
+  } catch {
+    throw new Error('Local agent status delivery unconfirmed');
+  }
+  let response;
+  try{response=JSON.parse(output.stdout.trim());}catch{
+    throw new Error('Local agent status delivery unconfirmed');
+  }
+  if(response?.schema!==1||response?.ok!==true||
+     response.operation!=='report-agent-activity'||
+     response.status!=='LOCAL_AGENT_REPORT_RECEIVED_NOT_DESKTOP_CONTROL')
+    throw new Error('Local agent status delivery unconfirmed');
+  return {status:'REPORTED_TO_EXISTING_NATIVE_CONTROLLER',
+    desktopControl:'NOT_VERIFIED'};
+}
 export async function runNative(executable, operation, slot) {
   if (!executable) throw new Error('Native integration is not configured; set --exe');
   const args = ['--lazy-tester-agent-cli',operation,...(slot === undefined?[]:[String(slot)])];
@@ -827,7 +859,7 @@ export const TOOL_LIST=[
   {name:'get_computer_use_target',description:'Resolve one AI-owned native Minecraft PID/HWND for read-only Cua Driver window capture without switching Windows focus. Does NOT capture pixels or control game input.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
   {name:'revalidate_computer_use_target',description:'Check a previously resolved exact PID/HWND/birth identity against current retained-controller observation. Never silently retarget another game.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},pid:{type:'integer',minimum:1},windowId:{type:'integer',minimum:1},createdFileTime:{type:'string',pattern:'^[0-9]{1,20}$'}},required:['slot','pid','windowId','createdFileTime'],additionalProperties:false}},
   {name:'get_test_context',description:'One bounded read-only handoff with current five native profiles, peer-host guidance and relevant game evidence. No game control or world success is inferred.',inputSchema:{type:'object',properties:{slots:{type:'array',items:{type:'integer',minimum:1,maximum:5},minItems:1,maxItems:5,uniqueItems:true}},additionalProperties:false}},
-  {name:'agent_capabilities',description:'Read capabilities and limits of this Windows five-profile test bridge. Never claims independent background movement.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
+  {name:'agent_capabilities',description:'Read local source-only AI/QA activity. Optional publishToDesktop=true mirrors bounded status to the already retained native controller; never proves Windows control or gameplay.',inputSchema:{type:'object',properties:{publishToDesktop:{type:'boolean'}},additionalProperties:false}},
   {name:'inspect_profiles',description:'Read five profile states from the authenticated native Lazy Tester controller (not game login or world readiness).',inputSchema:{type:'object',properties:{},additionalProperties:false}},
   {name:'launch_profile',description:'Explicitly request native Minecraft launch for an AI-controlled profile. Human MC01 cannot be launched in hybrid mode.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
   {name:'plan_peer_session',description:'Inspect native profiles and provide conservative human/AI host-and-join guidance. No world control or join is performed.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
@@ -1030,6 +1062,7 @@ export function createHandler(config,{
   aiLease=sendExperimentalAiWriterLeaseNative,
   gpuSourceFactory=createGpuFrameSource,
   visualObserverFactory=createVisualObserver,
+  publishActivity=publishAgentActivityNative,
   probeCatalog=readPinnedProbeCatalogCached,
   probeRevisionStatus=probeSourceRevisionStatus,
   mapContract=readMapTestContractCached,
@@ -2140,7 +2173,10 @@ export function createHandler(config,{
       } finally {inFlight=false;}
     }
     if (name==='agent_capabilities') {
-      keysExactly(args,[]);
+      keysExactly(args,['publishToDesktop']);
+      if(args.publishToDesktop!==undefined &&
+         typeof args.publishToDesktop!=='boolean')
+        throw new Error('Invalid tool arguments');
       // One bounded read of already-owned MCP memory. It cannot attest
       // external desktop control, successful input, an authenticated QA world,
       // or whether a separately run Skills Probe command was actually sent.
@@ -2159,7 +2195,16 @@ export function createHandler(config,{
         visualSamplers:typeof visualObserver.activity==='function'?
           visualObserver.activity():[],
       });
-      return {...capabilities(config.mode,mc02Enabled,multiEnabled),activity};
+      const result={...capabilities(config.mode,mc02Enabled,multiEnabled),activity};
+      if(args.publishToDesktop!==true)return result;
+      try {
+        const delivery=await publishActivity(config.executable,activity);
+        if(delivery?.status!=='REPORTED_TO_EXISTING_NATIVE_CONTROLLER')
+          throw new Error('Status delivery not acknowledged');
+        return {...result,desktopDelivery:'REPORTED_TO_EXISTING_NATIVE_CONTROLLER'};
+      } catch {
+        return {...result,desktopDelivery:'STATUS_DELIVERY_UNAVAILABLE'};
+      }
     }
     if (name==='read_game_evidence') {
       keysExactly(args,['slot']);

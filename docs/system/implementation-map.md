@@ -24,6 +24,7 @@ All desktop paths below start at `Development/apps/desktop/`.
 | Problem | Existing canonical source | Follow only when needed |
 | --- | --- | --- |
 | Main Play, Settings, Storage and action sequencing | `src/LazyTesterApp.svelte` | `src/app/inspectionScheduling.ts`, `src/app/presentation/` |
+| Optional MCP-reported AI/QA disclosure | `src/app/presentation/agentActivity.ts`, `src/AgentActivityNotice.svelte` | Existing `agent_capabilities` explicit status mirror in `Development/tooling/agent/mcp.mjs`; original controller `SessionSnapshot.agentActivity` only, no new watcher/QA owner |
 | Launcher rail and status guidance | `src/LauncherRail.svelte`, `src/SessionHealthNotice.svelte` | `src/app/presentation/sessionFeedback.ts` |
 | Settings and storage presentation | `src/GeneralSettings.svelte`, `src/DataStorage.svelte` | Typed `src/app/bridge/lazyTester.ts` |
 | Local agent MCP tools / bounded evidence reading | `Development/tooling/agent/mcp.mjs` | The opt-in MCP and `agent_cli.rs` pass a fresh per-transaction fencing epoch to the original mode-bound writer leases in `native_clients_session.rs` and `independent_bootstrap/session_controller.rs`; stale old-child input/neutral/release cannot adopt a newly leased replacement; per-slot recovery and `visual-observer.mjs` remain source-only, gameplay NOT_VERIFIED |

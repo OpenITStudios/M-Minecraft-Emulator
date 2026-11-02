@@ -37,8 +37,20 @@ new-revision acceptance.
   recovery/request state; **never** external Windows control or Minecraft
   gameplay success. No new tool/collector, native IPC, hidden UI badge
   or extra action is introduced. Desktop has no authenticated MCP status
-  reader, so new activity indicators remain deferred and disconnected
-  status must not be treated as idle. Fixtures AUTHORED_NOT_EXECUTED.
+  reader at that earlier revision; the new explicit native-controller
+  report mirror below supersedes this transport limitation without
+  proving Windows runtime. Fixtures AUTHORED_NOT_EXECUTED.
+- **Optional AI/QA desktop status mirror (2 November):** the existing MCP
+  `agent_capabilities({publishToDesktop:true})` can explicitly report only
+  enum-allowlisted local activity through a matching one-shot native CLI to
+  the already-retained original controller. It adds an optional
+  `SessionSnapshot.agentActivity`, bounded monotonic 12-second freshness
+  and a small Play-header disclosure for relevant or stale-ATTENTION status.
+  Ordinary capabilities are read-only; no hidden watch, auto-publish,
+  Tauri publishing authority, native input or layout change. The source
+  reports are not verified Windows control, gameplay or map QA. All newly
+  authored Rust/Node/desktop fixtures are NOT_EXECUTED and the complete
+  cross-process UI handoff on Windows remains NOT_VERIFIED.
 - **Native owner:** original Rust session controller handles game
   process identity, private profiles, normal exit and recovery.
   Workspace/DWM presentation never becomes a second lifecycle owner.

@@ -52,6 +52,20 @@ relevant per-profile activity or action-required issues, and preserve all five
 keyed DWM preview cards without resizing or shifting the layout. An absent
 or disconnected MCP is UNKNOWN, not proof of no AI activity.
 
+A bounded read-only AI/QA activity disclosure can appear in the Play
+header only when the original native controller has received an explicit
+short-lived local MCP status report. There is **no implicit status upload**,
+new background watcher, agent process discovery or separate UI status owner.
+The disclosure is absolutely positioned outside the five-card rail layout;
+it must not resize the central game viewport or move/replace any native
+DWM preview. Items identify reported local observation, source-only Probe
+preparation/results or experimental input/recovery only; **never** external
+Windows control, verified Minecraft input, or map gameplay acceptance.
+No incoming report means no extra UI. A stale earlier attention report
+is "AI/QA status unavailable", not an assumption of successful recovery.
+Only the same-image original controller receives explicit activity reports,
+and the regular desktop Tauri session command must refuse publications.
+
 Session ownership belongs to the existing native bootstrap; the UI is a consumer.
 The bootstrap keeps the reviewed game/DLL hashes, original process handles, private
 Roaming/Local/TEMP/HKCU stores, scoped singleton compatibility, and 144/10 FPS policy.

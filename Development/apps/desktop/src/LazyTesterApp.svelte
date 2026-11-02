@@ -1,11 +1,13 @@
 <script lang="ts">
   import {onMount, tick} from 'svelte';
   import {listen} from '@tauri-apps/api/event';
-  import {lazyTester, firstEmbeddedProfile, nextProfile, canRequestLaunch, validFpsLimits, type GraphicsPreset, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport} from './app/bridge/lazyTester.js';
+  import {lazyTester, firstEmbeddedProfile, nextProfile, canRequestLaunch, validFpsLimits, type AgentActivityReport, type GraphicsPreset, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport} from './app/bridge/lazyTester.js';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazy-tester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
   import LauncherRail from './LauncherRail.svelte';
+  import AgentActivityNotice from './AgentActivityNotice.svelte';
+  import {presentAgentActivity} from './app/presentation/agentActivity.js';
   import GeneralSettings from './GeneralSettings.svelte';
   import DataStorage from './DataStorage.svelte';
   import {projectSessionHealth, type SessionHealthAction} from './app/presentation/sessionHealth.js';
@@ -50,6 +52,9 @@
   // Alert context is authored, not a retained raw backend exception.
   let issueKey: UserMessageKey | null = null, connectionIssueKey: UserMessageKey | null = null;
   let previewIssue = '', selectedIdentity = '';
+  // Optional native controller mirror; no new timer or MCP process.
+  let agentActivity:AgentActivityReport|null=null;
+  $: activityView=presentAgentActivity(agentActivity);
   // Display state only; the retained Rust controller still owns game lifetime.
   let closeInProgress = false, closeFailure = '';
   // Presentation-only close reviews; never another process or session owner.
@@ -210,6 +215,7 @@
       if (disposed || !observationStillCurrent(issued, observationEpoch, reviewState())) return;
       const layoutChanged=!available||layoutIdentity(profiles)!==layoutIdentity(snapshot.profiles);
       profiles = snapshot.profiles; available = true; connectionIssueKey=null;
+      agentActivity=snapshot.agentActivity??null;
       // STOPPED only confirms a session observation, not restoration of
       // the original HWND/helper checkpoint. Only a positive selected-close
       // presentation receipt below may clear the uncertainty warning.
@@ -241,7 +247,7 @@
     } catch (error) {
       if (!disposed && observationStillCurrent(issued, observationEpoch, reviewState())) {
         if (available) dirty = true;
-        available = false;previewStatuses=[];pendingPreviewInvalidations.clear();
+        available = false;agentActivity=null;previewStatuses=[];pendingPreviewInvalidations.clear();
         connectionIssueKey='connection';
       }
     } finally { refreshing = false; }
@@ -800,6 +806,9 @@
   <header class="lt-topbar">
     <a class="lt-brand" href="#play" on:click|preventDefault={() => navigate('workspace')}><span>LT</span>Lazy Tester</a>
     <nav aria-label="Main navigation"><button disabled={closeInProgress} class:chosen={page==='workspace'} aria-current={page==='workspace'?'page':undefined} on:click={()=>navigate('workspace')}>Play</button><button disabled={closeInProgress||nativeBackend!=='WindowsNative'} class:chosen={page!=='workspace'} aria-current={page!=='workspace'?'page':undefined} on:click={()=>navigate('settings')}>Settings</button></nav>
+    {#if page==='workspace'&&available&&activityView}
+      <AgentActivityNotice view={activityView}/>
+    {/if}
     <span class="lt-connection" role="status"><span class="lt-dot" class:waiting={!available||!binding?.configured}></span>{sessionConnectionLabel(initializing,nativeBackend,!!binding?.configured,available)}</span>
   </header>
   <div class="lt-layout" class:lt-settings-layout={page!=='workspace'} inert={closeInProgress}>

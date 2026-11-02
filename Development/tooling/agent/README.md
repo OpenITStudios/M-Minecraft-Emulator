@@ -94,6 +94,41 @@ authorized bridge must bind the exact same MCP session and fail to
 as verified idle or synthesize Windows control from native game input.
 Preserve the existing five fixed Minecraft previews and style.
 
+## Explicit desktop activity handoff (source only)
+
+The already-existing MCP `agent_capabilities` tool can now be called with
+`{"publishToDesktop":true}` to send **only** its current bounded activity
+projection to the already-retained Lazy Tester controller through the
+same-image `--lazy-tester-agent-cli report-agent-activity` command.
+Default `agent_capabilities({})` remains read-only and does not contact
+the native controller, create a window, spawn a watcher or poll any log.
+This is an explicit optional **status mirror**, never a gameplay action.
+
+Admission requires `--exe` naming the matching Lazy Tester executable,
+an already-live original controller and its authenticated same-image
+native pipe. No new controller is created. The Rust owner rejects unknown
+status categories, unbounded items, per-profile duplicates, private detail,
+claims of PC control or map PASS. The Tauri webpage is explicitly forbidden
+to publish activity into the controller. A same-image CLI process is **not**
+cryptographic proof of the parent Node MCP agent, and the GUI only says
+"Reported by local agent"; no verified third-party Windows control is inferred.
+
+The controller uses a monotonic 12-second freshness limit. Expired normal
+reports disappear; expired **ATTENTION** reports become an explicit
+`stale=true` status-unavailable warning until a fresh bounded report
+arrives. This mirror is not a persistent QA result store or an input lease
+owner, and is not sampled automatically. The original read-only desktop
+Inspect response may include the optional `agentActivity` field. The Play
+header shows a single unobtrusive disclosure only while relevant activity or
+a prior unconfirmed issue exists. Five Minecraft live previews and native
+game/window operation paths remain unchanged.
+
+**Proof boundary:** Authored Rust, MCP and synthetic browser fixtures are
+NOT_EXECUTED. The local native transport, actual UI disclosure, Windows PC
+control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
+An opt-in status report is not evidence of native AI movement or successful
+Probe command execution.
+
 ## Optional input/capture integration (not authorized to execute yet)
 
 - Desktop Rust `multi-client-native-input` alias `mc02-native-input`

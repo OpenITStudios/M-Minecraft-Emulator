@@ -494,6 +494,7 @@ impl Sessions {
             profiles,
             storage: None,
             settings: None,
+            agent_activity: None,
         }
     }
 
@@ -1301,7 +1302,8 @@ fn receive_before_maintenance<T>(
 // The reply must not re-enter global journal persistence for unrelated games.
 // Ordinary Inspect and other operations retain their existing full reaping.
 fn response_reaps_all(request: &SessionRequest) -> bool {
-    if matches!(request, SessionRequest::CloseOne { .. } | SessionRequest::CloseAll) {
+    if matches!(request, SessionRequest::CloseOne { .. } |
+        SessionRequest::CloseAll | SessionRequest::PublishAgentActivity {..}) {
         return false;
     }
     #[cfg(feature="mc02-native-input")]
@@ -1338,6 +1340,9 @@ fn run() -> io::Result<()> {
         ));
     }
     let mut sessions = Sessions::prepare()?;
+    // Only the original actor keeps one ephemeral UI report mirror.
+    // This does not own Probe progress, games, input, or agent processes.
+    let mut agent_activity:Option<(crate::engine::native_clients_session::AgentActivityReport,Instant)>=None;
     let mut audio=None;
     let mut audio_mode=crate::engine::manager_settings::load_audio()?;
     // Audio's COM session enumerator already has a one-second discovery
@@ -1429,9 +1434,16 @@ fn run() -> io::Result<()> {
                 SessionRequest::AiLeaseAcquire {..} |
                 SessionRequest::AiLeaseRelease {..});
             #[cfg(not(feature="mc02-native-input"))]
-            let relabel_on_reply = true;
+            let relabel_on_reply = !matches!(&envelope.request,
+                SessionRequest::PublishAgentActivity{..});
             match envelope.request {
                 SessionRequest::Inspect => {}
+                SessionRequest::PublishAgentActivity {activity} => {
+                    if !activity.valid_ingress() {
+                        return Err("Invalid agent activity report".into());
+                    }
+                    agent_activity=Some((activity,Instant::now()));
+                }
                 SessionRequest::InspectSettings => {
                     // This is a read-only UI status, not mutation admission.
                     settings = Some(sessions.settings_observation().map_err(|error| error.to_string())?);
@@ -1558,6 +1570,17 @@ fn run() -> io::Result<()> {
             if let Some(report)=settings.as_mut(){report.audio_issue=audio_issue.clone();}
             snapshot.storage = storage;
             snapshot.settings = settings;
+            snapshot.agent_activity=agent_activity.as_ref().and_then(|(report,at)|{
+                if at.elapsed()<=Duration::from_secs(12) {
+                    Some(report.clone())
+                } else if report.display_hint=="ATTENTION" {
+                    // The old issue may remain: show loss of current
+                    // reporting, not stale control or QA execution claims.
+                    let mut stale=report.clone();
+                    stale.stale=true;
+                    Some(stale)
+                } else {None}
+            });
             Ok(snapshot)
         })();
         let _ = envelope.reply.send(reply); // A disconnected UI never cancels an admitted launch.
