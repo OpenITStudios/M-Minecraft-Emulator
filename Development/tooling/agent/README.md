@@ -111,6 +111,27 @@ prerequisites and upstream ZIP hashes, see
 For storage and help-addon details see
 [map diagnostics](../../../docs/system/map-diagnostics.md).
 
+## Team ZIP update intake (local-only, no module duplication)
+
+When new versions of the **two developer ZIPs** arrive, use the single
+offline inspector `team-update.mjs` with approved pins in
+`team-source-baseline.json`. It checks installed source bytes versus
+Skills Probe `modules-lock.json` and `skills-lock.json`, compares
+runtime-module fingerprints and identifies contract changes for
+`[ANALYTICS]` and `[GAME_RESULTS]`. It never imports, installs,
+runs, overwrites or re-exports developer modules.
+
+From `Development/`, after separate source-execution approval:
+
+    npm run team:update:inspect -- --team "C:\absolute\team-skills.zip" --probe "C:\absolute\skills-probe.zip"
+
+The command prints only a compact status and writes metadata under
+ignored `workspace/diagnostics/team-updates/`. A changed snapshot
+requires manual source review before updating its approved pin.
+Existing MCP stays a read-only telemetry consumer. No new Codex
+stream, auto-update daemon, test runner or Minecraft game process.
+See [team update workflow](../../../docs/system/education-team-source-updates.md).
+
 ## Test/release boundary
 
 Read [current handoff](../../../planning/development.md) and

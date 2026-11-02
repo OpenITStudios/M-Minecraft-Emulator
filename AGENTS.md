@@ -61,6 +61,15 @@ engine is authorized. The helper cannot install team modules. Team updates use t
 skills:check / skills:sync workflow, not a copied module fork.
 Actual Education Windows capability stays NOT_VERIFIED.
 
+**Team source update admission:** When newer team skills/Skills Probe ZIP
+snapshots are supplied, use the local read-only review gate described in
+`docs/system/education-team-source-updates.md`. No automatic module
+synchronization, source vendoring, unreviewed baseline-promotion,
+GitHub Actions, Minecraft execution or data upload is authorized.
+The team's `modules-lock.json` and `skills-lock.json` remain
+the actual module-copy authority; Lazy Tester stores only reviewed
+snapshot fingerprints and consumes their bounded evidence.
+
 **Hard scope gate for experimental AI input:** no generic MCP/privacy/parser/observer audits,
 second game controller, speculative provider or milestone churn.
 Native AI input source work must directly implement the existing per-client

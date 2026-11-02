@@ -1,0 +1,89 @@
+{
+  "schema": 1,
+  "purpose": "OPERATOR_ZIP_SNAPSHOT_COMPATIBILITY_PIN_NO_AUTO_SYNC",
+  "provenance": {
+    "teamArchiveSha256": "26c0a322cabed172ca74970413d5bb7a20d6f67181446df5f688e36057c54e21",
+    "probeArchiveSha256": "462fb6fe48b60f2bcf255f59d7ce0cb810c3a7ec598102c9e3888c68b341653b",
+    "moduleRepo": "https://github.com/achmadawdi/minecraft-bedrock-agent-skills.git",
+    "upstreamTag": "v0.35.0",
+    "upstreamCommit": "1856f1875ef0fb7039710c3a215da2123f87e7ba"
+  },
+  "wire": {
+    "analytics": {
+      "schema": 1,
+      "eventId": "mivubi:get_analytics",
+      "marker": "[ANALYTICS] ",
+      "maxLineBytes": 24576,
+      "linesPerTick": 8
+    },
+    "gameResults": {
+      "schema": 1,
+      "eventId": "daigon:get_all_scoring",
+      "marker": "[GAME_RESULTS] ",
+      "maxLineBytes": 24576,
+      "scoredTypes": [
+        "level_score",
+        "gameplay_result"
+      ]
+    },
+    "probe": {
+      "commands": [
+        "probe:list",
+        "probe:run",
+        "probe:report"
+      ]
+    }
+  },
+  "teamRequiredHashes": {
+    "analytics/contract.ts": "ef43cd5a6af36c266664e7a0f935bb510df9e853712105d82eed9de63ee45d16",
+    "analytics/analytics-export.ts": "e1f0f46b33108a5ba93f9e923e2c94fbd011876e57312b9a2ae6189df959256b",
+    "game-results/game-results-contract.ts": "0fc57cac2d30d7a3bf1c2eeb14146700662cde79eabf94babd7f451f7bdbb7a4",
+    "game-results/game-results-export.ts": "c635bc0dc8a2651b698eece95667b157e5f8e8120c7db1072671a62735560b9e",
+    "logging/log-core.ts": "c1dd1b88b02e515d815b4c974f966e2d194273f78efbc55f40883bc6c6efc674"
+  },
+  "probeRequiredHashes": {
+    "modules-lock.json": "e4909046fef8a8bfc3d908a914b796e9cf25294d8fa4218142c212d79a82793e",
+    "skills-lock.json": "086acb707dca19e8c88663793852b7622a39e612d46b2871e85b90cff3e2c2d9",
+    "packs/BP/scripts/probe/runner/runner.ts": "d2fd141a833d91e9cc923dc8e41552574b81c58917a5293cdd0d7935281fd796",
+    "packs/BP/manifest.json": "be7a063a4b73e216c819d6f943fa482094c70115e2fecdb4a591d38560a12aed",
+    "package.json": "4ce2fd42cb0164dd39da314dafe47c842b5e2323bc3ec21baa6c127a51bbe3fa"
+  },
+  "runtimeTrees": {
+    "team": {
+      "analytics": "a63e4b01ab38a481af904e63ac29fe18e496187a84596c1b5e6b2aa77fa8c8b1",
+      "coords": "2b5f14a808de7183fba9d37ae12420aa075261692b2b697b7633c25fb7474234",
+      "display": "7bb6dbbca5baabe9739df15032283275c4950f16ed9962683a024a218d2cde3f",
+      "entities": "598e647809bc78e6138f9c59525ffdaed631c12aba558d42611298d574426146",
+      "forms": "6d05f68c54497d6ec7a9dbe57531db6a99b52dc1d40e8f8af5399a635e852071",
+      "game-results": "af472ea7cc5466ca50622b0ab6c6b69a2e9d13dfe02e9bb6002021970c3f98f0",
+      "items": "c79981cbedaf386d6e36a816faa88c4c684333af1837d0c66fa27d0e1de0979b",
+      "logging": "c1bf7e2155e5a79ffdbab91717d1376e753863bd90f7479aedd6643126c13582",
+      "profiling": "a87e4201465b2eaf993fdead8aa1dc7539274bbf51e9093cadcc6ecccbdcca3b",
+      "sound": "a7acf29d01cd29f18e2e0011e04590ed3deb37050b1299dd99fac5b826e492ba",
+      "teleport": "c5277e9c5cdd0b0f4d355601fce72f2df8621e53e33fd6ce38d5a76272a29ec7",
+      "testing": "e98db1a86d4035054c2f14dc78eb9453cdb9a3eb83be0b39537c1037d4a9873d",
+      "time": "a9108ff178bf2951844cd411f8456517ba8d42565e1b017cafc626fd2e48fb61"
+    },
+    "probe": {
+      "analytics": "a63e4b01ab38a481af904e63ac29fe18e496187a84596c1b5e6b2aa77fa8c8b1",
+      "database": "5f3fbc64ac1618cb83168b311f299c664e0146a57980aac19af7a324d51c0d2b",
+      "display": "7bb6dbbca5baabe9739df15032283275c4950f16ed9962683a024a218d2cde3f",
+      "forms": "6d05f68c54497d6ec7a9dbe57531db6a99b52dc1d40e8f8af5399a635e852071",
+      "game-results": "af472ea7cc5466ca50622b0ab6c6b69a2e9d13dfe02e9bb6002021970c3f98f0",
+      "logging": "c1bf7e2155e5a79ffdbab91717d1376e753863bd90f7479aedd6643126c13582",
+      "profiling": "a87e4201465b2eaf993fdead8aa1dc7539274bbf51e9093cadcc6ecccbdcca3b",
+      "sound": "a7acf29d01cd29f18e2e0011e04590ed3deb37050b1299dd99fac5b826e492ba",
+      "teleport": "c5277e9c5cdd0b0f4d355601fce72f2df8621e53e33fd6ce38d5a76272a29ec7",
+      "time": "a9108ff178bf2951844cd411f8456517ba8d42565e1b017cafc626fd2e48fb61"
+    }
+  },
+  "reviewState": "APPROVED_SOURCE_REVIEW",
+  "probeRuntime": {
+    "minEngine": [
+      1,
+      26,
+      30
+    ],
+    "serverModule": "2.8.0"
+  }
+}

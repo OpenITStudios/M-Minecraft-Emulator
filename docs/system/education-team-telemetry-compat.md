@@ -127,6 +127,22 @@ The team Skills Probe's direct debugger protocol-7 capture was
 reported on Education 26.32/macOS; it has not verified Education
 26.33 Windows or five simultaneous clients.
 
+## Accepting new versions without forking developer modules
+
+The update gate lives in
+[Education team source updates](education-team-source-updates.md).
+It reads two operator-supplied ZIPs and the existing team/probe
+module locks, validates source hashes and flags contract changes.
+It never treats a changed runtime module as automatically compatible;
+only approved metadata pins may be updated after review.
+
+The next ZIP can change a module version without requiring another
+Minecraft behavior pack: Lazy Tester reads the same team export
+markers when their recorded schemas remain compatible. If an
+upstream command, line budget, record schema or score type changes,
+the local MCP parser and `/function help` list must be explicitly
+reviewed. The team repositories remain the only module publishers.
+
 ## Verification boundary
 
 No Node test suites, local package builds, Minecraft Education

@@ -2,6 +2,29 @@
 
 ## Minecraft Education team source parity + command help — 2 November 2026
 
+**Operator-approved modular team ZIP intake (SOURCE_ONLY /
+NOT_EXECUTED):** Added `team-source-baseline.json` with hash/version
+pins from the two operator-provided archives (team v0.35.0, installed
+Skills Probe modules), `team-update-zip.mjs` as a bounded ZIP32
+read-only source inspector, and `team-update.mjs` to compare runtime
+module fingerprints, upstream schema constants, Skills Probe
+`modules-lock.json` / `skills-lock.json` and candidate updates.
+One explicit local command `npm run team:update:inspect` writes
+a metadata-only, content-addressed review report under gitignored
+`workspace/diagnostics/team-updates/`. New modules/command/schema
+changes are REVIEW_REQUIRED or BLOCKED until separately approved;
+the staged candidate pin is explicitly NOT_APPROVED and cannot
+be loaded as the current approved baseline. The tool does not
+sync/execute team modules, write Minecraft data, connect Codex,
+call a game controller or change the live MCP wire parser.
+Synthetic regression fixtures are AUTHORED_NOT_EXECUTED.
+The only next evidence gate for real module updates is the
+developer's separately approved team `skills:check` /
+`modules:check` and Minecraft Education Windows validation.
+Documentation: `docs/system/education-team-source-updates.md`.
+
+
+
 **Simplified in-game help v2.1.0 (SOURCE_ONLY / NOT_EXECUTED):**
 The user requested a single memorable help command, not
 `/scriptevent lazytester:help commands`. Minecraft already reserves
