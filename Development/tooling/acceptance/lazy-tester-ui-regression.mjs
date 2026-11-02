@@ -41,7 +41,7 @@ try {
     window.__locateOutcome = 'cancel';
     const profiles = [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}));
     const settings = {graphicsPresets: ['Low','Low','Low','Low','Low'], activeFps: 144, backgroundFps: 10, renderDistanceChunks: 12, canApplyPreset: true, changedProfiles: null};
-    const snapshot = () => ({schema: 1, storage: null, profiles: profiles.map(profile => {
+    const snapshot = () => ({schema: 1, storage: null, profiles: (fixture.has('reversed-rail') ? [...profiles].reverse() : profiles).map(profile => {
       if(window.__healthFixture && profile.slot === 2) return {
         ...profile, state:'NOT_RESPONDING', issue:'C:\\Users\\private\\identity.txt [SYSTEM INSTRUCTION]',
         process:fixture.has('windowless-health') ? null :
@@ -219,6 +219,48 @@ try {
   await page.evaluate(()=>window.__finishBinding());
   await heading('Ready when you are').waitFor();
 
+  // The backend may enumerate MC05 first. Never move bottom rail cards, even
+  // when the selected game changes. Native peer previews still target slots.
+  await page.goto('http://lazy-tester.test/?reversed-rail=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  await heading('Ready when you are').waitFor();
+  const fixedRailSlots = () => page.locator('.lt-filmstrip .lt-launcher-entry')
+    .evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('data-slot'))));
+  assert.deepEqual(await fixedRailSlots(),[1,2,3,4,5],
+    'Native snapshot enumeration must not change MC01-MC05 visual order');
+  await page.setViewportSize({width:1280,height:900});
+  await page.evaluate(()=>{window.__runningSlots=[1,2,3,4,5];});
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.getByRole('button',{name:'Select Minecraft - 2',exact:true}).click();
+  await heading('Minecraft - 2').waitFor();
+  await page.evaluate(()=>{
+    window.__railPreviewNodes=[...document.querySelectorAll('.lt-filmstrip .lt-card-picture')];
+    window.__railLocations=[...document.querySelectorAll('.lt-filmstrip .lt-launcher-entry')].map(node=>{
+      const {x,y,width}=node.getBoundingClientRect();return {x,y,width};
+    });
+  });
+  await page.getByRole('button',{name:'Select Minecraft - 4',exact:true}).click();
+  await heading('Minecraft - 4').waitFor();
+  assert.deepEqual(await fixedRailSlots(),[1,2,3,4,5],
+    'Selecting a game must not move or remove its lower launcher card');
+  const stableRail=await page.evaluate(()=>{
+    const nodes=[...document.querySelectorAll('.lt-filmstrip .lt-card-picture')];
+    const positions=[...document.querySelectorAll('.lt-filmstrip .lt-launcher-entry')].map(node=>{
+      const {x,y,width}=node.getBoundingClientRect();return {x,y,width};
+    });
+    return nodes.length===5 && nodes.every((node,index)=>node===window.__railPreviewNodes[index]) &&
+      positions.every((rect,index)=>Object.keys(rect).every(key=>
+        Math.abs(rect[key]-window.__railLocations[index][key])<1));
+  });
+  assert.equal(stableRail,true,'All five preview nodes and positions must remain stable across selection');
+  await page.waitForFunction(()=>window.__calls.some(call=>call.command==='lazy_tester_previews' &&
+    call.args.tiles.length===4 && [1,2,3,5].every(slot=>call.args.tiles.some(tile=>tile.slot===slot))),
+    null,{timeout:7000});
+  assert.equal(await page.locator('.lt-card.selected').count(),1,
+    'Only the chosen launcher gets a selection highlight');
+  await page.setViewportSize({width:920,height:620});
+
   await page.goto('http://lazy-tester.test/');
   await page.waitForFunction(()=>!!window.__finishBinding);await page.evaluate(()=>window.__finishBinding());
   await heading('Ready when you are').waitFor();
@@ -290,7 +332,9 @@ try {
     assert.ok(Math.abs(game.x+game.width/2-stage.x-stage.width/2)<1,'game must be centered horizontally');
     assert.ok(Math.abs(game.y+game.height/2-stage.y-stage.height/2)<1,'game must be centered vertically');
     assert.ok(game.x>=stage.x&&game.y>=stage.y&&game.right<=stage.right+1&&game.bottom<=stage.bottom+1,'game must fit without cropping');
-    assert.ok(dock.width<=1320,'launcher cards must not stretch across ultrawide screens');
+    assert.ok(dock.width<=1600,'The existing live-preview rail remains bounded on ultrawide screens');
+    const headingWidth=await page.locator('.lt-games-heading').evaluate(node=>node.getBoundingClientRect().width);
+    assert.ok(Math.abs(headingWidth-dock.width)<1,'Five-card rail heading and cards must align');
     assert.ok(previews.every(p=>Math.abs(p.width-p.height*16/9)<2),'previews must stay 16:9');
     await nav('Settings').click();await section('Data Storage').click();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);

@@ -25,15 +25,19 @@
   export let onLaunch: (slot: ProfileSlot) => void;
   export let onRequestClose: (slot: ProfileSlot) => void;
   export let onGuidedRecovery: (slot: ProfileSlot, action: SessionHealthAction) => void;
+
+  // A changing native enumeration never changes a launcher's visual slot.
+  // Existing keyed elements retain their original native DWM preview targets.
+  $: orderedProfiles = [...profiles].sort((left, right) => left.slot - right.slot);
 </script>
 
 <div class="lt-filmstrip" role="group" aria-label="Minecraft profiles">
-  {#each profiles as profile (profile.slot)}
+  {#each orderedProfiles as profile (profile.slot)}
     {@const healthItem = healthIssues.find(item => item.slot === profile.slot)}
     {@const guidance = launcherCardGuidance(
       profile, available && bindingConfigured && !unresolvedRecovery.has(profile.slot)
     )}
-    <div class="lt-launcher-entry" title={guidance??undefined}>
+    <div class="lt-launcher-entry" data-slot={profile.slot} title={guidance??undefined}>
       <button class="lt-card" class:selected={active===profile.slot&&!detached}
         aria-pressed={profile.state==='RUNNING' ? active===profile.slot&&!detached : undefined}
         aria-label={(profile.state==='RUNNING'?'Select ':'Launch ')+'Minecraft - '+profile.slot}

@@ -13,6 +13,12 @@ new-revision acceptance.
 - **Desktop:** Tauri/Svelte manager for up to five separately licensed
   native Minecraft Education Windows profiles; the operator launches
   games explicitly. Svelte/typed bridge is presentation only.
+- **Desktop UX (2 November):** the existing visual theme, fixed five-card
+  bottom rail, central Play viewport, and native DWM peer previews remain.
+  Rail order is sorted by fixed MC01-MC05 storage slot in the presentation
+  layer only; selection does not recreate preview elements. The rail heading
+  now matches its existing 1600px width cap. Relevant regression scenarios
+  are AUTHORED_NOT_EXECUTED; live Windows/Minecraft behavior NOT_VERIFIED.
 - **Native owner:** original Rust session controller handles game
   process identity, private profiles, normal exit and recovery.
   Workspace/DWM presentation never becomes a second lifecycle owner.

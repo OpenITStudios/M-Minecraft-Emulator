@@ -11,10 +11,15 @@ lifecycle: ACTIVE
 
 The approved product is one central application controlling five stable Minecraft
 profiles. Users explicitly open each desired profile; app startup launches no game.
-One large viewport contains the selected playable game. Four other sessions belong
-in a lower preview rail; next/previous navigation skips sessions without a usable
-window. The profile number is fixed by its storage identity, never enumeration
-order, a title, or a claim that an account is signed in.
+One large viewport contains the selected game surface. All five Minecraft
+profiles (MC01-MC05) stay in a single fixed-order lower rail, including the
+selected profile. Selecting changes the main viewport and the card highlight,
+but never moves or removes its lower card. Up to four other eligible running
+sessions retain their original native DWM preview targets in that same rail.
+A failed preview is not proof that the game stopped. Next/previous navigation
+skips sessions without a usable window. Profile slots are fixed by storage
+identity, never native enumeration order, window title, or a claim that an
+account is signed in.
 
 Session ownership belongs to the existing native bootstrap; the UI is a consumer.
 The bootstrap keeps the reviewed game/DLL hashes, original process handles, private
@@ -143,9 +148,11 @@ worker stays idle without redraw/capture loops. Thumbnails hide when the manager
 is minimized or another application is foreground. DPI/client bounds and tile
 non-overlap are checked before moving/adopting windows.
 
-The mounted interface now has the large selected view/four lower cards, manual
-launch with pending-window state, and queued explicit selection. A new session
-opens only through a user launch action. The old app.css is no longer bundled.
+The mounted interface has a large selected view and five fixed lower launcher
+cards (up to four other eligible sessions have native live previews). Manual
+launch, pending-window state and explicit queued selection remain intact.
+A new session opens only through a user launch action. The old app.css is no
+longer bundled.
 
 Native DWM registration on hidden fixtures is not live Minecraft proof. Pixel
 freshness, preview click/input, foreground/background FPS, offscreen Education host
